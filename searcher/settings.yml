@@ -1,4 +1,4 @@
-use_default_settings: general
+use_default_settings: true
 
 general:
   debug: false
