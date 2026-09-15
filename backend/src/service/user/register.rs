@@ -1,9 +1,10 @@
 use anyhow::Result;
 use uuid::Uuid;
 
-use crate::core::db::DbPool;
+use crate::db::repo::user as users;
+use crate::db::DbPool;
 
-use super::{error::UserError, mail, store};
+use super::{error::UserError, mail};
 
 pub fn send_auth_code(email: &str) -> Result<()> {
     tracing::info!("mail stub: would send auth code to {email}");
@@ -20,7 +21,7 @@ pub async fn register_user(
         return Err(UserError::InvalidCode);
     }
     mail::send_code(email).map_err(UserError::from)?;
-    let id = store::insert_user(pool, email).await?;
+    let id = users::insert_user(pool, email).await?;
     id.ok_or(UserError::AlreadyExists)
 }
 

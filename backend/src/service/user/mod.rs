@@ -3,7 +3,6 @@ pub mod error;
 pub mod mail;
 pub mod oauth;
 pub mod register;
-pub mod store;
 
 pub use auth::{current_user, login};
 pub use error::UserError;

@@ -1,5 +1,5 @@
-use crate::core::db::DbPool;
 use crate::core::jwt::Jwt;
+use crate::db::DbPool;
 
 #[derive(Clone)]
 pub struct AppState {

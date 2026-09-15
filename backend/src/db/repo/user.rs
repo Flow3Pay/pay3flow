@@ -1,7 +1,7 @@
 use anyhow::Result;
 use uuid::Uuid;
 
-use crate::core::db::DbPool;
+use crate::db::DbPool;
 
 pub struct User {
     pub id: Uuid,

@@ -1,5 +1,6 @@
 mod config;
 mod core;
+mod db;
 mod server;
 mod service;
 
@@ -12,8 +13,8 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let cfg = config::Config::from_env()?;
-    let pool = core::db::build_pool(&cfg.database_url).await?;
-    core::db::apply_schema(&pool).await?;
+    let pool = db::build_pool(&cfg.database_url).await?;
+    db::apply_schema(&pool).await?;
 
     let state = core::state::AppState::new(pool, core::jwt::Jwt::new(&cfg.jwt_secret));
     let app = server::routing::api::router(state);

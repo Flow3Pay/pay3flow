@@ -1,3 +1,5 @@
+pub mod repo;
+
 use anyhow::{Context, Result};
 use deadpool_postgres::{Config as PoolCfg, ManagerConfig, Pool, RecyclingMethod, Runtime};
 use tokio_postgres::NoTls;
@@ -13,17 +15,17 @@ pub async fn build_pool(url: &str) -> Result<DbPool> {
     Ok(pool)
 }
 
-fn manager() -> ManagerConfig {
-    ManagerConfig {
-        recycling_method: RecyclingMethod::Fast,
-    }
-}
-
 pub async fn apply_schema(pool: &DbPool) -> Result<()> {
     let client = pool.get().await?;
     let sql = include_str!("../../migrations/schema.sql");
     client.batch_execute(sql).await?;
     Ok(())
+}
+
+fn manager() -> ManagerConfig {
+    ManagerConfig {
+        recycling_method: RecyclingMethod::Fast,
+    }
 }
 
 async fn ping(pool: &DbPool) -> Result<()> {
