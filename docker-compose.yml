@@ -1,0 +1,41 @@
+version: "3.9"
+
+services:
+  backend:
+    build: ./backend
+    container_name: pay3flow-backend
+    ports:
+      - "8080:8080"   # HTTP + WebSocket
+    environment:
+      RUST_LOG: info
+      HTTP_ADDR: 0.0.0.0:8080
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: pay3flow-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8080
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  fmatch:
+    build: ./fmatch
+    container_name: pay3flow-fmatch
+    ports:
+      - "7277:7277"
+    env_file:
+      - ./fmatch/.env
+    restart: unless-stopped
+
+  searcher:
+    image: docker.io/searxng/searxng:latest
+    container_name: pay3flow-searcher
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./searcher/settings.yml:/etc/searxng/settings.yml:ro
+    restart: unless-stopped
