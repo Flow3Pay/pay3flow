@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: pay3flow
       POSTGRES_DB: pay3flow
     ports:
-      - "5432:5432"
+      - "5435:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -28,9 +28,69 @@ services:
       HTTP_ADDR: 0.0.0.0:8080
       DATABASE_URL: postgres://pay3flow:pay3flow@postgres:5432/pay3flow
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      AP_ORIGIN: http://backend:8080
+      AP_HANDLE: pay3flow
+      AP_KEY_PATH: /app/data/ap-key.pem
+      AP_REQUIRE_SIGNATURES: "false"
+      FMATCH_INBOX: http://fmatch:7277/inbox/actra
+      FMATCH_ACTOR_ID: http://fmatch:7277/actor/actra
+    volumes:
+      - backend_data:/app/data
     depends_on:
       postgres:
         condition: service_healthy
+
+  fmatch-postgres:
+    image: postgres:16-alpine
+    container_name: pay3flow-fmatch-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: OrderQue2026Pass
+      POSTGRES_DB: orderque
+    ports:
+      - "5433:5432"
+    volumes:
+      - fmatch_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d orderque"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  fmatch-typesense:
+    image: typesense/typesense:0.25.1
+    container_name: pay3flow-fmatch-typesense
+    restart: unless-stopped
+    ports:
+      - "8108:8108"
+    environment:
+      TYPESENSE_API_KEY: development
+    volumes:
+      - fmatch_tsdata:/data
+    command: --data-dir=/data --api-key=development --port=8108
+
+  fmatch:
+    build: ./fmatch
+    container_name: pay3flow-fmatch
+    restart: unless-stopped
+    ports:
+      - "7277:7277"
+    environment:
+      RUST_LOG: info
+      POSTGRES_DNS: postgres://postgres:OrderQue2026Pass@fmatch-postgres:5432/orderque
+      TYPESENSE_HOST: http://fmatch-typesense:8108
+      TYPESENSE_API_KEY: development
+      ACTOR_DOMAIN: localhost:7277
+      ACTIVITYPUB_REQUIRE_SIGNATURES: "false"
+      FMATCH_CANDIDATE_RESULT_INBOX_URL: http://backend:8080/inbox
+    volumes:
+      - ./fmatch/data:/app/data
+    depends_on:
+      fmatch-postgres:
+        condition: service_healthy
+      fmatch-typesense:
+        condition: service_started
 
   frontend:
     build: ./frontend
@@ -43,15 +103,6 @@ services:
     depends_on:
       - backend
 
-  fmatch:
-    build: ./fmatch
-    container_name: pay3flow-fmatch
-    restart: unless-stopped
-    ports:
-      - "7277:7277"
-    env_file:
-      - ./fmatch/.env
-
   searcher:
     image: docker.io/searxng/searxng:latest
     container_name: pay3flow-searcher
@@ -63,3 +114,7 @@ services:
 
 volumes:
   pgdata:
+  backend_data:
+  fmatch_pgdata:
+  fmatch_tsdata:
+  fmatch_data:
