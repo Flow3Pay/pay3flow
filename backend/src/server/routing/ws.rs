@@ -1,7 +1,8 @@
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use futures::{SinkExt, StreamExt};
+use axum::response::Response;
+use futures::StreamExt;
 
-pub async fn ws_handler(ws: WebSocketUpgrade) -> WebSocketUpgrade {
+pub async fn ws_handler(ws: WebSocketUpgrade) -> Response {
     ws.on_upgrade(handle_socket)
 }
 

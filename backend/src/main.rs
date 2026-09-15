@@ -1,5 +1,7 @@
-mod api;
 mod config;
+mod core;
+mod server;
+mod service;
 
 use tracing_subscriber::EnvFilter;
 
@@ -10,14 +12,16 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let cfg = config::Config::from_env()?;
+    let pool = core::db::build_pool(&cfg.database_url).await?;
+    core::db::apply_schema(&pool).await?;
+
+    let state = core::state::AppState::new(pool, core::jwt::Jwt::new(&cfg.jwt_secret));
+    let app = server::routing::api::router(state);
+
     let addr = cfg.http_addr;
-
-    tracing::info!("starting pay3flow-backend on {addr}");
-
-    let router = api::router();
-
+    tracing::info!("listening on http://{addr}");
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    axum::serve(listener, router).await?;
+    axum::serve(listener, app).await?;
 
     Ok(())
 }

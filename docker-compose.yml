@@ -1,41 +1,65 @@
-version: "3.9"
-
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pay3flow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pay3flow
+      POSTGRES_PASSWORD: pay3flow
+      POSTGRES_DB: pay3flow
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pay3flow -d pay3flow"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   backend:
     build: ./backend
     container_name: pay3flow-backend
+    restart: unless-stopped
     ports:
-      - "8080:8080"   # HTTP + WebSocket
+      - "8080:8080"
     environment:
       RUST_LOG: info
       HTTP_ADDR: 0.0.0.0:8080
-    restart: unless-stopped
+      DATABASE_URL: postgres://pay3flow:pay3flow@postgres:5432/pay3flow
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   frontend:
     build: ./frontend
     container_name: pay3flow-frontend
+    restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8080
     depends_on:
       - backend
-    restart: unless-stopped
 
   fmatch:
     build: ./fmatch
     container_name: pay3flow-fmatch
+    restart: unless-stopped
     ports:
       - "7277:7277"
     env_file:
       - ./fmatch/.env
-    restart: unless-stopped
 
   searcher:
     image: docker.io/searxng/searxng:latest
     container_name: pay3flow-searcher
+    restart: unless-stopped
     ports:
       - "8081:8080"
     volumes:
       - ./searcher/settings.yml:/etc/searxng/settings.yml:ro
-    restart: unless-stopped
+
+volumes:
+  pgdata:
