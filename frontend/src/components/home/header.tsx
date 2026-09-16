@@ -80,7 +80,7 @@ export function Header({
   };
 
   return (
-    <header className={landing ? `${styles.header} ${styles.bar}` : styles.header}>
+    <header className={`${styles.header} ${styles.bar}`}>
       <div className={styles.inner}>
         <div className={styles.left}>
           {landing && (
