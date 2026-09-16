@@ -50,6 +50,9 @@
   --color-border-strong: rgba(23, 23, 19, 0.18);
   --color-text-invert: #ffffff;
 
+  --shadow-card: none;
+  --shadow-pop: none;
+
   min-height: 100vh;
   background: #fdfdfb;
 }

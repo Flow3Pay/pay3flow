@@ -197,8 +197,8 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  height: 40px;
-  padding: 0 14px;
+  height: 48px;
+  padding: 0 16px;
   border-radius: var(--radius-pill);
   font-size: 14px;
   font-weight: 500;
@@ -213,7 +213,7 @@
 
 .network:hover,
 .walletConnected:hover {
-  box-shadow: var(--shadow-card);
+  box-shadow: none;
 }
 
 .chainDot {
