@@ -21,7 +21,9 @@ async fn main() -> anyhow::Result<()> {
 
     let ap = pay3flow_backend::service::build_activitypub_service(&cfg, pool.clone(), identity);
 
-    let state = AppState::new(pool, Jwt::new(&cfg.jwt_secret), ap);
+    let picker = pay3flow_backend::routing::RoutePicker::from_seeds();
+
+    let state = AppState::new(pool, Jwt::new(&cfg.jwt_secret), ap, picker);
 
     tracing::info!(
         actor = %cfg.ap_origin,

@@ -9,7 +9,7 @@ use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 use tracing::Level;
 
 use crate::core::state::AppState;
-use crate::server::routing::{activitypub, auth, oauth, ws};
+use crate::server::routing::{activitypub, auth, matcher, oauth, ws};
 
 pub fn router(state: AppState) -> Router {
     Router::new()
@@ -19,6 +19,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/auth/me", get(auth::me))
         .route("/api/auth/oauth/{provider}", post(oauth::oauth))
         .route("/ws", get(ws::ws_handler))
+        .route("/routing/fallback", post(matcher::fallback))
         .route("/.well-known/webfinger", get(activitypub::webfinger))
         .route("/actor", get(activitypub::actor_collection))
         .route("/actor/:handle", get(activitypub::actor_document_by_handle))
