@@ -3,6 +3,8 @@
   padding: 18px 24px;
   position: relative;
   z-index: 20;
+  background: var(--color-paper);
+  border-bottom: 1px solid var(--color-border);
 }
 
 /* Landing bar look (like cow.fi MenuBar) */
