@@ -1,0 +1,178 @@
+[workspace]
+members = [
+    "crates/crw-core",
+    "crates/crw-diff",
+    "crates/crw-renderer",
+    "crates/crw-extract",
+    "crates/crw-crawl",
+    "crates/crw-search",
+    "crates/crw-server",
+    "crates/crw-mcp",
+    "crates/crw-mcp-proto",
+    "crates/crw-browse",
+    "crates/crw-cli",
+]
+exclude = ["fuzz"]
+resolver = "2"
+
+[workspace.package]
+version = "0.35.1"
+edition = "2024"
+license = "AGPL-3.0"
+repository = "https://github.com/us/crw"
+homepage = "https://fastcrw.com"
+keywords = ["web-scraper", "web-crawler", "mcp", "llm"]
+categories = ["web-programming", "command-line-utilities"]
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Web framework
+axum = { version = "0.8", features = ["macros", "multipart"] }
+tower = "0.5"
+tower-http = { version = "0.7", features = ["cors", "trace", "timeout", "set-header"] }
+
+# HTTP client
+# Resolver: use reqwest's default system getaddrinfo resolver (no `hickory-dns`).
+# getaddrinfo reads /etc/resolv.conf natively, so it resolves both external
+# CNAME chains and internal service names through Docker's embedded DNS
+# (127.0.0.11); the hickory resolver failed on that path for direct egress
+# (managed LLM, research APIs). getaddrinfo runs on tokio's blocking pool, so
+# it does not block the async runtime.
+reqwest = { version = "0.13", default-features = false, features = ["json", "cookies", "rustls", "gzip", "brotli", "deflate", "socks", "stream", "multipart"] }
+
+# Chrome TLS/JA3/HTTP2 impersonation client (optional source; only crw-renderer
+# references it, behind the `impersonated` feature). wreq-util 0.2 is Apache-2.0;
+# the later 3.0.0-rc line is LGPL and deliberately avoided.
+# `socks` mirrors the reqwest line above: `ProxyEntry` accepts socks5/socks5h, and
+# without the feature wreq silently routes a socks5 URL down its HTTP-proxy path,
+# putting `Proxy-Authorization` on the wire to a port that does not speak HTTP.
+# `stream` is what makes `Response::bytes_stream` exist. Without it the only way
+# to read a body is `bytes()`, which buffers the whole thing before any size can
+# be checked. `Content-Length` does not bound it: it is absent on any chunked
+# response, and tower-http's decompression body reports no size hint at all, so
+# a payload that expands on decode arrives with no number to check against.
+# reqwest already has `stream` enabled above and gives the plain tier `chunk()`.
+wreq = { version = "0.16", features = ["gzip", "brotli", "zstd", "deflate", "charset", "socks", "stream"] }
+wreq-util = "0.2"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "1"
+
+# HTML processing
+lol_html = "3"
+scraper = "0.27"
+htmd = "0.5"
+ego-tree = "0.11"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+once_cell = "1"
+
+# Text processing
+regex = "1"
+
+# PDF parsing: pure-Rust (lopdf-based) PDF -> markdown conversion. Optional
+# dep of `crw-extract` only, behind its default-on `pdf` feature. No system
+# libraries — preserves the single-static-binary story. The open-core
+# boundary gate asserts lopdf/ttf-parser are ABSENT when `pdf` is disabled.
+#
+# Was held at 0.1.6 because 0.1.7 gutted pages 6-11 of arXiv 1412.6980. Measured
+# again over 29 real PDFs (papers, IRS forms, RFCs, 10-K, the 756-page PDF spec)
+# scoring word recall against poppler as ground truth: 1.17.0 reaches 98.15% vs
+# 0.1.6's 97.72%, better on 23 of 29 documents, and every page of 1412.6980 now
+# comes back at 97-100%. The raw character count drops slightly only because
+# 1.17.0 rejoins hyphenated line breaks and stops duplicating table rows.
+pdf-inspector = "=1.17.0"
+
+# Diffing (change-tracking / monitor). Myers diff over lines; the parse-diff
+# AST and the unified text surface are both derived from its op stream.
+similar = "3"
+
+# Randomness
+rand = "0.10"
+
+# Async utilities
+futures = "0.3"
+dashmap = "6"
+
+# WebSocket client (shared by crw-renderer and crw-browse)
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-native-roots"] }
+
+# JSON schema generation (used by rmcp #[tool] macro)
+schemars = "1.0"
+
+# Config
+config = "0.15"
+
+# Error handling
+thiserror = "2"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# CLI
+clap = { version = "4", features = ["derive", "env"] }
+
+# Metrics
+prometheus = "0.14"
+
+# Caching (host preferences)
+moka = { version = "0.12", features = ["future"] }
+publicsuffix = "2"
+
+# Misc
+uuid = { version = "1", features = ["v4", "serde"] }
+url = { version = "2", features = ["serde"] }
+sha2 = "0.11"
+hex = "0.4"
+base64 = "0.23"
+
+# Unix process-group kill (browser teardown). Unix-only; already present
+# transitively. Used by crw-renderer's BROWSER_PGIDS group-kill registry.
+libc = "0.2"
+
+# Compile-time perfect-hash sets (url_filter deny-lists)
+phf = { version = "0.14", features = ["macros"] }
+
+# Test dependencies
+tokio-test = "0.4"
+wiremock = "0.6"
+axum-test = "21"
+proptest = "1"
+insta = { version = "1", features = ["json"] }
+
+# Internal crates. Centralized here so the crate-to-crate version pins live in
+# ONE place: release-please bumps these via release-please-config.json
+# ($.workspace.dependencies.<crate>.version) in lockstep with
+# [workspace.package].version. Member crates inherit with `{ workspace = true }`
+# and layer their own `features` / `optional` on top. `path` is resolved
+# relative to THIS (root) manifest. Only crates that are depended upon by
+# another crate appear here; leaf binaries (crw-mcp, crw-cli) just consume.
+crw-mcp-proto = { path = "crates/crw-mcp-proto", version = "0.35.1" }
+crw-core = { path = "crates/crw-core", version = "0.35.1" }
+crw-extract = { path = "crates/crw-extract", version = "0.35.1" }
+crw-renderer = { path = "crates/crw-renderer", version = "0.35.1" }
+crw-search = { path = "crates/crw-search", version = "0.35.1" }
+crw-diff = { path = "crates/crw-diff", version = "0.35.1" }
+crw-crawl = { path = "crates/crw-crawl", version = "0.35.1" }
+crw-server = { path = "crates/crw-server", version = "0.35.1" }
+crw-browse = { path = "crates/crw-browse", version = "0.35.1" }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+
+# Size-optimized profile for the lean proxy MCP binary. Inherits release (lto +
+# codegen-units=1 + strip) and adds `opt-level = "z"` to minimize size. Scoped to
+# its own profile so it does NOT slow the CPU-bound scraping engine in the normal
+# release build. NO `panic = "abort"` — crw-extract relies on `catch_unwind` to
+# survive malformed-PDF parser panics, which abort would turn into process crashes.
+# Build the lean binary with:
+#   cargo build --profile release-small --no-default-features -p crw-mcp
+[profile.release-small]
+inherits = "release"
+opt-level = "z"

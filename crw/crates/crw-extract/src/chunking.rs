@@ -1,0 +1,513 @@
+use crw_core::types::ChunkStrategy;
+use regex::Regex;
+use std::collections::HashSet;
+use std::sync::OnceLock;
+
+#[derive(Clone, Copy)]
+struct ChunkOptions {
+    max_chars: Option<usize>,
+    overlap_chars: usize,
+    dedupe: bool,
+}
+
+/// Chunk text according to the given strategy.
+pub fn chunk_text(text: &str, strategy: &ChunkStrategy) -> Vec<String> {
+    let (chunks, options) = match strategy {
+        ChunkStrategy::Sentence {
+            max_chars,
+            overlap_chars,
+            dedupe,
+        } => (
+            chunk_by_sentence(text, *max_chars),
+            ChunkOptions {
+                max_chars: *max_chars,
+                overlap_chars: overlap_chars.unwrap_or(0),
+                dedupe: dedupe.unwrap_or(true),
+            },
+        ),
+        ChunkStrategy::Regex {
+            pattern,
+            max_chars,
+            overlap_chars,
+            dedupe,
+        } => (
+            chunk_by_regex(text, pattern),
+            ChunkOptions {
+                max_chars: *max_chars,
+                overlap_chars: overlap_chars.unwrap_or(0),
+                dedupe: dedupe.unwrap_or(true),
+            },
+        ),
+        ChunkStrategy::Topic {
+            max_chars,
+            overlap_chars,
+            dedupe,
+        } => (
+            chunk_by_topic(text),
+            ChunkOptions {
+                max_chars: *max_chars,
+                overlap_chars: overlap_chars.unwrap_or(0),
+                dedupe: dedupe.unwrap_or(true),
+            },
+        ),
+    };
+
+    post_process_chunks(chunks, options)
+}
+
+/// Split on sentence boundaries (.!?) then merge chunks that are too short.
+fn chunk_by_sentence(text: &str, max_chars: Option<usize>) -> Vec<String> {
+    let max = max_chars.unwrap_or(1000);
+    let min_merge = max / 4; // Merge if a chunk is shorter than 25% of max.
+
+    // Split on sentence boundaries: find [.!?] followed by whitespace, keep punctuation
+    // with the preceding sentence. Rust regex doesn't support lookbehind.
+    static SENTENCE_BOUNDARY: OnceLock<Regex> = OnceLock::new();
+    let boundary = SENTENCE_BOUNDARY.get_or_init(|| Regex::new(r"[.!?]+\s+").unwrap());
+    let mut raw: Vec<String> = Vec::new();
+    let mut last = 0;
+    for m in boundary.find_iter(text) {
+        // include the punctuation (everything up to the trailing whitespace)
+        let end = m.start() + m.as_str().trim_end().len();
+        let fragment = text[last..end].trim();
+        if !fragment.is_empty() {
+            raw.push(fragment.to_string());
+        }
+        last = m.end();
+    }
+    if last < text.len() {
+        let tail = text[last..].trim();
+        if !tail.is_empty() {
+            raw.push(tail.to_string());
+        }
+    }
+
+    let mut chunks: Vec<String> = Vec::new();
+    let mut current = String::new();
+
+    for sentence in &raw {
+        let sentence = sentence.trim();
+        if sentence.is_empty() {
+            continue;
+        }
+
+        if current.is_empty() {
+            current.push_str(sentence);
+        } else if current.chars().count() + sentence.chars().count() + 1 < max {
+            current.push(' ');
+            current.push_str(sentence);
+        } else {
+            chunks.push(current.trim().to_string());
+            current = sentence.to_string();
+        }
+    }
+    if !current.trim().is_empty() {
+        chunks.push(current.trim().to_string());
+    }
+
+    // Merge very short trailing chunks into the previous one.
+    let mut merged: Vec<String> = Vec::new();
+    for chunk in chunks {
+        if chunk.chars().count() < min_merge && !merged.is_empty() {
+            let last = merged.last_mut().unwrap();
+            last.push(' ');
+            last.push_str(&chunk);
+        } else {
+            merged.push(chunk);
+        }
+    }
+
+    merged
+}
+
+fn post_process_chunks(chunks: Vec<String>, options: ChunkOptions) -> Vec<String> {
+    let mut processed = if let Some(max_chars) = options.max_chars.filter(|max| *max > 0) {
+        chunks
+            .into_iter()
+            .flat_map(|chunk| split_long_chunk(&chunk, max_chars, options.overlap_chars))
+            .collect::<Vec<_>>()
+    } else {
+        chunks
+    };
+
+    processed.retain(|chunk| {
+        let trimmed = chunk.trim();
+        if trimmed.is_empty() {
+            return false;
+        }
+        // Filter out chunks that are only markdown separators or whitespace
+        let stripped: String = trimmed.chars().filter(|c| !c.is_whitespace()).collect();
+        !stripped.chars().all(|c| c == '-' || c == '*' || c == '_')
+    });
+
+    if options.dedupe {
+        let mut seen = HashSet::new();
+        processed.retain(|chunk| seen.insert(normalize_chunk(chunk)));
+
+        // Remove near-duplicates using Jaccard word similarity.
+        // Two chunks sharing >85% of their words are considered near-duplicates;
+        // the second one is dropped.
+        processed = remove_near_duplicates(processed, 0.85);
+    }
+
+    processed
+}
+
+fn split_long_chunk(chunk: &str, max_chars: usize, overlap_chars: usize) -> Vec<String> {
+    let text = chunk.trim();
+    if text.is_empty() {
+        return Vec::new();
+    }
+    let char_count = text.chars().count();
+    if char_count <= max_chars {
+        return vec![text.to_string()];
+    }
+
+    let starts: Vec<usize> = text
+        .char_indices()
+        .map(|(i, _)| i)
+        .chain(std::iter::once(text.len()))
+        .collect();
+    let mut result = Vec::new();
+    let overlap_chars = overlap_chars.min(max_chars.saturating_sub(1));
+    let mut start = 0usize;
+
+    while start < char_count {
+        let remaining = char_count - start;
+        if remaining <= max_chars {
+            let segment = text[starts[start]..].trim();
+            if !segment.is_empty() {
+                result.push(segment.to_string());
+            }
+            break;
+        }
+
+        let mut end = start + max_chars;
+        let window = &text[starts[start]..starts[end]];
+        if let Some(relative) = window.rfind(|c: char| c.is_whitespace()) {
+            let before = window[..relative].chars().count();
+            if before > max_chars / 2 {
+                end = start + before;
+            }
+        }
+
+        let segment = text[starts[start]..starts[end]].trim();
+        if !segment.is_empty() {
+            result.push(segment.to_string());
+        }
+
+        if end >= char_count {
+            break;
+        }
+
+        let step = (end - start).saturating_sub(overlap_chars).max(1);
+        start += step;
+    }
+
+    result
+}
+
+/// Remove near-duplicate chunks using Jaccard word similarity.
+/// Keeps the first occurrence; drops later chunks that are too similar to any kept chunk.
+fn remove_near_duplicates(chunks: Vec<String>, threshold: f64) -> Vec<String> {
+    if chunks.len() <= 1 {
+        return chunks;
+    }
+
+    // Pre-compute word sets for each chunk.
+    let word_sets: Vec<HashSet<String>> = chunks
+        .iter()
+        .map(|c| {
+            c.split_whitespace()
+                .map(|w| w.to_lowercase())
+                .collect::<HashSet<_>>()
+        })
+        .collect();
+
+    let mut kept_indices: Vec<usize> = Vec::with_capacity(chunks.len());
+
+    for (i, set_i) in word_sets.iter().enumerate() {
+        if set_i.is_empty() {
+            continue;
+        }
+
+        let is_near_dup = kept_indices.iter().any(|&k| {
+            let set_k = &word_sets[k];
+            let intersection = set_i.intersection(set_k).count();
+            let union = set_i.union(set_k).count();
+            if union == 0 {
+                return false;
+            }
+            (intersection as f64 / union as f64) >= threshold
+        });
+
+        if !is_near_dup {
+            kept_indices.push(i);
+        }
+    }
+
+    kept_indices
+        .into_iter()
+        .map(|i| chunks[i].clone())
+        .collect()
+}
+
+fn normalize_chunk(chunk: &str) -> String {
+    chunk
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase()
+}
+
+/// Split using a regex pattern as separator.
+fn chunk_by_regex(text: &str, pattern: &str) -> Vec<String> {
+    let re = match Regex::new(pattern) {
+        Ok(r) => r,
+        Err(_) => {
+            tracing::warn!("Invalid chunk regex pattern: {pattern}");
+            return vec![text.to_string()];
+        }
+    };
+    re.split(text)
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+/// Split on markdown headings (lines starting with #).
+/// Tiny chunks (< 50 chars, e.g. heading-only) are merged with the next chunk.
+fn chunk_by_topic(text: &str) -> Vec<String> {
+    let mut chunks: Vec<String> = Vec::new();
+    let mut current = String::new();
+
+    for line in text.lines() {
+        if line.starts_with('#') && !current.trim().is_empty() {
+            chunks.push(current.trim().to_string());
+            current = String::new();
+        }
+        current.push_str(line);
+        current.push('\n');
+    }
+    if !current.trim().is_empty() {
+        chunks.push(current.trim().to_string());
+    }
+
+    merge_tiny_chunks(chunks, 50)
+}
+
+/// Merge chunks shorter than `min_chars` with the following chunk.
+/// If the last chunk is tiny, append it to the previous one instead.
+fn merge_tiny_chunks(chunks: Vec<String>, min_chars: usize) -> Vec<String> {
+    let mut merged: Vec<String> = Vec::new();
+    let mut carry = String::new();
+
+    for chunk in chunks {
+        if !carry.is_empty() {
+            carry.push_str("\n\n");
+            carry.push_str(&chunk);
+            if carry.chars().count() >= min_chars {
+                merged.push(carry);
+                carry = String::new();
+            }
+        } else if chunk.trim().chars().count() < min_chars {
+            carry = chunk;
+        } else {
+            merged.push(chunk);
+        }
+    }
+    if !carry.is_empty() {
+        if let Some(last) = merged.last_mut() {
+            last.push_str("\n\n");
+            last.push_str(&carry);
+        } else {
+            merged.push(carry);
+        }
+    }
+    merged
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sentence_chunks_basic() {
+        let text = "Hello world. This is sentence two. And sentence three.";
+        let chunks = chunk_text(
+            text,
+            &ChunkStrategy::Sentence {
+                max_chars: Some(30),
+                overlap_chars: None,
+                dedupe: None,
+            },
+        );
+        assert!(!chunks.is_empty());
+        // Each chunk should not exceed max_chars significantly
+        for chunk in &chunks {
+            assert!(chunk.chars().count() <= 60, "Chunk too long: {chunk}");
+        }
+    }
+
+    #[test]
+    fn topic_chunks_on_headings() {
+        let text = "# Title\nContent under title with enough text to exceed the minimum chunk size threshold.\n## Section\nSection content that is also long enough to be kept as a separate chunk easily.\n### Sub\nSub content with additional words to pass the minimum size requirement for chunks.";
+        let chunks = chunk_text(
+            text,
+            &ChunkStrategy::Topic {
+                max_chars: None,
+                overlap_chars: None,
+                dedupe: None,
+            },
+        );
+        assert_eq!(chunks.len(), 3);
+        assert!(chunks[0].starts_with("# Title"));
+        assert!(chunks[1].starts_with("## Section"));
+    }
+
+    #[test]
+    fn topic_chunks_merge_tiny() {
+        // Heading-only chunks (< 50 chars) should be merged with the next chunk.
+        let text =
+            "# A\n## B\nSome real content that is long enough to form a proper chunk on its own.";
+        let chunks = chunk_text(
+            text,
+            &ChunkStrategy::Topic {
+                max_chars: None,
+                overlap_chars: None,
+                dedupe: None,
+            },
+        );
+        // "# A" is tiny, merged with "## B\n..." which together exceed 50 chars
+        assert_eq!(chunks.len(), 1);
+        assert!(chunks[0].contains("# A"));
+        assert!(chunks[0].contains("## B"));
+    }
+
+    #[test]
+    fn regex_chunk_on_double_newline() {
+        let text = "Para one.\n\nPara two.\n\nPara three.";
+        let chunks = chunk_text(
+            text,
+            &ChunkStrategy::Regex {
+                pattern: r"\n\n".to_string(),
+                max_chars: None,
+                overlap_chars: None,
+                dedupe: None,
+            },
+        );
+        assert_eq!(chunks.len(), 3);
+    }
+
+    #[test]
+    fn regex_invalid_pattern_returns_whole_text() {
+        let text = "some text";
+        let chunks = chunk_text(
+            text,
+            &ChunkStrategy::Regex {
+                pattern: "[invalid".to_string(),
+                max_chars: None,
+                overlap_chars: None,
+                dedupe: None,
+            },
+        );
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0], text);
+    }
+
+    #[test]
+    fn overlap_and_dedupe_are_applied() {
+        let text = "alpha beta gamma delta epsilon zeta eta theta";
+        let chunks = chunk_text(
+            text,
+            &ChunkStrategy::Regex {
+                pattern: r"\n\n".to_string(),
+                max_chars: Some(16),
+                overlap_chars: Some(5),
+                dedupe: Some(true),
+            },
+        );
+
+        assert!(chunks.len() >= 2);
+        assert!(chunks.iter().all(|chunk| chunk.chars().count() <= 16));
+    }
+
+    #[test]
+    fn sentence_max_chars_packs_cjk_by_unicode_scalars() {
+        let text = "你好. 世界.";
+        let chunks = chunk_text(
+            text,
+            &ChunkStrategy::Sentence {
+                max_chars: Some(10),
+                overlap_chars: Some(0),
+                dedupe: Some(false),
+            },
+        );
+        assert_eq!(chunks, vec!["你好. 世界.".to_string()]);
+        assert_eq!(chunks[0].chars().count(), 7);
+        assert_eq!(chunks[0].len(), 15);
+    }
+
+    #[test]
+    fn max_chars_counts_unicode_scalars_not_utf8_bytes() {
+        let text: String = "漢".repeat(20);
+        assert_eq!(text.chars().count(), 20);
+        assert_eq!(text.len(), 60);
+
+        let chunks = chunk_text(
+            &text,
+            &ChunkStrategy::Regex {
+                pattern: r"\n\n".to_string(),
+                max_chars: Some(20),
+                overlap_chars: Some(0),
+                dedupe: Some(false),
+            },
+        );
+
+        assert_eq!(chunks, vec![text.clone()]);
+        assert_eq!(chunks[0].chars().count(), 20);
+        assert_eq!(chunks[0].len(), 60);
+    }
+
+    #[test]
+    fn max_chars_splits_multibyte_text_on_scalar_budget() {
+        let text: String = "漢".repeat(25);
+        let chunks = chunk_text(
+            &text,
+            &ChunkStrategy::Regex {
+                pattern: r"\n\n".to_string(),
+                max_chars: Some(10),
+                overlap_chars: Some(0),
+                dedupe: Some(false),
+            },
+        );
+
+        assert_eq!(chunks.len(), 3);
+        assert_eq!(chunks[0], "漢".repeat(10));
+        assert_eq!(chunks[1], "漢".repeat(10));
+        assert_eq!(chunks[2], "漢".repeat(5));
+        assert!(chunks.iter().all(|c| c.chars().count() <= 10));
+    }
+
+    #[test]
+    fn overlap_chars_counts_unicode_scalars() {
+        let text = "あいうえおかきくけこさしすせそ".to_string();
+        assert_eq!(text.chars().count(), 15);
+
+        let chunks = chunk_text(
+            &text,
+            &ChunkStrategy::Regex {
+                pattern: r"\n\n".to_string(),
+                max_chars: Some(10),
+                overlap_chars: Some(3),
+                dedupe: Some(false),
+            },
+        );
+
+        assert_eq!(chunks.len(), 2);
+        assert_eq!(chunks[0], "あいうえおかきくけこ");
+        assert_eq!(chunks[1], "くけこさしすせそ");
+        assert_eq!(chunks[0].chars().count(), 10);
+        assert_eq!(chunks[1].chars().count(), 8);
+    }
+}

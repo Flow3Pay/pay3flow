@@ -1,0 +1,2603 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "CRW REST API",
+    "version": "0.35.1",
+    "description": "Firecrawl-compatible web scraping, crawling, mapping, search, and extraction API. Hosted at https://api.fastcrw.com; self-host with `docker run -p 3000:3000 ghcr.io/us/crw:latest`.",
+    "license": {
+      "name": "AGPL-3.0",
+      "url": "https://opensource.org/licenses/AGPL-3.0"
+    },
+    "contact": {
+      "url": "https://github.com/us/crw"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.fastcrw.com",
+      "description": "Hosted (requires Bearer token)"
+    },
+    {
+      "url": "http://localhost:3000",
+      "description": "Self-hosted (no auth by default)"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    },
+    {}
+  ],
+  "tags": [
+    {
+      "name": "search",
+      "description": "Web search via our own search backend (self-hosted) or managed (hosted)"
+    },
+    {
+      "name": "scrape",
+      "description": "Single-URL content extraction"
+    },
+    {
+      "name": "crawl",
+      "description": "Async multi-page crawl jobs"
+    },
+    {
+      "name": "map",
+      "description": "URL discovery without full scraping"
+    },
+    {
+      "name": "extract",
+      "description": "Structured JSON extraction via scrape + jsonOptions"
+    },
+    {
+      "name": "change-tracking",
+      "description": "Stateless diff of a scrape against a caller-supplied previous snapshot (monitor primitive)"
+    }
+  ],
+  "paths": {
+    "/v1/search": {
+      "post": {
+        "tags": [
+          "search"
+        ],
+        "summary": "Search the web and optionally scrape results",
+        "operationId": "search",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              },
+              "examples": {
+                "minimal": {
+                  "summary": "Top 3 results, no scraping",
+                  "value": {
+                    "query": "renewable energy trends 2024",
+                    "limit": 3
+                  }
+                },
+                "with_scrape": {
+                  "summary": "Scrape each result as markdown",
+                  "value": {
+                    "query": "rust async runtime",
+                    "limit": 5,
+                    "scrapeOptions": {
+                      "formats": [
+                        "markdown"
+                      ],
+                      "onlyMainContent": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/SearchDisabled"
+          }
+        }
+      }
+    },
+    "/v1/scrape": {
+      "post": {
+        "tags": [
+          "scrape"
+        ],
+        "summary": "Scrape one URL",
+        "operationId": "scrape",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScrapeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Scrape result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScrapeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/map": {
+      "post": {
+        "tags": [
+          "map"
+        ],
+        "summary": "Discover URLs on a site",
+        "operationId": "map",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MapRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "List of URLs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MapResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/crawl": {
+      "post": {
+        "tags": [
+          "crawl"
+        ],
+        "summary": "Start an async crawl job",
+        "operationId": "crawlStart",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrawlRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Crawl job accepted; poll with /v1/crawl/{id}",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrawlAccepted"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/crawl/{id}": {
+      "get": {
+        "tags": [
+          "crawl"
+        ],
+        "summary": "Get crawl job status and results",
+        "operationId": "crawlStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Crawl job id returned by POST /v1/crawl"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job status + collected pages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrawlStatus"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/v1/batch/scrape": {
+      "post": {
+        "tags": [
+          "batch"
+        ],
+        "summary": "Start an async batch scrape over an explicit URL list",
+        "operationId": "batchScrapeStart",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchScrapeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Batch job accepted; poll with /v1/batch/scrape/{id}",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchScrapeAccepted"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/batch/scrape/{id}": {
+      "get": {
+        "tags": [
+          "batch"
+        ],
+        "summary": "Get batch job status and results",
+        "operationId": "batchScrapeStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Batch job id returned by POST /v1/batch/scrape"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job status + scraped pages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrawlStatus"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "batch"
+        ],
+        "summary": "Cancel an active batch job",
+        "operationId": "batchScrapeCancel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Batch job id returned by POST /v1/batch/scrape"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job cancelled; status becomes \"cancelled\""
+          }
+        }
+      }
+    },
+    "/v1/change-tracking/diff": {
+      "post": {
+        "tags": [
+          "change-tracking"
+        ],
+        "summary": "Diff current scrape content against a previous snapshot",
+        "description": "Stateless: opencore stores nothing — the caller supplies the `previous` snapshot. Accepts a single body or a `batch` array (presence of `batch` selects batch mode). The crawl-path workhorse for monitors.",
+        "operationId": "changeTrackingDiff",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeTrackingDiffRequest"
+              },
+              "examples": {
+                "single_gitdiff": {
+                  "summary": "Single page, markdown git-diff",
+                  "value": {
+                    "modes": [
+                      "gitDiff"
+                    ],
+                    "previous": {
+                      "markdown": "Starter $19",
+                      "contentHash": "abc"
+                    },
+                    "current": {
+                      "markdown": "Starter $24"
+                    }
+                  }
+                },
+                "batch_json": {
+                  "summary": "Batch, json per-field mode",
+                  "value": {
+                    "modes": [
+                      "json"
+                    ],
+                    "batch": [
+                      {
+                        "url": "https://example.com/pricing",
+                        "previous": {
+                          "json": {
+                            "price": "$19"
+                          },
+                          "contentHash": "abc"
+                        },
+                        "current": {
+                          "json": {
+                            "price": "$24"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Diff result (object for single, array for batch) wrapped in the standard envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/components/schemas/ChangeTrackingResult"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/ChangeTrackingResult"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/capabilities": {
+      "get": {
+        "tags": [
+          "capabilities"
+        ],
+        "summary": "Server capability discovery",
+        "description": "Returns what this opencore instance actually supports: LLM providers, output formats, search features, screenshot/renderer availability, document parsers and enforced limits. Every boolean is derived from the real build features and effective config — a capability is true only when the instance can perform it for a request that supplies no extra credentials. SaaS frontends call this on boot to validate a minimum capability set before sending traffic.",
+        "operationId": "capabilities",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {}
+        ],
+        "responses": {
+          "200": {
+            "description": "Capability report for this opencore instance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "version",
+                    "llm",
+                    "formats",
+                    "search",
+                    "screenshot",
+                    "renderers",
+                    "extract",
+                    "documents",
+                    "limits"
+                  ],
+                  "properties": {
+                    "version": {
+                      "type": "string",
+                      "description": "opencore semver string"
+                    },
+                    "llm": {
+                      "type": "object",
+                      "required": [
+                        "providers",
+                        "supportsBaseUrl",
+                        "serverKeyConfigured",
+                        "maxConcurrency"
+                      ],
+                      "properties": {
+                        "providers": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "example": [
+                            "anthropic",
+                            "openai",
+                            "deepseek",
+                            "openai-compatible",
+                            "openai-responses",
+                            "azure"
+                          ]
+                        },
+                        "supportsBaseUrl": {
+                          "type": "boolean",
+                          "description": "The LLM dispatcher accepts a custom baseUrl, but only as part of a BYOK request: the per-request LLM config that carries it is only built when the request also supplies llmApiKey. Sending baseUrl without a key leaves the server's own endpoint in force (the server never points its own key at a caller-chosen host). POST /v1/extract rejects baseUrl outright — configure [extraction.llm.base_url] server-side for that route. Build-invariant: no config turns this off."
+                        },
+                        "serverKeyConfigured": {
+                          "type": "boolean",
+                          "description": "True when a server-side LLM API key is present. False on BYOK-only deploys (CRW_DISABLE_SERVER_LLM_KEY=1), where a self-hosted instance still accepts a per-request llmApiKey. The managed cloud does not take a caller-supplied key."
+                        },
+                        "maxConcurrency": {
+                          "type": "integer",
+                          "description": "Server-configured LLM fan-out cap; 0 when no server LLM config is present"
+                        },
+                        "requireByokHeader": {
+                          "type": "string",
+                          "description": "Header name required on LLM-touching requests; omitted when no header guard is configured"
+                        }
+                      }
+                    },
+                    "formats": {
+                      "type": "object",
+                      "required": [
+                        "supported",
+                        "llmRequired",
+                        "changeTrackingModes",
+                        "changeTrackingModesLlmRequired"
+                      ],
+                      "properties": {
+                        "supported": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "example": [
+                            "markdown",
+                            "html",
+                            "rawHtml",
+                            "plainText",
+                            "links",
+                            "json",
+                            "summary",
+                            "changeTracking",
+                            "screenshot"
+                          ],
+                          "description": "Output formats this build/config can actually produce. `screenshot` is listed only when a screenshot-capable renderer (chrome / chrome_proxy / playwright) is compiled in and configured."
+                        },
+                        "changeTrackingModes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "example": [
+                            "gitDiff",
+                            "json"
+                          ]
+                        },
+                        "llmRequired": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Formats that additionally need an LLM: a server key (llm.serverKeyConfigured) or a per-request llmApiKey. Requesting them without one is a hard error, never a silent downgrade. When llm.requireByokHeader is set the server key is NOT sufficient: the scrape and extract paths reject these formats unless the request carries llmApiKey.",
+                          "example": [
+                            "json",
+                            "summary"
+                          ]
+                        },
+                        "changeTrackingModesLlmRequired": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Change-tracking modes that need an LLM. gitDiff is deterministic; json mode calls an LLM.",
+                          "example": [
+                            "json"
+                          ]
+                        }
+                      }
+                    },
+                    "search": {
+                      "type": "object",
+                      "required": [
+                        "supported",
+                        "answer",
+                        "summarizeResults"
+                      ],
+                      "properties": {
+                        "supported": {
+                          "type": "boolean",
+                          "description": "POST /v1/search is usable: [search].enabled and search.search_backend_url are set. Configured, not health-probed."
+                        },
+                        "answer": {
+                          "type": "boolean",
+                          "description": "Answer synthesis works WITHOUT a caller-supplied LLM key (search configured AND a server LLM key present). When false but supported is true, a self-hosted instance still answers a request that carries llmApiKey; the managed cloud does not take a caller-supplied key."
+                        },
+                        "summarizeResults": {
+                          "type": "boolean",
+                          "description": "Same gate as answer."
+                        }
+                      }
+                    },
+                    "screenshot": {
+                      "type": "object",
+                      "required": [
+                        "supported",
+                        "fullPage"
+                      ],
+                      "properties": {
+                        "supported": {
+                          "type": "boolean",
+                          "description": "A screenshot-capable renderer (chrome / chrome_proxy / playwright) is compiled in AND configured. LightPanda and Camoufox cannot capture, so an instance with only those reports false and the scrape path fails closed on a screenshot request."
+                        },
+                        "fullPage": {
+                          "type": "boolean",
+                          "description": "Full-page capture (screenshot@fullPage / screenshotFullPage). Same gate as supported."
+                        }
+                      }
+                    },
+                    "renderers": {
+                      "type": "object",
+                      "required": [
+                        "available",
+                        "mode"
+                      ],
+                      "properties": {
+                        "available": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Renderer tiers this instance constructed, in fallback order, reflecting both the build features and the config. These are the values the per-request `renderer` pin accepts. Mostly JS tiers, plus the JS-less impersonated-http tier when that feature is built in.",
+                          "example": [
+                            "lightpanda",
+                            "chrome"
+                          ]
+                        },
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "auto",
+                            "none",
+                            "lightpanda",
+                            "chrome",
+                            "playwright",
+                            "camoufox"
+                          ],
+                          "description": "Effective [renderer].mode. Note chrome_proxy is a renderer TIER (it can appear in renderers.available) but not a mode.",
+                          "example": "auto"
+                        },
+                        "renderJsDefault": {
+                          "type": "boolean",
+                          "description": "Effective [renderer].render_js_default; omitted when unset (auto-detect)."
+                        }
+                      }
+                    },
+                    "extract": {
+                      "type": "object",
+                      "required": [
+                        "supported",
+                        "maxUrls",
+                        "perFieldAttribution"
+                      ],
+                      "properties": {
+                        "supported": {
+                          "type": "boolean",
+                          "description": "POST /v1/extract works for a request that carries no credentials of its own. The route is ALWAYS mounted, but it needs an LLM: false means a server LLM key is absent, or llm.requireByokHeader is set (which makes the server key insufficient). false does NOT mean 'not implemented' — a request carrying llmApiKey still extracts on a self-hosted instance."
+                        },
+                        "maxUrls": {
+                          "type": "integer",
+                          "description": "Max URLs accepted per extract request (crawler.max_extract_urls)."
+                        },
+                        "perFieldAttribution": {
+                          "type": "boolean",
+                          "description": "Per-field `basis` attribution. This build ships `basis`, so it reports true; the flag reflects build capability, not whether an LLM is configured."
+                        }
+                      }
+                    },
+                    "documents": {
+                      "type": "object",
+                      "required": [
+                        "parsers",
+                        "fileUpload"
+                      ],
+                      "properties": {
+                        "parsers": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "example": [
+                            "pdf"
+                          ]
+                        },
+                        "fileUpload": {
+                          "type": "object",
+                          "required": [
+                            "supported",
+                            "endpoint",
+                            "maxBytes",
+                            "types",
+                            "ocr"
+                          ],
+                          "properties": {
+                            "supported": {
+                              "type": "boolean"
+                            },
+                            "endpoint": {
+                              "type": "string",
+                              "description": "Upload path to join onto your API base. /v2/parse is the one path served by every surface: the engine mounts it at the root and under /firecrawl, and the hosted API proxies /v1/* and /v2/* only.",
+                              "example": "/v2/parse"
+                            },
+                            "maxBytes": {
+                              "type": "integer",
+                              "description": "The ENFORCED body cap ([document].max_upload_bytes, clamped by the hard ceiling) — the same value the body-limit layer applies."
+                            },
+                            "types": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              },
+                              "example": [
+                                "application/pdf"
+                              ]
+                            },
+                            "ocr": {
+                              "type": "boolean"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "limits": {
+                      "type": "object",
+                      "required": [
+                        "maxBatchUrls",
+                        "maxExtractUrls",
+                        "searchDefaultLimit",
+                        "searchMaxLimit",
+                        "maxUploadBytes"
+                      ],
+                      "properties": {
+                        "maxBatchUrls": {
+                          "type": "integer",
+                          "description": "Max URLs per batch-scrape submission (crawler.max_batch_urls)."
+                        },
+                        "maxExtractUrls": {
+                          "type": "integer",
+                          "description": "Max URLs per /v1/extract request (crawler.max_extract_urls)."
+                        },
+                        "searchDefaultLimit": {
+                          "type": "integer",
+                          "description": "Default /v1/search limit when the request omits it."
+                        },
+                        "searchMaxLimit": {
+                          "type": "integer",
+                          "description": "Hard cap on the /v1/search limit."
+                        },
+                        "maxUploadBytes": {
+                          "type": "integer",
+                          "description": "Enforced upload cap on the parse endpoint, in bytes.",
+                          "example": 52428800
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/extract": {
+      "post": {
+        "tags": [
+          "extract"
+        ],
+        "summary": "Start an async multi-URL structured extraction job",
+        "description": "Native extraction. Returns a fixed-cardinality per-URL array via GET /v1/extract/{id}. At least one of `prompt` or `schema` is required. SDK async starters send `Prefer: respond-async` for managed/self-hosted parity.",
+        "operationId": "extractStart",
+        "parameters": [
+          {
+            "name": "Prefer",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "respond-async"
+              ]
+            },
+            "description": "Request the canonical async lifecycle across managed and self-hosted deployments."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtractRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Extract job accepted; poll with /v1/extract/{id}",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtractAccepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        }
+      }
+    },
+    "/v1/extract/{id}": {
+      "get": {
+        "tags": [
+          "extract"
+        ],
+        "summary": "Get extract job status and per-URL results",
+        "operationId": "extractStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Extract job id returned by POST /v1/extract"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job status + per-URL extraction results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtractStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "extract"
+        ],
+        "summary": "Cancel an extract job",
+        "description": "Idempotent. Processing becomes cancelling while a claimed URL settles, then cancelled. Completed, failed, and cancelled states are immutable.",
+        "operationId": "extractCancel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Extract job id returned by POST /v1/extract"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canonical job status + ordered per-URL results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtractStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "API key",
+        "description": "Hosted only. Get a key at https://fastcrw.com/register."
+      }
+    },
+    "schemas": {
+      "SearchRequest": {
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "default": 5
+          },
+          "lang": {
+            "type": "string",
+            "example": "en"
+          },
+          "tbs": {
+            "type": "string",
+            "enum": [
+              "qdr:h",
+              "qdr:d",
+              "qdr:w",
+              "qdr:m",
+              "qdr:y"
+            ]
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "web",
+                "news",
+                "images"
+              ]
+            }
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "scrapeOptions": {
+            "$ref": "#/components/schemas/SearchScrapeOptions"
+          }
+        }
+      },
+      "SearchResult": {
+        "type": "object",
+        "required": [
+          "url",
+          "title"
+        ],
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "title": {
+            "type": "string"
+          },
+          "snippet": {
+            "type": "string",
+            "description": "Result blurb (LLM-ready summary line)"
+          },
+          "description": {
+            "type": "string",
+            "description": "Alias of snippet (same value, kept for Firecrawl response-shape parity)"
+          },
+          "position": {
+            "type": "integer"
+          },
+          "score": {
+            "type": "number"
+          },
+          "category": {
+            "type": "string",
+            "description": "Search backend result category (e.g. 'general')"
+          },
+          "markdown": {
+            "type": "string",
+            "description": "Present when scrapeOptions.formats includes 'markdown'"
+          }
+        }
+      },
+      "SearchResponse": {
+        "type": "object",
+        "required": [
+          "success",
+          "data"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "description": "Search results. On the hosted API (https://api.fastcrw.com) the results ARE the value of `data`. A self-hosted engine wraps them one level deeper as `data.results`, and carries `answer`/`citations`/`llmUsage`/`warnings` inside `data` instead of at the top level. Clients that must work against both should read `data.results` when present and fall back to `data`.",
+            "anyOf": [
+              {
+                "title": "Flat results",
+                "description": "Returned when `sources` is not set.",
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/SearchResult"
+                }
+              },
+              {
+                "title": "Grouped results",
+                "description": "Returned when `sources` is set.",
+                "type": "object",
+                "properties": {
+                  "web": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/SearchResult"
+                    }
+                  },
+                  "news": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/SearchResult"
+                    }
+                  },
+                  "images": {
+                    "type": "array",
+                    "items": {
+                      "type": "object"
+                    }
+                  }
+                }
+              },
+              {
+                "title": "Self-hosted wrapper",
+                "description": "The self-hosted engine nests the flat or grouped results under `results`.",
+                "type": "object",
+                "required": [
+                  "results"
+                ],
+                "properties": {
+                  "results": {},
+                  "answer": {
+                    "type": "string"
+                  },
+                  "citations": {
+                    "type": "array",
+                    "items": {
+                      "type": "object"
+                    }
+                  },
+                  "llmUsage": {
+                    "type": "object"
+                  },
+                  "warnings": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "answer": {
+            "type": "string",
+            "description": "Hosted API only — synthesized answer over the top results, present when `answer: true` was set. A self-hosted engine returns this inside `data`."
+          },
+          "citations": {
+            "type": "array",
+            "description": "Hosted API only — sources for `answer`, in citation order. A self-hosted engine returns this inside `data`.",
+            "items": {
+              "type": "object"
+            }
+          },
+          "llmUsage": {
+            "type": "object",
+            "description": "Hosted API only — token usage for the answer synthesis. A self-hosted engine returns this inside `data`."
+          },
+          "warnings": {
+            "type": "array",
+            "description": "Hosted API only — soft-failure notices (e.g. an answer leg that was rate-limited). A self-hosted engine returns this inside `data`.",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SearchScrapeOptions": {
+        "type": "object",
+        "properties": {
+          "formats": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "markdown",
+                "html",
+                "rawHtml",
+                "links"
+              ]
+            },
+            "default": [
+              "markdown"
+            ]
+          },
+          "onlyMainContent": {
+            "type": "boolean",
+            "default": true
+          },
+          "timeout": {
+            "type": "integer",
+            "description": "Per-result scrape budget in ms. Default 15000. Search awaits every result, so this bounds the whole response; raise it for heavy JS pages.",
+            "minimum": 1,
+            "maximum": 60000,
+            "default": 15000
+          }
+        }
+      },
+      "ScrapeOptions": {
+        "type": "object",
+        "properties": {
+          "formats": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "markdown",
+                "html",
+                "rawHtml",
+                "links"
+              ]
+            },
+            "default": [
+              "markdown"
+            ]
+          },
+          "onlyMainContent": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "description": "Per-result enrichment for `/v1/search`. The search result envelope only carries these formats; `plainText` and `json` are rejected outright."
+      },
+      "FieldStatus": {
+        "type": "string",
+        "enum": [
+          "supported",
+          "unverified",
+          "unsupported",
+          "notFound"
+        ],
+        "description": "How well an extracted field is attributed to its source. Honest: a field whose attribution could not be verified is 'unverified'/'unsupported' rather than given a fabricated citation."
+      },
+      "EvidenceCitation": {
+        "type": "object",
+        "required": [
+          "url",
+          "sourceHash",
+          "sourceTextKind"
+        ],
+        "description": "A citation backing an extracted value. Every field is server-produced; never a model-supplied url, hash or excerpt.",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The document the engine fetched."
+          },
+          "title": {
+            "type": "string"
+          },
+          "excerpt": {
+            "type": "string",
+            "description": "Verbatim span from the canonical source text. Absent when the span could not be established (status 'unverified')."
+          },
+          "sourceHash": {
+            "type": "string",
+            "description": "'sha256:<hex>' of the exact text sent to the model."
+          },
+          "sourceTextKind": {
+            "type": "string",
+            "description": "Which text sourceHash covers. 'llmInput' for extraction basis (the truncated markdown sent to the model)."
+          }
+        }
+      },
+      "Basis": {
+        "type": "object",
+        "required": [
+          "basisVersion",
+          "field",
+          "value",
+          "status",
+          "citations"
+        ],
+        "description": "Per-field extraction evidence. Emitted only for top-level scalar schema properties, and only when the request set basis:true. citations is empty exactly when status is 'unsupported' or 'notFound'; value is null exactly when status is 'notFound'.",
+        "properties": {
+          "basisVersion": {
+            "type": "integer"
+          },
+          "field": {
+            "type": "string"
+          },
+          "value": {
+            "description": "The schema-validated value; null when status is 'notFound'. Never rewritten to the model's claim."
+          },
+          "status": {
+            "$ref": "#/components/schemas/FieldStatus"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "citations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EvidenceCitation"
+            }
+          }
+        }
+      },
+      "BasisWarning": {
+        "type": "object",
+        "required": [
+          "field",
+          "code"
+        ],
+        "description": "A coded reason a field's attribution was downgraded. Closed, crw-owned code set; never upstream text.",
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          }
+        }
+      },
+      "ScrapeRequest": {
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "formats": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OutputFormat"
+            },
+            "default": [
+              "markdown"
+            ]
+          },
+          "onlyMainContent": {
+            "type": "boolean",
+            "default": true,
+            "description": "Strip navigation, ads, and boilerplate; keep main article content only"
+          },
+          "renderJs": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "null = auto-detect, true = force JS rendering, false = skip JS rendering"
+          },
+          "waitFor": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Milliseconds to wait after JS rendering before extracting content"
+          },
+          "includeTags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [],
+            "description": "CSS selectors / HTML tags to include in extraction"
+          },
+          "excludeTags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [],
+            "description": "CSS selectors / HTML tags to remove before extraction"
+          },
+          "jsonSchema": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "JSON Schema describing the structured output shape for the 'json' format"
+          },
+          "basis": {
+            "type": "boolean",
+            "default": false,
+            "description": "Return per-field evidence alongside the 'json' format: each top-level scalar schema property comes back as a Basis with an honest status. Requires a JSON schema; off by default, and when off the request sent to the model is unchanged."
+          },
+          "headers": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Custom HTTP request headers forwarded to the target URL"
+          },
+          "cssSelector": {
+            "type": "string",
+            "description": "CSS selector to narrow content extraction to a specific element"
+          },
+          "xpath": {
+            "type": "string",
+            "description": "XPath expression to narrow content extraction to a specific element"
+          },
+          "chunkStrategy": {
+            "$ref": "#/components/schemas/ChunkStrategy",
+            "description": "Strategy for chunking the extracted markdown"
+          },
+          "query": {
+            "type": "string",
+            "description": "Query string for BM25/cosine chunk filtering (used with chunkStrategy)"
+          },
+          "filterMode": {
+            "type": "string",
+            "enum": [
+              "bm25",
+              "cosine"
+            ],
+            "description": "Filtering algorithm to rank chunks against query"
+          },
+          "topK": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Number of top chunks to return after filtering (default: 5)"
+          },
+          "proxy": {
+            "type": "string",
+            "description": "Per-request proxy URL (http/https/socks5). Overrides global config."
+          },
+          "proxyList": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [],
+            "description": "Per-request proxy pool to rotate among (BYOP). Takes precedence over proxy and server config."
+          },
+          "proxyRotation": {
+            "type": "string",
+            "enum": [
+              "round_robin",
+              "random",
+              "sticky_per_host"
+            ],
+            "description": "Rotation strategy for proxyList (default: sticky_per_host)"
+          },
+          "country": {
+            "type": "string",
+            "description": "2-letter ISO 3166-1 alpha-2 country code for residential proxy egress (e.g. 'us', 'gb')"
+          },
+          "stealth": {
+            "type": "boolean",
+            "description": "Override stealth mode for this request (null = use global config)"
+          },
+          "actions": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Unsupported Firecrawl parameter — returns a clear error if supplied"
+          },
+          "extract": {
+            "$ref": "#/components/schemas/ExtractOptions",
+            "description": "Firecrawl-compatible extract object (e.g. { schema: {...} })"
+          },
+          "llmApiKey": {
+            "type": "string",
+            "description": "BYOK: LLM provider API key for structured extraction (overrides server key)"
+          },
+          "llmProvider": {
+            "type": "string",
+            "enum": [
+              "anthropic",
+              "openai",
+              "deepseek",
+              "azure",
+              "openai-compatible",
+              "openai-responses"
+            ],
+            "description": "Per-request LLM provider override"
+          },
+          "llmModel": {
+            "type": "string",
+            "description": "Per-request LLM model identifier override"
+          },
+          "baseUrl": {
+            "type": "string",
+            "description": "Per-request LLM base URL override for Chat Completions-compatible or Responses-compatible providers (e.g. https://api.deepseek.com/v1)"
+          },
+          "summaryPrompt": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "User-supplied instructions appended to the summary system prompt (capped at 500 chars)"
+          },
+          "maxContentChars": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Maximum bytes of scraped content sent to LLM for 'summary' format (capped at 200 KB)"
+          },
+          "renderer": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "lightpanda",
+              "chrome",
+              "chrome_proxy",
+              "playwright",
+              "camoufox",
+              "impersonated-http"
+            ],
+            "description": "Pin this request to a specific renderer. A non-auto browser tier implies renderJs:true unless renderJs:false is set. impersonated-http is a JS-less tier that presents a real Chrome TLS fingerprint; it never implies renderJs, and combining it with renderJs:true is rejected."
+          },
+          "deadlineMs": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 60000,
+            "description": "End-to-end deadline budget in milliseconds (default: 8000, max: 60000)"
+          },
+          "debug": {
+            "type": "boolean",
+            "description": "When true, response includes debugExtraction trace with every candidate the extractor considered"
+          },
+          "changeTracking": {
+            "$ref": "#/components/schemas/ChangeTrackingOptions",
+            "description": "Activated when formats includes 'changeTracking'. The format entry is the plain string; options ride on this sibling field."
+          },
+          "goal": {
+            "type": "string",
+            "maxLength": 2048,
+            "description": "Plain-language monitor goal for the meaningful-change judge"
+          },
+          "judgeEnabled": {
+            "type": "boolean",
+            "description": "Run the LLM meaningful-change judge on a changed page (requires goal)"
+          },
+          "parsers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ParserSpec"
+            },
+            "description": "Document parser directives. Omit = auto-parse PDFs. Empty array = disable parsing."
+          },
+          "screenshotFullPage": {
+            "type": "boolean",
+            "default": false,
+            "description": "Capture the whole page rather than the viewport, for `formats: [\"screenshot\"]`."
+          }
+        }
+      },
+      "ScrapeResponse": {
+        "type": "object",
+        "required": [
+          "success",
+          "data"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "warning": {
+            "type": "string",
+            "description": "Top-level advisory (e.g. fallback render notice)"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "markdown": {
+                "type": "string"
+              },
+              "html": {
+                "type": "string"
+              },
+              "rawHtml": {
+                "type": "string"
+              },
+              "links": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              },
+              "json": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "metadata": {
+                "$ref": "#/components/schemas/PageMetadata"
+              },
+              "warning": {
+                "type": "string"
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "renderDecision": {
+                "type": "object",
+                "description": "How the renderer was chosen. A tagged object: `kind` is one of `userPinned`, `autoDefault`, `autoPromoted`, `breakerSkipped`, `failover`, and the remaining fields depend on it.",
+                "properties": {
+                  "kind": {
+                    "type": "string"
+                  }
+                }
+              },
+              "creditCost": {
+                "type": "number"
+              },
+              "basis": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Basis"
+                },
+                "description": "Per-field evidence for the 'json' format; present only when the request set basis:true."
+              },
+              "basisWarnings": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BasisWarning"
+                }
+              },
+              "llmInputHash": {
+                "type": "string",
+                "description": "'sha256:'-prefixed hash of the canonical text sent to the extraction LLM. The independent record a consumer checks a citation's sourceHash against, so the check is not circular."
+              },
+              "sourceHash": {
+                "type": "string",
+                "description": "Fingerprint of the canonical markdown, for dedup and caching."
+              },
+              "plainText": {
+                "type": "string",
+                "description": "Plain-text view; present when `formats` includes `plainText`."
+              },
+              "images": {
+                "$ref": "#/components/schemas/ScrapedImages"
+              },
+              "summary": {
+                "type": "string",
+                "description": "LLM summary; present when `formats` includes `summary`."
+              },
+              "llmUsage": {
+                "type": "object",
+                "description": "Token usage for the LLM call, when one ran."
+              },
+              "chunks": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                },
+                "description": "Chunked content, when a `chunkStrategy` was requested."
+              },
+              "contentType": {
+                "type": "string",
+                "description": "MIME type of the fetched resource."
+              },
+              "changeTracking": {
+                "type": "object",
+                "description": "Diff result; present when `formats` includes `changeTracking`."
+              },
+              "screenshot": {
+                "type": "string",
+                "description": "PNG capture as a `data:image/png;base64,...` URL; present when `formats` includes `screenshot`."
+              },
+              "block": {
+                "type": "object",
+                "description": "Anti-bot verdict. Present only when the page was a block or challenge shell, in which case `success` is false."
+              },
+              "debugExtraction": {
+                "type": "object",
+                "description": "Extraction trace; present only when `debug: true`."
+              }
+            }
+          }
+        }
+      },
+      "JsonOptions": {
+        "type": "object",
+        "properties": {
+          "schema": {
+            "type": "object",
+            "description": "JSON schema for the extracted shape",
+            "additionalProperties": true
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "systemPrompt": {
+            "type": "string"
+          }
+        }
+      },
+      "MapRequest": {
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "maxDepth": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Maximum link-follow depth from the start URL"
+          },
+          "useSitemap": {
+            "type": "boolean",
+            "default": true,
+            "description": "Fetch and parse sitemap.xml first"
+          },
+          "crawlFallback": {
+            "type": "boolean",
+            "default": true,
+            "description": "Fall back to BFS crawl when sitemap is missing or sparse"
+          },
+          "timeout": {
+            "type": "integer",
+            "description": "Custom timeout in seconds (default: 120)"
+          }
+        }
+      },
+      "MapResponse": {
+        "type": "object",
+        "required": [
+          "success",
+          "data"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "required": [
+              "links"
+            ],
+            "properties": {
+              "links": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              },
+              "droppedActionCount": {
+                "type": "integer"
+              },
+              "strippedTrackingCount": {
+                "type": "integer"
+              },
+              "sitemaps": {
+                "description": "Sitemap documents discovered and parsed while mapping the site (e.g. /sitemap.xml, /sitemap_index.xml). Not included in links, because a sitemap file is not a page.",
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              }
+            }
+          }
+        }
+      },
+      "CrawlRequest": {
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "maxPages": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 100
+          },
+          "maxDepth": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 2
+          },
+          "headers": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Custom HTTP request headers applied to every page the crawl fetches. On a browser render they apply to every request the page makes, subresources included, so avoid cross-origin-sensitive credentials here."
+          },
+          "scrapeOptions": {
+            "$ref": "#/components/schemas/CrawlScrapeOptions"
+          },
+          "formats": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CrawlOutputFormat"
+            },
+            "default": [
+              "markdown"
+            ]
+          },
+          "onlyMainContent": {
+            "type": "boolean",
+            "default": true
+          },
+          "jsonSchema": {
+            "type": "object"
+          },
+          "renderJs": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "waitFor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "renderer": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "lightpanda",
+              "chrome",
+              "chrome_proxy",
+              "playwright",
+              "camoufox",
+              "impersonated-http"
+            ]
+          },
+          "country": {
+            "type": "string",
+            "description": "2-letter ISO 3166-1 alpha-2 proxy egress country."
+          },
+          "proxyList": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "proxyRotation": {
+            "type": "string",
+            "enum": [
+              "round_robin",
+              "random",
+              "sticky_per_host"
+            ]
+          }
+        }
+      },
+      "CrawlAccepted": {
+        "type": "object",
+        "required": [
+          "success",
+          "id"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "URL to poll with GET /v1/crawl/{id}"
+          }
+        }
+      },
+      "CrawlStatus": {
+        "type": "object",
+        "required": [
+          "success",
+          "status",
+          "total",
+          "completed",
+          "data"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "scraping",
+              "completed",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "completed": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScrapeResponse"
+            }
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "ExtractRequest": {
+        "type": "object",
+        "required": [
+          "urls"
+        ],
+        "description": "At least one of `prompt` or `schema` must be present.",
+        "properties": {
+          "urls": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "description": "URLs to extract from (1..crawler.max_extract_urls)."
+          },
+          "prompt": {
+            "type": "string",
+            "description": "Free-text extraction objective."
+          },
+          "schema": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "JSON Schema constraining the extracted output."
+          },
+          "llmApiKey": {
+            "type": "string",
+            "description": "BYOK LLM API key."
+          },
+          "llmProvider": {
+            "type": "string"
+          },
+          "llmModel": {
+            "type": "string"
+          },
+          "basis": {
+            "type": "boolean",
+            "description": "Return per-field evidence: each result carries a 'basis' array, one entry per top-level scalar schema property. Requires 'schema'. Reported by GET /v1/capabilities (extract.perFieldAttribution)."
+          }
+        }
+      },
+      "ExtractResponse": {
+        "type": "object",
+        "required": [
+          "success",
+          "data"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "PageMetadata": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "sourceURL": {
+            "type": "string",
+            "format": "uri"
+          },
+          "statusCode": {
+            "type": "integer"
+          }
+        }
+      },
+      "ChangeTrackingOptions": {
+        "type": "object",
+        "properties": {
+          "modes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "gitDiff",
+                "json"
+              ]
+            },
+            "description": "Diff surfaces. gitDiff = markdown unified diff + AST; json = per-field diff; both = mixed."
+          },
+          "schema": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "JSON schema of tracked fields (json/mixed mode)"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "previous": {
+            "$ref": "#/components/schemas/ChangeTrackingSnapshot"
+          },
+          "tag": {
+            "type": "string",
+            "description": "Opaque caller tag echoed on the result"
+          },
+          "contentType": {
+            "type": "string",
+            "description": "MIME type; non-text content is hashed, not diffed"
+          }
+        }
+      },
+      "ChangeTrackingSnapshot": {
+        "type": "object",
+        "properties": {
+          "markdown": {
+            "type": "string",
+            "description": "Present for gitDiff/mixed mode"
+          },
+          "json": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Present for json/mixed mode"
+          },
+          "contentHash": {
+            "type": "string",
+            "description": "Mode-aware hash; persist + supply on the next check"
+          },
+          "capturedAt": {
+            "type": "string",
+            "description": "Caller-stamped capture time, echoed untouched"
+          }
+        }
+      },
+      "ChangeDiff": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Unified markdown diff (gitDiff/mixed)"
+          },
+          "json": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Parse-diff AST (gitDiff-only) OR per-field path map {previous,current} (json/mixed)"
+          }
+        }
+      },
+      "ChangeJudgment": {
+        "type": "object",
+        "required": [
+          "meaningful",
+          "confidence",
+          "reason"
+        ],
+        "properties": {
+          "meaningful": {
+            "type": "boolean"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "meaningfulChanges": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "added",
+                    "removed",
+                    "changed"
+                  ]
+                },
+                "before": {
+                  "type": "string"
+                },
+                "after": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChangeTrackingResult": {
+        "type": "object",
+        "required": [
+          "status",
+          "contentHash"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "same",
+              "changed"
+            ],
+            "description": "Per-page status. Set-level new/removed are computed by the caller's reconciler."
+          },
+          "firstObservation": {
+            "type": "boolean",
+            "description": "True when no previous was supplied — caller maps to 'new'"
+          },
+          "contentHash": {
+            "type": "string"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/ChangeTrackingSnapshot"
+          },
+          "diff": {
+            "$ref": "#/components/schemas/ChangeDiff"
+          },
+          "judgment": {
+            "$ref": "#/components/schemas/ChangeJudgment"
+          },
+          "tag": {
+            "type": "string"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ChangeTrackingDiffItem": {
+        "type": "object",
+        "required": [
+          "current"
+        ],
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "current": {
+            "type": "object",
+            "properties": {
+              "markdown": {
+                "type": "string"
+              },
+              "json": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          },
+          "previous": {
+            "$ref": "#/components/schemas/ChangeTrackingSnapshot"
+          },
+          "modes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "gitDiff",
+                "json"
+              ]
+            }
+          },
+          "schema": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "contentType": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          }
+        }
+      },
+      "ChangeTrackingDiffRequest": {
+        "type": "object",
+        "description": "Single body (provide 'current') OR batch (provide 'batch'). Top-level modes/schema/prompt/contentType act as shared defaults in batch mode.",
+        "properties": {
+          "batch": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChangeTrackingDiffItem"
+            }
+          },
+          "current": {
+            "type": "object",
+            "properties": {
+              "markdown": {
+                "type": "string"
+              },
+              "json": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          },
+          "previous": {
+            "$ref": "#/components/schemas/ChangeTrackingSnapshot"
+          },
+          "modes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "gitDiff",
+                "json"
+              ]
+            }
+          },
+          "schema": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "contentType": {
+            "type": "string"
+          }
+        }
+      },
+      "ChunkStrategy": {
+        "type": "object",
+        "description": "Strategy for chunking extracted markdown before query-based filtering",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "sentence",
+              "regex",
+              "topic"
+            ],
+            "description": "Chunking algorithm: sentence = split on .!?, regex = split on pattern, topic = split on markdown headings"
+          },
+          "maxChars": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Maximum characters per chunk (merges short chunks up to this limit)"
+          },
+          "overlapChars": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Character overlap between adjacent chunks"
+          },
+          "dedupe": {
+            "type": "boolean",
+            "description": "Remove duplicate chunks"
+          },
+          "pattern": {
+            "type": "string",
+            "description": "Regex pattern to split on (required when type = 'regex')"
+          }
+        }
+      },
+      "ExtractOptions": {
+        "type": "object",
+        "description": "Firecrawl-compatible extraction options sub-object",
+        "properties": {
+          "schema": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "JSON Schema for structured extraction. Used as jsonSchema when jsonSchema is not set directly."
+          }
+        }
+      },
+      "ParserSpec": {
+        "type": "object",
+        "description": "Document parser directive. Accepts string form ('pdf') or object form.",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "pdf"
+            ],
+            "description": "Parser type (only 'pdf' is supported)"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "fast",
+              "ocr"
+            ],
+            "description": "Parsing strategy (auto = text-first; ocr degrades to text extraction with a warning)"
+          },
+          "maxPages": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Optional cap on the number of pages to parse"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "success",
+          "error"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "const": false
+          },
+          "error": {
+            "type": "string",
+            "description": "Human-readable error message"
+          },
+          "errorCode": {
+            "type": "string",
+            "description": "Machine-readable error code (see docs/error-codes.md)"
+          }
+        }
+      },
+      "ExtractAccepted": {
+        "type": "object",
+        "required": [
+          "success",
+          "id",
+          "status",
+          "urls"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "processing"
+            ]
+          },
+          "urls": {
+            "type": "integer",
+            "description": "Count of URLs enqueued for fetch (preflight-failed URLs appear in results, not here)."
+          }
+        }
+      },
+      "ExtractUrlResult": {
+        "type": "object",
+        "required": [
+          "url",
+          "status"
+        ],
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "processing",
+              "completed",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Extracted JSON object (present when status is completed). Untouched cancelled slots omit data, error, usage, and basis."
+          },
+          "error": {
+            "type": "string"
+          },
+          "llmUsage": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Per-URL LLM token usage (provider/model/input/output tokens)."
+          },
+          "basis": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Basis"
+            },
+            "description": "Per-field evidence for this URL; present only when the request set basis:true."
+          },
+          "basisWarnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BasisWarning"
+            }
+          },
+          "llmInputHash": {
+            "type": "string",
+            "description": "'sha256:'-prefixed hash of the canonical text sent to the extraction LLM."
+          }
+        }
+      },
+      "ExtractStatus": {
+        "type": "object",
+        "required": [
+          "success",
+          "id",
+          "status",
+          "results",
+          "expiresAt",
+          "creditsUsed",
+          "tokensUsed"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "processing",
+              "cancelling",
+              "completed",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExtractUrlResult"
+            },
+            "description": "Fixed-cardinality per-URL slots in original request order. Pending slots are processing; untouched terminal slots are cancelled."
+          },
+          "error": {
+            "type": "string",
+            "description": "Job-level error, set only when every URL failed."
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "creditsUsed": {
+            "type": "integer"
+          },
+          "tokensUsed": {
+            "type": "integer"
+          }
+        }
+      },
+      "BatchScrapeRequest": {
+        "type": "object",
+        "description": "Every `/v1/scrape` body field except `url` is accepted here and applied to each URL. See `ScrapeRequest` for the full set.",
+        "required": [
+          "urls"
+        ],
+        "properties": {
+          "urls": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "minItems": 1,
+            "description": "URLs to scrape. Each is SSRF-validated; invalid entries are reported in invalidUrls."
+          },
+          "ignoreInvalidUrls": {
+            "type": "boolean",
+            "default": true,
+            "description": "When false, a single invalid URL rejects the whole submit with 400."
+          },
+          "maxConcurrency": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "How many URLs the job scrapes concurrently. Clamped server-side to crawler.max_batch_concurrency."
+          },
+          "formats": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OutputFormat"
+            },
+            "default": [
+              "markdown"
+            ]
+          },
+          "onlyMainContent": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
+      "BatchScrapeAccepted": {
+        "type": "object",
+        "required": [
+          "success",
+          "id",
+          "invalidUrls"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string",
+            "description": "Batch job id; poll with GET /v1/batch/scrape/{id}"
+          },
+          "invalidUrls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Submitted URLs rejected by parsing or the SSRF guard, verbatim."
+          }
+        }
+      },
+      "OutputFormat": {
+        "type": "string",
+        "enum": [
+          "markdown",
+          "html",
+          "rawHtml",
+          "plainText",
+          "links",
+          "images",
+          "json",
+          "summary",
+          "changeTracking",
+          "screenshot"
+        ],
+        "description": "Aliases accepted in addition to these: `extract` and `llm-extract` for `json`, `change-tracking` for `changeTracking`, `screenshot@fullPage` for `screenshot`."
+      },
+      "CrawlOutputFormat": {
+        "type": "string",
+        "enum": [
+          "markdown",
+          "html",
+          "rawHtml",
+          "plainText",
+          "links",
+          "images",
+          "json"
+        ],
+        "description": "The crawl path runs extraction and the optional LLM `json` pass. It does not produce `summary`, `screenshot` or inline `changeTracking`; use `/v1/scrape` for those."
+      },
+      "ScrapedImages": {
+        "type": "array",
+        "description": "Present when `formats` includes `images`.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "alt": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "url"
+          ]
+        }
+      },
+      "CrawlScrapeOptions": {
+        "type": "object",
+        "description": "Per-page scrape settings. Every key here may also be sent at the top level; an explicit top-level value wins.",
+        "properties": {
+          "formats": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CrawlOutputFormat"
+            },
+            "default": [
+              "markdown"
+            ]
+          },
+          "onlyMainContent": {
+            "type": "boolean",
+            "default": true
+          },
+          "jsonSchema": {
+            "type": "object",
+            "description": "JSON Schema for structured extraction, with `formats: [\"json\"]`."
+          },
+          "renderJs": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "null = auto-detect, true = force JS, false = never use a browser tier."
+          },
+          "waitFor": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Milliseconds to wait after JS rendering on each page."
+          },
+          "headers": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Custom HTTP request headers applied to every page the crawl fetches. On a browser render they apply to every request the page makes, subresources included, so avoid cross-origin-sensitive credentials here."
+          }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Invalid request body",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Missing or invalid bearer token (hosted only)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Resource not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "Rate limit exceeded",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "SearchDisabled": {
+        "description": "Search is disabled in self-hosted config (error: search_disabled)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    }
+  }
+}
