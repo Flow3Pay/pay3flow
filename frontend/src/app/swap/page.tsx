@@ -34,17 +34,19 @@ export default function SwapPage() {
 
   return (
     <div className="cowTheme">
-      <Header
-        connected={connected}
-        address={DEMO_ADDRESS}
-        onConnect={handleConnect}
-        onDisconnect={handleDisconnect}
-        links={SWAP_LINKS}
-        brandHref="/"
-      />
-      <main>
-        <Converter connected={connected} connecting={connecting} onConnect={handleConnect} />
-      </main>
+      <div className="heroBg">
+        <Header
+          connected={connected}
+          address={DEMO_ADDRESS}
+          onConnect={handleConnect}
+          onDisconnect={handleDisconnect}
+          links={SWAP_LINKS}
+          brandHref="/"
+        />
+        <main>
+          <Converter connected={connected} connecting={connecting} onConnect={handleConnect} />
+        </main>
+      </div>
     </div>
   );
 }
