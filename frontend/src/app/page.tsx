@@ -12,15 +12,17 @@ export default function Home() {
   return (
     <LanguageProvider>
       <div className="cowTheme">
-        <Header
-          landing
-          connected={false}
-          address=""
-          onConnect={() => {}}
-          onDisconnect={() => {}}
-        />
-        <main>
+        <div className="heroBg">
+          <Header
+            landing
+            connected={false}
+            address=""
+            onConnect={() => {}}
+            onDisconnect={() => {}}
+          />
           <Hero />
+        </div>
+        <main>
           <Features />
           <Technology />
           <Business />
