@@ -1,13 +1,57 @@
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --font-sans: var(--font-inter), "Inter var", Inter, "SF Pro Text", Arial, sans-serif;
+
+  /* Neutral palette */
+  --color-bg: #fdfdfb;
+  --color-paper: #ffffff;
+  --color-panel: #f2f2f2;
+  --color-panel-soft: rgba(0, 35, 78, 0.04);
+  --color-text: #00234e;
+  --color-text-soft: rgba(0, 35, 78, 0.7);
+  --color-text-faint: rgba(0, 35, 78, 0.45);
+  --color-primary: #004293;
+  --color-primary-strong: #002f68;
+  --color-accent: #ec4612;
+  --color-accent-soft: rgba(236, 70, 18, 0.14);
+  --color-good: #007b28;
+  --color-warn: #d94719;
+  --color-danger: #d41300;
+  --color-warn-bg: rgba(217, 71, 25, 0.12);
+  --color-border: rgba(0, 35, 78, 0.08);
+  --color-border-strong: rgba(0, 35, 78, 0.14);
+
+  --radius-card: 24px;
+  --radius-panel: 16px;
+  --radius-pill: 999px;
+
+  --shadow-card: 0 12px 12px rgba(0, 66, 147, 0.06), 0 24px 48px -16px rgba(0, 66, 147, 0.2);
+  --shadow-pop: 0 16px 40px -12px rgba(0, 35, 78, 0.22);
+
+  --page-bg: #fdfdfb;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Cow.fi-style theme for the landing page */
+.cowTheme {
+  --color-bg: #fdfdfb;
+  --color-paper: #ffffff;
+  --color-panel: #f4f4ef;
+  --color-panel-soft: rgba(23, 23, 19, 0.05);
+  --color-text: #171713;
+  --color-text-soft: #4d4a44;
+  --color-text-faint: #8a857c;
+  --color-primary: #012f7a;
+  --color-primary-strong: #001f55;
+  --color-accent: #ec4612;
+  --color-accent-soft: rgba(236, 70, 18, 0.2);
+  --color-good: #007b28;
+  --color-warn: #d94719;
+  --color-danger: #d41300;
+  --color-border: rgba(23, 23, 19, 0.1);
+  --color-border-strong: rgba(23, 23, 19, 0.18);
+  --color-text-invert: #ffffff;
+
+  min-height: 100vh;
+  background: #fdfdfb;
 }
 
 html {
@@ -22,11 +66,10 @@ body {
 
 body {
   min-height: 100%;
-  display: flex;
-  flex-direction: column;
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--color-text);
+  background: var(--page-bg);
+  background-attachment: fixed;
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -42,8 +85,34 @@ a {
   text-decoration: none;
 }
 
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--color-accent-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }

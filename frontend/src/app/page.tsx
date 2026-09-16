@@ -1,15 +1,32 @@
+"use client";
+
+import { Business } from "@/components/home/business";
+import { Features } from "@/components/home/features";
+import { Footer } from "@/components/home/footer";
+import { Header } from "@/components/home/header";
+import { Hero } from "@/components/home/hero";
+import { Technology } from "@/components/home/technology";
+import { LanguageProvider } from "@/i18n/context";
+
 export default function Home() {
   return (
-    <main style={{ maxWidth: 640, margin: "4rem auto", fontFamily: "system-ui" }}>
-      <h1>Pay3Flow</h1>
-      <p>Трансграничные платежи через эквайринг — комиссия ниже, чем SWIFT.</p>
-      <hr />
-      <h2>Сервисы</h2>
-      <ul>
-        <li><strong>Backend</strong> — API, WebSocket (Rust / Axum)</li>
-        <li><strong>Fmatch</strong> — матчинг запросов к эквайерам</li>
-        <li><strong>Searcher</strong> — поиск новых эквайеров (SearXNG)</li>
-      </ul>
-    </main>
+    <LanguageProvider>
+      <div className="cowTheme">
+        <Header
+          landing
+          connected={false}
+          address=""
+          onConnect={() => {}}
+          onDisconnect={() => {}}
+        />
+        <main>
+          <Hero />
+          <Features />
+          <Technology />
+          <Business />
+        </main>
+        <Footer />
+      </div>
+    </LanguageProvider>
   );
 }
