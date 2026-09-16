@@ -54,12 +54,13 @@ pub struct Proposal {
     pub resource_conforms_to: String,
     pub action: String,
     pub resource_unit: String,
+    pub attachments: Vec<Value>,
 }
 
 impl Proposal {
     /// Render as a full fep/0837 Proposal activity (purpose-aware).
     pub fn to_activity(&self) -> Value {
-        json!({
+        let mut activity = json!({
             "@context": [
                 AS_CONTEXT,
                 FEP0837_CONTEXT
@@ -81,7 +82,11 @@ impl Proposal {
                 }
             },
             "to": [AS_PUBLIC]
-        })
+        });
+        if !self.attachments.is_empty() {
+            activity["attachment"] = Value::Array(self.attachments.clone());
+        }
+        activity
     }
 }
 
@@ -105,6 +110,74 @@ pub fn accept_follow(activity: &Value, actor_id: &str) -> Value {
         "type": ACTIVITY_ACCEPT,
         "actor": actor_id,
         "object": object,
+    })
+}
+
+/// A fep/0837 request proposal (task submission) sent into the fmatch inbox.
+/// Top-level `command` and `resultInbox` are read by fmatch's request router.
+pub fn request_proposal(
+    id: &str,
+    actor: &str,
+    resource: &str,
+    command: &str,
+    content: &str,
+    result_inbox: &str,
+) -> Value {
+    json!({
+        "@context": [
+            AS_CONTEXT,
+            FEP0837_CONTEXT
+        ],
+        "id": id,
+        "type": OBJECT_PROPOSAL,
+        "purpose": "request",
+        "attributedTo": actor,
+        "name": format!("pay3flow request: {command}"),
+        "content": content,
+        "command": command,
+        "resultInbox": result_inbox,
+        "publishes": {
+            "id": format!("{id}#intent"),
+            "type": OBJECT_INTENT,
+            "action": "deliverService",
+            "resourceConformsTo": resource,
+            "resourceQuantity": {
+                "hasUnit": "one",
+                "hasNumericalValue": "1"
+            }
+        },
+        "to": [AS_PUBLIC]
+    })
+}
+
+/// A solver's Offer answer to a delivered Ticket. fmatch extracts `content`
+/// as the candidate answer (must not look like a pure acknowledgement or a
+/// failure notice), so this is the synchronous body returned from our inbox.
+pub fn solver_answer(actor_id: &str, task_ref: &str, in_reply_to: &str, content: &str) -> Value {
+    let id = format!(
+        "{}/activities/solver-answer/{}",
+        actor_id.trim_end_matches('/'),
+        uuid::Uuid::new_v4()
+    );
+    json!({
+        "@context": [
+            AS_CONTEXT,
+            FEP0837_CONTEXT
+        ],
+        "id": id,
+        "type": ACTIVITY_OFFER,
+        "actor": actor_id,
+        "object": {
+            "type": "Ticket",
+            "id": format!("{id}#ticket"),
+            "taskRef": task_ref,
+            "inReplyTo": in_reply_to,
+            "activity": "result",
+            "command": "#result",
+            "status": "completed",
+            "responseMode": "answer",
+            "content": content,
+        }
     })
 }
 
@@ -142,7 +215,8 @@ impl AcquirerCandidate {
             if let Some(object) = reply.get("object") {
                 if let Some(list) = object.get("candidates").and_then(Value::as_array) {
                     for raw in list {
-                        if let Ok(mut c) = serde_json::from_value::<AcquirerCandidate>(raw.clone()) {
+                        if let Ok(mut c) = serde_json::from_value::<AcquirerCandidate>(raw.clone())
+                        {
                             c.raw = raw.clone();
                             out.push(c);
                         }
@@ -169,6 +243,7 @@ mod tests {
             resource_conforms_to: "https://pay3flow.local/marketplace/resources/acquiring".into(),
             action: "deliverService".into(),
             resource_unit: "one".into(),
+            attachments: vec![],
         };
         let activity = p.to_activity();
         assert_eq!(activity["type"], json!(OBJECT_PROPOSAL));

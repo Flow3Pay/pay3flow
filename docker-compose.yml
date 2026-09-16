@@ -92,6 +92,25 @@ services:
       fmatch-typesense:
         condition: service_started
 
+  fake-solvers:
+    build: ./backend
+    container_name: pay3flow-fake-solvers
+    restart: unless-stopped
+    command: ["fake_solvers"]
+    ports:
+      - "9090:9090"
+    environment:
+      RUST_LOG: info
+      HTTP_ADDR: 0.0.0.0:9090
+      AP_ORIGIN: http://fake-solvers:9090
+      AP_KEY_PATH: /app/data/fake-key.pem
+      FMATCH_INBOX: http://fmatch:7277/inbox/actra
+      FMATCH_ACTOR_ID: http://fmatch:7277/actor/actra
+    volumes:
+      - backend_data:/app/data
+    depends_on:
+      - fmatch
+
   frontend:
     build: ./frontend
     container_name: pay3flow-frontend
@@ -103,14 +122,33 @@ services:
     depends_on:
       - backend
 
+  crw:
+    image: ghcr.io/us/crw:latest
+    container_name: pay3flow-crw
+    restart: unless-stopped
+    ports:
+      - "3030:3030"
+    environment:
+      RUST_LOG: info
+      CRW_SERVER__HOST: 0.0.0.0
+      CRW_SERVER__PORT: "3030"
+      CRW_RENDERER__MODE: none
+      CRW_SEARCH__SEARXNG_URL: http://searcher:8080
+    depends_on:
+      searcher:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3030/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   searcher:
     image: docker.io/searxng/searxng:latest
     container_name: pay3flow-searcher
     restart: unless-stopped
     ports:
       - "8081:8080"
-    volumes:
-      - ./searcher/settings.yml:/etc/searxng/settings.yml:ro
 
 volumes:
   pgdata:

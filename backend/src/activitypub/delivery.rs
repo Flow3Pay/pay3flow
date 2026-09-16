@@ -15,11 +15,16 @@ const BASE_BACKOFF_MS: u64 = 500;
 
 /// Outbound ActivityPub delivery: sign, retry transient failures, dedupe by
 /// activity id so a submission is never applied twice.
+///
+/// `pool` is optional purely so the failure path (unreachable/erroring inbox)
+/// is unit-testable without a Postgres instance; production code always passes
+/// `Some`. When `None`, dedupe is skipped (nothing is read or recorded).
 #[derive(Clone)]
 pub struct DeliveryClient {
     http: reqwest::Client,
-    pool: DbPool,
+    pool: Option<DbPool>,
     max_retries: u32,
+    base_backoff_ms: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -37,8 +42,25 @@ impl DeliveryClient {
             .expect("reqwest client");
         Self {
             http,
-            pool,
+            pool: Some(pool),
             max_retries: MAX_RETRIES,
+            base_backoff_ms: BASE_BACKOFF_MS,
+        }
+    }
+
+    /// Test-only client: no dedupe ledger (the DB table is never touched) and
+    /// a short backoff so the "fmatch is down" retry loop finishes fast.
+    #[cfg(test)]
+    pub fn for_test(max_retries: u32, base_backoff_ms: u64) -> Self {
+        let http = reqwest::Client::builder()
+            .timeout(DEFAULT_TIMEOUT)
+            .build()
+            .expect("reqwest client");
+        Self {
+            http,
+            pool: None,
+            max_retries,
+            base_backoff_ms,
         }
     }
 
@@ -49,22 +71,43 @@ impl DeliveryClient {
         inbox: &str,
         activity: &Value,
     ) -> Result<DeliveryOutcome, ActivityPubError> {
-        let activity_id = activity
-            .get("id")
-            .and_then(Value::as_str)
-            .ok_or_else(|| {
-                ActivityPubError::InvalidActivity {
-                    type_name: activity
-                        .get("type")
-                        .and_then(Value::as_str)
-                        .unwrap_or("unknown")
-                        .to_string(),
-                    detail: "activity is missing an id (idempotency key)".into(),
-                }
-            })?;
+        self.post(identity, inbox, activity, false)
+            .await
+            .map(|(outcome, _)| outcome)
+    }
+
+    /// Deliver a signed activity and return the response JSON body (when the
+    /// peer answered inline — e.g. fmatch's candidate list for a discovery
+    /// request).
+    pub async fn deliver_with_response(
+        &self,
+        identity: &ActorIdentity,
+        inbox: &str,
+        activity: &Value,
+    ) -> Result<(DeliveryOutcome, Option<Value>), ActivityPubError> {
+        self.post(identity, inbox, activity, true).await
+    }
+
+    async fn post(
+        &self,
+        identity: &ActorIdentity,
+        inbox: &str,
+        activity: &Value,
+        capture_body: bool,
+    ) -> Result<(DeliveryOutcome, Option<Value>), ActivityPubError> {
+        let activity_id = activity.get("id").and_then(Value::as_str).ok_or_else(|| {
+            ActivityPubError::InvalidActivity {
+                type_name: activity
+                    .get("type")
+                    .and_then(Value::as_str)
+                    .unwrap_or("unknown")
+                    .to_string(),
+                detail: "activity is missing an id (idempotency key)".into(),
+            }
+        })?;
 
         if self.was_delivered(activity_id, inbox).await? {
-            return Ok(DeliveryOutcome::AlreadyDelivered);
+            return Ok((DeliveryOutcome::AlreadyDelivered, None));
         }
 
         let parsed: reqwest::Url = inbox
@@ -83,14 +126,7 @@ impl DeliveryClient {
 
         let mut attempt: u32 = 0;
         loop {
-            let hdrs = sign_headers(
-                identity,
-                "POST",
-                &uri,
-                &host,
-                &body,
-                chrono::Utc::now(),
-            )?;
+            let hdrs = sign_headers(identity, "POST", &uri, &host, &body, chrono::Utc::now())?;
             let builder = self.http.post(inbox).body(body.clone());
             let request = hdrs
                 .into_iter()
@@ -101,29 +137,30 @@ impl DeliveryClient {
                 Ok(res) => {
                     let status = res.status();
                     if status.is_success() {
+                        let value = if capture_body {
+                            serde_json::from_str(&res.text().await.unwrap_or_default()).ok()
+                        } else {
+                            None
+                        };
                         self.record_delivery(activity_id, inbox).await?;
-                        return Ok(DeliveryOutcome::Delivered);
+                        return Ok((DeliveryOutcome::Delivered, value));
                     }
                     if !retryable(status.as_u16()) || attempt >= self.max_retries {
                         return Err(ActivityPubError::Delivery(format!(
                             "http {} for {}",
                             status,
-                            activity["id"]
-                                .as_str()
-                                .unwrap_or("<unknown>")
+                            activity["id"].as_str().unwrap_or("<unknown>")
                         )));
                     }
                 }
                 Err(e) => {
                     if attempt >= self.max_retries {
-                        return Err(ActivityPubError::Delivery(format!(
-                            "network error: {e}"
-                        )));
+                        return Err(ActivityPubError::Delivery(format!("network error: {e}")));
                     }
                 }
             }
             attempt += 1;
-            tokio::time::sleep(Duration::from_millis(BASE_BACKOFF_MS * (1 << attempt))).await;
+            tokio::time::sleep(Duration::from_millis(self.base_backoff_ms * (1 << attempt))).await;
         }
     }
 
@@ -140,16 +177,21 @@ impl DeliveryClient {
             return Ok(identity.public_key_pem().to_string());
         }
         let doc = identity.fetch_remote_actor(&self.http, actor_iri).await?;
-        doc.public_key
-            .map(|pk| pk.public_key_pem)
-            .ok_or_else(|| {
-                ActivityPubError::Signature(format!("actor {actor_iri} has no publicKey"))
-            })
+        doc.public_key.map(|pk| pk.public_key_pem).ok_or_else(|| {
+            ActivityPubError::Signature(format!("actor {actor_iri} has no publicKey"))
+        })
     }
 
-    async fn was_delivered(&self, activity_id: &str, inbox: &str) -> Result<bool, ActivityPubError> {
-        let client = self
-            .pool
+    async fn was_delivered(
+        &self,
+        activity_id: &str,
+        inbox: &str,
+    ) -> Result<bool, ActivityPubError> {
+        let Some(pool) = &self.pool else {
+            // test-only client without a ledger: dedupe is skipped
+            return Ok(false);
+        };
+        let client = pool
             .get()
             .await
             .map_err(|e| ActivityPubError::Other(format!("db: {e}")))?;
@@ -163,9 +205,16 @@ impl DeliveryClient {
         Ok(row.is_some())
     }
 
-    async fn record_delivery(&self, activity_id: &str, inbox: &str) -> Result<(), ActivityPubError> {
-        let client = self
-            .pool
+    async fn record_delivery(
+        &self,
+        activity_id: &str,
+        inbox: &str,
+    ) -> Result<(), ActivityPubError> {
+        let Some(pool) = &self.pool else {
+            // test-only client: nothing is recorded
+            return Ok(());
+        };
+        let client = pool
             .get()
             .await
             .map_err(|e| ActivityPubError::Other(format!("db: {e}")))?;
@@ -173,7 +222,10 @@ impl DeliveryClient {
             .execute(
                 "INSERT INTO activitypub_deliveries (activity_id, target) VALUES ($1, $2)
                  ON CONFLICT (activity_id, target) DO NOTHING",
-                &[&activity_id as &(dyn ToSql + Sync), &inbox as &(dyn ToSql + Sync)],
+                &[
+                    &activity_id as &(dyn ToSql + Sync),
+                    &inbox as &(dyn ToSql + Sync),
+                ],
             )
             .await
             .map_err(|e| ActivityPubError::Other(format!("db: {e}")))?;
@@ -199,5 +251,52 @@ mod port_tests {
         let url: reqwest::Url = "http://localhost:7277/inbox/actra?v=1".parse().unwrap();
         assert_eq!(url.path(), "/inbox/actra");
         assert_eq!(url.query(), Some("v=1"));
+    }
+}
+
+#[cfg(test)]
+mod fmatch_down_tests {
+    use serde_json::json;
+
+    use super::*;
+    use crate::activitypub::actor::ActorIdentity;
+
+    /// "fmatch упал" — the fmatch inbox is unreachable (connection refused on a
+    /// closed local port). `deliver` must exhaust its retries and surface a
+    /// `Delivery` error instead of panicking, and it must never fake success
+    /// (nothing is deduped/recorded when `pool: None`).
+    #[tokio::test]
+    async fn fmatch_unreachable_surfaces_delivery_error_after_retries() {
+        let key_path = std::env::temp_dir()
+            .join("pay3flow-fmatch-down-test")
+            .join("id.pem");
+        if let Some(parent) = key_path.parent() {
+            std::fs::create_dir_all(parent).expect("test key dir");
+        }
+        let identity = ActorIdentity::load_or_create(
+            key_path.to_str().expect("valid utf8 key path"),
+            "https://pay3flow.local",
+            "pay3flow",
+        )
+        .expect("actor identity");
+
+        let client = DeliveryClient::for_test(2, 5);
+        let inbox = "http://127.0.0.1:1/inbox/fmatch";
+        let activity = json!({
+            "id": "https://pay3flow.local/activities/fmatch-down-unit",
+            "type": "Follow",
+            "actor": "https://pay3flow.local/actor/pay3flow",
+            "object": "https://fmatch.local/actor/fmatch"
+        });
+
+        let err = client
+            .deliver(&identity, inbox, &activity)
+            .await
+            .expect_err("fmatch is down => delivery must fail");
+
+        assert!(
+            matches!(err, ActivityPubError::Delivery(_)),
+            "expected ActivityPubError::Delivery, got {err:?}"
+        );
     }
 }

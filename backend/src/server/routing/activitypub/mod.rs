@@ -62,5 +62,69 @@ pub async fn candidates(State(state): State<AppState>) -> Json<Vec<AcquirerCandi
     Json(state.ap.latest_candidates().await)
 }
 
+/// `POST /api/debug/task` — submit a payflow request into fmatch and return
+/// the inline candidate list it answers with (punkt 22, "best vs suitable").
+#[derive(serde::Deserialize)]
+pub struct DebugTaskPayload {
+    #[serde(default = "default_command")]
+    pub command: String,
+    #[serde(default = "default_content")]
+    pub content: String,
+}
+
+fn default_command() -> String {
+    "candidates".into()
+}
+
+fn default_content() -> String {
+    "transfer 100 USD from PayPal to VISA of BelarusBank; currency=USD; from=paypal; to=visa-belarusbank".into()
+}
+
+pub async fn debug_task(
+    State(state): State<AppState>,
+    payload: Option<Json<DebugTaskPayload>>,
+) -> Response {
+    let payload = payload.map(|Json(p)| p).unwrap_or(DebugTaskPayload {
+        command: default_command(),
+        content: default_content(),
+    });
+
+    state.ap.clear_candidates().await;
+    match state
+        .ap
+        .submit_request(&payload.command, &payload.content)
+        .await
+    {
+        Ok((outcome, body)) => {
+            let candidates = body
+                .as_ref()
+                .map(AcquirerCandidate::from_reply)
+                .unwrap_or_default();
+            state.ap.received_candidates(&candidates).await;
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "command": payload.command,
+                    "outcome": format!("{outcome:?}"),
+                    "body": body,
+                    "candidates": candidates,
+                })),
+            )
+                .into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": e.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+/// `GET /mock/payments` — mock payment ledger recorded from solved tickets.
+pub async fn debug_mock_payments(State(state): State<AppState>) -> Json<Value> {
+    Json(json!({ "mock_payments": state.ap.mock_payments().await }))
+}
+
 /// POST /inbox and POST /inbox/:handle live in the activitypub inbox module.
-pub use crate::activitypub::inbox::handle as inbox;
+pub use crate::activitypub::inbox::handle as inbox_shared;
+pub use crate::activitypub::inbox::handle_named as inbox_named;

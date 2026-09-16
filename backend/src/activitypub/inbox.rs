@@ -11,17 +11,32 @@ use crate::db::DbPool;
 
 const DEFAULT_HANDLE: &str = "pay3flow";
 
-/// Shared inbox entry-point: `POST /inbox[/:handle]`
+/// Shared inbox entry-point: `POST /inbox`
 pub async fn handle(
     State(state): State<AppState>,
-    Path(handle): Path<Option<String>>,
     headers: HeaderMap,
     body: String,
 ) -> Response {
-    let handle_str = handle.as_deref().unwrap_or(DEFAULT_HANDLE);
-    match inner(&state, handle_str, &headers, body.into_bytes()).await {
+    handle_inner(&state, DEFAULT_HANDLE, &headers, body).await
+}
+
+/// Per-handle inbox entry-point: `POST /inbox/:handle`
+pub async fn handle_named(
+    State(state): State<AppState>,
+    Path(handle): Path<String>,
+    headers: HeaderMap,
+    body: String,
+) -> Response {
+    handle_inner(&state, &handle, &headers, body).await
+}
+
+async fn handle_inner(state: &AppState, handle_str: &str, headers: &HeaderMap, body: String) -> Response {
+    match inner(state, handle_str, headers, body.into_bytes()).await {
         Ok(resp) => resp,
-        Err(status) => (status, Json(json!({"error": "bad request"}))).into_response(),
+        Err(status) => {
+            tracing::warn!(code = %status, "inbox inner failed");
+            (status, Json(json!({"error": "bad request"}))).into_response()
+        }
     }
 }
 
@@ -35,15 +50,19 @@ async fn inner(
         verify_inbound_signature(state, headers, raw_body.as_slice()).await?;
     }
 
-    let activity: Value = serde_json::from_slice(&raw_body).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let activity: Value = serde_json::from_slice(&raw_body).map_err(|e| {
+        tracing::warn!(error = %e, "inbox: body is not valid JSON");
+        StatusCode::BAD_REQUEST
+    })?;
 
     if let Some(id) = activity.get("id").and_then(Value::as_str) {
-        if was_received(&state.pool, id).await? {
-            return Ok(Json(json!({
-                "status": "exists",
-                "activity": activity,
-            }))
-            .into_response());
+        match was_received(&state.pool, id).await {
+            Ok(true) => return Ok(Json(json!({"status": "exists", "activity": activity})).into_response()),
+            Ok(false) => {}
+            Err(code) => {
+                tracing::warn!(activity_id = id, code = %code, "was_received failed");
+                return Err(code);
+            }
         }
     }
 
@@ -54,11 +73,15 @@ async fn inner(
 
     let response = match atype {
         "Follow" => handle_follow(state, &activity).await?,
+        _ if is_ticket_delivery(&activity) => handle_ticket(state, &activity).await?,
         _ => handle_generic(state, handle, &activity).await?,
     };
 
     if let Some(id) = activity.get("id").and_then(Value::as_str) {
-        record_inbound(&state.pool, id).await?;
+        if let Err(code) = record_inbound(&state.pool, id).await {
+            tracing::warn!(activity_id = id, code = %code, "record_inbound failed");
+            return Err(code);
+        }
     }
 
     Ok(response)
@@ -67,6 +90,73 @@ async fn inner(
 async fn handle_follow(state: &AppState, activity: &Value) -> Result<Response, StatusCode> {
     let accept = crate::activitypub::model::accept_follow(activity, &state.ap.identity.actor_id);
     Ok(Json(accept).into_response())
+}
+
+/// True when the activity is a fmatch `Create` wrapping a ForgeFed Ticket
+/// (a job dispatched to us as a candidate solver).
+fn is_ticket_delivery(activity: &Value) -> bool {
+    activity.get("type").and_then(Value::as_str) == Some("Create")
+        && activity
+            .get("object")
+            .and_then(|o| o.get("type"))
+            .and_then(Value::as_str)
+            == Some("Ticket")
+}
+
+/// Answer a dispatched Ticket synchronously with a mock solution and record
+/// the resulting mock payment. The response must carry a real `content` —
+/// fmatch treats a bare `{"status":"accepted"}` as an ack-only answer and
+/// waits for an async relay that never arrives.
+async fn handle_ticket(state: &AppState, activity: &Value) -> Result<Response, StatusCode> {
+    let object = activity.get("object").cloned().unwrap_or_default();
+    let task_ref = ["taskRef", "task_ref", "task", "id"]
+        .iter()
+        .find_map(|key| object.get(*key).and_then(Value::as_str))
+        .unwrap_or("unknown-task")
+        .to_string();
+
+    let execution_id = ["executionId", "execution_id", "id"]
+        .iter()
+        .find_map(|key| {
+            object
+                .get(*key)
+                .and_then(Value::as_str)
+                .map(|s| s.to_string())
+        })
+        .unwrap_or_else(|| format!("ticket-{}", uuid::Uuid::new_v4()));
+
+    let task = object
+        .get("content")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+
+    let reference = format!("mock-{}", uuid::Uuid::new_v4());
+    let content = format!(
+        "Mock solution for task {task_ref}: {task} | provider=pay3flow-backend; rate=1.0; fee=0.50; status=booked; reference={reference}"
+    );
+
+    state
+        .ap
+        .record_mock_payment(crate::activitypub::service::MockPayment {
+            id: format!("{}/mock-payments/{}", state.ap.origin, uuid::Uuid::new_v4()),
+            task_ref: task_ref.clone(),
+            execution_id,
+            provider: "pay3flow-backend".into(),
+            content: content.clone(),
+            status: "booked".into(),
+            created_at: chrono::Utc::now().to_rfc3339(),
+        })
+        .await;
+
+    tracing::info!(task_ref, "answered dispatched ticket with mock solution");
+    let answer = crate::activitypub::model::solver_answer(
+        &state.ap.identity.actor_id,
+        &task_ref,
+        activity.get("id").and_then(Value::as_str).unwrap_or(""),
+        &content,
+    );
+    Ok(Json(answer).into_response())
 }
 
 async fn handle_generic(
@@ -122,7 +212,7 @@ async fn verify_inbound_signature(
         "POST",
         "/inbox",
         body,
-        &state.ap.identity.public_key_pem(),
+        state.ap.identity.public_key_pem(),
         chrono::Utc::now(),
     )
     .map_err(|_| StatusCode::UNAUTHORIZED)?;

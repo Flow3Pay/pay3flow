@@ -1,10 +1,10 @@
 use std::path::Path;
 
-use rsa::pkcs8::{DecodePrivateKey, EncodePrivateKey, EncodePublicKey, LineEnding};
+use rand::rngs::OsRng;
 use rsa::pkcs1v15::SigningKey;
+use rsa::pkcs8::{DecodePrivateKey, EncodePrivateKey, EncodePublicKey, LineEnding};
 use rsa::signature::{SignatureEncoding, Signer};
 use rsa::{RsaPrivateKey, RsaPublicKey};
-use rand::rngs::OsRng;
 use serde_json::{json, Value};
 use sha2::Sha256;
 
@@ -28,7 +28,11 @@ pub struct ActorIdentity {
 
 impl ActorIdentity {
     /// Load the RSA key from `key_path` or generate + persist a fresh one.
-    pub fn load_or_create(key_path: &str, origin: &str, handle: &str) -> Result<Self, ActivityPubError> {
+    pub fn load_or_create(
+        key_path: &str,
+        origin: &str,
+        handle: &str,
+    ) -> Result<Self, ActivityPubError> {
         let path = Path::new(key_path);
         let private_key = if path.exists() {
             let pem = std::fs::read_to_string(path)
@@ -60,8 +64,10 @@ impl ActorIdentity {
             .to_string();
 
         let actor_id = format!("{origin}/actor/{handle}");
-        let inbox = format!("{actor_id}/inbox");
-        let outbox = format!("{actor_id}/outbox");
+        // Shared inbox: served as `POST /inbox` (also advertised by fmatch as
+        // the candidate inbox, so a ticket reaches the same handler).
+        let inbox = format!("{origin}/inbox");
+        let outbox = format!("{origin}/outbox");
 
         Ok(Self {
             actor_id,
@@ -84,6 +90,11 @@ impl ActorIdentity {
 
     pub fn public_key_pem(&self) -> &str {
         &self.public_key_pem
+    }
+
+    /// The marketplace resource this actor's capability advertises.
+    pub fn capability_resource(&self) -> String {
+        self.inbox.trim_end_matches("/inbox").to_string() + "/marketplace/resources/acquiring"
     }
 
     pub fn sign_bytes(&self, message: &[u8]) -> Vec<u8> {
@@ -110,14 +121,12 @@ impl ActorIdentity {
             }),
             attachment: vec![
                 json!({
-                    "type": "PropertyValue",
-                    "name": "resourceConformsTo",
-                    "value": self.actor_id.replace(
-                        &format!("/actor/{}", self.handle),
-                        "/marketplace/resources/acquiring",
-                    )
+                    "type": "Service",
+                    "resourceConformsTo": self.capability_resource(),
+                    "action": "deliverService",
+                    "purpose": "offer",
+                    "inbox": self.inbox,
                 }),
-                json!({ "type": "PropertyValue", "name": "action", "value": "deliverService" }),
                 json!({ "type": "PropertyValue", "name": "audience", "value": AS_PUBLIC }),
             ],
         };
@@ -155,18 +164,16 @@ impl ActorIdentity {
             .header("Accept", "application/activity+json")
             .send()
             .await
-            .map_err(|e| {
-                ActivityPubError::Http(format!("fetch actor {iri}: {e}"))
-            })?;
+            .map_err(|e| ActivityPubError::Http(format!("fetch actor {iri}: {e}")))?;
         if !res.status().is_success() {
             return Err(ActivityPubError::Http(format!(
                 "fetch actor {iri}: http {}",
                 res.status()
             )));
         }
-        res.json().await.map_err(|e| {
-            ActivityPubError::Http(format!("parse actor {iri}: {e}"))
-        })
+        res.json()
+            .await
+            .map_err(|e| ActivityPubError::Http(format!("parse actor {iri}: {e}")))
     }
 }
 
@@ -185,8 +192,23 @@ mod tests {
         let doc = id.to_document();
         assert_eq!(doc["id"], json!("https://pay3flow.local/actor/pay3flow"));
         assert_eq!(doc["preferredUsername"], json!("pay3flow"));
-        assert!(doc["publicKey"]["publicKeyPem"].as_str().unwrap().contains("PUBLIC KEY"));
-        assert_eq!(doc["endpoints"]["sharedInbox"], json!("https://pay3flow.local/actor/pay3flow/inbox"));
+        assert!(doc["publicKey"]["publicKeyPem"]
+            .as_str()
+            .unwrap()
+            .contains("PUBLIC KEY"));
+        assert_eq!(doc["inbox"], json!("https://pay3flow.local/inbox"));
+        assert_eq!(
+            doc["endpoints"]["sharedInbox"],
+            json!("https://pay3flow.local/inbox")
+        );
+
+        let cap = &doc["attachment"][0];
+        assert_eq!(
+            cap["resourceConformsTo"],
+            json!("https://pay3flow.local/marketplace/resources/acquiring")
+        );
+        assert_eq!(cap["action"], json!("deliverService"));
+        assert_eq!(cap["purpose"], json!("offer"));
 
         let wf = id.webfinger("https://pay3flow.local/actor/pay3flow");
         assert_eq!(wf["subject"], json!("acct:pay3flow@pay3flow.local"));

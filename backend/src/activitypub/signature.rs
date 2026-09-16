@@ -59,7 +59,10 @@ pub fn verify(
     let sig = parse_signature_header(headers)?;
 
     // digest verification is independent of the signature headers order
-    if let Some((dname, dvalue)) = headers.iter().find(|(n, _)| n.eq_ignore_ascii_case("digest")) {
+    if let Some((dname, dvalue)) = headers
+        .iter()
+        .find(|(n, _)| n.eq_ignore_ascii_case("digest"))
+    {
         let expected = format!("SHA-256={}", sha256_b64(body));
         if !dvalue.eq_ignore_ascii_case(&expected) {
             return Err(ActivityPubError::Signature("digest mismatch".into()));
@@ -131,9 +134,7 @@ struct ParsedSignature {
     signature: String,
 }
 
-fn parse_signature_header(
-    headers: &[(&str, &str)],
-) -> Result<ParsedSignature, ActivityPubError> {
+fn parse_signature_header(headers: &[(&str, &str)]) -> Result<ParsedSignature, ActivityPubError> {
     let (_, raw) = headers
         .iter()
         .find(|(n, _)| n.eq_ignore_ascii_case("signature"))
@@ -153,12 +154,7 @@ fn parse_signature_header(
         match key.trim() {
             "keyId" => parsed.key_id = value.to_string(),
             "algorithm" => parsed.algorithm = value.to_string(),
-            "headers" => {
-                parsed.headers = value
-                    .split_whitespace()
-                    .map(|s| s.to_string())
-                    .collect()
-            }
+            "headers" => parsed.headers = value.split_whitespace().map(|s| s.to_string()).collect(),
             "signature" => parsed.signature = value.to_string(),
             _ => {}
         }
@@ -168,8 +164,7 @@ fn parse_signature_header(
             "signature header lacks keyId/signature".into(),
         ));
     }
-    if !parsed.algorithm.is_empty()
-        && !matches!(parsed.algorithm.as_str(), "rsa-sha256" | "hs2019")
+    if !parsed.algorithm.is_empty() && !matches!(parsed.algorithm.as_str(), "rsa-sha256" | "hs2019")
     {
         return Err(ActivityPubError::Signature(format!(
             "unsupported algorithm {}",
@@ -194,8 +189,15 @@ mod tests {
         .unwrap();
         let now = Utc::now();
         let body = br#"{"type":"Follow"}"#;
-        let headers = sign_headers(&identity, "POST", "/inbox/actra", "localhost:7277", body, now)
-            .unwrap();
+        let headers = sign_headers(
+            &identity,
+            "POST",
+            "/inbox/actra",
+            "localhost:7277",
+            body,
+            now,
+        )
+        .unwrap();
         let pairs: Vec<(&str, &str)> = headers
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
@@ -223,14 +225,12 @@ mod tests {
         let now = Utc::now();
         let stale = now - Duration::minutes(10);
         let body = b"{}";
-        let headers =
-            sign_headers(&identity, "POST", "/x", "h", body, stale).unwrap();
+        let headers = sign_headers(&identity, "POST", "/x", "h", body, stale).unwrap();
         let pairs: Vec<(&str, &str)> = headers
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
-        let err = verify(&pairs, "POST", "/x", body, identity.public_key_pem(), now)
-            .unwrap_err();
+        let err = verify(&pairs, "POST", "/x", body, identity.public_key_pem(), now).unwrap_err();
         assert!(err.to_string().contains("replay"));
     }
 

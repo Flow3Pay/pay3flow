@@ -24,8 +24,10 @@ pub fn router(state: AppState) -> Router {
         .route("/actor", get(activitypub::actor_collection))
         .route("/actor/:handle", get(activitypub::actor_document_by_handle))
         .route("/candidates", get(activitypub::candidates))
-        .route("/inbox", post(activitypub::inbox))
-        .route("/inbox/:handle", post(activitypub::inbox))
+        .route("/api/debug/task", post(activitypub::debug_task))
+        .route("/mock/payments", get(activitypub::debug_mock_payments))
+        .route("/inbox", post(activitypub::inbox_shared))
+        .route("/inbox/:handle", post(activitypub::inbox_named))
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
