@@ -74,14 +74,7 @@ impl FakeAcquirer {
     pub fn worst_commission(&self) -> f64 {
         self.pairs
             .iter()
-            .filter_map(|p| {
-                p.commission
-                    .trim_end_matches('%')
-                    .trim()
-                    .replace(',', ".")
-                    .parse::<f64>()
-                    .ok()
-            })
+            .filter_map(|p| commission_pct(p.commission))
             .fold(0.0_f64, f64::max)
     }
 
@@ -641,6 +634,29 @@ pub fn fake_acquirer_by_slug(slug: &str) -> Option<&'static FakeAcquirer> {
     FAKE_ACQUIRERS
         .iter()
         .find(|a| a.slug.eq_ignore_ascii_case(slug))
+}
+
+/// Parse a pair commission ("3.4%", "1,9%") into a plain percent, or `None` for
+/// malformed / range strings. fmatch display names embed the worst commission,
+/// so the same parser drives both the fallback fee and pair-aware ranking.
+pub fn commission_pct(value: &str) -> Option<f64> {
+    value
+        .trim()
+        .trim_end_matches('%')
+        .trim()
+        .replace(',', ".")
+        .parse::<f64>()
+        .ok()
+}
+
+/// Resolve a fake solver by its fmatch display name ("Flinger Pay (US|EU|Global,
+/// 3.4%)"). Mirrors the `name.starts_with` matching in `acquirer_by_candidate_name`.
+pub fn fake_acquirer_by_name(name: &str) -> Option<&'static FakeAcquirer> {
+    let name = name.trim();
+    if name.is_empty() {
+        return None;
+    }
+    FAKE_ACQUIRERS.iter().find(|a| name.starts_with(a.name))
 }
 
 #[cfg(test)]

@@ -154,7 +154,18 @@ impl PaymentService {
         .with_geo(payment.to_geo.clone())
         .with_method(payment.method.clone());
         let quote = crate::quotes::compute_quote(&self.ap, &self.picker, request).await;
-        let Some(best) = quote.best.clone() else {
+        // fmatch ranks by relevance, not by the fee a solver charges on the
+        // swap pair (its price signal is per-token, commission lives in the
+        // offer text) — re-rank so the cheapest candidate that serves the pair
+        // wins. The final commercial pick is ours (PLAN #22); fmatch untouched.
+        let to_currency = payment
+            .to_currency
+            .as_deref()
+            .unwrap_or(&payment.currency);
+        let mut candidates =
+            crate::quotes::rank_candidates_by_pair_fee(&payment.currency, to_currency, quote.candidates);
+        candidates.sort_by_key(|candidate| candidate.rank);
+        let Some(best) = candidates.into_iter().next() else {
             // No acquirer can serve; park the transaction as failed (route
             // never created). The failure reason is surfaced in the view.
             repo::transition_status(&self.pool, &tx.id, TransactionStatus::Pending, TransactionStatus::Failed)
@@ -169,13 +180,20 @@ impl PaymentService {
             .as_ref()
             .map(|a| a.slug.clone())
             .unwrap_or_else(|| best.short_id.clone());
+        // Fee: the exact pair commission when the winner is a managed solver
+        // serving `from -> to`, otherwise the profile fee_percent as before.
+        let pair_fee_percent = crate::fake_acquirers::fake_acquirer_by_name(&best.name)
+            .and_then(|a| a.commission_for(&payment.currency, to_currency))
+            .and_then(crate::fake_acquirers::commission_pct);
+        let fee_percent = pair_fee_percent
+            .unwrap_or_else(|| acquirer.as_ref().map(|a| a.fee_percent).unwrap_or(0.0));
         let route = repo::insert_route(
             &self.pool,
             &NewRoute {
                 transaction_id: tx.id,
                 acquirer_id: acquirer.as_ref().map(|a| a.id),
                 acquirer_slug: acquirer_slug.clone(),
-                fee_percent: acquirer.as_ref().map(|a| a.fee_percent).unwrap_or(0.0),
+                fee_percent,
                 exchange_rate: None,
                 status: RouteStatus::Pending,
                 source: quote.source.as_str().to_string(),
@@ -196,7 +214,7 @@ impl PaymentService {
         let totals = fees::compute(
             gross,
             self.service_fee_percent,
-            acquirer.as_ref().map(|a| a.fee_percent).unwrap_or(0.0),
+            fee_percent,
             acquirer.as_ref().map(|a| a.fee_fixed).unwrap_or(0),
         );
         let net_minor = fees::net_amount(gross, &totals);
