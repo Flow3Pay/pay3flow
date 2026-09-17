@@ -229,6 +229,30 @@ async fn run_server() {
     let pool_drain =
         std::time::Duration::from_secs(state.config.renderer.chrome_pool.shutdown_drain_secs);
     let api_keys_empty = state.config.auth.api_keys.is_empty();
+    let grpc_state = std::sync::Arc::new(state.clone());
+
+    // gRPC server (internal module-facing port, default 3031).
+    let grpc_port = std::env::var("CRW_GRPC_PORT")
+        .ok()
+        .and_then(|v| v.parse::<u16>().ok())
+        .unwrap_or(3031);
+    let grpc_addr = format!("0.0.0.0:{grpc_port}");
+    let grpc_service = crw_server::grpc::CrwGrpcService::service(grpc_state);
+    let grpc_handle = tokio::spawn(async move {
+        let listener = match tokio::net::TcpListener::bind(&grpc_addr).await {
+            Ok(l) => l,
+            Err(e) => {
+                tracing::error!("Failed to bind gRPC to {grpc_addr}: {e}");
+                std::process::exit(1);
+            }
+        };
+        tracing::info!("CRW gRPC ready at {grpc_addr}");
+        tonic::transport::Server::builder()
+            .add_service(grpc_service)
+            .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(listener))
+            .await
+            .expect("gRPC server error");
+    });
 
     let app = crw_server::app::create_app(state);
 
@@ -252,6 +276,9 @@ async fn run_server() {
 
     if let Err(e) = server.await {
         tracing::error!("Server error: {e}");
+        if let Err(join_err) = grpc_handle.await {
+            tracing::warn!("gRPC task ended: {join_err}");
+        }
         std::process::exit(1);
     }
 

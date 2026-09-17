@@ -96,6 +96,7 @@ rand = "0.10"
 # Async utilities
 futures = "0.3"
 dashmap = "6"
+tokio-stream = "0.1"
 
 # WebSocket client (shared by crw-renderer and crw-browse)
 tokio-tungstenite = { version = "0.30", features = ["rustls-tls-native-roots"] }
@@ -108,7 +109,8 @@ config = "0.15"
 
 # gRPC (tonic)
 tonic = "0.14"
-tonic-build = "0.14"
+tonic-prost = "0.14"
+tonic-prost-build = "0.14"
 prost = "0.14"
 
 # Error handling

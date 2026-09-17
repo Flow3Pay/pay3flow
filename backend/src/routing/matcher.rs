@@ -62,6 +62,15 @@ pub enum RouteSource {
     Fallback,
 }
 
+impl RouteSource {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            RouteSource::Fmatch => "fmatch",
+            RouteSource::Fallback => "fallback",
+        }
+    }
+}
+
 /// Result of the routing step: candidates plus the source that produced them.
 #[derive(Debug, Clone, Serialize)]
 pub struct RouteResolved {

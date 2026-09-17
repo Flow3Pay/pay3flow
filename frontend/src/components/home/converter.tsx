@@ -333,7 +333,6 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
                 <div className={styles.settingsPop}>
                   <div className={styles.popHead}>
                     <span className={styles.popTitle}>Настройки обмена</span>
-                    <span className={styles.popBadge}>Pro</span>
                   </div>
 
                   <div className={styles.popSection}>

@@ -71,7 +71,14 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                             } else {
                                 RateOut::Quote {
                                     id,
-                                    quote: Box::new(quotes::compute_quote(&state, request).await),
+                                    quote: Box::new(
+                                        quotes::compute_quote(
+                                            &state.ap,
+                                            &state.picker,
+                                            request,
+                                        )
+                                        .await,
+                                    ),
                                 }
                             }
                         }
@@ -97,5 +104,5 @@ pub async fn debug_quote(
     State(state): State<AppState>,
     Json(request): Json<PaymentRequest>,
 ) -> Json<Quote> {
-    Json(quotes::compute_quote(&state, request).await)
+    Json(quotes::compute_quote(&state.ap, &state.picker, request).await)
 }

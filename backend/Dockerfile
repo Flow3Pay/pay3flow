@@ -1,17 +1,22 @@
 FROM rust:1.97-bookworm AS builder
 WORKDIR /app
-COPY Cargo.toml Cargo.lock ./
-RUN mkdir src && echo "fn main(){}" > src/main.rs && cargo build --release 2>/dev/null; rm -rf src
-COPY src ./src
-COPY migrations ./migrations
-RUN touch src/main.rs && cargo build --release --bins
+
+# protoc for tonic-prost-build codegen (backend/build.rs compiles crw/proto).
+RUN apt-get update && apt-get install -y --no-install-recommends protobuf-compiler && rm -rf /var/lib/apt/lists/*
+
+COPY backend/Cargo.toml backend/Cargo.lock backend/build.rs backend/
+COPY crw/proto crw/proto
+RUN mkdir -p backend/src && echo "fn main(){}" > backend/src/main.rs \
+    && cargo build --release --manifest-path backend/Cargo.toml 2>/dev/null; rm -rf backend/src
+COPY backend/src backend/src
+COPY backend/migrations backend/migrations
+RUN touch backend/src/main.rs && cargo build --release --bins --manifest-path backend/Cargo.toml
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY --from=builder /app/target/release/pay3flow-backend /usr/local/bin/pay3flow-backend
-COPY --from=builder /app/target/release/load_acquirers /usr/local/bin/load_acquirers
-COPY --from=builder /app/target/release/fake_solvers /usr/local/bin/fake_solvers
+COPY --from=builder /app/backend/target/release/pay3flow-backend /usr/local/bin/pay3flow-backend
+COPY --from=builder /app/backend/target/release/fake_solvers /usr/local/bin/fake_solvers
 RUN mkdir -p /app/data
 EXPOSE 8080
 CMD ["pay3flow-backend"]

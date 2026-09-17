@@ -18,7 +18,9 @@ services:
       retries: 5
 
   backend:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: pay3flow-backend
     restart: unless-stopped
     ports:
@@ -34,6 +36,10 @@ services:
       AP_REQUIRE_SIGNATURES: "false"
       FMATCH_INBOX: http://fmatch:7277/inbox/actra
       FMATCH_ACTOR_ID: http://fmatch:7277/actor/actra
+      SECRETS_KEY: ${SECRETS_KEY:-dev-secrets-key-change-me}
+      SERVICE_FEE_PERCENT: 0.7
+      FX_SOURCE: mock
+      FX_MARGIN_PERCENT: 1.0
     volumes:
       - backend_data:/app/data
     depends_on:
@@ -93,7 +99,9 @@ services:
         condition: service_started
 
   fake-solvers:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: pay3flow-fake-solvers
     restart: unless-stopped
     command: ["fake_solvers"]
@@ -123,15 +131,17 @@ services:
       - backend
 
   crw:
-    image: ghcr.io/us/crw:latest
+    build: ./crw
     container_name: pay3flow-crw
     restart: unless-stopped
     ports:
       - "3030:3030"
+      - "3031:3031"
     environment:
       RUST_LOG: info
       CRW_SERVER__HOST: 0.0.0.0
       CRW_SERVER__PORT: "3030"
+      CRW_GRPC_PORT: "3031"
       CRW_RENDERER__MODE: none
       CRW_SEARCH__SEARXNG_URL: http://searcher:8080
     depends_on:

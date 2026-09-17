@@ -38,13 +38,11 @@ export interface Dict {
     cards: FeatureCard[];
   };
   why: {
-    label: string;
     heading: string;
     sub: string;
     cards: { title: string; text: string; href: string }[];
   };
   business: {
-    label: string;
     heading: string;
     sub: string;
     cta: string;
@@ -109,7 +107,6 @@ export const dicts: Record<Lang, Dict> = {
       ],
     },
     why: {
-      label: "Why Pay3Flow",
       heading: "Payments should never make you wait or overpay",
       sub: "Direct routes keep money moving — faster and cheaper than the usual channels.",
       cards: [
@@ -131,7 +128,6 @@ export const dicts: Record<Lang, Dict> = {
       ],
     },
     business: {
-      label: "For business",
       heading: "Payment routes for your product",
       sub: "Connect Pay3Flow to your service and pay only for successful payments.",
       cta: "Become a client",
@@ -234,7 +230,6 @@ export const dicts: Record<Lang, Dict> = {
       ],
     },
     why: {
-      label: "Почему Pay3Flow",
       heading: "Платежи не должны заставлять вас ждать или переплачивать",
       sub: "Прямые маршруты двигают деньги быстрее и дешевле привычных каналов.",
       cards: [
@@ -256,7 +251,6 @@ export const dicts: Record<Lang, Dict> = {
       ],
     },
     business: {
-      label: "Для бизнеса",
       heading: "Платёжные маршруты для вашего продукта",
       sub: "Подключите Pay3Flow к своему сервису и платите только за успешные платежи.",
       cta: "Стать клиентом",

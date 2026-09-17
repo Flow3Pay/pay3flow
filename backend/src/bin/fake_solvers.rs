@@ -9,10 +9,10 @@ use serde_json::{json, Value};
 use tokio::sync::Mutex;
 use tracing_subscriber::EnvFilter;
 
-use pay3flow_backend::acquirer::ACQUIRERS;
 use pay3flow_backend::activitypub::actor::ActorIdentity;
 use pay3flow_backend::activitypub::model::{accept_follow, follow_activity, solver_answer};
 use pay3flow_backend::activitypub::signature::sign_headers;
+use pay3flow_backend::fake_acquirers::FAKE_ACQUIRERS;
 
 /// Each fake acquirer is its own ActivityPub actor-solver: own actor IRI, own
 /// key, own Follow handshake + `purpose="offer"` proposal, and an inbox that
@@ -50,7 +50,7 @@ async fn main() -> anyhow::Result<()> {
     let shared_inbox = format!("{origin}/inbox");
 
     let mut actors: HashMap<String, FakeActor> = HashMap::new();
-    for seed in ACQUIRERS {
+    for seed in FAKE_ACQUIRERS {
         let key = format!("{key_path}.{}", seed.slug);
         let identity = ActorIdentity::load_or_create(&key, &origin, seed.slug)?;
         actors.insert(seed.slug.to_string(), FakeActor { identity });
@@ -68,7 +68,7 @@ async fn main() -> anyhow::Result<()> {
     let seed_state = state.clone();
     let shared_inbox_seed = shared_inbox.clone();
     tokio::spawn(async move {
-        for seed in ACQUIRERS {
+        for seed in FAKE_ACQUIRERS {
             let actor = seed_state
                 .actors
                 .get(seed.slug)
@@ -120,7 +120,7 @@ async fn actor_document(
 }
 
 /// Fake inbox: answer Follow with Accept and a dispatched Ticket with a mock
-/// solution (mirrors the real backend solver inbox so either can be selected).
+/// solution (stands in for a real external acquirer's inbox).
 async fn inbox(State(state): State<FakeState>, body: String) -> axum::response::Response {
     let activity: Value = match serde_json::from_str(&body) {
         Ok(activity) => activity,

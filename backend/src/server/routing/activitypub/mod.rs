@@ -120,11 +120,6 @@ pub async fn debug_task(
     }
 }
 
-/// `GET /mock/payments` — mock payment ledger recorded from solved tickets.
-pub async fn debug_mock_payments(State(state): State<AppState>) -> Json<Value> {
-    Json(json!({ "mock_payments": state.ap.mock_payments().await }))
-}
-
 /// POST /inbox and POST /inbox/:handle live in the activitypub inbox module.
 pub use crate::activitypub::inbox::handle as inbox_shared;
 pub use crate::activitypub::inbox::handle_named as inbox_named;

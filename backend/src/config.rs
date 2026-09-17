@@ -10,6 +10,19 @@ pub struct Config {
     pub ap_require_signatures: bool,
     pub fmatch_inbox: String,
     pub fmatch_actor_id: String,
+    /// crw gRPC search endpoint (PLAN #82).
+    pub crw_grpc_url: String,
+    /// AES-GCM key material for encrypting provider credentials (PLAN #30).
+    pub secrets_key: String,
+    /// Our cut, percent of the gross payment amount (PLAN #41).
+    pub service_fee_percent: f64,
+    /// FX source: `mock` (offline table) or `http` (live endpoint, PLAN #42).
+    pub fx_source: String,
+    pub fx_url: String,
+    pub fx_cache_ttl_secs: u64,
+    /// Margin applied on top of the mid-market rate for cross-currency routes
+    /// (PLAN #43).
+    pub fx_margin_percent: f64,
 }
 
 impl Config {
@@ -29,6 +42,25 @@ impl Config {
                 .unwrap_or_else(|_| "http://localhost:7277/inbox/actra".into()),
             fmatch_actor_id: env::var("FMATCH_ACTOR_ID")
                 .unwrap_or_else(|_| "http://localhost:7277/actor/actra".into()),
+            crw_grpc_url: env::var("CRW_GRPC_URL")
+                .unwrap_or_else(|_| "http://localhost:3031".into()),
+            secrets_key: env::var("SECRETS_KEY")
+                .unwrap_or_else(|_| "dev-secrets-key-change-me".into()),
+            service_fee_percent: env::var("SERVICE_FEE_PERCENT")
+                .ok()
+                .and_then(|s| s.parse::<f64>().ok())
+                .unwrap_or(0.7),
+            fx_source: env::var("FX_SOURCE").unwrap_or_else(|_| "mock".into()),
+            fx_url: env::var("FX_URL")
+                .unwrap_or_else(|_| "https://api.frankfurter.app/latest".into()),
+            fx_cache_ttl_secs: env::var("FX_CACHE_TTL_SECS")
+                .ok()
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(300),
+            fx_margin_percent: env::var("FX_MARGIN_PERCENT")
+                .ok()
+                .and_then(|s| s.parse::<f64>().ok())
+                .unwrap_or(1.0),
         })
     }
 }

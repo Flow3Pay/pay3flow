@@ -11,7 +11,6 @@ export function Business() {
     <section className={styles.section} id="business">
       <div className={styles.inner}>
         <div className={styles.text}>
-          <span className={styles.label}>{d.business.label}</span>
           <h2 className={styles.heading}>{d.business.heading}</h2>
           <p className={styles.sub}>{d.business.sub}</p>
           <a className={styles.cta} href={d.business.ctaHref}>

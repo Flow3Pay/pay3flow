@@ -1,0 +1,266 @@
+#+TITLE: Backend -> fmatch: как отправляется запрос и с какими параметрами
+#+AUTHOR: Pay3Flow
+#+DATE: 2026-09-17
+
+* Зачем это
+
+Backend (папка =backend=) потребляет fmatch как *внешний read-only сервис*:
+он пушит платёжную задачу в inbox fmatch и читает ответный ранжированный список
+кандидатов. Ничего внутри fmatch не редактируется. Этот документ описывает,
+что именно шлёт backend, куда, с какими HTTP-заголовками и с какими параметрами
+в теле.
+
+Связанный код:
+- =backend/src/quotes/mod.rs= -- рендер контента + расчёт котировки;
+- =backend/src/activitypub/service.rs= -- сборка Proposal и отправка;
+- =backend/src/activitypub/model.rs= -- структура activity и разбор ответа;
+- =backend/src/activitypub/delivery.rs= -- HTTP-доставка, подпись, ретраи;
+- =backend/src/activitypub/signature.rs= -- HTTP Signature (rsa-sha256);
+- =backend/src/config.rs= -- настройки fmatch.
+
+* Общий поток
+
+#+begin_src text
+  Клиент (REST / WS)        backend                        fmatch:7277
+        |                     |                               |
+  POST /api/debug/quote       |  1. fmatch_content(req)      |
+  GET  /ws/rates              |     -> content string        |
+  POST /payments/*            |                               |
+        |---------------------+--2. request_proposal():      |
+                              |     Proposal(purpose="request",
+                              |     command="candidates",
+                              |     content=..., resultInbox=..)
+                              |--3. POST /inbox/actra ------->| фильтр пула
+                              |     с HTTP-подписью          |  по контенту
+                              |<---- Offer/candidates --------| (inline-список)
+                              |--4. AcquirerCandidate::from_reply
+                              |     -> Quote{source,candidates,best}
+#+end_src
+
+Если fmatch недоступен (timeout / ошибка сети / 5xx после ретраев),
+=compute_quote= не падает, а переключается на локальный fallback-мастер
+(=routing/matcher.rs=), и в =Quote.source= будет =fallback=.
+
+* Конфигурация fmatch (backend/src/config.rs)
+
+| Переменная            | Дефолт                              | Назначение                        |
+|-----------------------+-------------------------------------+-----------------------------------|
+| =FMATCH_INBOX=        | =http://localhost:7277/inbox/actra= | адрес inbox, куда шлётся POST     |
+| =FMATCH_ACTOR_ID=     | =http://localhost:7277/actor/actra= | IRI актора fmatch (Follow/reply)  |
+| =AP_ORIGIN=           | =http://localhost:8080=             | базовый IRI самого backend        |
+| =AP_HANDLE=           | =pay3flow=                          | handle актора backend             |
+| =AP_KEY_PATH=         | =./data/ap-key.pem=                 | RSA-ключ для подписи              |
+| =AP_REQUIRE_SIGNATURES= | =false=                           | проверять ли входящие подписи     |
+
+Плюс в =service/mod.rs=: =marketplace_resource = {AP_ORIGIN}/marketplace/resources/acquiring=,
+=origin = AP_ORIGIN=.
+
+* Где триггерится запрос
+
+- =GET /ws/rates= -- WebSocket: каждое сообщение ={"type":"quote","request":{...}}=
+  -> =quotes::compute_quote= (backend/src/server/routing/rates.rs);
+- =POST /api/debug/quote= -- JSON =PaymentRequest= -> =compute_quote= (там же);
+- =POST /api/debug/task= -- сырые =command= и =content=, уходит напрямую через
+  =submit_request= (backend/src/server/routing/activitypub/mod.rs);
+- =POST /payments/*= -- исполнение платежа: переиспользует тот же live-quote
+  пайплайн (fmatch -> fallback), см. =payments/service.rs:146=.
+
+Все пути сходятся в =Service::submit_request("candidates", content)=
+(=activitypub/service.rs:70=).
+
+* Параметры запроса в =content=
+
+Платёжный запрос (backend/src/routing/request.rs) имеет поля:
+
+| Поле        | Тип   | Смысл                              | Пример          |
+|-------------+-------+------------------------------------+-----------------|
+| =amount=    | f64   | сумма                              | =100.0=         |
+| =currency=  | str   | код валюты                         | =USD=, =EUR=    |
+| =from=      | str   | источник (канал/провайдер)         | =PayPal=        |
+| =to=        | str   | назначение (канал/провайдер)       | =VISA=, =Bank=  |
+| =to_geo=    | ?str  | территория назначения (опционально)| =NL=            |
+| =method=    | ?str  | способ платежа (опционально)       | =SEPA=          |
+
+=quotes::fmatch_content= (=quotes/mod.rs:30=) рендерит из них строку:
+
+#+begin_src text
+transfer {amount} {currency} from {from} to {to};
+currency={currency}; from={from}; to={to}[; to_geo={to_geo}][; method={method}]
+#+end_src
+
+Пример: =transfer 250.5 USD from PayPal to Bank; currency=USD; from=PayPal;
+to=Bank; to_geo=NL; method=SEPA=
+
+Именно эту строку fmatch читает для фильтрации пула решателей (аквириеров).
+
+* Тело activity (JSON-LD, fep/0837)
+
+=request_proposal()= (activitypub/model.rs:118) строит:
+
+#+begin_src json
+{
+  "@context": [
+    "https://www.w3.org/ns/activitystreams",
+    "https://w3id.org/fep/0837"
+  ],
+  "id": "{AP_ORIGIN}/requests/{uuid4}",
+  "type": "Proposal",
+  "purpose": "request",
+  "attributedTo": "{AP_ORIGIN}/actor/{AP_HANDLE}",
+  "name": "pay3flow request: candidates",
+  "content": "transfer 100 USD from PayPal to VISA of BelarusBank; currency=USD; from=paypal; to=visa-belarusbank",
+  "command": "candidates",
+  "resultInbox": "{AP_ORIGIN}/inbox",
+  "publishes": {
+    "id": "{AP_ORIGIN}/requests/{uuid4}#intent",
+    "type": "Intent",
+    "action": "deliverService",
+    "resourceConformsTo": "{AP_ORIGIN}/marketplace/resources/acquiring",
+    "resourceQuantity": { "hasUnit": "one", "hasNumericalValue": "1" }
+  },
+  "to": ["https://www.w3.org/ns/activitystreams#Public"]
+}
+#+end_src
+
+Ключевые для fmatch поля:
+- =command= -- тип запроса; backend всегда шлёт =candidates= (discovery-only:
+  только список, без исполнения). Допустимые у fmatch: =new=, =candidates=,
+  =findbestpath=, =candidate= (discovery), =plan=, =accept=, =cancel=, =execute=;
+- =resultInbox= -- куда fmatch доставляет асинхронный результат (для
+  discovery-команды ответ приходит inline, resultInbox используется для
+  callback-ов при реальном исполнении);
+- =publishes.resourceConformsTo= -- контракт ресурса (acquiring);
+- =content= -- параметры платежа из секции выше.
+
+* HTTP-доставка (activitypub/delivery.rs)
+
+Направление: =POST {FMATCH_INBOX}=, заголовок =Content-Type:
+application/activity+json=.
+
+Каждое исходящее activity подписывается HTTP Signature (rsa-sha256, PKCS#1 v1.5,
+ключ из =AP_KEY_PATH=):
+
+#+begin_src text
+Host: localhost:7277
+Date: Thu, 17 Sep 2026 12:00:00 GMT
+Digest: SHA-256={base64(sha256(body))}
+Signature: keyId="{AP_ORIGIN}/actor/{AP_HANDLE}#main-key",
+           algorithm="rsa-sha256",
+           headers="(request-target) host date digest",
+           signature="{base64}"
+
+Подписываемая строка:
+(request-target): post /inbox/actra
+host: localhost:7277
+date: Thu, 17 Sep 2026 12:00:00 GMT
+digest: SHA-256={base64(sha256(body))}
+#+end_src
+
+Параметры доставки:
+- таймаут одной попытки: 15 секунд;
+- ретраи: максимум 3, бэкофф =500ms * 2^attempt= (500/1000/2000 мс);
+- повторяются ошибки сети, HTTP 429 и >=500; 4xx не повторяются;
+- идемпотентность: перед отправкой проверяется таблица
+  =activitypub_deliveries(activity_id, target)=; повторная отправка того же
+  =id= в тот же inbox отдаёт =AlreadyDelivered= без HTTP-запроса.
+
+Успехом считается любой 2xx; тело ответа (JSON) захватывается только в режиме
+=deliver_with_response= -- так backend получает inline-ответ fmatch.
+
+* Разбор ответа fmatch
+
+=AcquirerCandidate::from_reply()= (activitypub/model.rs:204) ищет кандидатов
+в ответе в двух местах:
+1. top-level массив =candidates=;
+2. иначе в =object.candidates= (Ответ =Offer(Agreement)= с кандидатами).
+
+Поля кандидата (activitypub/model.rs:186):
+
+| JSON-поле  | Rust-поле      | Смысл                      |
+|------------+----------------+----------------------------|
+| =name=     | =name=         | имя аквириера              |
+| =shortId=  | =short_id=     | короткий id (для =execute=)|
+| =rank=     | =rank=         | позиция (1 = лучший)       |
+| =price=    | =price=?f64=   | эффективная цена/комиссия  |
+| =quality=  | =quality=?f64= | качество (0..1)            |
+
+Результат сворачивается в =Quote= (=quotes/mod.rs:13=):
+- =request= -- исходный =PaymentRequest=;
+- =source= -- =fmatch= или =fallback= (см. routing/matcher.rs:RouteSource);
+- =candidates= -- ранжированный список;
+- =best= -- кандидат с минимальным =rank=;
+- =quoted_at= -- RFC3339.
+
+=RoutePicker.resolve= (=routing/matcher.rs:101=): если ответ fmatch получен --
+список берётся как есть (даже пустой: fmatch источник истины); если fmatch
+недоступен -- включается локальный rules-мастер (fallback).
+
+* Что fmatch делает с запросом (кратко)
+
+- валидирует FEP-0837 Proposal (=purpose=request=): проверяет =@context=,
+  =id=, =publishes= и т.д.;
+- при =purpose=request= проверяет =resourceConformsTo= и наличие подписки;
+- команда =candidates= распознаётся как *discovery-only*: не создаёт
+  исполнение, а возвращает inline-страницу ранжированного списка
+  =candidate_summaries= (поле =candidates=) с =mode="findBestPath"= и
+  =detail="candidate list generated without candidate execution"=
+  (fmatch/src/routing/entry.rs:693);
+- для non-discovery команд (=plan=, =accept=, =execute=...) fmatch раздаёт
+  тикеты кандидатам и результат доставляет обратно в =resultInbox=.
+
+* Пример curl (для отладки)
+
+#+begin_src sh
+curl -sS -X POST http://localhost:7277/inbox/actra \
+  -H 'Content-Type: application/activity+json' \
+  -d @- <<'JSON'
+{
+  "@context": ["https://www.w3.org/ns/activitystreams", "https://w3id.org/fep/0837"],
+  "id": "http://localhost:8080/requests/debug-1",
+  "type": "Proposal",
+  "purpose": "request",
+  "attributedTo": "http://localhost:8080/actor/pay3flow",
+  "name": "pay3flow request: candidates",
+  "content": "transfer 100 USD from PayPal to VISA of BelarusBank; currency=USD; from=paypal; to=visa-belarusbank",
+  "command": "candidates",
+  "resultInbox": "http://localhost:8080/inbox",
+  "publishes": {
+    "id": "http://localhost:8080/requests/debug-1#intent",
+    "type": "Intent",
+    "action": "deliverService",
+    "resourceConformsTo": "http://localhost:8080/marketplace/resources/acquiring",
+    "resourceQuantity": {"hasUnit": "one", "hasNumericalValue": "1"}
+  },
+  "to": ["https://www.w3.org/ns/activitystreams#Public"]
+}
+JSON
+#+end_src
+
+Пример inline-ответа fmatch:
+
+#+begin_src json
+{
+  "status": "accepted",
+  "proposal": "http://localhost:8080/requests/debug-1",
+  "mode": "findBestPath",
+  "delivery": {
+    "mode": "candidate-list",
+    "status": 200,
+    "ok": true,
+    "detail": "candidate list generated without candidate execution",
+    "result": null
+  },
+  "candidates": [
+    {"name": "Stripe", "shortId": "s1", "rank": 1, "price": 0.031, "quality": 0.9}
+  ],
+  "candidatePage": 1,
+  "candidatePageSize": 20,
+  "candidateTotal": 1,
+  "candidateHasNext": false,
+  "candidateHasPrevious": false
+}
+#+end_src
+
+Приложение читает =candidates= и дальше работает с =Quote=. В curl пример не
+показан подписанный запрос: подпись backend проставляет сам, здесь curl -- для
+ручной проверки без валидации подписи.

@@ -23,6 +23,7 @@
 pub mod app;
 pub mod diagnostics;
 pub mod error;
+pub mod grpc;
 pub mod middleware;
 pub mod routes;
 pub mod setup;

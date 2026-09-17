@@ -2,8 +2,8 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 use crate::activitypub::model::AcquirerCandidate;
-use crate::core::state::AppState;
-use crate::routing::{PaymentRequest, RouteResolved, RouteSource};
+use crate::activitypub::Service;
+use crate::routing::{PaymentRequest, RoutePicker, RouteResolved, RouteSource};
 
 /// Live quote for an exchange pair. Built by asking fmatch which of its
 /// solvers (acquirers) can serve the payment task and how expensive they are.
@@ -53,9 +53,8 @@ fn fmt_amount(amount: f64) -> String {
 
 /// Compute a quote for the request: ask fmatch (read-only), fall back to
 /// local routing rules when fmatch is unreachable.
-pub async fn compute_quote(state: &AppState, request: PaymentRequest) -> Quote {
-    let resolved = match state
-        .ap
+pub async fn compute_quote(ap: &Service, picker: &RoutePicker, request: PaymentRequest) -> Quote {
+    let resolved = match ap
         .submit_request("candidates", &fmatch_content(&request))
         .await
     {
@@ -64,9 +63,9 @@ pub async fn compute_quote(state: &AppState, request: PaymentRequest) -> Quote {
                 .as_ref()
                 .map(AcquirerCandidate::from_reply)
                 .unwrap_or_default();
-            state.picker.resolve(&request, Some(candidates))
+            picker.resolve(&request, Some(candidates))
         }
-        Err(_) => state.picker.resolve(&request, None),
+        Err(_) => picker.resolve(&request, None),
     };
     quote_from_result(request, resolved)
 }

@@ -46,10 +46,12 @@ hex = { workspace = true }
 base64 = { workspace = true }
 futures = { workspace = true }
 tonic = { workspace = true }
+tonic-prost = { workspace = true }
 prost = { workspace = true }
+tokio-stream = { workspace = true }
 
 [build-dependencies]
-tonic-build = { workspace = true }
+tonic-prost-build = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }

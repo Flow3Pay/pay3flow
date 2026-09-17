@@ -9,7 +9,9 @@ use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 use tracing::Level;
 
 use crate::core::state::AppState;
-use crate::server::routing::{activitypub, auth, matcher, oauth, rates, ws};
+use crate::server::routing::{
+    activitypub, auth, fake, matcher, oauth, payments, payments_ws, rates, ws,
+};
 
 pub fn router(state: AppState) -> Router {
     Router::new()
@@ -20,14 +22,20 @@ pub fn router(state: AppState) -> Router {
         .route("/api/auth/oauth/{provider}", post(oauth::oauth))
         .route("/ws", get(ws::ws_handler))
         .route("/ws/rates", get(rates::rates_ws))
+        .route("/ws/payments", get(payments_ws::payments_ws))
+        .route("/api/payments", post(payments::create))
+        .route("/api/payments", get(payments::list))
+        .route("/api/payments/:id", get(payments::get))
+        .route("/api/providers/:provider/webhooks", post(payments::webhook))
         .route("/api/debug/quote", post(rates::debug_quote))
         .route("/routing/fallback", post(matcher::fallback))
+        .route("/api/debug/acquirers", get(fake::list))
+        .route("/api/debug/acquirers/:slug", get(fake::by_slug))
         .route("/.well-known/webfinger", get(activitypub::webfinger))
         .route("/actor", get(activitypub::actor_collection))
         .route("/actor/:handle", get(activitypub::actor_document_by_handle))
         .route("/candidates", get(activitypub::candidates))
         .route("/api/debug/task", post(activitypub::debug_task))
-        .route("/mock/payments", get(activitypub::debug_mock_payments))
         .route("/inbox", post(activitypub::inbox_shared))
         .route("/inbox/:handle", post(activitypub::inbox_named))
         .layer(

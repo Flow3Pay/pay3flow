@@ -11,7 +11,6 @@ export function Technology() {
     <section className={styles.section} id="tech">
       <div className={styles.inner}>
         <div className={styles.head}>
-          <span className={styles.label}>{d.why.label}</span>
           <h2 className={styles.heading}>{d.why.heading}</h2>
           <p className={styles.sub}>{d.why.sub}</p>
         </div>

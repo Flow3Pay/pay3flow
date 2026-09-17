@@ -118,7 +118,7 @@ pub const ACQUIRERS: &[AcquirerSeed] = &[
     },
 ];
 
-fn rating_attachment(name: &str, value: impl Into<serde_json::Value>) -> serde_json::Value {
+pub fn rating_attachment(name: &str, value: impl Into<serde_json::Value>) -> serde_json::Value {
     serde_json::json!({ "type": "PropertyValue", "name": name, "value": value.into() })
 }
 

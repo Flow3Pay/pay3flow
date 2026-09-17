@@ -11,16 +11,6 @@
   max-width: 620px;
 }
 
-.label {
-  display: inline-block;
-  font-size: 13px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--color-primary);
-  margin-bottom: 14px;
-}
-
 .heading {
   font-size: clamp(26px, 3.6vw, 40px);
   line-height: 1.12;

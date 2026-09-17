@@ -1,7 +1,10 @@
 pub mod activitypub;
 pub mod api;
 pub mod auth;
+pub mod fake;
 pub mod matcher;
 pub mod oauth;
+pub mod payments;
+pub mod payments_ws;
 pub mod rates;
 pub mod ws;
