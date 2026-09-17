@@ -49,6 +49,10 @@ tonic = { workspace = true }
 tonic-prost = { workspace = true }
 prost = { workspace = true }
 tokio-stream = { workspace = true }
+# Acquirer discovery: crw reads the backend DB directly (ACQUIRER_DB_DSN).
+tokio-postgres = { workspace = true }
+deadpool-postgres = { workspace = true }
+chrono = { workspace = true }
 
 [build-dependencies]
 tonic-prost-build = { workspace = true }

@@ -10,7 +10,7 @@ use tracing::Level;
 
 use crate::core::state::AppState;
 use crate::server::routing::{
-    activitypub, auth, fake, matcher, oauth, payments, payments_ws, rates, ws,
+    activitypub, auth, matcher, oauth, payments, payments_ws, rates, ws,
 };
 
 pub fn router(state: AppState) -> Router {
@@ -29,8 +29,6 @@ pub fn router(state: AppState) -> Router {
         .route("/api/providers/:provider/webhooks", post(payments::webhook))
         .route("/api/debug/quote", post(rates::debug_quote))
         .route("/routing/fallback", post(matcher::fallback))
-        .route("/api/debug/acquirers", get(fake::list))
-        .route("/api/debug/acquirers/:slug", get(fake::by_slug))
         .route("/.well-known/webfinger", get(activitypub::webfinger))
         .route("/actor", get(activitypub::actor_collection))
         .route("/actor/:handle", get(activitypub::actor_document_by_handle))

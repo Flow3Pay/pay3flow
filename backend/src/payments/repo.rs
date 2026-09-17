@@ -271,53 +271,6 @@ pub async fn acquirer_by_slug(pool: &DbPool, slug: &str) -> Result<Option<Acquir
     }))
 }
 
-/// Upsert a fictional solver's passport row (PLAN #28) from the fake catalog.
-/// Fee = worst-case pair commission; currencies = union of pair legs.
-pub async fn upsert_fake_acquirer(
-    pool: &DbPool,
-    acq: &crate::fake_acquirers::FakeAcquirer,
-) -> Result<Uuid> {
-    let client = pool.get().await?;
-    let stmt = client
-        .prepare_cached(r#"
-INSERT INTO acquirers (slug, name, geo, currencies, fee_percent, fee_fixed, amount_currency, status, active)
-VALUES ($1, $2, $3, $4, $5, 0, $6, 'active', TRUE)
-ON CONFLICT (slug) DO UPDATE SET
-    name = EXCLUDED.name,
-    geo = EXCLUDED.geo,
-    currencies = EXCLUDED.currencies,
-    fee_percent = EXCLUDED.fee_percent,
-    amount_currency = EXCLUDED.amount_currency,
-    updated_at = now()
-RETURNING id
-"#)
-        .await?;
-    let currencies = acq.currencies_token();
-    let fee = acq.worst_commission();
-    let amount_currency = acq
-        .limits
-        .split("max ")
-        .nth(1)
-        .and_then(|rest| rest.split_whitespace().nth(1))
-        .unwrap_or("USD")
-        .to_uppercase();
-    let row = client
-        .query_opt(
-            &stmt,
-            &[
-                &acq.slug,
-                &acq.name,
-                &acq.geo,
-                &currencies,
-                &fee,
-                &amount_currency,
-            ],
-        )
-        .await?
-        .context("fake acquirer upsert returned no row")?;
-    Ok(row.get(0))
-}
-
 // --- credentials (PLAN #29, secrets kept out of regular fetches) ---
 
 pub async fn set_credential(

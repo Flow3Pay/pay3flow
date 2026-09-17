@@ -98,46 +98,35 @@ pub async fn compute_quote(ap: &Service, picker: &RoutePicker, request: PaymentR
     quote_from_result(request, resolved)
 }
 
-/// Re-rank fmatch candidates by the fee they actually charge on the swap pair
-/// `from → to_currency`. fmatch ranks by its own quality/latency/intent model
-/// and never sees a percent commission (its price is per-token), so without
-/// this step the cheapest route on the pair would lose to a rank-1 candidate
-/// that may not even serve the pair. Candidates that do serve the pair come
-/// first, cheapest first (fmatch rank as the tiebreak); the rest stay after
-/// them in their original order, so `best` (rank-1) is always the cheapest
-/// route that can move the money. fmatch itself is untouched.
+/// Re-rank fmatch candidates for the swap pair `from → to`.
+///
+/// Acquirers discovered by crw carry their per-pair fee terms in the DB
+/// `endpoints` JSON, but the quote path here has no DB access, so this
+/// function re-ranks purely on the candidate's own `price` (fmatch's
+/// per-token price) when present, and otherwise preserves fmatch order.
+/// All candidates stay in the answer; only `best` (rank-1) is consumed by
+/// the payment service.
 pub fn rank_candidates_by_pair_fee(
-    from: &str,
-    to: &str,
+    _from: &str,
+    _to: &str,
     candidates: Vec<AcquirerCandidate>,
 ) -> Vec<AcquirerCandidate> {
-    let pair_fee = |candidate: &AcquirerCandidate| {
-        let acquirer = crate::fake_acquirers::fake_acquirer_by_name(&candidate.name)?;
-        acquirer
-            .commission_for(from, to)
-            .and_then(crate::fake_acquirers::commission_pct)
-    };
-
-    let mut serving: Vec<(AcquirerCandidate, f64, u64)> = candidates
+    let mut priced = candidates
         .iter()
-        .filter_map(|candidate| {
-            let fee = pair_fee(candidate)?;
-            let mut ranked = candidate.clone();
-            ranked.price = Some(fee / 100.0);
-            Some((ranked, fee, candidate.rank))
-        })
-        .collect();
-    serving.sort_by(|left, right| {
-        left.1
-            .partial_cmp(&right.1)
+        .filter(|c| c.price.is_some())
+        .cloned()
+        .collect::<Vec<_>>();
+    priced.sort_by(|left, right| {
+        left.price
+            .partial_cmp(&right.price)
             .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| left.2.cmp(&right.2))
+            .then_with(|| left.rank.cmp(&right.rank))
     });
 
-    let mut ranked = serving.into_iter().map(|(candidate, ..)| candidate).collect::<Vec<_>>();
+    let mut ranked = priced;
     let mut rest = candidates
         .into_iter()
-        .filter(|candidate| pair_fee(candidate).is_none())
+        .filter(|c| c.price.is_none())
         .collect::<Vec<_>>();
     rest.sort_by_key(|candidate| candidate.rank);
     ranked.extend(rest);
@@ -228,34 +217,41 @@ mod tests {
     }
 
     #[test]
-    fn pair_fee_ranking_prefers_cheapest_serving_solver() {
-        // fmatch returns bramba rank-1, but it doesn't serve EUR→USD (4.1%
-        // worst commission) while helixpay (rank 3, 1.5%) does.
+    fn pair_fee_ranking_prefers_cheapest_priced_solver() {
+        // fmatch returns bramba rank-1, but with prices set, ranking is by
+        // price: cheapest first. Price-less candidates stay after.
         let candidates = vec![
             cand("Bramba Global (EU, 4.1)", 1, None),
-            cand("Corvus Exchange (US|EU|Global, 2.8)", 2, None),
-            cand("Flinger Pay (US|EU|Global, 3.4)", 3, None),
-            cand("HelixPay Global (Global, 2.9)", 4, None),
+            cand("Corvus Exchange (US|EU|Global, 2.8)", 2, Some(0.028)),
+            cand("Flinger Pay (US|EU|Global, 3.4)", 3, Some(0.034)),
+            cand("HelixPay Global (Global, 2.9)", 4, Some(0.029)),
         ];
         let ranked = rank_candidates_by_pair_fee("EUR", "USD", candidates);
 
-        // helixpay (1.5%) > corvus (1.6%) > flinger (1.8%); bramba doesn't
-        // serve EUR→USD and is pushed behind every serving candidate.
-        assert_eq!(ranked[0].name, "HelixPay Global (Global, 2.9)");
-        assert!((ranked[0].price.unwrap() - 0.015).abs() < 1e-9);
+        assert_eq!(ranked[0].name, "Corvus Exchange (US|EU|Global, 2.8)");
+        assert!((ranked[0].price.unwrap() - 0.028).abs() < 1e-9);
         assert_eq!(ranked[0].rank, 1);
 
-        assert_eq!(ranked[1].name, "Corvus Exchange (US|EU|Global, 2.8)");
-        assert!((ranked[1].price.unwrap() - 0.016).abs() < 1e-9);
+        assert_eq!(ranked[1].name, "HelixPay Global (Global, 2.9)");
+        assert!((ranked[1].price.unwrap() - 0.029).abs() < 1e-9);
         assert_eq!(ranked[1].rank, 2);
 
         assert_eq!(ranked[2].name, "Flinger Pay (US|EU|Global, 3.4)");
-        assert!((ranked[2].price.unwrap() - 0.018).abs() < 1e-9);
+        assert!((ranked[2].price.unwrap() - 0.034).abs() < 1e-9);
         assert_eq!(ranked[2].rank, 3);
 
-        // bramba still present but can never win `best` (rank-1).
-        let bramba = ranked.iter().find(|c| c.name.starts_with("Bramba")).unwrap();
-        assert!(bramba.rank > 1);
+        // no price → won't win best (rank-1), pushed to the end.
+        let bramba = ranked.last().unwrap();
+        assert_eq!(bramba.name, "Bramba Global (EU, 4.1)");
         assert!(bramba.price.is_none());
+        assert_eq!(bramba.rank, 4);
+    }
+
+    #[test]
+    fn ranking_without_prices_preserves_fmatch_order() {
+        let candidates = vec![cand("A", 1, None), cand("B", 2, None), cand("C", 3, None)];
+        let ranked = rank_candidates_by_pair_fee("EUR", "USD", candidates);
+        assert_eq!(ranked.iter().map(|c| (c.name.as_str(), c.rank)).collect::<Vec<_>>(),
+                   vec![("A", 1), ("B", 2), ("C", 3)]);
     }
 }

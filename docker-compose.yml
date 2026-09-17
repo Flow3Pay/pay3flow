@@ -40,6 +40,8 @@ services:
       SERVICE_FEE_PERCENT: 0.7
       FX_SOURCE: mock
       FX_MARGIN_PERCENT: 1.0
+      CRW_GRPC_URL: http://crw:3031
+      DISCOVERY_INTERVAL_SECS: "1500"
     volumes:
       - backend_data:/app/data
     depends_on:
@@ -97,27 +99,6 @@ services:
         condition: service_healthy
       fmatch-typesense:
         condition: service_started
-
-  fake-solvers:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
-    container_name: pay3flow-fake-solvers
-    restart: unless-stopped
-    command: ["fake_solvers"]
-    ports:
-      - "9090:9090"
-    environment:
-      RUST_LOG: info
-      HTTP_ADDR: 0.0.0.0:9090
-      AP_ORIGIN: http://fake-solvers:9090
-      AP_KEY_PATH: /app/data/fake-key.pem
-      FMATCH_INBOX: http://fmatch:7277/inbox/actra
-      FMATCH_ACTOR_ID: http://fmatch:7277/actor/actra
-    volumes:
-      - backend_data:/app/data
-    depends_on:
-      - fmatch
 
   frontend:
     build: ./frontend

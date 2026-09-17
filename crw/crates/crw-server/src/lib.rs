@@ -20,6 +20,7 @@
 //! axum::serve(listener, app).await?;
 //! ```
 
+pub mod acquirer;
 pub mod app;
 pub mod diagnostics;
 pub mod error;

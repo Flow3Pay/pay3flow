@@ -26,9 +26,9 @@ async fn main() -> anyhow::Result<()> {
 
     let picker = pay3flow_backend::routing::RoutePicker::from_seeds();
 
-    // Seed the acquirer table from the curated list and set placeholder
-    // credentials (encrypted per PLAN #29/#30). Failures here are non-fatal:
-    // payments still route through the in-memory picker.
+    // Seed the acquirer table from the curated real-brand list. Failures here
+    // are non-fatal: payments still route through the in-memory picker. The
+    // discovery worker (below) keeps this table fresh from crw scans.
     for seed in pay3flow_backend::acquirer::ACQUIRERS {
         if let Ok(id) = pay3flow_backend::payments::repo::upsert_acquirer(&pool, seed).await {
             let boxed = SecretBox::new(&cfg.secrets_key);
@@ -36,30 +36,6 @@ async fn main() -> anyhow::Result<()> {
                 .encrypt("stub-secret-placeholder")
                 .unwrap_or_else(|e| {
                     tracing::warn!(error = %e, slug = seed.slug, "encrypt placeholder credential");
-                    String::new()
-                });
-            if !enc.is_empty() {
-                let _ = pay3flow_backend::payments::repo::set_credential(
-                    &pool,
-                    &id,
-                    "api_key",
-                    &enc,
-                )
-                .await;
-            }
-        }
-    }
-
-    // The 10 fictional solvers are our own passport entries too: their full
-    // (invented) API layers live in the catalog, and the DB row is the
-    // contact record the router attaches to a fmatch candidate (PLAN #28).
-    for acq in pay3flow_backend::fake_acquirers::FAKE_ACQUIRERS {
-        if let Ok(id) = pay3flow_backend::payments::repo::upsert_fake_acquirer(&pool, acq).await {
-            let boxed = SecretBox::new(&cfg.secrets_key);
-            let enc = boxed
-                .encrypt(&format!("{}-stub-secret-placeholder", acq.slug))
-                .unwrap_or_else(|e| {
-                    tracing::warn!(error = %e, slug = acq.slug, "encrypt placeholder credential");
                     String::new()
                 });
             if !enc.is_empty() {
@@ -121,6 +97,29 @@ async fn main() -> anyhow::Result<()> {
             Ok(outcome) => tracing::info!(?outcome, "self-seed follow"),
             Err(e) => tracing::warn!(error = %e, "self-seed follow failed"),
         }
+    });
+
+    // Background acquirer discovery: run once at startup and then every
+    // DISCOVERY_INTERVAL (default 25 min). Each run asks crw to scan the
+    // internet, receives an acquirer diff, applies it to the acquirers table
+    // and re-offers acquirers to fmatch as `purpose="offer"` proposals.
+    let discovery_pool = state.pool.clone();
+    let discovery_ap = state.ap.clone();
+    let discovery_crw_url = cfg.crw_grpc_url.clone();
+    let discovery_interval = std::time::Duration::from_secs(
+        std::env::var("DISCOVERY_INTERVAL_SECS")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(25 * 60),
+    );
+    tokio::spawn(async move {
+        pay3flow_backend::discovery::run_discovery_loop(
+            discovery_pool,
+            discovery_ap,
+            discovery_crw_url,
+            discovery_interval,
+        )
+        .await;
     });
 
     let app = routing::api::router(state);

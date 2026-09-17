@@ -3,7 +3,7 @@ pub mod activitypub;
 pub mod config;
 pub mod core;
 pub mod db;
-pub mod fake_acquirers;
+pub mod discovery;
 pub mod payments;
 pub mod quotes;
 pub mod routing;

@@ -174,14 +174,7 @@ impl PaymentService {
             .as_ref()
             .map(|a| a.slug.clone())
             .unwrap_or_else(|| best.short_id.clone());
-        // Fee: the exact pair commission when the winner is a managed solver
-        // serving `from -> to`, otherwise the profile fee_percent as before.
-        let to_currency = payment.to_currency.as_deref().unwrap_or(&payment.currency);
-        let pair_fee_percent = crate::fake_acquirers::fake_acquirer_by_name(&best.name)
-            .and_then(|a| a.commission_for(&payment.currency, to_currency))
-            .and_then(crate::fake_acquirers::commission_pct);
-        let fee_percent = pair_fee_percent
-            .unwrap_or_else(|| acquirer.as_ref().map(|a| a.fee_percent).unwrap_or(0.0));
+        let fee_percent = acquirer.as_ref().map(|a| a.fee_percent).unwrap_or(0.0);
         let route = repo::insert_route(
             &self.pool,
             &NewRoute {
@@ -298,13 +291,6 @@ impl PaymentService {
         let pool = crate::routing::profile::seed_pool();
         if let Some(slug) = pool.iter().find(|p| name.starts_with(&p.name)).map(|p| p.slug.clone()) {
             return repo::acquirer_by_slug(&self.pool, &slug).await;
-        }
-        // The fictional solvers fmatch actually routes to.
-        if let Some(fake) = crate::fake_acquirers::FAKE_ACQUIRERS
-            .iter()
-            .find(|a| name.starts_with(a.name))
-        {
-            return repo::acquirer_by_slug(&self.pool, fake.slug).await;
         }
         Ok(None)
     }

@@ -6,6 +6,14 @@ service SearchService {
   rpc Search(SearchRequest) returns (SearchResponse);
 }
 
+service AcquirerDiscoveryService {
+  // Ask crw to scan the internet for real acquirers and return a diff
+  // against what is already stored in the backend database (crw reads the
+  // DB directly via ACQUIRER_DB_DSN). The diff is then applied by backend:
+  // new acquirers are inserted, updated ones replaced, missing ones deleted.
+  rpc DiscoverAcquirers(DiscoverAcquirersRequest) returns (AcquirerDiff);
+}
+
 message SearchRequest {
   string query = 1;
   optional uint32 limit = 2;
@@ -31,4 +39,50 @@ message SearchResponse {
   repeated SearchResult results = 3;
   repeated string suggestions = 4;
   bool degraded = 5;
+}
+
+message DiscoverAcquirersRequest {
+  // How many acquirers to aim for. crw searches a battery of queries and
+  // normalizes/deranks results until this target is reached (~500).
+  optional uint32 target_count = 1;
+}
+
+message Acquirer {
+  // Slug of the acquirer (derived from its domain, e.g. "stripe").
+  string slug = 1;
+  string name = 2;
+  // Pipe-separated geo coverage, e.g. "US|EU|Global".
+  string geo = 3;
+  // Pipe-separated supported currencies, e.g. "USD|EUR".
+  string currencies = 4;
+  // Worst-case percent fee charged (0 when unknown).
+  double fee_percent = 5;
+  // Fixed fee in minor units of amount_currency (0 when unknown).
+  int64 fee_fixed = 6;
+  optional int64 min_amount = 7;
+  optional int64 max_amount = 8;
+  optional string amount_currency = 9;
+  // Main website URL.
+  string website_url = 10;
+  // Direct URL of the acquirer's API documentation.
+  string api_docs_url = 11;
+  string description = 12;
+  // Which search engine/page contributed this acquirer (debug).
+  string source = 13;
+  // JSON-encoded API layer when it could be extracted from the docs page.
+  string api_json = 14;
+}
+
+message AcquirerDiff {
+  // Count of acquirers found in this scan (after dedup / normalization).
+  uint32 found = 1;
+  // New acquirers to insert.
+  repeated Acquirer added = 2;
+  // Already known acquirers whose data changed (to replace in place).
+  repeated Acquirer updated = 3;
+  // Slugs of acquirers previously stored in the DB that were NOT found in
+  // this scan — backend should delete them.
+  repeated string deleted = 4;
+  // Wall-clock time the scan produced the diff (RFC3339).
+  string scanned_at = 5;
 }

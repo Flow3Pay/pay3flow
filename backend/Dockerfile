@@ -16,7 +16,6 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=builder /app/backend/target/release/pay3flow-backend /usr/local/bin/pay3flow-backend
-COPY --from=builder /app/backend/target/release/fake_solvers /usr/local/bin/fake_solvers
 RUN mkdir -p /app/data
 EXPOSE 8080
 CMD ["pay3flow-backend"]

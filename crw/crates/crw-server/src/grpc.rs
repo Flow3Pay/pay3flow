@@ -12,8 +12,15 @@ pub mod pb {
     tonic::include_proto!("crw.search");
 }
 
+use pb::acquirer_discovery_service_server::{
+    AcquirerDiscoveryService, AcquirerDiscoveryServiceServer,
+};
 use pb::search_service_server::{SearchService, SearchServiceServer};
-use pb::{SearchRequest as GrpcSearchRequest, SearchResponse as GrpcSearchResponse, SearchResult as GrpcSearchResult};
+use pb::{
+    Acquirer as GrpcAcquirer, AcquirerDiff, DiscoverAcquirersRequest,
+    SearchRequest as GrpcSearchRequest, SearchResponse as GrpcSearchResponse,
+    SearchResult as GrpcSearchResult,
+};
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
 
@@ -107,6 +114,85 @@ impl SearchService for CrwGrpcService {
             results,
             suggestions: Vec::new(),
             degraded: false,
+        }))
+    }
+}
+
+/// gRPC implementation of the AcquirerDiscoveryService. Delegates to
+/// `crate::acquirer::discover`, which runs the internet scan AND computes the
+/// diff against the backend database before coming back.
+pub struct CrwAcquirerDiscovery {
+    state: Arc<AppState>,
+}
+
+impl CrwAcquirerDiscovery {
+    pub fn new(state: Arc<AppState>) -> Self {
+        Self { state }
+    }
+
+    /// Return the tonic server object ready to be bound to a listener.
+    pub fn service(state: Arc<AppState>) -> AcquirerDiscoveryServiceServer<Self> {
+        AcquirerDiscoveryServiceServer::new(Self::new(state))
+    }
+}
+
+fn to_grpc_acquirer(a: &crate::acquirer::DiscoveredAcquirer) -> GrpcAcquirer {
+    GrpcAcquirer {
+        slug: a.slug.clone(),
+        name: a.name.clone(),
+        geo: a.geo.clone(),
+        currencies: a.currencies.clone(),
+        fee_percent: a.fee_percent,
+        fee_fixed: a.fee_fixed,
+        min_amount: a.min_amount,
+        max_amount: a.max_amount,
+        amount_currency: a.amount_currency.clone(),
+        website_url: a.website_url.clone(),
+        api_docs_url: a.api_docs_url.clone(),
+        description: a.description.clone(),
+        source: a.source.clone(),
+        api_json: a.api_json.clone(),
+    }
+}
+
+#[tonic::async_trait]
+impl AcquirerDiscoveryService for CrwAcquirerDiscovery {
+    async fn discover_acquirers(
+        &self,
+        req: Request<DiscoverAcquirersRequest>,
+    ) -> Result<Response<AcquirerDiff>, Status> {
+        let target = req.into_inner().target_count.unwrap_or(500);
+        let start = std::time::Instant::now();
+        let result = crate::acquirer::discover(&self.state, target).await;
+
+        if result.search_disabled {
+            return Err(Status::unavailable(
+                "search disabled: set CRW_SEARCH__SEARXNG_URL to point at a search backend",
+            ));
+        }
+        if let Some(err) = &result.error {
+            tracing::warn!(
+                error = %err,
+                "acquirer discovery: DB sync unavailable; treating scan as adds"
+            );
+        }
+
+        let elapsed_ms = start.elapsed().as_millis();
+        tracing::info!(
+            found = result.found,
+            added = result.added.len(),
+            updated = result.updated.len(),
+            deleted = result.deleted.len(),
+            elapsed_ms,
+            "acquirer discovery scan complete"
+        );
+
+        Ok(Response::new(AcquirerDiff {
+            found: result.found as u32,
+            added: result.added.iter().map(to_grpc_acquirer).collect(),
+            updated: result.updated.iter().map(to_grpc_acquirer).collect(),
+            deleted: result.deleted.clone(),
+            scanned_at: result.scanned_at,
         }))
     }
 }

@@ -130,6 +130,12 @@ prometheus = "0.14"
 moka = { version = "0.12", features = ["future"] }
 publicsuffix = "2"
 
+# Postgres — acquirer discovery syncs against the backend DB directly
+# (deadpool-postgres 0.12 + tokio-postgres 0.7: same lines the backend uses).
+tokio-postgres = { version = "0.7", features = ["with-uuid-1", "with-chrono-0_4", "with-serde_json-1"] }
+deadpool-postgres = "0.12"
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+
 # Misc
 uuid = { version = "1", features = ["v4", "serde"] }
 url = { version = "2", features = ["serde"] }

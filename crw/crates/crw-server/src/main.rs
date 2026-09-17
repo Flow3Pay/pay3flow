@@ -237,7 +237,8 @@ async fn run_server() {
         .and_then(|v| v.parse::<u16>().ok())
         .unwrap_or(3031);
     let grpc_addr = format!("0.0.0.0:{grpc_port}");
-    let grpc_service = crw_server::grpc::CrwGrpcService::service(grpc_state);
+    let grpc_service = crw_server::grpc::CrwGrpcService::service(grpc_state.clone());
+    let grpc_acquirer = crw_server::grpc::CrwAcquirerDiscovery::service(grpc_state);
     let grpc_handle = tokio::spawn(async move {
         let listener = match tokio::net::TcpListener::bind(&grpc_addr).await {
             Ok(l) => l,
@@ -249,6 +250,7 @@ async fn run_server() {
         tracing::info!("CRW gRPC ready at {grpc_addr}");
         tonic::transport::Server::builder()
             .add_service(grpc_service)
+            .add_service(grpc_acquirer)
             .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(listener))
             .await
             .expect("gRPC server error");
