@@ -34,7 +34,10 @@ impl IntoResponse for AppError {
             AppError::NotImplemented(msg) => (StatusCode::NOT_IMPLEMENTED, msg),
             AppError::Internal(e) => {
                 tracing::error!("internal error: {e:?}");
-                (StatusCode::INTERNAL_SERVER_ERROR, "internal server error".into())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "internal server error".into(),
+                )
             }
         };
         (status, Json(ErrorBody { error: msg })).into_response()

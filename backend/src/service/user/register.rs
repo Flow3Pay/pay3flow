@@ -11,11 +11,7 @@ pub fn send_auth_code(email: &str) -> Result<()> {
     Ok(())
 }
 
-pub async fn register_user(
-    pool: &DbPool,
-    email: &str,
-    code: &str,
-) -> Result<Uuid, UserError> {
+pub async fn register_user(pool: &DbPool, email: &str, code: &str) -> Result<Uuid, UserError> {
     validate_email(email)?;
     if !mail::verify_auth_code(email, code) {
         return Err(UserError::InvalidCode);
@@ -26,7 +22,8 @@ pub async fn register_user(
 }
 
 fn validate_email(email: &str) -> Result<(), UserError> {
-    let valid = !email.is_empty() && email.len() <= 254 && email.contains('@') && !email.starts_with('@');
+    let valid =
+        !email.is_empty() && email.len() <= 254 && email.contains('@') && !email.starts_with('@');
     if valid {
         Ok(())
     } else {

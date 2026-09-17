@@ -121,6 +121,7 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
   const [autoSlippage, setAutoSlippage] = useState(true);
   const [slippage, setSlippage] = useState(0.5);
   const [deadline, setDeadline] = useState(20);
+  const [deadlineOpen, setDeadlineOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   // Live quoting: fmatch answers the exchange pair over WebSocket.
@@ -129,6 +130,7 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
   const [intervalSec, setIntervalSec] = useState(10);
 
   const settingsRef = useRef<HTMLDivElement>(null);
+  const deadlineRef = useRef<HTMLDivElement>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const socketRef = useRef<RatesSocket | null>(null);
   const requestRef = useRef<QuoteRequest | null>(null);
@@ -170,10 +172,13 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
       if (settingsRef.current && !settingsRef.current.contains(event.target as Node)) {
         setSettingsOpen(false);
       }
+      if (deadlineRef.current && !deadlineRef.current.contains(event.target as Node)) {
+        setDeadlineOpen(false);
+      }
     };
-    if (settingsOpen) document.addEventListener("mousedown", onClickOutside);
+    if (settingsOpen || deadlineOpen) document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
-  }, [settingsOpen]);
+  }, [settingsOpen, deadlineOpen]);
 
   useEffect(() => {
     return () => {
@@ -379,18 +384,45 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
                     <label className={styles.popLabel} htmlFor="deadline">
                       Срок действия
                     </label>
-                    <select
-                      id="deadline"
-                      className={styles.select}
-                      value={deadline}
-                      onChange={(event) => setDeadline(Number(event.target.value))}
-                    >
-                      {DEADLINE_OPTIONS.map((value) => (
-                        <option key={value} value={value}>
-                          {value === 1440 ? "24 часа" : `${value} мин`}
-                        </option>
-                      ))}
-                    </select>
+                    <div className={styles.deadlineWrap} ref={deadlineRef}>
+                      <button
+                        type="button"
+                        id="deadline"
+                        className={styles.deadlineTrigger}
+                        aria-haspopup="listbox"
+                        aria-expanded={deadlineOpen}
+                        onClick={() => setDeadlineOpen((v) => !v)}
+                      >
+                        <span>{deadline === 1440 ? "24 часа" : `${deadline} мин`}</span>
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                          <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </button>
+                      {deadlineOpen && (
+                        <div className={styles.deadlineMenu} role="listbox">
+                          {DEADLINE_OPTIONS.map((value) => (
+                            <button
+                              key={value}
+                              type="button"
+                              className={styles.deadlineOption}
+                              role="option"
+                              aria-selected={deadline === value}
+                              onClick={() => {
+                                setDeadline(value);
+                                setDeadlineOpen(false);
+                              }}
+                            >
+                              <span>{value === 1440 ? "24 часа" : `${value} мин`}</span>
+                              {deadline === value && (
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                                  <path d="M3 8l3.5 3.5L13 5" stroke="var(--color-accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}

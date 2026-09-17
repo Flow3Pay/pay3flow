@@ -3,6 +3,7 @@
 # External projects (their own git repos)
 fmatch
 searxng
+cowswap-frontend
 
 # Local tooling / state
 .repowise
@@ -36,3 +37,4 @@ backend/target/
 
 # === Searcher ===
 searcher/redis-data/
+.playwright-mcp

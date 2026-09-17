@@ -1,0 +1,28 @@
+[server]
+host = "0.0.0.0"
+port = 3030
+request_timeout_secs = 30
+rate_limit_rps = 0
+
+[renderer]
+mode = "none"
+
+[search]
+enabled = true
+searxng_url = "http://searcher:8080"
+timeout_ms = 15000
+default_limit = 5
+max_limit = 20
+
+[crawler]
+max_concurrency = 5
+requests_per_second = 5.0
+respect_robots_txt = true
+user_agent = "CRW/0.35.1"
+default_max_depth = 1
+default_max_pages = 10
+job_ttl_secs = 300
+
+[extraction]
+default_format = "markdown"
+only_main_content = true

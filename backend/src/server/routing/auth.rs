@@ -38,7 +38,9 @@ pub async fn register(
     let id = user::register_user(&state.pool, &req.email, &req.code)
         .await
         .map_err(map_user_err)?;
-    Ok(Json(AuthRes { token: state.jwt.sign(&id.to_string())? }))
+    Ok(Json(AuthRes {
+        token: state.jwt.sign(&id.to_string())?,
+    }))
 }
 
 pub async fn login(
@@ -59,12 +61,17 @@ pub async fn me(
     let user = user::current_user(&state.pool, &state.jwt, token)
         .await
         .map_err(map_user_err)?;
-    Ok(Json(UserRes { id: user.id.to_string(), email: user.email }))
+    Ok(Json(UserRes {
+        id: user.id.to_string(),
+        email: user.email,
+    }))
 }
 
 fn bearer_token(headers: &HeaderMap) -> Result<&str, AppError> {
     let Some(raw) = headers.get(AUTHORIZATION) else {
-        return Err(AppError::Unauthorized("missing authorization header".into()));
+        return Err(AppError::Unauthorized(
+            "missing authorization header".into(),
+        ));
     };
     let raw = raw.to_str().unwrap_or_default();
     raw.strip_prefix("Bearer ")

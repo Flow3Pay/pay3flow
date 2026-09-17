@@ -12,11 +12,7 @@ use crate::db::DbPool;
 const DEFAULT_HANDLE: &str = "pay3flow";
 
 /// Shared inbox entry-point: `POST /inbox`
-pub async fn handle(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    body: String,
-) -> Response {
+pub async fn handle(State(state): State<AppState>, headers: HeaderMap, body: String) -> Response {
     handle_inner(&state, DEFAULT_HANDLE, &headers, body).await
 }
 
@@ -30,7 +26,12 @@ pub async fn handle_named(
     handle_inner(&state, &handle, &headers, body).await
 }
 
-async fn handle_inner(state: &AppState, handle_str: &str, headers: &HeaderMap, body: String) -> Response {
+async fn handle_inner(
+    state: &AppState,
+    handle_str: &str,
+    headers: &HeaderMap,
+    body: String,
+) -> Response {
     match inner(state, handle_str, headers, body.into_bytes()).await {
         Ok(resp) => resp,
         Err(status) => {
@@ -57,7 +58,9 @@ async fn inner(
 
     if let Some(id) = activity.get("id").and_then(Value::as_str) {
         match was_received(&state.pool, id).await {
-            Ok(true) => return Ok(Json(json!({"status": "exists", "activity": activity})).into_response()),
+            Ok(true) => {
+                return Ok(Json(json!({"status": "exists", "activity": activity})).into_response())
+            }
             Ok(false) => {}
             Err(code) => {
                 tracing::warn!(activity_id = id, code = %code, "was_received failed");

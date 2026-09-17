@@ -31,6 +31,32 @@ async fn main() -> anyhow::Result<()> {
         cfg.http_addr
     );
 
+    let self_seed = state.ap.clone();
+    tokio::spawn(async move {
+        let follow = pay3flow_backend::activitypub::model::follow_activity(
+            &self_seed.identity.actor_id,
+            &self_seed.identity.actor_id,
+            &self_seed.fmatch_actor_id,
+        );
+        match self_seed
+            .delivery
+            .deliver(&self_seed.identity, &self_seed.fmatch_inbox, &follow)
+            .await
+        {
+            Ok(outcome) => tracing::info!(?outcome, "self-seed follow"),
+            Err(e) => tracing::warn!(error = %e, "self-seed follow failed"),
+        }
+        let offer = self_seed.self_offer_activity();
+        match self_seed
+            .delivery
+            .deliver(&self_seed.identity, &self_seed.fmatch_inbox, &offer)
+            .await
+        {
+            Ok(outcome) => tracing::info!(?outcome, "self-seed offer"),
+            Err(e) => tracing::warn!(error = %e, "self-seed offer failed"),
+        }
+    });
+
     let app = routing::api::router(state);
     let addr = cfg.http_addr;
     let listener = tokio::net::TcpListener::bind(&addr).await?;

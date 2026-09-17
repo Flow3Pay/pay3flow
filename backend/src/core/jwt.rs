@@ -25,8 +25,15 @@ impl Jwt {
     }
 
     pub fn sign(&self, sub: &str) -> anyhow::Result<String> {
-        let claims = Claims { sub: sub.to_string(), exp: now_secs() + TTL_SECS };
-        Ok(encode(&Header::new(Algorithm::HS256), &claims, &self.encode_key)?)
+        let claims = Claims {
+            sub: sub.to_string(),
+            exp: now_secs() + TTL_SECS,
+        };
+        Ok(encode(
+            &Header::new(Algorithm::HS256),
+            &claims,
+            &self.encode_key,
+        )?)
     }
 
     pub fn verify(&self, token: &str) -> anyhow::Result<String> {

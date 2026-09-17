@@ -31,5 +31,8 @@ pub async fn user_by_id(pool: &DbPool, id: &Uuid) -> Result<Option<User>> {
     let client = pool.get().await?;
     let stmt = client.prepare_cached(GET_BY_ID).await?;
     let row = client.query_opt(&stmt, &[id]).await?;
-    Ok(row.map(|row| User { id: row.get(0), email: row.get(1) }))
+    Ok(row.map(|row| User {
+        id: row.get(0),
+        email: row.get(1),
+    }))
 }

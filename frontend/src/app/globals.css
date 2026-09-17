@@ -120,12 +120,3 @@ button {
   }
 }
 
-.heroBg {
-  position: relative;
-  min-height: 100vh;
-  background-image:
-    linear-gradient(rgba(253, 253, 251, 0.74), rgba(253, 253, 251, 0.74)),
-    url("/photo_2026-09-16_11-19-55.jpg");
-  background-size: cover;
-  background-position: center;
-}

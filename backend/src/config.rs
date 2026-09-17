@@ -21,8 +21,7 @@ impl Config {
             jwt_secret: env::var("JWT_SECRET").unwrap_or_else(|_| "dev-secret-change-me".into()),
             ap_origin: env::var("AP_ORIGIN").unwrap_or_else(|_| "http://localhost:8080".into()),
             ap_handle: env::var("AP_HANDLE").unwrap_or_else(|_| "pay3flow".into()),
-            ap_key_path: env::var("AP_KEY_PATH")
-                .unwrap_or_else(|_| "./data/ap-key.pem".into()),
+            ap_key_path: env::var("AP_KEY_PATH").unwrap_or_else(|_| "./data/ap-key.pem".into()),
             ap_require_signatures: env::var("AP_REQUIRE_SIGNATURES")
                 .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
                 .unwrap_or(false),

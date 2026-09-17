@@ -207,35 +207,79 @@
   color: var(--color-accent);
 }
 
-.select {
+.deadlineWrap {
+  position: relative;
+}
+
+.deadlineTrigger {
   appearance: none;
   -webkit-appearance: none;
-  height: 40px;
   width: 100%;
+  height: 40px;
   padding: 0 34px 0 12px;
   border-radius: 12px;
   border: 1px solid var(--color-border-strong);
-  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="%234d4a44" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>');
-  background-repeat: no-repeat;
-  background-position: right 12px center;
   background-color: var(--color-paper);
   color: var(--color-text);
   font-size: 14px;
   font-weight: 500;
-  outline: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
   cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s ease;
 }
 
-.select:focus-visible {
+.deadlineTrigger:focus-visible {
   border-color: var(--color-accent);
 }
 
-.select option {
+.deadlineTrigger svg {
+  color: var(--color-text-faint);
+}
+
+.deadlineMenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  min-width: 100%;
   background: var(--color-paper);
+  border-radius: 12px;
+  border: 1px solid var(--color-border-strong);
+  box-shadow: var(--shadow-pop);
+  padding: 4px;
+  z-index: 60;
+  animation: pop 0.14s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.deadlineOption {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
   color: var(--color-text);
   font-size: 14px;
   font-weight: 500;
-  padding: 8px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.deadlineOption:hover {
+  background: var(--color-panel);
+}
+
+.deadlineOption[aria-selected="true"] {
+  background: var(--color-panel);
+  color: var(--color-text);
 }
 
 .slotTop {
