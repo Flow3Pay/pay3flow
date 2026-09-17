@@ -220,6 +220,7 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
       currency: sell.symbol,
       from: sell.rail,
       to: buy.rail,
+      to_currency: buy.symbol,
     };
     requestRef.current = request;
 

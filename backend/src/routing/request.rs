@@ -14,6 +14,11 @@ pub struct PaymentRequest {
     pub to_geo: Option<String>,
     #[serde(default)]
     pub method: Option<String>,
+    /// Destination currency of the swap pair, when the payment converts
+    /// (e.g. "USD" for a EUR→USD exchange). Optional: not set = send the
+    /// same currency.
+    #[serde(default)]
+    pub to_currency: Option<String>,
 }
 
 impl PaymentRequest {
@@ -30,6 +35,12 @@ impl PaymentRequest {
             to: to.into(),
             to_geo: None,
             method: None,
+            to_currency: None,
         }
+    }
+
+    pub fn with_to_currency(mut self, to_currency: impl Into<String>) -> Self {
+        self.to_currency = Some(to_currency.into());
+        self
     }
 }

@@ -11,6 +11,8 @@ export interface QuoteRequest {
   currency: string;
   from: string;
   to: string;
+  /** Destination currency of the swap pair (e.g. "USD" for a EUR→USD exchange). */
+  to_currency?: string | null;
 }
 
 export interface QuoteCandidate {

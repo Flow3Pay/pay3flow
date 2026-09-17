@@ -151,21 +151,15 @@ impl PaymentService {
             &payment.from,
             &payment.to,
         )
+        .with_to_currency(payment.to_currency.clone().unwrap_or_else(|| payment.currency.clone()))
         .with_geo(payment.to_geo.clone())
         .with_method(payment.method.clone());
         let quote = crate::quotes::compute_quote(&self.ap, &self.picker, request).await;
-        // fmatch ranks by relevance, not by the fee a solver charges on the
-        // swap pair (its price signal is per-token, commission lives in the
-        // offer text) — re-rank so the cheapest candidate that serves the pair
-        // wins. The final commercial pick is ours (PLAN #22); fmatch untouched.
-        let to_currency = payment
-            .to_currency
-            .as_deref()
-            .unwrap_or(&payment.currency);
-        let mut candidates =
-            crate::quotes::rank_candidates_by_pair_fee(&payment.currency, to_currency, quote.candidates);
-        candidates.sort_by_key(|candidate| candidate.rank);
-        let Some(best) = candidates.into_iter().next() else {
+        // compute_quote already re-ranks fmatch by the real pair fee when the
+        // request converts (fallback ranks by effective fee today), so rank-1 is
+        // the cheapest managed solver that serves the pair, not fmatch's
+        // relevance winner. The final commercial pick is ours (PLAN #22).
+        let Some(best) = quote.best.clone() else {
             // No acquirer can serve; park the transaction as failed (route
             // never created). The failure reason is surfaced in the view.
             repo::transition_status(&self.pool, &tx.id, TransactionStatus::Pending, TransactionStatus::Failed)
@@ -182,6 +176,7 @@ impl PaymentService {
             .unwrap_or_else(|| best.short_id.clone());
         // Fee: the exact pair commission when the winner is a managed solver
         // serving `from -> to`, otherwise the profile fee_percent as before.
+        let to_currency = payment.to_currency.as_deref().unwrap_or(&payment.currency);
         let pair_fee_percent = crate::fake_acquirers::fake_acquirer_by_name(&best.name)
             .and_then(|a| a.commission_for(&payment.currency, to_currency))
             .and_then(crate::fake_acquirers::commission_pct);

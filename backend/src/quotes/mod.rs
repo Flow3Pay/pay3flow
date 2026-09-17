@@ -44,6 +44,9 @@ pub fn fmatch_content(req: &PaymentRequest) -> String {
     if let Some(method) = &req.method {
         content.push_str(&format!("; method={}", method.trim()));
     }
+    if let Some(to_currency) = &req.to_currency {
+        content.push_str(&format!("; to_currency={}", to_currency.trim()));
+    }
     content
 }
 
@@ -52,7 +55,11 @@ fn fmt_amount(amount: f64) -> String {
 }
 
 /// Compute a quote for the request: ask fmatch (read-only), fall back to
-/// local routing rules when fmatch is unreachable.
+/// local routing rules when fmatch is unreachable. When the request converts
+/// to a target currency (`to_currency`), fmatch's answer is re-ranked by the
+/// fee each managed solver actually charges on that pair — so `best` is always
+/// the cheapest route that can move the money, not just fmatch's relevance
+/// winner. fmatch itself stays read-only.
 pub async fn compute_quote(ap: &Service, picker: &RoutePicker, request: PaymentRequest) -> Quote {
     let resolved = match ap
         .submit_request("candidates", &fmatch_content(&request))
@@ -66,6 +73,27 @@ pub async fn compute_quote(ap: &Service, picker: &RoutePicker, request: PaymentR
             picker.resolve(&request, Some(candidates))
         }
         Err(_) => picker.resolve(&request, None),
+    };
+    let resolved = match resolved {
+        RouteResolved {
+            source: RouteSource::Fmatch,
+            candidates,
+        } => {
+            let from = request.currency.as_str();
+            let to = request.to_currency.as_deref().unwrap_or(from);
+            if from.eq_ignore_ascii_case(to) {
+                RouteResolved {
+                    source: RouteSource::Fmatch,
+                    candidates,
+                }
+            } else {
+                RouteResolved {
+                    source: RouteSource::Fmatch,
+                    candidates: rank_candidates_by_pair_fee(from, to, candidates),
+                }
+            }
+        }
+        other => other,
     };
     quote_from_result(request, resolved)
 }

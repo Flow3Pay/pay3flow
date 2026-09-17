@@ -206,6 +206,28 @@ foreach ($c in $cands) {
     Write-Host ("    #{0}  rank={1}  {2}" -f $i, $c.rank, $c.name)
 }
 
+# --- 3b. our filtered view: fmatch relevance order re-ranked by pair fee ------
+Write-Step "our filtered ranking on the pair (POST /api/debug/quote)"
+$quote = Invoke-Json -Method 'POST' -Url "$Backend/api/debug/quote" -Body @{
+    amount      = $Amount
+    currency    = $baseCur
+    from        = $From
+    to          = $To
+    to_currency = $quoteCur
+    method      = $Method
+}
+Assert-True ($quote.Code -eq 200) "backend quote answered (http $($quote.Code))"
+$ours = @($quote.Json.candidates)
+Assert-True ($ours.Count -gt 0) "backend returned $($ours.Count) ranked candidates"
+Assert-True ($quote.Json.best.name -like "*$($route.acquirer_slug)*") "route acquirer '$($route.acquirer_slug)' is rank-1 of our filtered list (cheapest on $baseCur/$quoteCur)"
+Write-Host "  backend filtered candidates (pair $baseCur -> $quoteCur, cheapest first):"
+$i = 0
+foreach ($c in $ours) {
+    $i++
+    $fee = if ($null -ne $c.price) { (" fee={0:P1}" -f $c.price) } else { "" }
+    Write-Host ("    #{0}  rank={1}  {2}{3}" -f $i, $c.rank, $c.name, $fee)
+}
+
 # --- we store and serve them ourselves --------------------------------------
 Write-Step "we store and serve (list our payments)"
 $list = Invoke-Json -Method 'GET' -Url "$Backend/api/payments" -Token $token
