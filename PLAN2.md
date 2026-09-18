@@ -45,6 +45,30 @@ Backend превращает этот intent в order, ищет solver'ов че
 10. Solver присылает proof.
 11. Backend проверяет proof, обновляет status и показывает результат в UI.
 
+Вариант funding flow для MVP:
+
+```text
+user
+  -> Pay3Flow form
+  -> user-initiated funding/payment instruction
+  -> solver
+  -> Pay3Flow wallet / internal TOKEN ledger
+  -> solver
+  -> recipient
+```
+
+Смысл:
+
+- пользователь заполняет простую форму перевода в Pay3Flow;
+- Pay3Flow показывает сумму, курс, комиссию, ETA и условия;
+- пользователь сам подтверждает действие и сам инициирует funding/payment;
+- Pay3Flow не принимает фиат на свой баланс и не распоряжается фиатом пользователя;
+- solver выполняет crypto/TOKEN purchase или внутренний расчётный leg как часть settlement;
+- Pay3Flow wallet/internal ledger используется для фиксации TOKEN-leg, proof и статусов;
+- второй solver leg доставляет деньги получателю через выбранный rail.
+
+Важно для агента: нельзя строить продукт на обмане пользователя. В UI можно не перегружать человека словами про инфраструктуру, но в условиях, подтверждении операции и compliance-документах должно быть прозрачно написано, что маршрут может использовать crypto/TOKEN settlement asset. Формулировка для продукта: "Pay3Flow подбирает маршрут обмена и расчёта; пользователь подтверждает условия, сумму, комиссию и способ исполнения".
+
 ## 2. Главное Архитектурное Решение
 
 `fmatch` не заменяется Cow Protocol Services.
@@ -172,6 +196,9 @@ cowprotocol-services/
 - В MVP включён только один коридор через данные: Armenia/AMD -> Russia/RUB.
 - Новые валюты и страны позже добавляются через БД/admin/config без переписывания core logic.
 - TOKEN в MVP: mock ledger внутри backend.
+- Funding flow MVP: user -> Pay3Flow form -> solver -> Pay3Flow wallet/internal ledger -> solver -> recipient.
+- Pay3Flow не управляет фиатными деньгами пользователя: пользователь сам подтверждает funding/payment instruction, а backend хранит order/status/proof.
+- Crypto/TOKEN leg не должен быть "тайным". Для UX можно показывать простую форму перевода, но terms/consent обязаны раскрывать, что settlement может идти через TOKEN/crypto asset.
 - Реальные деньги в MVP на этом этапе не включать.
 - Первый solver: fake solver в backend или отдельном mock-сервисе.
 - Количество fake solver'ов для smoke: минимум 2.
@@ -244,14 +271,16 @@ Cow reference:
 10. Backend scores quotes
 11. Backend picks winner
 12. Backend saves route and status=quoted
-13. User confirms or backend auto-locks for smoke
+13. User confirms selected quote and funding instruction
 14. Backend locks order and quote
-15. Solver executes TOKEN-leg
-16. Solver executes money-leg
-17. Solver submits proof
-18. Backend verifies proof
-19. Backend finalizes done or disputed/failed
-20. Frontend receives status through HTTP/WS
+15. User funding/payment instruction goes to selected solver/rail
+16. Solver executes crypto/TOKEN purchase or internal TOKEN-leg
+17. TOKEN-leg is reflected in Pay3Flow wallet/internal ledger
+18. Solver executes money-leg to recipient
+19. Solver submits proof
+20. Backend verifies proof
+21. Backend finalizes done or disputed/failed
+22. Frontend receives status through HTTP/WS
 ```
 
 ## 8. Scoring Algorithm Для Quotes
@@ -377,6 +406,8 @@ target_currency text not null
 target_amount_min_minor bigint null
 target_method_type text not null
 target_method_ref text null
+funding_instruction_id uuid null
+funding_status text not null default 'not_started'
 status text not null
 deadline_at timestamptz null
 selected_quote_id uuid null
@@ -435,6 +466,8 @@ source_amount_minor bigint not null
 target_amount_minor bigint not null
 source_currency text not null
 target_currency text not null
+funding_method_type text not null
+requires_user_funding boolean not null default true
 rate numeric(24, 12) not null
 fee_minor bigint not null
 eta_minutes integer not null
@@ -469,6 +502,8 @@ solver_id uuid not null
 status text not null
 token_leg_status text not null
 money_leg_status text not null
+funding_status text not null
+pay3flow_wallet_ref text null
 token_ledger_ref text null
 money_reference text null
 proof_id uuid null
@@ -491,6 +526,40 @@ verified_by text null
 verified_at timestamptz null
 created_at timestamptz not null
 ```
+
+### `funding_instructions`
+
+```text
+id uuid primary key
+order_id uuid not null
+quote_id uuid not null
+solver_id uuid not null
+status text not null
+method_type text not null
+amount_minor bigint not null
+currency text not null
+destination_ref text not null
+expires_at timestamptz not null
+user_confirmed_at timestamptz null
+raw_payload jsonb not null
+created_at timestamptz not null
+updated_at timestamptz not null
+```
+
+Status:
+
+```text
+created
+shown_to_user
+user_confirmed
+solver_acknowledged
+received_by_solver
+expired
+cancelled
+failed
+```
+
+Правило: funding instruction описывает действие, которое пользователь подтверждает сам. Pay3Flow не должен автоматически списывать фиат или делать вид, что TOKEN-leg не существует.
 
 ### `audit_events`
 
@@ -567,6 +636,29 @@ GET /api/exchange/orders/:id/quotes
 POST /api/exchange/orders/:id/confirm
 ```
 
+Ответ confirm должен вернуть funding instruction:
+
+```json
+{
+  "order_id": "uuid",
+  "quote_id": "uuid",
+  "funding_instruction": {
+    "id": "uuid",
+    "method_type": "card_or_bank_or_wallet",
+    "amount_minor": 10000000,
+    "currency": "AMD",
+    "expires_at": "2026-09-18T15:00:00Z",
+    "display_text": "Confirm funding for the selected exchange route"
+  }
+}
+```
+
+Подтвердить, что пользователь увидел и принял funding instruction:
+
+```text
+POST /api/exchange/orders/:id/funding/confirm
+```
+
 Отменить order:
 
 ```text
@@ -589,6 +681,7 @@ POST /api/solver/orders/:id/quotes
 POST /api/solver/settlements/:id/token-leg
 POST /api/solver/settlements/:id/money-leg
 POST /api/solver/settlements/:id/proofs
+POST /api/solver/funding/:id/ack
 ```
 
 Позже solver API должен получить auth/signatures.
@@ -730,6 +823,7 @@ order переходит в done.
 - target currency;
 - target method;
 - recipient;
+- checkbox/consent для условий маршрута и settlement asset;
 - submit.
 
 Показывать пользователю:
@@ -741,6 +835,8 @@ order переходит в done.
 - ETA;
 - статус;
 - выбранный route;
+- funding instruction после выбора quote;
+- что Pay3Flow показывает маршрут и статус, но пользователь сам подтверждает funding/payment;
 - если disputed/failed, понятная причина.
 
 Не показывать:
@@ -749,6 +845,7 @@ order переходит в done.
 - полный PAN карты;
 - приватные actor keys;
 - raw proof, если он содержит чувствительные данные.
+- misleading текст вроде "мы просто переводим деньги напрямую", если route использует TOKEN/crypto settlement.
 
 ## 16. Безопасность И Комплаенс
 
@@ -766,6 +863,8 @@ order переходит в done.
 - secrets не в репозитории;
 - logs не содержат PAN/CVC/token secrets;
 - disputes можно закрывать вручную.
+- пользовательское согласие на funding/settlement terms сохранено;
+- crypto/TOKEN settlement раскрыт в terms/consent, даже если UI остаётся простым.
 
 Запреты:
 
@@ -774,6 +873,8 @@ order переходит в done.
 - не логировать секреты;
 - не включать реальные деньги без kill switch;
 - не считать mock ledger реальным settlement.
+- не скрывать от пользователя, что route может использовать TOKEN/crypto settlement asset;
+- не писать в UI/доках, что Pay3Flow управляет фиатом пользователя, если по модели funding делает сам пользователь/solver.
 
 ## 17. Фазы Работ
 
@@ -829,6 +930,8 @@ order переходит в done.
 - [ ] EX-2.7. Добавить `docs/exchange-domain.md`.
 - [ ] EX-2.8. Добавить таблицу или seed-конфиг `exchange_corridors`: enabled corridor Armenia/AMD -> Russia/RUB.
 - [ ] EX-2.9. Запретить создание order для disabled corridor, но сделать это через данные, а не через hardcoded `AMD`/`RUB` в коде.
+- [ ] EX-2.10. Добавить таблицу `funding_instructions` и связать её с order/quote/solver.
+- [ ] EX-2.11. Добавить поля funding status в order/settlement модели.
 
 Приёмка:
 
@@ -837,6 +940,8 @@ order переходит в done.
 - Повторный create с тем же `Idempotency-Key` возвращает тот же order.
 - AMD -> RUB работает как seed/config.
 - Добавление нового corridor требует только новых данных, а не изменения core logic.
+- Funding instruction создаётся только после selected quote.
+- Funding instruction не списывает деньги автоматически.
 
 ## Фаза EX-3 - Orderbook API
 
@@ -848,12 +953,16 @@ order переходит в done.
 - [ ] EX-3.6. Подключить JWT ownership checks.
 - [ ] EX-3.7. Добавить validation: amount > 0, currencies not empty, countries ISO-like, deadline sane.
 - [ ] EX-3.8. Добавить tests для auth/ownership/idempotency.
+- [ ] EX-3.9. Реализовать `POST /api/exchange/orders/:id/confirm`, который создаёт funding instruction.
+- [ ] EX-3.10. Реализовать `POST /api/exchange/orders/:id/funding/confirm`, который фиксирует user consent.
 
 Приёмка:
 
 - Пользователь видит только свои orders.
 - Нельзя создать order с нулевой/отрицательной суммой.
 - Нельзя отменить чужой order.
+- Confirm возвращает funding instruction.
+- Без user funding confirmation settlement не стартует.
 
 ## Фаза EX-4 - fmatch Solver Discovery
 
@@ -927,17 +1036,21 @@ order переходит в done.
 ## Фаза EX-8 - Settlement И Proof
 
 - [ ] EX-8.1. Реализовать создание `exchange_settlements` после confirm/lock.
-- [ ] EX-8.2. Реализовать token-leg execution через mock ledger.
-- [ ] EX-8.3. Реализовать money-leg fake execution.
-- [ ] EX-8.4. Реализовать proof submit.
-- [ ] EX-8.5. Реализовать proof verification.
-- [ ] EX-8.6. Реализовать переход `proof_pending -> done`.
-- [ ] EX-8.7. Реализовать failure paths.
-- [ ] EX-8.8. Реализовать dispute paths.
+- [ ] EX-8.2. Реализовать funding instruction lifecycle: created -> shown_to_user -> user_confirmed -> solver_acknowledged.
+- [ ] EX-8.3. Реализовать token-leg execution через mock ledger после user funding confirmation.
+- [ ] EX-8.4. Отразить TOKEN-leg в Pay3Flow wallet/internal ledger.
+- [ ] EX-8.5. Реализовать money-leg fake execution.
+- [ ] EX-8.6. Реализовать proof submit.
+- [ ] EX-8.7. Реализовать proof verification.
+- [ ] EX-8.8. Реализовать переход `proof_pending -> done`.
+- [ ] EX-8.9. Реализовать failure paths.
+- [ ] EX-8.10. Реализовать dispute paths.
 
 Приёмка:
 
 - Happy path order доходит до `done`.
+- Settlement не стартует до user funding confirmation.
+- Funding instruction сохраняется и видна в audit trail.
 - Bad proof переводит order в `disputed`.
 - Failed money-leg переводит order в `failed` или `disputed` по правилу.
 
@@ -966,12 +1079,15 @@ order переходит в done.
 - [ ] EX-10.8. Русская локализация основных статусов.
 - [ ] EX-10.9. Список доступных corridors тянуть с backend, не хардкодить валюты на frontend.
 - [ ] EX-10.10. Для MVP backend отдаёт один enabled corridor: AMD -> RUB.
+- [ ] EX-10.11. После выбора quote показать funding instruction и consent.
+- [ ] EX-10.12. UI должен быть простым: пользователь видит перевод, сумму, курс, комиссию, ETA и условия; technical TOKEN details можно раскрывать в details/terms.
 
 Приёмка:
 
 - Пользователь может пройти fake exchange flow из UI.
 - На мобильном форма не ломается.
 - UI не содержит зашитого списка будущих валют.
+- Пользователь не может запустить settlement без подтверждения funding instruction.
 
 ## Фаза EX-11 - Safety Before Real Money
 
@@ -983,12 +1099,15 @@ order переходит в done.
 - [ ] EX-11.6. Manual review status.
 - [ ] EX-11.7. Admin/manual dispute resolution.
 - [ ] EX-11.8. Secret audit.
+- [ ] EX-11.9. Terms/consent документирует, что route может использовать TOKEN/crypto settlement asset.
+- [ ] EX-11.10. Audit trail хранит факт user consent без хранения лишних sensitive данных.
 
 Приёмка:
 
 - Можно остановить весь flow без деплоя.
 - Можно заблокировать одного solver'а.
 - Dispute можно закрыть вручную.
+- Нельзя запустить route, если terms/consent не подтверждены.
 
 ## Фаза EX-12 - End-to-end Smoke
 
@@ -1000,6 +1119,8 @@ order переходит в done.
 - [ ] EX-12.6. Скрипт: disabled corridor -> понятная ошибка.
 - [ ] EX-12.7. Скрипт: enabled AMD -> RUB corridor -> полный happy path.
 - [ ] EX-12.8. Playwright smoke: login -> create exchange -> quotes -> status -> history.
+- [ ] EX-12.9. Скрипт: no funding consent -> settlement не стартует.
+- [ ] EX-12.10. Скрипт: funding consent -> solver ack -> TOKEN-leg -> money-leg -> done.
 
 Приёмка MVP:
 
@@ -1008,6 +1129,7 @@ order переходит в done.
 Backend находит fake solver'ов через fmatch или fallback.
 Backend получает минимум два quotes.
 Backend выбирает winner.
+Пользователь подтверждает funding instruction.
 Settlement проходит через mock TOKEN ledger.
 Fake money-leg завершается proof.
 Order получает status=done.
@@ -1027,6 +1149,7 @@ Frontend открывается.
 Backend находит solver candidates через fmatch или fallback.
 Backend получает quotes.
 Backend выбирает winner.
+Funding instruction создана, показана пользователю и подтверждена.
 Settlement проходит через mock TOKEN ledger.
 Money-leg проходит через fake/manual rail.
 Proof проверяется.
