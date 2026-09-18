@@ -1,5 +1,7 @@
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
+use axum::response::Response;
 use axum::Json;
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -8,7 +10,7 @@ use uuid::Uuid;
 use crate::core::error::AppError;
 use crate::core::state::AppState;
 use crate::exchange::{
-    auction, discovery, ledger, repo, solver, AuditEvent, ExchangeOrder, ExchangeProof,
+    auction, discovery, ledger, live, repo, solver, AuditEvent, ExchangeOrder, ExchangeProof,
     ExchangeQuote, ExchangeSettlement, FundingInstruction, Minor, NewExchangeOrder, OrderStatus,
     TokenLedgerOperation,
 };
@@ -36,6 +38,11 @@ pub struct CreateOrderReq {
 #[derive(Debug, Deserialize)]
 pub struct ListOrdersQuery {
     pub limit: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LiveRoutesQuery {
+    pub access_token: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -144,6 +151,42 @@ pub async fn get_quotes(
         .await
         .map_err(AppError::from)?;
     Ok(Json(quotes))
+}
+
+pub async fn live_routes(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<LiveRoutesQuery>,
+    Path(id): Path<Uuid>,
+    ws: WebSocketUpgrade,
+) -> Result<Response, AppError> {
+    let user_id = match query
+        .access_token
+        .as_deref()
+        .filter(|token| !token.is_empty())
+    {
+        Some(token) => user_id_from_token(&state, token)?,
+        None => auth_user_id(&state, &headers)?,
+    };
+    let order = owned_order(&state, &user_id, &id).await?;
+    Ok(ws.on_upgrade(move |socket| live_routes_socket(state, order, socket)))
+}
+
+async fn live_routes_socket(state: AppState, order: ExchangeOrder, mut socket: WebSocket) {
+    let mut events = live::run_mock_live_search(state.pool.clone(), order);
+    while let Some(event) = events.recv().await {
+        let payload = match serde_json::to_string(&event) {
+            Ok(payload) => payload,
+            Err(err) => {
+                tracing::error!(error = %err, "exchange.live.serialize_failed");
+                break;
+            }
+        };
+        if socket.send(Message::Text(payload)).await.is_err() {
+            break;
+        }
+    }
+    let _ = socket.close().await;
 }
 
 pub async fn discover_solvers(
@@ -519,6 +562,14 @@ fn clean_optional(value: Option<String>) -> Option<String> {
     value
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
+}
+
+fn user_id_from_token(state: &AppState, token: &str) -> Result<Uuid, AppError> {
+    let sub = state
+        .jwt
+        .verify(token)
+        .map_err(|_| AppError::Unauthorized("invalid or expired token".into()))?;
+    Uuid::parse_str(&sub).map_err(|_| AppError::Unauthorized("malformed token subject".into()))
 }
 
 fn map_exchange_err(err: anyhow::Error) -> AppError {

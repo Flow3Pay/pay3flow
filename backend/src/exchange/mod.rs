@@ -1,6 +1,7 @@
 pub mod auction;
 pub mod discovery;
 pub mod ledger;
+pub mod live;
 pub mod model;
 pub mod repo;
 pub mod seed;
