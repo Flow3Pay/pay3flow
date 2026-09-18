@@ -28,6 +28,22 @@ Pay3Flow не должен слепо "переводить через эква�
 
 `https://github.com/cowprotocol/services` используем как reference:
 
+Важно: Cow Protocol Services не заменяет `fmatch`. `fmatch` остаётся рабочим
+matcher'ом solver'ов через ActivityPub. Cow нужен как reference для
+orderbook, auction window, solver competition, выбора победителя и
+settlement/status/proof flow.
+
+Итоговый контур:
+
+```text
+backend/orderbook
+  -> fmatch возвращает solver candidates
+  -> backend собирает quotes
+  -> backend выбирает лучший route
+  -> solver исполняет TOKEN-leg и money-leg
+  -> backend проверяет proof и обновляет status
+```
+
 - `orderbook` — модель пользовательских ордеров/intents, хранение, API,
   валидация и статусы;
 - auction/solver flow — как отдавать открытые ордера solver'ам и выбирать
@@ -84,17 +100,19 @@ Pay3Flow не должен слепо "переводить через эква�
 - [ ] EX-2.6. Документ `docs/exchange-domain.md`: модель данных, статусы,
   инварианты и что считается финальным исполнением.
 
-## Фаза EX-3 — Orderbook и solver matching
+## Фаза EX-3 — Orderbook, fmatch и solver matching
 
 - [ ] EX-3.1. Реализовать `POST /api/exchange/orders`: создать intent/order.
 - [ ] EX-3.2. Реализовать `GET /api/exchange/orders/:id`: состояние order и quotes.
 - [ ] EX-3.3. Реализовать solver API: получить открытые orders, отправить quote,
   обновить доступную ликвидность.
-- [ ] EX-3.4. Подключить `fmatch` для discovery solver'ов через ActivityPub.
-- [ ] EX-3.5. Реализовать auction window: собрать quotes за короткое окно и
+- [ ] EX-3.4. Зафиксировать роль `fmatch`: он ищет solver candidates, но не
+  заменяется Cow Services и не выбирает финальный route.
+- [ ] EX-3.5. Подключить `fmatch` для discovery solver'ов через ActivityPub.
+- [ ] EX-3.6. Реализовать auction window: собрать quotes за короткое окно и
   выбрать лучший по цене, сроку, лимитам и risk score.
-- [ ] EX-3.6. Redis-кэш quotes/candidates с TTL 5 минут для повторных запросов.
-- [ ] EX-3.7. Smoke: один order Армения -> Россия, два fake solver'а, выбран
+- [ ] EX-3.7. Redis-кэш quotes/candidates с TTL 5 минут для повторных запросов.
+- [ ] EX-3.8. Smoke: один order Армения -> Россия, два fake solver'а, выбран
   лучший quote, order переходит в `quoted`.
 
 ## Фаза EX-4 — TOKEN-leg и money-leg
