@@ -71,14 +71,19 @@ pub async fn compute_quote(
 
     // Try to get from Redis cache first
     if let Some(pool) = redis_pool {
-        if let Ok(Some(cached)) = crate::core::redis::get_json::<RouteResolved>(pool, &cache_key).await {
+        if let Ok(Some(cached)) =
+            crate::core::redis::get_json::<RouteResolved>(pool, &cache_key).await
+        {
             // Cache hit! Convert to Quote format
             return quote_from_result(request, cached);
         }
     }
 
     // Compute quote normally
-    let resolved = match ap.submit_request("candidates", &fmatch_content(&request)).await {
+    let resolved = match ap
+        .submit_request("candidates", &fmatch_content(&request))
+        .await
+    {
         Ok((_outcome, body)) => {
             let candidates = body
                 .as_ref()
@@ -211,7 +216,11 @@ mod tests {
         let req = PaymentRequest::new(100.0, "EUR", "PayPal", "VISA");
         let resolved = RouteResolved {
             source: RouteSource::Fmatch,
-            candidates: vec![cand("B", 2, Some(0.04)), cand("A", 1, Some(0.02)), cand("C", 3, Some(0.05))],
+            candidates: vec![
+                cand("B", 2, Some(0.04)),
+                cand("A", 1, Some(0.02)),
+                cand("C", 3, Some(0.05)),
+            ],
         };
         let quote = quote_from_result(req, resolved);
         assert_eq!(quote.source, RouteSource::Fmatch);
@@ -269,7 +278,12 @@ mod tests {
     fn ranking_without_prices_preserves_fmatch_order() {
         let candidates = vec![cand("A", 1, None), cand("B", 2, None), cand("C", 3, None)];
         let ranked = rank_candidates_by_pair_fee("EUR", "USD", candidates);
-        assert_eq!(ranked.iter().map(|c| (c.name.as_str(), c.rank)).collect::<Vec<_>>(),
-                   vec![("A", 1), ("B", 2), ("C", 3)]);
+        assert_eq!(
+            ranked
+                .iter()
+                .map(|c| (c.name.as_str(), c.rank))
+                .collect::<Vec<_>>(),
+            vec![("A", 1), ("B", 2), ("C", 3)]
+        );
     }
 }

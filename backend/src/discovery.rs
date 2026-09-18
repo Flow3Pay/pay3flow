@@ -59,11 +59,7 @@ pub async fn run_discovery_loop(
 }
 
 /// Ask crw for an acquirer diff and apply it to the DB + fmatch inbox.
-async fn run_discovery_pass(
-    pool: &DbPool,
-    ap: &ActivityPubService,
-    crw_url: &str,
-) -> Result<()> {
+async fn run_discovery_pass(pool: &DbPool, ap: &ActivityPubService, crw_url: &str) -> Result<()> {
     let channel = Channel::from_shared(crw_url.to_string())
         .context("crw discovery: invalid endpoint url")?
         .connect_lazy();
@@ -85,7 +81,7 @@ async fn run_discovery_pass(
         return Ok(());
     }
 
-    let mut db = pool.get().await.context("discovery: acquire db client")?     ;
+    let mut db = pool.get().await.context("discovery: acquire db client")?;
     let mut offer_count = 0usize;
 
     for entry in diff
@@ -135,7 +131,11 @@ async fn upsert_acquirer(db: &mut deadpool_postgres::Client, a: &Acquirer) -> Re
     } else {
         None
     };
-    let fee_fixed = if a.fee_fixed > 0 { Some(a.fee_fixed) } else { None };
+    let fee_fixed = if a.fee_fixed > 0 {
+        Some(a.fee_fixed)
+    } else {
+        None
+    };
     let stmt = db
         .prepare_cached(
             r#"

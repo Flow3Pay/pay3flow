@@ -1069,14 +1069,14 @@ order переходит в done.
 
 ## Фаза EX-4 - fmatch Solver Discovery
 
-- [ ] EX-4.1. Описать payload задачи для `fmatch`.
-- [ ] EX-4.2. Реализовать отправку discovery task из backend в `fmatch`.
-- [ ] EX-4.3. Реализовать парсинг solver candidates из ответа.
-- [ ] EX-4.4. Сопоставить candidates с `exchange_solvers`.
-- [ ] EX-4.5. Добавить Redis cache на candidates, TTL 5 минут.
-- [ ] EX-4.6. Добавить fallback: Redis cache -> local solver registry -> failed.
-- [ ] EX-4.7. Добавить smoke: `fmatch` живой, возвращает candidates.
-- [ ] EX-4.8. Добавить smoke: `fmatch` выключен, backend берёт cache/fallback.
+- [x] EX-4.1. Описать payload задачи для `fmatch` (`docs/fmatch-exchange-discovery.md`).
+- [x] EX-4.2. Реализовать отправку discovery task из backend в `fmatch`.
+- [x] EX-4.3. Реализовать парсинг solver candidates из ответа.
+- [x] EX-4.4. Сопоставить candidates с `exchange_solvers`.
+- [x] EX-4.5. Добавить Redis cache на candidates, TTL 5 минут.
+- [x] EX-4.6. Добавить fallback: Redis cache -> local solver registry -> failed.
+- [x] EX-4.7. Добавить smoke: `fmatch` живой, возвращает candidates (`POST /api/exchange/orders/:id/discover`).
+- [x] EX-4.8. Добавить smoke: `fmatch` выключен, backend берёт cache/fallback (`POST /api/exchange/orders/:id/discover`).
 
 Приёмка:
 
@@ -1279,6 +1279,22 @@ Audit trail полный.
 Есть тесты и smoke-скрипты.
 После этого сервис теоретически готов к реальным переводам: для боевого запуска останется подключить реальные rails/solver'ов, пройти юридический и комплаенс-чек, включить production secrets и лимиты.
 ```
+
+## 17.1. Команды Проверки В Этом Окружении
+
+В текущем workspace обычный `cargo` может быть недоступен в shell напрямую, а
+верхний `flake.nix` относится к `nerdctl` и не содержит Rust toolchain.
+Использовать cargo через ad-hoc nix shell:
+
+```bash
+cd backend
+nix shell nixpkgs#cargo nixpkgs#rustc nixpkgs#protobuf -c cargo check
+nix shell nixpkgs#cargo nixpkgs#rustc nixpkgs#protobuf -c cargo test
+nix shell nixpkgs#cargo nixpkgs#rustc nixpkgs#rustfmt -c cargo fmt
+```
+
+Почему нужен `nixpkgs#protobuf`: backend `build.rs` генерирует gRPC-код из
+`../crw/proto/search.proto`, и `cargo check/test` падает без `protoc`.
 
 ## 18. Что Агенту Делать Прямо Следующим Шагом
 

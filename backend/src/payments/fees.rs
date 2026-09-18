@@ -23,10 +23,14 @@ impl Fees {
 /// * `service_percent` — our cut, flat percentage of the gross (e.g. 0.7).
 /// * `acquirer_percent` — acquirer's percentage of the gross (route fee_percent).
 /// * `acquirer_fixed` — acquirer's fixed per-payment fee, in minor units.
-pub fn compute(gross: Minor, service_percent: f64, acquirer_percent: f64, acquirer_fixed: Minor) -> Fees {
+pub fn compute(
+    gross: Minor,
+    service_percent: f64,
+    acquirer_percent: f64,
+    acquirer_fixed: Minor,
+) -> Fees {
     let service = percent_ceil(gross, service_percent);
-    let acquirer = percent_ceil(gross, acquirer_percent)
-        .saturating_add(acquirer_fixed);
+    let acquirer = percent_ceil(gross, acquirer_percent).saturating_add(acquirer_fixed);
     Fees { service, acquirer }
 }
 
@@ -66,13 +70,19 @@ mod tests {
 
     #[test]
     fn net_is_gross_minus_total() {
-        let f = Fees { service: 50, acquirer: 100 };
+        let f = Fees {
+            service: 50,
+            acquirer: 100,
+        };
         assert_eq!(net_amount(10_000, &f), 9_850);
     }
 
     #[test]
     fn net_never_negative() {
-        let f = Fees { service: 5_000, acquirer: 5_000 };
+        let f = Fees {
+            service: 5_000,
+            acquirer: 5_000,
+        };
         assert_eq!(net_amount(100, &f), 0);
     }
 

@@ -1,3 +1,4 @@
+pub mod discovery;
 pub mod model;
 pub mod repo;
 pub mod status;

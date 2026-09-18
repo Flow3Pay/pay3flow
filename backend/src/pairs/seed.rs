@@ -32,61 +32,367 @@ impl Card {
 
 /// Sender side: cards that our payers pay from (CIS retail banks, multi-scheme).
 const SENDERS: &[Card] = &[
-    Card { scheme: "Visa", bank: "Беларусбанк", country: "BY", currency: "BYN", domain: "belarusbank.by" },
-    Card { scheme: "Visa", bank: "Сбербанк", country: "RU", currency: "RUB", domain: "sberbank.ru" },
-    Card { scheme: "Visa", bank: "Альфа-Банк", country: "RU", currency: "RUB", domain: "alfabank.by" },
-    Card { scheme: "Visa", bank: "ВТБ", country: "RU", currency: "RUB", domain: "vtb.ru" },
-    Card { scheme: "Visa", bank: "Т-Банк", country: "RU", currency: "RUB", domain: "tbank.ru" },
-    Card { scheme: "Visa", bank: "Газпромбанк", country: "RU", currency: "RUB", domain: "gazprombank.ru" },
-    Card { scheme: "Visa", bank: "Росбанк", country: "RU", currency: "RUB", domain: "rosbank.ru" },
-    Card { scheme: "Visa", bank: "МТС Банк", country: "RU", currency: "RUB", domain: "mtsbank.ru" },
-    Card { scheme: "MasterCard", bank: "Сбербанк", country: "RU", currency: "RUB", domain: "sberbank.ru" },
-    Card { scheme: "MasterCard", bank: "Альфа-Банк", country: "RU", currency: "RUB", domain: "alfabank.by" },
-    Card { scheme: "MasterCard", bank: "ВТБ", country: "RU", currency: "RUB", domain: "vtb.ru" },
-    Card { scheme: "MasterCard", bank: "Т-Банк", country: "RU", currency: "RUB", domain: "tbank.ru" },
-    Card { scheme: "MasterCard", bank: "Газпромбанк", country: "RU", currency: "RUB", domain: "gazprombank.ru" },
-    Card { scheme: "MasterCard", bank: "Райффайзенбанк", country: "RU", currency: "RUB", domain: "raiffeisen.ru" },
-    Card { scheme: "МИР", bank: "Сбербанк", country: "RU", currency: "RUB", domain: "sberbank.ru" },
-    Card { scheme: "МИР", bank: "ВТБ", country: "RU", currency: "RUB", domain: "vtb.ru" },
-    Card { scheme: "МИР", bank: "Альфа-Банк", country: "RU", currency: "RUB", domain: "alfabank.by" },
-    Card { scheme: "МИР", bank: "Т-Банк", country: "RU", currency: "RUB", domain: "tbank.ru" },
-    Card { scheme: "МИР", bank: "Газпромбанк", country: "RU", currency: "RUB", domain: "gazprombank.ru" },
-    Card { scheme: "UnionPay", bank: "Сбербанк", country: "RU", currency: "RUB", domain: "sberbank.ru" },
-    Card { scheme: "UnionPay", bank: "Альфа-Банк", country: "RU", currency: "RUB", domain: "alfabank.by" },
-    Card { scheme: "Visa", bank: "Халык Банк", country: "KZ", currency: "KZT", domain: "halykbank.kz" },
-    Card { scheme: "MasterCard", bank: "Kaspi.kz", country: "KZ", currency: "KZT", domain: "kaspi.kz" },
-    Card { scheme: "Visa", bank: "Ардшинбанк", country: "AM", currency: "AMD", domain: "ardshinbank.am" },
+    Card {
+        scheme: "Visa",
+        bank: "Беларусбанк",
+        country: "BY",
+        currency: "BYN",
+        domain: "belarusbank.by",
+    },
+    Card {
+        scheme: "Visa",
+        bank: "Сбербанк",
+        country: "RU",
+        currency: "RUB",
+        domain: "sberbank.ru",
+    },
+    Card {
+        scheme: "Visa",
+        bank: "Альфа-Банк",
+        country: "RU",
+        currency: "RUB",
+        domain: "alfabank.by",
+    },
+    Card {
+        scheme: "Visa",
+        bank: "ВТБ",
+        country: "RU",
+        currency: "RUB",
+        domain: "vtb.ru",
+    },
+    Card {
+        scheme: "Visa",
+        bank: "Т-Банк",
+        country: "RU",
+        currency: "RUB",
+        domain: "tbank.ru",
+    },
+    Card {
+        scheme: "Visa",
+        bank: "Газпромбанк",
+        country: "RU",
+        currency: "RUB",
+        domain: "gazprombank.ru",
+    },
+    Card {
+        scheme: "Visa",
+        bank: "Росбанк",
+        country: "RU",
+        currency: "RUB",
+        domain: "rosbank.ru",
+    },
+    Card {
+        scheme: "Visa",
+        bank: "МТС Банк",
+        country: "RU",
+        currency: "RUB",
+        domain: "mtsbank.ru",
+    },
+    Card {
+        scheme: "MasterCard",
+        bank: "Сбербанк",
+        country: "RU",
+        currency: "RUB",
+        domain: "sberbank.ru",
+    },
+    Card {
+        scheme: "MasterCard",
+        bank: "Альфа-Банк",
+        country: "RU",
+        currency: "RUB",
+        domain: "alfabank.by",
+    },
+    Card {
+        scheme: "MasterCard",
+        bank: "ВТБ",
+        country: "RU",
+        currency: "RUB",
+        domain: "vtb.ru",
+    },
+    Card {
+        scheme: "MasterCard",
+        bank: "Т-Банк",
+        country: "RU",
+        currency: "RUB",
+        domain: "tbank.ru",
+    },
+    Card {
+        scheme: "MasterCard",
+        bank: "Газпромбанк",
+        country: "RU",
+        currency: "RUB",
+        domain: "gazprombank.ru",
+    },
+    Card {
+        scheme: "MasterCard",
+        bank: "Райффайзенбанк",
+        country: "RU",
+        currency: "RUB",
+        domain: "raiffeisen.ru",
+    },
+    Card {
+        scheme: "МИР",
+        bank: "Сбербанк",
+        country: "RU",
+        currency: "RUB",
+        domain: "sberbank.ru",
+    },
+    Card {
+        scheme: "МИР",
+        bank: "ВТБ",
+        country: "RU",
+        currency: "RUB",
+        domain: "vtb.ru",
+    },
+    Card {
+        scheme: "МИР",
+        bank: "Альфа-Банк",
+        country: "RU",
+        currency: "RUB",
+        domain: "alfabank.by",
+    },
+    Card {
+        scheme: "МИР",
+        bank: "Т-Банк",
+        country: "RU",
+        currency: "RUB",
+        domain: "tbank.ru",
+    },
+    Card {
+        scheme: "МИР",
+        bank: "Газпромбанк",
+        country: "RU",
+        currency: "RUB",
+        domain: "gazprombank.ru",
+    },
+    Card {
+        scheme: "UnionPay",
+        bank: "Сбербанк",
+        country: "RU",
+        currency: "RUB",
+        domain: "sberbank.ru",
+    },
+    Card {
+        scheme: "UnionPay",
+        bank: "Альфа-Банк",
+        country: "RU",
+        currency: "RUB",
+        domain: "alfabank.by",
+    },
+    Card {
+        scheme: "Visa",
+        bank: "Халык Банк",
+        country: "KZ",
+        currency: "KZT",
+        domain: "halykbank.kz",
+    },
+    Card {
+        scheme: "MasterCard",
+        bank: "Kaspi.kz",
+        country: "KZ",
+        currency: "KZT",
+        domain: "kaspi.kz",
+    },
+    Card {
+        scheme: "Visa",
+        bank: "Ардшинбанк",
+        country: "AM",
+        currency: "AMD",
+        domain: "ardshinbank.am",
+    },
 ];
 
 /// Recipient side: banks our payers can receive into (EU/GB/CH/AM).
 const RECEIVERS: &[Card] = &[
-    Card { scheme: "Visa", bank: "Ameriabank", country: "AM", currency: "AMD", domain: "ameriabank.am" },
-    Card { scheme: "MasterCard", bank: "Ameriabank", country: "AM", currency: "AMD", domain: "ameriabank.am" },
-    Card { scheme: "Visa", bank: "Deutsche Bank", country: "DE", currency: "EUR", domain: "db.com" },
-    Card { scheme: "MasterCard", bank: "Deutsche Bank", country: "DE", currency: "EUR", domain: "db.com" },
-    Card { scheme: "Visa", bank: "Commerzbank", country: "DE", currency: "EUR", domain: "commerzbank.de" },
-    Card { scheme: "MasterCard", bank: "BNP Paribas", country: "FR", currency: "EUR", domain: "bnpparibas.com" },
-    Card { scheme: "Visa", bank: "BNP Paribas", country: "FR", currency: "EUR", domain: "bnpparibas.com" },
-    Card { scheme: "MasterCard", bank: "Société Générale", country: "FR", currency: "EUR", domain: "societegenerale.com" },
-    Card { scheme: "Visa", bank: "Santander", country: "ES", currency: "EUR", domain: "santander.com" },
-    Card { scheme: "MasterCard", bank: "BBVA", country: "ES", currency: "EUR", domain: "bbva.com" },
-    Card { scheme: "Visa", bank: "UniCredit", country: "IT", currency: "EUR", domain: "unicreditgroup.eu" },
-    Card { scheme: "MasterCard", bank: "Intesa Sanpaolo", country: "IT", currency: "EUR", domain: "intesasanpaolo.com" },
-    Card { scheme: "Visa", bank: "ING", country: "NL", currency: "EUR", domain: "ing.com" },
-    Card { scheme: "MasterCard", bank: "Rabobank", country: "NL", currency: "EUR", domain: "rabobank.nl" },
-    Card { scheme: "Visa", bank: "KBC", country: "BE", currency: "EUR", domain: "kbc.be" },
-    Card { scheme: "MasterCard", bank: "Nordea", country: "SE", currency: "EUR", domain: "nordea.com" },
-    Card { scheme: "Visa", bank: "Swedbank", country: "SE", currency: "SEK", domain: "swedbank.se" },
-    Card { scheme: "MasterCard", bank: "Danske Bank", country: "DK", currency: "DKK", domain: "danskebank.com" },
-    Card { scheme: "Visa", bank: "Erste Group", country: "AT", currency: "EUR", domain: "erstegroup.com" },
-    Card { scheme: "MasterCard", bank: "Raiffeisen Bank Intl.", country: "AT", currency: "EUR", domain: "rbinternational.com" },
-    Card { scheme: "Visa", bank: "UBS", country: "CH", currency: "CHF", domain: "ubs.com" },
-    Card { scheme: "MasterCard", bank: "Barclays", country: "GB", currency: "GBP", domain: "barclays.co.uk" },
-    Card { scheme: "Visa", bank: "HSBC", country: "GB", currency: "GBP", domain: "hsbc.co.uk" },
-    Card { scheme: "MasterCard", bank: "Revolut", country: "GB", currency: "GBP", domain: "revolut.com" },
-    Card { scheme: "Visa", bank: "Wise", country: "EU", currency: "EUR", domain: "wise.com" },
-    Card { scheme: "MasterCard", bank: "N26", country: "DE", currency: "EUR", domain: "n26.com" },
-    Card { scheme: "Visa", bank: "Alpha Bank", country: "GR", currency: "EUR", domain: "alpha.gr" },
+    Card {
+        scheme: "Visa",
+        bank: "Ameriabank",
+        country: "AM",
+        currency: "AMD",
+        domain: "ameriabank.am",
+    },
+    Card {
+        scheme: "MasterCard",
+        bank: "Ameriabank",
+        country: "AM",
+        currency: "AMD",
+        domain: "ameriabank.am",
+    },
+    Card {
+        scheme: "Visa",
+        bank: "Deutsche Bank",
+        country: "DE",
+        currency: "EUR",
+        domain: "db.com",
+    },
+    Card {
+        scheme: "MasterCard",
+        bank: "Deutsche Bank",
+        country: "DE",
+        currency: "EUR",
+        domain: "db.com",
+    },
+    Card {
+        scheme: "Visa",
+        bank: "Commerzbank",
+        country: "DE",
+        currency: "EUR",
+        domain: "commerzbank.de",
+    },
+    Card {
+        scheme: "MasterCard",
+        bank: "BNP Paribas",
+        country: "FR",
+        currency: "EUR",
+        domain: "bnpparibas.com",
+    },
+    Card {
+        scheme: "Visa",
+        bank: "BNP Paribas",
+        country: "FR",
+        currency: "EUR",
+        domain: "bnpparibas.com",
+    },
+    Card {
+        scheme: "MasterCard",
+        bank: "Société Générale",
+        country: "FR",
+        currency: "EUR",
+        domain: "societegenerale.com",
+    },
+    Card {
+        scheme: "Visa",
+        bank: "Santander",
+        country: "ES",
+        currency: "EUR",
+        domain: "santander.com",
+    },
+    Card {
+        scheme: "MasterCard",
+        bank: "BBVA",
+        country: "ES",
+        currency: "EUR",
+        domain: "bbva.com",
+    },
+    Card {
+        scheme: "Visa",
+        bank: "UniCredit",
+        country: "IT",
+        currency: "EUR",
+        domain: "unicreditgroup.eu",
+    },
+    Card {
+        scheme: "MasterCard",
+        bank: "Intesa Sanpaolo",
+        country: "IT",
+        currency: "EUR",
+        domain: "intesasanpaolo.com",
+    },
+    Card {
+        scheme: "Visa",
+        bank: "ING",
+        country: "NL",
+        currency: "EUR",
+        domain: "ing.com",
+    },
+    Card {
+        scheme: "MasterCard",
+        bank: "Rabobank",
+        country: "NL",
+        currency: "EUR",
+        domain: "rabobank.nl",
+    },
+    Card {
+        scheme: "Visa",
+        bank: "KBC",
+        country: "BE",
+        currency: "EUR",
+        domain: "kbc.be",
+    },
+    Card {
+        scheme: "MasterCard",
+        bank: "Nordea",
+        country: "SE",
+        currency: "EUR",
+        domain: "nordea.com",
+    },
+    Card {
+        scheme: "Visa",
+        bank: "Swedbank",
+        country: "SE",
+        currency: "SEK",
+        domain: "swedbank.se",
+    },
+    Card {
+        scheme: "MasterCard",
+        bank: "Danske Bank",
+        country: "DK",
+        currency: "DKK",
+        domain: "danskebank.com",
+    },
+    Card {
+        scheme: "Visa",
+        bank: "Erste Group",
+        country: "AT",
+        currency: "EUR",
+        domain: "erstegroup.com",
+    },
+    Card {
+        scheme: "MasterCard",
+        bank: "Raiffeisen Bank Intl.",
+        country: "AT",
+        currency: "EUR",
+        domain: "rbinternational.com",
+    },
+    Card {
+        scheme: "Visa",
+        bank: "UBS",
+        country: "CH",
+        currency: "CHF",
+        domain: "ubs.com",
+    },
+    Card {
+        scheme: "MasterCard",
+        bank: "Barclays",
+        country: "GB",
+        currency: "GBP",
+        domain: "barclays.co.uk",
+    },
+    Card {
+        scheme: "Visa",
+        bank: "HSBC",
+        country: "GB",
+        currency: "GBP",
+        domain: "hsbc.co.uk",
+    },
+    Card {
+        scheme: "MasterCard",
+        bank: "Revolut",
+        country: "GB",
+        currency: "GBP",
+        domain: "revolut.com",
+    },
+    Card {
+        scheme: "Visa",
+        bank: "Wise",
+        country: "EU",
+        currency: "EUR",
+        domain: "wise.com",
+    },
+    Card {
+        scheme: "MasterCard",
+        bank: "N26",
+        country: "DE",
+        currency: "EUR",
+        domain: "n26.com",
+    },
+    Card {
+        scheme: "Visa",
+        bank: "Alpha Bank",
+        country: "GR",
+        currency: "EUR",
+        domain: "alpha.gr",
+    },
 ];
 
 /// Build the catalog: the cross product of every sender card with every
@@ -132,13 +438,16 @@ mod tests {
     #[test]
     fn catalog_overflows_the_two_hundred_route_requirement() {
         let pairs = build_pairs();
-        assert!(pairs.len() > 200, "catalog must hold >200 routes, got {}", pairs.len());
+        assert!(
+            pairs.len() > 200,
+            "catalog must hold >200 routes, got {}",
+            pairs.len()
+        );
     }
 
     #[test]
     fn catalog_covers_all_four_schemes_on_the_sender_side() {
-        let senders: std::collections::HashSet<&str> =
-            SENDERS.iter().map(|c| c.scheme).collect();
+        let senders: std::collections::HashSet<&str> = SENDERS.iter().map(|c| c.scheme).collect();
         for scheme in ["Visa", "MasterCard", "МИР", "UnionPay"] {
             assert!(senders.contains(scheme), "missing sender scheme {scheme}");
         }
@@ -150,7 +459,10 @@ mod tests {
             assert!(!pair.from_bank_icon_url.as_deref().unwrap_or("").is_empty());
             assert!(!pair.to_bank_icon_url.as_deref().unwrap_or("").is_empty());
             let currencies = pair.currencies.as_deref().unwrap_or("");
-            assert!(currencies.contains(','), "pair must carry from,to currencies: {currencies}");
+            assert!(
+                currencies.contains(','),
+                "pair must carry from,to currencies: {currencies}"
+            );
         }
     }
 }

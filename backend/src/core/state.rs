@@ -1,7 +1,7 @@
 use crate::activitypub;
 use crate::banks::BanksService;
-use crate::core::redis::RedisPool;
 use crate::core::jwt::Jwt;
+use crate::core::redis::RedisPool;
 use crate::db::DbPool;
 use crate::pairs::ExchangePairsService;
 use crate::payments::PaymentService;

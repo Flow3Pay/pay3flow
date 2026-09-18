@@ -42,7 +42,11 @@ impl From<ProtoSearchResult> for SearchResult {
         Self {
             url: r.url,
             title: r.title,
-            snippet: if !r.snippet.is_empty() { r.snippet } else { r.description },
+            snippet: if !r.snippet.is_empty() {
+                r.snippet
+            } else {
+                r.description
+            },
             position: r.position,
             engine: r.engine,
         }
@@ -97,7 +101,12 @@ impl CrwClient {
 
             match tokio::time::timeout(SEARCH_TIMEOUT, fut).await {
                 Ok(Ok(resp)) => {
-                    let results = resp.into_inner().results.into_iter().map(Into::into).collect();
+                    let results = resp
+                        .into_inner()
+                        .results
+                        .into_iter()
+                        .map(Into::into)
+                        .collect();
                     return Ok(results);
                 }
                 Ok(Err(e)) => {

@@ -66,7 +66,9 @@ pub async fn admin_set_status(
 ) -> Result<Json<Bank>, AppError> {
     auth_admin(&state, &headers)?;
     if body.status != "enabled" && body.status != "disabled" {
-        return Err(AppError::BadRequest("status must be 'enabled' or 'disabled'".into()));
+        return Err(AppError::BadRequest(
+            "status must be 'enabled' or 'disabled'".into(),
+        ));
     }
     let bank = state
         .banks

@@ -3,9 +3,7 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::db::DbPool;
-use crate::payments::model::{
-    Minor, NewRoute, NewTransaction, Route, Transaction,
-};
+use crate::payments::model::{Minor, NewRoute, NewTransaction, Route, Transaction};
 use crate::payments::status::{RouteStatus, TransactionStatus};
 
 // --- transactions ---
@@ -71,7 +69,9 @@ pub async fn transaction_by_idempotency_key(
 pub async fn transactions_for_user(pool: &DbPool, user_id: &Uuid) -> Result<Vec<Transaction>> {
     let client = pool.get().await?;
     let stmt = client
-        .prepare_cached(&format!("{SELECT_TX} WHERE user_id = $1 ORDER BY created_at DESC"))
+        .prepare_cached(&format!(
+            "{SELECT_TX} WHERE user_id = $1 ORDER BY created_at DESC"
+        ))
         .await?;
     let rows = client.query(&stmt, &[user_id]).await?;
     Ok(rows.into_iter().map(row_to_tx).collect())
@@ -88,7 +88,9 @@ pub async fn transition_status(
 ) -> Result<bool> {
     let client = pool.get().await?;
     let stmt = client
-        .prepare_cached("UPDATE transactions SET status = $2, updated_at = now() WHERE id = $1 AND status = $3")
+        .prepare_cached(
+            "UPDATE transactions SET status = $2, updated_at = now() WHERE id = $1 AND status = $3",
+        )
         .await?;
     let n = client
         .execute(&stmt, &[id, &to.as_str(), &from.as_str()])
@@ -125,11 +127,13 @@ pub async fn set_amounts(
 ) -> Result<()> {
     let client = pool.get().await?;
     let stmt = client
-        .prepare_cached(r#"
+        .prepare_cached(
+            r#"
 UPDATE transactions
 SET to_amount = $2, to_currency = $3, fees = $4, updated_at = now()
 WHERE id = $1
-"#)
+"#,
+        )
         .await?;
     client
         .execute(&stmt, &[id, &to_amount, &to_currency, &fees])
@@ -195,7 +199,9 @@ pub async fn transition_route(
 ) -> Result<bool> {
     let client = pool.get().await?;
     let stmt = client
-        .prepare_cached("UPDATE routes SET status = $2, updated_at = now() WHERE id = $1 AND status = $3")
+        .prepare_cached(
+            "UPDATE routes SET status = $2, updated_at = now() WHERE id = $1 AND status = $3",
+        )
         .await?;
     let n = client
         .execute(&stmt, &[id, &to.as_str(), &from.as_str()])
@@ -240,7 +246,9 @@ pub async fn get_credential_encrypted(
 ) -> Result<Option<String>> {
     let client = pool.get().await?;
     let stmt = client
-        .prepare_cached("SELECT value_encrypted FROM credentials WHERE acquirer_id = $1 AND name = $2")
+        .prepare_cached(
+            "SELECT value_encrypted FROM credentials WHERE acquirer_id = $1 AND name = $2",
+        )
         .await?;
     let row = client.query_opt(&stmt, &[acquirer_id, &name]).await?;
     Ok(row.map(|row| row.get(0)))
@@ -258,14 +266,19 @@ pub async fn insert_webhook(
 ) -> Result<i64> {
     let client = pool.get().await?;
     let stmt = client
-        .prepare_cached(r#"
+        .prepare_cached(
+            r#"
 INSERT INTO provider_webhooks (provider, event_id, event_type, payload, signature)
 VALUES ($1, $2, $3, $4, $5)
 RETURNING id
-"#)
+"#,
+        )
         .await?;
     let row = client
-        .query_opt(&stmt, &[&provider, &event_id, &event_type, payload, &signature])
+        .query_opt(
+            &stmt,
+            &[&provider, &event_id, &event_type, payload, &signature],
+        )
         .await?
         .context("webhook insert returned no row")?;
     Ok(row.get(0))

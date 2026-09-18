@@ -102,13 +102,15 @@ impl Rates {
 
     fn cached(&self, from: &str, to: &str) -> Option<f64> {
         let cache = self.cache.lock().unwrap();
-        cache.get(&(from.to_string(), to.to_string())).and_then(|c| {
-            if c.fetched_at.elapsed() < self.ttl {
-                Some(c.rate)
-            } else {
-                None
-            }
-        })
+        cache
+            .get(&(from.to_string(), to.to_string()))
+            .and_then(|c| {
+                if c.fetched_at.elapsed() < self.ttl {
+                    Some(c.rate)
+                } else {
+                    None
+                }
+            })
     }
 
     fn remember(&self, from: &str, to: &str, rate: f64) {

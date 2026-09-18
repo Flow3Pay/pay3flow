@@ -46,6 +46,8 @@ impl AcquireProvider for StubProvider {
     }
 
     async fn status(&self, external_id: &str) -> Result<AcquireResult> {
-        Err(anyhow!("stub status({external_id}): execution is synchronous, no async status"))
+        Err(anyhow!(
+            "stub status({external_id}): execution is synchronous, no async status"
+        ))
     }
 }

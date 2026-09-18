@@ -68,7 +68,10 @@ impl ProviderRegistry {
     }
 
     pub fn get(&self, slug: &str) -> Option<&dyn AcquireProvider> {
-        self.providers.iter().find(|p| p.slug() == slug).map(|p| p.as_ref())
+        self.providers
+            .iter()
+            .find(|p| p.slug() == slug)
+            .map(|p| p.as_ref())
     }
 
     pub fn slugs(&self) -> Vec<&str> {

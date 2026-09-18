@@ -205,7 +205,12 @@ const BANKS: &[(&str, &str, &str, &str)] = &[
     ("Lansforsakringar Bank", "SE", "SEK", "lansforsakringar.se"),
     ("Alandsbanken", "FI", "EUR", "alandsbanken.fi"),
     // --- Central & Eastern Europe ---
-    ("Raiffeisen Bank International", "AT", "EUR", "rbinternational.com"),
+    (
+        "Raiffeisen Bank International",
+        "AT",
+        "EUR",
+        "rbinternational.com",
+    ),
     ("Erste Group", "AT", "EUR", "erstegroup.com"),
     ("Bank Austria", "AT", "EUR", "bankaustria.at"),
     ("Komercni banka", "CZ", "CZK", "kb.cz"),
@@ -342,11 +347,29 @@ const BANKS: &[(&str, &str, &str, &str)] = &[
 const PAYMENT_METHODS: &[(&str, &str, &str, &str, &str)] = &[
     // --- Global card and account rails ---
     ("Visa Network", "GLOBAL", "USD", "visa.com", "Visa"),
-    ("Mastercard Network", "GLOBAL", "USD", "mastercard.com", "MasterCard"),
+    (
+        "Mastercard Network",
+        "GLOBAL",
+        "USD",
+        "mastercard.com",
+        "MasterCard",
+    ),
     ("MIR Network", "RU", "RUB", "mironline.ru", "MIR"),
-    ("UnionPay Network", "CN", "CNY", "unionpayintl.com", "UnionPay"),
+    (
+        "UnionPay Network",
+        "CN",
+        "CNY",
+        "unionpayintl.com",
+        "UnionPay",
+    ),
     ("JCB Network", "JP", "JPY", "global.jcb", "JCB"),
-    ("American Express Network", "US", "USD", "americanexpress.com", "AmEx"),
+    (
+        "American Express Network",
+        "US",
+        "USD",
+        "americanexpress.com",
+        "AmEx",
+    ),
     ("Discover Network", "US", "USD", "discover.com", "Discover"),
     ("Diners Club", "US", "USD", "dinersclub.com", "Diners Club"),
     ("RuPay Network", "IN", "INR", "rupay.co.in", "RuPay"),
@@ -356,16 +379,40 @@ const PAYMENT_METHODS: &[(&str, &str, &str, &str, &str)] = &[
     ("Venmo", "US", "USD", "venmo.com", "Venmo"),
     ("Cash App", "US", "USD", "cash.app", "Cash App"),
     ("Apple Pay", "GLOBAL", "USD", "apple.com", "Apple Pay"),
-    ("Google Pay", "GLOBAL", "USD", "pay.google.com", "Google Pay"),
-    ("Samsung Wallet", "GLOBAL", "USD", "samsung.com", "Samsung Wallet"),
+    (
+        "Google Pay",
+        "GLOBAL",
+        "USD",
+        "pay.google.com",
+        "Google Pay",
+    ),
+    (
+        "Samsung Wallet",
+        "GLOBAL",
+        "USD",
+        "samsung.com",
+        "Samsung Wallet",
+    ),
     ("Skrill", "GLOBAL", "EUR", "skrill.com", "Skrill"),
     ("Neteller", "GLOBAL", "EUR", "neteller.com", "Neteller"),
-    ("Payoneer Account", "GLOBAL", "USD", "payoneer.com", "Payoneer"),
+    (
+        "Payoneer Account",
+        "GLOBAL",
+        "USD",
+        "payoneer.com",
+        "Payoneer",
+    ),
     ("Wise Account", "GLOBAL", "USD", "wise.com", "Wise"),
     ("Revolut Wallet", "GLOBAL", "EUR", "revolut.com", "Revolut"),
     ("Paysend", "GLOBAL", "USD", "paysend.com", "Paysend"),
     ("Remitly", "GLOBAL", "USD", "remitly.com", "Remitly"),
-    ("Western Union", "GLOBAL", "USD", "westernunion.com", "Western Union"),
+    (
+        "Western Union",
+        "GLOBAL",
+        "USD",
+        "westernunion.com",
+        "Western Union",
+    ),
     ("MoneyGram", "GLOBAL", "USD", "moneygram.com", "MoneyGram"),
     ("Zelle", "US", "USD", "zellepay.com", "Zelle"),
     ("Stripe Link", "GLOBAL", "USD", "link.com", "Link"),
@@ -390,8 +437,20 @@ const PAYMENT_METHODS: &[(&str, &str, &str, &str, &str)] = &[
     ("Idram", "AM", "AMD", "idram.am", "Idram"),
     ("EasyPay Georgia", "GE", "GEL", "easypay.ge", "EasyPay"),
     // --- Europe local rails ---
-    ("SEPA Transfer", "EU", "EUR", "europeanpaymentscouncil.eu", "SEPA"),
-    ("SEPA Instant", "EU", "EUR", "europeanpaymentscouncil.eu", "SEPA Instant"),
+    (
+        "SEPA Transfer",
+        "EU",
+        "EUR",
+        "europeanpaymentscouncil.eu",
+        "SEPA",
+    ),
+    (
+        "SEPA Instant",
+        "EU",
+        "EUR",
+        "europeanpaymentscouncil.eu",
+        "SEPA Instant",
+    ),
     ("Sofort", "DE", "EUR", "sofort.com", "Sofort"),
     ("Giropay", "DE", "EUR", "giropay.de", "Giropay"),
     ("iDEAL", "NL", "EUR", "ideal.nl", "iDEAL"),
@@ -410,7 +469,13 @@ const PAYMENT_METHODS: &[(&str, &str, &str, &str, &str)] = &[
     ("WeChat Pay", "CN", "CNY", "wechatpay.com", "WeChat Pay"),
     ("Octopus", "HK", "HKD", "octopus.com.hk", "Octopus"),
     ("PayPay Japan", "JP", "JPY", "paypay.ne.jp", "PayPay"),
-    ("Rakuten Pay", "JP", "JPY", "pay.rakuten.co.jp", "Rakuten Pay"),
+    (
+        "Rakuten Pay",
+        "JP",
+        "JPY",
+        "pay.rakuten.co.jp",
+        "Rakuten Pay",
+    ),
     ("LINE Pay", "JP", "JPY", "linepay.line.me", "LINE Pay"),
     ("Kakao Pay", "KR", "KRW", "kakaopay.com", "Kakao Pay"),
     ("Naver Pay", "KR", "KRW", "pay.naver.com", "Naver Pay"),
@@ -423,7 +488,13 @@ const PAYMENT_METHODS: &[(&str, &str, &str, &str, &str)] = &[
     ("Maya Philippines", "PH", "PHP", "maya.ph", "Maya"),
     ("GrabPay", "SG", "SGD", "grab.com", "GrabPay"),
     ("ShopeePay", "SG", "SGD", "shopeepay.com", "ShopeePay"),
-    ("Touch n Go eWallet", "MY", "MYR", "touchngo.com.my", "Touch n Go"),
+    (
+        "Touch n Go eWallet",
+        "MY",
+        "MYR",
+        "touchngo.com.my",
+        "Touch n Go",
+    ),
     ("DuitNow", "MY", "MYR", "duitnow.my", "DuitNow"),
     ("TrueMoney", "TH", "THB", "truemoney.com", "TrueMoney"),
     ("PromptPay", "TH", "THB", "bot.or.th", "PromptPay"),
@@ -436,23 +507,65 @@ const PAYMENT_METHODS: &[(&str, &str, &str, &str, &str)] = &[
     ("STC Pay", "SA", "SAR", "stcpay.com.sa", "STC Pay"),
     ("Fawry", "EG", "EGP", "fawry.com", "Fawry"),
     ("M-Pesa", "KE", "KES", "mpesa.com", "M-Pesa"),
-    ("Airtel Money", "GLOBAL", "USD", "airtel.africa", "Airtel Money"),
-    ("Orange Money", "GLOBAL", "EUR", "orange.com", "Orange Money"),
+    (
+        "Airtel Money",
+        "GLOBAL",
+        "USD",
+        "airtel.africa",
+        "Airtel Money",
+    ),
+    (
+        "Orange Money",
+        "GLOBAL",
+        "EUR",
+        "orange.com",
+        "Orange Money",
+    ),
     ("MTN Mobile Money", "GLOBAL", "USD", "mtn.com", "MTN MoMo"),
     ("Pix", "BR", "BRL", "bcb.gov.br", "PIX"),
     ("Boleto Bancario", "BR", "BRL", "febraban.org.br", "Boleto"),
-    ("Mercado Pago", "LATAM", "USD", "mercadopago.com", "Mercado Pago"),
+    (
+        "Mercado Pago",
+        "LATAM",
+        "USD",
+        "mercadopago.com",
+        "Mercado Pago",
+    ),
     ("SPEI", "MX", "MXN", "banxico.org.mx", "SPEI"),
     ("OXXO Pay", "MX", "MXN", "oxxo.com", "OXXO Pay"),
     ("PSE Colombia", "CO", "COP", "pse.com.co", "PSE"),
     ("Webpay", "CL", "CLP", "transbank.cl", "Webpay"),
-    ("PagoEfectivo", "PE", "PEN", "pagoefectivo.pe", "PagoEfectivo"),
+    (
+        "PagoEfectivo",
+        "PE",
+        "PEN",
+        "pagoefectivo.pe",
+        "PagoEfectivo",
+    ),
     // --- Crypto rails shown as payment methods ---
     ("Bitcoin Network", "GLOBAL", "BTC", "bitcoin.org", "Bitcoin"),
-    ("Ethereum Network", "GLOBAL", "ETH", "ethereum.org", "Ethereum"),
+    (
+        "Ethereum Network",
+        "GLOBAL",
+        "ETH",
+        "ethereum.org",
+        "Ethereum",
+    ),
     ("TON Network", "GLOBAL", "TON", "ton.org", "TON"),
-    ("Tether USDT TRC20", "GLOBAL", "USDT", "tether.to", "USDT TRC20"),
-    ("Tether USDT ERC20", "GLOBAL", "USDT", "tether.to", "USDT ERC20"),
+    (
+        "Tether USDT TRC20",
+        "GLOBAL",
+        "USDT",
+        "tether.to",
+        "USDT TRC20",
+    ),
+    (
+        "Tether USDT ERC20",
+        "GLOBAL",
+        "USDT",
+        "tether.to",
+        "USDT ERC20",
+    ),
     ("USD Coin", "GLOBAL", "USDC", "circle.com", "USDC"),
 ];
 
@@ -461,27 +574,29 @@ pub fn build_banks() -> Vec<NewBank> {
     let mut entries = BANKS
         .iter()
         .flat_map(|(name, country, currency, domain)| {
-            schemes_for(country)
-                .split(',')
-                .map(move |scheme| {
+            schemes_for(country).split(',').map(move |scheme| {
+                (
+                    format!("{name} {scheme}"),
+                    *country,
+                    *currency,
+                    *domain,
+                    scheme.to_string(),
+                )
+            })
+        })
+        .chain(
+            PAYMENT_METHODS
+                .iter()
+                .map(|(name, country, currency, domain, scheme)| {
                     (
-                        format!("{name} {scheme}"),
+                        (*name).to_string(),
                         *country,
                         *currency,
                         *domain,
-                        scheme.to_string(),
+                        (*scheme).to_string(),
                     )
-                })
-        })
-        .chain(PAYMENT_METHODS.iter().map(|(name, country, currency, domain, scheme)| {
-            (
-                (*name).to_string(),
-                *country,
-                *currency,
-                *domain,
-                (*scheme).to_string(),
-            )
-        }))
+                }),
+        )
         .map(|(name, country, currency, domain, schemes)| {
             let icon_url = branded_icon_url(&name, domain);
             NewBank {
@@ -520,12 +635,17 @@ mod tests {
     #[test]
     fn catalog_holds_many_worldwide_payment_methods() {
         let banks = build_banks();
-        assert!(banks.len() >= 500, "need >=500 methods, got {}", banks.len());
-        let countries: HashSet<&str> = banks
-            .iter()
-            .filter_map(|b| b.country.as_deref())
-            .collect();
-        assert!(countries.len() >= 40, "methods should span the world, got {} countries", countries.len());
+        assert!(
+            banks.len() >= 500,
+            "need >=500 methods, got {}",
+            banks.len()
+        );
+        let countries: HashSet<&str> = banks.iter().filter_map(|b| b.country.as_deref()).collect();
+        assert!(
+            countries.len() >= 40,
+            "methods should span the world, got {} countries",
+            countries.len()
+        );
     }
 
     #[test]
@@ -538,14 +658,22 @@ mod tests {
                 "bank name must be latin/english, got {}",
                 bank.name
             );
-            assert!(seen.insert(bank.name.clone()), "duplicate bank name {}", bank.name);
+            assert!(
+                seen.insert(bank.name.clone()),
+                "duplicate bank name {}",
+                bank.name
+            );
         }
     }
 
     #[test]
     fn every_method_has_a_favicon_and_schemes() {
         for bank in build_banks() {
-            assert!(bank.icon_url.as_deref().unwrap_or("").starts_with("https://"));
+            assert!(bank
+                .icon_url
+                .as_deref()
+                .unwrap_or("")
+                .starts_with("https://"));
             assert!(!bank.schemes.as_deref().unwrap_or("").is_empty());
         }
     }
@@ -585,7 +713,10 @@ mod tests {
             "Pix",
             "UPI",
         ] {
-            assert!(names.contains(expected), "missing payment method {expected}");
+            assert!(
+                names.contains(expected),
+                "missing payment method {expected}"
+            );
         }
     }
 

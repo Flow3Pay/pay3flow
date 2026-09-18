@@ -18,10 +18,7 @@ where
     T: serde::de::DeserializeOwned,
 {
     let mut conn = pool.get().await.context("failed to get Redis connection")?;
-    let value: Option<String> = conn
-        .get(key)
-        .await
-        .context("failed to read Redis key")?;
+    let value: Option<String> = conn.get(key).await.context("failed to read Redis key")?;
     match value {
         Some(v) => serde_json::from_str(&v)
             .context("failed to decode Redis value")
@@ -35,8 +32,7 @@ where
     T: serde::Serialize,
 {
     let mut conn = pool.get().await.context("failed to get Redis connection")?;
-    let encoded = serde_json::to_string(value)
-        .context("failed to encode value for Redis")?;
+    let encoded = serde_json::to_string(value).context("failed to encode value for Redis")?;
     conn.set_ex::<_, _, ()>(key, encoded, ttl_secs as usize)
         .await
         .context("failed to write Redis value")?;
@@ -58,9 +54,6 @@ mod tests {
     #[test]
     fn cache_key_includes_amount_when_present() {
         assert_eq!(cache_key("USD", "EUR", None), "fmatch:USD:EUR");
-        assert_eq!(
-            cache_key("USD", "EUR", Some("1000")),
-            "fmatch:USD:EUR:1000"
-        );
+        assert_eq!(cache_key("USD", "EUR", Some("1000")), "fmatch:USD:EUR:1000");
     }
 }

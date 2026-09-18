@@ -127,8 +127,14 @@ mod tests {
 
     #[test]
     fn parses_known_and_rejects_unknown() {
-        assert_eq!(TransactionStatus::parse("pending"), Some(TransactionStatus::Pending));
-        assert_eq!(TransactionStatus::parse("done"), Some(TransactionStatus::Done));
+        assert_eq!(
+            TransactionStatus::parse("pending"),
+            Some(TransactionStatus::Pending)
+        );
+        assert_eq!(
+            TransactionStatus::parse("done"),
+            Some(TransactionStatus::Done)
+        );
         assert!(TransactionStatus::parse("inflight").is_none());
     }
 }

@@ -66,11 +66,11 @@ pub async fn get(
 /// Resolve the caller's user id from the Bearer token.
 pub fn auth_user_id(state: &AppState, headers: &HeaderMap) -> Result<Uuid, AppError> {
     let token = bearer_token(headers)?;
-    let sub = state.jwt.verify(token).map_err(|_| {
-        AppError::Unauthorized("invalid or expired token".into())
-    })?;
-    Uuid::parse_str(&sub)
-        .map_err(|_| AppError::Unauthorized("malformed token subject".into()))
+    let sub = state
+        .jwt
+        .verify(token)
+        .map_err(|_| AppError::Unauthorized("invalid or expired token".into()))?;
+    Uuid::parse_str(&sub).map_err(|_| AppError::Unauthorized("malformed token subject".into()))
 }
 
 fn bearer_token(headers: &HeaderMap) -> Result<&str, AppError> {
@@ -120,5 +120,7 @@ pub async fn webhook(
     )
     .await
     .map_err(AppError::from)?;
-    Ok(axum::Json(serde_json::json!({ "id": row_id, "status": "received" })))
+    Ok(axum::Json(
+        serde_json::json!({ "id": row_id, "status": "received" }),
+    ))
 }

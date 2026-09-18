@@ -212,7 +212,7 @@ async fn repo_list(pool: &DbPool, filters: &PairFilters) -> Result<Vec<ExchangeP
     }
     sql.push_str(" ORDER BY from_bank, to_bank");
 
-let params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = values
+    let params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = values
         .iter()
         .map(|v| v.as_ref() as &(dyn tokio_postgres::types::ToSql + Sync))
         .collect();
@@ -223,7 +223,9 @@ let params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = values
 
 pub async fn repo_upsert(pool: &DbPool, body: &NewPair) -> Result<ExchangePair> {
     let client = pool.get().await?;
-    let stmt = client.prepare_cached(&format!("{UPSERT_SQL} {SELECT_COLS}")).await?;
+    let stmt = client
+        .prepare_cached(&format!("{UPSERT_SQL} {SELECT_COLS}"))
+        .await?;
     let row = client
         .query_opt(
             &stmt,
@@ -246,7 +248,11 @@ pub async fn repo_upsert(pool: &DbPool, body: &NewPair) -> Result<ExchangePair> 
     Ok(row_to_pair(&row))
 }
 
-pub async fn repo_patch(pool: &DbPool, id: Uuid, patch: &PairPatch) -> Result<Option<ExchangePair>> {
+pub async fn repo_patch(
+    pool: &DbPool,
+    id: Uuid,
+    patch: &PairPatch,
+) -> Result<Option<ExchangePair>> {
     let client = pool.get().await?;
     let mut sets: Vec<String> = Vec::new();
     let mut values: Vec<Box<dyn tokio_postgres::types::ToSql + Sync + Send>> = Vec::new();
@@ -304,7 +310,7 @@ pub async fn repo_patch(pool: &DbPool, id: Uuid, patch: &PairPatch) -> Result<Op
         sets.join(", "),
         values.len() + 1
     );
-let mut params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = values
+    let mut params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = values
         .iter()
         .map(|v| v.as_ref() as &(dyn tokio_postgres::types::ToSql + Sync))
         .collect();
@@ -316,7 +322,9 @@ let mut params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = values
 pub async fn repo_by_id(pool: &DbPool, id: Uuid) -> Result<Option<ExchangePair>> {
     let client = pool.get().await?;
     let stmt = client
-        .prepare_cached(&format!("SELECT {SELECT_COLS} FROM exchange_pairs WHERE id = $1"))
+        .prepare_cached(&format!(
+            "SELECT {SELECT_COLS} FROM exchange_pairs WHERE id = $1"
+        ))
         .await?;
     let row = client.query_opt(&stmt, &[&id]).await?;
     Ok(row.map(|r| row_to_pair(&r)))

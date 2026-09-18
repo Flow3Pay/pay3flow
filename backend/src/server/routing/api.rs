@@ -31,6 +31,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/exchange/orders/:id", get(exchange::get_order))
         .route("/api/exchange/orders/:id/quotes", get(exchange::get_quotes))
         .route(
+            "/api/exchange/orders/:id/discover",
+            post(exchange::discover_solvers),
+        )
+        .route(
             "/api/exchange/orders/:id/confirm",
             post(exchange::confirm_order),
         )

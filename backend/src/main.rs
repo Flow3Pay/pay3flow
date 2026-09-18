@@ -25,9 +25,10 @@ async fn main() -> anyhow::Result<()> {
 
     let picker = pay3flow_backend::routing::RoutePicker::from_seeds();
 
-    let providers = pay3flow_backend::payments::providers::ProviderRegistry::from_providers(vec![
-        Box::new(pay3flow_backend::payments::providers::stub::StubProvider::new()),
-    ]);
+    let providers =
+        pay3flow_backend::payments::providers::ProviderRegistry::from_providers(vec![Box::new(
+            pay3flow_backend::payments::providers::stub::StubProvider::new(),
+        )]);
 
     let rates = match cfg.fx_source.to_ascii_lowercase().as_str() {
         "http" => Rates::http(cfg.fx_url.clone(), "EUR".into())
@@ -53,11 +54,10 @@ async fn main() -> anyhow::Result<()> {
         None
     } else {
         Some(
-            pay3flow_backend::core::redis::build_pool(&cfg.redis_url)
-                .unwrap_or_else(|e| {
-                    tracing::warn!(error = %e, "failed to build Redis pool; cache will be skipped");
-                    panic!("dead pool")
-                }),
+            pay3flow_backend::core::redis::build_pool(&cfg.redis_url).unwrap_or_else(|e| {
+                tracing::warn!(error = %e, "failed to build Redis pool; cache will be skipped");
+                panic!("dead pool")
+            }),
         )
     };
 

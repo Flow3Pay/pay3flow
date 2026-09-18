@@ -56,9 +56,11 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
         }
     });
 
-    let _ = send_tx.send(Message::Text(
-        serde_json::to_string(&WsOut::Subscribed).unwrap_or_default(),
-    )).await;
+    let _ = send_tx
+        .send(Message::Text(
+            serde_json::to_string(&WsOut::Subscribed).unwrap_or_default(),
+        ))
+        .await;
 
     while let Some(Ok(msg)) = rx.next().await {
         match msg {

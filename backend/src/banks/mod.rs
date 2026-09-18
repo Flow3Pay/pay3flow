@@ -184,7 +184,12 @@ pub async fn repo_count(pool: &DbPool, filters: &BankFilters) -> Result<i64> {
 }
 
 /// Shared `AND ...` filter fragment and its bound values.
-fn build_where(filters: &BankFilters) -> (String, Vec<Box<dyn tokio_postgres::types::ToSql + Sync + Send>>) {
+fn build_where(
+    filters: &BankFilters,
+) -> (
+    String,
+    Vec<Box<dyn tokio_postgres::types::ToSql + Sync + Send>>,
+) {
     let mut sql = String::new();
     let mut values: Vec<Box<dyn tokio_postgres::types::ToSql + Sync + Send>> = Vec::new();
 
@@ -192,7 +197,11 @@ fn build_where(filters: &BankFilters) -> (String, Vec<Box<dyn tokio_postgres::ty
         if role == "sender" || role == "receiver" {
             values.push(Box::new(role));
             values.push(Box::new("both".to_string()));
-            sql.push_str(&format!(" AND role IN (${}, ${})", values.len() - 1, values.len()));
+            sql.push_str(&format!(
+                " AND role IN (${}, ${})",
+                values.len() - 1,
+                values.len()
+            ));
         }
     }
     if let Some(country) = clean(filters.country.clone()) {
@@ -205,7 +214,10 @@ fn build_where(filters: &BankFilters) -> (String, Vec<Box<dyn tokio_postgres::ty
     }
     if let Some(scheme) = clean(filters.scheme.clone()) {
         values.push(Box::new(scheme));
-        sql.push_str(&format!(" AND ${} = ANY(string_to_array(schemes, ','))", values.len()));
+        sql.push_str(&format!(
+            " AND ${} = ANY(string_to_array(schemes, ','))",
+            values.len()
+        ));
     }
     if let Some(q) = clean(filters.q.clone()) {
         values.push(Box::new(format!("%{q}%")));
@@ -216,7 +228,9 @@ fn build_where(filters: &BankFilters) -> (String, Vec<Box<dyn tokio_postgres::ty
 
 pub async fn repo_upsert(pool: &DbPool, body: &NewBank) -> Result<Bank> {
     let client = pool.get().await?;
-    let stmt = client.prepare_cached(&format!("{BANK_UPSERT} {BANK_COLS}")).await?;
+    let stmt = client
+        .prepare_cached(&format!("{BANK_UPSERT} {BANK_COLS}"))
+        .await?;
     let row = client
         .query_opt(
             &stmt,

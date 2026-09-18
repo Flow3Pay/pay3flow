@@ -357,6 +357,48 @@ pub async fn solver_by_slug(pool: &DbPool, slug: &str) -> Result<Option<Exchange
     Ok(row.map(row_to_solver))
 }
 
+pub async fn solvers_for_order(
+    pool: &DbPool,
+    order: &ExchangeOrder,
+) -> Result<Vec<ExchangeSolver>> {
+    let client = pool.get().await?;
+    let stmt = client
+        .prepare_cached(&format!(
+            r#"
+{SELECT_SOLVER}
+WHERE status IN ('active', 'discovered')
+  AND jsonb_exists(countries, $1)
+  AND jsonb_exists(countries, $2)
+  AND jsonb_exists(currencies, $3)
+  AND jsonb_exists(currencies, $4)
+  AND jsonb_exists(rails, $5)
+  AND jsonb_exists(rails, $6)
+  AND (min_amount_minor IS NULL OR min_amount_minor <= $7)
+  AND (max_amount_minor IS NULL OR max_amount_minor >= $7)
+ORDER BY
+  CASE status WHEN 'active' THEN 0 ELSE 1 END,
+  risk_score ASC,
+  updated_at DESC
+"#
+        ))
+        .await?;
+    let rows = client
+        .query(
+            &stmt,
+            &[
+                &order.source_country,
+                &order.target_country,
+                &order.source_currency,
+                &order.target_currency,
+                &order.source_method_type,
+                &order.target_method_type,
+                &order.source_amount_minor,
+            ],
+        )
+        .await?;
+    Ok(rows.into_iter().map(row_to_solver).collect())
+}
+
 pub async fn insert_quote(pool: &DbPool, quote: &NewExchangeQuote) -> Result<ExchangeQuote> {
     let client = pool.get().await?;
     let stmt = client

@@ -74,8 +74,7 @@ impl Config {
                 .ok()
                 .and_then(|s| s.parse::<u64>().ok())
                 .unwrap_or(300),
-            redis_url: env::var("REDIS_URL")
-                .unwrap_or_else(|_| "redis://127.0.0.1:6379".into()),
+            redis_url: env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".into()),
         })
     }
 }

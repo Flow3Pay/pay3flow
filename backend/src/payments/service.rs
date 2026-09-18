@@ -6,9 +6,7 @@ use crate::activitypub::model::AcquirerCandidate;
 use crate::activitypub::Service;
 use crate::db::DbPool;
 use crate::payments::fees;
-use crate::payments::model::{
-    to_minor, Minor, NewPayment, NewRoute, NewTransaction, Route,
-};
+use crate::payments::model::{to_minor, Minor, NewPayment, NewRoute, NewTransaction, Route};
 use crate::payments::providers::{
     AcquireProvider, AcquireResult, ExecuteRequest, ProviderRegistry,
 };
@@ -91,7 +89,12 @@ impl PaymentService {
     /// Full lifecycle of a payment: validate → route → execute → persist.
     ///
     /// Returns a view with the transaction and, when routed, its route.
-    pub async fn create(&self, user_id: Uuid, payment: NewPayment, idem_key: Option<String>) -> Result<PaymentView> {
+    pub async fn create(
+        &self,
+        user_id: Uuid,
+        payment: NewPayment,
+        idem_key: Option<String>,
+    ) -> Result<PaymentView> {
         let gross = validate(&payment)?;
 
         // Idempotency: when the caller supplied a key, a second identical
@@ -104,12 +107,7 @@ impl PaymentService {
             }
         }
 
-        let fees = fees::compute(
-            gross,
-            self.service_fee_percent,
-            0.0,
-            0,
-        );
+        let fees = fees::compute(gross, self.service_fee_percent, 0.0, 0);
         let inserted = repo::insert_transaction(
             &self.pool,
             &NewTransaction {
@@ -151,7 +149,12 @@ impl PaymentService {
             &payment.from,
             &payment.to,
         )
-        .with_to_currency(payment.to_currency.clone().unwrap_or_else(|| payment.currency.clone()))
+        .with_to_currency(
+            payment
+                .to_currency
+                .clone()
+                .unwrap_or_else(|| payment.currency.clone()),
+        )
         .with_geo(payment.to_geo.clone())
         .with_method(payment.method.clone());
         let quote = crate::quotes::compute_quote(&self.ap, &self.picker, request, None).await;
@@ -162,8 +165,13 @@ impl PaymentService {
         let Some(best) = quote.best.clone() else {
             // No acquirer can serve; park the transaction as failed (route
             // never created). The failure reason is surfaced in the view.
-            repo::transition_status(&self.pool, &tx.id, TransactionStatus::Pending, TransactionStatus::Failed)
-                .await?;
+            repo::transition_status(
+                &self.pool,
+                &tx.id,
+                TransactionStatus::Pending,
+                TransactionStatus::Failed,
+            )
+            .await?;
             return self.view(&tx.id).await;
         };
 
@@ -191,10 +199,20 @@ impl PaymentService {
         .context("route insert returned no row")?;
 
         // Pending -> Matched (route chosen).
-        repo::transition_status(&self.pool, &tx.id, TransactionStatus::Pending, TransactionStatus::Matched)
-            .await?;
-        repo::transition_route(&self.pool, &route.id, RouteStatus::Pending, RouteStatus::Matched)
-            .await?;
+        repo::transition_status(
+            &self.pool,
+            &tx.id,
+            TransactionStatus::Pending,
+            TransactionStatus::Matched,
+        )
+        .await?;
+        repo::transition_route(
+            &self.pool,
+            &route.id,
+            RouteStatus::Pending,
+            RouteStatus::Matched,
+        )
+        .await?;
         self.publish(tx.id, TransactionStatus::Matched, None);
 
         // Fees: ours + the acquirer's, then compute what the recipient gets
@@ -213,14 +231,7 @@ impl PaymentService {
             }
             _ => (Some(net_minor), Some(payment.currency.clone())),
         };
-        repo::set_amounts(
-            &self.pool,
-            &tx.id,
-            to_amount,
-            to_currency,
-            totals.total(),
-        )
-        .await?;
+        repo::set_amounts(&self.pool, &tx.id, to_amount, to_currency, totals.total()).await?;
 
         // Execute through the matched acquirer. The stub provider drives the
         // smoke-test branches deterministically.
@@ -230,17 +241,15 @@ impl PaymentService {
             AcquireResult::Failed => (TransactionStatus::Failed, RouteStatus::Failed),
             AcquireResult::Pending => (TransactionStatus::Executing, RouteStatus::Executing),
         };
-        repo::transition_status(&self.pool, &tx.id, TransactionStatus::Executing, final_status)
-            .await?;
-        repo::transition_route(&self.pool, &route.id, RouteStatus::Matched, route_status)
-            .await?;
-        repo::set_provider(
+        repo::transition_status(
             &self.pool,
             &tx.id,
-            &acquirer_slug,
-            &external_id,
+            TransactionStatus::Executing,
+            final_status,
         )
         .await?;
+        repo::transition_route(&self.pool, &route.id, RouteStatus::Matched, route_status).await?;
+        repo::set_provider(&self.pool, &tx.id, &acquirer_slug, &external_id).await?;
         self.publish(tx.id, final_status, Some(external_id));
 
         self.view(&tx.id).await
@@ -252,7 +261,11 @@ impl PaymentService {
             .await?
             .context("transaction not found")?;
         let route = repo::route_for_transaction(&self.pool, tx_id).await?;
-        Ok(PaymentView { transaction: tx, route, quote: None })
+        Ok(PaymentView {
+            transaction: tx,
+            route,
+            quote: None,
+        })
     }
 
     /// List recent payments for a user.
@@ -261,7 +274,11 @@ impl PaymentService {
         let mut views = Vec::with_capacity(txs.len());
         for tx in txs {
             let route = repo::route_for_transaction(&self.pool, &tx.id).await?;
-            views.push(PaymentView { transaction: tx, route, quote: None });
+            views.push(PaymentView {
+                transaction: tx,
+                route,
+                quote: None,
+            });
         }
         Ok(views)
     }
@@ -289,7 +306,11 @@ impl PaymentService {
         }
         // Our own curated real-provider pool.
         let pool = crate::routing::profile::seed_pool();
-        if let Some(slug) = pool.iter().find(|p| name.starts_with(&p.name)).map(|p| p.slug.clone()) {
+        if let Some(slug) = pool
+            .iter()
+            .find(|p| name.starts_with(&p.name))
+            .map(|p| p.slug.clone())
+        {
             return repo::acquirer_by_slug(&self.pool, &slug).await;
         }
         Ok(None)
@@ -321,8 +342,13 @@ impl PaymentService {
     ) -> Result<(AcquireResult, String)> {
         let provider_ref = tx_id.to_string();
         // Matched -> Executing, held until the provider settles.
-        repo::transition_status(&self.pool, tx_id, TransactionStatus::Matched, TransactionStatus::Executing)
-            .await?;
+        repo::transition_status(
+            &self.pool,
+            tx_id,
+            TransactionStatus::Matched,
+            TransactionStatus::Executing,
+        )
+        .await?;
         let request = ExecuteRequest {
             amount: to_minor(payment.amount),
             currency: payment.currency.clone(),
