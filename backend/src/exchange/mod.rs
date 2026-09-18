@@ -4,7 +4,8 @@ pub mod status;
 
 pub use model::{
     AuditEvent, ExchangeCorridor, ExchangeOrder, ExchangeProof, ExchangeQuote, ExchangeSettlement,
-    FundingInstruction, Minor, NewAuditEvent, NewExchangeOrder,
+    ExchangeSolver, FundingInstruction, Minor, NewAuditEvent, NewExchangeOrder, NewExchangeProof,
+    NewExchangeQuote, NewExchangeSettlement, NewExchangeSolver, NewFundingInstruction,
 };
 pub use status::{
     FundingInstructionStatus, LegStatus, OrderStatus, ProofVerificationStatus, QuoteStatus,

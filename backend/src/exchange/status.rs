@@ -84,7 +84,10 @@ impl OrderStatus {
     }
 
     pub fn is_terminal(self) -> bool {
-        matches!(self, Self::Done | Self::Failed | Self::Expired | Self::Cancelled)
+        matches!(
+            self,
+            Self::Done | Self::Failed | Self::Expired | Self::Cancelled
+        )
     }
 }
 
@@ -108,6 +111,18 @@ impl QuoteStatus {
             Self::Selected => "selected",
             Self::Expired => "expired",
             Self::Rejected => "rejected",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "received" => Some(Self::Received),
+            "valid" => Some(Self::Valid),
+            "invalid" => Some(Self::Invalid),
+            "selected" => Some(Self::Selected),
+            "expired" => Some(Self::Expired),
+            "rejected" => Some(Self::Rejected),
+            _ => None,
         }
     }
 }
@@ -135,6 +150,17 @@ impl SolverStatus {
 
     pub fn accepts_quotes(self) -> bool {
         matches!(self, Self::Active)
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "discovered" => Some(Self::Discovered),
+            "active" => Some(Self::Active),
+            "paused" => Some(Self::Paused),
+            "broken" => Some(Self::Broken),
+            "blocked" => Some(Self::Blocked),
+            _ => None,
+        }
     }
 }
 
@@ -164,6 +190,20 @@ impl SettlementStatus {
             Self::Disputed => "disputed",
         }
     }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "created" => Some(Self::Created),
+            "funding_pending" => Some(Self::FundingPending),
+            "token_settling" => Some(Self::TokenSettling),
+            "money_settling" => Some(Self::MoneySettling),
+            "proof_pending" => Some(Self::ProofPending),
+            "done" => Some(Self::Done),
+            "failed" => Some(Self::Failed),
+            "disputed" => Some(Self::Disputed),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -184,6 +224,17 @@ impl LegStatus {
             Self::Done => "done",
             Self::Failed => "failed",
             Self::Disputed => "disputed",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "not_started" => Some(Self::NotStarted),
+            "pending" => Some(Self::Pending),
+            "done" => Some(Self::Done),
+            "failed" => Some(Self::Failed),
+            "disputed" => Some(Self::Disputed),
+            _ => None,
         }
     }
 }
@@ -273,6 +324,15 @@ impl ProofVerificationStatus {
             Self::Rejected => "rejected",
         }
     }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "pending" => Some(Self::Pending),
+            "verified" => Some(Self::Verified),
+            "rejected" => Some(Self::Rejected),
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -338,33 +398,21 @@ mod tests {
     #[test]
     fn funding_instruction_requires_user_confirmation_before_solver_ack() {
         assert!(
-            FundingInstructionStatus::NotStarted
-                .can_transition(FundingInstructionStatus::Created)
+            FundingInstructionStatus::NotStarted.can_transition(FundingInstructionStatus::Created)
         );
         assert!(
-            FundingInstructionStatus::Created
-                .can_transition(FundingInstructionStatus::ShownToUser)
+            FundingInstructionStatus::Created.can_transition(FundingInstructionStatus::ShownToUser)
         );
-        assert!(
-            FundingInstructionStatus::ShownToUser
-                .can_transition(FundingInstructionStatus::UserConfirmed)
-        );
-        assert!(
-            FundingInstructionStatus::UserConfirmed
-                .can_transition(FundingInstructionStatus::SolverAcknowledged)
-        );
-        assert!(
-            !FundingInstructionStatus::NotStarted
-                .can_transition(FundingInstructionStatus::SolverAcknowledged)
-        );
-        assert!(
-            !FundingInstructionStatus::Created
-                .can_transition(FundingInstructionStatus::SolverAcknowledged)
-        );
-        assert!(
-            !FundingInstructionStatus::ShownToUser
-                .can_transition(FundingInstructionStatus::SolverAcknowledged)
-        );
+        assert!(FundingInstructionStatus::ShownToUser
+            .can_transition(FundingInstructionStatus::UserConfirmed));
+        assert!(FundingInstructionStatus::UserConfirmed
+            .can_transition(FundingInstructionStatus::SolverAcknowledged));
+        assert!(!FundingInstructionStatus::NotStarted
+            .can_transition(FundingInstructionStatus::SolverAcknowledged));
+        assert!(!FundingInstructionStatus::Created
+            .can_transition(FundingInstructionStatus::SolverAcknowledged));
+        assert!(!FundingInstructionStatus::ShownToUser
+            .can_transition(FundingInstructionStatus::SolverAcknowledged));
     }
 
     #[test]

@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::exchange::status::{
     FundingInstructionStatus, LegStatus, OrderStatus, ProofVerificationStatus, QuoteStatus,
-    SettlementStatus,
+    SettlementStatus, SolverStatus,
 };
 
 pub type Minor = i64;
@@ -70,6 +70,42 @@ pub struct ExchangeOrder {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct ExchangeSolver {
+    pub id: Uuid,
+    pub slug: String,
+    pub actor_id: Option<String>,
+    pub handle: Option<String>,
+    pub display_name: String,
+    pub status: SolverStatus,
+    pub countries: Value,
+    pub currencies: Value,
+    pub rails: Value,
+    pub min_amount_minor: Option<Minor>,
+    pub max_amount_minor: Option<Minor>,
+    pub fee_model: Value,
+    pub risk_score: i32,
+    pub last_seen_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewExchangeSolver {
+    pub slug: String,
+    pub actor_id: Option<String>,
+    pub handle: Option<String>,
+    pub display_name: String,
+    pub status: SolverStatus,
+    pub countries: Value,
+    pub currencies: Value,
+    pub rails: Value,
+    pub min_amount_minor: Option<Minor>,
+    pub max_amount_minor: Option<Minor>,
+    pub fee_model: Value,
+    pub risk_score: i32,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct ExchangeQuote {
     pub id: Uuid,
     pub order_id: Uuid,
@@ -93,6 +129,27 @@ pub struct ExchangeQuote {
     pub updated_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone)]
+pub struct NewExchangeQuote {
+    pub order_id: Uuid,
+    pub solver_id: Uuid,
+    pub source_amount_minor: Minor,
+    pub target_amount_minor: Minor,
+    pub source_currency: String,
+    pub target_currency: String,
+    pub funding_method_type: String,
+    pub requires_user_funding: bool,
+    pub rate: String,
+    pub fee_minor: Minor,
+    pub eta_minutes: i32,
+    pub expires_at: DateTime<Utc>,
+    pub status: QuoteStatus,
+    pub settlement_plan: Value,
+    pub risk_score: i32,
+    pub score: Option<i64>,
+    pub raw_response: Option<Value>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct ExchangeSettlement {
     pub id: Uuid,
@@ -113,6 +170,20 @@ pub struct ExchangeSettlement {
     pub updated_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone)]
+pub struct NewExchangeSettlement {
+    pub order_id: Uuid,
+    pub quote_id: Uuid,
+    pub solver_id: Uuid,
+    pub status: SettlementStatus,
+    pub token_leg_status: LegStatus,
+    pub money_leg_status: LegStatus,
+    pub funding_status: FundingInstructionStatus,
+    pub pay3flow_wallet_ref: Option<String>,
+    pub token_ledger_ref: Option<String>,
+    pub money_reference: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct FundingInstruction {
     pub id: Uuid,
@@ -131,6 +202,20 @@ pub struct FundingInstruction {
     pub updated_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone)]
+pub struct NewFundingInstruction {
+    pub order_id: Uuid,
+    pub quote_id: Uuid,
+    pub solver_id: Uuid,
+    pub status: FundingInstructionStatus,
+    pub method_type: String,
+    pub amount_minor: Minor,
+    pub currency: String,
+    pub destination_ref: String,
+    pub expires_at: DateTime<Utc>,
+    pub raw_payload: Value,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct ExchangeProof {
     pub id: Uuid,
@@ -142,6 +227,16 @@ pub struct ExchangeProof {
     pub verified_by: Option<String>,
     pub verified_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewExchangeProof {
+    pub settlement_id: Uuid,
+    pub solver_id: Uuid,
+    pub proof_type: String,
+    pub proof_payload: Value,
+    pub verification_status: ProofVerificationStatus,
+    pub verified_by: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
