@@ -996,23 +996,23 @@ order переходит в done.
 
 ## Фаза EX-1A - Route Aggregation Research
 
-- [ ] EX-1A.1. Создать `docs/route-aggregation-research.md`.
-- [ ] EX-1A.2. Изучить Meta Matcha: какую UX/intent модель можно повторить.
-- [ ] EX-1A.3. Изучить 0x: Swap API, RFQ, route/liquidity model.
-- [ ] EX-1A.4. Изучить 1inch: aggregation API, pathfinder, supported chains.
-- [ ] EX-1A.5. Изучить Barter: категория, API, применимость.
-- [ ] EX-1A.6. Изучить Bebop: RFQ/solver/quote model, API.
-- [ ] EX-1A.7. Изучить Bitget: API/venue/liquidity role, KYC/custody risk.
-- [ ] EX-1A.8. Изучить Enso: route API, DeFi routing model.
-- [ ] EX-1A.9. Изучить KyberSwap: aggregator API, routing, fees.
-- [ ] EX-1A.10. Изучить Lightning: уточнить, это Lightning Network или конкретный provider; описать только после проверки.
-- [ ] EX-1A.11. Изучить Nordstern: уточнить категорию и применимость.
-- [ ] EX-1A.12. Изучить OKX: DEX/CEX/Wallet APIs, routing, compliance/custody risk.
-- [ ] EX-1A.13. Изучить Velora: aggregator/intent model, API.
-- [ ] EX-1A.14. Сравнить всё с Cow Protocol подходом.
-- [ ] EX-1A.15. Выбрать оптимальный подход для Pay3Flow MVP.
-- [ ] EX-1A.16. Спроектировать abstraction `RouteQuoteSource`.
-- [ ] EX-1A.17. Зафиксировать решение: какие источники quotes идут в MVP как mock, какие позже как real adapters.
+- [x] EX-1A.1. Создать `docs/route-aggregation-research.md`.
+- [x] EX-1A.2. Изучить Meta Matcha: какую UX/intent модель можно повторить.
+- [x] EX-1A.3. Изучить 0x: Swap API, RFQ, route/liquidity model.
+- [x] EX-1A.4. Изучить 1inch: aggregation API, pathfinder, supported chains.
+- [x] EX-1A.5. Изучить Barter: категория, API, применимость.
+- [x] EX-1A.6. Изучить Bebop: RFQ/solver/quote model, API.
+- [x] EX-1A.7. Изучить Bitget: API/venue/liquidity role, KYC/custody risk.
+- [x] EX-1A.8. Изучить Enso: route API, DeFi routing model.
+- [x] EX-1A.9. Изучить KyberSwap: aggregator API, routing, fees.
+- [x] EX-1A.10. Изучить Lightning: уточнить, это Lightning Network или конкретный provider; описать только после проверки.
+- [x] EX-1A.11. Изучить Nordstern: уточнить категорию и применимость.
+- [x] EX-1A.12. Изучить OKX: DEX/CEX/Wallet APIs, routing, compliance/custody risk.
+- [x] EX-1A.13. Изучить Velora: aggregator/intent model, API.
+- [x] EX-1A.14. Сравнить всё с Cow Protocol подходом.
+- [x] EX-1A.15. Выбрать оптимальный подход для Pay3Flow MVP.
+- [x] EX-1A.16. Спроектировать abstraction `RouteQuoteSource`.
+- [x] EX-1A.17. Зафиксировать решение: какие источники quotes идут в MVP как mock, какие позже как real adapters.
 
 Приёмка:
 
