@@ -86,9 +86,10 @@ cowprotocol-services/
 
 ## Фаза P2P-1 — Cow Protocol Services как reference
 
-- [ ] P2P-1.1. Склонировать `cowprotocol/services` в корень монорепо:
-  `cowprotocol-services/`.
-- [ ] P2P-1.2. Держать `cowprotocol-services/` в `.gitignore`, если это внешний
+- [x] P2P-1.1. Склонировать `cowprotocol/services` в корень монорепо:
+  `cowprotocol-services/`. Текущий upstream commit:
+  `3017e9400 solana-autopilot: hold in-flight orders out of auction cuts (#4937)`.
+- [x] P2P-1.2. Держать `cowprotocol-services/` в `.gitignore`, если это внешний
   reference, а не vendored-код.
 - [ ] P2P-1.3. Собрать upstream локально и записать команды:
   build, tests, docker/playground.
