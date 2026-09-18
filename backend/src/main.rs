@@ -85,7 +85,14 @@ async fn main() -> anyhow::Result<()> {
     let self_seed = state.ap.clone();
     tokio::spawn(async move {
         let follow = pay3flow_backend::activitypub::model::follow_activity(
-            &self_seed.identity.actor_id,
+            &format!(
+                "{}/seed/{}",
+                self_seed.identity.actor_id,
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0)
+            ),
             &self_seed.identity.actor_id,
             &self_seed.fmatch_actor_id,
         );

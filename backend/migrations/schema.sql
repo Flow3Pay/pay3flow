@@ -42,6 +42,13 @@ CREATE TABLE IF NOT EXISTS acquirers (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Self-heal acquirer tables created before the discovery columns existed
+-- (CREATE TABLE IF NOT EXISTS does not alter an existing table).
+ALTER TABLE acquirers ADD COLUMN IF NOT EXISTS website_url TEXT NOT NULL DEFAULT '';
+ALTER TABLE acquirers ADD COLUMN IF NOT EXISTS api_docs_url TEXT NOT NULL DEFAULT '';
+ALTER TABLE acquirers ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT '';
+ALTER TABLE acquirers ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT '';
+
 -- Provider secrets, kept separate from regular acquisitions.
 CREATE TABLE IF NOT EXISTS credentials (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

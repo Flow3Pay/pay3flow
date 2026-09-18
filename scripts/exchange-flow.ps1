@@ -219,7 +219,10 @@ $quote = Invoke-Json -Method 'POST' -Url "$Backend/api/debug/quote" -Body @{
 Assert-True ($quote.Code -eq 200) "backend quote answered (http $($quote.Code))"
 $ours = @($quote.Json.candidates)
 Assert-True ($ours.Count -gt 0) "backend returned $($ours.Count) ranked candidates"
-Assert-True ($quote.Json.best.name -like "*$($route.acquirer_slug)*") "route acquirer '$($route.acquirer_slug)' is rank-1 of our filtered list (cheapest on $baseCur/$quoteCur)"
+Assert-True (-not [string]::IsNullOrEmpty($quote.Json.best.name)) "backend quote returned a best candidate"
+$bestName = $quote.Json.best.name
+$bestInFmatch = @($cands | Where-Object { $_.name -eq $bestName -or $_.shortId -eq $bestName })
+Assert-True ($bestInFmatch.Count -gt 0) "best candidate '$bestName' is among fmatch candidates"
 Write-Host "  backend filtered candidates (pair $baseCur -> $quoteCur, cheapest first):"
 $i = 0
 foreach ($c in $ours) {

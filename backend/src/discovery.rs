@@ -19,9 +19,11 @@
 use std::time::Duration;
 
 use anyhow::{anyhow, Context, Result};
+use serde_json::json;
 use tonic::transport::Channel;
 use tracing::{info, warn};
 
+use crate::activitypub::model::Proposal;
 use crate::activitypub::Service as ActivityPubService;
 use crate::db::DbPool;
 use crate::search::crw_client::pb;
@@ -100,8 +102,14 @@ async fn run_discovery_pass(
 
     if !diff.deleted.is_empty() {
         let slugs: Vec<&str> = diff.deleted.iter().map(String::as_str).collect();
+        // Soft-delete: routes/credentials keep FK references to vanished
+        // acquirers, so hard DELETE would violate routes_acquirer_id_fkey.
+        // Re-discovery of the same slug re-activates via the upsert.
         let stmt = db
-            .prepare_cached("DELETE FROM acquirers WHERE slug = ANY($1)")
+            .prepare_cached(
+                "UPDATE acquirers SET active = FALSE, status = 'inactive', updated_at = now() \
+                 WHERE slug = ANY($1)",
+            )
             .await?;
         db.execute(&stmt, &[&slugs]).await?;
     }
@@ -133,15 +141,20 @@ async fn upsert_acquirer(db: &mut deadpool_postgres::Client, a: &Acquirer) -> Re
             r#"
 INSERT INTO acquirers
   (slug, name, geo, currencies, fee_percent, fee_fixed, amount_currency,
-   status, active)
-VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', TRUE)
+   website_url, api_docs_url, description, source, status, active)
+VALUES ($1, $2, $3, $4, COALESCE($5::double precision, 0), COALESCE($6::bigint, 0), $7,
+        $8, $9, $10, $11, 'active', TRUE)
 ON CONFLICT (slug) DO UPDATE SET
   name = COALESCE(EXCLUDED.name, acquirers.name),
   geo = COALESCE(EXCLUDED.geo, acquirers.geo),
   currencies = COALESCE(EXCLUDED.currencies, acquirers.currencies),
-  fee_percent = COALESCE(EXCLUDED.fee_percent, acquirers.fee_percent),
-  fee_fixed = COALESCE(EXCLUDED.fee_fixed, acquirers.fee_fixed),
+  fee_percent = CASE WHEN $5 IS NULL THEN acquirers.fee_percent ELSE EXCLUDED.fee_percent END,
+  fee_fixed = CASE WHEN $6 IS NULL THEN acquirers.fee_fixed ELSE EXCLUDED.fee_fixed END,
   amount_currency = COALESCE(EXCLUDED.amount_currency, acquirers.amount_currency),
+  website_url = COALESCE(NULLIF(EXCLUDED.website_url, ''), acquirers.website_url),
+  api_docs_url = COALESCE(NULLIF(EXCLUDED.api_docs_url, ''), acquirers.api_docs_url),
+  description = COALESCE(NULLIF(EXCLUDED.description, ''), acquirers.description),
+  source = COALESCE(NULLIF(EXCLUDED.source, ''), acquirers.source),
   status = 'active',
   active = TRUE,
   updated_at = now()
@@ -158,6 +171,10 @@ ON CONFLICT (slug) DO UPDATE SET
             &fee_percent,
             &fee_fixed,
             &a.amount_currency,
+            &a.website_url,
+            &a.api_docs_url,
+            &a.description,
+            &a.source,
         ],
     )
     .await?;
@@ -177,30 +194,24 @@ async fn offer_acquirer(ap: &ActivityPubService, a: &Acquirer) -> Result<()> {
             .map(|d| d.as_secs())
             .unwrap_or(0)
     );
-    let activity = serde_json::json!({
-        "@context": [
-            "https://www.w3.org/ns/activitystreams",
-            "https://www.w3.org/ns/activitystreams#fep-0837"
-        ],
-        "id": id,
-        "type": "Proposal",
-        "purpose": "offer",
-        "attributedTo": ap.identity.actor_id,
-        "name": a.name,
-        "content": format!(
+    let proposal = Proposal {
+        id: id.clone(),
+        purpose: "offer".to_string(),
+        attributed_to: ap.identity.actor_id.clone(),
+        name: a.name.clone(),
+        content: format!(
             "{} fee {} (geo {}) — discovered by crw.",
             a.slug, a.fee_percent, a.geo
         ),
-        "publishes": {
-            "action": "deliverService",
-            "resourceConformsTo": ap.marketplace_resource
-        },
-        "to": ["https://www.w3.org/ns/activitystreams#Public"],
-        "attachment": [
-            {"type": "PropertyValue", "name": "source", "value": a.source},
-            {"type": "PropertyValue", "name": "feePercent", "value": a.fee_percent}
-        ]
-    });
+        resource_conforms_to: ap.marketplace_resource.clone(),
+        action: "deliverService".to_string(),
+        resource_unit: "one".to_string(),
+        attachments: vec![
+            json!({"type": "PropertyValue", "name": "source", "value": a.source}),
+            json!({"type": "PropertyValue", "name": "feePercent", "value": a.fee_percent}),
+        ],
+    };
+    let activity = proposal.to_activity();
 
     ap.delivery
         .deliver(&ap.identity, &ap.fmatch_inbox, &activity)
