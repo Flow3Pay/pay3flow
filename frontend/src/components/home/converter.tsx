@@ -194,7 +194,7 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
   const [deadlineOpen, setDeadlineOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
-  // Bank exchange routes: the payment form picks a real sending bank, then a
+  // Bank exchange routes: the swap form picks a real sending bank, then a
   // receiving bank; the exchange combination is the user's.
   const [fromBank, setFromBank] = useState<BankOption | null>(null);
   const [toBank, setToBank] = useState<BankOption | null>(null);
@@ -374,10 +374,10 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
   const selectFromBank = (bank: Bank) => {
     setFromBank(toBankOption(bank));
     setToBank(null);
-    // Preview the sender's currency/scheme, then move the user straight to
-    // "choose what to exchange to".
+    // Preview the sender's currency/scheme; the user opens the receiving bank
+    // picker explicitly from the route button.
     setSell(pairToken(bank.currency, bank.schemes[0] ?? ""));
-    setPickerSide("buy");
+    setPickerSide(null);
   };
 
   const selectToBank = (bank: Bank) => {
@@ -394,7 +394,7 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
   const chooseMode = (next: Mode) => {
     setMode(next);
     setPicker(null);
-    if (next !== "payment") setPickerSide(null);
+    if (next !== "swap") setPickerSide(null);
   };
 
   const handleCta = () => {
@@ -543,7 +543,7 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
             />
             <span className={styles.fiat}>{usdIn > 0 ? `≈ ${formatUsd(usdIn)}` : EMPTY_USD}</span>
           </span>
-          {mode === "payment" ? (
+          {mode === "swap" ? (
             <PairButton
               label={fromBank?.name}
               placeholder="Sending bank"
@@ -556,7 +556,7 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
           )}
         </label>
 
-        {mode === "payment" ? (
+        {mode === "swap" ? (
           <div className={styles.separatorFlat} aria-hidden="true" />
         ) : (
           <div className={styles.separator} aria-hidden="true">
@@ -594,7 +594,7 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
             />
             <span className={styles.fiat}>{usdOut > 0 ? `≈ ${formatUsd(usdOut)}` : EMPTY_USD}</span>
           </span>
-          {mode === "payment" ? (
+          {mode === "swap" ? (
             <PairButton
               label={toBank?.name}
               placeholder={fromBank ? "Receiving bank" : "Pick sending bank"}
@@ -715,7 +715,7 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
 
       <PairPicker
         open={pickerSide !== null}
-        title={pickerSide === "buy" ? "Choose the receiving bank" : "Choose the sending bank"}
+        title={pickerSide === "buy" ? "Buy" : "Sell"}
         mode={pickerSide === "buy" ? "receiver" : "sender"}
         emptyText={pickerSide === "buy" ? "No receiving banks found" : "No banks available"}
         selectedName={pickerSide === "buy" ? toBank?.name ?? null : fromBank?.name ?? null}
