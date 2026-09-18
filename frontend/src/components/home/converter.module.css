@@ -438,15 +438,15 @@
 
 .schemeAvatar {
   position: absolute;
-  right: -4px;
-  bottom: -4px;
-  width: 17px;
-  height: 17px;
-  border-radius: 50%;
+  right: -10px;
+  bottom: -7px;
+  width: 28px;
+  height: 20px;
+  border-radius: 7px;
   object-fit: contain;
   background: #fff;
   border: 1px solid rgba(15, 23, 42, 0.14);
-  padding: 2px;
+  padding: 3px;
   box-shadow: 0 4px 10px rgba(15, 23, 42, 0.16);
 }
 
