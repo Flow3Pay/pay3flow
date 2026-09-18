@@ -428,6 +428,28 @@
   background: var(--color-panel-soft);
 }
 
+.bankAvatarStack {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: inline-flex;
+}
+
+.schemeAvatar {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  object-fit: contain;
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  padding: 2px;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.16);
+}
+
 .bankLabel {
   font-family: var(--font-sans);
   font-size: 15px;

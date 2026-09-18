@@ -1,14 +1,30 @@
-//! Seed catalog of banks (PLAN 2△ / banks): the worldwide directory the payment
-//! form picks a sending bank and a receiving bank from. Names are English and
-//! every bank resolves its own site favicon, so the list stays real without
-//! shipping image assets. The admin endpoint can extend or disable any row.
+//! Seed catalog of payment methods (PLAN 2△ / banks): the worldwide directory
+//! the swap form picks a sending method and a receiving method from. Names are
+//! English and every method resolves its own site favicon, so the list stays
+//! real without shipping image assets. The admin endpoint can extend or
+//! disable any row.
 
 use crate::banks::{repo_upsert, NewBank};
 use crate::db::DbPool;
 
-/// Bank logos come from the bank's own site favicon (Google favicon service).
+/// Method logos come from the provider's own site favicon (Google favicon service).
 pub fn icon_url(domain: &str) -> String {
-    format!("https://www.google.com/s2/favicons?domain={domain}&sz=128")
+    format!("https://www.google.com/s2/favicons?domain_url=https://{domain}/&sz=128")
+}
+
+fn branded_icon_url(name: &str, domain: &str) -> String {
+    match name {
+        "Visa Network" => {
+            "https://upload.wikimedia.org/wikipedia/commons/9/98/Visa_Inc._logo_%282005%E2%80%932014%29.svg?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=original".to_string()
+        }
+        "Mastercard Network" => {
+            "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a4/Mastercard_2019_logo.svg/1280px-Mastercard_2019_logo.svg.png?utm_source=en.wikipedia.org&utm_campaign=index&utm_content=thumbnail".to_string()
+        }
+        "PayPal" => {
+            "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0e/PayPal_2024_%28Icon%29.svg/250px-PayPal_2024_%28Icon%29.svg.png?utm_source=en.wikipedia.org&utm_campaign=parser&utm_content=thumbnail".to_string()
+        }
+        _ => icon_url(domain),
+    }
 }
 
 /// Card schemes we attribute to a bank by its home market.
@@ -318,21 +334,153 @@ const BANKS: &[(&str, &str, &str, &str)] = &[
     ("Bank of Africa", "MA", "MAD", "bankofafrica.ma"),
 ];
 
-/// Build the bank directory as upsert payloads.
+/// (name, country, currency, domain, rail). Non-bank payment methods and
+/// payment networks live in the same catalog so the swap picker can offer cards,
+/// wallets, local rails and mobile money next to bank accounts.
+const PAYMENT_METHODS: &[(&str, &str, &str, &str, &str)] = &[
+    // --- Global card and account rails ---
+    ("Visa Network", "GLOBAL", "USD", "visa.com", "Visa"),
+    ("Mastercard Network", "GLOBAL", "USD", "mastercard.com", "MasterCard"),
+    ("MIR Network", "RU", "RUB", "mironline.ru", "MIR"),
+    ("UnionPay Network", "CN", "CNY", "unionpayintl.com", "UnionPay"),
+    ("JCB Network", "JP", "JPY", "global.jcb", "JCB"),
+    ("American Express Network", "US", "USD", "americanexpress.com", "AmEx"),
+    ("Discover Network", "US", "USD", "discover.com", "Discover"),
+    ("Diners Club", "US", "USD", "dinersclub.com", "Diners Club"),
+    ("RuPay Network", "IN", "INR", "rupay.co.in", "RuPay"),
+    ("Verve", "NG", "NGN", "myverveworld.com", "Verve"),
+    // --- Global wallets and money apps ---
+    ("PayPal", "GLOBAL", "USD", "paypal.com", "PayPal"),
+    ("Venmo", "US", "USD", "venmo.com", "Venmo"),
+    ("Cash App", "US", "USD", "cash.app", "Cash App"),
+    ("Apple Pay", "GLOBAL", "USD", "apple.com", "Apple Pay"),
+    ("Google Pay", "GLOBAL", "USD", "pay.google.com", "Google Pay"),
+    ("Samsung Wallet", "GLOBAL", "USD", "samsung.com", "Samsung Wallet"),
+    ("Skrill", "GLOBAL", "EUR", "skrill.com", "Skrill"),
+    ("Neteller", "GLOBAL", "EUR", "neteller.com", "Neteller"),
+    ("Payoneer Account", "GLOBAL", "USD", "payoneer.com", "Payoneer"),
+    ("Wise Account", "GLOBAL", "USD", "wise.com", "Wise"),
+    ("Revolut Wallet", "GLOBAL", "EUR", "revolut.com", "Revolut"),
+    ("Paysend", "GLOBAL", "USD", "paysend.com", "Paysend"),
+    ("Remitly", "GLOBAL", "USD", "remitly.com", "Remitly"),
+    ("Western Union", "GLOBAL", "USD", "westernunion.com", "Western Union"),
+    ("MoneyGram", "GLOBAL", "USD", "moneygram.com", "MoneyGram"),
+    ("Zelle", "US", "USD", "zellepay.com", "Zelle"),
+    ("Stripe Link", "GLOBAL", "USD", "link.com", "Link"),
+    ("Klarna", "GLOBAL", "EUR", "klarna.com", "Klarna"),
+    ("Afterpay", "AU", "AUD", "afterpay.com", "Afterpay"),
+    // --- CIS and Eastern Europe wallets/rails ---
+    ("YooMoney", "RU", "RUB", "yoomoney.ru", "YooMoney"),
+    ("QIWI Wallet", "RU", "RUB", "qiwi.com", "QIWI"),
+    ("SBP Fast Payments", "RU", "RUB", "sbp.nspk.ru", "SBP"),
+    ("SberPay", "RU", "RUB", "sberbank.ru", "SberPay"),
+    ("T-Pay", "RU", "RUB", "tbank.ru", "T-Pay"),
+    ("MTS Money", "RU", "RUB", "mtsbank.ru", "MTS Money"),
+    ("ERIP Raschet", "BY", "BYN", "raschet.by", "ERIP"),
+    ("O!Pay", "KG", "KGS", "opay.kg", "O!Pay"),
+    ("Kaspi Pay", "KZ", "KZT", "kaspi.kz", "Kaspi Pay"),
+    ("Halyk QR", "KZ", "KZT", "halykbank.kz", "Halyk QR"),
+    ("Click Uzbekistan", "UZ", "UZS", "click.uz", "Click"),
+    ("Payme Uzbekistan", "UZ", "UZS", "payme.uz", "Payme"),
+    ("Uzcard", "UZ", "UZS", "uzcard.uz", "Uzcard"),
+    ("Humo", "UZ", "UZS", "humocard.uz", "Humo"),
+    ("ArCa", "AM", "AMD", "arca.am", "ArCa"),
+    ("Idram", "AM", "AMD", "idram.am", "Idram"),
+    ("EasyPay Georgia", "GE", "GEL", "easypay.ge", "EasyPay"),
+    // --- Europe local rails ---
+    ("SEPA Transfer", "EU", "EUR", "europeanpaymentscouncil.eu", "SEPA"),
+    ("SEPA Instant", "EU", "EUR", "europeanpaymentscouncil.eu", "SEPA Instant"),
+    ("Sofort", "DE", "EUR", "sofort.com", "Sofort"),
+    ("Giropay", "DE", "EUR", "giropay.de", "Giropay"),
+    ("iDEAL", "NL", "EUR", "ideal.nl", "iDEAL"),
+    ("Bancontact", "BE", "EUR", "bancontact.com", "Bancontact"),
+    ("BLIK", "PL", "PLN", "blik.com", "BLIK"),
+    ("Przelewy24", "PL", "PLN", "przelewy24.pl", "Przelewy24"),
+    ("Swish", "SE", "SEK", "swish.nu", "Swish"),
+    ("Vipps", "NO", "NOK", "vipps.no", "Vipps"),
+    ("MobilePay", "DK", "DKK", "mobilepay.dk", "MobilePay"),
+    ("Twint", "CH", "CHF", "twint.ch", "Twint"),
+    ("Paylib", "FR", "EUR", "paylib.fr", "Paylib"),
+    ("Bizum", "ES", "EUR", "bizum.es", "Bizum"),
+    ("Satispay", "IT", "EUR", "satispay.com", "Satispay"),
+    // --- Asia wallets and rails ---
+    ("Alipay", "CN", "CNY", "alipay.com", "Alipay"),
+    ("WeChat Pay", "CN", "CNY", "wechatpay.com", "WeChat Pay"),
+    ("Octopus", "HK", "HKD", "octopus.com.hk", "Octopus"),
+    ("PayPay Japan", "JP", "JPY", "paypay.ne.jp", "PayPay"),
+    ("Rakuten Pay", "JP", "JPY", "pay.rakuten.co.jp", "Rakuten Pay"),
+    ("LINE Pay", "JP", "JPY", "linepay.line.me", "LINE Pay"),
+    ("Kakao Pay", "KR", "KRW", "kakaopay.com", "Kakao Pay"),
+    ("Naver Pay", "KR", "KRW", "pay.naver.com", "Naver Pay"),
+    ("Toss", "KR", "KRW", "toss.im", "Toss"),
+    ("Paytm", "IN", "INR", "paytm.com", "Paytm"),
+    ("PhonePe", "IN", "INR", "phonepe.com", "PhonePe"),
+    ("UPI", "IN", "INR", "npci.org.in", "UPI"),
+    ("BHIM", "IN", "INR", "bhimupi.org.in", "BHIM"),
+    ("GCash", "PH", "PHP", "gcash.com", "GCash"),
+    ("Maya Philippines", "PH", "PHP", "maya.ph", "Maya"),
+    ("GrabPay", "SG", "SGD", "grab.com", "GrabPay"),
+    ("ShopeePay", "SG", "SGD", "shopeepay.com", "ShopeePay"),
+    ("Touch n Go eWallet", "MY", "MYR", "touchngo.com.my", "Touch n Go"),
+    ("DuitNow", "MY", "MYR", "duitnow.my", "DuitNow"),
+    ("TrueMoney", "TH", "THB", "truemoney.com", "TrueMoney"),
+    ("PromptPay", "TH", "THB", "bot.or.th", "PromptPay"),
+    ("MoMo Vietnam", "VN", "VND", "momo.vn", "MoMo"),
+    ("ZaloPay", "VN", "VND", "zalopay.vn", "ZaloPay"),
+    ("OVO", "ID", "IDR", "ovo.id", "OVO"),
+    ("DANA", "ID", "IDR", "dana.id", "DANA"),
+    ("GoPay", "ID", "IDR", "gopay.co.id", "GoPay"),
+    // --- Middle East, Africa, LatAm rails ---
+    ("STC Pay", "SA", "SAR", "stcpay.com.sa", "STC Pay"),
+    ("Fawry", "EG", "EGP", "fawry.com", "Fawry"),
+    ("M-Pesa", "KE", "KES", "mpesa.com", "M-Pesa"),
+    ("Airtel Money", "GLOBAL", "USD", "airtel.africa", "Airtel Money"),
+    ("Orange Money", "GLOBAL", "EUR", "orange.com", "Orange Money"),
+    ("MTN Mobile Money", "GLOBAL", "USD", "mtn.com", "MTN MoMo"),
+    ("Pix", "BR", "BRL", "bcb.gov.br", "PIX"),
+    ("Boleto Bancario", "BR", "BRL", "febraban.org.br", "Boleto"),
+    ("Mercado Pago", "LATAM", "USD", "mercadopago.com", "Mercado Pago"),
+    ("SPEI", "MX", "MXN", "banxico.org.mx", "SPEI"),
+    ("OXXO Pay", "MX", "MXN", "oxxo.com", "OXXO Pay"),
+    ("PSE Colombia", "CO", "COP", "pse.com.co", "PSE"),
+    ("Webpay", "CL", "CLP", "transbank.cl", "Webpay"),
+    ("PagoEfectivo", "PE", "PEN", "pagoefectivo.pe", "PagoEfectivo"),
+    // --- Crypto rails shown as payment methods ---
+    ("Bitcoin Network", "GLOBAL", "BTC", "bitcoin.org", "Bitcoin"),
+    ("Ethereum Network", "GLOBAL", "ETH", "ethereum.org", "Ethereum"),
+    ("TON Network", "GLOBAL", "TON", "ton.org", "TON"),
+    ("Tether USDT TRC20", "GLOBAL", "USDT", "tether.to", "USDT TRC20"),
+    ("Tether USDT ERC20", "GLOBAL", "USDT", "tether.to", "USDT ERC20"),
+    ("USD Coin", "GLOBAL", "USDC", "circle.com", "USDC"),
+];
+
+/// Build the payment-method directory as upsert payloads.
 pub fn build_banks() -> Vec<NewBank> {
-    BANKS
+    let mut entries = BANKS
         .iter()
-        .map(|(name, country, currency, domain)| NewBank {
-            name: (*name).to_string(),
+        .map(|(name, country, currency, domain)| {
+            (
+                *name,
+                *country,
+                *currency,
+                *domain,
+                schemes_for(country),
+            )
+        })
+        .chain(PAYMENT_METHODS.iter().copied())
+        .map(|(name, country, currency, domain, schemes)| NewBank {
+            name: name.to_string(),
             role: Some("both".to_string()),
-            country: Some((*country).to_string()),
-            currency: Some((*currency).to_string()),
-            domain: Some((*domain).to_string()),
-            icon_url: Some(icon_url(domain)),
-            schemes: Some(schemes_for(country).to_string()),
+            country: Some(country.to_string()),
+            currency: Some(currency.to_string()),
+            domain: Some(domain.to_string()),
+            icon_url: Some(branded_icon_url(name, domain)),
+            schemes: Some(schemes.to_string()),
             status: Some("enabled".to_string()),
         })
-        .collect()
+        .collect::<Vec<_>>();
+    entries.sort_by(|left, right| left.name.cmp(&right.name));
+    entries
 }
 
 /// Seed the `banks` table idempotently (upsert on `name`), called at startup.
@@ -350,14 +498,14 @@ mod tests {
     use std::collections::HashSet;
 
     #[test]
-    fn catalog_holds_at_least_two_hundred_worldwide_banks() {
+    fn catalog_holds_many_worldwide_payment_methods() {
         let banks = build_banks();
-        assert!(banks.len() >= 200, "need >=200 banks, got {}", banks.len());
+        assert!(banks.len() >= 300, "need >=300 methods, got {}", banks.len());
         let countries: HashSet<&str> = banks
             .iter()
             .filter_map(|b| b.country.as_deref())
             .collect();
-        assert!(countries.len() >= 40, "banks should span the world, got {} countries", countries.len());
+        assert!(countries.len() >= 40, "methods should span the world, got {} countries", countries.len());
     }
 
     #[test]
@@ -375,10 +523,37 @@ mod tests {
     }
 
     #[test]
-    fn every_bank_has_a_favicon_and_schemes() {
+    fn every_method_has_a_favicon_and_schemes() {
         for bank in build_banks() {
-            assert!(bank.icon_url.as_deref().unwrap_or("").contains("favicons"));
+            assert!(bank.icon_url.as_deref().unwrap_or("").starts_with("https://"));
             assert!(!bank.schemes.as_deref().unwrap_or("").is_empty());
+        }
+    }
+
+    #[test]
+    fn major_standalone_methods_use_their_brand_logos() {
+        let banks = build_banks();
+        let icon_for = |name: &str| {
+            banks
+                .iter()
+                .find(|bank| bank.name == name)
+                .and_then(|bank| bank.icon_url.as_deref())
+                .unwrap_or("")
+        };
+
+        assert!(icon_for("Visa Network").contains("Visa_Inc._logo"));
+        assert!(icon_for("Mastercard Network").contains("Mastercard_2019_logo"));
+        assert!(icon_for("PayPal").contains("PayPal_2024"));
+    }
+
+    #[test]
+    fn catalog_includes_wallets_networks_and_local_rails() {
+        let names = build_banks()
+            .into_iter()
+            .map(|b| b.name)
+            .collect::<HashSet<_>>();
+        for expected in ["PayPal", "YooMoney", "Visa Network", "MIR Network", "SEPA Instant", "Pix", "UPI"] {
+            assert!(names.contains(expected), "missing payment method {expected}");
         }
     }
 }

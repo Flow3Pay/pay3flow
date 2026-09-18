@@ -16,7 +16,7 @@ pub struct AppState {
     pub payments: PaymentService,
     /// Bank exchange-pair router catalog (PLAN 2△ / 46c).
     pub pairs: ExchangePairsService,
-    /// Worldwide bank directory the payment form picks from (PLAN 2△).
+    /// Worldwide payment-method directory the swap form picks from (PLAN 2△).
     pub banks: BanksService,
     /// Bearer token guarding the admin endpoints (PLAN 46e).
     pub admin_token: String,

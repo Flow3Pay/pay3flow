@@ -31,9 +31,25 @@ export interface BankFilters {
   signal?: AbortSignal;
 }
 
+const SCHEME_ICONS: Record<string, string> = {
+  mastercard:
+    "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a4/Mastercard_2019_logo.svg/1280px-Mastercard_2019_logo.svg.png?utm_source=en.wikipedia.org&utm_campaign=index&utm_content=thumbnail",
+  paypal:
+    "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0e/PayPal_2024_%28Icon%29.svg/250px-PayPal_2024_%28Icon%29.svg.png?utm_source=en.wikipedia.org&utm_campaign=parser&utm_content=thumbnail",
+  visa: "https://upload.wikimedia.org/wikipedia/commons/9/98/Visa_Inc._logo_%282005%E2%80%932014%29.svg?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=original",
+};
+
+function normalizeScheme(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, "");
+}
+
+export function schemeIconUrl(scheme: string): string | undefined {
+  return SCHEME_ICONS[normalizeScheme(scheme)];
+}
+
 /**
- * Fetch a paged slice of the backend bank directory. No auth: the directory is
- * the source of truth for the payment form's "sending → receiving" pickers.
+ * Fetch a paged slice of the backend payment-method directory. No auth: the
+ * directory is the source of truth for the swap form's sell/buy method pickers.
  */
 export async function fetchBanks(filters: BankFilters = {}): Promise<BankPage> {
   const { signal, ...params } = filters;

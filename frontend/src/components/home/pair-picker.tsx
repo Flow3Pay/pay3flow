@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { Bank, fetchBanks } from "@/lib/banks";
+import { Bank, fetchBanks, schemeIconUrl } from "@/lib/banks";
 
 import styles from "./pair-picker.module.css";
 
@@ -49,6 +49,21 @@ function BankLogo({ src, name }: { src: string; name: string }) {
   );
 }
 
+function SchemeLogo({ scheme }: { scheme: string }) {
+  const [failed, setFailed] = useState(false);
+  const src = schemeIconUrl(scheme);
+  if (!src || failed) return null;
+  return (
+    <img
+      className={styles.schemeLogo}
+      src={src}
+      alt=""
+      loading="lazy"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 export function PairPicker({
   open,
   title,
@@ -57,7 +72,7 @@ export function PairPicker({
   onSelect,
   mode,
   query,
-  emptyText = "No banks found",
+  emptyText = "No payment methods found",
 }: PairPickerProps) {
   const [search, setSearch] = useState(query ?? "");
   const [serverQuery, setServerQuery] = useState("");
@@ -97,6 +112,12 @@ export function PairPicker({
   }, [search]);
 
   const role = mode === "sender" ? "sender" : "receiver";
+
+  useEffect(() => {
+    if (open) return;
+    setSearch("");
+    setServerQuery("");
+  }, [open]);
 
   const fetchPage = useCallback(
     async (offset: number, limit: number, strategy: "replace" | "append" | "prepend") => {
@@ -259,8 +280,8 @@ export function PairPicker({
             type="text"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search bank…"
-            aria-label="Search bank"
+            placeholder="Search payment method…"
+            aria-label="Search payment method"
           />
         </div>
 
@@ -286,7 +307,13 @@ export function PairPicker({
               >
                 <span className={styles.leg}>
                   <BankLogo src={bank.icon_url} name={bank.name} />
-                  <span className={styles.bank}>{bank.name}</span>
+                  <span className={styles.legMeta}>
+                    <span className={styles.bank}>{bank.name}</span>
+                    <span className={styles.scheme}>
+                      {bank.schemes[0] && <SchemeLogo scheme={bank.schemes[0]} />}
+                      {bank.schemes.join(", ")}
+                    </span>
+                  </span>
                 </span>
                 {isSelected && (
                   <svg className={styles.check} width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">

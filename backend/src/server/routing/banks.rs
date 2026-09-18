@@ -8,10 +8,10 @@ use crate::core::error::AppError;
 use crate::core::state::AppState;
 use crate::server::routing::pairs::auth_admin;
 
-/// `GET /api/banks` — the public bank directory (PLAN 2△). Only `enabled`
+/// `GET /api/banks` — the public payment-method directory (PLAN 2△). Only `enabled`
 /// banks are served; filters: `role` (`sender`/`receiver`/`both`), `country`,
 /// `currency`, `scheme`, `q` (name search), plus `limit`/`offset` pagination.
-/// No auth: it is the source of truth for the payment form's bank pickers.
+/// No auth: it is the source of truth for the swap form's method pickers.
 #[derive(Debug, Deserialize)]
 pub struct ListQuery {
     #[serde(flatten)]

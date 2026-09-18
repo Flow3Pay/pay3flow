@@ -16,7 +16,7 @@ import { TokenPicker } from "./token-picker";
 import { PairPicker } from "./pair-picker";
 import { SidePanel } from "./side-panel";
 
-import { Bank } from "@/lib/banks";
+import { Bank, schemeIconUrl } from "@/lib/banks";
 
 import {
   createRatesSocket,
@@ -84,6 +84,7 @@ function pairToken(currency: string, scheme: string): Token {
 interface BankOption {
   name: string;
   icon: string;
+  schemeIcon?: string;
   scheme: string;
   currency: string;
 }
@@ -92,10 +93,31 @@ function toBankOption(bank: Bank): BankOption {
   return {
     name: bank.name,
     icon: bank.icon_url,
+    schemeIcon: schemeIconUrl(bank.schemes[0] ?? ""),
     scheme: bank.schemes[0] ?? "",
     currency: bank.currency,
   };
 }
+
+function methodIcon(domain: string): string {
+  return `https://www.google.com/s2/favicons?domain_url=https://${domain}/&sz=128`;
+}
+
+const DEFAULT_SELL_METHOD: BankOption = {
+  name: "PayPal",
+  icon: schemeIconUrl("PayPal") ?? methodIcon("paypal.com"),
+  schemeIcon: schemeIconUrl("PayPal"),
+  scheme: "PayPal",
+  currency: "USD",
+};
+
+const DEFAULT_BUY_METHOD: BankOption = {
+  name: "Belarusbank",
+  icon: methodIcon("belarusbank.by"),
+  schemeIcon: schemeIconUrl("Visa"),
+  scheme: "Visa",
+  currency: "BYN",
+};
 
 const EMPTY_USD = formatUsd(0);
 
@@ -134,6 +156,7 @@ function PairButton({
   placeholder,
   fallbackSymbol,
   icon,
+  schemeIcon,
   disabled,
   onOpen,
 }: {
@@ -141,10 +164,17 @@ function PairButton({
   placeholder: string;
   fallbackSymbol: string;
   icon?: string;
+  schemeIcon?: string;
   disabled?: boolean;
   onOpen: () => void;
 }) {
   const [failed, setFailed] = useState(false);
+  const [schemeFailed, setSchemeFailed] = useState(false);
+  const showSchemeIcon = Boolean(schemeIcon && schemeIcon !== icon && !schemeFailed);
+
+  useEffect(() => setFailed(false), [icon]);
+  useEffect(() => setSchemeFailed(false), [schemeIcon]);
+
   return (
     <button
       type="button"
@@ -153,13 +183,23 @@ function PairButton({
       disabled={disabled}
       aria-label={label ? `Payment route via ${label}` : placeholder}
     >
-      {icon && !failed ? (
-        <img className={styles.bankAvatar} src={icon} alt="" onError={() => setFailed(true)} />
-      ) : (
-        <span className={styles.tokenAvatar} style={{ background: label ? "#6b7280" : "var(--color-border)" }}>
-          {label ? fallbackSymbol.slice(0, 2) : "—"}
-        </span>
-      )}
+      <span className={styles.bankAvatarStack}>
+        {icon && !failed ? (
+          <img className={styles.bankAvatar} src={icon} alt="" onError={() => setFailed(true)} />
+        ) : (
+          <span className={styles.tokenAvatar} style={{ background: label ? "#6b7280" : "var(--color-border)" }}>
+            {label ? fallbackSymbol.slice(0, 2) : "—"}
+          </span>
+        )}
+        {showSchemeIcon && (
+          <img
+            className={styles.schemeAvatar}
+            src={schemeIcon}
+            alt=""
+            onError={() => setSchemeFailed(true)}
+          />
+        )}
+      </span>
       <span className={styles.bankLabel}>{label ?? placeholder}</span>
       <svg className={styles.tokenChevron} width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
         <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -180,8 +220,12 @@ interface ConverterProps {
 
 export function Converter({ connected, connecting, onConnect }: ConverterProps) {
   const [mode, setMode] = useState<Mode>("swap");
-  const [sell, setSell] = useState<Token>(TOKENS[0]);
-  const [buy, setBuy] = useState<Token>(TOKENS[6]);
+  const [sell, setSell] = useState<Token>(
+    pairToken(DEFAULT_SELL_METHOD.currency, DEFAULT_SELL_METHOD.scheme),
+  );
+  const [buy, setBuy] = useState<Token>(
+    pairToken(DEFAULT_BUY_METHOD.currency, DEFAULT_BUY_METHOD.scheme),
+  );
   const [sellText, setSellText] = useState("");
   const [buyText, setBuyText] = useState("");
   const [indep, setIndep] = useState<Field>("sell");
@@ -194,10 +238,10 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
   const [deadlineOpen, setDeadlineOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
-  // Bank exchange routes: the swap form picks a real sending bank, then a
-  // receiving bank; the exchange combination is the user's.
-  const [fromBank, setFromBank] = useState<BankOption | null>(null);
-  const [toBank, setToBank] = useState<BankOption | null>(null);
+  // Payment routes: the swap form picks a sending method, then a receiving
+  // method; the exchange combination is the user's.
+  const [fromBank, setFromBank] = useState<BankOption | null>(DEFAULT_SELL_METHOD);
+  const [toBank, setToBank] = useState<BankOption | null>(DEFAULT_BUY_METHOD);
   const [pickerSide, setPickerSide] = useState<Field | null>(null);
 
   // Live quoting: fmatch answers the exchange pair over WebSocket.
@@ -546,9 +590,10 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
           {mode === "swap" ? (
             <PairButton
               label={fromBank?.name}
-              placeholder="Sending bank"
+              placeholder="Sell method"
               fallbackSymbol={sell.symbol}
               icon={fromBank?.icon}
+              schemeIcon={fromBank?.schemeIcon}
               onOpen={() => setPickerSide("sell")}
             />
           ) : (
@@ -597,9 +642,10 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
           {mode === "swap" ? (
             <PairButton
               label={toBank?.name}
-              placeholder={fromBank ? "Receiving bank" : "Pick sending bank"}
+              placeholder={fromBank ? "Buy method" : "Pick sell method"}
               fallbackSymbol={buy.symbol}
               icon={toBank?.icon}
+              schemeIcon={toBank?.schemeIcon}
               disabled={!fromBank}
               onOpen={() => fromBank && setPickerSide("buy")}
             />
@@ -717,7 +763,7 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
         open={pickerSide !== null}
         title={pickerSide === "buy" ? "Buy" : "Sell"}
         mode={pickerSide === "buy" ? "receiver" : "sender"}
-        emptyText={pickerSide === "buy" ? "No receiving banks found" : "No banks available"}
+        emptyText={pickerSide === "buy" ? "No buy methods found" : "No sell methods available"}
         selectedName={pickerSide === "buy" ? toBank?.name ?? null : fromBank?.name ?? null}
         onClose={() => setPickerSide(null)}
         onSelect={pickerSide === "buy" ? selectToBank : selectFromBank}
