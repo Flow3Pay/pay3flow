@@ -970,13 +970,13 @@ order переходит в done.
 - [x] EX-1.1. Склонировать `cowprotocol/services` в `cowprotocol-services/`.
 - [x] EX-1.2. Держать `cowprotocol-services/` в `.gitignore`.
 - [ ] EX-1.3. Собрать upstream локально.
-- [ ] EX-1.4. Записать команды сборки в `docs/cow-services-analysis.md`.
-- [ ] EX-1.5. Изучить `orderbook`: API, модель order, статусы, storage.
-- [ ] EX-1.6. Изучить `autopilot`: как двигается auction/matching.
-- [ ] EX-1.7. Изучить `driver/solver`: как solver получает задачу и отдаёт решение.
-- [ ] EX-1.8. Написать `docs/cow-services-analysis.md`.
-- [ ] EX-1.9. Изучить `https://meta.matcha.xyz/` как reference intent UX: trade/bridge, sell/buy form, slippage, route details, intents mode.
-- [ ] EX-1.10. Зафиксировать в `docs/cow-services-analysis.md`, что Cow = orderbook/solver reference, Meta Matcha = UX/route aggregation reference, `fmatch` = Pay3Flow solver matcher.
+- [x] EX-1.4. Записать команды сборки в `docs/cow-services-analysis.md`.
+- [x] EX-1.5. Изучить `orderbook`: API, модель order, статусы, storage.
+- [x] EX-1.6. Изучить `autopilot`: как двигается auction/matching.
+- [x] EX-1.7. Изучить `driver/solver`: как solver получает задачу и отдаёт решение.
+- [x] EX-1.8. Написать `docs/cow-services-analysis.md`.
+- [x] EX-1.9. Изучить `https://meta.matcha.xyz/` как reference intent UX: trade/bridge, sell/buy form, slippage, route details, intents mode.
+- [x] EX-1.10. Зафиксировать в `docs/cow-services-analysis.md`, что Cow = orderbook/solver reference, Meta Matcha = UX/route aggregation reference, `fmatch` = Pay3Flow solver matcher.
 
 Что написать в `docs/cow-services-analysis.md`:
 
