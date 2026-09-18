@@ -72,7 +72,39 @@ graph LR
     fmatch --> typesense
 ```
 
-## Поток данных: перевод
+## Архитектура: exchange-flow
+
+```mermaid
+graph LR
+    intent["User intent<br/>AM/AMD -> RU/RUB"]
+    orderbook["backend/orderbook<br/>exchange_orders"]
+    fmatch["fmatch<br/>solver discovery"]
+    auction["backend/auction<br/>quotes + scoring"]
+    solver["solver<br/>TOKEN-leg + money-leg"]
+    ledger["mock TOKEN ledger"]
+    proof["proof verification<br/>audit trail"]
+    frontend["frontend<br/>status + history"]
+
+    intent --> orderbook
+    orderbook --> fmatch
+    fmatch -->|"candidates, not winner"| auction
+    auction -->|"quote requests"| solver
+    auction -->|"selected route"| orderbook
+    orderbook -->|"funding instruction"| frontend
+    frontend -->|"user funding confirmation"| orderbook
+    orderbook --> solver
+    solver --> ledger
+    solver --> proof
+    proof --> orderbook
+    orderbook --> frontend
+```
+
+Эквайеры, старый `transactions/routes` контур и acquiring provider adapters
+остаются legacy/fallback rail. Новый MVP строится вокруг `exchange_orders`,
+solver candidates, quotes, selected route, funding instruction, mock TOKEN
+ledger, money-leg и proof.
+
+## Поток данных: exchange order
 
 ```mermaid
 sequenceDiagram
@@ -82,21 +114,22 @@ sequenceDiagram
     participant BE as backend
     participant DB as postgres
     participant FM as fmatch
-    participant OB as Orderbook
     participant S as Solver
 
     К->>FE: Создать перевод Армения → Россия
-    FE->>BE: POST /api/payments
-    BE->>DB: Записать intent/order (status=pending)
-    BE->>OB: Разместить order
-    BE->>FM: Найти solver'ов/ликвидность
-    FM-->>BE: Кандидаты solver'ов
-    BE->>S: Запросить quote / proof / лимиты
-    S-->>BE: Цена, комиссия, сроки, условия
-    BE->>DB: Зафиксировать выбранный маршрут
-    BE->>S: Исполнение локальных ног + token settlement
-    S-->>BE: Подтверждения / ошибки / доказательства
-    BE->>DB: Обновить статус (done / failed)
+    FE->>BE: POST /api/exchange/orders
+    BE->>DB: Записать exchange_order (status=created)
+    BE->>FM: Найти solver candidates
+    FM-->>BE: Candidates only
+    BE->>S: Запросить quotes
+    S-->>BE: Rate, fee, ETA, settlement plan
+    BE->>DB: Выбрать route, status=quoted
+    FE->>BE: POST /api/exchange/orders/:id/confirm
+    BE-->>FE: Funding instruction
+    FE->>BE: POST /api/exchange/orders/:id/funding/confirm
+    BE->>S: TOKEN-leg + money-leg execution
+    S-->>BE: Proof
+    BE->>DB: Verify proof, status=done/disputed/failed
     BE-->>К: WebSocket: статус обновлён
 ```
 
@@ -106,23 +139,23 @@ sequenceDiagram
 Клиент
   │
   ▼
-┌──────────┐  POST /api/payments  ┌──────────┐
-│ frontend │ ────────────────────▶│ backend  │
+┌──────────┐  POST /api/exchange/orders  ┌──────────┐
+│ frontend │ ───────────────────────────▶│ backend  │
 └──────────┘                      └────┬─────┘
-                                       │ 1. Записать intent/order
-                                       │ 2. Найти solver'ов и ликвидность
+                                       │ 1. Записать exchange_order
+                                       │ 2. Найти solver candidates
                                        ▼
                                  ┌──────────┐
                                  │  fmatch  │ ← ActivityPub inbox/outbox
                                  └────┬─────┘
-                                      │ 3. Вернуть кандидатов solver'ов
-                                      │ 4. Quote / auction / route selection
+                                      │ 3. Вернуть candidates, не winner
+                                      │ 4. Backend auction / quotes / winner
                                       ▼
                                  ┌──────────┐
                                  │ backend  │
                                  └────┬─────┘
-                                      │ 5. Исполнить fiat/token/money ноги
-                                      │ 6. Проверить proofs, обновить статус
+                                      │ 5. Funding instruction + user consent
+                                      │ 6. Mock TOKEN-leg + money-leg + proof
                                       ▼
                                  ┌──────────┐
                                  │ Solver   │ (ликвидность)

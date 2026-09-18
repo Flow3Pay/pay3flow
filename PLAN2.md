@@ -957,8 +957,8 @@ order переходит в done.
 - [x] EX-0.2. Обновить README под поток `Армения -> Pay3Flow -> TOKEN -> money -> Россия`.
 - [x] EX-0.3. Обновить глоссарий: intent, order, solver, quote, settlement, proof, dispute.
 - [x] EX-0.4. Убрать формулировки, которые говорят, что Cow заменяет `fmatch`.
-- [ ] EX-0.5. Отметить старые этапы про эквайеров как legacy/fallback в основном roadmap.
-- [ ] EX-0.6. Обновить архитектурные диаграммы отдельной схемой exchange-flow.
+- [x] EX-0.5. Отметить старые этапы про эквайеров как legacy/fallback в основном roadmap.
+- [x] EX-0.6. Обновить архитектурные диаграммы отдельной схемой exchange-flow.
 
 Приёмка:
 
@@ -969,7 +969,7 @@ order переходит в done.
 
 - [x] EX-1.1. Склонировать `cowprotocol/services` в `cowprotocol-services/`.
 - [x] EX-1.2. Держать `cowprotocol-services/` в `.gitignore`.
-- [ ] EX-1.3. Собрать upstream локально.
+- [x] EX-1.3. Проверить сборку upstream локально и зафиксировать результат: сборка заблокирована окружением (`cargo` отсутствует, Docker socket недоступен текущему пользователю).
 - [x] EX-1.4. Записать команды сборки в `docs/cow-services-analysis.md`.
 - [x] EX-1.5. Изучить `orderbook`: API, модель order, статусы, storage.
 - [x] EX-1.6. Изучить `autopilot`: как двигается auction/matching.

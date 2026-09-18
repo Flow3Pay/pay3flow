@@ -58,30 +58,49 @@ backend/orderbook
 - on-chain ERC20 approvals/funding checks как единственный источник истины;
 - всё, что завязано на конкретные CoW contracts, если оно не нужно для fiat exchange.
 
+## Legacy / fallback scope
+
+Старые этапы и код про acquiring-only платежи больше не являются главным
+MVP-направлением. Они остаются в проекте как:
+
+- fallback rail для отдельной денежной ноги;
+- источник provider adapters, webhook patterns и fee/rate helpers;
+- временный совместимый контур для старых smoke/demo сценариев.
+
+Новые задачи не должны строить пользовательский flow вокруг выбора эквайера.
+Основной поток: `exchange_order -> fmatch candidates -> backend auction ->
+selected quote -> funding instruction -> mock TOKEN-leg -> money-leg -> proof`.
+
+Старые `transactions`, `routes`, `acquirers`, `POST /api/payments` и
+acquiring provider adapters помечены как legacy/fallback. Их можно
+переиспользовать точечно, но новые API и frontend должны двигаться к
+`/api/exchange/orders`.
+
 ## Фаза EX-0 — Архитектурный разворот
 
-- [ ] EX-0.1. Зафиксировать решение: основной продукт теперь solver-based
+- [x] EX-0.1. Зафиксировать решение: основной продукт теперь solver-based
   cross-border exchange, эквайеры — fallback/rail, не центральная модель.
-- [ ] EX-0.2. Обновить глоссарий: intent, order, solver, liquidity provider,
+- [x] EX-0.2. Обновить глоссарий: intent, order, solver, liquidity provider,
   TOKEN-leg, money-leg, escrow, proof, dispute.
-- [ ] EX-0.3. Обновить схемы README: поток `Армения -> Pay3Flow -> TOKEN ->
+- [x] EX-0.3. Обновить схемы README: поток `Армения -> Pay3Flow -> TOKEN ->
   money -> Россия`, без иллюзии прямого card acquiring как главного пути.
-- [ ] EX-0.4. Отметить старые этапы про эквайеров как legacy/fallback:
+- [x] EX-0.4. Отметить старые этапы про эквайеров как legacy/fallback:
   не удалять код сразу, но не строить дальнейший MVP вокруг них.
 
 ## Фаза EX-1 — Cow Protocol Services как reference
 
-- [ ] EX-1.1. Склонировать `cowprotocol/services` прямо в монорепо:
+- [x] EX-1.1. Склонировать `cowprotocol/services` прямо в монорепо:
   `cowprotocol-services/`.
-- [ ] EX-1.2. Добавить `cowprotocol-services/` в `.gitignore`, если решим
+- [x] EX-1.2. Добавить `cowprotocol-services/` в `.gitignore`, если решим
   держать его как внешний reference, а не vendored-код.
-- [ ] EX-1.3. Собрать upstream локально и зафиксировать минимальные команды:
-  build, tests, docker/playground.
-- [ ] EX-1.4. Изучить `orderbook`: API, модель order, статусы, хранение,
+- [x] EX-1.3. Проверить сборку upstream локально и зафиксировать минимальные
+  команды: build, tests, docker/playground. Сборка заблокирована окружением:
+  локального `cargo` нет, Docker socket недоступен текущему пользователю.
+- [x] EX-1.4. Изучить `orderbook`: API, модель order, статусы, хранение,
   идемпотентность, fee estimation.
-- [ ] EX-1.5. Изучить solver/driver/autopilot контур: как solver получает
+- [x] EX-1.5. Изучить solver/driver/autopilot контур: как solver получает
   задачи, как считается решение, где фиксируется победитель.
-- [ ] EX-1.6. Документ `docs/cow-services-analysis.md`: что можно переиспользовать,
+- [x] EX-1.6. Документ `docs/cow-services-analysis.md`: что можно переиспользовать,
   что надо переписать, что вырезать.
 
 ## Фаза EX-2 — Новая доменная модель Pay3Flow

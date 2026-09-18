@@ -46,9 +46,24 @@ cargo check -p orderbook -p autopilot -p driver --all-targets
 zsh:1: command not found: cargo
 ```
 
-Вывод: локальная сборка Cow не была выполнена из-за отсутствия `cargo` в
-окружении. После установки Rust toolchain стоит повторить команду выше. Для
-полного playground-flow Cow README рекомендует:
+Проверка Docker:
+
+```bash
+docker version
+```
+
+Результат:
+
+```text
+permission denied while trying to connect to the docker API at unix:///var/run/docker.sock
+```
+
+Вывод: локальная сборка Cow не была выполнена из-за ограничений окружения:
+локальный Rust toolchain недоступен (`cargo` отсутствует), а Docker daemon
+недоступен текущему пользователю. После установки Rust toolchain или выдачи
+доступа к Docker стоит повторить `cargo check` выше.
+
+Для полного playground-flow Cow README рекомендует:
 
 ```bash
 cd cowprotocol-services
