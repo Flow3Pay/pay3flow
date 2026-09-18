@@ -1,21 +1,21 @@
 # Pay3Flow
 
-Трансграничные P2P-платежи с комиссией ниже, чем SWIFT.
+Трансграничные обменные платежи с комиссией ниже, чем SWIFT.
 
 ## Идея
 
-Получаем платёжный intent пользователя → подбираем P2P-ликвидность и
+Получаем платёжный intent пользователя → подбираем ликвидность solver'ов и
 solver'ов → проводим две локальные денежные ноги через участников сети →
 фиксируем статус, комиссии, подтверждения и спорные ситуации.
 
 Целевой поток:
 
 ```text
-Армения → Pay3Flow → P2P exchange TOKEN → P2P exchange money → Россия
+Армения → Pay3Flow → TOKEN exchange → money exchange → Россия
 ```
 
 Старый контур через эквайеров остаётся как fallback/исторический слой, но
-новая целевая архитектура строится вокруг P2P orderbook + solver competition
+новая целевая архитектура строится вокруг orderbook + solver competition
 по модели CoW Protocol.
 
 ## Микросервисы
@@ -23,7 +23,7 @@ solver'ов → проводим две локальные денежные но
 | Сервис | Каталог | Стек | Описание |
 |--------|---------|------|----------|
 | `frontend` | `frontend/` | Next.js + TypeScript | Веб-интерфейс |
-| `backend` | `backend/` | Rust (Axum, WebSocket, Postgres, Redis) | Ядро: auth, intents, P2P-маршрутизация, статусы, споры |
+| `backend` | `backend/` | Rust (Axum, WebSocket, Postgres, Redis) | Ядро: auth, intents, маршрутизация, статусы, споры |
 | `cow-services` | `cowprotocol-services/` | Rust | Референс CoW Protocol Services: orderbook, auction/solver flow, settlement patterns |
 | `fmatch` | `fmatch/` | Rust (Axum, sqlx) | Федеративный discovery/matching solver'ов и участников сети |
 | `crw` | `crw/` | Rust + gRPC | Поиск и discovery новых solver'ов/провайдеров ликвидности |
@@ -46,7 +46,7 @@ graph LR
     fmatch_db["fmatch-postgres<br/>:5432"]
     typesense["fmatch-typesense<br/>:8108"]
     crw["crw<br/>:3030/:3031<br/>Rust + gRPC"]
-    p2p["P2P solvers<br/>fiat / token liquidity"]
+    solvers["Solvers<br/>fiat / token liquidity"]
 
     client <-->|"HTTP / WS"| frontend
     frontend -->|"REST API"| backend
@@ -55,12 +55,12 @@ graph LR
     backend -. изучить / адаптировать .-> cow
     backend <-->|"ActivityPub<br/>inbox / outbox"| fmatch
     backend <-->|"gRPC discovery"| crw
-    backend <-->|"quotes / execution / proof"| p2p
+    backend <-->|"quotes / execution / proof"| solvers
     fmatch --> fmatch_db
     fmatch --> typesense
 ```
 
-## Поток данных: P2P-перевод
+## Поток данных: перевод
 
 ```mermaid
 sequenceDiagram
@@ -70,13 +70,13 @@ sequenceDiagram
     participant BE as backend
     participant DB as postgres
     participant FM as fmatch
-    participant OB as P2P orderbook
-    participant S as Solver/P2P участник
+    participant OB as Orderbook
+    participant S as Solver
 
     К->>FE: Создать перевод Армения → Россия
     FE->>BE: POST /api/payments
     BE->>DB: Записать intent/order (status=pending)
-    BE->>OB: Разместить P2P order
+    BE->>OB: Разместить order
     BE->>FM: Найти solver'ов/ликвидность
     FM-->>BE: Кандидаты solver'ов
     BE->>S: Запросить quote / proof / лимиты
@@ -97,7 +97,7 @@ sequenceDiagram
 ┌──────────┐  POST /api/payments  ┌──────────┐
 │ frontend │ ────────────────────▶│ backend  │
 └──────────┘                      └────┬─────┘
-                                       │ 1. Записать P2P intent/order
+                                       │ 1. Записать intent/order
                                        │ 2. Найти solver'ов и ликвидность
                                        ▼
                                  ┌──────────┐
@@ -109,11 +109,11 @@ sequenceDiagram
                                  ┌──────────┐
                                  │ backend  │
                                  └────┬─────┘
-                                      │ 5. Исполнить P2P fiat/token/money ноги
+                                      │ 5. Исполнить fiat/token/money ноги
                                       │ 6. Проверить proofs, обновить статус
                                       ▼
                                  ┌──────────┐
-                                 │ Solver   │ (P2P ликвидность)
+                                 │ Solver   │ (ликвидность)
                                  └──────────┘
 ```
 
