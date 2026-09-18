@@ -45,6 +45,37 @@ Backend превращает этот intent в order, ищет solver'ов че
 10. Solver присылает proof.
 11. Backend проверяет proof, обновляет status и показывает результат в UI.
 
+Практический MVP-поток для первого коридора `AM/AMD -> RU/RUB`:
+
+```text
+user вводит сумму AMD
+  -> backend создаёт order
+  -> backend начинает live-поиск связок
+      -> параллельно ищет вход: Armenian bank / AMD P2P -> любая crypto
+      -> как только найден один входной вариант, сразу ищет выход по этой crypto -> RUB
+      -> не ждёт завершения всех входных вариантов
+      -> каждую найденную полную или частичную связку отправляет во frontend через WS
+  -> frontend показывает связки в боковой панели
+  -> пользователь выбирает/подтверждает подходящий route
+```
+
+Важная продуктовая формулировка: пользователь не выбирает криптовалюту вручную. Он хочет отправить деньги из Армении в Россию, вводит сумму, а Pay3Flow ищет маршрут. На входе можно покупать любую crypto, если связка выгодная или потери минимальны. Примеры возможных промежуточных активов: `USDT ERC20`, `ETH Ethereum`, `BTC Binance`, `SOL`. Это не фиксированный список, а результат поиска.
+
+Критерий хорошей связки:
+
+- route даёт плюс относительно базового курса;
+- или route идёт примерно по себестоимости;
+- или route даёт минимальную допустимую просадку, например около `-0.08%`, если лучшего варианта сейчас нет.
+
+Поиск должен быть streaming/fan-out:
+
+- backend параллельно ищет несколько вариантов `AMD -> crypto`;
+- найденный входной вариант сразу становится задачей для поиска `crypto -> RUB`;
+- backend не ждёт, пока завершатся все варианты покупки crypto;
+- по каждой crypto можно параллельно искать несколько покупателей/выходных rails;
+- frontend получает события по WebSocket и постепенно наполняет боковую панель;
+- лучший route может обновляться по мере прихода новых данных, пока order не locked.
+
 Вариант funding flow для MVP:
 
 ```text
@@ -241,6 +272,10 @@ decision
 
 `Route`: выбранный quote + solver + конкретный план исполнения.
 
+`Связка`: live route candidate, собранный из двух частей: вход `AMD -> crypto` и выход `crypto -> RUB`. Связка может быть partial, если найден только вход или только идёт поиск выхода.
+
+Важно для совместимости плана: `exchange_quotes` и quote API остаются storage/API-слоем для complete routes. Во frontend основной визуальной единицей является `связка`, потому что пользователь должен видеть живой поиск, partial routes и текущий best route, а не только финальный список quotes после ожидания.
+
 `Auction window`: короткое окно ожидания quotes. Для MVP default: 3 секунды.
 
 `TOKEN-leg`: внутренний расчётный шаг. В MVP это mock ledger, не реальные деньги.
@@ -287,7 +322,8 @@ decision
 - Все изменения статусов делать guarded update через текущий status.
 - Все create-запросы делать идемпотентными через `Idempotency-Key`.
 - Все важные шаги писать в audit log.
-- Frontend сначала минимальный: новый order, quotes, status, история.
+- Frontend уже считать почти готовым по форме. Главный оставшийся frontend work: находить/получать связки через backend/WS и показывать их в боковой панели.
+- Боковая панель связок должна показывать streaming results, а не только финальный winner.
 
 Правила автономной разработки:
 
@@ -332,28 +368,32 @@ Cow reference:
 ## 7. Главный Алгоритм MVP
 
 ```text
-1. User creates exchange order
+1. User creates exchange order: AM/AMD -> RU/RUB, amount=...
 2. Backend validates input
 3. Backend saves exchange_orders row with status=created
-4. Backend sends solver discovery task to fmatch
-5. fmatch returns solver candidates
-6. Backend saves candidates or reads cached candidates
-7. Backend asks candidates for quotes
-8. Backend waits auction window
-9. Backend filters invalid/expired quotes
-10. Backend scores quotes
-11. Backend picks winner
-12. Backend saves route and status=quoted
-13. User confirms selected quote and funding instruction
-14. Backend locks order and quote
-15. User funding/payment instruction goes to selected solver/rail
-16. Solver executes crypto/TOKEN purchase or internal TOKEN-leg
-17. TOKEN-leg is reflected in Pay3Flow wallet/internal ledger
-18. Solver executes money-leg to recipient
-19. Solver submits proof
-20. Backend verifies proof
-21. Backend finalizes done or disputed/failed
-22. Frontend receives status through HTTP/WS
+4. Backend opens/uses order WS channel for live route events
+5. Backend sends solver discovery task to fmatch
+6. fmatch returns solver candidates
+7. Backend saves candidates or reads cached candidates
+8. Backend starts parallel search for entry legs: AMD from Armenian bank/P2P -> any crypto
+9. Each profitable or near-breakeven entry leg is emitted to WS as partial route
+10. For each found entry leg, backend immediately starts exit search: crypto -> RUB buyer/rail
+11. Backend does not wait for all entry legs before searching exits
+12. Backend emits every full candidate связка to WS with rate, fee, ETA, spread, status
+13. Backend keeps scoring candidates while auction/search window is open
+14. Backend filters invalid/expired quotes and impossible legs
+15. Backend picks current best route, but can update best route until locked
+16. Backend saves selected route and status=quoted
+17. User confirms selected quote and funding instruction
+18. Backend locks order and quote
+19. User funding/payment instruction goes to selected solver/rail
+20. Solver executes crypto/TOKEN purchase or internal TOKEN-leg
+21. TOKEN-leg is reflected in Pay3Flow wallet/internal ledger
+22. Solver executes money-leg to recipient
+23. Solver submits proof
+24. Backend verifies proof
+25. Backend finalizes done or disputed/failed
+26. Frontend receives search results and status through HTTP/WS
 ```
 
 ## 8. Scoring Algorithm Для Quotes
@@ -703,6 +743,63 @@ GET /api/exchange/orders/:id
 GET /api/exchange/orders/:id/quotes
 ```
 
+Live route/search events:
+
+```text
+WS /api/exchange/orders/:id/live
+```
+
+События WS для MVP:
+
+```text
+order_status
+search_started
+entry_leg_found
+exit_search_started
+route_candidate_found
+best_route_updated
+route_rejected
+search_finished
+search_failed
+```
+
+Минимальный payload route candidate:
+
+```json
+{
+  "type": "route_candidate_found",
+  "order_id": "uuid",
+  "route_id": "uuid",
+  "status": "complete",
+  "source_amount_minor": 10000000,
+  "source_currency": "AMD",
+  "entry_asset": "USDT",
+  "entry_network": "ERC20",
+  "target_amount_minor": 2035000,
+  "target_currency": "RUB",
+  "spread_bps": 8,
+  "fee_minor": 12000,
+  "eta_minutes": 12,
+  "is_current_best": true,
+  "legs": [
+    {
+      "kind": "entry",
+      "from": "AMD",
+      "to": "USDT",
+      "provider": "am-p2p-mock",
+      "status": "found"
+    },
+    {
+      "kind": "exit",
+      "from": "USDT",
+      "to": "RUB",
+      "provider": "ru-buyer-mock",
+      "status": "found"
+    }
+  ]
+}
+```
+
 Подтвердить выбранный quote:
 
 ```text
@@ -877,11 +974,13 @@ order переходит в done.
 
 Минимальный frontend не должен быть маркетинговой страницей. Нужен рабочий кабинет.
 
+Важно: frontend в целом считать почти готовым. Не нужно планировать большую переделку интерфейса. Основная оставшаяся работа: подключить live-поиск связок и показать найденные маршруты в боковой панели.
+
 Страницы:
 
 - login/register;
 - new exchange order;
-- quotes/route selection;
+- quotes/route selection через боковую панель связок;
 - order status;
 - history;
 - order details.
@@ -911,6 +1010,20 @@ order переходит в done.
 - funding instruction после выбора quote;
 - что Pay3Flow показывает маршрут и статус, но пользователь сам подтверждает funding/payment;
 - если disputed/failed, понятная причина.
+
+Боковая панель связок:
+
+- открывается/обновляется после отправки формы order;
+- подписывается на `WS /api/exchange/orders/:id/live`;
+- показывает partial candidates, когда найден вход `AMD -> crypto`, но ещё ищется выход;
+- показывает complete candidates, когда найден полный route `AMD -> crypto -> RUB`;
+- группирует варианты по промежуточному asset/network, например `USDT ERC20`, `ETH Ethereum`, `BTC Binance`, `SOL`;
+- показывает spread/profit/loss в процентах и bps;
+- явно отличает profitable, breakeven и small-loss route;
+- помечает текущий лучший route;
+- обновляет лучший route без перезагрузки страницы;
+- позволяет выбрать/подтвердить только complete route;
+- не блокирует UI ожиданием всех вариантов.
 
 Не показывать:
 
@@ -1175,18 +1288,20 @@ order переходит в done.
 
 ## Фаза EX-10 - Frontend MVP
 
-- [ ] EX-10.1. Страница создания exchange order.
-- [ ] EX-10.2. Отображение quotes.
-- [ ] EX-10.3. Подтверждение quote.
-- [ ] EX-10.4. Страница статуса order.
-- [ ] EX-10.5. История orders.
-- [ ] EX-10.6. Live status через WebSocket или polling.
+- [ ] EX-10.1. Проверить, что существующая страница создания exchange order покрывает ввод суммы и corridor AM/AMD -> RU/RUB.
+- [ ] EX-10.2. Подключить боковую панель связок к live events order.
+- [ ] EX-10.3. Показывать partial связки: найден вход `AMD -> crypto`, выход ещё ищется.
+- [ ] EX-10.4. Показывать complete связки: найден полный route `AMD -> crypto -> RUB`.
+- [ ] EX-10.5. Группировать связки по промежуточной crypto/network.
+- [ ] EX-10.6. Live status/search через WebSocket, polling только как fallback.
 - [ ] EX-10.7. Ошибки backend показываются понятно.
 - [ ] EX-10.8. Русская локализация основных статусов.
 - [ ] EX-10.9. Список доступных corridors тянуть с backend, не хардкодить валюты на frontend.
 - [ ] EX-10.10. Для MVP backend отдаёт один enabled corridor: AMD -> RUB.
 - [ ] EX-10.11. После выбора quote показать funding instruction и consent.
 - [ ] EX-10.12. UI должен быть простым: пользователь видит перевод, сумму, курс, комиссию, ETA и условия; technical TOKEN details можно раскрывать в details/terms.
+- [ ] EX-10.13. Боковая панель не ждёт окончания всего поиска: новые связки появляются по мере нахождения.
+- [ ] EX-10.14. Пользователь может подтвердить только complete связку, partial route остаётся informational/loading.
 
 Приёмка:
 
@@ -1194,6 +1309,9 @@ order переходит в done.
 - На мобильном форма не ломается.
 - UI не содержит зашитого списка будущих валют.
 - Пользователь не может запустить settlement без подтверждения funding instruction.
+- После ввода суммы frontend показывает live-поиск связок в боковой панели.
+- Сначала может появиться partial входной вариант, затем complete route.
+- Лучший route обновляется по WS без ручного refresh.
 
 ## Фаза EX-11 - Safety Before Real Money
 
@@ -1233,7 +1351,11 @@ order переходит в done.
 ```text
 Один пользователь создаёт order AM/AMD -> RU/RUB.
 Backend находит fake solver'ов через fmatch или fallback.
-Backend получает минимум два quotes.
+Backend параллельно ищет входные связки AMD -> crypto.
+Backend сразу запускает поиск выхода crypto -> RUB для каждой найденной входной связки.
+Backend отправляет partial и complete связки во frontend через WS.
+Frontend показывает связки в боковой панели.
+Backend получает минимум два complete route/quotes.
 Backend выбирает winner.
 Пользователь подтверждает funding instruction.
 Settlement проходит через mock TOKEN ledger.
