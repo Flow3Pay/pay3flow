@@ -69,8 +69,10 @@ where
     }
 
     let quotes = repo::quotes_for_order(pool, &order.id).await?;
-    let solver_by_id: HashMap<Uuid, ExchangeSolver> =
-        solvers.into_iter().map(|solver| (solver.id, solver)).collect();
+    let solver_by_id: HashMap<Uuid, ExchangeSolver> = solvers
+        .into_iter()
+        .map(|solver| (solver.id, solver))
+        .collect();
     let candidates = quotes
         .into_iter()
         .filter_map(|quote| {
@@ -219,6 +221,7 @@ mod tests {
             funding_instruction_id: None,
             funding_status: FundingInstructionStatus::NotStarted,
             status: OrderStatus::Quoting,
+            correlation_id: Uuid::new_v4(),
             deadline_at: None,
             selected_quote_id: None,
             failure_code: None,
@@ -381,7 +384,10 @@ mod tests {
             ],
             now,
         );
-        assert_eq!(choose_winner(&scored).expect("winner").quote.id, lower_risk.id);
+        assert_eq!(
+            choose_winner(&scored).expect("winner").quote.id,
+            lower_risk.id
+        );
 
         let solver_a = solver(SolverStatus::Active, 10);
         let solver_b = solver(SolverStatus::Active, 10);

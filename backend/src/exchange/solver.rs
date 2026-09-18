@@ -133,7 +133,9 @@ impl Default for MockRouteQuoteSource {
 
 impl MockRouteQuoteSource {
     fn profile_for(&self, slug: &str) -> Option<FakeSolver> {
-        fake_solvers().into_iter().find(|solver| solver.slug == slug)
+        fake_solvers()
+            .into_iter()
+            .find(|solver| solver.slug == slug)
     }
 }
 
@@ -313,6 +315,7 @@ mod tests {
             funding_instruction_id: None,
             funding_status: FundingInstructionStatus::NotStarted,
             status,
+            correlation_id: Uuid::new_v4(),
             deadline_at: None,
             selected_quote_id: None,
             failure_code: None,

@@ -8,8 +8,9 @@ use uuid::Uuid;
 use crate::core::error::AppError;
 use crate::core::state::AppState;
 use crate::exchange::{
-    auction, discovery, repo, solver, ExchangeOrder, ExchangeQuote, FundingInstruction, Minor,
-    NewExchangeOrder, OrderStatus,
+    auction, discovery, ledger, repo, solver, AuditEvent, ExchangeOrder, ExchangeProof,
+    ExchangeQuote, ExchangeSettlement, FundingInstruction, Minor, NewExchangeOrder, OrderStatus,
+    TokenLedgerOperation,
 };
 use crate::server::routing::payments::auth_user_id;
 
@@ -46,12 +47,27 @@ pub struct ConfirmOrderReq {
 pub struct ConfirmOrderRes {
     pub order: ExchangeOrder,
     pub funding_instruction: FundingInstruction,
+    pub settlement: ExchangeSettlement,
 }
 
 #[derive(Debug, Serialize)]
 pub struct FundingConfirmRes {
     pub order: ExchangeOrder,
     pub funding_instruction: FundingInstruction,
+    pub settlement: ExchangeSettlement,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SubmitProofReq {
+    pub proof_type: String,
+    pub proof_payload: serde_json::Value,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SubmitProofRes {
+    pub order: ExchangeOrder,
+    pub settlement: ExchangeSettlement,
+    pub proof: ExchangeProof,
 }
 
 pub async fn create_order(
@@ -82,6 +98,12 @@ pub async fn create_order(
     let order = repo::create_order_idempotent(&state.pool, &order)
         .await
         .map_err(map_exchange_err)?;
+    tracing::info!(
+        order_id = %order.id,
+        correlation_id = %order.correlation_id,
+        status = %order.status.as_str(),
+        "exchange.order.created"
+    );
     Ok(Json(order))
 }
 
@@ -135,6 +157,13 @@ pub async fn discover_solvers(
         discovery::discover_solvers_for_order(&state.pool, &state.ap, state.redis.as_ref(), &order)
             .await
             .map_err(map_exchange_err)?;
+    tracing::info!(
+        order_id = %order.id,
+        correlation_id = %order.correlation_id,
+        candidates = result.candidates.len(),
+        source = %result.source.as_str(),
+        "exchange.discovery.completed"
+    );
     Ok(Json(result))
 }
 
@@ -149,6 +178,13 @@ pub async fn run_auction(
     let result = auction::run_auction_for_order(&state.pool, &order, &quote_source)
         .await
         .map_err(map_exchange_err)?;
+    tracing::info!(
+        order_id = %result.order.id,
+        correlation_id = %result.order.correlation_id,
+        quote_id = %result.selected_quote.id,
+        status = %result.order.status.as_str(),
+        "exchange.auction.completed"
+    );
     Ok(Json(result))
 }
 
@@ -200,9 +236,17 @@ pub async fn confirm_order(
             .await
             .map_err(AppError::from)?
             .ok_or_else(|| AppError::NotFound("funding instruction not found".into()))?;
+        let quote = repo::quote_by_id(&state.pool, &instruction.quote_id)
+            .await
+            .map_err(AppError::from)?
+            .ok_or_else(|| AppError::NotFound("exchange quote not found".into()))?;
+        let settlement = repo::ensure_settlement_for_order(&state.pool, &order, &quote)
+            .await
+            .map_err(map_exchange_err)?;
         return Ok(Json(ConfirmOrderRes {
             order,
             funding_instruction: instruction,
+            settlement,
         }));
     }
 
@@ -222,9 +266,22 @@ pub async fn confirm_order(
         repo::create_funding_instruction_for_quote(&state.pool, &order, &quote)
             .await
             .map_err(map_exchange_err)?;
+    let settlement = repo::settlement_by_order_id(&state.pool, &order.id)
+        .await
+        .map_err(AppError::from)?
+        .ok_or_else(|| AppError::NotFound("exchange settlement not found".into()))?;
+    tracing::info!(
+        order_id = %order.id,
+        correlation_id = %order.correlation_id,
+        funding_instruction_id = %funding_instruction.id,
+        settlement_id = %settlement.id,
+        status = %order.status.as_str(),
+        "exchange.order.confirmed"
+    );
     Ok(Json(ConfirmOrderRes {
         order,
         funding_instruction,
+        settlement,
     }))
 }
 
@@ -247,9 +304,116 @@ pub async fn confirm_funding(
         repo::confirm_funding_instruction(&state.pool, &order, &instruction)
             .await
             .map_err(map_exchange_err)?;
+    let (order, funding_instruction, settlement) =
+        repo::execute_settlement_after_user_funding(&state.pool, &order, &funding_instruction)
+            .await
+            .map_err(map_exchange_err)?;
+    tracing::info!(
+        order_id = %order.id,
+        correlation_id = %order.correlation_id,
+        funding_instruction_id = %funding_instruction.id,
+        settlement_id = %settlement.id,
+        status = %order.status.as_str(),
+        "exchange.funding.confirmed"
+    );
     Ok(Json(FundingConfirmRes {
         order,
         funding_instruction,
+        settlement,
+    }))
+}
+
+pub async fn get_settlement(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<Json<ExchangeSettlement>, AppError> {
+    let user_id = auth_user_id(&state, &headers)?;
+    let order = owned_order(&state, &user_id, &id).await?;
+    let settlement = repo::settlement_by_order_id(&state.pool, &order.id)
+        .await
+        .map_err(AppError::from)?
+        .ok_or_else(|| AppError::NotFound("exchange settlement not found".into()))?;
+    Ok(Json(settlement))
+}
+
+pub async fn get_proofs(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Vec<ExchangeProof>>, AppError> {
+    let user_id = auth_user_id(&state, &headers)?;
+    let order = owned_order(&state, &user_id, &id).await?;
+    let settlement = repo::settlement_by_order_id(&state.pool, &order.id)
+        .await
+        .map_err(AppError::from)?
+        .ok_or_else(|| AppError::NotFound("exchange settlement not found".into()))?;
+    let proofs = repo::proofs_for_settlement(&state.pool, &settlement.id)
+        .await
+        .map_err(AppError::from)?;
+    Ok(Json(proofs))
+}
+
+pub async fn get_ledger_operations(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Vec<TokenLedgerOperation>>, AppError> {
+    let user_id = auth_user_id(&state, &headers)?;
+    let order = owned_order(&state, &user_id, &id).await?;
+    let operations = ledger::operations_for_order(&state.pool, &order.id)
+        .await
+        .map_err(AppError::from)?;
+    Ok(Json(operations))
+}
+
+pub async fn get_audit_events(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Vec<AuditEvent>>, AppError> {
+    let user_id = auth_user_id(&state, &headers)?;
+    let order = owned_order(&state, &user_id, &id).await?;
+    let events = repo::audit_events_for_entity(&state.pool, "exchange_order", &order.id)
+        .await
+        .map_err(AppError::from)?;
+    Ok(Json(events))
+}
+
+pub async fn submit_proof(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(req): Json<SubmitProofReq>,
+) -> Result<Json<SubmitProofRes>, AppError> {
+    let user_id = auth_user_id(&state, &headers)?;
+    let order = owned_order(&state, &user_id, &id).await?;
+    let settlement = repo::settlement_by_order_id(&state.pool, &order.id)
+        .await
+        .map_err(AppError::from)?
+        .ok_or_else(|| AppError::NotFound("exchange settlement not found".into()))?;
+    let (order, settlement, proof) = repo::submit_and_verify_proof(
+        &state.pool,
+        &order,
+        &settlement,
+        &req.proof_type,
+        req.proof_payload,
+    )
+    .await
+    .map_err(map_exchange_err)?;
+    tracing::info!(
+        order_id = %order.id,
+        correlation_id = %order.correlation_id,
+        settlement_id = %settlement.id,
+        proof_id = %proof.id,
+        proof_status = %proof.verification_status.as_str(),
+        status = %order.status.as_str(),
+        "exchange.proof.submitted"
+    );
+    Ok(Json(SubmitProofRes {
+        order,
+        settlement,
+        proof,
     }))
 }
 
@@ -368,6 +532,11 @@ fn map_exchange_err(err: anyhow::Error) -> AppError {
         || msg.contains("solver")
         || msg.contains("winner")
         || msg.contains("auction")
+        || msg.contains("ledger")
+        || msg.contains("settlement")
+        || msg.contains("proof")
+        || msg.contains("release")
+        || msg.contains("rollback")
         || msg.contains("no valid")
         || msg.contains("expired")
         || msg.contains("must be")
@@ -419,6 +588,7 @@ mod tests {
             funding_instruction_id: None,
             funding_status: FundingInstructionStatus::NotStarted,
             status: OrderStatus::Created,
+            correlation_id: Uuid::new_v4(),
             deadline_at: None,
             selected_quote_id: None,
             failure_code: None,

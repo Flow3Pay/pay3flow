@@ -10,8 +10,8 @@ use tracing::Level;
 
 use crate::core::state::AppState;
 use crate::server::routing::{
-    activitypub, auth, banks, exchange, matcher, oauth, pairs, payments, payments_ws, rates, solver,
-    ws,
+    activitypub, auth, banks, exchange, matcher, oauth, pairs, payments, payments_ws, rates,
+    solver, ws,
 };
 
 pub fn router(state: AppState) -> Router {
@@ -48,14 +48,28 @@ pub fn router(state: AppState) -> Router {
             post(exchange::confirm_funding),
         )
         .route(
+            "/api/exchange/orders/:id/settlement",
+            get(exchange::get_settlement),
+        )
+        .route(
+            "/api/exchange/orders/:id/ledger",
+            get(exchange::get_ledger_operations),
+        )
+        .route("/api/exchange/orders/:id/proofs", get(exchange::get_proofs))
+        .route(
+            "/api/exchange/orders/:id/proof",
+            post(exchange::submit_proof),
+        )
+        .route(
+            "/api/debug/exchange/orders/:id/audit",
+            get(exchange::get_audit_events),
+        )
+        .route(
             "/api/exchange/orders/:id/cancel",
             post(exchange::cancel_order),
         )
         .route("/api/solver/orders/open", get(solver::open_orders))
-        .route(
-            "/api/solver/orders/:id/quotes",
-            post(solver::submit_quote),
-        )
+        .route("/api/solver/orders/:id/quotes", post(solver::submit_quote))
         .route("/api/exchange-pairs", get(pairs::list))
         .route("/api/admin/exchange-pairs", post(pairs::admin_create))
         .route("/api/admin/exchange-pairs/:id", post(pairs::admin_update))

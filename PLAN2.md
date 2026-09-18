@@ -1124,13 +1124,13 @@ order переходит в done.
 
 ## Фаза EX-7 - Mock TOKEN Ledger
 
-- [ ] EX-7.1. Добавить таблицы ledger.
-- [ ] EX-7.2. Реализовать reserve.
-- [ ] EX-7.3. Реализовать lock.
-- [ ] EX-7.4. Реализовать release.
-- [ ] EX-7.5. Реализовать rollback.
-- [ ] EX-7.6. Добавить idempotency для ledger operations.
-- [ ] EX-7.7. Добавить tests против double release/double rollback.
+- [x] EX-7.1. Добавить таблицы ledger.
+- [x] EX-7.2. Реализовать reserve.
+- [x] EX-7.3. Реализовать lock.
+- [x] EX-7.4. Реализовать release.
+- [x] EX-7.5. Реализовать rollback.
+- [x] EX-7.6. Добавить idempotency для ledger operations.
+- [x] EX-7.7. Добавить tests против double release/double rollback.
 
 Приёмка:
 
@@ -1140,16 +1140,16 @@ order переходит в done.
 
 ## Фаза EX-8 - Settlement И Proof
 
-- [ ] EX-8.1. Реализовать создание `exchange_settlements` после confirm/lock.
-- [ ] EX-8.2. Реализовать funding instruction lifecycle: created -> shown_to_user -> user_confirmed -> solver_acknowledged.
-- [ ] EX-8.3. Реализовать token-leg execution через mock ledger после user funding confirmation.
-- [ ] EX-8.4. Отразить TOKEN-leg в Pay3Flow wallet/internal ledger.
-- [ ] EX-8.5. Реализовать money-leg fake execution.
-- [ ] EX-8.6. Реализовать proof submit.
-- [ ] EX-8.7. Реализовать proof verification.
-- [ ] EX-8.8. Реализовать переход `proof_pending -> done`.
-- [ ] EX-8.9. Реализовать failure paths.
-- [ ] EX-8.10. Реализовать dispute paths.
+- [x] EX-8.1. Реализовать создание `exchange_settlements` после confirm/lock.
+- [x] EX-8.2. Реализовать funding instruction lifecycle: created -> shown_to_user -> user_confirmed -> solver_acknowledged.
+- [x] EX-8.3. Реализовать token-leg execution через mock ledger после user funding confirmation.
+- [x] EX-8.4. Отразить TOKEN-leg в Pay3Flow wallet/internal ledger.
+- [x] EX-8.5. Реализовать money-leg fake execution.
+- [x] EX-8.6. Реализовать proof submit.
+- [x] EX-8.7. Реализовать proof verification.
+- [x] EX-8.8. Реализовать переход `proof_pending -> done`.
+- [x] EX-8.9. Реализовать failure paths.
+- [x] EX-8.10. Реализовать dispute paths.
 
 Приёмка:
 
@@ -1161,11 +1161,11 @@ order переходит в done.
 
 ## Фаза EX-9 - Audit Trail И Observability
 
-- [ ] EX-9.1. Все create/update/status события пишут `audit_events`.
-- [ ] EX-9.2. Добавить correlation_id для order.
-- [ ] EX-9.3. Логи структурированные.
-- [ ] EX-9.4. Не логировать секреты и полные реквизиты.
-- [ ] EX-9.5. Добавить debug endpoint для просмотра audit по order.
+- [x] EX-9.1. Все create/update/status события пишут `audit_events`.
+- [x] EX-9.2. Добавить correlation_id для order.
+- [x] EX-9.3. Логи структурированные.
+- [x] EX-9.4. Не логировать секреты и полные реквизиты.
+- [x] EX-9.5. Добавить debug endpoint для просмотра audit по order.
 
 Приёмка:
 

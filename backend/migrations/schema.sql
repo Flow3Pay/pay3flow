@@ -212,6 +212,7 @@ CREATE TABLE IF NOT EXISTS exchange_orders (
     funding_instruction_id UUID,
     funding_status TEXT NOT NULL DEFAULT 'not_started',
     status TEXT NOT NULL DEFAULT 'created',
+    correlation_id UUID NOT NULL DEFAULT gen_random_uuid(),
     deadline_at TIMESTAMPTZ,
     selected_quote_id UUID,
     failure_code TEXT,
@@ -225,6 +226,10 @@ CREATE INDEX IF NOT EXISTS exchange_orders_user_created_idx
     ON exchange_orders (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS exchange_orders_status_created_idx
     ON exchange_orders (status, created_at);
+
+ALTER TABLE exchange_orders ADD COLUMN IF NOT EXISTS correlation_id UUID NOT NULL DEFAULT gen_random_uuid();
+CREATE INDEX IF NOT EXISTS exchange_orders_correlation_idx
+    ON exchange_orders (correlation_id);
 
 CREATE TABLE IF NOT EXISTS exchange_solvers (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -277,6 +282,46 @@ CREATE INDEX IF NOT EXISTS exchange_quotes_solver_idx
     ON exchange_quotes (solver_id, created_at);
 CREATE INDEX IF NOT EXISTS exchange_quotes_status_expires_idx
     ON exchange_quotes (status, expires_at);
+
+CREATE TABLE IF NOT EXISTS token_ledger_accounts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    owner_type TEXT NOT NULL,
+    owner_id UUID NOT NULL,
+    currency TEXT NOT NULL,
+    available_minor BIGINT NOT NULL DEFAULT 0,
+    reserved_minor BIGINT NOT NULL DEFAULT 0,
+    locked_minor BIGINT NOT NULL DEFAULT 0,
+    metadata JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (owner_type, owner_id, currency),
+    CHECK (available_minor >= 0),
+    CHECK (reserved_minor >= 0),
+    CHECK (locked_minor >= 0)
+);
+
+CREATE INDEX IF NOT EXISTS token_ledger_accounts_owner_idx
+    ON token_ledger_accounts (owner_type, owner_id);
+
+CREATE TABLE IF NOT EXISTS token_ledger_operations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    idempotency_key TEXT NOT NULL UNIQUE,
+    account_id UUID NOT NULL REFERENCES token_ledger_accounts(id) ON DELETE CASCADE,
+    operation_type TEXT NOT NULL,
+    amount_minor BIGINT NOT NULL,
+    currency TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'applied',
+    related_order_id UUID REFERENCES exchange_orders(id) ON DELETE SET NULL,
+    related_settlement_id UUID,
+    previous_operation_id UUID REFERENCES token_ledger_operations(id) ON DELETE SET NULL,
+    metadata JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS token_ledger_operations_account_idx
+    ON token_ledger_operations (account_id, created_at);
+CREATE INDEX IF NOT EXISTS token_ledger_operations_order_idx
+    ON token_ledger_operations (related_order_id, created_at);
 
 CREATE TABLE IF NOT EXISTS funding_instructions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

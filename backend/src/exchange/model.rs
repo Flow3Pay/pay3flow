@@ -4,8 +4,8 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::exchange::status::{
-    FundingInstructionStatus, LegStatus, OrderStatus, ProofVerificationStatus, QuoteStatus,
-    SettlementStatus, SolverStatus,
+    FundingInstructionStatus, LedgerOperationStatus, LedgerOperationType, LegStatus, OrderStatus,
+    ProofVerificationStatus, QuoteStatus, SettlementStatus, SolverStatus,
 };
 
 pub type Minor = i64;
@@ -61,6 +61,7 @@ pub struct ExchangeOrder {
     pub funding_instruction_id: Option<Uuid>,
     pub funding_status: FundingInstructionStatus,
     pub status: OrderStatus,
+    pub correlation_id: Uuid,
     pub deadline_at: Option<DateTime<Utc>>,
     pub selected_quote_id: Option<Uuid>,
     pub failure_code: Option<String>,
@@ -237,6 +238,49 @@ pub struct NewExchangeProof {
     pub proof_payload: Value,
     pub verification_status: ProofVerificationStatus,
     pub verified_by: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TokenLedgerAccount {
+    pub id: Uuid,
+    pub owner_type: String,
+    pub owner_id: Uuid,
+    pub currency: String,
+    pub available_minor: Minor,
+    pub reserved_minor: Minor,
+    pub locked_minor: Minor,
+    pub metadata: Value,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TokenLedgerOperation {
+    pub id: Uuid,
+    pub idempotency_key: String,
+    pub account_id: Uuid,
+    pub operation_type: LedgerOperationType,
+    pub amount_minor: Minor,
+    pub currency: String,
+    pub status: LedgerOperationStatus,
+    pub related_order_id: Option<Uuid>,
+    pub related_settlement_id: Option<Uuid>,
+    pub previous_operation_id: Option<Uuid>,
+    pub metadata: Value,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewTokenLedgerOperation {
+    pub idempotency_key: String,
+    pub account_id: Uuid,
+    pub operation_type: LedgerOperationType,
+    pub amount_minor: Minor,
+    pub currency: String,
+    pub related_order_id: Option<Uuid>,
+    pub related_settlement_id: Option<Uuid>,
+    pub previous_operation_id: Option<Uuid>,
+    pub metadata: Value,
 }
 
 #[derive(Debug, Clone, Serialize)]

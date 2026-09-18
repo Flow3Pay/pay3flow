@@ -336,6 +336,63 @@ impl ProofVerificationStatus {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LedgerOperationType {
+    Reserve,
+    Lock,
+    Release,
+    Rollback,
+    Credit,
+}
+
+impl LedgerOperationType {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Reserve => "reserve",
+            Self::Lock => "lock",
+            Self::Release => "release",
+            Self::Rollback => "rollback",
+            Self::Credit => "credit",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "reserve" => Some(Self::Reserve),
+            "lock" => Some(Self::Lock),
+            "release" => Some(Self::Release),
+            "rollback" => Some(Self::Rollback),
+            "credit" => Some(Self::Credit),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LedgerOperationStatus {
+    Applied,
+    Replayed,
+}
+
+impl LedgerOperationStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Applied => "applied",
+            Self::Replayed => "replayed",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "applied" => Some(Self::Applied),
+            "replayed" => Some(Self::Replayed),
+            _ => None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

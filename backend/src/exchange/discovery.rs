@@ -385,6 +385,7 @@ mod tests {
             funding_instruction_id: None,
             funding_status: FundingInstructionStatus::NotStarted,
             status: OrderStatus::Created,
+            correlation_id: Uuid::new_v4(),
             deadline_at: None,
             selected_quote_id: None,
             failure_code: None,
