@@ -267,6 +267,7 @@ decision
 - Этот коридор нельзя хардкодить в бизнес-логике. Он должен жить в конфиге, seed-данных, таблицах или тестовых fixtures.
 - Код должен быть generic по валютам и странам: `source_currency`, `target_currency`, `source_country`, `target_country`.
 - В MVP включён только один коридор через данные: Armenia/AMD -> Russia/RUB.
+- Публичный seed `exchange_pairs` для picker'а тоже должен начинаться с одной enabled связки: Armenia/AMD -> Russia/RUB. Большой банковский каталог пока не нужен; новые связки добавляются позже через БД/admin/config.
 - Новые валюты и страны позже добавляются через БД/admin/config без переписывания core logic.
 - TOKEN в MVP: mock ledger внутри backend.
 - Funding flow MVP: user -> Pay3Flow form -> solver -> Pay3Flow wallet/internal ledger -> solver -> recipient.
