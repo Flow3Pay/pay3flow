@@ -2,7 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { Bank, fetchBanks, paymentMethodBaseName, paymentMethodVariants, schemeIconUrl } from "@/lib/banks";
+import {
+  Bank,
+  fetchBanks,
+  paymentMethodBaseName,
+  paymentMethodVariants,
+  schemeIconUrl,
+  uniquePaymentMethods,
+} from "@/lib/banks";
 
 import styles from "./pair-picker.module.css";
 
@@ -150,6 +157,7 @@ export function PairPicker({
           nextItems = [...pageItems, ...cur.items];
           nextStart = page.offset;
         }
+        nextItems = uniquePaymentMethods(nextItems);
         if (nextItems.length > MAX_ROWS) {
           const excess = nextItems.length - MAX_ROWS;
           nextItems = nextItems.slice(excess);

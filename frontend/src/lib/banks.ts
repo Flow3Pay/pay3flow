@@ -67,6 +67,16 @@ export function paymentMethodVariants(bank: Bank): Bank[] {
   }));
 }
 
+export function uniquePaymentMethods(banks: Bank[]): Bank[] {
+  const seen = new Set<string>();
+  return banks.filter((bank) => {
+    const key = `${normalizeScheme(bank.name)}:${normalizeScheme(bank.schemes[0] ?? "")}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 /**
  * Fetch a paged slice of the backend payment-method directory. No auth: the
  * directory is the source of truth for the swap form's sell/buy method pickers.

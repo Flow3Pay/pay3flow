@@ -4,7 +4,7 @@
 //! real without shipping image assets. The admin endpoint can extend or
 //! disable any row.
 
-use crate::banks::{repo_upsert, NewBank};
+use crate::banks::{repo_set_status, repo_upsert, NewBank};
 use crate::db::DbPool;
 
 /// Method logos come from the provider's own site favicon (Google favicon service).
@@ -505,6 +505,9 @@ pub async fn seed_banks(pool: &DbPool) -> anyhow::Result<usize> {
     let banks = build_banks();
     for bank in &banks {
         repo_upsert(pool, bank).await?;
+    }
+    for (name, _, _, _) in BANKS {
+        let _ = repo_set_status(pool, name, "disabled").await?;
     }
     Ok(banks.len())
 }
