@@ -30,7 +30,7 @@
   --page-bg: #fdfdfb;
 }
 
-/* Cow.fi-style theme for the landing page */
+/* App theme: dark backdrop (temporary dark-theme-backgraund) */
 .cowTheme {
   --color-bg: #fdfdfb;
   --color-paper: #ffffff;
@@ -54,7 +54,21 @@
   --shadow-pop: none;
 
   min-height: 100vh;
-  background: #fdfdfb;
+  isolation: isolate;
+  background-color: #0b0e14;
+}
+
+/* Blurred dark backdrop */
+.cowTheme::before {
+  content: "";
+  position: fixed;
+  inset: -8px;
+  z-index: -1;
+  background-image: url("/dark-theme-backgraund.jpg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  filter: blur(8px);
 }
 
 html {

@@ -12,6 +12,7 @@ import {
   formatUsd,
 } from "./tokens";
 import { TokenPicker } from "./token-picker";
+import { SidePanel } from "./side-panel";
 
 import {
   createRatesSocket,
@@ -283,12 +284,10 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
 
   const isCtaEnabled = !connected || hasAmount;
 
-  const statusDotClass =
-    ratesStatus === "open" ? styles.dotOpen : ratesStatus === "connecting" ? styles.dotConnecting : styles.dotClosed;
-
   return (
     <section className={styles.shell} id="swap">
-      <div className={styles.card} ref={settingsRef}>
+      <div className={styles.dock}>
+        <div className={styles.card} ref={settingsRef}>
         <div className={styles.head}>
           <div className={styles.tabs} role="tablist" aria-label="Режимы">
             {MODES.map((m) => (
@@ -551,39 +550,6 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
           <span className={styles.slippageValue}>{autoSlippage ? "Авто" : `${slippage}%`}</span>
         </button>
 
-        {quote && (
-          <div className={styles.routes}>
-            <div className={styles.routesHead}>
-              <span className={`${styles.statusDot} ${statusDotClass}`} aria-hidden="true" />
-              <span className={styles.routesTitle}>Маршруты ({sourceLabel ?? "—"}, {intervalSec} c)</span>
-              <span className={styles.routesTime}>
-                {new Date(quote.quotedAt).toLocaleTimeString("ru-RU")}
-              </span>
-            </div>
-            {quote.candidates.length > 0 ? (
-              <ol className={styles.routesList}>
-                {quote.candidates.slice(0, 3).map((c) => (
-                  <li
-                    key={`${c.shortId ?? c.name}-${c.rank}`}
-                    className={c.rank === quote.best?.rank ? styles.routeBest : styles.routeRow}
-                  >
-                    <span className={styles.routeRank}>#{c.rank}</span>
-                    <span className={styles.routeName}>{c.name}</span>
-                    <span className={styles.routeFee}>
-                      {c.price != null ? formatPercentage(c.price * 100) : "—"}
-                    </span>
-                    {c.quality != null && (
-                      <span className={styles.routeQuality}>релевантность {formatNumber(c.quality, 3)}</span>
-                    )}
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <div className={styles.routesEmpty}>Подходящих эквайеров под пару не найдено</div>
-            )}
-          </div>
-        )}
-
         {hasAmount && (
           <div className={styles.warnRow}>
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -628,6 +594,17 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
         )}
 
         <div className={styles.powered}>Сеть Pay3Flow · рельсы SEBA · SEPA · ERC-20 · TRC-20</div>
+        </div>
+
+        <SidePanel
+          active={hasAmount}
+          sell={sell}
+          buy={buy}
+          rate={rate}
+          feeLabel={feeLabel}
+          quote={quote}
+          ratesStatus={ratesStatus}
+        />
       </div>
 
       <TokenPicker

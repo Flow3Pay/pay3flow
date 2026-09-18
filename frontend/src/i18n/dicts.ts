@@ -96,13 +96,13 @@ export const dicts: Record<Lang, Dict> = {
           title: "Pay3Flow Network",
           text: "A payment network with direct routes between people and businesses — no chains of intermediaries.",
           link: "Start paying",
-          href: "/swap",
+          href: "/",
         },
         {
           title: "Pay3Flow Exchange",
           text: "Convert and send at market rates with a transparent fee — no hidden cuts.",
           link: "Exchange now",
-          href: "/swap",
+          href: "/",
         },
       ],
     },
@@ -145,7 +145,7 @@ export const dicts: Record<Lang, Dict> = {
         {
           title: "Product",
           links: [
-            { href: "/swap", label: "Exchange" },
+            { href: "/", label: "Exchange" },
             { href: "/#how", label: "Payouts" },
             { href: "/#business", label: "Pricing" },
           ],
@@ -219,13 +219,13 @@ export const dicts: Record<Lang, Dict> = {
           title: "Сеть Pay3Flow",
           text: "Платёжная сеть с прямыми маршрутами между людьми и компаниями — без цепочек посредников.",
           link: "Начать платить",
-          href: "/swap",
+          href: "/",
         },
         {
           title: "Обмен Pay3Flow",
           text: "Конвертируйте и отправляйте по рыночному курсу с прозрачной комиссией — без скрытых наценок.",
           link: "Обменять сейчас",
-          href: "/swap",
+          href: "/",
         },
       ],
     },
@@ -268,7 +268,7 @@ export const dicts: Record<Lang, Dict> = {
         {
           title: "Продукт",
           links: [
-            { href: "/swap", label: "Обмен" },
+            { href: "/", label: "Обмен" },
             { href: "/#how", label: "Выплаты" },
             { href: "/#business", label: "Тарифы" },
           ],
