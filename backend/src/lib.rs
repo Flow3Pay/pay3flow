@@ -5,6 +5,7 @@ pub mod config;
 pub mod core;
 pub mod db;
 pub mod discovery;
+pub mod exchange;
 pub mod pairs;
 pub mod payments;
 pub mod quotes;
