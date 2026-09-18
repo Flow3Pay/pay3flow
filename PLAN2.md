@@ -1030,7 +1030,7 @@ order переходит в done.
 - [x] EX-2.4. Добавить guarded status transitions.
 - [x] EX-2.5. Добавить idempotency на create order.
 - [x] EX-2.6. Добавить unit tests для transition table.
-- [ ] EX-2.7. Добавить `docs/exchange-domain.md`.
+- [x] EX-2.7. Добавить `docs/exchange-domain.md`.
 - [x] EX-2.8. Добавить таблицу или seed-конфиг `exchange_corridors`: enabled corridor Armenia/AMD -> Russia/RUB.
 - [ ] EX-2.9. Запретить создание order для disabled corridor, но сделать это через данные, а не через hardcoded `AMD`/`RUB` в коде.
 - [x] EX-2.10. Добавить таблицу `funding_instructions` и связать её с order/quote/solver.
