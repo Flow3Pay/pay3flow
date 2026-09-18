@@ -161,6 +161,12 @@ cowprotocol-services/
 Если агент не уверен, использовать эти решения:
 
 - Первый продуктовый коридор MVP: `AMD -> RUB`.
+- Точная запись первого коридора: `AM/AMD -> RU/RUB`.
+- `AM` = Armenia как страна, ISO 3166-1 alpha-2.
+- `AMD` = Armenian dram как валюта, ISO 4217.
+- `RU` = Russia как страна, ISO 3166-1 alpha-2.
+- `RUB` = Russian ruble как валюта, ISO 4217.
+- В коде всегда хранить страну и валюту отдельно: country не равен currency.
 - Этот коридор нельзя хардкодить в бизнес-логике. Он должен жить в конфиге, seed-данных, таблицах или тестовых fixtures.
 - Код должен быть generic по валютам и странам: `source_currency`, `target_currency`, `source_country`, `target_country`.
 - В MVP включён только один коридор через данные: Armenia/AMD -> Russia/RUB.
@@ -1055,6 +1061,7 @@ Audit trail полный.
 - заменяет ли Cow `fmatch`: нет;
 - делать ли реальные деньги сразу: нет;
 - какой первый corridor: Armenia/AMD -> Russia/RUB;
+- как отличать страну от валюты: `AM`/`RU` это страны, `AMD`/`RUB` это валюты;
 - хардкодить ли AMD/RUB в коде: нет, только seed/config/data;
 - делать ли mock ledger: да;
 - сколько fake solver'ов: минимум два;
