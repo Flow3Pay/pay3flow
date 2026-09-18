@@ -60,6 +60,7 @@ impl OrderStatus {
         matches!(
             (self, next),
             (Self::Created, Self::Discovering)
+                | (Self::Created, Self::Cancelled)
                 | (Self::Discovering, Self::Quoting)
                 | (Self::Discovering, Self::Failed)
                 | (Self::Quoting, Self::Quoted)
@@ -382,6 +383,7 @@ mod tests {
             (OrderStatus::Discovering, OrderStatus::Failed),
             (OrderStatus::Quoting, OrderStatus::Failed),
             (OrderStatus::Quoting, OrderStatus::Expired),
+            (OrderStatus::Created, OrderStatus::Cancelled),
             (OrderStatus::Quoted, OrderStatus::Cancelled),
             (OrderStatus::TokenSettling, OrderStatus::Disputed),
             (OrderStatus::MoneySettling, OrderStatus::Disputed),

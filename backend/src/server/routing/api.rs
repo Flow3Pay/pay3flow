@@ -10,7 +10,7 @@ use tracing::Level;
 
 use crate::core::state::AppState;
 use crate::server::routing::{
-    activitypub, auth, banks, matcher, oauth, pairs, payments, payments_ws, rates, ws,
+    activitypub, auth, banks, exchange, matcher, oauth, pairs, payments, payments_ws, rates, ws,
 };
 
 pub fn router(state: AppState) -> Router {
@@ -26,12 +26,31 @@ pub fn router(state: AppState) -> Router {
         .route("/api/payments", post(payments::create))
         .route("/api/payments", get(payments::list))
         .route("/api/payments/:id", get(payments::get))
+        .route("/api/exchange/orders", post(exchange::create_order))
+        .route("/api/exchange/orders", get(exchange::list_orders))
+        .route("/api/exchange/orders/:id", get(exchange::get_order))
+        .route("/api/exchange/orders/:id/quotes", get(exchange::get_quotes))
+        .route(
+            "/api/exchange/orders/:id/confirm",
+            post(exchange::confirm_order),
+        )
+        .route(
+            "/api/exchange/orders/:id/funding/confirm",
+            post(exchange::confirm_funding),
+        )
+        .route(
+            "/api/exchange/orders/:id/cancel",
+            post(exchange::cancel_order),
+        )
         .route("/api/exchange-pairs", get(pairs::list))
         .route("/api/admin/exchange-pairs", post(pairs::admin_create))
         .route("/api/admin/exchange-pairs/:id", post(pairs::admin_update))
         .route("/api/banks", get(banks::list))
         .route("/api/admin/banks", post(banks::admin_create))
-        .route("/api/admin/banks/:name/status", post(banks::admin_set_status))
+        .route(
+            "/api/admin/banks/:name/status",
+            post(banks::admin_set_status),
+        )
         .route("/api/providers/:provider/webhooks", post(payments::webhook))
         .route("/api/debug/quote", post(rates::debug_quote))
         .route("/routing/fallback", post(matcher::fallback))

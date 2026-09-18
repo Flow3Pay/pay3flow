@@ -227,6 +227,21 @@ pub async fn order_by_id(pool: &DbPool, id: &Uuid) -> Result<Option<ExchangeOrde
     Ok(row.map(row_to_order))
 }
 
+pub async fn orders_for_user(
+    pool: &DbPool,
+    user_id: &Uuid,
+    limit: i64,
+) -> Result<Vec<ExchangeOrder>> {
+    let client = pool.get().await?;
+    let stmt = client
+        .prepare_cached(&format!(
+            "{SELECT_ORDER} WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2"
+        ))
+        .await?;
+    let rows = client.query(&stmt, &[user_id, &limit]).await?;
+    Ok(rows.into_iter().map(row_to_order).collect())
+}
+
 pub async fn order_by_idempotency_key(
     pool: &DbPool,
     user_id: &Uuid,
@@ -268,6 +283,10 @@ pub async fn transition_order_status(
         .execute(&stmt, &[id, &to.as_str(), &from.as_str()])
         .await?;
     Ok(changed == 1)
+}
+
+pub async fn cancel_order(pool: &DbPool, id: &Uuid, current: OrderStatus) -> Result<bool> {
+    transition_order_status(pool, id, current, OrderStatus::Cancelled).await
 }
 
 pub async fn upsert_solver(pool: &DbPool, solver: &NewExchangeSolver) -> Result<ExchangeSolver> {
@@ -463,6 +482,160 @@ pub async fn funding_instructions_for_order(
         .await?;
     let rows = client.query(&stmt, &[order_id]).await?;
     Ok(rows.into_iter().map(row_to_funding_instruction).collect())
+}
+
+pub async fn create_funding_instruction_for_quote(
+    pool: &DbPool,
+    order: &ExchangeOrder,
+    quote: &ExchangeQuote,
+) -> Result<(ExchangeOrder, FundingInstruction)> {
+    if order.id != quote.order_id {
+        bail!("quote does not belong to exchange order");
+    }
+    if order.status != OrderStatus::Quoted {
+        bail!("exchange order must be quoted before confirm");
+    }
+    if let Some(selected_quote_id) = order.selected_quote_id {
+        if selected_quote_id != quote.id {
+            bail!("exchange order already selected a different quote");
+        }
+    }
+    if quote.expires_at <= Utc::now() {
+        bail!("exchange quote expired");
+    }
+
+    let mut client = pool.get().await?;
+    let tx = client.transaction().await?;
+
+    let instruction_row = tx
+        .query_one(
+            r#"
+INSERT INTO funding_instructions
+    (order_id, quote_id, solver_id, status, method_type, amount_minor, currency,
+     destination_ref, expires_at, raw_payload)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, order_id, quote_id, solver_id, status, method_type, amount_minor, currency,
+          destination_ref, expires_at, user_confirmed_at, raw_payload, created_at, updated_at
+"#,
+            &[
+                &order.id,
+                &quote.id,
+                &quote.solver_id,
+                &FundingInstructionStatus::ShownToUser.as_str(),
+                &quote.funding_method_type,
+                &quote.source_amount_minor,
+                &quote.source_currency,
+                &format!("solver:{}:{}", quote.solver_id, quote.id),
+                &quote.expires_at,
+                &serde_json::json!({
+                    "order_id": order.id,
+                    "quote_id": quote.id,
+                    "solver_id": quote.solver_id,
+                    "display_text": "Confirm funding for the selected exchange route",
+                    "requires_user_funding": quote.requires_user_funding,
+                }),
+            ],
+        )
+        .await?;
+    let instruction = row_to_funding_instruction(instruction_row);
+
+    tx.execute(
+        "UPDATE exchange_quotes SET status = $2, updated_at = now() WHERE id = $1",
+        &[&quote.id, &QuoteStatus::Selected.as_str()],
+    )
+    .await?;
+
+    let order_row = tx
+        .query_opt(
+            r#"
+UPDATE exchange_orders
+SET funding_instruction_id = $2,
+    funding_status = $3,
+    selected_quote_id = $4,
+    status = $5,
+    updated_at = now()
+WHERE id = $1 AND status = $6
+RETURNING id, user_id, idempotency_key, source_country, source_currency, source_amount_minor,
+          source_method_type, source_method_ref, target_country, target_currency,
+          target_amount_min_minor, target_method_type, target_method_ref,
+          funding_instruction_id, funding_status, status, deadline_at, selected_quote_id,
+          failure_code, failure_message, created_at, updated_at
+"#,
+            &[
+                &order.id,
+                &instruction.id,
+                &FundingInstructionStatus::ShownToUser.as_str(),
+                &quote.id,
+                &OrderStatus::Locked.as_str(),
+                &OrderStatus::Quoted.as_str(),
+            ],
+        )
+        .await?
+        .context("exchange order was not quoted at confirm time")?;
+    let updated_order = row_to_order(order_row);
+
+    tx.commit().await?;
+    Ok((updated_order, instruction))
+}
+
+pub async fn confirm_funding_instruction(
+    pool: &DbPool,
+    order: &ExchangeOrder,
+    instruction: &FundingInstruction,
+) -> Result<(ExchangeOrder, FundingInstruction)> {
+    if order.id != instruction.order_id {
+        bail!("funding instruction does not belong to exchange order");
+    }
+    if instruction.status == FundingInstructionStatus::UserConfirmed {
+        return Ok((order.clone(), instruction.clone()));
+    }
+    if instruction.status != FundingInstructionStatus::ShownToUser {
+        bail!("funding instruction must be shown to user before confirmation");
+    }
+    if instruction.expires_at <= Utc::now() {
+        bail!("funding instruction expired");
+    }
+
+    let mut client = pool.get().await?;
+    let tx = client.transaction().await?;
+
+    let instruction_row = tx
+        .query_one(
+            r#"
+UPDATE funding_instructions
+SET status = $2, user_confirmed_at = now(), updated_at = now()
+WHERE id = $1 AND status = $3
+RETURNING id, order_id, quote_id, solver_id, status, method_type, amount_minor, currency,
+          destination_ref, expires_at, user_confirmed_at, raw_payload, created_at, updated_at
+"#,
+            &[
+                &instruction.id,
+                &FundingInstructionStatus::UserConfirmed.as_str(),
+                &FundingInstructionStatus::ShownToUser.as_str(),
+            ],
+        )
+        .await?;
+    let updated_instruction = row_to_funding_instruction(instruction_row);
+
+    let order_row = tx
+        .query_one(
+            r#"
+UPDATE exchange_orders
+SET funding_status = $2, updated_at = now()
+WHERE id = $1
+RETURNING id, user_id, idempotency_key, source_country, source_currency, source_amount_minor,
+          source_method_type, source_method_ref, target_country, target_currency,
+          target_amount_min_minor, target_method_type, target_method_ref,
+          funding_instruction_id, funding_status, status, deadline_at, selected_quote_id,
+          failure_code, failure_message, created_at, updated_at
+"#,
+            &[&order.id, &FundingInstructionStatus::UserConfirmed.as_str()],
+        )
+        .await?;
+    let updated_order = row_to_order(order_row);
+
+    tx.commit().await?;
+    Ok((updated_order, updated_instruction))
 }
 
 pub async fn insert_settlement(

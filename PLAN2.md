@@ -306,7 +306,7 @@ frontend
       -> postgres
       -> redis
       -> fmatch      (ActivityPub solver discovery/matching)
-      -> crw         (gRPC discovery/search)
+      -> crw         (legacy gRPC discovery/search; удалить отдельной cleanup-фазой, так как больше не нужен)
       -> solvers     (quotes / execution / proofs)
 
 cowprotocol-services/
@@ -1048,16 +1048,16 @@ order переходит в done.
 
 ## Фаза EX-3 - Orderbook API
 
-- [ ] EX-3.1. Реализовать `POST /api/exchange/orders`.
-- [ ] EX-3.2. Реализовать `GET /api/exchange/orders/:id`.
-- [ ] EX-3.3. Реализовать `GET /api/exchange/orders`.
-- [ ] EX-3.4. Реализовать `GET /api/exchange/orders/:id/quotes`.
-- [ ] EX-3.5. Реализовать `POST /api/exchange/orders/:id/cancel`.
-- [ ] EX-3.6. Подключить JWT ownership checks.
-- [ ] EX-3.7. Добавить validation: amount > 0, currencies not empty, countries ISO-like, deadline sane.
-- [ ] EX-3.8. Добавить tests для auth/ownership/idempotency.
-- [ ] EX-3.9. Реализовать `POST /api/exchange/orders/:id/confirm`, который создаёт funding instruction.
-- [ ] EX-3.10. Реализовать `POST /api/exchange/orders/:id/funding/confirm`, который фиксирует user consent.
+- [x] EX-3.1. Реализовать `POST /api/exchange/orders`.
+- [x] EX-3.2. Реализовать `GET /api/exchange/orders/:id`.
+- [x] EX-3.3. Реализовать `GET /api/exchange/orders`.
+- [x] EX-3.4. Реализовать `GET /api/exchange/orders/:id/quotes`.
+- [x] EX-3.5. Реализовать `POST /api/exchange/orders/:id/cancel`.
+- [x] EX-3.6. Подключить JWT ownership checks.
+- [x] EX-3.7. Добавить validation: amount > 0, currencies not empty, countries ISO-like, deadline sane.
+- [x] EX-3.8. Добавить tests для auth/ownership/idempotency.
+- [x] EX-3.9. Реализовать `POST /api/exchange/orders/:id/confirm`, который создаёт funding instruction.
+- [x] EX-3.10. Реализовать `POST /api/exchange/orders/:id/funding/confirm`, который фиксирует user consent.
 
 Приёмка:
 
@@ -1227,6 +1227,15 @@ order переходит в done.
 - [ ] EX-12.8. Playwright smoke: login -> create exchange -> quotes -> status -> history.
 - [ ] EX-12.9. Скрипт: no funding consent -> settlement не стартует.
 - [ ] EX-12.10. Скрипт: funding consent -> solver ack -> TOKEN-leg -> money-leg -> done.
+
+## Фаза CLEAN-CRW - Удаление legacy crw
+
+- [ ] CLEAN-CRW.1. Подтвердить, что `crw` больше не нужен для Pay3Flow MVP discovery/search.
+- [ ] CLEAN-CRW.2. Удалить `crw/` из репозитория и docker-compose.
+- [ ] CLEAN-CRW.3. Удалить backend `search::crw_client`, `discovery.rs`, `CRW_GRPC_URL` и startup discovery loop.
+- [ ] CLEAN-CRW.4. Обновить README, diagrams и docs, чтобы discovery шёл через `fmatch`/local fallback без `crw`.
+- [ ] CLEAN-CRW.5. Удалить связанные env vars, build.rs/proto-зависимости и неиспользуемые crates/deps.
+- [ ] CLEAN-CRW.6. Прогнать backend/frontend smoke после удаления.
 
 Приёмка MVP:
 
