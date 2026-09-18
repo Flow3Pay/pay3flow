@@ -1064,6 +1064,168 @@ order переходит в done.
 
 ## 17. Фазы Работ
 
+## 17.0. Что Должно Быть, Чтобы Реализация Считалась Соответствующей Плану
+
+Этот раздел фиксирует разницу между "backend-модель частично реализована" и
+"продукт работает так, как описано в PLAN2". План нельзя считать выполненным,
+пока не выполнены все пункты ниже.
+
+### Backend live search/order flow
+
+- Должен существовать endpoint:
+
+```text
+WS /api/exchange/orders/:id/live
+```
+
+- Этот endpoint должен быть привязан именно к `exchange_order`, а не к старому
+  `/ws/rates` или `/api/payments`.
+- После создания order backend должен уметь запускать search/auction flow и
+  отправлять события в live channel:
+
+```text
+order_status
+search_started
+entry_leg_found
+exit_search_started
+route_candidate_found
+best_route_updated
+route_rejected
+search_finished
+search_failed
+```
+
+- События должны приходить по мере нахождения вариантов, без ожидания полного
+  завершения всех entry/exit searches.
+- Backend должен поддерживать partial route:
+
+```text
+AMD -> crypto найдено, crypto -> RUB ещё ищется
+```
+
+- Backend должен поддерживать complete route:
+
+```text
+AMD -> crypto -> RUB найдено
+```
+
+- Best route может обновляться до lock/confirm, но не после `locked`.
+- Старый `/ws/rates` может остаться legacy/fallback, но он не является
+  выполнением PLAN2 live exchange flow.
+
+### Backend route search semantics
+
+- Search должен быть fan-out:
+  - параллельно искать несколько entry legs `AMD -> any crypto`;
+  - сразу запускать exit search для найденной crypto;
+  - по каждой crypto параллельно искать несколько выходов `crypto -> RUB`;
+  - публиковать partial и complete candidates в WS.
+- `exchange_quotes` остаётся storage/API-слоем для complete routes.
+- Для live UI нужна отдельная модель route candidate/связки, даже если она
+  мапится на quote после complete route.
+- Mock implementation для MVP должна симулировать минимум такие связки:
+
+```text
+AMD -> USDT ERC20 -> RUB
+AMD -> ETH Ethereum -> RUB
+AMD -> BTC Binance -> RUB
+AMD -> SOL Solana -> RUB
+```
+
+- Не нужно подключать реальные crypto/DEX/CEX providers на этом этапе.
+
+### Frontend MVP flow
+
+- Frontend должен создавать новый exchange order через:
+
+```text
+POST /api/exchange/orders
+```
+
+- Frontend не должен считать основной flow через legacy:
+
+```text
+POST /api/payments
+GET /ws/rates
+```
+
+- После создания order frontend должен подписываться на:
+
+```text
+WS /api/exchange/orders/:id/live
+```
+
+- Боковая панель должна показывать именно связки:
+  - partial route: найден вход, выход ещё ищется;
+  - complete route: полный маршрут готов к выбору;
+  - intermediate asset/network: `USDT ERC20`, `ETH Ethereum`, `BTC Binance`,
+    `SOL Solana` и т.п.;
+  - spread/profit/loss в процентах и bps;
+  - fee, ETA, expected received amount;
+  - current best marker.
+- Пользователь может выбрать/подтвердить только complete route.
+- После выбора route frontend должен вызвать:
+
+```text
+POST /api/exchange/orders/:id/confirm
+```
+
+- Confirm должен показать funding instruction и consent.
+- Settlement не должен стартовать до:
+
+```text
+POST /api/exchange/orders/:id/funding/confirm
+```
+
+- UI должен явно сохранять/передавать согласие пользователя с условиями, где
+  раскрыто, что route может использовать TOKEN/crypto settlement asset.
+
+### Safety and control gates
+
+- Должен быть kill switch для всего exchange flow.
+- Должен быть kill switch по corridor/country pair.
+- Должен быть kill switch по solver.
+- Должны быть daily limits хотя бы на уровне MVP/config.
+- Должен быть manual review status/path.
+- Должен быть admin/manual dispute resolution path:
+
+```text
+disputed -> done
+disputed -> failed
+```
+
+- Должен быть документ:
+
+```text
+docs/exchange-risk-compliance.md
+```
+
+- Нельзя включать реальные деньги, пока эти gates не готовы.
+
+### End-to-end smoke acceptance
+
+Нужны smoke scripts/tests именно для нового exchange flow, не только для
+legacy `/api/payments`.
+
+Минимальные smoke cases:
+
+- register/login -> create exchange order -> discover solvers -> auction ->
+  selected quote;
+- confirm quote -> funding instruction created;
+- no funding consent -> settlement does not start;
+- funding consent -> token-leg -> money-leg -> proof -> done;
+- bad proof -> disputed;
+- disputed -> manual resolve done/failed;
+- fmatch down -> Redis cache/local fallback;
+- repeated `Idempotency-Key` -> same order;
+- disabled corridor -> clear error;
+- enabled `AM/AMD -> RU/RUB` -> full happy path;
+- Playwright smoke: login -> create exchange -> live routes -> choose complete
+  route -> funding consent -> status/history.
+
+Только после прохождения этих проверок можно писать, что "работает как в
+PLAN2".
+
 ## Фаза EX-0 - Архитектурный Разворот
 
 - [x] EX-0.1. Зафиксировать решение: основной продукт теперь solver-based cross-border exchange, эквайеры - fallback/rail.
