@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { Bank, fetchBanks, schemeIconUrl } from "@/lib/banks";
+import { Bank, fetchBanks, paymentMethodBaseName, paymentMethodVariants, schemeIconUrl } from "@/lib/banks";
 
 import styles from "./pair-picker.module.css";
 
@@ -49,11 +49,10 @@ function BankLogo({ src, name }: { src: string; name: string }) {
   );
 }
 
-function SchemeLogo({ scheme }: { scheme: string }) {
+function SchemeMark({ scheme }: { scheme: string }) {
   const [failed, setFailed] = useState(false);
   const src = schemeIconUrl(scheme);
-  if (!src || failed) return null;
-  return (
+  if (src && !failed) return (
     <img
       className={styles.schemeLogo}
       src={src}
@@ -62,6 +61,7 @@ function SchemeLogo({ scheme }: { scheme: string }) {
       onError={() => setFailed(true)}
     />
   );
+  return <span className={styles.schemeText}>{scheme}</span>;
 }
 
 export function PairPicker({
@@ -139,14 +139,15 @@ export function PairPicker({
         const cur = dataRef.current;
         let nextItems: Bank[];
         let nextStart: number;
+        const pageItems = page.items.flatMap(paymentMethodVariants);
         if (strategy === "replace") {
-          nextItems = page.items;
+          nextItems = pageItems;
           nextStart = page.offset;
         } else if (strategy === "append") {
-          nextItems = [...cur.items, ...page.items];
+          nextItems = [...cur.items, ...pageItems];
           nextStart = cur.windowStart;
         } else {
-          nextItems = [...page.items, ...cur.items];
+          nextItems = [...pageItems, ...cur.items];
           nextStart = page.offset;
         }
         if (nextItems.length > MAX_ROWS) {
@@ -295,9 +296,10 @@ export function PairPicker({
           {firstOffset > 0 && <div style={{ height: firstOffset }} aria-hidden="true" />}
           {items.map((bank) => {
             const isSelected = selectedName === bank.name;
+            const scheme = bank.schemes[0] ?? "";
             return (
               <button
-                key={bank.id}
+                key={`${bank.id}-${bank.name}-${bank.schemes[0] ?? ""}`}
                 type="button"
                 role="option"
                 aria-selected={isSelected || undefined}
@@ -308,11 +310,12 @@ export function PairPicker({
                 <span className={styles.leg}>
                   <BankLogo src={bank.icon_url} name={bank.name} />
                   <span className={styles.legMeta}>
-                    <span className={styles.bank}>{bank.name}</span>
-                    <span className={styles.scheme}>
-                      {bank.schemes[0] && <SchemeLogo scheme={bank.schemes[0]} />}
-                      {bank.schemes.join(", ")}
-                    </span>
+                    <span className={styles.bank}>{paymentMethodBaseName(bank.name, scheme)}</span>
+                    {scheme && (
+                      <span className={styles.scheme} aria-label={scheme}>
+                        <SchemeMark scheme={scheme} />
+                      </span>
+                    )}
                   </span>
                 </span>
                 {isSelected && (

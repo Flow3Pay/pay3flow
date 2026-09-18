@@ -156,7 +156,6 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 12px;
   color: var(--color-text-soft);
   white-space: nowrap;
   overflow: hidden;
@@ -172,6 +171,12 @@
   border: 1px solid rgba(15, 23, 42, 0.12);
   padding: 3px;
   flex-shrink: 0;
+}
+
+.schemeText {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  line-height: 1;
 }
 
 .arrow {

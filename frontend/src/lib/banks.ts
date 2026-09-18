@@ -47,6 +47,25 @@ export function schemeIconUrl(scheme: string): string | undefined {
   return SCHEME_ICONS[normalizeScheme(scheme)];
 }
 
+function methodName(name: string, scheme: string): string {
+  return normalizeScheme(name).endsWith(normalizeScheme(scheme)) ? name : `${name} ${scheme}`;
+}
+
+export function paymentMethodBaseName(name: string, scheme?: string): string {
+  if (!scheme) return name;
+  const suffix = ` ${scheme}`;
+  return name.endsWith(suffix) ? name.slice(0, -suffix.length) : name;
+}
+
+export function paymentMethodVariants(bank: Bank): Bank[] {
+  if (bank.schemes.length <= 1) return [bank];
+  return bank.schemes.map((scheme) => ({
+    ...bank,
+    name: methodName(bank.name, scheme),
+    schemes: [scheme],
+  }));
+}
+
 /**
  * Fetch a paged slice of the backend payment-method directory. No auth: the
  * directory is the source of truth for the swap form's sell/buy method pickers.

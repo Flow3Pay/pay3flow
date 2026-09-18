@@ -458,25 +458,40 @@ const PAYMENT_METHODS: &[(&str, &str, &str, &str, &str)] = &[
 pub fn build_banks() -> Vec<NewBank> {
     let mut entries = BANKS
         .iter()
-        .map(|(name, country, currency, domain)| {
+        .flat_map(|(name, country, currency, domain)| {
+            schemes_for(country)
+                .split(',')
+                .map(move |scheme| {
+                    (
+                        format!("{name} {scheme}"),
+                        *country,
+                        *currency,
+                        *domain,
+                        scheme.to_string(),
+                    )
+                })
+        })
+        .chain(PAYMENT_METHODS.iter().map(|(name, country, currency, domain, scheme)| {
             (
-                *name,
+                (*name).to_string(),
                 *country,
                 *currency,
                 *domain,
-                schemes_for(country),
+                (*scheme).to_string(),
             )
-        })
-        .chain(PAYMENT_METHODS.iter().copied())
-        .map(|(name, country, currency, domain, schemes)| NewBank {
-            name: name.to_string(),
-            role: Some("both".to_string()),
-            country: Some(country.to_string()),
-            currency: Some(currency.to_string()),
-            domain: Some(domain.to_string()),
-            icon_url: Some(branded_icon_url(name, domain)),
-            schemes: Some(schemes.to_string()),
-            status: Some("enabled".to_string()),
+        }))
+        .map(|(name, country, currency, domain, schemes)| {
+            let icon_url = branded_icon_url(&name, domain);
+            NewBank {
+                name,
+                role: Some("both".to_string()),
+                country: Some(country.to_string()),
+                currency: Some(currency.to_string()),
+                domain: Some(domain.to_string()),
+                icon_url: Some(icon_url),
+                schemes: Some(schemes),
+                status: Some("enabled".to_string()),
+            }
         })
         .collect::<Vec<_>>();
     entries.sort_by(|left, right| left.name.cmp(&right.name));
@@ -500,7 +515,7 @@ mod tests {
     #[test]
     fn catalog_holds_many_worldwide_payment_methods() {
         let banks = build_banks();
-        assert!(banks.len() >= 300, "need >=300 methods, got {}", banks.len());
+        assert!(banks.len() >= 500, "need >=500 methods, got {}", banks.len());
         let countries: HashSet<&str> = banks
             .iter()
             .filter_map(|b| b.country.as_deref())
@@ -552,8 +567,35 @@ mod tests {
             .into_iter()
             .map(|b| b.name)
             .collect::<HashSet<_>>();
-        for expected in ["PayPal", "YooMoney", "Visa Network", "MIR Network", "SEPA Instant", "Pix", "UPI"] {
+        for expected in [
+            "Alfa-Bank Visa",
+            "Belarusbank MasterCard",
+            "PayPal",
+            "YooMoney",
+            "Visa Network",
+            "MIR Network",
+            "SEPA Instant",
+            "Pix",
+            "UPI",
+        ] {
             assert!(names.contains(expected), "missing payment method {expected}");
         }
+    }
+
+    #[test]
+    fn bank_card_schemes_are_individual_selectable_methods() {
+        let banks = build_banks();
+        let alfa_visa = banks
+            .iter()
+            .find(|bank| bank.name == "Alfa-Bank Visa")
+            .expect("Alfa-Bank Visa must be selectable");
+        let alfa_mastercard = banks
+            .iter()
+            .find(|bank| bank.name == "Alfa-Bank MasterCard")
+            .expect("Alfa-Bank MasterCard must be selectable");
+
+        assert_eq!(alfa_visa.schemes.as_deref(), Some("Visa"));
+        assert_eq!(alfa_mastercard.schemes.as_deref(), Some("MasterCard"));
+        assert_eq!(alfa_visa.icon_url, alfa_mastercard.icon_url);
     }
 }

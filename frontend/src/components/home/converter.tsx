@@ -16,7 +16,7 @@ import { TokenPicker } from "./token-picker";
 import { PairPicker } from "./pair-picker";
 import { SidePanel } from "./side-panel";
 
-import { Bank, schemeIconUrl } from "@/lib/banks";
+import { Bank, paymentMethodBaseName, schemeIconUrl } from "@/lib/banks";
 
 import {
   createRatesSocket,
@@ -112,7 +112,7 @@ const DEFAULT_SELL_METHOD: BankOption = {
 };
 
 const DEFAULT_BUY_METHOD: BankOption = {
-  name: "Belarusbank",
+  name: "Belarusbank Visa",
   icon: methodIcon("belarusbank.by"),
   schemeIcon: schemeIconUrl("Visa"),
   scheme: "Visa",
@@ -157,6 +157,7 @@ function PairButton({
   fallbackSymbol,
   icon,
   schemeIcon,
+  scheme,
   disabled,
   onOpen,
 }: {
@@ -165,12 +166,14 @@ function PairButton({
   fallbackSymbol: string;
   icon?: string;
   schemeIcon?: string;
+  scheme?: string;
   disabled?: boolean;
   onOpen: () => void;
 }) {
   const [failed, setFailed] = useState(false);
   const [schemeFailed, setSchemeFailed] = useState(false);
   const showSchemeIcon = Boolean(schemeIcon && schemeIcon !== icon && !schemeFailed);
+  const visualLabel = label && showSchemeIcon ? paymentMethodBaseName(label, scheme) : label;
 
   useEffect(() => setFailed(false), [icon]);
   useEffect(() => setSchemeFailed(false), [schemeIcon]);
@@ -200,7 +203,7 @@ function PairButton({
           />
         )}
       </span>
-      <span className={styles.bankLabel}>{label ?? placeholder}</span>
+      <span className={styles.bankLabel}>{visualLabel ?? placeholder}</span>
       <svg className={styles.tokenChevron} width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
         <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
@@ -594,6 +597,7 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
               fallbackSymbol={sell.symbol}
               icon={fromBank?.icon}
               schemeIcon={fromBank?.schemeIcon}
+              scheme={fromBank?.scheme}
               onOpen={() => setPickerSide("sell")}
             />
           ) : (
@@ -646,6 +650,7 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
               fallbackSymbol={buy.symbol}
               icon={toBank?.icon}
               schemeIcon={toBank?.schemeIcon}
+              scheme={toBank?.scheme}
               disabled={!fromBank}
               onOpen={() => fromBank && setPickerSide("buy")}
             />
