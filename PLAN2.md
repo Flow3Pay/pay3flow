@@ -1025,16 +1025,16 @@ order переходит в done.
 ## Фаза EX-2 - Домен И Миграции
 
 - [x] EX-2.1. Добавить enum/status-модели в Rust.
-- [ ] EX-2.2. Добавить миграции: `exchange_orders`, `exchange_solvers`, `exchange_quotes`, `exchange_settlements`, `exchange_proofs`, `audit_events`.
+- [x] EX-2.2. Добавить миграции: `exchange_orders`, `exchange_solvers`, `exchange_quotes`, `exchange_settlements`, `exchange_proofs`, `audit_events`.
 - [ ] EX-2.3. Добавить repo layer для каждой таблицы.
 - [ ] EX-2.4. Добавить guarded status transitions.
 - [ ] EX-2.5. Добавить idempotency на create order.
 - [x] EX-2.6. Добавить unit tests для transition table.
 - [ ] EX-2.7. Добавить `docs/exchange-domain.md`.
-- [ ] EX-2.8. Добавить таблицу или seed-конфиг `exchange_corridors`: enabled corridor Armenia/AMD -> Russia/RUB.
+- [x] EX-2.8. Добавить таблицу или seed-конфиг `exchange_corridors`: enabled corridor Armenia/AMD -> Russia/RUB.
 - [ ] EX-2.9. Запретить создание order для disabled corridor, но сделать это через данные, а не через hardcoded `AMD`/`RUB` в коде.
-- [ ] EX-2.10. Добавить таблицу `funding_instructions` и связать её с order/quote/solver.
-- [ ] EX-2.11. Добавить поля funding status в order/settlement модели.
+- [x] EX-2.10. Добавить таблицу `funding_instructions` и связать её с order/quote/solver.
+- [x] EX-2.11. Добавить поля funding status в order/settlement модели.
 
 Приёмка:
 

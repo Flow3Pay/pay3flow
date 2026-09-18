@@ -191,6 +191,7 @@ impl LegStatus {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FundingInstructionStatus {
+    NotStarted,
     Created,
     ShownToUser,
     UserConfirmed,
@@ -204,6 +205,7 @@ pub enum FundingInstructionStatus {
 impl FundingInstructionStatus {
     pub fn as_str(self) -> &'static str {
         match self {
+            Self::NotStarted => "not_started",
             Self::Created => "created",
             Self::ShownToUser => "shown_to_user",
             Self::UserConfirmed => "user_confirmed",
@@ -218,7 +220,8 @@ impl FundingInstructionStatus {
     pub fn can_transition(self, next: Self) -> bool {
         matches!(
             (self, next),
-            (Self::Created, Self::ShownToUser)
+            (Self::NotStarted, Self::Created)
+                | (Self::Created, Self::ShownToUser)
                 | (Self::Created, Self::Expired)
                 | (Self::Created, Self::Cancelled)
                 | (Self::ShownToUser, Self::UserConfirmed)
@@ -320,6 +323,10 @@ mod tests {
     #[test]
     fn funding_instruction_requires_user_confirmation_before_solver_ack() {
         assert!(
+            FundingInstructionStatus::NotStarted
+                .can_transition(FundingInstructionStatus::Created)
+        );
+        assert!(
             FundingInstructionStatus::Created
                 .can_transition(FundingInstructionStatus::ShownToUser)
         );
@@ -329,6 +336,10 @@ mod tests {
         );
         assert!(
             FundingInstructionStatus::UserConfirmed
+                .can_transition(FundingInstructionStatus::SolverAcknowledged)
+        );
+        assert!(
+            !FundingInstructionStatus::NotStarted
                 .can_transition(FundingInstructionStatus::SolverAcknowledged)
         );
         assert!(

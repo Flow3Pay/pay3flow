@@ -162,3 +162,195 @@ CREATE TABLE IF NOT EXISTS banks (
 CREATE UNIQUE INDEX IF NOT EXISTS banks_name_idx ON banks (name);
 CREATE INDEX IF NOT EXISTS banks_status_idx ON banks (status);
 CREATE INDEX IF NOT EXISTS banks_role_idx ON banks (role);
+
+-- === PLAN2 EX-2: solver-based exchange domain ===
+
+CREATE TABLE IF NOT EXISTS exchange_corridors (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_country TEXT NOT NULL,
+    source_currency TEXT NOT NULL,
+    target_country TEXT NOT NULL,
+    target_currency TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'enabled',
+    min_amount_minor BIGINT,
+    max_amount_minor BIGINT,
+    daily_limit_minor BIGINT,
+    metadata JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (source_country, source_currency, target_country, target_currency)
+);
+
+CREATE INDEX IF NOT EXISTS exchange_corridors_status_idx
+    ON exchange_corridors (status);
+
+INSERT INTO exchange_corridors
+    (source_country, source_currency, target_country, target_currency, status, min_amount_minor, max_amount_minor, metadata)
+VALUES
+    ('AM', 'AMD', 'RU', 'RUB', 'enabled', 1000, NULL, '{"mvp": true, "label": "Armenia AMD to Russia RUB"}')
+ON CONFLICT (source_country, source_currency, target_country, target_currency)
+DO UPDATE SET
+    status = EXCLUDED.status,
+    min_amount_minor = EXCLUDED.min_amount_minor,
+    metadata = exchange_corridors.metadata || EXCLUDED.metadata,
+    updated_at = now();
+
+CREATE TABLE IF NOT EXISTS exchange_orders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    idempotency_key TEXT NOT NULL,
+    source_country TEXT NOT NULL,
+    source_currency TEXT NOT NULL,
+    source_amount_minor BIGINT NOT NULL,
+    source_method_type TEXT NOT NULL,
+    source_method_ref TEXT,
+    target_country TEXT NOT NULL,
+    target_currency TEXT NOT NULL,
+    target_amount_min_minor BIGINT,
+    target_method_type TEXT NOT NULL,
+    target_method_ref TEXT,
+    funding_instruction_id UUID,
+    funding_status TEXT NOT NULL DEFAULT 'not_started',
+    status TEXT NOT NULL DEFAULT 'created',
+    deadline_at TIMESTAMPTZ,
+    selected_quote_id UUID,
+    failure_code TEXT,
+    failure_message TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (user_id, idempotency_key)
+);
+
+CREATE INDEX IF NOT EXISTS exchange_orders_user_created_idx
+    ON exchange_orders (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS exchange_orders_status_created_idx
+    ON exchange_orders (status, created_at);
+
+CREATE TABLE IF NOT EXISTS exchange_solvers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    slug TEXT UNIQUE NOT NULL,
+    actor_id TEXT,
+    handle TEXT,
+    display_name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'discovered',
+    countries JSONB NOT NULL DEFAULT '[]',
+    currencies JSONB NOT NULL DEFAULT '[]',
+    rails JSONB NOT NULL DEFAULT '[]',
+    min_amount_minor BIGINT,
+    max_amount_minor BIGINT,
+    fee_model JSONB NOT NULL DEFAULT '{}',
+    risk_score INTEGER NOT NULL DEFAULT 50,
+    last_seen_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS exchange_solvers_status_idx
+    ON exchange_solvers (status);
+
+CREATE TABLE IF NOT EXISTS exchange_quotes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_id UUID NOT NULL REFERENCES exchange_orders(id) ON DELETE CASCADE,
+    solver_id UUID NOT NULL REFERENCES exchange_solvers(id) ON DELETE CASCADE,
+    source_amount_minor BIGINT NOT NULL,
+    target_amount_minor BIGINT NOT NULL,
+    source_currency TEXT NOT NULL,
+    target_currency TEXT NOT NULL,
+    funding_method_type TEXT NOT NULL,
+    requires_user_funding BOOLEAN NOT NULL DEFAULT TRUE,
+    rate NUMERIC(24, 12) NOT NULL,
+    fee_minor BIGINT NOT NULL,
+    eta_minutes INTEGER NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    status TEXT NOT NULL DEFAULT 'received',
+    settlement_plan JSONB NOT NULL DEFAULT '{}',
+    risk_score INTEGER NOT NULL,
+    score BIGINT,
+    raw_response JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS exchange_quotes_order_idx
+    ON exchange_quotes (order_id, created_at);
+CREATE INDEX IF NOT EXISTS exchange_quotes_solver_idx
+    ON exchange_quotes (solver_id, created_at);
+CREATE INDEX IF NOT EXISTS exchange_quotes_status_expires_idx
+    ON exchange_quotes (status, expires_at);
+
+CREATE TABLE IF NOT EXISTS funding_instructions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_id UUID NOT NULL REFERENCES exchange_orders(id) ON DELETE CASCADE,
+    quote_id UUID NOT NULL REFERENCES exchange_quotes(id) ON DELETE CASCADE,
+    solver_id UUID NOT NULL REFERENCES exchange_solvers(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'created',
+    method_type TEXT NOT NULL,
+    amount_minor BIGINT NOT NULL,
+    currency TEXT NOT NULL,
+    destination_ref TEXT NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    user_confirmed_at TIMESTAMPTZ,
+    raw_payload JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS funding_instructions_order_idx
+    ON funding_instructions (order_id, created_at);
+CREATE INDEX IF NOT EXISTS funding_instructions_status_idx
+    ON funding_instructions (status, expires_at);
+
+CREATE TABLE IF NOT EXISTS exchange_settlements (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_id UUID NOT NULL REFERENCES exchange_orders(id) ON DELETE CASCADE,
+    quote_id UUID NOT NULL REFERENCES exchange_quotes(id) ON DELETE CASCADE,
+    solver_id UUID NOT NULL REFERENCES exchange_solvers(id) ON DELETE CASCADE,
+    status TEXT NOT NULL,
+    token_leg_status TEXT NOT NULL,
+    money_leg_status TEXT NOT NULL,
+    funding_status TEXT NOT NULL,
+    pay3flow_wallet_ref TEXT,
+    token_ledger_ref TEXT,
+    money_reference TEXT,
+    proof_id UUID,
+    failure_code TEXT,
+    failure_message TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS exchange_settlements_order_idx
+    ON exchange_settlements (order_id);
+CREATE INDEX IF NOT EXISTS exchange_settlements_status_idx
+    ON exchange_settlements (status, created_at);
+
+CREATE TABLE IF NOT EXISTS exchange_proofs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    settlement_id UUID NOT NULL REFERENCES exchange_settlements(id) ON DELETE CASCADE,
+    solver_id UUID NOT NULL REFERENCES exchange_solvers(id) ON DELETE CASCADE,
+    proof_type TEXT NOT NULL,
+    proof_payload JSONB NOT NULL,
+    verification_status TEXT NOT NULL DEFAULT 'pending',
+    verified_by TEXT,
+    verified_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS exchange_proofs_settlement_idx
+    ON exchange_proofs (settlement_id, created_at);
+
+CREATE TABLE IF NOT EXISTS audit_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    entity_type TEXT NOT NULL,
+    entity_id UUID NOT NULL,
+    event_type TEXT NOT NULL,
+    actor_type TEXT NOT NULL,
+    actor_id TEXT,
+    payload JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS audit_events_entity_idx
+    ON audit_events (entity_type, entity_id, created_at);
+CREATE INDEX IF NOT EXISTS audit_events_type_idx
+    ON audit_events (event_type, created_at);
