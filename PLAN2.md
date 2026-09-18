@@ -110,12 +110,18 @@ cowprotocol-services/
   -> не production-зависимость без отдельного решения
 ```
 
-## 3. Что Берём Из Cow Protocol Services
+## 3. Что Берём Из Cow Protocol Services И Meta Matcha
 
 Reference repo:
 
 ```text
 https://github.com/cowprotocol/services
+```
+
+Meta Matcha reference:
+
+```text
+https://meta.matcha.xyz/
 ```
 
 Локальный каталог:
@@ -139,6 +145,10 @@ cowprotocol-services/
 - `settlement lifecycle`: как вести статусы от создания order до финала.
 - `observability`: как логировать критичные финансовые шаги.
 - `tests`: как делать unit/smoke/e2e проверки для matching и settlement.
+- Meta Matcha UX: простая intent-форма `sell -> buy`, slippage, trade/bridge режимы, route details, intents mode.
+- Meta Matcha product pattern: пользователь видит простую форму обмена, а сложный routing/settlement спрятан в деталях маршрута и условиях.
+
+Важно: Meta Matcha не считать "биржей" в плане. Это reference для meta-aggregator / intent UX / route aggregation подхода.
 
 Не переносим вслепую:
 
@@ -155,6 +165,69 @@ cowprotocol-services/
 Сначала написать docs/cow-services-analysis.md.
 Потом переносить только понятные идеи и маленькие паттерны.
 ```
+
+## 3.1. Route Aggregation Research
+
+Перед тем как писать финальный production routing, агент должен изучить подходы route/liquidity aggregation у следующих систем:
+
+```text
+Meta Matcha
+0x
+1inch
+Barter
+Bebop
+Bitget
+Enso
+KyberSwap
+Lightning
+Nordstern
+OKX
+Velora
+Cow Protocol
+```
+
+Что нужно выяснить по каждому:
+
+- это intent protocol, solver auction, DEX aggregator, bridge aggregator, CEX/venue API или hybrid;
+- как пользователь формулирует intent/order;
+- кто ищет route;
+- кто исполняет route;
+- есть ли solver competition;
+- есть ли RFQ/private market makers;
+- поддерживается ли bridge/cross-chain;
+- как считаются slippage, fees, minimum received;
+- есть ли API/SDK, который можно использовать;
+- можно ли использовать как источник quotes для TOKEN-leg;
+- какие риски: custody, compliance, geo restrictions, API limits, sanctions, KYC.
+
+Deliverable:
+
+```text
+docs/route-aggregation-research.md
+```
+
+В документе должна быть таблица:
+
+```text
+name
+category
+what_it_does
+how_it_routes
+how_it_executes
+api_or_sdk
+useful_for_pay3flow
+risks
+decision
+```
+
+Решения по умолчанию до завершения research:
+
+- Не завязывать core backend на одного внешнего агрегатора.
+- Сделать abstraction `RouteQuoteSource`.
+- Для MVP оставить fake/mock quote sources.
+- Реальный TOKEN-leg later должен подключаться через adapter.
+- `fmatch` всё равно остаётся solver matcher для Pay3Flow solver candidates.
+- Внешние агрегаторы могут быть quote/liquidity sources внутри solver или backend adapter, но не заменяют весь Pay3Flow flow.
 
 ## 4. Словарь
 
@@ -902,6 +975,8 @@ order переходит в done.
 - [ ] EX-1.6. Изучить `autopilot`: как двигается auction/matching.
 - [ ] EX-1.7. Изучить `driver/solver`: как solver получает задачу и отдаёт решение.
 - [ ] EX-1.8. Написать `docs/cow-services-analysis.md`.
+- [ ] EX-1.9. Изучить `https://meta.matcha.xyz/` как reference intent UX: trade/bridge, sell/buy form, slippage, route details, intents mode.
+- [ ] EX-1.10. Зафиксировать в `docs/cow-services-analysis.md`, что Cow = orderbook/solver reference, Meta Matcha = UX/route aggregation reference, `fmatch` = Pay3Flow solver matcher.
 
 Что написать в `docs/cow-services-analysis.md`:
 
@@ -918,6 +993,34 @@ order переходит в done.
 - Cow repo собирается или описано, почему не собирается.
 - Есть документ анализа.
 - В документе явно написано: Cow reference, `fmatch` matcher.
+
+## Фаза EX-1A - Route Aggregation Research
+
+- [ ] EX-1A.1. Создать `docs/route-aggregation-research.md`.
+- [ ] EX-1A.2. Изучить Meta Matcha: какую UX/intent модель можно повторить.
+- [ ] EX-1A.3. Изучить 0x: Swap API, RFQ, route/liquidity model.
+- [ ] EX-1A.4. Изучить 1inch: aggregation API, pathfinder, supported chains.
+- [ ] EX-1A.5. Изучить Barter: категория, API, применимость.
+- [ ] EX-1A.6. Изучить Bebop: RFQ/solver/quote model, API.
+- [ ] EX-1A.7. Изучить Bitget: API/venue/liquidity role, KYC/custody risk.
+- [ ] EX-1A.8. Изучить Enso: route API, DeFi routing model.
+- [ ] EX-1A.9. Изучить KyberSwap: aggregator API, routing, fees.
+- [ ] EX-1A.10. Изучить Lightning: уточнить, это Lightning Network или конкретный provider; описать только после проверки.
+- [ ] EX-1A.11. Изучить Nordstern: уточнить категорию и применимость.
+- [ ] EX-1A.12. Изучить OKX: DEX/CEX/Wallet APIs, routing, compliance/custody risk.
+- [ ] EX-1A.13. Изучить Velora: aggregator/intent model, API.
+- [ ] EX-1A.14. Сравнить всё с Cow Protocol подходом.
+- [ ] EX-1A.15. Выбрать оптимальный подход для Pay3Flow MVP.
+- [ ] EX-1A.16. Спроектировать abstraction `RouteQuoteSource`.
+- [ ] EX-1A.17. Зафиксировать решение: какие источники quotes идут в MVP как mock, какие позже как real adapters.
+
+Приёмка:
+
+- Есть `docs/route-aggregation-research.md`.
+- Для каждого источника есть category, API/SDK, применимость, риски и decision.
+- В решении явно написано, что внешние aggregators не заменяют `fmatch`, а дают route/liquidity/quote source.
+- Для MVP выбран самый быстрый путь: fake/mock adapters + интерфейс для будущего подключения.
+- Агент может начать кодить `RouteQuoteSource` без вопросов к владельцу.
 
 ## Фаза EX-2 - Домен И Миграции
 
@@ -986,6 +1089,9 @@ order переходит в done.
 - [ ] EX-5.1. Создать fake solver model.
 - [ ] EX-5.2. Seed минимум двух fake solver'ов: `fast-low-limit` и `slow-better-rate`.
 - [ ] EX-5.3. Реализовать internal solver quote interface.
+- [ ] EX-5.3a. Реализовать trait/interface `RouteQuoteSource`: `quote(request) -> route quote`, `health()`, `name()`.
+- [ ] EX-5.3b. Реализовать `MockRouteQuoteSource` для MVP.
+- [ ] EX-5.3c. Не подключать real 0x/1inch/etc в MVP без research decision и env-gated adapter.
 - [ ] EX-5.4. Реализовать `GET /api/solver/orders/open`.
 - [ ] EX-5.5. Реализовать `POST /api/solver/orders/:id/quotes`.
 - [ ] EX-5.6. Fake solver должен уметь вернуть quote success.
