@@ -31,6 +31,7 @@ fn branded_icon_url(name: &str, domain: &str) -> String {
 /// Card schemes we attribute to a bank by its home market.
 fn schemes_for(country: &str) -> &'static str {
     match country {
+        "BY" => "Visa,MasterCard,MIR",
         "RU" => "Visa,MasterCard,MIR",
         "CN" => "UnionPay,Visa,MasterCard",
         "JP" => "Visa,MasterCard,JCB",
@@ -572,6 +573,7 @@ mod tests {
         for expected in [
             "Alfa-Bank Visa",
             "Belarusbank MasterCard",
+            "Belarusbank MIR",
             "PayPal",
             "YooMoney",
             "Visa Network",
@@ -595,9 +597,14 @@ mod tests {
             .iter()
             .find(|bank| bank.name == "Alfa-Bank MasterCard")
             .expect("Alfa-Bank MasterCard must be selectable");
+        let belarusbank_mir = banks
+            .iter()
+            .find(|bank| bank.name == "Belarusbank MIR")
+            .expect("Belarusbank MIR must be selectable");
 
         assert_eq!(alfa_visa.schemes.as_deref(), Some("Visa"));
         assert_eq!(alfa_mastercard.schemes.as_deref(), Some("MasterCard"));
+        assert_eq!(belarusbank_mir.schemes.as_deref(), Some("MIR"));
         assert_eq!(alfa_visa.icon_url, alfa_mastercard.icon_url);
     }
 }
