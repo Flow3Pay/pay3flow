@@ -10,9 +10,13 @@ import {
   formatBalance,
   formatNumber,
   formatUsd,
+  tokenForCurrency,
 } from "./tokens";
 import { TokenPicker } from "./token-picker";
+import { PairPicker } from "./pair-picker";
 import { SidePanel } from "./side-panel";
+
+import { Bank } from "@/lib/banks";
 
 import {
   createRatesSocket,
@@ -28,9 +32,8 @@ type Mode = "swap" | "payment" | "limit";
 type Field = "sell" | "buy";
 
 const MODES: { id: Mode; label: string }[] = [
-  { id: "swap", label: "Обмен" },
-  { id: "payment", label: "Оплата" },
-  { id: "limit", label: "Лимит" },
+  { id: "swap", label: "Swap" },
+  { id: "payment", label: "Payment" },
 ];
 
 const RATE_INTERVALS = [5, 10, 15, 20];
@@ -61,6 +64,39 @@ function sanitizeInput(value: string): string {
   return rest.length ? `${head}.${rest.join("")}` : head;
 }
 
+/** A token for a pair currency, taking the card scheme from the chosen route
+ *  and falling back to a neutral 1:1 "bank" token for currencies the local
+ *  catalog does not know (KZT, BYN, AMD, …). */
+function pairToken(currency: string, scheme: string): Token {
+  const base = tokenForCurrency(currency);
+  return {
+    symbol: currency.toUpperCase(),
+    name: base?.name ?? currency.toUpperCase(),
+    nameRu: base?.nameRu ?? currency.toUpperCase(),
+    color: base?.color ?? "#6b7280",
+    priceUsd: base?.priceUsd ?? 1,
+    rail: scheme || base?.rail || "Bank",
+    group: base?.group ?? "fiat",
+  };
+}
+
+/** A bank slot: everything the converter needs to preview a route. */
+interface BankOption {
+  name: string;
+  icon: string;
+  scheme: string;
+  currency: string;
+}
+
+function toBankOption(bank: Bank): BankOption {
+  return {
+    name: bank.name,
+    icon: bank.icon_url,
+    scheme: bank.schemes[0] ?? "",
+    currency: bank.currency,
+  };
+}
+
 const EMPTY_USD = formatUsd(0);
 
 function SlotLabel({ label, balance, showBalance }: { label: string; balance?: number; showBalance: boolean }) {
@@ -68,7 +104,7 @@ function SlotLabel({ label, balance, showBalance }: { label: string; balance?: n
     <div className={styles.slotTop}>
       <span className={styles.slotLabel}>{label}</span>
       {showBalance && balance !== undefined && (
-        <span className={styles.slotBalance}>Баланс: {formatBalance(balance)}</span>
+        <span className={styles.slotBalance}>Balance: {formatBalance(balance)}</span>
       )}
     </div>
   );
@@ -80,7 +116,7 @@ function TokenButton({ token, onOpen }: { token: Token; onOpen: () => void }) {
       type="button"
       className={styles.tokenButton}
       onClick={onOpen}
-      aria-label={`Выбрать валюту ${token.symbol}`}
+      aria-label={`Select ${token.symbol}`}
     >
       <span className={styles.tokenAvatar} style={{ background: token.color }}>
         {token.symbol.slice(0, 2)}
@@ -93,11 +129,44 @@ function TokenButton({ token, onOpen }: { token: Token; onOpen: () => void }) {
   );
 }
 
-const STATUS_LABEL: Record<RatesStatus, string> = {
-  open: "онлайн",
-  connecting: "подключение…",
-  closed: "офлайн",
-};
+function PairButton({
+  label,
+  placeholder,
+  fallbackSymbol,
+  icon,
+  disabled,
+  onOpen,
+}: {
+  label?: string;
+  placeholder: string;
+  fallbackSymbol: string;
+  icon?: string;
+  disabled?: boolean;
+  onOpen: () => void;
+}) {
+  const [failed, setFailed] = useState(false);
+  return (
+    <button
+      type="button"
+      className={styles.tokenButton}
+      onClick={onOpen}
+      disabled={disabled}
+      aria-label={label ? `Payment route via ${label}` : placeholder}
+    >
+      {icon && !failed ? (
+        <img className={styles.bankAvatar} src={icon} alt="" onError={() => setFailed(true)} />
+      ) : (
+        <span className={styles.tokenAvatar} style={{ background: label ? "#6b7280" : "var(--color-border)" }}>
+          {label ? fallbackSymbol.slice(0, 2) : "—"}
+        </span>
+      )}
+      <span className={styles.bankLabel}>{label ?? placeholder}</span>
+      <svg className={styles.tokenChevron} width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </button>
+  );
+}
 
 function formatPercentage(value: number): string {
   return `${formatNumber(value, 4)}%`;
@@ -117,7 +186,6 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
   const [buyText, setBuyText] = useState("");
   const [indep, setIndep] = useState<Field>("sell");
   const [picker, setPicker] = useState<Field | null>(null);
-  const [rateOpen, setRateOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsClosing, setSettingsClosing] = useState(false);
   const [autoSlippage, setAutoSlippage] = useState(true);
@@ -125,6 +193,12 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
   const [deadline, setDeadline] = useState(20);
   const [deadlineOpen, setDeadlineOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // Bank exchange routes: the payment form picks a real sending bank, then a
+  // receiving bank; the exchange combination is the user's.
+  const [fromBank, setFromBank] = useState<BankOption | null>(null);
+  const [toBank, setToBank] = useState<BankOption | null>(null);
+  const [pickerSide, setPickerSide] = useState<Field | null>(null);
 
   // Live quoting: fmatch answers the exchange pair over WebSocket.
   const [quote, setQuote] = useState<Quote | null>(null);
@@ -162,17 +236,16 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
   const hasAmount = sellNum > 0;
 
   const feeLabel = quote?.best?.price != null ? formatPercentage(feePercent) : `~${NETWORK_FEE_PERCENT}%`;
-  const sourceLabel = quote?.source === "fmatch" ? "fmatch" : quote?.source === "fallback" ? "локально" : null;
 
   const ctaLabel = !connected
-    ? "Подключить кошелёк"
+    ? "Connect wallet"
     : !hasAmount
-      ? "Введите сумму"
+      ? "Enter amount"
       : mode === "swap"
-        ? `Обменять ${sell.symbol} → ${buy.symbol}`
+        ? `Exchange ${sell.symbol} → ${buy.symbol}`
         : mode === "payment"
-          ? `Оплатить ${sell.symbol} → ${buy.symbol}`
-          : `Зафиксировать курс ${sell.symbol} → ${buy.symbol}`;
+          ? `Pay ${sell.symbol} → ${buy.symbol}`
+          : `Lock the rate ${sell.symbol} → ${buy.symbol}`;
 
   const closeSettings = useCallback(() => {
     if (settingsClosing) return;
@@ -298,15 +371,41 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
     setIndep((i) => (i === "sell" ? "buy" : "sell"));
   };
 
+  const selectFromBank = (bank: Bank) => {
+    setFromBank(toBankOption(bank));
+    setToBank(null);
+    // Preview the sender's currency/scheme, then move the user straight to
+    // "choose what to exchange to".
+    setSell(pairToken(bank.currency, bank.schemes[0] ?? ""));
+    setPickerSide("buy");
+  };
+
+  const selectToBank = (bank: Bank) => {
+    setPickerSide(null);
+    if (!fromBank) return;
+    setToBank(toBankOption(bank));
+    setSell(pairToken(fromBank.currency, fromBank.scheme));
+    setBuy(pairToken(bank.currency, bank.schemes[0] ?? ""));
+    setSellText("");
+    setBuyText("");
+    setIndep("sell");
+  };
+
+  const chooseMode = (next: Mode) => {
+    setMode(next);
+    setPicker(null);
+    if (next !== "payment") setPickerSide(null);
+  };
+
   const handleCta = () => {
     if (!connected) {
       onConnect();
       return;
     }
     if (!hasAmount) return;
-    const route = quote?.best ? `, маршрут ${quote.best.name}` : "";
+    const route = quote?.best ? `, route ${quote.best.name}` : "";
     showNotice(
-      `Демо: ${formatNumber(sellNum)} ${sell.symbol} → ${formatNumber(buyNum)} ${buy.symbol} (комиссия ${feeLabel}${route}). Реальный расчёт появится после подключения платёжных провайдеров.`,
+      `Demo: ${formatNumber(sellNum)} ${sell.symbol} → ${formatNumber(buyNum)} ${buy.symbol} (fee ${feeLabel}${route}). A real quote will be available once payment providers are connected.`,
     );
   };
 
@@ -317,7 +416,7 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
       <div className={styles.dock}>
         <div className={styles.card}>
         <div className={styles.head}>
-          <div className={styles.tabs} role="tablist" aria-label="Режимы">
+          <div className={styles.tabs} role="tablist" aria-label="Modes">
             {MODES.map((m) => (
               <button
                 key={m.id}
@@ -325,7 +424,7 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
                 role="tab"
                 aria-selected={mode === m.id}
                 className={mode === m.id ? styles.tabActive : styles.tab}
-                onClick={() => setMode(m.id)}
+                onClick={() => chooseMode(m.id)}
               >
                 {m.label}
               </button>
@@ -337,62 +436,28 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
               <button
                 type="button"
                 className={styles.gear}
-                aria-label="Настройки"
+                aria-label="Settings"
                 aria-expanded={settingsOpen}
                 onClick={toggleSettings}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path
-                    d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z"
-                    stroke="currentColor"
-                    strokeWidth="1.7"
-                  />
-                  <path
-                    d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.65 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.54V4.45A1.7 1.7 0 0 0 10.92 3.4V3.3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.05A1.7 1.7 0 0 0 21.6 11h.09a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.2.53Z"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
+                  <path d="M22 6.5H16" stroke="currentColor" strokeWidth="1.5" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M6 6.5H2" stroke="currentColor" strokeWidth="1.5" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M13.5 6.5C13.5 8.43 11.93 10 10 10C8.07 10 6.5 8.43 6.5 6.5C6.5 4.57 8.07 3 10 3C10.34 3 10.67 3.05 10.98 3.14" stroke="currentColor" strokeWidth="1.5" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M22 17.5H18" stroke="currentColor" strokeWidth="1.5" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M8 17.5H2" stroke="currentColor" strokeWidth="1.5" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M14 21C15.933 21 17.5 19.433 17.5 17.5C17.5 15.567 15.933 14 14 14C12.067 14 10.5 15.567 10.5 17.5C10.5 19.433 12.067 21 14 21Z" stroke="currentColor" strokeWidth="1.5" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </button>
 
               {(settingsOpen || settingsClosing) && (
                 <div className={settingsClosing ? styles.settingsPopClosing : styles.settingsPop}>
                   <div className={styles.popHead}>
-                    <span className={styles.popTitle}>Настройки обмена</span>
+                    <span className={styles.popTitle}>Exchange settings</span>
                   </div>
 
                   <div className={styles.popSection}>
-                    <div className={styles.popRow}>
-                      <span>Умное проскальзывание</span>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={autoSlippage}
-                        className={autoSlippage ? styles.switchOn : styles.switch}
-                        onClick={() => setAutoSlippage((v) => !v)}
-                      >
-                        <span className={styles.knob} />
-                      </button>
-                    </div>
-                    <div className={styles.optionRow} aria-disabled={autoSlippage || undefined}>
-                      {SLIPPAGE_OPTIONS.map((value) => (
-                        <button
-                          key={value}
-                          type="button"
-                          disabled={autoSlippage}
-                          className={slippage === value ? styles.pillActive : styles.pill}
-                          onClick={() => setSlippage(value)}
-                        >
-                          {value}%
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className={styles.popSection}>
-                    <span className={styles.popLabel}>Периодичность обновления курса</span>
+                    <span className={styles.popLabel}>Rate update interval</span>
                     <div className={styles.optionRow}>
                       {RATE_INTERVALS.map((value) => (
                         <button
@@ -401,7 +466,7 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
                           className={intervalSec === value ? styles.pillActive : styles.pill}
                           onClick={() => setIntervalSec(value)}
                         >
-                          {value} сек
+                          {value} s
                         </button>
                       ))}
                     </div>
@@ -409,7 +474,7 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
 
                   <div className={styles.popSection}>
                     <label className={styles.popLabel} htmlFor="deadline">
-                      Срок действия
+                      Deadline
                     </label>
                     <div className={styles.deadlineWrap} ref={deadlineRef}>
                       <button
@@ -420,7 +485,7 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
                         aria-expanded={deadlineOpen}
                         onClick={() => setDeadlineOpen((v) => !v)}
                       >
-                        <span>{deadline === 1440 ? "24 часа" : `${deadline} мин`}</span>
+                        <span>{deadline === 1440 ? "24 hours" : `${deadline} min`}</span>
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                           <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
@@ -439,7 +504,7 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
                                 setDeadlineOpen(false);
                               }}
                             >
-                              <span>{value === 1440 ? "24 часа" : `${value} мин`}</span>
+                              <span>{value === 1440 ? "24 hours" : `${value} min`}</span>
                               {deadline === value && (
                                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                                   <path d="M3 8l3.5 3.5L13 5" stroke="var(--color-accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -458,7 +523,7 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
         </div>
 
         <SlotLabel
-          label="Вы продаёте"
+          label="You sell"
           balance={BALANCES[sell.symbol]}
           showBalance={connected}
         />
@@ -474,31 +539,45 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
                 setSellText(sanitizeInput(event.target.value));
                 setIndep("sell");
               }}
-              aria-label={`Сумма в ${sell.symbol}`}
+              aria-label={`Amount in ${sell.symbol}`}
             />
             <span className={styles.fiat}>{usdIn > 0 ? `≈ ${formatUsd(usdIn)}` : EMPTY_USD}</span>
           </span>
-          <TokenButton token={sell} onOpen={() => setPicker("sell")} />
+          {mode === "payment" ? (
+            <PairButton
+              label={fromBank?.name}
+              placeholder="Sending bank"
+              fallbackSymbol={sell.symbol}
+              icon={fromBank?.icon}
+              onOpen={() => setPickerSide("sell")}
+            />
+          ) : (
+            <TokenButton token={sell} onOpen={() => setPicker("sell")} />
+          )}
         </label>
 
-        <div className={styles.separator} aria-hidden="true">
-          <button
-            type="button"
-            className={styles.swapBtn}
-            onClick={switchTokens}
-            aria-label="Поменять валюты местами"
-            title="Поменять местами"
-          >
-            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-              <path d="M6 13.5 13.5 6" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
-              <path d="M13.5 6H8.6M13.5 6v4.9" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M14 6.5 6.5 14" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
-              <path d="M6.5 14h4.9M6.5 14V9.1" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-        </div>
+        {mode === "payment" ? (
+          <div className={styles.separatorFlat} aria-hidden="true" />
+        ) : (
+          <div className={styles.separator} aria-hidden="true">
+            <button
+              type="button"
+              className={styles.swapBtn}
+              onClick={switchTokens}
+              aria-label="Swap currencies"
+              title="Swap"
+            >
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M6 13.5 13.5 6" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+                <path d="M13.5 6H8.6M13.5 6v4.9" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M14 6.5 6.5 14" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+                <path d="M6.5 14h4.9M6.5 14V9.1" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          </div>
+        )}
 
-        <SlotLabel label={`Вы получаете · комиссия ${feeLabel}${quote?.best ? ` · ${quote.best.name}` : ""}`} showBalance={false} />
+        <SlotLabel label={`You receive · fee ${feeLabel}${quote?.best ? ` · ${quote.best.name}` : ""}`} showBalance={false} />
         <label className={styles.panel}>
           <span className={styles.panelMain}>
             <input
@@ -511,73 +590,65 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
                 setBuyText(sanitizeInput(event.target.value));
                 setIndep("buy");
               }}
-              aria-label={`Сумма в ${buy.symbol}`}
+              aria-label={`Amount in ${buy.symbol}`}
             />
             <span className={styles.fiat}>{usdOut > 0 ? `≈ ${formatUsd(usdOut)}` : EMPTY_USD}</span>
           </span>
-          <TokenButton token={buy} onOpen={() => setPicker("buy")} />
+          {mode === "payment" ? (
+            <PairButton
+              label={toBank?.name}
+              placeholder={fromBank ? "Receiving bank" : "Pick sending bank"}
+              fallbackSymbol={buy.symbol}
+              icon={toBank?.icon}
+              disabled={!fromBank}
+              onOpen={() => fromBank && setPickerSide("buy")}
+            />
+          ) : (
+            <TokenButton token={buy} onOpen={() => setPicker("buy")} />
+          )}
         </label>
-
-        <button
-          type="button"
-          className={styles.rateRow}
-          aria-expanded={rateOpen}
-          onClick={() => setRateOpen((v) => !v)}
-        >
-          <span className={styles.rateText}>
-            1 {sell.symbol} = {formatNumber(rate)} {buy.symbol}
-            {sourceLabel && <span className={styles.rateUsd}>· {sourceLabel}</span>}
-          </span>
-          <svg
-            className={rateOpen ? styles.chevronUp : styles.chevron}
-            width="16"
-            height="16"
-            viewBox="0 0 16 16"
-            fill="none"
-            aria-hidden="true"
-          >
-            <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-
-        {rateOpen && (
-          <div className={styles.rateDetails}>
-            <div className={styles.rateDetailRow}>
-              <span>Вы получаете (с учётом комиссии)</span>
-              <strong>
-                {formatNumber(buyNum, 10)} {buy.symbol}
-              </strong>
-            </div>
-            <div className={styles.rateDetailRow}>
-              <span>Комиссия{quote?.best ? ` · ${quote.best.name}` : " сети и сервиса"}</span>
-              <strong>{feeLabel}</strong>
-            </div>
-            <div className={styles.rateDetailRow}>
-              <span>Курс</span>
-              <strong>
-                1 {sell.symbol} = {formatNumber(rate, 8)} {buy.symbol}
-              </strong>
-            </div>
-            <div className={styles.rateDetailRow}>
-              <span>Маршруты</span>
-              <strong>{sourceLabel ? `${sourceLabel} · ${STATUS_LABEL[ratesStatus]}` : "ожидаем ответ fmatch…"}</strong>
-            </div>
-          </div>
-        )}
 
         <button
           type="button"
           className={styles.slippageRow}
           ref={slippageRowRef}
           onClick={toggleSettings}
-          aria-label="Настройки проскальзывания"
+          aria-label="Slippage settings"
         >
           <span className={styles.slippageLabel}>
-            Проскальзывание
-            {autoSlippage && <span className={styles.slippageHint}> (авто)</span>}
+            Slippage
+            {autoSlippage && <span className={styles.slippageHint}> (auto)</span>}
           </span>
-          <span className={styles.slippageValue}>{autoSlippage ? "Авто" : `${slippage}%`}</span>
+          <span className={styles.slippageValue}>{autoSlippage ? "Auto" : `${slippage}%`}</span>
         </button>
+
+        <div className={styles.popSection}>
+          <div className={styles.popRow}>
+            <span>Smart slippage</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={autoSlippage}
+              className={autoSlippage ? styles.switchOn : styles.switch}
+              onClick={() => setAutoSlippage((v) => !v)}
+            >
+              <span className={styles.knob} />
+            </button>
+          </div>
+          <div className={styles.optionRow} aria-disabled={autoSlippage || undefined}>
+            {SLIPPAGE_OPTIONS.map((value) => (
+              <button
+                key={value}
+                type="button"
+                disabled={autoSlippage}
+                className={slippage === value ? styles.pillActive : styles.pill}
+                onClick={() => setSlippage(value)}
+              >
+                {value}%
+              </button>
+            ))}
+          </div>
+        </div>
 
         {hasAmount && (
           <div className={styles.warnRow}>
@@ -585,7 +656,7 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
               <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" />
               <path d="M8 5v3.5m0 2.5v.01" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
             </svg>
-            <span>Минимальная сумма платежа — от 2 {sell.symbol}</span>
+            <span>Minimum payment amount — from 2 {sell.symbol}</span>
           </div>
         )}
 
@@ -609,7 +680,7 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
               <circle cx="11.5" cy="10" r="1" fill="currentColor" />
             </svg>
           )}
-          {connecting ? "Подключаем кошелёк…" : ctaLabel}
+          {connecting ? "Connecting wallet…" : ctaLabel}
         </button>
 
         {notice && (
@@ -621,8 +692,6 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
             {notice}
           </div>
         )}
-
-        <div className={styles.powered}>Сеть Pay3Flow · рельсы SEBA · SEPA · ERC-20 · TRC-20</div>
         </div>
 
         <SidePanel
@@ -638,10 +707,20 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
 
       <TokenPicker
         open={picker !== null}
-        title={picker === "sell" ? "Выберите валюту оплаты" : "Выберите валюту получения"}
+        title={picker === "sell" ? "Choose currency to pay with" : "Choose currency to receive"}
         selected={picker === "sell" ? sell : buy}
         onClose={() => setPicker(null)}
         onSelect={(token) => picker && selectToken(picker, token)}
+      />
+
+      <PairPicker
+        open={pickerSide !== null}
+        title={pickerSide === "buy" ? "Choose the receiving bank" : "Choose the sending bank"}
+        mode={pickerSide === "buy" ? "receiver" : "sender"}
+        emptyText={pickerSide === "buy" ? "No receiving banks found" : "No banks available"}
+        selectedName={pickerSide === "buy" ? toBank?.name ?? null : fromBank?.name ?? null}
+        onClose={() => setPickerSide(null)}
+        onSelect={pickerSide === "buy" ? selectToBank : selectFromBank}
       />
     </section>
   );

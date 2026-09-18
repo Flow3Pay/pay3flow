@@ -7,8 +7,6 @@ import { Header } from "@/components/home/header";
 
 const DEMO_ADDRESS = "0x1a2b3c…9fE4";
 
-const NAV_LINKS = [{ href: "/", label: "Home" }];
-
 export default function HomePage() {
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -35,7 +33,6 @@ export default function HomePage() {
         address={DEMO_ADDRESS}
         onConnect={handleConnect}
         onDisconnect={handleDisconnect}
-        links={NAV_LINKS}
         brandHref="/"
       />
       <main>

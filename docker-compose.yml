@@ -42,6 +42,8 @@ services:
       FX_MARGIN_PERCENT: 1.0
       CRW_GRPC_URL: http://crw:3031
       DISCOVERY_INTERVAL_SECS: "1500"
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token-change-me}
+      PAIRS_CACHE_TTL_SECS: "300"
     volumes:
       - backend_data:/app/data
     depends_on:

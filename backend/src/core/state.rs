@@ -1,6 +1,8 @@
 use crate::activitypub;
+use crate::banks::BanksService;
 use crate::core::jwt::Jwt;
 use crate::db::DbPool;
+use crate::pairs::ExchangePairsService;
 use crate::payments::PaymentService;
 use crate::routing::RoutePicker;
 
@@ -11,6 +13,12 @@ pub struct AppState {
     pub ap: activitypub::Service,
     pub picker: RoutePicker,
     pub payments: PaymentService,
+    /// Bank exchange-pair router catalog (PLAN 2△ / 46c).
+    pub pairs: ExchangePairsService,
+    /// Worldwide bank directory the payment form picks from (PLAN 2△).
+    pub banks: BanksService,
+    /// Bearer token guarding the admin endpoints (PLAN 46e).
+    pub admin_token: String,
 }
 
 impl AppState {
@@ -21,6 +29,9 @@ impl AppState {
         ap: activitypub::Service,
         picker: RoutePicker,
         payments: PaymentService,
+        pairs: ExchangePairsService,
+        banks: BanksService,
+        admin_token: String,
     ) -> Self {
         Self {
             pool,
@@ -28,6 +39,9 @@ impl AppState {
             ap,
             picker,
             payments,
+            pairs,
+            banks,
+            admin_token,
         }
     }
 }

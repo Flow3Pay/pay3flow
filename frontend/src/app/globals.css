@@ -1,5 +1,6 @@
 :root {
   --font-sans: var(--font-inter), "Inter var", Inter, "SF Pro Text", Arial, sans-serif;
+  --font-syne-tactile: "Syne Tactile", system-ui;
 
   /* Neutral palette */
   --color-bg: #fdfdfb;
@@ -86,7 +87,7 @@ body {
   color: var(--color-text);
   background: var(--page-bg);
   background-attachment: fixed;
-  font-family: var(--font-sans);
+  font-family: var(--font-syne-tactile), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -122,6 +123,12 @@ button {
 
 ::selection {
   background: var(--color-accent-soft);
+}
+
+.syne-tactile-regular {
+  font-family: "Syne Tactile", system-ui;
+  font-weight: 400;
+  font-style: normal;
 }
 
 @media (prefers-reduced-motion: reduce) {

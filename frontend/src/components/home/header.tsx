@@ -12,8 +12,6 @@ export interface ChainOption {
   color: string;
 }
 
-const DEFAULT_LINKS: { href: string; label: string }[] = [{ href: "/", label: "Home" }];
-
 const CHAINS: ChainOption[] = [
   { id: "ethereum", label: "Ethereum", color: "#627eea" },
   { id: "polygon", label: "Polygon", color: "#8247e5" },
@@ -27,7 +25,6 @@ interface HeaderProps {
   address: string;
   onConnect: () => void;
   onDisconnect: () => void;
-  links?: { href: string; label: string }[];
   brandHref?: string;
 }
 
@@ -36,14 +33,12 @@ export function Header({
   address,
   onConnect,
   onDisconnect,
-  links = DEFAULT_LINKS,
   brandHref = "/",
 }: HeaderProps) {
   const { d } = useI18nSafe();
   const [chainOpen, setChainOpen] = useState(false);
   const [chain, setChain] = useState<ChainOption>(CHAINS[0]);
   const [walletOpen, setWalletOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
   const walletRef = useRef<HTMLDivElement>(null);
 
   const chooseChain = (option: ChainOption) => {
@@ -91,14 +86,6 @@ export function Header({
             </span>
           </a>
         </div>
-
-        <nav className={styles.nav} aria-label={d.header.ariaNav}>
-          {links.map((link) => (
-            <a key={link.href} href={link.href}>
-              {link.label}
-            </a>
-          ))}
-        </nav>
 
         <div className={styles.actions}>
           <div className={styles.networkWrap}>
@@ -176,39 +163,8 @@ export function Header({
               {d.header.wallet.connect}
             </button>
           )}
-
-          <button
-            type="button"
-            className={styles.burger}
-            aria-label={menuOpen ? d.header.mobileMenu.close : d.header.mobileMenu.open}
-            aria-expanded={menuOpen}
-            onClick={() => setMenuOpen((v) => !v)}
-          >
-            {menuOpen ? (
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-              </svg>
-            ) : (
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-              </svg>
-            )}
-          </button>
         </div>
       </div>
-
-      {menuOpen && (
-        <>
-          <div className={styles.menuOverlay} onClick={() => setMenuOpen(false)} />
-          <div className={styles.mobileMenu} role="menu" aria-label={d.header.mobileMenu.ariaLabel}>
-            {links.map((link) => (
-              <a key={link.href} href={link.href} role="menuitem" onClick={() => setMenuOpen(false)}>
-                {link.label}
-              </a>
-            ))}
-          </div>
-        </>
-      )}
     </header>
   );
 }

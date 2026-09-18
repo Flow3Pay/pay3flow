@@ -23,6 +23,11 @@ pub struct Config {
     /// Margin applied on top of the mid-market rate for cross-currency routes
     /// (PLAN #43).
     pub fx_margin_percent: f64,
+    /// Bearer token guarding the admin endpoints (PLAN #46e). Mismatched
+    /// tokens get 401; an unset value keeps the dev default.
+    pub admin_token: String,
+    /// TTL of the exchange-pairs in-memory cache (PLAN #46c), seconds.
+    pub pairs_cache_ttl_secs: u64,
 }
 
 impl Config {
@@ -61,6 +66,12 @@ impl Config {
                 .ok()
                 .and_then(|s| s.parse::<f64>().ok())
                 .unwrap_or(1.0),
+            admin_token: env::var("ADMIN_TOKEN")
+                .unwrap_or_else(|_| "dev-admin-token-change-me".into()),
+            pairs_cache_ttl_secs: env::var("PAIRS_CACHE_TTL_SECS")
+                .ok()
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(300),
         })
     }
 }

@@ -114,3 +114,51 @@ CREATE TABLE IF NOT EXISTS routes (
 
 CREATE INDEX IF NOT EXISTS transactions_user_idx ON transactions (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS routes_transaction_idx ON routes (transaction_id);
+
+-- === PLAN 2△ / 46a: bank exchange-pair router ===
+-- "which card of which sender bank can pay which card of which recipient bank".
+-- The catalog lives here (not hardcoded in the frontend) and is served by
+-- GET /api/exchange-pairs; status/limits are managed via /api/admin/exchange-pairs.
+CREATE TABLE IF NOT EXISTS exchange_pairs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    from_scheme TEXT NOT NULL,
+    from_bank TEXT NOT NULL,
+    from_bank_icon_url TEXT NOT NULL DEFAULT '',
+    to_scheme TEXT NOT NULL,
+    to_bank TEXT NOT NULL,
+    to_bank_icon_url TEXT NOT NULL DEFAULT '',
+    country TEXT NOT NULL DEFAULT '',
+    currencies TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'enabled',
+    daily_limit_minor BIGINT,
+    daily_limit_currency TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS exchange_pairs_route_idx
+    ON exchange_pairs (from_scheme, from_bank, to_scheme, to_bank);
+CREATE INDEX IF NOT EXISTS exchange_pairs_status_idx
+    ON exchange_pairs (status);
+
+-- === PLAN 2△ / banks: the bank directory the payment form picks from ===
+-- The user composes the exchange ("from bank → to bank") themselves, so the
+-- backend owns the canonical, worldwide list of banks (>=200). Each bank's
+-- icon comes from its own site favicon (domain), not a shipped asset.
+CREATE TABLE IF NOT EXISTS banks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'both',      -- sender | receiver | both
+    country TEXT NOT NULL DEFAULT '',
+    currency TEXT NOT NULL DEFAULT '',
+    domain TEXT NOT NULL DEFAULT '',
+    icon_url TEXT NOT NULL DEFAULT '',
+    schemes TEXT NOT NULL DEFAULT '',        -- comma-separated card schemes
+    status TEXT NOT NULL DEFAULT 'enabled',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS banks_name_idx ON banks (name);
+CREATE INDEX IF NOT EXISTS banks_status_idx ON banks (status);
+CREATE INDEX IF NOT EXISTS banks_role_idx ON banks (role);

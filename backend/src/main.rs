@@ -2,7 +2,6 @@ use tracing_subscriber::EnvFilter;
 
 use pay3flow_backend::activitypub::actor::ActorIdentity;
 use pay3flow_backend::config::Config;
-use pay3flow_backend::core::crypto::SecretBox;
 use pay3flow_backend::core::jwt::Jwt;
 use pay3flow_backend::core::state::AppState;
 use pay3flow_backend::db;
@@ -25,30 +24,6 @@ async fn main() -> anyhow::Result<()> {
     let ap = pay3flow_backend::service::build_activitypub_service(&cfg, pool.clone(), identity);
 
     let picker = pay3flow_backend::routing::RoutePicker::from_seeds();
-
-    // Seed the acquirer table from the curated real-brand list. Failures here
-    // are non-fatal: payments still route through the in-memory picker. The
-    // discovery worker (below) keeps this table fresh from crw scans.
-    for seed in pay3flow_backend::acquirer::ACQUIRERS {
-        if let Ok(id) = pay3flow_backend::payments::repo::upsert_acquirer(&pool, seed).await {
-            let boxed = SecretBox::new(&cfg.secrets_key);
-            let enc = boxed
-                .encrypt("stub-secret-placeholder")
-                .unwrap_or_else(|e| {
-                    tracing::warn!(error = %e, slug = seed.slug, "encrypt placeholder credential");
-                    String::new()
-                });
-            if !enc.is_empty() {
-                let _ = pay3flow_backend::payments::repo::set_credential(
-                    &pool,
-                    &id,
-                    "api_key",
-                    &enc,
-                )
-                .await;
-            }
-        }
-    }
 
     let providers = pay3flow_backend::payments::providers::ProviderRegistry::from_providers(vec![
         Box::new(pay3flow_backend::payments::providers::stub::StubProvider::new()),
@@ -74,7 +49,36 @@ async fn main() -> anyhow::Result<()> {
         },
     );
 
-    let state = AppState::new(pool, Jwt::new(&cfg.jwt_secret), ap, picker, payments);
+    // Bank exchange-pair router (PLAN 2△ / 46a-46c): seed the catalog once at
+    // startup (idempotent upsert), then hand the cached reader service to the
+    // router. Admin edits land on the next GET because the cache is
+    // invalidated on every admin write.
+    let seeded_pairs = pay3flow_backend::pairs::seed::seed_exchange_pairs(&pool).await?;
+    tracing::info!(pairs = seeded_pairs, "exchange-pair router catalog seeded");
+    let pairs = pay3flow_backend::pairs::ExchangePairsService::new(
+        pool.clone(),
+        std::time::Duration::from_secs(cfg.pairs_cache_ttl_secs),
+    );
+
+    // Bank directory (PLAN 2△): seed the worldwide catalog once at startup
+    // (idempotent upsert), then hand the cached reader service to the router.
+    let seeded_banks = pay3flow_backend::banks::seed::seed_banks(&pool).await?;
+    tracing::info!(banks = seeded_banks, "bank directory seeded");
+    let banks = pay3flow_backend::banks::BanksService::new(
+        pool.clone(),
+        std::time::Duration::from_secs(cfg.pairs_cache_ttl_secs),
+    );
+
+    let state = AppState::new(
+        pool,
+        Jwt::new(&cfg.jwt_secret),
+        ap,
+        picker,
+        payments,
+        pairs,
+        banks,
+        cfg.admin_token,
+    );
 
     tracing::info!(
         actor = %cfg.ap_origin,

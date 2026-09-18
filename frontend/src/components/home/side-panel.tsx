@@ -5,17 +5,17 @@ import { Quote, QuoteCandidate } from "@/lib/rates";
 
 import styles from "./side-panel.module.css";
 
-/** Split a number into integer and fractional parts (ru-RU decimal comma). */
+/** Split a number into integer and fractional parts (en-US grouping). */
 function splitAmount(value: number, maxFrac = 6): [string, string] {
   const abs = Math.abs(value);
   const int = Math.floor(abs);
   const frac = Math.round((abs - int) * 10 ** maxFrac);
   const fracStr = frac > 0 ? `.${frac.toString().padStart(maxFrac, "0").replace(/0+$/, "")}` : "";
-  return [int.toLocaleString("ru-RU"), fracStr];
+  return [int.toLocaleString("en-US"), fracStr];
 }
 
 function formatDeviation(value: number): string {
-  return `${value.toFixed(2).replace(".", ",")}%`;
+  return `${value.toFixed(2)}%`;
 }
 
 interface SidePanelProps {
@@ -70,24 +70,24 @@ export function SidePanel({
         <div className={styles.quote} aria-hidden={!active || undefined}>
           <div className={styles.quoteInner}>
             <div className={styles.quoteHead}>
-              <span className={styles.quoteTitle}>Сводка обмена</span>
+              <span className={styles.quoteTitle}>Exchange summary</span>
             </div>
 
             <div className={styles.details}>
               <div className={styles.detailRow}>
-                <span>Курс</span>
+                <span>Rate</span>
                 <strong>
                   1 {sell.symbol} = {formatNumber(rate)} {buy.symbol}
                 </strong>
               </div>
               <div className={styles.detailRow}>
-                <span>Комиссия{quote?.best?.name ? ` · ${quote.best.name}` : ""}</span>
+                <span>Fee{quote?.best?.name ? ` · ${quote.best.name}` : ""}</span>
                 <strong>{feeLabel}</strong>
               </div>
               {quote?.quotedAt && (
                 <div className={styles.detailRow}>
-                  <span>Котировка</span>
-                  <strong>{new Date(quote.quotedAt).toLocaleTimeString("ru-RU")}</strong>
+                  <span>Quote</span>
+                  <strong>{new Date(quote.quotedAt).toLocaleTimeString("en-US")}</strong>
                 </div>
               )}
             </div>
@@ -136,7 +136,7 @@ export function SidePanel({
                                   <path d="M5.5799 12.3996C5.4999 12.3996 5.4299 12.3896 5.3499 12.3596C4.5299 12.0996 3.7599 11.6196 3.1199 10.9796C1.9699 9.70961 1.3999 8.31961 1.3999 6.84961C1.3999 5.02961 2.8299 3.59961 4.6499 3.59961H5.2999C5.5499 3.59961 5.7899 3.72961 5.9299 3.93961C6.0699 4.14961 6.0899 4.41961 5.9899 4.64961C5.8299 5.00961 5.7499 5.41961 5.7499 5.84961V8.84961C5.7499 9.70961 5.9199 10.5496 6.2699 11.3496C6.3899 11.6196 6.3299 11.9296 6.1399 12.1496C5.9899 12.3096 5.7899 12.3996 5.5799 12.3996ZM4.2999 5.12961C3.4899 5.28961 2.8999 5.98961 2.8999 6.84961C2.8999 7.93961 3.3399 8.98961 4.2099 9.94961C4.2499 9.99961 4.2999 10.0396 4.3499 10.0796C4.2799 9.66961 4.2499 9.25961 4.2499 8.84961V5.84961C4.2499 5.60961 4.2699 5.36961 4.2999 5.12961Z" />
                                   <path d="M12 16.75C7.73 16.75 4.25 13.27 4.25 9V6C4.25 3.38 6.38 1.25 9 1.25H15C17.62 1.25 19.75 3.38 19.75 6V9C19.75 13.27 16.27 16.75 12 16.75ZM9 2.75C7.21 2.75 5.75 4.21 5.75 6V9C5.75 12.45 8.55 15.25 12 15.25C15.45 15.25 18.25 12.45 18.25 9V6C18.25 4.21 16.79 2.75 15 2.75H9Z" />
                                 </svg>
-                                ЛУЧШИЙ
+                                BEST
                               </span>
                             ) : (
                               <span className={styles.routeBadgeDelta}>
@@ -144,7 +144,7 @@ export function SidePanel({
                               </span>
                             )
                           ) : (
-                            <span className={styles.routeBadgeFlat}>-0,00%</span>
+                            <span className={styles.routeBadgeFlat}>-0.00%</span>
                           )}
                           <span className={styles.routeName}>{c.name}</span>
                         </div>
@@ -154,13 +154,13 @@ export function SidePanel({
                 </ul>
               ) : (
                 <div className={styles.routeEmpty}>
-                  {quote ? "Подходящих эквайеров под пару не найдено" : "ожидаем котировку…"}
+                  {quote ? "No acquirers matched that pair" : "waiting for a quote…"}
                 </div>
               )}
 
             <div className={styles.quoteFooter}>
               <span className={styles.spinner} aria-hidden="true" />
-              Pay3Flow подбирает лучший маршрут автоматически
+              Pay3Flow picks the best route automatically
             </div>
           </div>
         </div>

@@ -33,18 +33,10 @@
   background: var(--color-paper);
   box-shadow: var(--shadow-card);
   overflow: hidden;
-  transform: translateX(100%);
-  opacity: 0;
   pointer-events: none;
-  will-change: transform, opacity;
-  transition:
-    transform 0.55s cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 0.45s ease;
 }
 
 .side.active .quote {
-  transform: translateX(0);
-  opacity: 1;
   pointer-events: auto;
 }
 
@@ -234,6 +226,7 @@
 }
 
 .routeName {
+  font-family: var(--font-sans);
   font-size: 14.5px;
   font-weight: 600;
   color: var(--color-text);

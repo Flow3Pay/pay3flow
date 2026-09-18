@@ -74,7 +74,7 @@ export function TokenPicker({ open, title, selected, onClose, onSelect }: TokenP
       >
         <div className={styles.head}>
           <h2 className={styles.title}>{title}</h2>
-          <button type="button" className={styles.close} onClick={handleClose} aria-label="Закрыть">
+          <button type="button" className={styles.close} onClick={handleClose} aria-label="Close">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path d="M4 4l8 8m0-8-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
             </svg>
@@ -91,13 +91,13 @@ export function TokenPicker({ open, title, selected, onClose, onSelect }: TokenP
             type="text"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Поиск по названию или символу…"
-            aria-label="Поиск валюты"
+            placeholder="Search by name or symbol…"
+            aria-label="Search currency"
           />
         </div>
 
         <div className={styles.list}>
-          {filtered.length === 0 && <p className={styles.empty}>Ничего не найдено</p>}
+          {filtered.length === 0 && <p className={styles.empty}>Nothing found</p>}
           {GROUPS.map((group) => {
             const tokens = grouped.get(group) ?? [];
             if (tokens.length === 0) return null;
@@ -119,7 +119,7 @@ export function TokenPicker({ open, title, selected, onClose, onSelect }: TokenP
                         <span className={styles.rail}>{token.rail === "ERC-20" ? "ETH" : token.rail === "TRC-20" ? "TRX" : token.rail.slice(0, 3)}</span>
                       </span>
                       <span className={styles.meta}>
-                        <span className={styles.name}>{token.nameRu}</span>
+                        <span className={styles.name}>{token.name}</span>
                         <span className={styles.symbol}>
                           {token.symbol} · {token.rail}
                         </span>

@@ -1,9 +1,11 @@
 pub mod acquirer;
 pub mod activitypub;
+pub mod banks;
 pub mod config;
 pub mod core;
 pub mod db;
 pub mod discovery;
+pub mod pairs;
 pub mod payments;
 pub mod quotes;
 pub mod routing;

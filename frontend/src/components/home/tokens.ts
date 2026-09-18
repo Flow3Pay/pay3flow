@@ -31,10 +31,16 @@ export const TOKENS: Token[] = [
 ];
 
 export const GROUP_LABEL: Record<TokenGroup, string> = {
-  fiat: "Фиатные валюты",
-  stable: "Стейблкоины",
-  crypto: "Криптовалюта",
+  fiat: "Fiat currencies",
+  stable: "Stablecoins",
+  crypto: "Cryptocurrency",
 };
+
+/** Look up a token by its currency symbol (case-insensitive). */
+export function tokenForCurrency(symbol: string): Token | undefined {
+  const upper = symbol.trim().toUpperCase();
+  return TOKENS.find((token) => token.symbol === upper);
+}
 
 export function formatNumber(n: number, maxSignificant = 8): string {
   if (!Number.isFinite(n)) return "0";
@@ -44,14 +50,14 @@ export function formatNumber(n: number, maxSignificant = 8): string {
     useGrouping: abs >= 10000,
     maximumSignificantDigits: maxSignificant,
   };
-  return new Intl.NumberFormat("ru-RU", options).format(n);
+  return new Intl.NumberFormat("en-US", options).format(n);
 }
 
 export function formatUsd(n: number): string {
   if (!Number.isFinite(n)) return "—";
   const abs = Math.abs(n);
   const fractionDigits = abs > 0 && abs < 1 ? 4 : 2;
-  return new Intl.NumberFormat("ru-RU", {
+  return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: 2,
@@ -60,7 +66,7 @@ export function formatUsd(n: number): string {
 }
 
 export function formatBalance(n: number): string {
-  return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(n);
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(n);
 }
 
 export const NETWORK_FEE_PERCENT = 0.8;

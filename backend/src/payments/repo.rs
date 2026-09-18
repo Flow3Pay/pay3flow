@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::db::DbPool;
 use crate::payments::model::{
-    to_minor, Minor, NewRoute, NewTransaction, Route, Transaction,
+    Minor, NewRoute, NewTransaction, Route, Transaction,
 };
 use crate::payments::status::{RouteStatus, TransactionStatus};
 
@@ -215,44 +215,6 @@ pub struct AcquirerRow {
     pub active: bool,
 }
 
-/// Upsert an acquirer by slug (used to seed/refresh the acquirer table from the
-/// curated seed list, PLAN #28). Returns the acquirer id (existing or new).
-pub async fn upsert_acquirer(pool: &DbPool, seed: &crate::acquirer::AcquirerSeed) -> Result<Uuid> {
-    let client = pool.get().await?;
-    let stmt = client
-        .prepare_cached(r#"
-INSERT INTO acquirers (slug, name, geo, currencies, fee_percent, fee_fixed, amount_currency, status, active)
-VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', TRUE)
-ON CONFLICT (slug) DO UPDATE SET
-    name = EXCLUDED.name,
-    geo = EXCLUDED.geo,
-    currencies = EXCLUDED.currencies,
-    fee_percent = EXCLUDED.fee_percent,
-    fee_fixed = EXCLUDED.fee_fixed,
-    amount_currency = EXCLUDED.amount_currency,
-    updated_at = now()
-RETURNING id
-"#)
-        .await?;
-    let f = crate::routing::profile::AcquirerProfile::from(seed);
-    let row = client
-        .query_opt(
-            &stmt,
-            &[
-                &seed.slug,
-                &seed.name,
-                &seed.geo,
-                &seed.currencies,
-                &f.fee_percent,
-                &to_minor(f.fee_flat),
-                &f.amount_currency,
-            ],
-        )
-        .await?
-        .context("acquirer upsert returned no row")?;
-    Ok(row.get(0))
-}
-
 pub async fn acquirer_by_slug(pool: &DbPool, slug: &str) -> Result<Option<AcquirerRow>> {
     let client = pool.get().await?;
     let stmt = client
@@ -269,28 +231,6 @@ pub async fn acquirer_by_slug(pool: &DbPool, slug: &str) -> Result<Option<Acquir
         fee_fixed: row.get(4),
         active: row.get(5),
     }))
-}
-
-// --- credentials (PLAN #29, secrets kept out of regular fetches) ---
-
-pub async fn set_credential(
-    pool: &DbPool,
-    acquirer_id: &Uuid,
-    name: &str,
-    value_encrypted: &str,
-) -> Result<()> {
-    let client = pool.get().await?;
-    let stmt = client
-        .prepare_cached(r#"
-INSERT INTO credentials (acquirer_id, name, value_encrypted)
-VALUES ($1, $2, $3)
-ON CONFLICT (acquirer_id, name) DO UPDATE SET value_encrypted = EXCLUDED.value_encrypted, updated_at = now()
-"#)
-        .await?;
-    client
-        .execute(&stmt, &[acquirer_id, &name, &value_encrypted])
-        .await?;
-    Ok(())
 }
 
 pub async fn get_credential_encrypted(
