@@ -72,7 +72,7 @@ impl RouteSource {
 }
 
 /// Result of the routing step: candidates plus the source that produced them.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RouteResolved {
     pub source: RouteSource,
     pub candidates: Vec<AcquirerCandidate>,

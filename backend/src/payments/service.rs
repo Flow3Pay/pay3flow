@@ -154,7 +154,7 @@ impl PaymentService {
         .with_to_currency(payment.to_currency.clone().unwrap_or_else(|| payment.currency.clone()))
         .with_geo(payment.to_geo.clone())
         .with_method(payment.method.clone());
-        let quote = crate::quotes::compute_quote(&self.ap, &self.picker, request).await;
+        let quote = crate::quotes::compute_quote(&self.ap, &self.picker, request, None).await;
         // compute_quote already re-ranks fmatch by the real pair fee when the
         // request converts (fallback ranks by effective fee today), so rank-1 is
         // the cheapest managed solver that serves the pair, not fmatch's

@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::activitypub::model::AcquirerCandidate;
 use crate::activitypub::Service;
-use crate::core::redis;
 use crate::routing::{PaymentRequest, RoutePicker, RouteResolved, RouteSource};
 
 /// Live quote for an exchange pair. Built by asking fmatch which of its
@@ -63,8 +62,12 @@ pub async fn compute_quote(
 ) -> Quote {
     let from = request.currency.as_str();
     let to = request.to_currency.as_deref().unwrap_or(from);
-    let amount_str = if (from != to) { Some(&format!("{}", request.amount)) } else { None };
-    let cache_key = crate::core::redis::cache_key(from, to, amount_str.as_deref());
+    let amount = if from != to {
+        Some(request.amount.to_string())
+    } else {
+        None
+    };
+    let cache_key = crate::core::redis::cache_key(from, to, amount.as_deref());
 
     // Try to get from Redis cache first
     if let Some(pool) = redis_pool {

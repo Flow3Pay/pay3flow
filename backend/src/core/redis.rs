@@ -1,19 +1,15 @@
-use std::time::Duration;
-
 use anyhow::{Context, Result};
-use deadpool_redis::{Config as RedisConfig, Pool};
-use redis::aio::ConnectionManager;
-use redis::AsyncCommands;
+use deadpool_redis::{redis::AsyncCommands, Config as RedisConfig, Pool, Runtime};
 
 /// Redis connection pool used for caching fmatch candidate results.
-pub type RedisPool = Pool<ConnectionManager>;
+pub type RedisPool = Pool;
 
 /// Build a Redis pool lazily. Connection errors are returned to the caller;
 /// the pool itself is still created so the app can start without Redis.
 pub fn build_pool(url: &str) -> Result<RedisPool> {
     let config = RedisConfig::from_url(url);
     Ok(config
-        .build_unchecked()
+        .create_pool(Some(Runtime::Tokio1))
         .context("failed to build Redis pool")?)
 }
 
@@ -41,7 +37,7 @@ where
     let mut conn = pool.get().await.context("failed to get Redis connection")?;
     let encoded = serde_json::to_string(value)
         .context("failed to encode value for Redis")?;
-    conn.set_ex(key, encoded, ttl_secs)
+    conn.set_ex::<_, _, ()>(key, encoded, ttl_secs as usize)
         .await
         .context("failed to write Redis value")?;
     Ok(())
