@@ -119,6 +119,7 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
   const [picker, setPicker] = useState<Field | null>(null);
   const [rateOpen, setRateOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsClosing, setSettingsClosing] = useState(false);
   const [autoSlippage, setAutoSlippage] = useState(true);
   const [slippage, setSlippage] = useState(0.5);
   const [deadline, setDeadline] = useState(20);
@@ -131,7 +132,9 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
   const [intervalSec, setIntervalSec] = useState(10);
 
   const settingsRef = useRef<HTMLDivElement>(null);
+  const slippageRowRef = useRef<HTMLButtonElement>(null);
   const deadlineRef = useRef<HTMLDivElement>(null);
+  const popTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const socketRef = useRef<RatesSocket | null>(null);
   const requestRef = useRef<QuoteRequest | null>(null);
@@ -142,9 +145,12 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
 
   const feePercent = quote?.best?.price != null ? quote.best.price * 100 : NETWORK_FEE_PERCENT;
 
+  const bestResolved = quote?.best != null;
+
   const sellNum =
     indep === "sell" ? parseAmount(sellText) : parseAmount(buyText) > 0 ? convert(parseAmount(buyText), buy, sell) : 0;
-  const buyNum = indep === "buy" ? parseAmount(buyText) : convert(sellNum, sell, buy, feePercent);
+  const buyNum =
+    indep === "buy" ? parseAmount(buyText) : bestResolved ? convert(sellNum, sell, buy, feePercent) : 0;
 
   const sellDisplay = indep === "sell" ? sellText : sellNum > 0 ? formatNumber(sellNum) : "";
   const buyDisplay = indep === "buy" ? buyText : buyNum > 0 ? formatNumber(buyNum) : "";
@@ -168,21 +174,43 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
           ? `Оплатить ${sell.symbol} → ${buy.symbol}`
           : `Зафиксировать курс ${sell.symbol} → ${buy.symbol}`;
 
+  const closeSettings = useCallback(() => {
+    if (settingsClosing) return;
+    setSettingsClosing(true);
+    if (popTimer.current) clearTimeout(popTimer.current);
+    popTimer.current = setTimeout(() => {
+      setSettingsOpen(false);
+      setSettingsClosing(false);
+    }, 170);
+  }, [settingsClosing]);
+
+  const toggleSettings = useCallback(() => {
+    if (settingsOpen) {
+      closeSettings();
+    } else {
+      setSettingsOpen(true);
+    }
+  }, [settingsOpen, closeSettings]);
+
   useEffect(() => {
     const onClickOutside = (event: MouseEvent) => {
-      if (settingsRef.current && !settingsRef.current.contains(event.target as Node)) {
-        setSettingsOpen(false);
+      const target = event.target as Node;
+      if (settingsRef.current && !settingsRef.current.contains(target)) {
+        closeSettings();
       }
-      if (deadlineRef.current && !deadlineRef.current.contains(event.target as Node)) {
+      if (slippageRowRef.current?.contains(target)) return; // row toggles the popup itself
+      if (deadlineRef.current && !deadlineRef.current.contains(target)) {
         setDeadlineOpen(false);
       }
     };
-    if (settingsOpen || deadlineOpen) document.addEventListener("mousedown", onClickOutside);
+    if (settingsOpen || settingsClosing || deadlineOpen)
+      document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
-  }, [settingsOpen, deadlineOpen]);
+  }, [settingsOpen, settingsClosing, deadlineOpen, closeSettings]);
 
   useEffect(() => {
     return () => {
+      if (popTimer.current) clearTimeout(popTimer.current);
       if (noticeTimer.current) clearTimeout(noticeTimer.current);
     };
   }, []);
@@ -287,7 +315,7 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
   return (
     <section className={styles.shell} id="swap">
       <div className={styles.dock}>
-        <div className={styles.card} ref={settingsRef}>
+        <div className={styles.card}>
         <div className={styles.head}>
           <div className={styles.tabs} role="tablist" aria-label="Режимы">
             {MODES.map((m) => (
@@ -305,13 +333,13 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
           </div>
 
           <div className={styles.headRight}>
-            <div className={styles.settingsAnchor}>
+            <div className={styles.settingsAnchor} ref={settingsRef}>
               <button
                 type="button"
                 className={styles.gear}
                 aria-label="Настройки"
                 aria-expanded={settingsOpen}
-                onClick={() => setSettingsOpen((v) => !v)}
+                onClick={toggleSettings}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path
@@ -329,8 +357,8 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
                 </svg>
               </button>
 
-              {settingsOpen && (
-                <div className={styles.settingsPop}>
+              {(settingsOpen || settingsClosing) && (
+                <div className={settingsClosing ? styles.settingsPopClosing : styles.settingsPop}>
                   <div className={styles.popHead}>
                     <span className={styles.popTitle}>Настройки обмена</span>
                   </div>
@@ -540,7 +568,8 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
         <button
           type="button"
           className={styles.slippageRow}
-          onClick={() => setSettingsOpen((v) => !v)}
+          ref={slippageRowRef}
+          onClick={toggleSettings}
           aria-label="Настройки проскальзывания"
         >
           <span className={styles.slippageLabel}>
@@ -603,7 +632,7 @@ export function Converter({ connected, connecting, onConnect }: ConverterProps) 
           rate={rate}
           feeLabel={feeLabel}
           quote={quote}
-          ratesStatus={ratesStatus}
+          amount={sellNum}
         />
       </div>
 

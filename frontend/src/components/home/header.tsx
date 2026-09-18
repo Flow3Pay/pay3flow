@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useI18nSafe } from "@/i18n/context";
 
@@ -44,21 +44,23 @@ export function Header({
   const [chain, setChain] = useState<ChainOption>(CHAINS[0]);
   const [walletOpen, setWalletOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const walletRef = useRef<HTMLDivElement>(null);
 
   const chooseChain = (option: ChainOption) => {
     setChain(option);
     setChainOpen(false);
   };
 
-  const scheduleWalletClose = () => {
-    if (closeTimer.current) clearTimeout(closeTimer.current);
-    setWalletOpen(false);
-  };
-
-  const cancelWalletClose = () => {
-    if (closeTimer.current) clearTimeout(closeTimer.current);
-  };
+  useEffect(() => {
+    if (!walletOpen) return;
+    const onClickOutside = (event: MouseEvent) => {
+      if (walletRef.current && !walletRef.current.contains(event.target as Node)) {
+        setWalletOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [walletOpen]);
 
   return (
     <header className={`${styles.header} ${styles.bar}`}>
@@ -138,8 +140,7 @@ export function Header({
           {connected ? (
             <div
               className={styles.walletWrap}
-              onMouseLeave={scheduleWalletClose}
-              onMouseEnter={cancelWalletClose}
+              ref={walletRef}
             >
               <button
                 type="button"

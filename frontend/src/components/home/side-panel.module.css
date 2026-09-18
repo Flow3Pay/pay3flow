@@ -71,24 +71,6 @@
   color: var(--color-text);
 }
 
-.live {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--color-text-soft);
-}
-
-.liveDot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-good);
-  box-shadow: 0 0 0 3px rgba(0, 123, 40, 0.16);
-  flex-shrink: 0;
-}
-
 .details {
   display: flex;
   flex-direction: column;
@@ -112,123 +94,154 @@
   text-align: right;
 }
 
-.routesBlock {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px;
-  background: var(--color-panel-soft);
-  border-radius: 16px;
-}
-
-.routesHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--color-text-soft);
-}
-
-.routesTitle {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.routesDot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-good);
-  box-shadow: 0 0 0 3px rgba(0, 123, 40, 0.14);
-  flex-shrink: 0;
-}
-
-.routesTime {
-  font-weight: 500;
-  color: var(--color-text-faint);
-  font-variant-numeric: tabular-nums;
-}
-
 .routeList {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
 }
 
 .routeRow,
 .routeBest {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 14px;
-  font-size: 13.5px;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border-radius: 16px;
+  border: 1px solid var(--color-border);
+  background: var(--color-paper);
   color: var(--color-text);
-  background: var(--color-panel);
-  transition: background 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    transform 0.15s ease;
+}
+
+.routeRow:hover,
+.routeBest:hover {
+  border-color: var(--color-primary);
+  background: rgba(0, 66, 147, 0.04);
 }
 
 .routeBest {
-  background: rgba(0, 123, 40, 0.1);
-  box-shadow: inset 0 0 0 1px rgba(0, 123, 40, 0.28);
+  border-color: var(--color-primary);
+  background: rgba(0, 66, 147, 0.08);
+  transform: scale(1.01);
 }
 
-.routeIndex {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-paper);
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--color-text-faint);
+.routeMain {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.routeBest .routeMain {
+  flex: 1.04;
+}
+
+.routeAmount {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-weight: 600;
+}
+
+.routeAmountInt {
+  font-size: 24px;
+  line-height: 1.1;
+  font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
 
-.routeBest .routeIndex {
-  background: var(--color-good);
+.routeAmountFrac {
+  font-size: 18px;
+  line-height: 1.1;
+  font-weight: 500;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.routeTicker {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--color-text-faint);
+  margin-left: 4px;
+}
+
+.routeUsd {
+  font-size: 17px;
+  line-height: 1.2;
+  font-weight: 450;
+  color: var(--color-text-soft);
+}
+
+.routeFeeLine {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-soft);
+  margin-top: 2px;
+}
+
+.routeFeeLine svg {
+  color: var(--color-good);
+}
+
+.routeSide {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.routeBadgeBest,
+.routeBadgeDelta,
+.routeBadgeFlat {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 14px;
+  border-radius: var(--radius-pill);
   color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.routeBadgeBest {
+  background: var(--color-good);
+}
+
+.routeBadgeDelta {
+  background: var(--color-warn);
+}
+
+.routeBadgeFlat {
+  background: #6b7280;
 }
 
 .routeName {
-  flex: 1;
+  font-size: 14.5px;
   font-weight: 600;
+  color: var(--color-text);
+  max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.routeEnd {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.bestBadge {
-  padding: 3px 8px;
-  border-radius: var(--radius-pill);
-  background: var(--color-good);
-  color: #fff;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.routeFee {
-  font-weight: 600;
-  color: var(--color-primary);
-  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .routeEmpty {
