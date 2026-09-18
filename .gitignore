@@ -1,40 +1,82 @@
+
 # === Monorepo ignores ===
 
+
+
 # External projects (their own git repos)
+
 fmatch
+
 searxng
+
 cowswap-frontend
 
+cowprotocol-services
+
+
+
 # Local tooling / state
+
 .repowise
+
 data
+
 diagnostics
+
 PLAN.md
 
+
+
 # Editors / OS
+
 .vscode/
+
 .idea/
+
 *.swp
+
 *.swo
+
 .DS_Store
+
 Thumbs.db
 
+
+
 # Env files
+
 .env
+
 .env.local
+
 .env.*.local
 
+
+
 # Logs
+
 *.log
 
+
+
 # === Frontend (Next.js) ===
+
 frontend/node_modules/
+
 frontend/.next/
+
 frontend/out/
 
+
+
 # === Backend (Rust) ===
+
 backend/target/
 
+
+
 # === Searcher ===
+
 searcher/redis-data/
+
 .playwright-mcp
