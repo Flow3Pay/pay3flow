@@ -10,6 +10,22 @@ use crate::exchange::status::{
 
 pub type Minor = i64;
 
+#[derive(Debug, Clone, Serialize)]
+pub struct ExchangeCorridor {
+    pub id: Uuid,
+    pub source_country: String,
+    pub source_currency: String,
+    pub target_country: String,
+    pub target_currency: String,
+    pub status: String,
+    pub min_amount_minor: Option<Minor>,
+    pub max_amount_minor: Option<Minor>,
+    pub daily_limit_minor: Option<Minor>,
+    pub metadata: Value,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewExchangeOrder {
     pub user_id: Uuid,
@@ -138,4 +154,14 @@ pub struct AuditEvent {
     pub actor_id: Option<String>,
     pub payload: Value,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewAuditEvent {
+    pub entity_type: String,
+    pub entity_id: Uuid,
+    pub event_type: String,
+    pub actor_type: String,
+    pub actor_id: Option<String>,
+    pub payload: Value,
 }

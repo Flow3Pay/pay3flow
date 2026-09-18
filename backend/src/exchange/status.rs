@@ -217,6 +217,21 @@ impl FundingInstructionStatus {
         }
     }
 
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "not_started" => Some(Self::NotStarted),
+            "created" => Some(Self::Created),
+            "shown_to_user" => Some(Self::ShownToUser),
+            "user_confirmed" => Some(Self::UserConfirmed),
+            "solver_acknowledged" => Some(Self::SolverAcknowledged),
+            "received_by_solver" => Some(Self::ReceivedBySolver),
+            "expired" => Some(Self::Expired),
+            "cancelled" => Some(Self::Cancelled),
+            "failed" => Some(Self::Failed),
+            _ => None,
+        }
+    }
+
     pub fn can_transition(self, next: Self) -> bool {
         matches!(
             (self, next),
