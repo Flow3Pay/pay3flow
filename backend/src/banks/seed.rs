@@ -20,6 +20,7 @@ fn branded_icon_url(name: &str, domain: &str) -> String {
         "Mastercard Network" => {
             "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a4/Mastercard_2019_logo.svg/1280px-Mastercard_2019_logo.svg.png?utm_source=en.wikipedia.org&utm_campaign=index&utm_content=thumbnail".to_string()
         }
+        "MIR Network" => "https://evgenykatyshev.ru/projects/mir-logo/mir-logo.svg".to_string(),
         "PayPal" => {
             "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0e/PayPal_2024_%28Icon%29.svg/250px-PayPal_2024_%28Icon%29.svg.png?utm_source=en.wikipedia.org&utm_campaign=parser&utm_content=thumbnail".to_string()
         }
@@ -558,6 +559,7 @@ mod tests {
 
         assert!(icon_for("Visa Network").contains("Visa_Inc._logo"));
         assert!(icon_for("Mastercard Network").contains("Mastercard_2019_logo"));
+        assert!(icon_for("MIR Network").contains("mir-logo.svg"));
         assert!(icon_for("PayPal").contains("PayPal_2024"));
     }
 
