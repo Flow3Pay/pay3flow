@@ -242,6 +242,19 @@ pub async fn orders_for_user(
     Ok(rows.into_iter().map(row_to_order).collect())
 }
 
+pub async fn open_solver_orders(pool: &DbPool, limit: i64) -> Result<Vec<ExchangeOrder>> {
+    let client = pool.get().await?;
+    let stmt = client
+        .prepare_cached(&format!(
+            "{SELECT_ORDER} WHERE status = $1 ORDER BY created_at ASC LIMIT $2"
+        ))
+        .await?;
+    let rows = client
+        .query(&stmt, &[&OrderStatus::Quoting.as_str(), &limit])
+        .await?;
+    Ok(rows.into_iter().map(row_to_order).collect())
+}
+
 pub async fn order_by_idempotency_key(
     pool: &DbPool,
     user_id: &Uuid,
@@ -461,6 +474,57 @@ pub async fn quotes_for_order(pool: &DbPool, order_id: &Uuid) -> Result<Vec<Exch
         .await?;
     let rows = client.query(&stmt, &[order_id]).await?;
     Ok(rows.into_iter().map(row_to_quote).collect())
+}
+
+pub async fn select_quote_for_order(
+    pool: &DbPool,
+    order: &ExchangeOrder,
+    quote: &ExchangeQuote,
+    score: i64,
+) -> Result<ExchangeOrder> {
+    if order.status != OrderStatus::Quoting {
+        bail!("exchange order must be quoting before selecting winner");
+    }
+    if quote.order_id != order.id {
+        bail!("quote does not belong to exchange order");
+    }
+
+    let mut client = pool.get().await?;
+    let tx = client.transaction().await?;
+
+    tx.execute(
+        "UPDATE exchange_quotes SET score = $2, status = $3, updated_at = now() WHERE id = $1",
+        &[&quote.id, &score, &QuoteStatus::Selected.as_str()],
+    )
+    .await?;
+
+    let order_row = tx
+        .query_opt(
+            r#"
+UPDATE exchange_orders
+SET selected_quote_id = $2,
+    status = $3,
+    updated_at = now()
+WHERE id = $1 AND status = $4
+RETURNING id, user_id, idempotency_key, source_country, source_currency, source_amount_minor,
+          source_method_type, source_method_ref, target_country, target_currency,
+          target_amount_min_minor, target_method_type, target_method_ref,
+          funding_instruction_id, funding_status, status, deadline_at, selected_quote_id,
+          failure_code, failure_message, created_at, updated_at
+"#,
+            &[
+                &order.id,
+                &quote.id,
+                &OrderStatus::Quoted.as_str(),
+                &OrderStatus::Quoting.as_str(),
+            ],
+        )
+        .await?
+        .context("exchange order was not quoting at winner selection time")?;
+    let order = row_to_order(order_row);
+
+    tx.commit().await?;
+    Ok(order)
 }
 
 pub async fn insert_funding_instruction(

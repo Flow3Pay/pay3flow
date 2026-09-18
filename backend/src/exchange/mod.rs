@@ -1,6 +1,9 @@
+pub mod auction;
 pub mod discovery;
 pub mod model;
 pub mod repo;
+pub mod seed;
+pub mod solver;
 pub mod status;
 
 pub use model::{

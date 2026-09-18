@@ -1085,18 +1085,18 @@ order переходит в done.
 
 ## Фаза EX-5 - Solver API И Fake Solvers
 
-- [ ] EX-5.1. Создать fake solver model.
-- [ ] EX-5.2. Seed минимум двух fake solver'ов: `fast-low-limit` и `slow-better-rate`.
-- [ ] EX-5.3. Реализовать internal solver quote interface.
-- [ ] EX-5.3a. Реализовать trait/interface `RouteQuoteSource`: `quote(request) -> route quote`, `health()`, `name()`.
-- [ ] EX-5.3b. Реализовать `MockRouteQuoteSource` для MVP.
-- [ ] EX-5.3c. Не подключать real 0x/1inch/etc в MVP без research decision и env-gated adapter.
-- [ ] EX-5.4. Реализовать `GET /api/solver/orders/open`.
-- [ ] EX-5.5. Реализовать `POST /api/solver/orders/:id/quotes`.
-- [ ] EX-5.6. Fake solver должен уметь вернуть quote success.
-- [ ] EX-5.7. Fake solver должен уметь вернуть quote reject.
-- [ ] EX-5.8. Fake solver должен уметь симулировать timeout.
-- [ ] EX-5.9. Unit tests: quote validation, expiration, solver status.
+- [x] EX-5.1. Создать fake solver model.
+- [x] EX-5.2. Seed минимум двух fake solver'ов: `fast-low-limit` и `slow-better-rate`.
+- [x] EX-5.3. Реализовать internal solver quote interface.
+- [x] EX-5.3a. Реализовать trait/interface `RouteQuoteSource`: `quote(request) -> route quote`, `health()`, `name()`.
+- [x] EX-5.3b. Реализовать `MockRouteQuoteSource` для MVP.
+- [x] EX-5.3c. Не подключать real 0x/1inch/etc в MVP без research decision и env-gated adapter.
+- [x] EX-5.4. Реализовать `GET /api/solver/orders/open`.
+- [x] EX-5.5. Реализовать `POST /api/solver/orders/:id/quotes`.
+- [x] EX-5.6. Fake solver должен уметь вернуть quote success.
+- [x] EX-5.7. Fake solver должен уметь вернуть quote reject.
+- [x] EX-5.8. Fake solver должен уметь симулировать timeout.
+- [x] EX-5.9. Unit tests: quote validation, expiration, solver status.
 
 Приёмка:
 
@@ -1106,15 +1106,15 @@ order переходит в done.
 
 ## Фаза EX-6 - Auction И Выбор Winner
 
-- [ ] EX-6.1. Реализовать auction window 3 секунды.
-- [ ] EX-6.2. Собрать quotes от candidates.
-- [ ] EX-6.3. Отфильтровать expired/invalid quotes.
-- [ ] EX-6.4. Посчитать score.
-- [ ] EX-6.5. Выбрать winner.
-- [ ] EX-6.6. Сохранить selected quote.
-- [ ] EX-6.7. Перевести order в `quoted`.
-- [ ] EX-6.8. Добавить deterministic tests на scoring.
-- [ ] EX-6.9. Добавить tie-break tests.
+- [x] EX-6.1. Реализовать auction window 3 секунды.
+- [x] EX-6.2. Собрать quotes от candidates.
+- [x] EX-6.3. Отфильтровать expired/invalid quotes.
+- [x] EX-6.4. Посчитать score.
+- [x] EX-6.5. Выбрать winner.
+- [x] EX-6.6. Сохранить selected quote.
+- [x] EX-6.7. Перевести order в `quoted`.
+- [x] EX-6.8. Добавить deterministic tests на scoring.
+- [x] EX-6.9. Добавить tie-break tests.
 
 Приёмка:
 

@@ -10,7 +10,8 @@ use tracing::Level;
 
 use crate::core::state::AppState;
 use crate::server::routing::{
-    activitypub, auth, banks, exchange, matcher, oauth, pairs, payments, payments_ws, rates, ws,
+    activitypub, auth, banks, exchange, matcher, oauth, pairs, payments, payments_ws, rates, solver,
+    ws,
 };
 
 pub fn router(state: AppState) -> Router {
@@ -35,6 +36,10 @@ pub fn router(state: AppState) -> Router {
             post(exchange::discover_solvers),
         )
         .route(
+            "/api/exchange/orders/:id/auction",
+            post(exchange::run_auction),
+        )
+        .route(
             "/api/exchange/orders/:id/confirm",
             post(exchange::confirm_order),
         )
@@ -45,6 +50,11 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/api/exchange/orders/:id/cancel",
             post(exchange::cancel_order),
+        )
+        .route("/api/solver/orders/open", get(solver::open_orders))
+        .route(
+            "/api/solver/orders/:id/quotes",
+            post(solver::submit_quote),
         )
         .route("/api/exchange-pairs", get(pairs::list))
         .route("/api/admin/exchange-pairs", post(pairs::admin_create))

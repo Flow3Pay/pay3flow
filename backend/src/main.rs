@@ -81,6 +81,12 @@ async fn main() -> anyhow::Result<()> {
         std::time::Duration::from_secs(cfg.pairs_cache_ttl_secs),
     );
 
+    let seeded_fake_solvers = pay3flow_backend::exchange::seed::seed_fake_solvers(&pool).await?;
+    tracing::info!(
+        solvers = seeded_fake_solvers,
+        "fake exchange solvers seeded"
+    );
+
     let state = AppState::new(
         pool,
         Jwt::new(&cfg.jwt_secret),

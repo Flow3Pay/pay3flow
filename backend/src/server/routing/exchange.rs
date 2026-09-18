@@ -8,8 +8,8 @@ use uuid::Uuid;
 use crate::core::error::AppError;
 use crate::core::state::AppState;
 use crate::exchange::{
-    discovery, repo, ExchangeOrder, ExchangeQuote, FundingInstruction, Minor, NewExchangeOrder,
-    OrderStatus,
+    auction, discovery, repo, solver, ExchangeOrder, ExchangeQuote, FundingInstruction, Minor,
+    NewExchangeOrder, OrderStatus,
 };
 use crate::server::routing::payments::auth_user_id;
 
@@ -135,6 +135,20 @@ pub async fn discover_solvers(
         discovery::discover_solvers_for_order(&state.pool, &state.ap, state.redis.as_ref(), &order)
             .await
             .map_err(map_exchange_err)?;
+    Ok(Json(result))
+}
+
+pub async fn run_auction(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<Json<auction::AuctionResult>, AppError> {
+    let user_id = auth_user_id(&state, &headers)?;
+    let order = owned_order(&state, &user_id, &id).await?;
+    let quote_source = solver::MockRouteQuoteSource::default();
+    let result = auction::run_auction_for_order(&state.pool, &order, &quote_source)
+        .await
+        .map_err(map_exchange_err)?;
     Ok(Json(result))
 }
 
@@ -352,6 +366,9 @@ fn map_exchange_err(err: anyhow::Error) -> AppError {
         || msg.contains("transition")
         || msg.contains("discover")
         || msg.contains("solver")
+        || msg.contains("winner")
+        || msg.contains("auction")
+        || msg.contains("no valid")
         || msg.contains("expired")
         || msg.contains("must be")
         || msg.contains("already")

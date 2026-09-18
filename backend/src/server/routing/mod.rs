@@ -9,4 +9,5 @@ pub mod pairs;
 pub mod payments;
 pub mod payments_ws;
 pub mod rates;
+pub mod solver;
 pub mod ws;
