@@ -306,7 +306,6 @@ frontend
       -> postgres
       -> redis
       -> fmatch      (ActivityPub solver discovery/matching)
-      -> crw         (legacy gRPC discovery/search; удалить отдельной cleanup-фазой, так как больше не нужен)
       -> solvers     (quotes / execution / proofs)
 
 cowprotocol-services/
@@ -1228,15 +1227,6 @@ order переходит в done.
 - [ ] EX-12.9. Скрипт: no funding consent -> settlement не стартует.
 - [ ] EX-12.10. Скрипт: funding consent -> solver ack -> TOKEN-leg -> money-leg -> done.
 
-## Фаза CLEAN-CRW - Удаление legacy crw
-
-- [ ] CLEAN-CRW.1. Подтвердить, что `crw` больше не нужен для Pay3Flow MVP discovery/search.
-- [ ] CLEAN-CRW.2. Удалить `crw/` из репозитория и docker-compose.
-- [ ] CLEAN-CRW.3. Удалить backend `search::crw_client`, `discovery.rs`, `CRW_GRPC_URL` и startup discovery loop.
-- [ ] CLEAN-CRW.4. Обновить README, diagrams и docs, чтобы discovery шёл через `fmatch`/local fallback без `crw`.
-- [ ] CLEAN-CRW.5. Удалить связанные env vars, build.rs/proto-зависимости и неиспользуемые crates/deps.
-- [ ] CLEAN-CRW.6. Прогнать backend/frontend smoke после удаления.
-
 Приёмка MVP:
 
 ```text
@@ -1288,13 +1278,10 @@ Audit trail полный.
 
 ```bash
 cd backend
-nix shell nixpkgs#cargo nixpkgs#rustc nixpkgs#protobuf -c cargo check
-nix shell nixpkgs#cargo nixpkgs#rustc nixpkgs#protobuf -c cargo test
+nix shell nixpkgs#cargo nixpkgs#rustc -c cargo check
+nix shell nixpkgs#cargo nixpkgs#rustc -c cargo test
 nix shell nixpkgs#cargo nixpkgs#rustc nixpkgs#rustfmt -c cargo fmt
 ```
-
-Почему нужен `nixpkgs#protobuf`: backend `build.rs` генерирует gRPC-код из
-`../crw/proto/search.proto`, и `cargo check/test` падает без `protoc`.
 
 ## 18. Что Агенту Делать Прямо Следующим Шагом
 

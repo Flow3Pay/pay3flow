@@ -123,29 +123,6 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    // Background acquirer discovery: run once at startup and then every
-    // DISCOVERY_INTERVAL (default 25 min). Each run asks crw to scan the
-    // internet, receives an acquirer diff, applies it to the acquirers table
-    // and re-offers acquirers to fmatch as `purpose="offer"` proposals.
-    let discovery_pool = state.pool.clone();
-    let discovery_ap = state.ap.clone();
-    let discovery_crw_url = cfg.crw_grpc_url.clone();
-    let discovery_interval = std::time::Duration::from_secs(
-        std::env::var("DISCOVERY_INTERVAL_SECS")
-            .ok()
-            .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or(25 * 60),
-    );
-    tokio::spawn(async move {
-        pay3flow_backend::discovery::run_discovery_loop(
-            discovery_pool,
-            discovery_ap,
-            discovery_crw_url,
-            discovery_interval,
-        )
-        .await;
-    });
-
     let app = routing::api::router(state);
     let addr = cfg.http_addr;
     let listener = tokio::net::TcpListener::bind(&addr).await?;

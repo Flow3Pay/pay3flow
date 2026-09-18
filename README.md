@@ -38,7 +38,6 @@
 | `backend` | `backend/` | Rust (Axum, WebSocket, Postgres, Redis) | Ядро: auth, intents, маршрутизация, статусы, споры |
 | `cow-services` | `cowprotocol-services/` | Rust | Референс CoW Protocol Services: orderbook, auction/solver flow, settlement patterns |
 | `fmatch` | `fmatch/` | Rust (Axum, sqlx) | Федеративный discovery/matching solver'ов и участников сети |
-| `crw` | `crw/` | Rust + gRPC | Поиск и discovery новых solver'ов/провайдеров ликвидности |
 
 > `cowprotocol-services/` должен быть локальной копией
 > `https://github.com/cowprotocol/services` для изучения и адаптации, а не
@@ -57,7 +56,6 @@ graph LR
     fmatch["fmatch<br/>:7277<br/>Rust + Axum"]
     fmatch_db["fmatch-postgres<br/>:5432"]
     typesense["fmatch-typesense<br/>:8108"]
-    crw["crw<br/>:3030/:3031<br/>Rust + gRPC"]
     solvers["Solvers<br/>fiat / token liquidity"]
 
     client <-->|"HTTP / WS"| frontend
@@ -66,7 +64,6 @@ graph LR
     backend --> redis
     backend -. изучить / адаптировать .-> cow
     backend <-->|"ActivityPub<br/>inbox / outbox"| fmatch
-    backend <-->|"gRPC discovery"| crw
     backend <-->|"quotes / execution / proof"| solvers
     fmatch --> fmatch_db
     fmatch --> typesense
@@ -177,7 +174,6 @@ pay3flow/
 ├── backend/       # Rust: Axum + WS + ActivityPub + Postgres + Redis
 ├── cowprotocol-services/ # локальный reference CoW Protocol Services
 ├── fmatch/        # матчер (отдельный репозиторий)
-├── crw/           # discovery/search через gRPC
 ├── docs/          # документация (API, схемы, глоссарий)
 ├── scripts/       # утилиты (health-check и т.д.)
 ├── docker-compose.yml
@@ -195,7 +191,6 @@ pay3flow/
 | `fmatch` | `7277` | ActivityPub-матчер |
 | `fmatch-postgres` | `5433` | PostgreSQL (fmatch) |
 | `fmatch-typesense` | `8108` | Поиск (Typesense) |
-| `crw` | `3030 / 3031` | HTTP + gRPC discovery |
 
 ## Лицензия
 

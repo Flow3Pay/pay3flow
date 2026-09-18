@@ -1,9 +1,0 @@
-target/
-.git/
-.gitignore
-*.log
-config.local.toml
-.env
-.env.*
-plans/
-fuzz/

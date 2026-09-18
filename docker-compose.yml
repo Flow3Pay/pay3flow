@@ -54,8 +54,6 @@ services:
       SERVICE_FEE_PERCENT: 0.7
       FX_SOURCE: mock
       FX_MARGIN_PERCENT: 1.0
-      CRW_GRPC_URL: http://crw:3031
-      DISCOVERY_INTERVAL_SECS: "1500"
       ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token-change-me}
       REDIS_URL: redis://redis:6379
       PAIRS_CACHE_TTL_SECS: "300"
@@ -129,39 +127,6 @@ services:
       NEXT_PUBLIC_API_URL: http://localhost:8080
     depends_on:
       - backend
-
-  crw:
-    build: ./crw
-    container_name: pay3flow-crw
-    restart: unless-stopped
-    ports:
-      - "3030:3030"
-      - "3031:3031"
-    environment:
-      RUST_LOG: info
-      CRW_SERVER__HOST: 0.0.0.0
-      CRW_SERVER__PORT: "3030"
-      CRW_GRPC_PORT: "3031"
-      CRW_RENDERER__MODE: none
-      CRW_SEARCH__SEARXNG_URL: http://searcher:8080
-      ACQUIRER_DB_DSN: postgres://pay3flow:pay3flow@postgres:5432/pay3flow
-    depends_on:
-      searcher:
-        condition: service_started
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3030/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  searcher:
-    image: docker.io/searxng/searxng:latest
-    container_name: pay3flow-searcher
-    restart: unless-stopped
-    ports:
-      - "8081:8080"
-    volumes:
-      - ./config/searxng/settings.yml:/etc/searxng/settings.yml:ro
 
 volumes:
   pgdata:

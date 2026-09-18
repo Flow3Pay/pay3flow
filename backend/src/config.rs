@@ -10,8 +10,6 @@ pub struct Config {
     pub ap_require_signatures: bool,
     pub fmatch_inbox: String,
     pub fmatch_actor_id: String,
-    /// crw gRPC search endpoint (PLAN #82).
-    pub crw_grpc_url: String,
     /// AES-GCM key material for encrypting provider credentials (PLAN #30).
     pub secrets_key: String,
     /// Our cut, percent of the gross payment amount (PLAN #41).
@@ -49,8 +47,6 @@ impl Config {
                 .unwrap_or_else(|_| "http://localhost:7277/inbox/actra".into()),
             fmatch_actor_id: env::var("FMATCH_ACTOR_ID")
                 .unwrap_or_else(|_| "http://localhost:7277/actor/actra".into()),
-            crw_grpc_url: env::var("CRW_GRPC_URL")
-                .unwrap_or_else(|_| "http://localhost:3031".into()),
             secrets_key: env::var("SECRETS_KEY")
                 .unwrap_or_else(|_| "dev-secrets-key-change-me".into()),
             service_fee_percent: env::var("SERVICE_FEE_PERCENT")

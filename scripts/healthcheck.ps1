@@ -59,7 +59,6 @@ $services = @(
     @{ Name = 'fmatch';          Kind = 'http'; Endpoint = 'http://localhost:7277/health'; Expect = 'ok'        },
     @{ Name = 'fmatch-typesense';Kind = 'http'; Endpoint = 'http://localhost:8108/health'; Expect = 'ok'        },
     @{ Name = 'frontend';        Kind = 'http'; Endpoint = 'http://localhost:3000/';       Expect = 'any2xx'    },
-    @{ Name = 'searcher';        Kind = 'http'; Endpoint = 'http://localhost:8081/';       Expect = 'any2xx'    },
     @{ Name = 'postgres';        Kind = 'tcp';  Host = 'localhost'; Port = 5435                                 },
     @{ Name = 'fmatch-postgres'; Kind = 'tcp';  Host = 'localhost'; Port = 5433                                 }
 )

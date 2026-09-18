@@ -123,10 +123,10 @@ pub async fn compute_quote(
 
 /// Re-rank fmatch candidates for the swap pair `from → to`.
 ///
-/// Acquirers discovered by crw carry their per-pair fee terms in the DB
-/// `endpoints` JSON, but the quote path here has no DB access, so this
-/// function re-ranks purely on the candidate's own `price` (fmatch's
-/// per-token price) when present, and otherwise preserves fmatch order.
+/// Some acquirers carry their per-pair fee terms in the DB `endpoints` JSON,
+/// but the quote path here has no DB access, so this function re-ranks purely
+/// on the candidate's own `price` (fmatch's per-token price) when present, and
+/// otherwise preserves fmatch order.
 /// All candidates stay in the answer; only `best` (rank-1) is consumed by
 /// the payment service.
 pub fn rank_candidates_by_pair_fee(

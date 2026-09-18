@@ -1,11 +1,7 @@
 FROM rust:1.97-bookworm AS builder
 WORKDIR /app
 
-# protoc for tonic-prost-build codegen (backend/build.rs compiles crw/proto).
-RUN apt-get update && apt-get install -y --no-install-recommends protobuf-compiler && rm -rf /var/lib/apt/lists/*
-
-COPY backend/Cargo.toml backend/Cargo.lock backend/build.rs backend/
-COPY crw/proto crw/proto
+COPY backend/Cargo.toml backend/Cargo.lock backend/
 RUN mkdir -p backend/src && echo "fn main(){}" > backend/src/main.rs \
     && cargo build --release --manifest-path backend/Cargo.toml 2>/dev/null; rm -rf backend/src
 COPY backend/src backend/src
