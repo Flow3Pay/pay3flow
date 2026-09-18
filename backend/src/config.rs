@@ -28,6 +28,8 @@ pub struct Config {
     pub admin_token: String,
     /// TTL of the exchange-pairs in-memory cache (PLAN #46c), seconds.
     pub pairs_cache_ttl_secs: u64,
+    /// Redis URL for caching fmatch candidates (PLAN #5a, #37d).
+    pub redis_url: String,
 }
 
 impl Config {
@@ -72,6 +74,8 @@ impl Config {
                 .ok()
                 .and_then(|s| s.parse::<u64>().ok())
                 .unwrap_or(300),
+            redis_url: env::var("REDIS_URL")
+                .unwrap_or_else(|_| "redis://127.0.0.1:6379".into()),
         })
     }
 }

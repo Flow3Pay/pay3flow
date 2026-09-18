@@ -49,6 +49,18 @@ async fn main() -> anyhow::Result<()> {
         },
     );
 
+    let redis_pool = if cfg.redis_url.is_empty() {
+        None
+    } else {
+        Some(
+            pay3flow_backend::core::redis::build_pool(&cfg.redis_url)
+                .unwrap_or_else(|e| {
+                    tracing::warn!(error = %e, "failed to build Redis pool; cache will be skipped");
+                    panic!("dead pool")
+                }),
+        )
+    };
+
     // Bank exchange-pair router (PLAN 2△ / 46a-46c): seed the catalog once at
     // startup (idempotent upsert), then hand the cached reader service to the
     // router. Admin edits land on the next GET because the cache is
@@ -78,6 +90,7 @@ async fn main() -> anyhow::Result<()> {
         pairs,
         banks,
         cfg.admin_token,
+        redis_pool,
     );
 
     tracing::info!(

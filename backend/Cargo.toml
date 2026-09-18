@@ -12,6 +12,7 @@ axum = { version = "0.7", features = ["ws", "macros"] }
 base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 deadpool-postgres = "0.12"
+deadpool-redis = "0.10"
 futures = "0.3"
 jsonwebtoken = "9"
 rand = "0.8"

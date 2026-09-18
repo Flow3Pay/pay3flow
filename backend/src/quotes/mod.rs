@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::activitypub::model::AcquirerCandidate;
 use crate::activitypub::Service;
+use crate::core::redis;
 use crate::routing::{PaymentRequest, RoutePicker, RouteResolved, RouteSource};
 
 /// Live quote for an exchange pair. Built by asking fmatch which of its
@@ -54,17 +55,27 @@ fn fmt_amount(amount: f64) -> String {
     format!("{}", amount)
 }
 
-/// Compute a quote for the request: ask fmatch (read-only), fall back to
-/// local routing rules when fmatch is unreachable. When the request converts
-/// to a target currency (`to_currency`), fmatch's answer is re-ranked by the
-/// fee each managed solver actually charges on that pair — so `best` is always
-/// the cheapest route that can move the money, not just fmatch's relevance
-/// winner. fmatch itself stays read-only.
-pub async fn compute_quote(ap: &Service, picker: &RoutePicker, request: PaymentRequest) -> Quote {
-    let resolved = match ap
-        .submit_request("candidates", &fmatch_content(&request))
-        .await
-    {
+pub async fn compute_quote(
+    ap: &Service,
+    picker: &RoutePicker,
+    request: PaymentRequest,
+    redis_pool: Option<&crate::core::redis::RedisPool>,
+) -> Quote {
+    let from = request.currency.as_str();
+    let to = request.to_currency.as_deref().unwrap_or(from);
+    let amount_str = if (from != to) { Some(&format!("{}", request.amount)) } else { None };
+    let cache_key = crate::core::redis::cache_key(from, to, amount_str.as_deref());
+
+    // Try to get from Redis cache first
+    if let Some(pool) = redis_pool {
+        if let Ok(Some(cached)) = crate::core::redis::get_json::<RouteResolved>(pool, &cache_key).await {
+            // Cache hit! Convert to Quote format
+            return quote_from_result(request, cached);
+        }
+    }
+
+    // Compute quote normally
+    let resolved = match ap.submit_request("candidates", &fmatch_content(&request)).await {
         Ok((_outcome, body)) => {
             let candidates = body
                 .as_ref()
@@ -79,8 +90,6 @@ pub async fn compute_quote(ap: &Service, picker: &RoutePicker, request: PaymentR
             source: RouteSource::Fmatch,
             candidates,
         } => {
-            let from = request.currency.as_str();
-            let to = request.to_currency.as_deref().unwrap_or(from);
             if from.eq_ignore_ascii_case(to) {
                 RouteResolved {
                     source: RouteSource::Fmatch,
@@ -95,6 +104,12 @@ pub async fn compute_quote(ap: &Service, picker: &RoutePicker, request: PaymentR
         }
         other => other,
     };
+
+    // Cache the result
+    if let Some(pool) = redis_pool {
+        let _ = crate::core::redis::set_json(pool, &cache_key, &resolved, 300).await;
+    }
+
     quote_from_result(request, resolved)
 }
 

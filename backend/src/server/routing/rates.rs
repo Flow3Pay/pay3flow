@@ -62,26 +62,27 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                 let send_tx = send_tx.clone();
                 let state = state.clone();
                 tokio::spawn(async move {
-                    let reply = match serde_json::from_str::<RateIn>(&text) {
-                        Ok(RateIn::Quote { request, id }) => {
-                            if request.amount <= 0.0 {
-                                RateOut::Error {
-                                    message: "amount must be positive".into(),
-                                }
-                            } else {
-                                RateOut::Quote {
-                                    id,
-                                    quote: Box::new(
-                                        quotes::compute_quote(
-                                            &state.ap,
-                                            &state.picker,
-                                            request,
-                                        )
-                                        .await,
-                                    ),
-                                }
-                            }
-                        }
+let reply = match serde_json::from_str::<RateIn>(&text) {
+                         Ok(RateIn::Quote { request, id }) => {
+                             if request.amount <= 0.0 {
+                                 RateOut::Error {
+                                     message: "amount must be positive".into(),
+                                 }
+                             } else {
+                                 RateOut::Quote {
+                                     id,
+                                     quote: Box::new(
+                                         quotes::compute_quote(
+                                             &state.ap,
+                                             &state.picker,
+                                             request,
+                                             state.redis.as_ref(),
+                                         )
+                                         .await,
+                                     ),
+                                 }
+                             }
+                         }
                         Ok(RateIn::Ping) => RateOut::Pong,
                         Err(err) => RateOut::Error {
                             message: format!("invalid message: {err}"),
@@ -104,5 +105,11 @@ pub async fn debug_quote(
     State(state): State<AppState>,
     Json(request): Json<PaymentRequest>,
 ) -> Json<Quote> {
-    Json(quotes::compute_quote(&state.ap, &state.picker, request).await)
+    Json(quotes::compute_quote(
+        &state.ap,
+        &state.picker,
+        request,
+        state.redis.as_ref(),
+    )
+    .await)
 }

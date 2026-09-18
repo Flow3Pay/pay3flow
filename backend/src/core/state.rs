@@ -1,5 +1,6 @@
 use crate::activitypub;
 use crate::banks::BanksService;
+use crate::core::redis::RedisPool;
 use crate::core::jwt::Jwt;
 use crate::db::DbPool;
 use crate::pairs::ExchangePairsService;
@@ -19,6 +20,8 @@ pub struct AppState {
     pub banks: BanksService,
     /// Bearer token guarding the admin endpoints (PLAN 46e).
     pub admin_token: String,
+    /// Optional Redis pool for fmatch candidate caching (PLAN #37d).
+    pub redis: Option<RedisPool>,
 }
 
 impl AppState {
@@ -32,6 +35,7 @@ impl AppState {
         pairs: ExchangePairsService,
         banks: BanksService,
         admin_token: String,
+        redis: Option<RedisPool>,
     ) -> Self {
         Self {
             pool,
@@ -42,6 +46,7 @@ impl AppState {
             pairs,
             banks,
             admin_token,
+            redis,
         }
     }
 }

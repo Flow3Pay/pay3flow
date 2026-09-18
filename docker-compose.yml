@@ -17,6 +17,20 @@ services:
       timeout: 3s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    container_name: pay3flow-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   backend:
     build:
       context: .
@@ -43,11 +57,14 @@ services:
       CRW_GRPC_URL: http://crw:3031
       DISCOVERY_INTERVAL_SECS: "1500"
       ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token-change-me}
+      REDIS_URL: redis://redis:6379
       PAIRS_CACHE_TTL_SECS: "300"
     volumes:
       - backend_data:/app/data
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   fmatch-postgres:
@@ -149,6 +166,7 @@ services:
 volumes:
   pgdata:
   backend_data:
+  redisdata:
   fmatch_pgdata:
   fmatch_tsdata:
   fmatch_data:

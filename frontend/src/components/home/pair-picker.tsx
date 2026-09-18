@@ -64,8 +64,7 @@ export function PairPicker({
   const [items, setItems] = useState<Bank[]>([]);
   const [windowStart, setWindowStart] = useState(0);
   const [total, setTotal] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const listRef = useRef<HTMLDivElement>(null);
@@ -75,17 +74,19 @@ export function PairPicker({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dataRef = useRef<WindowData>({ items: [], windowStart: 0, total: 0, hasMore: true });
 
+  // Keep the (optional) externally-controlled query in sync with typing.
+  const [lastQuery, setLastQuery] = useState(query);
+  if (query !== lastQuery) {
+    setLastQuery(query);
+    setSearch(query ?? "");
+  }
+
   const commit = (next: WindowData) => {
     dataRef.current = next;
     setItems(next.items);
     setWindowStart(next.windowStart);
     setTotal(next.total);
-    setHasMore(next.hasMore);
   };
-
-  useEffect(() => {
-    if (query !== undefined) setSearch(query);
-  }, [query]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -153,10 +154,11 @@ export function PairPicker({
   );
 
   // First page every time the drawer opens, the side flips, or the search
-  // query settles; abort any in-flight load left behind.
+  // query settles; abort any in-flight load left behind. Deferred a microtask
+  // so the fetch's loading state lands outside the effect commit.
   useEffect(() => {
     if (!open) return;
-    fetchPage(0, FIRST_PAGE, "replace");
+    queueMicrotask(() => fetchPage(0, FIRST_PAGE, "replace"));
     return () => {
       abortRef.current?.abort();
     };
