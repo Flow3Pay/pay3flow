@@ -21,8 +21,26 @@ const REFRESH_OPTIONS: RefreshSeconds[] = [0, 5, 15, 30, 60];
 const AMOUNT_STORAGE_KEY = "pay3flow.exchange.amount";
 const REFRESH_STORAGE_KEY = "pay3flow.exchange.refresh-seconds";
 
-const money = (minor: number, currency: string) =>
-  `${(minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })} ${currency}`;
+interface SharedExchange {
+  sourceCurrency: string;
+  targetCurrency: string;
+  amount: string | null;
+}
+
+function readSharedExchange(): SharedExchange | null {
+  if (typeof window === "undefined") return null;
+
+  const match = window.location.hash.match(/^#\/swap\/([^/?#]+)\/([^/?#]+)(?:\?([^#]*))?$/i);
+  if (!match) return null;
+
+  const params = new URLSearchParams(match[3] ?? "");
+  const amount = params.get("amount");
+  return {
+    sourceCurrency: decodeURIComponent(match[1]).toUpperCase(),
+    targetCurrency: decodeURIComponent(match[2]).toUpperCase(),
+    amount: amount && /^[0-9.,\s]+$/.test(amount) ? amount : null,
+  };
+}
 
 const amountFromMinor = (minor: number | undefined) =>
   minor == null
@@ -118,12 +136,15 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
   const abortRef = useRef<AbortController | null>(null);
   const settingsRef = useRef<HTMLDivElement>(null);
   const preferencesLoadedRef = useRef(false);
+  const urlReadyRef = useRef(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       try {
+        const sharedExchange = readSharedExchange();
         const savedAmount = window.localStorage.getItem(AMOUNT_STORAGE_KEY);
-        if (savedAmount) setAmount(savedAmount);
+        if (sharedExchange?.amount) setAmount(sharedExchange.amount);
+        else if (savedAmount) setAmount(savedAmount);
 
         const savedRefresh = Number(window.localStorage.getItem(REFRESH_STORAGE_KEY));
         if (REFRESH_OPTIONS.includes(savedRefresh as RefreshSeconds)) {
@@ -226,11 +247,40 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
   useEffect(() => {
     fetchCorridors()
       .then((response) => {
+        const sharedExchange = readSharedExchange();
+        const sharedCorridor = sharedExchange
+          ? response.items.find(
+              (item) =>
+                (item.source_currency === sharedExchange.sourceCurrency &&
+                  item.target_currency === sharedExchange.targetCurrency) ||
+                (item.source_currency === sharedExchange.targetCurrency &&
+                  item.target_currency === sharedExchange.sourceCurrency),
+            )
+          : null;
+
         setCorridors(response.items);
-        setCorridorId((current) => current || response.items[0]?.id || "");
+        setCorridorId((current) => current || sharedCorridor?.id || response.items[0]?.id || "");
+        if (
+          sharedExchange &&
+          sharedCorridor?.source_currency === sharedExchange.targetCurrency &&
+          sharedCorridor.target_currency === sharedExchange.sourceCurrency
+        ) {
+          setDirectionReversed(true);
+        }
+        urlReadyRef.current = true;
       })
       .catch((cause: Error) => setError(cause.message));
   }, []);
+
+  useEffect(() => {
+    if (!urlReadyRef.current || !corridor || !sourceCurrency || !targetCurrency) return;
+
+    const params = new URLSearchParams();
+    if (amount !== "0") params.set("amount", amount);
+    const query = params.toString();
+    const hash = `#/swap/${encodeURIComponent(sourceCurrency)}/${encodeURIComponent(targetCurrency)}${query ? `?${query}` : ""}`;
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}${hash}`);
+  }, [amount, corridor, sourceCurrency, targetCurrency]);
 
   useEffect(() => {
     if (token) return;
@@ -647,20 +697,6 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
             )}
           </button>
 
-          {selected && (
-            <div className={styles.selectionBox} data-testid="selected-route">
-              <div className={styles.selectionIcon}>✓</div>
-              <div>
-                <strong>Route selected</strong>
-                <span>{money(selected.target_amount_minor ?? 0, selected.target_currency ?? targetCurrency)}</span>
-                <small>
-                  {selected.payment_methods_verified
-                    ? "Both banks are listed on the matched offers."
-                    : "Confirm both banks on the venue before transferring."}
-                </small>
-              </div>
-            </div>
-          )}
           {error && token && <div className={styles.errorBox} role="alert">{error}</div>}
         </div>
 
