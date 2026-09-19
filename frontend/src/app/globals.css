@@ -81,29 +81,29 @@ button {
   isolation: isolate;
   overflow: hidden;
   background:
-    radial-gradient(circle at 15% 8%, rgba(185, 242, 39, 0.27), transparent 30%),
-    radial-gradient(circle at 88% 30%, rgba(117, 88, 246, 0.15), transparent 34%),
-    linear-gradient(180deg, #f8f8f4 0%, #f0f1ea 48%, #ebede5 100%);
+    radial-gradient(circle at 15% 8%, rgba(185, 242, 39, 0.2), transparent 28%),
+    radial-gradient(circle at 88% 30%, rgba(117, 88, 246, 0.11), transparent 32%),
+    linear-gradient(180deg, #f8f8f4 0%, #f1f2eb 48%, #ebece5 100%);
 }
 
 .appShell::before {
   position: fixed;
   inset: 0;
-  z-index: -2;
+  z-index: -1;
   content: "";
-  opacity: 0.42;
-  background-image:
-    linear-gradient(rgba(25, 28, 24, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(25, 28, 24, 0.035) 1px, transparent 1px);
-  background-size: 64px 64px;
-  mask-image: linear-gradient(to bottom, black 0%, transparent 72%);
+  opacity: 0.72;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220' viewBox='0 0 220 220'%3E%3Cpath d='M1 1h83c0 14 11 25 25 25s25-11 25-25h85v84c-14 0-25 11-25 25s11 25 25 25v84h-85c0-14-11-25-25-25s-25 11-25 25H1v-84c14 0 25-11 25-25S15 85 1 85V1Z' fill='%23ffffff' fill-opacity='.2' stroke='%23161815' stroke-opacity='.08' stroke-width='1.2'/%3E%3Ccircle cx='109' cy='110' r='4' fill='%23b9f227' fill-opacity='.2'/%3E%3C/svg%3E");
+  background-position: 30px 14px;
+  background-size: 220px 220px;
+  mask-image: linear-gradient(to bottom, black 0%, rgba(0, 0, 0, 0.82) 68%, transparent 100%);
+  animation: puzzleDrift 36s ease-in-out infinite alternate;
 }
 
 .appShell::after {
   position: fixed;
   top: 120px;
   left: 50%;
-  z-index: -1;
+  z-index: -2;
   width: min(1040px, 92vw);
   height: 620px;
   border-radius: 50%;
@@ -111,6 +111,11 @@ button {
   filter: blur(90px);
   content: "";
   transform: translateX(-50%);
+}
+
+@keyframes puzzleDrift {
+  from { background-position: 30px 14px; }
+  to { background-position: 58px 34px; }
 }
 
 .siteFooter {

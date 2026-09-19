@@ -104,6 +104,7 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
   const [selected, setSelected] = useState<RouteCandidate | null>(null);
   const [sourceMethodId, setSourceMethodId] = useState("am-ameriabank");
   const [targetMethodId, setTargetMethodId] = useState("ru-sberbank");
+  const [directionReversed, setDirectionReversed] = useState(false);
   const [methodPicker, setMethodPicker] = useState<"source" | "target" | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [refreshSeconds, setRefreshSeconds] = useState<RefreshSeconds>(15);
@@ -120,49 +121,52 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
     [corridorId, corridors],
   );
 
-  const sourceLocations = useMemo(
+  const locations = useMemo(
     () => [
       ...new Map(
-        corridors.map((item) => [
-          locationKey(item.source_country, item.source_currency),
-          { country: item.source_country, currency: item.source_currency },
+        corridors.flatMap((item) => [
+          [
+            locationKey(item.source_country, item.source_currency),
+            { country: item.source_country, currency: item.source_currency },
+          ] as const,
+          [
+            locationKey(item.target_country, item.target_currency),
+            { country: item.target_country, currency: item.target_currency },
+          ] as const,
         ]),
       ).values(),
     ],
     [corridors],
   );
 
-  const targetLocations = useMemo(() => {
-    const compatible = corridor
-      ? corridors.filter(
-          (item) =>
-            item.source_country === corridor.source_country &&
-            item.source_currency === corridor.source_currency,
-        )
-      : corridors;
-    return [
-      ...new Map(
-        compatible.map((item) => [
-          locationKey(item.target_country, item.target_currency),
-          { country: item.target_country, currency: item.target_currency },
-        ]),
-      ).values(),
-    ];
-  }, [corridor, corridors]);
+  const sourceCountry = corridor
+    ? directionReversed
+      ? corridor.target_country
+      : corridor.source_country
+    : "";
+  const sourceCurrency = corridor
+    ? directionReversed
+      ? corridor.target_currency
+      : corridor.source_currency
+    : "";
+  const targetCountry = corridor
+    ? directionReversed
+      ? corridor.source_country
+      : corridor.target_country
+    : "";
+  const targetCurrency = corridor
+    ? directionReversed
+      ? corridor.source_currency
+      : corridor.target_currency
+    : "";
 
   const sourceMethods = useMemo(
-    () =>
-      corridor
-        ? paymentMethodsFor(corridor.source_country, corridor.source_currency, "sender")
-        : [],
-    [corridor],
+    () => (sourceCountry ? paymentMethodsFor(sourceCountry, sourceCurrency, "sender") : []),
+    [sourceCountry, sourceCurrency],
   );
   const targetMethods = useMemo(
-    () =>
-      corridor
-        ? paymentMethodsFor(corridor.target_country, corridor.target_currency, "recipient")
-        : [],
-    [corridor],
+    () => (targetCountry ? paymentMethodsFor(targetCountry, targetCurrency, "recipient") : []),
+    [targetCountry, targetCurrency],
   );
   const sourceMethod =
     sourceMethods.find((method) => method.id === sourceMethodId) ?? sourceMethods[0] ?? null;
@@ -215,30 +219,6 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
     return () => window.clearInterval(timer);
   }, [lastUpdatedAt]);
 
-  const chooseSourceLocation = (value: string) => {
-    const currentTarget = corridor
-      ? locationKey(corridor.target_country, corridor.target_currency)
-      : null;
-    const matchingCorridors = corridors.filter(
-      (item) => locationKey(item.source_country, item.source_currency) === value,
-    );
-    const next =
-      matchingCorridors.find(
-        (item) => locationKey(item.target_country, item.target_currency) === currentTarget,
-      ) ?? matchingCorridors[0];
-    if (next) setCorridorId(next.id);
-  };
-
-  const chooseTargetLocation = (value: string) => {
-    const next = corridors.find(
-      (item) =>
-        item.source_country === corridor?.source_country &&
-        item.source_currency === corridor?.source_currency &&
-        locationKey(item.target_country, item.target_currency) === value,
-    );
-    if (next) setCorridorId(next.id);
-  };
-
   const resetResults = () => {
     abortRef.current?.abort();
     setRoutes([]);
@@ -246,6 +226,61 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
     setLastUpdatedAt(null);
     setSearching(false);
     setError(null);
+  };
+
+  const applyOrientation = (next: ExchangeCorridor, reversed: boolean) => {
+    const nextSourceCountry = reversed ? next.target_country : next.source_country;
+    const nextSourceCurrency = reversed ? next.target_currency : next.source_currency;
+    const nextTargetCountry = reversed ? next.source_country : next.target_country;
+    const nextTargetCurrency = reversed ? next.source_currency : next.target_currency;
+    setCorridorId(next.id);
+    setDirectionReversed(reversed);
+    setSourceMethodId(
+      paymentMethodsFor(nextSourceCountry, nextSourceCurrency, "sender")[0]?.id ?? "",
+    );
+    setTargetMethodId(
+      paymentMethodsFor(nextTargetCountry, nextTargetCurrency, "recipient")[0]?.id ?? "",
+    );
+    setMethodPicker(null);
+    resetResults();
+  };
+
+  const chooseSourceLocation = (value: string) => {
+    const direct = corridors.find(
+      (item) => locationKey(item.source_country, item.source_currency) === value,
+    );
+    if (direct) {
+      applyOrientation(direct, false);
+      return;
+    }
+    const reversed = corridors.find(
+      (item) => locationKey(item.target_country, item.target_currency) === value,
+    );
+    if (reversed) applyOrientation(reversed, true);
+  };
+
+  const chooseTargetLocation = (value: string) => {
+    const direct = corridors.find(
+      (item) => locationKey(item.target_country, item.target_currency) === value,
+    );
+    if (direct) {
+      applyOrientation(direct, false);
+      return;
+    }
+    const reversed = corridors.find(
+      (item) => locationKey(item.source_country, item.source_currency) === value,
+    );
+    if (reversed) applyOrientation(reversed, true);
+  };
+
+  const swapDirection = () => {
+    if (!corridor) return;
+    const nextSourceMethodId = targetMethod?.id ?? "";
+    const nextTargetMethodId = sourceMethod?.id ?? "";
+    setDirectionReversed((current) => !current);
+    setSourceMethodId(nextSourceMethodId);
+    setTargetMethodId(nextTargetMethodId);
+    resetResults();
   };
 
   const chooseSourceMethod = (method: PaymentMethod) => {
@@ -290,8 +325,8 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
     setError(null);
     try {
       const response = await fetchP2pRoutes({
-        sourceFiat: corridor.source_currency,
-        targetFiat: corridor.target_currency,
+        sourceFiat: sourceCurrency,
+        targetFiat: targetCurrency,
         sourceAmount: value,
         sourcePaymentMethod: sourceMethod.p2pQuery,
         targetPaymentMethod: targetMethod.p2pQuery,
@@ -316,7 +351,7 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
     } finally {
       if (requestId === requestRef.current) setSearching(false);
     }
-  }, [amount, corridor, sourceMethod, targetMethod]);
+  }, [amount, corridor, sourceCurrency, sourceMethod, targetCurrency, targetMethod]);
 
   useEffect(() => {
     if (
@@ -345,25 +380,17 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
       : null;
 
   const updateAmount = (value: string) => {
-    const sanitized = value.replace(/[^0-9.,\s]/g, "");
-    setAmount(sanitized || "0");
+    const sanitized = value.replace(/[^0-9.,\s]/g, "").replace(/\s/g, "");
+    const withoutLeadingZeroes = sanitized.replace(/^0+(?=\d)/, "");
+    setAmount(withoutLeadingZeroes || "0");
     resetResults();
   };
 
   return (
     <section className={styles.shell} id="transfer">
       <div className={styles.hero}>
-        <div className={styles.eyebrow}>
-          <span className={styles.eyebrowMark}>P3</span>
-          Intelligent payment routing
-        </div>
         <h1>Move money. <span>Keep more.</span></h1>
-        <p>One intent, every available path. Pay3Flow compares live P2P liquidity and assembles the strongest route from Armenia to Russia.</p>
-        <div className={styles.heroSignals} aria-label="Product capabilities">
-          <span><i className={styles.signalLive} /> Live public offers</span>
-          <span>4 connected venues</span>
-          <span>Multi-asset routing</span>
-        </div>
+        <p>One intent, every available path. Pay3Flow compares live P2P liquidity and assembles the strongest cross-border route for you.</p>
       </div>
 
       <div className={styles.workspace}>
@@ -449,7 +476,7 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
                 onChange={(event) => updateAmount(event.target.value)}
                 aria-label="Amount to send"
               />
-              <span className={styles.currencyHint}>{corridor?.source_currency ?? "AMD"} available via bank transfer</span>
+              <span className={styles.currencyHint}>{sourceCurrency || "AMD"} available via bank transfer</span>
             </div>
             <button
               type="button"
@@ -462,7 +489,7 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
               </span>
               <span className={styles.methodText}>
                 <strong>{sourceMethod?.name ?? "Select bank"}</strong>
-                <small>{corridor ? locationLabel(corridor.source_country, corridor.source_currency) : "Unavailable"}</small>
+                <small>{corridor ? locationLabel(sourceCountry, sourceCurrency) : "Unavailable"}</small>
               </span>
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                 <path d="m4 6 4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -470,14 +497,20 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
             </button>
           </div>
 
-          <div className={styles.flowBridge} aria-hidden="true">
-            <span className={styles.bridgeLine} />
-            <span className={styles.bridgeIcon}>
+          <div className={styles.flowBridge}>
+            <span className={styles.bridgeLine} aria-hidden="true" />
+            <button
+              type="button"
+              className={`${styles.bridgeIcon}${directionReversed ? ` ${styles.bridgeIconReversed}` : ""}`}
+              onClick={swapDirection}
+              aria-label="Swap sender and recipient"
+              title="Swap sender and recipient"
+            >
               <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
                 <path d="M10 4v12m0 0-4-4m4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-            </span>
-            <span className={styles.bridgeLabel}>{searching ? "Building route" : "Best path"}</span>
+            </button>
+            <span className={styles.bridgeLabel}>{searching ? "Building route" : "Swap direction"}</span>
           </div>
 
           <div className={`${styles.moneyPanel} ${styles.moneyPanelTarget}`}>
@@ -501,7 +534,7 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
               </span>
               <span className={styles.methodText}>
                 <strong>{targetMethod?.name ?? "Select bank"}</strong>
-                <small>{corridor ? locationLabel(corridor.target_country, corridor.target_currency) : "Unavailable"}</small>
+                <small>{corridor ? locationLabel(targetCountry, targetCurrency) : "Unavailable"}</small>
               </span>
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                 <path d="m4 6 4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -557,7 +590,7 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
               <div className={styles.selectionIcon}>✓</div>
               <div>
                 <strong>Route selected</strong>
-                <span>{money(selected.target_amount_minor ?? 0, selected.target_currency ?? corridor?.target_currency ?? "")}</span>
+                <span>{money(selected.target_amount_minor ?? 0, selected.target_currency ?? targetCurrency)}</span>
                 <small>
                   {selected.payment_methods_verified
                     ? "Both banks are listed on the matched offers."
@@ -591,8 +624,8 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
         open={methodPicker === "source"}
         title="Choose where you pay from"
         role="sender"
-        locations={sourceLocations}
-        selectedLocation={corridor ? { country: corridor.source_country, currency: corridor.source_currency } : null}
+        locations={locations}
+        selectedLocation={corridor ? { country: sourceCountry, currency: sourceCurrency } : null}
         selected={sourceMethod}
         onClose={() => setMethodPicker(null)}
         onLocationSelect={(location) => chooseSourceLocation(locationKey(location.country, location.currency))}
@@ -603,8 +636,8 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
         open={methodPicker === "target"}
         title="Choose where the recipient gets paid"
         role="recipient"
-        locations={targetLocations}
-        selectedLocation={corridor ? { country: corridor.target_country, currency: corridor.target_currency } : null}
+        locations={locations}
+        selectedLocation={corridor ? { country: targetCountry, currency: targetCurrency } : null}
         selected={targetMethod}
         onClose={() => setMethodPicker(null)}
         onLocationSelect={(location) => chooseTargetLocation(locationKey(location.country, location.currency))}

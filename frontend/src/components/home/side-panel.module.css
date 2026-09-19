@@ -1,7 +1,9 @@
 .side {
+  position: relative;
+  z-index: 1;
   display: flex;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   font-family: var(--font-sans);
   opacity: 0;
   transform: translateX(10px);
@@ -14,9 +16,10 @@
 }
 
 .panel {
+  position: relative;
   display: flex;
   width: 100%;
-  min-height: 720px;
+  height: 720px;
   min-width: 0;
   flex-direction: column;
   padding: 20px;
@@ -27,6 +30,27 @@
   box-shadow: 0 28px 75px rgba(22, 25, 21, 0.18);
   color: #fff;
   backdrop-filter: blur(26px) saturate(130%);
+  isolation: isolate;
+}
+
+.panel::before {
+  position: absolute;
+  top: 50%;
+  left: -38px;
+  z-index: 0;
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  background: var(--page-bg);
+  box-shadow: inset -7px 0 12px rgba(22, 25, 21, 0.04);
+  content: "";
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.panel > * {
+  position: relative;
+  z-index: 1;
 }
 
 .panelTop,
@@ -195,6 +219,7 @@
   padding-right: 6px;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
   scrollbar-width: thin;
 }
@@ -513,15 +538,28 @@
 
 @media (max-width: 980px) {
   .panel {
-    min-height: 580px;
+    height: 580px;
+    padding-top: 48px;
+  }
+
+  .panel::before {
+    top: -38px;
+    left: 50%;
+    transform: translateX(-50%);
   }
 }
 
 @media (max-width: 640px) {
   .panel {
-    min-height: 520px;
-    padding: 15px;
+    height: 520px;
+    padding: 42px 15px 15px;
     border-radius: 25px;
+  }
+
+  .panel::before {
+    top: -32px;
+    width: 64px;
+    height: 64px;
   }
 
   .bestSummary strong {

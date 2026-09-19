@@ -83,6 +83,7 @@ export function SidePanel({
     <aside
       className={`${styles.side}${active ? ` ${styles.active}` : ""}`}
       aria-label="Found routes"
+      aria-busy={searching}
       id="routes"
     >
       <div className={styles.panel}>
@@ -118,7 +119,7 @@ export function SidePanel({
           <span>{targetBank}</span>
         </div>
 
-        {searching && routes.length === 0 ? (
+        {searching ? (
           <SearchSkeleton />
         ) : routes.length > 0 ? (
           <div className={styles.routeGroups} data-testid="route-groups" tabIndex={0} aria-label="Found routes">

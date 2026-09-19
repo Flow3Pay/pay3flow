@@ -107,6 +107,19 @@ test("login modal → automatic P2P route search → select estimate", async ({ 
   await expect(page.getByTestId("auth-form")).toBeHidden();
   await expect(page.getByLabel("Amount to send")).toHaveValue("0");
 
+  const amountInput = page.getByLabel("Amount to send");
+  await amountInput.press("End");
+  await amountInput.type("123");
+  await expect(amountInput).toHaveValue("123");
+  await amountInput.fill("0");
+
+  const swapDirection = page.getByRole("button", { name: "Swap sender and recipient" });
+  await swapDirection.click();
+  await expect(page.getByRole("button", { name: "Select sending bank: Sberbank" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Select recipient bank: Ameriabank" })).toBeVisible();
+  await swapDirection.click();
+  await expect(page.getByRole("button", { name: "Select sending bank: Ameriabank" })).toBeVisible();
+
   await page.getByRole("button", { name: "Route refresh settings" }).click();
   await page.getByRole("button", { name: "30s" }).click();
 
@@ -124,7 +137,7 @@ test("login modal → automatic P2P route search → select estimate", async ({ 
   await targetPicker.getByRole("option", { name: /Alfa-Bank/ }).click();
   await expect(page.getByRole("button", { name: "Select recipient bank: Alfa-Bank" })).toBeVisible();
 
-  await page.getByLabel("Amount to send").fill("100000");
+  await amountInput.fill("100000");
   await page.getByTestId("start-search").click();
   await expect(page.getByTestId("complete-route")).toHaveCount(2);
   await expect(page.getByTestId("complete-route").first()).toContainText("20,350 RUB");

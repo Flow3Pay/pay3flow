@@ -12,8 +12,6 @@
   animation: heroIn 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.eyebrow,
-.heroSignals,
 .modeTabs,
 .cardActions,
 .intentLabel,
@@ -25,29 +23,6 @@
 .demoNote {
   display: flex;
   align-items: center;
-}
-
-.eyebrow {
-  width: fit-content;
-  gap: 9px;
-  margin: 0 auto 20px;
-  color: var(--color-text-soft);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-}
-
-.eyebrowMark {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border-radius: 9px;
-  background: var(--color-primary);
-  color: var(--color-accent);
-  font-size: 9px;
-  letter-spacing: -0.02em;
 }
 
 .hero h1 {
@@ -88,50 +63,19 @@
   line-height: 1.7;
 }
 
-.heroSignals {
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 25px;
-}
-
-.heroSignals span {
-  display: inline-flex;
-  min-height: 33px;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.52);
-  color: var(--color-text-soft);
-  box-shadow: 0 3px 10px rgba(20, 23, 19, 0.04);
-  font-size: 10px;
-  font-weight: 750;
-  letter-spacing: 0.03em;
-  backdrop-filter: blur(16px);
-}
-
-.signalLive {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-good);
-  box-shadow: 0 0 0 4px rgba(45, 142, 69, 0.1);
-}
-
 .workspace {
   display: grid;
   width: min(1130px, 100%);
   grid-template-columns: minmax(0, 560px) minmax(0, 1fr);
   align-items: start;
-  gap: 18px;
+  gap: 6px;
   margin: 0 auto;
   animation: workspaceIn 0.72s 0.08s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .card {
   position: relative;
+  z-index: 2;
   display: flex;
   min-width: 0;
   flex-direction: column;
@@ -144,6 +88,7 @@
   box-shadow: var(--shadow-card);
   backdrop-filter: blur(28px) saturate(145%);
   -webkit-backdrop-filter: blur(28px) saturate(145%);
+  isolation: isolate;
 }
 
 .card::before {
@@ -153,6 +98,22 @@
   border-radius: inherit;
   background: linear-gradient(145deg, rgba(255,255,255,0.8), transparent 34%);
   content: "";
+}
+
+.card::after {
+  position: absolute;
+  top: 50%;
+  right: -34px;
+  width: 68px;
+  height: 68px;
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 12px 0 22px rgba(24, 28, 23, 0.06);
+  clip-path: inset(-24px -24px -24px 50%);
+  content: "";
+  pointer-events: none;
+  transform: translateY(-50%);
 }
 
 .cardTop {
@@ -498,9 +459,12 @@
   left: 8%;
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--color-border-strong), transparent);
+  pointer-events: none;
 }
 
 .bridgeIcon {
+  position: relative;
+  z-index: 1;
   display: grid;
   width: 42px;
   height: 42px;
@@ -509,7 +473,26 @@
   border-radius: 14px;
   background: var(--color-primary);
   color: var(--color-accent);
+  cursor: pointer;
   box-shadow: 0 7px 16px rgba(20, 23, 19, 0.18);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.bridgeIcon:hover {
+  box-shadow: 0 10px 22px rgba(20, 23, 19, 0.24);
+  transform: translateY(-1px) scale(1.04);
+}
+
+.bridgeIcon:active {
+  transform: scale(0.96);
+}
+
+.bridgeIcon svg {
+  transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.bridgeIconReversed svg {
+  transform: rotate(180deg);
 }
 
 .bridgeLabel {
@@ -949,6 +932,17 @@
   .workspace {
     width: min(610px, 100%);
     grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .card::after {
+    top: auto;
+    right: auto;
+    bottom: -34px;
+    left: 50%;
+    clip-path: inset(50% -24px -24px -24px);
+    box-shadow: 0 12px 22px rgba(24, 28, 23, 0.06);
+    transform: translateX(-50%);
   }
 
   .hero {
@@ -969,13 +963,15 @@
     font-size: 13px;
   }
 
-  .heroSignals span:nth-child(3) {
-    display: none;
-  }
-
   .card {
     padding: 12px;
     border-radius: 25px;
+  }
+
+  .card::after {
+    bottom: -28px;
+    width: 56px;
+    height: 56px;
   }
 
   .moneyPanel {

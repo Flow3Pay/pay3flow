@@ -47,12 +47,6 @@ export function Header({
           <span className={styles.beta}>Beta</span>
         </a>
 
-        <nav className={styles.nav} aria-label="Primary navigation">
-          <a className={styles.navActive} href="#transfer">Transfer</a>
-          <a href="#routes">Live routes</a>
-          <a href="#how-it-works">How it works</a>
-        </nav>
-
         <div className={styles.actions}>
           <span className={styles.marketStatus}>
             <span className={styles.pulse} />
