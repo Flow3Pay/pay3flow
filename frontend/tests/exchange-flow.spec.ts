@@ -49,6 +49,28 @@ async function mockBackend(page: Page) {
         },
         source_url: `https://example.com/${adId}`,
       });
+      const routes = Array.from({ length: 12 }, (_, index) => {
+        const best = index === 0;
+        const asset = index % 2 === 0 ? "USDT" : "USDC";
+        const venue = index % 2 === 0 ? "binance" : "bybit";
+        return {
+          rank: index + 1,
+          asset,
+          source_fiat: "AMD",
+          source_amount: "100000.00",
+          acquired_asset_amount: best ? "253.16455696" : "252.52525252",
+          target_fiat: "RUB",
+          target_amount: best ? "20350.00" : (20120 - index * 20).toFixed(2),
+          effective_rate: best ? "0.20350000" : "0.20100000",
+          same_venue: true,
+          requires_asset_transfer: false,
+          transfer_fee_included: true,
+          payment_methods_verified: best,
+          entry_offer: offer(venue, `entry-${index + 1}`, "AMD", asset),
+          exit_offer: offer(venue, `exit-${index + 1}`, "RUB", asset),
+          warnings: ["Search estimate only."],
+        };
+      });
       return json({
         searched_at: "2026-09-19T10:00:00Z",
         source_fiat: "AMD",
@@ -56,42 +78,7 @@ async function mockBackend(page: Page) {
         source_amount: "100000.00",
         assets_searched: ["USDT", "USDC", "BTC", "ETH"],
         can_exchange_to_target: true,
-        routes: [
-          {
-            rank: 1,
-            asset: "USDT",
-            source_fiat: "AMD",
-            source_amount: "100000.00",
-            acquired_asset_amount: "253.16455696",
-            target_fiat: "RUB",
-            target_amount: "20350.00",
-            effective_rate: "0.20350000",
-            same_venue: true,
-            requires_asset_transfer: false,
-            transfer_fee_included: true,
-            payment_methods_verified: true,
-            entry_offer: offer("binance", "entry-1", "AMD", "USDT"),
-            exit_offer: offer("binance", "exit-1", "RUB", "USDT"),
-            warnings: ["Search estimate only."],
-          },
-          {
-            rank: 2,
-            asset: "USDC",
-            source_fiat: "AMD",
-            source_amount: "100000.00",
-            acquired_asset_amount: "252.52525252",
-            target_fiat: "RUB",
-            target_amount: "20100.00",
-            effective_rate: "0.20100000",
-            same_venue: true,
-            requires_asset_transfer: false,
-            transfer_fee_included: true,
-            payment_methods_verified: false,
-            entry_offer: offer("bybit", "entry-2", "AMD", "USDC"),
-            exit_offer: offer("bybit", "exit-2", "RUB", "USDC"),
-            warnings: ["Search estimate only."],
-          },
-        ],
+        routes,
       });
     }
     return json({ error: `unmocked ${method} ${url.pathname}` }, 500);
@@ -139,9 +126,22 @@ test("login modal → automatic P2P route search → select estimate", async ({ 
 
   await amountInput.fill("100000");
   await page.getByTestId("start-search").click();
-  await expect(page.getByTestId("complete-route")).toHaveCount(2);
+  await expect(page.getByTestId("complete-route")).toHaveCount(12);
   await expect(page.getByTestId("complete-route").first()).toContainText("20,350 RUB");
-  await expect(page.getByText("AMD → USDT Tether (Binance) → RUB (Binance)")).toBeVisible();
+  await expect(page.getByTestId("complete-route").first()).toContainText(
+    "AMD → USDT Tether (Binance) → RUB (Binance)",
+  );
+  const routeGroups = page.getByTestId("route-groups");
+  const scrollMetrics = await routeGroups.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+    overflowY: getComputedStyle(element).overflowY,
+  }));
+  expect(scrollMetrics.overflowY).toBe("auto");
+  expect(scrollMetrics.scrollHeight).toBeGreaterThan(scrollMetrics.clientHeight);
+  await routeGroups.evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
+  await expect(page.getByTestId("complete-route").last()).toBeVisible();
+  await routeGroups.evaluate((element) => element.scrollTo({ top: 0 }));
   await page.getByTestId("complete-route").first().click();
   await expect(page.getByTestId("selected-route")).toBeVisible();
   await expect(page.getByText("Both banks are listed on the matched offers.")).toBeVisible();

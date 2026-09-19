@@ -91,12 +91,11 @@ button {
   inset: 0;
   z-index: -1;
   content: "";
-  opacity: 0.72;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220' viewBox='0 0 220 220'%3E%3Cpath d='M1 1h83c0 14 11 25 25 25s25-11 25-25h85v84c-14 0-25 11-25 25s11 25 25 25v84h-85c0-14-11-25-25-25s-25 11-25 25H1v-84c14 0 25-11 25-25S15 85 1 85V1Z' fill='%23ffffff' fill-opacity='.2' stroke='%23161815' stroke-opacity='.08' stroke-width='1.2'/%3E%3Ccircle cx='109' cy='110' r='4' fill='%23b9f227' fill-opacity='.2'/%3E%3C/svg%3E");
-  background-position: 30px 14px;
-  background-size: 220px 220px;
+  opacity: 0.68;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='480' height='360' viewBox='0 0 480 360'%3E%3Cg fill='none' stroke='%23161815' stroke-opacity='.09' stroke-width='1.25'%3E%3Cpath d='M160 0v42c-18 0-28 10-28 24s10 24 28 24v72c18 0 28 10 28 24s-10 24-28 24v150M320 0v68c18 0 28 10 28 24s-10 24-28 24v70c-18 0-28 10-28 24s10 24 28 24v126M0 120h56c0-18 10-28 24-28s24 10 24 28h116c0 18 10 28 24 28s24-10 24-28h108c0-18 10-28 24-28s24 10 24 28h56M0 240h84c0 18 10 28 24 28s24-10 24-28h94c0-18 10-28 24-28s24 10 24 28h114c0 18 10 28 24 28s24-10 24-28h44'/%3E%3C/g%3E%3Cg fill='none' stroke='%23b9f227' stroke-opacity='.16' stroke-width='1.8'%3E%3Cpath d='M160 162c18 0 28 10 28 24s-10 24-28 24M376 120c0-18 10-28 24-28s24 10 24 28M226 240c0-18 10-28 24-28s24 10 24 28'/%3E%3C/g%3E%3C/svg%3E");
+  background-position: 22px 8px;
+  background-size: 480px 360px;
   mask-image: linear-gradient(to bottom, black 0%, rgba(0, 0, 0, 0.82) 68%, transparent 100%);
-  animation: puzzleDrift 36s ease-in-out infinite alternate;
 }
 
 .appShell::after {
@@ -111,11 +110,6 @@ button {
   filter: blur(90px);
   content: "";
   transform: translateX(-50%);
-}
-
-@keyframes puzzleDrift {
-  from { background-position: 30px 14px; }
-  to { background-position: 58px 34px; }
 }
 
 .siteFooter {

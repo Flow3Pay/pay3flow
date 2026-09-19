@@ -26,31 +26,12 @@
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: var(--radius-card);
-  background: rgba(24, 27, 23, 0.94);
+  background: #1b1e1a;
   box-shadow: 0 28px 75px rgba(22, 25, 21, 0.18);
   color: #fff;
-  backdrop-filter: blur(26px) saturate(130%);
   isolation: isolate;
-}
-
-.panel::before {
-  position: absolute;
-  top: 50%;
-  left: -38px;
-  z-index: 0;
-  width: 76px;
-  height: 76px;
-  border-radius: 50%;
-  background: var(--page-bg);
-  box-shadow: inset -7px 0 12px rgba(22, 25, 21, 0.04);
-  content: "";
-  pointer-events: none;
-  transform: translateY(-50%);
-}
-
-.panel > * {
-  position: relative;
-  z-index: 1;
+  -webkit-mask-image: radial-gradient(circle 35px at 0 var(--puzzle-lock-y), transparent 34px, #000 35px);
+  mask-image: radial-gradient(circle 35px at 0 var(--puzzle-lock-y), transparent 34px, #000 35px);
 }
 
 .panelTop,
@@ -222,6 +203,8 @@
   scrollbar-gutter: stable;
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
   scrollbar-width: thin;
+  contain: layout paint;
+  transform: translateZ(0);
 }
 
 .routeGroups::-webkit-scrollbar {
@@ -250,6 +233,11 @@
   list-style: none;
 }
 
+.routeList > li {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 132px;
+}
+
 .routeCard {
   position: relative;
   display: flex;
@@ -260,23 +248,12 @@
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.075);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.045);
+  background:
+    radial-gradient(circle at 100% 0, rgba(117, 88, 246, 0.11), transparent 34%),
+    rgba(255, 255, 255, 0.045);
   color: #fff;
   text-align: left;
   transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
-}
-
-.routeCard::after {
-  position: absolute;
-  top: -50px;
-  right: -70px;
-  width: 150px;
-  height: 120px;
-  border-radius: 50%;
-  background: rgba(117, 88, 246, 0.12);
-  content: "";
-  filter: blur(20px);
-  pointer-events: none;
 }
 
 .routeCard:hover {
@@ -540,12 +517,8 @@
   .panel {
     height: 580px;
     padding-top: 48px;
-  }
-
-  .panel::before {
-    top: -38px;
-    left: 50%;
-    transform: translateX(-50%);
+    -webkit-mask-image: radial-gradient(circle 35px at 50% 0, transparent 34px, #000 35px);
+    mask-image: radial-gradient(circle 35px at 50% 0, transparent 34px, #000 35px);
   }
 }
 
@@ -556,10 +529,9 @@
     border-radius: 25px;
   }
 
-  .panel::before {
-    top: -32px;
-    width: 64px;
-    height: 64px;
+  .panel {
+    -webkit-mask-image: radial-gradient(circle 29px at 50% 0, transparent 28px, #000 29px);
+    mask-image: radial-gradient(circle 29px at 50% 0, transparent 28px, #000 29px);
   }
 
   .bestSummary strong {

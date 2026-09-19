@@ -64,11 +64,12 @@
 }
 
 .workspace {
+  --puzzle-lock-y: 360px;
   display: grid;
   width: min(1130px, 100%);
   grid-template-columns: minmax(0, 560px) minmax(0, 1fr);
   align-items: start;
-  gap: 6px;
+  gap: 0;
   margin: 0 auto;
   animation: workspaceIn 0.72s 0.08s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -84,7 +85,7 @@
   overflow: visible;
   border: 1px solid rgba(255, 255, 255, 0.78);
   border-radius: var(--radius-card);
-  background: rgba(255, 255, 255, 0.89);
+  background: rgba(255, 255, 252, 0.96);
   box-shadow: var(--shadow-card);
   backdrop-filter: blur(28px) saturate(145%);
   -webkit-backdrop-filter: blur(28px) saturate(145%);
@@ -102,15 +103,12 @@
 
 .card::after {
   position: absolute;
-  top: 50%;
+  top: var(--puzzle-lock-y);
   right: -34px;
   width: 68px;
   height: 68px;
-  border: 1px solid rgba(255, 255, 255, 0.82);
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: 12px 0 22px rgba(24, 28, 23, 0.06);
-  clip-path: inset(-24px -24px -24px 50%);
+  background: #fffffc;
   content: "";
   pointer-events: none;
   transform: translateY(-50%);
@@ -930,9 +928,10 @@
   }
 
   .workspace {
+    --puzzle-lock-y: 50%;
     width: min(610px, 100%);
     grid-template-columns: 1fr;
-    gap: 6px;
+    gap: 0;
   }
 
   .card::after {
@@ -940,8 +939,6 @@
     right: auto;
     bottom: -34px;
     left: 50%;
-    clip-path: inset(50% -24px -24px -24px);
-    box-shadow: 0 12px 22px rgba(24, 28, 23, 0.06);
     transform: translateX(-50%);
   }
 
