@@ -60,12 +60,12 @@ services:
       P2P_SEARCH_ENABLED: "true"
       P2P_SEARCH_TIMEOUT_MS: "4000"
       P2P_SEARCH_CACHE_TTL_MS: "5000"
-      # First-tier exchange P2P sources are intentionally disabled until
-      # verified, account-free source adapters are available.
-      P2P_BINANCE_ENABLED: "false"
-      P2P_BYBIT_ENABLED: "false"
-      P2P_OKX_ENABLED: "false"
-      P2P_BITGET_ENABLED: "false"
+      # Public read-only P2P sources. Override individual flags to disable a
+      # venue whose public endpoint is unavailable in the deployment region.
+      P2P_BINANCE_ENABLED: ${P2P_BINANCE_ENABLED:-true}
+      P2P_BYBIT_ENABLED: ${P2P_BYBIT_ENABLED:-true}
+      P2P_OKX_ENABLED: ${P2P_OKX_ENABLED:-true}
+      P2P_BITGET_ENABLED: ${P2P_BITGET_ENABLED:-true}
       P2P_SEARCH_ASSETS: "USDT,USDC,BTC,ETH"
       WALLET_KEYSTORE_PATH: ${WALLET_KEYSTORE_PATH:-}
       WALLET_KEYSTORE_PASSWORD: ${WALLET_KEYSTORE_PASSWORD:-}
