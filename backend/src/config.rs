@@ -28,6 +28,15 @@ pub struct Config {
     pub pairs_cache_ttl_secs: u64,
     /// Redis URL for caching fmatch candidates (PLAN #5a, #37d).
     pub redis_url: String,
+    /// Public P2P advertisement search. This is read-only and never places orders.
+    pub p2p_search_enabled: bool,
+    pub p2p_search_timeout_ms: u64,
+    pub p2p_search_cache_ttl_ms: u64,
+    pub p2p_binance_enabled: bool,
+    pub p2p_binance_url: String,
+    pub p2p_bybit_enabled: bool,
+    pub p2p_bybit_url: String,
+    pub p2p_search_assets: Vec<String>,
 }
 
 impl Config {
@@ -71,6 +80,34 @@ impl Config {
                 .and_then(|s| s.parse::<u64>().ok())
                 .unwrap_or(300),
             redis_url: env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".into()),
+            p2p_search_enabled: env_flag("P2P_SEARCH_ENABLED", true),
+            p2p_search_timeout_ms: env::var("P2P_SEARCH_TIMEOUT_MS")
+                .ok()
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(4_000),
+            p2p_search_cache_ttl_ms: env::var("P2P_SEARCH_CACHE_TTL_MS")
+                .ok()
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(5_000),
+            p2p_binance_enabled: env_flag("P2P_BINANCE_ENABLED", true),
+            p2p_binance_url: env::var("P2P_BINANCE_URL").unwrap_or_else(|_| {
+                "https://www.binance.com/bapi/c2c/v1/public/c2c/agent/ad-list".into()
+            }),
+            p2p_bybit_enabled: env_flag("P2P_BYBIT_ENABLED", true),
+            p2p_bybit_url: env::var("P2P_BYBIT_URL")
+                .unwrap_or_else(|_| "https://api2.bybit.com/fiat/otc/item/online".into()),
+            p2p_search_assets: env::var("P2P_SEARCH_ASSETS")
+                .unwrap_or_else(|_| "USDT,USDC,BTC,ETH".into())
+                .split(',')
+                .map(|asset| asset.trim().to_ascii_uppercase())
+                .filter(|asset| !asset.is_empty())
+                .collect(),
         })
     }
+}
+
+fn env_flag(name: &str, default: bool) -> bool {
+    env::var(name)
+        .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+        .unwrap_or(default)
 }

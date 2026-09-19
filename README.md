@@ -166,6 +166,22 @@ docker compose up -d --build
 curl -sS http://localhost:8080/health
 ```
 
+Проверить живой read-only поиск P2P-связок по нескольким активам:
+
+```bash
+curl -G 'http://localhost:8080/api/p2p/routes' \
+  --data-urlencode 'source_fiat=AMD' \
+  --data-urlencode 'target_fiat=RUB' \
+  --data-urlencode 'source_amount=100000' \
+  --data-urlencode 'assets=USDT,USDC,BTC,ETH' \
+  --data-urlencode 'min_orders=20' \
+  --data-urlencode 'min_completion_rate=0.9'
+```
+
+Алгоритм параллельно собирает пазл `AMD -> asset -> RUB`, проверяет лимиты и
+ликвидность обеих P2P-ног и ранжирует полные связки по ожидаемой сумме RUB.
+Подробности: [`docs/p2p-search.md`](docs/p2p-search.md).
+
 ## Структура
 
 ```text

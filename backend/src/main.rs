@@ -87,6 +87,8 @@ async fn main() -> anyhow::Result<()> {
         "fake exchange solvers seeded"
     );
 
+    let p2p = pay3flow_backend::p2p::P2pSearchService::from_config(&cfg)?;
+
     let state = AppState::new(
         pool,
         Jwt::new(&cfg.jwt_secret),
@@ -97,6 +99,7 @@ async fn main() -> anyhow::Result<()> {
         banks,
         cfg.admin_token,
         redis_pool,
+        p2p,
     );
 
     tracing::info!(

@@ -3,6 +3,7 @@ use crate::banks::BanksService;
 use crate::core::jwt::Jwt;
 use crate::core::redis::RedisPool;
 use crate::db::DbPool;
+use crate::p2p::P2pSearchService;
 use crate::pairs::ExchangePairsService;
 use crate::payments::PaymentService;
 use crate::routing::RoutePicker;
@@ -22,6 +23,8 @@ pub struct AppState {
     pub admin_token: String,
     /// Optional Redis pool for fmatch candidate caching (PLAN #37d).
     pub redis: Option<RedisPool>,
+    /// Read-only fan-out search over public P2P advertisement boards.
+    pub p2p: P2pSearchService,
 }
 
 impl AppState {
@@ -36,6 +39,7 @@ impl AppState {
         banks: BanksService,
         admin_token: String,
         redis: Option<RedisPool>,
+        p2p: P2pSearchService,
     ) -> Self {
         Self {
             pool,
@@ -47,6 +51,7 @@ impl AppState {
             banks,
             admin_token,
             redis,
+            p2p,
         }
     }
 }

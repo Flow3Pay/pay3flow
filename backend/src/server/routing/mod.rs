@@ -5,6 +5,7 @@ pub mod banks;
 pub mod exchange;
 pub mod matcher;
 pub mod oauth;
+pub mod p2p;
 pub mod pairs;
 pub mod payments;
 pub mod payments_ws;

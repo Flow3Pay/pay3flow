@@ -5,6 +5,7 @@ pub mod config;
 pub mod core;
 pub mod db;
 pub mod exchange;
+pub mod p2p;
 pub mod pairs;
 pub mod payments;
 pub mod quotes;
