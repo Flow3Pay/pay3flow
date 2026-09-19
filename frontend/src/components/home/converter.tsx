@@ -420,6 +420,10 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
     refreshSeconds && lastUpdatedAt
       ? Math.max(0, refreshSeconds - Math.floor((clock - lastUpdatedAt) / 1_000))
       : null;
+  const refreshProgress =
+    secondsUntilRefresh !== null && refreshSeconds
+      ? ((refreshSeconds - secondsUntilRefresh) / refreshSeconds) * 100
+      : 0;
 
   const updateAmount = (value: string) => {
     const sanitized = value.replace(/[^0-9.,\s]/g, "").replace(/\s/g, "");
@@ -586,7 +590,23 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
 
           <div className={styles.marketBar}>
             <div className={styles.marketState}>
-              <span className={searching ? styles.scanningDot : routes.length ? styles.liveDot : styles.idleDot} />
+              <span
+                className={styles.refreshProgress}
+                role="img"
+                aria-label={secondsUntilRefresh === null ? "Auto-refresh is off" : `Refresh in ${secondsUntilRefresh} seconds`}
+              >
+                <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+                  <circle className={styles.refreshTrack} cx="9" cy="9" r="7" pathLength="100" />
+                  <circle
+                    className={styles.refreshFill}
+                    cx="9"
+                    cy="9"
+                    r="7"
+                    pathLength="100"
+                    style={{ strokeDashoffset: `${100 - refreshProgress}` }}
+                  />
+                </svg>
+              </span>
               <div>
                 <strong>
                   {searching
@@ -605,7 +625,7 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
               </div>
             </div>
             {secondsUntilRefresh !== null && (
-              <span className={styles.nextRefresh}>Refresh in {secondsUntilRefresh}s</span>
+              <span className={styles.nextRefresh}>{secondsUntilRefresh}s</span>
             )}
           </div>
 

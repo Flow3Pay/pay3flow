@@ -495,16 +495,13 @@
 .marketBar {
   justify-content: space-between;
   gap: 16px;
-  min-height: 64px;
-  padding: 9px 12px;
-  border: 1px solid var(--color-border);
-  border-radius: 18px;
-  background: rgba(247, 247, 243, 0.72);
+  min-height: 28px;
+  padding: 0 2px;
 }
 
 .marketState {
   min-width: 0;
-  gap: 11px;
+  gap: 8px;
 }
 
 .marketState > div {
@@ -522,7 +519,7 @@
   white-space: nowrap;
 }
 
-.marketState span:not(.liveDot, .idleDot, .scanningDot) {
+.marketState > div > span {
   overflow: hidden;
   color: var(--color-text-faint);
   font-size: 9px;
@@ -531,41 +528,40 @@
   white-space: nowrap;
 }
 
-.liveDot,
-.idleDot,
-.scanningDot {
-  width: 10px;
-  height: 10px;
+.refreshProgress {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
   flex: 0 0 auto;
-  border-radius: 50%;
 }
 
-.liveDot {
-  background: var(--color-good);
-  box-shadow: 0 0 0 5px rgba(45, 142, 69, 0.1);
+.refreshProgress svg {
+  overflow: visible;
 }
 
-.idleDot {
-  background: #b0b2aa;
-  box-shadow: 0 0 0 5px rgba(133, 136, 128, 0.1);
+.refreshTrack,
+.refreshFill {
+  fill: none;
+  stroke-width: 2;
 }
 
-.scanningDot {
-  background: var(--color-violet);
-  box-shadow: 0 0 0 5px rgba(117, 88, 246, 0.1);
-  animation: scanPulse 1s ease-in-out infinite;
+.refreshTrack {
+  stroke: #d3d5ce;
+}
+
+.refreshFill {
+  stroke: var(--color-good);
+  stroke-dasharray: 100;
+  transform: rotate(-90deg);
+  transform-origin: center;
+  transition: stroke-dashoffset 0.3s ease;
 }
 
 .nextRefresh {
-  min-height: 29px;
   flex: 0 0 auto;
-  padding: 0 10px;
-  border-radius: var(--radius-pill);
-  background: #fff;
   color: var(--color-text-soft);
   font-family: var(--font-mono);
   font-size: 9px;
-  box-shadow: 0 2px 8px rgba(20, 23, 19, 0.05);
 }
 
 .cta {
@@ -973,8 +969,7 @@
   }
 
   .marketBar {
-    align-items: flex-start;
-    flex-direction: column;
+    gap: 10px;
   }
 
   .assurance {
