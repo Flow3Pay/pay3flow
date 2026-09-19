@@ -9,18 +9,18 @@ const money = (minor: number | undefined, currency: string | undefined) =>
 
 function spreadLabel(bps: number): string {
   const value = bps / 100;
-  if (Math.abs(value) < 0.005) return "at cost";
-  return `${value > 0 ? "+" : ""}${value.toFixed(2)}%`;
+  if (Math.abs(value) < 0.005) return "same output";
+  return value < 0 ? `${Math.abs(value).toFixed(2)}% lower` : `${value.toFixed(2)}% higher`;
 }
 
 interface SidePanelProps {
   active: boolean;
   routes: RouteCandidate[];
-  selectedQuoteId: string | null;
+  selectedRouteId: string | null;
   onSelect: (route: RouteCandidate) => void;
 }
 
-export function SidePanel({ active, routes, selectedQuoteId, onSelect }: SidePanelProps) {
+export function SidePanel({ active, routes, selectedRouteId, onSelect }: SidePanelProps) {
   return (
     <aside className={`${styles.side}${active ? ` ${styles.active}` : ""}`} aria-label="Found routes">
       <div className={styles.stage}>
@@ -36,7 +36,7 @@ export function SidePanel({ active, routes, selectedQuoteId, onSelect }: SidePan
                 <ul className={styles.routeList}>
                   {routes.map((route) => {
                     const complete = route.status === "complete";
-                    const selected = route.quote_id === selectedQuoteId;
+                    const selected = route.route_id === selectedRouteId;
                     return (
                       <li key={route.route_id}>
                         <button
@@ -54,7 +54,9 @@ export function SidePanel({ active, routes, selectedQuoteId, onSelect }: SidePan
                             </span>
                             <span className={styles.routeMeta}>
                               {complete
-                                ? `Fee ${money(route.fee_minor, route.source_currency)} · ${route.eta_minutes} min`
+                                ? route.is_live_market
+                                  ? "Live public market estimate"
+                                  : `Fee ${money(route.fee_minor, route.source_currency)} · ${route.eta_minutes} min`
                                 : "Checking recipient payout availability"}
                             </span>
                           </span>

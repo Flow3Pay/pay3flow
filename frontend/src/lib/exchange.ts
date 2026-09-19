@@ -69,7 +69,58 @@ export interface RouteCandidate {
   fee_minor?: number;
   eta_minutes?: number;
   is_current_best?: boolean;
+  is_live_market?: boolean;
   legs: RouteLeg[];
+}
+
+export interface P2pAdvertiser {
+  nickname: string;
+  is_merchant: boolean;
+  is_verified: boolean;
+  completed_orders_30d: number | null;
+  completion_rate_30d: number | null;
+}
+
+export interface P2pOffer {
+  source: string;
+  ad_id: string;
+  fiat: string;
+  asset: string;
+  price: string;
+  available_asset: string;
+  min_fiat: string;
+  max_fiat: string;
+  payment_methods: string[];
+  pay_time_limit_minutes: number | null;
+  advertiser: P2pAdvertiser;
+  source_url: string;
+}
+
+export interface P2pRoute {
+  rank: number;
+  asset: string;
+  source_fiat: string;
+  source_amount: string;
+  acquired_asset_amount: string;
+  target_fiat: string;
+  target_amount: string;
+  effective_rate: string;
+  same_venue: boolean;
+  requires_asset_transfer: boolean;
+  transfer_fee_included: boolean;
+  entry_offer: P2pOffer;
+  exit_offer: P2pOffer;
+  warnings: string[];
+}
+
+export interface P2pRouteSearchResponse {
+  searched_at: string;
+  source_fiat: string;
+  target_fiat: string;
+  source_amount: string;
+  assets_searched: string[];
+  can_exchange_to_target: boolean;
+  routes: P2pRoute[];
 }
 
 export type LiveRouteEvent =
@@ -139,6 +190,23 @@ export async function authenticate(email: string, code: string): Promise<string>
 
 export function fetchCorridors(): Promise<CorridorsResponse> {
   return request("/api/exchange/corridors");
+}
+
+export function fetchP2pRoutes(query: {
+  sourceFiat: string;
+  targetFiat: string;
+  sourceAmount: number;
+  limit?: number;
+}): Promise<P2pRouteSearchResponse> {
+  const params = new URLSearchParams({
+    source_fiat: query.sourceFiat,
+    target_fiat: query.targetFiat,
+    source_amount: String(query.sourceAmount),
+    min_orders: "20",
+    min_completion_rate: "0.9",
+    limit: String(query.limit ?? 40),
+  });
+  return request(`/api/p2p/routes?${params.toString()}`);
 }
 
 export function createOrder(

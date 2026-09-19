@@ -1,28 +1,6 @@
 import { expect, Page, test } from "@playwright/test";
 
-const order = {
-  id: "00000000-0000-4000-8000-000000000001",
-  source_country: "AM",
-  source_currency: "AMD",
-  source_amount_minor: 10_000_000,
-  source_method_type: "bank_card",
-  target_country: "RU",
-  target_currency: "RUB",
-  target_method_type: "bank_card",
-  funding_status: "not_started",
-  status: "created",
-  selected_quote_id: null,
-  failure_message: null,
-  created_at: "2026-09-19T10:00:00Z",
-};
-
 async function mockBackend(page: Page) {
-  let currentOrder = {
-    ...order,
-    status: order.status as string,
-    funding_status: order.funding_status as string,
-    selected_quote_id: null as string | null,
-  };
   await page.route("http://localhost:8080/api/**", async (route) => {
     const url = new URL(route.request().url());
     const method = route.request().method();
@@ -47,85 +25,88 @@ async function mockBackend(page: Page) {
         }],
       });
     }
-    if (url.pathname === "/api/exchange/orders" && method === "GET") return json(currentOrder.status === "created" ? [] : [currentOrder]);
-    if (url.pathname === "/api/exchange/orders" && method === "POST") return json(currentOrder);
-    if (url.pathname.endsWith("/confirm") && !url.pathname.includes("funding")) {
-      currentOrder = { ...currentOrder, status: "locked", funding_status: "shown_to_user", selected_quote_id: "quote-usdt" };
-      return json({
-        order: currentOrder,
-        funding_instruction: {
-          id: "funding-1",
-          method_type: "bank_card",
-          amount_minor: 10_000_000,
-          currency: "AMD",
-          destination_ref: "solver:demo:route",
-          expires_at: "2026-09-19T11:00:00Z",
-          raw_payload: { display_text: "Confirm funding" },
+    if (url.pathname === "/api/p2p/routes") {
+      const offer = (source: string, adId: string, fiat: string, asset: string) => ({
+        source,
+        ad_id: adId,
+        fiat,
+        asset,
+        price: "1",
+        available_asset: "1000000",
+        min_fiat: "1000",
+        max_fiat: "10000000",
+        payment_methods: ["Bank transfer"],
+        pay_time_limit_minutes: 15,
+        advertiser: {
+          nickname: `${source}-merchant`,
+          is_merchant: true,
+          is_verified: true,
+          completed_orders_30d: 300,
+          completion_rate_30d: 0.99,
         },
-        settlement: { id: "settlement-1", solver_id: "solver-1" },
+        source_url: `https://example.com/${adId}`,
       });
-    }
-    if (url.pathname.endsWith("/funding/confirm")) {
-      currentOrder = { ...currentOrder, status: "proof_pending", funding_status: "solver_acknowledged" };
-      return json({ order: currentOrder });
-    }
-    if (url.pathname.endsWith("/proof")) {
-      currentOrder = { ...currentOrder, status: "done" };
-      return json({ order: currentOrder });
+      return json({
+        searched_at: "2026-09-19T10:00:00Z",
+        source_fiat: "AMD",
+        target_fiat: "RUB",
+        source_amount: "100000.00",
+        assets_searched: ["USDT", "USDC", "BTC", "ETH"],
+        can_exchange_to_target: true,
+        routes: [
+          {
+            rank: 1,
+            asset: "USDT",
+            source_fiat: "AMD",
+            source_amount: "100000.00",
+            acquired_asset_amount: "253.16455696",
+            target_fiat: "RUB",
+            target_amount: "20350.00",
+            effective_rate: "0.20350000",
+            same_venue: true,
+            requires_asset_transfer: false,
+            transfer_fee_included: true,
+            entry_offer: offer("binance", "entry-1", "AMD", "USDT"),
+            exit_offer: offer("binance", "exit-1", "RUB", "USDT"),
+            warnings: ["Search estimate only."],
+          },
+          {
+            rank: 2,
+            asset: "USDC",
+            source_fiat: "AMD",
+            source_amount: "100000.00",
+            acquired_asset_amount: "252.52525252",
+            target_fiat: "RUB",
+            target_amount: "20100.00",
+            effective_rate: "0.20100000",
+            same_venue: true,
+            requires_asset_transfer: false,
+            transfer_fee_included: true,
+            entry_offer: offer("bybit", "entry-2", "AMD", "USDC"),
+            exit_offer: offer("bybit", "exit-2", "RUB", "USDC"),
+            warnings: ["Search estimate only."],
+          },
+        ],
+      });
     }
     return json({ error: `unmocked ${method} ${url.pathname}` }, 500);
   });
-
-  await page.routeWebSocket(/localhost:8080\/api\/exchange\/orders\/.+\/live/, (socket) => {
-    const base = {
-      order_id: order.id,
-      route_id: "route-usdt",
-      status: "partial",
-      source_amount_minor: 10_000_000,
-      source_currency: "AMD",
-      entry_asset: "USDT",
-      entry_network: "ERC20",
-      spread_bps: 8,
-      legs: [
-        { kind: "entry", from: "AMD", to: "USDT", provider: "am-p2p-mock", status: "found" },
-        { kind: "exit", from: "USDT", to: "RUB", provider: "ru-buyer-mock", status: "searching" },
-      ],
-    };
-    socket.send(JSON.stringify({ type: "search_started", order_id: order.id }));
-    setTimeout(() => socket.send(JSON.stringify({ type: "entry_leg_found", ...base })), 30);
-    setTimeout(() => socket.send(JSON.stringify({
-      type: "route_candidate_found",
-      ...base,
-      status: "complete",
-      quote_id: "quote-usdt",
-      target_amount_minor: 2_035_000,
-      target_currency: "RUB",
-      fee_minor: 1200,
-      eta_minutes: 12,
-      is_current_best: true,
-      legs: base.legs.map((leg) => ({ ...leg, status: "found" })),
-    })), 120);
-    setTimeout(() => socket.send(JSON.stringify({ type: "search_finished", order_id: order.id, best_quote_id: "quote-usdt" })), 180);
-  });
 }
 
-test("login → live routes → funding consent → done", async ({ page }) => {
+test("login modal → real P2P route search → select estimate", async ({ page }) => {
   await mockBackend(page);
   await page.goto("/");
 
+  await expect(page.getByRole("dialog", { name: "Sign in to Pay3Flow" })).toBeVisible();
   await page.getByRole("button", { name: "Sign in", exact: true }).last().click();
   await expect(page.getByTestId("auth-form")).toBeHidden();
 
+  await expect(page.getByLabel("Send from")).toHaveValue("AM:AMD");
+  await expect(page.getByLabel("Send to")).toHaveValue("RU:RUB");
   await page.getByTestId("start-search").click();
-  await expect(page.getByTestId("partial-route")).toBeVisible();
-  await expect(page.getByTestId("complete-route")).toBeVisible();
-  await page.getByTestId("complete-route").click();
+  await expect(page.getByTestId("complete-route")).toHaveCount(2);
+  await expect(page.getByText("20,350 RUB")).toBeVisible();
+  await page.getByTestId("complete-route").first().click();
   await expect(page.getByTestId("selected-route")).toBeVisible();
-  await page.getByRole("button", { name: "Confirm selected route" }).click();
-
-  await expect(page.getByTestId("funding-instruction")).toBeVisible();
-  await expect(page.getByTestId("confirm-funding")).toBeDisabled();
-  await page.getByLabel(/I confirm the payment instructions/).check();
-  await page.getByTestId("confirm-funding").click();
-  await expect(page.getByTestId("order-done")).toBeVisible();
+  await expect(page.getByText(/No trade or reservation has been placed/)).toBeVisible();
 });
