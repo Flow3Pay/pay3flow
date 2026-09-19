@@ -208,7 +208,9 @@
 }
 
 .routeGroups:focus-visible {
-  outline-color: var(--color-accent);
+  outline: 2px solid rgba(185, 242, 39, 0.55);
+  outline-offset: 4px;
+  border-radius: 18px;
 }
 
 .routeList {
@@ -233,18 +235,16 @@
   gap: 8px;
   padding: 15px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.075);
-  border-radius: 18px;
-  background:
-    radial-gradient(circle at 100% 0, rgba(117, 88, 246, 0.11), transparent 34%),
-    rgba(255, 255, 255, 0.045);
+  border: 1px solid transparent;
+  border-radius: 20px;
+  background: transparent;
   color: #fff;
   text-align: left;
   transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
 }
 
 .routeCard:hover {
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.075);
   transform: translateY(-1px);
 }
