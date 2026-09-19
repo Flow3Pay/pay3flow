@@ -113,7 +113,7 @@ test("login → live routes → funding consent → done", async ({ page }) => {
   await mockBackend(page);
   await page.goto("/");
 
-  await page.getByRole("button", { name: "Войти", exact: true }).last().click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).last().click();
   await expect(page.getByTestId("auth-form")).toBeHidden();
 
   await page.getByTestId("start-search").click();
@@ -121,11 +121,11 @@ test("login → live routes → funding consent → done", async ({ page }) => {
   await expect(page.getByTestId("complete-route")).toBeVisible();
   await page.getByTestId("complete-route").click();
   await expect(page.getByTestId("selected-route")).toBeVisible();
-  await page.getByRole("button", { name: "Подтвердить полную связку" }).click();
+  await page.getByRole("button", { name: "Confirm selected route" }).click();
 
   await expect(page.getByTestId("funding-instruction")).toBeVisible();
   await expect(page.getByTestId("confirm-funding")).toBeDisabled();
-  await page.getByLabel(/Я подтверждаю инструкцию/).check();
+  await page.getByLabel(/I confirm the payment instructions/).check();
   await page.getByTestId("confirm-funding").click();
   await expect(page.getByTestId("order-done")).toBeVisible();
 });

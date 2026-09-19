@@ -24,24 +24,44 @@ import {
 import { SidePanel } from "./side-panel";
 import styles from "./converter.module.css";
 
-const STATUS_RU: Record<string, string> = {
-  created: "Заявка создана",
-  discovering: "Ищем исполнителей",
-  quoting: "Собираем маршруты",
-  quoted: "Маршрут выбран",
-  locked: "Маршрут зафиксирован",
-  token_settling: "Выполняется расчётный этап",
-  money_settling: "Деньги отправляются получателю",
-  proof_pending: "Проверяем подтверждение",
-  done: "Перевод завершён",
-  failed: "Перевод не выполнен",
-  expired: "Заявка истекла",
-  cancelled: "Заявка отменена",
-  disputed: "Нужна ручная проверка",
+const STATUS_EN: Record<string, string> = {
+  created: "Order created",
+  discovering: "Finding providers",
+  quoting: "Building routes",
+  quoted: "Route selected",
+  locked: "Route locked",
+  token_settling: "Processing settlement",
+  money_settling: "Sending funds to recipient",
+  proof_pending: "Verifying confirmation",
+  done: "Transfer completed",
+  failed: "Transfer failed",
+  expired: "Order expired",
+  cancelled: "Order cancelled",
+  disputed: "Manual review required",
 };
 
 const money = (minor: number, currency: string) =>
-  `${(minor / 100).toLocaleString("ru-RU", { maximumFractionDigits: 2 })} ${currency}`;
+  `${(minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })} ${currency}`;
+
+const locationKey = (country: string, currency: string) => `${country}:${currency}`;
+
+const METHOD_LABELS: Record<string, string> = {
+  bank_card: "Bank card",
+  bank_transfer: "Bank transfer",
+  p2p: "P2P",
+  wallet: "Wallet",
+};
+
+const methodLabel = (method: string) => METHOD_LABELS[method] ?? method;
+
+function locationLabel(country: string, currency: string): string {
+  try {
+    const region = new Intl.DisplayNames(["en"], { type: "region" }).of(country);
+    return `${region ?? country} · ${currency}`;
+  } catch {
+    return `${country} · ${currency}`;
+  }
+}
 
 function upsertRoute(routes: RouteCandidate[], fresh: RouteCandidate): RouteCandidate[] {
   const existing = routes.findIndex((route) => route.route_id === fresh.route_id);
@@ -85,6 +105,36 @@ export function Converter({ token, email: sessionEmail, onAuthenticated, onRequi
     [corridorId, corridors],
   );
 
+  const sourceLocations = useMemo(
+    () => [
+      ...new Map(
+        corridors.map((item) => [
+          locationKey(item.source_country, item.source_currency),
+          { country: item.source_country, currency: item.source_currency },
+        ]),
+      ).values(),
+    ],
+    [corridors],
+  );
+
+  const targetLocations = useMemo(() => {
+    const compatible = corridor
+      ? corridors.filter(
+          (item) =>
+            item.source_country === corridor.source_country &&
+            item.source_currency === corridor.source_currency,
+        )
+      : corridors;
+    return [
+      ...new Map(
+        compatible.map((item) => [
+          locationKey(item.target_country, item.target_currency),
+          { country: item.target_country, currency: item.target_currency },
+        ]),
+      ).values(),
+    ];
+  }, [corridor, corridors]);
+
   useEffect(() => {
     fetchCorridors()
       .then((response) => {
@@ -102,6 +152,39 @@ export function Converter({ token, email: sessionEmail, onAuthenticated, onRequi
 
   useEffect(refreshHistory, [refreshHistory]);
   useEffect(() => () => closeSocket.current?.(), []);
+
+  useEffect(() => {
+    if (token) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [token]);
+
+  const chooseSourceLocation = (value: string) => {
+    const currentTarget = corridor
+      ? locationKey(corridor.target_country, corridor.target_currency)
+      : null;
+    const matchingCorridors = corridors.filter(
+      (item) => locationKey(item.source_country, item.source_currency) === value,
+    );
+    const next =
+      matchingCorridors.find(
+        (item) => locationKey(item.target_country, item.target_currency) === currentTarget,
+      ) ?? matchingCorridors[0];
+    if (next) setCorridorId(next.id);
+  };
+
+  const chooseTargetLocation = (value: string) => {
+    const next = corridors.find(
+      (item) =>
+        item.source_country === corridor?.source_country &&
+        item.source_currency === corridor?.source_currency &&
+        locationKey(item.target_country, item.target_currency) === value,
+    );
+    if (next) setCorridorId(next.id);
+  };
 
   const handleLiveEvent = useCallback((event: LiveRouteEvent) => {
     if (event.type === "entry_leg_found" || event.type === "route_candidate_found") {
@@ -146,7 +229,7 @@ export function Converter({ token, email: sessionEmail, onAuthenticated, onRequi
       const freshToken = await authenticate(authEmail.trim(), authCode.trim());
       onAuthenticated(freshToken, authEmail.trim());
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Не удалось войти");
+      setError(cause instanceof Error ? cause.message : "Sign-in failed");
     } finally {
       setAuthBusy(false);
     }
@@ -155,16 +238,16 @@ export function Converter({ token, email: sessionEmail, onAuthenticated, onRequi
   const startSearch = async () => {
     if (!token) {
       onRequireAuth();
-      setError("Сначала войдите, чтобы создать заявку.");
+      setError("Sign in before creating an order.");
       return;
     }
     if (!corridor) {
-      setError("Backend не вернул доступный коридор.");
+      setError("The backend did not return an available corridor.");
       return;
     }
     const numericAmount = Number(amount.replace(/\s/g, "").replace(",", "."));
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
-      setError("Введите сумму больше нуля.");
+      setError("Enter an amount greater than zero.");
       return;
     }
     setBusy(true);
@@ -198,7 +281,7 @@ export function Converter({ token, email: sessionEmail, onAuthenticated, onRequi
       closeSocket.current = openLiveRoutes(token, freshOrder.id, handleLiveEvent, () => setSocketFallback(true));
       refreshHistory();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Не удалось создать заявку");
+      setError(cause instanceof Error ? cause.message : "Could not create the order");
     } finally {
       setBusy(false);
     }
@@ -216,7 +299,7 @@ export function Converter({ token, email: sessionEmail, onAuthenticated, onRequi
       setSearching(false);
       closeSocket.current?.();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Не удалось зафиксировать маршрут");
+      setError(cause instanceof Error ? cause.message : "Could not lock the route");
     } finally {
       setBusy(false);
     }
@@ -240,7 +323,7 @@ export function Converter({ token, email: sessionEmail, onAuthenticated, onRequi
       setOrder(completed.order);
       refreshHistory();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Не удалось подтвердить исполнение");
+      setError(cause instanceof Error ? cause.message : "Could not confirm settlement");
     } finally {
       setBusy(false);
     }
@@ -252,89 +335,128 @@ export function Converter({ token, email: sessionEmail, onAuthenticated, onRequi
         <div className={styles.card}>
           <div className={styles.head}>
             <div>
-              <div className={styles.productTitle}>Перевод Армения → Россия</div>
-              <div className={styles.productHint}>Вы задаёте сумму, Pay3Flow находит маршрут</div>
+              <div className={styles.productTitle}>Send money across borders</div>
+              <div className={styles.productHint}>Enter an amount and Pay3Flow finds the best route</div>
             </div>
-            <span className={styles.statusPill}>{order ? STATUS_RU[order.status] ?? order.status : "Новая заявка"}</span>
+            <span className={styles.statusPill}>{order ? STATUS_EN[order.status] ?? order.status : "New order"}</span>
           </div>
 
-          {!token && (
-            <form className={styles.authBox} onSubmit={signIn} data-testid="auth-form">
-              <strong>Вход или регистрация</strong>
-              <p>Для демо используется одноразовый код 1234.</p>
-              <input className={styles.textInput} type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} required aria-label="Email" />
-              <input className={styles.textInput} value={authCode} onChange={(event) => setAuthCode(event.target.value)} required aria-label="Код входа" />
-              <button className={styles.secondaryButton} disabled={authBusy} type="submit">{authBusy ? "Входим…" : "Войти"}</button>
-            </form>
-          )}
-
-          <label className={styles.fieldLabel}>
-            Коридор
-            <select className={styles.select} value={corridor?.id ?? ""} onChange={(event) => setCorridorId(event.target.value)} disabled={searching || Boolean(funding)}>
-              {corridors.map((item) => (
-                <option key={item.id} value={item.id}>{item.source_country}/{item.source_currency} → {item.target_country}/{item.target_currency}</option>
-              ))}
-            </select>
-          </label>
+          <div className={styles.locationGrid} aria-label="Transfer direction">
+            <label className={styles.locationField}>
+              <span>From</span>
+              <select
+                className={styles.select}
+                value={corridor ? locationKey(corridor.source_country, corridor.source_currency) : ""}
+                onChange={(event) => chooseSourceLocation(event.target.value)}
+                disabled={searching || Boolean(funding)}
+              >
+                {sourceLocations.map((location) => (
+                  <option key={locationKey(location.country, location.currency)} value={locationKey(location.country, location.currency)}>
+                    {locationLabel(location.country, location.currency)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <span className={styles.directionArrow} aria-hidden="true">→</span>
+            <label className={styles.locationField}>
+              <span>To</span>
+              <select
+                className={styles.select}
+                value={corridor ? locationKey(corridor.target_country, corridor.target_currency) : ""}
+                onChange={(event) => chooseTargetLocation(event.target.value)}
+                disabled={searching || Boolean(funding)}
+              >
+                {targetLocations.map((location) => (
+                  <option key={locationKey(location.country, location.currency)} value={locationKey(location.country, location.currency)}>
+                    {locationLabel(location.country, location.currency)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
 
           <div className={styles.panel}>
             <div className={styles.panelMain}>
-              <label className={styles.slotLabel} htmlFor="exchange-amount">Вы отправляете</label>
+              <label className={styles.slotLabel} htmlFor="exchange-amount">You send</label>
               <input id="exchange-amount" className={styles.input} inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} disabled={searching || Boolean(funding)} />
             </div>
             <span className={styles.currencyBadge}>{corridor?.source_currency ?? "—"}</span>
           </div>
 
           <div className={styles.twoColumns}>
-            <label className={styles.fieldLabel}>Способ отправки<select className={styles.select} value={sourceMethod} onChange={(event) => setSourceMethod(event.target.value)}><option value="bank_card">Банковская карта</option><option value="bank_transfer">Банковский перевод</option><option value="p2p">P2P</option></select></label>
-            <label className={styles.fieldLabel}>Способ получения<select className={styles.select} value={targetMethod} onChange={(event) => setTargetMethod(event.target.value)}><option value="bank_card">На карту</option><option value="bank_transfer">На счёт</option><option value="wallet">На кошелёк</option></select></label>
+            <label className={styles.fieldLabel}>Sending method<select className={styles.select} value={sourceMethod} onChange={(event) => setSourceMethod(event.target.value)}><option value="bank_card">Bank card</option><option value="bank_transfer">Bank transfer</option><option value="p2p">P2P</option></select></label>
+            <label className={styles.fieldLabel}>Receiving method<select className={styles.select} value={targetMethod} onChange={(event) => setTargetMethod(event.target.value)}><option value="bank_card">Bank card</option><option value="bank_transfer">Bank account</option><option value="wallet">Wallet</option></select></label>
           </div>
 
-          <label className={styles.fieldLabel}>Получатель<input className={styles.textInput} value={recipient} onChange={(event) => setRecipient(event.target.value)} placeholder="Имя или сохранённый recipient ID" /></label>
+          <label className={styles.fieldLabel}>Recipient<input className={styles.textInput} value={recipient} onChange={(event) => setRecipient(event.target.value)} placeholder="Name or saved recipient ID" /></label>
 
           {!funding && (
             <button type="button" className={styles.cta} disabled={busy || searching || !corridor} onClick={startSearch} data-testid="start-search">
               {(busy || searching) && <span className={styles.spinner} />}
-              {searching ? "Ищем связки…" : order ? "Новый поиск" : "Найти маршрут"}
+              {searching ? "Searching routes…" : order ? "Search again" : "Find a route"}
             </button>
           )}
 
           {selected && !funding && (
             <div className={styles.selectionBox} data-testid="selected-route">
-              <strong>{selected.entry_asset} · {selected.entry_network}</strong>
-              <span>Получатель получит {money(selected.target_amount_minor ?? 0, selected.target_currency ?? corridor?.target_currency ?? "")}</span>
-              <span>Комиссия {money(selected.fee_minor ?? 0, corridor?.source_currency ?? "")}, ETA {selected.eta_minutes} мин</span>
-              <button type="button" className={styles.cta} disabled={busy || selected.status !== "complete"} onClick={lockRoute}>Подтвердить полную связку</button>
+              <strong>Selected option</strong>
+              <span>Recipient receives {money(selected.target_amount_minor ?? 0, selected.target_currency ?? corridor?.target_currency ?? "")}</span>
+              <span>Fee {money(selected.fee_minor ?? 0, corridor?.source_currency ?? "")}, ETA {selected.eta_minutes} min</span>
+              <button type="button" className={styles.cta} disabled={busy || selected.status !== "complete"} onClick={lockRoute}>Confirm selected route</button>
             </div>
           )}
 
           {funding && order?.status !== "done" && (
             <div className={styles.fundingBox} data-testid="funding-instruction">
-              <strong>Инструкция по оплате</strong>
-              <span>{money(funding.amount_minor, funding.currency)} через {funding.method_type}</span>
+              <strong>Payment instructions</strong>
+              <span>{money(funding.amount_minor, funding.currency)} via {methodLabel(funding.method_type)}</span>
               <span className={styles.destination}>{funding.destination_ref}</span>
               <label className={styles.consentLabel}>
                 <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
-                Я подтверждаю инструкцию и условия версии {termsVersion}. Маршрут может использовать TOKEN/crypto как расчётный актив; Pay3Flow не списывает фиат автоматически.
+                I confirm the payment instructions and terms version {termsVersion}. The route may use a TOKEN/crypto settlement asset; Pay3Flow does not debit fiat automatically.
               </label>
-              <button type="button" className={styles.cta} disabled={!consent || busy} onClick={fundAndFinish} data-testid="confirm-funding">{busy ? "Выполняем…" : "Подтвердить funding"}</button>
+              <button type="button" className={styles.cta} disabled={!consent || busy} onClick={fundAndFinish} data-testid="confirm-funding">{busy ? "Processing…" : "Confirm payment"}</button>
             </div>
           )}
 
-          {order?.status === "done" && <div className={styles.successBox} data-testid="order-done"><strong>Перевод завершён</strong><span>Mock settlement и proof успешно проверены.</span></div>}
-          {socketFallback && searching && <div className={styles.warning}>WebSocket недоступен — результаты обновляются polling-запросами.</div>}
-          {error && <div className={styles.errorBox} role="alert">{error}</div>}
+          {order?.status === "done" && <div className={styles.successBox} data-testid="order-done"><strong>Transfer completed</strong><span>Mock settlement and proof were verified successfully.</span></div>}
+          {socketFallback && searching && <div className={styles.warning}>WebSocket unavailable — results are being refreshed by polling.</div>}
+          {error && token && <div className={styles.errorBox} role="alert">{error}</div>}
 
           {history.length > 0 && (
             <details className={styles.history}>
-              <summary>История операций ({history.length})</summary>
-              {history.map((item) => <div key={item.id} className={styles.historyRow}><span>{money(item.source_amount_minor, item.source_currency)} → {item.target_currency}</span><strong>{STATUS_RU[item.status] ?? item.status}</strong></div>)}
+              <summary>Transfer history ({history.length})</summary>
+              {history.map((item) => <div key={item.id} className={styles.historyRow}><span>{money(item.source_amount_minor, item.source_currency)} → {item.target_currency}</span><strong>{STATUS_EN[item.status] ?? item.status}</strong></div>)}
             </details>
           )}
         </div>
 
-        <SidePanel active={Boolean(order)} routes={routes} searching={searching} selectedQuoteId={selected?.quote_id ?? null} onSelect={setSelected} />
+        <SidePanel active={Boolean(order)} routes={routes} selectedQuoteId={selected?.quote_id ?? null} onSelect={setSelected} />
       </div>
+
+      {!token && (
+        <div className={styles.authBackdrop}>
+          <div className={styles.authModal} role="dialog" aria-modal="true" aria-labelledby="auth-title">
+            <form className={styles.authBox} onSubmit={signIn} data-testid="auth-form">
+              <div className={styles.authMark} aria-hidden="true">P3</div>
+              <div className={styles.authCopy}>
+                <strong id="auth-title">Sign in to Pay3Flow</strong>
+                <p>Enter your email and the demo one-time code 1234.</p>
+              </div>
+              <label className={styles.fieldLabel}>
+                Email
+                <input className={styles.textInput} type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} required autoFocus aria-label="Email" />
+              </label>
+              <label className={styles.fieldLabel}>
+                One-time code
+                <input className={styles.textInput} value={authCode} onChange={(event) => setAuthCode(event.target.value)} required inputMode="numeric" aria-label="One-time code" />
+              </label>
+              {error && <div className={styles.errorBox} role="alert">{error}</div>}
+              <button className={styles.secondaryButton} disabled={authBusy} type="submit">{authBusy ? "Signing in…" : "Sign in"}</button>
+            </form>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

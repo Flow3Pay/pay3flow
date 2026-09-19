@@ -6,20 +6,6 @@ import { useI18nSafe } from "@/i18n/context";
 
 import styles from "./header.module.css";
 
-export interface ChainOption {
-  id: string;
-  label: string;
-  color: string;
-}
-
-const CHAINS: ChainOption[] = [
-  { id: "ethereum", label: "Ethereum", color: "#627eea" },
-  { id: "polygon", label: "Polygon", color: "#8247e5" },
-  { id: "solana", label: "Solana", color: "#9945ff" },
-  { id: "bitcoin", label: "Bitcoin", color: "#f7931a" },
-  { id: "mx", label: "Mir", color: "#00a77f" },
-];
-
 interface HeaderProps {
   connected: boolean;
   address: string;
@@ -36,15 +22,8 @@ export function Header({
   brandHref = "/",
 }: HeaderProps) {
   const { d } = useI18nSafe();
-  const [chainOpen, setChainOpen] = useState(false);
-  const [chain, setChain] = useState<ChainOption>(CHAINS[0]);
   const [walletOpen, setWalletOpen] = useState(false);
   const walletRef = useRef<HTMLDivElement>(null);
-
-  const chooseChain = (option: ChainOption) => {
-    setChain(option);
-    setChainOpen(false);
-  };
 
   useEffect(() => {
     if (!walletOpen) return;
@@ -88,42 +67,6 @@ export function Header({
         </div>
 
         <div className={styles.actions}>
-          <div className={styles.networkWrap}>
-            <button
-              type="button"
-              className={styles.network}
-              aria-haspopup="menu"
-              aria-expanded={chainOpen}
-              onClick={() => setChainOpen((v) => !v)}
-            >
-              <span className={styles.chainDot} style={{ background: chain.color }} />
-              {chain.label}
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-            {chainOpen && (
-              <>
-                <div className={styles.overlay} onClick={() => setChainOpen(false)} />
-                <div className={styles.menu} role="menu">
-                  {CHAINS.map((option) => (
-                    <button
-                      key={option.id}
-                      type="button"
-                      role="menuitem"
-                      className={styles.menuItem}
-                      onClick={() => chooseChain(option)}
-                    >
-                      <span className={styles.chainDot} style={{ background: option.color }} />
-                      {option.label}
-                      {option.id === chain.id && <span className={styles.menuCheck}>✓</span>}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-
           {connected ? (
             <div
               className={styles.walletWrap}

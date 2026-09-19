@@ -4,6 +4,7 @@
   margin-left: 0;
   overflow: hidden;
   flex-shrink: 0;
+  font-family: var(--font-sans);
   transition:
     width 0.55s cubic-bezier(0.22, 1, 0.36, 1),
     margin-left 0.55s cubic-bezier(0.22, 1, 0.36, 1);
@@ -42,48 +43,11 @@
 
 .quoteInner {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
   padding: 24px;
-}
-
-.quoteHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.quoteTitle {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--color-text);
-}
-
-.details {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 2px;
-}
-
-.detailRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  font-size: 13px;
-  color: var(--color-text-soft);
-}
-
-.detailRow strong {
-  font-weight: 600;
-  color: var(--color-text);
-  font-variant-numeric: tabular-nums;
-  text-align: right;
+  overflow: hidden;
 }
 
 .routeList {
@@ -100,22 +64,35 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 8px;
+  scrollbar-color: var(--color-border-strong) transparent;
+  scrollbar-width: thin;
   flex-direction: column;
   gap: 14px;
 }
 
-.routeGroup {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.routeGroups:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 4px;
+  border-radius: 8px;
 }
 
-.groupTitle {
-  color: var(--color-text-soft);
-  font-family: var(--font-sans);
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.routeGroups::-webkit-scrollbar {
+  width: 7px;
+}
+
+.routeGroups::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.routeGroups::-webkit-scrollbar-thumb {
+  border-radius: var(--radius-pill);
+  background: var(--color-border-strong);
+}
+
+.routeGroups::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-faint);
 }
 
 .routeRow,
@@ -221,17 +198,12 @@
   color: var(--color-good);
 }
 
-.routeMeta,
-.legs {
+.routeMeta {
   color: var(--color-text-soft);
   font-family: var(--font-sans);
   font-size: 12px;
   line-height: 1.35;
   text-align: left;
-}
-
-.legs {
-  color: var(--color-text-faint);
 }
 
 .routeSide {
@@ -295,13 +267,6 @@
   text-align: right;
 }
 
-.routeEmpty {
-  padding: 4px 2px;
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--color-text-faint);
-}
-
 .emptyState {
   display: grid;
   flex: 1;
@@ -315,37 +280,10 @@
   text-align: center;
 }
 
-.quoteFooter {
-  margin-top: auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-top: 16px;
-  border-top: 1px solid var(--color-border);
-  font-size: 11.5px;
-  font-weight: 500;
-  color: var(--color-text-faint);
-}
-
-.spinner {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 2px solid var(--color-border-strong);
-  border-top-color: var(--color-good);
-  animation: spin 0.8s linear infinite;
-  flex-shrink: 0;
-}
 
 @media (max-width: 1080px) {
   .side.active {
     width: 100%;
     margin-left: 0;
-  }
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
   }
 }

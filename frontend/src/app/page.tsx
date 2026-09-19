@@ -21,7 +21,7 @@ export default function HomePage() {
   }, []);
 
   const handleConnect = useCallback(() => {
-    document.querySelector("[data-testid='auth-form']")?.scrollIntoView({ behavior: "smooth" });
+    document.querySelector<HTMLInputElement>("[data-testid='auth-form'] input[type='email']")?.focus();
   }, []);
 
   const handleDisconnect = useCallback(() => {
@@ -35,7 +35,7 @@ export default function HomePage() {
     <div className="cowTheme">
       <Header
         connected={Boolean(token)}
-        address={email || "Профиль"}
+        address={email || "Profile"}
         onConnect={handleConnect}
         onDisconnect={handleDisconnect}
         brandHref="/"

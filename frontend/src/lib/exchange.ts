@@ -116,7 +116,7 @@ async function request<T>(
     const payload = (await response.json().catch(() => null)) as
       | { error?: string; message?: string }
       | null;
-    throw new Error(payload?.error ?? payload?.message ?? `Ошибка backend (${response.status})`);
+    throw new Error(payload?.error ?? payload?.message ?? `Backend error (${response.status})`);
   }
   return (await response.json()) as T;
 }
@@ -129,7 +129,7 @@ export async function authenticate(email: string, code: string): Promise<string>
     body,
   });
   if (login.ok) return ((await login.json()) as { token: string }).token;
-  if (login.status !== 404) throw new Error("Не удалось войти. Проверьте email и код.");
+  if (login.status !== 404) throw new Error("Sign-in failed. Check your email and code.");
   const registered = await request<{ token: string }>("/api/auth/register", {
     method: "POST",
     body,
