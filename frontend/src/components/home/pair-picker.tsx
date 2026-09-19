@@ -122,8 +122,11 @@ export function PairPicker({
 
   useEffect(() => {
     if (open) return;
-    setSearch("");
-    setServerQuery("");
+    const timer = window.setTimeout(() => {
+      setSearch("");
+      setServerQuery("");
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [open]);
 
   const fetchPage = useCallback(

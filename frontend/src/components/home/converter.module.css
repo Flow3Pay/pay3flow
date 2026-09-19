@@ -624,3 +624,193 @@
     transform: rotate(360deg);
   }
 }
+
+.productTitle {
+  color: var(--color-text);
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.productHint {
+  margin-top: 3px;
+  color: var(--color-text-faint);
+  font-family: var(--font-sans);
+  font-size: 11px;
+}
+
+.statusPill,
+.currencyBadge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  border-radius: var(--radius-pill);
+  background: var(--color-panel);
+  color: var(--color-text-soft);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0 12px;
+  text-align: center;
+}
+
+.currencyBadge {
+  color: var(--color-text);
+  font-size: 16px;
+}
+
+.fieldLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--color-text-faint);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.select,
+.textInput {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 12px;
+  outline: 0;
+  background: var(--color-paper);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  padding: 0 12px;
+}
+
+.select:focus,
+.textInput:focus {
+  border-color: var(--color-accent);
+}
+
+.twoColumns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.authBox,
+.selectionBox,
+.fundingBox,
+.successBox {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  border-radius: var(--radius-panel);
+  background: var(--color-panel);
+  color: var(--color-text-soft);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  padding: 14px;
+}
+
+.authBox strong,
+.selectionBox strong,
+.fundingBox strong,
+.successBox strong {
+  color: var(--color-text);
+  font-size: 15px;
+}
+
+.secondaryButton {
+  min-height: 42px;
+  border-radius: 12px;
+  background: var(--color-text);
+  color: var(--color-text-invert);
+  font-family: var(--font-sans);
+  font-weight: 600;
+}
+
+.destination {
+  overflow-wrap: anywhere;
+  border-radius: 8px;
+  background: var(--color-paper);
+  color: var(--color-text);
+  padding: 9px;
+}
+
+.consentLabel {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.consentLabel input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.successBox {
+  background: rgba(0, 123, 40, 0.12);
+  color: var(--color-good);
+}
+
+.warning,
+.errorBox {
+  border-radius: 12px;
+  background: var(--color-warn-bg);
+  color: var(--color-warn);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 11px 12px;
+}
+
+.errorBox {
+  background: rgba(212, 19, 0, 0.1);
+  color: var(--color-danger);
+}
+
+.history {
+  color: var(--color-text-soft);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  padding: 8px 4px;
+}
+
+.history summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.historyRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--color-border);
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+.historyRow strong {
+  color: var(--color-text);
+  text-align: right;
+}
+
+@media (max-width: 560px) {
+  .shell {
+    padding: 56px 12px 12px;
+  }
+
+  .card {
+    border-radius: 18px;
+  }
+
+  .twoColumns {
+    grid-template-columns: 1fr;
+  }
+
+  .head {
+    align-items: flex-start;
+    gap: 8px;
+  }
+}

@@ -29,6 +29,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/payments/:id", get(payments::get))
         .route("/api/exchange/orders", post(exchange::create_order))
         .route("/api/exchange/orders", get(exchange::list_orders))
+        .route("/api/exchange/corridors", get(exchange::list_corridors))
         .route("/api/exchange/orders/:id", get(exchange::get_order))
         .route("/api/exchange/orders/:id/quotes", get(exchange::get_quotes))
         .route("/api/exchange/orders/:id/live", get(exchange::live_routes))
@@ -47,6 +48,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/api/exchange/orders/:id/funding/confirm",
             post(exchange::confirm_funding),
+        )
+        .route(
+            "/api/exchange/orders/:id/manual-review",
+            get(exchange::get_manual_review),
         )
         .route(
             "/api/exchange/orders/:id/settlement",
@@ -74,6 +79,26 @@ pub fn router(state: AppState) -> Router {
         .route("/api/exchange-pairs", get(pairs::list))
         .route("/api/admin/exchange-pairs", post(pairs::admin_create))
         .route("/api/admin/exchange-pairs/:id", post(pairs::admin_update))
+        .route(
+            "/api/admin/exchange/controls",
+            get(exchange::admin_get_controls).post(exchange::admin_update_controls),
+        )
+        .route(
+            "/api/admin/exchange/corridors/:id",
+            post(exchange::admin_set_corridor_enabled),
+        )
+        .route(
+            "/api/admin/exchange/solvers/:id",
+            post(exchange::admin_set_solver_status),
+        )
+        .route(
+            "/api/admin/exchange/orders/:id/manual-review",
+            post(exchange::admin_resolve_manual_review),
+        )
+        .route(
+            "/api/admin/exchange/orders/:id/dispute",
+            post(exchange::admin_resolve_dispute),
+        )
         .route("/api/banks", get(banks::list))
         .route("/api/admin/banks", post(banks::admin_create))
         .route(

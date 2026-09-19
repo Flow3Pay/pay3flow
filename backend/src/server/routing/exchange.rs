@@ -10,10 +10,11 @@ use uuid::Uuid;
 use crate::core::error::AppError;
 use crate::core::state::AppState;
 use crate::exchange::{
-    auction, discovery, ledger, live, repo, solver, AuditEvent, ExchangeOrder, ExchangeProof,
-    ExchangeQuote, ExchangeSettlement, FundingInstruction, Minor, NewExchangeOrder, OrderStatus,
-    TokenLedgerOperation,
+    auction, control, discovery, ledger, live, repo, solver, AuditEvent, ExchangeCorridor,
+    ExchangeOrder, ExchangeProof, ExchangeQuote, ExchangeSettlement, FundingInstruction, Minor,
+    NewExchangeOrder, OrderStatus, SolverStatus, TokenLedgerOperation,
 };
+use crate::server::routing::pairs::auth_admin;
 use crate::server::routing::payments::auth_user_id;
 
 const IDEMPOTENCY_HEADER: &str = "Idempotency-Key";
@@ -65,6 +66,40 @@ pub struct FundingConfirmRes {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct FundingConfirmReq {
+    pub accepts_terms: bool,
+    pub terms_version: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CorridorsRes {
+    pub items: Vec<ExchangeCorridor>,
+    pub terms_version: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct EnabledReq {
+    pub enabled: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SolverStatusReq {
+    pub status: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ManualReviewResolutionReq {
+    pub approved: bool,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DisputeResolutionReq {
+    pub outcome: String,
+    pub note: String,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct SubmitProofReq {
     pub proof_type: String,
     pub proof_payload: serde_json::Value,
@@ -112,6 +147,19 @@ pub async fn create_order(
         "exchange.order.created"
     );
     Ok(Json(order))
+}
+
+pub async fn list_corridors(State(state): State<AppState>) -> Result<Json<CorridorsRes>, AppError> {
+    let controls = control::controls(&state.pool)
+        .await
+        .map_err(AppError::from)?;
+    let items = repo::enabled_corridors(&state.pool)
+        .await
+        .map_err(AppError::from)?;
+    Ok(Json(CorridorsRes {
+        items,
+        terms_version: controls.terms_version,
+    }))
 }
 
 pub async fn get_order(
@@ -169,6 +217,9 @@ pub async fn live_routes(
         None => auth_user_id(&state, &headers)?,
     };
     let order = owned_order(&state, &user_id, &id).await?;
+    control::ensure_order_allowed(&state.pool, &order)
+        .await
+        .map_err(map_exchange_err)?;
     Ok(ws.on_upgrade(move |socket| live_routes_socket(state, order, socket)))
 }
 
@@ -196,6 +247,9 @@ pub async fn discover_solvers(
 ) -> Result<Json<discovery::SolverDiscoveryResult>, AppError> {
     let user_id = auth_user_id(&state, &headers)?;
     let order = owned_order(&state, &user_id, &id).await?;
+    control::ensure_order_allowed(&state.pool, &order)
+        .await
+        .map_err(map_exchange_err)?;
     let result =
         discovery::discover_solvers_for_order(&state.pool, &state.ap, state.redis.as_ref(), &order)
             .await
@@ -217,6 +271,9 @@ pub async fn run_auction(
 ) -> Result<Json<auction::AuctionResult>, AppError> {
     let user_id = auth_user_id(&state, &headers)?;
     let order = owned_order(&state, &user_id, &id).await?;
+    control::ensure_order_allowed(&state.pool, &order)
+        .await
+        .map_err(map_exchange_err)?;
     let quote_source = solver::MockRouteQuoteSource::default();
     let result = auction::run_auction_for_order(&state.pool, &order, &quote_source)
         .await
@@ -238,6 +295,9 @@ pub async fn cancel_order(
 ) -> Result<Json<ExchangeOrder>, AppError> {
     let user_id = auth_user_id(&state, &headers)?;
     let order = owned_order(&state, &user_id, &id).await?;
+    control::ensure_order_allowed(&state.pool, &order)
+        .await
+        .map_err(map_exchange_err)?;
     if order.status.is_terminal() {
         return Err(AppError::Conflict(
             "exchange order is already terminal".into(),
@@ -272,7 +332,10 @@ pub async fn confirm_order(
     Json(req): Json<ConfirmOrderReq>,
 ) -> Result<Json<ConfirmOrderRes>, AppError> {
     let user_id = auth_user_id(&state, &headers)?;
-    let order = owned_order(&state, &user_id, &id).await?;
+    let mut order = owned_order(&state, &user_id, &id).await?;
+    control::ensure_order_allowed(&state.pool, &order)
+        .await
+        .map_err(map_exchange_err)?;
 
     if let Some(instruction_id) = order.funding_instruction_id {
         let instruction = repo::funding_instruction_by_id(&state.pool, &instruction_id)
@@ -305,6 +368,23 @@ pub async fn confirm_order(
         return Err(AppError::NotFound("exchange quote not found".into()));
     }
 
+    control::ensure_solver_allowed(&state.pool, &order, &quote)
+        .await
+        .map_err(map_exchange_err)?;
+
+    if order.status == OrderStatus::Quoting {
+        let score = auction::score_quote(&quote);
+        order = repo::select_quote_for_order(&state.pool, &order, &quote, score)
+            .await
+            .map_err(map_exchange_err)?;
+    }
+    control::ensure_or_create_manual_review(&state.pool, &order)
+        .await
+        .map_err(map_exchange_err)?;
+    control::require_manual_review_approval(&state.pool, &order.id)
+        .await
+        .map_err(map_exchange_err)?;
+
     let (order, funding_instruction) =
         repo::create_funding_instruction_for_quote(&state.pool, &order, &quote)
             .await
@@ -328,13 +408,147 @@ pub async fn confirm_order(
     }))
 }
 
+pub async fn get_manual_review(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Option<control::ManualReview>>, AppError> {
+    let user_id = auth_user_id(&state, &headers)?;
+    let order = owned_order(&state, &user_id, &id).await?;
+    let review = control::manual_review_for_order(&state.pool, &order.id)
+        .await
+        .map_err(AppError::from)?;
+    Ok(Json(review))
+}
+
+pub async fn admin_get_controls(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<control::ExchangeControls>, AppError> {
+    auth_admin(&state, &headers)?;
+    Ok(Json(
+        control::controls(&state.pool)
+            .await
+            .map_err(AppError::from)?,
+    ))
+}
+
+pub async fn admin_update_controls(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(patch): Json<control::ExchangeControlsPatch>,
+) -> Result<Json<control::ExchangeControls>, AppError> {
+    auth_admin(&state, &headers)?;
+    let controls = control::update_controls(&state.pool, &patch, "admin-api")
+        .await
+        .map_err(map_exchange_err)?;
+    Ok(Json(controls))
+}
+
+pub async fn admin_set_corridor_enabled(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(req): Json<EnabledReq>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    auth_admin(&state, &headers)?;
+    control::set_corridor_enabled(&state.pool, &id, req.enabled)
+        .await
+        .map_err(map_exchange_err)?;
+    Ok(Json(
+        serde_json::json!({ "id": id, "enabled": req.enabled }),
+    ))
+}
+
+pub async fn admin_set_solver_status(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(req): Json<SolverStatusReq>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    auth_admin(&state, &headers)?;
+    let status = SolverStatus::parse(req.status.trim())
+        .ok_or_else(|| AppError::BadRequest("invalid exchange solver status".into()))?;
+    control::set_solver_status(&state.pool, &id, status)
+        .await
+        .map_err(map_exchange_err)?;
+    Ok(Json(
+        serde_json::json!({ "id": id, "status": status.as_str() }),
+    ))
+}
+
+pub async fn admin_resolve_manual_review(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(req): Json<ManualReviewResolutionReq>,
+) -> Result<Json<control::ManualReview>, AppError> {
+    auth_admin(&state, &headers)?;
+    let review = control::resolve_manual_review(
+        &state.pool,
+        &id,
+        req.approved,
+        "admin-api",
+        req.note.as_deref(),
+    )
+    .await
+    .map_err(map_exchange_err)?;
+    if let Some(order) = repo::order_by_id(&state.pool, &id)
+        .await
+        .map_err(AppError::from)?
+    {
+        repo::audit_order_event(
+            &state.pool,
+            &order,
+            "exchange.manual_review.resolved",
+            serde_json::json!({
+                "approved": req.approved,
+                "note": req.note,
+            }),
+        )
+        .await
+        .map_err(AppError::from)?;
+    }
+    Ok(Json(review))
+}
+
+pub async fn admin_resolve_dispute(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(req): Json<DisputeResolutionReq>,
+) -> Result<Json<ExchangeOrder>, AppError> {
+    auth_admin(&state, &headers)?;
+    let order = repo::order_by_id(&state.pool, &id)
+        .await
+        .map_err(AppError::from)?
+        .ok_or_else(|| AppError::NotFound("exchange order not found".into()))?;
+    let outcome = OrderStatus::parse(req.outcome.trim())
+        .filter(|status| matches!(status, OrderStatus::Done | OrderStatus::Failed))
+        .ok_or_else(|| AppError::BadRequest("outcome must be done or failed".into()))?;
+    let order =
+        control::resolve_dispute(&state.pool, &order, outcome, "admin-api", req.note.trim())
+            .await
+            .map_err(map_exchange_err)?;
+    Ok(Json(order))
+}
+
 pub async fn confirm_funding(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
+    Json(req): Json<FundingConfirmReq>,
 ) -> Result<Json<FundingConfirmRes>, AppError> {
     let user_id = auth_user_id(&state, &headers)?;
     let order = owned_order(&state, &user_id, &id).await?;
+    if !req.accepts_terms {
+        return Err(AppError::BadRequest(
+            "funding consent and settlement asset disclosure are required".into(),
+        ));
+    }
+    control::record_consent(&state.pool, &order, req.terms_version.trim())
+        .await
+        .map_err(map_exchange_err)?;
     let instruction_id = order
         .funding_instruction_id
         .ok_or_else(|| AppError::BadRequest("funding instruction is not created".into()))?;
@@ -359,6 +573,17 @@ pub async fn confirm_funding(
         status = %order.status.as_str(),
         "exchange.funding.confirmed"
     );
+    repo::audit_order_event(
+        &state.pool,
+        &order,
+        "exchange.user_consent.recorded",
+        serde_json::json!({
+            "terms_version": req.terms_version,
+            "settlement_asset_disclosure": true,
+        }),
+    )
+    .await
+    .map_err(AppError::from)?;
     Ok(Json(FundingConfirmRes {
         order,
         funding_instruction,
@@ -592,6 +817,11 @@ fn map_exchange_err(err: anyhow::Error) -> AppError {
         || msg.contains("expired")
         || msg.contains("must be")
         || msg.contains("already")
+        || msg.contains("disabled")
+        || msg.contains("limit")
+        || msg.contains("manual review")
+        || msg.contains("terms")
+        || msg.contains("consent")
     {
         AppError::BadRequest(msg)
     } else {

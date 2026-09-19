@@ -69,8 +69,8 @@ export const dicts: Record<Lang, Dict> = {
       },
       launch: "Exchange",
       wallet: {
-        connect: "Connect wallet",
-        disconnect: "Disconnect wallet",
+        connect: "Sign in",
+        disconnect: "Sign out",
       },
       mobileMenu: {
         open: "Open menu",
@@ -192,8 +192,8 @@ export const dicts: Record<Lang, Dict> = {
       },
       launch: "Обмен",
       wallet: {
-        connect: "Подключить кошелёк",
-        disconnect: "Отключить кошелёк",
+        connect: "Войти",
+        disconnect: "Выйти",
       },
       mobileMenu: {
         open: "Открыть меню",

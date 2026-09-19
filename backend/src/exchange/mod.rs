@@ -1,4 +1,5 @@
 pub mod auction;
+pub mod control;
 pub mod discovery;
 pub mod ledger;
 pub mod live;

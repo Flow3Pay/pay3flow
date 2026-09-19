@@ -1,778 +1,340 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  NETWORK_FEE_PERCENT,
-  Token,
-  TOKENS,
-  convert,
-  formatBalance,
-  formatNumber,
-  formatUsd,
-  tokenForCurrency,
-} from "./tokens";
-import { TokenPicker } from "./token-picker";
-import { PairPicker } from "./pair-picker";
+  ConfirmOrderResponse,
+  ExchangeCorridor,
+  ExchangeOrder,
+  FundingInstruction,
+  LiveRouteEvent,
+  RouteCandidate,
+  authenticate,
+  confirmFunding,
+  confirmOrder,
+  createOrder,
+  fetchCorridors,
+  fetchOrders,
+  fetchQuotes,
+  openLiveRoutes,
+  quoteToCandidate,
+  submitMockProof,
+} from "@/lib/exchange";
+
 import { SidePanel } from "./side-panel";
-
-import { Bank, paymentMethodBaseName, schemeIconUrl } from "@/lib/banks";
-
-import {
-  createRatesSocket,
-  Quote,
-  QuoteRequest,
-  RatesSocket,
-  RatesStatus,
-} from "@/lib/rates";
-
 import styles from "./converter.module.css";
 
-type Mode = "swap" | "payment" | "limit";
-type Field = "sell" | "buy";
-
-const MODES: { id: Mode; label: string }[] = [
-  { id: "swap", label: "Swap" },
-  { id: "payment", label: "Payment" },
-];
-
-const RATE_INTERVALS = [5, 10, 15, 20];
-
-const BALANCES: Record<string, number> = {
-  EUR: 2438.45,
-  USD: 3200,
-  TRY: 18420,
-  USDT: 1250.8,
-  USDC: 1864.25,
-  DAI: 903,
-  TON: 42.5,
-  ETH: 1.24,
+const STATUS_RU: Record<string, string> = {
+  created: "Заявка создана",
+  discovering: "Ищем исполнителей",
+  quoting: "Собираем маршруты",
+  quoted: "Маршрут выбран",
+  locked: "Маршрут зафиксирован",
+  token_settling: "Выполняется расчётный этап",
+  money_settling: "Деньги отправляются получателю",
+  proof_pending: "Проверяем подтверждение",
+  done: "Перевод завершён",
+  failed: "Перевод не выполнен",
+  expired: "Заявка истекла",
+  cancelled: "Заявка отменена",
+  disputed: "Нужна ручная проверка",
 };
 
-const SLIPPAGE_OPTIONS = [0.1, 0.5, 1, 2, 5];
-const DEADLINE_OPTIONS = [10, 20, 30, 60, 1440];
-const QUOTE_DEBOUNCE_MS = 300;
+const money = (minor: number, currency: string) =>
+  `${(minor / 100).toLocaleString("ru-RU", { maximumFractionDigits: 2 })} ${currency}`;
 
-function parseAmount(value: string): number {
-  const n = parseFloat(value.replace(/\s+/g, "").replace(",", "."));
-  return Number.isFinite(n) && n > 0 ? n : 0;
-}
-
-function sanitizeInput(value: string): string {
-  const cleaned = value.replace(/[^\d.,]/g, "").replace(/,/g, ".");
-  const [head, ...rest] = cleaned.split(".");
-  return rest.length ? `${head}.${rest.join("")}` : head;
-}
-
-/** A token for a pair currency, taking the card scheme from the chosen route
- *  and falling back to a neutral 1:1 "bank" token for currencies the local
- *  catalog does not know (KZT, BYN, AMD, …). */
-function pairToken(currency: string, scheme: string): Token {
-  const base = tokenForCurrency(currency);
-  return {
-    symbol: currency.toUpperCase(),
-    name: base?.name ?? currency.toUpperCase(),
-    nameRu: base?.nameRu ?? currency.toUpperCase(),
-    color: base?.color ?? "#6b7280",
-    priceUsd: base?.priceUsd ?? 1,
-    rail: scheme || base?.rail || "Bank",
-    group: base?.group ?? "fiat",
-  };
-}
-
-/** A bank slot: everything the converter needs to preview a route. */
-interface BankOption {
-  name: string;
-  icon: string;
-  schemeIcon?: string;
-  scheme: string;
-  currency: string;
-}
-
-function toBankOption(bank: Bank): BankOption {
-  return {
-    name: bank.name,
-    icon: bank.icon_url,
-    schemeIcon: schemeIconUrl(bank.schemes[0] ?? ""),
-    scheme: bank.schemes[0] ?? "",
-    currency: bank.currency,
-  };
-}
-
-function methodIcon(domain: string): string {
-  return `https://www.google.com/s2/favicons?domain_url=https://${domain}/&sz=128`;
-}
-
-const DEFAULT_SELL_METHOD: BankOption = {
-  name: "PayPal",
-  icon: schemeIconUrl("PayPal") ?? methodIcon("paypal.com"),
-  schemeIcon: schemeIconUrl("PayPal"),
-  scheme: "PayPal",
-  currency: "USD",
-};
-
-const DEFAULT_BUY_METHOD: BankOption = {
-  name: "Belarusbank Visa",
-  icon: methodIcon("belarusbank.by"),
-  schemeIcon: schemeIconUrl("Visa"),
-  scheme: "Visa",
-  currency: "BYN",
-};
-
-const EMPTY_USD = formatUsd(0);
-
-function SlotLabel({ label, balance, showBalance }: { label: string; balance?: number; showBalance: boolean }) {
-  return (
-    <div className={styles.slotTop}>
-      <span className={styles.slotLabel}>{label}</span>
-      {showBalance && balance !== undefined && (
-        <span className={styles.slotBalance}>Balance: {formatBalance(balance)}</span>
-      )}
-    </div>
-  );
-}
-
-function TokenButton({ token, onOpen }: { token: Token; onOpen: () => void }) {
-  return (
-    <button
-      type="button"
-      className={styles.tokenButton}
-      onClick={onOpen}
-      aria-label={`Select ${token.symbol}`}
-    >
-      <span className={styles.tokenAvatar} style={{ background: token.color }}>
-        {token.symbol.slice(0, 2)}
-      </span>
-      <span className={styles.tokenSymbol}>{token.symbol}</span>
-      <svg className={styles.tokenChevron} width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-        <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </button>
-  );
-}
-
-function PairButton({
-  label,
-  placeholder,
-  fallbackSymbol,
-  icon,
-  schemeIcon,
-  scheme,
-  disabled,
-  onOpen,
-}: {
-  label?: string;
-  placeholder: string;
-  fallbackSymbol: string;
-  icon?: string;
-  schemeIcon?: string;
-  scheme?: string;
-  disabled?: boolean;
-  onOpen: () => void;
-}) {
-  const [failed, setFailed] = useState(false);
-  const [schemeFailed, setSchemeFailed] = useState(false);
-  const showSchemeIcon = Boolean(schemeIcon && schemeIcon !== icon && !schemeFailed);
-  const visualLabel = label && showSchemeIcon ? paymentMethodBaseName(label, scheme) : label;
-
-  useEffect(() => setFailed(false), [icon]);
-  useEffect(() => setSchemeFailed(false), [schemeIcon]);
-
-  return (
-    <button
-      type="button"
-      className={styles.tokenButton}
-      onClick={onOpen}
-      disabled={disabled}
-      aria-label={label ? `Payment route via ${label}` : placeholder}
-    >
-      <span className={styles.bankAvatarStack}>
-        {icon && !failed ? (
-          <img className={styles.bankAvatar} src={icon} alt="" onError={() => setFailed(true)} />
-        ) : (
-          <span className={styles.tokenAvatar} style={{ background: label ? "#6b7280" : "var(--color-border)" }}>
-            {label ? fallbackSymbol.slice(0, 2) : "—"}
-          </span>
-        )}
-        {showSchemeIcon && (
-          <img
-            className={styles.schemeAvatar}
-            src={schemeIcon}
-            alt=""
-            onError={() => setSchemeFailed(true)}
-          />
-        )}
-      </span>
-      <span className={styles.bankLabel}>{visualLabel ?? placeholder}</span>
-      <svg className={styles.tokenChevron} width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-        <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </button>
-  );
-}
-
-function formatPercentage(value: number): string {
-  return `${formatNumber(value, 4)}%`;
+function upsertRoute(routes: RouteCandidate[], fresh: RouteCandidate): RouteCandidate[] {
+  const existing = routes.findIndex((route) => route.route_id === fresh.route_id);
+  if (existing < 0) return [...routes, fresh];
+  return routes.map((route, index) => (index === existing ? { ...route, ...fresh } : route));
 }
 
 interface ConverterProps {
-  connected: boolean;
-  connecting: boolean;
-  onConnect: () => void;
+  token: string | null;
+  email: string;
+  onAuthenticated: (token: string, email: string) => void;
+  onRequireAuth: () => void;
 }
 
-export function Converter({ connected, connecting, onConnect }: ConverterProps) {
-  const [mode, setMode] = useState<Mode>("swap");
-  const [sell, setSell] = useState<Token>(
-    pairToken(DEFAULT_SELL_METHOD.currency, DEFAULT_SELL_METHOD.scheme),
+export function Converter({ token, email: sessionEmail, onAuthenticated, onRequireAuth }: ConverterProps) {
+  const [corridors, setCorridors] = useState<ExchangeCorridor[]>([]);
+  const [corridorId, setCorridorId] = useState("");
+  const [termsVersion, setTermsVersion] = useState("");
+  const [amount, setAmount] = useState("100000");
+  const [sourceMethod, setSourceMethod] = useState("bank_card");
+  const [targetMethod, setTargetMethod] = useState("bank_card");
+  const [recipient, setRecipient] = useState("");
+  const [authEmail, setAuthEmail] = useState(sessionEmail || "demo@pay3flow.dev");
+  const [authCode, setAuthCode] = useState("1234");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [order, setOrder] = useState<ExchangeOrder | null>(null);
+  const [routes, setRoutes] = useState<RouteCandidate[]>([]);
+  const [selected, setSelected] = useState<RouteCandidate | null>(null);
+  const [funding, setFunding] = useState<FundingInstruction | null>(null);
+  const [settlement, setSettlement] = useState<{ id: string; solver_id: string } | null>(null);
+  const [consent, setConsent] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [socketFallback, setSocketFallback] = useState(false);
+  const [history, setHistory] = useState<ExchangeOrder[]>([]);
+  const closeSocket = useRef<(() => void) | null>(null);
+
+  const corridor = useMemo(
+    () => corridors.find((item) => item.id === corridorId) ?? corridors[0],
+    [corridorId, corridors],
   );
-  const [buy, setBuy] = useState<Token>(
-    pairToken(DEFAULT_BUY_METHOD.currency, DEFAULT_BUY_METHOD.scheme),
-  );
-  const [sellText, setSellText] = useState("");
-  const [buyText, setBuyText] = useState("");
-  const [indep, setIndep] = useState<Field>("sell");
-  const [picker, setPicker] = useState<Field | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsClosing, setSettingsClosing] = useState(false);
-  const [autoSlippage, setAutoSlippage] = useState(true);
-  const [slippage, setSlippage] = useState(0.5);
-  const [deadline, setDeadline] = useState(20);
-  const [deadlineOpen, setDeadlineOpen] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
-
-  // Payment routes: the swap form picks a sending method, then a receiving
-  // method; the exchange combination is the user's.
-  const [fromBank, setFromBank] = useState<BankOption | null>(DEFAULT_SELL_METHOD);
-  const [toBank, setToBank] = useState<BankOption | null>(DEFAULT_BUY_METHOD);
-  const [pickerSide, setPickerSide] = useState<Field | null>(null);
-
-  // Live quoting: fmatch answers the exchange pair over WebSocket.
-  const [quote, setQuote] = useState<Quote | null>(null);
-  const [ratesStatus, setRatesStatus] = useState<RatesStatus>("connecting");
-  const [intervalSec, setIntervalSec] = useState(10);
-
-  const settingsRef = useRef<HTMLDivElement>(null);
-  const slippageRowRef = useRef<HTMLButtonElement>(null);
-  const deadlineRef = useRef<HTMLDivElement>(null);
-  const popTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const socketRef = useRef<RatesSocket | null>(null);
-  const requestRef = useRef<QuoteRequest | null>(null);
-  const quoteIdRef = useRef(0);
-  const latestQuoteIdRef = useRef(0);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const feePercent = quote?.best?.price != null ? quote.best.price * 100 : NETWORK_FEE_PERCENT;
-
-  const bestResolved = quote?.best != null;
-
-  const sellNum =
-    indep === "sell" ? parseAmount(sellText) : parseAmount(buyText) > 0 ? convert(parseAmount(buyText), buy, sell) : 0;
-  const buyNum =
-    indep === "buy" ? parseAmount(buyText) : bestResolved ? convert(sellNum, sell, buy, feePercent) : 0;
-
-  const sellDisplay = indep === "sell" ? sellText : sellNum > 0 ? formatNumber(sellNum) : "";
-  const buyDisplay = indep === "buy" ? buyText : buyNum > 0 ? formatNumber(buyNum) : "";
-
-  const usdIn = sellNum * sell.priceUsd;
-  const usdOut = buyNum * buy.priceUsd;
-  const rate = sell.priceUsd / buy.priceUsd;
-
-  const hasAmount = sellNum > 0;
-
-  const feeLabel = quote?.best?.price != null ? formatPercentage(feePercent) : `~${NETWORK_FEE_PERCENT}%`;
-
-  const ctaLabel = !connected
-    ? "Connect wallet"
-    : !hasAmount
-      ? "Enter amount"
-      : mode === "swap"
-        ? `Exchange ${sell.symbol} → ${buy.symbol}`
-        : mode === "payment"
-          ? `Pay ${sell.symbol} → ${buy.symbol}`
-          : `Lock the rate ${sell.symbol} → ${buy.symbol}`;
-
-  const closeSettings = useCallback(() => {
-    if (settingsClosing) return;
-    setSettingsClosing(true);
-    if (popTimer.current) clearTimeout(popTimer.current);
-    popTimer.current = setTimeout(() => {
-      setSettingsOpen(false);
-      setSettingsClosing(false);
-    }, 170);
-  }, [settingsClosing]);
-
-  const toggleSettings = useCallback(() => {
-    if (settingsOpen) {
-      closeSettings();
-    } else {
-      setSettingsOpen(true);
-    }
-  }, [settingsOpen, closeSettings]);
 
   useEffect(() => {
-    const onClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (settingsRef.current && !settingsRef.current.contains(target)) {
-        closeSettings();
-      }
-      if (slippageRowRef.current?.contains(target)) return; // row toggles the popup itself
-      if (deadlineRef.current && !deadlineRef.current.contains(target)) {
-        setDeadlineOpen(false);
-      }
-    };
-    if (settingsOpen || settingsClosing || deadlineOpen)
-      document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, [settingsOpen, settingsClosing, deadlineOpen, closeSettings]);
-
-  useEffect(() => {
-    return () => {
-      if (popTimer.current) clearTimeout(popTimer.current);
-      if (noticeTimer.current) clearTimeout(noticeTimer.current);
-    };
+    fetchCorridors()
+      .then((response) => {
+        setCorridors(response.items);
+        setCorridorId((current) => current || response.items[0]?.id || "");
+        setTermsVersion(response.terms_version);
+      })
+      .catch((cause: Error) => setError(cause.message));
   }, []);
 
-  // One socket for the lifetime of the widget: polls are decided client-side,
-  // the backend only answers each "quote" message it receives.
-  useEffect(() => {
-    const socket = createRatesSocket({
-      onQuote: (fresh, id) => {
-        const replyId = id ? Number(id) : 0;
-        if (Number.isFinite(replyId) && replyId > 0 && replyId < latestQuoteIdRef.current) {
-          return; // stale reply outran by a newer request
-        }
-        setQuote(fresh);
-      },
-      onStatus: setRatesStatus,
-    });
-    socketRef.current = socket;
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      socket.close();
-      socketRef.current = null;
-    };
-  }, []);
+  const refreshHistory = useCallback(() => {
+    if (!token) return;
+    fetchOrders(token).then(setHistory).catch(() => undefined);
+  }, [token]);
 
-  // Debounce on change, then keep refreshing every `intervalSec` while there
-  // is an amount — the cadence is the user's choice, not the backend's.
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    if (sellNum <= 0) return;
+  useEffect(refreshHistory, [refreshHistory]);
+  useEffect(() => () => closeSocket.current?.(), []);
 
-    const request: QuoteRequest = {
-      amount: sellNum,
-      currency: sell.symbol,
-      from: sell.rail,
-      to: buy.rail,
-      to_currency: buy.symbol,
-    };
-    requestRef.current = request;
-
-    const sendNow = () => {
-      const req = requestRef.current;
-      const socket = socketRef.current;
-      if (!req || !socket) return;
-      quoteIdRef.current += 1;
-      latestQuoteIdRef.current = quoteIdRef.current;
-      socket.sendQuote(req, String(quoteIdRef.current));
-    };
-
-    debounceRef.current = setTimeout(sendNow, QUOTE_DEBOUNCE_MS);
-    intervalRef.current = setInterval(sendNow, intervalSec * 1000);
-
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [sell, buy, sellNum, intervalSec]);
-
-  const showNotice = useCallback((message: string) => {
-    setNotice(message);
-    if (noticeTimer.current) clearTimeout(noticeTimer.current);
-    noticeTimer.current = setTimeout(() => setNotice(null), 4200);
-  }, []);
-
-  const selectToken = (field: Field, token: Token) => {
-    if (field === "sell") {
-      if (token.symbol === buy.symbol) setBuy(sell);
-      setSell(token);
-    } else {
-      if (token.symbol === sell.symbol) setSell(buy);
-      setBuy(token);
-    }
-    setPicker(null);
-  };
-
-  const switchTokens = () => {
-    setSell((prev) => {
-      setBuy(prev);
-      return buy;
-    });
-    setSellText(buyText);
-    setBuyText(sellText);
-    setIndep((i) => (i === "sell" ? "buy" : "sell"));
-  };
-
-  const selectFromBank = (bank: Bank) => {
-    setFromBank(toBankOption(bank));
-    setToBank(null);
-    // Preview the sender's currency/scheme; the user opens the receiving bank
-    // picker explicitly from the route button.
-    setSell(pairToken(bank.currency, bank.schemes[0] ?? ""));
-    setPickerSide(null);
-  };
-
-  const selectToBank = (bank: Bank) => {
-    setPickerSide(null);
-    if (!fromBank) return;
-    setToBank(toBankOption(bank));
-    setSell(pairToken(fromBank.currency, fromBank.scheme));
-    setBuy(pairToken(bank.currency, bank.schemes[0] ?? ""));
-    setSellText("");
-    setBuyText("");
-    setIndep("sell");
-  };
-
-  const chooseMode = (next: Mode) => {
-    setMode(next);
-    setPicker(null);
-    if (next !== "swap") setPickerSide(null);
-  };
-
-  const handleCta = () => {
-    if (!connected) {
-      onConnect();
+  const handleLiveEvent = useCallback((event: LiveRouteEvent) => {
+    if (event.type === "entry_leg_found" || event.type === "route_candidate_found") {
+      setRoutes((current) => upsertRoute(current, event));
       return;
     }
-    if (!hasAmount) return;
-    const route = quote?.best ? `, route ${quote.best.name}` : "";
-    showNotice(
-      `Demo: ${formatNumber(sellNum)} ${sell.symbol} → ${formatNumber(buyNum)} ${buy.symbol} (fee ${feeLabel}${route}). A real quote will be available once payment providers are connected.`,
-    );
+    if (event.type === "best_route_updated") {
+      setRoutes((current) =>
+        current.map((route) => ({ ...route, is_current_best: route.quote_id === event.quote_id })),
+      );
+      return;
+    }
+    if (event.type === "order_status") {
+      setOrder((current) => (current ? { ...current, status: event.status } : current));
+      return;
+    }
+    if (event.type === "search_finished") {
+      setSearching(false);
+      return;
+    }
+    if (event.type === "search_failed") {
+      setSearching(false);
+      setError(event.error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!socketFallback || !token || !order || !searching) return;
+    const timer = window.setInterval(() => {
+      fetchQuotes(token, order.id)
+        .then((quotes) => setRoutes(quotes.map(quoteToCandidate)))
+        .catch(() => undefined);
+    }, 1500);
+    return () => window.clearInterval(timer);
+  }, [order, searching, socketFallback, token]);
+
+  const signIn = async (event: FormEvent) => {
+    event.preventDefault();
+    setAuthBusy(true);
+    setError(null);
+    try {
+      const freshToken = await authenticate(authEmail.trim(), authCode.trim());
+      onAuthenticated(freshToken, authEmail.trim());
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Не удалось войти");
+    } finally {
+      setAuthBusy(false);
+    }
   };
 
-  const isCtaEnabled = !connected || hasAmount;
+  const startSearch = async () => {
+    if (!token) {
+      onRequireAuth();
+      setError("Сначала войдите, чтобы создать заявку.");
+      return;
+    }
+    if (!corridor) {
+      setError("Backend не вернул доступный коридор.");
+      return;
+    }
+    const numericAmount = Number(amount.replace(/\s/g, "").replace(",", "."));
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      setError("Введите сумму больше нуля.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setRoutes([]);
+    setSelected(null);
+    setFunding(null);
+    setSettlement(null);
+    setConsent(false);
+    closeSocket.current?.();
+    try {
+      const freshOrder = await createOrder(
+        token,
+        {
+          source_country: corridor.source_country,
+          source_currency: corridor.source_currency,
+          source_amount_minor: Math.round(numericAmount * 100),
+          source_method_type: sourceMethod,
+          source_method_ref: null,
+          target_country: corridor.target_country,
+          target_currency: corridor.target_currency,
+          target_amount_min_minor: null,
+          target_method_type: targetMethod,
+          target_method_ref: recipient.trim() || null,
+        },
+        crypto.randomUUID(),
+      );
+      setOrder(freshOrder);
+      setSearching(true);
+      setSocketFallback(false);
+      closeSocket.current = openLiveRoutes(token, freshOrder.id, handleLiveEvent, () => setSocketFallback(true));
+      refreshHistory();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Не удалось создать заявку");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const lockRoute = async () => {
+    if (!token || !order || !selected?.quote_id) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const response: ConfirmOrderResponse = await confirmOrder(token, order.id, selected.quote_id);
+      setOrder(response.order);
+      setFunding(response.funding_instruction);
+      setSettlement(response.settlement);
+      setSearching(false);
+      closeSocket.current?.();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Не удалось зафиксировать маршрут");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const fundAndFinish = async () => {
+    if (!token || !order || !selected || !settlement || !consent) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const funded = await confirmFunding(token, order.id, termsVersion);
+      setOrder(funded.order);
+      const completed = await submitMockProof(
+        token,
+        order.id,
+        settlement.id,
+        settlement.solver_id,
+        selected.target_amount_minor ?? 0,
+        selected.target_currency ?? order.target_currency,
+      );
+      setOrder(completed.order);
+      refreshHistory();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Не удалось подтвердить исполнение");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <section className={styles.shell} id="swap">
       <div className={styles.dock}>
         <div className={styles.card}>
-        <div className={styles.head}>
-          <div className={styles.tabs} role="tablist" aria-label="Modes">
-            {MODES.map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                role="tab"
-                aria-selected={mode === m.id}
-                className={mode === m.id ? styles.tabActive : styles.tab}
-                onClick={() => chooseMode(m.id)}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
-
-          <div className={styles.headRight}>
-            <div className={styles.settingsAnchor} ref={settingsRef}>
-              <button
-                type="button"
-                className={styles.gear}
-                aria-label="Settings"
-                aria-expanded={settingsOpen}
-                onClick={toggleSettings}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M22 6.5H16" stroke="currentColor" strokeWidth="1.5" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round" />
-                  <path d="M6 6.5H2" stroke="currentColor" strokeWidth="1.5" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round" />
-                  <path d="M13.5 6.5C13.5 8.43 11.93 10 10 10C8.07 10 6.5 8.43 6.5 6.5C6.5 4.57 8.07 3 10 3C10.34 3 10.67 3.05 10.98 3.14" stroke="currentColor" strokeWidth="1.5" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round" />
-                  <path d="M22 17.5H18" stroke="currentColor" strokeWidth="1.5" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round" />
-                  <path d="M8 17.5H2" stroke="currentColor" strokeWidth="1.5" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round" />
-                  <path d="M14 21C15.933 21 17.5 19.433 17.5 17.5C17.5 15.567 15.933 14 14 14C12.067 14 10.5 15.567 10.5 17.5C10.5 19.433 12.067 21 14 21Z" stroke="currentColor" strokeWidth="1.5" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-
-              {(settingsOpen || settingsClosing) && (
-                <div className={settingsClosing ? styles.settingsPopClosing : styles.settingsPop}>
-                  <div className={styles.popHead}>
-                    <span className={styles.popTitle}>Exchange settings</span>
-                  </div>
-
-                  <div className={styles.popSection}>
-                    <span className={styles.popLabel}>Rate update interval</span>
-                    <div className={styles.optionRow}>
-                      {RATE_INTERVALS.map((value) => (
-                        <button
-                          key={value}
-                          type="button"
-                          className={intervalSec === value ? styles.pillActive : styles.pill}
-                          onClick={() => setIntervalSec(value)}
-                        >
-                          {value} s
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className={styles.popSection}>
-                    <label className={styles.popLabel} htmlFor="deadline">
-                      Deadline
-                    </label>
-                    <div className={styles.deadlineWrap} ref={deadlineRef}>
-                      <button
-                        type="button"
-                        id="deadline"
-                        className={styles.deadlineTrigger}
-                        aria-haspopup="listbox"
-                        aria-expanded={deadlineOpen}
-                        onClick={() => setDeadlineOpen((v) => !v)}
-                      >
-                        <span>{deadline === 1440 ? "24 hours" : `${deadline} min`}</span>
-                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                          <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </button>
-                      {deadlineOpen && (
-                        <div className={styles.deadlineMenu} role="listbox">
-                          {DEADLINE_OPTIONS.map((value) => (
-                            <button
-                              key={value}
-                              type="button"
-                              className={styles.deadlineOption}
-                              role="option"
-                              aria-selected={deadline === value}
-                              onClick={() => {
-                                setDeadline(value);
-                                setDeadlineOpen(false);
-                              }}
-                            >
-                              <span>{value === 1440 ? "24 hours" : `${value} min`}</span>
-                              {deadline === value && (
-                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                                  <path d="M3 8l3.5 3.5L13 5" stroke="var(--color-accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                </svg>
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
+          <div className={styles.head}>
+            <div>
+              <div className={styles.productTitle}>Перевод Армения → Россия</div>
+              <div className={styles.productHint}>Вы задаёте сумму, Pay3Flow находит маршрут</div>
             </div>
+            <span className={styles.statusPill}>{order ? STATUS_RU[order.status] ?? order.status : "Новая заявка"}</span>
           </div>
-        </div>
 
-        <SlotLabel
-          label="You sell"
-          balance={BALANCES[sell.symbol]}
-          showBalance={connected}
-        />
-        <label className={styles.panel}>
-          <span className={styles.panelMain}>
-            <input
-              className={styles.input}
-              type="text"
-              inputMode="decimal"
-              placeholder="0"
-              value={sellDisplay}
-              onChange={(event) => {
-                setSellText(sanitizeInput(event.target.value));
-                setIndep("sell");
-              }}
-              aria-label={`Amount in ${sell.symbol}`}
-            />
-            <span className={styles.fiat}>{usdIn > 0 ? `≈ ${formatUsd(usdIn)}` : EMPTY_USD}</span>
-          </span>
-          {mode === "swap" ? (
-            <PairButton
-              label={fromBank?.name}
-              placeholder="Sell method"
-              fallbackSymbol={sell.symbol}
-              icon={fromBank?.icon}
-              schemeIcon={fromBank?.schemeIcon}
-              scheme={fromBank?.scheme}
-              onOpen={() => setPickerSide("sell")}
-            />
-          ) : (
-            <TokenButton token={sell} onOpen={() => setPicker("sell")} />
+          {!token && (
+            <form className={styles.authBox} onSubmit={signIn} data-testid="auth-form">
+              <strong>Вход или регистрация</strong>
+              <p>Для демо используется одноразовый код 1234.</p>
+              <input className={styles.textInput} type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} required aria-label="Email" />
+              <input className={styles.textInput} value={authCode} onChange={(event) => setAuthCode(event.target.value)} required aria-label="Код входа" />
+              <button className={styles.secondaryButton} disabled={authBusy} type="submit">{authBusy ? "Входим…" : "Войти"}</button>
+            </form>
           )}
-        </label>
 
-        {mode === "swap" ? (
-          <div className={styles.separatorFlat} aria-hidden="true" />
-        ) : (
-          <div className={styles.separator} aria-hidden="true">
-            <button
-              type="button"
-              className={styles.swapBtn}
-              onClick={switchTokens}
-              aria-label="Swap currencies"
-              title="Swap"
-            >
-              <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                <path d="M6 13.5 13.5 6" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
-                <path d="M13.5 6H8.6M13.5 6v4.9" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M14 6.5 6.5 14" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
-                <path d="M6.5 14h4.9M6.5 14V9.1" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
+          <label className={styles.fieldLabel}>
+            Коридор
+            <select className={styles.select} value={corridor?.id ?? ""} onChange={(event) => setCorridorId(event.target.value)} disabled={searching || Boolean(funding)}>
+              {corridors.map((item) => (
+                <option key={item.id} value={item.id}>{item.source_country}/{item.source_currency} → {item.target_country}/{item.target_currency}</option>
+              ))}
+            </select>
+          </label>
+
+          <div className={styles.panel}>
+            <div className={styles.panelMain}>
+              <label className={styles.slotLabel} htmlFor="exchange-amount">Вы отправляете</label>
+              <input id="exchange-amount" className={styles.input} inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} disabled={searching || Boolean(funding)} />
+            </div>
+            <span className={styles.currencyBadge}>{corridor?.source_currency ?? "—"}</span>
+          </div>
+
+          <div className={styles.twoColumns}>
+            <label className={styles.fieldLabel}>Способ отправки<select className={styles.select} value={sourceMethod} onChange={(event) => setSourceMethod(event.target.value)}><option value="bank_card">Банковская карта</option><option value="bank_transfer">Банковский перевод</option><option value="p2p">P2P</option></select></label>
+            <label className={styles.fieldLabel}>Способ получения<select className={styles.select} value={targetMethod} onChange={(event) => setTargetMethod(event.target.value)}><option value="bank_card">На карту</option><option value="bank_transfer">На счёт</option><option value="wallet">На кошелёк</option></select></label>
+          </div>
+
+          <label className={styles.fieldLabel}>Получатель<input className={styles.textInput} value={recipient} onChange={(event) => setRecipient(event.target.value)} placeholder="Имя или сохранённый recipient ID" /></label>
+
+          {!funding && (
+            <button type="button" className={styles.cta} disabled={busy || searching || !corridor} onClick={startSearch} data-testid="start-search">
+              {(busy || searching) && <span className={styles.spinner} />}
+              {searching ? "Ищем связки…" : order ? "Новый поиск" : "Найти маршрут"}
             </button>
-          </div>
-        )}
-
-        <SlotLabel label={`You receive · fee ${feeLabel}${quote?.best ? ` · ${quote.best.name}` : ""}`} showBalance={false} />
-        <label className={styles.panel}>
-          <span className={styles.panelMain}>
-            <input
-              className={styles.input}
-              type="text"
-              inputMode="decimal"
-              placeholder="0"
-              value={buyDisplay}
-              onChange={(event) => {
-                setBuyText(sanitizeInput(event.target.value));
-                setIndep("buy");
-              }}
-              aria-label={`Amount in ${buy.symbol}`}
-            />
-            <span className={styles.fiat}>{usdOut > 0 ? `≈ ${formatUsd(usdOut)}` : EMPTY_USD}</span>
-          </span>
-          {mode === "swap" ? (
-            <PairButton
-              label={toBank?.name}
-              placeholder={fromBank ? "Buy method" : "Pick sell method"}
-              fallbackSymbol={buy.symbol}
-              icon={toBank?.icon}
-              schemeIcon={toBank?.schemeIcon}
-              scheme={toBank?.scheme}
-              disabled={!fromBank}
-              onOpen={() => fromBank && setPickerSide("buy")}
-            />
-          ) : (
-            <TokenButton token={buy} onOpen={() => setPicker("buy")} />
           )}
-        </label>
 
-        <button
-          type="button"
-          className={styles.slippageRow}
-          ref={slippageRowRef}
-          onClick={toggleSettings}
-          aria-label="Slippage settings"
-        >
-          <span className={styles.slippageLabel}>
-            Slippage
-            {autoSlippage && <span className={styles.slippageHint}> (auto)</span>}
-          </span>
-          <span className={styles.slippageValue}>{autoSlippage ? "Auto" : `${slippage}%`}</span>
-        </button>
+          {selected && !funding && (
+            <div className={styles.selectionBox} data-testid="selected-route">
+              <strong>{selected.entry_asset} · {selected.entry_network}</strong>
+              <span>Получатель получит {money(selected.target_amount_minor ?? 0, selected.target_currency ?? corridor?.target_currency ?? "")}</span>
+              <span>Комиссия {money(selected.fee_minor ?? 0, corridor?.source_currency ?? "")}, ETA {selected.eta_minutes} мин</span>
+              <button type="button" className={styles.cta} disabled={busy || selected.status !== "complete"} onClick={lockRoute}>Подтвердить полную связку</button>
+            </div>
+          )}
 
-        <div className={styles.popSection}>
-          <div className={styles.popRow}>
-            <span>Smart slippage</span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={autoSlippage}
-              className={autoSlippage ? styles.switchOn : styles.switch}
-              onClick={() => setAutoSlippage((v) => !v)}
-            >
-              <span className={styles.knob} />
-            </button>
-          </div>
-          <div className={styles.optionRow} aria-disabled={autoSlippage || undefined}>
-            {SLIPPAGE_OPTIONS.map((value) => (
-              <button
-                key={value}
-                type="button"
-                disabled={autoSlippage}
-                className={slippage === value ? styles.pillActive : styles.pill}
-                onClick={() => setSlippage(value)}
-              >
-                {value}%
-              </button>
-            ))}
-          </div>
+          {funding && order?.status !== "done" && (
+            <div className={styles.fundingBox} data-testid="funding-instruction">
+              <strong>Инструкция по оплате</strong>
+              <span>{money(funding.amount_minor, funding.currency)} через {funding.method_type}</span>
+              <span className={styles.destination}>{funding.destination_ref}</span>
+              <label className={styles.consentLabel}>
+                <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
+                Я подтверждаю инструкцию и условия версии {termsVersion}. Маршрут может использовать TOKEN/crypto как расчётный актив; Pay3Flow не списывает фиат автоматически.
+              </label>
+              <button type="button" className={styles.cta} disabled={!consent || busy} onClick={fundAndFinish} data-testid="confirm-funding">{busy ? "Выполняем…" : "Подтвердить funding"}</button>
+            </div>
+          )}
+
+          {order?.status === "done" && <div className={styles.successBox} data-testid="order-done"><strong>Перевод завершён</strong><span>Mock settlement и proof успешно проверены.</span></div>}
+          {socketFallback && searching && <div className={styles.warning}>WebSocket недоступен — результаты обновляются polling-запросами.</div>}
+          {error && <div className={styles.errorBox} role="alert">{error}</div>}
+
+          {history.length > 0 && (
+            <details className={styles.history}>
+              <summary>История операций ({history.length})</summary>
+              {history.map((item) => <div key={item.id} className={styles.historyRow}><span>{money(item.source_amount_minor, item.source_currency)} → {item.target_currency}</span><strong>{STATUS_RU[item.status] ?? item.status}</strong></div>)}
+            </details>
+          )}
         </div>
 
-        {hasAmount && (
-          <div className={styles.warnRow}>
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" />
-              <path d="M8 5v3.5m0 2.5v.01" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-            </svg>
-            <span>Minimum payment amount — from 2 {sell.symbol}</span>
-          </div>
-        )}
-
-        <button
-          type="button"
-          className={styles.cta}
-          disabled={!isCtaEnabled}
-          onClick={handleCta}
-        >
-          {connecting && (
-            <span className={styles.spinner} aria-hidden="true" />
-          )}
-          {!connecting && !connected && (
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-              <path
-                d="M3.5 3.5h7.5a2 2 0 0 1 2 2v7a2 2 0 0 0 2 2h-11.5V6"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-              />
-              <circle cx="11.5" cy="10" r="1" fill="currentColor" />
-            </svg>
-          )}
-          {connecting ? "Connecting wallet…" : ctaLabel}
-        </button>
-
-        {notice && (
-          <div className={styles.notice} role="status">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <circle cx="8" cy="8" r="8" fill="var(--color-good)" />
-              <path d="M5 8.2 7.2 10.5 11 6.2" stroke="white" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            {notice}
-          </div>
-        )}
-        </div>
-
-        <SidePanel
-          active={hasAmount}
-          sell={sell}
-          buy={buy}
-          rate={rate}
-          feeLabel={feeLabel}
-          quote={quote}
-          amount={sellNum}
-        />
+        <SidePanel active={Boolean(order)} routes={routes} searching={searching} selectedQuoteId={selected?.quote_id ?? null} onSelect={setSelected} />
       </div>
-
-      <TokenPicker
-        open={picker !== null}
-        title={picker === "sell" ? "Choose currency to pay with" : "Choose currency to receive"}
-        selected={picker === "sell" ? sell : buy}
-        onClose={() => setPicker(null)}
-        onSelect={(token) => picker && selectToken(picker, token)}
-      />
-
-      <PairPicker
-        open={pickerSide !== null}
-        title={pickerSide === "buy" ? "Buy" : "Sell"}
-        mode={pickerSide === "buy" ? "receiver" : "sender"}
-        emptyText={pickerSide === "buy" ? "No buy methods found" : "No sell methods available"}
-        selectedName={pickerSide === "buy" ? toBank?.name ?? null : fromBank?.name ?? null}
-        onClose={() => setPickerSide(null)}
-        onSelect={pickerSide === "buy" ? selectToBank : selectFromBank}
-      />
     </section>
   );
 }

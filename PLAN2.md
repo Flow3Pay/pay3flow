@@ -1450,20 +1450,20 @@ PLAN2".
 
 ## Фаза EX-10 - Frontend MVP
 
-- [ ] EX-10.1. Проверить, что существующая страница создания exchange order покрывает ввод суммы и corridor AM/AMD -> RU/RUB.
-- [ ] EX-10.2. Подключить боковую панель связок к live events order.
-- [ ] EX-10.3. Показывать partial связки: найден вход `AMD -> crypto`, выход ещё ищется.
-- [ ] EX-10.4. Показывать complete связки: найден полный route `AMD -> crypto -> RUB`.
-- [ ] EX-10.5. Группировать связки по промежуточной crypto/network.
-- [ ] EX-10.6. Live status/search через WebSocket, polling только как fallback.
-- [ ] EX-10.7. Ошибки backend показываются понятно.
-- [ ] EX-10.8. Русская локализация основных статусов.
-- [ ] EX-10.9. Список доступных corridors тянуть с backend, не хардкодить валюты на frontend.
-- [ ] EX-10.10. Для MVP backend отдаёт один enabled corridor: AMD -> RUB.
-- [ ] EX-10.11. После выбора quote показать funding instruction и consent.
-- [ ] EX-10.12. UI должен быть простым: пользователь видит перевод, сумму, курс, комиссию, ETA и условия; technical TOKEN details можно раскрывать в details/terms.
-- [ ] EX-10.13. Боковая панель не ждёт окончания всего поиска: новые связки появляются по мере нахождения.
-- [ ] EX-10.14. Пользователь может подтвердить только complete связку, partial route остаётся informational/loading.
+- [x] EX-10.1. Проверить, что существующая страница создания exchange order покрывает ввод суммы и corridor AM/AMD -> RU/RUB.
+- [x] EX-10.2. Подключить боковую панель связок к live events order.
+- [x] EX-10.3. Показывать partial связки: найден вход `AMD -> crypto`, выход ещё ищется.
+- [x] EX-10.4. Показывать complete связки: найден полный route `AMD -> crypto -> RUB`.
+- [x] EX-10.5. Группировать связки по промежуточной crypto/network.
+- [x] EX-10.6. Live status/search через WebSocket, polling только как fallback.
+- [x] EX-10.7. Ошибки backend показываются понятно.
+- [x] EX-10.8. Русская локализация основных статусов.
+- [x] EX-10.9. Список доступных corridors тянуть с backend, не хардкодить валюты на frontend.
+- [x] EX-10.10. Для MVP backend отдаёт один enabled corridor: AMD -> RUB.
+- [x] EX-10.11. После выбора quote показать funding instruction и consent.
+- [x] EX-10.12. UI должен быть простым: пользователь видит перевод, сумму, курс, комиссию, ETA и условия; technical TOKEN details можно раскрывать в details/terms.
+- [x] EX-10.13. Боковая панель не ждёт окончания всего поиска: новые связки появляются по мере нахождения.
+- [x] EX-10.14. Пользователь может подтвердить только complete связку, partial route остаётся informational/loading.
 
 Приёмка:
 
@@ -1477,16 +1477,16 @@ PLAN2".
 
 ## Фаза EX-11 - Safety Before Real Money
 
-- [ ] EX-11.1. Документ `docs/exchange-risk-compliance.md`.
-- [ ] EX-11.2. Kill switch по всему exchange flow.
-- [ ] EX-11.3. Kill switch по country pair.
-- [ ] EX-11.4. Kill switch по solver.
-- [ ] EX-11.5. Daily limits.
-- [ ] EX-11.6. Manual review status.
-- [ ] EX-11.7. Admin/manual dispute resolution.
-- [ ] EX-11.8. Secret audit.
-- [ ] EX-11.9. Terms/consent документирует, что route может использовать TOKEN/crypto settlement asset.
-- [ ] EX-11.10. Audit trail хранит факт user consent без хранения лишних sensitive данных.
+- [x] EX-11.1. Документ `docs/exchange-risk-compliance.md`.
+- [x] EX-11.2. Kill switch по всему exchange flow.
+- [x] EX-11.3. Kill switch по country pair.
+- [x] EX-11.4. Kill switch по solver.
+- [x] EX-11.5. Daily limits.
+- [x] EX-11.6. Manual review status.
+- [x] EX-11.7. Admin/manual dispute resolution.
+- [x] EX-11.8. Secret audit.
+- [x] EX-11.9. Terms/consent документирует, что route может использовать TOKEN/crypto settlement asset.
+- [x] EX-11.10. Audit trail хранит факт user consent без хранения лишних sensitive данных.
 
 Приёмка:
 
@@ -1497,16 +1497,16 @@ PLAN2".
 
 ## Фаза EX-12 - End-to-end Smoke
 
-- [ ] EX-12.1. Скрипт: register/login -> create order -> discover solver -> collect quotes.
-- [ ] EX-12.2. Скрипт: choose winner -> lock -> token-leg -> money-leg -> proof -> done.
-- [ ] EX-12.3. Скрипт: bad proof -> disputed -> manual resolve.
-- [ ] EX-12.4. Скрипт: fmatch down -> Redis/local fallback.
-- [ ] EX-12.5. Скрипт: repeated Idempotency-Key -> same order.
-- [ ] EX-12.6. Скрипт: disabled corridor -> понятная ошибка.
-- [ ] EX-12.7. Скрипт: enabled AMD -> RUB corridor -> полный happy path.
-- [ ] EX-12.8. Playwright smoke: login -> create exchange -> quotes -> status -> history.
-- [ ] EX-12.9. Скрипт: no funding consent -> settlement не стартует.
-- [ ] EX-12.10. Скрипт: funding consent -> solver ack -> TOKEN-leg -> money-leg -> done.
+- [x] EX-12.1. Скрипт: register/login -> create order -> discover solver -> collect quotes.
+- [x] EX-12.2. Скрипт: choose winner -> lock -> token-leg -> money-leg -> proof -> done.
+- [x] EX-12.3. Скрипт: bad proof -> disputed -> manual resolve.
+- [x] EX-12.4. Скрипт: fmatch down -> Redis/local fallback.
+- [x] EX-12.5. Скрипт: repeated Idempotency-Key -> same order.
+- [x] EX-12.6. Скрипт: disabled corridor -> понятная ошибка.
+- [x] EX-12.7. Скрипт: enabled AMD -> RUB corridor -> полный happy path.
+- [x] EX-12.8. Playwright smoke: login -> create exchange -> quotes -> status -> history.
+- [x] EX-12.9. Скрипт: no funding consent -> settlement не стартует.
+- [x] EX-12.10. Скрипт: funding consent -> solver ack -> TOKEN-leg -> money-leg -> done.
 
 Приёмка MVP:
 
@@ -1568,36 +1568,8 @@ nix shell nixpkgs#cargo nixpkgs#rustc -c cargo test
 nix shell nixpkgs#cargo nixpkgs#rustc nixpkgs#rustfmt -c cargo fmt
 ```
 
-## 18. Что Агенту Делать Прямо Следующим Шагом
+## 18. Статус Выполнения
 
-Следующий агент должен идти так:
-
-1. Открыть `PLAN2.md`.
-2. Открыть `README.md`.
-3. Открыть `docs/glossary.md`.
-4. Открыть `cowprotocol-services/README.md`.
-5. Открыть `cowprotocol-services/docs/ONBOARDING.md`, если файл есть.
-6. Изучить Cow `orderbook`, `autopilot`, `driver/solver`.
-7. Создать `docs/cow-services-analysis.md`.
-8. Потом начинать EX-2: доменные модели и миграции.
-
-Не спрашивать владельца:
-
-- использовать ли `fmatch`: да, использовать;
-- заменяет ли Cow `fmatch`: нет;
-- делать ли реальные деньги сразу: нет;
-- какой первый corridor: Armenia/AMD -> Russia/RUB;
-- как отличать страну от валюты: `AM`/`RU` это страны, `AMD`/`RUB` это валюты;
-- хардкодить ли AMD/RUB в коде: нет, только seed/config/data;
-- делать ли mock ledger: да;
-- сколько fake solver'ов: минимум два;
-- кто выбирает winner: backend;
-- какой TTL cache: 5 минут;
-- какой auction window: 3 секунды.
-
-Спрашивать владельца только если:
-
-- нужно выбрать реальный юридический/комплаенс-подход;
-- нужно включить реальные деньги;
-- нужно выбрать реальный расчётный TOKEN/stablecoin;
-- нужно подключить реального solver'а или провайдера.
+Все фазы EX-0—EX-12 реализованы. MVP остаётся в mock/fake режиме: включение
+реальных денег, выбор расчётного TOKEN/stablecoin, подключение production rails и
+solver'ов требуют отдельного решения владельца, юридического и комплаенс-чека.

@@ -185,13 +185,13 @@ CREATE INDEX IF NOT EXISTS exchange_corridors_status_idx
     ON exchange_corridors (status);
 
 INSERT INTO exchange_corridors
-    (source_country, source_currency, target_country, target_currency, status, min_amount_minor, max_amount_minor, metadata)
+    (source_country, source_currency, target_country, target_currency, status, min_amount_minor, max_amount_minor, daily_limit_minor, metadata)
 VALUES
-    ('AM', 'AMD', 'RU', 'RUB', 'enabled', 1000, NULL, '{"mvp": true, "label": "Armenia AMD to Russia RUB"}')
+    ('AM', 'AMD', 'RU', 'RUB', 'enabled', 1000, NULL, 5000000000, '{"mvp": true, "label": "Armenia AMD to Russia RUB"}')
 ON CONFLICT (source_country, source_currency, target_country, target_currency)
 DO UPDATE SET
-    status = EXCLUDED.status,
     min_amount_minor = EXCLUDED.min_amount_minor,
+    daily_limit_minor = COALESCE(exchange_corridors.daily_limit_minor, EXCLUDED.daily_limit_minor),
     metadata = exchange_corridors.metadata || EXCLUDED.metadata,
     updated_at = now();
 
@@ -399,3 +399,49 @@ CREATE INDEX IF NOT EXISTS audit_events_entity_idx
     ON audit_events (entity_type, entity_id, created_at);
 CREATE INDEX IF NOT EXISTS audit_events_type_idx
     ON audit_events (event_type, created_at);
+
+-- Runtime safety gates. The singleton row is intentionally database-backed so
+-- operations can stop the exchange without rebuilding or redeploying it.
+CREATE TABLE IF NOT EXISTS exchange_controls (
+    singleton BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton),
+    exchange_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    user_daily_limit_minor BIGINT NOT NULL DEFAULT 1000000000 CHECK (user_daily_limit_minor > 0),
+    solver_daily_limit_minor BIGINT NOT NULL DEFAULT 5000000000 CHECK (solver_daily_limit_minor > 0),
+    manual_review_threshold_minor BIGINT CHECK (manual_review_threshold_minor > 0),
+    terms_version TEXT NOT NULL DEFAULT '2026-09-19',
+    updated_by TEXT,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+INSERT INTO exchange_controls
+    (singleton, exchange_enabled, user_daily_limit_minor, solver_daily_limit_minor,
+     manual_review_threshold_minor, terms_version)
+VALUES (TRUE, TRUE, 1000000000, 5000000000, 50000000, '2026-09-19')
+ON CONFLICT (singleton) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS exchange_manual_reviews (
+    order_id UUID PRIMARY KEY REFERENCES exchange_orders(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'pending',
+    reason TEXT NOT NULL,
+    resolved_by TEXT,
+    resolution_note TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    resolved_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS exchange_manual_reviews_status_idx
+    ON exchange_manual_reviews (status, created_at);
+
+CREATE TABLE IF NOT EXISTS exchange_consents (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_id UUID NOT NULL REFERENCES exchange_orders(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    terms_version TEXT NOT NULL,
+    settlement_asset_disclosure BOOLEAN NOT NULL,
+    accepted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (order_id, terms_version)
+);
+
+CREATE INDEX IF NOT EXISTS exchange_consents_order_idx
+    ON exchange_consents (order_id, accepted_at);

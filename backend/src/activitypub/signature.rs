@@ -179,14 +179,18 @@ mod tests {
     use super::*;
     use chrono::Duration;
 
+    fn temp_key(name: &str) -> String {
+        std::env::temp_dir()
+            .join(format!("pay3flow-{name}-{}.pem", uuid::Uuid::new_v4()))
+            .to_string_lossy()
+            .into_owned()
+    }
+
     #[test]
     fn roundtrip_sign_and_verify() {
-        let identity = ActorIdentity::load_or_create(
-            "C:\\Users\\pasaz\\AppData\\Local\\Temp\\opencode\\ap_sig_test_key.pem",
-            "https://pay3flow.local",
-            "pay3flow",
-        )
-        .unwrap();
+        let key_path = temp_key("signature-roundtrip");
+        let identity =
+            ActorIdentity::load_or_create(&key_path, "https://pay3flow.local", "pay3flow").unwrap();
         let now = Utc::now();
         let body = br#"{"type":"Follow"}"#;
         let headers = sign_headers(
@@ -212,16 +216,14 @@ mod tests {
         )
         .unwrap();
         assert_eq!(key_id, identity.public_key_id());
+        std::fs::remove_file(key_path).unwrap();
     }
 
     #[test]
     fn replay_window_rejects_stale_date() {
-        let identity = ActorIdentity::load_or_create(
-            "C:\\Users\\pasaz\\AppData\\Local\\Temp\\opencode\\ap_sig_test_key2.pem",
-            "https://pay3flow.local",
-            "pay3flow",
-        )
-        .unwrap();
+        let key_path = temp_key("signature-replay");
+        let identity =
+            ActorIdentity::load_or_create(&key_path, "https://pay3flow.local", "pay3flow").unwrap();
         let now = Utc::now();
         let stale = now - Duration::minutes(10);
         let body = b"{}";
@@ -232,16 +234,14 @@ mod tests {
             .collect();
         let err = verify(&pairs, "POST", "/x", body, identity.public_key_pem(), now).unwrap_err();
         assert!(err.to_string().contains("replay"));
+        std::fs::remove_file(key_path).unwrap();
     }
 
     #[test]
     fn digest_mismatch_is_rejected() {
-        let identity = ActorIdentity::load_or_create(
-            "C:\\Users\\pasaz\\AppData\\Local\\Temp\\opencode\\ap_sig_test_key3.pem",
-            "https://pay3flow.local",
-            "pay3flow",
-        )
-        .unwrap();
+        let key_path = temp_key("signature-digest");
+        let identity =
+            ActorIdentity::load_or_create(&key_path, "https://pay3flow.local", "pay3flow").unwrap();
         let now = Utc::now();
         let body = b"original";
         let headers = sign_headers(&identity, "POST", "/x", "h", body, now).unwrap();
@@ -259,5 +259,6 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.to_string().contains("digest"));
+        std::fs::remove_file(key_path).unwrap();
     }
 }

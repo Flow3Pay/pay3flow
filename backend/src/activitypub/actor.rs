@@ -181,14 +181,18 @@ impl ActorIdentity {
 mod tests {
     use super::*;
 
+    fn temp_key(name: &str) -> String {
+        std::env::temp_dir()
+            .join(format!("pay3flow-{name}-{}.pem", uuid::Uuid::new_v4()))
+            .to_string_lossy()
+            .into_owned()
+    }
+
     #[test]
     fn document_and_webfinger_shape() {
-        let id = ActorIdentity::load_or_create(
-            "C:\\Users\\pasaz\\AppData\\Local\\Temp\\opencode\\ap_test_key.pem",
-            "https://pay3flow.local",
-            "pay3flow",
-        )
-        .unwrap();
+        let key_path = temp_key("document");
+        let id =
+            ActorIdentity::load_or_create(&key_path, "https://pay3flow.local", "pay3flow").unwrap();
         let doc = id.to_document();
         assert_eq!(doc["id"], json!("https://pay3flow.local/actor/pay3flow"));
         assert_eq!(doc["preferredUsername"], json!("pay3flow"));
@@ -213,16 +217,17 @@ mod tests {
         let wf = id.webfinger("https://pay3flow.local/actor/pay3flow");
         assert_eq!(wf["subject"], json!("acct:pay3flow@pay3flow.local"));
         assert_eq!(wf["links"][0]["rel"], json!("self"));
+        std::fs::remove_file(key_path).unwrap();
     }
 
     #[test]
     fn key_is_persisted_and_reloaded_identically() {
-        let key_path = "C:\\Users\\pasaz\\AppData\\Local\\Temp\\opencode\\ap_persist_test.pem";
-        let _ = std::fs::remove_file(key_path);
-        let a = ActorIdentity::load_or_create(key_path, "https://a.local", "svc").unwrap();
-        let b = ActorIdentity::load_or_create(key_path, "https://a.local", "svc").unwrap();
+        let key_path = temp_key("persist");
+        let a = ActorIdentity::load_or_create(&key_path, "https://a.local", "svc").unwrap();
+        let b = ActorIdentity::load_or_create(&key_path, "https://a.local", "svc").unwrap();
         assert_eq!(a.public_key_pem, b.public_key_pem);
         let msg = b"hello";
         assert_eq!(a.sign_bytes(msg), b.sign_bytes(msg));
+        std::fs::remove_file(key_path).unwrap();
     }
 }

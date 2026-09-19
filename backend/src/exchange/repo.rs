@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::db::DbPool;
+use crate::exchange::control;
 use crate::exchange::ledger;
 use crate::exchange::model::{
     AuditEvent, ExchangeCorridor, ExchangeOrder, ExchangeProof, ExchangeQuote, ExchangeSettlement,
@@ -192,6 +193,14 @@ pub async fn ensure_corridor_accepts_order(pool: &DbPool, order: &NewExchangeOrd
         }
     }
 
+    control::ensure_user_daily_limit(
+        pool,
+        &order.user_id,
+        order.source_amount_minor,
+        corridor.daily_limit_minor,
+    )
+    .await?;
+
     Ok(())
 }
 
@@ -348,7 +357,10 @@ ON CONFLICT (slug) DO UPDATE SET
     actor_id = EXCLUDED.actor_id,
     handle = EXCLUDED.handle,
     display_name = EXCLUDED.display_name,
-    status = EXCLUDED.status,
+    status = CASE
+        WHEN exchange_solvers.status IN ('paused', 'blocked') THEN exchange_solvers.status
+        ELSE EXCLUDED.status
+    END,
     countries = EXCLUDED.countries,
     currencies = EXCLUDED.currencies,
     rails = EXCLUDED.rails,
@@ -1111,11 +1123,38 @@ pub async fn submit_and_verify_proof(
         bail!("settlement must be proof_pending before proof verification");
     }
 
-    let valid = !proof_type.trim().is_empty()
-        && proof_payload
-            .get("valid")
-            .and_then(|value| value.as_bool())
-            .unwrap_or(true);
+    let quote = quote_by_id(pool, &settlement.quote_id)
+        .await?
+        .context("exchange quote not found for proof verification")?;
+    let reference = proof_payload
+        .get("reference")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .unwrap_or_default();
+    let reference_used = if reference.is_empty() {
+        false
+    } else {
+        let client = pool.get().await?;
+        client
+            .query_opt(
+                r#"
+SELECT 1 FROM exchange_proofs
+WHERE proof_payload->>'reference' = $1 AND verification_status = 'verified'
+LIMIT 1
+"#,
+                &[&reference],
+            )
+            .await?
+            .is_some()
+    };
+    let valid = proof_type.trim() == "machine_receipt"
+        && !reference_used
+        && machine_proof_is_valid(
+            &proof_payload,
+            settlement,
+            quote.target_amount_minor,
+            &quote.target_currency,
+        );
     let proof_status = if valid {
         ProofVerificationStatus::Verified
     } else {
@@ -1228,6 +1267,38 @@ RETURNING id, user_id, idempotency_key, source_country, source_currency, source_
     )
     .await?;
     Ok((order, settlement, proof))
+}
+
+fn machine_proof_is_valid(
+    payload: &serde_json::Value,
+    settlement: &ExchangeSettlement,
+    amount_minor: Minor,
+    currency: &str,
+) -> bool {
+    payload
+        .get("valid")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(true)
+        && payload
+            .get("settlement_id")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|value| value == settlement.id.to_string())
+        && payload
+            .get("solver_id")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|value| value == settlement.solver_id.to_string())
+        && payload
+            .get("amount_minor")
+            .and_then(serde_json::Value::as_i64)
+            .is_some_and(|value| value == amount_minor)
+        && payload
+            .get("currency")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|value| value == currency)
+        && payload
+            .get("reference")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|value| !value.trim().is_empty())
 }
 
 pub async fn insert_settlement(
@@ -1683,5 +1754,75 @@ fn row_to_audit_event(row: tokio_postgres::Row) -> AuditEvent {
         actor_id: row.try_get::<_, Option<String>>(5).ok().flatten(),
         payload: row.get(6),
         created_at: row.get::<_, DateTime<Utc>>(7),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn settlement() -> ExchangeSettlement {
+        ExchangeSettlement {
+            id: Uuid::new_v4(),
+            order_id: Uuid::new_v4(),
+            quote_id: Uuid::new_v4(),
+            solver_id: Uuid::new_v4(),
+            status: SettlementStatus::ProofPending,
+            token_leg_status: LegStatus::Done,
+            money_leg_status: LegStatus::Done,
+            funding_status: FundingInstructionStatus::SolverAcknowledged,
+            pay3flow_wallet_ref: None,
+            token_ledger_ref: None,
+            money_reference: None,
+            proof_id: None,
+            failure_code: None,
+            failure_message: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    #[test]
+    fn machine_proof_requires_matching_identity_amount_currency_and_reference() {
+        let settlement = settlement();
+        let valid = serde_json::json!({
+            "settlement_id": settlement.id,
+            "solver_id": settlement.solver_id,
+            "amount_minor": 2_035_000,
+            "currency": "RUB",
+            "reference": "receipt-1",
+            "valid": true,
+        });
+        assert!(machine_proof_is_valid(
+            &valid,
+            &settlement,
+            2_035_000,
+            "RUB"
+        ));
+
+        for invalid in [
+            serde_json::json!({ "reference": "receipt-1" }),
+            serde_json::json!({
+                "settlement_id": settlement.id,
+                "solver_id": settlement.solver_id,
+                "amount_minor": 2_035_001,
+                "currency": "RUB",
+                "reference": "receipt-1",
+            }),
+            serde_json::json!({
+                "settlement_id": settlement.id,
+                "solver_id": settlement.solver_id,
+                "amount_minor": 2_035_000,
+                "currency": "AMD",
+                "reference": "receipt-1",
+            }),
+        ] {
+            assert!(!machine_proof_is_valid(
+                &invalid,
+                &settlement,
+                2_035_000,
+                "RUB"
+            ));
+        }
     }
 }
