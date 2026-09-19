@@ -18,6 +18,8 @@ import styles from "./converter.module.css";
 type RefreshSeconds = 0 | 5 | 15 | 30 | 60;
 
 const REFRESH_OPTIONS: RefreshSeconds[] = [0, 5, 15, 30, 60];
+const AMOUNT_STORAGE_KEY = "pay3flow.exchange.amount";
+const REFRESH_STORAGE_KEY = "pay3flow.exchange.refresh-seconds";
 
 const money = (minor: number, currency: string) =>
   `${(minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })} ${currency}`;
@@ -115,6 +117,43 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
   const requestRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const settingsRef = useRef<HTMLDivElement>(null);
+  const preferencesLoadedRef = useRef(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        const savedAmount = window.localStorage.getItem(AMOUNT_STORAGE_KEY);
+        if (savedAmount) setAmount(savedAmount);
+
+        const savedRefresh = Number(window.localStorage.getItem(REFRESH_STORAGE_KEY));
+        if (REFRESH_OPTIONS.includes(savedRefresh as RefreshSeconds)) {
+          setRefreshSeconds(savedRefresh as RefreshSeconds);
+        }
+      } catch {
+        // Local storage can be unavailable when the browser blocks site data.
+      }
+      preferencesLoadedRef.current = true;
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!preferencesLoadedRef.current) return;
+    try {
+      window.localStorage.setItem(AMOUNT_STORAGE_KEY, amount);
+    } catch {
+      // Local storage can be unavailable when the browser blocks site data.
+    }
+  }, [amount]);
+
+  useEffect(() => {
+    if (!preferencesLoadedRef.current) return;
+    try {
+      window.localStorage.setItem(REFRESH_STORAGE_KEY, String(refreshSeconds));
+    } catch {
+      // Local storage can be unavailable when the browser blocks site data.
+    }
+  }, [refreshSeconds]);
 
   const corridor = useMemo(
     () => corridors.find((item) => item.id === corridorId) ?? corridors[0],
@@ -338,7 +377,10 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
       const liveRoutes = mapRoutes(response);
       setRoutes(liveRoutes);
       setSelected((current) =>
-        current ? liveRoutes.find((route) => route.route_id === current.route_id) ?? null : null,
+        liveRoutes.find((route) => route.route_id === current?.route_id) ??
+          liveRoutes.find((route) => route.status === "complete" && route.is_current_best) ??
+          liveRoutes.find((route) => route.status === "complete") ??
+          null,
       );
       setLastUpdatedAt(Date.now());
       setClock(Date.now());
