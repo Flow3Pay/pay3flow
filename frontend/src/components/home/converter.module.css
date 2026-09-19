@@ -104,11 +104,11 @@
 .card::after {
   position: absolute;
   top: var(--puzzle-lock-y);
-  right: -34px;
-  width: 68px;
-  height: 68px;
-  border-radius: 50%;
+  right: -58px;
+  width: 58px;
+  height: 48px;
   background: #fffffc;
+  clip-path: path("M 0 12 L 17 12 C 18 5 24 0 33 0 C 47 0 58 11 58 24 C 58 37 47 48 33 48 C 24 48 18 43 17 36 L 0 36 Z");
   content: "";
   pointer-events: none;
   transform: translateY(-50%);
@@ -937,8 +937,11 @@
   .card::after {
     top: auto;
     right: auto;
-    bottom: -34px;
+    bottom: -58px;
     left: 50%;
+    width: 48px;
+    height: 58px;
+    clip-path: path("M 12 0 L 12 17 C 5 18 0 24 0 33 C 0 47 11 58 24 58 C 37 58 48 47 48 33 C 48 24 43 18 36 17 L 36 0 Z");
     transform: translateX(-50%);
   }
 
@@ -966,9 +969,10 @@
   }
 
   .card::after {
-    bottom: -28px;
-    width: 56px;
-    height: 56px;
+    bottom: -52px;
+    width: 44px;
+    height: 52px;
+    clip-path: path("M 11 0 L 11 15 C 4 17 0 22 0 30 C 0 42 10 52 22 52 C 34 52 44 42 44 30 C 44 22 40 17 33 15 L 33 0 Z");
   }
 
   .moneyPanel {

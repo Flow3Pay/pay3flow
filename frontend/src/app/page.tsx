@@ -1,17 +1,23 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Converter } from "@/components/home/converter";
 import { Header } from "@/components/home/header";
+import { generatePuzzleBackground } from "@/lib/puzzle-background";
 
 export default function HomePage() {
+  const shellRef = useRef<HTMLDivElement>(null);
   const [token, setToken] = useState<string | null>(() =>
     typeof window === "undefined" ? null : window.localStorage.getItem("pay3flow-token"),
   );
   const [email, setEmail] = useState(() =>
     typeof window === "undefined" ? "" : window.localStorage.getItem("pay3flow-email") ?? "",
   );
+
+  useEffect(() => {
+    shellRef.current?.style.setProperty("--puzzle-pattern", generatePuzzleBackground());
+  }, []);
 
   const handleAuthenticated = useCallback((freshToken: string, freshEmail: string) => {
     window.localStorage.setItem("pay3flow-token", freshToken);
@@ -32,7 +38,7 @@ export default function HomePage() {
   }, []);
 
   return (
-    <div className="appShell">
+    <div className="appShell" ref={shellRef}>
       <Header
         connected={Boolean(token)}
         address={email || "Profile"}

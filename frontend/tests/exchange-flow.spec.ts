@@ -89,6 +89,22 @@ test("login modal → automatic P2P route search → select estimate", async ({ 
   await mockBackend(page);
   await page.goto("/");
 
+  const backgroundPattern = await expect
+    .poll(() => page.locator(".appShell").evaluate((element) => getComputedStyle(element, "::before").backgroundImage))
+    .not.toBe("none")
+    .then(() =>
+      page.locator(".appShell").evaluate((element) => getComputedStyle(element, "::before").backgroundImage),
+    );
+  await page.reload();
+  await expect
+    .poll(async () => {
+      const nextPattern = await page
+        .locator(".appShell")
+        .evaluate((element) => getComputedStyle(element, "::before").backgroundImage);
+      return nextPattern !== "none" && nextPattern !== backgroundPattern;
+    })
+    .toBe(true);
+
   await expect(page.getByRole("dialog", { name: "Sign in to route money smarter." })).toBeVisible();
   await page.getByRole("button", { name: "Enter Pay3Flow" }).click();
   await expect(page.getByTestId("auth-form")).toBeHidden();
