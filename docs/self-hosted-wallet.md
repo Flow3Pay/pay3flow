@@ -4,6 +4,10 @@ Pay3Flow now supports an optional self-hosted EVM wallet. The encrypted
 keystore is stored on the Pay3Flow host; Circle, Coinbase and exchange custody
 are not used.
 
+> For a fully local, zero-funds test environment (Anvil node + mock
+> USDT/USDC/TOKEN + setup/smoke scripts) see
+> [`docs/local-test-wallet.md`](local-test-wallet.md).
+
 ## Create a wallet
 
 Run this from `backend/` and keep the password out of shell history in real

@@ -31,12 +31,37 @@ services:
       timeout: 3s
       retries: 5
 
+  # Local test EVM node (Anvil). Chain data is in-memory and resets on
+  # restart, so it is safe for wallets and mock tokens. Cast ships inside the
+  # image; provisioning uses `docker compose exec anvil cast ...`.
+  anvil:
+    image: ghcr.io/foundry-rs/foundry:stable
+    container_name: pay3flow-anvil
+    restart: unless-stopped
+    ports:
+      - "8545:8545"
+    volumes:
+      - ./contracts:/contracts:ro
+    # The foundry image has ENTRYPOINT ["/bin/sh","-c"]. Compose splits `command:`
+    # on whitespace and passes the tokens to sh -c, so only the first token
+    # becomes the script and --host etc. would be swallowed. A single-element
+    # array keeps the whole command string for sh -c.
+    command: ["anvil --chain-id 31337 --host 0.0.0.0 --port 8545"]
+    healthcheck:
+      test: ["CMD", "cast", "chain-id", "--rpc-url", "http://localhost:8545"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
   backend:
     build:
       context: .
       dockerfile: backend/Dockerfile
     container_name: pay3flow-backend
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8080:8080"
     environment:
@@ -69,9 +94,10 @@ services:
       P2P_SEARCH_ASSETS: "USDT,USDC,BTC,ETH"
       WALLET_KEYSTORE_PATH: ${WALLET_KEYSTORE_PATH:-}
       WALLET_KEYSTORE_PASSWORD: ${WALLET_KEYSTORE_PASSWORD:-}
-      WALLET_RPC_URL: ${WALLET_RPC_URL:-http://host.docker.internal:8545}
+      WALLET_RPC_URL: ${WALLET_RPC_URL:-http://anvil:8545}
     volumes:
       - backend_data:/app/data
+      - ./data/wallet:/app/wallet:ro
     depends_on:
       postgres:
         condition: service_healthy

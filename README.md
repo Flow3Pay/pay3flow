@@ -207,6 +207,17 @@ pay3flow/
 | `fmatch` | `7277` | ActivityPub-матчер |
 | `fmatch-postgres` | `5433` | PostgreSQL (fmatch) |
 | `fmatch-typesense` | `8108` | Поиск (Typesense) |
+| `anvil` | `8545` | Локальный тестовый EVM-узел (wallet, mock-токены) |
+
+## Локальный тестовый крипто-кошелёк
+
+```bash
+./scripts/wallet-setup.sh      # узел + keystore + USDT/USDC/TOKEN (Windows: wallet-setup.ps1)
+docker compose up -d backend   # после установки WALLET_* из data/wallet/setup.env
+./scripts/wallet-smoke.sh      # info → balance → transfer → token-transfer
+```
+
+Полная инструкция: [`docs/local-test-wallet.md`](docs/local-test-wallet.md).
 
 ## Лицензия
 
