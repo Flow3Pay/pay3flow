@@ -123,6 +123,7 @@ test("login modal → real P2P route search → select estimate", async ({ page 
   await page.getByTestId("start-search").click();
   await expect(page.getByTestId("complete-route")).toHaveCount(2);
   await expect(page.getByText("20,350 RUB")).toBeVisible();
+  await expect(page.getByText("AMD → USDT Tether (Binance) → RUB (Binance)")).toBeVisible();
   await page.getByTestId("complete-route").first().click();
   await expect(page.getByTestId("selected-route")).toBeVisible();
   await expect(page.getByText(/No trade or reservation has been placed/)).toBeVisible();

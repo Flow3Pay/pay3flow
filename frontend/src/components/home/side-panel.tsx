@@ -13,6 +13,33 @@ function spreadLabel(bps: number): string {
   return value < 0 ? `${Math.abs(value).toFixed(2)}% lower` : `${value.toFixed(2)}% higher`;
 }
 
+const ASSET_NAMES: Record<string, string> = {
+  BTC: "Bitcoin",
+  ETH: "Ether",
+  USDC: "USD Coin",
+  USDT: "Tether",
+};
+
+const VENUE_NAMES: Record<string, string> = {
+  binance: "Binance",
+  bitget: "Bitget",
+  bybit: "Bybit",
+  okx: "OKX",
+};
+
+function venueName(value: string | undefined): string {
+  if (!value) return "Searching";
+  return VENUE_NAMES[value.toLowerCase()] ?? value;
+}
+
+function workflowLabel(route: RouteCandidate): string {
+  const entry = route.legs.find((leg) => leg.kind === "entry");
+  const exit = route.legs.find((leg) => leg.kind === "exit");
+  const assetName = ASSET_NAMES[route.entry_asset.toUpperCase()];
+  const asset = assetName ? `${route.entry_asset} ${assetName}` : route.entry_asset;
+  return `${route.source_currency} → ${asset} (${venueName(entry?.provider)}) → ${route.target_currency ?? "—"} (${venueName(exit?.provider)})`;
+}
+
 interface SidePanelProps {
   active: boolean;
   routes: RouteCandidate[];
@@ -45,6 +72,11 @@ export function SidePanel({ active, routes, selectedRouteId, onSelect }: SidePan
                           disabled={!complete}
                           onClick={() => onSelect(route)}
                           data-testid={complete ? "complete-route" : "partial-route"}
+                          title={
+                            complete && route.is_live_market && !route.payment_methods_verified
+                              ? "Confirm the selected banks on the venue before starting the transfer."
+                              : undefined
+                          }
                         >
                           <span className={styles.routeMain}>
                             <span className={styles.routeAmount}>
@@ -55,9 +87,7 @@ export function SidePanel({ active, routes, selectedRouteId, onSelect }: SidePan
                             <span className={styles.routeMeta}>
                               {complete
                                 ? route.is_live_market
-                                  ? route.payment_methods_verified
-                                    ? "Selected banks confirmed in listing"
-                                    : "Bank availability needs confirmation"
+                                  ? workflowLabel(route)
                                   : `Fee ${money(route.fee_minor, route.source_currency)} · ${route.eta_minutes} min`
                                 : "Checking recipient payout availability"}
                             </span>
