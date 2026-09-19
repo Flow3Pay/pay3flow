@@ -202,6 +202,7 @@ export function fetchP2pRoutes(query: {
   targetPaymentMethod?: string;
   allowCrossVenue?: boolean;
   limit?: number;
+  signal?: AbortSignal;
 }): Promise<P2pRouteSearchResponse> {
   const params = new URLSearchParams({
     source_fiat: query.sourceFiat,
@@ -218,7 +219,7 @@ export function fetchP2pRoutes(query: {
   if (query.targetPaymentMethod) {
     params.set("target_payment_method", query.targetPaymentMethod);
   }
-  return request(`/api/p2p/routes?${params.toString()}`);
+  return request(`/api/p2p/routes?${params.toString()}`, { signal: query.signal });
 }
 
 export function createOrder(

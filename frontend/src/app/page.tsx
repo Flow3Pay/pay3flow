@@ -32,7 +32,7 @@ export default function HomePage() {
   }, []);
 
   return (
-    <div className="cowTheme">
+    <div className="appShell">
       <Header
         connected={Boolean(token)}
         address={email || "Profile"}
@@ -48,6 +48,10 @@ export default function HomePage() {
           onRequireAuth={handleConnect}
         />
       </main>
+      <footer className="siteFooter">
+        <span>Pay3Flow</span>
+        <span>Live routing infrastructure · Public market estimates</span>
+      </footer>
     </div>
   );
 }

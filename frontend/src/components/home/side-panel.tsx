@@ -4,15 +4,6 @@ import { RouteCandidate } from "@/lib/exchange";
 
 import styles from "./side-panel.module.css";
 
-const money = (minor: number | undefined, currency: string | undefined) =>
-  minor == null ? "—" : `${(minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })} ${currency ?? ""}`;
-
-function spreadLabel(bps: number): string {
-  const value = bps / 100;
-  if (Math.abs(value) < 0.005) return "same output";
-  return value < 0 ? `${Math.abs(value).toFixed(2)}% lower` : `${value.toFixed(2)}% higher`;
-}
-
 const ASSET_NAMES: Record<string, string> = {
   BTC: "Bitcoin",
   ETH: "Ether",
@@ -26,6 +17,17 @@ const VENUE_NAMES: Record<string, string> = {
   bybit: "Bybit",
   okx: "OKX",
 };
+
+const money = (minor: number | undefined, currency: string | undefined) =>
+  minor == null
+    ? "—"
+    : `${(minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })} ${currency ?? ""}`;
+
+function spreadLabel(bps: number): string {
+  const value = Math.abs(bps / 100);
+  if (value < 0.005) return "Same output";
+  return `${value.toFixed(2)}% less`;
+}
 
 function venueName(value: string | undefined): string {
   if (!value) return "Searching";
@@ -45,74 +47,137 @@ interface SidePanelProps {
   routes: RouteCandidate[];
   selectedRouteId: string | null;
   onSelect: (route: RouteCandidate) => void;
+  searching?: boolean;
+  hasAmount?: boolean;
+  sourceBank?: string;
+  targetBank?: string;
 }
 
-export function SidePanel({ active, routes, selectedRouteId, onSelect }: SidePanelProps) {
+function SearchSkeleton() {
   return (
-    <aside className={`${styles.side}${active ? ` ${styles.active}` : ""}`} aria-label="Found routes">
-      <div className={styles.stage}>
-        <div className={styles.quote}>
-          <div className={styles.quoteInner}>
-            {routes.length > 0 ? (
-              <div
-                className={styles.routeGroups}
-                data-testid="route-groups"
-                tabIndex={0}
-                aria-label="Found routes"
-              >
-                <ul className={styles.routeList}>
-                  {routes.map((route) => {
-                    const complete = route.status === "complete";
-                    const selected = route.route_id === selectedRouteId;
-                    return (
-                      <li key={route.route_id}>
-                        <button
-                          type="button"
-                          className={`${route.is_current_best ? styles.routeBest : styles.routeRow}${selected ? ` ${styles.selected}` : ""}`}
-                          disabled={!complete}
-                          onClick={() => onSelect(route)}
-                          data-testid={complete ? "complete-route" : "partial-route"}
-                          title={
-                            complete && route.is_live_market && !route.payment_methods_verified
-                              ? "Confirm the selected banks on the venue before starting the transfer."
-                              : undefined
-                          }
-                        >
-                          <span className={styles.routeMain}>
-                            <span className={styles.routeAmount}>
-                              {complete
-                                ? money(route.target_amount_minor, route.target_currency)
-                                : "Preparing route"}
-                            </span>
-                            <span className={styles.routeMeta}>
-                              {complete
-                                ? route.is_live_market
-                                  ? workflowLabel(route)
-                                  : `Fee ${money(route.fee_minor, route.source_currency)} · ${route.eta_minutes} min`
-                                : "Checking recipient payout availability"}
-                            </span>
-                          </span>
-                          <span className={styles.routeSide}>
-                            {route.is_current_best && <span className={styles.routeBadgeBest}>BEST</span>}
-                            {!route.is_current_best && complete && (
-                              <span className={route.spread_bps < 0 ? styles.routeBadgeDelta : styles.routeBadgeFlat}>
-                                {spreadLabel(route.spread_bps)}
-                              </span>
-                            )}
-                            {!complete && <span className={styles.partialBadge}>SEARCHING</span>}
-                            <span className={styles.routeName}>{complete ? "Select" : "Waiting"}</span>
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ) : (
-              <div className={styles.emptyState}>Enter an amount and start route search.</div>
-            )}
-          </div>
+    <div className={styles.skeletonList} aria-label="Searching live routes">
+      {[0, 1, 2, 3].map((item) => (
+        <div className={styles.skeletonCard} key={item} style={{ animationDelay: `${item * 80}ms` }}>
+          <span className={styles.skeletonShort} />
+          <span className={styles.skeletonLong} />
+          <span className={styles.skeletonMedium} />
         </div>
+      ))}
+    </div>
+  );
+}
+
+export function SidePanel({
+  active,
+  routes,
+  selectedRouteId,
+  onSelect,
+  searching = false,
+  hasAmount = false,
+  sourceBank = "Sender bank",
+  targetBank = "Recipient bank",
+}: SidePanelProps) {
+  const best = routes[0];
+
+  return (
+    <aside
+      className={`${styles.side}${active ? ` ${styles.active}` : ""}`}
+      aria-label="Found routes"
+      id="routes"
+    >
+      <div className={styles.panel}>
+        <div className={styles.panelTop}>
+          <div>
+            <span className={styles.kicker}>Route intelligence</span>
+            <strong>{routes.length ? "Live market paths" : "Awaiting your intent"}</strong>
+          </div>
+          <span className={searching ? styles.searchBadge : routes.length ? styles.liveBadge : styles.readyBadge}>
+            <i />
+            {searching ? "Scanning" : routes.length ? "Live" : "Ready"}
+          </span>
+        </div>
+
+        {best && (
+          <div className={styles.bestSummary}>
+            <div>
+              <span>Best recipient output</span>
+              <strong>{money(best.target_amount_minor, best.target_currency)}</strong>
+            </div>
+            <div className={styles.summaryMeta}>
+              <span>{routes.length}</span>
+              <small>routes compared</small>
+            </div>
+          </div>
+        )}
+
+        <div className={styles.bankContext}>
+          <span>{sourceBank}</span>
+          <svg width="24" height="12" viewBox="0 0 24 12" fill="none" aria-hidden="true">
+            <path d="M1 6h21m0 0-4-4m4 4-4 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <span>{targetBank}</span>
+        </div>
+
+        {searching && routes.length === 0 ? (
+          <SearchSkeleton />
+        ) : routes.length > 0 ? (
+          <div className={styles.routeGroups} data-testid="route-groups" tabIndex={0} aria-label="Found routes">
+            <ul className={styles.routeList}>
+              {routes.map((route, index) => {
+                const complete = route.status === "complete";
+                const selected = route.route_id === selectedRouteId;
+                return (
+                  <li key={route.route_id}>
+                    <button
+                      type="button"
+                      className={`${styles.routeCard}${route.is_current_best ? ` ${styles.routeBest}` : ""}${selected ? ` ${styles.selected}` : ""}`}
+                      disabled={!complete}
+                      onClick={() => onSelect(route)}
+                      data-testid={complete ? "complete-route" : "partial-route"}
+                    >
+                      <span className={styles.routeTopline}>
+                        <span className={styles.routeRank}>#{String(index + 1).padStart(2, "0")}</span>
+                        {route.is_current_best ? (
+                          <span className={styles.bestBadge}>Best route</span>
+                        ) : (
+                          <span className={styles.deltaBadge}>{spreadLabel(route.spread_bps)}</span>
+                        )}
+                      </span>
+                      <span className={styles.routeAmount}>{money(route.target_amount_minor, route.target_currency)}</span>
+                      <span className={styles.workflow}>{workflowLabel(route)}</span>
+                      <span className={styles.routeFooter}>
+                        <span className={route.payment_methods_verified ? styles.verified : styles.unverified}>
+                          <i />
+                          {route.payment_methods_verified ? "Banks confirmed" : "Confirm bank support"}
+                        </span>
+                        <span className={styles.selectLabel}>{selected ? "Selected" : "Choose"} →</span>
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ) : (
+          <div className={styles.emptyState}>
+            <div className={styles.emptyVisual} aria-hidden="true">
+              <span className={styles.emptyNode}>AM</span>
+              <span className={styles.emptyPath}><i /><i /><i /></span>
+              <span className={styles.emptyNode}>RU</span>
+            </div>
+            <div>
+              <strong>{hasAmount ? "Preparing market scan" : "Your routes will appear here"}</strong>
+              <p>
+                {hasAmount
+                  ? "Pay3Flow is ready to compare entry assets, venues and recipient payout options."
+                  : "Enter an amount and we will assemble live cross-border paths in real time."}
+              </p>
+            </div>
+            <div className={styles.emptyVenues}>
+              <span>BINANCE</span><span>BYBIT</span><span>OKX</span><span>BITGET</span>
+            </div>
+          </div>
+        )}
       </div>
     </aside>
   );

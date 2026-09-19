@@ -98,33 +98,38 @@ async function mockBackend(page: Page) {
   });
 }
 
-test("login modal → real P2P route search → select estimate", async ({ page }) => {
+test("login modal → automatic P2P route search → select estimate", async ({ page }) => {
   await mockBackend(page);
   await page.goto("/");
 
-  await expect(page.getByRole("dialog", { name: "Sign in to Pay3Flow" })).toBeVisible();
-  await page.getByRole("button", { name: "Sign in", exact: true }).last().click();
+  await expect(page.getByRole("dialog", { name: "Sign in to route money smarter." })).toBeVisible();
+  await page.getByRole("button", { name: "Enter Pay3Flow" }).click();
   await expect(page.getByTestId("auth-form")).toBeHidden();
+  await expect(page.getByLabel("Amount to send")).toHaveValue("0");
+
+  await page.getByRole("button", { name: "Route refresh settings" }).click();
+  await page.getByRole("button", { name: "30s" }).click();
 
   await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
-  const sourcePicker = page.getByRole("dialog", { name: "Select sender bank" });
+  const sourcePicker = page.getByRole("dialog", { name: "Choose where you pay from" });
   await expect(sourcePicker).toBeVisible();
   await sourcePicker.getByLabel("Search banks and payment methods").fill("IDBank");
   await sourcePicker.getByRole("option", { name: /IDBank/ }).click();
   await expect(page.getByRole("button", { name: "Select sending bank: IDBank" })).toBeVisible();
 
   await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
-  const targetPicker = page.getByRole("dialog", { name: "Select recipient bank" });
+  const targetPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
   await expect(targetPicker).toBeVisible();
   await targetPicker.getByLabel("Search banks and payment methods").fill("Alfa");
   await targetPicker.getByRole("option", { name: /Alfa-Bank/ }).click();
   await expect(page.getByRole("button", { name: "Select recipient bank: Alfa-Bank" })).toBeVisible();
 
+  await page.getByLabel("Amount to send").fill("100000");
   await page.getByTestId("start-search").click();
   await expect(page.getByTestId("complete-route")).toHaveCount(2);
-  await expect(page.getByText("20,350 RUB")).toBeVisible();
+  await expect(page.getByTestId("complete-route").first()).toContainText("20,350 RUB");
   await expect(page.getByText("AMD → USDT Tether (Binance) → RUB (Binance)")).toBeVisible();
   await page.getByTestId("complete-route").first().click();
   await expect(page.getByTestId("selected-route")).toBeVisible();
-  await expect(page.getByText(/No trade or reservation has been placed/)).toBeVisible();
+  await expect(page.getByText("Both banks are listed on the matched offers.")).toBeVisible();
 });
