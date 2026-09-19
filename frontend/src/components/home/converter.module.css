@@ -6,7 +6,7 @@
 }
 
 .hero {
-  width: min(820px, 100%);
+  width: min(900px, 100%);
   margin: 0 auto 42px;
   text-align: center;
   animation: heroIn 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -26,13 +26,19 @@
 }
 
 .hero h1 {
-  max-width: 780px;
+  max-width: 900px;
   margin: 0 auto;
   color: var(--color-text);
   font-size: clamp(50px, 6.8vw, 84px);
   font-weight: 650;
   letter-spacing: -0.07em;
   line-height: 0.96;
+}
+
+@media (min-width: 981px) {
+  .hero h1 {
+    white-space: nowrap;
+  }
 }
 
 .hero h1 span {
