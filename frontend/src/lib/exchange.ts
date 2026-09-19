@@ -70,6 +70,7 @@ export interface RouteCandidate {
   eta_minutes?: number;
   is_current_best?: boolean;
   is_live_market?: boolean;
+  payment_methods_verified?: boolean;
   legs: RouteLeg[];
 }
 
@@ -108,6 +109,7 @@ export interface P2pRoute {
   same_venue: boolean;
   requires_asset_transfer: boolean;
   transfer_fee_included: boolean;
+  payment_methods_verified: boolean;
   entry_offer: P2pOffer;
   exit_offer: P2pOffer;
   warnings: string[];
@@ -196,6 +198,9 @@ export function fetchP2pRoutes(query: {
   sourceFiat: string;
   targetFiat: string;
   sourceAmount: number;
+  sourcePaymentMethod?: string;
+  targetPaymentMethod?: string;
+  allowCrossVenue?: boolean;
   limit?: number;
 }): Promise<P2pRouteSearchResponse> {
   const params = new URLSearchParams({
@@ -204,8 +209,15 @@ export function fetchP2pRoutes(query: {
     source_amount: String(query.sourceAmount),
     min_orders: "20",
     min_completion_rate: "0.9",
+    allow_cross_venue: String(query.allowCrossVenue ?? true),
     limit: String(query.limit ?? 40),
   });
+  if (query.sourcePaymentMethod) {
+    params.set("source_payment_method", query.sourcePaymentMethod);
+  }
+  if (query.targetPaymentMethod) {
+    params.set("target_payment_method", query.targetPaymentMethod);
+  }
   return request(`/api/p2p/routes?${params.toString()}`);
 }
 

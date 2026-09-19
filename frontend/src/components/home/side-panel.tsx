@@ -55,7 +55,9 @@ export function SidePanel({ active, routes, selectedRouteId, onSelect }: SidePan
                             <span className={styles.routeMeta}>
                               {complete
                                 ? route.is_live_market
-                                  ? "Live public market estimate"
+                                  ? route.payment_methods_verified
+                                    ? "Selected banks confirmed in listing"
+                                    : "Bank availability needs confirmation"
                                   : `Fee ${money(route.fee_minor, route.source_currency)} · ${route.eta_minutes} min`
                                 : "Checking recipient payout availability"}
                             </span>

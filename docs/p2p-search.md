@@ -8,13 +8,15 @@ money.
 
 - Binance public C2C agent advertisement list.
 - Bybit public web P2P advertisement list.
+- OKX public web P2P advertisement list.
+- Bitget public web P2P advertisement list.
 
-Both sources are queried concurrently. A timeout or parsing failure from one
+All sources are queried concurrently. A timeout or parsing failure from one
 source is returned in `sources` without discarding successful results from the
 other source. Successful leg searches are cached in memory for five seconds by
 default; cached responses contain `cached: true`.
 
-The public website endpoints can change without notice. Keep both adapters
+The public website endpoints can change without notice. Keep the adapters
 enabled, monitor `sources[].ok`, and do not treat a search result as a firm
 quote until the platform confirms it.
 
@@ -32,6 +34,11 @@ GET /api/p2p/search?fiat=AMD&asset=USDT&side=buy&amount=100000&min_orders=20&min
 The response contains normalized prices, fiat limits, available asset amount,
 payment methods, public advertiser reputation, source status, and a link back
 to the venue.
+
+`payment_method` accepts the bank selected in the frontend. Named payment
+methods are matched after punctuation/case normalization. Some venues return
+only opaque numeric payment-method IDs; those offers remain visible as
+unverified estimates instead of being silently discarded.
 
 ## Build the AMD -> asset -> RUB puzzle
 
@@ -56,6 +63,10 @@ It then:
    liquidity;
 5. returns complete routes ordered by maximum estimated RUB output.
 
+Routes whose two selected banks are explicitly named by both advertisements
+are ranked ahead of routes with opaque payment IDs. The response exposes this
+as `payment_methods_verified`; unverified routes also include a warning.
+
 By default only same-venue routes are returned. They do not require moving the
 asset from one exchange to another. Set `allow_cross_venue=true` to include
 cross-venue candidates; they are marked `requires_asset_transfer=true`, and
@@ -74,11 +85,14 @@ P2P_SEARCH_TIMEOUT_MS=4000
 P2P_SEARCH_CACHE_TTL_MS=5000
 P2P_BINANCE_ENABLED=true
 P2P_BYBIT_ENABLED=true
+P2P_OKX_ENABLED=true
+P2P_BITGET_ENABLED=true
 P2P_SEARCH_ASSETS=USDT,USDC,BTC,ETH
 ```
 
-Endpoint URLs can be overridden with `P2P_BINANCE_URL` and `P2P_BYBIT_URL` for
-tests or when a venue changes its public endpoint.
+Endpoint URLs can be overridden with `P2P_BINANCE_URL`, `P2P_BYBIT_URL`,
+`P2P_OKX_URL`, and `P2P_BITGET_URL` for tests or when a venue changes its
+public endpoint.
 
 Run the opt-in live smoke test:
 

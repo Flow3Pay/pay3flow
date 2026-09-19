@@ -5,7 +5,9 @@ use chrono::{DateTime, Utc};
 use futures::future::join_all;
 use serde::{Deserialize, Serialize};
 
-use crate::p2p::service::{P2pOffer, P2pSearchQuery, P2pSearchService, P2pSide, SourceStatus};
+use crate::p2p::service::{
+    P2pOffer, P2pSearchQuery, P2pSearchService, P2pSide, PaymentMethodMatch, SourceStatus,
+};
 
 const DEFAULT_ROUTE_LIMIT: usize = 20;
 const MAX_ROUTE_LIMIT: usize = 100;
@@ -45,6 +47,9 @@ pub struct P2pRoute {
     pub same_venue: bool,
     pub requires_asset_transfer: bool,
     pub transfer_fee_included: bool,
+    /// True when both selected bank names were present in venue responses.
+    /// False means at least one venue returned only opaque payment IDs.
+    pub payment_methods_verified: bool,
     pub entry_offer: P2pOffer,
     pub exit_offer: P2pOffer,
     pub warnings: Vec<String>,
@@ -137,9 +142,14 @@ impl P2pSearchService {
         }
 
         routes.sort_by(|left, right| {
-            route_target(right)
-                .partial_cmp(&route_target(left))
-                .unwrap_or(Ordering::Equal)
+            right
+                .payment_methods_verified
+                .cmp(&left.payment_methods_verified)
+                .then_with(|| {
+                    route_target(right)
+                        .partial_cmp(&route_target(left))
+                        .unwrap_or(Ordering::Equal)
+                })
                 .then_with(|| right.same_venue.cmp(&left.same_venue))
         });
         routes.truncate(query.limit);
@@ -316,6 +326,29 @@ fn compose_routes(
                         .into(),
                 );
             }
+            let entry_method_match = query
+                .source_payment_method
+                .as_deref()
+                .map(|method| entry.payment_method_match(method));
+            let exit_method_match = query
+                .target_payment_method
+                .as_deref()
+                .map(|method| exit.payment_method_match(method));
+            if entry_method_match == Some(PaymentMethodMatch::Unknown) {
+                warnings.push(
+                    "The selected sender bank could not be verified because the venue returned an opaque payment-method ID."
+                        .into(),
+                );
+            }
+            if exit_method_match == Some(PaymentMethodMatch::Unknown) {
+                warnings.push(
+                    "The selected recipient bank could not be verified because the venue returned an opaque payment-method ID."
+                        .into(),
+                );
+            }
+            let payment_methods_verified = entry_method_match
+                .is_none_or(|matched| matched == PaymentMethodMatch::Exact)
+                && exit_method_match.is_none_or(|matched| matched == PaymentMethodMatch::Exact);
             routes.push(P2pRoute {
                 rank: 0,
                 asset: asset.into(),
@@ -328,6 +361,7 @@ fn compose_routes(
                 same_venue,
                 requires_asset_transfer: !same_venue,
                 transfer_fee_included: same_venue,
+                payment_methods_verified,
                 entry_offer: entry.clone(),
                 exit_offer: exit.clone(),
                 warnings,
@@ -460,8 +494,26 @@ mod tests {
         assert_eq!(filtered.len(), 2);
     }
 
+    #[test]
+    fn labels_route_when_venue_payment_ids_are_opaque() {
+        let mut query = query(true);
+        query.source_payment_method = Some("Ameriabank".into());
+        query.target_payment_method = Some("Sberbank".into());
+        let mut entry = offer("bybit", P2pSide::BuyCrypto, "400", "1000", "200000");
+        let mut exit = offer("bybit", P2pSide::SellCrypto, "80", "1000", "100000");
+        entry.payment_methods = vec!["18".into()];
+        exit.payment_methods = vec!["40".into()];
+
+        let mut routes = Vec::new();
+        compose_routes(&mut routes, &query, "USDT", &[entry], &[exit]);
+
+        assert_eq!(routes.len(), 1);
+        assert!(!routes[0].payment_methods_verified);
+        assert_eq!(routes[0].warnings.len(), 3);
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    #[ignore = "calls live Binance and Bybit public P2P endpoints"]
+    #[ignore = "calls live Binance, Bybit, OKX and Bitget public P2P endpoints"]
     async fn live_amd_to_rub_route_search() {
         let config = Config::from_env().unwrap();
         let service = P2pSearchService::from_config(&config).unwrap();
@@ -493,5 +545,33 @@ mod tests {
             .iter()
             .any(|source| source.ok)
             && status.exit_sources.iter().any(|source| source.ok)));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore = "calls live Binance, Bybit, OKX and Bitget public P2P endpoints"]
+    async fn live_bank_filtered_amd_to_rub_route_search() {
+        let config = Config::from_env().unwrap();
+        let service = P2pSearchService::from_config(&config).unwrap();
+        let response = service
+            .search_routes(P2pRouteSearchQuery {
+                source_fiat: "AMD".into(),
+                target_fiat: "RUB".into(),
+                source_amount: 100_000.0,
+                assets: Some("USDT,USDC,BTC,ETH".into()),
+                source_payment_method: Some("Ameriabank".into()),
+                target_payment_method: Some("Sberbank".into()),
+                merchant_only: Some(false),
+                min_orders: None,
+                min_completion_rate: None,
+                allow_cross_venue: Some(true),
+                max_price_deviation_bps: Some(1_000),
+                limit: Some(10),
+            })
+            .await
+            .unwrap();
+
+        eprintln!("{}", serde_json::to_string_pretty(&response).unwrap());
+        assert!(response.can_exchange_to_target);
+        assert!(!response.routes.is_empty());
     }
 }

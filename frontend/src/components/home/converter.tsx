@@ -9,7 +9,9 @@ import {
   fetchCorridors,
   fetchP2pRoutes,
 } from "@/lib/exchange";
+import { PaymentMethod, paymentMethodsFor } from "@/lib/payment-methods";
 
+import { PaymentMethodPicker } from "./payment-method-picker";
 import { SidePanel } from "./side-panel";
 import styles from "./converter.module.css";
 
@@ -51,6 +53,9 @@ export function Converter({ token, email: sessionEmail, onAuthenticated, onRequi
   const [authBusy, setAuthBusy] = useState(false);
   const [routes, setRoutes] = useState<RouteCandidate[]>([]);
   const [selected, setSelected] = useState<RouteCandidate | null>(null);
+  const [sourceMethodId, setSourceMethodId] = useState("am-ameriabank");
+  const [targetMethodId, setTargetMethodId] = useState("ru-sberbank");
+  const [methodPicker, setMethodPicker] = useState<"source" | "target" | null>(null);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -88,6 +93,27 @@ export function Converter({ token, email: sessionEmail, onAuthenticated, onRequi
       ).values(),
     ];
   }, [corridor, corridors]);
+
+  const sourceMethods = useMemo(
+    () =>
+      corridor
+        ? paymentMethodsFor(corridor.source_country, corridor.source_currency, "sender")
+        : [],
+    [corridor],
+  );
+
+  const targetMethods = useMemo(
+    () =>
+      corridor
+        ? paymentMethodsFor(corridor.target_country, corridor.target_currency, "recipient")
+        : [],
+    [corridor],
+  );
+
+  const sourceMethod =
+    sourceMethods.find((method) => method.id === sourceMethodId) ?? sourceMethods[0] ?? null;
+  const targetMethod =
+    targetMethods.find((method) => method.id === targetMethodId) ?? targetMethods[0] ?? null;
 
   const previewRoute = useMemo(
     () =>
@@ -140,6 +166,20 @@ export function Converter({ token, email: sessionEmail, onAuthenticated, onRequi
     if (next) setCorridorId(next.id);
   };
 
+  const chooseSourceMethod = (method: PaymentMethod) => {
+    setSourceMethodId(method.id);
+    setMethodPicker(null);
+    setRoutes([]);
+    setSelected(null);
+  };
+
+  const chooseTargetMethod = (method: PaymentMethod) => {
+    setTargetMethodId(method.id);
+    setMethodPicker(null);
+    setRoutes([]);
+    setSelected(null);
+  };
+
 
   const signIn = async (event: FormEvent) => {
     event.preventDefault();
@@ -179,6 +219,9 @@ export function Converter({ token, email: sessionEmail, onAuthenticated, onRequi
         sourceFiat: corridor.source_currency,
         targetFiat: corridor.target_currency,
         sourceAmount: numericAmount,
+        sourcePaymentMethod: sourceMethod?.p2pQuery,
+        targetPaymentMethod: targetMethod?.p2pQuery,
+        allowCrossVenue: true,
         limit: 40,
       });
       const bestTarget = Number(response.routes[0]?.target_amount ?? 0);
@@ -200,6 +243,7 @@ export function Converter({ token, email: sessionEmail, onAuthenticated, onRequi
           spread_bps: relativeBps,
           is_current_best: index === 0,
           is_live_market: true,
+          payment_methods_verified: route.payment_methods_verified,
           legs: [
             {
               kind: "entry",
@@ -260,24 +304,28 @@ export function Converter({ token, email: sessionEmail, onAuthenticated, onRequi
                 aria-label="Amount to send"
               />
             </div>
-            <div className={styles.locationControl}>
-              <span className={styles.locationAvatar} aria-hidden="true">
-                {corridor?.source_country ?? "—"}
-              </span>
-              <select
-                className={styles.panelSelect}
-                value={corridor ? locationKey(corridor.source_country, corridor.source_currency) : ""}
-                onChange={(event) => chooseSourceLocation(event.target.value)}
+            <button
+                type="button"
+                className={styles.methodTrigger}
+                onClick={() => setMethodPicker("source")}
                 disabled={searching}
-                aria-label="Send from"
+                aria-label={`Select sending bank: ${sourceMethod?.name ?? "none"}`}
               >
-                {sourceLocations.map((location) => (
-                  <option key={locationKey(location.country, location.currency)} value={locationKey(location.country, location.currency)}>
-                    {locationLabel(location.country, location.currency)}
-                  </option>
-                ))}
-              </select>
-            </div>
+                <span
+                  className={styles.methodAvatar}
+                  style={{ backgroundColor: sourceMethod?.color ?? "var(--color-text)" }}
+                  aria-hidden="true"
+                >
+                  {sourceMethod?.initials ?? corridor?.source_country ?? "—"}
+                </span>
+                <span className={styles.methodTriggerCopy}>
+                  <strong>{sourceMethod?.name ?? "Select bank"}</strong>
+                  <span>{corridor ? locationLabel(corridor.source_country, corridor.source_currency) : "Unavailable"}</span>
+                </span>
+                <svg className={styles.methodChevron} width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="m4 6 4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+            </button>
           </div>
 
           <div className={styles.separator} aria-hidden="true">
@@ -302,24 +350,28 @@ export function Converter({ token, email: sessionEmail, onAuthenticated, onRequi
                 aria-label={`Estimated amount in ${corridor?.target_currency ?? "target currency"}`}
               />
             </div>
-            <div className={styles.locationControl}>
-              <span className={styles.locationAvatar} aria-hidden="true">
-                {corridor?.target_country ?? "—"}
-              </span>
-              <select
-                className={styles.panelSelect}
-                value={corridor ? locationKey(corridor.target_country, corridor.target_currency) : ""}
-                onChange={(event) => chooseTargetLocation(event.target.value)}
+            <button
+                type="button"
+                className={styles.methodTrigger}
+                onClick={() => setMethodPicker("target")}
                 disabled={searching}
-                aria-label="Send to"
+                aria-label={`Select recipient bank: ${targetMethod?.name ?? "none"}`}
               >
-                {targetLocations.map((location) => (
-                  <option key={locationKey(location.country, location.currency)} value={locationKey(location.country, location.currency)}>
-                    {locationLabel(location.country, location.currency)}
-                  </option>
-                ))}
-              </select>
-            </div>
+                <span
+                  className={styles.methodAvatar}
+                  style={{ backgroundColor: targetMethod?.color ?? "var(--color-text)" }}
+                  aria-hidden="true"
+                >
+                  {targetMethod?.initials ?? corridor?.target_country ?? "—"}
+                </span>
+                <span className={styles.methodTriggerCopy}>
+                  <strong>{targetMethod?.name ?? "Select bank"}</strong>
+                  <span>{corridor ? locationLabel(corridor.target_country, corridor.target_currency) : "Unavailable"}</span>
+                </span>
+                <svg className={styles.methodChevron} width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="m4 6 4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+            </button>
           </div>
 
           <button type="button" className={styles.cta} disabled={searching || !corridor} onClick={startSearch} data-testid="start-search">
@@ -331,6 +383,11 @@ export function Converter({ token, email: sessionEmail, onAuthenticated, onRequi
             <div className={styles.selectionBox} data-testid="selected-route">
               <strong>Selected live route</strong>
               <span>Estimated recipient amount: {money(selected.target_amount_minor ?? 0, selected.target_currency ?? corridor?.target_currency ?? "")}</span>
+              <span>
+                {selected.payment_methods_verified
+                  ? "Both selected banks are listed on the matched offers."
+                  : "Confirm both selected banks on the venue before starting the transfer."}
+              </span>
               <span>This is a read-only public market estimate. No trade or reservation has been placed.</span>
             </div>
           )}
@@ -339,6 +396,42 @@ export function Converter({ token, email: sessionEmail, onAuthenticated, onRequi
 
         <SidePanel active={routes.length > 0} routes={routes} selectedRouteId={selected?.route_id ?? null} onSelect={setSelected} />
       </div>
+
+      <PaymentMethodPicker
+        open={methodPicker === "source"}
+        title="Select sender bank"
+        role="sender"
+        locations={sourceLocations}
+        selectedLocation={
+          corridor
+            ? { country: corridor.source_country, currency: corridor.source_currency }
+            : null
+        }
+        selected={sourceMethod}
+        onClose={() => setMethodPicker(null)}
+        onLocationSelect={(location) =>
+          chooseSourceLocation(locationKey(location.country, location.currency))
+        }
+        onSelect={chooseSourceMethod}
+      />
+
+      <PaymentMethodPicker
+        open={methodPicker === "target"}
+        title="Select recipient bank"
+        role="recipient"
+        locations={targetLocations}
+        selectedLocation={
+          corridor
+            ? { country: corridor.target_country, currency: corridor.target_currency }
+            : null
+        }
+        selected={targetMethod}
+        onClose={() => setMethodPicker(null)}
+        onLocationSelect={(location) =>
+          chooseTargetLocation(locationKey(location.country, location.currency))
+        }
+        onSelect={chooseTargetMethod}
+      />
 
       {!token && (
         <div className={styles.authBackdrop}>

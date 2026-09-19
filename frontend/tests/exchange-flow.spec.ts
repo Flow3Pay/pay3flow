@@ -26,6 +26,9 @@ async function mockBackend(page: Page) {
       });
     }
     if (url.pathname === "/api/p2p/routes") {
+      expect(url.searchParams.get("source_payment_method")).toBe("IDBank");
+      expect(url.searchParams.get("target_payment_method")).toBe("Alfa-Bank");
+      expect(url.searchParams.get("allow_cross_venue")).toBe("true");
       const offer = (source: string, adId: string, fiat: string, asset: string) => ({
         source,
         ad_id: adId,
@@ -66,6 +69,7 @@ async function mockBackend(page: Page) {
             same_venue: true,
             requires_asset_transfer: false,
             transfer_fee_included: true,
+            payment_methods_verified: true,
             entry_offer: offer("binance", "entry-1", "AMD", "USDT"),
             exit_offer: offer("binance", "exit-1", "RUB", "USDT"),
             warnings: ["Search estimate only."],
@@ -82,6 +86,7 @@ async function mockBackend(page: Page) {
             same_venue: true,
             requires_asset_transfer: false,
             transfer_fee_included: true,
+            payment_methods_verified: false,
             entry_offer: offer("bybit", "entry-2", "AMD", "USDC"),
             exit_offer: offer("bybit", "exit-2", "RUB", "USDC"),
             warnings: ["Search estimate only."],
@@ -101,8 +106,20 @@ test("login modal → real P2P route search → select estimate", async ({ page 
   await page.getByRole("button", { name: "Sign in", exact: true }).last().click();
   await expect(page.getByTestId("auth-form")).toBeHidden();
 
-  await expect(page.getByLabel("Send from")).toHaveValue("AM:AMD");
-  await expect(page.getByLabel("Send to")).toHaveValue("RU:RUB");
+  await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
+  const sourcePicker = page.getByRole("dialog", { name: "Select sender bank" });
+  await expect(sourcePicker).toBeVisible();
+  await sourcePicker.getByLabel("Search banks and payment methods").fill("IDBank");
+  await sourcePicker.getByRole("option", { name: /IDBank/ }).click();
+  await expect(page.getByRole("button", { name: "Select sending bank: IDBank" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
+  const targetPicker = page.getByRole("dialog", { name: "Select recipient bank" });
+  await expect(targetPicker).toBeVisible();
+  await targetPicker.getByLabel("Search banks and payment methods").fill("Alfa");
+  await targetPicker.getByRole("option", { name: /Alfa-Bank/ }).click();
+  await expect(page.getByRole("button", { name: "Select recipient bank: Alfa-Bank" })).toBeVisible();
+
   await page.getByTestId("start-search").click();
   await expect(page.getByTestId("complete-route")).toHaveCount(2);
   await expect(page.getByText("20,350 RUB")).toBeVisible();

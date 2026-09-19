@@ -62,6 +62,8 @@ services:
       P2P_SEARCH_CACHE_TTL_MS: "5000"
       P2P_BINANCE_ENABLED: "true"
       P2P_BYBIT_ENABLED: "true"
+      P2P_OKX_ENABLED: "true"
+      P2P_BITGET_ENABLED: "true"
       P2P_SEARCH_ASSETS: "USDT,USDC,BTC,ETH"
     volumes:
       - backend_data:/app/data

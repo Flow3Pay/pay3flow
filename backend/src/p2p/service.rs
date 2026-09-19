@@ -11,7 +11,9 @@ use futures::future::join_all;
 use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
-use crate::p2p::{binance::BinanceP2pSource, bybit::BybitP2pSource};
+use crate::p2p::{
+    binance::BinanceP2pSource, bitget::BitgetP2pSource, bybit::BybitP2pSource, okx::OkxP2pSource,
+};
 
 const DEFAULT_LIMIT: usize = 20;
 const MAX_LIMIT: usize = 100;
@@ -109,6 +111,13 @@ pub struct P2pOffer {
     pub source_url: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PaymentMethodMatch {
+    Exact,
+    Unknown,
+    No,
+}
+
 impl P2pOffer {
     fn price_number(&self) -> Option<f64> {
         self.price.parse().ok()
@@ -118,6 +127,30 @@ impl P2pOffer {
         let min = self.min_fiat.parse::<f64>().unwrap_or(f64::INFINITY);
         let max = self.max_fiat.parse::<f64>().unwrap_or(f64::NEG_INFINITY);
         min <= amount && amount <= max
+    }
+
+    pub(crate) fn payment_method_match(&self, requested: &str) -> PaymentMethodMatch {
+        let requested = canonical_payment_method(requested);
+        if self.payment_methods.iter().any(|method| {
+            let method = canonical_payment_method(method);
+            !method.is_empty() && (method.contains(&requested) || requested.contains(&method))
+        }) {
+            return PaymentMethodMatch::Exact;
+        }
+
+        // Some public venue responses (notably Bybit) expose only internal
+        // numeric payment IDs. Keep these offers as unverified estimates rather
+        // than incorrectly claiming that the requested bank is unavailable.
+        if self.payment_methods.is_empty()
+            || self
+                .payment_methods
+                .iter()
+                .all(|method| method.bytes().all(|byte| byte.is_ascii_digit()))
+        {
+            return PaymentMethodMatch::Unknown;
+        }
+
+        PaymentMethodMatch::No
     }
 
     fn matches(&self, query: &P2pSearchQuery) -> bool {
@@ -141,16 +174,24 @@ impl P2pOffer {
             return false;
         }
         if let Some(payment_method) = &query.payment_method {
-            let needle = payment_method.to_ascii_lowercase();
-            if !self
-                .payment_methods
-                .iter()
-                .any(|method| method.to_ascii_lowercase().contains(&needle))
-            {
+            if self.payment_method_match(payment_method) == PaymentMethodMatch::No {
                 return false;
             }
         }
         true
+    }
+}
+
+fn canonical_payment_method(value: &str) -> String {
+    let normalized = value
+        .chars()
+        .filter(|character| character.is_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect::<String>();
+    match normalized.as_str() {
+        "tbank" | "tinkoffbank" => "tinkoff".into(),
+        "sber" => "sberbank".into(),
+        other => other.into(),
     }
 }
 
@@ -211,8 +252,20 @@ impl P2pSearchService {
         }
         if config.p2p_bybit_enabled {
             sources.push(Arc::new(BybitP2pSource::new(
-                client,
+                client.clone(),
                 config.p2p_bybit_url.clone(),
+            )));
+        }
+        if config.p2p_okx_enabled {
+            sources.push(Arc::new(OkxP2pSource::new(
+                client.clone(),
+                config.p2p_okx_url.clone(),
+            )));
+        }
+        if config.p2p_bitget_enabled {
+            sources.push(Arc::new(BitgetP2pSource::new(
+                client,
+                config.p2p_bitget_url.clone(),
             )));
         }
         Ok(Self {
@@ -537,5 +590,25 @@ mod tests {
         assert!(!first.cached);
         assert!(second.cached);
         assert_eq!(first.offers, second.offers);
+    }
+
+    #[test]
+    fn payment_filter_keeps_opaque_ids_but_rejects_known_mismatch() {
+        let mut numeric = offer("bybit", "360", "1", "100000", 20);
+        numeric.payment_methods = vec!["18".into(), "40".into()];
+        assert_eq!(
+            numeric.payment_method_match("Sberbank"),
+            PaymentMethodMatch::Unknown
+        );
+
+        let known = offer("bitget", "360", "1", "100000", 20);
+        assert_eq!(
+            known.payment_method_match("Ameriabank"),
+            PaymentMethodMatch::No
+        );
+        assert_eq!(
+            known.payment_method_match("ID Bank"),
+            PaymentMethodMatch::Exact
+        );
     }
 }
