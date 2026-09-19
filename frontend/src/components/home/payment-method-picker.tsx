@@ -8,6 +8,7 @@ import {
   paymentMethodsFor,
 } from "@/lib/payment-methods";
 
+import { BankLogo } from "./bank-logo";
 import styles from "./payment-method-picker.module.css";
 
 export interface PaymentLocation {
@@ -99,13 +100,7 @@ export function PaymentMethodPicker({
         data-selected={isSelected || undefined}
         onClick={() => onSelect(method)}
       >
-        <span
-          className={styles.methodLogo}
-          style={{ backgroundColor: method.color }}
-          aria-hidden="true"
-        >
-          {method.initials}
-        </span>
+        <BankLogo className={styles.methodLogo} method={method} fallback={method.initials} />
         <span className={styles.methodCopy}>
           <span className={styles.methodName}>{method.name}</span>
           <span className={styles.methodMeta}>

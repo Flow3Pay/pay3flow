@@ -12,6 +12,7 @@ import {
 import { PaymentMethod, paymentMethodsFor } from "@/lib/payment-methods";
 
 import { PaymentMethodPicker } from "./payment-method-picker";
+import { BankLogo } from "./bank-logo";
 import { SidePanel } from "./side-panel";
 import styles from "./converter.module.css";
 
@@ -20,6 +21,10 @@ type RefreshSeconds = 0 | 5 | 15 | 30 | 60;
 const REFRESH_OPTIONS: RefreshSeconds[] = [0, 5, 15, 30, 60];
 const AMOUNT_STORAGE_KEY = "pay3flow.exchange.amount";
 const REFRESH_STORAGE_KEY = "pay3flow.exchange.refresh-seconds";
+const CORRIDOR_STORAGE_KEY = "pay3flow.exchange.corridor";
+const SOURCE_METHOD_STORAGE_KEY = "pay3flow.exchange.source-method";
+const TARGET_METHOD_STORAGE_KEY = "pay3flow.exchange.target-method";
+const DIRECTION_STORAGE_KEY = "pay3flow.exchange.direction-reversed";
 
 interface SharedExchange {
   sourceCurrency: string;
@@ -143,8 +148,16 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
       try {
         const sharedExchange = readSharedExchange();
         const savedAmount = window.localStorage.getItem(AMOUNT_STORAGE_KEY);
+        const savedCorridorId = window.localStorage.getItem(CORRIDOR_STORAGE_KEY);
+        const savedSourceMethodId = window.localStorage.getItem(SOURCE_METHOD_STORAGE_KEY);
+        const savedTargetMethodId = window.localStorage.getItem(TARGET_METHOD_STORAGE_KEY);
+        const savedDirection = window.localStorage.getItem(DIRECTION_STORAGE_KEY);
         if (sharedExchange?.amount) setAmount(sharedExchange.amount);
         else if (savedAmount) setAmount(savedAmount);
+        if (savedCorridorId) setCorridorId(savedCorridorId);
+        if (savedSourceMethodId) setSourceMethodId(savedSourceMethodId);
+        if (savedTargetMethodId) setTargetMethodId(savedTargetMethodId);
+        if (savedDirection != null) setDirectionReversed(savedDirection === "true");
 
         const savedRefresh = Number(window.localStorage.getItem(REFRESH_STORAGE_KEY));
         if (REFRESH_OPTIONS.includes(savedRefresh as RefreshSeconds)) {
@@ -175,6 +188,42 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
       // Local storage can be unavailable when the browser blocks site data.
     }
   }, [refreshSeconds]);
+
+  useEffect(() => {
+    if (!preferencesLoadedRef.current) return;
+    try {
+      window.localStorage.setItem(CORRIDOR_STORAGE_KEY, corridorId);
+    } catch {
+      // Local storage can be unavailable when the browser blocks site data.
+    }
+  }, [corridorId]);
+
+  useEffect(() => {
+    if (!preferencesLoadedRef.current) return;
+    try {
+      window.localStorage.setItem(SOURCE_METHOD_STORAGE_KEY, sourceMethodId);
+    } catch {
+      // Local storage can be unavailable when the browser blocks site data.
+    }
+  }, [sourceMethodId]);
+
+  useEffect(() => {
+    if (!preferencesLoadedRef.current) return;
+    try {
+      window.localStorage.setItem(TARGET_METHOD_STORAGE_KEY, targetMethodId);
+    } catch {
+      // Local storage can be unavailable when the browser blocks site data.
+    }
+  }, [targetMethodId]);
+
+  useEffect(() => {
+    if (!preferencesLoadedRef.current) return;
+    try {
+      window.localStorage.setItem(DIRECTION_STORAGE_KEY, String(directionReversed));
+    } catch {
+      // Local storage can be unavailable when the browser blocks site data.
+    }
+  }, [directionReversed]);
 
   const corridor = useMemo(
     () => corridors.find((item) => item.id === corridorId) ?? corridors[0],
@@ -248,6 +297,8 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
     fetchCorridors()
       .then((response) => {
         const sharedExchange = readSharedExchange();
+        const savedCorridorId = window.localStorage.getItem(CORRIDOR_STORAGE_KEY);
+        const savedDirection = window.localStorage.getItem(DIRECTION_STORAGE_KEY);
         const sharedCorridor = sharedExchange
           ? response.items.find(
               (item) =>
@@ -259,13 +310,18 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
           : null;
 
         setCorridors(response.items);
-        setCorridorId((current) => current || sharedCorridor?.id || response.items[0]?.id || "");
+        setCorridorId(
+          (current) =>
+            current || sharedCorridor?.id || savedCorridorId || response.items[0]?.id || "",
+        );
         if (
           sharedExchange &&
           sharedCorridor?.source_currency === sharedExchange.targetCurrency &&
           sharedCorridor.target_currency === sharedExchange.sourceCurrency
         ) {
           setDirectionReversed(true);
+        } else if (savedDirection != null) {
+          setDirectionReversed(savedDirection === "true");
         }
         urlReadyRef.current = true;
       })
@@ -580,9 +636,11 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
               onClick={() => setMethodPicker("source")}
               aria-label={`Select sending bank: ${sourceMethod?.name ?? "none"}`}
             >
-              <span className={styles.methodAvatar} style={{ backgroundColor: sourceMethod?.color ?? "#171a17" }} aria-hidden="true">
-                {sourceMethod?.initials ?? corridor?.source_country ?? "—"}
-              </span>
+              <BankLogo
+                className={styles.methodAvatar}
+                method={sourceMethod}
+                fallback={corridor?.source_country ?? "—"}
+              />
               <span className={styles.methodText}>
                 <strong>{sourceMethod?.name ?? "Select bank"}</strong>
                 <small>{corridor ? locationLabel(sourceCountry, sourceCurrency) : "Unavailable"}</small>
@@ -625,9 +683,11 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
               onClick={() => setMethodPicker("target")}
               aria-label={`Select recipient bank: ${targetMethod?.name ?? "none"}`}
             >
-              <span className={styles.methodAvatar} style={{ backgroundColor: targetMethod?.color ?? "#171a17" }} aria-hidden="true">
-                {targetMethod?.initials ?? corridor?.target_country ?? "—"}
-              </span>
+              <BankLogo
+                className={styles.methodAvatar}
+                method={targetMethod}
+                fallback={corridor?.target_country ?? "—"}
+              />
               <span className={styles.methodText}>
                 <strong>{targetMethod?.name ?? "Select bank"}</strong>
                 <small>{corridor ? locationLabel(targetCountry, targetCurrency) : "Unavailable"}</small>
@@ -638,46 +698,48 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
             </button>
           </div>
 
-          <div className={styles.marketBar}>
-            <div className={styles.marketState}>
-              <span
-                className={styles.refreshProgress}
-                role="img"
-                aria-label={secondsUntilRefresh === null ? "Auto-refresh is off" : `Refresh in ${secondsUntilRefresh} seconds`}
-              >
-                <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-                  <circle className={styles.refreshTrack} cx="9" cy="9" r="7" pathLength="100" />
-                  <circle
-                    className={styles.refreshFill}
-                    cx="9"
-                    cy="9"
-                    r="7"
-                    pathLength="100"
-                    style={{ strokeDashoffset: `${100 - refreshProgress}` }}
-                  />
-                </svg>
-              </span>
-              <div>
-                <strong>
-                  {searching
-                    ? "Comparing live offers"
-                    : routes.length
-                      ? `${routes.length} executable estimates`
-                      : hasAmount
-                        ? "Ready to search"
-                        : "Enter an amount"}
-                </strong>
-                <span>
-                  {lastUpdatedAt
-                    ? `Updated ${Math.max(0, Math.floor((clock - lastUpdatedAt) / 1_000))}s ago`
-                    : "Binance · Bybit · OKX · Bitget"}
+          {refreshSeconds > 0 && (
+            <div className={styles.marketBar}>
+              <div className={styles.marketState}>
+                <span
+                  className={styles.refreshProgress}
+                  role="img"
+                  aria-label={secondsUntilRefresh === null ? "Auto-refresh is off" : `Refresh in ${secondsUntilRefresh} seconds`}
+                >
+                  <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+                    <circle className={styles.refreshTrack} cx="9" cy="9" r="7" pathLength="100" />
+                    <circle
+                      className={styles.refreshFill}
+                      cx="9"
+                      cy="9"
+                      r="7"
+                      pathLength="100"
+                      style={{ strokeDashoffset: `${100 - refreshProgress}` }}
+                    />
+                  </svg>
                 </span>
+                <div>
+                  <strong>
+                    {searching
+                      ? "Comparing live offers"
+                      : routes.length
+                        ? `${routes.length} executable estimates`
+                        : hasAmount
+                          ? "Ready to search"
+                          : "Enter an amount"}
+                  </strong>
+                  <span>
+                    {lastUpdatedAt
+                      ? `Updated ${Math.max(0, Math.floor((clock - lastUpdatedAt) / 1_000))}s ago`
+                      : "Binance · Bybit · OKX · Bitget"}
+                  </span>
+                </div>
               </div>
+              {secondsUntilRefresh !== null && (
+                <span className={styles.nextRefresh}>{secondsUntilRefresh}s</span>
+              )}
             </div>
-            {secondsUntilRefresh !== null && (
-              <span className={styles.nextRefresh}>{secondsUntilRefresh}s</span>
-            )}
-          </div>
+          )}
 
           <button
             type="button"

@@ -214,3 +214,25 @@ export function paymentMethodsFor(
       (method.role === role || method.role === "both"),
   );
 }
+
+const PAYMENT_METHOD_DOMAINS: Record<string, string> = {
+  "am-ameriabank": "ameriabank.am",
+  "am-idbank": "idbank.am",
+  "am-acba": "acba.am",
+  "am-ardshinbank": "ardshinbank.am",
+  "am-inecobank": "inecobank.am",
+  "am-evocabank": "evoca.am",
+  "am-vtb": "vtb.am",
+  "ru-sberbank": "sberbank.ru",
+  "ru-tbank": "tbank.ru",
+  "ru-alfabank": "alfabank.ru",
+  "ru-vtb": "vtb.ru",
+  "ru-gazprombank": "gazprombank.ru",
+  "ru-raiffeisen": "raiffeisen.ru",
+  "ru-ozon": "ozon.ru",
+};
+
+export function paymentMethodFavicon(method: PaymentMethod | null | undefined): string | null {
+  const domain = method ? PAYMENT_METHOD_DOMAINS[method.id] : undefined;
+  return domain ? `https://${domain}/favicon.ico` : null;
+}

@@ -177,6 +177,7 @@
 }
 
 .methodLogo {
+  position: relative;
   display: grid;
   width: 46px;
   height: 46px;
@@ -189,6 +190,16 @@
   font-size: 11px;
   font-weight: 850;
   letter-spacing: 0.03em;
+}
+
+.methodLogo img {
+  position: absolute;
+  inset: 5px;
+  width: calc(100% - 10px);
+  height: calc(100% - 10px);
+  border-radius: 10px;
+  background: #fff;
+  object-fit: contain;
 }
 
 .methodCopy,
