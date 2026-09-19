@@ -408,7 +408,6 @@
   width: calc(100% - 10px);
   height: calc(100% - 10px);
   border-radius: 10px;
-  background: #fff;
   object-fit: contain;
 }
 

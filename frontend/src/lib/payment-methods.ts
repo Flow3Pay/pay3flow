@@ -223,13 +223,13 @@ const PAYMENT_METHOD_DOMAINS: Record<string, string> = {
   "am-inecobank": "inecobank.am",
   "am-evocabank": "evoca.am",
   "am-vtb": "vtb.am",
-  "ru-sberbank": "sberbank.ru",
+  "ru-sberbank": "sber-bank.by",
   "ru-tbank": "tbank.ru",
-  "ru-alfabank": "alfabank.ru",
-  "ru-vtb": "vtb.ru",
-  "ru-gazprombank": "gazprombank.ru",
+  "ru-alfabank": "alfabank.by",
+  "ru-vtb": "vtb.by",
+  "ru-gazprombank": "www.gazprombank.ru",
   "ru-raiffeisen": "raiffeisen.ru",
-  "ru-ozon": "ozon.ru",
+  "ru-ozon": "finance.ozon.ru",
 };
 
 export function paymentMethodFavicon(method: PaymentMethod | null | undefined): string | null {

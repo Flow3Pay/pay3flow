@@ -10,7 +10,11 @@ export function BankLogo({ method, className, fallback }: BankLogoProps) {
   const favicon = paymentMethodFavicon(method);
 
   return (
-    <span className={className} style={{ backgroundColor: method?.color ?? "#171a17" }} aria-hidden="true">
+    <span
+      className={className}
+      style={{ backgroundColor: favicon ? "transparent" : method?.color ?? "#171a17" }}
+      aria-hidden="true"
+    >
       {favicon && (
         <img
           src={favicon}
