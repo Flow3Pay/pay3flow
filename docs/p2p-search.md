@@ -11,6 +11,13 @@ money.
 - OKX public web P2P advertisement list.
 - Bitget public web P2P advertisement list.
 
+These are the four sources currently implemented and enabled by default. Other
+venues from the research list are intentionally not presented as live sources:
+MEXC's official P2P Open API requires merchant/API access, OKX's merchant API
+has separate eligibility requirements, and no stable public advertisement API
+has been approved for BingX or the remaining venues. Adding a venue requires a
+dedicated adapter and an explicit decision about its official API access.
+
 All sources are queried concurrently. A timeout or parsing failure from one
 source is returned in `sources` without discarding successful results from the
 other source. Successful leg searches are cached in memory for five seconds by

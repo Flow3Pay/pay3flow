@@ -974,7 +974,7 @@ order переходит в done.
 
 Минимальный frontend не должен быть маркетинговой страницей. Нужен рабочий кабинет.
 
-Важно: frontend в целом считать почти готовым. Не нужно планировать большую переделку интерфейса. Основная оставшаяся работа: подключить live-поиск связок и показать найденные маршруты в боковой панели.
+Важно: frontend MVP уже покрывает live read-only поиск связок и отображение найденных маршрутов в боковой панели. Дальнейшая работа относится к production settlement, расширению источников ликвидности и hardening, а не к базовой форме поиска.
 
 Страницы:
 
@@ -1032,6 +1032,16 @@ order переходит в done.
 - приватные actor keys;
 - raw proof, если он содержит чувствительные данные.
 - misleading текст вроде "мы просто переводим деньги напрямую", если route использует TOKEN/crypto settlement.
+
+### Реализованные frontend-улучшения
+
+- Live read-only поиск связок через GET /api/p2p/routes.
+- Автоматический выбор текущего лучшего complete route после поиска.
+- Сохранение суммы, refresh timeout, направления, коридора и выбранных банков в localStorage.
+- Восстановление обмена после перезагрузки: например, VTB -> Ameriabank не возвращается к дефолтному Sberbank -> Ameriabank.
+- Shareable URL формата #/swap/AMD/RUB?amount=100000; при открытии URL восстанавливаются валюты и сумма.
+- Компактный круговой индикатор refresh; при выключенном refresh статусный блок полностью скрывается.
+- Реальные favicon банков с fallback на инициалы, если внешний favicon недоступен.
 
 ## 16. Безопасность И Комплаенс
 
@@ -1123,7 +1133,7 @@ AMD -> crypto -> RUB найдено
 - `exchange_quotes` остаётся storage/API-слоем для complete routes.
 - Для live UI нужна отдельная модель route candidate/связки, даже если она
   мапится на quote после complete route.
-- Mock implementation для MVP должна симулировать минимум такие связки:
+- Mock exchange/live implementation для старого order/solver flow должна симулировать минимум такие связки:
 
 ```text
 AMD -> USDT ERC20 -> RUB
@@ -1132,7 +1142,8 @@ AMD -> BTC Binance -> RUB
 AMD -> SOL Solana -> RUB
 ```
 
-- Не нужно подключать реальные crypto/DEX/CEX providers на этом этапе.
+- Отдельный read-only P2P search layer уже подключает реальные public advertisement endpoints
+  Binance, Bybit, OKX и Bitget; он не исполняет сделки и не заменяет mock settlement flow.
 
 ### Frontend MVP flow
 
@@ -1464,6 +1475,12 @@ PLAN2".
 - [x] EX-10.12. UI должен быть простым: пользователь видит перевод, сумму, курс, комиссию, ETA и условия; technical TOKEN details можно раскрывать в details/terms.
 - [x] EX-10.13. Боковая панель не ждёт окончания всего поиска: новые связки появляются по мере нахождения.
 - [x] EX-10.14. Пользователь может подтвердить только complete связку, partial route остаётся informational/loading.
+- [x] EX-10.15. Подключить read-only /api/p2p/routes для live-связок fiat -> asset -> fiat.
+- [x] EX-10.16. Автоматически выбирать лучший complete route после получения результатов.
+- [x] EX-10.17. Сохранять сумму, refresh timeout, коридор, направление и выбранные банки.
+- [x] EX-10.18. Восстанавливать сохранённый обмен после перезагрузки страницы.
+- [x] EX-10.19. Добавить shareable URL с направлением и суммой обмена.
+- [x] EX-10.20. Добавить favicon банков с безопасным fallback на инициалы.
 
 Приёмка:
 
@@ -1570,6 +1587,8 @@ nix shell nixpkgs#cargo nixpkgs#rustc nixpkgs#rustfmt -c cargo fmt
 
 ## 18. Статус Выполнения
 
-Все фазы EX-0—EX-12 реализованы. MVP остаётся в mock/fake режиме: включение
-реальных денег, выбор расчётного TOKEN/stablecoin, подключение production rails и
-solver'ов требуют отдельного решения владельца, юридического и комплаенс-чека.
+Все фазы EX-0—EX-12 реализованы. Settlement и solver order flow остаются
+mock/fake, но read-only P2P route search работает через реальные публичные
+источники Binance, Bybit, OKX и Bitget. Включение реальных денег, выбор
+расчётного TOKEN/stablecoin, подключение production rails и production solver'ов
+требуют отдельного решения владельца, юридического и комплаенс-чека.
