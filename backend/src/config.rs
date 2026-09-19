@@ -41,6 +41,10 @@ pub struct Config {
     pub p2p_bitget_enabled: bool,
     pub p2p_bitget_url: String,
     pub p2p_search_assets: Vec<String>,
+    /// Self-hosted EVM wallet keystore. Disabled when the path is empty.
+    pub wallet_keystore_path: String,
+    pub wallet_keystore_password: String,
+    pub wallet_rpc_url: String,
 }
 
 impl Config {
@@ -112,6 +116,9 @@ impl Config {
                 .map(|asset| asset.trim().to_ascii_uppercase())
                 .filter(|asset| !asset.is_empty())
                 .collect(),
+            wallet_keystore_path: env::var("WALLET_KEYSTORE_PATH").unwrap_or_default(),
+            wallet_keystore_password: env::var("WALLET_KEYSTORE_PASSWORD").unwrap_or_default(),
+            wallet_rpc_url: env::var("WALLET_RPC_URL").unwrap_or_default(),
         })
     }
 }

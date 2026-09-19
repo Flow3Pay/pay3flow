@@ -65,6 +65,9 @@ services:
       P2P_OKX_ENABLED: "true"
       P2P_BITGET_ENABLED: "true"
       P2P_SEARCH_ASSETS: "USDT,USDC,BTC,ETH"
+      WALLET_KEYSTORE_PATH: ${WALLET_KEYSTORE_PATH:-}
+      WALLET_KEYSTORE_PASSWORD: ${WALLET_KEYSTORE_PASSWORD:-}
+      WALLET_RPC_URL: ${WALLET_RPC_URL:-http://host.docker.internal:8545}
     volumes:
       - backend_data:/app/data
     depends_on:

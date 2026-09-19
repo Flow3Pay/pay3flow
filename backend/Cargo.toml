@@ -5,6 +5,7 @@ edition = "2021"
 publish = false
 
 [dependencies]
+alloy = { version = "2.4.2", features = ["provider-http", "signer-local", "signer-keystore"] }
 anyhow = "1"
 aes-gcm = "0.10"
 async-trait = "0.1"
