@@ -91,6 +91,8 @@ function mapRoutes(response: Awaited<ReturnType<typeof fetchP2pRoutes>>): RouteC
       is_current_best: index === 0,
       is_live_market: true,
       payment_methods_verified: route.payment_methods_verified,
+      entry_offer_url: route.entry_offer.source_url,
+      exit_offer_url: route.exit_offer.source_url,
       legs: [
         {
           kind: "entry",
@@ -132,6 +134,10 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
   const [directionReversed, setDirectionReversed] = useState(false);
   const [methodPicker, setMethodPicker] = useState<"source" | "target" | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
+  const [exchangeModalOpen, setExchangeModalOpen] = useState(false);
+  const [sourceCardLast4, setSourceCardLast4] = useState("");
+  const [targetCardLast4, setTargetCardLast4] = useState("");
   const [refreshSeconds, setRefreshSeconds] = useState<RefreshSeconds>(15);
   const [searching, setSearching] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
@@ -502,19 +508,6 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
   }, [amount, corridor, sourceCurrency, sourceMethod, targetCurrency, targetMethod]);
 
   useEffect(() => {
-    if (
-      !hasAmount ||
-      !corridor ||
-      !sourceMethod ||
-      !targetMethod ||
-      searching ||
-      routes.length > 0
-    ) return;
-    const timer = window.setTimeout(() => void startSearch(), 650);
-    return () => window.clearTimeout(timer);
-  }, [corridor, hasAmount, routes.length, searching, sourceMethod, startSearch, targetMethod]);
-
-  useEffect(() => {
     if (!refreshSeconds || !lastUpdatedAt || !hasAmount) return;
     const timer = window.setInterval(() => void startSearch(), refreshSeconds * 1_000);
     return () => window.clearInterval(timer);
@@ -538,6 +531,28 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
     resetResults();
   };
 
+  const openSearchModal = () => {
+    if (!hasAmount || searching || !corridor) return;
+    setSearchModalOpen(true);
+  };
+
+  const openExchangeModal = () => {
+    if (!selected || selected.status !== "complete" || !corridor) return;
+    setError(null);
+    setExchangeModalOpen(true);
+  };
+
+  const handleExchangeClick = () => {
+    if (selected?.status === "complete") openExchangeModal();
+    else openSearchModal();
+  };
+
+  const submitSearchDetails = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSearchModalOpen(false);
+    void startSearch();
+  };
+
   return (
     <section className={styles.shell} id="transfer">
       <div className={styles.hero}>
@@ -548,15 +563,15 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
       <div className={styles.workspace}>
         <div className={styles.card}>
           <div className={styles.cardTop}>
-            <div className={styles.modeTabs} aria-label="Transfer mode">
-              <button type="button" className={styles.modeActive}>Transfer</button>
+            <div className={styles.modeTabs} aria-label="Exchange mode">
+              <button type="button" className={styles.modeActive}>Exchange</button>
               <button type="button" disabled>History</button>
             </div>
             <div className={styles.cardActions}>
               <button
                 type="button"
                 className={styles.refreshButton}
-                onClick={() => void startSearch()}
+                onClick={openSearchModal}
                 disabled={!hasAmount || searching}
                 aria-label="Refresh routes now"
               >
@@ -612,7 +627,7 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
           </div>
 
           <div className={styles.intentLabel}>
-            <span>Create transfer intent</span>
+            <span>Create exchange intent</span>
             <span className={styles.intentStatus}>{searching ? "Scanning markets" : "Live routing"}</span>
           </div>
 
@@ -731,7 +746,7 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
                   <span>
                     {lastUpdatedAt
                       ? `Updated ${Math.max(0, Math.floor((clock - lastUpdatedAt) / 1_000))}s ago`
-                      : "Binance · Bybit · OKX · Bitget"}
+                    : "Public P2P sources only · no order placement"}
                   </span>
                 </div>
               </div>
@@ -745,15 +760,14 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
             type="button"
             className={styles.cta}
             disabled={!hasAmount || searching || !corridor}
-            onClick={() => void startSearch()}
+            onClick={handleExchangeClick}
             data-testid="start-search"
+            aria-label="Start exchange"
           >
             {searching ? (
               <><span className={styles.spinner} /> Searching every path</>
-            ) : routes.length ? (
-              <>Refresh {routes.length} live routes <span>↗</span></>
             ) : hasAmount ? (
-              <>Find the best route <span>→</span></>
+              <>Exchange <span>↗</span></>
             ) : (
               "Enter an amount to begin"
             )}
@@ -803,6 +817,106 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
         onLocationSelect={(location) => chooseTargetLocation(locationKey(location.country, location.currency))}
         onSelect={chooseTargetMethod}
       />
+
+      {searchModalOpen && (
+        <div className={styles.authBackdrop} onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setSearchModalOpen(false);
+        }}>
+          <div className={styles.authModal} role="dialog" aria-modal="true" aria-labelledby="search-title">
+            <form className={styles.authBox} onSubmit={submitSearchDetails} data-testid="search-details-form">
+              <div className={styles.authBrand}>
+                <span className={styles.authMark}>P3</span>
+                <span>PUBLIC P2P SEARCH</span>
+              </div>
+              <div className={styles.authCopy}>
+                <span className={styles.authEyebrow}>Before we scan</span>
+                <strong id="search-title">Tell us the payment details.</strong>
+                <p>We use these details only to filter public offers. Full card numbers, CVV and passwords are never needed.</p>
+              </div>
+              <div className={styles.searchSummary}>
+                <span>{amount} {sourceCurrency}</span>
+                <span>→</span>
+                <span>{targetCurrency}</span>
+              </div>
+              <label className={styles.fieldLabel}>
+                Sender card — last 4 digits <span className={styles.optionalLabel}>optional</span>
+                <input
+                  className={styles.textInput}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={4}
+                  pattern="[0-9]{4}"
+                  value={sourceCardLast4}
+                  onChange={(event) => setSourceCardLast4(event.target.value.replace(/\\D/g, "").slice(0, 4))}
+                  placeholder="1234"
+                />
+              </label>
+              <label className={styles.fieldLabel}>
+                Recipient card — last 4 digits <span className={styles.optionalLabel}>optional</span>
+                <input
+                  className={styles.textInput}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={4}
+                  pattern="[0-9]{4}"
+                  value={targetCardLast4}
+                  onChange={(event) => setTargetCardLast4(event.target.value.replace(/\\D/g, "").slice(0, 4))}
+                  placeholder="5678"
+                />
+              </label>
+              <div className={styles.demoNote}><span>Read-only</span> Search shows public offers and does not place an order.</div>
+              <button className={styles.secondaryButton} type="submit">
+                Find exchange routes
+              </button>
+              <button className={styles.modalCancel} type="button" onClick={() => setSearchModalOpen(false)}>
+                Cancel
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {exchangeModalOpen && selected && (
+        <div className={styles.authBackdrop} onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setExchangeModalOpen(false);
+        }}>
+          <div className={styles.authModal} role="dialog" aria-modal="true" aria-labelledby="exchange-title">
+            <div className={styles.authBox}>
+              <div className={styles.authBrand}>
+                <span className={styles.authMark}>P3</span>
+                <span>PAY3FLOW EXCHANGE</span>
+              </div>
+              <div className={styles.authCopy}>
+                <span className={styles.authEyebrow}>Selected P2P route</span>
+                <strong id="exchange-title">Review the P2P exchange.</strong>
+                <p>Pay3Flow only shows the route. Payment and settlement happen directly through the P2P provider.</p>
+              </div>
+              <div className={styles.searchSummary}>
+                <span>{amount} {sourceCurrency}</span>
+                <span>→</span>
+                <strong>{amountFromMinor(selected.target_amount_minor)} {selected.target_currency}</strong>
+              </div>
+              <div className={styles.exchangeReview}>
+                <div><span>Pay from</span><strong>{sourceMethod?.name}</strong></div>
+                <div><span>Pay to</span><strong>{targetMethod?.name}</strong></div>
+                <div><span>Route</span><strong>{selected.entry_asset} · {selected.entry_network}</strong></div>
+                <div><span>Estimated time</span><strong>{selected.eta_minutes ? `${selected.eta_minutes} min` : "Live estimate"}</strong></div>
+              </div>
+              <div className={styles.demoNote}><span>Read-only</span> No funds are collected, held or transferred by Pay3Flow.</div>
+              <div className={styles.p2pLinks}>
+                {selected.entry_offer_url && <a href={selected.entry_offer_url} target="_blank" rel="noreferrer">Open entry P2P offer ↗</a>}
+                {selected.exit_offer_url && <a href={selected.exit_offer_url} target="_blank" rel="noreferrer">Open exit P2P offer ↗</a>}
+              </div>
+              <button className={styles.secondaryButton} type="button" onClick={() => setExchangeModalOpen(false)}>
+                Continue to P2P
+              </button>
+              <button className={styles.modalCancel} type="button" onClick={() => setExchangeModalOpen(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {!token && (
         <div className={styles.authBackdrop}>

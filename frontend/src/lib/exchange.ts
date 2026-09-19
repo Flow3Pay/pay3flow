@@ -71,6 +71,8 @@ export interface RouteCandidate {
   is_current_best?: boolean;
   is_live_market?: boolean;
   payment_methods_verified?: boolean;
+  entry_offer_url?: string;
+  exit_offer_url?: string;
   legs: RouteLeg[];
 }
 
