@@ -29,6 +29,41 @@
     0 22px 48px rgba(55, 77, 52, 0.08), 0 2px 8px rgba(55, 77, 52, 0.04);
   --shadow-pop: 0 26px 80px rgba(17, 20, 18, 0.18), 0 3px 12px rgba(17, 20, 18, 0.08);
   --page-bg: #f3f5ef;
+  --shell-glow: rgba(255, 255, 255, 0.72);
+  --shell-gradient: linear-gradient(180deg, #f8faf5 0%, #f3f5ef 58%, #edf1e9 100%);
+  --puzzle-opacity: 0.1;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --color-bg: #0b0e0c;
+  --color-paper: #151916;
+  --color-panel: #1b211c;
+  --color-panel-soft: rgba(255, 255, 255, 0.055);
+  --color-text: #f0f4ed;
+  --color-text-soft: #a6b0a4;
+  --color-text-faint: #717c70;
+  --color-primary: #eef5ec;
+  --color-primary-strong: #ffffff;
+  --color-accent: #b5f500;
+  --color-accent-strong: #c5ff22;
+  --color-accent-soft: rgba(181, 245, 0, 0.13);
+  --color-violet: #a28dff;
+  --color-violet-soft: rgba(162, 141, 255, 0.14);
+  --color-good: #62ce79;
+  --color-warn: #f0a659;
+  --color-danger: #ff7770;
+  --color-warn-bg: rgba(240, 166, 89, 0.12);
+  --color-border: rgba(207, 225, 204, 0.12);
+  --color-border-strong: rgba(207, 225, 204, 0.2);
+  --color-text-invert: #101410;
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 24px 60px rgba(0, 0, 0, 0.34), 0 2px 10px rgba(0, 0, 0, 0.22);
+  --shadow-pop: 0 28px 90px rgba(0, 0, 0, 0.58), 0 3px 14px rgba(0, 0, 0, 0.35);
+  --page-bg: #0b0e0c;
+  --shell-glow: rgba(61, 85, 54, 0.16);
+  --shell-gradient: linear-gradient(180deg, #101510 0%, #0b0e0c 58%, #080a09 100%);
+  --puzzle-opacity: 0.055;
 }
 
 html {
@@ -82,7 +117,8 @@ button {
   overflow: hidden;
   background:
     radial-gradient(circle at 18% 10%, rgba(181, 245, 0, 0.08), transparent 24%),
-    linear-gradient(180deg, #f8faf5 0%, #f3f5ef 58%, #edf1e9 100%);
+    var(--shell-gradient);
+  transition: background 0.28s ease, color 0.28s ease;
 }
 
 .appShell::before {
@@ -90,7 +126,7 @@ button {
   inset: 0;
   z-index: -1;
   content: "";
-  opacity: 0.1;
+  opacity: var(--puzzle-opacity);
   background-image: var(--puzzle-pattern, none);
   background-position: 14px 6px;
   background-size: 420px 280px;
@@ -105,7 +141,7 @@ button {
   width: min(1040px, 92vw);
   height: 620px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--shell-glow);
   filter: blur(110px);
   content: "";
   transform: translateX(-50%);

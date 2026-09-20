@@ -261,3 +261,24 @@
 .rail {
   border-color: var(--color-border-strong);
 }
+
+:global(html[data-theme="dark"]) .panel {
+  border-color: var(--color-border-strong);
+  background: rgba(19, 24, 20, 0.99);
+  box-shadow: var(--shadow-pop);
+}
+
+:global(html[data-theme="dark"]) .search,
+:global(html[data-theme="dark"]) .row:hover {
+  border-color: #39443a;
+  background: #242b25;
+}
+
+:global(html[data-theme="dark"]) .row[data-selected] {
+  border-color: rgba(181, 245, 0, 0.32);
+  background: rgba(181, 245, 0, 0.09);
+}
+
+:global(html[data-theme="dark"]) .avatarIcon {
+  background: #242b25;
+}

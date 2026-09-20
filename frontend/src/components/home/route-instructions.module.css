@@ -362,3 +362,30 @@
     font-size: 23px;
   }
 }
+
+:global(html[data-theme="dark"]) .modal {
+  border-color: var(--color-border-strong);
+  background: rgba(19, 24, 20, 0.99);
+  box-shadow: var(--shadow-pop);
+}
+
+:global(html[data-theme="dark"]) .closeButton,
+:global(html[data-theme="dark"]) .step,
+:global(html[data-theme="dark"]) .counterparty {
+  border-color: #354036;
+  background: #1b211c;
+}
+
+:global(html[data-theme="dark"]) .step:hover {
+  border-color: #526252;
+  background: #222a23;
+}
+
+:global(html[data-theme="dark"]) .avatarVenue {
+  border-color: #1b211c;
+  background: #ffffff;
+}
+
+:global(html[data-theme="dark"]) .profileBadge {
+  color: var(--color-accent);
+}
