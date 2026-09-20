@@ -24,6 +24,7 @@ const P2P_SOURCES = [
   { id: "bybit", label: "Bybit" },
   { id: "okx", label: "OKX" },
   { id: "bitget", label: "Bitget" },
+  { id: "rapira", label: "Rapira" },
 ] as const;
 type P2pSource = (typeof P2P_SOURCES)[number]["id"];
 const DEFAULT_P2P_SOURCES = P2P_SOURCES.map((source) => source.id);

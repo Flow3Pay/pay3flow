@@ -11,6 +11,7 @@ const VENUE_NAMES: Record<string, string> = {
   bitget: "Bitget",
   bybit: "Bybit",
   okx: "OKX",
+  rapira: "Rapira",
 };
 
 const venueName = (value: string | undefined) =>

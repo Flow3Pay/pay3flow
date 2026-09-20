@@ -16,6 +16,7 @@ const VENUE_NAMES: Record<string, string> = {
   bitget: "Bitget",
   bybit: "Bybit",
   okx: "OKX",
+  rapira: "Rapira",
 };
 
 const money = (minor: number | undefined, currency: string | undefined) =>
@@ -175,7 +176,7 @@ export function SidePanel({
               </p>
             </div>
             <div className={styles.emptyVenues}>
-              <span>BINANCE</span><span>BYBIT</span><span>OKX</span><span>BITGET</span>
+              <span>BINANCE</span><span>BYBIT</span><span>OKX</span><span>BITGET</span><span>RAPIRA</span>
             </div>
           </div>
         )}
