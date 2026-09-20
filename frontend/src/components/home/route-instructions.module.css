@@ -15,6 +15,7 @@
   width: min(100%, 560px);
   max-height: min(720px, calc(100vh - 40px));
   overflow-y: auto;
+  scrollbar-width: none;
   padding: 28px;
   border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: 28px;
@@ -22,6 +23,10 @@
   box-shadow: 0 35px 110px rgba(0, 0, 0, 0.3);
   color: var(--color-text);
   animation: modalIn 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.modal::-webkit-scrollbar {
+  display: none;
 }
 
 .header {
