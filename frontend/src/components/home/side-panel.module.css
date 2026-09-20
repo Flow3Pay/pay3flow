@@ -614,15 +614,15 @@
 
 :global(html[data-theme="dark"]) .panel {
   border-color: var(--color-border-strong);
-  background: rgba(19, 24, 20, 0.96);
+  background: rgba(25, 25, 25, 0.96);
   box-shadow: var(--shadow-card);
 }
 
 :global(html[data-theme="dark"]) .routeCard,
 :global(html[data-theme="dark"]) .skeletonCard,
 :global(html[data-theme="dark"]) .emptyNode {
-  border-color: #303a31;
-  background: #171c18;
+  border-color: #383838;
+  background: #202020;
 }
 
 :global(html[data-theme="dark"]) .routeBest,
@@ -632,15 +632,20 @@
 }
 
 :global(html[data-theme="dark"]) .routeRank,
-:global(html[data-theme="dark"]) .workflow,
-:global(html[data-theme="dark"]) .workflowVenue,
 :global(html[data-theme="dark"]) .deltaBadge,
 :global(html[data-theme="dark"]) .emptyVenues span {
-  background: #252d26;
+  background: #2b2b2b;
+}
+
+:global(html[data-theme="dark"]) .workflow,
+:global(html[data-theme="dark"]) .workflowPart,
+:global(html[data-theme="dark"]) .workflowAsset,
+:global(html[data-theme="dark"]) .workflowVenue {
+  background: transparent;
 }
 
 :global(html[data-theme="dark"]) .skeletonShort,
 :global(html[data-theme="dark"]) .skeletonLong,
 :global(html[data-theme="dark"]) .skeletonMedium {
-  background: #303a31;
+  background: #383838;
 }

@@ -1738,21 +1738,21 @@
 /* Dark theme: graphite surfaces with the existing lime route accents. */
 :global(html[data-theme="dark"]) .card {
   border-color: var(--color-border-strong);
-  background: rgba(19, 24, 20, 0.96);
+  background: rgba(25, 25, 25, 0.96);
   box-shadow: var(--shadow-card);
 }
 
 :global(html[data-theme="dark"]) .refreshButton:hover:not(:disabled),
 :global(html[data-theme="dark"]) .settingsButton:hover,
 :global(html[data-theme="dark"]) .modeTabs .modeActive {
-  background: #252c25;
+  background: #292929;
 }
 
 :global(html[data-theme="dark"]) .settingsMenu,
 :global(html[data-theme="dark"]) .authBox,
 :global(html[data-theme="dark"]) .networkDialog {
   border-color: var(--color-border-strong);
-  background: rgba(19, 24, 20, 0.98);
+  background: rgba(25, 25, 25, 0.98);
   box-shadow: var(--shadow-pop);
 }
 
@@ -1765,40 +1765,40 @@
 :global(html[data-theme="dark"]) .moneyPanel,
 :global(html[data-theme="dark"]) .moneyPanelSource,
 :global(html[data-theme="dark"]) .moneyPanelTarget {
-  border-color: #303a31;
-  background: #171c18;
+  border-color: #383838;
+  background: #202020;
 }
 
 :global(html[data-theme="dark"]) .methodTrigger,
 :global(html[data-theme="dark"]) .methodControls .networkButton {
-  border-color: #354036;
-  background: #232a24;
+  border-color: #3b3b3b;
+  background: #2a2a2a;
 }
 
 :global(html[data-theme="dark"]) .methodTrigger:hover,
 :global(html[data-theme="dark"]) .methodControls .networkButton:hover {
-  border-color: #62715f;
-  background: #2a322b;
+  border-color: #626262;
+  background: #323232;
 }
 
 :global(html[data-theme="dark"]) .bridgeLine {
-  background: #354137;
+  background: #404040;
 }
 
 :global(html[data-theme="dark"]) .bridgeIcon {
-  border-color: #43513f;
-  background: #202721;
+  border-color: #505050;
+  background: #272727;
   color: var(--color-accent);
 }
 
 :global(html[data-theme="dark"]) .walletSupport {
-  border-color: #303a31;
+  border-color: #383838;
 }
 
 :global(html[data-theme="dark"]) .walletSupport b {
-  border-color: #171c18;
-  background: #2a332b;
-  color: #d4ddd2;
+  border-color: #202020;
+  background: #313131;
+  color: #dddddd;
 }
 
 :global(html[data-theme="dark"]) .networkButton,
@@ -1816,7 +1816,7 @@
 
 :global(html[data-theme="dark"]) .networkMenu {
   border-color: var(--color-border-strong);
-  background: rgba(22, 27, 23, 0.98);
+  background: rgba(27, 27, 27, 0.98);
   box-shadow: var(--shadow-pop);
 }
 
@@ -1827,12 +1827,12 @@
 }
 
 :global(html[data-theme="dark"]) .cta:disabled {
-  border-color: #303a31;
-  background: #202521;
-  color: #687267;
+  border-color: #383838;
+  background: #262626;
+  color: #707070;
 }
 
 :global(html[data-theme="dark"]) .textInput {
   border-color: var(--color-border-strong);
-  background: #111512;
+  background: #151515;
 }

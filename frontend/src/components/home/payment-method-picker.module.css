@@ -383,32 +383,32 @@
 
 :global(html[data-theme="dark"]) .dialog {
   border-color: var(--color-border-strong);
-  background: rgba(19, 24, 20, 0.99);
+  background: rgba(25, 25, 25, 0.99);
   box-shadow: var(--shadow-pop);
 }
 
 :global(html[data-theme="dark"]) .titleBar {
-  background: #171c18;
+  background: #202020;
 }
 
 :global(html[data-theme="dark"]) .backButton,
 :global(html[data-theme="dark"]) .searchBox,
 :global(html[data-theme="dark"]) .countryHead,
 :global(html[data-theme="dark"]) .countryMark {
-  border-color: #354036;
-  background: #232a24;
+  border-color: #3b3b3b;
+  background: #2a2a2a;
 }
 
 :global(html[data-theme="dark"]) .searchBox:focus-within {
   border-color: var(--color-accent-strong);
-  background: #171c18;
+  background: #202020;
 }
 
 :global(html[data-theme="dark"]) .methodRow:hover,
 :global(html[data-theme="dark"]) .countryButton:hover,
 :global(html[data-theme="dark"]) .countryButton[aria-pressed="true"] {
-  border-color: #455346;
-  background: #242c25;
+  border-color: #4b4b4b;
+  background: #2d2d2d;
 }
 
 :global(html[data-theme="dark"]) .methodRow[data-selected] {

@@ -365,24 +365,24 @@
 
 :global(html[data-theme="dark"]) .modal {
   border-color: var(--color-border-strong);
-  background: rgba(19, 24, 20, 0.99);
+  background: rgba(25, 25, 25, 0.99);
   box-shadow: var(--shadow-pop);
 }
 
 :global(html[data-theme="dark"]) .closeButton,
 :global(html[data-theme="dark"]) .step,
 :global(html[data-theme="dark"]) .counterparty {
-  border-color: #354036;
-  background: #1b211c;
+  border-color: #3b3b3b;
+  background: #222222;
 }
 
 :global(html[data-theme="dark"]) .step:hover {
-  border-color: #526252;
-  background: #222a23;
+  border-color: #555555;
+  background: #2a2a2a;
 }
 
 :global(html[data-theme="dark"]) .avatarVenue {
-  border-color: #1b211c;
+  border-color: #222222;
   background: #ffffff;
 }
 
