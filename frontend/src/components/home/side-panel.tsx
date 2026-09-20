@@ -189,10 +189,6 @@ export function SidePanel({
           <div>
             <strong>{routes.length ? "Live market paths" : "Awaiting your intent"}</strong>
           </div>
-          <span className={searching ? styles.searchBadge : routes.length ? styles.liveBadge : styles.readyBadge}>
-            <i />
-            {searching ? "Scanning" : routes.length ? "Live" : "Ready"}
-          </span>
         </div>
 
         {searching ? (
@@ -233,20 +229,6 @@ export function SidePanel({
                               <WorkflowVenue provider={step.provider} />
                             </span>
                           ))}
-                        </span>
-                        <span className={styles.routeFooter}>
-                          <span className={route.route_kind === "crypto_to_crypto"
-                            ? styles.verified
-                            : route.payment_methods_verified
-                              ? styles.verified
-                              : styles.unverified}>
-                            <i />
-                            {route.route_kind === "crypto_to_crypto"
-                              ? "Spot market"
-                              : route.payment_methods_verified
-                                ? "Banks confirmed"
-                              : "Confirm bank support"}
-                          </span>
                         </span>
                       </button>
                       {complete && (

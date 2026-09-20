@@ -34,9 +34,6 @@
 
 .panelTop,
 .routeTopline,
-.routeFooter,
-.verified,
-.unverified,
 .liveBadge,
 .searchBadge,
 .readyBadge,
@@ -300,38 +297,9 @@
   color: rgba(255, 255, 255, 0.32);
 }
 
-.routeFooter {
-  margin-top: 2px;
-  padding-top: 9px;
-  border-top: 1px solid rgba(255, 255, 255, 0.065);
-}
-
-.verified,
-.unverified {
-  gap: 6px;
-  color: rgba(255, 255, 255, 0.42);
-  font-size: 8px;
-  font-weight: 700;
-}
-
-.verified i,
-.unverified i {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-}
-
-.verified i {
-  background: var(--color-accent);
-}
-
-.unverified i {
-  background: #f0a659;
-}
-
 .instructionButton {
   position: absolute;
-  right: 12px;
+  right: 20px;
   top: 50%;
   z-index: 3;
   display: grid;
@@ -584,9 +552,7 @@
 }
 
 .routeRank,
-.workflow,
-.verified,
-.unverified {
+.workflow {
   color: var(--color-text-faint);
 }
 
@@ -611,14 +577,6 @@
 
 .routeAmount {
   color: var(--color-text);
-}
-
-.routeFooter {
-  border-top-color: var(--color-border);
-}
-
-.verified i {
-  background: var(--color-good);
 }
 
 .instructionButton {
