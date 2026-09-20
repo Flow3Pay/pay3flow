@@ -302,7 +302,7 @@
 
 .instructionButton {
   position: absolute;
-  right: 20px;
+  right: 32px;
   top: 44px;
   z-index: 3;
   display: grid;
