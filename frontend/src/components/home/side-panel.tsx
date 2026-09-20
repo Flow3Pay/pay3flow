@@ -75,8 +75,6 @@ export function SidePanel({
   searched = false,
   hasAmount = false,
 }: SidePanelProps) {
-  const best = routes[0];
-
   return (
     <aside
       className={`${styles.side}${active ? ` ${styles.active}` : ""}`}
@@ -95,19 +93,6 @@ export function SidePanel({
             {searching ? "Scanning" : routes.length ? "Live" : "Ready"}
           </span>
         </div>
-
-        {best && (
-          <div className={styles.bestSummary}>
-            <div>
-              <span>Best recipient output</span>
-              <strong>{money(best.target_amount_minor, best.target_currency)}</strong>
-            </div>
-            <div className={styles.summaryMeta}>
-              <span>{routes.length}</span>
-              <small>routes compared</small>
-            </div>
-          </div>
-        )}
 
         {searching ? (
           <SearchSkeleton />
