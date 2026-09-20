@@ -24,8 +24,11 @@ pub struct P2pRouteSearchQuery {
     pub target_network: Option<String>,
     /// Fiat currency used as a pivot when both endpoints are crypto assets.
     pub bridge_fiat: Option<String>,
-    /// Optional comma-separated asset list. Defaults to `P2P_SEARCH_ASSETS`.
+    /// Backward-compatible alias for `intermediary_assets`.
     pub assets: Option<String>,
+    /// Optional comma-separated crypto intermediaries for fiat-to-fiat routes.
+    /// Defaults to `P2P_SEARCH_ASSETS` when omitted.
+    pub intermediary_assets: Option<String>,
     pub source_payment_method: Option<String>,
     pub target_payment_method: Option<String>,
     pub merchant_only: Option<bool>,
@@ -296,16 +299,17 @@ fn normalize_query(
         bail!("min_completion_rate must be between 0 and 1");
     }
     let assets = query
-        .assets
+        .intermediary_assets
         .as_deref()
+        .or(query.assets.as_deref())
         .map(|assets| assets.split(',').map(str::to_owned).collect::<Vec<_>>())
         .unwrap_or_else(|| default_assets.to_vec())
         .into_iter()
         .map(|asset| asset.trim().to_ascii_uppercase())
         .filter(|asset| !asset.is_empty())
         .collect::<Vec<_>>();
-    if assets.is_empty() || assets.len() > 12 {
-        bail!("assets must contain between 1 and 12 comma-separated codes");
+    if assets.is_empty() || assets.len() > 24 {
+        bail!("assets must contain between 1 and 24 comma-separated codes");
     }
     if assets.iter().any(|asset| {
         !(2..=12).contains(&asset.len()) || !asset.bytes().all(|b| b.is_ascii_alphanumeric())
@@ -879,6 +883,7 @@ mod tests {
                 target_network: None,
                 bridge_fiat: None,
                 assets: Some("USDT,USDC,BTC,ETH".into()),
+                intermediary_assets: None,
                 source_payment_method: None,
                 target_payment_method: None,
                 merchant_only: Some(false),
@@ -916,6 +921,7 @@ mod tests {
                 target_network: None,
                 bridge_fiat: None,
                 assets: Some("USDT,USDC,BTC,ETH".into()),
+                intermediary_assets: None,
                 source_payment_method: Some("Ameriabank".into()),
                 target_payment_method: Some("Sberbank".into()),
                 merchant_only: Some(false),

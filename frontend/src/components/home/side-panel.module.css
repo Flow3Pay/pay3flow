@@ -170,12 +170,6 @@
   transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
 }
 
-.routeCard:hover {
-  border-color: rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.075);
-  transform: translateY(-1px);
-}
-
 .routeBest {
   border-color: rgba(185, 242, 39, 0.3);
   background: linear-gradient(135deg, rgba(185, 242, 39, 0.095), rgba(255, 255, 255, 0.04));
@@ -506,12 +500,6 @@
   background: #fbfcfa;
   color: var(--color-text);
   transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
-}
-
-.routeCard:hover {
-  border-color: #b7cead;
-  background: #fff;
-  box-shadow: 0 8px 18px rgba(55, 77, 52, 0.07);
 }
 
 .routeBest {

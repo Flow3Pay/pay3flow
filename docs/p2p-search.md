@@ -61,8 +61,12 @@ unverified estimates instead of being silently discarded.
 ## Build the AMD -> asset -> RUB puzzle
 
 ```text
-GET /api/p2p/routes?source_fiat=AMD&target_fiat=RUB&source_amount=100000&assets=USDT,USDC,BTC,ETH&min_orders=20&min_completion_rate=0.9&sources=binance,okx&limit=20
+GET /api/p2p/routes?source_fiat=AMD&target_fiat=RUB&source_amount=100000&intermediary_assets=USDT,USDC,BTC,ETH,BNB,SOL,TRX,TON,DOGE,LTC,DAI,FDUSD,XRP,ADA,DOT,LINK,AVAX,MATIC,BCH,NEAR,APT,ATOM,UNI,SUI&min_orders=20&min_completion_rate=0.9&sources=binance,okx&limit=20
 ```
+
+`intermediary_assets` accepts one or more comma-separated crypto codes. If it is
+omitted, the backend searches the full `P2P_SEARCH_ASSETS` catalog. The older
+`assets` parameter remains supported as a compatibility alias.
 
 For every asset the backend concurrently searches:
 
@@ -110,7 +114,7 @@ P2P_BYBIT_ENABLED=true
 P2P_OKX_ENABLED=true
 P2P_BITGET_ENABLED=true
 P2P_RAPIRA_ENABLED=true
-P2P_SEARCH_ASSETS=USDT,USDC,BTC,ETH
+P2P_SEARCH_ASSETS=USDT,USDC,BTC,ETH,BNB,SOL,TRX,TON,DOGE,LTC,DAI,FDUSD,XRP,ADA,DOT,LINK,AVAX,MATIC,BCH,NEAR,APT,ATOM,UNI,SUI
 ```
 
 Endpoint URLs can be overridden with `P2P_BINANCE_URL`, `P2P_BYBIT_URL`,

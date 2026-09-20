@@ -173,7 +173,7 @@ curl -G 'http://localhost:8080/api/p2p/routes' \
   --data-urlencode 'source_fiat=AMD' \
   --data-urlencode 'target_fiat=RUB' \
   --data-urlencode 'source_amount=100000' \
-  --data-urlencode 'assets=USDT,USDC,BTC,ETH' \
+  --data-urlencode 'intermediary_assets=USDT,USDC,BTC,ETH,BNB,SOL,TRX,TON,DOGE,LTC,DAI,FDUSD,XRP,ADA,DOT,LINK,AVAX,MATIC,BCH,NEAR,APT,ATOM,UNI,SUI' \
   --data-urlencode 'min_orders=20' \
   --data-urlencode 'min_completion_rate=0.9'
 ```

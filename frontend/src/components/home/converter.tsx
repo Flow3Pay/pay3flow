@@ -29,6 +29,11 @@ const P2P_SOURCES = [
 ] as const;
 type P2pSource = (typeof P2P_SOURCES)[number]["id"];
 const DEFAULT_P2P_SOURCES = P2P_SOURCES.map((source) => source.id);
+const INTERMEDIARY_ASSETS = [
+  "USDT", "USDC", "BTC", "ETH", "BNB", "SOL", "TRX", "TON",
+  "DOGE", "LTC", "DAI", "FDUSD", "XRP", "ADA", "DOT", "LINK",
+  "AVAX", "MATIC", "BCH", "NEAR", "APT", "ATOM", "UNI", "SUI",
+] as const;
 const AMOUNT_STORAGE_KEY = "pay3flow.exchange.amount";
 const REFRESH_STORAGE_KEY = "pay3flow.exchange.refresh-seconds";
 const SOURCES_STORAGE_KEY = "pay3flow.exchange.p2p-sources";
@@ -36,6 +41,7 @@ const CORRIDOR_STORAGE_KEY = "pay3flow.exchange.corridor";
 const SOURCE_METHOD_STORAGE_KEY = "pay3flow.exchange.source-method";
 const TARGET_METHOD_STORAGE_KEY = "pay3flow.exchange.target-method";
 const DIRECTION_STORAGE_KEY = "pay3flow.exchange.direction-reversed";
+const INTERMEDIARY_ASSETS_STORAGE_KEY = "pay3flow.exchange.intermediary-assets";
 
 interface NetworkControlProps {
   network: CryptoNetwork;
@@ -148,8 +154,21 @@ function locationLabel(country: string, currency: string): string {
   }
 }
 
+function normalizeAmountInput(value: string): string {
+  const sanitized = value.replace(/[^0-9.,]/g, "");
+  const lastSeparator = Math.max(sanitized.lastIndexOf("."), sanitized.lastIndexOf(","));
+  if (lastSeparator < 0) {
+    return sanitized.replace(/^0+(?=\d)/, "") || "0";
+  }
+
+  const integerPart = sanitized.slice(0, lastSeparator).replace(/[.,]/g, "");
+  const fractionPart = sanitized.slice(lastSeparator + 1).replace(/[.,]/g, "");
+  const integer = integerPart.replace(/^0+(?=\d)/, "") || "0";
+  return `${integer}${sanitized[lastSeparator]}${fractionPart}`;
+}
+
 function amountNumber(value: string): number {
-  return Number(value.replace(/\s/g, "").replace(",", "."));
+  return Number(normalizeAmountInput(value).replace(",", "."));
 }
 
 function mapRoutes(response: Awaited<ReturnType<typeof fetchP2pRoutes>>): RouteCandidate[] {
@@ -228,6 +247,8 @@ export function Converter() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [refreshSeconds, setRefreshSeconds] = useState<RefreshSeconds>(15);
   const [selectedSources, setSelectedSources] = useState<P2pSource[]>(DEFAULT_P2P_SOURCES);
+  // An empty selection means “all available” and lets the backend use its full catalog.
+  const [selectedIntermediaryAssets, setSelectedIntermediaryAssets] = useState<string[]>([]);
   const [searching, setSearching] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const [clock, setClock] = useState(() => Date.now());
@@ -248,6 +269,7 @@ export function Converter() {
         const savedTargetMethodId = window.localStorage.getItem(TARGET_METHOD_STORAGE_KEY);
         const savedDirection = window.localStorage.getItem(DIRECTION_STORAGE_KEY);
         const savedSources = window.localStorage.getItem(SOURCES_STORAGE_KEY);
+        const savedIntermediaryAssets = window.localStorage.getItem(INTERMEDIARY_ASSETS_STORAGE_KEY);
         if (sharedExchange?.amount) setAmount(sharedExchange.amount);
         else if (savedAmount) setAmount(savedAmount);
         if (savedCorridorId) setCorridorId(savedCorridorId);
@@ -260,6 +282,14 @@ export function Converter() {
               P2P_SOURCES.some((available) => available.id === source),
           );
           if (parsedSources.length > 0) setSelectedSources([...new Set(parsedSources)]);
+        }
+        if (savedIntermediaryAssets != null) {
+          const parsedAssets = savedIntermediaryAssets
+            .split(",")
+            .filter((asset): asset is (typeof INTERMEDIARY_ASSETS)[number] =>
+              INTERMEDIARY_ASSETS.includes(asset as (typeof INTERMEDIARY_ASSETS)[number]),
+            );
+          setSelectedIntermediaryAssets([...new Set(parsedAssets)]);
         }
 
         const savedRefresh = Number(window.localStorage.getItem(REFRESH_STORAGE_KEY));
@@ -314,6 +344,15 @@ export function Converter() {
       // Local storage can be unavailable when the browser blocks site data.
     }
   }, [selectedSources]);
+
+  useEffect(() => {
+    if (!preferencesLoadedRef.current) return;
+    try {
+      window.localStorage.setItem(INTERMEDIARY_ASSETS_STORAGE_KEY, selectedIntermediaryAssets.join(","));
+    } catch {
+      // Local storage can be unavailable when the browser blocks site data.
+    }
+  }, [selectedIntermediaryAssets]);
 
   useEffect(() => {
     if (!preferencesLoadedRef.current) return;
@@ -526,7 +565,10 @@ export function Converter() {
         sourceFiat: sourceIsWallet ? sourceMethod.currency : sourceCurrency,
         targetFiat: targetIsWallet ? targetMethod.currency : targetCurrency,
         sourceAmount: value,
-        assets: !sourceIsWallet && !targetIsWallet ? ["ETH"] : undefined,
+        intermediaryAssets:
+          !sourceIsWallet && !targetIsWallet && selectedIntermediaryAssets.length > 0
+            ? selectedIntermediaryAssets
+            : undefined,
         bridgeFiat: sourceIsWallet && targetIsWallet ? targetCurrency : undefined,
         sourceNetwork: sourceIsWallet ? selectedNetwork.id : undefined,
         targetNetwork: targetIsWallet ? selectedNetwork.id : undefined,
@@ -557,7 +599,7 @@ export function Converter() {
     } finally {
       if (requestId === requestRef.current) setSearching(false);
     }
-  }, [amount, corridor, selectedNetwork.id, selectedSources, sourceCurrency, sourceMethod, targetCurrency, targetMethod]);
+  }, [amount, corridor, selectedIntermediaryAssets, selectedNetwork.id, selectedSources, sourceCurrency, sourceMethod, targetCurrency, targetMethod]);
 
   // Re-run the read-only market search after the user changes the intent.
   // The old result is cleared immediately by updateAmount/applyOrientation,
@@ -598,9 +640,7 @@ export function Converter() {
       : 0;
 
   const updateAmount = (value: string) => {
-    const sanitized = value.replace(/[^0-9.,\s]/g, "").replace(/\s/g, "");
-    const withoutLeadingZeroes = sanitized.replace(/^0+(?=\d)/, "");
-    setAmount(withoutLeadingZeroes || "0");
+    setAmount(normalizeAmountInput(value));
     resetResults();
   };
 
@@ -698,7 +738,45 @@ export function Converter() {
                         })}
                       </div>
                     </div>
-                    <p>Search also runs automatically 650ms after you change the amount or a bank.</p>
+                    <div className={styles.sourceSettings}>
+                      <div className={styles.intermediarySettingsHead}>
+                        <span className={styles.sourceSettingsLabel}>Cryptocurrency intermediary</span>
+                        <small>{selectedIntermediaryAssets.length ? `${selectedIntermediaryAssets.length} selected` : "All available"}</small>
+                      </div>
+                      <div className={`${styles.sourceOptions} ${styles.intermediaryOptions}`} aria-label="Cryptocurrency intermediaries">
+                        <button
+                          type="button"
+                          className={`${styles.sourceOption}${selectedIntermediaryAssets.length === 0 ? ` ${styles.sourceOptionActive}` : ""}`}
+                          aria-pressed={selectedIntermediaryAssets.length === 0}
+                          onClick={() => {
+                            setSelectedIntermediaryAssets([]);
+                            resetResults();
+                          }}
+                        >
+                          All available
+                        </button>
+                        {INTERMEDIARY_ASSETS.map((asset) => {
+                          const enabled = selectedIntermediaryAssets.includes(asset);
+                          return (
+                            <button
+                              key={asset}
+                              type="button"
+                              className={`${styles.sourceOption}${enabled ? ` ${styles.sourceOptionActive}` : ""}`}
+                              aria-pressed={enabled}
+                              onClick={() => {
+                                setSelectedIntermediaryAssets((current) =>
+                                  enabled ? current.filter((item) => item !== asset) : [...current, asset],
+                                );
+                                resetResults();
+                              }}
+                            >
+                              {asset}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <p>Search also runs automatically 650ms after you change the amount, bank or intermediary.</p>
                   </div>
                 )}
               </div>

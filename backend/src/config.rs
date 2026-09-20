@@ -112,7 +112,9 @@ impl Config {
             p2p_rapira_url: env::var("P2P_RAPIRA_URL")
                 .unwrap_or_else(|_| "https://api.rapira.net/otc/offers/page-query/v2".into()),
             p2p_search_assets: env::var("P2P_SEARCH_ASSETS")
-                .unwrap_or_else(|_| "USDT,USDC,BTC,ETH".into())
+                .unwrap_or_else(|_| {
+                    "USDT,USDC,BTC,ETH,BNB,SOL,TRX,TON,DOGE,LTC,DAI,FDUSD,XRP,ADA,DOT,LINK,AVAX,MATIC,BCH,NEAR,APT,ATOM,UNI,SUI".into()
+                })
                 .split(',')
                 .map(|asset| asset.trim().to_ascii_uppercase())
                 .filter(|asset| !asset.is_empty())

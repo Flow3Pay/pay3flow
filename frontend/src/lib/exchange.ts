@@ -214,6 +214,7 @@ export function fetchP2pRoutes(query: {
   targetFiat: string;
   sourceAmount: number;
   assets?: string[];
+  intermediaryAssets?: string[];
   bridgeFiat?: string;
   sourceNetwork?: string;
   targetNetwork?: string;
@@ -235,6 +236,9 @@ export function fetchP2pRoutes(query: {
   });
   if (query.assets?.length) {
     params.set("assets", query.assets.join(","));
+  }
+  if (query.intermediaryAssets?.length) {
+    params.set("intermediary_assets", query.intermediaryAssets.join(","));
   }
   if (query.bridgeFiat) {
     params.set("bridge_fiat", query.bridgeFiat);

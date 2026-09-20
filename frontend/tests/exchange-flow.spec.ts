@@ -50,7 +50,7 @@ async function mockBackend(page: Page) {
       });
       const routes = Array.from({ length: 12 }, (_, index) => {
         const best = index === 0;
-        const asset = "ETH";
+        const asset = index % 2 === 0 ? "USDT" : "USDC";
         const venue = index % 2 === 0 ? "binance" : "bybit";
         return {
           rank: index + 1,
@@ -75,7 +75,7 @@ async function mockBackend(page: Page) {
         source_fiat: "AMD",
         target_fiat: "RUB",
         source_amount: "100000.00",
-        assets_searched: ["ETH"],
+        assets_searched: ["USDT", "USDC", "BTC", "ETH"],
         can_exchange_to_target: true,
         routes,
       });
@@ -142,7 +142,7 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await expect(page.getByTestId("complete-route")).toHaveCount(12);
   await expect(page.getByTestId("complete-route").first()).toContainText("20,350 RUB");
   await expect(page.getByTestId("complete-route").first()).toContainText(
-    "AMD → ETH Ether (Binance) → RUB (Binance)",
+    "AMD → USDT Tether (Binance) → RUB (Binance)",
   );
   const routeGroups = page.getByTestId("route-groups");
   const scrollMetrics = await routeGroups.evaluate((element) => ({
@@ -158,7 +158,7 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await page.getByTestId("route-instructions-button").first().click();
   const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
   await expect(instructions).toBeVisible();
-  await expect(instructions.getByText("Buy ETH for 100000 AMD")).toBeVisible();
+  await expect(instructions.getByText("Buy USDT for 100000 AMD")).toBeVisible();
   const offerLinks = instructions.getByRole("link", { name: "Open Binance offer ↗" });
   await expect(offerLinks.first()).toHaveAttribute(
     "href",
