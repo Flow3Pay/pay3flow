@@ -50,8 +50,6 @@ interface SidePanelProps {
   searching?: boolean;
   searched?: boolean;
   hasAmount?: boolean;
-  sourceBank?: string;
-  targetBank?: string;
 }
 
 function SearchSkeleton() {
@@ -76,8 +74,6 @@ export function SidePanel({
   searching = false,
   searched = false,
   hasAmount = false,
-  sourceBank = "Sender bank",
-  targetBank = "Recipient bank",
 }: SidePanelProps) {
   const best = routes[0];
 
@@ -112,14 +108,6 @@ export function SidePanel({
             </div>
           </div>
         )}
-
-        <div className={styles.bankContext}>
-          <span>{sourceBank}</span>
-          <svg width="24" height="12" viewBox="0 0 24 12" fill="none" aria-hidden="true">
-            <path d="M1 6h21m0 0-4-4m4 4-4 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          <span>{targetBank}</span>
-        </div>
 
         {searching ? (
           <SearchSkeleton />

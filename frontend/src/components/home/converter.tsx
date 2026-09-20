@@ -805,8 +805,6 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
           searching={searching}
           searched={lastUpdatedAt !== null}
           hasAmount={hasAmount}
-          sourceBank={sourceMethod?.name ?? "Sender bank"}
-          targetBank={targetMethod?.name ?? "Recipient bank"}
         />
       </div>
 
