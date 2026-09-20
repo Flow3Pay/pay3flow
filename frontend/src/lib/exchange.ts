@@ -102,6 +102,7 @@ export interface P2pOffer {
   payment_methods: string[];
   pay_time_limit_minutes: number | null;
   advertiser: P2pAdvertiser;
+  advertiser_profile_url?: string | null;
   source_url: string;
   source_url_is_exact?: boolean;
 }

@@ -441,6 +441,7 @@ mod tests {
                 completion_rate_30d: Some(0.99),
                 positive_rate: None,
             },
+            advertiser_profile_url: None,
             source_url: "https://example.test".into(),
             source_url_is_exact: true,
         }

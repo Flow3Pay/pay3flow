@@ -134,6 +134,7 @@ pub struct P2pOffer {
     pub payment_methods: Vec<String>,
     pub pay_time_limit_minutes: Option<u32>,
     pub advertiser: Advertiser,
+    pub advertiser_profile_url: Option<String>,
     pub source_url: String,
     /// True only when the venue URL addresses this exact advertisement.
     /// Public market URLs must not be presented as exact offer links.
@@ -519,6 +520,7 @@ mod tests {
                 completion_rate_30d: Some(0.99),
                 positive_rate: Some(1.0),
             },
+            advertiser_profile_url: None,
             source_url: "https://example.test".into(),
             source_url_is_exact: false,
         }

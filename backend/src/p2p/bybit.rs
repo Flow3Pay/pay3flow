@@ -152,6 +152,7 @@ impl BybitItem {
                 completion_rate_30d: self.recent_execute_rate.map(|rate| rate / 100.0),
                 positive_rate: None,
             },
+            advertiser_profile_url: None,
             source_url: format!("https://www.bybit.com/fiat/trade/otc/?token={asset}&fiat={fiat}"),
             source_url_is_exact: false,
             fiat,

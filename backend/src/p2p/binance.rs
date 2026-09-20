@@ -151,6 +151,9 @@ impl BinanceItem {
                 .user_type
                 .as_deref()
                 .is_some_and(|kind| kind.eq_ignore_ascii_case("merchant"));
+        let advertiser_profile_url = self.advertiser.user_no.as_deref().map(|user_no| {
+            format!("https://c2c.binance.com/en/advertiserDetail?advertiserNo={user_no}")
+        });
         P2pOffer {
             source: "binance".into(),
             source_url: format!("https://c2c.binance.com/en/adv?code={}", self.adv.adv_no),
@@ -179,6 +182,7 @@ impl BinanceItem {
                 completion_rate_30d: self.advertiser.month_finish_rate,
                 positive_rate: self.advertiser.positive_rate,
             },
+            advertiser_profile_url,
             source_url_is_exact: true,
         }
     }

@@ -114,56 +114,103 @@
   line-height: 1.5;
 }
 
-.step a {
+.counterparty {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid rgba(111, 83, 190, 0.2);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.counterpartyTopline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.counterpartyLabel {
+  color: var(--color-violet);
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.profileBadge,
+.manualBadge {
+  padding: 4px 7px;
+  border-radius: 999px;
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.profileBadge {
+  background: rgba(181, 224, 58, 0.2);
+  color: #557309;
+}
+
+.manualBadge {
+  background: rgba(240, 166, 89, 0.16);
+  color: #8a5b1e;
+}
+
+.advertiser {
+  display: block;
+  margin-top: 9px;
+  font-size: 16px;
+  letter-spacing: -0.03em;
+}
+
+.venueLine,
+.paymentLine,
+.adHint {
+  display: block;
+  color: var(--color-text-faint);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin: 10px 0 7px;
+  color: var(--color-text-soft);
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+
+.metrics b {
+  color: var(--color-text);
+}
+
+.profileLink {
+  display: inline-block;
+  margin-top: 10px;
   color: #587b08;
-  font-size: 11px;
-  font-weight: 800;
+  font-size: 10px;
+  font-weight: 850;
   text-decoration: none;
 }
 
-.step a:hover {
+.profileLink:hover {
   text-decoration: underline;
 }
 
-.step a span {
+.profileLink span {
   margin-left: 3px;
 }
 
-.shareRow {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 18px;
-  padding: 11px 13px;
-  border: 1px solid rgba(111, 83, 190, 0.2);
-  border-radius: 14px;
-  background: rgba(111, 83, 190, 0.06);
+.adHint {
+  margin-top: 6px;
+  font-size: 9px;
 }
 
-.shareRow a {
-  color: var(--color-violet);
-}
-
-.shareButton {
-  border: 1px solid var(--color-border);
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.8);
+.missing {
   color: var(--color-text-soft);
-  cursor: pointer;
-  font-size: 10px;
-  font-weight: 800;
-  padding: 7px 9px;
-}
-
-.shareButton:hover {
-  border-color: var(--color-violet);
-  color: var(--color-violet);
-}
-
-.missingLink {
-  color: var(--color-text-faint);
-  font-size: 10px;
 }
 
 .warning {

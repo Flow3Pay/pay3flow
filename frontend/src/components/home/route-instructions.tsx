@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
-import { RouteCandidate } from "@/lib/exchange";
-import { routeLocatorPath } from "@/lib/route-locator";
+import { P2pOffer, RouteCandidate } from "@/lib/exchange";
 
 import styles from "./route-instructions.module.css";
 
@@ -22,14 +21,68 @@ const money = (minor: number | undefined, currency: string | undefined) =>
     ? "—"
     : `${(minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })} ${currency ?? ""}`;
 
+const percentage = (value: number | null | undefined) =>
+  value == null ? "—" : `${(value * 100).toFixed(1)}%`;
+
 interface RouteInstructionsProps {
   route: RouteCandidate;
   onClose: () => void;
 }
 
+function AdvertiserCard({
+  offer,
+  label,
+}: {
+  offer: P2pOffer | undefined;
+  label: string;
+}) {
+  if (!offer) {
+    return (
+      <div className={`${styles.counterparty} ${styles.missing}`}>
+        <span className={styles.counterpartyLabel}>{label}</span>
+        <strong>Advertiser details unavailable</strong>
+      </div>
+    );
+  }
+
+  const venue = venueName(offer.source);
+  const profileUrl = offer.advertiser_profile_url ?? null;
+  const actionUrl = profileUrl ?? offer.source_url;
+  const actionLabel = profileUrl
+    ? `Open ${venue} profile`
+    : `Open ${venue} P2P and find ${offer.advertiser.nickname}`;
+
+  return (
+    <div className={styles.counterparty}>
+      <div className={styles.counterpartyTopline}>
+        <span className={styles.counterpartyLabel}>{label}</span>
+        <span className={profileUrl ? styles.profileBadge : styles.manualBadge}>
+          {profileUrl ? "User profile" : "Find by nickname"}
+        </span>
+      </div>
+      <strong className={styles.advertiser}>{offer.advertiser.nickname}</strong>
+      <span className={styles.venueLine}>
+        {venue} · {offer.advertiser.is_merchant ? "Merchant" : "Advertiser"}
+      </span>
+      <div className={styles.metrics}>
+        <span><b>{percentage(offer.advertiser.completion_rate_30d)}</b> completion</span>
+        <span><b>{offer.advertiser.completed_orders_30d ?? "—"}</b> orders / 30d</span>
+        <span><b>{offer.price} {offer.fiat}</b> rate</span>
+      </div>
+      <span className={styles.paymentLine}>
+        Payment: {offer.payment_methods.length ? offer.payment_methods.join(", ") : "confirm on venue"}
+      </span>
+      <a href={actionUrl} target="_blank" rel="noreferrer noopener" className={styles.profileLink}>
+        {actionLabel} <span>↗</span>
+      </a>
+      {!profileUrl && (
+        <small className={styles.adHint}>Match the nickname and ad ID {offer.ad_id} before opening an order.</small>
+      )}
+    </div>
+  );
+}
+
 export function RouteInstructions({ route, onClose }: RouteInstructionsProps) {
-  const [copied, setCopied] = useState(false);
-  const locatorPath = routeLocatorPath(route);
   const entry = route.legs.find((leg) => leg.kind === "entry");
   const exit = route.legs.find((leg) => leg.kind === "exit");
   const entryVenue = venueName(entry?.provider);
@@ -44,20 +97,14 @@ export function RouteInstructions({ route, onClose }: RouteInstructionsProps) {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
-  const copyLocatorUrl = async () => {
-    const locatorUrl = `${window.location.origin}${window.location.pathname}${window.location.search}${locatorPath}`;
-    try {
-      await navigator.clipboard.writeText(locatorUrl);
-      setCopied(true);
-    } catch {
-      setCopied(false);
-    }
-  };
-
   return (
-    <div className={styles.backdrop} role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) onClose();
-    }}>
+    <div
+      className={styles.backdrop}
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
       <section className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="route-instructions-title">
         <div className={styles.header}>
           <div>
@@ -72,30 +119,13 @@ export function RouteInstructions({ route, onClose }: RouteInstructionsProps) {
           </button>
         </div>
 
-        <div className={styles.shareRow}>
-          <a href={locatorPath} target="_blank" rel="noreferrer noopener">
-            Open route locator <span>↗</span>
-          </a>
-          <button type="button" className={styles.shareButton} onClick={copyLocatorUrl}>
-            {copied ? "Link copied" : "Copy locator link"}
-          </button>
-        </div>
-
         <div className={styles.workflow}>
           <article className={styles.step}>
             <span className={styles.stepNumber}>01</span>
             <div>
               <strong>Buy {route.entry_asset} for {money(route.source_amount_minor, route.source_currency)}</strong>
-              <p>Open the matched offer on {entryVenue}, check the advertiser and send the fiat payment using the selected bank.</p>
-              {route.entry_offer_url && route.entry_offer_is_exact ? (
-                <a href={route.entry_offer_url} target="_blank" rel="noreferrer noopener">
-                  Open exact {entryVenue} offer <span>↗</span>
-                </a>
-              ) : (
-                <span className={styles.missingLink}>
-                  {entryVenue} does not expose a public deep-link for this ad. Ad ID: {route.entry_offer_ad_id ?? "—"}
-                </span>
-              )}
+              <p>Open the seller&apos;s profile, verify the rate and limits, then send the fiat payment using the selected bank.</p>
+              <AdvertiserCard offer={route.entry_offer_snapshot} label={`Seller on ${entryVenue}`} />
             </div>
           </article>
 
@@ -113,23 +143,15 @@ export function RouteInstructions({ route, onClose }: RouteInstructionsProps) {
             <span className={styles.stepNumber}>{crossVenue ? "03" : "02"}</span>
             <div>
               <strong>Sell {route.entry_asset} for {money(route.target_amount_minor, route.target_currency)}</strong>
-              <p>Open the exit offer on {exitVenue}, sell the asset and choose the recipient payment method.</p>
-              {route.exit_offer_url && route.exit_offer_is_exact ? (
-                <a href={route.exit_offer_url} target="_blank" rel="noreferrer noopener">
-                  Open exact {exitVenue} offer <span>↗</span>
-                </a>
-              ) : (
-                <span className={styles.missingLink}>
-                  {exitVenue} does not expose a public deep-link for this ad. Ad ID: {route.exit_offer_ad_id ?? "—"}
-                </span>
-              )}
+              <p>Open the buyer&apos;s profile, verify the recipient payment method and create the P2P order only on the venue.</p>
+              <AdvertiserCard offer={route.exit_offer_snapshot} label={`Buyer on ${exitVenue}`} />
             </div>
           </article>
         </div>
 
         <div className={styles.warning}>
           <strong>Important</strong>
-          <span>Rates, limits and ads can change. Verify the offer, payment details and network on the exchange before sending money.</span>
+          <span>Rates, limits and ads can change. Confirm the user, payment details and network on the exchange before sending money. Pay3Flow never creates the order or moves funds.</span>
         </div>
       </section>
     </div>

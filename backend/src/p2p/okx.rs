@@ -162,6 +162,7 @@ impl OkxAd {
                     .as_deref()
                     .and_then(parse_percentage),
             },
+            advertiser_profile_url: None,
         }
     }
 }
