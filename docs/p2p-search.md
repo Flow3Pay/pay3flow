@@ -11,12 +11,21 @@ money.
 - OKX public web P2P advertisement list.
 - Bitget public web P2P advertisement list.
 
-These are the four sources currently implemented and enabled by default. Other
+These are the four sources currently configured. The included Docker Compose
+deployment enables them by default; other deployments can enable them through
+the provider-specific environment variables below. Other
 venues from the research list are intentionally not presented as live sources:
 MEXC's official P2P Open API requires merchant/API access, OKX's merchant API
 has separate eligibility requirements, and no stable public advertisement API
-has been approved for BingX or the remaining venues. Adding a venue requires a
-dedicated adapter and an explicit decision about its official API access.
+has been approved for BingX or the remaining venues. Every new venue still
+needs an explicit decision about its official API access and response mapping.
+
+Provider connections are declared in `backend/providers/reg.json`. Each entry
+points to a JSON request/response mapping under `backend/providers/<name>/`.
+These files are validated and embedded into the backend during the Cargo build;
+the running container does not need to mount the provider directory. A new
+provider that exposes a compatible JSON API can therefore be added by creating
+its mapping and adding one line to `reg.json`, without a new Rust adapter.
 
 All sources are queried concurrently. A timeout or parsing failure from one
 source is returned in `sources` without discarding successful results from the

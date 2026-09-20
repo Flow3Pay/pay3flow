@@ -11,9 +11,8 @@ use futures::future::join_all;
 use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
-use crate::p2p::{
-    binance::BinanceP2pSource, bitget::BitgetP2pSource, bybit::BybitP2pSource, okx::OkxP2pSource,
-};
+use crate::p2p::configured::ConfiguredP2pSource;
+use crate::providers;
 
 const DEFAULT_LIMIT: usize = 20;
 const MAX_LIMIT: usize = 100;
@@ -245,7 +244,7 @@ pub struct P2pSearchResponse {
 
 #[async_trait]
 pub(crate) trait P2pSource: Send + Sync {
-    fn name(&self) -> &'static str;
+    fn name(&self) -> &str;
     async fn search(&self, query: &P2pSearchQuery) -> Result<Vec<P2pOffer>>;
 }
 
@@ -274,28 +273,16 @@ impl P2pSearchService {
             .build()
             .context("failed to build P2P HTTP client")?;
         let mut sources: Vec<Arc<dyn P2pSource>> = Vec::new();
-        if config.p2p_binance_enabled {
-            sources.push(Arc::new(BinanceP2pSource::new(
+        for provider in providers::configs()? {
+            if provider.kind != "p2p" || !provider_enabled(&provider.name, provider.enabled) {
+                continue;
+            }
+            let endpoint = std::env::var(provider_url_env_name(&provider.name))
+                .unwrap_or_else(|_| provider.endpoint.clone());
+            sources.push(Arc::new(ConfiguredP2pSource::new(
                 client.clone(),
-                config.p2p_binance_url.clone(),
-            )));
-        }
-        if config.p2p_bybit_enabled {
-            sources.push(Arc::new(BybitP2pSource::new(
-                client.clone(),
-                config.p2p_bybit_url.clone(),
-            )));
-        }
-        if config.p2p_okx_enabled {
-            sources.push(Arc::new(OkxP2pSource::new(
-                client.clone(),
-                config.p2p_okx_url.clone(),
-            )));
-        }
-        if config.p2p_bitget_enabled {
-            sources.push(Arc::new(BitgetP2pSource::new(
-                client,
-                config.p2p_bitget_url.clone(),
+                provider.clone(),
+                endpoint,
             )));
         }
         Ok(Self {
@@ -442,6 +429,20 @@ impl P2pSearchService {
     }
 }
 
+fn provider_enabled(name: &str, default: bool) -> bool {
+    std::env::var(provider_enabled_env_name(name))
+        .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+        .unwrap_or(default)
+}
+
+fn provider_enabled_env_name(name: &str) -> String {
+    format!("P2P_{}_ENABLED", name.to_ascii_uppercase())
+}
+
+fn provider_url_env_name(name: &str) -> String {
+    format!("P2P_{}_URL", name.to_ascii_uppercase())
+}
+
 fn sort_offers(offers: &mut [P2pOffer], side: P2pSide) {
     offers.sort_by(|left, right| {
         let price_order = left
@@ -487,7 +488,7 @@ mod tests {
 
     #[async_trait]
     impl P2pSource for StubSource {
-        fn name(&self) -> &'static str {
+        fn name(&self) -> &str {
             self.name
         }
 

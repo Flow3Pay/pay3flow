@@ -1,7 +1,4 @@
-mod binance;
-mod bitget;
-mod bybit;
-mod okx;
+mod configured;
 mod routes;
 mod service;
 

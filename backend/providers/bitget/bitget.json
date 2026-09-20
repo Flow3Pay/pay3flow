@@ -1,0 +1,70 @@
+{
+  "name": "bitget",
+  "kind": "p2p",
+  "enabled": false,
+  "endpoint": "https://www.bitget.com/v1/p2p/pub/adv/queryAdvList",
+  "request": {
+    "method": "POST",
+    "body": {
+      "side": {
+        "$template": "side",
+        "$type": "number"
+      },
+      "pageNo": 1,
+      "pageSize": {
+        "$template": "fetch_limit",
+        "$type": "number"
+      },
+      "coinCode": "{{asset}}",
+      "fiatCode": "{{fiat}}"
+    },
+    "side": {
+      "buy": "1",
+      "sell": "2"
+    }
+  },
+  "response": {
+    "success": {
+      "path": "/code",
+      "equals": "00000"
+    },
+    "items_path": "/data/dataList",
+    "fields": {
+      "ad_id": "/adNo",
+      "fiat": "/fiatCode",
+      "asset": "/coinCode",
+      "price": "/price",
+      "available_asset": "/editAmount",
+      "min_fiat": "/minAmount",
+      "max_fiat": "/maxAmount",
+      "payment_methods": "/paymethodInfo/*/paymethodName",
+      "pay_time_limit_minutes": "/payDuration"
+    },
+    "advertiser": {
+      "id": "/encryptUserId",
+      "nickname": "/nickName",
+      "user_type": "/certifiedMerchant",
+      "completed_orders_30d": "/thirtyTunoverNum",
+      "completion_rate_30d": {
+        "path": "/thirtyCompletionRate",
+        "transform": "ratio"
+      },
+      "positive_rate": {
+        "path": "/goodEvaluationRate",
+        "transform": "percentage"
+      }
+    },
+    "merchant_rules": [
+      {
+        "path": "/certifiedMerchant",
+        "op": "gt",
+        "value": 0
+      }
+    ],
+    "urls": {
+      "source": "https://www.bitget.com/p2p-trade/{{user_side}}?fiatName={{fiat}}",
+      "advertiser_profile": "https://www.bitget.com/p2p-trade/user/{{advertiser_id}}"
+    },
+    "source_url_is_exact": false
+  }
+}

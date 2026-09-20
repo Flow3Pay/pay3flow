@@ -32,14 +32,6 @@ pub struct Config {
     pub p2p_search_enabled: bool,
     pub p2p_search_timeout_ms: u64,
     pub p2p_search_cache_ttl_ms: u64,
-    pub p2p_binance_enabled: bool,
-    pub p2p_binance_url: String,
-    pub p2p_bybit_enabled: bool,
-    pub p2p_bybit_url: String,
-    pub p2p_okx_enabled: bool,
-    pub p2p_okx_url: String,
-    pub p2p_bitget_enabled: bool,
-    pub p2p_bitget_url: String,
     pub p2p_search_assets: Vec<String>,
 }
 
@@ -93,19 +85,6 @@ impl Config {
                 .ok()
                 .and_then(|s| s.parse::<u64>().ok())
                 .unwrap_or(5_000),
-            p2p_binance_enabled: env_flag("P2P_BINANCE_ENABLED", false),
-            p2p_binance_url: env::var("P2P_BINANCE_URL").unwrap_or_else(|_| {
-                "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search".into()
-            }),
-            p2p_bybit_enabled: env_flag("P2P_BYBIT_ENABLED", false),
-            p2p_bybit_url: env::var("P2P_BYBIT_URL")
-                .unwrap_or_else(|_| "https://api2.bybit.com/fiat/otc/item/online".into()),
-            p2p_okx_enabled: env_flag("P2P_OKX_ENABLED", false),
-            p2p_okx_url: env::var("P2P_OKX_URL")
-                .unwrap_or_else(|_| "https://www.okx.com/v3/c2c/tradingOrders/books".into()),
-            p2p_bitget_enabled: env_flag("P2P_BITGET_ENABLED", false),
-            p2p_bitget_url: env::var("P2P_BITGET_URL")
-                .unwrap_or_else(|_| "https://www.bitget.com/v1/p2p/pub/adv/queryAdvList".into()),
             p2p_search_assets: env::var("P2P_SEARCH_ASSETS")
                 .unwrap_or_else(|_| "USDT,USDC,BTC,ETH".into())
                 .split(',')

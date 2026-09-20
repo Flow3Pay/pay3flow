@@ -1,0 +1,71 @@
+{
+  "name": "bybit",
+  "kind": "p2p",
+  "enabled": false,
+  "endpoint": "https://api2.bybit.com/fiat/otc/item/online",
+  "request": {
+    "method": "POST",
+    "body": {
+      "userId": "",
+      "tokenId": "{{asset}}",
+      "currencyId": "{{fiat}}",
+      "payment": [],
+      "side": "{{side}}",
+      "size": "{{fetch_limit}}",
+      "page": "1",
+      "amount": "{{amount}}",
+      "authMaker": false,
+      "canTrade": false
+    },
+    "side": {
+      "buy": "1",
+      "sell": "0"
+    }
+  },
+  "response": {
+    "success": {
+      "path": "/ret_code",
+      "equals": 0
+    },
+    "items_path": "/result/items",
+    "fields": {
+      "ad_id": "/id",
+      "fiat": "/currencyId",
+      "asset": "/tokenId",
+      "price": "/price",
+      "available_asset": "/quantity",
+      "min_fiat": "/minAmount",
+      "max_fiat": "/maxAmount",
+      "payment_methods": "/payments",
+      "pay_time_limit_minutes": "/paymentPeriod"
+    },
+    "advertiser": {
+      "id": "/userMaskId",
+      "nickname": "/nickName",
+      "user_type": "/userType",
+      "completed_orders_30d": "/recentOrderNum",
+      "completion_rate_30d": {
+        "path": "/recentExecuteRate",
+        "transform": "percentage"
+      }
+    },
+    "merchant_rules": [
+      {
+        "path": "/authTag",
+        "op": "nonempty"
+      }
+    ],
+    "verified_rules": [
+      {
+        "path": "/authStatus",
+        "op": "equals",
+        "value": 1
+      }
+    ],
+    "urls": {
+      "source": "https://www.bybit.com/fiat/trade/otc/?token={{asset}}&fiat={{fiat}}",
+      "advertiser_profile": "https://www.bybit.com/en/p2p/profile/{{advertiser_id}}/{{asset}}/{{fiat}}/item"
+    },
+    "source_url_is_exact": false
+  }
+}

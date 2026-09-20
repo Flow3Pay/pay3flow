@@ -1,0 +1,83 @@
+{
+  "name": "okx",
+  "kind": "p2p",
+  "enabled": false,
+  "endpoint": "https://www.okx.com/v3/c2c/tradingOrders/books",
+  "request": {
+    "method": "GET",
+    "headers": {
+      "origin": "https://www.okx.com",
+      "referer": "https://www.okx.com/p2p-markets/"
+    },
+    "query": {
+      "quoteCurrency": "{{fiat}}",
+      "baseCurrency": "{{asset}}",
+      "side": "{{side}}",
+      "paymentMethod": "all",
+      "userType": "all",
+      "showTrade": "false",
+      "showFollow": "false",
+      "showAlreadyTraded": "false",
+      "isAbleFilter": "false",
+      "urlId": "0"
+    },
+    "body": null,
+    "side": {
+      "buy": "sell",
+      "sell": "buy"
+    }
+  },
+  "response": {
+    "success": {
+      "path": "/code",
+      "equals": 0
+    },
+    "items_path": "/data/{{side}}",
+    "fields": {
+      "ad_id": "/id",
+      "fiat": "/quoteCurrency",
+      "asset": "/baseCurrency",
+      "price": "/price",
+      "available_asset": "/availableAmount",
+      "min_fiat": "/quoteMinAmountPerOrder",
+      "max_fiat": "/quoteMaxAmountPerOrder",
+      "payment_methods": "/paymentMethods",
+      "pay_time_limit_minutes": "/paymentTimeoutMinutes"
+    },
+    "advertiser": {
+      "id": "/publicUserId",
+      "nickname": "/nickName",
+      "user_type": "/userType",
+      "completed_orders_30d": "/completedOrderQuantity",
+      "completion_rate_30d": {
+        "path": "/completedRate",
+        "transform": "ratio"
+      },
+      "positive_rate": {
+        "path": "/posReviewPercentage",
+        "transform": "percentage"
+      }
+    },
+    "merchant_rules": [
+      {
+        "path": "/isInstitution",
+        "op": "gt",
+        "value": 0
+      },
+      {
+        "path": "/merchantId",
+        "op": "present"
+      },
+      {
+        "path": "/userType",
+        "op": "equals_ci",
+        "value": "merchant"
+      }
+    ],
+    "urls": {
+      "source": "https://www.okx.com/p2p-markets/{{fiat}}/{{user_side}}-{{asset}}",
+      "advertiser_profile": "https://www.okx.com/p2p/ads-merchant?publicUserId={{advertiser_id}}"
+    },
+    "source_url_is_exact": false
+  }
+}
