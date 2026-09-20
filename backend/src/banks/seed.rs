@@ -12,8 +12,13 @@ pub fn icon_url(domain: &str) -> String {
     format!("https://www.google.com/s2/favicons?domain_url=https://{domain}/&sz=128")
 }
 
+const ETHEREUM_ICON_URL: &str = "https://upload.wikimedia.org/wikipedia/commons/f/fd/Ethereum_Logo.png?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=original";
+const USDC_ICON_URL: &str = "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4a/Circle_USDC_Logo.svg/1280px-Circle_USDC_Logo.svg.png?utm_source=en.wikipedia.org&utm_campaign=index&utm_content=thumbnail";
+
 fn branded_icon_url(name: &str, domain: &str) -> String {
     match name {
+        "Ethereum Network" => ETHEREUM_ICON_URL.to_string(),
+        "USD Coin" => USDC_ICON_URL.to_string(),
         "Visa Network" => {
             "https://upload.wikimedia.org/wikipedia/commons/9/98/Visa_Inc._logo_%282005%E2%80%932014%29.svg?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=original".to_string()
         }
@@ -718,6 +723,27 @@ mod tests {
                 "missing payment method {expected}"
             );
         }
+    }
+
+    #[test]
+    fn catalog_includes_required_crypto_assets_with_brand_icons() {
+        let banks = build_banks();
+        let asset = |name: &str, currency: &str| {
+            banks
+                .iter()
+                .find(|bank| bank.name == name && bank.currency.as_deref() == Some(currency))
+                .unwrap_or_else(|| panic!("missing crypto asset {name} ({currency})"))
+        };
+
+        let ethereum = asset("Ethereum Network", "ETH");
+        assert_eq!(ethereum.country.as_deref(), Some("GLOBAL"));
+        assert_eq!(ethereum.schemes.as_deref(), Some("Ethereum"));
+        assert_eq!(ethereum.icon_url.as_deref(), Some(ETHEREUM_ICON_URL));
+
+        let usdc = asset("USD Coin", "USDC");
+        assert_eq!(usdc.country.as_deref(), Some("GLOBAL"));
+        assert_eq!(usdc.schemes.as_deref(), Some("USDC"));
+        assert_eq!(usdc.icon_url.as_deref(), Some(USDC_ICON_URL));
     }
 
     #[test]
