@@ -178,11 +178,6 @@ curl -G 'http://localhost:8080/api/p2p/routes' \
   --data-urlencode 'min_completion_rate=0.9'
 ```
 
-Конфигурация P2P-бирж находится в
-[`backend/providers/reg.json`](backend/providers/reg.json), а формат JSON-
-провайдеров и инструкции по добавлению новой биржи описаны в
-[`docs/p2p-search.md`](docs/p2p-search.md).
-
 Алгоритм параллельно собирает пазл `AMD -> asset -> RUB`, проверяет лимиты и
 ликвидность обеих P2P-ног и ранжирует полные связки по ожидаемой сумме RUB.
 Подробности: [`docs/p2p-search.md`](docs/p2p-search.md).
