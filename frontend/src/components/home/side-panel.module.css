@@ -211,6 +211,8 @@
   position: relative;
   z-index: 1;
   overflow: hidden;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   font-family: var(--font-sans);
   font-size: 22px;
   font-weight: 700;
@@ -224,6 +226,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
+  padding-top: 1px;
   width: 100%;
   min-width: 0;
   z-index: 1;
@@ -300,32 +303,31 @@
 .instructionButton {
   position: absolute;
   right: 20px;
-  top: 50%;
+  top: 44px;
   z-index: 3;
   display: grid;
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
   place-items: center;
   padding: 0;
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: 9px;
   background: #fff;
   color: var(--color-text-soft);
   box-shadow: 0 4px 10px rgba(55, 77, 52, 0.08);
-  transform: translateY(-50%);
   transition: border-color 0.14s ease, background 0.14s ease, transform 0.14s ease;
 }
 
 .instructionButton:hover {
   border-color: var(--color-accent-strong);
   background: #f1f8df;
-  transform: translateY(calc(-50% - 1px));
+  transform: translateY(-1px);
 }
 
 .instructionButton img {
   display: block;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   filter: grayscale(1) brightness(0.55);
   object-fit: contain;
 }
@@ -577,6 +579,7 @@
 
 .routeAmount {
   color: var(--color-text);
+  border-bottom-color: var(--color-border);
 }
 
 .instructionButton {
