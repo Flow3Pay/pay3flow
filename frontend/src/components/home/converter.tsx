@@ -9,7 +9,12 @@ import {
   fetchP2pRoutes,
 } from "@/lib/exchange";
 import { CryptoNetwork, FALLBACK_NETWORK, fetchNetworks } from "@/lib/networks";
-import { DIGITAL_ASSETS, PaymentMethod, paymentMethodsFor } from "@/lib/payment-methods";
+import {
+  DIGITAL_ASSETS,
+  PaymentMethod,
+  paymentMethodFavicon,
+  paymentMethodsFor,
+} from "@/lib/payment-methods";
 
 import { PaymentMethodPicker } from "./payment-method-picker";
 import { BankLogo } from "./bank-logo";
@@ -175,7 +180,11 @@ function locationLabel(country: string, currency: string): string {
 }
 
 function normalizeAmountInput(value: string): string {
-  const sanitized = value.replace(/[^0-9.,]/g, "");
+  const sanitized = value
+    .normalize("NFKC")
+    .replace(/[\u00a0\u200b-\u200d\ufeff]/g, "")
+    .replace(/[٫٬]/g, ".")
+    .replace(/[^0-9.,]/g, "");
   const lastSeparator = Math.max(sanitized.lastIndexOf("."), sanitized.lastIndexOf(","));
   if (lastSeparator < 0) {
     return sanitized.replace(/^0+(?=\d)/, "") || "0";
@@ -191,7 +200,11 @@ function amountNumber(value: string): number {
   return Number(normalizeAmountInput(value).replace(",", "."));
 }
 
-function mapRoutes(response: Awaited<ReturnType<typeof fetchP2pRoutes>>): RouteCandidate[] {
+function mapRoutes(
+  response: Awaited<ReturnType<typeof fetchP2pRoutes>>,
+  sourceMethod: PaymentMethod | null,
+  targetMethod: PaymentMethod | null,
+): RouteCandidate[] {
   const bestTarget = Number(response.routes[0]?.target_amount ?? 0);
   return response.routes.map((route, index) => {
     const entryOffer = route.entry_offer;
@@ -208,12 +221,14 @@ function mapRoutes(response: Awaited<ReturnType<typeof fetchP2pRoutes>>): RouteC
       status: "complete",
       source_amount_minor: Math.round(Number(route.source_amount) * 100),
       source_currency: route.source_fiat,
+      source_method_icon_url: sourceMethod?.kind === "bank" ? paymentMethodFavicon(sourceMethod) ?? undefined : undefined,
       entry_asset: route.asset,
       entry_network: route.same_venue
         ? entryOffer?.source ?? exitOffer?.source ?? "direct"
         : "cross-venue",
       target_amount_minor: Math.round(targetAmount * 100),
       target_currency: route.target_fiat,
+      target_method_icon_url: targetMethod?.kind === "bank" ? paymentMethodFavicon(targetMethod) ?? undefined : undefined,
       route_kind: route.route_kind,
       bridge_currency: route.bridge_currency,
       market_path: route.market_path,
@@ -621,7 +636,7 @@ export function Converter() {
         signal: controller.signal,
       });
       if (requestId !== requestRef.current) return;
-      const liveRoutes = mapRoutes(response);
+      const liveRoutes = mapRoutes(response, sourceMethod, targetMethod);
       setRoutes(liveRoutes);
       setSelected((current) =>
         liveRoutes.find((route) => route.route_id === current?.route_id) ??
@@ -855,9 +870,32 @@ export function Converter() {
               <input
                 id="exchange-amount"
                 className={styles.amountInput}
+                type="text"
                 inputMode="decimal"
+                autoComplete="off"
+                spellCheck={false}
                 value={amount}
                 onFocus={(event) => event.currentTarget.select()}
+                onKeyDown={(event) => {
+                  const isSeparator = ["Comma", "Period", "NumpadDecimal", "Decimal"].includes(event.code)
+                    || event.key === ","
+                    || event.key === ".";
+                  if (!isSeparator) return;
+
+                  event.preventDefault();
+                  const input = event.currentTarget;
+                  const start = input.selectionStart ?? input.value.length;
+                  const end = input.selectionEnd ?? start;
+                  const separator = event.key === "," || event.code === "Comma" ? "," : ".";
+                  const nextValue = normalizeAmountInput(
+                    `${input.value.slice(0, start)}${separator}${input.value.slice(end)}`,
+                  );
+                  updateAmount(nextValue);
+                  window.requestAnimationFrame(() => {
+                    const cursor = nextValue.length;
+                    input.setSelectionRange(cursor, cursor);
+                  });
+                }}
                 onChange={(event) => updateAmount(event.target.value)}
                 aria-label="Amount to send"
               />

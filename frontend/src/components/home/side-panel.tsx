@@ -64,6 +64,7 @@ function assetIconUrl(currency: string): string | null {
 interface WorkflowStep {
   currency: string;
   provider?: string;
+  iconUrl?: string;
 }
 
 function workflowSteps(route: RouteCandidate): WorkflowStep[] {
@@ -74,37 +75,37 @@ function workflowSteps(route: RouteCandidate): WorkflowStep[] {
 
   if (!entry && exit) {
     return [
-      { currency: source, provider: exit.provider },
-      { currency: target },
+      { currency: source, provider: exit.provider, iconUrl: route.source_method_icon_url },
+      { currency: target, iconUrl: route.target_method_icon_url },
     ];
   }
   if (entry && !exit) {
     return [
-      { currency: source },
-      { currency: target, provider: entry.provider },
+      { currency: source, iconUrl: route.source_method_icon_url },
+      { currency: target, provider: entry.provider, iconUrl: route.target_method_icon_url },
     ];
   }
   if (route.bridge_currency) {
     return [
-      { currency: source, provider: entry?.provider },
+      { currency: source, provider: entry?.provider, iconUrl: route.source_method_icon_url },
       { currency: route.bridge_currency },
-      { currency: target, provider: exit?.provider },
+      { currency: target, provider: exit?.provider, iconUrl: route.target_method_icon_url },
     ];
   }
   return [
-    { currency: source },
+    { currency: source, iconUrl: route.source_method_icon_url },
     { currency: route.entry_asset ?? "—", provider: entry?.provider },
-    { currency: target, provider: exit?.provider },
+    { currency: target, provider: exit?.provider, iconUrl: route.target_method_icon_url },
   ];
 }
 
-function WorkflowIcon({ currency }: { currency: string }) {
+function WorkflowIcon({ currency, iconUrl }: { currency: string; iconUrl?: string }) {
   const mark = FIAT_MARKS[currency.toUpperCase()];
-  if (mark) return <span className={styles.workflowFlag} aria-hidden="true">{mark}</span>;
+  if (mark && !iconUrl) return <span className={styles.workflowFlag} aria-hidden="true">{mark}</span>;
 
   return (
     <span className={styles.workflowIcon} aria-hidden="true">
-      <img src={assetIconUrl(currency) ?? `${ASSET_ICON_CDN}/generic.png`} alt="" />
+      <img src={iconUrl ?? assetIconUrl(currency) ?? `${ASSET_ICON_CDN}/generic.png`} alt="" />
     </span>
   );
 }
@@ -218,7 +219,7 @@ export function SidePanel({
                             <span className={styles.workflowPart} key={`${step.currency}-${stepIndex}`}>
                               {stepIndex > 0 && <span className={styles.workflowArrow} aria-hidden="true">→</span>}
                               <span className={styles.workflowAsset}>
-                                <WorkflowIcon currency={step.currency} />
+                                <WorkflowIcon currency={step.currency} iconUrl={step.iconUrl} />
                                 <span>{assetLabel(step.currency)}</span>
                               </span>
                               <WorkflowVenue provider={step.provider} />

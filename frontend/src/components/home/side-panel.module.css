@@ -583,6 +583,15 @@
   color: var(--color-text-faint);
 }
 
+.workflowVenue {
+  color: var(--color-text-soft);
+  font-weight: 750;
+}
+
+.workflowArrow {
+  color: var(--color-text-faint);
+}
+
 .bestBadge {
   background: var(--color-accent);
   color: var(--color-primary);

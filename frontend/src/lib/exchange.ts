@@ -61,10 +61,12 @@ export interface RouteCandidate {
   status: "partial" | "complete";
   source_amount_minor: number;
   source_currency: string;
+  source_method_icon_url?: string;
   entry_asset: string;
   entry_network: string;
   target_amount_minor?: number;
   target_currency?: string;
+  target_method_icon_url?: string;
   route_kind?: "fiat_to_fiat" | "fiat_to_crypto" | "crypto_to_fiat" | "crypto_to_crypto";
   bridge_currency?: string | null;
   market_path?: CryptoMarketPath;
