@@ -254,8 +254,8 @@
 }
 
 .refreshOptions button[aria-pressed="true"] {
-  background: var(--color-primary);
-  color: var(--color-accent);
+  background: var(--color-accent);
+  color: #171717;
 }
 
 .sourceSettings {
@@ -1743,8 +1743,7 @@
 }
 
 :global(html[data-theme="dark"]) .refreshButton:hover:not(:disabled),
-:global(html[data-theme="dark"]) .settingsButton:hover,
-:global(html[data-theme="dark"]) .modeTabs .modeActive {
+:global(html[data-theme="dark"]) .settingsButton:hover {
   background: #292929;
 }
 

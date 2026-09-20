@@ -199,7 +199,7 @@
 
 .bestBadge {
   background: var(--color-accent);
-  color: var(--color-primary);
+  color: #171717;
 }
 
 .deltaBadge {
@@ -547,7 +547,7 @@
 
 .bestBadge {
   background: var(--color-accent);
-  color: var(--color-primary);
+  color: #171717;
 }
 
 .deltaBadge {
