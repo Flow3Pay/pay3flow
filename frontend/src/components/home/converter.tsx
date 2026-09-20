@@ -182,7 +182,9 @@ function mapRoutes(response: Awaited<ReturnType<typeof fetchP2pRoutes>>): RouteC
         ? Math.round((targetAmount / bestTarget - 1) * 10_000)
         : 0;
     return {
-      route_id: `live:${entryOffer?.source ?? "direct"}:${entryOffer?.ad_id ?? "none"}:${exitOffer?.source ?? "direct"}:${exitOffer?.ad_id ?? "none"}`,
+      route_id: route.market_path
+        ? `spot:${route.market_path.venue}:${route.market_path.source_pair}:${route.market_path.target_pair}`
+        : `live:${entryOffer?.source ?? "direct"}:${entryOffer?.ad_id ?? "none"}:${exitOffer?.source ?? "direct"}:${exitOffer?.ad_id ?? "none"}`,
       status: "complete",
       source_amount_minor: Math.round(Number(route.source_amount) * 100),
       source_currency: route.source_fiat,
@@ -194,6 +196,7 @@ function mapRoutes(response: Awaited<ReturnType<typeof fetchP2pRoutes>>): RouteC
       target_currency: route.target_fiat,
       route_kind: route.route_kind,
       bridge_currency: route.bridge_currency,
+      market_path: route.market_path,
       spread_bps: relativeBps,
       is_current_best: index === 0,
       is_live_market: true,
@@ -206,7 +209,26 @@ function mapRoutes(response: Awaited<ReturnType<typeof fetchP2pRoutes>>): RouteC
       exit_offer_ad_id: exitOffer?.ad_id,
       entry_offer_snapshot: entryOffer,
       exit_offer_snapshot: exitOffer,
-      legs: [
+      legs: route.market_path
+        ? [
+            {
+              kind: "entry" as const,
+              from: route.source_fiat,
+              to: route.bridge_currency ?? route.target_fiat,
+              provider: route.market_path.venue,
+              status: "found" as const,
+            },
+            ...(route.bridge_currency
+              ? [{
+                  kind: "exit" as const,
+                  from: route.bridge_currency,
+                  to: route.target_fiat,
+                  provider: route.market_path.venue,
+                  status: "found" as const,
+                }]
+              : []),
+          ]
+        : [
         ...(entryOffer
           ? [{
               kind: "entry" as const,
@@ -225,7 +247,7 @@ function mapRoutes(response: Awaited<ReturnType<typeof fetchP2pRoutes>>): RouteC
               status: "found" as const,
             }]
           : []),
-      ],
+          ],
     };
   });
 }
@@ -569,7 +591,6 @@ export function Converter() {
           !sourceIsWallet && !targetIsWallet && selectedIntermediaryAssets.length > 0
             ? selectedIntermediaryAssets
             : undefined,
-        bridgeFiat: sourceIsWallet && targetIsWallet ? targetCurrency : undefined,
         sourceNetwork: sourceIsWallet ? selectedNetwork.id : undefined,
         targetNetwork: targetIsWallet ? selectedNetwork.id : undefined,
         sourcePaymentMethod: sourceIsWallet ? undefined : sourceMethod.p2pQuery,
@@ -803,12 +824,6 @@ export function Converter() {
               <span className={styles.currencyHint}>
                 {sourceMethod?.currency || sourceCurrency || "AMD"} available via {sourceMethod?.kind === "wallet" ? "digital wallet" : "bank transfer"}
               </span>
-              <div className={styles.walletSupport}>
-                <span>Supported wallets</span>
-                <div>
-                  <b>◈</b><b>◉</b><b>W</b><small>+ more</small>
-                </div>
-              </div>
             </div>
             <div className={styles.methodControls}>
               <button
@@ -849,6 +864,12 @@ export function Converter() {
                 />
               )}
             </div>
+            <div className={styles.walletSupport}>
+              <span>Supported wallets</span>
+              <div>
+                <b>◈</b><b>◉</b><b>W</b><small>+ more</small>
+              </div>
+            </div>
           </div>
 
           <div className={styles.flowBridge}>
@@ -885,12 +906,6 @@ export function Converter() {
                     ? `Estimated ${previewRoute.target_currency}`
                     : "Live estimate appears here"}
               </span>
-              <div className={styles.walletSupport}>
-                <span>Supported wallets</span>
-                <div>
-                  <b>◈</b><b>◉</b><b>W</b><small>+ more</small>
-                </div>
-              </div>
             </div>
             <div className={styles.methodControls}>
               <button
@@ -930,6 +945,12 @@ export function Converter() {
                   }}
                 />
               )}
+            </div>
+            <div className={styles.walletSupport}>
+              <span>Supported wallets</span>
+              <div>
+                <b>◈</b><b>◉</b><b>W</b><small>+ more</small>
+              </div>
             </div>
           </div>
 

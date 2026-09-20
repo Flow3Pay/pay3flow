@@ -11,6 +11,10 @@ use futures::future::join_all;
 use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
+use crate::p2p::spot::{
+    BinanceSpotSource, BitgetSpotSource, BybitSpotSource, CryptoMarketSource, CryptoTicker,
+    OkxSpotSource,
+};
 use crate::p2p::{
     binance::BinanceP2pSource, bitget::BitgetP2pSource, bybit::BybitP2pSource, okx::OkxP2pSource,
     rapira::RapiraP2pSource,
@@ -257,6 +261,7 @@ pub struct P2pSearchService {
     cache_ttl: Duration,
     cache: Arc<RwLock<HashMap<String, CachedSearch>>>,
     sources: Arc<[Arc<dyn P2pSource>]>,
+    market_sources: Arc<[Arc<dyn CryptoMarketSource>]>,
     pub(crate) default_assets: Arc<[String]>,
 }
 
@@ -275,33 +280,38 @@ impl P2pSearchService {
             .build()
             .context("failed to build P2P HTTP client")?;
         let mut sources: Vec<Arc<dyn P2pSource>> = Vec::new();
+        let mut market_sources: Vec<Arc<dyn CryptoMarketSource>> = Vec::new();
         if config.p2p_binance_enabled {
             sources.push(Arc::new(BinanceP2pSource::new(
                 client.clone(),
                 config.p2p_binance_url.clone(),
             )));
+            market_sources.push(Arc::new(BinanceSpotSource::new(client.clone())));
         }
         if config.p2p_bybit_enabled {
             sources.push(Arc::new(BybitP2pSource::new(
                 client.clone(),
                 config.p2p_bybit_url.clone(),
             )));
+            market_sources.push(Arc::new(BybitSpotSource::new(client.clone())));
         }
         if config.p2p_okx_enabled {
             sources.push(Arc::new(OkxP2pSource::new(
                 client.clone(),
                 config.p2p_okx_url.clone(),
             )));
+            market_sources.push(Arc::new(OkxSpotSource::new(client.clone())));
         }
         if config.p2p_bitget_enabled {
             sources.push(Arc::new(BitgetP2pSource::new(
                 client.clone(),
                 config.p2p_bitget_url.clone(),
             )));
+            market_sources.push(Arc::new(BitgetSpotSource::new(client.clone())));
         }
         if config.p2p_rapira_enabled {
             sources.push(Arc::new(RapiraP2pSource::new(
-                client,
+                client.clone(),
                 config.p2p_rapira_url.clone(),
             )));
         }
@@ -311,6 +321,7 @@ impl P2pSearchService {
             cache_ttl: Duration::from_millis(config.p2p_search_cache_ttl_ms.min(60_000)),
             cache: Arc::new(RwLock::new(HashMap::new())),
             sources: sources.into(),
+            market_sources: market_sources.into(),
             default_assets: config.p2p_search_assets.clone().into(),
         })
     }
@@ -323,6 +334,7 @@ impl P2pSearchService {
             cache_ttl: Duration::ZERO,
             cache: Arc::new(RwLock::new(HashMap::new())),
             sources: sources.into(),
+            market_sources: Vec::new().into(),
             default_assets: vec![
                 "USDT".into(),
                 "USDC".into(),
@@ -348,7 +360,8 @@ impl P2pSearchService {
                 "ATOM".into(),
                 "UNI".into(),
                 "SUI".into(),
-            ].into(),
+            ]
+            .into(),
         }
     }
 
@@ -471,6 +484,30 @@ impl P2pSearchService {
                 },
             );
         }
+    }
+
+    pub(crate) async fn search_market_tickers(
+        &self,
+        requested_sources: Option<&str>,
+    ) -> Vec<(String, Result<Vec<CryptoTicker>>)> {
+        let selected_sources = self
+            .market_sources
+            .iter()
+            .filter(|source| {
+                requested_sources
+                    .is_none_or(|requested| requested.split(',').any(|name| name == source.name()))
+            })
+            .collect::<Vec<_>>();
+
+        join_all(selected_sources.into_iter().map(|source| async move {
+            let name = source.name().to_string();
+            let result = tokio::time::timeout(self.timeout, source.tickers())
+                .await
+                .map_err(|_| anyhow::anyhow!("{} spot ticker request timed out", name))
+                .and_then(|result| result);
+            (name, result)
+        }))
+        .await
     }
 }
 

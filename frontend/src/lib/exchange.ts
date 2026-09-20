@@ -67,6 +67,7 @@ export interface RouteCandidate {
   target_currency?: string;
   route_kind?: "fiat_to_fiat" | "fiat_to_crypto" | "crypto_to_fiat" | "crypto_to_crypto";
   bridge_currency?: string | null;
+  market_path?: CryptoMarketPath;
   spread_bps: number;
   fee_minor?: number;
   eta_minutes?: number;
@@ -82,6 +83,15 @@ export interface RouteCandidate {
   entry_offer_snapshot?: P2pOffer;
   exit_offer_snapshot?: P2pOffer;
   legs: RouteLeg[];
+}
+
+export interface CryptoMarketPath {
+  venue: string;
+  source_pair: string;
+  target_pair: string;
+  source_rate: string;
+  target_rate: string;
+  intermediary_amount: string;
 }
 
 export interface P2pAdvertiser {
@@ -124,6 +134,7 @@ export interface P2pRoute {
   transfer_fee_included: boolean;
   route_kind?: "fiat_to_fiat" | "fiat_to_crypto" | "crypto_to_fiat" | "crypto_to_crypto";
   bridge_currency?: string | null;
+  market_path?: CryptoMarketPath;
   payment_methods_verified: boolean;
   entry_offer?: P2pOffer;
   exit_offer?: P2pOffer;

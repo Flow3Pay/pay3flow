@@ -1210,6 +1210,7 @@
 
 .moneyPanel {
   min-height: 0;
+  flex-wrap: wrap;
   align-items: flex-start;
   padding: 15px 15px 12px;
   border: 1px solid #d9ded4;
@@ -1407,6 +1408,11 @@
   font-family: var(--font-mono);
   font-size: 9px;
   line-height: 1;
+}
+
+.moneyPanel > .walletSupport {
+  width: 100%;
+  flex: 0 0 100%;
 }
 
 .walletSupport > div {

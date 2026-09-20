@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use chrono::{DateTime, Utc};
 use futures::future::join_all;
 use serde::{Deserialize, Serialize};
@@ -9,6 +9,7 @@ use crate::p2p::service::{
     normalize_sources, P2pOffer, P2pSearchQuery, P2pSearchService, P2pSide, PaymentMethodMatch,
     SourceStatus,
 };
+use crate::p2p::spot::CryptoTicker;
 
 const DEFAULT_ROUTE_LIMIT: usize = 20;
 const MAX_ROUTE_LIMIT: usize = 100;
@@ -22,7 +23,7 @@ pub struct P2pRouteSearchQuery {
     pub source_amount: f64,
     pub source_network: Option<String>,
     pub target_network: Option<String>,
-    /// Fiat currency used as a pivot when both endpoints are crypto assets.
+    /// Legacy field. Crypto-to-crypto routes no longer use a fiat pivot.
     pub bridge_fiat: Option<String>,
     /// Backward-compatible alias for `intermediary_assets`.
     pub assets: Option<String>,
@@ -59,12 +60,23 @@ pub struct P2pRoute {
     pub transfer_fee_included: bool,
     pub route_kind: String,
     pub bridge_currency: Option<String>,
+    pub market_path: Option<CryptoMarketPath>,
     /// True when both selected bank names were present in venue responses.
     /// False means at least one venue returned only opaque payment IDs.
     pub payment_methods_verified: bool,
     pub entry_offer: Option<P2pOffer>,
     pub exit_offer: Option<P2pOffer>,
     pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CryptoMarketPath {
+    pub venue: String,
+    pub source_pair: String,
+    pub target_pair: String,
+    pub source_rate: String,
+    pub target_rate: String,
+    pub intermediary_amount: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -93,7 +105,6 @@ pub struct P2pRouteSearchResponse {
 struct NormalizedRouteQuery {
     source_currency: String,
     target_currency: String,
-    bridge_fiat: Option<String>,
     source_amount: f64,
     assets: Vec<String>,
     source_payment_method: Option<String>,
@@ -213,41 +224,21 @@ impl P2pSearchService {
                 );
             }
             (true, true) => {
-                let pivot = query
-                    .bridge_fiat
-                    .as_deref()
-                    .context("bridge_fiat is required for a crypto-to-crypto search")?;
                 let source_asset = query.source_currency.clone();
                 let target_asset = query.target_currency.clone();
-                let source_query = leg_query(
-                    pivot,
-                    &source_asset,
-                    P2pSide::SellCrypto,
-                    None,
-                    None,
-                    &query,
-                );
-                let target_query =
-                    leg_query(pivot, &target_asset, P2pSide::BuyCrypto, None, None, &query);
-                let (source, target) =
-                    tokio::join!(self.search(source_query), self.search(target_query));
-                let source = source?;
-                let target = target?;
-                let source_offers =
-                    reject_price_outliers(source.offers, query.max_price_deviation_bps);
-                let target_offers =
-                    reject_price_outliers(target.offers, query.max_price_deviation_bps);
-                let before = routes.len();
-                compose_crypto_routes(&mut routes, &query, pivot, &source_offers, &target_offers);
-                push_asset_status(
-                    &mut asset_statuses,
-                    target_asset,
-                    &source.sources,
-                    &target.sources,
-                    &source_offers,
-                    &target_offers,
-                    routes.len() - before,
-                );
+                for (venue, result) in self.search_market_tickers(query.sources.as_deref()).await {
+                    let Ok(tickers) = result else {
+                        continue;
+                    };
+                    compose_crypto_market_routes(
+                        &mut routes,
+                        &query,
+                        &venue,
+                        &source_asset,
+                        &target_asset,
+                        &tickers,
+                    );
+                }
             }
         }
 
@@ -322,20 +313,12 @@ fn normalize_query(
     if max_price_deviation_bps > 5_000 {
         bail!("max_price_deviation_bps must not exceed 5000");
     }
-    let bridge_fiat = query
-        .bridge_fiat
-        .map(|value| value.trim().to_ascii_uppercase())
-        .filter(|value| !value.is_empty());
-    if bridge_fiat.as_deref().is_some_and(is_crypto) {
-        bail!("bridge_fiat must be a fiat currency");
-    }
     validate_network(&query.source_network, &source_currency)?;
     validate_network(&query.target_network, &target_currency)?;
 
     Ok(NormalizedRouteQuery {
         source_currency,
         target_currency,
-        bridge_fiat,
         source_amount: query.source_amount,
         assets,
         source_payment_method: trimmed(query.source_payment_method),
@@ -523,6 +506,7 @@ fn compose_fiat_routes(
                 transfer_fee_included: same_venue,
                 route_kind: "fiat_to_fiat".into(),
                 bridge_currency: None,
+                market_path: None,
                 payment_methods_verified,
                 entry_offer: Some(entry.clone()),
                 exit_offer: Some(exit.clone()),
@@ -565,6 +549,7 @@ fn compose_fiat_to_crypto_routes(
             transfer_fee_included: true,
             route_kind: "fiat_to_crypto".into(),
             bridge_currency: None,
+            market_path: None,
             payment_methods_verified,
             entry_offer: Some(offer.clone()),
             exit_offer: None,
@@ -612,6 +597,7 @@ fn compose_crypto_to_fiat_routes(
             transfer_fee_included: true,
             route_kind: "crypto_to_fiat".into(),
             bridge_currency: None,
+            market_path: None,
             payment_methods_verified,
             entry_offer: None,
             exit_offer: Some(offer.clone()),
@@ -622,68 +608,111 @@ fn compose_crypto_to_fiat_routes(
     }
 }
 
-fn compose_crypto_routes(
+fn compose_crypto_market_routes(
     routes: &mut Vec<P2pRoute>,
     query: &NormalizedRouteQuery,
-    bridge_fiat: &str,
-    source_offers: &[P2pOffer],
-    target_offers: &[P2pOffer],
+    venue: &str,
+    source_asset: &str,
+    target_asset: &str,
+    tickers: &[CryptoTicker],
 ) {
-    for entry in source_offers {
-        let Some(entry_price) = positive_number(&entry.price) else {
+    const SPOT_FEE_RATE: f64 = 0.001;
+    let intermediaries = std::iter::once(None).chain(
+        query
+            .assets
+            .iter()
+            .map(String::as_str)
+            .filter(|asset| !asset.eq_ignore_ascii_case(source_asset))
+            .filter(|asset| !asset.eq_ignore_ascii_case(target_asset))
+            .map(Some),
+    );
+
+    for intermediary in intermediaries {
+        let first = match intermediary {
+            Some(asset) => conversion_quote(tickers, source_asset, asset),
+            None => conversion_quote(tickers, source_asset, target_asset),
+        };
+        let second = intermediary.and_then(|asset| conversion_quote(tickers, asset, target_asset));
+        let Some(first) = first else {
             continue;
         };
-        if positive_number(&entry.available_asset)
-            .is_none_or(|available| available < query.source_amount)
-        {
+        if intermediary.is_some() && second.is_none() {
             continue;
         }
-        let bridge_amount = query.source_amount * entry_price;
-        for exit in target_offers {
-            let same_venue = entry.source == exit.source;
-            if !same_venue && !query.allow_cross_venue {
-                continue;
-            }
-            let Some(exit_price) = positive_number(&exit.price) else {
-                continue;
-            };
-            let target_amount = bridge_amount / exit_price;
-            if positive_number(&exit.available_asset)
-                .is_none_or(|available| available < target_amount)
-                || !covers_target(exit, bridge_amount)
-            {
-                continue;
-            }
-            let mut warnings = vec![
-                "Search estimate only: platform fees, account eligibility and execution are not verified.".into(),
-            ];
-            if !same_venue {
-                warnings.push(
-                    "Cross-venue route requires an asset transfer; network fee and compatible network are not included."
-                        .into(),
-                );
-            }
-            routes.push(P2pRoute {
-                rank: 0,
-                asset: query.target_currency.clone(),
-                source_fiat: query.source_currency.clone(),
-                source_amount: fixed(query.source_amount, 8),
-                acquired_asset_amount: fixed(target_amount, 8),
-                target_fiat: query.target_currency.clone(),
-                target_amount: fixed(target_amount, 8),
-                effective_rate: fixed(target_amount / query.source_amount, 8),
-                same_venue,
-                requires_asset_transfer: !same_venue,
-                transfer_fee_included: same_venue,
-                route_kind: "crypto_to_crypto".into(),
-                bridge_currency: Some(bridge_fiat.into()),
-                payment_methods_verified: true,
-                entry_offer: Some(entry.clone()),
-                exit_offer: Some(exit.clone()),
-                warnings,
-            });
+
+        let intermediary_amount = query.source_amount * first.rate * (1.0 - SPOT_FEE_RATE);
+        let second_rate = second.as_ref().map(|quote| quote.rate).unwrap_or(1.0);
+        let target_pair = second
+            .as_ref()
+            .map(|quote| quote.pair.clone())
+            .unwrap_or_else(|| first.pair.clone());
+        let target_amount = match second {
+            Some(second) => intermediary_amount * second.rate * (1.0 - SPOT_FEE_RATE),
+            None => intermediary_amount,
+        };
+        if !target_amount.is_finite() || target_amount <= 0.0 {
+            continue;
         }
+
+        let bridge_currency = intermediary.map(str::to_owned);
+        let path = CryptoMarketPath {
+            venue: venue.into(),
+            source_pair: first.pair,
+            target_pair,
+            source_rate: fixed(first.rate, 12),
+            target_rate: fixed(second_rate, 12),
+            intermediary_amount: fixed(intermediary_amount, 12),
+        };
+        routes.push(P2pRoute {
+            rank: 0,
+            asset: target_asset.into(),
+            source_fiat: source_asset.into(),
+            source_amount: fixed(query.source_amount, 12),
+            acquired_asset_amount: fixed(target_amount, 12),
+            target_fiat: target_asset.into(),
+            target_amount: fixed(target_amount, 12),
+            effective_rate: fixed(target_amount / query.source_amount, 12),
+            same_venue: true,
+            requires_asset_transfer: false,
+            transfer_fee_included: false,
+            route_kind: "crypto_to_crypto".into(),
+            bridge_currency,
+            market_path: Some(path),
+            payment_methods_verified: true,
+            entry_offer: None,
+            exit_offer: None,
+            warnings: vec![
+                "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.".into(),
+            ],
+        });
     }
+}
+
+struct ConversionQuote {
+    pair: String,
+    rate: f64,
+}
+
+fn conversion_quote(tickers: &[CryptoTicker], from: &str, to: &str) -> Option<ConversionQuote> {
+    let direct = format!("{}{}", from.to_ascii_uppercase(), to.to_ascii_uppercase());
+    if let Some(ticker) = tickers
+        .iter()
+        .find(|ticker| ticker.symbol.eq_ignore_ascii_case(&direct))
+    {
+        return Some(ConversionQuote {
+            pair: ticker.symbol.clone(),
+            rate: ticker.bid,
+        });
+    }
+
+    let inverse = format!("{}{}", to.to_ascii_uppercase(), from.to_ascii_uppercase());
+    tickers
+        .iter()
+        .find(|ticker| ticker.symbol.eq_ignore_ascii_case(&inverse))
+        .map(|ticker| ConversionQuote {
+            pair: ticker.symbol.clone(),
+            rate: 1.0 / ticker.ask,
+        })
 }
 
 fn push_asset_status(
@@ -775,7 +804,6 @@ mod tests {
         NormalizedRouteQuery {
             source_currency: "AMD".into(),
             target_currency: "RUB".into(),
-            bridge_fiat: None,
             source_amount: 100_000.0,
             assets: vec!["USDT".into()],
             source_payment_method: None,
@@ -867,6 +895,50 @@ mod tests {
         assert_eq!(routes.len(), 1);
         assert!(!routes[0].payment_methods_verified);
         assert_eq!(routes[0].warnings.len(), 3);
+    }
+
+    #[test]
+    fn composes_crypto_to_crypto_route_without_fiat() {
+        let query = NormalizedRouteQuery {
+            source_currency: "ETH".into(),
+            target_currency: "USDC".into(),
+            source_amount: 0.04,
+            assets: vec!["USDT".into()],
+            source_payment_method: None,
+            target_payment_method: None,
+            merchant_only: false,
+            min_orders: None,
+            min_completion_rate: None,
+            allow_cross_venue: true,
+            max_price_deviation_bps: 1_000,
+            limit: 20,
+            sources: None,
+        };
+        let tickers = vec![
+            CryptoTicker {
+                symbol: "ETHUSDT".into(),
+                bid: 2_500.0,
+                ask: 2_501.0,
+            },
+            CryptoTicker {
+                symbol: "USDCUSDT".into(),
+                bid: 0.999,
+                ask: 1.001,
+            },
+        ];
+        let mut routes = Vec::new();
+
+        compose_crypto_market_routes(&mut routes, &query, "bybit", "ETH", "USDC", &tickers);
+
+        assert_eq!(routes.len(), 1);
+        let route = &routes[0];
+        assert_eq!(route.source_fiat, "ETH");
+        assert_eq!(route.target_fiat, "USDC");
+        assert_eq!(route.bridge_currency.as_deref(), Some("USDT"));
+        assert!(route.entry_offer.is_none());
+        assert!(route.exit_offer.is_none());
+        assert_eq!(route.market_path.as_ref().unwrap().venue, "bybit");
+        assert!(route.target_amount.parse::<f64>().unwrap() > 99.0);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

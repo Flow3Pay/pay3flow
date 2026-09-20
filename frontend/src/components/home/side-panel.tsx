@@ -141,9 +141,17 @@ export function SidePanel({
                         <span className={styles.routeAmount}>{money(route.target_amount_minor, route.target_currency)}</span>
                         <span className={styles.workflow}>{workflowLabel(route)}</span>
                         <span className={styles.routeFooter}>
-                          <span className={route.payment_methods_verified ? styles.verified : styles.unverified}>
+                          <span className={route.route_kind === "crypto_to_crypto"
+                            ? styles.verified
+                            : route.payment_methods_verified
+                              ? styles.verified
+                              : styles.unverified}>
                             <i />
-                            {route.payment_methods_verified ? "Banks confirmed" : "Confirm bank support"}
+                            {route.route_kind === "crypto_to_crypto"
+                              ? "Spot market"
+                              : route.payment_methods_verified
+                                ? "Banks confirmed"
+                                : "Confirm bank support"}
                           </span>
                           <span className={styles.selectLabel}>{selected ? "Selected" : "Choose"} →</span>
                         </span>

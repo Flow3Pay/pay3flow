@@ -98,6 +98,7 @@ export function RouteInstructions({ route, onClose }: RouteInstructionsProps) {
   const crossVenue = Boolean(entry && exit && entry.provider !== exit.provider);
   const cryptoToCrypto = route.route_kind === "crypto_to_crypto";
   const cryptoToFiat = route.route_kind === "crypto_to_fiat";
+  const marketPath = route.market_path;
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -130,6 +131,35 @@ export function RouteInstructions({ route, onClose }: RouteInstructionsProps) {
         </div>
 
         <div className={styles.workflow}>
+          {cryptoToCrypto && marketPath && (
+            <article className={styles.step}>
+              <span className={styles.stepNumber}>01</span>
+              <div>
+                <strong>
+                  {route.bridge_currency
+                    ? `Swap ${route.source_currency} → ${route.bridge_currency} → ${route.target_currency}`
+                    : `Swap ${route.source_currency} → ${route.target_currency}`}
+                </strong>
+                <p>
+                  Use the {marketPath.venue} spot market. The route uses {marketPath.source_pair}
+                  {route.bridge_currency ? ` and ${marketPath.target_pair}` : ""}; no bank or fiat payment is involved.
+                </p>
+                <div className={styles.counterparty}>
+                  <div className={styles.counterpartyTopline}>
+                    <span className={styles.counterpartyLabel}>Spot market</span>
+                    <span className={styles.profileBadge}>{marketPath.venue}</span>
+                  </div>
+                  <strong className={styles.advertiser}>{marketPath.source_pair}</strong>
+                  <span className={styles.venueLine}>Conversion rate {marketPath.source_rate}</span>
+                  {route.bridge_currency && (
+                    <span className={styles.paymentLine}>
+                      {marketPath.target_pair} · second leg rate {marketPath.target_rate}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </article>
+          )}
           {route.entry_offer_snapshot && (
             <article className={styles.step}>
               <span className={styles.stepNumber}>01</span>

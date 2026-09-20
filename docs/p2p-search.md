@@ -93,6 +93,12 @@ Routes whose two selected banks are explicitly named by both advertisements
 are ranked ahead of routes with opaque payment IDs. The response exposes this
 as `payment_methods_verified`; unverified routes also include a warning.
 
+For crypto-to-crypto requests, the route builder uses spot-market tickers from
+the selected enabled venues instead of P2P fiat advertisements. It searches a
+direct pair or a crypto-only path such as `ETH -> USDT -> USDC`; `bridge_fiat`
+is retained only for wire compatibility and is ignored by this route type. No
+bank payment or AMD/RUB leg is introduced into a crypto-to-crypto route.
+
 By default only same-venue routes are returned. They do not require moving the
 asset from one exchange to another. Set `allow_cross_venue=true` to include
 cross-venue candidates; they are marked `requires_asset_transfer=true`, and
