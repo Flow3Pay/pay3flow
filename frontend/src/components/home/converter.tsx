@@ -1,11 +1,10 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   ExchangeCorridor,
   RouteCandidate,
-  authenticate,
   fetchCorridors,
   fetchP2pRoutes,
 } from "@/lib/exchange";
@@ -13,6 +12,7 @@ import { PaymentMethod, paymentMethodsFor } from "@/lib/payment-methods";
 
 import { PaymentMethodPicker } from "./payment-method-picker";
 import { BankLogo } from "./bank-logo";
+import { RouteInstructions } from "./route-instructions";
 import { SidePanel } from "./side-panel";
 import styles from "./converter.module.css";
 
@@ -122,22 +122,13 @@ function mapRoutes(response: Awaited<ReturnType<typeof fetchP2pRoutes>>): RouteC
   });
 }
 
-interface ConverterProps {
-  token: string | null;
-  email: string;
-  onAuthenticated: (token: string, email: string) => void;
-  onRequireAuth: () => void;
-}
-
-export function Converter({ token, email: sessionEmail, onAuthenticated }: ConverterProps) {
+export function Converter() {
   const [corridors, setCorridors] = useState<ExchangeCorridor[]>([]);
   const [corridorId, setCorridorId] = useState("");
   const [amount, setAmount] = useState("0");
-  const [authEmail, setAuthEmail] = useState(sessionEmail || "demo@pay3flow.dev");
-  const [authCode, setAuthCode] = useState("1234");
-  const [authBusy, setAuthBusy] = useState(false);
   const [routes, setRoutes] = useState<RouteCandidate[]>([]);
   const [selected, setSelected] = useState<RouteCandidate | null>(null);
+  const [instructionsRoute, setInstructionsRoute] = useState<RouteCandidate | null>(null);
   const [sourceMethodId, setSourceMethodId] = useState("am-ameriabank");
   const [targetMethodId, setTargetMethodId] = useState("ru-sberbank");
   const [directionReversed, setDirectionReversed] = useState(false);
@@ -368,15 +359,6 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
   }, [amount, corridor, sourceCurrency, targetCurrency]);
 
   useEffect(() => {
-    if (token) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [token]);
-
-  useEffect(() => {
     if (!settingsOpen) return;
     const onClickOutside = (event: MouseEvent) => {
       if (settingsRef.current && !settingsRef.current.contains(event.target as Node)) {
@@ -397,6 +379,7 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
     abortRef.current?.abort();
     setRoutes([]);
     setSelected(null);
+    setInstructionsRoute(null);
     setLastUpdatedAt(null);
     setSearching(false);
     setError(null);
@@ -467,20 +450,6 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
     setTargetMethodId(method.id);
     setMethodPicker(null);
     resetResults();
-  };
-
-  const signIn = async (event: FormEvent) => {
-    event.preventDefault();
-    setAuthBusy(true);
-    setError(null);
-    try {
-      const freshToken = await authenticate(authEmail.trim(), authCode.trim());
-      onAuthenticated(freshToken, authEmail.trim());
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Sign-in failed");
-    } finally {
-      setAuthBusy(false);
-    }
   };
 
   const startSearch = useCallback(async () => {
@@ -824,7 +793,7 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
             )}
           </button>
 
-          {error && token && <div className={styles.errorBox} role="alert">{error}</div>}
+          {error && <div className={styles.errorBox} role="alert">{error}</div>}
         </div>
 
         <SidePanel
@@ -832,6 +801,7 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
           routes={routes}
           selectedRouteId={selected?.route_id ?? null}
           onSelect={setSelected}
+          onOpenInstructions={setInstructionsRoute}
           searching={searching}
           searched={lastUpdatedAt !== null}
           hasAmount={hasAmount}
@@ -868,36 +838,11 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
         onSelect={chooseTargetMethod}
       />
 
-      {!token && (
-        <div className={styles.authBackdrop}>
-          <div className={styles.authModal} role="dialog" aria-modal="true" aria-labelledby="auth-title">
-            <form className={styles.authBox} onSubmit={signIn} data-testid="auth-form">
-              <div className={styles.authBrand}>
-                <span className={styles.authMark}>P3</span>
-                <span>PAY3FLOW ACCESS</span>
-              </div>
-              <div className={styles.authCopy}>
-                <span className={styles.authEyebrow}>Welcome back</span>
-                <strong id="auth-title">Sign in to route money smarter.</strong>
-                <p>Use your email and the demo one-time code to enter the live routing workspace.</p>
-              </div>
-              <label className={styles.fieldLabel}>
-                Email address
-                <input className={styles.textInput} type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} required autoFocus aria-label="Email" />
-              </label>
-              <label className={styles.fieldLabel}>
-                One-time code
-                <input className={styles.textInput} value={authCode} onChange={(event) => setAuthCode(event.target.value)} required inputMode="numeric" aria-label="One-time code" />
-              </label>
-              <div className={styles.demoNote}><span>Demo</span> Use code <strong>1234</strong></div>
-              {error && <div className={styles.errorBox} role="alert">{error}</div>}
-              <button className={styles.secondaryButton} disabled={authBusy} type="submit">
-                {authBusy ? "Opening workspace…" : "Enter Pay3Flow"}
-              </button>
-              <small className={styles.authLegal}>By continuing, you agree to the routing and settlement disclosure.</small>
-            </form>
-          </div>
-        </div>
+      {instructionsRoute && (
+        <RouteInstructions
+          route={instructionsRoute}
+          onClose={() => setInstructionsRoute(null)}
+        />
       )}
     </section>
   );

@@ -21,7 +21,7 @@ const VENUE_NAMES: Record<string, string> = {
 const money = (minor: number | undefined, currency: string | undefined) =>
   minor == null
     ? "—"
-    : `${(minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })} ${currency ?? ""}`;
+    : `${(minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2, useGrouping: false })} ${currency ?? ""}`;
 
 function spreadLabel(bps: number): string {
   const value = Math.abs(bps / 100);
@@ -47,6 +47,7 @@ interface SidePanelProps {
   routes: RouteCandidate[];
   selectedRouteId: string | null;
   onSelect: (route: RouteCandidate) => void;
+  onOpenInstructions: (route: RouteCandidate) => void;
   searching?: boolean;
   searched?: boolean;
   hasAmount?: boolean;
@@ -71,6 +72,7 @@ export function SidePanel({
   routes,
   selectedRouteId,
   onSelect,
+  onOpenInstructions,
   searching = false,
   searched = false,
   hasAmount = false,
@@ -104,31 +106,46 @@ export function SidePanel({
                 const selected = route.route_id === selectedRouteId;
                 return (
                   <li key={route.route_id}>
-                    <button
-                      type="button"
-                      className={`${styles.routeCard}${route.is_current_best ? ` ${styles.routeBest}` : ""}${selected ? ` ${styles.selected}` : ""}`}
-                      disabled={!complete}
-                      onClick={() => onSelect(route)}
-                      data-testid={complete ? "complete-route" : "partial-route"}
-                    >
-                      <span className={styles.routeTopline}>
-                        <span className={styles.routeRank}>#{String(index + 1).padStart(2, "0")}</span>
-                        {route.is_current_best ? (
-                          <span className={styles.bestBadge}>Best route</span>
-                        ) : (
-                          <span className={styles.deltaBadge}>{spreadLabel(route.spread_bps)}</span>
-                        )}
-                      </span>
-                      <span className={styles.routeAmount}>{money(route.target_amount_minor, route.target_currency)}</span>
-                      <span className={styles.workflow}>{workflowLabel(route)}</span>
-                      <span className={styles.routeFooter}>
-                        <span className={route.payment_methods_verified ? styles.verified : styles.unverified}>
-                          <i />
-                          {route.payment_methods_verified ? "Banks confirmed" : "Confirm bank support"}
+                    <div className={styles.routeCardShell}>
+                      <button
+                        type="button"
+                        className={`${styles.routeCard}${route.is_current_best ? ` ${styles.routeBest}` : ""}${selected ? ` ${styles.selected}` : ""}`}
+                        disabled={!complete}
+                        onClick={() => onSelect(route)}
+                        data-testid={complete ? "complete-route" : "partial-route"}
+                      >
+                        <span className={styles.routeTopline}>
+                          <span className={styles.routeRank}>#{String(index + 1).padStart(2, "0")}</span>
+                          {route.is_current_best ? (
+                            <span className={styles.bestBadge}>Best route</span>
+                          ) : (
+                            <span className={styles.deltaBadge}>{spreadLabel(route.spread_bps)}</span>
+                          )}
                         </span>
-                        <span className={styles.selectLabel}>{selected ? "Selected" : "Choose"} →</span>
-                      </span>
-                    </button>
+                        <span className={styles.routeAmount}>{money(route.target_amount_minor, route.target_currency)}</span>
+                        <span className={styles.workflow}>{workflowLabel(route)}</span>
+                        <span className={styles.routeFooter}>
+                          <span className={route.payment_methods_verified ? styles.verified : styles.unverified}>
+                            <i />
+                            {route.payment_methods_verified ? "Banks confirmed" : "Confirm bank support"}
+                          </span>
+                          <span className={styles.selectLabel}>{selected ? "Selected" : "Choose"} →</span>
+                        </span>
+                      </button>
+                      {complete && (
+                        <button
+                          type="button"
+                          className={styles.instructionButton}
+                          onClick={() => {
+                            onSelect(route);
+                            onOpenInstructions(route);
+                          }}
+                          data-testid="route-instructions-button"
+                        >
+                          View step-by-step instructions <span>↗</span>
+                        </button>
+                      )}
+                    </div>
                   </li>
                 );
               })}

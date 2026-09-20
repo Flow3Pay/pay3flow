@@ -1,38 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-
 import styles from "./header.module.css";
 
 interface HeaderProps {
-  connected: boolean;
-  address: string;
-  onConnect: () => void;
-  onDisconnect: () => void;
   brandHref?: string;
 }
 
 export function Header({
-  connected,
-  address,
-  onConnect,
-  onDisconnect,
   brandHref = "/",
 }: HeaderProps) {
-  const [profileOpen, setProfileOpen] = useState(false);
-  const profileRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!profileOpen) return;
-    const onClickOutside = (event: MouseEvent) => {
-      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
-        setProfileOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, [profileOpen]);
-
   return (
     <header className={styles.header}>
       <div className={styles.inner}>
@@ -52,40 +28,6 @@ export function Header({
             <span className={styles.pulse} />
             Markets live
           </span>
-          {connected ? (
-            <div className={styles.profileWrap} ref={profileRef}>
-              <button
-                type="button"
-                className={styles.profile}
-                aria-expanded={profileOpen}
-                onClick={() => setProfileOpen((value) => !value)}
-              >
-                <span className={styles.profileAvatar}>{address.slice(0, 1).toUpperCase()}</span>
-                <span className={styles.profileAddress}>{address}</span>
-                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                  <path d="m4 6 4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-              {profileOpen && (
-                <div className={styles.menu} role="menu">
-                  <div className={styles.menuIdentity}>
-                    <span>Signed in as</span>
-                    <strong>{address}</strong>
-                  </div>
-                  <button type="button" className={styles.menuItem} role="menuitem" onClick={onDisconnect}>
-                    Sign out
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <button type="button" className={styles.connect} onClick={onConnect}>
-              Sign in
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-          )}
         </div>
       </div>
     </header>

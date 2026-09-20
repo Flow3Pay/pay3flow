@@ -7,8 +7,6 @@ async function mockBackend(page: Page) {
     const json = (value: unknown, status = 200) =>
       route.fulfill({ status, contentType: "application/json", body: JSON.stringify(value) });
 
-    if (url.pathname === "/api/auth/login") return json({ error: "not found" }, 404);
-    if (url.pathname === "/api/auth/register") return json({ token: "e2e-token" });
     if (url.pathname === "/api/exchange/corridors") {
       return json({
         terms_version: "2026-09-19",
@@ -85,7 +83,7 @@ async function mockBackend(page: Page) {
   });
 }
 
-test("login modal → automatic P2P route search → select estimate", async ({ page }) => {
+test("public P2P route search → open step-by-step instructions", async ({ page }) => {
   await mockBackend(page);
   await page.goto("/");
 
@@ -105,9 +103,7 @@ test("login modal → automatic P2P route search → select estimate", async ({ 
     })
     .toBe(true);
 
-  await expect(page.getByRole("dialog", { name: "Sign in to route money smarter." })).toBeVisible();
-  await page.getByRole("button", { name: "Enter Pay3Flow" }).click();
-  await expect(page.getByTestId("auth-form")).toBeHidden();
+  await expect(page.getByTestId("auth-form")).toHaveCount(0);
   await expect(page.getByLabel("Amount to send")).toHaveValue("0");
 
   const amountInput = page.getByLabel("Amount to send");
@@ -158,7 +154,16 @@ test("login modal → automatic P2P route search → select estimate", async ({ 
   await routeGroups.evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
   await expect(page.getByTestId("complete-route").last()).toBeVisible();
   await routeGroups.evaluate((element) => element.scrollTo({ top: 0 }));
-  await page.getByTestId("complete-route").first().click();
-  await expect(page.getByTestId("selected-route")).toBeVisible();
-  await expect(page.getByText("Both banks are listed on the matched offers.")).toBeVisible();
+  await page.getByTestId("route-instructions-button").first().click();
+  const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
+  await expect(instructions).toBeVisible();
+  await expect(instructions.getByText("Buy USDT for 100000 AMD")).toBeVisible();
+  const offerLinks = instructions.getByRole("link", { name: "Open Binance offer ↗" });
+  await expect(offerLinks.first()).toHaveAttribute(
+    "href",
+    "https://example.com/entry-1",
+  );
+  await expect(offerLinks).toHaveCount(2);
+  await instructions.getByRole("button", { name: "Close instructions" }).click();
+  await expect(instructions).toBeHidden();
 });

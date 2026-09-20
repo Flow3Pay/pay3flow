@@ -148,6 +148,12 @@
   contain-intrinsic-size: 0 132px;
 }
 
+.routeCardShell {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
 .routeCard {
   position: relative;
   display: flex;
@@ -271,6 +277,20 @@
   color: var(--color-accent);
   font-size: 9px;
   font-weight: 800;
+}
+
+.instructionButton {
+  align-self: flex-start;
+  margin: 0 15px 4px;
+  color: var(--color-accent);
+  font-size: 9px;
+  font-weight: 800;
+  text-align: left;
+}
+
+.instructionButton:hover {
+  color: #fff;
+  text-decoration: underline;
 }
 
 .skeletonList {
