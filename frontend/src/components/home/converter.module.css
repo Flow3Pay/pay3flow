@@ -375,7 +375,7 @@
 .sourceOptionActive {
   border-color: var(--color-accent);
   background: var(--color-accent);
-  color: var(--color-primary);
+  color: #171717;
   box-shadow: 0 5px 13px rgba(185, 242, 39, 0.2);
 }
 
@@ -1320,13 +1320,13 @@
   border: 1px solid #b9e834;
   border-radius: 5px;
   background: var(--color-accent);
-  color: var(--color-text);
+  color: #171717;
   box-shadow: none;
   font-size: 12px;
 }
 
 .cta span:not(.spinner) {
-  color: #6d9800;
+  color: #2e2e2e;
   font-size: 17px;
 }
 
