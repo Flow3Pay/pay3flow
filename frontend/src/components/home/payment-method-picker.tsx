@@ -133,7 +133,6 @@ export function PaymentMethodPicker({
             </button>
             <h2 className={styles.title}>{title}</h2>
           </div>
-          <span className={styles.modeBadge}>{role === "sender" ? "Pay with" : "Receive with"}</span>
         </div>
 
         <div className={styles.searchRow}>

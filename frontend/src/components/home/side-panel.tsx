@@ -158,7 +158,7 @@ interface SidePanelProps {
 function SearchSkeleton() {
   return (
     <div className={styles.skeletonList} aria-label="Searching live routes">
-      {[0, 1, 2, 3].map((item) => (
+      {[0, 1, 2, 3, 4].map((item) => (
         <div className={styles.skeletonCard} key={item} style={{ animationDelay: `${item * 80}ms` }}>
           <span className={styles.skeletonShort} />
           <span className={styles.skeletonLong} />

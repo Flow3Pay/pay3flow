@@ -15,11 +15,19 @@ const VENUE_NAMES: Record<string, string> = {
 };
 
 const VENUE_ICON_URLS: Record<string, string> = {
-  binance: "https://binance.com/favicon.ico",
+  binance: "https://www.google.com/s2/favicons?domain=binance.com&sz=64",
   bybit: "https://www.bybit.com/favicon.ico",
   okx: "https://www.okx.com/favicon.ico",
   bitget: "https://www.bitget.com/favicon.ico",
   rapira: "https://rapira.net/favicon.ico",
+};
+
+const VENUE_DOMAINS: Record<string, string> = {
+  binance: "binance.com",
+  bybit: "bybit.com",
+  okx: "okx.com",
+  bitget: "bitget.com",
+  rapira: "rapira.net",
 };
 
 const venueName = (value: string | undefined) =>
@@ -36,13 +44,24 @@ const percentage = (value: number | null | undefined) =>
 const avatarInitial = (nickname: string) => nickname.trim().charAt(0).toUpperCase() || "?";
 
 function CounterpartyAvatar({ offer }: { offer: P2pOffer }) {
-  const venueIcon = VENUE_ICON_URLS[offer.source.toLowerCase()];
+  const venueKey = offer.source.toLowerCase();
+  const venueIcon = VENUE_ICON_URLS[venueKey];
+  const venueDomain = VENUE_DOMAINS[venueKey];
   return (
     <span className={styles.counterpartyAvatar} aria-hidden="true">
       <span className={styles.avatarInitial}>{avatarInitial(offer.advertiser.nickname)}</span>
       {venueIcon && (
         <span className={styles.avatarVenue}>
-          <img src={venueIcon} alt="" />
+          <img
+            src={venueIcon}
+            alt=""
+            onError={(event) => {
+              event.currentTarget.onerror = null;
+              if (venueDomain) {
+                event.currentTarget.src = `https://www.google.com/s2/favicons?domain=${venueDomain}&sz=64`;
+              }
+            }}
+          />
         </span>
       )}
     </span>
