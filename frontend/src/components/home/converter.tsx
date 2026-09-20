@@ -803,6 +803,7 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
           selectedRouteId={selected?.route_id ?? null}
           onSelect={setSelected}
           searching={searching}
+          searched={lastUpdatedAt !== null}
           hasAmount={hasAmount}
           sourceBank={sourceMethod?.name ?? "Sender bank"}
           targetBank={targetMethod?.name ?? "Recipient bank"}

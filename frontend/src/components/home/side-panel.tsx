@@ -48,6 +48,7 @@ interface SidePanelProps {
   selectedRouteId: string | null;
   onSelect: (route: RouteCandidate) => void;
   searching?: boolean;
+  searched?: boolean;
   hasAmount?: boolean;
   sourceBank?: string;
   targetBank?: string;
@@ -73,6 +74,7 @@ export function SidePanel({
   selectedRouteId,
   onSelect,
   searching = false,
+  searched = false,
   hasAmount = false,
   sourceBank = "Sender bank",
   targetBank = "Recipient bank",
@@ -167,11 +169,19 @@ export function SidePanel({
               <span className={styles.emptyNode}>RU</span>
             </div>
             <div>
-              <strong>{hasAmount ? "Preparing market scan" : "Your routes will appear here"}</strong>
+              <strong>
+                {searched && hasAmount
+                  ? "No routes found"
+                  : hasAmount
+                    ? "Preparing market scan"
+                    : "Your routes will appear here"}
+              </strong>
               <p>
-                {hasAmount
-                  ? "Pay3Flow is ready to compare entry assets, venues and recipient payout options."
-                  : "Enter an amount and we will assemble live cross-border paths in real time."}
+                {searched && hasAmount
+                  ? "No compatible live offers were found for this amount and payment method."
+                  : hasAmount
+                    ? "Pay3Flow is ready to compare entry assets, venues and recipient payout options."
+                    : "Enter an amount and we will assemble live cross-border paths in real time."}
               </p>
             </div>
             <div className={styles.emptyVenues}>
