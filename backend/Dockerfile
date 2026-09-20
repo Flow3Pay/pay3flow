@@ -2,8 +2,6 @@ FROM rust:1.97-bookworm AS builder
 WORKDIR /app
 
 COPY backend/Cargo.toml backend/Cargo.lock backend/
-COPY backend/build.rs backend/
-COPY backend/providers backend/providers
 RUN mkdir -p backend/src && echo "fn main(){}" > backend/src/main.rs \
     && cargo build --release --manifest-path backend/Cargo.toml 2>/dev/null; rm -rf backend/src
 COPY backend/src backend/src

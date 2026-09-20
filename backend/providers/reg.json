@@ -1,6 +1,0 @@
-{
-  "binance": "./binance/binance.json",
-  "bybit": "./bybit/bybit.json",
-  "okx": "./okx/okx.json",
-  "bitget": "./bitget/bitget.json"
-}
