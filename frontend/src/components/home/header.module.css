@@ -68,6 +68,30 @@
   gap: 9px;
 }
 
+.githubLink {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.72);
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+}
+
+.githubLink img {
+  display: block;
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
+.githubLink:hover {
+  border-color: var(--color-accent-strong);
+  background: var(--color-accent-soft);
+  transform: translateY(-1px);
+}
+
 .marketStatus {
   gap: 8px;
   padding: 0 10px;

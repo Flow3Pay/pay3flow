@@ -213,12 +213,18 @@
   overflow: hidden;
   padding-bottom: 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
   font-family: var(--font-sans);
   font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.05em;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition: color 0.15s ease;
+}
+
+.routeAmount:hover {
+  color: #6d9800;
 }
 
 .workflow {
@@ -298,38 +304,6 @@
 .workflowArrow {
   flex: 0 0 auto;
   color: rgba(255, 255, 255, 0.32);
-}
-
-.instructionButton {
-  position: absolute;
-  right: 32px;
-  top: 44px;
-  z-index: 3;
-  display: grid;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  padding: 0;
-  border: 1px solid var(--color-border);
-  border-radius: 9px;
-  background: #fff;
-  color: var(--color-text-soft);
-  box-shadow: 0 4px 10px rgba(55, 77, 52, 0.08);
-  transition: border-color 0.14s ease, background 0.14s ease, transform 0.14s ease;
-}
-
-.instructionButton:hover {
-  border-color: var(--color-accent-strong);
-  background: #f1f8df;
-  transform: translateY(-1px);
-}
-
-.instructionButton img {
-  display: block;
-  width: 22px;
-  height: 22px;
-  filter: grayscale(1) brightness(0.55);
-  object-fit: contain;
 }
 
 .skeletonList {
@@ -514,6 +488,10 @@
   color: var(--color-text);
 }
 
+.panelTop {
+  transform: translateY(-5px);
+}
+
 .liveBadge,
 .searchBadge,
 .readyBadge {
@@ -535,7 +513,7 @@
 }
 
 .routeCard {
-  padding: 15px 52px 15px 15px;
+  padding: 15px;
   border-color: var(--color-border);
   border-radius: 10px;
   background: #fbfcfa;
@@ -580,10 +558,6 @@
 .routeAmount {
   color: var(--color-text);
   border-bottom-color: var(--color-border);
-}
-
-.instructionButton {
-  color: #6d9800;
 }
 
 .skeletonCard {

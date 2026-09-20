@@ -28,6 +28,18 @@ export function Header({
             <span className={styles.pulse} />
             Markets live
           </span>
+          <a
+            className={styles.githubLink}
+            href="https://github.com/Flow3Pay/pay3flow"
+            target="_blank"
+            rel="noreferrer noopener"
+            aria-label="Open Pay3Flow on GitHub"
+          >
+            <img
+              src="https://cdn-icons-png.flaticon.com/512/2111/2111432.png"
+              alt=""
+            />
+          </a>
         </div>
       </div>
     </header>
