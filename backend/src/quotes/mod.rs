@@ -60,6 +60,7 @@ pub async fn compute_quote(
     request: PaymentRequest,
     redis_pool: Option<&crate::core::redis::RedisPool>,
 ) -> Quote {
+    const REFRESH_LOCK_TTL_SECS: u64 = 30;
     let from = request.currency.as_str();
     let to = request.to_currency.as_deref().unwrap_or(from);
     let amount = if from != to {
@@ -74,14 +75,56 @@ pub async fn compute_quote(
         if let Ok(Some(cached)) =
             crate::core::redis::get_json::<RouteResolved>(pool, &cache_key).await
         {
-            // Cache hit! Convert to Quote format
+            // Return the cached answer immediately, then refresh it in the
+            // background. The Redis lock prevents a request storm on fmatch.
+            let refresh_key = format!("fmatch:refresh:{cache_key}");
+            let ap = ap.clone();
+            let picker = picker.clone();
+            let pool = pool.clone();
+            let refresh_request = request.clone();
+            let refresh_cache_key = cache_key.clone();
+            tokio::spawn(async move {
+                if !matches!(
+                    crate::core::redis::try_acquire_lock(
+                        &pool,
+                        &refresh_key,
+                        REFRESH_LOCK_TTL_SECS,
+                    )
+                    .await,
+                    Ok(true)
+                ) {
+                    return;
+                }
+                let resolved = resolve_live(&ap, &picker, &refresh_request).await;
+                if resolved.source == RouteSource::Fmatch {
+                    let _ = crate::core::redis::set_json(&pool, &refresh_cache_key, &resolved, 300)
+                        .await;
+                }
+            });
+            // Cache hit! Convert to Quote format without waiting for refresh.
             return quote_from_result(request, cached);
         }
     }
 
-    // Compute quote normally
+    let resolved = resolve_live(ap, picker, &request).await;
+
+    // Cache the result
+    if let Some(pool) = redis_pool {
+        let _ = crate::core::redis::set_json(pool, &cache_key, &resolved, 300).await;
+    }
+
+    quote_from_result(request, resolved)
+}
+
+async fn resolve_live(
+    ap: &Service,
+    picker: &RoutePicker,
+    request: &PaymentRequest,
+) -> RouteResolved {
+    let from = request.currency.as_str();
+    let to = request.to_currency.as_deref().unwrap_or(from);
     let resolved = match ap
-        .submit_request("candidates", &fmatch_content(&request))
+        .submit_request("candidates", &fmatch_content(request))
         .await
     {
         Ok((_outcome, body)) => {
@@ -89,11 +132,11 @@ pub async fn compute_quote(
                 .as_ref()
                 .map(AcquirerCandidate::from_reply)
                 .unwrap_or_default();
-            picker.resolve(&request, Some(candidates))
+            picker.resolve(request, Some(candidates))
         }
-        Err(_) => picker.resolve(&request, None),
+        Err(_) => picker.resolve(request, None),
     };
-    let resolved = match resolved {
+    match resolved {
         RouteResolved {
             source: RouteSource::Fmatch,
             candidates,
@@ -111,14 +154,7 @@ pub async fn compute_quote(
             }
         }
         other => other,
-    };
-
-    // Cache the result
-    if let Some(pool) = redis_pool {
-        let _ = crate::core::redis::set_json(pool, &cache_key, &resolved, 300).await;
     }
-
-    quote_from_result(request, resolved)
 }
 
 /// Re-rank fmatch candidates for the swap pair `from → to`.

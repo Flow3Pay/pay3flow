@@ -39,6 +39,22 @@ where
     Ok(())
 }
 
+/// Acquire a short-lived single-flight lock for a background cache refresh.
+/// The expiration prevents a crashed task from blocking future refreshes.
+pub async fn try_acquire_lock(pool: &RedisPool, key: &str, ttl_secs: u64) -> Result<bool> {
+    let mut conn = pool.get().await.context("failed to get Redis connection")?;
+    let result: Option<String> = deadpool_redis::redis::cmd("SET")
+        .arg(key)
+        .arg("1")
+        .arg("NX")
+        .arg("EX")
+        .arg(ttl_secs)
+        .query_async(&mut conn)
+        .await
+        .context("failed to acquire Redis lock")?;
+    Ok(result.is_some())
+}
+
 /// Build the cache key for a fmatch candidate list.
 pub fn cache_key(from: &str, to: &str, amount: Option<&str>) -> String {
     match amount {
