@@ -127,6 +127,10 @@ impl OkxAd {
                 .is_some_and(|kind| kind.eq_ignore_ascii_case("merchant"));
         let fiat = self.quote_currency;
         let asset = self.base_currency;
+        let advertiser_profile_url = self
+            .public_user_id
+            .as_deref()
+            .map(|user_id| format!("https://www.okx.com/p2p/ads-merchant?publicUserId={user_id}"));
         P2pOffer {
             source: "okx".into(),
             source_url: format!(
@@ -162,7 +166,7 @@ impl OkxAd {
                     .as_deref()
                     .and_then(parse_percentage),
             },
-            advertiser_profile_url: None,
+            advertiser_profile_url,
         }
     }
 }
@@ -216,5 +220,9 @@ mod tests {
         assert_eq!(offer.advertiser.positive_rate, Some(0.991));
         assert!(!offer.source_url_is_exact);
         assert!(offer.advertiser.is_merchant);
+        assert_eq!(
+            offer.advertiser_profile_url.as_deref(),
+            Some("https://www.okx.com/p2p/ads-merchant?publicUserId=masked")
+        );
     }
 }

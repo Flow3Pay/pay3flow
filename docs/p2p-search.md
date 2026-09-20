@@ -46,9 +46,11 @@ exact advertisement returned by the source. The frontend instructions focus on
 the advertiser profile and nickname; when no stable profile URL is available,
 they open the venue's P2P market and tell the user to find the advertiser by
 nickname and verify the ad ID. Routes keep valuable offers even when a venue
-only provides a generic market URL. Binance currently provides exact public
-advertisement and advertiser profile URLs; Bybit, OKX, and Bitget can still
-contribute useful market offers without being silently discarded.
+only provides a generic market URL. Binance, OKX, and Bitget currently expose
+public advertiser profile URLs; Bybit exposes only a masked public identifier,
+so it still uses the venue fallback and asks the user to verify the nickname.
+All four venues can contribute useful market offers without being silently
+discarded.
 
 `payment_method` accepts the bank selected in the frontend. Named payment
 methods are matched after punctuation/case normalization. Some venues return

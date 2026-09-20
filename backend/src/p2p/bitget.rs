@@ -119,6 +119,10 @@ impl BitgetAd {
         let is_merchant = self.certified_merchant.is_some_and(|value| value > 0);
         let fiat = self.fiat_code;
         let asset = self.coin_code;
+        let advertiser_profile_url = self
+            .encrypt_user_id
+            .as_deref()
+            .map(|user_id| format!("https://www.bitget.com/p2p-trade/user/{user_id}"));
         P2pOffer {
             source: "bitget".into(),
             source_url: format!(
@@ -160,7 +164,7 @@ impl BitgetAd {
                     .as_deref()
                     .and_then(parse_percentage),
             },
-            advertiser_profile_url: None,
+            advertiser_profile_url,
         }
     }
 }
@@ -214,5 +218,9 @@ mod tests {
         assert_eq!(offer.advertiser.completed_orders_30d, Some(69));
         assert_eq!(offer.advertiser.positive_rate, Some(1.0));
         assert!(!offer.source_url_is_exact);
+        assert_eq!(
+            offer.advertiser_profile_url.as_deref(),
+            Some("https://www.bitget.com/p2p-trade/user/masked")
+        );
     }
 }
