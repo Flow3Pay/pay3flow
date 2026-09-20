@@ -28,6 +28,8 @@ const VENUE_ICON_URLS: Record<string, string> = {
   rapira: "https://rapira.net/favicon.ico",
 };
 
+const INSTRUCTION_ICON_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAACkUlEQVR4AbTVXWjNcRzH8TNuRJQbyihlFLFSE7nhwqaUC4nWWmm78JAmCnm4QDGR0aTmYh5upKSFyEN5SEoolJILIpGUWBQhO17fMzvb6Zz/2Rm2Pu/z/f5+/+/D7//7//7/DUkN8t9/aZBOpw/ifKG1/nMDhecrXI9J/DSbo79qoNAoTIxKZWVltzCGvxpfzZ9isxpwAwWWyH6IE8hKkzsGW1EnZjeb0YAaSGyT1YHP2IscaXLYxBGsQEYlN1B8rYxGhNoUuxZOX8QsNa7GXWTUbwNJk3FadKzsNhtqMTcinB6MY/VnjcdqvpzNqGgDSQ2ibqAWayTG6s7xR+ISUmJm4TG/CR1iRrNZJTaQdEHUcXSiQuJRNsXGQ/7AnydmJ3sfU9HkWmwRt1cFG0jcJ2QxfqACUZBJxYqnc14jtMPPdcxUPLaQm6ucBgqX462QzdiOFgzDVUTxOEFP+DMQx3SXwgvw1Ligsg0UHi/iDT5irqRmbOO/wGzXH7GxPb/Yaa41IrbIMFnZBkJqEKqRmDlmik4x8RyhCfGDoZiDktS3QZyE77LWIbZjPXsPC3EALxHb84DdhJKUbWDV8fofkrXFym+y4cdRjBNy0bgKzYg3uFJMHFnD4so2iDBN4lsSH6s45w3G9XjmWjzV0+wZxHsQd1PSXeQ0kBznPIpWKXwyxlYaz2ERv8VcF+KTvN+42rVKtqjyGhSIjuP6yfwx9ChewJjr9y6KNrDCcSrWodXKv7EZ8eMFbDWoFVPOJqpoA1kb8RPxIWNyFHNdZjYgUYkNrCwe9EqZ7VYc28Ht1Z+5djOrxA5nCyqxgeh4oS6ze5Ck+M91xcWIZfKV2MAKO7EM7/PTumdce4eI+dI9k//7GwAA//+nN1TZAAAABklEQVQDANHZ3DHWgTEEAAAAAElFTkSuQmCC";
+
 const FIAT_MARKS: Record<string, string> = {
   AMD: "🇦🇲",
   RUB: "🇷🇺",
@@ -118,7 +120,14 @@ function WorkflowVenue({ provider }: { provider?: string }) {
       <span aria-hidden="true">(</span>
       {iconUrl && (
         <span className={styles.workflowVenueIcon} aria-hidden="true">
-          <img src={iconUrl} alt="" />
+          <img
+            src={iconUrl}
+            alt=""
+            onError={(event) => {
+              event.currentTarget.onerror = null;
+              event.currentTarget.src = `https://www.google.com/s2/favicons?domain=${provider.toLowerCase()}.com&sz=64`;
+            }}
+          />
         </span>
       )}
       <span>{venueName(provider)}</span>
@@ -252,7 +261,7 @@ export function SidePanel({
                           }}
                           data-testid="route-instructions-button"
                         >
-                          View step-by-step instructions <span>↗</span>
+                          <img src={INSTRUCTION_ICON_URL} alt="icon" />
                         </button>
                       )}
                     </div>

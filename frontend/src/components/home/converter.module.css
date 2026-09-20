@@ -389,10 +389,6 @@
   text-transform: uppercase;
 }
 
-.intentStatus {
-  color: var(--color-violet);
-}
-
 .moneyPanel {
   position: relative;
   display: flex;
@@ -1197,13 +1193,8 @@
   vertical-align: 1px;
 }
 
-.intentStatus {
-  margin-left: auto;
-  color: var(--color-text-faint);
-  font-size: 9px;
-  font-weight: 400;
-  letter-spacing: 0;
-  text-transform: none;
+.intentLabelBuy > span:first-child::before {
+  background: #d9534f;
 }
 
 .moneyPanel {

@@ -861,7 +861,6 @@ export function Converter() {
 
           <div className={styles.intentLabel}>
             <span>Sell</span>
-            <span className={styles.intentStatus}>{searching ? "Scanning markets" : "Live routing"}</span>
           </div>
 
           <div className={`${styles.moneyPanel} ${styles.moneyPanelSource}`}>
@@ -966,9 +965,8 @@ export function Converter() {
             <span className={styles.bridgeLabel}>{searching ? "Building route" : "Swap direction"}</span>
           </div>
 
-          <div className={styles.intentLabel}>
+          <div className={`${styles.intentLabel} ${styles.intentLabelBuy}`}>
             <span>Buy</span>
-            <span className={styles.intentStatus}>{previewRoute ? "Estimated output" : "Awaiting quote"}</span>
           </div>
 
           <div className={`${styles.moneyPanel} ${styles.moneyPanelTarget}`}>
@@ -1053,15 +1051,6 @@ export function Converter() {
                   </svg>
                 </span>
                 <div>
-                  <strong>
-                    {searching
-                      ? "Comparing live offers"
-                      : routes.length
-                        ? `${routes.length} executable estimates`
-                        : hasAmount
-                          ? "Ready to search"
-                          : "Enter an amount"}
-                  </strong>
                   <span>
                     {lastUpdatedAt
                       ? `Updated ${Math.max(0, Math.floor((clock - lastUpdatedAt) / 1_000))}s ago`

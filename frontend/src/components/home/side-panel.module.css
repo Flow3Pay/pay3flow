@@ -150,6 +150,7 @@
 
 .routeCardShell {
   display: flex;
+  position: relative;
   flex-direction: column;
   gap: 7px;
 }
@@ -338,17 +339,34 @@
 }
 
 .instructionButton {
-  align-self: flex-start;
-  margin: 0 15px 4px;
-  color: var(--color-accent);
-  font-size: 9px;
-  font-weight: 800;
-  text-align: left;
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 3;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--color-text-soft);
+  box-shadow: 0 4px 10px rgba(55, 77, 52, 0.08);
+  transition: border-color 0.14s ease, background 0.14s ease, transform 0.14s ease;
 }
 
 .instructionButton:hover {
-  color: #fff;
-  text-decoration: underline;
+  border-color: var(--color-accent-strong);
+  background: #f1f8df;
+  transform: translateY(-1px);
+}
+
+.instructionButton img {
+  display: block;
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
 }
 
 .skeletonList {
@@ -558,7 +576,7 @@
 }
 
 .routeCard {
-  padding: 15px;
+  padding: 15px 52px 53px 15px;
   border-color: var(--color-border);
   border-radius: 10px;
   background: #fbfcfa;
