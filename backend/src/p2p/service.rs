@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::config::Config;
 use crate::p2p::{
     binance::BinanceP2pSource, bitget::BitgetP2pSource, bybit::BybitP2pSource, okx::OkxP2pSource,
+    rapira::RapiraP2pSource,
 };
 
 const DEFAULT_LIMIT: usize = 20;
@@ -294,8 +295,14 @@ impl P2pSearchService {
         }
         if config.p2p_bitget_enabled {
             sources.push(Arc::new(BitgetP2pSource::new(
-                client,
+                client.clone(),
                 config.p2p_bitget_url.clone(),
+            )));
+        }
+        if config.p2p_rapira_enabled {
+            sources.push(Arc::new(RapiraP2pSource::new(
+                client,
+                config.p2p_rapira_url.clone(),
             )));
         }
         Ok(Self {

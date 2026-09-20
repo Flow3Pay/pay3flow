@@ -545,7 +545,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    #[ignore = "calls live Binance, Bybit, OKX and Bitget public P2P endpoints"]
+    #[ignore = "calls live Binance, Bybit, OKX, Bitget and Rapira public P2P endpoints"]
     async fn live_amd_to_rub_route_search() {
         let config = Config::from_env().unwrap();
         let service = P2pSearchService::from_config(&config).unwrap();
@@ -579,7 +579,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    #[ignore = "calls live Binance, Bybit, OKX and Bitget public P2P endpoints"]
+    #[ignore = "calls live Binance, Bybit, OKX, Bitget and Rapira public P2P endpoints"]
     async fn live_bank_filtered_amd_to_rub_route_search() {
         let config = Config::from_env().unwrap();
         let service = P2pSearchService::from_config(&config).unwrap();

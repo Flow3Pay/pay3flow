@@ -10,8 +10,9 @@ money.
 - Bybit public web P2P advertisement list.
 - OKX public web P2P advertisement list.
 - Bitget public web P2P advertisement list.
+- Rapira public web P2P advertisement list.
 
-These are the four sources currently implemented and enabled by default. Other
+These are the five sources currently implemented and enabled by default. Other
 venues from the research list are intentionally not presented as live sources:
 MEXC's official P2P Open API requires merchant/API access, OKX's merchant API
 has separate eligibility requirements, and no stable public advertisement API
@@ -46,10 +47,11 @@ exact advertisement returned by the source. The frontend instructions focus on
 the advertiser profile and nickname; when no stable profile URL is available,
 they open the venue's P2P market and tell the user to find the advertiser by
 nickname and verify the ad ID. Routes keep valuable offers even when a venue
-only provides a generic market URL. Binance, OKX, and Bitget currently expose
-public advertiser profile URLs, including Bybit's profile route built from its
-masked public identifier. All four venues can contribute useful market offers
-without being silently discarded.
+only provides a generic market URL. Binance, OKX, Bitget, and Rapira currently
+expose public advertiser profile URLs, including Bybit's profile route built from
+its masked public identifier. All five venues can contribute useful market offers
+without being silently discarded. Rapira currently contributes only to the
+USDT/RUB market.
 
 `payment_method` accepts the bank selected in the frontend. Named payment
 methods are matched after punctuation/case normalization. Some venues return
@@ -80,8 +82,8 @@ It then:
 5. returns complete routes ordered by maximum estimated RUB output.
 
 The optional `sources` parameter limits both legs to a comma-separated list of
-enabled venues: `binance`, `bybit`, `okx`, and `bitget`. If omitted, all enabled
-venues are queried. The selected venue list is part of the search cache key.
+enabled venues: `binance`, `bybit`, `okx`, `bitget`, and `rapira`. If omitted, all
+enabled venues are queried. The selected venue list is part of the search cache key.
 
 Routes whose two selected banks are explicitly named by both advertisements
 are ranked ahead of routes with opaque payment IDs. The response exposes this
@@ -107,12 +109,13 @@ P2P_BINANCE_ENABLED=true
 P2P_BYBIT_ENABLED=true
 P2P_OKX_ENABLED=true
 P2P_BITGET_ENABLED=true
+P2P_RAPIRA_ENABLED=true
 P2P_SEARCH_ASSETS=USDT,USDC,BTC,ETH
 ```
 
 Endpoint URLs can be overridden with `P2P_BINANCE_URL`, `P2P_BYBIT_URL`,
-`P2P_OKX_URL`, and `P2P_BITGET_URL` for tests or when a venue changes its
-public endpoint.
+`P2P_OKX_URL`, `P2P_BITGET_URL`, and `P2P_RAPIRA_URL` for tests or when a venue
+changes its public endpoint.
 
 Run the opt-in live smoke test:
 

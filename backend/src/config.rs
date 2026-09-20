@@ -40,6 +40,8 @@ pub struct Config {
     pub p2p_okx_url: String,
     pub p2p_bitget_enabled: bool,
     pub p2p_bitget_url: String,
+    pub p2p_rapira_enabled: bool,
+    pub p2p_rapira_url: String,
     pub p2p_search_assets: Vec<String>,
 }
 
@@ -106,6 +108,9 @@ impl Config {
             p2p_bitget_enabled: env_flag("P2P_BITGET_ENABLED", false),
             p2p_bitget_url: env::var("P2P_BITGET_URL")
                 .unwrap_or_else(|_| "https://www.bitget.com/v1/p2p/pub/adv/queryAdvList".into()),
+            p2p_rapira_enabled: env_flag("P2P_RAPIRA_ENABLED", false),
+            p2p_rapira_url: env::var("P2P_RAPIRA_URL")
+                .unwrap_or_else(|_| "https://api.rapira.net/otc/offers/page-query/v2".into()),
             p2p_search_assets: env::var("P2P_SEARCH_ASSETS")
                 .unwrap_or_else(|_| "USDT,USDC,BTC,ETH".into())
                 .split(',')

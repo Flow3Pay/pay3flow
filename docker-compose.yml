@@ -66,6 +66,7 @@ services:
       P2P_BYBIT_ENABLED: ${P2P_BYBIT_ENABLED:-true}
       P2P_OKX_ENABLED: ${P2P_OKX_ENABLED:-true}
       P2P_BITGET_ENABLED: ${P2P_BITGET_ENABLED:-true}
+      P2P_RAPIRA_ENABLED: ${P2P_RAPIRA_ENABLED:-true}
       P2P_SEARCH_ASSETS: "USDT,USDC,BTC,ETH"
     volumes:
       - backend_data:/app/data
