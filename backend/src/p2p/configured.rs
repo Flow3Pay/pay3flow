@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use anyhow::{bail, Context, Result};
@@ -107,7 +106,7 @@ impl ConfiguredP2pSource {
         &self,
         item: &Value,
         query: &P2pSearchQuery,
-        context: &RequestContext,
+        context: &RequestContext<'_>,
     ) -> Result<P2pOffer> {
         let fields = &self.config.response.fields;
         let advertiser_fields = &self.config.response.advertiser;
@@ -146,7 +145,7 @@ impl ConfiguredP2pSource {
             .map(|rules| matches_rules(item, rules, context))
             .unwrap_or(is_merchant);
 
-        let mut output_context = context.values().clone();
+        let mut output_context = context.values();
         output_context.insert("ad_id".into(), ad_id.clone());
         output_context.insert("fiat".into(), fiat.clone());
         output_context.insert("asset".into(), asset.clone());
@@ -208,12 +207,14 @@ impl ConfiguredP2pSource {
     }
 }
 
-struct RequestContext {
-    values: BTreeMap<String, String>,
+struct RequestContext<'a> {
+    query: &'a P2pSearchQuery,
+    side: String,
+    fetch_limit: usize,
 }
 
-impl RequestContext {
-    fn new(query: &P2pSearchQuery, config: &ProviderConfig) -> Self {
+impl<'a> RequestContext<'a> {
+    fn new(query: &'a P2pSearchQuery, config: &ProviderConfig) -> Self {
         let side = config
             .request
             .side
@@ -226,36 +227,40 @@ impl RequestContext {
                 P2pSide::BuyCrypto => "buy".into(),
                 P2pSide::SellCrypto => "sell".into(),
             });
+        Self {
+            query,
+            side,
+            fetch_limit: query.fetch_limit(),
+        }
+    }
+
+    fn values(&self) -> BTreeMap<String, String> {
         let mut values = BTreeMap::from([
-            ("fiat".into(), query.fiat.clone()),
-            ("asset".into(), query.asset.clone()),
-            ("side".into(), side),
+            ("fiat".into(), self.query.fiat.clone()),
+            ("asset".into(), self.query.asset.clone()),
+            ("side".into(), self.side.clone()),
             (
                 "user_side".into(),
-                match query.side {
+                match self.query.side {
                     P2pSide::BuyCrypto => "buy".into(),
                     P2pSide::SellCrypto => "sell".into(),
                 },
             ),
-            ("fetch_limit".into(), query.fetch_limit().to_string()),
+            ("fetch_limit".into(), self.fetch_limit.to_string()),
             ("amount".into(), String::new()),
             ("payment_method".into(), String::new()),
         ]);
-        if let Some(amount) = query.amount {
+        if let Some(amount) = self.query.amount {
             values.insert("amount".into(), amount.to_string());
         }
-        if let Some(payment_method) = &query.payment_method {
+        if let Some(payment_method) = &self.query.payment_method {
             values.insert("payment_method".into(), payment_method.clone());
         }
-        Self { values }
-    }
-
-    fn values(&self) -> &BTreeMap<String, String> {
-        &self.values
+        values
     }
 }
 
-fn render_value(value: &Value, context: &RequestContext) -> Result<Value> {
+fn render_value(value: &Value, context: &RequestContext<'_>) -> Result<Value> {
     match value {
         Value::String(string) => Ok(Value::String(render_string(string, context))),
         Value::Array(values) => values
@@ -297,16 +302,12 @@ fn render_value(value: &Value, context: &RequestContext) -> Result<Value> {
     }
 }
 
-fn render_string(template: &str, context: &RequestContext) -> String {
+fn render_string(template: &str, context: &RequestContext<'_>) -> String {
     render_output(template, &context.values())
 }
 
-fn render_path<'a>(template: &'a str, context: &RequestContext) -> Cow<'a, str> {
-    if template.contains("{{") {
-        Cow::Owned(render_output(template, context.values()))
-    } else {
-        Cow::Borrowed(template)
-    }
+fn render_path(template: &str, context: &RequestContext<'_>) -> String {
+    render_output(template, &context.values())
 }
 
 fn render_output(template: &str, values: &BTreeMap<String, String>) -> String {
@@ -317,13 +318,13 @@ fn render_output(template: &str, values: &BTreeMap<String, String>) -> String {
     output
 }
 
-fn read_field(item: &Value, field: &FieldConfig, context: &RequestContext) -> Option<Value> {
+fn read_field(item: &Value, field: &FieldConfig, context: &RequestContext<'_>) -> Option<Value> {
     let value = read_json_path(item, &render_path(field.path(), context))?;
     Some(apply_transform(value, field.transform()))
 }
 
 fn read_json_path(root: &Value, path: &str) -> Option<Value> {
-    let mut values = vec![root];
+    let mut values = vec![root.clone()];
     for segment in path.trim_start_matches('/').split('/') {
         if segment.is_empty() {
             continue;
@@ -332,13 +333,13 @@ fn read_json_path(root: &Value, path: &str) -> Option<Value> {
         values = values
             .into_iter()
             .flat_map(|value| match value {
-                Value::Object(object) if segment == "*" => object.values().collect(),
-                Value::Object(object) => object.get(&segment).into_iter().collect(),
-                Value::Array(array) if segment == "*" => array.iter().collect(),
+                Value::Object(object) if segment == "*" => object.into_values().collect(),
+                Value::Object(object) => object.get(&segment).cloned().into_iter().collect(),
+                Value::Array(array) if segment == "*" => array,
                 Value::Array(array) => segment
                     .parse::<usize>()
                     .ok()
-                    .and_then(|index| array.get(index))
+                    .and_then(|index| array.get(index).cloned())
                     .into_iter()
                     .collect(),
                 _ => Vec::new(),
@@ -349,9 +350,9 @@ fn read_json_path(root: &Value, path: &str) -> Option<Value> {
         }
     }
     if values.len() == 1 {
-        Some(values[0].clone())
+        Some(values.remove(0))
     } else {
-        Some(Value::Array(values.into_iter().cloned().collect()))
+        Some(Value::Array(values))
     }
 }
 
@@ -375,7 +376,7 @@ fn apply_transform(value: Value, transform: Option<&str>) -> Value {
     }
 }
 
-fn matches_rules(item: &Value, rules: &[MatchRule], context: &RequestContext) -> bool {
+fn matches_rules(item: &Value, rules: &[MatchRule], context: &RequestContext<'_>) -> bool {
     rules.iter().any(|rule| {
         let Some(actual) = item.pointer(&render_path(&rule.path, context)) else {
             return false;
