@@ -962,7 +962,6 @@ export function Converter() {
                 <path d="M10 4v12m0 0-4-4m4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
-            <span className={styles.bridgeLabel}>{searching ? "Building route" : "Swap direction"}</span>
           </div>
 
           <div className={`${styles.intentLabel} ${styles.intentLabelBuy}`}>

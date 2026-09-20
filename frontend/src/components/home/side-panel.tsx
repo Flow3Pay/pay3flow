@@ -187,7 +187,6 @@ export function SidePanel({
       <div className={styles.panel}>
         <div className={styles.panelTop}>
           <div>
-            <span className={styles.kicker}>Route intelligence</span>
             <strong>{routes.length ? "Live market paths" : "Awaiting your intent"}</strong>
           </div>
           <span className={searching ? styles.searchBadge : routes.length ? styles.liveBadge : styles.readyBadge}>
@@ -246,9 +245,8 @@ export function SidePanel({
                               ? "Spot market"
                               : route.payment_methods_verified
                                 ? "Banks confirmed"
-                                : "Confirm bank support"}
+                              : "Confirm bank support"}
                           </span>
-                          <span className={styles.selectLabel}>{selected ? "Selected" : "Choose"} →</span>
                         </span>
                       </button>
                       {complete && (

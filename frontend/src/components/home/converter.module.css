@@ -614,19 +614,6 @@
   transform: rotate(180deg);
 }
 
-.bridgeLabel {
-  position: absolute;
-  right: 16px;
-  padding: 5px 8px;
-  border-radius: var(--radius-pill);
-  background: #fff;
-  color: var(--color-text-faint);
-  font-size: 8px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 .marketBar {
   justify-content: space-between;
   gap: 16px;
@@ -1050,10 +1037,6 @@
     font-size: 36px;
   }
 
-  .bridgeLabel {
-    display: none;
-  }
-
   .settingsMenu {
     position: fixed;
     top: auto;
@@ -1188,13 +1171,13 @@
   height: 5px;
   margin-right: 8px;
   border-radius: 50%;
-  background: var(--color-accent);
+  background: #d9534f;
   content: "";
   vertical-align: 1px;
 }
 
 .intentLabelBuy > span:first-child::before {
-  background: #d9534f;
+  background: var(--color-accent);
 }
 
 .moneyPanel {
@@ -1325,18 +1308,6 @@
 .bridgeIcon:hover {
   box-shadow: 0 4px 12px rgba(53, 84, 43, 0.1);
   transform: translateY(-1px) scale(1.04);
-}
-
-.bridgeLabel {
-  right: 0;
-  padding: 0;
-  background: transparent;
-  color: var(--color-text-faint);
-  font-family: var(--font-mono);
-  font-size: 8px;
-  font-weight: 500;
-  letter-spacing: 0;
-  text-transform: none;
 }
 
 .marketBar {
