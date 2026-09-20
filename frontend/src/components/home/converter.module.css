@@ -1093,13 +1093,13 @@
 }
 
 .card {
-  min-height: 690px;
+  min-height: 0;
   gap: 12px;
-  padding: 24px;
+  padding: 19px;
   border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-card);
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.96);
-  box-shadow: var(--shadow-card);
+  box-shadow: 0 28px 70px rgba(41, 54, 38, 0.11);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
@@ -1109,8 +1109,8 @@
 }
 
 .cardTop {
-  min-height: 36px;
-  padding: 0 1px 7px;
+  min-height: 34px;
+  padding: 0 1px 5px;
 }
 
 .modeTabs {
@@ -1119,12 +1119,12 @@
 }
 
 .modeTabs button {
-  min-height: 29px;
+  min-height: 27px;
   padding: 0;
   color: var(--color-text);
-  font-size: 19px;
-  font-weight: 750;
-  letter-spacing: -0.04em;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
 .modeTabs button + button {
@@ -1148,28 +1148,51 @@
 }
 
 .intentLabel {
-  padding: 4px 1px 1px;
-  color: var(--color-text-soft);
+  justify-content: flex-start;
+  gap: 8px;
+  margin: 0 3px 9px;
+  padding: 0;
+  color: #687164;
+  font-family: var(--font-mono);
   font-size: 10px;
-  letter-spacing: 0.1em;
+  font-weight: 500;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.intentLabel > span:first-child::before {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  content: "";
+  vertical-align: 1px;
 }
 
 .intentStatus {
-  color: #699100;
+  margin-left: auto;
+  color: var(--color-text-faint);
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .moneyPanel {
-  min-height: 166px;
-  padding: 20px;
-  border: 1px solid #d3dfd0;
-  border-radius: 9px;
-  background: #f6f9f3;
+  min-height: 0;
+  align-items: flex-start;
+  padding: 15px 15px 12px;
+  border: 1px solid #d9ded4;
+  border-radius: 7px;
+  background: #f9faf6;
   box-shadow: none;
 }
 
 .moneyPanelSource,
 .moneyPanelTarget {
-  background: #f6f9f3;
+  background: #f9faf6;
 }
 
 .moneyPanel::after {
@@ -1181,18 +1204,21 @@
 }
 
 .panelCopy label {
-  color: #718170;
-  font-size: 10px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 .amountInput,
 .amountOutput,
 .amountOutputEmpty {
+  font-family: var(--font-mono);
   font-size: clamp(28px, 3.2vw, 38px);
-  font-weight: 650;
-  letter-spacing: -0.06em;
+  font-weight: 500;
+  letter-spacing: -0.05em;
 }
 
 .currencyHint {
@@ -1201,25 +1227,26 @@
 }
 
 .methodTrigger {
-  width: min(238px, 52%);
-  min-height: 56px;
-  gap: 9px;
-  padding: 7px 9px 7px 7px;
-  border: 1px solid #e0e8dc;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.72);
+  width: min(190px, 48%);
+  min-height: 42px;
+  gap: 7px;
+  padding: 6px 8px 6px 6px;
+  border: 1px solid #d7dcd3;
+  border-radius: 5px;
+  background: #e7ebe2;
   box-shadow: none;
 }
 
 .methodTrigger:hover {
-  border-color: #b7cead;
-  box-shadow: 0 6px 16px rgba(55, 77, 52, 0.08);
+  border-color: #a4af9e;
+  background: #edf2e8;
+  box-shadow: 0 6px 16px rgba(41, 54, 38, 0.08);
   transform: translateY(-1px);
 }
 
 .methodAvatar {
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   border: 0;
   border-radius: 50%;
   box-shadow: none;
@@ -1238,12 +1265,12 @@
 }
 
 .methodText strong {
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .methodText small {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 8px;
 }
 
 .flowBridge {
@@ -1293,11 +1320,11 @@
 }
 
 .cta {
-  height: 46px;
+  height: 48px;
   margin-top: 3px;
-  border: 1px solid #d3dfd0;
-  border-radius: 8px;
-  background: #f0f5ec;
+  border: 1px solid #b9e834;
+  border-radius: 5px;
+  background: var(--color-accent);
   color: var(--color-text);
   box-shadow: none;
   font-size: 12px;
@@ -1309,12 +1336,13 @@
 }
 
 .cta:hover:not(:disabled) {
-  background: #e7f1df;
+  background: #c9f34b;
   box-shadow: 0 8px 18px rgba(55, 77, 52, 0.11);
   transform: translateY(-1px);
 }
 
 .cta:disabled {
+  border-color: #d3dfd0;
   background: #f3f6f0;
   color: #9aa79a;
 }

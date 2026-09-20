@@ -563,7 +563,7 @@ export function Converter() {
         <div className={styles.card}>
           <div className={styles.cardTop}>
             <div className={styles.modeTabs} aria-label="Exchange mode">
-              <button type="button" className={styles.modeActive}>Exchange</button>
+              <button type="button" className={styles.modeActive}>Bridge</button>
               <button type="button" disabled>History</button>
             </div>
             <div className={styles.cardActions}>
@@ -654,7 +654,7 @@ export function Converter() {
           </div>
 
           <div className={styles.intentLabel}>
-            <span>Create exchange intent</span>
+            <span>Sell</span>
             <span className={styles.intentStatus}>{searching ? "Scanning markets" : "Live routing"}</span>
           </div>
 
@@ -707,6 +707,11 @@ export function Converter() {
               </svg>
             </button>
             <span className={styles.bridgeLabel}>{searching ? "Building route" : "Swap direction"}</span>
+          </div>
+
+          <div className={styles.intentLabel}>
+            <span>Buy</span>
+            <span className={styles.intentStatus}>{previewRoute ? "Estimated output" : "Awaiting quote"}</span>
           </div>
 
           <div className={`${styles.moneyPanel} ${styles.moneyPanelTarget}`}>
