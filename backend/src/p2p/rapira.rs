@@ -144,7 +144,11 @@ impl RapiraAd {
             .merchant
             .profile_uid
             .as_deref()
-            .map(|profile_uid| format!("{RAPIRA_BASE_URL}/p2p/profileUser?profileUid={profile_uid}"));
+            .map(|profile_uid| {
+                format!(
+                    "{RAPIRA_BASE_URL}/ru/p2p/profileUser?p=1&profileUid={profile_uid}&msp=1"
+                )
+            });
         let is_verified = self.merchant.p2p_level.as_deref().is_some_and(|level| {
             matches!(
                 level.to_ascii_lowercase().as_str(),
@@ -230,7 +234,7 @@ mod tests {
         assert!((offer.advertiser.completion_rate_30d.unwrap() - 0.956).abs() < 1e-12);
         assert_eq!(
             offer.advertiser_profile_url.as_deref(),
-            Some("https://rapira.net/p2p/profileUser?profileUid=profile-1")
+            Some("https://rapira.net/ru/p2p/profileUser?p=1&profileUid=profile-1&msp=1")
         );
         assert_eq!(offer.source_url, "https://rapira.net/p2p?adId=52834");
         assert!(offer.source_url_is_exact);
