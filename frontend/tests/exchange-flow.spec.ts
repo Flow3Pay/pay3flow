@@ -39,6 +39,7 @@ async function mockBackend(page: Page) {
         payment_methods: ["Bank transfer"],
         pay_time_limit_minutes: 15,
         advertiser: {
+          id: source === "bybit" ? `masked-${adId}` : null,
           nickname: `${source}-merchant`,
           is_merchant: true,
           is_verified: true,

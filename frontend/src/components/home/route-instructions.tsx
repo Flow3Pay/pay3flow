@@ -24,6 +24,13 @@ const money = (minor: number | undefined, currency: string | undefined) =>
 const percentage = (value: number | null | undefined) =>
   value == null ? "—" : `${(value * 100).toFixed(1)}%`;
 
+const fallbackProfileUrl = (offer: P2pOffer) => {
+  if (offer.source.toLowerCase() !== "bybit" || !offer.advertiser.id) {
+    return null;
+  }
+  return `https://www.bybit.com/en/p2p/profile/${encodeURIComponent(offer.advertiser.id)}/${encodeURIComponent(offer.asset)}/${encodeURIComponent(offer.fiat)}/item`;
+};
+
 interface RouteInstructionsProps {
   route: RouteCandidate;
   onClose: () => void;
@@ -46,7 +53,7 @@ function AdvertiserCard({
   }
 
   const venue = venueName(offer.source);
-  const profileUrl = offer.advertiser_profile_url ?? null;
+  const profileUrl = offer.advertiser_profile_url ?? fallbackProfileUrl(offer);
   const actionUrl = profileUrl ?? offer.source_url;
   const actionLabel = profileUrl
     ? `Open ${venue} profile`

@@ -83,6 +83,7 @@ export interface RouteCandidate {
 }
 
 export interface P2pAdvertiser {
+  id?: string | null;
   nickname: string;
   is_merchant: boolean;
   is_verified: boolean;
