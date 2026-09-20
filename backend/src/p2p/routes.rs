@@ -129,14 +129,8 @@ impl P2pSearchService {
         for (asset, entry, exit) in join_all(searches).await {
             let entry = entry?;
             let exit = exit?;
-            let entry_offers = reject_price_outliers(
-                exact_offer_links(entry.offers),
-                query.max_price_deviation_bps,
-            );
-            let exit_offers = reject_price_outliers(
-                exact_offer_links(exit.offers),
-                query.max_price_deviation_bps,
-            );
+            let entry_offers = reject_price_outliers(entry.offers, query.max_price_deviation_bps);
+            let exit_offers = reject_price_outliers(exit.offers, query.max_price_deviation_bps);
             let before = routes.len();
             compose_routes(&mut routes, &query, &asset, &entry_offers, &exit_offers);
             let routes_built = routes.len() - before;
@@ -294,13 +288,6 @@ fn reject_price_outliers(offers: Vec<P2pOffer>, max_deviation_bps: u32) -> Vec<P
         .collect()
 }
 
-fn exact_offer_links(offers: Vec<P2pOffer>) -> Vec<P2pOffer> {
-    offers
-        .into_iter()
-        .filter(|offer| offer.source_url_is_exact)
-        .collect()
-}
-
 fn compose_routes(
     routes: &mut Vec<P2pRoute>,
     query: &NormalizedRouteQuery,
@@ -362,6 +349,12 @@ fn compose_routes(
             if exit_method_match == Some(PaymentMethodMatch::Unknown) {
                 warnings.push(
                     "The selected recipient bank could not be verified because the venue returned an opaque payment-method ID."
+                        .into(),
+                );
+            }
+            if !entry.source_url_is_exact || !exit.source_url_is_exact {
+                warnings.push(
+                    "At least one selected venue does not expose a public deep-link for this advertisement. Verify the advertiser ID and terms on the venue before sending money."
                         .into(),
                 );
             }
@@ -516,14 +509,20 @@ mod tests {
     }
 
     #[test]
-    fn removes_offers_without_exact_deep_links() {
-        let exact = offer("binance", P2pSide::BuyCrypto, "400", "1", "100000");
-        let mut generic = offer("bybit", P2pSide::BuyCrypto, "401", "1", "100000");
-        generic.source_url_is_exact = false;
+    fn keeps_offers_without_exact_deep_links_for_manual_fallback() {
+        let mut entry = offer("bybit", P2pSide::BuyCrypto, "400", "1000", "200000");
+        entry.source_url_is_exact = false;
+        let exit = offer("bybit", P2pSide::SellCrypto, "80", "1000", "100000");
 
-        let filtered = exact_offer_links(vec![exact.clone(), generic]);
+        let mut routes = Vec::new();
+        compose_routes(&mut routes, &query(false), "USDT", &[entry], &[exit]);
 
-        assert_eq!(filtered, vec![exact]);
+        assert_eq!(routes.len(), 1);
+        assert!(!routes[0].entry_offer.source_url_is_exact);
+        assert!(routes[0]
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("deep-link")));
     }
 
     #[test]
@@ -569,9 +568,7 @@ mod tests {
             .unwrap();
 
         eprintln!("{}", serde_json::to_string_pretty(&response).unwrap());
-        assert!(response.routes.iter().all(|route| route.same_venue
-            && route.entry_offer.source_url_is_exact
-            && route.exit_offer.source_url_is_exact));
+        assert!(response.routes.iter().all(|route| route.same_venue));
         assert_eq!(response.asset_statuses.len(), 4);
         assert!(response.asset_statuses.iter().all(|status| status
             .entry_sources
@@ -606,7 +603,8 @@ mod tests {
 
         eprintln!("{}", serde_json::to_string_pretty(&response).unwrap());
         assert!(response.routes.iter().all(|route| {
-            route.entry_offer.source_url_is_exact && route.exit_offer.source_url_is_exact
+            route.entry_offer.side == P2pSide::BuyCrypto
+                && route.exit_offer.side == P2pSide::SellCrypto
         }));
     }
 }

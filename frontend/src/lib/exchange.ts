@@ -77,6 +77,8 @@ export interface RouteCandidate {
   exit_offer_url?: string;
   exit_offer_is_exact?: boolean;
   exit_offer_ad_id?: string;
+  entry_offer_snapshot?: P2pOffer;
+  exit_offer_snapshot?: P2pOffer;
   legs: RouteLeg[];
 }
 

@@ -106,6 +106,8 @@ function mapRoutes(response: Awaited<ReturnType<typeof fetchP2pRoutes>>): RouteC
       exit_offer_url: route.exit_offer.source_url,
       exit_offer_is_exact: route.exit_offer.source_url_is_exact,
       exit_offer_ad_id: route.exit_offer.ad_id,
+      entry_offer_snapshot: route.entry_offer,
+      exit_offer_snapshot: route.exit_offer,
       legs: [
         {
           kind: "entry",

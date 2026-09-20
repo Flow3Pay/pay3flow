@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { RouteCandidate } from "@/lib/exchange";
+import { routeLocatorPath } from "@/lib/route-locator";
 
 import styles from "./route-instructions.module.css";
 
@@ -27,6 +28,8 @@ interface RouteInstructionsProps {
 }
 
 export function RouteInstructions({ route, onClose }: RouteInstructionsProps) {
+  const [copied, setCopied] = useState(false);
+  const locatorPath = routeLocatorPath(route);
   const entry = route.legs.find((leg) => leg.kind === "entry");
   const exit = route.legs.find((leg) => leg.kind === "exit");
   const entryVenue = venueName(entry?.provider);
@@ -40,6 +43,16 @@ export function RouteInstructions({ route, onClose }: RouteInstructionsProps) {
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
+
+  const copyLocatorUrl = async () => {
+    const locatorUrl = `${window.location.origin}${window.location.pathname}${window.location.search}${locatorPath}`;
+    try {
+      await navigator.clipboard.writeText(locatorUrl);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
 
   return (
     <div className={styles.backdrop} role="presentation" onMouseDown={(event) => {
@@ -56,6 +69,15 @@ export function RouteInstructions({ route, onClose }: RouteInstructionsProps) {
           </div>
           <button type="button" className={styles.closeButton} onClick={onClose} aria-label="Close instructions">
             ×
+          </button>
+        </div>
+
+        <div className={styles.shareRow}>
+          <a href={locatorPath} target="_blank" rel="noreferrer noopener">
+            Open route locator <span>↗</span>
+          </a>
+          <button type="button" className={styles.shareButton} onClick={copyLocatorUrl}>
+            {copied ? "Link copied" : "Copy locator link"}
           </button>
         </div>
 
