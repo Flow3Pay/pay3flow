@@ -21,11 +21,11 @@ type RefreshSeconds = 0 | 5 | 15 | 30 | 60;
 
 const REFRESH_OPTIONS: RefreshSeconds[] = [0, 5, 15, 30, 60];
 const P2P_SOURCES = [
-  { id: "binance", label: "Binance" },
-  { id: "bybit", label: "Bybit" },
-  { id: "okx", label: "OKX" },
-  { id: "bitget", label: "Bitget" },
-  { id: "rapira", label: "Rapira" },
+  { id: "binance", label: "Binance", iconUrl: "https://binance.com/favicon.ico" },
+  { id: "bybit", label: "Bybit", iconUrl: "https://www.bybit.com/favicon.ico" },
+  { id: "okx", label: "OKX", iconUrl: "https://www.okx.com/favicon.ico" },
+  { id: "bitget", label: "Bitget", iconUrl: "https://www.bitget.com/favicon.ico" },
+  { id: "rapira", label: "Rapira", iconUrl: "https://rapira.net/favicon.ico" },
 ] as const;
 type P2pSource = (typeof P2P_SOURCES)[number]["id"];
 const DEFAULT_P2P_SOURCES = P2P_SOURCES.map((source) => source.id);
@@ -44,6 +44,11 @@ const INTERMEDIARY_ASSET_ICONS: Record<string, string> = {
   SOL: "https://upload.wikimedia.org/wikipedia/en/b/b9/Solana_logo.png?utm_source=en.wikipedia.org&utm_campaign=index&utm_content=original",
   TRX: "https://assets.streamlinehq.com/image/private/w_300,h_300,ar_1/f_auto/v1/icons/vectors/trx-q8ocxy7h0nc2c11ucr2m.png/trx-2ynri4p1kxp5a8djpqdzy8.png?_a=DATAiZAAZAA0",
   DOT: "https://i.pinimg.com/originals/e1/bb/20/e1bb208a7252b1e3c3cd58a85d6e06c7.png",
+  TON: "https://cdn-icons-png.flaticon.com/512/12114/12114247.png",
+  APT: "https://readi.fi/media/Aptos_mark_BLK.png",
+  NEAR: "https://cdn-icons-png.flaticon.com/512/14446/14446201.png",
+  SUI: "https://s2.coinmarketcap.com/static/img/coins/200x200/20947.png",
+  FDUSD: "https://assets.kraken.com/marketing/web/icons-uni-webp/s_fdusd.webp?i=kds",
 };
 
 function intermediaryIconUrl(asset: string): string {
@@ -748,7 +753,7 @@ export function Converter() {
                     </div>
                     <div className={styles.sourceSettings}>
                       <span className={styles.sourceSettingsLabel}>Search exchanges</span>
-                      <div className={styles.sourceOptions} aria-label="Exchanges to search">
+                      <div className={`${styles.sourceOptions} ${styles.exchangeOptions}`} aria-label="Exchanges to search">
                         {P2P_SOURCES.map((source) => {
                           const enabled = selectedSources.includes(source.id);
                           return (
@@ -768,6 +773,16 @@ export function Converter() {
                                 resetResults();
                               }}
                             >
+                              <span className={styles.sourceOptionIcon} aria-hidden="true">
+                                <img
+                                  src={source.iconUrl}
+                                  alt=""
+                                  onError={(event) => {
+                                    event.currentTarget.onerror = null;
+                                    event.currentTarget.src = `https://www.google.com/s2/favicons?domain=${source.id === "rapira" ? "rapira.net" : `${source.id}.com`}&sz=64`;
+                                  }}
+                                />
+                              </span>
                               {source.label}
                             </button>
                           );
