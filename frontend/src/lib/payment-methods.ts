@@ -17,6 +17,7 @@ export interface PaymentMethod {
   color: string;
   initials: string;
   popular?: boolean;
+  iconUrl?: string;
   /** Name fragment understood by the public P2P venue filters. */
   p2pQuery: string;
 }
@@ -196,6 +197,34 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
   },
 ];
 
+/** Crypto assets available in the same picker as bank payment methods. */
+export const DIGITAL_ASSETS: PaymentMethod[] = [
+  {
+    id: "global-ethereum",
+    name: "Ethereum",
+    country: "GLOBAL",
+    currency: "ETH",
+    role: "both",
+    kind: "wallet",
+    color: "#627eea",
+    initials: "ETH",
+    p2pQuery: "Ethereum",
+    iconUrl: "https://upload.wikimedia.org/wikipedia/commons/f/fd/Ethereum_Logo.png?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=original",
+  },
+  {
+    id: "global-usdc",
+    name: "USD Coin",
+    country: "GLOBAL",
+    currency: "USDC",
+    role: "both",
+    kind: "wallet",
+    color: "#2775ca",
+    initials: "USDC",
+    p2pQuery: "USDC",
+    iconUrl: "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4a/Circle_USDC_Logo.svg/1280px-Circle_USDC_Logo.svg.png?utm_source=en.wikipedia.org&utm_campaign=index&utm_content=thumbnail",
+  },
+];
+
 export function paymentCountry(code: string, currency?: string): PaymentCountry | undefined {
   return PAYMENT_COUNTRIES.find(
     (country) => country.code === code && (!currency || country.currency === currency),
@@ -233,6 +262,7 @@ const PAYMENT_METHOD_DOMAINS: Record<string, string> = {
 };
 
 export function paymentMethodFavicon(method: PaymentMethod | null | undefined): string | null {
+  if (method?.iconUrl) return method.iconUrl;
   const domain = method ? PAYMENT_METHOD_DOMAINS[method.id] : undefined;
   return domain ? `https://${domain}/favicon.ico` : null;
 }

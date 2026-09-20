@@ -8,7 +8,8 @@ import {
   fetchCorridors,
   fetchP2pRoutes,
 } from "@/lib/exchange";
-import { PaymentMethod, paymentMethodsFor } from "@/lib/payment-methods";
+import { CryptoNetwork, FALLBACK_NETWORK, fetchNetworks } from "@/lib/networks";
+import { DIGITAL_ASSETS, PaymentMethod, paymentMethodsFor } from "@/lib/payment-methods";
 
 import { PaymentMethodPicker } from "./payment-method-picker";
 import { BankLogo } from "./bank-logo";
@@ -35,6 +36,58 @@ const CORRIDOR_STORAGE_KEY = "pay3flow.exchange.corridor";
 const SOURCE_METHOD_STORAGE_KEY = "pay3flow.exchange.source-method";
 const TARGET_METHOD_STORAGE_KEY = "pay3flow.exchange.target-method";
 const DIRECTION_STORAGE_KEY = "pay3flow.exchange.direction-reversed";
+
+interface NetworkControlProps {
+  network: CryptoNetwork;
+  networks: CryptoNetwork[];
+  open: boolean;
+  onToggle: () => void;
+  onSelect: (network: CryptoNetwork) => void;
+}
+
+function NetworkControl({ network, networks, open, onToggle, onSelect }: NetworkControlProps) {
+  return (
+    <div className={styles.networkControl}>
+      <button
+        type="button"
+        className={styles.networkButton}
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+      >
+        <span className={styles.networkDot} aria-hidden="true">♦</span>
+        <span className={styles.networkCopy}>
+          <small>Network</small>
+          <strong>{network.name}</strong>
+        </span>
+        <span className={styles.networkChevron} aria-hidden="true">⌄</span>
+      </button>
+      {open && (
+        <div className={styles.networkMenu} role="listbox" aria-label="Select crypto network">
+          <div className={styles.networkMenuTitle}>Select network</div>
+          {networks.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={styles.networkOption}
+              data-selected={item.id === network.id || undefined}
+              role="option"
+              aria-selected={item.id === network.id}
+              onClick={() => onSelect(item)}
+            >
+              <span className={styles.networkOptionDot} aria-hidden="true">♦</span>
+              <span>
+                <strong>{item.name}</strong>
+                <small>{item.currencies.join(" · ")}</small>
+              </span>
+              {item.id === network.id && <b aria-hidden="true">✓</b>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface SharedExchange {
   sourceCurrency: string;
@@ -64,8 +117,6 @@ const amountFromMinor = (minor: number | undefined) =>
         maximumFractionDigits: 2,
         useGrouping: false,
       });
-
-const locationKey = (country: string, currency: string) => `${country}:${currency}`;
 
 function locationLabel(country: string, currency: string): string {
   try {
@@ -140,6 +191,9 @@ export function Converter() {
   const [targetMethodId, setTargetMethodId] = useState("ru-sberbank");
   const [directionReversed, setDirectionReversed] = useState(false);
   const [methodPicker, setMethodPicker] = useState<"source" | "target" | null>(null);
+  const [networks, setNetworks] = useState<CryptoNetwork[]>([FALLBACK_NETWORK]);
+  const [selectedNetworkId, setSelectedNetworkId] = useState(FALLBACK_NETWORK.id);
+  const [networkPicker, setNetworkPicker] = useState<"source" | "target" | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [refreshSeconds, setRefreshSeconds] = useState<RefreshSeconds>(15);
   const [selectedSources, setSelectedSources] = useState<P2pSource[]>(DEFAULT_P2P_SOURCES);
@@ -187,6 +241,20 @@ export function Converter() {
       preferencesLoadedRef.current = true;
     }, 0);
     return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    fetchNetworks()
+      .then((items) => {
+        if (items.length === 0) return;
+        setNetworks(items);
+        setSelectedNetworkId((current) =>
+          items.some((network) => network.id === current) ? current : items[0].id,
+        );
+      })
+      .catch(() => {
+        // Keep the Ethereum fallback visible while the backend is unavailable.
+      });
   }, []);
 
   useEffect(() => {
@@ -257,24 +325,6 @@ export function Converter() {
     [corridorId, corridors],
   );
 
-  const locations = useMemo(
-    () => [
-      ...new Map(
-        corridors.flatMap((item) => [
-          [
-            locationKey(item.source_country, item.source_currency),
-            { country: item.source_country, currency: item.source_currency },
-          ] as const,
-          [
-            locationKey(item.target_country, item.target_currency),
-            { country: item.target_country, currency: item.target_currency },
-          ] as const,
-        ]),
-      ).values(),
-    ],
-    [corridors],
-  );
-
   const sourceCountry = corridor
     ? directionReversed
       ? corridor.target_country
@@ -297,17 +347,25 @@ export function Converter() {
     : "";
 
   const sourceMethods = useMemo(
-    () => (sourceCountry ? paymentMethodsFor(sourceCountry, sourceCurrency, "sender") : []),
+    () => [
+      ...(sourceCountry ? paymentMethodsFor(sourceCountry, sourceCurrency, "sender") : []),
+      ...DIGITAL_ASSETS,
+    ],
     [sourceCountry, sourceCurrency],
   );
   const targetMethods = useMemo(
-    () => (targetCountry ? paymentMethodsFor(targetCountry, targetCurrency, "recipient") : []),
+    () => [
+      ...(targetCountry ? paymentMethodsFor(targetCountry, targetCurrency, "recipient") : []),
+      ...DIGITAL_ASSETS,
+    ],
     [targetCountry, targetCurrency],
   );
   const sourceMethod =
     sourceMethods.find((method) => method.id === sourceMethodId) ?? sourceMethods[0] ?? null;
   const targetMethod =
     targetMethods.find((method) => method.id === targetMethodId) ?? targetMethods[0] ?? null;
+  const selectedNetwork =
+    networks.find((network) => network.id === selectedNetworkId) ?? networks[0] ?? FALLBACK_NETWORK;
   const numericAmount = amountNumber(amount);
   const hasAmount = Number.isFinite(numericAmount) && numericAmount > 0;
 
@@ -390,51 +448,6 @@ export function Converter() {
     setLastUpdatedAt(null);
     setSearching(false);
     setError(null);
-  };
-
-  const applyOrientation = (next: ExchangeCorridor, reversed: boolean) => {
-    const nextSourceCountry = reversed ? next.target_country : next.source_country;
-    const nextSourceCurrency = reversed ? next.target_currency : next.source_currency;
-    const nextTargetCountry = reversed ? next.source_country : next.target_country;
-    const nextTargetCurrency = reversed ? next.source_currency : next.target_currency;
-    setCorridorId(next.id);
-    setDirectionReversed(reversed);
-    setSourceMethodId(
-      paymentMethodsFor(nextSourceCountry, nextSourceCurrency, "sender")[0]?.id ?? "",
-    );
-    setTargetMethodId(
-      paymentMethodsFor(nextTargetCountry, nextTargetCurrency, "recipient")[0]?.id ?? "",
-    );
-    setMethodPicker(null);
-    resetResults();
-  };
-
-  const chooseSourceLocation = (value: string) => {
-    const direct = corridors.find(
-      (item) => locationKey(item.source_country, item.source_currency) === value,
-    );
-    if (direct) {
-      applyOrientation(direct, false);
-      return;
-    }
-    const reversed = corridors.find(
-      (item) => locationKey(item.target_country, item.target_currency) === value,
-    );
-    if (reversed) applyOrientation(reversed, true);
-  };
-
-  const chooseTargetLocation = (value: string) => {
-    const direct = corridors.find(
-      (item) => locationKey(item.target_country, item.target_currency) === value,
-    );
-    if (direct) {
-      applyOrientation(direct, false);
-      return;
-    }
-    const reversed = corridors.find(
-      (item) => locationKey(item.source_country, item.source_currency) === value,
-    );
-    if (reversed) applyOrientation(reversed, true);
   };
 
   const swapDirection = () => {
@@ -670,13 +683,33 @@ export function Converter() {
                 onChange={(event) => updateAmount(event.target.value)}
                 aria-label="Amount to send"
               />
-              <span className={styles.currencyHint}>{sourceCurrency || "AMD"} available via bank transfer</span>
+              <span className={styles.currencyHint}>
+                {sourceMethod?.currency || sourceCurrency || "AMD"} available via {sourceMethod?.kind === "wallet" ? "digital wallet" : "bank transfer"}
+              </span>
+              <div className={styles.walletSupport}>
+                <span>Supported wallets</span>
+                <div>
+                  <b>◈</b><b>◉</b><b>W</b><small>+ more</small>
+                </div>
+              </div>
+              {sourceMethod?.kind === "wallet" && (
+                <NetworkControl
+                  network={selectedNetwork}
+                  networks={networks}
+                  open={networkPicker === "source"}
+                  onToggle={() => setNetworkPicker((current) => current === "source" ? null : "source")}
+                  onSelect={(network) => {
+                    setSelectedNetworkId(network.id);
+                    setNetworkPicker(null);
+                  }}
+                />
+              )}
             </div>
             <button
               type="button"
               className={styles.methodTrigger}
               onClick={() => setMethodPicker("source")}
-              aria-label={`Select sending bank: ${sourceMethod?.name ?? "none"}`}
+              aria-label={`Select sending ${sourceMethod?.kind === "wallet" ? "asset" : "bank"}: ${sourceMethod?.name ?? "none"}`}
             >
               <BankLogo
                 className={styles.methodAvatar}
@@ -685,7 +718,13 @@ export function Converter() {
               />
               <span className={styles.methodText}>
                 <strong>{sourceMethod?.name ?? "Select bank"}</strong>
-                <small>{corridor ? locationLabel(sourceCountry, sourceCurrency) : "Unavailable"}</small>
+                <small>
+                  {sourceMethod?.kind === "wallet"
+                    ? `${sourceMethod.currency} · ${selectedNetwork.name}`
+                    : corridor
+                      ? locationLabel(sourceCountry, sourceCurrency)
+                      : "Unavailable"}
+                </small>
               </span>
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                 <path d="m4 6 4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -721,14 +760,36 @@ export function Converter() {
                 {amountFromMinor(previewRoute?.target_amount_minor)}
               </output>
               <span className={styles.currencyHint}>
-                {previewRoute ? `Estimated ${previewRoute.target_currency}` : "Live estimate appears here"}
+                {targetMethod?.kind === "wallet"
+                  ? `${targetMethod.currency} available via digital wallet`
+                  : previewRoute
+                    ? `Estimated ${previewRoute.target_currency}`
+                    : "Live estimate appears here"}
               </span>
+              <div className={styles.walletSupport}>
+                <span>Supported wallets</span>
+                <div>
+                  <b>◈</b><b>◉</b><b>W</b><small>+ more</small>
+                </div>
+              </div>
+              {targetMethod?.kind === "wallet" && (
+                <NetworkControl
+                  network={selectedNetwork}
+                  networks={networks}
+                  open={networkPicker === "target"}
+                  onToggle={() => setNetworkPicker((current) => current === "target" ? null : "target")}
+                  onSelect={(network) => {
+                    setSelectedNetworkId(network.id);
+                    setNetworkPicker(null);
+                  }}
+                />
+              )}
             </div>
             <button
               type="button"
               className={styles.methodTrigger}
               onClick={() => setMethodPicker("target")}
-              aria-label={`Select recipient bank: ${targetMethod?.name ?? "none"}`}
+              aria-label={`Select recipient ${targetMethod?.kind === "wallet" ? "asset" : "bank"}: ${targetMethod?.name ?? "none"}`}
             >
               <BankLogo
                 className={styles.methodAvatar}
@@ -737,7 +798,13 @@ export function Converter() {
               />
               <span className={styles.methodText}>
                 <strong>{targetMethod?.name ?? "Select bank"}</strong>
-                <small>{corridor ? locationLabel(targetCountry, targetCurrency) : "Unavailable"}</small>
+                <small>
+                  {targetMethod?.kind === "wallet"
+                    ? `${targetMethod.currency} · ${selectedNetwork.name}`
+                    : corridor
+                      ? locationLabel(targetCountry, targetCurrency)
+                      : "Unavailable"}
+                </small>
               </span>
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                 <path d="m4 6 4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -830,11 +897,9 @@ export function Converter() {
         open={methodPicker === "source"}
         title="Choose where you pay from"
         role="sender"
-        locations={locations}
         selectedLocation={corridor ? { country: sourceCountry, currency: sourceCurrency } : null}
         selected={sourceMethod}
         onClose={() => setMethodPicker(null)}
-        onLocationSelect={(location) => chooseSourceLocation(locationKey(location.country, location.currency))}
         onSelect={chooseSourceMethod}
       />
 
@@ -842,11 +907,9 @@ export function Converter() {
         open={methodPicker === "target"}
         title="Choose where the recipient gets paid"
         role="recipient"
-        locations={locations}
         selectedLocation={corridor ? { country: targetCountry, currency: targetCurrency } : null}
         selected={targetMethod}
         onClose={() => setMethodPicker(null)}
-        onLocationSelect={(location) => chooseTargetLocation(locationKey(location.country, location.currency))}
         onSelect={chooseTargetMethod}
       />
 

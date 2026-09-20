@@ -4,6 +4,7 @@ pub mod auth;
 pub mod banks;
 pub mod exchange;
 pub mod matcher;
+pub mod networks;
 pub mod oauth;
 pub mod p2p;
 pub mod pairs;

@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  DIGITAL_ASSETS,
   PaymentMethod,
-  paymentCountry,
   paymentMethodsFor,
 } from "@/lib/payment-methods";
 
@@ -20,11 +20,9 @@ interface PaymentMethodPickerProps {
   open: boolean;
   title: string;
   role: "sender" | "recipient";
-  locations: PaymentLocation[];
   selectedLocation: PaymentLocation | null;
   selected: PaymentMethod | null;
   onClose: () => void;
-  onLocationSelect: (location: PaymentLocation) => void;
   onSelect: (method: PaymentMethod) => void;
 }
 
@@ -32,11 +30,9 @@ export function PaymentMethodPicker({
   open,
   title,
   role,
-  locations,
   selectedLocation,
   selected,
   onClose,
-  onLocationSelect,
   onSelect,
 }: PaymentMethodPickerProps) {
   const [query, setQuery] = useState("");
@@ -64,12 +60,13 @@ export function PaymentMethodPicker({
   }, [handleClose, open]);
 
   const methods = useMemo(() => {
-    if (!selectedLocation) return [];
-    return paymentMethodsFor(
-      selectedLocation.country,
-      selectedLocation.currency,
-      role,
+    const banks = selectedLocation
+      ? paymentMethodsFor(selectedLocation.country, selectedLocation.currency, role)
+      : [];
+    const assets = DIGITAL_ASSETS.filter(
+      (method) => method.role === role || method.role === "both",
     );
+    return [...banks, ...assets];
   }, [role, selectedLocation]);
 
   const filtered = useMemo(() => {
@@ -84,7 +81,8 @@ export function PaymentMethodPicker({
   }, [methods, query]);
 
   const popular = filtered.filter((method) => method.popular);
-  const all = filtered.filter((method) => !method.popular);
+  const assets = filtered.filter((method) => method.kind === "wallet");
+  const all = filtered.filter((method) => !method.popular && method.kind === "bank");
 
   if (!open) return null;
 
@@ -130,7 +128,7 @@ export function PaymentMethodPicker({
           <div className={styles.titleGroup}>
             <button type="button" className={styles.backButton} onClick={handleClose} aria-label="Close payment method picker">
               <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="m15 18-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="m7 7 10 10m0-10L7 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
               </svg>
             </button>
             <h2 className={styles.title}>{title}</h2>
@@ -168,6 +166,12 @@ export function PaymentMethodPicker({
                 {popular.map(renderMethod)}
               </section>
             )}
+            {assets.length > 0 && (
+              <section className={styles.section}>
+                <h3>Digital assets</h3>
+                {assets.map(renderMethod)}
+              </section>
+            )}
             {all.length > 0 && (
               <section className={styles.section}>
                 <h3>All payment methods</h3>
@@ -176,41 +180,6 @@ export function PaymentMethodPicker({
             )}
           </div>
 
-          <aside className={styles.countries} aria-label="Select country">
-            <div className={styles.countryHead}>
-              <h3>Select country</h3>
-              <span>Available corridor</span>
-            </div>
-            <div className={styles.countryList}>
-              {locations.map((location) => {
-                const country = paymentCountry(location.country, location.currency);
-                const isActive =
-                  selectedLocation?.country === location.country &&
-                  selectedLocation.currency === location.currency;
-                return (
-                  <button
-                    key={`${location.country}:${location.currency}`}
-                    type="button"
-                    className={styles.countryButton}
-                    aria-pressed={isActive}
-                    onClick={() => onLocationSelect(location)}
-                  >
-                    <span className={styles.countryMark}>{country?.mark ?? location.country}</span>
-                    <span className={styles.countryCopy}>
-                      <strong>{country?.name ?? location.country}</strong>
-                      <span>{location.currency}</span>
-                    </span>
-                    {isActive && (
-                      <svg className={styles.countryCheck} width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-                        <circle cx="9" cy="9" r="9" fill="currentColor" />
-                        <path d="M5.5 9.2 8 11.5l4.5-5" stroke="white" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </aside>
         </div>
       </div>
     </div>

@@ -8,6 +8,7 @@ pub mod exchange;
 pub mod p2p;
 pub mod pairs;
 pub mod payments;
+pub mod networks;
 pub mod quotes;
 pub mod routing;
 pub mod server;

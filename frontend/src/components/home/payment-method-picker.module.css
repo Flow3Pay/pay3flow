@@ -581,3 +581,79 @@
   border-color: #dae2d2;
   background: #fff;
 }
+
+/* Asset-style modal: one compact list; the country rail is intentionally not rendered. */
+.dialog {
+  width: min(100%, 430px);
+  max-height: min(680px, 88vh);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 48px 96px rgba(16, 36, 14, 0.22), 0 8px 24px rgba(16, 36, 14, 0.12);
+}
+
+.titleBar {
+  min-height: 58px;
+  padding: 16px 18px 15px;
+  background: #fff;
+}
+
+.backButton {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+}
+
+.title {
+  font-size: 14px;
+  letter-spacing: -0.02em;
+}
+
+.body {
+  display: flex;
+  height: min(560px, calc(88vh - 120px));
+  min-height: 300px;
+  flex-direction: column;
+}
+
+.methods {
+  order: 1;
+  min-height: 0;
+  padding: 4px 12px 20px;
+}
+
+.section h3 {
+  padding: 14px 10px 5px;
+  color: #8a9689;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.09em;
+}
+
+.methodRow {
+  gap: 11px;
+  padding: 9px 10px;
+  border-radius: 8px;
+}
+
+.methodRow:hover {
+  border-color: #dae2d2;
+  background: #f3f7ec;
+  box-shadow: none;
+}
+
+.methodRow[data-selected] {
+  border-color: #c5e092;
+  background: #eef7dc;
+}
+
+@media (max-width: 700px) {
+  .dialog {
+    max-height: 94vh;
+    border-radius: 14px 14px 0 0;
+  }
+
+  .body {
+    height: min(650px, calc(94vh - 140px));
+  }
+}
