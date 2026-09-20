@@ -6,7 +6,8 @@ use futures::future::join_all;
 use serde::{Deserialize, Serialize};
 
 use crate::p2p::service::{
-    P2pOffer, P2pSearchQuery, P2pSearchService, P2pSide, PaymentMethodMatch, SourceStatus,
+    normalize_sources, P2pOffer, P2pSearchQuery, P2pSearchService, P2pSide, PaymentMethodMatch,
+    SourceStatus,
 };
 
 const DEFAULT_ROUTE_LIMIT: usize = 20;
@@ -31,6 +32,8 @@ pub struct P2pRouteSearchQuery {
     /// Reject prices too far from the median for that leg. Default 1000 (10%).
     pub max_price_deviation_bps: Option<u32>,
     pub limit: Option<usize>,
+    /// Optional comma-separated list of P2P sources to query.
+    pub sources: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -91,6 +94,7 @@ struct NormalizedRouteQuery {
     allow_cross_venue: bool,
     max_price_deviation_bps: u32,
     limit: usize,
+    sources: Option<String>,
 }
 
 impl P2pSearchService {
@@ -226,6 +230,7 @@ fn normalize_query(
             .limit
             .unwrap_or(DEFAULT_ROUTE_LIMIT)
             .clamp(1, MAX_ROUTE_LIMIT),
+        sources: normalize_sources(query.sources)?,
     })
 }
 
@@ -253,6 +258,7 @@ fn leg_query(
         min_orders: route.min_orders,
         min_completion_rate: route.min_completion_rate,
         limit: Some(LEG_SEARCH_LIMIT),
+        sources: route.sources.clone(),
     }
 }
 
@@ -447,6 +453,7 @@ mod tests {
             allow_cross_venue,
             max_price_deviation_bps: 1_000,
             limit: 20,
+            sources: None,
         }
     }
 
@@ -531,6 +538,7 @@ mod tests {
                 allow_cross_venue: Some(false),
                 max_price_deviation_bps: Some(1_000),
                 limit: Some(10),
+                sources: None,
             })
             .await
             .unwrap();
@@ -566,6 +574,7 @@ mod tests {
                 allow_cross_venue: Some(true),
                 max_price_deviation_bps: Some(1_000),
                 limit: Some(10),
+                sources: None,
             })
             .await
             .unwrap();

@@ -30,7 +30,7 @@ quote until the platform confirms it.
 ## Find one P2P leg
 
 ```text
-GET /api/p2p/search?fiat=AMD&asset=USDT&side=buy&amount=100000&min_orders=20&min_completion_rate=0.9&limit=20
+GET /api/p2p/search?fiat=AMD&asset=USDT&side=buy&amount=100000&min_orders=20&min_completion_rate=0.9&sources=binance,okx&limit=20
 ```
 
 `side` is always from the Pay3Flow user's perspective:
@@ -50,7 +50,7 @@ unverified estimates instead of being silently discarded.
 ## Build the AMD -> asset -> RUB puzzle
 
 ```text
-GET /api/p2p/routes?source_fiat=AMD&target_fiat=RUB&source_amount=100000&assets=USDT,USDC,BTC,ETH&min_orders=20&min_completion_rate=0.9&limit=20
+GET /api/p2p/routes?source_fiat=AMD&target_fiat=RUB&source_amount=100000&assets=USDT,USDC,BTC,ETH&min_orders=20&min_completion_rate=0.9&sources=binance,okx&limit=20
 ```
 
 For every asset the backend concurrently searches:
@@ -69,6 +69,10 @@ It then:
 4. calculates the RUB output and checks the exit advertisement limits and
    liquidity;
 5. returns complete routes ordered by maximum estimated RUB output.
+
+The optional `sources` parameter limits both legs to a comma-separated list of
+enabled venues: `binance`, `bybit`, `okx`, and `bitget`. If omitted, all enabled
+venues are queried. The selected venue list is part of the search cache key.
 
 Routes whose two selected banks are explicitly named by both advertisements
 are ranked ahead of routes with opaque payment IDs. The response exposes this

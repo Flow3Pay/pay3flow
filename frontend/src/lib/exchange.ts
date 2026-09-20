@@ -202,6 +202,7 @@ export function fetchP2pRoutes(query: {
   sourceAmount: number;
   sourcePaymentMethod?: string;
   targetPaymentMethod?: string;
+  sources?: string[];
   allowCrossVenue?: boolean;
   limit?: number;
   signal?: AbortSignal;
@@ -220,6 +221,9 @@ export function fetchP2pRoutes(query: {
   }
   if (query.targetPaymentMethod) {
     params.set("target_payment_method", query.targetPaymentMethod);
+  }
+  if (query.sources?.length) {
+    params.set("sources", query.sources.join(","));
   }
   return request(`/api/p2p/routes?${params.toString()}`, { signal: query.signal });
 }

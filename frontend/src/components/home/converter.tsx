@@ -19,8 +19,17 @@ import styles from "./converter.module.css";
 type RefreshSeconds = 0 | 5 | 15 | 30 | 60;
 
 const REFRESH_OPTIONS: RefreshSeconds[] = [0, 5, 15, 30, 60];
+const P2P_SOURCES = [
+  { id: "binance", label: "Binance" },
+  { id: "bybit", label: "Bybit" },
+  { id: "okx", label: "OKX" },
+  { id: "bitget", label: "Bitget" },
+] as const;
+type P2pSource = (typeof P2P_SOURCES)[number]["id"];
+const DEFAULT_P2P_SOURCES = P2P_SOURCES.map((source) => source.id);
 const AMOUNT_STORAGE_KEY = "pay3flow.exchange.amount";
 const REFRESH_STORAGE_KEY = "pay3flow.exchange.refresh-seconds";
+const SOURCES_STORAGE_KEY = "pay3flow.exchange.p2p-sources";
 const CORRIDOR_STORAGE_KEY = "pay3flow.exchange.corridor";
 const SOURCE_METHOD_STORAGE_KEY = "pay3flow.exchange.source-method";
 const TARGET_METHOD_STORAGE_KEY = "pay3flow.exchange.target-method";
@@ -135,6 +144,7 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
   const [methodPicker, setMethodPicker] = useState<"source" | "target" | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [refreshSeconds, setRefreshSeconds] = useState<RefreshSeconds>(15);
+  const [selectedSources, setSelectedSources] = useState<P2pSource[]>(DEFAULT_P2P_SOURCES);
   const [searching, setSearching] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const [clock, setClock] = useState(() => Date.now());
@@ -154,12 +164,20 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
         const savedSourceMethodId = window.localStorage.getItem(SOURCE_METHOD_STORAGE_KEY);
         const savedTargetMethodId = window.localStorage.getItem(TARGET_METHOD_STORAGE_KEY);
         const savedDirection = window.localStorage.getItem(DIRECTION_STORAGE_KEY);
+        const savedSources = window.localStorage.getItem(SOURCES_STORAGE_KEY);
         if (sharedExchange?.amount) setAmount(sharedExchange.amount);
         else if (savedAmount) setAmount(savedAmount);
         if (savedCorridorId) setCorridorId(savedCorridorId);
         if (savedSourceMethodId) setSourceMethodId(savedSourceMethodId);
         if (savedTargetMethodId) setTargetMethodId(savedTargetMethodId);
         if (savedDirection != null) setDirectionReversed(savedDirection === "true");
+        if (savedSources) {
+          const parsedSources = savedSources.split(",").filter(
+            (source): source is P2pSource =>
+              P2P_SOURCES.some((available) => available.id === source),
+          );
+          if (parsedSources.length > 0) setSelectedSources([...new Set(parsedSources)]);
+        }
 
         const savedRefresh = Number(window.localStorage.getItem(REFRESH_STORAGE_KEY));
         if (REFRESH_OPTIONS.includes(savedRefresh as RefreshSeconds)) {
@@ -190,6 +208,15 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
       // Local storage can be unavailable when the browser blocks site data.
     }
   }, [refreshSeconds]);
+
+  useEffect(() => {
+    if (!preferencesLoadedRef.current) return;
+    try {
+      window.localStorage.setItem(SOURCES_STORAGE_KEY, selectedSources.join(","));
+    } catch {
+      // Local storage can be unavailable when the browser blocks site data.
+    }
+  }, [selectedSources]);
 
   useEffect(() => {
     if (!preferencesLoadedRef.current) return;
@@ -477,6 +504,7 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
         sourceAmount: value,
         sourcePaymentMethod: sourceMethod.p2pQuery,
         targetPaymentMethod: targetMethod.p2pQuery,
+        sources: selectedSources,
         allowCrossVenue: true,
         limit: 40,
         signal: controller.signal,
@@ -501,7 +529,7 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
     } finally {
       if (requestId === requestRef.current) setSearching(false);
     }
-  }, [amount, corridor, sourceCurrency, sourceMethod, targetCurrency, targetMethod]);
+  }, [amount, corridor, selectedSources, sourceCurrency, sourceMethod, targetCurrency, targetMethod]);
 
   // Re-run the read-only market search after the user changes the intent.
   // The old result is cleared immediately by updateAmount/applyOrientation,
@@ -613,6 +641,34 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
                           {seconds === 0 ? "Off" : `${seconds}s`}
                         </button>
                       ))}
+                    </div>
+                    <div className={styles.sourceSettings}>
+                      <span className={styles.sourceSettingsLabel}>Search exchanges</span>
+                      <div className={styles.sourceOptions} aria-label="Exchanges to search">
+                        {P2P_SOURCES.map((source) => {
+                          const enabled = selectedSources.includes(source.id);
+                          return (
+                            <button
+                              key={source.id}
+                              type="button"
+                              className={`${styles.sourceOption}${enabled ? ` ${styles.sourceOptionActive}` : ""}`}
+                              aria-pressed={enabled}
+                              onClick={() => {
+                                setSelectedSources((current) => {
+                                  if (enabled) {
+                                    if (current.length === 1) return current;
+                                    return current.filter((item) => item !== source.id);
+                                  }
+                                  return [...current, source.id];
+                                });
+                                resetResults();
+                              }}
+                            >
+                              {source.label}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                     <p>Search also runs automatically 650ms after you change the amount or a bank.</p>
                   </div>

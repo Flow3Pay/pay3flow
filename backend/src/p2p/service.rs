@@ -39,6 +39,8 @@ pub struct P2pSearchQuery {
     /// Fraction from 0 to 1. `0.95` means a 95% completion rate.
     pub min_completion_rate: Option<f64>,
     pub limit: Option<usize>,
+    /// Optional comma-separated list of P2P sources to query.
+    pub sources: Option<String>,
 }
 
 impl P2pSearchQuery {
@@ -61,6 +63,7 @@ impl P2pSearchQuery {
             .payment_method
             .map(|method| method.trim().to_string())
             .filter(|method| !method.is_empty());
+        self.sources = normalize_sources(self.sources)?;
         self.limit = Some(self.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT));
         Ok(self)
     }
@@ -79,6 +82,29 @@ fn normalized_code(value: &str, field: &str) -> Result<String> {
         bail!("{field} must be a 2-12 character alphanumeric code");
     }
     Ok(code)
+}
+
+pub(crate) fn normalize_sources(value: Option<String>) -> Result<Option<String>> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let mut sources = value
+        .split(',')
+        .map(|source| source.trim().to_ascii_lowercase())
+        .filter(|source| !source.is_empty())
+        .collect::<Vec<_>>();
+    if sources.is_empty() {
+        bail!("sources must contain at least one source");
+    }
+    if sources.iter().any(|source| {
+        !(2..=32).contains(&source.len())
+            || !source.bytes().all(|byte| byte.is_ascii_alphanumeric())
+    }) {
+        bail!("sources must contain only 2-32 character alphanumeric names");
+    }
+    sources.sort_unstable();
+    sources.dedup();
+    Ok(Some(sources.join(",")))
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -306,7 +332,20 @@ impl P2pSearchService {
             response.cached = true;
             return Ok(response);
         }
-        let searches = self.sources.iter().map(|source| async {
+        let selected_sources =
+            self.sources
+                .iter()
+                .filter(|source| {
+                    query.sources.as_deref().is_none_or(|requested| {
+                        requested.split(',').any(|name| name == source.name())
+                    })
+                })
+                .collect::<Vec<_>>();
+        if selected_sources.is_empty() {
+            bail!("none of the requested P2P sources are enabled");
+        }
+
+        let searches = selected_sources.into_iter().map(|source| async {
             let started = Instant::now();
             let result = tokio::time::timeout(self.timeout, source.search(&query)).await;
             let elapsed = started.elapsed().as_millis();
@@ -513,6 +552,7 @@ mod tests {
                 min_orders: Some(50),
                 min_completion_rate: Some(0.95),
                 limit: Some(10),
+                sources: None,
             })
             .await
             .unwrap();
@@ -551,6 +591,7 @@ mod tests {
                 min_orders: None,
                 min_completion_rate: None,
                 limit: None,
+                sources: None,
             })
             .await
             .unwrap();
@@ -560,6 +601,46 @@ mod tests {
             response.sources.iter().filter(|source| source.ok).count(),
             1
         );
+    }
+
+    #[tokio::test]
+    async fn queries_only_requested_sources() {
+        let service = P2pSearchService::with_sources(
+            vec![
+                Arc::new(StubSource {
+                    name: "one",
+                    offers: vec![offer("one", "362", "1", "100000", 20)],
+                    delay: Duration::ZERO,
+                }),
+                Arc::new(StubSource {
+                    name: "two",
+                    offers: vec![offer("two", "360", "1", "100000", 20)],
+                    delay: Duration::ZERO,
+                }),
+            ],
+            Duration::from_secs(1),
+        );
+
+        let response = service
+            .search(P2pSearchQuery {
+                fiat: "AMD".into(),
+                asset: "USDT".into(),
+                side: P2pSide::BuyCrypto,
+                amount: None,
+                payment_method: None,
+                merchant_only: None,
+                min_orders: None,
+                min_completion_rate: None,
+                limit: None,
+                sources: Some("TWO".into()),
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(response.sources.len(), 1);
+        assert_eq!(response.sources[0].source, "two");
+        assert_eq!(response.offers.len(), 1);
+        assert_eq!(response.offers[0].source, "two");
     }
 
     #[tokio::test]
@@ -583,6 +664,7 @@ mod tests {
             min_orders: None,
             min_completion_rate: None,
             limit: None,
+            sources: None,
         };
 
         let first = service.search(query.clone()).await.unwrap();
