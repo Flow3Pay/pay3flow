@@ -1,8 +1,10 @@
 use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::p2p::service::{Advertiser, P2pOffer, P2pSearchQuery, P2pSide, P2pSource};
+
+const MAX_BINANCE_ROWS: usize = 20;
 
 pub(crate) struct BinanceP2pSource {
     client: reqwest::Client,
@@ -26,16 +28,25 @@ impl P2pSource for BinanceP2pSource {
             P2pSide::BuyCrypto => "BUY",
             P2pSide::SellCrypto => "SELL",
         };
+        let request = BinanceRequest {
+            fiat: &query.fiat,
+            page: 1,
+            rows: query.fetch_limit().min(MAX_BINANCE_ROWS),
+            trade_type: side,
+            asset: &query.asset,
+            countries: Vec::new(),
+            pro_merchant_ads: false,
+            shield_merchant_ads: false,
+            publisher_type: None,
+            pay_types: Vec::new(),
+            additional_kyc_verify_filter: 0,
+        };
         let response = self
             .client
-            .get(&self.url)
-            .query(&[
-                ("fiat", query.fiat.as_str()),
-                ("asset", query.asset.as_str()),
-                ("tradeType", side),
-                ("limit", &query.fetch_limit().to_string()),
-                ("order", "PRICE"),
-            ])
+            .post(&self.url)
+            .header("origin", "https://www.binance.com")
+            .header("referer", "https://www.binance.com/")
+            .json(&request)
             .send()
             .await
             .context("Binance P2P request failed")?
@@ -53,7 +64,6 @@ impl P2pSource for BinanceP2pSource {
         }
         Ok(response
             .data
-            .map(|data| data.items)
             .unwrap_or_default()
             .into_iter()
             .map(|item| item.into_offer(query.side))
@@ -61,41 +71,69 @@ impl P2pSource for BinanceP2pSource {
     }
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BinanceRequest<'a> {
+    fiat: &'a str,
+    page: u32,
+    rows: usize,
+    trade_type: &'a str,
+    asset: &'a str,
+    countries: Vec<String>,
+    pro_merchant_ads: bool,
+    shield_merchant_ads: bool,
+    publisher_type: Option<String>,
+    pay_types: Vec<String>,
+    additional_kyc_verify_filter: u8,
+}
+
 #[derive(Debug, Deserialize)]
 struct BinanceResponse {
     code: String,
     message: Option<String>,
-    data: Option<BinanceData>,
+    data: Option<Vec<BinanceItem>>,
 }
 
 #[derive(Debug, Deserialize)]
-struct BinanceData {
-    #[serde(default)]
-    items: Vec<BinanceItem>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct BinanceItem {
-    ad_no: String,
-    price: f64,
-    fiat: String,
-    fiat_scale: u32,
-    asset: String,
-    asset_scale: u32,
-    price_scale: u32,
-    min_trans_amount: f64,
-    max_trans_amount: f64,
-    tradable_amount: f64,
-    pay_time_limit: Option<u32>,
-    #[serde(default)]
-    trade_methods: Vec<String>,
+    adv: BinanceAd,
     advertiser: BinanceAdvertiser,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct BinanceAd {
+    adv_no: String,
+    price: String,
+    fiat_unit: String,
+    asset: String,
+    tradable_quantity: String,
+    min_single_trans_amount: String,
+    max_single_trans_amount: String,
+    pay_time_limit: Option<u32>,
+    #[serde(default)]
+    trade_methods: Vec<BinanceTradeMethod>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BinanceTradeMethod {
+    trade_method_name: Option<String>,
+    identifier: Option<String>,
+}
+
+impl BinanceTradeMethod {
+    fn name(self) -> Option<String> {
+        self.trade_method_name
+            .or(self.identifier)
+            .filter(|name| !name.is_empty())
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct BinanceAdvertiser {
+    user_no: Option<String>,
     nick_name: String,
     user_type: Option<String>,
     month_order_count: Option<u64>,
@@ -115,20 +153,24 @@ impl BinanceItem {
                 .is_some_and(|kind| kind.eq_ignore_ascii_case("merchant"));
         P2pOffer {
             source: "binance".into(),
-            source_url: format!("https://c2c.binance.com/en/adv?code={}", self.ad_no),
-            ad_id: self.ad_no,
+            source_url: format!("https://c2c.binance.com/en/adv?code={}", self.adv.adv_no),
+            ad_id: self.adv.adv_no,
             side,
-            fiat: self.fiat,
-            asset: self.asset,
-            price: fixed(self.price, self.price_scale),
-            available_asset: fixed(self.tradable_amount, self.asset_scale),
-            // Binance's agent endpoint expresses these two limits in asset units.
-            min_fiat: fixed(self.min_trans_amount * self.price, self.fiat_scale),
-            max_fiat: fixed(self.max_trans_amount * self.price, self.fiat_scale),
-            payment_methods: self.trade_methods,
-            pay_time_limit_minutes: self.pay_time_limit,
+            fiat: self.adv.fiat_unit,
+            asset: self.adv.asset,
+            price: self.adv.price,
+            available_asset: self.adv.tradable_quantity,
+            min_fiat: self.adv.min_single_trans_amount,
+            max_fiat: self.adv.max_single_trans_amount,
+            payment_methods: self
+                .adv
+                .trade_methods
+                .into_iter()
+                .filter_map(BinanceTradeMethod::name)
+                .collect(),
+            pay_time_limit_minutes: self.adv.pay_time_limit,
             advertiser: Advertiser {
-                id: None,
+                id: self.advertiser.user_no,
                 nickname: self.advertiser.nick_name,
                 user_type: self.advertiser.user_type,
                 is_merchant,
@@ -142,10 +184,6 @@ impl BinanceItem {
     }
 }
 
-fn fixed(value: f64, scale: u32) -> String {
-    format!("{value:.precision$}", precision = scale.min(8) as usize)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -155,23 +193,22 @@ mod tests {
         let response: BinanceResponse = serde_json::from_str(
             r#"{
               "code":"000000",
-              "data":{"items":[{
-                "adNo":"ad-1","price":361.75,"fiat":"AMD","fiatScale":2,
-                "asset":"USDT","assetScale":2,"priceScale":2,
-                "minTransAmount":55.28,"maxTransAmount":100.0,
-                "tradableAmount":423.41,"payTimeLimit":15,
-                "tradeMethods":["IDBank"],
-                "advertiser":{"nickName":"Trader","userType":"merchant",
+              "data":[{"adv":{
+                "advNo":"ad-1","price":"361.75","fiatUnit":"AMD",
+                "asset":"USDT","tradableQuantity":"423.41",
+                "minSingleTransAmount":"19997.54","maxSingleTransAmount":"36175.00",
+                "payTimeLimit":15,
+                "tradeMethods":[{"tradeMethodName":"IDBank","identifier":"IDBank"}]},
+                "advertiser":{"userNo":"user-1","nickName":"Trader","userType":"merchant",
                   "monthOrderCount":1204,"monthFinishRate":0.999,
                   "positiveRate":1.0,"merchantGroupMember":false}
-              }]}
+              }]
             }"#,
         )
         .unwrap();
         let offer = response
             .data
             .unwrap()
-            .items
             .remove(0)
             .into_offer(P2pSide::BuyCrypto);
         assert_eq!(offer.min_fiat, "19997.54");

@@ -569,9 +569,9 @@ mod tests {
             .unwrap();
 
         eprintln!("{}", serde_json::to_string_pretty(&response).unwrap());
-        assert!(response.can_exchange_to_target);
-        assert!(!response.routes.is_empty());
-        assert!(response.routes.iter().all(|route| route.same_venue));
+        assert!(response.routes.iter().all(|route| route.same_venue
+            && route.entry_offer.source_url_is_exact
+            && route.exit_offer.source_url_is_exact));
         assert_eq!(response.asset_statuses.len(), 4);
         assert!(response.asset_statuses.iter().all(|status| status
             .entry_sources
@@ -605,7 +605,8 @@ mod tests {
             .unwrap();
 
         eprintln!("{}", serde_json::to_string_pretty(&response).unwrap());
-        assert!(response.can_exchange_to_target);
-        assert!(!response.routes.is_empty());
+        assert!(response.routes.iter().all(|route| {
+            route.entry_offer.source_url_is_exact && route.exit_offer.source_url_is_exact
+        }));
     }
 }

@@ -95,7 +95,7 @@ impl Config {
                 .unwrap_or(5_000),
             p2p_binance_enabled: env_flag("P2P_BINANCE_ENABLED", false),
             p2p_binance_url: env::var("P2P_BINANCE_URL").unwrap_or_else(|_| {
-                "https://www.binance.com/bapi/c2c/v1/public/c2c/agent/ad-list".into()
+                "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search".into()
             }),
             p2p_bybit_enabled: env_flag("P2P_BYBIT_ENABLED", false),
             p2p_bybit_url: env::var("P2P_BYBIT_URL")
