@@ -135,6 +135,17 @@
   flex-shrink: 0;
 }
 
+.avatarIcon {
+  position: absolute;
+  inset: 3px;
+  z-index: 1;
+  width: calc(100% - 6px);
+  height: calc(100% - 6px);
+  border-radius: 50%;
+  background: #fff;
+  object-fit: contain;
+}
+
 .rail {
   position: absolute;
   right: -4px;

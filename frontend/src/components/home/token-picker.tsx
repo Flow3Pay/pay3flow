@@ -115,6 +115,17 @@ export function TokenPicker({ open, title, selected, onClose, onSelect }: TokenP
                       onClick={() => onSelect(token)}
                     >
                       <span className={styles.avatar} style={{ background: token.color }}>
+                        {token.iconUrl && (
+                          <img
+                            className={styles.avatarIcon}
+                            src={token.iconUrl}
+                            alt=""
+                            loading="lazy"
+                            onError={(event) => {
+                              event.currentTarget.style.display = "none";
+                            }}
+                          />
+                        )}
                         {token.symbol.slice(0, 2)}
                         <span className={styles.rail}>{token.rail === "ERC-20" ? "ETH" : token.rail === "TRC-20" ? "TRX" : token.rail.slice(0, 3)}</span>
                       </span>

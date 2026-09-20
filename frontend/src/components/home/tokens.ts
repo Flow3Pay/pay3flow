@@ -8,6 +8,7 @@ export interface Token {
   priceUsd: number;
   rail: string;
   group: TokenGroup;
+  iconUrl?: string;
 }
 
 export const TOKENS: Token[] = [
@@ -20,11 +21,29 @@ export const TOKENS: Token[] = [
   { symbol: "KES", name: "Kenyan Shilling", nameRu: "Кенийский шиллинг", color: "#1aab00", priceUsd: 0.0078, rail: "M-PESA", group: "fiat" },
   // Stablecoins
   { symbol: "USDT", name: "Tether", nameRu: "Tether", color: "#26a17b", priceUsd: 1, rail: "TRC-20", group: "stable" },
-  { symbol: "USDC", name: "USD Coin", nameRu: "USD Coin", color: "#2775ca", priceUsd: 1, rail: "ERC-20", group: "stable" },
+  {
+    symbol: "USDC",
+    name: "USD Coin",
+    nameRu: "USD Coin",
+    color: "#2775ca",
+    priceUsd: 1,
+    rail: "ERC-20",
+    group: "stable",
+    iconUrl: "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4a/Circle_USDC_Logo.svg/1280px-Circle_USDC_Logo.svg.png?utm_source=en.wikipedia.org&utm_campaign=index&utm_content=thumbnail",
+  },
   { symbol: "DAI", name: "Dai", nameRu: "Dai", color: "#f5ac37", priceUsd: 1, rail: "ERC-20", group: "stable" },
   // Crypto
   { symbol: "TON", name: "Toncoin", nameRu: "Toncoin", color: "#0098ea", priceUsd: 5.4, rail: "TON", group: "crypto" },
-  { symbol: "ETH", name: "Ether", nameRu: "Ethereum", color: "#627eea", priceUsd: 3200, rail: "ERC-20", group: "crypto" },
+  {
+    symbol: "ETH",
+    name: "Ether",
+    nameRu: "Ethereum",
+    color: "#627eea",
+    priceUsd: 3200,
+    rail: "ERC-20",
+    group: "crypto",
+    iconUrl: "https://upload.wikimedia.org/wikipedia/commons/f/fd/Ethereum_Logo.png?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=original",
+  },
   { symbol: "BTC", name: "Bitcoin", nameRu: "Bitcoin", color: "#f7931a", priceUsd: 96200, rail: "Bitcoin", group: "crypto" },
   { symbol: "SOL", name: "Solana", nameRu: "Solana", color: "#9945ff", priceUsd: 152, rail: "Solana", group: "crypto" },
   { symbol: "BNB", name: "BNB", nameRu: "BNB", color: "#f0b90b", priceUsd: 582, rail: "BEP-20", group: "crypto" },
