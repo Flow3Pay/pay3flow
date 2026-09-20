@@ -8,12 +8,19 @@ import { generatePuzzleBackground } from "@/lib/puzzle-background";
 
 export default function HomePage() {
   const shellRef = useRef<HTMLDivElement>(null);
-  const [token, setToken] = useState<string | null>(() =>
-    typeof window === "undefined" ? null : window.localStorage.getItem("pay3flow-token"),
-  );
-  const [email, setEmail] = useState(() =>
-    typeof window === "undefined" ? "" : window.localStorage.getItem("pay3flow-email") ?? "",
-  );
+  // Read browser storage after hydration. Reading it in the initial state
+  // makes the server render signed out while the first client render is
+  // signed in, which causes React hydration error #418.
+  const [token, setToken] = useState<string | null>(null);
+  const [email, setEmail] = useState("");
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setToken(window.localStorage.getItem("pay3flow-token"));
+      setEmail(window.localStorage.getItem("pay3flow-email") ?? "");
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     shellRef.current?.style.setProperty("--puzzle-pattern", generatePuzzleBackground());

@@ -507,6 +507,27 @@ export function Converter({ token, email: sessionEmail, onAuthenticated }: Conve
     }
   }, [amount, corridor, sourceCurrency, sourceMethod, targetCurrency, targetMethod]);
 
+  // Re-run the read-only market search after the user changes the intent.
+  // The old result is cleared immediately by updateAmount/applyOrientation,
+  // but no new request was scheduled afterwards, leaving the panel empty (or
+  // stuck in its loading state after a refresh). Debouncing also prevents a
+  // request for every keystroke while the amount is being entered.
+  useEffect(() => {
+    if (
+      !preferencesLoadedRef.current ||
+      !urlReadyRef.current ||
+      !corridor ||
+      !sourceMethod ||
+      !targetMethod ||
+      !hasAmount
+    ) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => void startSearch(), 650);
+    return () => window.clearTimeout(timer);
+  }, [corridor, hasAmount, sourceMethod, startSearch, targetMethod]);
+
   useEffect(() => {
     if (!refreshSeconds || !lastUpdatedAt || !hasAmount) return;
     const timer = window.setInterval(() => void startSearch(), refreshSeconds * 1_000);

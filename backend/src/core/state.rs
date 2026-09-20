@@ -7,7 +7,6 @@ use crate::p2p::P2pSearchService;
 use crate::pairs::ExchangePairsService;
 use crate::payments::PaymentService;
 use crate::routing::RoutePicker;
-use crate::wallet::WalletService;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -26,8 +25,6 @@ pub struct AppState {
     pub redis: Option<RedisPool>,
     /// Read-only fan-out search over public P2P advertisement boards.
     pub p2p: P2pSearchService,
-    /// Optional self-hosted EVM wallet. Disabled when WALLET_KEYSTORE_PATH is empty.
-    pub wallet: Option<WalletService>,
 }
 
 impl AppState {
@@ -43,7 +40,6 @@ impl AppState {
         admin_token: String,
         redis: Option<RedisPool>,
         p2p: P2pSearchService,
-        wallet: Option<WalletService>,
     ) -> Self {
         Self {
             pool,
@@ -56,7 +52,6 @@ impl AppState {
             admin_token,
             redis,
             p2p,
-            wallet,
         }
     }
 }

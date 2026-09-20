@@ -88,15 +88,6 @@ async fn main() -> anyhow::Result<()> {
     );
 
     let p2p = pay3flow_backend::p2p::P2pSearchService::from_config(&cfg)?;
-    let wallet = pay3flow_backend::wallet::WalletService::load_from_config(
-        cfg.wallet_keystore_path.clone(),
-        cfg.wallet_keystore_password.clone(),
-        cfg.wallet_rpc_url.clone(),
-    )?;
-    tracing::info!(
-        enabled = wallet.is_some(),
-        "self-hosted wallet configuration loaded"
-    );
 
     let state = AppState::new(
         pool,
@@ -109,7 +100,6 @@ async fn main() -> anyhow::Result<()> {
         cfg.admin_token,
         redis_pool,
         p2p,
-        wallet,
     );
 
     tracing::info!(

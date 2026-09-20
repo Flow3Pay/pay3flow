@@ -12,4 +12,3 @@ pub mod quotes;
 pub mod routing;
 pub mod server;
 pub mod service;
-pub mod wallet;

@@ -3226,7 +3226,6 @@ name = "pay3flow-backend"
 version = "0.1.0"
 dependencies = [
  "aes-gcm",
- "alloy",
  "anyhow",
  "async-trait",
  "axum",

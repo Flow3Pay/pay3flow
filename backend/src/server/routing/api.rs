@@ -11,7 +11,7 @@ use tracing::Level;
 use crate::core::state::AppState;
 use crate::server::routing::{
     activitypub, auth, banks, exchange, matcher, oauth, p2p, pairs, payments, payments_ws, rates,
-    solver, wallet, ws,
+    solver, ws,
 };
 
 pub fn router(state: AppState) -> Router {
@@ -103,13 +103,6 @@ pub fn router(state: AppState) -> Router {
         .route("/api/p2p/search", get(p2p::search))
         .route("/api/p2p/routes", get(p2p::routes))
         .route("/api/admin/banks", post(banks::admin_create))
-        .route("/api/admin/wallet", get(wallet::info))
-        .route("/api/admin/wallet/balance", get(wallet::balance))
-        .route("/api/admin/wallet/transfer", post(wallet::transfer))
-        .route(
-            "/api/admin/wallet/token-transfer",
-            post(wallet::token_transfer),
-        )
         .route(
             "/api/admin/banks/:name/status",
             post(banks::admin_set_status),
