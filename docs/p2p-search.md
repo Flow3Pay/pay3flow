@@ -27,6 +27,74 @@ the running container does not need to mount the provider directory. A new
 provider that exposes a compatible JSON API can therefore be added by creating
 its mapping and adding one line to `reg.json`, without a new Rust adapter.
 
+### Provider registry
+
+The registry is a JSON object whose keys are source slugs and whose values are
+paths relative to `backend/providers/`:
+
+```json
+{
+  "binance": "./binance/binance.json",
+  "new_exchange": "./new_exchange/new_exchange.json"
+}
+```
+
+Each provider file contains these main sections:
+
+```json
+{
+  "name": "new_exchange",
+  "kind": "p2p",
+  "enabled": false,
+  "endpoint": "https://example.com/api/p2p",
+  "request": {
+    "method": "POST",
+    "headers": {},
+    "query": {},
+    "body": {},
+    "side": { "buy": "BUY", "sell": "SELL" }
+  },
+  "response": {
+    "success": { "path": "/code", "equals": "00000" },
+    "items_path": "/data/items",
+    "fields": {},
+    "advertiser": {},
+    "merchant_rules": [],
+    "urls": {}
+  }
+}
+```
+
+Request and URL strings support these templates:
+
+- `{{fiat}}`, `{{asset}}` — normalized query codes;
+- `{{side}}` — provider-specific side from `request.side`;
+- `{{user_side}}` — Pay3Flow side, `buy` or `sell`;
+- `{{fetch_limit}}`, `{{amount}}`, `{{payment_method}}` — query values.
+
+Response field paths use JSON Pointer syntax. The `*` segment collects values
+from an array, which is useful for nested payment-method objects. A field can
+also specify `"transform": "ratio"` or `"transform": "percentage"` for
+completion and positive-review rates.
+
+Merchant rules support `present`, `nonempty`, `truthy`, `equals`, `equals_ci`
+and `gt`. `verified_rules` is optional; when omitted, verified status follows
+the merchant result. The normalized fields expected by the backend are:
+`ad_id`, `fiat`, `asset`, `price`, `available_asset`, `min_fiat`,
+`max_fiat`, `payment_methods`, `pay_time_limit_minutes`, plus advertiser
+fields `id`, `nickname`, `user_type`, `completed_orders_30d`,
+`completion_rate_30d` and `positive_rate`.
+
+`enabled` is the default activation flag. It can be overridden at runtime with
+`P2P_<SLUG>_ENABLED=true|false`; the endpoint can be overridden with
+`P2P_<SLUG>_URL`. For example, `new_exchange` uses
+`P2P_NEW_EXCHANGE_ENABLED` and `P2P_NEW_EXCHANGE_URL`.
+
+During `cargo build`, `backend/build.rs` reads `reg.json`, checks every linked
+file stays inside `backend/providers/`, and generates embedded `include_str!`
+entries. Runtime configuration is deserialized from those embedded strings, so
+changing a provider JSON requires rebuilding the backend image.
+
 All sources are queried concurrently. A timeout or parsing failure from one
 source is returned in `sources` without discarding successful results from the
 other source. Successful leg searches are cached in memory for five seconds by
