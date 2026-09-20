@@ -95,7 +95,9 @@ export function RouteInstructions({ route, onClose }: RouteInstructionsProps) {
   const exit = route.legs.find((leg) => leg.kind === "exit");
   const entryVenue = venueName(entry?.provider);
   const exitVenue = venueName(exit?.provider);
-  const crossVenue = entry?.provider !== exit?.provider;
+  const crossVenue = Boolean(entry && exit && entry.provider !== exit.provider);
+  const cryptoToCrypto = route.route_kind === "crypto_to_crypto";
+  const cryptoToFiat = route.route_kind === "crypto_to_fiat";
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -128,14 +130,27 @@ export function RouteInstructions({ route, onClose }: RouteInstructionsProps) {
         </div>
 
         <div className={styles.workflow}>
-          <article className={styles.step}>
-            <span className={styles.stepNumber}>01</span>
-            <div>
-              <strong>Buy {route.entry_asset} for {money(route.source_amount_minor, route.source_currency)}</strong>
-              <p>Open the seller&apos;s profile, verify the rate and limits, then send the fiat payment using the selected bank.</p>
-              <AdvertiserCard offer={route.entry_offer_snapshot} label={`Seller on ${entryVenue}`} />
-            </div>
-          </article>
+          {route.entry_offer_snapshot && (
+            <article className={styles.step}>
+              <span className={styles.stepNumber}>01</span>
+              <div>
+                <strong>
+                  {cryptoToCrypto
+                    ? `Sell ${route.source_currency} for ${route.bridge_currency}`
+                    : `Buy ${route.entry_asset} for ${money(route.source_amount_minor, route.source_currency)}`}
+                </strong>
+                <p>
+                  {cryptoToCrypto
+                    ? "Open the buyer's profile, verify the rate and limits, then complete the crypto sale on the venue."
+                    : "Open the seller&apos;s profile, verify the rate and limits, then send the fiat payment using the selected bank."}
+                </p>
+                <AdvertiserCard
+                  offer={route.entry_offer_snapshot}
+                  label={`${cryptoToCrypto ? "Buyer" : "Seller"} on ${entryVenue}`}
+                />
+              </div>
+            </article>
+          )}
 
           {crossVenue && (
             <article className={styles.step}>
@@ -147,14 +162,29 @@ export function RouteInstructions({ route, onClose }: RouteInstructionsProps) {
             </article>
           )}
 
-          <article className={styles.step}>
-            <span className={styles.stepNumber}>{crossVenue ? "03" : "02"}</span>
-            <div>
-              <strong>Sell {route.entry_asset} for {money(route.target_amount_minor, route.target_currency)}</strong>
-              <p>Open the buyer&apos;s profile, verify the recipient payment method and create the P2P order only on the venue.</p>
-              <AdvertiserCard offer={route.exit_offer_snapshot} label={`Buyer on ${exitVenue}`} />
-            </div>
-          </article>
+          {route.exit_offer_snapshot && (
+            <article className={styles.step}>
+              <span className={styles.stepNumber}>{crossVenue ? "03" : route.entry_offer_snapshot ? "02" : "01"}</span>
+              <div>
+                <strong>
+                  {cryptoToCrypto
+                    ? `Buy ${route.target_currency} with ${route.bridge_currency}`
+                    : cryptoToFiat
+                      ? `Sell ${route.entry_asset} for ${money(route.target_amount_minor, route.target_currency)}`
+                      : `Sell ${route.entry_asset} for ${money(route.target_amount_minor, route.target_currency)}`}
+                </strong>
+                <p>
+                  {cryptoToCrypto
+                    ? "Open the seller's profile, verify the network and limits, then buy the destination asset on the venue."
+                    : "Open the buyer&apos;s profile, verify the recipient payment method and create the P2P order only on the venue."}
+                </p>
+                <AdvertiserCard
+                  offer={route.exit_offer_snapshot}
+                  label={`${cryptoToCrypto ? "Seller" : "Buyer"} on ${exitVenue}`}
+                />
+              </div>
+            </article>
+          )}
         </div>
 
         <div className={styles.warning}>

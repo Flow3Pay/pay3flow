@@ -65,6 +65,8 @@ export interface RouteCandidate {
   entry_network: string;
   target_amount_minor?: number;
   target_currency?: string;
+  route_kind?: "fiat_to_fiat" | "fiat_to_crypto" | "crypto_to_fiat" | "crypto_to_crypto";
+  bridge_currency?: string | null;
   spread_bps: number;
   fee_minor?: number;
   eta_minutes?: number;
@@ -120,9 +122,11 @@ export interface P2pRoute {
   same_venue: boolean;
   requires_asset_transfer: boolean;
   transfer_fee_included: boolean;
+  route_kind?: "fiat_to_fiat" | "fiat_to_crypto" | "crypto_to_fiat" | "crypto_to_crypto";
+  bridge_currency?: string | null;
   payment_methods_verified: boolean;
-  entry_offer: P2pOffer;
-  exit_offer: P2pOffer;
+  entry_offer?: P2pOffer;
+  exit_offer?: P2pOffer;
   warnings: string[];
 }
 
@@ -209,6 +213,10 @@ export function fetchP2pRoutes(query: {
   sourceFiat: string;
   targetFiat: string;
   sourceAmount: number;
+  assets?: string[];
+  bridgeFiat?: string;
+  sourceNetwork?: string;
+  targetNetwork?: string;
   sourcePaymentMethod?: string;
   targetPaymentMethod?: string;
   sources?: string[];
@@ -225,6 +233,18 @@ export function fetchP2pRoutes(query: {
     allow_cross_venue: String(query.allowCrossVenue ?? true),
     limit: String(query.limit ?? 40),
   });
+  if (query.assets?.length) {
+    params.set("assets", query.assets.join(","));
+  }
+  if (query.bridgeFiat) {
+    params.set("bridge_fiat", query.bridgeFiat);
+  }
+  if (query.sourceNetwork) {
+    params.set("source_network", query.sourceNetwork);
+  }
+  if (query.targetNetwork) {
+    params.set("target_network", query.targetNetwork);
+  }
   if (query.sourcePaymentMethod) {
     params.set("source_payment_method", query.sourcePaymentMethod);
   }

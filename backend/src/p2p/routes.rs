@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use chrono::{DateTime, Utc};
 use futures::future::join_all;
 use serde::{Deserialize, Serialize};
@@ -20,6 +20,10 @@ pub struct P2pRouteSearchQuery {
     pub source_fiat: String,
     pub target_fiat: String,
     pub source_amount: f64,
+    pub source_network: Option<String>,
+    pub target_network: Option<String>,
+    /// Fiat currency used as a pivot when both endpoints are crypto assets.
+    pub bridge_fiat: Option<String>,
     /// Optional comma-separated asset list. Defaults to `P2P_SEARCH_ASSETS`.
     pub assets: Option<String>,
     pub source_payment_method: Option<String>,
@@ -50,11 +54,13 @@ pub struct P2pRoute {
     pub same_venue: bool,
     pub requires_asset_transfer: bool,
     pub transfer_fee_included: bool,
+    pub route_kind: String,
+    pub bridge_currency: Option<String>,
     /// True when both selected bank names were present in venue responses.
     /// False means at least one venue returned only opaque payment IDs.
     pub payment_methods_verified: bool,
-    pub entry_offer: P2pOffer,
-    pub exit_offer: P2pOffer,
+    pub entry_offer: Option<P2pOffer>,
+    pub exit_offer: Option<P2pOffer>,
     pub warnings: Vec<String>,
 }
 
@@ -82,8 +88,9 @@ pub struct P2pRouteSearchResponse {
 }
 
 struct NormalizedRouteQuery {
-    source_fiat: String,
-    target_fiat: String,
+    source_currency: String,
+    target_currency: String,
+    bridge_fiat: Option<String>,
     source_amount: f64,
     assets: Vec<String>,
     source_payment_method: Option<String>,
@@ -103,46 +110,142 @@ impl P2pSearchService {
         query: P2pRouteSearchQuery,
     ) -> Result<P2pRouteSearchResponse> {
         let query = normalize_query(query, &self.default_assets)?;
-        let searches = query.assets.iter().map(|asset| async {
-            let entry_query = leg_query(
-                &query.source_fiat,
-                asset,
-                P2pSide::BuyCrypto,
-                Some(query.source_amount),
-                query.source_payment_method.clone(),
-                &query,
-            );
-            let exit_query = leg_query(
-                &query.target_fiat,
-                asset,
-                P2pSide::SellCrypto,
-                None,
-                query.target_payment_method.clone(),
-                &query,
-            );
-            let (entry, exit) = tokio::join!(self.search(entry_query), self.search(exit_query));
-            (asset.clone(), entry, exit)
-        });
-
         let mut routes = Vec::new();
         let mut asset_statuses = Vec::new();
-        for (asset, entry, exit) in join_all(searches).await {
-            let entry = entry?;
-            let exit = exit?;
-            let entry_offers = reject_price_outliers(entry.offers, query.max_price_deviation_bps);
-            let exit_offers = reject_price_outliers(exit.offers, query.max_price_deviation_bps);
-            let before = routes.len();
-            compose_routes(&mut routes, &query, &asset, &entry_offers, &exit_offers);
-            let routes_built = routes.len() - before;
-            asset_statuses.push(RouteAssetStatus {
-                asset,
-                entry_offers: entry_offers.len(),
-                exit_offers: exit_offers.len(),
-                routes_built,
-                can_exchange_to_target: routes_built > 0,
-                entry_sources: entry.sources,
-                exit_sources: exit.sources,
-            });
+        match (
+            is_crypto(&query.source_currency),
+            is_crypto(&query.target_currency),
+        ) {
+            (false, false) => {
+                let searches = query.assets.iter().map(|asset| async {
+                    let entry_query = leg_query(
+                        &query.source_currency,
+                        asset,
+                        P2pSide::BuyCrypto,
+                        Some(query.source_amount),
+                        query.source_payment_method.clone(),
+                        &query,
+                    );
+                    let exit_query = leg_query(
+                        &query.target_currency,
+                        asset,
+                        P2pSide::SellCrypto,
+                        None,
+                        query.target_payment_method.clone(),
+                        &query,
+                    );
+                    let (entry, exit) =
+                        tokio::join!(self.search(entry_query), self.search(exit_query));
+                    (asset.clone(), entry, exit)
+                });
+
+                for (asset, entry, exit) in join_all(searches).await {
+                    let entry = entry?;
+                    let exit = exit?;
+                    let entry_offers =
+                        reject_price_outliers(entry.offers, query.max_price_deviation_bps);
+                    let exit_offers =
+                        reject_price_outliers(exit.offers, query.max_price_deviation_bps);
+                    let before = routes.len();
+                    compose_fiat_routes(&mut routes, &query, &asset, &entry_offers, &exit_offers);
+                    push_asset_status(
+                        &mut asset_statuses,
+                        asset,
+                        &entry.sources,
+                        &exit.sources,
+                        &entry_offers,
+                        &exit_offers,
+                        routes.len() - before,
+                    );
+                }
+            }
+            (false, true) => {
+                let asset = query.target_currency.clone();
+                let response = self
+                    .search(leg_query(
+                        &query.source_currency,
+                        &asset,
+                        P2pSide::BuyCrypto,
+                        Some(query.source_amount),
+                        query.source_payment_method.clone(),
+                        &query,
+                    ))
+                    .await?;
+                let offers = reject_price_outliers(response.offers, query.max_price_deviation_bps);
+                let before = routes.len();
+                compose_fiat_to_crypto_routes(&mut routes, &query, &asset, &offers);
+                push_asset_status(
+                    &mut asset_statuses,
+                    asset,
+                    &response.sources,
+                    &[],
+                    &offers,
+                    &[],
+                    routes.len() - before,
+                );
+            }
+            (true, false) => {
+                let asset = query.source_currency.clone();
+                let response = self
+                    .search(leg_query(
+                        &query.target_currency,
+                        &asset,
+                        P2pSide::SellCrypto,
+                        None,
+                        query.target_payment_method.clone(),
+                        &query,
+                    ))
+                    .await?;
+                let offers = reject_price_outliers(response.offers, query.max_price_deviation_bps);
+                let before = routes.len();
+                compose_crypto_to_fiat_routes(&mut routes, &query, &asset, &offers);
+                push_asset_status(
+                    &mut asset_statuses,
+                    asset,
+                    &[],
+                    &response.sources,
+                    &[],
+                    &offers,
+                    routes.len() - before,
+                );
+            }
+            (true, true) => {
+                let pivot = query
+                    .bridge_fiat
+                    .as_deref()
+                    .context("bridge_fiat is required for a crypto-to-crypto search")?;
+                let source_asset = query.source_currency.clone();
+                let target_asset = query.target_currency.clone();
+                let source_query = leg_query(
+                    pivot,
+                    &source_asset,
+                    P2pSide::SellCrypto,
+                    None,
+                    None,
+                    &query,
+                );
+                let target_query =
+                    leg_query(pivot, &target_asset, P2pSide::BuyCrypto, None, None, &query);
+                let (source, target) =
+                    tokio::join!(self.search(source_query), self.search(target_query));
+                let source = source?;
+                let target = target?;
+                let source_offers =
+                    reject_price_outliers(source.offers, query.max_price_deviation_bps);
+                let target_offers =
+                    reject_price_outliers(target.offers, query.max_price_deviation_bps);
+                let before = routes.len();
+                compose_crypto_routes(&mut routes, &query, pivot, &source_offers, &target_offers);
+                push_asset_status(
+                    &mut asset_statuses,
+                    target_asset,
+                    &source.sources,
+                    &target.sources,
+                    &source_offers,
+                    &target_offers,
+                    routes.len() - before,
+                );
+            }
         }
 
         routes.sort_by(|left, right| {
@@ -163,8 +266,8 @@ impl P2pSearchService {
 
         Ok(P2pRouteSearchResponse {
             searched_at: Utc::now(),
-            source_fiat: query.source_fiat,
-            target_fiat: query.target_fiat,
+            source_fiat: query.source_currency,
+            target_fiat: query.target_currency,
             source_amount: fixed(query.source_amount, 2),
             assets_searched: query.assets,
             can_exchange_to_target: !routes.is_empty(),
@@ -181,7 +284,9 @@ fn normalize_query(
     if !query.source_amount.is_finite() || query.source_amount <= 0.0 {
         bail!("source_amount must be a positive finite number");
     }
-    if query.source_fiat.eq_ignore_ascii_case(&query.target_fiat) {
+    let source_currency = query.source_fiat.trim().to_ascii_uppercase();
+    let target_currency = query.target_fiat.trim().to_ascii_uppercase();
+    if source_currency.eq_ignore_ascii_case(&target_currency) {
         bail!("source_fiat and target_fiat must differ");
     }
     if query
@@ -213,10 +318,20 @@ fn normalize_query(
     if max_price_deviation_bps > 5_000 {
         bail!("max_price_deviation_bps must not exceed 5000");
     }
+    let bridge_fiat = query
+        .bridge_fiat
+        .map(|value| value.trim().to_ascii_uppercase())
+        .filter(|value| !value.is_empty());
+    if bridge_fiat.as_deref().is_some_and(is_crypto) {
+        bail!("bridge_fiat must be a fiat currency");
+    }
+    validate_network(&query.source_network, &source_currency)?;
+    validate_network(&query.target_network, &target_currency)?;
 
     Ok(NormalizedRouteQuery {
-        source_fiat: query.source_fiat.trim().to_ascii_uppercase(),
-        target_fiat: query.target_fiat.trim().to_ascii_uppercase(),
+        source_currency,
+        target_currency,
+        bridge_fiat,
         source_amount: query.source_amount,
         assets,
         source_payment_method: trimmed(query.source_payment_method),
@@ -232,6 +347,35 @@ fn normalize_query(
             .clamp(1, MAX_ROUTE_LIMIT),
         sources: normalize_sources(query.sources)?,
     })
+}
+
+fn validate_network(network_id: &Option<String>, currency: &str) -> Result<()> {
+    let Some(network_id) = network_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+    else {
+        return Ok(());
+    };
+    let supported = crate::networks::catalog().into_iter().any(|network| {
+        network.id.eq_ignore_ascii_case(network_id)
+            && network
+                .currencies
+                .iter()
+                .any(|item| item.eq_ignore_ascii_case(currency))
+    });
+    if supported {
+        Ok(())
+    } else {
+        bail!("network {network_id} is not compatible with {currency}")
+    }
+}
+
+fn is_crypto(currency: &str) -> bool {
+    matches!(
+        currency.to_ascii_uppercase().as_str(),
+        "BTC" | "ETH" | "USDC" | "USDT" | "SOL"
+    )
 }
 
 fn trimmed(value: Option<String>) -> Option<String> {
@@ -288,7 +432,7 @@ fn reject_price_outliers(offers: Vec<P2pOffer>, max_deviation_bps: u32) -> Vec<P
         .collect()
 }
 
-fn compose_routes(
+fn compose_fiat_routes(
     routes: &mut Vec<P2pRoute>,
     query: &NormalizedRouteQuery,
     asset: &str,
@@ -364,22 +508,198 @@ fn compose_routes(
             routes.push(P2pRoute {
                 rank: 0,
                 asset: asset.into(),
-                source_fiat: query.source_fiat.clone(),
+                source_fiat: query.source_currency.clone(),
                 source_amount: fixed(query.source_amount, 2),
                 acquired_asset_amount: fixed(acquired_asset, 8),
-                target_fiat: query.target_fiat.clone(),
+                target_fiat: query.target_currency.clone(),
                 target_amount: fixed(target_amount, 2),
                 effective_rate: fixed(target_amount / query.source_amount, 8),
                 same_venue,
                 requires_asset_transfer: !same_venue,
                 transfer_fee_included: same_venue,
+                route_kind: "fiat_to_fiat".into(),
+                bridge_currency: None,
                 payment_methods_verified,
-                entry_offer: entry.clone(),
-                exit_offer: exit.clone(),
+                entry_offer: Some(entry.clone()),
+                exit_offer: Some(exit.clone()),
                 warnings,
             });
         }
     }
+}
+
+fn compose_fiat_to_crypto_routes(
+    routes: &mut Vec<P2pRoute>,
+    query: &NormalizedRouteQuery,
+    asset: &str,
+    offers: &[P2pOffer],
+) {
+    for offer in offers {
+        let Some(price) = positive_number(&offer.price) else {
+            continue;
+        };
+        let target_amount = query.source_amount / price;
+        if positive_number(&offer.available_asset).is_none_or(|available| available < target_amount)
+        {
+            continue;
+        }
+        let payment_methods_verified = query
+            .source_payment_method
+            .as_deref()
+            .is_none_or(|method| offer.payment_method_match(method) == PaymentMethodMatch::Exact);
+        routes.push(P2pRoute {
+            rank: 0,
+            asset: asset.into(),
+            source_fiat: query.source_currency.clone(),
+            source_amount: fixed(query.source_amount, 8),
+            acquired_asset_amount: fixed(target_amount, 8),
+            target_fiat: query.target_currency.clone(),
+            target_amount: fixed(target_amount, 8),
+            effective_rate: fixed(target_amount / query.source_amount, 8),
+            same_venue: true,
+            requires_asset_transfer: false,
+            transfer_fee_included: true,
+            route_kind: "fiat_to_crypto".into(),
+            bridge_currency: None,
+            payment_methods_verified,
+            entry_offer: Some(offer.clone()),
+            exit_offer: None,
+            warnings: vec![
+                "Search estimate only: platform fees, account eligibility and execution are not verified.".into(),
+            ],
+        });
+    }
+}
+
+fn compose_crypto_to_fiat_routes(
+    routes: &mut Vec<P2pRoute>,
+    query: &NormalizedRouteQuery,
+    asset: &str,
+    offers: &[P2pOffer],
+) {
+    for offer in offers {
+        let Some(price) = positive_number(&offer.price) else {
+            continue;
+        };
+        if positive_number(&offer.available_asset)
+            .is_none_or(|available| available < query.source_amount)
+        {
+            continue;
+        }
+        let target_amount = query.source_amount * price;
+        if !covers_target(offer, target_amount) {
+            continue;
+        }
+        let payment_methods_verified = query
+            .target_payment_method
+            .as_deref()
+            .is_none_or(|method| offer.payment_method_match(method) == PaymentMethodMatch::Exact);
+        routes.push(P2pRoute {
+            rank: 0,
+            asset: asset.into(),
+            source_fiat: query.source_currency.clone(),
+            source_amount: fixed(query.source_amount, 8),
+            acquired_asset_amount: fixed(query.source_amount, 8),
+            target_fiat: query.target_currency.clone(),
+            target_amount: fixed(target_amount, 2),
+            effective_rate: fixed(target_amount / query.source_amount, 8),
+            same_venue: true,
+            requires_asset_transfer: false,
+            transfer_fee_included: true,
+            route_kind: "crypto_to_fiat".into(),
+            bridge_currency: None,
+            payment_methods_verified,
+            entry_offer: None,
+            exit_offer: Some(offer.clone()),
+            warnings: vec![
+                "Search estimate only: platform fees, account eligibility and execution are not verified.".into(),
+            ],
+        });
+    }
+}
+
+fn compose_crypto_routes(
+    routes: &mut Vec<P2pRoute>,
+    query: &NormalizedRouteQuery,
+    bridge_fiat: &str,
+    source_offers: &[P2pOffer],
+    target_offers: &[P2pOffer],
+) {
+    for entry in source_offers {
+        let Some(entry_price) = positive_number(&entry.price) else {
+            continue;
+        };
+        if positive_number(&entry.available_asset)
+            .is_none_or(|available| available < query.source_amount)
+        {
+            continue;
+        }
+        let bridge_amount = query.source_amount * entry_price;
+        for exit in target_offers {
+            let same_venue = entry.source == exit.source;
+            if !same_venue && !query.allow_cross_venue {
+                continue;
+            }
+            let Some(exit_price) = positive_number(&exit.price) else {
+                continue;
+            };
+            let target_amount = bridge_amount / exit_price;
+            if positive_number(&exit.available_asset)
+                .is_none_or(|available| available < target_amount)
+                || !covers_target(exit, bridge_amount)
+            {
+                continue;
+            }
+            let mut warnings = vec![
+                "Search estimate only: platform fees, account eligibility and execution are not verified.".into(),
+            ];
+            if !same_venue {
+                warnings.push(
+                    "Cross-venue route requires an asset transfer; network fee and compatible network are not included."
+                        .into(),
+                );
+            }
+            routes.push(P2pRoute {
+                rank: 0,
+                asset: query.target_currency.clone(),
+                source_fiat: query.source_currency.clone(),
+                source_amount: fixed(query.source_amount, 8),
+                acquired_asset_amount: fixed(target_amount, 8),
+                target_fiat: query.target_currency.clone(),
+                target_amount: fixed(target_amount, 8),
+                effective_rate: fixed(target_amount / query.source_amount, 8),
+                same_venue,
+                requires_asset_transfer: !same_venue,
+                transfer_fee_included: same_venue,
+                route_kind: "crypto_to_crypto".into(),
+                bridge_currency: Some(bridge_fiat.into()),
+                payment_methods_verified: true,
+                entry_offer: Some(entry.clone()),
+                exit_offer: Some(exit.clone()),
+                warnings,
+            });
+        }
+    }
+}
+
+fn push_asset_status(
+    statuses: &mut Vec<RouteAssetStatus>,
+    asset: String,
+    entry_sources: &[SourceStatus],
+    exit_sources: &[SourceStatus],
+    entry_offers: &[P2pOffer],
+    exit_offers: &[P2pOffer],
+    routes_built: usize,
+) {
+    statuses.push(RouteAssetStatus {
+        asset,
+        entry_offers: entry_offers.len(),
+        exit_offers: exit_offers.len(),
+        routes_built,
+        can_exchange_to_target: routes_built > 0,
+        entry_sources: entry_sources.to_vec(),
+        exit_sources: exit_sources.to_vec(),
+    });
 }
 
 fn positive_number(value: &str) -> Option<f64> {
@@ -449,8 +769,9 @@ mod tests {
 
     fn query(allow_cross_venue: bool) -> NormalizedRouteQuery {
         NormalizedRouteQuery {
-            source_fiat: "AMD".into(),
-            target_fiat: "RUB".into(),
+            source_currency: "AMD".into(),
+            target_currency: "RUB".into(),
+            bridge_fiat: None,
             source_amount: 100_000.0,
             assets: vec!["USDT".into()],
             source_payment_method: None,
@@ -468,7 +789,7 @@ mod tests {
     #[test]
     fn composes_two_feasible_legs() {
         let mut routes = Vec::new();
-        compose_routes(
+        compose_fiat_routes(
             &mut routes,
             &query(false),
             "USDT",
@@ -486,7 +807,7 @@ mod tests {
         let entry = offer("binance", P2pSide::BuyCrypto, "400", "1000", "200000");
         let exit = offer("bybit", P2pSide::SellCrypto, "80", "30000", "100000");
         let mut routes = Vec::new();
-        compose_routes(
+        compose_fiat_routes(
             &mut routes,
             &query(false),
             "USDT",
@@ -494,7 +815,7 @@ mod tests {
             std::slice::from_ref(&exit),
         );
         assert!(routes.is_empty());
-        compose_routes(&mut routes, &query(true), "USDT", &[entry], &[exit]);
+        compose_fiat_routes(&mut routes, &query(true), "USDT", &[entry], &[exit]);
         assert!(routes.is_empty());
     }
 
@@ -516,10 +837,10 @@ mod tests {
         let exit = offer("bybit", P2pSide::SellCrypto, "80", "1000", "100000");
 
         let mut routes = Vec::new();
-        compose_routes(&mut routes, &query(false), "USDT", &[entry], &[exit]);
+        compose_fiat_routes(&mut routes, &query(false), "USDT", &[entry], &[exit]);
 
         assert_eq!(routes.len(), 1);
-        assert!(!routes[0].entry_offer.source_url_is_exact);
+        assert!(!routes[0].entry_offer.as_ref().unwrap().source_url_is_exact);
         assert!(routes[0]
             .warnings
             .iter()
@@ -537,7 +858,7 @@ mod tests {
         exit.payment_methods = vec!["40".into()];
 
         let mut routes = Vec::new();
-        compose_routes(&mut routes, &query, "USDT", &[entry], &[exit]);
+        compose_fiat_routes(&mut routes, &query, "USDT", &[entry], &[exit]);
 
         assert_eq!(routes.len(), 1);
         assert!(!routes[0].payment_methods_verified);
@@ -554,6 +875,9 @@ mod tests {
                 source_fiat: "AMD".into(),
                 target_fiat: "RUB".into(),
                 source_amount: 100_000.0,
+                source_network: None,
+                target_network: None,
+                bridge_fiat: None,
                 assets: Some("USDT,USDC,BTC,ETH".into()),
                 source_payment_method: None,
                 target_payment_method: None,
@@ -588,6 +912,9 @@ mod tests {
                 source_fiat: "AMD".into(),
                 target_fiat: "RUB".into(),
                 source_amount: 100_000.0,
+                source_network: None,
+                target_network: None,
+                bridge_fiat: None,
                 assets: Some("USDT,USDC,BTC,ETH".into()),
                 source_payment_method: Some("Ameriabank".into()),
                 target_payment_method: Some("Sberbank".into()),
@@ -604,8 +931,14 @@ mod tests {
 
         eprintln!("{}", serde_json::to_string_pretty(&response).unwrap());
         assert!(response.routes.iter().all(|route| {
-            route.entry_offer.side == P2pSide::BuyCrypto
-                && route.exit_offer.side == P2pSide::SellCrypto
+            route
+                .entry_offer
+                .as_ref()
+                .is_some_and(|offer| offer.side == P2pSide::BuyCrypto)
+                && route
+                    .exit_offer
+                    .as_ref()
+                    .is_some_and(|offer| offer.side == P2pSide::SellCrypto)
         }));
     }
 }

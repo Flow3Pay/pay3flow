@@ -38,9 +38,24 @@ function venueName(value: string | undefined): string {
 function workflowLabel(route: RouteCandidate): string {
   const entry = route.legs.find((leg) => leg.kind === "entry");
   const exit = route.legs.find((leg) => leg.kind === "exit");
-  const assetName = ASSET_NAMES[route.entry_asset.toUpperCase()];
-  const asset = assetName ? `${route.entry_asset} ${assetName}` : route.entry_asset;
-  return `${route.source_currency} → ${asset} (${venueName(entry?.provider)}) → ${route.target_currency ?? "—"} (${venueName(exit?.provider)})`;
+  const label = (currency: string | undefined) => {
+    if (!currency) return "—";
+    const name = ASSET_NAMES[currency.toUpperCase()];
+    return name ? `${currency} ${name}` : currency;
+  };
+  const source = label(route.source_currency);
+  const target = label(route.target_currency);
+  if (!entry && exit) {
+    return `${source} (${venueName(exit.provider)}) → ${target}`;
+  }
+  if (entry && !exit) {
+    return `${source} → ${target} (${venueName(entry.provider)})`;
+  }
+  if (route.bridge_currency) {
+    return `${source} (${venueName(entry?.provider)}) → ${route.bridge_currency} → ${target} (${venueName(exit?.provider)})`;
+  }
+  const asset = label(route.entry_asset);
+  return `${source} → ${asset} (${venueName(entry?.provider)}) → ${target} (${venueName(exit?.provider)})`;
 }
 
 interface SidePanelProps {

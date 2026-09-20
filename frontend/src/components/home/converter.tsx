@@ -63,26 +63,47 @@ function NetworkControl({ network, networks, open, onToggle, onSelect }: Network
         <span className={styles.networkChevron} aria-hidden="true">⌄</span>
       </button>
       {open && (
-        <div className={styles.networkMenu} role="listbox" aria-label="Select crypto network">
-          <div className={styles.networkMenuTitle}>Select network</div>
-          {networks.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={styles.networkOption}
-              data-selected={item.id === network.id || undefined}
-              role="option"
-              aria-selected={item.id === network.id}
-              onClick={() => onSelect(item)}
-            >
-              <span className={styles.networkOptionDot} aria-hidden="true">♦</span>
-              <span>
-                <strong>{item.name}</strong>
-                <small>{item.currencies.join(" · ")}</small>
-              </span>
-              {item.id === network.id && <b aria-hidden="true">✓</b>}
-            </button>
-          ))}
+        <div className={styles.networkBackdrop} onMouseDown={onToggle}>
+          <div
+            className={styles.networkDialog}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Select crypto network"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className={styles.networkDialogHead}>
+              <div className={styles.networkDialogTitleGroup}>
+                <button type="button" className={styles.networkBackButton} onClick={onToggle} aria-label="Close network picker">
+                  <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="m15 18-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                <h2>Select network</h2>
+              </div>
+              <span className={styles.networkModeBadge}>Network</span>
+            </div>
+            <div className={styles.networkDialogBody} role="listbox" aria-label="Crypto networks">
+              <p className={styles.networkSectionLabel}>Available networks</p>
+              {networks.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={styles.networkOption}
+                  data-selected={item.id === network.id || undefined}
+                  role="option"
+                  aria-selected={item.id === network.id}
+                  onClick={() => onSelect(item)}
+                >
+                  <span className={styles.networkOptionDot} aria-hidden="true">♦</span>
+                  <span>
+                    <strong>{item.name}</strong>
+                    <small>{item.currencies.join(" · ")}</small>
+                  </span>
+                  {item.id === network.id && <b aria-hidden="true">✓</b>}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -134,47 +155,57 @@ function amountNumber(value: string): number {
 function mapRoutes(response: Awaited<ReturnType<typeof fetchP2pRoutes>>): RouteCandidate[] {
   const bestTarget = Number(response.routes[0]?.target_amount ?? 0);
   return response.routes.map((route, index) => {
+    const entryOffer = route.entry_offer;
+    const exitOffer = route.exit_offer;
     const targetAmount = Number(route.target_amount);
     const relativeBps =
       bestTarget > 0 && Number.isFinite(targetAmount)
         ? Math.round((targetAmount / bestTarget - 1) * 10_000)
         : 0;
     return {
-      route_id: `live:${route.entry_offer.source}:${route.entry_offer.ad_id}:${route.exit_offer.source}:${route.exit_offer.ad_id}`,
+      route_id: `live:${entryOffer?.source ?? "direct"}:${entryOffer?.ad_id ?? "none"}:${exitOffer?.source ?? "direct"}:${exitOffer?.ad_id ?? "none"}`,
       status: "complete",
       source_amount_minor: Math.round(Number(route.source_amount) * 100),
       source_currency: route.source_fiat,
       entry_asset: route.asset,
-      entry_network: route.same_venue ? route.entry_offer.source : "cross-venue",
+      entry_network: route.same_venue
+        ? entryOffer?.source ?? exitOffer?.source ?? "direct"
+        : "cross-venue",
       target_amount_minor: Math.round(targetAmount * 100),
       target_currency: route.target_fiat,
+      route_kind: route.route_kind,
+      bridge_currency: route.bridge_currency,
       spread_bps: relativeBps,
       is_current_best: index === 0,
       is_live_market: true,
       payment_methods_verified: route.payment_methods_verified,
-      entry_offer_url: route.entry_offer.source_url,
-      entry_offer_is_exact: route.entry_offer.source_url_is_exact,
-      entry_offer_ad_id: route.entry_offer.ad_id,
-      exit_offer_url: route.exit_offer.source_url,
-      exit_offer_is_exact: route.exit_offer.source_url_is_exact,
-      exit_offer_ad_id: route.exit_offer.ad_id,
-      entry_offer_snapshot: route.entry_offer,
-      exit_offer_snapshot: route.exit_offer,
+      entry_offer_url: entryOffer?.source_url,
+      entry_offer_is_exact: entryOffer?.source_url_is_exact,
+      entry_offer_ad_id: entryOffer?.ad_id,
+      exit_offer_url: exitOffer?.source_url,
+      exit_offer_is_exact: exitOffer?.source_url_is_exact,
+      exit_offer_ad_id: exitOffer?.ad_id,
+      entry_offer_snapshot: entryOffer,
+      exit_offer_snapshot: exitOffer,
       legs: [
-        {
-          kind: "entry",
-          from: route.source_fiat,
-          to: route.asset,
-          provider: route.entry_offer.source,
-          status: "found",
-        },
-        {
-          kind: "exit",
-          from: route.asset,
-          to: route.target_fiat,
-          provider: route.exit_offer.source,
-          status: "found",
-        },
+        ...(entryOffer
+          ? [{
+              kind: "entry" as const,
+              from: route.source_fiat,
+              to: route.bridge_currency ?? route.asset,
+              provider: entryOffer.source,
+              status: "found" as const,
+            }]
+          : []),
+        ...(exitOffer
+          ? [{
+              kind: "exit" as const,
+              from: route.bridge_currency ?? route.asset,
+              to: route.target_fiat,
+              provider: exitOffer.source,
+              status: "found" as const,
+            }]
+          : []),
       ],
     };
   });
@@ -361,9 +392,11 @@ export function Converter() {
     [targetCountry, targetCurrency],
   );
   const sourceMethod =
-    sourceMethods.find((method) => method.id === sourceMethodId) ?? sourceMethods[0] ?? null;
+    sourceMethods.find((method) => method.id === sourceMethodId) ??
+    (sourceCountry ? sourceMethods[0] : null);
   const targetMethod =
-    targetMethods.find((method) => method.id === targetMethodId) ?? targetMethods[0] ?? null;
+    targetMethods.find((method) => method.id === targetMethodId) ??
+    (targetCountry ? targetMethods[0] : null);
   const selectedNetwork =
     networks.find((network) => network.id === selectedNetworkId) ?? networks[0] ?? FALLBACK_NETWORK;
   const numericAmount = amountNumber(amount);
@@ -487,12 +520,18 @@ export function Converter() {
     setSearching(true);
     setError(null);
     try {
+      const sourceIsWallet = sourceMethod.kind === "wallet";
+      const targetIsWallet = targetMethod.kind === "wallet";
       const response = await fetchP2pRoutes({
-        sourceFiat: sourceCurrency,
-        targetFiat: targetCurrency,
+        sourceFiat: sourceIsWallet ? sourceMethod.currency : sourceCurrency,
+        targetFiat: targetIsWallet ? targetMethod.currency : targetCurrency,
         sourceAmount: value,
-        sourcePaymentMethod: sourceMethod.p2pQuery,
-        targetPaymentMethod: targetMethod.p2pQuery,
+        assets: !sourceIsWallet && !targetIsWallet ? ["ETH"] : undefined,
+        bridgeFiat: sourceIsWallet && targetIsWallet ? targetCurrency : undefined,
+        sourceNetwork: sourceIsWallet ? selectedNetwork.id : undefined,
+        targetNetwork: targetIsWallet ? selectedNetwork.id : undefined,
+        sourcePaymentMethod: sourceIsWallet ? undefined : sourceMethod.p2pQuery,
+        targetPaymentMethod: targetIsWallet ? undefined : targetMethod.p2pQuery,
         sources: selectedSources,
         allowCrossVenue: true,
         limit: 40,
@@ -518,7 +557,7 @@ export function Converter() {
     } finally {
       if (requestId === requestRef.current) setSearching(false);
     }
-  }, [amount, corridor, selectedSources, sourceCurrency, sourceMethod, targetCurrency, targetMethod]);
+  }, [amount, corridor, selectedNetwork.id, selectedSources, sourceCurrency, sourceMethod, targetCurrency, targetMethod]);
 
   // Re-run the read-only market search after the user changes the intent.
   // The old result is cleared immediately by updateAmount/applyOrientation,
@@ -692,6 +731,33 @@ export function Converter() {
                   <b>◈</b><b>◉</b><b>W</b><small>+ more</small>
                 </div>
               </div>
+            </div>
+            <div className={styles.methodControls}>
+              <button
+                type="button"
+                className={styles.methodTrigger}
+                onClick={() => setMethodPicker("source")}
+                aria-label={`Select sending ${sourceMethod?.kind === "wallet" ? "asset" : "bank"}: ${sourceMethod?.name ?? "none"}`}
+              >
+                <BankLogo
+                  className={styles.methodAvatar}
+                  method={sourceMethod}
+                  fallback={corridor?.source_country ?? "—"}
+                />
+                <span className={styles.methodText}>
+                  <strong>{sourceMethod?.name ?? "Select bank"}</strong>
+                  <small>
+                    {sourceMethod?.kind === "wallet"
+                      ? `${sourceMethod.currency} · ${selectedNetwork.name}`
+                      : corridor
+                        ? locationLabel(sourceCountry, sourceCurrency)
+                        : "Unavailable"}
+                  </small>
+                </span>
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="m4 6 4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
               {sourceMethod?.kind === "wallet" && (
                 <NetworkControl
                   network={selectedNetwork}
@@ -705,31 +771,6 @@ export function Converter() {
                 />
               )}
             </div>
-            <button
-              type="button"
-              className={styles.methodTrigger}
-              onClick={() => setMethodPicker("source")}
-              aria-label={`Select sending ${sourceMethod?.kind === "wallet" ? "asset" : "bank"}: ${sourceMethod?.name ?? "none"}`}
-            >
-              <BankLogo
-                className={styles.methodAvatar}
-                method={sourceMethod}
-                fallback={corridor?.source_country ?? "—"}
-              />
-              <span className={styles.methodText}>
-                <strong>{sourceMethod?.name ?? "Select bank"}</strong>
-                <small>
-                  {sourceMethod?.kind === "wallet"
-                    ? `${sourceMethod.currency} · ${selectedNetwork.name}`
-                    : corridor
-                      ? locationLabel(sourceCountry, sourceCurrency)
-                      : "Unavailable"}
-                </small>
-              </span>
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path d="m4 6 4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
           </div>
 
           <div className={styles.flowBridge}>
@@ -772,6 +813,33 @@ export function Converter() {
                   <b>◈</b><b>◉</b><b>W</b><small>+ more</small>
                 </div>
               </div>
+            </div>
+            <div className={styles.methodControls}>
+              <button
+                type="button"
+                className={styles.methodTrigger}
+                onClick={() => setMethodPicker("target")}
+                aria-label={`Select recipient ${targetMethod?.kind === "wallet" ? "asset" : "bank"}: ${targetMethod?.name ?? "none"}`}
+              >
+                <BankLogo
+                  className={styles.methodAvatar}
+                  method={targetMethod}
+                  fallback={corridor?.target_country ?? "—"}
+                />
+                <span className={styles.methodText}>
+                  <strong>{targetMethod?.name ?? "Select bank"}</strong>
+                  <small>
+                    {targetMethod?.kind === "wallet"
+                      ? `${targetMethod.currency} · ${selectedNetwork.name}`
+                      : corridor
+                        ? locationLabel(targetCountry, targetCurrency)
+                        : "Unavailable"}
+                  </small>
+                </span>
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="m4 6 4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
               {targetMethod?.kind === "wallet" && (
                 <NetworkControl
                   network={selectedNetwork}
@@ -785,31 +853,6 @@ export function Converter() {
                 />
               )}
             </div>
-            <button
-              type="button"
-              className={styles.methodTrigger}
-              onClick={() => setMethodPicker("target")}
-              aria-label={`Select recipient ${targetMethod?.kind === "wallet" ? "asset" : "bank"}: ${targetMethod?.name ?? "none"}`}
-            >
-              <BankLogo
-                className={styles.methodAvatar}
-                method={targetMethod}
-                fallback={corridor?.target_country ?? "—"}
-              />
-              <span className={styles.methodText}>
-                <strong>{targetMethod?.name ?? "Select bank"}</strong>
-                <small>
-                  {targetMethod?.kind === "wallet"
-                    ? `${targetMethod.currency} · ${selectedNetwork.name}`
-                    : corridor
-                      ? locationLabel(targetCountry, targetCurrency)
-                      : "Unavailable"}
-                </small>
-              </span>
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path d="m4 6 4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
           </div>
 
           {refreshSeconds > 0 && (
