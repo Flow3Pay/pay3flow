@@ -72,7 +72,11 @@ export interface RouteCandidate {
   is_live_market?: boolean;
   payment_methods_verified?: boolean;
   entry_offer_url?: string;
+  entry_offer_is_exact?: boolean;
+  entry_offer_ad_id?: string;
   exit_offer_url?: string;
+  exit_offer_is_exact?: boolean;
+  exit_offer_ad_id?: string;
   legs: RouteLeg[];
 }
 
@@ -97,6 +101,7 @@ export interface P2pOffer {
   pay_time_limit_minutes: number | null;
   advertiser: P2pAdvertiser;
   source_url: string;
+  source_url_is_exact?: boolean;
 }
 
 export interface P2pRoute {

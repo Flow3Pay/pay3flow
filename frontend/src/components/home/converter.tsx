@@ -101,7 +101,11 @@ function mapRoutes(response: Awaited<ReturnType<typeof fetchP2pRoutes>>): RouteC
       is_live_market: true,
       payment_methods_verified: route.payment_methods_verified,
       entry_offer_url: route.entry_offer.source_url,
+      entry_offer_is_exact: route.entry_offer.source_url_is_exact,
+      entry_offer_ad_id: route.entry_offer.ad_id,
       exit_offer_url: route.exit_offer.source_url,
+      exit_offer_is_exact: route.exit_offer.source_url_is_exact,
+      exit_offer_ad_id: route.exit_offer.ad_id,
       legs: [
         {
           kind: "entry",

@@ -137,6 +137,7 @@ impl BinanceItem {
                 completion_rate_30d: self.advertiser.month_finish_rate,
                 positive_rate: self.advertiser.positive_rate,
             },
+            source_url_is_exact: true,
         }
     }
 }
@@ -175,6 +176,8 @@ mod tests {
             .into_offer(P2pSide::BuyCrypto);
         assert_eq!(offer.min_fiat, "19997.54");
         assert_eq!(offer.payment_methods, ["IDBank"]);
+        assert!(offer.source_url_is_exact);
+        assert!(offer.source_url.ends_with("code=ad-1"));
         assert!(offer.advertiser.is_merchant);
     }
 }

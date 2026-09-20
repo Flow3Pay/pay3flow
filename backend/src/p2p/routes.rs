@@ -129,8 +129,14 @@ impl P2pSearchService {
         for (asset, entry, exit) in join_all(searches).await {
             let entry = entry?;
             let exit = exit?;
-            let entry_offers = reject_price_outliers(entry.offers, query.max_price_deviation_bps);
-            let exit_offers = reject_price_outliers(exit.offers, query.max_price_deviation_bps);
+            let entry_offers = reject_price_outliers(
+                exact_offer_links(entry.offers),
+                query.max_price_deviation_bps,
+            );
+            let exit_offers = reject_price_outliers(
+                exact_offer_links(exit.offers),
+                query.max_price_deviation_bps,
+            );
             let before = routes.len();
             compose_routes(&mut routes, &query, &asset, &entry_offers, &exit_offers);
             let routes_built = routes.len() - before;
@@ -288,6 +294,13 @@ fn reject_price_outliers(offers: Vec<P2pOffer>, max_deviation_bps: u32) -> Vec<P
         .collect()
 }
 
+fn exact_offer_links(offers: Vec<P2pOffer>) -> Vec<P2pOffer> {
+    offers
+        .into_iter()
+        .filter(|offer| offer.source_url_is_exact)
+        .collect()
+}
+
 fn compose_routes(
     routes: &mut Vec<P2pRoute>,
     query: &NormalizedRouteQuery,
@@ -436,6 +449,7 @@ mod tests {
                 positive_rate: None,
             },
             source_url: "https://example.test".into(),
+            source_url_is_exact: true,
         }
     }
 
@@ -499,6 +513,17 @@ mod tests {
         ];
         let filtered = reject_price_outliers(offers, 1_000);
         assert_eq!(filtered.len(), 2);
+    }
+
+    #[test]
+    fn removes_offers_without_exact_deep_links() {
+        let exact = offer("binance", P2pSide::BuyCrypto, "400", "1", "100000");
+        let mut generic = offer("bybit", P2pSide::BuyCrypto, "401", "1", "100000");
+        generic.source_url_is_exact = false;
+
+        let filtered = exact_offer_links(vec![exact.clone(), generic]);
+
+        assert_eq!(filtered, vec![exact]);
     }
 
     #[test]

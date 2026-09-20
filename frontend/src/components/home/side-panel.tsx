@@ -168,7 +168,7 @@ export function SidePanel({
               </strong>
               <p>
                 {searched && hasAmount
-                  ? "No compatible live offers were found for this amount and payment method."
+                  ? "No compatible offers with a direct link to the exact ad were found for this amount and payment method."
                   : hasAmount
                     ? "Pay3Flow is ready to compare entry assets, venues and recipient payout options."
                     : "Enter an amount and we will assemble live cross-border paths in real time."}

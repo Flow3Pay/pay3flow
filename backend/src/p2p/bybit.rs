@@ -153,6 +153,7 @@ impl BybitItem {
                 positive_rate: None,
             },
             source_url: format!("https://www.bybit.com/fiat/trade/otc/?token={asset}&fiat={fiat}"),
+            source_url_is_exact: false,
             fiat,
             asset,
         }
@@ -185,6 +186,7 @@ mod tests {
             .into_offer(P2pSide::SellCrypto);
         assert_eq!(offer.price, "96.76");
         assert_eq!(offer.advertiser.completion_rate_30d, Some(0.995));
+        assert!(!offer.source_url_is_exact);
         assert!(offer.advertiser.is_merchant);
     }
 }

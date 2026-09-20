@@ -138,6 +138,7 @@ impl OkxAd {
                 },
                 asset.to_ascii_lowercase()
             ),
+            source_url_is_exact: false,
             ad_id: self.id,
             side,
             fiat,
@@ -212,6 +213,7 @@ mod tests {
         assert_eq!(offer.payment_methods, ["IDBank", "Ameriabank"]);
         assert_eq!(offer.advertiser.completion_rate_30d, Some(0.9489));
         assert_eq!(offer.advertiser.positive_rate, Some(0.991));
+        assert!(!offer.source_url_is_exact);
         assert!(offer.advertiser.is_merchant);
     }
 }

@@ -65,12 +65,14 @@ export function RouteInstructions({ route, onClose }: RouteInstructionsProps) {
             <div>
               <strong>Buy {route.entry_asset} for {money(route.source_amount_minor, route.source_currency)}</strong>
               <p>Open the matched offer on {entryVenue}, check the advertiser and send the fiat payment using the selected bank.</p>
-              {route.entry_offer_url ? (
+              {route.entry_offer_url && route.entry_offer_is_exact ? (
                 <a href={route.entry_offer_url} target="_blank" rel="noreferrer noopener">
-                  Open {entryVenue} offer <span>↗</span>
+                  Open exact {entryVenue} offer <span>↗</span>
                 </a>
               ) : (
-                <span className={styles.missingLink}>Offer link is unavailable</span>
+                <span className={styles.missingLink}>
+                  {entryVenue} does not expose a public deep-link for this ad. Ad ID: {route.entry_offer_ad_id ?? "—"}
+                </span>
               )}
             </div>
           </article>
@@ -90,12 +92,14 @@ export function RouteInstructions({ route, onClose }: RouteInstructionsProps) {
             <div>
               <strong>Sell {route.entry_asset} for {money(route.target_amount_minor, route.target_currency)}</strong>
               <p>Open the exit offer on {exitVenue}, sell the asset and choose the recipient payment method.</p>
-              {route.exit_offer_url ? (
+              {route.exit_offer_url && route.exit_offer_is_exact ? (
                 <a href={route.exit_offer_url} target="_blank" rel="noreferrer noopener">
-                  Open {exitVenue} offer <span>↗</span>
+                  Open exact {exitVenue} offer <span>↗</span>
                 </a>
               ) : (
-                <span className={styles.missingLink}>Offer link is unavailable</span>
+                <span className={styles.missingLink}>
+                  {exitVenue} does not expose a public deep-link for this ad. Ad ID: {route.exit_offer_ad_id ?? "—"}
+                </span>
               )}
             </div>
           </article>

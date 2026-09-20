@@ -129,6 +129,7 @@ impl BitgetAd {
                 },
                 fiat
             ),
+            source_url_is_exact: false,
             ad_id: self.ad_no,
             side,
             fiat,
@@ -211,5 +212,6 @@ mod tests {
         assert_eq!(offer.payment_methods, ["Ameriabank", "IDBank"]);
         assert_eq!(offer.advertiser.completed_orders_30d, Some(69));
         assert_eq!(offer.advertiser.positive_rate, Some(1.0));
+        assert!(!offer.source_url_is_exact);
     }
 }

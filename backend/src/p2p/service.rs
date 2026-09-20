@@ -135,6 +135,9 @@ pub struct P2pOffer {
     pub pay_time_limit_minutes: Option<u32>,
     pub advertiser: Advertiser,
     pub source_url: String,
+    /// True only when the venue URL addresses this exact advertisement.
+    /// Public market URLs must not be presented as exact offer links.
+    pub source_url_is_exact: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -517,6 +520,7 @@ mod tests {
                 positive_rate: Some(1.0),
             },
             source_url: "https://example.test".into(),
+            source_url_is_exact: false,
         }
     }
 

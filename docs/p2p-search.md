@@ -39,8 +39,14 @@ GET /api/p2p/search?fiat=AMD&asset=USDT&side=buy&amount=100000&min_orders=20&min
 - `sell`: give the crypto asset and receive fiat.
 
 The response contains normalized prices, fiat limits, available asset amount,
-payment methods, public advertiser reputation, source status, and a link back
-to the venue.
+payment methods, public advertiser reputation, source status, and the source
+advertisement URL. `source_url_is_exact` marks whether that URL opens the exact
+advertisement returned by the source. Route composition only uses offers with
+this flag set, so a generic venue market page can never be presented as an
+executable route. At the moment Binance provides exact public advertisement
+URLs; Bybit, OKX, and Bitget remain available for source diagnostics but their
+generic market URLs are excluded from route results until an official
+advertisement deep-link is available.
 
 `payment_method` accepts the bank selected in the frontend. Named payment
 methods are matched after punctuation/case normalization. Some venues return
