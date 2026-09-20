@@ -14,6 +14,14 @@ const VENUE_NAMES: Record<string, string> = {
   rapira: "Rapira",
 };
 
+const VENUE_ICON_URLS: Record<string, string> = {
+  binance: "https://binance.com/favicon.ico",
+  bybit: "https://www.bybit.com/favicon.ico",
+  okx: "https://www.okx.com/favicon.ico",
+  bitget: "https://www.bitget.com/favicon.ico",
+  rapira: "https://rapira.net/favicon.ico",
+};
+
 const venueName = (value: string | undefined) =>
   value ? VENUE_NAMES[value.toLowerCase()] ?? value : "P2P market";
 
@@ -24,6 +32,22 @@ const money = (minor: number | undefined, currency: string | undefined) =>
 
 const percentage = (value: number | null | undefined) =>
   value == null ? "—" : `${(value * 100).toFixed(1)}%`;
+
+const avatarInitial = (nickname: string) => nickname.trim().charAt(0).toUpperCase() || "?";
+
+function CounterpartyAvatar({ offer }: { offer: P2pOffer }) {
+  const venueIcon = VENUE_ICON_URLS[offer.source.toLowerCase()];
+  return (
+    <span className={styles.counterpartyAvatar} aria-hidden="true">
+      <span className={styles.avatarInitial}>{avatarInitial(offer.advertiser.nickname)}</span>
+      {venueIcon && (
+        <span className={styles.avatarVenue}>
+          <img src={venueIcon} alt="" />
+        </span>
+      )}
+    </span>
+  );
+}
 
 const fallbackProfileUrl = (offer: P2pOffer) => {
   if (offer.source.toLowerCase() !== "bybit" || !offer.advertiser.id) {
@@ -62,16 +86,21 @@ function AdvertiserCard({
 
   return (
     <div className={styles.counterparty}>
-      <div className={styles.counterpartyTopline}>
-        <span className={styles.counterpartyLabel}>{label}</span>
-        <span className={profileUrl ? styles.profileBadge : styles.manualBadge}>
-          {profileUrl ? "User profile" : "Find by nickname"}
-        </span>
+      <div className={styles.counterpartyIdentity}>
+        <CounterpartyAvatar offer={offer} />
+        <div className={styles.counterpartyIdentityCopy}>
+          <div className={styles.counterpartyTopline}>
+            <span className={styles.counterpartyLabel}>{label}</span>
+            <span className={profileUrl ? styles.profileBadge : styles.manualBadge}>
+              {profileUrl ? "User profile" : "Find by nickname"}
+            </span>
+          </div>
+          <strong className={styles.advertiser}>{offer.advertiser.nickname}</strong>
+          <span className={styles.venueLine}>
+            {venue} · {offer.advertiser.is_merchant ? "Merchant" : "Advertiser"}
+          </span>
+        </div>
       </div>
-      <strong className={styles.advertiser}>{offer.advertiser.nickname}</strong>
-      <span className={styles.venueLine}>
-        {venue} · {offer.advertiser.is_merchant ? "Merchant" : "Advertiser"}
-      </span>
       <div className={styles.metrics}>
         <span><b>{percentage(offer.advertiser.completion_rate_30d)}</b> completion</span>
         <span><b>{offer.advertiser.completed_orders_30d ?? "—"}</b> orders / 30d</span>
