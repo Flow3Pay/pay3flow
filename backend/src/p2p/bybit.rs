@@ -132,6 +132,9 @@ impl BybitItem {
                 .is_some_and(|kind| !kind.eq_ignore_ascii_case("personal"));
         let fiat = self.currency_id;
         let asset = self.token_id;
+        let advertiser_profile_url = self.user_mask_id.as_deref().map(|user_id| {
+            format!("https://www.bybit.com/en/p2p/profile/{user_id}/{asset}/{fiat}/item")
+        });
         P2pOffer {
             source: "bybit".into(),
             ad_id: self.id,
@@ -152,7 +155,7 @@ impl BybitItem {
                 completion_rate_30d: self.recent_execute_rate.map(|rate| rate / 100.0),
                 positive_rate: None,
             },
-            advertiser_profile_url: None,
+            advertiser_profile_url,
             source_url: format!("https://www.bybit.com/fiat/trade/otc/?token={asset}&fiat={fiat}"),
             source_url_is_exact: false,
             fiat,
@@ -189,5 +192,9 @@ mod tests {
         assert_eq!(offer.advertiser.completion_rate_30d, Some(0.995));
         assert!(!offer.source_url_is_exact);
         assert!(offer.advertiser.is_merchant);
+        assert_eq!(
+            offer.advertiser_profile_url.as_deref(),
+            Some("https://www.bybit.com/en/p2p/profile/masked-user/USDT/RUB/item")
+        );
     }
 }
