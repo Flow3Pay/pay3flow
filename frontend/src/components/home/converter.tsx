@@ -34,6 +34,21 @@ const INTERMEDIARY_ASSETS = [
   "DOGE", "LTC", "DAI", "FDUSD", "XRP", "ADA", "DOT", "LINK",
   "AVAX", "MATIC", "BCH", "NEAR", "APT", "ATOM", "UNI", "SUI",
 ] as const;
+const CRYPTO_ICON_CDN = "https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@0.18.1/128/color";
+const INTERMEDIARY_ASSET_ICONS: Record<string, string> = {
+  USDT: "https://upload.wikimedia.org/wikipedia/commons/0/01/USDT_Logo.png?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=original",
+  USDC: "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4a/Circle_USDC_Logo.svg/1280px-Circle_USDC_Logo.svg.png?utm_source=en.wikipedia.org&utm_campaign=index&utm_content=thumbnail",
+  BTC: "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/46/Bitcoin.svg/1280px-Bitcoin.svg.png?utm_source=en.wikipedia.org&utm_campaign=index&utm_content=thumbnail",
+  ETH: "https://upload.wikimedia.org/wikipedia/commons/f/fd/Ethereum_Logo.png?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=original",
+  BNB: "https://assets.streamlinehq.com/image/private/w_300,h_300,ar_1/f_auto/v1/icons/vectors/bnb-2c9adc7qw85po528q8y3b.png/bnb-tss7lyzvhxyjfc9ivae0l.png?_a=DATAiZAAZAA0",
+  SOL: "https://upload.wikimedia.org/wikipedia/en/b/b9/Solana_logo.png?utm_source=en.wikipedia.org&utm_campaign=index&utm_content=original",
+  TRX: "https://assets.streamlinehq.com/image/private/w_300,h_300,ar_1/f_auto/v1/icons/vectors/trx-q8ocxy7h0nc2c11ucr2m.png/trx-2ynri4p1kxp5a8djpqdzy8.png?_a=DATAiZAAZAA0",
+  DOT: "https://i.pinimg.com/originals/e1/bb/20/e1bb208a7252b1e3c3cd58a85d6e06c7.png",
+};
+
+function intermediaryIconUrl(asset: string): string {
+  return INTERMEDIARY_ASSET_ICONS[asset] ?? `${CRYPTO_ICON_CDN}/${asset.toLowerCase()}.png`;
+}
 const AMOUNT_STORAGE_KEY = "pay3flow.exchange.amount";
 const REFRESH_STORAGE_KEY = "pay3flow.exchange.refresh-seconds";
 const SOURCES_STORAGE_KEY = "pay3flow.exchange.p2p-sources";
@@ -791,6 +806,16 @@ export function Converter() {
                                 resetResults();
                               }}
                             >
+                              <span className={styles.intermediaryAssetIcon} aria-hidden="true">
+                                <img
+                                  src={intermediaryIconUrl(asset)}
+                                  alt=""
+                                  onError={(event) => {
+                                    event.currentTarget.onerror = null;
+                                    event.currentTarget.src = `${CRYPTO_ICON_CDN}/generic.png`;
+                                  }}
+                                />
+                              </span>
                               {asset}
                             </button>
                           );
@@ -1027,12 +1052,6 @@ export function Converter() {
           searched={lastUpdatedAt !== null}
           hasAmount={hasAmount}
         />
-      </div>
-
-      <div className={styles.assurance} id="how-it-works">
-        <div><strong>01</strong><span>You choose the banks</span></div>
-        <div><strong>02</strong><span>We scan every viable asset</span></div>
-        <div><strong>03</strong><span>You receive the strongest route</span></div>
       </div>
 
       <PaymentMethodPicker
