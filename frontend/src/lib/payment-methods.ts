@@ -45,6 +45,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     color: "#6d2c91",
     initials: "AM",
     popular: true,
+    iconUrl: "https://play-lh.googleusercontent.com/LlgHs2NWADW53GaDxeiaSHpS6wXR5ocHBQQXkQEA0-AdSH1EJIhEVUFTWDTkuW9bq9EENQ6L7gePa-tRSDpD7g",
     p2pQuery: "Ameriabank",
   },
   {
@@ -57,6 +58,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     color: "#21a366",
     initials: "ID",
     popular: true,
+    iconUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT_fCeNz-ZvlBVAlEB-EIDZG0DBlTVsxfsJ7BoJlJP73m7fnvY153Rmp4Gm&s=10",
     p2pQuery: "IDBank",
   },
   {
@@ -80,6 +82,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     kind: "bank",
     color: "#0877bd",
     initials: "AR",
+    iconUrl: "https://banks.am/static/companies/images////112744141810.jpg",
     p2pQuery: "Ardshinbank",
   },
   {
