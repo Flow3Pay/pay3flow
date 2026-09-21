@@ -6,7 +6,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: "list",
   use: {
-    baseURL: "http://127.0.0.1:3001",
+    baseURL: "http://127.0.0.1:3000",
     trace: "on-first-retry",
   },
   projects: [
@@ -14,8 +14,8 @@ export default defineConfig({
     { name: "mobile", use: { ...devices["Pixel 7"] } },
   ],
   webServer: {
-    command: "npm run dev -- --host 127.0.0.1 --port 3001",
-    url: "http://127.0.0.1:3001",
+    command: "npm run dev -- --host 127.0.0.1 --port 3000",
+    url: "http://127.0.0.1:3000",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },

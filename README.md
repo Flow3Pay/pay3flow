@@ -34,7 +34,7 @@
 
 | Сервис | Каталог | Стек | Описание |
 |--------|---------|------|----------|
-| `frontend` | `frontend/` | Next.js + TypeScript | Веб-интерфейс |
+| `pay3low-svelte-frontend` | `pay3low-svelte-frontend/` | SvelteKit + TypeScript | Веб-интерфейс |
 | `backend` | `backend/` | Rust (Axum, WebSocket, Postgres, Redis) | Ядро: auth, intents, маршрутизация, статусы, споры |
 | `cow-services` | `cowprotocol-services/` | Rust | Референс CoW Protocol Services: orderbook, auction/solver flow, settlement patterns |
 | `fmatch` | `fmatch/` | Rust (Axum, sqlx) | Федеративный discovery/matching solver'ов и участников сети |
@@ -48,7 +48,7 @@
 ```mermaid
 graph LR
     client["Клиент<br/>(Browser)"]
-    frontend["frontend<br/>:3000<br/>Next.js + TS"]
+    frontend["pay3low-svelte-frontend<br/>:3000<br/>SvelteKit + TS"]
     backend["backend<br/>:8080<br/>Rust + Axum + WS"]
     postgres["postgres<br/>:5432<br/>Postgres"]
     redis["redis<br/>:6379<br/>Redis"]
@@ -186,7 +186,7 @@ curl -G 'http://localhost:8080/api/p2p/routes' \
 
 ```text
 pay3flow/
-├── frontend/      # Next.js + TS
+├── pay3low-svelte-frontend/ # SvelteKit + TypeScript
 ├── backend/       # Rust: Axum + WS + ActivityPub + Postgres + Redis
 ├── cowprotocol-services/ # локальный reference CoW Protocol Services
 ├── fmatch/        # матчер (отдельный репозиторий)
@@ -200,7 +200,7 @@ pay3flow/
 
 | Сервис | Порт | Назначение |
 |--------|------|------------|
-| `frontend` | `3000` | Веб-интерфейс |
+| `pay3low-svelte-frontend` | `3000` | Веб-интерфейс |
 | `backend` | `8080` | REST API + WebSocket |
 | `postgres` | `5435` | PostgreSQL (наш backend) |
 | `redis` | `6379` | Кэш quotes/candidates |
