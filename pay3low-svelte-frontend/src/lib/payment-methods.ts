@@ -47,7 +47,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     color: "#6d2c91",
     initials: "AM",
     popular: true,
-    iconUrl: "/icons/assets/ameriabank.png",
+    iconUrl: "/icons/assets/ameriabank.webp",
     p2pQuery: "Ameriabank",
   },
   {

@@ -65,7 +65,10 @@
     return paymentMethodFavicon(method);
   }
   function hideBrokenImage(event: Event) {
-    (event.currentTarget as HTMLImageElement).style.display = "none";
+    const image = event.currentTarget as HTMLImageElement;
+    image.style.display = "none";
+    const fallback = image.parentElement?.querySelector<HTMLElement>("[data-icon-fallback]");
+    if (fallback) fallback.style.display = "inline";
   }
 
   $: banks = selectedLocation ? paymentMethodsFor(selectedLocation.country, selectedLocation.currency, role) : [];
@@ -117,7 +120,7 @@
                   {@const isSelected = selected?.id === method.id && (method.kind !== "wallet" || network?.id === selectedNetwork?.id)}
                   <button type="button" role="option" aria-selected={isSelected} class="methodRow" data-selected={isSelected || undefined} on:click={() => onSelect(method, network)}>
                     <span class="methodLogo" style:background-color={logo(method) ? "transparent" : method.color} aria-hidden="true">
-                      <span>{method.initials}</span>{#if logo(method)}<img src={logo(method) ?? ""} alt="" width="42" height="42" loading="lazy" decoding="async" on:error={hideBrokenImage} />{/if}
+                      {#if logo(method)}<img src={logo(method) ?? ""} alt="" width="42" height="42" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{method.initials}</span>{:else}<span>{method.initials}</span>{/if}
                     </span>
                     <span class="methodCopy">
                       <span class="methodName">{method.name}</span>

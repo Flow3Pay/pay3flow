@@ -7,7 +7,7 @@ const LOCAL_ASSET_ICONS = new Set([
 /** Returns a static asset served by this frontend. */
 export function venueIcon(venue: string): string {
   const key = venue.toLowerCase();
-  const extension = key === "binance" || key === "bybit" || key === "okx" ? "png" : "svg";
+  const extension = key === "binance" || key === "bybit" || key === "okx" ? "webp" : "svg";
   return LOCAL_VENUE_ICONS.has(key)
     ? `/icons/venues/${key}.${extension}`
     : "/icons/venues/generic.svg";
@@ -17,6 +17,6 @@ export function venueIcon(venue: string): string {
 export function assetIcon(asset: string): string {
   const key = asset.toLowerCase();
   return LOCAL_ASSET_ICONS.has(key)
-    ? `/icons/assets/${key}.${key === "fdusd" ? "webp" : "png"}`
+    ? `/icons/assets/${key}.webp`
     : "/icons/assets/generic.svg";
 }
