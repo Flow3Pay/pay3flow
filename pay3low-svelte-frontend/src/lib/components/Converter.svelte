@@ -44,6 +44,10 @@
   let clock = Date.now();
   let error: string | null = null;
   let settingsElement: HTMLDivElement;
+  let settingsDialog: HTMLDivElement;
+  let settingsDragging = false;
+  let settingsDragStartY = 0;
+  let settingsDragDistance = 0;
   let settingsWasOpen = false;
   let settingsScrollLocked = false;
   let previousOverflow = "";
@@ -198,6 +202,28 @@
   function onDocumentMouseDown(event: MouseEvent) { if (settingsOpen && settingsElement && !settingsElement.contains(event.target as Node)) settingsOpen = false; }
   function closeSettings() { settingsOpen = false; }
   function onSettingsKeyDown(event: KeyboardEvent) { if (event.key === "Escape") closeSettings(); }
+  function startSettingsDrag(event: PointerEvent) {
+    if (!window.matchMedia("(max-width: 640px)").matches) return;
+    settingsDragging = true;
+    settingsDragStartY = event.clientY;
+    settingsDragDistance = 0;
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  }
+  function moveSettingsDrag(event: PointerEvent) {
+    if (!settingsDragging) return;
+    settingsDragDistance = Math.max(0, event.clientY - settingsDragStartY);
+    settingsDialog?.style.setProperty("--settings-sheet-drag", `${settingsDragDistance}px`);
+  }
+  function endSettingsDrag() {
+    if (!settingsDragging) return;
+    const shouldClose = settingsDragDistance > 96 || (settingsDialog && settingsDragDistance > settingsDialog.clientHeight * 0.24);
+    settingsDragging = false;
+    if (shouldClose) {
+      closeSettings();
+    } else {
+      settingsDialog?.style.removeProperty("--settings-sheet-drag");
+    }
+  }
   function hideBrokenImage(event: Event) {
     const image = event.currentTarget as HTMLImageElement;
     image.style.display = "none";
@@ -288,8 +314,8 @@
             <button type="button" class="settingsButton" on:click={() => settingsOpen = !settingsOpen} aria-haspopup="dialog" aria-expanded={settingsOpen} aria-label="Route refresh settings"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 6.8a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4Z" stroke="currentColor" stroke-width="1.6" /><path d="M16.2 11.3a6.5 6.5 0 0 0 0-2.6l1.5-1.1-1.8-3.1-1.8.8a6.7 6.7 0 0 0-2.2-1.3L11.7 2H8.3L8 4a6.7 6.7 0 0 0-2.2 1.3L4 4.5 2.2 7.6l1.5 1.1a6.5 6.5 0 0 0 0 2.6l-1.5 1.1L4 15.5l1.8-.8A6.7 6.7 0 0 0 8 16l.3 2h3.4l.3-2a6.7 6.7 0 0 0 2.2-1.3l1.8.8 1.8-3.1-1.6-1.1Z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
             {#if settingsOpen}
               <div class="settingsBackdrop" on:mousedown={closeSettings} role="presentation">
-                <div class="settingsMenu" role="dialog" aria-modal="true" aria-label="Refresh settings" tabindex="-1" on:mousedown|stopPropagation>
-                <div class="settingsModalHeader"><span class="settingsSheetHandle" aria-hidden="true"></span><button type="button" class="settingsClose" on:click={closeSettings} aria-label="Close route settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button></div>
+                <div class:settingsDragging class="settingsMenu" bind:this={settingsDialog} role="dialog" aria-modal="true" aria-label="Refresh settings" tabindex="-1" on:mousedown|stopPropagation>
+                <div class="settingsModalHeader"><span class="settingsSheetHandle" aria-hidden="true" on:pointerdown={startSettingsDrag} on:pointermove={moveSettingsDrag} on:pointerup={endSettingsDrag} on:pointercancel={endSettingsDrag}></span><button type="button" class="settingsClose" on:click={closeSettings} aria-label="Close route settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button></div>
                 <div class="settingsHead"><div><strong>Auto-refresh</strong><span>Keep market routes current</span></div><span class={refreshSeconds ? "onBadge" : "offBadge"}>{refreshSeconds ? "On" : "Off"}</span></div>
                 <div class="refreshOptions">{#each REFRESH_OPTIONS as seconds}<button type="button" aria-pressed={refreshSeconds === seconds} on:click={() => { refreshSeconds = seconds; settingsOpen = false; }}>{seconds === 0 ? "Off" : `${seconds}s`}</button>{/each}</div>
                 <div class="sourceSettings"><span class="sourceSettingsLabel">Search exchanges</span><div class="sourceOptions exchangeOptions" aria-label="Exchanges to search">{#each P2P_SOURCES as source}{@const enabled = selectedSources.includes(source.id)}<button type="button" class:sourceOptionActive={enabled} class="sourceOption" aria-pressed={enabled} on:click={() => toggleSource(source.id)}><span class="sourceOptionIcon" aria-hidden="true"><img src={source.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackSourceIcon(event, source.id)} /></span>{source.label}</button>{/each}</div></div>
@@ -1910,7 +1936,7 @@
     top: auto;
     right: auto;
     width: 100%;
-    max-height: min(650px, 94dvh);
+    max-height: calc(100dvh - 16px);
     padding: 10px 16px calc(18px + env(safe-area-inset-bottom));
     border-radius: 14px 14px 0 0;
     animation: settingsSheetIn 0.24s cubic-bezier(0.22, 1, 0.36, 1);
@@ -1918,6 +1944,12 @@
     -webkit-backdrop-filter: none;
     overscroll-behavior: contain;
     touch-action: auto;
+    transform: translateY(var(--settings-sheet-drag, 0px));
+    transition: transform 0.24s ease;
+  }
+
+  .settingsMenu.settingsDragging {
+    transition: none;
   }
 
   .settingsModalHeader {
