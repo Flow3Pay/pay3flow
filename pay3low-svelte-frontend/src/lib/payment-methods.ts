@@ -1,3 +1,5 @@
+import { assetIcon } from "$lib/icons";
+
 export type PaymentMethodRole = "sender" | "recipient" | "both";
 
 export interface PaymentCountry {
@@ -45,7 +47,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     color: "#6d2c91",
     initials: "AM",
     popular: true,
-    iconUrl: "https://play-lh.googleusercontent.com/LlgHs2NWADW53GaDxeiaSHpS6wXR5ocHBQQXkQEA0-AdSH1EJIhEVUFTWDTkuW9bq9EENQ6L7gePa-tRSDpD7g",
+    iconUrl: "/icons/assets/ameriabank.png",
     p2pQuery: "Ameriabank",
   },
   {
@@ -58,7 +60,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     color: "#21a366",
     initials: "ID",
     popular: true,
-    iconUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT_fCeNz-ZvlBVAlEB-EIDZG0DBlTVsxfsJ7BoJlJP73m7fnvY153Rmp4Gm&s=10",
+    iconUrl: "/icons/assets/idbank.svg",
     p2pQuery: "IDBank",
   },
   {
@@ -82,7 +84,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     kind: "bank",
     color: "#0877bd",
     initials: "AR",
-    iconUrl: "https://banks.am/static/companies/images////112744141810.jpg",
+    iconUrl: "/icons/assets/ardshinbank.svg",
     p2pQuery: "Ardshinbank",
   },
   {
@@ -200,8 +202,6 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
   },
 ];
 
-const CRYPTO_ICON_CDN = "https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@0.18.1/128/color";
-
 /** Kept in the same order as the backend intermediary catalog. */
 export const CRYPTO_ASSETS = [
   ["USDT", "Tether", "#26a17b"],
@@ -232,13 +232,6 @@ export const CRYPTO_ASSETS = [
 
 type CryptoAssetCode = (typeof CRYPTO_ASSETS)[number][0];
 
-const ASSET_ICON_URLS: Partial<Record<CryptoAssetCode, string>> = {
-  USDT: "https://upload.wikimedia.org/wikipedia/commons/0/01/USDT_Logo.png",
-  USDC: "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4a/Circle_USDC_Logo.svg/1280px-Circle_USDC_Logo.svg.png",
-  BTC: "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/46/Bitcoin.svg/1280px-Bitcoin.svg.png",
-  ETH: "https://upload.wikimedia.org/wikipedia/commons/f/fd/Ethereum_Logo.png",
-};
-
 /** Crypto assets available on both sides of an exchange. */
 export const DIGITAL_ASSETS: PaymentMethod[] = CRYPTO_ASSETS.map(
   ([currency, name, color]) => ({
@@ -251,7 +244,7 @@ export const DIGITAL_ASSETS: PaymentMethod[] = CRYPTO_ASSETS.map(
     color,
     initials: currency,
     p2pQuery: currency,
-    iconUrl: ASSET_ICON_URLS[currency] ?? `${CRYPTO_ICON_CDN}/${currency.toLowerCase()}.png`,
+    iconUrl: assetIcon(currency),
   }),
 );
 
@@ -274,25 +267,12 @@ export function paymentMethodsFor(
   );
 }
 
-const PAYMENT_METHOD_DOMAINS: Record<string, string> = {
-  "am-ameriabank": "ameriabank.am",
-  "am-idbank": "idbank.am",
-  "am-acba": "acba.am",
-  "am-ardshinbank": "ardshinbank.am",
-  "am-inecobank": "inecobank.am",
-  "am-evocabank": "evoca.am",
-  "am-vtb": "vtb.am",
-  "ru-sberbank": "sber-bank.by",
-  "ru-tbank": "tbank.ru",
-  "ru-alfabank": "alfabank.by",
-  "ru-vtb": "vtb.by",
-  "ru-gazprombank": "www.gazprombank.ru",
-  "ru-raiffeisen": "raiffeisen.ru",
-  "ru-ozon": "finance.ozon.ru",
-};
-
 export function paymentMethodFavicon(method: PaymentMethod | null | undefined): string | null {
-  if (method?.iconUrl) return method.iconUrl;
-  const domain = method ? PAYMENT_METHOD_DOMAINS[method.id] : undefined;
-  return domain ? `https://${domain}/favicon.ico` : null;
+  if (!method) return null;
+  if (method.kind === "wallet") return assetIcon(method.currency);
+  // External bank logos are deliberately ignored. Bank initials are rendered
+  // by the picker, so a remote icon can never add a third-party request.
+  return method.iconUrl?.startsWith("/") || method.iconUrl?.startsWith("data:")
+    ? method.iconUrl
+    : null;
 }

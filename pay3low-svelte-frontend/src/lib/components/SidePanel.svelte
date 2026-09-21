@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { RouteCandidate } from "$lib/exchange";
+  import { assetIcon, venueIcon } from "$lib/icons";
 
   export let routes: RouteCandidate[];
   export let selectedRouteId: string | null;
@@ -12,17 +13,15 @@
   const ASSET_NAMES: Record<string, string> = { BTC: "Bitcoin", ETH: "Ether", USDC: "USD Coin", USDT: "Tether" };
   const VENUE_NAMES: Record<string, string> = { binance: "Binance", bitget: "Bitget", bybit: "Bybit", okx: "OKX", rapira: "Rapira" };
   const VENUE_ICONS: Record<string, string> = {
-    binance: "https://binance.com/favicon.ico", bybit: "https://www.bybit.com/favicon.ico", okx: "https://www.okx.com/favicon.ico", bitget: "https://www.bitget.com/favicon.ico", rapira: "https://rapira.net/favicon.ico",
+    binance: venueIcon("binance"), bybit: venueIcon("bybit"), okx: venueIcon("okx"), bitget: venueIcon("bitget"), rapira: venueIcon("rapira"),
   };
   const FIAT_MARKS: Record<string, string> = { AMD: "🇦🇲", RUB: "🇷🇺", BYN: "🇧🇾" };
-  const ASSET_ICON_CDN = "https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@0.18.1/32/color";
   type Step = { currency: string; network?: string; provider?: string; iconUrl?: string };
 
   const venueName = (value?: string) => value ? VENUE_NAMES[value.toLowerCase()] ?? value : "Searching";
   const assetLabel = (currency?: string) => !currency ? "—" : ASSET_NAMES[currency.toUpperCase()] ? `${currency} ${ASSET_NAMES[currency.toUpperCase()]}` : currency;
   const money = (minor?: number, currency?: string) => minor == null ? "—" : `${(minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2, useGrouping: false })} ${currency ?? ""}`;
   const spreadLabel = (bps: number) => Math.abs(bps / 100) < 0.005 ? "Same output" : `${Math.abs(bps / 100).toFixed(2)}% less`;
-  const assetIcon = (currency: string) => `${ASSET_ICON_CDN}/${currency.toLowerCase()}.png`;
 
   function workflowSteps(route: RouteCandidate): Step[] {
     const entry = route.legs.find((leg) => leg.kind === "entry");
@@ -45,7 +44,7 @@
   function fallbackVenueIcon(event: Event, provider: string) {
     const image = event.currentTarget as HTMLImageElement;
     image.onerror = null;
-    image.src = `https://www.google.com/s2/favicons?domain=${provider.toLowerCase()}.com&sz=64`;
+    image.src = venueIcon(provider);
   }
 </script>
 

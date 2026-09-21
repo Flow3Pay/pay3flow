@@ -1,9 +1,10 @@
 <script lang="ts">
   import type { P2pOffer } from "$lib/exchange";
+  import { venueIcon } from "$lib/icons";
   export let offer: P2pOffer | undefined;
   export let label: string;
   const VENUE_NAMES: Record<string, string> = { binance: "Binance", bitget: "Bitget", bybit: "Bybit", okx: "OKX", rapira: "Rapira" };
-  const VENUE_ICONS: Record<string, string> = { binance: "https://www.google.com/s2/favicons?domain=binance.com&sz=64", bybit: "https://www.bybit.com/favicon.ico", okx: "https://www.okx.com/favicon.ico", bitget: "https://www.bitget.com/favicon.ico", rapira: "https://rapira.net/favicon.ico" };
+  const VENUE_ICONS: Record<string, string> = { binance: venueIcon("binance"), bybit: venueIcon("bybit"), okx: venueIcon("okx"), bitget: venueIcon("bitget"), rapira: venueIcon("rapira") };
   const venueName = (value?: string) => value ? VENUE_NAMES[value.toLowerCase()] ?? value : "P2P market";
   const percentage = (value?: number | null) => value == null ? "—" : `${(value * 100).toFixed(1)}%`;
   const profileFallback = (value: P2pOffer) => value.source.toLowerCase() === "bybit" && value.advertiser.id ? `https://www.bybit.com/en/p2p/profile/${encodeURIComponent(value.advertiser.id)}/${encodeURIComponent(value.asset)}/${encodeURIComponent(value.fiat)}/item` : null;
@@ -14,8 +15,7 @@
   function fallbackVenueIcon(event: Event, source: string) {
     const image = event.currentTarget as HTMLImageElement;
     image.onerror = null;
-    const domain = ({ binance: "binance.com", bybit: "bybit.com", okx: "okx.com", bitget: "bitget.com", rapira: "rapira.net" } as Record<string, string>)[source.toLowerCase()];
-    if (domain) image.src = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+    image.src = venueIcon(source);
   }
 </script>
 

@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import { fetchCorridors, fetchP2pRoutes, type ExchangeCorridor, type RouteCandidate } from "$lib/exchange";
   import { FALLBACK_NETWORK, fetchNetworks, type CryptoNetwork } from "$lib/networks";
+  import { assetIcon, venueIcon } from "$lib/icons";
   import { CRYPTO_ASSETS, DIGITAL_ASSETS, paymentMethodFavicon, paymentMethodsFor, type PaymentMethod } from "$lib/payment-methods";
   import PaymentMethodPicker from "./PaymentMethodPicker.svelte";
   import NetworkPicker from "./NetworkPicker.svelte";
@@ -12,26 +13,15 @@
   type PickerSide = "source" | "target" | null;
   const REFRESH_OPTIONS: RefreshSeconds[] = [0, 5, 15, 30, 60];
   const P2P_SOURCES = [
-    { id: "binance", label: "Binance", iconUrl: "https://binance.com/favicon.ico" },
-    { id: "bybit", label: "Bybit", iconUrl: "https://www.bybit.com/favicon.ico" },
-    { id: "okx", label: "OKX", iconUrl: "https://www.okx.com/favicon.ico" },
-    { id: "bitget", label: "Bitget", iconUrl: "https://www.bitget.com/favicon.ico" },
-    { id: "rapira", label: "Rapira", iconUrl: "https://rapira.net/favicon.ico" },
+    { id: "binance", label: "Binance", iconUrl: venueIcon("binance") },
+    { id: "bybit", label: "Bybit", iconUrl: venueIcon("bybit") },
+    { id: "okx", label: "OKX", iconUrl: venueIcon("okx") },
+    { id: "bitget", label: "Bitget", iconUrl: venueIcon("bitget") },
+    { id: "rapira", label: "Rapira", iconUrl: venueIcon("rapira") },
   ] as const;
   type P2pSource = (typeof P2P_SOURCES)[number]["id"];
   const DEFAULT_SOURCES = P2P_SOURCES.map((source) => source.id);
   const INTERMEDIARY_ASSETS = CRYPTO_ASSETS.map(([currency]) => currency);
-  const CRYPTO_CDN = "https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@0.18.1/128/color";
-  const INTERMEDIARY_ICONS: Record<string, string> = {
-    USDT: "https://upload.wikimedia.org/wikipedia/commons/0/01/USDT_Logo.png?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=original",
-    USDC: "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4a/Circle_USDC_Logo.svg/1280px-Circle_USDC_Logo.svg.png?utm_source=en.wikipedia.org&utm_campaign=index&utm_content=thumbnail",
-    BTC: "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/46/Bitcoin.svg/1280px-Bitcoin.svg.png?utm_source=en.wikipedia.org&utm_campaign=index&utm_content=thumbnail",
-    ETH: "https://upload.wikimedia.org/wikipedia/commons/f/fd/Ethereum_Logo.png?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=original",
-    BNB: "https://assets.streamlinehq.com/image/private/w_300,h_300,ar_1/f_auto/v1/icons/vectors/bnb-2c9adc7qw85po528q8y3b.png/bnb-tss7lyzvhxyjfc9ivae0l.png?_a=DATAiZAAZAA0",
-    SOL: "https://upload.wikimedia.org/wikipedia/en/b/b9/Solana_logo.png?utm_source=en.wikipedia.org&utm_campaign=index&utm_content=original",
-    TRX: "https://assets.streamlinehq.com/image/private/w_300,h_300,ar_1/f_auto/v1/icons/vectors/trx-q8ocxy7h0nc2c11ucr2m.png/trx-2ynri4p1kxp5a8djpqdzy8.png?_a=DATAiZAAZAA0",
-    DOT: "https://i.pinimg.com/originals/e1/bb/20/e1bb208a7252b1e3c3cd58a85d6e06c7.png", TON: "https://cdn-icons-png.flaticon.com/512/12114/12114247.png", APT: "https://readi.fi/media/Aptos_mark_BLK.png", NEAR: "https://cdn-icons-png.flaticon.com/512/14446/14446201.png", SUI: "https://s2.coinmarketcap.com/static/img/coins/200x200/20947.png", FDUSD: "https://assets.kraken.com/marketing/web/icons-uni-webp/s_fdusd.webp?i=kds",
-  };
   const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", sources: "pay3flow.exchange.p2p-sources", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets" };
 
   let corridors: ExchangeCorridor[] = [];
@@ -81,7 +71,7 @@
   }
   const amountNumber = (value: string) => Number(normalizeAmount(value).replace(",", "."));
   const amountFromMinor = (minor?: number) => minor == null ? "0" : (minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2, useGrouping: false });
-  const intermediaryIcon = (asset: string) => INTERMEDIARY_ICONS[asset] ?? `${CRYPTO_CDN}/${asset.toLowerCase()}.png`;
+  const intermediaryIcon = (asset: string) => assetIcon(asset);
   const networkName = (id: string | null | undefined) => !id ? "internal" : networks.find((network) => network.id === id)?.name ?? id;
   const locationLabel = (country: string, currency: string) => { try { return `${new Intl.DisplayNames(["en"], { type: "region" }).of(country) ?? country} · ${currency}`; } catch { return `${country} · ${currency}`; } };
 
@@ -191,12 +181,12 @@
   function fallbackSourceIcon(event: Event, source: P2pSource) {
     const image = event.currentTarget as HTMLImageElement;
     image.onerror = null;
-    image.src = `https://www.google.com/s2/favicons?domain=${source === "rapira" ? "rapira.net" : `${source}.com`}&sz=64`;
+    image.src = venueIcon(source);
   }
   function fallbackAssetIcon(event: Event) {
     const image = event.currentTarget as HTMLImageElement;
     image.onerror = null;
-    image.src = `${CRYPTO_CDN}/generic.png`;
+    image.src = assetIcon("generic");
   }
 
   onMount(() => {
