@@ -10,6 +10,7 @@ import {
 } from "@/lib/exchange";
 import { CryptoNetwork, FALLBACK_NETWORK, fetchNetworks } from "@/lib/networks";
 import {
+  CRYPTO_ASSETS,
   DIGITAL_ASSETS,
   PaymentMethod,
   paymentMethodFavicon,
@@ -35,11 +36,7 @@ const P2P_SOURCES = [
 ] as const;
 type P2pSource = (typeof P2P_SOURCES)[number]["id"];
 const DEFAULT_P2P_SOURCES = P2P_SOURCES.map((source) => source.id);
-const INTERMEDIARY_ASSETS = [
-  "USDT", "USDC", "BTC", "ETH", "BNB", "SOL", "TRX", "TON",
-  "DOGE", "LTC", "DAI", "FDUSD", "XRP", "ADA", "DOT", "LINK",
-  "AVAX", "MATIC", "BCH", "NEAR", "APT", "ATOM", "UNI", "SUI",
-] as const;
+const INTERMEDIARY_ASSETS = CRYPTO_ASSETS.map(([currency]) => currency);
 const CRYPTO_ICON_CDN = "https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@0.18.1/128/color";
 const INTERMEDIARY_ASSET_ICONS: Record<string, string> = {
   USDT: "https://upload.wikimedia.org/wikipedia/commons/0/01/USDT_Logo.png?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=original",
@@ -252,7 +249,8 @@ export function Converter() {
   const [directionReversed, setDirectionReversed] = useState(false);
   const [methodPicker, setMethodPicker] = useState<"source" | "target" | null>(null);
   const [networks, setNetworks] = useState<CryptoNetwork[]>([FALLBACK_NETWORK]);
-  const [selectedNetworkId, setSelectedNetworkId] = useState(FALLBACK_NETWORK.id);
+  const [sourceNetworkId, setSourceNetworkId] = useState(FALLBACK_NETWORK.id);
+  const [targetNetworkId, setTargetNetworkId] = useState(FALLBACK_NETWORK.id);
   const [networkPicker, setNetworkPicker] = useState<"source" | "target" | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [refreshSeconds, setRefreshSeconds] = useState<RefreshSeconds>(15);
@@ -319,9 +317,6 @@ export function Converter() {
       .then((items) => {
         if (items.length === 0) return;
         setNetworks(items);
-        setSelectedNetworkId((current) =>
-          items.some((network) => network.id === current) ? current : items[0].id,
-        );
       })
       .catch(() => {
         // Keep the Ethereum fallback visible while the backend is unavailable.
@@ -446,8 +441,16 @@ export function Converter() {
   const targetMethod =
     targetMethods.find((method) => method.id === targetMethodId) ??
     (targetCountry ? targetMethods[0] : null);
-  const selectedNetwork =
-    networks.find((network) => network.id === selectedNetworkId) ?? networks[0] ?? FALLBACK_NETWORK;
+  const sourceNetworks = sourceMethod?.kind === "wallet"
+    ? networks.filter((network) => network.currencies.includes(sourceMethod.currency))
+    : [];
+  const targetNetworks = targetMethod?.kind === "wallet"
+    ? networks.filter((network) => network.currencies.includes(targetMethod.currency))
+    : [];
+  const sourceNetwork =
+    sourceNetworks.find((network) => network.id === sourceNetworkId) ?? sourceNetworks[0];
+  const targetNetwork =
+    targetNetworks.find((network) => network.id === targetNetworkId) ?? targetNetworks[0];
   const numericAmount = amountNumber(amount);
   const hasAmount = Number.isFinite(numericAmount) && numericAmount > 0;
 
@@ -542,6 +545,8 @@ export function Converter() {
     setDirectionReversed((current) => !current);
     setSourceMethodId(nextSourceMethodId);
     setTargetMethodId(nextTargetMethodId);
+    setSourceNetworkId(targetNetwork?.id ?? FALLBACK_NETWORK.id);
+    setTargetNetworkId(sourceNetwork?.id ?? FALLBACK_NETWORK.id);
     resetResults();
   };
 
@@ -574,6 +579,9 @@ export function Converter() {
     try {
       const sourceIsWallet = sourceMethod.kind === "wallet";
       const targetIsWallet = targetMethod.kind === "wallet";
+      if ((sourceIsWallet && !sourceNetwork) || (targetIsWallet && !targetNetwork)) {
+        throw new Error("No compatible network is available for the selected cryptocurrency");
+      }
       const response = await fetchP2pRoutes({
         sourceFiat: sourceIsWallet ? sourceMethod.currency : sourceCurrency,
         targetFiat: targetIsWallet ? targetMethod.currency : targetCurrency,
@@ -582,8 +590,8 @@ export function Converter() {
           !sourceIsWallet && !targetIsWallet && selectedIntermediaryAssets.length > 0
             ? selectedIntermediaryAssets
             : undefined,
-        sourceNetwork: sourceIsWallet ? selectedNetwork.id : undefined,
-        targetNetwork: targetIsWallet ? selectedNetwork.id : undefined,
+        sourceNetwork: sourceIsWallet ? sourceNetwork?.id : undefined,
+        targetNetwork: targetIsWallet ? targetNetwork?.id : undefined,
         sourcePaymentMethod: sourceIsWallet ? undefined : sourceMethod.p2pQuery,
         targetPaymentMethod: targetIsWallet ? undefined : targetMethod.p2pQuery,
         sources: selectedSources,
@@ -611,7 +619,7 @@ export function Converter() {
     } finally {
       if (requestId === requestRef.current) setSearching(false);
     }
-  }, [amount, corridor, selectedIntermediaryAssets, selectedNetwork.id, selectedSources, sourceCurrency, sourceMethod, targetCurrency, targetMethod]);
+  }, [amount, corridor, selectedIntermediaryAssets, selectedSources, sourceCurrency, sourceMethod, sourceNetwork, targetCurrency, targetMethod, targetNetwork]);
 
   // Re-run the read-only market search after the user changes the intent.
   // The old result is cleared immediately by updateAmount/applyOrientation,
@@ -874,7 +882,7 @@ export function Converter() {
                   <strong>{sourceMethod?.name ?? "Select bank"}</strong>
                   <small>
                     {sourceMethod?.kind === "wallet"
-                      ? `${sourceMethod.currency} · ${selectedNetwork.name}`
+                      ? `${sourceMethod.currency} · ${sourceNetwork?.name ?? "Loading networks…"}`
                       : corridor
                         ? locationLabel(sourceCountry, sourceCurrency)
                         : "Unavailable"}
@@ -884,9 +892,9 @@ export function Converter() {
                   <path d="m4 6 4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </button>
-              {sourceMethod?.kind === "wallet" && (
+              {sourceMethod?.kind === "wallet" && sourceNetwork && (
                 <NetworkControl
-                  network={selectedNetwork}
+                  network={sourceNetwork}
                   onOpen={() => setNetworkPicker("source")}
                 />
               )}
@@ -948,7 +956,7 @@ export function Converter() {
                   <strong>{targetMethod?.name ?? "Select bank"}</strong>
                   <small>
                     {targetMethod?.kind === "wallet"
-                      ? `${targetMethod.currency} · ${selectedNetwork.name}`
+                      ? `${targetMethod.currency} · ${targetNetwork?.name ?? "Loading networks…"}`
                       : corridor
                         ? locationLabel(targetCountry, targetCurrency)
                         : "Unavailable"}
@@ -958,9 +966,9 @@ export function Converter() {
                   <path d="m4 6 4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </button>
-              {targetMethod?.kind === "wallet" && (
+              {targetMethod?.kind === "wallet" && targetNetwork && (
                 <NetworkControl
-                  network={selectedNetwork}
+                  network={targetNetwork}
                   onOpen={() => setNetworkPicker("target")}
                 />
               )}
@@ -1061,11 +1069,12 @@ export function Converter() {
 
       <NetworkPicker
         open={networkPicker !== null}
-        networks={networks}
-        selected={selectedNetwork}
+        networks={networkPicker === "source" ? sourceNetworks : targetNetworks}
+        selected={networkPicker === "source" ? sourceNetwork : targetNetwork}
         onClose={() => setNetworkPicker(null)}
         onSelect={(network) => {
-          setSelectedNetworkId(network.id);
+          if (networkPicker === "source") setSourceNetworkId(network.id);
+          else setTargetNetworkId(network.id);
           setNetworkPicker(null);
           resetResults();
         }}

@@ -200,33 +200,60 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
   },
 ];
 
-/** Crypto assets available in the same picker as bank payment methods. */
-export const DIGITAL_ASSETS: PaymentMethod[] = [
-  {
-    id: "global-ethereum",
-    name: "Ethereum",
+const CRYPTO_ICON_CDN = "https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@0.18.1/128/color";
+
+/** Kept in the same order as the backend intermediary catalog. */
+export const CRYPTO_ASSETS = [
+  ["USDT", "Tether", "#26a17b"],
+  ["USDC", "USD Coin", "#2775ca"],
+  ["BTC", "Bitcoin", "#f7931a"],
+  ["ETH", "Ethereum", "#627eea"],
+  ["BNB", "BNB", "#f3ba2f"],
+  ["SOL", "Solana", "#14f195"],
+  ["TRX", "TRON", "#ef0027"],
+  ["TON", "Toncoin", "#0098ea"],
+  ["DOGE", "Dogecoin", "#c2a633"],
+  ["LTC", "Litecoin", "#345d9d"],
+  ["DAI", "Dai", "#f5ac37"],
+  ["FDUSD", "First Digital USD", "#1d1d1d"],
+  ["XRP", "XRP", "#23292f"],
+  ["ADA", "Cardano", "#0033ad"],
+  ["DOT", "Polkadot", "#e6007a"],
+  ["LINK", "Chainlink", "#2a5ada"],
+  ["AVAX", "Avalanche", "#e84142"],
+  ["MATIC", "Polygon", "#8247e5"],
+  ["BCH", "Bitcoin Cash", "#8dc351"],
+  ["NEAR", "NEAR Protocol", "#111827"],
+  ["APT", "Aptos", "#111827"],
+  ["ATOM", "Cosmos", "#2e3148"],
+  ["UNI", "Uniswap", "#ff007a"],
+  ["SUI", "Sui", "#6fbcf0"],
+] as const;
+
+type CryptoAssetCode = (typeof CRYPTO_ASSETS)[number][0];
+
+const ASSET_ICON_URLS: Partial<Record<CryptoAssetCode, string>> = {
+  USDT: "https://upload.wikimedia.org/wikipedia/commons/0/01/USDT_Logo.png",
+  USDC: "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4a/Circle_USDC_Logo.svg/1280px-Circle_USDC_Logo.svg.png",
+  BTC: "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/46/Bitcoin.svg/1280px-Bitcoin.svg.png",
+  ETH: "https://upload.wikimedia.org/wikipedia/commons/f/fd/Ethereum_Logo.png",
+};
+
+/** Crypto assets available on both sides of an exchange. */
+export const DIGITAL_ASSETS: PaymentMethod[] = CRYPTO_ASSETS.map(
+  ([currency, name, color]) => ({
+    id: `global-${currency.toLowerCase()}`,
+    name,
     country: "GLOBAL",
-    currency: "ETH",
+    currency,
     role: "both",
     kind: "wallet",
-    color: "#627eea",
-    initials: "ETH",
-    p2pQuery: "Ethereum",
-    iconUrl: "https://upload.wikimedia.org/wikipedia/commons/f/fd/Ethereum_Logo.png?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=original",
-  },
-  {
-    id: "global-usdc",
-    name: "USD Coin",
-    country: "GLOBAL",
-    currency: "USDC",
-    role: "both",
-    kind: "wallet",
-    color: "#2775ca",
-    initials: "USDC",
-    p2pQuery: "USDC",
-    iconUrl: "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4a/Circle_USDC_Logo.svg/1280px-Circle_USDC_Logo.svg.png?utm_source=en.wikipedia.org&utm_campaign=index&utm_content=thumbnail",
-  },
-];
+    color,
+    initials: currency,
+    p2pQuery: currency,
+    iconUrl: ASSET_ICON_URLS[currency] ?? `${CRYPTO_ICON_CDN}/${currency.toLowerCase()}.png`,
+  }),
+);
 
 export function paymentCountry(code: string, currency?: string): PaymentCountry | undefined {
   return PAYMENT_COUNTRIES.find(

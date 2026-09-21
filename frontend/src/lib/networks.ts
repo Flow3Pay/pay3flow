@@ -8,8 +8,8 @@ export interface CryptoNetwork {
 
 export const FALLBACK_NETWORK: CryptoNetwork = {
   id: "ethereum",
-  name: "Ethereum",
-  currencies: ["ETH", "USDC"],
+  name: "Ethereum (ERC-20)",
+  currencies: ["ETH", "USDT", "USDC", "BNB", "DAI", "FDUSD", "LINK", "MATIC", "UNI"],
 };
 
 export async function fetchNetworks(currency?: string): Promise<CryptoNetwork[]> {

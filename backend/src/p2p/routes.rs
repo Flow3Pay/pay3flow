@@ -359,10 +359,7 @@ fn validate_network(network_id: &Option<String>, currency: &str) -> Result<()> {
 }
 
 fn is_crypto(currency: &str) -> bool {
-    matches!(
-        currency.to_ascii_uppercase().as_str(),
-        "BTC" | "ETH" | "USDC" | "USDT" | "SOL"
-    )
+    crate::networks::is_supported_asset(currency)
 }
 
 fn trimmed(value: Option<String>) -> Option<String> {
@@ -815,6 +812,35 @@ mod tests {
             max_price_deviation_bps: 1_000,
             limit: 20,
             sources: None,
+        }
+    }
+
+    #[test]
+    fn recognizes_every_exchange_asset_as_crypto() {
+        for asset in crate::networks::CRYPTO_ASSETS {
+            assert!(is_crypto(asset), "asset should use crypto routing: {asset}");
+        }
+        assert!(!is_crypto("AMD"));
+    }
+
+    #[test]
+    fn network_validation_rejects_incompatible_assets() {
+        let cases = [
+            ("ethereum", "ETH", true),
+            ("ethereum", "BTC", false),
+            ("bitcoin", "BTC", true),
+            ("bitcoin", "ETH", false),
+            ("tron", "USDT", true),
+            ("tron", "USDC", false),
+            ("unknown", "ETH", false),
+        ];
+
+        for (network, asset, expected) in cases {
+            assert_eq!(
+                validate_network(&Some(network.to_string()), asset).is_ok(),
+                expected,
+                "network={network}, asset={asset}"
+            );
         }
     }
 

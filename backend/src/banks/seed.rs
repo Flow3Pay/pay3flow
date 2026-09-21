@@ -547,7 +547,7 @@ const PAYMENT_METHODS: &[(&str, &str, &str, &str, &str)] = &[
         "pagoefectivo.pe",
         "PagoEfectivo",
     ),
-    // --- Crypto rails shown as payment methods ---
+    // --- Crypto assets shown as payment methods; network is selected separately ---
     ("Bitcoin Network", "GLOBAL", "BTC", "bitcoin.org", "Bitcoin"),
     (
         "Ethereum Network",
@@ -556,21 +556,33 @@ const PAYMENT_METHODS: &[(&str, &str, &str, &str, &str)] = &[
         "ethereum.org",
         "Ethereum",
     ),
+    ("BNB", "GLOBAL", "BNB", "bnbchain.org", "BNB"),
+    ("Solana", "GLOBAL", "SOL", "solana.com", "SOL"),
+    ("TRON", "GLOBAL", "TRX", "tron.network", "TRX"),
     ("TON Network", "GLOBAL", "TON", "ton.org", "TON"),
+    ("Dogecoin", "GLOBAL", "DOGE", "dogecoin.com", "DOGE"),
+    ("Litecoin", "GLOBAL", "LTC", "litecoin.org", "LTC"),
+    ("Dai", "GLOBAL", "DAI", "makerdao.com", "DAI"),
     (
-        "Tether USDT TRC20",
+        "First Digital USD",
         "GLOBAL",
-        "USDT",
-        "tether.to",
-        "USDT TRC20",
+        "FDUSD",
+        "firstdigitallabs.com",
+        "FDUSD",
     ),
-    (
-        "Tether USDT ERC20",
-        "GLOBAL",
-        "USDT",
-        "tether.to",
-        "USDT ERC20",
-    ),
+    ("XRP", "GLOBAL", "XRP", "xrpl.org", "XRP"),
+    ("Cardano", "GLOBAL", "ADA", "cardano.org", "ADA"),
+    ("Polkadot", "GLOBAL", "DOT", "polkadot.com", "DOT"),
+    ("Chainlink", "GLOBAL", "LINK", "chain.link", "LINK"),
+    ("Avalanche", "GLOBAL", "AVAX", "avax.network", "AVAX"),
+    ("Polygon", "GLOBAL", "MATIC", "polygon.technology", "MATIC"),
+    ("Bitcoin Cash", "GLOBAL", "BCH", "bitcoincash.org", "BCH"),
+    ("NEAR Protocol", "GLOBAL", "NEAR", "near.org", "NEAR"),
+    ("Aptos", "GLOBAL", "APT", "aptosfoundation.org", "APT"),
+    ("Cosmos", "GLOBAL", "ATOM", "cosmos.network", "ATOM"),
+    ("Uniswap", "GLOBAL", "UNI", "uniswap.org", "UNI"),
+    ("Sui", "GLOBAL", "SUI", "sui.io", "SUI"),
+    ("Tether", "GLOBAL", "USDT", "tether.to", "USDT"),
     ("USD Coin", "GLOBAL", "USDC", "circle.com", "USDC"),
 ];
 
@@ -744,6 +756,18 @@ mod tests {
         assert_eq!(usdc.country.as_deref(), Some("GLOBAL"));
         assert_eq!(usdc.schemes.as_deref(), Some("USDC"));
         assert_eq!(usdc.icon_url.as_deref(), Some(USDC_ICON_URL));
+
+        let currencies = banks
+            .iter()
+            .filter(|bank| bank.country.as_deref() == Some("GLOBAL"))
+            .filter_map(|bank| bank.currency.as_deref())
+            .collect::<HashSet<_>>();
+        for currency in crate::networks::CRYPTO_ASSETS {
+            assert!(
+                currencies.contains(currency),
+                "missing crypto asset {currency}"
+            );
+        }
     }
 
     #[test]

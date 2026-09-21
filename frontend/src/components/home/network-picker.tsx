@@ -9,7 +9,7 @@ import styles from "./payment-method-picker.module.css";
 interface NetworkPickerProps {
   open: boolean;
   networks: CryptoNetwork[];
-  selected: CryptoNetwork;
+  selected?: CryptoNetwork;
   onClose: () => void;
   onSelect: (network: CryptoNetwork) => void;
 }
@@ -69,7 +69,7 @@ export function NetworkPicker({
             <section className={styles.section}>
               <h3>Available networks</h3>
               {networks.map((network) => {
-                const isSelected = network.id === selected.id;
+                const isSelected = network.id === selected?.id;
                 return (
                   <button
                     key={network.id}
