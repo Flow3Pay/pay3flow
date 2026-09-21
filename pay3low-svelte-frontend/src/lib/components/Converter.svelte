@@ -2011,6 +2011,11 @@
     flex: 1 1 auto;
   }
 
+  .methodControls:not(:has(.networkControl)) .methodTrigger {
+    width: 100%;
+    max-width: none;
+  }
+
   .methodControls .networkButton {
     flex: 0 0 auto;
   }
