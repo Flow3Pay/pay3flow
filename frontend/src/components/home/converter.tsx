@@ -550,14 +550,16 @@ export function Converter() {
     resetResults();
   };
 
-  const chooseSourceMethod = (method: PaymentMethod) => {
+  const chooseSourceMethod = (method: PaymentMethod, network?: CryptoNetwork) => {
     setSourceMethodId(method.id);
+    if (network) setSourceNetworkId(network.id);
     setMethodPicker(null);
     resetResults();
   };
 
-  const chooseTargetMethod = (method: PaymentMethod) => {
+  const chooseTargetMethod = (method: PaymentMethod, network?: CryptoNetwork) => {
     setTargetMethodId(method.id);
+    if (network) setTargetNetworkId(network.id);
     setMethodPicker(null);
     resetResults();
   };
@@ -1051,8 +1053,10 @@ export function Converter() {
         open={methodPicker === "source"}
         title="Choose where you pay from"
         role="sender"
+        networks={networks}
         selectedLocation={corridor ? { country: sourceCountry, currency: sourceCurrency } : null}
         selected={sourceMethod}
+        selectedNetwork={sourceNetwork}
         onClose={() => setMethodPicker(null)}
         onSelect={chooseSourceMethod}
       />
@@ -1061,8 +1065,10 @@ export function Converter() {
         open={methodPicker === "target"}
         title="Choose where the recipient gets paid"
         role="recipient"
+        networks={networks}
         selectedLocation={corridor ? { country: targetCountry, currency: targetCurrency } : null}
         selected={targetMethod}
+        selectedNetwork={targetNetwork}
         onClose={() => setMethodPicker(null)}
         onSelect={chooseTargetMethod}
       />

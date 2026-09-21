@@ -23,6 +23,13 @@ async function mockBackend(page: Page) {
         }],
       });
     }
+    if (url.pathname === "/api/networks") {
+      return json([
+        { id: "ethereum", name: "Ethereum (ERC-20)", currencies: ["ETH", "USDT", "USDC"] },
+        { id: "tron", name: "TRON (TRC-20)", currencies: ["TRX", "USDT"] },
+        { id: "bitcoin", name: "Bitcoin", currencies: ["BTC"] },
+      ]);
+    }
     if (url.pathname === "/api/p2p/routes") {
       expect(url.searchParams.get("source_payment_method")).toBe("IDBank");
       expect(url.searchParams.get("target_payment_method")).toBe("Alfa-Bank");
@@ -170,4 +177,20 @@ test("public P2P route search → open step-by-step instructions", async ({ page
 
   await swapDirection.click();
   await expect(amountInput).toHaveValue("20350");
+});
+
+test("cryptocurrency search binds the selected asset to its network", async ({ page }) => {
+  await mockBackend(page);
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
+  const picker = page.getByRole("dialog", { name: "Choose where you pay from" });
+  await picker.getByLabel("Search banks and payment methods").fill("USDT ERC20");
+
+  const ethereumUsdt = picker.getByRole("option", { name: /Tether USDT · Ethereum \(ERC-20\)/ });
+  await expect(ethereumUsdt).toHaveCount(1);
+  await ethereumUsdt.click();
+
+  const selectedAsset = page.getByRole("button", { name: "Select sending asset: Tether" });
+  await expect(selectedAsset).toContainText("USDT · Ethereum (ERC-20)");
 });

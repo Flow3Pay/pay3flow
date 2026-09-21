@@ -7,6 +7,7 @@ import {
   PaymentMethod,
   paymentMethodsFor,
 } from "@/lib/payment-methods";
+import type { CryptoNetwork } from "@/lib/networks";
 
 import { BankLogo } from "./bank-logo";
 import styles from "./payment-method-picker.module.css";
@@ -20,18 +21,53 @@ interface PaymentMethodPickerProps {
   open: boolean;
   title: string;
   role: "sender" | "recipient";
+  networks: CryptoNetwork[];
   selectedLocation: PaymentLocation | null;
   selected: PaymentMethod | null;
+  selectedNetwork?: CryptoNetwork;
   onClose: () => void;
-  onSelect: (method: PaymentMethod) => void;
+  onSelect: (method: PaymentMethod, network?: CryptoNetwork) => void;
+}
+
+interface PaymentMethodOption {
+  method: PaymentMethod;
+  network?: CryptoNetwork;
+}
+
+function normalizeSearch(value: string): string {
+  return value
+    .normalize("NFKC")
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+function matchesSearch(option: PaymentMethodOption, query: string): boolean {
+  const { method, network } = option;
+  const searchText = normalizeSearch([
+    method.name,
+    method.currency,
+    method.kind,
+    method.p2pQuery,
+    network?.name,
+    network?.id,
+  ].filter(Boolean).join(" "));
+  const compactSearchText = searchText.replaceAll(" ", "");
+
+  return normalizeSearch(query)
+    .split(" ")
+    .filter(Boolean)
+    .every((term) => searchText.includes(term) || compactSearchText.includes(term));
 }
 
 export function PaymentMethodPicker({
   open,
   title,
   role,
+  networks,
   selectedLocation,
   selected,
+  selectedNetwork,
   onClose,
   onSelect,
 }: PaymentMethodPickerProps) {
@@ -59,50 +95,57 @@ export function PaymentMethodPicker({
     };
   }, [handleClose, open]);
 
-  const methods = useMemo(() => {
+  const options = useMemo(() => {
     const banks = selectedLocation
       ? paymentMethodsFor(selectedLocation.country, selectedLocation.currency, role)
       : [];
     const assets = DIGITAL_ASSETS.filter(
       (method) => method.role === role || method.role === "both",
     );
-    return [...banks, ...assets];
-  }, [role, selectedLocation]);
+    return [
+      ...banks.map((method): PaymentMethodOption => ({ method })),
+      ...assets.flatMap((method): PaymentMethodOption[] => {
+        const compatibleNetworks = networks.filter((network) =>
+          network.currencies.includes(method.currency),
+        );
+        return compatibleNetworks.length > 0
+          ? compatibleNetworks.map((network) => ({ method, network }))
+          : [{ method }];
+      }),
+    ];
+  }, [networks, role, selectedLocation]);
 
   const filtered = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
-    if (!normalized) return methods;
-    return methods.filter((method) =>
-      [method.name, method.currency, method.kind, method.p2pQuery]
-        .join(" ")
-        .toLowerCase()
-        .includes(normalized),
-    );
-  }, [methods, query]);
+    if (!query.trim()) return options;
+    return options.filter((option) => matchesSearch(option, query));
+  }, [options, query]);
 
-  const popular = filtered.filter((method) => method.popular);
-  const assets = filtered.filter((method) => method.kind === "wallet");
-  const all = filtered.filter((method) => !method.popular && method.kind === "bank");
+  const popular = filtered.filter(({ method }) => method.popular);
+  const assets = filtered.filter(({ method }) => method.kind === "wallet");
+  const all = filtered.filter(({ method }) => !method.popular && method.kind === "bank");
 
   if (!open) return null;
 
-  const renderMethod = (method: PaymentMethod) => {
-    const isSelected = selected?.id === method.id;
+  const renderMethod = ({ method, network }: PaymentMethodOption) => {
+    const isSelected = selected?.id === method.id &&
+      (method.kind !== "wallet" || network?.id === selectedNetwork?.id);
     return (
       <button
-        key={method.id}
+        key={`${method.id}:${network?.id ?? "default"}`}
         type="button"
         role="option"
         aria-selected={isSelected}
         className={styles.methodRow}
         data-selected={isSelected || undefined}
-        onClick={() => onSelect(method)}
+        onClick={() => onSelect(method, network)}
       >
         <BankLogo className={styles.methodLogo} method={method} fallback={method.initials} />
         <span className={styles.methodCopy}>
           <span className={styles.methodName}>{method.name}</span>
           <span className={styles.methodMeta}>
-            {method.kind === "bank" ? "Bank transfer" : "Digital wallet"} · {method.currency}
+            {method.kind === "bank"
+              ? `Bank transfer · ${method.currency}`
+              : `${method.currency} · ${network?.name ?? "Digital wallet"}`}
           </span>
         </span>
         {isSelected && (
@@ -145,7 +188,7 @@ export function PaymentMethodPicker({
               ref={inputRef}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search banks and payment methods…"
+              placeholder="Search banks, assets or networks…"
               aria-label="Search banks and payment methods"
             />
           </label>
