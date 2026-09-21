@@ -67,6 +67,7 @@ function assetIconUrl(currency: string): string | null {
 
 interface WorkflowStep {
   currency: string;
+  network?: string;
   provider?: string;
   iconUrl?: string;
 }
@@ -79,14 +80,24 @@ function workflowSteps(route: RouteCandidate): WorkflowStep[] {
 
   if (!entry && exit) {
     return [
-      { currency: source, provider: exit.provider, iconUrl: route.source_method_icon_url },
+      {
+        currency: source,
+        network: route.entry_network !== "internal" ? route.entry_network : undefined,
+        provider: exit.provider,
+        iconUrl: route.source_method_icon_url,
+      },
       { currency: target, iconUrl: route.target_method_icon_url },
     ];
   }
   if (entry && !exit) {
     return [
       { currency: source, iconUrl: route.source_method_icon_url },
-      { currency: target, provider: entry.provider, iconUrl: route.target_method_icon_url },
+      {
+        currency: target,
+        network: route.entry_network !== "internal" ? route.entry_network : undefined,
+        provider: entry.provider,
+        iconUrl: route.target_method_icon_url,
+      },
     ];
   }
   if (route.bridge_currency) {
@@ -98,7 +109,11 @@ function workflowSteps(route: RouteCandidate): WorkflowStep[] {
   }
   return [
     { currency: source, iconUrl: route.source_method_icon_url },
-    { currency: route.entry_asset ?? "—", provider: entry?.provider },
+    {
+      currency: route.entry_asset ?? "—",
+      network: route.entry_network !== "internal" ? route.entry_network : undefined,
+      provider: entry?.provider,
+    },
     { currency: target, provider: exit?.provider, iconUrl: route.target_method_icon_url },
   ];
 }
@@ -140,7 +155,7 @@ function WorkflowVenue({ provider }: { provider?: string }) {
 
 function workflowLabel(route: RouteCandidate): string {
   return workflowSteps(route)
-    .map((step) => `${assetLabel(step.currency)}${step.provider ? ` (${venueName(step.provider)})` : ""}`)
+    .map((step) => `${assetLabel(step.currency)}${step.network ? ` · ${step.network}` : ""}${step.provider ? ` (${venueName(step.provider)})` : ""}`)
     .join(" → ");
 }
 
@@ -235,7 +250,10 @@ export function SidePanel({
                               {stepIndex > 0 && <span className={styles.workflowArrow} aria-hidden="true">→</span>}
                               <span className={styles.workflowAsset}>
                                 <WorkflowIcon currency={step.currency} iconUrl={step.iconUrl} />
-                                <span>{assetLabel(step.currency)}</span>
+                                <span>
+                                  {assetLabel(step.currency)}
+                                  {step.network ? ` · ${step.network}` : ""}
+                                </span>
                               </span>
                               <WorkflowVenue provider={step.provider} />
                             </span>

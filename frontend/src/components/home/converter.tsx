@@ -150,10 +150,16 @@ function amountNumber(value: string): number {
   return Number(normalizeAmountInput(value).replace(",", "."));
 }
 
+function networkName(networkId: string | null | undefined, networks: CryptoNetwork[]): string {
+  if (!networkId) return "internal";
+  return networks.find((network) => network.id === networkId)?.name ?? networkId;
+}
+
 function mapRoutes(
   response: Awaited<ReturnType<typeof fetchP2pRoutes>>,
   sourceMethod: PaymentMethod | null,
   targetMethod: PaymentMethod | null,
+  networks: CryptoNetwork[],
 ): RouteCandidate[] {
   const bestTarget = Number(response.routes[0]?.target_amount ?? 0);
   return response.routes.map((route, index) => {
@@ -173,9 +179,7 @@ function mapRoutes(
       source_currency: route.source_fiat,
       source_method_icon_url: sourceMethod?.kind === "bank" ? paymentMethodFavicon(sourceMethod) ?? undefined : undefined,
       entry_asset: route.asset,
-      entry_network: route.same_venue
-        ? entryOffer?.source ?? exitOffer?.source ?? "direct"
-        : "cross-venue",
+      entry_network: networkName(route.entry_network, networks),
       target_amount_minor: Math.round(targetAmount * 100),
       target_currency: route.target_fiat,
       target_method_icon_url: targetMethod?.kind === "bank" ? paymentMethodFavicon(targetMethod) ?? undefined : undefined,
@@ -602,7 +606,7 @@ export function Converter() {
         signal: controller.signal,
       });
       if (requestId !== requestRef.current) return;
-      const liveRoutes = mapRoutes(response, sourceMethod, targetMethod);
+      const liveRoutes = mapRoutes(response, sourceMethod, targetMethod, networks);
       setRoutes(liveRoutes);
       setSelected((current) =>
         liveRoutes.find((route) => route.route_id === current?.route_id) ??
@@ -621,7 +625,7 @@ export function Converter() {
     } finally {
       if (requestId === requestRef.current) setSearching(false);
     }
-  }, [amount, corridor, selectedIntermediaryAssets, selectedSources, sourceCurrency, sourceMethod, sourceNetwork, targetCurrency, targetMethod, targetNetwork]);
+  }, [amount, corridor, networks, selectedIntermediaryAssets, selectedSources, sourceCurrency, sourceMethod, sourceNetwork, targetCurrency, targetMethod, targetNetwork]);
 
   // Re-run the read-only market search after the user changes the intent.
   // The old result is cleared immediately by updateAmount/applyOrientation,

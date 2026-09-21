@@ -31,9 +31,6 @@ async function mockBackend(page: Page) {
       ]);
     }
     if (url.pathname === "/api/p2p/routes") {
-      expect(url.searchParams.get("source_payment_method")).toBe("IDBank");
-      expect(url.searchParams.get("target_payment_method")).toBe("Alfa-Bank");
-      expect(url.searchParams.get("allow_cross_venue")).toBe("true");
       const offer = (source: string, adId: string, fiat: string, asset: string) => ({
         source,
         ad_id: adId,
@@ -55,6 +52,40 @@ async function mockBackend(page: Page) {
         },
         source_url: `https://example.com/${adId}`,
       });
+      if (url.searchParams.get("source_fiat") === "USDT") {
+        expect(url.searchParams.get("source_network")).toBe("ethereum");
+        expect(url.searchParams.has("source_payment_method")).toBe(false);
+        return json({
+          searched_at: "2026-09-19T10:00:00Z",
+          source_fiat: "USDT",
+          target_fiat: "RUB",
+          source_amount: "125.00",
+          assets_searched: ["USDT"],
+          can_exchange_to_target: true,
+          routes: [{
+            rank: 1,
+            asset: "USDT",
+            entry_network: "ethereum",
+            source_fiat: "USDT",
+            source_amount: "125.00000000",
+            acquired_asset_amount: "125.00000000",
+            target_fiat: "RUB",
+            target_amount: "11250.00",
+            effective_rate: "90.00000000",
+            same_venue: true,
+            requires_asset_transfer: false,
+            transfer_fee_included: true,
+            route_kind: "crypto_to_fiat",
+            payment_methods_verified: true,
+            entry_offer: null,
+            exit_offer: offer("binance", "exit-erc20", "RUB", "USDT"),
+            warnings: ["Search estimate only."],
+          }],
+        });
+      }
+      expect(url.searchParams.get("source_payment_method")).toBe("IDBank");
+      expect(url.searchParams.get("target_payment_method")).toBe("Alfa-Bank");
+      expect(url.searchParams.get("allow_cross_venue")).toBe("true");
       const routes = Array.from({ length: 12 }, (_, index) => {
         const best = index === 0;
         const asset = index % 2 === 0 ? "USDT" : "USDC";
@@ -193,4 +224,11 @@ test("cryptocurrency search binds the selected asset to its network", async ({ p
 
   const selectedAsset = page.getByRole("button", { name: "Select sending asset: Tether" });
   await expect(selectedAsset).toContainText("USDT · Ethereum (ERC-20)");
+
+  await page.getByLabel("Amount to send").fill("125");
+  await page.getByTestId("start-search").click();
+  await expect(page.getByTestId("complete-route")).toHaveCount(1);
+  await expect(page.getByTestId("complete-route")).toContainText(
+    "USDT Tether · Ethereum (ERC-20) (Binance) → RUB",
+  );
 });

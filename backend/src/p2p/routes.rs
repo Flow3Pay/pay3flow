@@ -48,6 +48,8 @@ pub struct P2pRouteSearchQuery {
 pub struct P2pRoute {
     pub rank: usize,
     pub asset: String,
+    /// Canonical network id for the crypto asset selected by the user.
+    pub entry_network: Option<String>,
     pub source_fiat: String,
     pub source_amount: String,
     pub acquired_asset_amount: String,
@@ -106,6 +108,8 @@ struct NormalizedRouteQuery {
     source_currency: String,
     target_currency: String,
     source_amount: f64,
+    source_network: Option<String>,
+    target_network: Option<String>,
     assets: Vec<String>,
     source_payment_method: Option<String>,
     target_payment_method: Option<String>,
@@ -313,13 +317,15 @@ fn normalize_query(
     if max_price_deviation_bps > 5_000 {
         bail!("max_price_deviation_bps must not exceed 5000");
     }
-    validate_network(&query.source_network, &source_currency)?;
-    validate_network(&query.target_network, &target_currency)?;
+    let source_network = validate_network(&query.source_network, &source_currency)?;
+    let target_network = validate_network(&query.target_network, &target_currency)?;
 
     Ok(NormalizedRouteQuery {
         source_currency,
         target_currency,
         source_amount: query.source_amount,
+        source_network,
+        target_network,
         assets,
         source_payment_method: trimmed(query.source_payment_method),
         target_payment_method: trimmed(query.target_payment_method),
@@ -336,25 +342,24 @@ fn normalize_query(
     })
 }
 
-fn validate_network(network_id: &Option<String>, currency: &str) -> Result<()> {
+fn validate_network(network_id: &Option<String>, currency: &str) -> Result<Option<String>> {
     let Some(network_id) = network_id
         .as_deref()
         .map(str::trim)
         .filter(|id| !id.is_empty())
     else {
-        return Ok(());
+        return Ok(None);
     };
-    let supported = crate::networks::catalog().into_iter().any(|network| {
+    let network = crate::networks::catalog().into_iter().find(|network| {
         network.id.eq_ignore_ascii_case(network_id)
             && network
                 .currencies
                 .iter()
                 .any(|item| item.eq_ignore_ascii_case(currency))
     });
-    if supported {
-        Ok(())
-    } else {
-        bail!("network {network_id} is not compatible with {currency}")
+    match network {
+        Some(network) => Ok(Some(network.id)),
+        None => bail!("network {network_id} is not compatible with {currency}"),
     }
 }
 
@@ -492,6 +497,7 @@ fn compose_fiat_routes(
             routes.push(P2pRoute {
                 rank: 0,
                 asset: asset.into(),
+                entry_network: None,
                 source_fiat: query.source_currency.clone(),
                 source_amount: fixed(query.source_amount, 2),
                 acquired_asset_amount: fixed(acquired_asset, 8),
@@ -535,6 +541,7 @@ fn compose_fiat_to_crypto_routes(
         routes.push(P2pRoute {
             rank: 0,
             asset: asset.into(),
+            entry_network: query.target_network.clone(),
             source_fiat: query.source_currency.clone(),
             source_amount: fixed(query.source_amount, 8),
             acquired_asset_amount: fixed(target_amount, 8),
@@ -583,6 +590,7 @@ fn compose_crypto_to_fiat_routes(
         routes.push(P2pRoute {
             rank: 0,
             asset: asset.into(),
+            entry_network: query.source_network.clone(),
             source_fiat: query.source_currency.clone(),
             source_amount: fixed(query.source_amount, 8),
             acquired_asset_amount: fixed(query.source_amount, 8),
@@ -663,6 +671,7 @@ fn compose_crypto_market_routes(
         routes.push(P2pRoute {
             rank: 0,
             asset: target_asset.into(),
+            entry_network: query.source_network.clone(),
             source_fiat: source_asset.into(),
             source_amount: fixed(query.source_amount, 12),
             acquired_asset_amount: fixed(target_amount, 12),
@@ -802,6 +811,8 @@ mod tests {
             source_currency: "AMD".into(),
             target_currency: "RUB".into(),
             source_amount: 100_000.0,
+            source_network: None,
+            target_network: None,
             assets: vec!["USDT".into()],
             source_payment_method: None,
             target_payment_method: None,
@@ -842,6 +853,53 @@ mod tests {
                 "network={network}, asset={asset}"
             );
         }
+    }
+
+    #[test]
+    fn crypto_to_fiat_route_preserves_the_selected_source_network() {
+        let query = normalize_query(
+            P2pRouteSearchQuery {
+                source_fiat: "USDT".into(),
+                target_fiat: "AMD".into(),
+                source_amount: 125.0,
+                source_network: Some("ethereum".into()),
+                target_network: None,
+                bridge_fiat: None,
+                assets: None,
+                intermediary_assets: None,
+                source_payment_method: None,
+                target_payment_method: Some("Ameriabank".into()),
+                merchant_only: Some(false),
+                min_orders: None,
+                min_completion_rate: None,
+                allow_cross_venue: Some(false),
+                max_price_deviation_bps: Some(1_000),
+                limit: Some(20),
+                sources: None,
+            },
+            &["USDT".into()],
+        )
+        .unwrap();
+        let mut routes = Vec::new();
+
+        compose_crypto_to_fiat_routes(
+            &mut routes,
+            &query,
+            "USDT",
+            &[offer(
+                "binance",
+                P2pSide::SellCrypto,
+                "359.12",
+                "1000",
+                "100000",
+            )],
+        );
+
+        assert_eq!(routes.len(), 1);
+        assert_eq!(
+            serde_json::to_value(&routes[0]).unwrap()["entry_network"],
+            "ethereum"
+        );
     }
 
     #[test]
@@ -929,6 +987,8 @@ mod tests {
             source_currency: "ETH".into(),
             target_currency: "USDC".into(),
             source_amount: 0.04,
+            source_network: Some("ethereum".into()),
+            target_network: Some("ethereum".into()),
             assets: vec!["USDT".into()],
             source_payment_method: None,
             target_payment_method: None,

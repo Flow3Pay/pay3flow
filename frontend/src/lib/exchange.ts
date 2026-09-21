@@ -125,6 +125,7 @@ export interface P2pOffer {
 export interface P2pRoute {
   rank: number;
   asset: string;
+  entry_network?: string | null;
   source_fiat: string;
   source_amount: string;
   acquired_asset_amount: string;
