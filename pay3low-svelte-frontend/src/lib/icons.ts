@@ -29,7 +29,7 @@ const NETWORK_ASSETS: Array<[RegExp, string]> = [
 /** Returns a static asset served by this frontend. */
 export function venueIcon(venue: string): string {
   const key = venue.toLowerCase();
-  const extension = key === "binance" || key === "bitget" || key === "rapira" ? "png" : "svg";
+  const extension = key === "binance" || key === "bybit" || key === "bitget" || key === "rapira" ? "png" : "svg";
   return LOCAL_VENUE_ICONS.has(key)
     ? `/icons/venues/${key}.${extension}`
     : "/icons/venues/generic.svg";
