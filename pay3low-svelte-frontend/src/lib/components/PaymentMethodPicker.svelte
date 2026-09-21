@@ -1,13 +1,12 @@
 <script lang="ts">
   import { afterUpdate, onDestroy } from "svelte";
-  import { DIGITAL_ASSETS, paymentMethodFavicon, paymentMethodsFor, type PaymentMethod } from "$lib/payment-methods";
+  import { DIGITAL_ASSETS, PAYMENT_METHODS, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
   import type { CryptoNetwork } from "$lib/networks";
 
   export let open: boolean;
   export let title: string;
   export let role: "sender" | "recipient";
   export let networks: CryptoNetwork[];
-  export let selectedLocation: { country: string; currency: string } | null;
   export let selected: PaymentMethod | null;
   export let selectedNetwork: CryptoNetwork | undefined;
   export let onClose: () => void;
@@ -24,6 +23,7 @@
   let dragging = false;
   let dragStartY = 0;
   let dragDistance = 0;
+  const BANK_METHODS = PAYMENT_METHODS.filter((method) => method.kind === "bank");
 
   function close() {
     query = "";
@@ -106,7 +106,10 @@
     if (fallback) fallback.style.display = "inline";
   }
 
-  $: banks = selectedLocation ? paymentMethodsFor(selectedLocation.country, selectedLocation.currency, role) : [];
+  // Both sides can use the same bank directory. The selected corridor still
+  // controls the exchange route; this keeps banks from disappearing when the
+  // direction is swapped between Sell and Buy.
+  $: banks = BANK_METHODS.filter((method) => method.role === role || method.role === "both");
   $: assetsForRole = DIGITAL_ASSETS.filter((method) => method.role === role || method.role === "both");
   $: options = [
     ...banks.map((method): Option => ({ method })),
