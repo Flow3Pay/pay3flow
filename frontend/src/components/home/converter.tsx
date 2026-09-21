@@ -18,6 +18,7 @@ import {
 
 import { PaymentMethodPicker } from "./payment-method-picker";
 import { BankLogo } from "./bank-logo";
+import { NetworkPicker } from "./network-picker";
 import { RouteInstructions } from "./route-instructions";
 import { SidePanel } from "./side-panel";
 import styles from "./converter.module.css";
@@ -70,21 +71,17 @@ const INTERMEDIARY_ASSETS_STORAGE_KEY = "pay3flow.exchange.intermediary-assets";
 
 interface NetworkControlProps {
   network: CryptoNetwork;
-  networks: CryptoNetwork[];
-  open: boolean;
-  onToggle: () => void;
-  onSelect: (network: CryptoNetwork) => void;
+  onOpen: () => void;
 }
 
-function NetworkControl({ network, networks, open, onToggle, onSelect }: NetworkControlProps) {
+function NetworkControl({ network, onOpen }: NetworkControlProps) {
   return (
     <div className={styles.networkControl}>
       <button
         type="button"
         className={styles.networkButton}
-        onClick={onToggle}
-        aria-expanded={open}
-        aria-haspopup="listbox"
+        onClick={onOpen}
+        aria-haspopup="dialog"
       >
         <span className={styles.networkDot} aria-hidden="true">♦</span>
         <span className={styles.networkCopy}>
@@ -93,50 +90,6 @@ function NetworkControl({ network, networks, open, onToggle, onSelect }: Network
         </span>
         <span className={styles.networkChevron} aria-hidden="true">⌄</span>
       </button>
-      {open && (
-        <div className={styles.networkBackdrop} onMouseDown={onToggle}>
-          <div
-            className={styles.networkDialog}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Select crypto network"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <div className={styles.networkDialogHead}>
-              <div className={styles.networkDialogTitleGroup}>
-                <button type="button" className={styles.networkBackButton} onClick={onToggle} aria-label="Close network picker">
-                  <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="m15 18-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </button>
-                <h2>Select network</h2>
-              </div>
-              <span className={styles.networkModeBadge}>Network</span>
-            </div>
-            <div className={styles.networkDialogBody} role="listbox" aria-label="Crypto networks">
-              <p className={styles.networkSectionLabel}>Available networks</p>
-              {networks.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={styles.networkOption}
-                  data-selected={item.id === network.id || undefined}
-                  role="option"
-                  aria-selected={item.id === network.id}
-                  onClick={() => onSelect(item)}
-                >
-                  <span className={styles.networkOptionDot} aria-hidden="true">♦</span>
-                  <span>
-                    <strong>{item.name}</strong>
-                    <small>{item.currencies.join(" · ")}</small>
-                  </span>
-                  {item.id === network.id && <b aria-hidden="true">✓</b>}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -934,13 +887,7 @@ export function Converter() {
               {sourceMethod?.kind === "wallet" && (
                 <NetworkControl
                   network={selectedNetwork}
-                  networks={networks}
-                  open={networkPicker === "source"}
-                  onToggle={() => setNetworkPicker((current) => current === "source" ? null : "source")}
-                  onSelect={(network) => {
-                    setSelectedNetworkId(network.id);
-                    setNetworkPicker(null);
-                  }}
+                  onOpen={() => setNetworkPicker("source")}
                 />
               )}
             </div>
@@ -1014,13 +961,7 @@ export function Converter() {
               {targetMethod?.kind === "wallet" && (
                 <NetworkControl
                   network={selectedNetwork}
-                  networks={networks}
-                  open={networkPicker === "target"}
-                  onToggle={() => setNetworkPicker((current) => current === "target" ? null : "target")}
-                  onSelect={(network) => {
-                    setSelectedNetworkId(network.id);
-                    setNetworkPicker(null);
-                  }}
+                  onOpen={() => setNetworkPicker("target")}
                 />
               )}
             </div>
@@ -1116,6 +1057,18 @@ export function Converter() {
         selected={targetMethod}
         onClose={() => setMethodPicker(null)}
         onSelect={chooseTargetMethod}
+      />
+
+      <NetworkPicker
+        open={networkPicker !== null}
+        networks={networks}
+        selected={selectedNetwork}
+        onClose={() => setNetworkPicker(null)}
+        onSelect={(network) => {
+          setSelectedNetworkId(network.id);
+          setNetworkPicker(null);
+          resetResults();
+        }}
       />
 
       {instructionsRoute && (
