@@ -180,6 +180,12 @@ function mapRoutes(
       source_method_icon_url: sourceMethod?.kind === "bank" ? paymentMethodFavicon(sourceMethod) ?? undefined : undefined,
       entry_asset: route.asset,
       entry_network: networkName(route.entry_network, networks),
+      source_network: route.source_network
+        ? networkName(route.source_network, networks)
+        : undefined,
+      target_network: route.target_network
+        ? networkName(route.target_network, networks)
+        : undefined,
       target_amount_minor: Math.round(targetAmount * 100),
       target_currency: route.target_fiat,
       target_method_icon_url: targetMethod?.kind === "bank" ? paymentMethodFavicon(targetMethod) ?? undefined : undefined,
@@ -198,6 +204,7 @@ function mapRoutes(
       exit_offer_ad_id: exitOffer?.ad_id,
       entry_offer_snapshot: entryOffer,
       exit_offer_snapshot: exitOffer,
+      warnings: route.warnings,
       legs: route.market_path
         ? [
             {
@@ -587,6 +594,18 @@ export function Converter() {
       const targetIsWallet = targetMethod.kind === "wallet";
       if ((sourceIsWallet && !sourceNetwork) || (targetIsWallet && !targetNetwork)) {
         throw new Error("No compatible network is available for the selected cryptocurrency");
+      }
+      if (
+        sourceIsWallet &&
+        targetIsWallet &&
+        sourceMethod.currency === targetMethod.currency
+      ) {
+        if (sourceNetwork?.id === targetNetwork?.id) {
+          throw new Error("Choose a different cryptocurrency or network for the destination");
+        }
+        throw new Error(
+          `Cross-network bridge routes are not available yet. No live bridge provider is configured for ${sourceMethod.currency}: ${sourceNetwork?.name} → ${targetNetwork?.name}.`,
+        );
       }
       const response = await fetchP2pRoutes({
         sourceFiat: sourceIsWallet ? sourceMethod.currency : sourceCurrency,

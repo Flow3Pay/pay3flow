@@ -64,6 +64,8 @@ export interface RouteCandidate {
   source_method_icon_url?: string;
   entry_asset: string;
   entry_network: string;
+  source_network?: string;
+  target_network?: string;
   target_amount_minor?: number;
   target_currency?: string;
   target_method_icon_url?: string;
@@ -84,6 +86,7 @@ export interface RouteCandidate {
   exit_offer_ad_id?: string;
   entry_offer_snapshot?: P2pOffer;
   exit_offer_snapshot?: P2pOffer;
+  warnings?: string[];
   legs: RouteLeg[];
 }
 
@@ -126,6 +129,8 @@ export interface P2pRoute {
   rank: number;
   asset: string;
   entry_network?: string | null;
+  source_network?: string | null;
+  target_network?: string | null;
   source_fiat: string;
   source_amount: string;
   acquired_asset_amount: string;

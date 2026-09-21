@@ -82,7 +82,7 @@ function workflowSteps(route: RouteCandidate): WorkflowStep[] {
     return [
       {
         currency: source,
-        network: route.entry_network !== "internal" ? route.entry_network : undefined,
+        network: route.source_network,
         provider: exit.provider,
         iconUrl: route.source_method_icon_url,
       },
@@ -91,10 +91,14 @@ function workflowSteps(route: RouteCandidate): WorkflowStep[] {
   }
   if (entry && !exit) {
     return [
-      { currency: source, iconUrl: route.source_method_icon_url },
+      {
+        currency: source,
+        network: route.source_network,
+        iconUrl: route.source_method_icon_url,
+      },
       {
         currency: target,
-        network: route.entry_network !== "internal" ? route.entry_network : undefined,
+        network: route.target_network,
         provider: entry.provider,
         iconUrl: route.target_method_icon_url,
       },
@@ -102,9 +106,19 @@ function workflowSteps(route: RouteCandidate): WorkflowStep[] {
   }
   if (route.bridge_currency) {
     return [
-      { currency: source, provider: entry?.provider, iconUrl: route.source_method_icon_url },
+      {
+        currency: source,
+        network: route.source_network,
+        provider: entry?.provider,
+        iconUrl: route.source_method_icon_url,
+      },
       { currency: route.bridge_currency },
-      { currency: target, provider: exit?.provider, iconUrl: route.target_method_icon_url },
+      {
+        currency: target,
+        network: route.target_network,
+        provider: exit?.provider,
+        iconUrl: route.target_method_icon_url,
+      },
     ];
   }
   return [

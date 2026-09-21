@@ -26,7 +26,9 @@ async function mockBackend(page: Page) {
     if (url.pathname === "/api/networks") {
       return json([
         { id: "ethereum", name: "Ethereum (ERC-20)", currencies: ["ETH", "USDT", "USDC"] },
+        { id: "base", name: "Base", currencies: ["ETH", "USDC"] },
         { id: "tron", name: "TRON (TRC-20)", currencies: ["TRX", "USDT"] },
+        { id: "ton", name: "TON", currencies: ["TON", "USDT"] },
         { id: "bitcoin", name: "Bitcoin", currencies: ["BTC"] },
       ]);
     }
@@ -66,6 +68,8 @@ async function mockBackend(page: Page) {
             rank: 1,
             asset: "USDT",
             entry_network: "ethereum",
+            source_network: "ethereum",
+            target_network: null,
             source_fiat: "USDT",
             source_amount: "125.00000000",
             acquired_asset_amount: "125.00000000",
@@ -80,6 +84,48 @@ async function mockBackend(page: Page) {
             entry_offer: null,
             exit_offer: offer("binance", "exit-erc20", "RUB", "USDT"),
             warnings: ["Search estimate only."],
+          }],
+        });
+      }
+      if (url.searchParams.get("source_fiat") === "ETH") {
+        expect(url.searchParams.get("source_network")).toBe("base");
+        expect(url.searchParams.get("target_network")).toBe("ton");
+        return json({
+          searched_at: "2026-09-19T10:00:00Z",
+          source_fiat: "ETH",
+          target_fiat: "USDT",
+          source_amount: "0.03",
+          assets_searched: ["USDT"],
+          can_exchange_to_target: true,
+          routes: [{
+            rank: 1,
+            asset: "USDT",
+            entry_network: "base",
+            source_network: "base",
+            target_network: "ton",
+            source_fiat: "ETH",
+            source_amount: "0.030000000000",
+            acquired_asset_amount: "80.100000000000",
+            target_fiat: "USDT",
+            target_amount: "80.100000000000",
+            effective_rate: "2670.000000000000",
+            same_venue: true,
+            requires_asset_transfer: false,
+            transfer_fee_included: false,
+            route_kind: "crypto_to_crypto",
+            bridge_currency: null,
+            market_path: {
+              venue: "binance",
+              source_pair: "ETHUSDT",
+              target_pair: "ETHUSDT",
+              source_rate: "2670.000000000000",
+              target_rate: "1.000000000000",
+              intermediary_amount: "80.100000000000",
+            },
+            payment_methods_verified: true,
+            entry_offer: null,
+            exit_offer: null,
+            warnings: ["Network availability is not verified."],
           }],
         });
       }
@@ -230,5 +276,49 @@ test("cryptocurrency search binds the selected asset to its network", async ({ p
   await expect(page.getByTestId("complete-route")).toHaveCount(1);
   await expect(page.getByTestId("complete-route")).toContainText(
     "USDT Tether · Ethereum (ERC-20) (Binance) → RUB",
+  );
+});
+
+test("crypto route keeps distinct source and target networks", async ({ page }) => {
+  await mockBackend(page);
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
+  const sourcePicker = page.getByRole("dialog", { name: "Choose where you pay from" });
+  await sourcePicker.getByLabel("Search banks and payment methods").fill("ETH Base");
+  await sourcePicker.getByRole("option", { name: /Ethereum ETH · Base/ }).click();
+
+  await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
+  const targetPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
+  await targetPicker.getByLabel("Search banks and payment methods").fill("USDT TON");
+  await targetPicker.getByRole("option", { name: /Tether USDT · TON/ }).click();
+
+  await page.getByLabel("Amount to send").fill("0.03");
+  await page.getByTestId("start-search").click();
+
+  await expect(page.getByTestId("complete-route")).toContainText(
+    "ETH Ether · Base → USDT Tether · TON (Binance)",
+  );
+});
+
+test("same asset on different networks reports unavailable bridge provider", async ({ page }) => {
+  await mockBackend(page);
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
+  const sourcePicker = page.getByRole("dialog", { name: "Choose where you pay from" });
+  await sourcePicker.getByLabel("Search banks and payment methods").fill("USDT TRC20");
+  await sourcePicker.getByRole("option", { name: /Tether USDT · TRON \(TRC-20\)/ }).click();
+
+  await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
+  const targetPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
+  await targetPicker.getByLabel("Search banks and payment methods").fill("USDT TON");
+  await targetPicker.getByRole("option", { name: /Tether USDT · TON/ }).click();
+
+  await page.getByLabel("Amount to send").fill("125");
+  await page.getByTestId("start-search").click();
+
+  await expect(page.getByRole("alert")).toContainText(
+    "No live bridge provider is configured for USDT: TRON (TRC-20) → TON",
   );
 });

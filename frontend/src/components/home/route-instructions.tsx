@@ -357,6 +357,7 @@ export function RouteInstructions({ route, onClose }: RouteInstructionsProps) {
         <div className={styles.warning}>
           <strong>Important</strong>
           <span>Rates, limits and ads can change. Confirm the user, payment details and network on the exchange before sending money. Pay3Flow never creates the order or moves funds.</span>
+          {route.warnings?.map((warning) => <span key={warning}>{warning}</span>)}
         </div>
       </section>
     </div>

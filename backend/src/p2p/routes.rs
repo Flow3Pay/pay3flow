@@ -50,6 +50,8 @@ pub struct P2pRoute {
     pub asset: String,
     /// Canonical network id for the crypto asset selected by the user.
     pub entry_network: Option<String>,
+    pub source_network: Option<String>,
+    pub target_network: Option<String>,
     pub source_fiat: String,
     pub source_amount: String,
     pub acquired_asset_amount: String,
@@ -284,9 +286,6 @@ fn normalize_query(
     }
     let source_currency = query.source_fiat.trim().to_ascii_uppercase();
     let target_currency = query.target_fiat.trim().to_ascii_uppercase();
-    if source_currency.eq_ignore_ascii_case(&target_currency) {
-        bail!("source_fiat and target_fiat must differ");
-    }
     if query
         .min_completion_rate
         .is_some_and(|rate| !rate.is_finite() || !(0.0..=1.0).contains(&rate))
@@ -319,6 +318,16 @@ fn normalize_query(
     }
     let source_network = validate_network(&query.source_network, &source_currency)?;
     let target_network = validate_network(&query.target_network, &target_currency)?;
+    if source_currency.eq_ignore_ascii_case(&target_currency) {
+        match (&source_network, &target_network) {
+            (Some(source_network), Some(target_network)) if source_network != target_network => {
+                bail!(
+                    "cross-network bridge routes are not available: no bridge quote provider is configured for {source_currency} from {source_network} to {target_network}"
+                );
+            }
+            _ => bail!("source and target asset/network must differ"),
+        }
+    }
 
     Ok(NormalizedRouteQuery {
         source_currency,
@@ -498,6 +507,8 @@ fn compose_fiat_routes(
                 rank: 0,
                 asset: asset.into(),
                 entry_network: None,
+                source_network: query.source_network.clone(),
+                target_network: query.target_network.clone(),
                 source_fiat: query.source_currency.clone(),
                 source_amount: fixed(query.source_amount, 2),
                 acquired_asset_amount: fixed(acquired_asset, 8),
@@ -542,6 +553,8 @@ fn compose_fiat_to_crypto_routes(
             rank: 0,
             asset: asset.into(),
             entry_network: query.target_network.clone(),
+            source_network: query.source_network.clone(),
+            target_network: query.target_network.clone(),
             source_fiat: query.source_currency.clone(),
             source_amount: fixed(query.source_amount, 8),
             acquired_asset_amount: fixed(target_amount, 8),
@@ -591,6 +604,8 @@ fn compose_crypto_to_fiat_routes(
             rank: 0,
             asset: asset.into(),
             entry_network: query.source_network.clone(),
+            source_network: query.source_network.clone(),
+            target_network: query.target_network.clone(),
             source_fiat: query.source_currency.clone(),
             source_amount: fixed(query.source_amount, 8),
             acquired_asset_amount: fixed(query.source_amount, 8),
@@ -672,6 +687,8 @@ fn compose_crypto_market_routes(
             rank: 0,
             asset: target_asset.into(),
             entry_network: query.source_network.clone(),
+            source_network: query.source_network.clone(),
+            target_network: query.target_network.clone(),
             source_fiat: source_asset.into(),
             source_amount: fixed(query.source_amount, 12),
             acquired_asset_amount: fixed(target_amount, 12),
@@ -689,6 +706,7 @@ fn compose_crypto_market_routes(
             exit_offer: None,
             warnings: vec![
                 "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.".into(),
+                "Deposit and withdrawal network availability and fees are not verified by the selected venue.".into(),
             ],
         });
     }
@@ -856,6 +874,39 @@ mod tests {
     }
 
     #[test]
+    fn same_asset_on_different_networks_reports_missing_bridge_provider() {
+        let error = normalize_query(
+            P2pRouteSearchQuery {
+                source_fiat: "USDT".into(),
+                target_fiat: "USDT".into(),
+                source_amount: 125.0,
+                source_network: Some("tron".into()),
+                target_network: Some("ton".into()),
+                bridge_fiat: None,
+                assets: None,
+                intermediary_assets: None,
+                source_payment_method: None,
+                target_payment_method: None,
+                merchant_only: Some(false),
+                min_orders: None,
+                min_completion_rate: None,
+                allow_cross_venue: Some(false),
+                max_price_deviation_bps: Some(1_000),
+                limit: Some(20),
+                sources: None,
+            },
+            &["USDT".into()],
+        )
+        .err()
+        .expect("same-asset cross-network request should be rejected without a bridge provider");
+
+        assert_eq!(
+            error.to_string(),
+            "cross-network bridge routes are not available: no bridge quote provider is configured for USDT from tron to ton"
+        );
+    }
+
+    #[test]
     fn crypto_to_fiat_route_preserves_the_selected_source_network() {
         let query = normalize_query(
             P2pRouteSearchQuery {
@@ -1020,6 +1071,8 @@ mod tests {
         let route = &routes[0];
         assert_eq!(route.source_fiat, "ETH");
         assert_eq!(route.target_fiat, "USDC");
+        assert_eq!(route.source_network.as_deref(), Some("ethereum"));
+        assert_eq!(route.target_network.as_deref(), Some("ethereum"));
         assert_eq!(route.bridge_currency.as_deref(), Some("USDT"));
         assert!(route.entry_offer.is_none());
         assert!(route.exit_offer.is_none());
