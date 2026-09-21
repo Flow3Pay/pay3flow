@@ -1940,7 +1940,7 @@
     top: auto;
     right: auto;
     width: 100%;
-    height: calc(100dvh - 16px);
+    height: auto;
     max-height: calc(100dvh - 16px);
     box-sizing: border-box;
     padding: 10px 16px calc(18px + env(safe-area-inset-bottom));
