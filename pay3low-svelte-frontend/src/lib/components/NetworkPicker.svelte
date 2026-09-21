@@ -1,0 +1,737 @@
+<script lang="ts">
+  import { afterUpdate, onDestroy } from "svelte";
+  import type { CryptoNetwork } from "$lib/networks";
+
+  export let open: boolean;
+  export let networks: CryptoNetwork[];
+  export let selected: CryptoNetwork | undefined;
+  export let onClose: () => void;
+  export let onSelect: (network: CryptoNetwork) => void;
+  let wasOpen = false;
+  let previousOverflow = "";
+  const onKeyDown = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+
+  afterUpdate(() => {
+    if (open === wasOpen) return;
+    wasOpen = open;
+    if (open) {
+      previousOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      window.addEventListener("keydown", onKeyDown);
+    } else {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    }
+  });
+  onDestroy(() => {
+    if (wasOpen) document.body.style.overflow = previousOverflow;
+    window.removeEventListener("keydown", onKeyDown);
+  });
+</script>
+
+{#if open}
+  <div class="backdrop" on:mousedown={onClose} role="presentation">
+    <div class="dialog" role="dialog" aria-modal="true" aria-label="Choose network" tabindex="-1" on:mousedown|stopPropagation>
+      <div class="titleBar"><div class="titleGroup">
+        <button type="button" class="backButton" on:click={onClose} aria-label="Close network picker"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button>
+        <h2 class="title">Choose network</h2>
+      </div></div>
+      <div class="body"><div class="methods" role="listbox" aria-label="Crypto networks"><section class="section">
+        <h3>Available networks</h3>
+        {#each networks as network (network.id)}
+          {@const isSelected = network.id === selected?.id}
+          <button type="button" role="option" aria-selected={isSelected} class="methodRow" data-selected={isSelected || undefined} on:click={() => onSelect(network)}>
+            <span class="methodLogo" style="background-color:#627eea" aria-hidden="true">♦</span>
+            <span class="methodCopy"><span class="methodName">{network.name}</span><span class="methodMeta">{network.currencies.join(" · ")}</span></span>
+            {#if isSelected}<svg class="check" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="currentColor" /><path d="m6 10.2 2.7 2.5 5.3-5.6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>{/if}
+          </button>
+        {/each}
+      </section></div></div>
+    </div>
+  </div>
+{/if}
+
+<style>
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 17, 14, 0.66);
+  backdrop-filter: blur(18px) saturate(120%);
+  -webkit-backdrop-filter: blur(18px) saturate(120%);
+  animation: backdropIn 0.2s ease-out;
+}
+
+.dialog {
+  width: min(100%, 860px);
+  max-height: min(720px, 92vh);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 30px;
+  background: rgba(250, 250, 246, 0.98);
+  box-shadow: 0 38px 120px rgba(0, 0, 0, 0.35);
+  animation: dialogIn 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.titleBar,
+.titleGroup,
+.searchBox,
+.countryButton,
+.methodRow {
+  display: flex;
+  align-items: center;
+}
+
+.titleBar {
+  min-height: 78px;
+  justify-content: space-between;
+  padding: 15px 21px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.titleGroup {
+  gap: 10px;
+}
+
+.title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 750;
+  letter-spacing: -0.035em;
+}
+
+.backButton {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 13px;
+  color: var(--color-text-soft);
+  transition: background 0.14s ease, transform 0.14s ease;
+}
+
+.backButton:hover {
+  background: var(--color-panel);
+  transform: translateX(-1px);
+}
+
+.searchRow {
+  padding: 15px 20px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.searchBox {
+  height: 52px;
+  gap: 11px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  background: #efefe9;
+  color: var(--color-text-faint);
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.searchBox:focus-within {
+  border-color: var(--color-violet);
+  background: #fff;
+  box-shadow: 0 0 0 4px var(--color-violet-soft);
+}
+
+.searchBox input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.searchBox input::placeholder {
+  color: var(--color-text-faint);
+}
+
+.body {
+  display: grid;
+  height: min(530px, calc(92vh - 160px));
+  min-height: 360px;
+  grid-template-columns: minmax(0, 1fr) 255px;
+}
+
+.methods,
+.countries {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--color-border-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.methods {
+  padding: 13px 17px 26px;
+}
+
+.methods::-webkit-scrollbar,
+.countries::-webkit-scrollbar {
+  width: 6px;
+}
+
+.methods::-webkit-scrollbar-thumb,
+.countries::-webkit-scrollbar-thumb {
+  border-radius: 10px;
+  background: var(--color-border-strong);
+}
+
+.section + .section {
+  margin-top: 14px;
+}
+
+.section h3 {
+  margin: 0;
+  padding: 10px 11px 8px;
+  color: var(--color-text-faint);
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.methodRow {
+  width: 100%;
+  gap: 13px;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: 17px;
+  text-align: left;
+  transition: background 0.14s ease, border-color 0.14s ease, transform 0.14s ease;
+}
+
+.methodRow:hover {
+  background: #fff;
+  border-color: var(--color-border);
+  transform: translateX(2px);
+}
+
+.methodRow[data-selected] {
+  border-color: rgba(117, 88, 246, 0.16);
+  background: var(--color-violet-soft);
+}
+
+.methodLogo {
+  position: relative;
+  display: grid;
+  width: 46px;
+  height: 46px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 2px solid rgba(255, 255, 255, 0.72);
+  border-radius: 15px;
+  color: #fff;
+  box-shadow: 0 6px 15px rgba(20, 23, 19, 0.14);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.03em;
+}
+
+.methodLogo img {
+  position: absolute;
+  inset: 5px;
+  width: calc(100% - 10px);
+  height: calc(100% - 10px);
+  border-radius: 10px;
+  object-fit: contain;
+}
+
+.methodCopy,
+.countryCopy,
+.empty {
+  display: flex;
+  flex-direction: column;
+}
+
+.methodCopy {
+  min-width: 0;
+  flex: 1;
+  gap: 3px;
+}
+
+.methodName {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 780;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.methodMeta {
+  color: var(--color-text-faint);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.check,
+.countryCheck {
+  flex: 0 0 auto;
+  color: var(--color-violet);
+}
+
+.countries {
+  padding: 19px 14px;
+  border-left: 1px solid var(--color-border);
+  background: #efefe9;
+}
+
+.countryHead {
+  padding: 0 9px 14px;
+}
+
+.countryHead h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.countryHead span {
+  display: block;
+  margin-top: 4px;
+  color: var(--color-text-faint);
+  font-size: 9px;
+}
+
+.countryList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.countryButton {
+  width: 100%;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: 15px;
+  text-align: left;
+  transition: background 0.14s ease, border-color 0.14s ease;
+}
+
+.countryButton:hover,
+.countryButton[aria-pressed="true"] {
+  border-color: var(--color-border);
+  background: #fff;
+}
+
+.countryMark {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--color-primary);
+  color: var(--color-accent);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.countryCopy {
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+}
+
+.countryCopy strong {
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.countryCopy span {
+  color: var(--color-text-faint);
+  font-size: 9px;
+}
+
+.empty {
+  min-height: 250px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--color-text-faint);
+  text-align: center;
+}
+
+.empty strong {
+  color: var(--color-text);
+  font-size: 14px;
+}
+
+.empty span {
+  font-size: 11px;
+}
+
+@media (max-width: 700px) {
+  .backdrop {
+    align-items: end;
+    padding: 0;
+  }
+
+  .dialog {
+    max-height: 94vh;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 26px 26px 0 0;
+  }
+
+  .body {
+    display: flex;
+    height: min(650px, calc(94vh - 160px));
+    flex-direction: column-reverse;
+  }
+
+  .countries {
+    flex: 0 0 auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-bottom: 1px solid var(--color-border);
+    border-left: 0;
+    padding: 12px 14px;
+  }
+
+  .countryHead {
+    display: none;
+  }
+
+  .countryList {
+    flex-direction: row;
+  }
+
+  .countryButton {
+    width: auto;
+    min-width: 160px;
+  }
+
+  .methods {
+    flex: 1;
+  }
+
+}
+
+:global(html[data-theme="dark"]) .dialog {
+  border-color: var(--color-border-strong);
+  background: rgba(25, 25, 25, 0.99);
+  box-shadow: var(--shadow-pop);
+}
+
+:global(html[data-theme="dark"]) .titleBar {
+  background: #202020;
+}
+
+:global(html[data-theme="dark"]) .backButton,
+:global(html[data-theme="dark"]) .searchBox,
+:global(html[data-theme="dark"]) .countryHead,
+:global(html[data-theme="dark"]) .countryMark {
+  border-color: #3b3b3b;
+  background: #2a2a2a;
+}
+
+:global(html[data-theme="dark"]) .searchBox:focus-within {
+  border-color: var(--color-accent-strong);
+  background: #202020;
+}
+
+:global(html[data-theme="dark"]) .methodRow:hover,
+:global(html[data-theme="dark"]) .countryButton:hover,
+:global(html[data-theme="dark"]) .countryButton[aria-pressed="true"] {
+  border-color: #4b4b4b;
+  background: #2d2d2d;
+}
+
+:global(html[data-theme="dark"]) .methodRow[data-selected] {
+  border-color: rgba(181, 245, 0, 0.32);
+  background: rgba(181, 245, 0, 0.09);
+}
+
+:global(html[data-theme="dark"]) .methodLogo {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+@keyframes backdropIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes dialogIn {
+  from { opacity: 0; transform: translateY(16px) scale(0.975); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Paper dialog variant: same interaction model, lighter surfaces and lime state accents. */
+.backdrop {
+  background: rgba(38, 57, 37, 0.28);
+  backdrop-filter: blur(9px);
+  -webkit-backdrop-filter: blur(9px);
+}
+
+.dialog {
+  border-color: var(--color-border-strong);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 30px 80px rgba(44, 64, 42, 0.18);
+}
+
+.titleBar {
+  min-height: 68px;
+  padding: 12px 16px;
+  background: #fbfcfa;
+}
+
+.backButton {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+}
+
+.searchRow {
+  padding: 12px 16px;
+}
+
+.searchBox {
+  height: 44px;
+  border-color: var(--color-border);
+  border-radius: 9px;
+  background: #f4f8f1;
+}
+
+.searchBox:focus-within {
+  border-color: var(--color-accent-strong);
+  box-shadow: 0 0 0 3px rgba(181, 245, 0, 0.16);
+}
+
+.methods {
+  padding: 12px 16px 22px;
+}
+
+.methodRow {
+  border-radius: 10px;
+  transition: background 0.14s ease, border-color 0.14s ease, transform 0.14s ease, box-shadow 0.14s ease;
+}
+
+.methodRow:hover {
+  border-color: #b7cead;
+  background: #fbfcfa;
+  box-shadow: 0 5px 12px rgba(55, 77, 52, 0.06);
+}
+
+.methodRow[data-selected] {
+  border-color: #cce29a;
+  background: #f1f8df;
+}
+
+.check,
+.countryCheck {
+  color: #6d9800;
+}
+
+.countries {
+  padding: 16px 12px;
+  background: #f4f8f1;
+}
+
+.countryButton {
+  border-radius: 10px;
+}
+
+.countryButton:hover,
+.countryButton[aria-pressed="true"] {
+  border-color: #b7cead;
+  background: #fff;
+}
+
+.countryMark {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+}
+
+/* Compact asset-picker treatment, while retaining the bank and country lists. */
+.backdrop {
+  background: rgba(8, 11, 8, 0.52);
+  /* Keep the overlay cheap while the list scrolls underneath it. */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.dialog {
+  width: min(100%, 760px);
+  max-height: min(680px, 92vh);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 48px 96px rgba(16, 36, 14, 0.22), 0 8px 24px rgba(16, 36, 14, 0.12);
+}
+
+.titleBar {
+  min-height: 62px;
+  padding: 12px 18px 11px;
+  background: #fff;
+}
+
+.title {
+  font-size: 14px;
+  letter-spacing: -0.02em;
+}
+
+.searchRow {
+  padding: 12px 18px;
+}
+
+.searchBox {
+  height: 44px;
+  border-color: #dae2d2;
+  border-radius: 8px;
+  background: #f3f7ec;
+}
+
+.searchBox:focus-within {
+  border-color: #c5e092;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(185, 232, 52, 0.18);
+}
+
+.methods {
+  padding: 10px 12px 20px;
+}
+
+.methodRow {
+  gap: 11px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  transition: background 0.13s ease, border-color 0.13s ease, transform 0.13s ease, box-shadow 0.13s ease;
+}
+
+.methodRow:hover {
+  border-color: #dae2d2;
+  background: #f3f7ec;
+  box-shadow: none;
+}
+
+.methodRow[data-selected] {
+  border-color: #c5e092;
+  background: #eef7dc;
+}
+
+.methodMeta {
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+
+.check,
+.countryCheck {
+  color: #5c8c13;
+}
+
+.countries {
+  padding: 16px 12px;
+  background: #f0f3eb;
+}
+
+.countryButton {
+  border-radius: 8px;
+  transition: background 0.13s ease, border-color 0.13s ease, transform 0.13s ease;
+}
+
+.countryButton:hover,
+.countryButton[aria-pressed="true"] {
+  border-color: #dae2d2;
+  background: #fff;
+}
+
+/* Asset-style modal: one compact list; the country rail is intentionally not rendered. */
+.dialog {
+  width: min(100%, 430px);
+  max-height: min(680px, 88vh);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 48px 96px rgba(16, 36, 14, 0.22), 0 8px 24px rgba(16, 36, 14, 0.12);
+  contain: layout paint;
+  isolation: isolate;
+}
+
+.titleBar {
+  min-height: 58px;
+  padding: 16px 18px 15px;
+  background: #fff;
+}
+
+.backButton {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+}
+
+.title {
+  font-size: 14px;
+  letter-spacing: -0.02em;
+}
+
+.body {
+  display: flex;
+  height: min(560px, calc(88vh - 120px));
+  min-height: 300px;
+  flex-direction: column;
+}
+
+.methods {
+  order: 1;
+  min-height: 0;
+  padding: 4px 12px 20px;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+}
+
+.section h3 {
+  padding: 14px 10px 5px;
+  color: #8a9689;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.09em;
+}
+
+.methodRow {
+  gap: 11px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  contain: layout paint;
+  transition: background 0.13s ease, border-color 0.13s ease, box-shadow 0.13s ease;
+}
+
+.methodRow:hover {
+  border-color: #dae2d2;
+  background: #f3f7ec;
+  box-shadow: none;
+  transform: none;
+}
+
+.methodRow[data-selected] {
+  border-color: #c5e092;
+  background: #eef7dc;
+}
+
+@media (max-width: 700px) {
+  .dialog {
+    max-height: 94vh;
+    border-radius: 14px 14px 0 0;
+  }
+
+  .body {
+    height: min(650px, calc(94vh - 140px));
+  }
+}
+
+</style>

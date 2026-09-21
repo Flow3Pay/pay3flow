@@ -139,6 +139,19 @@ services:
     depends_on:
       - backend
 
+  pay3low-svelte-frontend:
+    build: ./pay3low-svelte-frontend
+    container_name: pay3flow-svelte-frontend
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      PUBLIC_API_URL: http://localhost:8080
+      HOST: 0.0.0.0
+      PORT: "3001"
+    depends_on:
+      - backend
+
 volumes:
   pgdata:
   backend_data:
