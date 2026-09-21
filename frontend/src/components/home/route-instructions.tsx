@@ -30,6 +30,13 @@ const VENUE_DOMAINS: Record<string, string> = {
   rapira: "rapira.net",
 };
 
+const SPOT_HOME_URLS: Record<string, string> = {
+  binance: "https://www.binance.com/en/trade",
+  bybit: "https://www.bybit.com/trade/spot/",
+  okx: "https://www.okx.com/trade-spot/",
+  bitget: "https://www.bitget.com/spot/",
+};
+
 const venueName = (value: string | undefined) =>
   value ? VENUE_NAMES[value.toLowerCase()] ?? value : "P2P market";
 
@@ -40,6 +47,74 @@ const money = (minor: number | undefined, currency: string | undefined) =>
 
 const percentage = (value: number | null | undefined) =>
   value == null ? "—" : `${(value * 100).toFixed(1)}%`;
+
+const marketRate = (value: string) => {
+  const number = Number(value);
+  return Number.isFinite(number)
+    ? number.toLocaleString("en-US", { maximumFractionDigits: 12, useGrouping: false })
+    : value;
+};
+
+function spotPair(
+  symbol: string,
+  firstAsset: string,
+  secondAsset: string,
+): { base: string; quote: string } | null {
+  const normalizedSymbol = symbol.replace(/[^a-z0-9]/gi, "").toUpperCase();
+  const first = firstAsset.toUpperCase();
+  const second = secondAsset.toUpperCase();
+  if (normalizedSymbol === `${first}${second}`) return { base: first, quote: second };
+  if (normalizedSymbol === `${second}${first}`) return { base: second, quote: first };
+  return null;
+}
+
+function spotMarketUrl(
+  venue: string,
+  symbol: string,
+  firstAsset: string,
+  secondAsset: string,
+): string | null {
+  const venueKey = venue.toLowerCase();
+  const pair = spotPair(symbol, firstAsset, secondAsset);
+  if (!pair) return SPOT_HOME_URLS[venueKey] ?? null;
+
+  const { base, quote } = pair;
+  switch (venueKey) {
+    case "binance":
+      return `https://www.binance.com/en/trade/${base}_${quote}?type=spot`;
+    case "bybit":
+      return `https://www.bybit.com/trade/spot/${base}/${quote}`;
+    case "okx":
+      return `https://www.okx.com/trade-spot/${base.toLowerCase()}-${quote.toLowerCase()}`;
+    case "bitget":
+      return `https://www.bitget.com/spot/${base}${quote}`;
+    default:
+      return null;
+  }
+}
+
+function SpotMarketLink({
+  venue,
+  symbol,
+  firstAsset,
+  secondAsset,
+}: {
+  venue: string;
+  symbol: string;
+  firstAsset: string;
+  secondAsset: string;
+}) {
+  const url = spotMarketUrl(venue, symbol, firstAsset, secondAsset);
+  if (!url) return null;
+
+  const pair = spotPair(symbol, firstAsset, secondAsset);
+  const label = pair ? `${pair.base}/${pair.quote}` : symbol;
+  return (
+    <a href={url} target="_blank" rel="noreferrer noopener" className={styles.profileLink}>
+      Open {label} on {venueName(venue)} <span>↗</span>
+    </a>
+  );
+}
 
 const avatarInitial = (nickname: string) => nickname.trim().charAt(0).toUpperCase() || "?";
 
@@ -189,20 +264,34 @@ export function RouteInstructions({ route, onClose }: RouteInstructionsProps) {
                     : `Swap ${route.source_currency} → ${route.target_currency}`}
                 </strong>
                 <p>
-                  Use the {marketPath.venue} spot market. The route uses {marketPath.source_pair}
-                  {route.bridge_currency ? ` and ${marketPath.target_pair}` : ""}; no bank or fiat payment is involved.
+                  This route uses the {venueName(marketPath.venue)} exchange order book, not a P2P
+                  advertiser, so there is no user profile. Open the spot pair below to place the trade.
                 </p>
                 <div className={styles.counterparty}>
                   <div className={styles.counterpartyTopline}>
                     <span className={styles.counterpartyLabel}>Spot market</span>
-                    <span className={styles.profileBadge}>{marketPath.venue}</span>
+                    <span className={styles.profileBadge}>{venueName(marketPath.venue)}</span>
                   </div>
                   <strong className={styles.advertiser}>{marketPath.source_pair}</strong>
-                  <span className={styles.venueLine}>Conversion rate {marketPath.source_rate}</span>
+                  <span className={styles.venueLine}>Conversion rate {marketRate(marketPath.source_rate)}</span>
+                  <SpotMarketLink
+                    venue={marketPath.venue}
+                    symbol={marketPath.source_pair}
+                    firstAsset={route.source_currency}
+                    secondAsset={route.bridge_currency ?? route.target_currency ?? route.entry_asset}
+                  />
                   {route.bridge_currency && (
-                    <span className={styles.paymentLine}>
-                      {marketPath.target_pair} · second leg rate {marketPath.target_rate}
-                    </span>
+                    <>
+                      <span className={styles.paymentLine}>
+                        {marketPath.target_pair} · second leg rate {marketRate(marketPath.target_rate)}
+                      </span>
+                      <SpotMarketLink
+                        venue={marketPath.venue}
+                        symbol={marketPath.target_pair}
+                        firstAsset={route.bridge_currency}
+                        secondAsset={route.target_currency ?? route.entry_asset}
+                      />
+                    </>
                   )}
                 </div>
               </div>

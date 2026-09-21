@@ -583,6 +583,9 @@ export function Converter() {
     if (!corridor) return;
     const nextSourceMethodId = targetMethod?.id ?? "";
     const nextTargetMethodId = sourceMethod?.id ?? "";
+    if (previewRoute?.target_amount_minor != null) {
+      setAmount(amountFromMinor(previewRoute.target_amount_minor));
+    }
     setDirectionReversed((current) => !current);
     setSourceMethodId(nextSourceMethodId);
     setTargetMethodId(nextTargetMethodId);
@@ -704,7 +707,7 @@ export function Converter() {
     <section className={styles.shell} id="transfer">
       <div className={styles.hero}>
         <h1>Move money. <span>Keep more.</span></h1>
-        <p>One intent, every available path. Pay3Flow compares live P2P liquidity and assembles the strongest cross-border route for you.</p>
+        <p>Stop spending hours searching for an exchange.</p>
       </div>
 
       <div className={styles.workspace}>

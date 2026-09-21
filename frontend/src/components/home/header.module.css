@@ -121,7 +121,7 @@
 
 :global(html[data-theme="dark"]) .sunIcon {
   opacity: 1;
-  filter: invert(1) brightness(1.1);
+  filter: brightness(0) invert(1);
   transform: rotate(0) scale(1);
 }
 

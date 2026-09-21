@@ -167,4 +167,7 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await expect(offerLinks).toHaveCount(2);
   await instructions.getByRole("button", { name: "Close instructions" }).click();
   await expect(instructions).toBeHidden();
+
+  await swapDirection.click();
+  await expect(amountInput).toHaveValue("20350");
 });
