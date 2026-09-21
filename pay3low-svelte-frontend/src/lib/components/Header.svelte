@@ -23,7 +23,6 @@
       <span class="beta">Beta</span>
     </a>
     <div class="actions">
-      <span class="marketStatus"><span class="pulse"></span>Markets live</span>
       <button class="themeToggle" type="button" on:click={toggleTheme} aria-label="Переключить цветовую тему" title="Переключить тему">
         <img class="moonIcon" src={moonIcon} alt="" width="24" height="24" decoding="async" />
         <img class="sunIcon" src={sunIcon} alt="" width="24" height="24" decoding="async" />
@@ -62,8 +61,7 @@
 
 .brand,
 .actions,
-.profile,
-.marketStatus {
+.profile {
   display: flex;
   align-items: center;
 }
@@ -193,34 +191,6 @@
   background: rgba(25, 25, 25, 0.98);
 }
 
-.marketStatus {
-  gap: 8px;
-  padding: 0 10px;
-  color: var(--color-text-soft);
-  font-size: 10px;
-  font-weight: 750;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.pulse {
-  position: relative;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--color-good);
-  box-shadow: 0 0 0 4px rgba(45, 142, 69, 0.12);
-}
-
-.pulse::after {
-  position: absolute;
-  inset: -4px;
-  border: 1px solid rgba(45, 142, 69, 0.45);
-  border-radius: 50%;
-  content: "";
-  animation: pulse 2s ease-out infinite;
-}
-
 .connect,
 .profile {
   min-height: 48px;
@@ -326,20 +296,9 @@
   background: rgba(212, 61, 53, 0.07);
 }
 
-@keyframes pulse {
-  from { opacity: 0.8; transform: scale(0.6); }
-  to { opacity: 0; transform: scale(1.8); }
-}
-
 @keyframes menuIn {
   from { opacity: 0; transform: translateY(-5px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-@media (max-width: 860px) {
-  .marketStatus {
-    display: none;
-  }
 }
 
 @media (max-width: 560px) {
