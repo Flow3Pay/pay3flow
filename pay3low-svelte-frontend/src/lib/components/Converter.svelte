@@ -43,7 +43,9 @@
   let lastUpdatedAt: number | null = null;
   let clock = Date.now();
   let error: string | null = null;
+  let settingsElement: HTMLDivElement;
   let settingsWasOpen = false;
+  let settingsScrollLocked = false;
   let previousOverflow = "";
   let previousOverscrollBehavior = "";
   let preferencesLoaded = false;
@@ -193,6 +195,7 @@
   }
   function toggleSource(source: P2pSource) { initialSearchReady = true; selectedSources = selectedSources.includes(source) ? (selectedSources.length === 1 ? selectedSources : selectedSources.filter((item) => item !== source)) : [...selectedSources, source]; resetResults(); }
   function toggleAsset(asset: string) { initialSearchReady = true; selectedIntermediaryAssets = selectedIntermediaryAssets.includes(asset) ? selectedIntermediaryAssets.filter((item) => item !== asset) : [...selectedIntermediaryAssets, asset]; resetResults(); }
+  function onDocumentMouseDown(event: MouseEvent) { if (settingsOpen && settingsElement && !settingsElement.contains(event.target as Node)) settingsOpen = false; }
   function closeSettings() { settingsOpen = false; }
   function onSettingsKeyDown(event: KeyboardEvent) { if (event.key === "Escape") closeSettings(); }
   function hideBrokenImage(event: Event) {
@@ -234,20 +237,27 @@
       if (shared && sharedCorridor?.source_currency === shared.targetCurrency && sharedCorridor.target_currency === shared.sourceCurrency) directionReversed = true; else if (savedDirection != null) directionReversed = savedDirection === "true";
       urlReady = true;
     }).catch((cause: Error) => error = cause.message);
+    document.addEventListener("mousedown", onDocumentMouseDown);
     clockTimer = window.setInterval(() => clock = Date.now(), 1000);
   });
   afterUpdate(() => {
     if (settingsOpen === settingsWasOpen) return;
     settingsWasOpen = settingsOpen;
     if (settingsOpen) {
-      previousOverflow = document.body.style.overflow;
-      previousOverscrollBehavior = document.body.style.overscrollBehavior;
-      document.body.style.overflow = "hidden";
-      document.body.style.overscrollBehavior = "none";
-      window.addEventListener("keydown", onSettingsKeyDown);
+      settingsScrollLocked = window.matchMedia("(max-width: 640px)").matches;
+      if (settingsScrollLocked) {
+        previousOverflow = document.body.style.overflow;
+        previousOverscrollBehavior = document.body.style.overscrollBehavior;
+        document.body.style.overflow = "hidden";
+        document.body.style.overscrollBehavior = "none";
+        window.addEventListener("keydown", onSettingsKeyDown);
+      }
     } else {
-      document.body.style.overflow = previousOverflow;
-      document.body.style.overscrollBehavior = previousOverscrollBehavior;
+      if (settingsScrollLocked) {
+        document.body.style.overflow = previousOverflow;
+        document.body.style.overscrollBehavior = previousOverscrollBehavior;
+        settingsScrollLocked = false;
+      }
       window.removeEventListener("keydown", onSettingsKeyDown);
     }
   });
@@ -257,7 +267,8 @@
     if (refreshTimer) clearInterval(refreshTimer);
     if (clockTimer) clearInterval(clockTimer);
     if (initialSearchTimer) clearTimeout(initialSearchTimer);
-    if (typeof document !== "undefined" && settingsWasOpen) {
+    if (typeof document !== "undefined") document.removeEventListener("mousedown", onDocumentMouseDown);
+    if (typeof document !== "undefined" && settingsScrollLocked) {
       document.body.style.overflow = previousOverflow;
       document.body.style.overscrollBehavior = previousOverscrollBehavior;
     }
@@ -268,12 +279,12 @@
 <section class="shell" id="transfer">
   <div class="hero"><h1>Move money. <span>Keep more.</span></h1><p>Stop spending hours searching for an exchange.</p></div>
   <div class="workspace">
-    <div class:settingsActive={settingsOpen} class="card">
+    <div class="card">
       <div class="cardTop">
         <div class="modeTabs" aria-label="Exchange mode"><button type="button" class="modeActive">Bridge</button><button type="button" disabled>History</button></div>
         <div class="cardActions">
           <button type="button" class="refreshButton" on:click={startSearch} disabled={!hasAmount || searching} aria-label="Refresh routes now"><svg class:refreshSpin={searching} width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M16.2 7.1A6.8 6.8 0 1 0 16.7 12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /><path d="M13.1 3.8h3.6v3.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
-          <div class="settingsWrap">
+          <div class="settingsWrap" bind:this={settingsElement}>
             <button type="button" class="settingsButton" on:click={() => settingsOpen = !settingsOpen} aria-haspopup="dialog" aria-expanded={settingsOpen} aria-label="Route refresh settings"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 6.8a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4Z" stroke="currentColor" stroke-width="1.6" /><path d="M16.2 11.3a6.5 6.5 0 0 0 0-2.6l1.5-1.1-1.8-3.1-1.8.8a6.7 6.7 0 0 0-2.2-1.3L11.7 2H8.3L8 4a6.7 6.7 0 0 0-2.2 1.3L4 4.5 2.2 7.6l1.5 1.1a6.5 6.5 0 0 0 0 2.6l-1.5 1.1L4 15.5l1.8-.8A6.7 6.7 0 0 0 8 16l.3 2h3.4l.3-2a6.7 6.7 0 0 0 2.2-1.3l1.8.8 1.8-3.1-1.6-1.1Z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
             {#if settingsOpen}
               <div class="settingsBackdrop" on:mousedown={closeSettings} role="presentation">
@@ -504,74 +515,36 @@
 }
 
 .settingsBackdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1100;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: rgba(15, 17, 14, 0.52);
-  backdrop-filter: blur(12px) saturate(115%);
-  -webkit-backdrop-filter: blur(12px) saturate(115%);
-  animation: backdropIn 0.2s ease-out;
-  touch-action: none;
+  position: static;
 }
 
 .settingsMenu {
-  position: relative;
-  width: min(100%, 560px);
-  max-height: min(720px, 92vh);
+  position: absolute;
+  top: calc(100% + 9px);
+  right: 0;
+  z-index: 80;
+  width: 310px;
+  max-height: min(680px, calc(100vh - 32px));
   overflow-y: auto;
   padding: 17px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-card);
-  background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 30px 80px rgba(17, 20, 18, 0.24);
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: var(--shadow-pop);
   backdrop-filter: blur(24px);
-  animation: dialogIn 0.24s cubic-bezier(0.22, 1, 0.36, 1);
-  overscroll-behavior: contain;
-  touch-action: auto;
+  animation: popIn 0.18s ease;
 }
 
 .settingsModalHeader {
-  display: flex;
-  min-height: 28px;
-  align-items: center;
-  justify-content: flex-end;
+  display: none;
 }
 
 .settingsClose {
-  display: grid;
-  width: 36px;
-  height: 36px;
-  place-items: center;
-  border-radius: 12px;
-  color: var(--color-text-soft);
-  transition: background 0.14s ease, transform 0.14s ease;
-}
-
-.settingsClose:hover {
-  background: var(--color-panel);
-  transform: translateX(1px);
+  display: none;
 }
 
 .settingsSheetHandle {
   display: none;
-}
-
-@keyframes backdropIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes dialogIn {
-  from { opacity: 0; transform: translateY(16px) scale(0.975); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-/* The card owns the stacking context so its modal can cover the workspace. */
-.card.settingsActive {
-  z-index: 1200;
 }
 
 .settingsHead {
@@ -1912,19 +1885,36 @@
   }
 
   .settingsBackdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1100;
+    display: grid;
     place-items: end center;
     padding: 0;
+    background: rgba(8, 11, 8, 0.52);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    animation: fadeIn 0.2s ease-out;
+    touch-action: none;
   }
 
   .settingsMenu {
+    position: relative;
+    top: auto;
+    right: auto;
     width: 100%;
     max-height: 94vh;
     padding: 10px 16px calc(18px + env(safe-area-inset-bottom));
-    border-radius: 25px 25px 0 0;
+    border-radius: 14px 14px 0 0;
     animation: settingsSheetIn 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    overscroll-behavior: contain;
+    touch-action: auto;
   }
 
   .settingsModalHeader {
+    display: flex;
     min-height: 30px;
     justify-content: space-between;
   }
@@ -1939,6 +1929,7 @@
   }
 
   .settingsClose {
+    display: grid;
     position: absolute;
     top: 10px;
     right: 12px;
