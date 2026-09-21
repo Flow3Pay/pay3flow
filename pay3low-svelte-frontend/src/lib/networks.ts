@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "./api";
+import { apiUrl } from "./api";
 
 export interface CryptoNetwork {
   id: string;
@@ -13,7 +13,7 @@ export const FALLBACK_NETWORK: CryptoNetwork = {
 };
 
 export async function fetchNetworks(currency?: string): Promise<CryptoNetwork[]> {
-  const url = new URL("/api/networks", API_BASE_URL);
+  const url = apiUrl("/api/networks");
   if (currency) url.searchParams.set("currency", currency);
 
   const response = await fetch(url);

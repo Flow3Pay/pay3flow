@@ -1,214 +1,112 @@
-# Глоссарий Pay3Flow
+# Pay3Flow glossary
 
-Базовые термины системы. При добавлении новых понятий — сюда же.
+Use these terms consistently in code, API documentation, and user-facing
+copy. Add new domain terms here before introducing them in multiple places.
 
----
+## Acquirer
 
-## Эквайер (Acquirer)
+A provider or intermediary that processes a payment between sender and
+recipient. In the current architecture an acquirer is a legacy/fallback rail
+or a way to execute one local leg; it is no longer the central product model.
 
-Компания-посредник, которая проводит платёж от отправителя к получателю.
-В нашей системе эквайер — это внешний провайдер (Stripe, Adyen, Payoneer,
-крипто-онрампа и т.д.), через которого фактически переводятся средства.
+## Exchange intent / order
 
-Каждый эквайер хранится в таблице `acquirers` с паспортом: гео, валюты,
-комиссии, лимиты, эндпоинты. Ключевые эквайеры добавляются вручную.
+The user's request to exchange and deliver money between a source and target
+country/currency, for example sending `100,000 AMD` from Armenia to a Russian
+recipient in RUB. An order records methods, amounts, deadline, user, status,
+and idempotency key. It does not mean that funds have been delivered.
 
-После перехода на solver-based exchange эквайер перестаёт быть центральным исполнителем.
-Он остаётся fallback-rail или одним из технических способов провести
-отдельную денежную ногу.
+## Solver / liquidity provider
 
-**См. также:** Маршрут, Комиссия, Exchange Order, Solver.
+A network participant that offers to execute an exchange order. A solver may
+accept one local money leg, perform a TOKEN-leg or internal accounting step,
+and deliver the other local leg. Its profile includes rails, countries,
+currencies, limits, fees, speed, risk score, status, and possibly an
+ActivityPub actor.
 
----
+## Candidate
 
-## Exchange Intent / Order
-
-Намерение пользователя обменять и доставить деньги между странами/валютами.
-Например: "из Армении отправить 100 000 AMD получателю в России в RUB".
-
-Order фиксирует:
-- исходную страну, валюту и способ оплаты;
-- целевую страну, валюту и способ получения;
-- сумму, дедлайн, допустимую комиссию/курс;
-- пользователя, статус и ключ идемпотентности.
-
-Order не означает, что деньги уже доставлены. Он становится исполняемым
-после quote от solver'а и фиксации маршрута.
-
-**См. также:** Solver, Quote, Settlement.
-
----
-
-## Solver / Liquidity Provider
-
-Участник сети, который готов исполнить exchange order за заданную комиссию:
-принять локальную денежную ногу в одной стране, провести TOKEN-leg или
-внутренний расчёт, а затем доставить деньги получателю в другой стране.
-
-Solver хранится с параметрами:
-- страны и валюты;
-- доступные rails: карта, банк, кошелёк, cash-in/cash-out и т.д.;
-- лимиты, комиссии, скорость;
-- risk score и статус;
-- ActivityPub actor/profile, если solver найден через `fmatch`.
-
-**См. также:** Quote, Settlement, Proof.
-
----
+A solver surfaced by fmatch or a local registry as potentially eligible for an
+order. A candidate is not yet the selected route and has no authority to start
+settlement.
 
 ## Quote
 
-Предложение solver'а исполнить конкретный exchange order.
+A solver's offer for a particular order. It includes rate, fees, expiration,
+expected timing, limits, and a settlement plan. The backend compares multiple
+quotes during an auction window.
 
-Quote содержит курс, комиссию, срок действия, лимиты, ожидаемое время
-исполнения и settlement-plan. За короткое auction window backend собирает
-несколько quotes и выбирает лучший с учётом цены, риска и сроков.
+## Auction
 
-**См. также:** Exchange Order, Solver.
+The bounded period in which Pay3Flow collects and scores quotes before locking
+one route. Winner selection is deterministic, auditable, and separate from
+solver discovery.
 
----
+## Route
+
+The selected execution plan: solver, rails, source and target methods, rate,
+fees, ETA, and settlement steps. A route is only authoritative after the
+backend locks it.
 
 ## Settlement
 
-Фактическое исполнение exchange order. В новой модели settlement состоит минимум
-из двух частей:
+Execution of an exchange order. The MVP models at least two legs:
 
-1. `TOKEN-leg` — внутренний расчёт/резерв/перевод расчётного актива.
-2. `money-leg` — локальная доставка денег получателю.
+1. `TOKEN-leg`: reserve, transfer, or internal accounting of a settlement asset.
+2. `money-leg`: local delivery to the recipient through the selected rail.
 
-Для MVP `TOKEN` может быть mock-ledger, пока не выбрана реальная расчётная
-модель: stablecoin, внутренний ledger, voucher или другой актив.
+The MVP uses a mock ledger while the real settlement model is undecided.
 
-**См. также:** Proof, Dispute.
+## TOKEN
 
----
+The settlement asset used by the domain model. It may eventually be a stablecoin,
+internal ledger unit, voucher, or another instrument. Until the legal and
+technical model is approved, TOKEN means only the mock-ledger concept and must
+not be presented as real stored value.
+
+## Funding instruction
+
+A user-facing instruction created after quote selection. It describes what the
+user must review and initiate. Settlement must not begin before explicit terms
+acceptance and funding confirmation.
 
 ## Proof
 
-Доказательство, что solver выполнил свою часть settlement: receipt, bank
-reference, скрин/чек, webhook от провайдера или иной проверяемый артефакт.
-
-В MVP proof может проверяться вручную. Для production он должен быть
-машиночитаемым там, где это возможно.
-
-**См. также:** Settlement, Dispute.
-
----
+A receipt, bank reference, provider webhook, or machine-readable artifact that
+supports a solver's claim that it completed a settlement step. MVP proofs may
+be reviewed manually; production proofs should be independently verifiable.
 
 ## Dispute
 
-Спорная ситуация по settlement: одна нога исполнена, другая задержана,
-proof невалиден, сумма не совпала или получатель не подтвердил получение.
+A state in which a leg is delayed, a proof is invalid, an amount differs, or
+receipt is not confirmed. A dispute freezes normal progression until an
+authorized manual or automated resolution sets the order to `done` or `failed`.
 
-Dispute замораживает order/settlement до ручного или автоматического решения.
+## Transaction
 
-**См. также:** Settlement, Proof.
+The legacy payment entity created by `POST /api/payments`. It follows:
 
----
-
-## Транзакция (Transaction)
-
-Единичная операция перевода средств. Создаётся пользователем через
-`POST /api/payments` и проходит полный жизненный цикл:
-
-```
-pending → matched → executing → done | failed
+```text
+pending -> matched -> executing -> done | failed
 ```
 
-Поля транзакции (миграция `transactions`):
-- `id` — внутренний идентификатор (UUID);
-- `user_id` — кто создал;
-- `from_amount`, `from_currency` — исходная сумма и валюта;
-- `to_amount`, `to_currency` — итоговая сумма и валюта;
-- `status` — текущий статус;
-- `fees` — комиссия сервиса;
-- `provider` — какой эквайер исполнитель;
-- `external_id` — ID операции у провайдера;
-- `idempotency_key` — ключ идемпотентности.
+New exchange functionality should use `exchange_orders` instead.
 
-**См. также:** Маршрут, Статусы транзакции.
+## Fee
 
----
+The cost of processing a payment or exchange. It may include a solver/provider
+fee, a Pay3Flow service fee, and an FX margin. All API and database amounts are
+minor units; the user interface should show the currency and precision clearly.
 
-## Маршрут (Route)
+## Idempotency
 
-Результат матчинга запроса платежа с эквайером. Маршрут связывает
-транзакцию с конкретным эквайером и фиксирует параметры исполнения:
-комиссию, курс конвертации, лимиты.
+A guarantee that retrying a request with the same key does not create a second
+order or charge. Exchange creation uses `Idempotency-Key` and stores the key
+with the user. ActivityPub delivery also uses activity IDs and delivery records
+to avoid duplicate sends.
 
-Маршрут создаётся в три шага:
-1. `pending` — запрос создан, ждёт матчинга;
-2. `matched` — fmatch нашёл кандидата, эквайер выбран;
-3. `executing` — платёж отправлен в обработку провайдеру.
+## Legacy / fallback rail
 
-Модель маршрута описана в таблице `routes` с полями: `transaction_id`,
-`acquirer_id`, `fee_percent`, `exchange_rate`, `status`.
-
-**См. также:** Транзакция, Эквайер.
-
----
-
-## Комиссия (Fee)
-
-Стоимость проведения платежа. Состоит из двух частей:
-
-- **Комиссия эквайера** — берётся внешним провайдером за обработку
-  операции. Задаётся как процент от суммы + фиксированная часть
-  (например, 0.8% + 0.25 $). Записывается в `acquirers.fee_percent`
-  и `acquirers.fee_fixed`.
-
-- **Комиссия сервиса** — берётся Pay3Flow за обработку. Рассчитывается
-  автоматически и записывается в `transactions.fees`.
-
-Итоговая комиссия = комиссия эквайера + комиссия сервиса.
-
-Точность расчёта — до цента (two decimal places). При конвертации валют
-в комиссию закладывается margin на неблагоприятное движение курса.
-
-**См. также:** Маршрут.
-
----
-
-## Статусы транзакции (Transaction Statuses)
-
-Статус отражает текущую фазу жизненного цикла платежа:
-
-| Статус | Описание |
-|--------|----------|
-| `pending` | Транзакция создана, ждёт матчинга с эквайером |
-| `matched` | fmatch нашёл кандидата, эквайер выбран и зафиксирован |
-| `executing` | Платёж отправлен эквайеру, ожидаем подтверждения |
-| `done` | Платёж успешно завершён, средства доставлены |
-| `failed` | Платёж не удался (ошибка провайдера, недостаток средств и т.д.) |
-
-Переходы строго однонаправленные:
-```
-pending → matched → executing → done
-                          ↓
-                        failed
-```
-
-Обработка коллизий (гонки) — на уровне БД: `UPDATE ... WHERE status = 'matched'`
-с проверкой результата. Гонка = ошибка, транзакция требует ручного разбора.
-
-**См. также:** Транзакция, Маршрут.
-
----
-
-## Идемпотентность (Idempotency)
-
-Гарантия, что повторный запрос с тем же ключом вернёт тот же результат
-без повторного списания.
-
-Реализация:
-- При `POST /api/payments` клиент передаёт заголовок `Idempotency-Key`
-  (UUID);
-- `backend` сохраняет ключ в таблице `transactions` (UNIQUE);
-- При повторном запросе с тем же ключом — возвращает уже созданную
-  транзакцию вместо создания новой;
-- Время жизни ключа — 24 часа (конфигурируется).
-
-Идемпотентность также действует на уровне доставки activity в fmatch:
-каждая activity имеет уникальный `id`, дубликаты отбрасываются.
-
-**См. также:** Транзакция.
+An existing acquiring or payment path retained for compatibility, fallback,
+or demos. It is not a reason to build new exchange flows around provider
+selection.

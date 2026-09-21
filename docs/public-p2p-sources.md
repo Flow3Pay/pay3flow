@@ -1,24 +1,24 @@
 # Public P2P source policy
 
-На текущем этапе Pay3Flow подключает Binance, Bybit, OKX, Bitget и Rapira как
-read-only источники объявлений; сделки через эти адаптеры не создаются.
+Pay3Flow currently uses Binance, Bybit, OKX, Bitget, and Rapira as read-only
+advertisement sources. These adapters do not create trades.
 
-Поиск остаётся read-only: Pay3Flow не создаёт ордера, не авторизуется в
-сторонних сервисах и не принимает реквизиты полной банковской карты.
+The search does not authenticate to third-party services, place orders, reserve
+crypto, or collect full payment-card credentials.
 
-## Источники и кандидаты
+## Sources and candidates
 
-| Источник | Что реально даёт | Регистрация/API | Решение |
-|---|---|---|---|
-| Rapira P2P | Публичные read-only объявления через `/otc/offers/page-query/v2` | API вызывается без авторизации; формат может меняться | Подключён как read-only адаптер, сделки не создаёт |
-| CoinGecko | Агрегированные цены и market data | API-планы и лимиты меняются; это не P2P-объявления | Только reference price, не источник P2P routes |
-| BestChange | Курсы и резервы обменников | Официальный API требует API key | Подключать только через легальный API key |
-| Exnode | Обменные/merchant API | API требует public/private keys и подпись | Не использовать без зарегистрированного API-доступа |
+| Source | What it provides | Access | Decision |
+| --- | --- | --- | --- |
+| Rapira P2P | Public read-only offers through `/otc/offers/page-query/v2` | No auth in the current adapter; format may change | Enabled as read-only; never creates trades |
+| CoinGecko | Aggregated prices and market data | Plans and limits change; not P2P ads | Reference price only |
+| BestChange | Exchange rates and reserves | Official API requires an API key | Use only with a legitimate key |
+| Exnode | Exchange or merchant APIs | Requires keys and request signing | Do not use without registered access |
 
-Нельзя выдавать эти источники за проверенных solver'ов. Rapira подключена только
-как public/read-only источник объявлений и не является исполнителем расчётов.
-Остальные перечисленные сервисы остаются исследуемыми источниками до появления
-легальных public/read-only интерфейсов.
+Do not describe these sources as verified solvers. Rapira is only a public
+advertisement source, not a settlement executor. Other research sources remain
+out of the live path until a legitimate read-only interface and adapter review
+exist.
 
-Модалка поиска принимает только параметры фильтрации. Полный номер карты, CVV,
-пароли и коды подтверждения в Pay3Flow вводить нельзя.
+The search UI accepts filtering parameters only. Users must never enter full
+card numbers, CVV, passwords, or one-time confirmation codes into Pay3Flow.

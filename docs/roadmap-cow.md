@@ -1,176 +1,100 @@
-# Roadmap: переход Pay3Flow на CoW-style exchange архитектуру
+# Roadmap: CoW-style exchange architecture
 
-Этот документ добавляет новый архитектурный поворот к текущему плану:
-уходим от основной ставки на эквайеров и строим solver-based обмен ликвидностью.
-Эквайеры остаются fallback-слоем и источником отдельных rails, но целевой
-продукт — это intent/orderbook + solver competition + локальные денежные ноги.
+Pay3Flow is moving from an acquiring-first model to solver-based cross-border
+exchange. Acquirers remain fallback rails and sources for individual payment
+methods; the target product is intent/orderbook plus solver competition and
+local money legs.
 
-## Новая целевая модель
-
-Пример:
+## Target model
 
 ```text
-Пользователь в Армении хочет отправить деньги в Россию
-
-Армения
-  -> Pay3Flow intent/order
-  -> TOKEN exchange
-  -> money exchange
-  -> Россия
+user intent -> Pay3Flow order -> solver candidates -> quotes
+             -> selected route -> TOKEN-leg -> money-leg -> proof
 ```
 
-Pay3Flow не должен слепо "переводить через эквайера". Он принимает intent:
-кто, откуда, куда, сколько, в какой валюте, каким способом оплаты и каким
-получателем. Дальше backend ищет solver'ов, сравнивает цены/лимиты/риски,
-фиксирует выбранный маршрут и ведёт исполнение до финального статуса.
+The backend accepts the intent, validates corridor and limits, discovers
+solvers, compares price/risk/timing, locks the route, and tracks settlement to
+its final status. The user sees and accepts the route and any settlement-asset
+disclosure before funding.
 
-## Что берём из Cow Protocol Services
+## Role of CoW Protocol Services
 
-`https://github.com/cowprotocol/services` используем как reference:
+The local `cowprotocol-services/` checkout is a reference for orderbook,
+auction windows, solver competition, winner selection, settlement status, and
+observability. It does not replace fmatch. fmatch remains the ActivityPub
+matcher for Pay3Flow solver candidates.
 
-Важно: Cow Protocol Services не заменяет `fmatch`. `fmatch` остаётся рабочим
-matcher'ом solver'ов через ActivityPub. Cow нужен как reference для
-orderbook, auction window, solver competition, выбора победителя и
-settlement/status/proof flow.
+Do not copy Ethereum-only settlement, ERC-20 approvals, contract assumptions,
+or chain-specific funding checks into the fiat exchange core without a new
+design decision.
 
-Итоговый контур:
+## Legacy scope
+
+The old `transactions`, `routes`, `acquirers`, `/api/payments`, and provider
+adapter paths remain for compatibility, fallback, and smoke tests. New product
+work should use:
 
 ```text
-backend/orderbook
-  -> fmatch возвращает solver candidates
-  -> backend собирает quotes
-  -> backend выбирает лучший route
-  -> solver исполняет TOKEN-leg и money-leg
-  -> backend проверяет proof и обновляет status
+exchange_order -> fmatch candidates -> backend auction -> selected quote
+-> funding instruction -> mock TOKEN-leg -> money-leg -> proof
 ```
 
-- `orderbook` — модель пользовательских ордеров/intents, хранение, API,
-  валидация и статусы;
-- auction/solver flow — как отдавать открытые ордера solver'ам и выбирать
-  лучшее исполнение;
-- `autopilot`-подход — отдельный процесс, который режет/публикует раунды
-  matching и двигает систему вперёд;
-- observability/test patterns — как проверять критичный matching/settlement.
+## Completed architecture work
 
-Что не переносим вслепую:
+- Defined solver-based cross-border exchange as the primary direction.
+- Kept fmatch as candidate discovery rather than winner selection.
+- Added the exchange domain document and typed status model.
+- Added a local CoW reference checkout and documented its boundaries.
+- Added risk/compliance gates, audit requirements, and kill-switch requirements.
+- Added read-only P2P route search and explicit public-source policy.
 
-- Ethereum-only settlement как обязательное ядро;
-- on-chain ERC20 approvals/funding checks как единственный источник истины;
-- всё, что завязано на конкретные CoW contracts, если оно не нужно для fiat exchange.
+## Next implementation phases
 
-## Legacy / fallback scope
+### EX-2 — Complete the domain model
 
-Старые этапы и код про acquiring-only платежи больше не являются главным
-MVP-направлением. Они остаются в проекте как:
+- Add and maintain `exchange_orders`, `exchange_solvers`, `exchange_quotes`,
+  `exchange_settlements`, `exchange_proofs`, `funding_instructions`, and
+  `audit_events`.
+- Keep the corridor in data: `AM/AMD -> RU/RUB` is seed data only.
+- Cover all status transitions with guarded-update and transition tests.
 
-- fallback rail для отдельной денежной ноги;
-- источник provider adapters, webhook patterns и fee/rate helpers;
-- временный совместимый контур для старых smoke/demo сценариев.
+### EX-3 — Orderbook, discovery, and auction
 
-Новые задачи не должны строить пользовательский flow вокруг выбора эквайера.
-Основной поток: `exchange_order -> fmatch candidates -> backend auction ->
-selected quote -> funding instruction -> mock TOKEN-leg -> money-leg -> proof`.
+- Stabilize create/read order endpoints and idempotency behavior.
+- Map fmatch candidates to active local solvers.
+- Collect quotes within a bounded auction window.
+- Score quotes by target amount, fees, ETA, limits, and risk.
+- Cache short-lived candidate/quote data without replacing durable state.
+- Add a smoke test with two fake solvers and a deterministic winner.
 
-Старые `transactions`, `routes`, `acquirers`, `POST /api/payments` и
-acquiring provider adapters помечены как legacy/fallback. Их можно
-переиспользовать точечно, но новые API и frontend должны двигаться к
-`/api/exchange/orders`.
+### EX-4 — TOKEN-leg and money-leg
 
-## Фаза EX-0 — Архитектурный разворот
+- Keep the TOKEN implementation as a mock ledger until its legal and technical
+  meaning is approved.
+- Define reserve, lock, release, rollback, proof, and partial-failure behavior.
+- Add dispute handling that freezes settlement and requires an explicit outcome.
+- Prove the happy path and invalid-proof path in smoke tests.
 
-- [x] EX-0.1. Зафиксировать решение: основной продукт теперь solver-based
-  cross-border exchange, эквайеры — fallback/rail, не центральная модель.
-- [x] EX-0.2. Обновить глоссарий: intent, order, solver, liquidity provider,
-  TOKEN-leg, money-leg, escrow, proof, dispute.
-- [x] EX-0.3. Обновить схемы README: поток `Армения -> Pay3Flow -> TOKEN ->
-  money -> Россия`, без иллюзии прямого card acquiring как главного пути.
-- [x] EX-0.4. Отметить старые этапы про эквайеров как legacy/fallback:
-  не удалять код сразу, но не строить дальнейший MVP вокруг них.
+### EX-5 — Simplify the reference and legacy paths
 
-## Фаза EX-1 — Cow Protocol Services как reference
+- Keep chain-specific CoW components isolated from the fiat domain.
+- Keep acquiring adapters as fallback rails.
+- Make the frontend display quotes, solver route, fees, timing, and final amount.
+- Complete the registration -> order -> quote -> settlement -> history flow.
 
-- [x] EX-1.1. Склонировать `cowprotocol/services` прямо в монорепо:
-  `cowprotocol-services/`.
-- [x] EX-1.2. Добавить `cowprotocol-services/` в `.gitignore`, если решим
-  держать его как внешний reference, а не vendored-код.
-- [x] EX-1.3. Проверить сборку upstream локально и зафиксировать минимальные
-  команды: build, tests, docker/playground. Сборка заблокирована окружением:
-  локального `cargo` нет, Docker socket недоступен текущему пользователю.
-- [x] EX-1.4. Изучить `orderbook`: API, модель order, статусы, хранение,
-  идемпотентность, fee estimation.
-- [x] EX-1.5. Изучить solver/driver/autopilot контур: как solver получает
-  задачи, как считается решение, где фиксируется победитель.
-- [x] EX-1.6. Документ `docs/cow-services-analysis.md`: что можно переиспользовать,
-  что надо переписать, что вырезать.
+### EX-6 — Risk, compliance, and security
 
-## Фаза EX-2 — Новая доменная модель Pay3Flow
+- Define KYC/AML and sanctions requirements for users and solvers.
+- Enforce per-user, per-solver, per-corridor, and daily limits.
+- Add velocity, repeated-identity, and manual-review controls.
+- Preserve a complete audit trail and operator kill switches.
+- Finish legal review before enabling real-money settlement.
 
-- [ ] EX-2.1. Таблица `exchange_orders`: user, source country/currency/method,
-  target country/currency/method, amount, desired rate, deadline, status.
-- [ ] EX-2.2. Таблица `exchange_solvers`: actor_id, rails, countries, currencies,
-  min/max limits, fee model, risk score, status.
-- [ ] EX-2.3. Таблица `exchange_quotes`: order_id, solver_id, rate, fee, expires_at,
-  settlement plan, status.
-- [ ] EX-2.4. Таблица `exchange_settlements`: token_leg, money_leg, proofs,
-  confirmations, dispute status.
-- [ ] EX-2.5. Статусная машина:
-  `created -> quoted -> locked -> token_settling -> money_settling -> done`
-  и ветки `expired | cancelled | disputed | failed`.
-- [ ] EX-2.6. Документ `docs/exchange-domain.md`: модель данных, статусы,
-  инварианты и что считается финальным исполнением.
+### EX-7 — Production readiness
 
-## Фаза EX-3 — Orderbook, fmatch и solver matching
-
-- [ ] EX-3.1. Реализовать `POST /api/exchange/orders`: создать intent/order.
-- [ ] EX-3.2. Реализовать `GET /api/exchange/orders/:id`: состояние order и quotes.
-- [ ] EX-3.3. Реализовать solver API: получить открытые orders, отправить quote,
-  обновить доступную ликвидность.
-- [ ] EX-3.4. Зафиксировать роль `fmatch`: он ищет solver candidates, но не
-  заменяется Cow Services и не выбирает финальный route.
-- [ ] EX-3.5. Подключить `fmatch` для discovery solver'ов через ActivityPub.
-- [ ] EX-3.6. Реализовать auction window: собрать quotes за короткое окно и
-  выбрать лучший по цене, сроку, лимитам и risk score.
-- [ ] EX-3.7. Redis-кэш quotes/candidates с TTL 5 минут для повторных запросов.
-- [ ] EX-3.8. Smoke: один order Армения -> Россия, два fake solver'а, выбран
-  лучший quote, order переходит в `quoted`.
-
-## Фаза EX-4 — TOKEN-leg и money-leg
-
-- [ ] EX-4.1. Описать внутренний `TOKEN`: это ledger unit, stablecoin, voucher
-  или иной расчётный актив. До решения — только mock-ledger.
-- [ ] EX-4.2. Реализовать mock token ledger: reserve, lock, release, rollback.
-- [ ] EX-4.3. Реализовать money-leg proof: чек/receipt/reference от solver'а,
-  ручная проверка в MVP.
-- [ ] EX-4.4. Зафиксировать атомарность MVP: что делаем при успехе одной ноги
-  и падении второй.
-- [ ] EX-4.5. Dispute flow: открыть спор, заморозить settlement, приложить proof,
-  закрыть вручную.
-- [ ] EX-4.6. Smoke: order проходит token-leg и money-leg на fake solver'е до
-  `done`.
-
-## Фаза EX-5 — Вырезать лишнее из Cow/reference и текущего кода
-
-- [ ] EX-5.1. Составить список Cow-компонентов, которые не нужны для fiat exchange:
-  chain-specific bindings, contract-only settlement, ненужные e2e окружения.
-- [ ] EX-5.2. Решить стратегию: port идей в наш backend или отдельный сервис
-  `exchange-orderbook`.
-- [ ] EX-5.3. Вырезать/изолировать старые acquiring-only endpoints из основной
-  формы платежа.
-- [ ] EX-5.4. Оставить acquiring provider layer только как fallback rail.
-- [ ] EX-5.5. Обновить frontend: вместо token-picker и эквайерных маршрутов
-  показывать quotes, solver route, сроки и итоговую сумму.
-- [ ] EX-5.6. E2E: регистрация -> способ оплаты -> exchange order -> quote ->
-  settlement -> история.
-
-## Фаза EX-6 — Риски, комплаенс и безопасность
-
-- [ ] EX-6.1. KYC/AML minimum для solver'ов и пользователей перед реальными
-  деньгами.
-- [ ] EX-6.2. Лимиты: per user, per solver, per country pair, per day.
-- [ ] EX-6.3. Anti-fraud checks: повторные карты/кошельки, velocity, подозримые
-  пары, ручной review.
-- [ ] EX-6.4. Audit trail: полный лог intent, quotes, выбора solver'а,
-  подтверждений и ручных действий.
-- [ ] EX-6.5. Kill switch по стране, валюте, solver'у и всему exchange-контуру.
-- [ ] EX-6.6. Документ `docs/exchange-risk-compliance.md`: что можно запускать в MVP,
-  что нельзя запускать без юриста/комплаенса.
+- Add authenticated solver APIs and signed callbacks.
+- Establish custody, key management, reconciliation, independent proofs, and
+  incident response.
+- Add backups, restore drills, alerting, access reviews, and release runbooks.
+- Gate every external provider behind configuration, rate limits, and health
+  monitoring.

@@ -1,16 +1,16 @@
 # Route Aggregation Research
 
-Дата: 2026-09-18.
+Date: 2026-09-18.
 
-Цель: понять, какие route/liquidity aggregation подходы можно использовать
-для Pay3Flow, не заменяя `fmatch` и не привязывая core backend к одному
-внешнему провайдеру.
+Goal: evaluate route and liquidity aggregation patterns that Pay3Flow could
+use without replacing `fmatch` or coupling the core backend to one external
+provider.
 
-Главный вывод: для MVP нельзя делать core backend зависимым от 0x, 1inch,
-Velora, OKX или другого агрегатора. В Pay3Flow `fmatch` остается matcher'ом
-Pay3Flow solver candidates, backend остается orderbook/auction/winner-selection
-центром, а внешние агрегаторы могут быть только quote/liquidity sources через
-adapter.
+Main conclusion: the MVP must not depend on 0x, 1inch, Velora, OKX, or another
+aggregator as its core. In Pay3Flow, `fmatch` remains the matcher for Pay3Flow
+solver candidates, the backend remains the orderbook/auction/winner-selection
+center, and external aggregators may only provide quotes or liquidity through
+an adapter.
 
 ## Sources
 

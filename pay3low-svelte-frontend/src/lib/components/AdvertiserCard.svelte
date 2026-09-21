@@ -24,7 +24,7 @@
 {:else}
   <div class="counterparty">
     <div class="counterpartyIdentity">
-      <span class="counterpartyAvatar" aria-hidden="true"><span class="avatarInitial">{offer.advertiser.nickname.trim().charAt(0).toUpperCase() || "?"}</span>{#if VENUE_ICONS[offer.source.toLowerCase()]}<span class="avatarVenue"><img src={VENUE_ICONS[offer.source.toLowerCase()]} alt="" on:error={(event) => fallbackVenueIcon(event, offer?.source ?? "")} /></span>{/if}</span>
+      <span class="counterpartyAvatar" aria-hidden="true"><span class="avatarInitial">{offer.advertiser.nickname.trim().charAt(0).toUpperCase() || "?"}</span>{#if VENUE_ICONS[offer.source.toLowerCase()]}<span class="avatarVenue"><img src={VENUE_ICONS[offer.source.toLowerCase()]} alt="" width="16" height="16" loading="lazy" decoding="async" on:error={(event) => fallbackVenueIcon(event, offer?.source ?? "")} /></span>{/if}</span>
       <div class="counterpartyIdentityCopy"><div class="counterpartyTopline"><span class="counterpartyLabel">{label}</span><span class={profileUrl ? "profileBadge" : "manualBadge"}>{profileUrl ? "User profile" : "Find by nickname"}</span></div><strong class="advertiser">{offer.advertiser.nickname}</strong><span class="venueLine">{venue} · {offer.advertiser.is_merchant ? "Merchant" : "Advertiser"}</span></div>
     </div>
     <div class="metrics"><span><b>{percentage(offer.advertiser.completion_rate_30d)}</b> completion</span><span><b>{offer.advertiser.completed_orders_30d ?? "—"}</b> orders / 30d</span><span><b>{offer.price} {offer.fiat}</b> rate</span></div>

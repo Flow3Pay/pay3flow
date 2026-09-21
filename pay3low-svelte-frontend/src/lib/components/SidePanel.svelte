@@ -76,12 +76,12 @@
                         {#if FIAT_MARKS[step.currency.toUpperCase()] && !step.iconUrl}
                           <span class="workflowFlag" aria-hidden="true">{FIAT_MARKS[step.currency.toUpperCase()]}</span>
                         {:else}
-                          <span class="workflowIcon" aria-hidden="true"><img src={step.iconUrl ?? assetIcon(step.currency)} alt="" /></span>
+                          <span class="workflowIcon" aria-hidden="true"><img src={step.iconUrl ?? assetIcon(step.currency)} alt="" width="15" height="15" loading="lazy" decoding="async" /></span>
                         {/if}
                         <span>{assetLabel(step.currency)}{step.network ? ` · ${step.network}` : ""}</span>
                       </span>
                       {#if step.provider}
-                        <span class="workflowVenue"><span aria-hidden="true">(</span>{#if VENUE_ICONS[step.provider.toLowerCase()]}<span class="workflowVenueIcon" aria-hidden="true"><img src={VENUE_ICONS[step.provider.toLowerCase()]} alt="" on:error={(event) => fallbackVenueIcon(event, step.provider ?? "")} /></span>{/if}<span>{venueName(step.provider)}</span><span aria-hidden="true">)</span></span>
+                        <span class="workflowVenue"><span aria-hidden="true">(</span>{#if VENUE_ICONS[step.provider.toLowerCase()]}<span class="workflowVenueIcon" aria-hidden="true"><img src={VENUE_ICONS[step.provider.toLowerCase()]} alt="" width="12" height="12" loading="lazy" decoding="async" on:error={(event) => fallbackVenueIcon(event, step.provider ?? "")} /></span>{/if}<span>{venueName(step.provider)}</span><span aria-hidden="true">)</span></span>
                       {/if}
                     </span>
                   {/each}

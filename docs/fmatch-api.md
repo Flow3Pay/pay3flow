@@ -1,43 +1,47 @@
-# fmatch API — мини-заметка
+# fmatch API reference
 
-Fmatch — ActivityPub-матчер, источник истины «что умеет юзер/сервис» — это
-`marketplace_subscriptions` и `marketplace_proposals` в его Postgres. HTTP-пути —
-транспорт ActivityPub (inbox/outbox/actor), а не REST-ресурсы.
+fmatch is an ActivityPub matcher. Its PostgreSQL tables
+`marketplace_subscriptions` and `marketplace_proposals` are the source of truth
+for advertised capabilities and proposals. The HTTP paths are ActivityPub
+transport surfaces, not conventional REST resources.
 
-Локально: `http://localhost:7277` (postgres :5433, typesense :8108).
+Local development uses `http://localhost:7277`, fmatch PostgreSQL on `5433`,
+and Typesense on `8108`.
 
-## Поверхности
+## Surfaces
 
-| Путь | Метод | Что делает |
-|------|-------|------------|
-| `/health` | GET | `{"status":"ok"}` |
-| `/typesense/health` | GET | здоровье typesense |
-| `/actor`, `/actors` | GET | список акторов (`OrderedCollection`) |
-| `/actor/:handle` | GET | actor-документ (ActivityStreams) |
-| `/inbox`, `/inbox/:handle` | POST | shared / per-actor inbox (приём activities) |
-| `/outbox/:handle` | GET | pending-задачи (`OrderedCollection` из activities) |
-| `/follow` | POST | подписаться на удалённый актор (от имени fmatch) |
-| `/.well-known/webfinger?resource=acct:...` | GET | webfinger-резолюция |
-| `/.well-known/nodeinfo`, `/nodeinfo/:ver` | GET | nodeinfo 2.0/2.1 |
-| `/marketplace/resources/:name` | GET | описание resource-спецификации |
-| `/activitypub/object?iri=...` | GET | fetch удалённого AP-объекта |
+| Path | Method | Purpose |
+| --- | --- | --- |
+| `/health` | `GET` | Return `{"status":"ok"}` |
+| `/typesense/health` | `GET` | Check the Typesense connection |
+| `/actor`, `/actors` | `GET` | List actors as an `OrderedCollection` |
+| `/actor/:handle` | `GET` | Return an ActivityStreams actor document |
+| `/inbox`, `/inbox/:handle` | `POST` | Accept activities in the shared or actor inbox |
+| `/outbox/:handle` | `GET` | Return pending activities |
+| `/follow` | `POST` | Follow a remote actor on behalf of fmatch |
+| `/.well-known/webfinger?resource=acct:...` | `GET` | Resolve an account |
+| `/.well-known/nodeinfo`, `/nodeinfo/:ver` | `GET` | Return NodeInfo 2.0/2.1 |
+| `/marketplace/resources/:name` | `GET` | Describe a resource contract |
+| `/activitypub/object?iri=...` | `GET` | Fetch a remote ActivityPub object |
 
-Базовый актор: `actra` (`https://<domain>/actor/actra`), shared inbox `/inbox/actra`.
+The default actor is `actra` (`https://<domain>/actor/actra`) and its inbox is
+`/inbox/actra`.
 
-## Принимаемые activity-типы (валидация `validate_marketplace_inbox_entry`)
+## Accepted activity types
 
-- `Follow` — подписка. fmatch fetch-ит актор из `Follow.actor`, создаёт
-  `marketplace_subscriptions`.
-- `Proposal`, `Note` — FEP-0837 предложение (`purpose=offer|request`).
-- `Create` / `Offer` с `object` = `Proposal` / `Note` / `OrderedCollection` /
-  ForgeFed `Ticket|Issue|MergeRequest|PullRequest|Patch`.
-- `Update(Proposal)` / `Update(Agreement)`.
-- `OfferAgreement` / `AcceptAgreement` / `RejectAgreement` — settlement.
-- `Accept` / `Reject` / `Undo` — settlement (ack).
+Validation is performed by `validate_marketplace_inbox_entry`.
 
-## Как подать запрос (наш сценарий: платёжный запрос)
+- `Follow` subscribes to a remote actor and creates a marketplace subscription.
+- `Proposal` and `Note` carry FEP-0837 offers or requests.
+- `Create` and `Offer` may wrap `Proposal`, `Note`, `OrderedCollection`, or
+  ForgeFed ticket-like objects.
+- `Update(Proposal)` and `Update(Agreement)` update existing records.
+- `OfferAgreement`, `AcceptAgreement`, and `RejectAgreement` handle settlement.
+- `Accept`, `Reject`, and `Undo` provide settlement acknowledgements.
 
-`POST /inbox/actra` с JSON-LD. Минимум для FEP-0837 proposal (`purpose=request`):
+## Submit a payment request
+
+Post a JSON-LD FEP-0837 proposal to `/inbox/actra`:
 
 ```json
 {
@@ -49,7 +53,7 @@ Fmatch — ActivityPub-матчер, источник истины «что ум
   "id": "https://pay3flow.local/proposals/req-1",
   "purpose": "request",
   "attributedTo": "https://pay3flow.local/actor/pay3flow",
-  "name": "Send 100 USD to TR account",
+  "name": "Send 100 USD to a TR bank account",
   "content": "100 USD, from US, to TR, bank transfer",
   "publishes": {
     "type": "Intent",
@@ -62,29 +66,20 @@ Fmatch — ActivityPub-матчер, источник истины «что ум
 }
 ```
 
-Требования валидации (`validate_fep0837_proposal`):
-- `@context` включает ActivityStreams **и** `https://w3id.org/fep/0837`;
-- `proposal.id`, `type ∈ {Proposal,Note}`, `purpose ∈ {offer,request}`,
-  `attributedTo`, `to`;
-- `publishes` — `Intent` c `id`, `action ∈ {deliverService,transfer}`,
-  `resourceConformsTo` (http/https), `resourceQuantity.hasUnit`;
-- необязательно: количественники как строки (`hasNumericalValue: "0.89"`).
+The validator requires ActivityStreams and FEP-0837 contexts, a valid proposal
+identity and purpose, `attributedTo`, `to`, and an `Intent` with an action,
+resource contract, and quantity unit. Quantities may be strings.
 
-## Ответ fmatch
+## Responses and commands
 
-Fmatch отвечает ActivityPub-объектом, **не** REST-обёрткой:
-- успех матчинга → `Offer(Agreement)` + блок `candidates` (ранжированный
-  список; у каждого — price/латентность/качество);
-- промежуточные → `Accept` с `status`;
-- нет кандидатов → `Reject` (`status=no-candidates`, HTTP 503);
-- падение исполнения → `Reject` (`execution-failed`, HTTP 502).
+fmatch returns an ActivityPub object rather than a REST wrapper:
 
-Внутренний envelope routing (`delivery/chain`) наружу не отдаётся.
+- successful matching returns `Offer(Agreement)` with a ranked `candidates`
+  list;
+- intermediate work returns `Accept` with a status;
+- no candidates returns `Reject` with `status=no-candidates` and HTTP 503;
+- execution failure returns `Reject` with `execution-failed` and HTTP 502.
 
-## Маршрут результата
-
-Для асинхронного результата в запросе указываем `resultInbox` (наш `/inbox`);
-fmatch доставит `Offer(Agreement)`-результат туда через `candidate_result_inbox_url`
-(`/inbox/actra` по умолчанию). Команды:
-`new`/`candidates`/`findbestpath` — только список кандидатов без исполнения;
-`execute[:N]` — зафиксировать кандидата N.
+For asynchronous results, provide `resultInbox`. Discovery commands
+`new`, `candidates`, and `findbestpath` return candidates without execution;
+`execute[:N]` selects candidate `N` for execution.

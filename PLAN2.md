@@ -1,1594 +1,229 @@
-# PLAN2: Pay3Flow CoW-style exchange architecture
+# PLAN2: Pay3Flow exchange architecture
 
-Этот документ написан как инструкция для следующего ИИ-агента. Цель: агент должен понимать продукт, роли сервисов, порядок работ и решения по умолчанию без дополнительных вопросов к владельцу проекта.
+This is the working plan for the Pay3Flow MVP. It describes the product
+direction, service responsibilities, execution rules, and implementation
+phases so a contributor can continue work without re-discovering the design.
 
-## 0. Главная Идея
+## 1. Product intent
 
-Pay3Flow больше не строится вокруг эквайеров как центрального способа перевода. Эквайеры остаются fallback/rail, но основной MVP строится как solver-based cross-border exchange.
+Pay3Flow is a solver-based cross-border exchange coordinator. A user states the
+source country/currency/method, target country/currency/method, amount, and
+constraints. The backend turns that intent into an order, discovers eligible
+solvers through fmatch, collects quotes, selects a route, requests explicit
+funding consent, and records settlement proofs.
 
-Пользователь не выбирает провайдера сам. Пользователь формулирует intent:
-
-```text
-Хочу отправить деньги из страны A в страну B.
-У меня есть source amount/source currency/source method.
-Получатель должен получить target currency/target method.
-Я хочу понятный курс, комиссию, срок и статус.
-```
-
-Backend превращает этот intent в order, ищет solver'ов через `fmatch`, собирает quotes, выбирает лучший route, ведёт settlement и проверяет proofs.
-
-Главная рабочая установка: разработка должна идти быстро и автономно. На текущем этапе владельца проекта не нужно вовлекать в ежедневные технические решения. Агент сам выбирает безопасный, простой и расширяемый вариант, реализует его, проверяет тестами и двигается дальше.
-
-## 1. Целевой Поток
-
-Базовый пример:
+Example:
 
 ```text
-Армения
-  -> Pay3Flow intent/order
-  -> TOKEN exchange
-  -> money exchange
-  -> Россия
+Armenia -> Pay3Flow order -> TOKEN settlement -> local money delivery -> Russia
 ```
 
-Человечески:
+The user does not need to choose an intermediary cryptocurrency or provider
+manually. The UI must show the resulting route, rate, fees, ETA, funding
+instruction, and any TOKEN/crypto settlement asset before confirmation.
 
-1. Пользователь в Армении хочет отправить деньги получателю в России.
-2. Pay3Flow сохраняет заявку как exchange order.
-3. Backend отправляет задачу в `fmatch`.
-4. `fmatch` возвращает подходящих solver'ов.
-5. Backend собирает quotes от solver'ов.
-6. Backend выбирает лучший route.
-7. Solver принимает/подтверждает первую денежную ногу.
-8. Solver выполняет TOKEN-leg или внутренний расчёт.
-9. Solver выполняет money-leg получателю.
-10. Solver присылает proof.
-11. Backend проверяет proof, обновляет status и показывает результат в UI.
+The MVP uses fake solvers and a mock TOKEN ledger. It must not be represented
+as authorization to process real funds.
 
-Практический MVP-поток для первого коридора `AM/AMD -> RU/RUB`:
+## 2. Target flow
 
 ```text
-user вводит сумму AMD
-  -> backend создаёт order
-  -> backend начинает live-поиск связок
-      -> параллельно ищет вход: Armenian bank / AMD P2P -> любая crypto
-      -> как только найден один входной вариант, сразу ищет выход по этой crypto -> RUB
-      -> не ждёт завершения всех входных вариантов
-      -> каждую найденную полную или частичную связку отправляет во frontend через WS
-  -> frontend показывает связки в боковой панели
-  -> пользователь выбирает/подтверждает подходящий route
+1. User submits an exchange intent.
+2. Backend validates corridor, limits, and idempotency.
+3. Backend asks fmatch for solver candidates.
+4. Backend collects normalized quotes within an auction window.
+5. Backend scores and locks the best route.
+6. Backend presents a funding instruction and terms.
+7. User explicitly confirms the funding action.
+8. Solver runs the TOKEN-leg and money-leg.
+9. Solver submits proof.
+10. Backend verifies proof, writes audit events, and publishes the final status.
 ```
 
-Важная продуктовая формулировка: пользователь не выбирает криптовалюту вручную. Он хочет отправить деньги из Армении в Россию, вводит сумму, а Pay3Flow ищет маршрут. На входе можно покупать любую crypto, если связка выгодная или потери минимальны. Примеры возможных промежуточных активов: `USDT ERC20`, `ETH Ethereum`, `BTC Binance`, `SOL`. Это не фиксированный список, а результат поиска.
+Discovery and quote search should be streaming/fan-out where useful: an input
+leg can trigger an output-leg search as soon as a viable intermediary asset is
+found. The frontend may receive progressively better routes, but the route
+becomes immutable after `locked`.
 
-Критерий хорошей связки:
-
-- route даёт плюс относительно базового курса;
-- или route идёт примерно по себестоимости;
-- или route даёт минимальную допустимую просадку, например около `-0.08%`, если лучшего варианта сейчас нет.
-
-Поиск должен быть streaming/fan-out:
-
-- backend параллельно ищет несколько вариантов `AMD -> crypto`;
-- найденный входной вариант сразу становится задачей для поиска `crypto -> RUB`;
-- backend не ждёт, пока завершатся все варианты покупки crypto;
-- по каждой crypto можно параллельно искать несколько покупателей/выходных rails;
-- frontend получает события по WebSocket и постепенно наполняет боковую панель;
-- лучший route может обновляться по мере прихода новых данных, пока order не locked.
-
-Вариант funding flow для MVP:
-
-```text
-user
-  -> Pay3Flow form
-  -> user-initiated funding/payment instruction
-  -> solver
-  -> Pay3Flow wallet / internal TOKEN ledger
-  -> solver
-  -> recipient
-```
-
-Смысл:
-
-- пользователь заполняет простую форму перевода в Pay3Flow;
-- Pay3Flow показывает сумму, курс, комиссию, ETA и условия;
-- пользователь сам подтверждает действие и сам инициирует funding/payment;
-- Pay3Flow не принимает фиат на свой баланс и не распоряжается фиатом пользователя;
-- solver выполняет crypto/TOKEN purchase или внутренний расчётный leg как часть settlement;
-- Pay3Flow wallet/internal ledger используется для фиксации TOKEN-leg, proof и статусов;
-- второй solver leg доставляет деньги получателю через выбранный rail.
-
-Важно для агента: нельзя строить продукт на обмане пользователя. В UI можно не перегружать человека словами про инфраструктуру, но в условиях, подтверждении операции и compliance-документах должно быть прозрачно написано, что маршрут может использовать crypto/TOKEN settlement asset. Формулировка для продукта: "Pay3Flow подбирает маршрут обмена и расчёта; пользователь подтверждает условия, сумму, комиссию и способ исполнения".
-
-## 2. Главное Архитектурное Решение
-
-`fmatch` не заменяется Cow Protocol Services.
-
-Роли:
+## 3. Service responsibilities
 
 ```text
 backend/orderbook
-  -> создаёт и хранит exchange orders
-  -> отправляет задачу в fmatch
+  -> stores exchange orders and durable state
+  -> validates requests and idempotency
+  -> collects quotes and chooses the winner
+  -> owns settlement, proof, disputes, and audit history
 
 fmatch
-  -> ищет solver candidates через ActivityPub
-  -> возвращает candidates backend'у
-  -> не выбирает финальный route
-  -> не исполняет деньги
-
-backend/auction
-  -> собирает quotes от solver candidates
-  -> сравнивает quotes
-  -> выбирает лучший route
-  -> фиксирует winner
+  -> advertises and discovers solver capabilities through ActivityPub
+  -> returns candidates
+  -> does not choose the Pay3Flow winner or execute money
 
 solver
-  -> даёт quote
-  -> подтверждает readiness
-  -> исполняет TOKEN-leg и money-leg
-  -> присылает proof
-
-backend/settlement
-  -> ведёт статусную машину
-  -> проверяет proof
-  -> пишет audit trail
-  -> отдаёт статусы frontend'у
+  -> provides a quote
+  -> acknowledges readiness
+  -> executes the TOKEN-leg and money-leg
+  -> submits proof
 
 cowprotocol-services/
-  -> локальный reference
-  -> источник идей orderbook, auction, solver competition, settlement flow
-  -> не production-зависимость без отдельного решения
+  -> local reference for orderbook and solver-auction design
+  -> not a runtime dependency or replacement for fmatch
 ```
 
-## 3. Что Берём Из Cow Protocol Services И Meta Matcha
+Legacy `transactions`, `routes`, `acquirers`, and acquiring provider adapters
+remain fallback/compatibility code. New exchange work belongs under the
+`exchange_*` domain and `/api/exchange/orders`.
 
-Reference repo:
+## 4. Data and lifecycle rules
 
-```text
-https://github.com/cowprotocol/services
-```
+The first corridor is seed data: `AM/AMD -> RU/RUB`. Never hard-code that pair
+in core logic. Countries and currencies remain independent fields. Amounts are
+integer minor units. Order creation is idempotent by user and key.
 
-Meta Matcha reference:
-
-```text
-https://meta.matcha.xyz/
-```
-
-Локальный каталог:
+Order lifecycle:
 
 ```text
-cowprotocol-services/
+created -> discovering -> quoting -> quoted -> locked -> token_settling
+-> money_settling -> proof_pending -> done
 ```
 
-Текущий upstream commit клона:
+Failure branches are `failed`, `expired`, `cancelled`, and `disputed`.
+Disputes are resolved explicitly to `done` or `failed`; terminal statuses do
+not change in the normal flow. Every status transition is a guarded database
+update and produces an audit event where appropriate.
+
+Funding lifecycle:
 
 ```text
-3017e9400 solana-autopilot: hold in-flight orders out of auction cuts (#4937)
+not_started -> created -> shown_to_user -> user_confirmed
+-> solver_acknowledged -> received_by_solver
 ```
 
-Берём идеи:
+Settlement must not begin before the user confirms the terms and funding
+instruction. The consent record contains order ID, user ID, terms version,
+disclosure flag, and timestamp; never store PAN, CVC, or payment credentials in
+the consent or audit payload.
 
-- `orderbook`: как принимать пользовательские orders, валидировать их, хранить, отдавать состояние и не ломаться при повторных запросах.
-- `auction window`: как собрать несколько orders/quotes за короткое окно, чтобы не выбирать route слишком рано.
-- `solver competition`: как позволить нескольким solver'ам предложить решение.
-- `winner selection`: как выбрать лучший quote по цене, сроку, риску и лимитам.
-- `settlement lifecycle`: как вести статусы от создания order до финала.
-- `observability`: как логировать критичные финансовые шаги.
-- `tests`: как делать unit/smoke/e2e проверки для matching и settlement.
-- Meta Matcha UX: простая intent-форма `sell -> buy`, slippage, trade/bridge режимы, route details, intents mode.
-- Meta Matcha product pattern: пользователь видит простую форму обмена, а сложный routing/settlement спрятан в деталях маршрута и условиях.
+## 5. fmatch contract
 
-Важно: Meta Matcha не считать "биржей" в плане. Это reference для meta-aggregator / intent UX / route aggregation подхода.
+The backend sends FEP-0837 JSON-LD proposals through
+`ActivityPubService::submit_request("candidates", content)`. The legacy payment
+and exchange discovery paths share the same HTTP-signature and retry behavior.
+The exchange content includes order ID, source/target country and currency,
+methods, and source amount in minor units.
 
-Не переносим вслепую:
+Discovery fallback order:
 
-- Ethereum-only settlement как обязательное ядро.
-- ERC20 approvals/funding checks как единственный источник истины.
-- CoW smart contracts как обязательную часть MVP.
-- Их production-инфраструктуру целиком.
-- Всё, что не нужно для fiat/token exchange MVP.
+1. Live fmatch request.
+2. Redis candidate cache, with a short TTL.
+3. Local `exchange_solvers` registry filtered by corridor, rails, amount, and
+   active/discovered status.
 
-Решение по умолчанию для агента:
+An empty successful fmatch response is authoritative and must not be replaced
+with local candidates merely because it is empty. A transport failure may use a
+cache or local registry according to the endpoint contract.
+
+## 6. Quote and winner selection
+
+Use a small abstraction for quote sources:
 
 ```text
-Не копировать большие куски Cow в backend без анализа.
-Сначала написать docs/cow-services-analysis.md.
-Потом переносить только понятные идеи и маленькие паттерны.
+RouteQuoteSource
+  name() -> stable source name
+  health() -> source health
+  quote(request) -> normalized RouteQuote list
 ```
 
-## 3.1. Route Aggregation Research
+The source never creates an order, selects the global winner, or starts
+settlement. External raw responses are retained for audit/debug, but the
+normalized `RouteQuote` is the public contract.
 
-Перед тем как писать финальный production routing, агент должен изучить подходы route/liquidity aggregation у следующих систем:
+MVP quote sources:
 
-```text
-Meta Matcha
-0x
-1inch
-Barter
-Bebop
-Bitget
-Enso
-KyberSwap
-Lightning
-Nordstern
-OKX
-Velora
-Cow Protocol
-```
+- `MockRouteQuoteSource` with deterministic success, reject, and timeout cases;
+- at least a fast/low-limit and slow/better-rate fake solver profile.
 
-Что нужно выяснить по каждому:
+Possible later adapters include Velora, Bebop, 0x, 1inch, KyberSwap, Enso, or
+OKX. They remain disabled by default and are only TOKEN-leg/liquidity sources;
+they do not replace fmatch or own order lifecycle.
 
-- это intent protocol, solver auction, DEX aggregator, bridge aggregator, CEX/venue API или hybrid;
-- как пользователь формулирует intent/order;
-- кто ищет route;
-- кто исполняет route;
-- есть ли solver competition;
-- есть ли RFQ/private market makers;
-- поддерживается ли bridge/cross-chain;
-- как считаются slippage, fees, minimum received;
-- есть ли API/SDK, который можно использовать;
-- можно ли использовать как источник quotes для TOKEN-leg;
-- какие риски: custody, compliance, geo restrictions, API limits, sanctions, KYC.
+The MVP scoring model should be deterministic and include target amount, fees,
+ETA, risk, limits, manual-review penalties, expiration, and stable tie-breaks.
+The selected winner cannot change after `locked`.
 
-Deliverable:
+## 7. TOKEN-leg and money-leg rules
 
-```text
-docs/route-aggregation-research.md
-```
+Until the settlement asset is defined, TOKEN means only a mock ledger unit.
+Implement reserve, lock, release, and rollback with explicit audit events.
+Define what happens when one leg succeeds and the other fails. A proof may be
+a machine receipt, provider reference, or manual artifact in the MVP; invalid
+proof enters `disputed` rather than silently completing the order.
 
-В документе должна быть таблица:
+The product must describe the route honestly. It may simplify infrastructure
+language in the primary UI, but terms, confirmation, and compliance material
+must disclose that a route may use a TOKEN/crypto settlement asset and that the
+user initiates the fiat funding action.
 
-```text
-name
-category
-what_it_does
-how_it_routes
-how_it_executes
-api_or_sdk
-useful_for_pay3flow
-risks
-decision
-```
+## 8. Safety and launch gates
 
-Решения по умолчанию до завершения research:
+Before real money:
 
-- Не завязывать core backend на одного внешнего агрегатора.
-- Сделать abstraction `RouteQuoteSource`.
-- Для MVP оставить fake/mock quote sources.
-- Реальный TOKEN-leg later должен подключаться через adapter.
-- `fmatch` всё равно остаётся solver matcher для Pay3Flow solver candidates.
-- Внешние агрегаторы могут быть quote/liquidity sources внутри solver или backend adapter, но не заменяют весь Pay3Flow flow.
+- obtain corridor-specific legal advice and define regulated roles;
+- select KYC/AML, sanctions, source-of-funds, travel-rule, retention,
+  complaint, chargeback, and suspicious-activity requirements;
+- authenticate solvers and sign callbacks;
+- review custody, key management, reconciliation, and proof independence;
+- implement limits, manual review, alerting, four-eyes admin actions, and kill
+  switches;
+- test backups, rollback, incident response, and operator runbooks.
 
-## 4. Словарь
+Run `scripts/secret-audit.sh`, backend tests, frontend checks/build, the
+exchange smoke test, and Playwright before release. Development values from
+`.env.example` and `docker-compose.yml` are not production secrets.
 
-`Intent`: намерение пользователя. Например: "отправить 100 000 AMD из Армении, получатель должен получить RUB в России".
+## 9. Implementation phases
 
-`Order`: сохранённый intent в базе. Имеет id, user_id, суммы, валюты, страны, методы, status, deadline, idempotency_key.
+### EX-0 — Architecture
 
-`Solver`: исполнитель/поставщик ликвидности. Он может принять задачу, дать quote и провести settlement.
+- [x] Adopt solver-based exchange as the primary MVP direction.
+- [x] Keep fmatch as candidate matcher and acquiring as fallback.
+- [x] Document the CoW reference boundary and exchange domain.
 
-`Quote`: предложение solver'а: курс, комиссия, срок, лимиты, план исполнения, expires_at.
+### EX-1 — Reference research
 
-`Route`: выбранный quote + solver + конкретный план исполнения.
+- [x] Add the local CoW reference checkout.
+- [x] Inspect orderbook, autopilot, driver, and solver-competition patterns.
+- [x] Record build limitations and reuse decisions.
 
-`Связка`: live route candidate, собранный из двух частей: вход `AMD -> crypto` и выход `crypto -> RUB`. Связка может быть partial, если найден только вход или только идёт поиск выхода.
+### EX-2 — Domain model
 
-Важно для совместимости плана: `exchange_quotes` и quote API остаются storage/API-слоем для complete routes. Во frontend основной визуальной единицей является `связка`, потому что пользователь должен видеть живой поиск, partial routes и текущий best route, а не только финальный список quotes после ожидания.
+- [ ] Complete CRUD for corridors, orders, solvers, quotes, funding
+  instructions, settlements, proofs, and audit events.
+- [ ] Cover every transition with unit and integration tests.
+- [ ] Keep all amounts and limits in minor units.
 
-`Auction window`: короткое окно ожидания quotes. Для MVP default: 3 секунды.
+### EX-3 — Discovery and auction
 
-`TOKEN-leg`: внутренний расчётный шаг. В MVP это mock ledger, не реальные деньги.
+- [ ] Stabilize order create/read endpoints and idempotency behavior.
+- [ ] Connect fmatch discovery with cache and local fallback.
+- [ ] Implement bounded quote collection and deterministic winner selection.
+- [ ] Add a two-fake-solver smoke test.
 
-`Money-leg`: локальная доставка денег получателю через доступный rail.
+### EX-4 — Settlement
 
-`Proof`: доказательство исполнения: receipt, reference, webhook, файл, ручное подтверждение или machine-readable receipt.
+- [ ] Implement the mock ledger and explicit partial-failure behavior.
+- [ ] Add funding consent gate, proof verification, and disputes.
+- [ ] Prove happy and invalid-proof flows end to end.
 
-`Dispute`: спорная ситуация, когда proof невалиден, суммы не совпадают, одна нога зависла или получатель не подтвердил деньги.
+### EX-5 — Frontend and legacy isolation
 
-`Rail`: технический способ движения денег: карта, банк, кошелёк, cash-in/cash-out, эквайер, крипто-онрамп, внутренний ledger.
+- [ ] Show quotes, route details, fees, timing, terms, and history.
+- [ ] Keep acquiring paths behind fallback/compatibility boundaries.
+- [ ] Complete registration -> order -> quote -> settlement -> history E2E.
 
-## 5. Решения По Умолчанию
+### EX-6 — Production readiness
 
-Если агент не уверен, использовать эти решения:
-
-- Первый продуктовый коридор MVP: `AMD -> RUB`.
-- Точная запись первого коридора: `AM/AMD -> RU/RUB`.
-- `AM` = Armenia как страна, ISO 3166-1 alpha-2.
-- `AMD` = Armenian dram как валюта, ISO 4217.
-- `RU` = Russia как страна, ISO 3166-1 alpha-2.
-- `RUB` = Russian ruble как валюта, ISO 4217.
-- В коде всегда хранить страну и валюту отдельно: country не равен currency.
-- Этот коридор нельзя хардкодить в бизнес-логике. Он должен жить в конфиге, seed-данных, таблицах или тестовых fixtures.
-- Код должен быть generic по валютам и странам: `source_currency`, `target_currency`, `source_country`, `target_country`.
-- В MVP включён только один коридор через данные: Armenia/AMD -> Russia/RUB.
-- Публичный seed `exchange_pairs` для picker'а тоже должен начинаться с одной enabled связки: Armenia/AMD -> Russia/RUB. Большой банковский каталог пока не нужен; новые связки добавляются позже через БД/admin/config.
-- Новые валюты и страны позже добавляются через БД/admin/config без переписывания core logic.
-- TOKEN в MVP: mock ledger внутри backend.
-- Funding flow MVP: user -> Pay3Flow form -> solver -> Pay3Flow wallet/internal ledger -> solver -> recipient.
-- Pay3Flow не управляет фиатными деньгами пользователя: пользователь сам подтверждает funding/payment instruction, а backend хранит order/status/proof.
-- Crypto/TOKEN leg не должен быть "тайным". Для UX можно показывать простую форму перевода, но terms/consent обязаны раскрывать, что settlement может идти через TOKEN/crypto asset.
-- Реальные деньги в MVP на этом этапе не включать.
-- Первый solver: fake solver в backend или отдельном mock-сервисе.
-- Количество fake solver'ов для smoke: минимум 2.
-- Auction window: 3 секунды.
-- Quote TTL: 5 минут.
-- Redis TTL для candidates/quotes: 5 минут.
-- Финальный route выбирает backend, не `fmatch`.
-- `fmatch` возвращает candidates, не победителя.
-- Если `fmatch` недоступен: использовать Redis cache, если есть живая запись.
-- Если cache пустой: использовать локальный fallback solver registry.
-- Все денежные значения хранить в minor units: копейки/центы/драмы в целых.
-- Все изменения статусов делать guarded update через текущий status.
-- Все create-запросы делать идемпотентными через `Idempotency-Key`.
-- Все важные шаги писать в audit log.
-- Frontend уже считать почти готовым по форме. Главный оставшийся frontend work: находить/получать связки через backend/WS и показывать их в боковой панели.
-- Боковая панель связок должна показывать streaming results, а не только финальный winner.
-
-Правила автономной разработки:
-
-- Не задавать владельцу вопросы по деталям, которые можно безопасно решить самому.
-- Если есть 2-3 нормальных варианта, выбрать самый простой и расширяемый.
-- Если выбор влияет на реальные деньги, безопасность или закон, оставить safe default и описать TODO в docs.
-- Не блокировать работу из-за отсутствия реального провайдера, банка, TOKEN или юриста: использовать mock/stub слой.
-- После каждого значимого блока запускать тесты или smoke.
-- План считать выполненным только когда сервис можно пройти end-to-end на fake деньгах.
-- Теоретическая готовность к реальным переводам означает: архитектура, статусы, proof, audit, лимиты, kill switch и ручной review готовы, но реальные деньги включаются отдельным решением.
-
-## 6. Топология Сервисов
-
-```text
-frontend
-  -> backend
-      -> postgres
-      -> redis
-      -> fmatch      (ActivityPub solver discovery/matching)
-      -> solvers     (quotes / execution / proofs)
-
-cowprotocol-services/
-  локальный reference для изучения orderbook/solver/autopilot
-```
-
-Backend остаётся центром принятия решений.
-
-`fmatch`:
-
-- получает задачу на поиск solver'ов;
-- возвращает ranked или unordered candidates;
-- не отвечает за money movement;
-- не пишет наши orders;
-- не выбирает финального winner.
-
-Cow reference:
-
-- не является live-сервисом Pay3Flow;
-- изучается локально;
-- используется как образец.
-
-## 7. Главный Алгоритм MVP
-
-```text
-1. User creates exchange order: AM/AMD -> RU/RUB, amount=...
-2. Backend validates input
-3. Backend saves exchange_orders row with status=created
-4. Backend opens/uses order WS channel for live route events
-5. Backend sends solver discovery task to fmatch
-6. fmatch returns solver candidates
-7. Backend saves candidates or reads cached candidates
-8. Backend starts parallel search for entry legs: AMD from Armenian bank/P2P -> any crypto
-9. Each profitable or near-breakeven entry leg is emitted to WS as partial route
-10. For each found entry leg, backend immediately starts exit search: crypto -> RUB buyer/rail
-11. Backend does not wait for all entry legs before searching exits
-12. Backend emits every full candidate связка to WS with rate, fee, ETA, spread, status
-13. Backend keeps scoring candidates while auction/search window is open
-14. Backend filters invalid/expired quotes and impossible legs
-15. Backend picks current best route, but can update best route until locked
-16. Backend saves selected route and status=quoted
-17. User confirms selected quote and funding instruction
-18. Backend locks order and quote
-19. User funding/payment instruction goes to selected solver/rail
-20. Solver executes crypto/TOKEN purchase or internal TOKEN-leg
-21. TOKEN-leg is reflected in Pay3Flow wallet/internal ledger
-22. Solver executes money-leg to recipient
-23. Solver submits proof
-24. Backend verifies proof
-25. Backend finalizes done or disputed/failed
-26. Frontend receives search results and status through HTTP/WS
-```
-
-## 8. Scoring Algorithm Для Quotes
-
-Для MVP использовать простую deterministic формулу:
-
-```text
-score =
-  received_amount_score
-  - fee_penalty
-  - time_penalty
-  - risk_penalty
-  - manual_review_penalty
-```
-
-Правила:
-
-- Quote с истёкшим `expires_at` исключается.
-- Quote ниже минимальной суммы получателя исключается.
-- Solver со status не `active` исключается.
-- Solver выше лимита по сумме исключается.
-- Solver с risk_score выше лимита исключается.
-- Если два quote равны, выбрать solver с меньшим risk_score.
-- Если всё ещё равно, выбрать quote с более ранним `created_at`.
-
-Default веса:
-
-```text
-received_amount_score = target_amount_minor
-fee_penalty = total_fee_minor
-time_penalty = eta_minutes * 10
-risk_penalty = risk_score * 100
-manual_review_penalty = 5000, если route требует ручной проверки
-```
-
-Для smoke можно упростить:
-
-```text
-выбрать quote с максимальным target_amount_minor после комиссий,
-при равенстве выбрать меньший eta_minutes,
-при равенстве выбрать меньший risk_score.
-```
-
-## 9. Статусы
-
-Order status:
-
-```text
-created
-discovering
-quoting
-quoted
-locked
-token_settling
-money_settling
-proof_pending
-done
-failed
-expired
-cancelled
-disputed
-```
-
-Разрешённые переходы:
-
-```text
-created -> discovering
-discovering -> quoting
-discovering -> failed
-quoting -> quoted
-quoting -> failed
-quoting -> expired
-quoted -> locked
-quoted -> expired
-quoted -> cancelled
-locked -> token_settling
-token_settling -> money_settling
-token_settling -> disputed
-token_settling -> failed
-money_settling -> proof_pending
-money_settling -> disputed
-money_settling -> failed
-proof_pending -> done
-proof_pending -> disputed
-proof_pending -> failed
-disputed -> done
-disputed -> failed
-```
-
-Запрещено:
-
-- terminal status менять без отдельного admin/manual resolution;
-- перескакивать `created -> done`;
-- менять winner после `locked`, кроме dispute/manual resolution;
-- запускать settlement без locked quote.
-
-Terminal statuses:
-
-```text
-done
-failed
-expired
-cancelled
-```
-
-`disputed` не terminal: спор должен быть закрыт вручную в `done` или `failed`.
-
-## 10. Минимальная Модель БД
-
-### `exchange_orders`
-
-```text
-id uuid primary key
-user_id uuid not null
-idempotency_key text not null
-source_country text not null
-source_currency text not null
-source_amount_minor bigint not null
-source_method_type text not null
-source_method_ref text null
-target_country text not null
-target_currency text not null
-target_amount_min_minor bigint null
-target_method_type text not null
-target_method_ref text null
-funding_instruction_id uuid null
-funding_status text not null default 'not_started'
-status text not null
-deadline_at timestamptz null
-selected_quote_id uuid null
-failure_code text null
-failure_message text null
-created_at timestamptz not null
-updated_at timestamptz not null
-```
-
-Индексы:
-
-```text
-unique(user_id, idempotency_key)
-index(user_id, created_at desc)
-index(status, created_at)
-```
-
-### `exchange_solvers`
-
-```text
-id uuid primary key
-slug text unique not null
-actor_id text null
-handle text null
-display_name text not null
-status text not null
-countries jsonb not null
-currencies jsonb not null
-rails jsonb not null
-min_amount_minor bigint null
-max_amount_minor bigint null
-fee_model jsonb not null
-risk_score integer not null default 50
-last_seen_at timestamptz null
-created_at timestamptz not null
-updated_at timestamptz not null
-```
-
-Status:
-
-```text
-discovered
-active
-paused
-broken
-blocked
-```
-
-### `exchange_quotes`
-
-```text
-id uuid primary key
-order_id uuid not null
-solver_id uuid not null
-source_amount_minor bigint not null
-target_amount_minor bigint not null
-source_currency text not null
-target_currency text not null
-funding_method_type text not null
-requires_user_funding boolean not null default true
-rate numeric(24, 12) not null
-fee_minor bigint not null
-eta_minutes integer not null
-expires_at timestamptz not null
-status text not null
-settlement_plan jsonb not null
-risk_score integer not null
-score bigint null
-raw_response jsonb null
-created_at timestamptz not null
-updated_at timestamptz not null
-```
-
-Status:
-
-```text
-received
-valid
-invalid
-selected
-expired
-rejected
-```
-
-### `exchange_settlements`
-
-```text
-id uuid primary key
-order_id uuid not null
-quote_id uuid not null
-solver_id uuid not null
-status text not null
-token_leg_status text not null
-money_leg_status text not null
-funding_status text not null
-pay3flow_wallet_ref text null
-token_ledger_ref text null
-money_reference text null
-proof_id uuid null
-failure_code text null
-failure_message text null
-created_at timestamptz not null
-updated_at timestamptz not null
-```
-
-### `exchange_proofs`
-
-```text
-id uuid primary key
-settlement_id uuid not null
-solver_id uuid not null
-proof_type text not null
-proof_payload jsonb not null
-verification_status text not null
-verified_by text null
-verified_at timestamptz null
-created_at timestamptz not null
-```
-
-### `funding_instructions`
-
-```text
-id uuid primary key
-order_id uuid not null
-quote_id uuid not null
-solver_id uuid not null
-status text not null
-method_type text not null
-amount_minor bigint not null
-currency text not null
-destination_ref text not null
-expires_at timestamptz not null
-user_confirmed_at timestamptz null
-raw_payload jsonb not null
-created_at timestamptz not null
-updated_at timestamptz not null
-```
-
-Status:
-
-```text
-created
-shown_to_user
-user_confirmed
-solver_acknowledged
-received_by_solver
-expired
-cancelled
-failed
-```
-
-Правило: funding instruction описывает действие, которое пользователь подтверждает сам. Pay3Flow не должен автоматически списывать фиат или делать вид, что TOKEN-leg не существует.
-
-### `audit_events`
-
-```text
-id uuid primary key
-entity_type text not null
-entity_id uuid not null
-event_type text not null
-actor_type text not null
-actor_id text null
-payload jsonb not null
-created_at timestamptz not null
-```
-
-Каждый важный шаг пишет audit event.
-
-## 11. API Backend
-
-### User API
-
-Создать order:
-
-```text
-POST /api/exchange/orders
-Authorization: Bearer <jwt>
-Idempotency-Key: <uuid>
-```
-
-Body:
-
-```json
-{
-  "source_country": "AM",
-  "source_currency": "AMD",
-  "source_amount_minor": 10000000,
-  "source_method_type": "card",
-  "source_method_ref": "payment_method_id",
-  "target_country": "RU",
-  "target_currency": "RUB",
-  "target_amount_min_minor": 2000000,
-  "target_method_type": "bank_card",
-  "target_method_ref": "recipient_id",
-  "deadline_minutes": 30
-}
-```
-
-Response:
-
-```json
-{
-  "id": "uuid",
-  "status": "created",
-  "source_amount_minor": 10000000,
-  "source_currency": "AMD",
-  "target_currency": "RUB"
-}
-```
-
-Получить order:
-
-```text
-GET /api/exchange/orders/:id
-```
-
-Получить quotes:
-
-```text
-GET /api/exchange/orders/:id/quotes
-```
-
-Live route/search events:
-
-```text
-WS /api/exchange/orders/:id/live
-```
-
-События WS для MVP:
-
-```text
-order_status
-search_started
-entry_leg_found
-exit_search_started
-route_candidate_found
-best_route_updated
-route_rejected
-search_finished
-search_failed
-```
-
-Минимальный payload route candidate:
-
-```json
-{
-  "type": "route_candidate_found",
-  "order_id": "uuid",
-  "route_id": "uuid",
-  "status": "complete",
-  "source_amount_minor": 10000000,
-  "source_currency": "AMD",
-  "entry_asset": "USDT",
-  "entry_network": "ERC20",
-  "target_amount_minor": 2035000,
-  "target_currency": "RUB",
-  "spread_bps": 8,
-  "fee_minor": 12000,
-  "eta_minutes": 12,
-  "is_current_best": true,
-  "legs": [
-    {
-      "kind": "entry",
-      "from": "AMD",
-      "to": "USDT",
-      "provider": "am-p2p-mock",
-      "status": "found"
-    },
-    {
-      "kind": "exit",
-      "from": "USDT",
-      "to": "RUB",
-      "provider": "ru-buyer-mock",
-      "status": "found"
-    }
-  ]
-}
-```
-
-Подтвердить выбранный quote:
-
-```text
-POST /api/exchange/orders/:id/confirm
-```
-
-Ответ confirm должен вернуть funding instruction:
-
-```json
-{
-  "order_id": "uuid",
-  "quote_id": "uuid",
-  "funding_instruction": {
-    "id": "uuid",
-    "method_type": "card_or_bank_or_wallet",
-    "amount_minor": 10000000,
-    "currency": "AMD",
-    "expires_at": "2026-09-18T15:00:00Z",
-    "display_text": "Confirm funding for the selected exchange route"
-  }
-}
-```
-
-Подтвердить, что пользователь увидел и принял funding instruction:
-
-```text
-POST /api/exchange/orders/:id/funding/confirm
-```
-
-Отменить order:
-
-```text
-POST /api/exchange/orders/:id/cancel
-```
-
-История:
-
-```text
-GET /api/exchange/orders?limit=20&cursor=...
-```
-
-### Solver API
-
-MVP может быть internal/debug API:
-
-```text
-GET /api/solver/orders/open
-POST /api/solver/orders/:id/quotes
-POST /api/solver/settlements/:id/token-leg
-POST /api/solver/settlements/:id/money-leg
-POST /api/solver/settlements/:id/proofs
-POST /api/solver/funding/:id/ack
-```
-
-Позже solver API должен получить auth/signatures.
-
-### Debug API Для Smoke
-
-```text
-POST /api/debug/exchange/fake-solver/register
-POST /api/debug/exchange/orders/:id/run
-GET /api/debug/exchange/orders/:id/audit
-```
-
-Debug API должен быть выключаемым через env:
-
-```text
-ENABLE_DEBUG_ROUTES=false
-```
-
-## 12. Интеграция С fmatch
-
-Backend отправляет в `fmatch` задачу:
-
-```text
-Нужны solver'ы для:
-source_country=AM
-source_currency=AMD
-target_country=RU
-target_currency=RUB
-source_amount_minor=...
-target_method_type=...
-deadline=...
-```
-
-`fmatch` возвращает candidates:
-
-```json
-[
-  {
-    "solver_id": "solver-am-ru-fast",
-    "actor_id": "https://solver.example/actor",
-    "rank": 1,
-    "quality": 0.93,
-    "price_hint": null,
-    "metadata": {}
-  }
-]
-```
-
-Backend обязан:
-
-- сохранить candidates в Redis на 5 минут;
-- сопоставить candidate с локальным `exchange_solvers`;
-- отфильтровать inactive/broken/blocked solver'ов;
-- запросить quote только у допустимых solver'ов;
-- при недоступности `fmatch` использовать Redis cache;
-- если cache пустой, использовать local fallback registry.
-
-Важно:
-
-```text
-fmatch не выбирает winner.
-fmatch не исполняет settlement.
-fmatch не отвечает за proof.
-```
-
-## 13. Mock TOKEN Ledger
-
-Для MVP не нужен реальный токен. Нужен mock ledger.
-
-Таблицы:
-
-```text
-ledger_accounts
-ledger_entries
-ledger_locks
-```
-
-Операции:
-
-```text
-reserve(order_id, amount)
-lock(settlement_id, amount)
-release(settlement_id)
-rollback(settlement_id)
-```
-
-Правила:
-
-- Ledger должен быть идемпотентным.
-- Нельзя release без lock.
-- Нельзя double release.
-- Все операции пишут audit events.
-- Для smoke можно выдать fake solver'ам стартовый баланс.
-
-## 14. Proof Verification MVP
-
-Machine-check:
-
-- proof payload валидный JSON;
-- settlement_id совпадает;
-- solver_id совпадает;
-- amount/currency совпадают с quote;
-- reference не пустой;
-- proof не использован раньше.
-
-Manual-check:
-
-- если `proof_type=manual_receipt`, поставить `verification_status=pending`;
-- admin/debug endpoint может перевести в `verified` или `rejected`.
-
-Default для smoke:
-
-```text
-fake solver отправляет machine_receipt,
-backend автоматически verification_status=verified,
-order переходит в done.
-```
-
-## 15. Frontend MVP
-
-Минимальный frontend не должен быть маркетинговой страницей. Нужен рабочий кабинет.
-
-Важно: frontend MVP уже покрывает live read-only поиск связок и отображение найденных маршрутов в боковой панели. Дальнейшая работа относится к production settlement, расширению источников ликвидности и hardening, а не к базовой форме поиска.
-
-Страницы:
-
-- login/register;
-- new exchange order;
-- quotes/route selection через боковую панель связок;
-- order status;
-- history;
-- order details.
-
-На форме нового order:
-
-- source country;
-- source currency;
-- source amount;
-- source method;
-- target country;
-- target currency;
-- target method;
-- recipient;
-- checkbox/consent для условий маршрута и settlement asset;
-- submit.
-
-Показывать пользователю:
-
-- сколько отправляет;
-- сколько получатель получит;
-- комиссия;
-- курс;
-- ETA;
-- статус;
-- выбранный route;
-- funding instruction после выбора quote;
-- что Pay3Flow показывает маршрут и статус, но пользователь сам подтверждает funding/payment;
-- если disputed/failed, понятная причина.
-
-Боковая панель связок:
-
-- открывается/обновляется после отправки формы order;
-- подписывается на `WS /api/exchange/orders/:id/live`;
-- показывает partial candidates, когда найден вход `AMD -> crypto`, но ещё ищется выход;
-- показывает complete candidates, когда найден полный route `AMD -> crypto -> RUB`;
-- группирует варианты по промежуточному asset/network, например `USDT ERC20`, `ETH Ethereum`, `BTC Binance`, `SOL`;
-- показывает spread/profit/loss в процентах и bps;
-- явно отличает profitable, breakeven и small-loss route;
-- помечает текущий лучший route;
-- обновляет лучший route без перезагрузки страницы;
-- позволяет выбрать/подтвердить только complete route;
-- не блокирует UI ожиданием всех вариантов.
-
-Не показывать:
-
-- внутренние solver secrets;
-- полный PAN карты;
-- приватные actor keys;
-- raw proof, если он содержит чувствительные данные.
-- misleading текст вроде "мы просто переводим деньги напрямую", если route использует TOKEN/crypto settlement.
-
-### Реализованные frontend-улучшения
-
-- Live read-only поиск связок через GET /api/p2p/routes.
-- Автоматический выбор текущего лучшего complete route после поиска.
-- Сохранение суммы, refresh timeout, направления, коридора и выбранных банков в localStorage.
-- Восстановление обмена после перезагрузки: например, VTB -> Ameriabank не возвращается к дефолтному Sberbank -> Ameriabank.
-- Shareable URL формата #/swap/AMD/RUB?amount=100000; при открытии URL восстанавливаются валюты и сумма.
-- Компактный круговой индикатор refresh; при выключенном refresh статусный блок полностью скрывается.
-- Реальные favicon банков с fallback на инициалы, если внешний favicon недоступен.
-
-## 16. Безопасность И Комплаенс
-
-До реальных денег обязательно:
-
-- user auth работает;
-- solver auth работает;
-- лимиты по пользователю;
-- лимиты по solver'у;
-- лимиты по коридору;
-- audit trail;
-- kill switch;
-- manual review;
-- KYC/AML решение хотя бы на уровне документа;
-- secrets не в репозитории;
-- logs не содержат PAN/CVC/token secrets;
-- disputes можно закрывать вручную.
-- пользовательское согласие на funding/settlement terms сохранено;
-- crypto/TOKEN settlement раскрыт в terms/consent, даже если UI остаётся простым.
-
-Запреты:
-
-- не хранить CVC;
-- не отдавать полный PAN во frontend;
-- не логировать секреты;
-- не включать реальные деньги без kill switch;
-- не считать mock ledger реальным settlement.
-- не скрывать от пользователя, что route может использовать TOKEN/crypto settlement asset;
-- не писать в UI/доках, что Pay3Flow управляет фиатом пользователя, если по модели funding делает сам пользователь/solver.
-
-## 17. Фазы Работ
-
-## 17.0. Что Должно Быть, Чтобы Реализация Считалась Соответствующей Плану
-
-Этот раздел фиксирует разницу между "backend-модель частично реализована" и
-"продукт работает так, как описано в PLAN2". План нельзя считать выполненным,
-пока не выполнены все пункты ниже.
-
-### Backend live search/order flow
-
-- Должен существовать endpoint:
-
-```text
-WS /api/exchange/orders/:id/live
-```
-
-- Этот endpoint должен быть привязан именно к `exchange_order`, а не к старому
-  `/ws/rates` или `/api/payments`.
-- После создания order backend должен уметь запускать search/auction flow и
-  отправлять события в live channel:
-
-```text
-order_status
-search_started
-entry_leg_found
-exit_search_started
-route_candidate_found
-best_route_updated
-route_rejected
-search_finished
-search_failed
-```
-
-- События должны приходить по мере нахождения вариантов, без ожидания полного
-  завершения всех entry/exit searches.
-- Backend должен поддерживать partial route:
-
-```text
-AMD -> crypto найдено, crypto -> RUB ещё ищется
-```
-
-- Backend должен поддерживать complete route:
-
-```text
-AMD -> crypto -> RUB найдено
-```
-
-- Best route может обновляться до lock/confirm, но не после `locked`.
-- Старый `/ws/rates` может остаться legacy/fallback, но он не является
-  выполнением PLAN2 live exchange flow.
-
-### Backend route search semantics
-
-- Search должен быть fan-out:
-  - параллельно искать несколько entry legs `AMD -> any crypto`;
-  - сразу запускать exit search для найденной crypto;
-  - по каждой crypto параллельно искать несколько выходов `crypto -> RUB`;
-  - публиковать partial и complete candidates в WS.
-- `exchange_quotes` остаётся storage/API-слоем для complete routes.
-- Для live UI нужна отдельная модель route candidate/связки, даже если она
-  мапится на quote после complete route.
-- Mock exchange/live implementation для старого order/solver flow должна симулировать минимум такие связки:
-
-```text
-AMD -> USDT ERC20 -> RUB
-AMD -> ETH Ethereum -> RUB
-AMD -> BTC Binance -> RUB
-AMD -> SOL Solana -> RUB
-```
-
-- Отдельный read-only P2P search layer уже подключает реальные public advertisement endpoints
-  Binance, Bybit, OKX и Bitget; он не исполняет сделки и не заменяет mock settlement flow.
-
-### Frontend MVP flow
-
-- Frontend должен создавать новый exchange order через:
-
-```text
-POST /api/exchange/orders
-```
-
-- Frontend не должен считать основной flow через legacy:
-
-```text
-POST /api/payments
-GET /ws/rates
-```
-
-- После создания order frontend должен подписываться на:
-
-```text
-WS /api/exchange/orders/:id/live
-```
-
-- Боковая панель должна показывать именно связки:
-  - partial route: найден вход, выход ещё ищется;
-  - complete route: полный маршрут готов к выбору;
-  - intermediate asset/network: `USDT ERC20`, `ETH Ethereum`, `BTC Binance`,
-    `SOL Solana` и т.п.;
-  - spread/profit/loss в процентах и bps;
-  - fee, ETA, expected received amount;
-  - current best marker.
-- Пользователь может выбрать/подтвердить только complete route.
-- После выбора route frontend должен вызвать:
-
-```text
-POST /api/exchange/orders/:id/confirm
-```
-
-- Confirm должен показать funding instruction и consent.
-- Settlement не должен стартовать до:
-
-```text
-POST /api/exchange/orders/:id/funding/confirm
-```
-
-- UI должен явно сохранять/передавать согласие пользователя с условиями, где
-  раскрыто, что route может использовать TOKEN/crypto settlement asset.
-
-### Safety and control gates
-
-- Должен быть kill switch для всего exchange flow.
-- Должен быть kill switch по corridor/country pair.
-- Должен быть kill switch по solver.
-- Должны быть daily limits хотя бы на уровне MVP/config.
-- Должен быть manual review status/path.
-- Должен быть admin/manual dispute resolution path:
-
-```text
-disputed -> done
-disputed -> failed
-```
-
-- Должен быть документ:
-
-```text
-docs/exchange-risk-compliance.md
-```
-
-- Нельзя включать реальные деньги, пока эти gates не готовы.
-
-### End-to-end smoke acceptance
-
-Нужны smoke scripts/tests именно для нового exchange flow, не только для
-legacy `/api/payments`.
-
-Минимальные smoke cases:
-
-- register/login -> create exchange order -> discover solvers -> auction ->
-  selected quote;
-- confirm quote -> funding instruction created;
-- no funding consent -> settlement does not start;
-- funding consent -> token-leg -> money-leg -> proof -> done;
-- bad proof -> disputed;
-- disputed -> manual resolve done/failed;
-- fmatch down -> Redis cache/local fallback;
-- repeated `Idempotency-Key` -> same order;
-- disabled corridor -> clear error;
-- enabled `AM/AMD -> RU/RUB` -> full happy path;
-- Playwright smoke: login -> create exchange -> live routes -> choose complete
-  route -> funding consent -> status/history.
-
-Только после прохождения этих проверок можно писать, что "работает как в
-PLAN2".
-
-## Фаза EX-0 - Архитектурный Разворот
-
-- [x] EX-0.1. Зафиксировать решение: основной продукт теперь solver-based cross-border exchange, эквайеры - fallback/rail.
-- [x] EX-0.2. Обновить README под поток `Армения -> Pay3Flow -> TOKEN -> money -> Россия`.
-- [x] EX-0.3. Обновить глоссарий: intent, order, solver, quote, settlement, proof, dispute.
-- [x] EX-0.4. Убрать формулировки, которые говорят, что Cow заменяет `fmatch`.
-- [x] EX-0.5. Отметить старые этапы про эквайеров как legacy/fallback в основном roadmap.
-- [x] EX-0.6. Обновить архитектурные диаграммы отдельной схемой exchange-flow.
-
-Приёмка:
-
-- README ясно говорит, что `fmatch` остаётся matcher'ом solver'ов.
-- PLAN2 достаточно подробный, чтобы агент не спрашивал базовые вопросы.
-
-## Фаза EX-1 - Cow Protocol Services Как Reference
-
-- [x] EX-1.1. Склонировать `cowprotocol/services` в `cowprotocol-services/`.
-- [x] EX-1.2. Держать `cowprotocol-services/` в `.gitignore`.
-- [x] EX-1.3. Проверить сборку upstream локально и зафиксировать результат: сборка заблокирована окружением (`cargo` отсутствует, Docker socket недоступен текущему пользователю).
-- [x] EX-1.4. Записать команды сборки в `docs/cow-services-analysis.md`.
-- [x] EX-1.5. Изучить `orderbook`: API, модель order, статусы, storage.
-- [x] EX-1.6. Изучить `autopilot`: как двигается auction/matching.
-- [x] EX-1.7. Изучить `driver/solver`: как solver получает задачу и отдаёт решение.
-- [x] EX-1.8. Написать `docs/cow-services-analysis.md`.
-- [x] EX-1.9. Изучить `https://meta.matcha.xyz/` как reference intent UX: trade/bridge, sell/buy form, slippage, route details, intents mode.
-- [x] EX-1.10. Зафиксировать в `docs/cow-services-analysis.md`, что Cow = orderbook/solver reference, Meta Matcha = UX/route aggregation reference, `fmatch` = Pay3Flow solver matcher.
-
-Что написать в `docs/cow-services-analysis.md`:
-
-- какие crates смотрели;
-- какие endpoints у orderbook;
-- какие статусы есть в Cow;
-- что подходит Pay3Flow;
-- что не подходит Pay3Flow;
-- какие идеи переносим;
-- какие файлы/модули в Cow смотреть повторно при реализации.
-
-Приёмка:
-
-- Cow repo собирается или описано, почему не собирается.
-- Есть документ анализа.
-- В документе явно написано: Cow reference, `fmatch` matcher.
-
-## Фаза EX-1A - Route Aggregation Research
-
-- [x] EX-1A.1. Создать `docs/route-aggregation-research.md`.
-- [x] EX-1A.2. Изучить Meta Matcha: какую UX/intent модель можно повторить.
-- [x] EX-1A.3. Изучить 0x: Swap API, RFQ, route/liquidity model.
-- [x] EX-1A.4. Изучить 1inch: aggregation API, pathfinder, supported chains.
-- [x] EX-1A.5. Изучить Barter: категория, API, применимость.
-- [x] EX-1A.6. Изучить Bebop: RFQ/solver/quote model, API.
-- [x] EX-1A.7. Изучить Bitget: API/venue/liquidity role, KYC/custody risk.
-- [x] EX-1A.8. Изучить Enso: route API, DeFi routing model.
-- [x] EX-1A.9. Изучить KyberSwap: aggregator API, routing, fees.
-- [x] EX-1A.10. Изучить Lightning: уточнить, это Lightning Network или конкретный provider; описать только после проверки.
-- [x] EX-1A.11. Изучить Nordstern: уточнить категорию и применимость.
-- [x] EX-1A.12. Изучить OKX: DEX/CEX/Wallet APIs, routing, compliance/custody risk.
-- [x] EX-1A.13. Изучить Velora: aggregator/intent model, API.
-- [x] EX-1A.14. Сравнить всё с Cow Protocol подходом.
-- [x] EX-1A.15. Выбрать оптимальный подход для Pay3Flow MVP.
-- [x] EX-1A.16. Спроектировать abstraction `RouteQuoteSource`.
-- [x] EX-1A.17. Зафиксировать решение: какие источники quotes идут в MVP как mock, какие позже как real adapters.
-
-Приёмка:
-
-- Есть `docs/route-aggregation-research.md`.
-- Для каждого источника есть category, API/SDK, применимость, риски и decision.
-- В решении явно написано, что внешние aggregators не заменяют `fmatch`, а дают route/liquidity/quote source.
-- Для MVP выбран самый быстрый путь: fake/mock adapters + интерфейс для будущего подключения.
-- Агент может начать кодить `RouteQuoteSource` без вопросов к владельцу.
-
-## Фаза EX-2 - Домен И Миграции
-
-- [x] EX-2.1. Добавить enum/status-модели в Rust.
-- [x] EX-2.2. Добавить миграции: `exchange_orders`, `exchange_solvers`, `exchange_quotes`, `exchange_settlements`, `exchange_proofs`, `audit_events`.
-- [x] EX-2.3. Добавить repo layer для каждой таблицы.
-- [x] EX-2.4. Добавить guarded status transitions.
-- [x] EX-2.5. Добавить idempotency на create order.
-- [x] EX-2.6. Добавить unit tests для transition table.
-- [x] EX-2.7. Добавить `docs/exchange-domain.md`.
-- [x] EX-2.8. Добавить таблицу или seed-конфиг `exchange_corridors`: enabled corridor Armenia/AMD -> Russia/RUB.
-- [x] EX-2.9. Запретить создание order для disabled corridor, но сделать это через данные, а не через hardcoded `AMD`/`RUB` в коде.
-- [x] EX-2.10. Добавить таблицу `funding_instructions` и связать её с order/quote/solver.
-- [x] EX-2.11. Добавить поля funding status в order/settlement модели.
-
-Приёмка:
-
-- `cargo test` проходит по доменным тестам.
-- Нельзя сделать запрещённый переход статуса.
-- Повторный create с тем же `Idempotency-Key` возвращает тот же order.
-- AMD -> RUB работает как seed/config.
-- Добавление нового corridor требует только новых данных, а не изменения core logic.
-- Funding instruction создаётся только после selected quote.
-- Funding instruction не списывает деньги автоматически.
-
-## Фаза EX-3 - Orderbook API
-
-- [x] EX-3.1. Реализовать `POST /api/exchange/orders`.
-- [x] EX-3.2. Реализовать `GET /api/exchange/orders/:id`.
-- [x] EX-3.3. Реализовать `GET /api/exchange/orders`.
-- [x] EX-3.4. Реализовать `GET /api/exchange/orders/:id/quotes`.
-- [x] EX-3.5. Реализовать `POST /api/exchange/orders/:id/cancel`.
-- [x] EX-3.6. Подключить JWT ownership checks.
-- [x] EX-3.7. Добавить validation: amount > 0, currencies not empty, countries ISO-like, deadline sane.
-- [x] EX-3.8. Добавить tests для auth/ownership/idempotency.
-- [x] EX-3.9. Реализовать `POST /api/exchange/orders/:id/confirm`, который создаёт funding instruction.
-- [x] EX-3.10. Реализовать `POST /api/exchange/orders/:id/funding/confirm`, который фиксирует user consent.
-
-Приёмка:
-
-- Пользователь видит только свои orders.
-- Нельзя создать order с нулевой/отрицательной суммой.
-- Нельзя отменить чужой order.
-- Confirm возвращает funding instruction.
-- Без user funding confirmation settlement не стартует.
-
-## Фаза EX-4 - fmatch Solver Discovery
-
-- [x] EX-4.1. Описать payload задачи для `fmatch` (`docs/fmatch-exchange-discovery.md`).
-- [x] EX-4.2. Реализовать отправку discovery task из backend в `fmatch`.
-- [x] EX-4.3. Реализовать парсинг solver candidates из ответа.
-- [x] EX-4.4. Сопоставить candidates с `exchange_solvers`.
-- [x] EX-4.5. Добавить Redis cache на candidates, TTL 5 минут.
-- [x] EX-4.6. Добавить fallback: Redis cache -> local solver registry -> failed.
-- [x] EX-4.7. Добавить smoke: `fmatch` живой, возвращает candidates (`POST /api/exchange/orders/:id/discover`).
-- [x] EX-4.8. Добавить smoke: `fmatch` выключен, backend берёт cache/fallback (`POST /api/exchange/orders/:id/discover`).
-
-Приёмка:
-
-- `fmatch` участвует именно как matcher.
-- Backend не ждёт от `fmatch` финального winner.
-- При падении `fmatch` create order не ломает весь backend.
-
-## Фаза EX-5 - Solver API И Fake Solvers
-
-- [x] EX-5.1. Создать fake solver model.
-- [x] EX-5.2. Seed минимум двух fake solver'ов: `fast-low-limit` и `slow-better-rate`.
-- [x] EX-5.3. Реализовать internal solver quote interface.
-- [x] EX-5.3a. Реализовать trait/interface `RouteQuoteSource`: `quote(request) -> route quote`, `health()`, `name()`.
-- [x] EX-5.3b. Реализовать `MockRouteQuoteSource` для MVP.
-- [x] EX-5.3c. Не подключать real 0x/1inch/etc в MVP без research decision и env-gated adapter.
-- [x] EX-5.4. Реализовать `GET /api/solver/orders/open`.
-- [x] EX-5.5. Реализовать `POST /api/solver/orders/:id/quotes`.
-- [x] EX-5.6. Fake solver должен уметь вернуть quote success.
-- [x] EX-5.7. Fake solver должен уметь вернуть quote reject.
-- [x] EX-5.8. Fake solver должен уметь симулировать timeout.
-- [x] EX-5.9. Unit tests: quote validation, expiration, solver status.
-
-Приёмка:
-
-- Один order получает минимум два quote.
-- Invalid quote отбрасывается.
-- Timeout solver не валит весь auction.
-
-## Фаза EX-6 - Auction И Выбор Winner
-
-- [x] EX-6.1. Реализовать auction window 3 секунды.
-- [x] EX-6.2. Собрать quotes от candidates.
-- [x] EX-6.3. Отфильтровать expired/invalid quotes.
-- [x] EX-6.4. Посчитать score.
-- [x] EX-6.5. Выбрать winner.
-- [x] EX-6.6. Сохранить selected quote.
-- [x] EX-6.7. Перевести order в `quoted`.
-- [x] EX-6.8. Добавить deterministic tests на scoring.
-- [x] EX-6.9. Добавить tie-break tests.
-
-Приёмка:
-
-- При двух quotes выбирается ожидаемый winner.
-- При равных quotes tie-break стабильный.
-- Winner не меняется после `locked`.
-
-## Фаза EX-7 - Mock TOKEN Ledger
-
-- [x] EX-7.1. Добавить таблицы ledger.
-- [x] EX-7.2. Реализовать reserve.
-- [x] EX-7.3. Реализовать lock.
-- [x] EX-7.4. Реализовать release.
-- [x] EX-7.5. Реализовать rollback.
-- [x] EX-7.6. Добавить idempotency для ledger operations.
-- [x] EX-7.7. Добавить tests против double release/double rollback.
-
-Приёмка:
-
-- Нельзя release без lock.
-- Нельзя списать больше баланса fake solver'а.
-- Повтор операции не удваивает движение ledger.
-
-## Фаза EX-8 - Settlement И Proof
-
-- [x] EX-8.1. Реализовать создание `exchange_settlements` после confirm/lock.
-- [x] EX-8.2. Реализовать funding instruction lifecycle: created -> shown_to_user -> user_confirmed -> solver_acknowledged.
-- [x] EX-8.3. Реализовать token-leg execution через mock ledger после user funding confirmation.
-- [x] EX-8.4. Отразить TOKEN-leg в Pay3Flow wallet/internal ledger.
-- [x] EX-8.5. Реализовать money-leg fake execution.
-- [x] EX-8.6. Реализовать proof submit.
-- [x] EX-8.7. Реализовать proof verification.
-- [x] EX-8.8. Реализовать переход `proof_pending -> done`.
-- [x] EX-8.9. Реализовать failure paths.
-- [x] EX-8.10. Реализовать dispute paths.
-
-Приёмка:
-
-- Happy path order доходит до `done`.
-- Settlement не стартует до user funding confirmation.
-- Funding instruction сохраняется и видна в audit trail.
-- Bad proof переводит order в `disputed`.
-- Failed money-leg переводит order в `failed` или `disputed` по правилу.
-
-## Фаза EX-9 - Audit Trail И Observability
-
-- [x] EX-9.1. Все create/update/status события пишут `audit_events`.
-- [x] EX-9.2. Добавить correlation_id для order.
-- [x] EX-9.3. Логи структурированные.
-- [x] EX-9.4. Не логировать секреты и полные реквизиты.
-- [x] EX-9.5. Добавить debug endpoint для просмотра audit по order.
-
-Приёмка:
-
-- По одному order можно восстановить всю историю.
-- В логах нет CVC/PAN/secrets.
-
-## Фаза EX-10 - Frontend MVP
-
-- [x] EX-10.1. Проверить, что существующая страница создания exchange order покрывает ввод суммы и corridor AM/AMD -> RU/RUB.
-- [x] EX-10.2. Подключить боковую панель связок к live events order.
-- [x] EX-10.3. Показывать partial связки: найден вход `AMD -> crypto`, выход ещё ищется.
-- [x] EX-10.4. Показывать complete связки: найден полный route `AMD -> crypto -> RUB`.
-- [x] EX-10.5. Группировать связки по промежуточной crypto/network.
-- [x] EX-10.6. Live status/search через WebSocket, polling только как fallback.
-- [x] EX-10.7. Ошибки backend показываются понятно.
-- [x] EX-10.8. Русская локализация основных статусов.
-- [x] EX-10.9. Список доступных corridors тянуть с backend, не хардкодить валюты на frontend.
-- [x] EX-10.10. Для MVP backend отдаёт один enabled corridor: AMD -> RUB.
-- [x] EX-10.11. После выбора quote показать funding instruction и consent.
-- [x] EX-10.12. UI должен быть простым: пользователь видит перевод, сумму, курс, комиссию, ETA и условия; technical TOKEN details можно раскрывать в details/terms.
-- [x] EX-10.13. Боковая панель не ждёт окончания всего поиска: новые связки появляются по мере нахождения.
-- [x] EX-10.14. Пользователь может подтвердить только complete связку, partial route остаётся informational/loading.
-- [x] EX-10.15. Подключить read-only /api/p2p/routes для live-связок fiat -> asset -> fiat.
-- [x] EX-10.16. Автоматически выбирать лучший complete route после получения результатов.
-- [x] EX-10.17. Сохранять сумму, refresh timeout, коридор, направление и выбранные банки.
-- [x] EX-10.18. Восстанавливать сохранённый обмен после перезагрузки страницы.
-- [x] EX-10.19. Добавить shareable URL с направлением и суммой обмена.
-- [x] EX-10.20. Добавить favicon банков с безопасным fallback на инициалы.
-
-Приёмка:
-
-- Пользователь может пройти fake exchange flow из UI.
-- На мобильном форма не ломается.
-- UI не содержит зашитого списка будущих валют.
-- Пользователь не может запустить settlement без подтверждения funding instruction.
-- После ввода суммы frontend показывает live-поиск связок в боковой панели.
-- Сначала может появиться partial входной вариант, затем complete route.
-- Лучший route обновляется по WS без ручного refresh.
-
-## Фаза EX-11 - Safety Before Real Money
-
-- [x] EX-11.1. Документ `docs/exchange-risk-compliance.md`.
-- [x] EX-11.2. Kill switch по всему exchange flow.
-- [x] EX-11.3. Kill switch по country pair.
-- [x] EX-11.4. Kill switch по solver.
-- [x] EX-11.5. Daily limits.
-- [x] EX-11.6. Manual review status.
-- [x] EX-11.7. Admin/manual dispute resolution.
-- [x] EX-11.8. Secret audit.
-- [x] EX-11.9. Terms/consent документирует, что route может использовать TOKEN/crypto settlement asset.
-- [x] EX-11.10. Audit trail хранит факт user consent без хранения лишних sensitive данных.
-
-Приёмка:
-
-- Можно остановить весь flow без деплоя.
-- Можно заблокировать одного solver'а.
-- Dispute можно закрыть вручную.
-- Нельзя запустить route, если terms/consent не подтверждены.
-
-## Фаза EX-12 - End-to-end Smoke
-
-- [x] EX-12.1. Скрипт: register/login -> create order -> discover solver -> collect quotes.
-- [x] EX-12.2. Скрипт: choose winner -> lock -> token-leg -> money-leg -> proof -> done.
-- [x] EX-12.3. Скрипт: bad proof -> disputed -> manual resolve.
-- [x] EX-12.4. Скрипт: fmatch down -> Redis/local fallback.
-- [x] EX-12.5. Скрипт: repeated Idempotency-Key -> same order.
-- [x] EX-12.6. Скрипт: disabled corridor -> понятная ошибка.
-- [x] EX-12.7. Скрипт: enabled AMD -> RUB corridor -> полный happy path.
-- [x] EX-12.8. Playwright smoke: login -> create exchange -> quotes -> status -> history.
-- [x] EX-12.9. Скрипт: no funding consent -> settlement не стартует.
-- [x] EX-12.10. Скрипт: funding consent -> solver ack -> TOKEN-leg -> money-leg -> done.
-
-Приёмка MVP:
-
-```text
-Один пользователь создаёт order AM/AMD -> RU/RUB.
-Backend находит fake solver'ов через fmatch или fallback.
-Backend параллельно ищет входные связки AMD -> crypto.
-Backend сразу запускает поиск выхода crypto -> RUB для каждой найденной входной связки.
-Backend отправляет partial и complete связки во frontend через WS.
-Frontend показывает связки в боковой панели.
-Backend получает минимум два complete route/quotes.
-Backend выбирает winner.
-Пользователь подтверждает funding instruction.
-Settlement проходит через mock TOKEN ledger.
-Fake money-leg завершается proof.
-Order получает status=done.
-История показывает финальный результат.
-Audit trail показывает все шаги.
-```
-
-Финальная приёмка всего PLAN2:
-
-```text
-Сервис поднимается одной командой через docker compose.
-Backend health зелёный.
-Frontend открывается.
-Пользователь может зарегистрироваться/войти.
-Пользователь может создать exchange order для включённого corridor AMD -> RUB.
-Валюты и corridor приходят из backend, а не зашиты в frontend.
-Backend находит solver candidates через fmatch или fallback.
-Backend получает quotes.
-Backend выбирает winner.
-Funding instruction создана, показана пользователю и подтверждена.
-Settlement проходит через mock TOKEN ledger.
-Money-leg проходит через fake/manual rail.
-Proof проверяется.
-Order получает done.
-История показывает операцию.
-Audit trail полный.
-Повторный Idempotency-Key не создаёт дубль.
-Падение fmatch покрыто cache/fallback.
-Есть kill switch.
-Есть лимиты.
-Есть dispute/manual review.
-Есть тесты и smoke-скрипты.
-После этого сервис теоретически готов к реальным переводам: для боевого запуска останется подключить реальные rails/solver'ов, пройти юридический и комплаенс-чек, включить production secrets и лимиты.
-```
-
-## 17.1. Команды Проверки В Этом Окружении
-
-В текущем workspace обычный `cargo` может быть недоступен в shell напрямую, а
-верхний `flake.nix` относится к `nerdctl` и не содержит Rust toolchain.
-Использовать cargo через ad-hoc nix shell:
-
-```bash
-cd backend
-nix shell nixpkgs#cargo nixpkgs#rustc -c cargo check
-nix shell nixpkgs#cargo nixpkgs#rustc -c cargo test
-nix shell nixpkgs#cargo nixpkgs#rustc nixpkgs#rustfmt -c cargo fmt
-```
-
-## 18. Статус Выполнения
-
-Все фазы EX-0—EX-12 реализованы. Settlement и solver order flow остаются
-mock/fake, но read-only P2P route search работает через реальные публичные
-источники Binance, Bybit, OKX и Bitget. Включение реальных денег, выбор
-расчётного TOKEN/stablecoin, подключение production rails и production solver'ов
-требуют отдельного решения владельца, юридического и комплаенс-чека.
+- [ ] Complete legal/compliance review and operational controls.
+- [ ] Add signed solver callbacks, reconciliation, monitoring, backups, and
+  incident runbooks.
+- [ ] Enable real providers only through reviewed, env-gated adapters.

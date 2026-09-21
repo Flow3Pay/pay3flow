@@ -1,294 +1,131 @@
-# Cow Protocol Services Analysis
+# CoW Protocol Services analysis
 
-Дата: 2026-09-18.
+Date: 2026-09-18.
 
-Цель документа: зафиксировать, какие идеи из локального
-`cowprotocol-services/` стоит переносить в Pay3Flow, а какие остаются только
-reference. Cow не заменяет `fmatch`: в Pay3Flow `fmatch` остается matcher'ом
-solver candidates, а backend хранит orders, собирает quotes, выбирает winner и
-ведет settlement/proof lifecycle.
+This document records which ideas from the local `cowprotocol-services/`
+checkout are useful for Pay3Flow and which remain reference-only. CoW does not
+replace `fmatch`: fmatch discovers solver candidates, while the Pay3Flow
+backend stores orders, collects quotes, selects a winner, and owns the
+settlement/proof lifecycle.
 
-## Что было изучено
+## Reviewed material
 
-Локальный reference:
+- `cowprotocol-services/README.md` and `docs/ONBOARDING.md`;
+- orderbook API, order and quote endpoints, and OpenAPI definitions;
+- autopilot run loop and solvable-order filtering;
+- driver quote domain, run loop, and OpenAPI definitions;
+- Matcha UI and 0x documentation as external UX/API references.
 
-- `cowprotocol-services/README.md`
-- `cowprotocol-services/docs/ONBOARDING.md`
-- `cowprotocol-services/crates/orderbook/src/api.rs`
-- `cowprotocol-services/crates/orderbook/src/api/post_order.rs`
-- `cowprotocol-services/crates/orderbook/src/api/post_quote.rs`
-- `cowprotocol-services/crates/orderbook/openapi.yml`
-- `cowprotocol-services/crates/autopilot/src/run_loop.rs`
-- `cowprotocol-services/crates/autopilot/src/solvable_orders.rs`
-- `cowprotocol-services/crates/autopilot/openapi.yml`
-- `cowprotocol-services/crates/driver/README.md`
-- `cowprotocol-services/crates/driver/src/domain/quote.rs`
-- `cowprotocol-services/crates/driver/src/run.rs`
-- `cowprotocol-services/crates/driver/openapi.yml`
+## Local build status
 
-Внешний UX/API reference:
-
-- Matcha UI: https://matcha.xyz/
-- 0x Docs: https://docs.0x.org/docs/introduction/welcome
-
-## Сборка Cow Локально
-
-Команда, которую нужно использовать для быстрой проверки ключевых crates:
+The source-level check is:
 
 ```bash
 cd cowprotocol-services
 cargo check -p orderbook -p autopilot -p driver --all-targets
 ```
 
-Результат на текущей машине:
-
-```text
-zsh:1: command not found: cargo
-```
-
-Проверка Docker:
-
-```bash
-docker version
-```
-
-Результат:
-
-```text
-permission denied while trying to connect to the docker API at unix:///var/run/docker.sock
-```
-
-Вывод: локальная сборка Cow не была выполнена из-за ограничений окружения:
-локальный Rust toolchain недоступен (`cargo` отсутствует), а Docker daemon
-недоступен текущему пользователю. После установки Rust toolchain или выдачи
-доступа к Docker стоит повторить `cargo check` выше.
-
-Для полного playground-flow Cow README рекомендует:
+The check was not run in the original environment because `cargo` was not
+installed and the current user could not access the Docker socket. The upstream
+playground also requires a configured `ETH_RPC_URL`:
 
 ```bash
 cd cowprotocol-services
 docker compose -f playground/docker-compose.fork.yml up --build
 ```
 
-Этот путь требует настроенного `ETH_RPC_URL`, потому для Pay3Flow сейчас
-достаточно source-level анализа.
+Repeat these checks when the Rust toolchain and Docker permissions are
+available. This limitation does not affect the architectural conclusions below.
 
-## Orderbook
+## Orderbook lessons
 
-Главная роль Cow `orderbook`:
+The CoW orderbook accepts orders, validates constraints, persists lifecycle
+data, exposes status/history, and supplies eligible orders to solver tooling.
+Useful patterns for Pay3Flow are:
 
-- принимает пользовательские orders через HTTP;
-- валидирует подписи, app-data, funding/allowance, сроки и token constraints;
-- пишет orders и lifecycle data в Postgres;
-- отдает пользователю order/status/history;
-- отдает solvers/autopilot данные для auction.
+- a dedicated exchange-order API instead of extending the old payment endpoint;
+- typed request/response DTOs and consistent validation errors;
+- separate order, status, quote, and history endpoints;
+- idempotent creation and observable HTTP/status transitions.
 
-Полезные endpoints из `crates/orderbook/openapi.yml`:
+Do not copy Ethereum signatures, ERC-20 allowance checks, on-chain token
+validation, or the CoW order UID as Pay3Flow's domain model. Pay3Flow orders
+store country, currency, method, amount, deadline, and corridor data. Amounts
+are integer minor units and creation is idempotent by user and key.
 
-- `POST /api/v1/orders` - создание order;
-- `GET /api/v1/orders/{UID}` - чтение order;
-- `GET /api/v1/orders/{UID}/status` - чтение статуса;
-- `GET /api/v1/account/{owner}/orders` - история пользователя;
-- `POST /api/v1/quote` и `POST /api/v1/quote/stream` - расчет quote перед order;
-- `GET /api/v1/auction` - текущий auction snapshot;
-- `GET /api/v2/solver_competition/...` - просмотр solver competition data.
+## Autopilot and auction lessons
 
-Что переносим в Pay3Flow:
+Autopilot builds auctions from eligible orders, filters non-executable work,
+collects solutions, ranks them, and prevents in-flight orders from re-entering
+competition. Pay3Flow should adopt:
 
-- отдельный orderbook API для exchange orders вместо старого
-  `POST /api/payments`;
-- typed request/response DTO;
-- единый error mapping для validation ошибок;
-- запись order lifecycle в БД;
-- отдельные endpoints для order, status, quotes, history;
-- observability на уровне HTTP route + status + elapsed;
-- idempotent order creation.
+- a short quote window, currently planned as three seconds;
+- explicit rejection reasons for candidates and quotes;
+- deterministic scoring and stable tie-break rules;
+- an immutable winner after `locked`;
+- audit events for selected winners and rejected quotes.
 
-Что не переносим:
+Pay3Flow does not need block-based scheduling, EVM deadlines, on-chain event
+indexing, or calldata simulation. The backend receives fmatch candidates,
+collects quotes, and selects the winner. The fallback order is Redis cache,
+local solver registry, then failure.
 
-- Ethereum signatures как обязательную модель order;
-- ERC20 allowance/funding checks как источник истины;
-- on-chain token validation;
-- CoW order UID как доменную модель.
+## Driver and quote-source lessons
 
-Pay3Flow adaptation:
+The CoW driver separates quote production from orderbook storage and converts a
+solver solution into a quote. Pay3Flow should keep the same boundary:
 
-- `exchange_orders` хранят intent: country/currency/method/amount/deadline;
-- source/target country и currency всегда разные поля;
-- все суммы в minor units;
-- idempotency через `(user_id, idempotency_key)`;
-- validation сначала простая: amount > 0, ISO-like country/currency,
-  enabled corridor, sane deadline.
+```text
+solver discovery -> quote collection -> winner selection -> settlement
+```
 
-## Autopilot / Auction
+Use a `RouteQuoteSource` abstraction with `name`, `health`, and `quote` methods.
+The MVP implementation is `MockRouteQuoteSource`; later providers may become
+adapters for TOKEN-leg liquidity. An adapter timeout or rejection must not fail
+the complete auction, and raw provider data must remain separate from the
+normalized public quote.
 
-Главная роль Cow `autopilot`:
+Do not copy EVM transaction simulation, calldata encoding, settlement contracts,
+or chain-specific exclusivity into the fiat exchange core.
 
-- периодически строит auction из eligible orders;
-- фильтрует неисполняемые orders;
-- готовит данные для solver competition;
-- собирает bids/solutions;
-- ранжирует решения;
-- говорит победителю исполнять settlement;
-- индексирует on-chain events после settlement.
+## Lifecycle mapping
 
-Важные идеи из `run_loop.rs` и `solvable_orders.rs`:
-
-- auction строится не мгновенно на каждый order, а по окну/событию;
-- есть cache solvable orders;
-- фильтрация причин неисполнения явная и наблюдаемая;
-- winner selection отделен от solver discovery;
-- in-flight orders не должны повторно попадать в новые auctions;
-- competition metadata полезна для debug/audit.
-
-Что переносим в Pay3Flow:
-
-- auction window 3 секунды для сбора quotes;
-- явную фильтрацию quotes/candidates с причинами;
-- детерминированный scoring;
-- стабильные tie-break rules;
-- запрет менять winner после `locked`;
-- audit events для selected winner и rejected quotes.
-
-Что не переносим:
-
-- block-based run loop;
-- EVM settlement deadlines;
-- on-chain event indexing;
-- calldata/simulation model.
-
-Pay3Flow adaptation:
-
-- auction запускается для одного exchange order или небольшого batch позже;
-- `fmatch` возвращает candidates, но winner выбирает backend;
-- если `fmatch` недоступен: Redis cache -> local solver registry -> failed;
-- MVP scoring:
-  `target_amount_minor - fee_minor - eta_minutes * 10 - risk_score * 100 -
-  manual_review_penalty`.
-
-## Driver / Solver
-
-Главная роль Cow `driver`:
-
-- принимает auction/quote request;
-- вызывает solver engine;
-- выбирает или конвертирует solution в quote;
-- кодирует settlement;
-- публикует settlement, если solution победила.
-
-В `driver/src/domain/quote.rs` quote строится через synthetic single-order
-auction: driver вызывает solver, получает solutions и превращает выбранное
-solution в quote. Это полезная архитектурная граница: quote source не обязан
-быть тем же компонентом, который хранит orderbook.
-
-Что переносим в Pay3Flow:
-
-- trait/abstraction для источников quotes;
-- fake solver'ы как первые implementations;
-- разделение:
-  `solver discovery` -> `quote collection` -> `winner selection` -> `settlement`;
-- timeout/reject не валит весь auction;
-- solver-specific raw response хранится отдельно от normalized quote.
-
-Что не переносим:
-
-- EVM transaction simulation;
-- calldata encoding;
-- settlement contract buffers;
-- fast-path on-chain exclusivity.
-
-Pay3Flow adaptation:
-
-- добавить `RouteQuoteSource`:
-  `name()`, `health()`, `quote(request)`;
-- MVP implementation: `MockRouteQuoteSource`;
-- позже external aggregators могут стать adapters для TOKEN-leg quote/liquidity,
-  но они не заменяют `fmatch` и не становятся core backend.
-
-## Status / Lifecycle Mapping
-
-Cow lifecycle больше завязан на signed orders, auctions и on-chain settlement.
-Pay3Flow lifecycle должен быть fiat/token exchange specific:
+The Pay3Flow lifecycle is exchange-specific:
 
 ```text
 created -> discovering -> quoting -> quoted -> locked -> token_settling
 -> money_settling -> proof_pending -> done
 ```
 
-Failure/dispute branches:
+Failures and disputes branch to `failed`, `expired`, `cancelled`, or `disputed`
+as described in [`exchange-domain.md`](exchange-domain.md). Every transition
+must be a guarded database update using the current status. Terminal statuses
+must not change without an explicit manual-resolution path.
 
-```text
-discovering -> failed
-quoting -> failed | expired
-quoted -> expired | cancelled
-token_settling -> disputed | failed
-money_settling -> disputed | failed
-proof_pending -> disputed | failed
-disputed -> done | failed
-```
+## UX and API references
 
-Обязательное правило для EX-2: все transitions делаются guarded update через
-текущий status. Terminal statuses не меняются без admin/manual resolution.
+Matcha is useful as a product reference: start with a simple sell/receive
+intent, expose price, fees, timing, route details, and warnings, and keep
+provider selection behind route information. 0x is useful as a reference for
+optional trading API adapters.
 
-## Matcha / Meta Matcha UX Reference
+Pay3Flow should:
 
-Matcha useful pattern:
+- keep the first screen focused on the exchange intent;
+- display amount, rate, fee, ETA, selected route, and funding instruction;
+- disclose TOKEN/crypto settlement in terms, consent, and details;
+- load currencies and corridors from the backend rather than hard-coding them.
 
-- пользователь начинает с простой формы swap/search;
-- сложная маршрутизация скрыта за понятной ценой, сетью, route details и
-  предупреждениями;
-- route/liquidity aggregation воспринимается как backend capability, а не как
-  ручной выбор провайдера пользователем;
-- токены, networks, liquidity score и security warnings показываются как
-  decision support, но не перегружают основной intent.
+## Decisions
 
-0x useful API pattern:
+1. Keep CoW as a local reference, not a runtime dependency.
+2. Keep fmatch as the solver-candidate matcher.
+3. Keep winner selection and audit history in the Pay3Flow backend.
+4. Start new work with typed domain models, migrations, and transition tests.
+5. Keep real money and token integrations behind mock/stub implementations until
+   legal, compliance, custody, and proof decisions are complete.
+6. Keep `AM/AMD -> RU/RUB` in seed data rather than Rust conditionals.
 
-- единая trading API family для swap/gasless/cross-chain;
-- route/liquidity source может быть adapter за Pay3Flow solver или
-  `RouteQuoteSource`;
-- API/provider dependency должна быть optional и env-gated.
-
-Что переносим в Pay3Flow frontend:
-
-- первый экран должен быть рабочим кабинетом обмена, не landing;
-- intent-form: sell/source -> receive/target;
-- показывать amount, rate, fee, ETA, selected route и funding instruction;
-- TOKEN/crypto settlement раскрывать в terms/consent/details;
-- currencies/corridors тянуть из backend, не хардкодить на frontend.
-
-## Решения Для Pay3Flow
-
-1. Cow остается локальным reference, не runtime dependency.
-2. `fmatch` остается matcher'ом solver candidates.
-3. Backend выбирает winner и хранит audit trail.
-4. EX-2 начинается с typed domain models, migrations и transition tests.
-5. Все реальные money/token integrations остаются mock/stub до отдельного
-   legal/compliance решения.
-6. Первый corridor живет в seed/config/table: `AM/AMD -> RU/RUB`.
-7. Следующий coding target: `exchange_orders`, `exchange_solvers`,
-   `exchange_quotes`, `exchange_settlements`, `exchange_proofs`,
-   `funding_instructions`, `audit_events`, `exchange_corridors`.
-
-## Файлы Cow Для Повторного Просмотра
-
-При реализации EX-2/EX-3:
-
-- `crates/orderbook/src/api.rs`
-- `crates/orderbook/src/api/post_order.rs`
-- `crates/orderbook/src/api/get_order_status.rs`
-- `crates/orderbook/src/database/orders.rs`
-- `crates/orderbook/src/database/quotes.rs`
-
-При реализации EX-5/EX-6:
-
-- `crates/autopilot/src/run_loop.rs`
-- `crates/autopilot/src/solvable_orders.rs`
-- `crates/driver/src/domain/quote.rs`
-- `crates/driver/README.md`
-
-При реализации observability/debug:
-
-- `crates/orderbook/src/api/get_solver_competition_v2.rs`
-- `crates/orderbook/src/database/solver_competition_v2.rs`
-- `crates/autopilot/src/database/order_events.rs`
+Files worth revisiting for future work are the upstream orderbook API/database,
+autopilot run loop and solvable-order modules, driver quote domain, and solver
+competition persistence.

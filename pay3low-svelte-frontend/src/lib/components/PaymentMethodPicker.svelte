@@ -45,9 +45,9 @@
   });
 
   onDestroy(() => {
-    if (wasOpen) document.body.style.overflow = previousOverflow;
-    window.removeEventListener("keydown", onKeyDown);
-    if (focusTimer) window.clearTimeout(focusTimer);
+    if (typeof document !== "undefined" && wasOpen) document.body.style.overflow = previousOverflow;
+    if (typeof window !== "undefined") window.removeEventListener("keydown", onKeyDown);
+    if (typeof window !== "undefined" && focusTimer) window.clearTimeout(focusTimer);
   });
 
   function normalizeSearch(value: string) {
@@ -117,7 +117,7 @@
                   {@const isSelected = selected?.id === method.id && (method.kind !== "wallet" || network?.id === selectedNetwork?.id)}
                   <button type="button" role="option" aria-selected={isSelected} class="methodRow" data-selected={isSelected || undefined} on:click={() => onSelect(method, network)}>
                     <span class="methodLogo" style:background-color={logo(method) ? "transparent" : method.color} aria-hidden="true">
-                      <span>{method.initials}</span>{#if logo(method)}<img src={logo(method) ?? ""} alt="" on:error={hideBrokenImage} />{/if}
+                      <span>{method.initials}</span>{#if logo(method)}<img src={logo(method) ?? ""} alt="" width="42" height="42" loading="lazy" decoding="async" on:error={hideBrokenImage} />{/if}
                     </span>
                     <span class="methodCopy">
                       <span class="methodName">{method.name}</span>

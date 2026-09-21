@@ -1,213 +1,182 @@
 # Pay3Flow
 
-Трансграничные обменные платежи с комиссией ниже, чем SWIFT.
+Pay3Flow is an experimental cross-border exchange platform. It turns a user
+intent into an exchange order, discovers eligible solvers, compares quotes,
+collects explicit funding consent, and records settlement proofs.
 
-## Идея
+The current implementation is an MVP with a mock TOKEN ledger and fake/local
+solvers. It is not production-ready payment infrastructure and must not be
+used to process real funds without a separate legal, compliance, security, and
+operational review.
 
-Получаем платёжный intent пользователя → подбираем solver'ов и ликвидность →
-проводим две локальные денежные ноги через участников сети →
-фиксируем статус, комиссии, подтверждения и спорные ситуации.
+## Product model
 
-Целевой поток:
+The primary flow is a solver-based exchange rather than a provider picker:
 
 ```text
-Армения → Pay3Flow → TOKEN exchange → money exchange → Россия
+user intent -> exchange order -> solver discovery -> quote auction
+             -> selected route -> funding instruction -> settlement -> proof
 ```
 
-Старый контур через эквайеров остаётся как fallback/исторический слой, но
-новая целевая архитектура строится вокруг orderbook + solver competition
-по модели CoW Protocol.
+The first target corridor is `AM/AMD -> RU/RUB`, but country and currency are
+data fields and the domain model is designed for additional corridors.
 
-## Роли Cow и fmatch
+The settlement model has two conceptual legs:
 
-`fmatch` остаётся нашим рабочим matcher'ом solver'ов: через ActivityPub он
-находит подходящих исполнителей, принимает/отдаёт offers и возвращает
-кандидатов.
+1. `TOKEN-leg`: a reserve, transfer, or internal accounting step. The MVP uses
+   a mock ledger.
+2. `money-leg`: local delivery to the recipient through the selected rail.
 
-`cowprotocol-services/` нужен как reference-архитектура, а не замена `fmatch`.
-Из CoW берём идеи orderbook, auction window, solver competition, выбор
-победителя, settlement/status/proof flow. В Pay3Flow эти идеи адаптируются
-так: backend хранит orders, `fmatch` ищет solver'ов, backend собирает quotes
-и выбирает маршрут.
+The user must see and accept the route, amount, fees, timing, and any TOKEN or
+crypto settlement asset involved. Pay3Flow must never present a multi-leg
+route as an undisclosed direct fiat transfer.
 
-## Микросервисы
+## Service topology
 
-| Сервис | Каталог | Стек | Описание |
-|--------|---------|------|----------|
-| `pay3low-svelte-frontend` | `pay3low-svelte-frontend/` | SvelteKit + TypeScript | Веб-интерфейс |
-| `backend` | `backend/` | Rust (Axum, WebSocket, Postgres, Redis) | Ядро: auth, intents, маршрутизация, статусы, споры |
-| `cow-services` | `cowprotocol-services/` | Rust | Референс CoW Protocol Services: orderbook, auction/solver flow, settlement patterns |
-| `fmatch` | `fmatch/` | Rust (Axum, sqlx) | Федеративный discovery/matching solver'ов и участников сети |
-
-> `cowprotocol-services/` должен быть локальной копией
-> `https://github.com/cowprotocol/services` для изучения и адаптации, а не
-> прямой production-зависимостью без аудита.
-
-## Архитектура: топология сервисов
+| Service | Directory | Stack | Responsibility |
+| --- | --- | --- | --- |
+| Web frontend | `pay3low-svelte-frontend/` | SvelteKit + TypeScript | Exchange form, quotes, route details, status and history |
+| Backend | `backend/` | Rust, Axum, PostgreSQL, Redis | Auth, orders, discovery, auction, settlement state and API |
+| fmatch | `fmatch/` | Rust, Axum, ActivityPub | Federated solver discovery and candidate matching |
+| CoW reference | `cowprotocol-services/` | Rust | Local reference for orderbook and solver-auction patterns; not a production dependency |
 
 ```mermaid
 graph LR
-    client["Клиент<br/>(Browser)"]
-    frontend["pay3low-svelte-frontend<br/>:3000<br/>SvelteKit + TS"]
-    backend["backend<br/>:8080<br/>Rust + Axum + WS"]
-    postgres["postgres<br/>:5432<br/>Postgres"]
-    redis["redis<br/>:6379<br/>Redis"]
-    cow["cow-services<br/>local reference<br/>orderbook / solver flow"]
-    fmatch["fmatch<br/>:7277<br/>Rust + Axum"]
-    fmatch_db["fmatch-postgres<br/>:5432"]
-    typesense["fmatch-typesense<br/>:8108"]
-    solvers["Solvers<br/>fiat / token liquidity"]
-
-    client <-->|"HTTP / WS"| frontend
-    frontend -->|"REST API"| backend
-    backend --> postgres
-    backend --> redis
-    backend -. изучить / адаптировать .-> cow
-    backend <-->|"ActivityPub<br/>inbox / outbox"| fmatch
-    backend <-->|"quotes / execution / proof"| solvers
-    fmatch --> fmatch_db
-    fmatch --> typesense
+    client[Browser] --> frontend[Frontend :3000]
+    frontend -->|REST / WebSocket| backend[Backend :8080]
+    backend --> postgres[(PostgreSQL)]
+    backend --> redis[(Redis)]
+    backend <-->|ActivityPub discovery| fmatch[fmatch :7277]
+    fmatch --> fmatchdb[(fmatch PostgreSQL)]
+    fmatch --> typesense[(Typesense)]
+    backend -->|quotes and settlement| solvers[Solvers / liquidity rails]
 ```
 
-## Архитектура: exchange-flow
+`fmatch` returns candidates; it does not select the final Pay3Flow winner and
+does not own settlement. The backend remains the orderbook, quote collector,
+scoring engine, and settlement state machine. Acquiring adapters and the old
+`transactions/routes` flow remain available as legacy or fallback rails.
 
-```mermaid
-graph LR
-    intent["User intent<br/>AM/AMD -> RU/RUB"]
-    orderbook["backend/orderbook<br/>exchange_orders"]
-    fmatch["fmatch<br/>solver discovery"]
-    auction["backend/auction<br/>quotes + scoring"]
-    solver["solver<br/>TOKEN-leg + money-leg"]
-    ledger["mock TOKEN ledger"]
-    proof["proof verification<br/>audit trail"]
-    frontend["frontend<br/>status + history"]
+## Quick start
 
-    intent --> orderbook
-    orderbook --> fmatch
-    fmatch -->|"candidates, not winner"| auction
-    auction -->|"quote requests"| solver
-    auction -->|"selected route"| orderbook
-    orderbook -->|"funding instruction"| frontend
-    frontend -->|"user funding confirmation"| orderbook
-    orderbook --> solver
-    solver --> ledger
-    solver --> proof
-    proof --> orderbook
-    orderbook --> frontend
-```
-
-Эквайеры, старый `transactions/routes` контур и acquiring provider adapters
-остаются legacy/fallback rail. Новый MVP строится вокруг `exchange_orders`,
-solver candidates, quotes, selected route, funding instruction, mock TOKEN
-ledger, money-leg и proof.
-
-## Поток данных: exchange order
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant К as Клиент
-    participant FE as frontend
-    participant BE as backend
-    participant DB as postgres
-    participant FM as fmatch
-    participant S as Solver
-
-    К->>FE: Создать перевод Армения → Россия
-    FE->>BE: POST /api/exchange/orders
-    BE->>DB: Записать exchange_order (status=created)
-    BE->>FM: Найти solver candidates
-    FM-->>BE: Candidates only
-    BE->>S: Запросить quotes
-    S-->>BE: Rate, fee, ETA, settlement plan
-    BE->>DB: Выбрать route, status=quoted
-    FE->>BE: POST /api/exchange/orders/:id/confirm
-    BE-->>FE: Funding instruction
-    FE->>BE: POST /api/exchange/orders/:id/funding/confirm
-    BE->>S: TOKEN-leg + money-leg execution
-    S-->>BE: Proof
-    BE->>DB: Verify proof, status=done/disputed/failed
-    BE-->>К: WebSocket: статус обновлён
-```
-
-## Поток данных: кратко
-
-```text
-Клиент
-  │
-  ▼
-┌──────────┐  POST /api/exchange/orders  ┌──────────┐
-│ frontend │ ───────────────────────────▶│ backend  │
-└──────────┘                      └────┬─────┘
-                                       │ 1. Записать exchange_order
-                                       │ 2. Найти solver candidates
-                                       ▼
-                                 ┌──────────┐
-                                 │  fmatch  │ ← ActivityPub inbox/outbox
-                                 └────┬─────┘
-                                      │ 3. Вернуть candidates, не winner
-                                      │ 4. Backend auction / quotes / winner
-                                      ▼
-                                 ┌──────────┐
-                                 │ backend  │
-                                 └────┬─────┘
-                                      │ 5. Funding instruction + user consent
-                                      │ 6. Mock TOKEN-leg + money-leg + proof
-                                      ▼
-                                 ┌──────────┐
-                                 │ Solver   │ (ликвидность)
-                                 └──────────┘
-```
-
-## Быстрый старт
+Requirements: Docker Compose, `curl`, and `jq` for the smoke test.
 
 ```bash
 docker compose up -d --build
-curl -sS http://localhost:8080/health
+curl -fsS http://localhost:8080/health
+curl -fsS http://localhost:7277/health
 ```
 
-Проверить живой read-only поиск P2P-связок по нескольким активам:
+Open the frontend at <http://localhost:3000>.
+
+Run the exchange smoke test after the services are healthy:
+
+```bash
+./scripts/exchange-flow.sh
+```
+
+The smoke test covers corridor validation, idempotent order creation, fmatch
+discovery or fallback, quote selection, the consent gate, proof handling,
+disputes, kill switches, audit history, and order history.
+
+For a local frontend-only workflow, see
+[`pay3low-svelte-frontend/README.md`](pay3low-svelte-frontend/README.md). For
+development and testing conventions, see [`docs/development.md`](docs/development.md).
+
+## Useful API endpoints
+
+The API is still evolving. The most useful MVP endpoints are:
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/health` | Backend health check |
+| `POST` | `/api/auth/register` | Register a demo user |
+| `POST` | `/api/auth/login` | Log in with the demo code flow |
+| `GET` | `/api/exchange/corridors` | List enabled exchange corridors |
+| `POST` | `/api/exchange/orders` | Create an exchange order |
+| `GET` | `/api/exchange/orders/:id` | Read an order and its current state |
+| `POST` | `/api/exchange/orders/:id/discover` | Discover solver candidates |
+| `POST` | `/api/exchange/orders/:id/auction` | Collect quotes and select a route |
+| `POST` | `/api/exchange/orders/:id/confirm` | Lock a selected quote and show funding instructions |
+| `POST` | `/api/exchange/orders/:id/funding/confirm` | Record explicit user consent and start the MVP settlement flow |
+| `POST` | `/api/exchange/orders/:id/proof` | Submit a settlement proof |
+| `GET` | `/api/exchange/orders/:id/live` | Stream order route updates over WebSocket |
+| `GET` | `/api/p2p/routes` | Read-only multi-leg P2P route search |
+
+See [`docs/api-overview.md`](docs/api-overview.md) for request examples and
+the complete route families.
+
+## P2P route search
+
+The P2P search is read-only. It looks for routes such as
+`AMD -> intermediary asset -> RUB`, checks limits and completion data, and
+streams or ranks complete routes. It does not create orders on external
+platforms, authenticate to them, or collect full card details.
 
 ```bash
 curl -G 'http://localhost:8080/api/p2p/routes' \
   --data-urlencode 'source_fiat=AMD' \
   --data-urlencode 'target_fiat=RUB' \
   --data-urlencode 'source_amount=100000' \
-  --data-urlencode 'intermediary_assets=USDT,USDC,BTC,ETH,BNB,SOL,TRX,TON,DOGE,LTC,DAI,FDUSD,XRP,ADA,DOT,LINK,AVAX,MATIC,BCH,NEAR,APT,ATOM,UNI,SUI' \
+  --data-urlencode 'intermediary_assets=USDT,USDC,BTC,ETH,BNB,SOL,TRX,TON' \
   --data-urlencode 'min_orders=20' \
   --data-urlencode 'min_completion_rate=0.9'
 ```
 
-Алгоритм параллельно собирает пазл `AMD -> asset -> RUB`, проверяет лимиты и
-ликвидность обеих P2P-ног и ранжирует полные связки по ожидаемой сумме RUB.
-Подробности: [`docs/p2p-search.md`](docs/p2p-search.md).
+Details are in [`docs/p2p-search.md`](docs/p2p-search.md) and the source policy
+is documented in [`docs/public-p2p-sources.md`](docs/public-p2p-sources.md).
 
-## Структура
+## Repository layout
 
 ```text
 pay3flow/
-├── pay3low-svelte-frontend/ # SvelteKit + TypeScript
-├── backend/       # Rust: Axum + WS + ActivityPub + Postgres + Redis
-├── cowprotocol-services/ # локальный reference CoW Protocol Services
-├── fmatch/        # матчер (отдельный репозиторий)
-├── docs/          # документация (API, схемы, глоссарий)
-├── scripts/       # утилиты (health-check и т.д.)
+├── backend/                    # Rust API, domain logic and migrations
+├── fmatch/                     # ActivityPub solver matcher
+├── cowprotocol-services/       # Local upstream reference checkout
+├── pay3low-svelte-frontend/    # SvelteKit web application
+├── docs/                       # Architecture, API, operations and domain docs
+├── scripts/                    # Smoke, health and secret-audit scripts
 ├── docker-compose.yml
-└── .github/       # CI
+└── LICENSE                     # GNU AGPL v3 or later
 ```
 
-## Порты
+## Development ports
 
-| Сервис | Порт | Назначение |
-|--------|------|------------|
-| `pay3low-svelte-frontend` | `3000` | Веб-интерфейс |
-| `backend` | `8080` | REST API + WebSocket |
-| `postgres` | `5435` | PostgreSQL (наш backend) |
-| `redis` | `6379` | Кэш quotes/candidates |
-| `fmatch` | `7277` | ActivityPub-матчер |
-| `fmatch-postgres` | `5433` | PostgreSQL (fmatch) |
-| `fmatch-typesense` | `8108` | Поиск (Typesense) |
+| Service | Host port | Purpose |
+| --- | ---: | --- |
+| Frontend | `3000` | SvelteKit application |
+| Backend | `8080` | REST API, ActivityPub and WebSocket endpoints |
+| Backend PostgreSQL | `5435` | Pay3Flow database |
+| Redis | `6379` | Cache and short-lived quote data |
+| fmatch | `7277` | ActivityPub matcher |
+| fmatch PostgreSQL | `5433` | fmatch database |
+| Typesense | `8108` | fmatch search index |
 
-## Лицензия
+## Documentation map
 
-Пока не определена.
+- [`docs/README.md`](docs/README.md) — documentation index and reading paths.
+- [`docs/architecture.md`](docs/architecture.md) — service boundaries and data flow.
+- [`docs/development.md`](docs/development.md) — local development and verification.
+- [`docs/configuration.md`](docs/configuration.md) — environment variables and secrets.
+- [`docs/deployment.md`](docs/deployment.md) — deployment checklist and production blockers.
+- [`docs/api-overview.md`](docs/api-overview.md) — API route families and examples.
+- [`docs/exchange-domain.md`](docs/exchange-domain.md) — tables, invariants and states.
+- [`docs/exchange-risk-compliance.md`](docs/exchange-risk-compliance.md) — safety gates.
+- [`docs/backend-to-fmatch.org`](docs/backend-to-fmatch.org) — ActivityPub request contract.
+- [`docs/fmatch-api.md`](docs/fmatch-api.md) — fmatch surfaces and activity types.
+- [`docs/fmatch-offer-schema.md`](docs/fmatch-offer-schema.md) — solver offer format.
+- [`docs/p2p-search.md`](docs/p2p-search.md) — read-only P2P route search.
+- [`docs/route-aggregation-research.md`](docs/route-aggregation-research.md) — future quote sources.
+- [`docs/roadmap-cow.md`](docs/roadmap-cow.md) — CoW-style migration roadmap.
+- [`docs/glossary.md`](docs/glossary.md) — domain vocabulary.
+
+## License
+
+Pay3Flow is licensed under the GNU Affero General Public License, version 3 or
+any later version (`AGPL-3.0-or-later`). See [`LICENSE`](LICENSE).
+
+The AGPL requires recipients who convey covered modified or derivative works,
+including network-accessible modified versions, to receive the corresponding
+source under the same license terms. It does not automatically relicense every
+independent program that merely communicates with Pay3Flow; consult the license
+text and qualified legal counsel for a specific distribution or integration.

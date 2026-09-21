@@ -210,6 +210,12 @@ button {
 }
 
 @media (max-width: 640px) {
+  /* Keep the first mobile paint cheap: the decorative layers are not content. */
+  .appShell::before,
+  .appShell::after {
+    display: none;
+  }
+
   .siteFooter {
     width: calc(100% - 32px);
     flex-direction: column;

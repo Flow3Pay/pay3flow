@@ -24,8 +24,8 @@
     }
   });
   onDestroy(() => {
-    if (wasOpen) document.body.style.overflow = previousOverflow;
-    window.removeEventListener("keydown", onKeyDown);
+    if (typeof document !== "undefined" && wasOpen) document.body.style.overflow = previousOverflow;
+    if (typeof window !== "undefined") window.removeEventListener("keydown", onKeyDown);
   });
 </script>
 

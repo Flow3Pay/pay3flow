@@ -1,4 +1,4 @@
-import { API_BASE_URL, wsUrl } from "./api";
+import { apiUrl, wsUrl } from "./api";
 
 export interface ExchangeCorridor {
   id: string;
@@ -198,7 +198,7 @@ async function request<T>(
   headers.set("Accept", "application/json");
   if (init.body) headers.set("Content-Type", "application/json");
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  const response = await fetch(new URL(path, API_BASE_URL), { ...init, headers });
+  const response = await fetch(apiUrl(path), { ...init, headers });
   if (!response.ok) {
     const payload = (await response.json().catch(() => null)) as
       | { error?: string; message?: string }
@@ -210,7 +210,7 @@ async function request<T>(
 
 export async function authenticate(email: string, code: string): Promise<string> {
   const body = JSON.stringify({ email, code });
-  const login = await fetch(new URL("/api/auth/login", API_BASE_URL), {
+  const login = await fetch(apiUrl("/api/auth/login"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body,
