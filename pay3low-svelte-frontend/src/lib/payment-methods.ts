@@ -118,6 +118,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     kind: "bank",
     color: "#0a52bd",
     initials: "VT",
+    iconUrl: "/icons/assets/vtb.webp",
     p2pQuery: "VTB",
   },
   {
@@ -130,6 +131,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     color: "#21a038",
     initials: "SB",
     popular: true,
+    iconUrl: "/icons/assets/sberbank.webp",
     p2pQuery: "Sberbank",
   },
   {
@@ -142,6 +144,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     color: "#ffdd2d",
     initials: "TB",
     popular: true,
+    iconUrl: "/icons/assets/tbank.webp",
     p2pQuery: "T-Bank",
   },
   {
@@ -154,6 +157,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     color: "#ef3124",
     initials: "AB",
     popular: true,
+    iconUrl: "/icons/assets/alfabank.webp",
     p2pQuery: "Alfa-Bank",
   },
   {
@@ -165,6 +169,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     kind: "bank",
     color: "#0a52bd",
     initials: "VT",
+    iconUrl: "/icons/assets/vtb.webp",
     p2pQuery: "VTB",
   },
   {
@@ -176,6 +181,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     kind: "bank",
     color: "#006db7",
     initials: "GP",
+    iconUrl: "/icons/assets/gazprombank.webp",
     p2pQuery: "Gazprombank",
   },
   {
@@ -187,6 +193,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     kind: "bank",
     color: "#ffe500",
     initials: "RB",
+    iconUrl: "/icons/assets/raiffeisenbank.webp",
     p2pQuery: "Raiffeisenbank",
   },
   {
@@ -198,6 +205,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     kind: "bank",
     color: "#005bff",
     initials: "OZ",
+    iconUrl: "/icons/assets/ozonbank.webp",
     p2pQuery: "Ozon Bank",
   },
 ];

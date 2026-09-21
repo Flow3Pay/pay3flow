@@ -4,7 +4,6 @@
   import { FALLBACK_NETWORK, fetchNetworks, type CryptoNetwork } from "$lib/networks";
   import { assetIcon, venueIcon } from "$lib/icons";
   import { CRYPTO_ASSETS, DIGITAL_ASSETS, paymentMethodFavicon, paymentMethodsFor, type PaymentMethod } from "$lib/payment-methods";
-  import NetworkPicker from "./NetworkPicker.svelte";
   import SidePanel from "./SidePanel.svelte";
 
   type RefreshSeconds = 0 | 5 | 15 | 30 | 60;
