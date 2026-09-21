@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { RouteCandidate } from "$lib/exchange";
-  import { assetIcon, venueIcon } from "$lib/icons";
+  import { assetIcon, networkIcon, venueIcon } from "$lib/icons";
 
   export let routes: RouteCandidate[];
   export let selectedRouteId: string | null;
@@ -77,7 +77,14 @@
                         {:else}
                           <span class="workflowIcon" aria-hidden="true"><img src={step.iconUrl ?? assetIcon(step.currency)} alt="" width="15" height="15" loading="lazy" decoding="async" /></span>
                         {/if}
-                        <span>{assetLabel(step.currency)}{step.network ? ` · ${step.network}` : ""}</span>
+                        <span>{assetLabel(step.currency)}</span>
+                        {#if step.network}
+                          <span class="workflowNetwork" aria-label={`Network: ${step.network}`}>
+                            <span aria-hidden="true">·</span>
+                            <span class="workflowNetworkIcon" aria-hidden="true"><img src={networkIcon(step.network)} alt="" width="14" height="14" loading="lazy" decoding="async" /></span>
+                            <span>{step.network}</span>
+                          </span>
+                        {/if}
                       </span>
                       {#if step.provider}
                         <span class="workflowVenue"><span aria-hidden="true">(</span>{#if VENUE_ICONS[step.provider.toLowerCase()]}<span class="workflowVenueIcon" aria-hidden="true"><img src={VENUE_ICONS[step.provider.toLowerCase()]} alt="" width="12" height="12" loading="lazy" decoding="async" on:error={(event) => fallbackVenueIcon(event, step.provider ?? "")} /></span>{/if}<span>{venueName(step.provider)}</span><span aria-hidden="true">)</span></span>
@@ -362,6 +369,31 @@
 
 .workflowAsset {
   gap: 4px;
+}
+
+.workflowNetwork {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 3px;
+}
+
+.workflowNetworkIcon {
+  display: inline-grid;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.workflowNetworkIcon img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .workflowIcon,

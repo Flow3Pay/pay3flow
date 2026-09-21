@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { afterUpdate, onMount, onDestroy } from "svelte";
   import { fetchCorridors, fetchP2pRoutes, type ExchangeCorridor, type RouteCandidate } from "$lib/exchange";
   import { FALLBACK_NETWORK, fetchNetworks, type CryptoNetwork } from "$lib/networks";
   import { assetIcon, venueIcon } from "$lib/icons";
@@ -43,7 +43,9 @@
   let lastUpdatedAt: number | null = null;
   let clock = Date.now();
   let error: string | null = null;
-  let settingsElement: HTMLDivElement;
+  let settingsWasOpen = false;
+  let previousOverflow = "";
+  let previousOverscrollBehavior = "";
   let preferencesLoaded = false;
   let urlReady = false;
   let requestId = 0;
@@ -191,7 +193,8 @@
   }
   function toggleSource(source: P2pSource) { initialSearchReady = true; selectedSources = selectedSources.includes(source) ? (selectedSources.length === 1 ? selectedSources : selectedSources.filter((item) => item !== source)) : [...selectedSources, source]; resetResults(); }
   function toggleAsset(asset: string) { initialSearchReady = true; selectedIntermediaryAssets = selectedIntermediaryAssets.includes(asset) ? selectedIntermediaryAssets.filter((item) => item !== asset) : [...selectedIntermediaryAssets, asset]; resetResults(); }
-  function onDocumentMouseDown(event: MouseEvent) { if (settingsOpen && settingsElement && !settingsElement.contains(event.target as Node)) settingsOpen = false; }
+  function closeSettings() { settingsOpen = false; }
+  function onSettingsKeyDown(event: KeyboardEvent) { if (event.key === "Escape") closeSettings(); }
   function hideBrokenImage(event: Event) {
     const image = event.currentTarget as HTMLImageElement;
     image.style.display = "none";
@@ -231,8 +234,22 @@
       if (shared && sharedCorridor?.source_currency === shared.targetCurrency && sharedCorridor.target_currency === shared.sourceCurrency) directionReversed = true; else if (savedDirection != null) directionReversed = savedDirection === "true";
       urlReady = true;
     }).catch((cause: Error) => error = cause.message);
-    document.addEventListener("mousedown", onDocumentMouseDown);
     clockTimer = window.setInterval(() => clock = Date.now(), 1000);
+  });
+  afterUpdate(() => {
+    if (settingsOpen === settingsWasOpen) return;
+    settingsWasOpen = settingsOpen;
+    if (settingsOpen) {
+      previousOverflow = document.body.style.overflow;
+      previousOverscrollBehavior = document.body.style.overscrollBehavior;
+      document.body.style.overflow = "hidden";
+      document.body.style.overscrollBehavior = "none";
+      window.addEventListener("keydown", onSettingsKeyDown);
+    } else {
+      document.body.style.overflow = previousOverflow;
+      document.body.style.overscrollBehavior = previousOverscrollBehavior;
+      window.removeEventListener("keydown", onSettingsKeyDown);
+    }
   });
   onDestroy(() => {
     controller?.abort();
@@ -240,22 +257,28 @@
     if (refreshTimer) clearInterval(refreshTimer);
     if (clockTimer) clearInterval(clockTimer);
     if (initialSearchTimer) clearTimeout(initialSearchTimer);
-    if (typeof document !== "undefined") document.removeEventListener("mousedown", onDocumentMouseDown);
+    if (typeof document !== "undefined" && settingsWasOpen) {
+      document.body.style.overflow = previousOverflow;
+      document.body.style.overscrollBehavior = previousOverscrollBehavior;
+    }
+    if (typeof window !== "undefined") window.removeEventListener("keydown", onSettingsKeyDown);
   });
 </script>
 
 <section class="shell" id="transfer">
   <div class="hero"><h1>Move money. <span>Keep more.</span></h1><p>Stop spending hours searching for an exchange.</p></div>
   <div class="workspace">
-    <div class="card">
+    <div class:settingsActive={settingsOpen} class="card">
       <div class="cardTop">
         <div class="modeTabs" aria-label="Exchange mode"><button type="button" class="modeActive">Bridge</button><button type="button" disabled>History</button></div>
         <div class="cardActions">
           <button type="button" class="refreshButton" on:click={startSearch} disabled={!hasAmount || searching} aria-label="Refresh routes now"><svg class:refreshSpin={searching} width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M16.2 7.1A6.8 6.8 0 1 0 16.7 12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /><path d="M13.1 3.8h3.6v3.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
-          <div class="settingsWrap" bind:this={settingsElement}>
-            <button type="button" class="settingsButton" on:click={() => settingsOpen = !settingsOpen} aria-expanded={settingsOpen} aria-label="Route refresh settings"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 6.8a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4Z" stroke="currentColor" stroke-width="1.6" /><path d="M16.2 11.3a6.5 6.5 0 0 0 0-2.6l1.5-1.1-1.8-3.1-1.8.8a6.7 6.7 0 0 0-2.2-1.3L11.7 2H8.3L8 4a6.7 6.7 0 0 0-2.2 1.3L4 4.5 2.2 7.6l1.5 1.1a6.5 6.5 0 0 0 0 2.6l-1.5 1.1L4 15.5l1.8-.8A6.7 6.7 0 0 0 8 16l.3 2h3.4l.3-2a6.7 6.7 0 0 0 2.2-1.3l1.8.8 1.8-3.1-1.6-1.1Z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
+          <div class="settingsWrap">
+            <button type="button" class="settingsButton" on:click={() => settingsOpen = !settingsOpen} aria-haspopup="dialog" aria-expanded={settingsOpen} aria-label="Route refresh settings"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 6.8a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4Z" stroke="currentColor" stroke-width="1.6" /><path d="M16.2 11.3a6.5 6.5 0 0 0 0-2.6l1.5-1.1-1.8-3.1-1.8.8a6.7 6.7 0 0 0-2.2-1.3L11.7 2H8.3L8 4a6.7 6.7 0 0 0-2.2 1.3L4 4.5 2.2 7.6l1.5 1.1a6.5 6.5 0 0 0 0 2.6l-1.5 1.1L4 15.5l1.8-.8A6.7 6.7 0 0 0 8 16l.3 2h3.4l.3-2a6.7 6.7 0 0 0 2.2-1.3l1.8.8 1.8-3.1-1.6-1.1Z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
             {#if settingsOpen}
-              <div class="settingsMenu" role="dialog" aria-label="Refresh settings">
+              <div class="settingsBackdrop" on:mousedown={closeSettings} role="presentation">
+                <div class="settingsMenu" role="dialog" aria-modal="true" aria-label="Refresh settings" tabindex="-1" on:mousedown|stopPropagation>
+                <div class="settingsModalHeader"><span class="settingsSheetHandle" aria-hidden="true"></span><button type="button" class="settingsClose" on:click={closeSettings} aria-label="Close route settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button></div>
                 <div class="settingsHead"><div><strong>Auto-refresh</strong><span>Keep market routes current</span></div><span class={refreshSeconds ? "onBadge" : "offBadge"}>{refreshSeconds ? "On" : "Off"}</span></div>
                 <div class="refreshOptions">{#each REFRESH_OPTIONS as seconds}<button type="button" aria-pressed={refreshSeconds === seconds} on:click={() => { refreshSeconds = seconds; settingsOpen = false; }}>{seconds === 0 ? "Off" : `${seconds}s`}</button>{/each}</div>
                 <div class="sourceSettings"><span class="sourceSettingsLabel">Search exchanges</span><div class="sourceOptions exchangeOptions" aria-label="Exchanges to search">{#each P2P_SOURCES as source}{@const enabled = selectedSources.includes(source.id)}<button type="button" class:sourceOptionActive={enabled} class="sourceOption" aria-pressed={enabled} on:click={() => toggleSource(source.id)}><span class="sourceOptionIcon" aria-hidden="true"><img src={source.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackSourceIcon(event, source.id)} /></span>{source.label}</button>{/each}</div></div>
@@ -264,6 +287,7 @@
                   {#each INTERMEDIARY_ASSETS as asset}{@const enabled = selectedIntermediaryAssets.includes(asset)}<button type="button" class:sourceOptionActive={enabled} class="sourceOption" aria-pressed={enabled} on:click={() => toggleAsset(asset)}><span class="intermediaryAssetIcon" aria-hidden="true"><img src={intermediaryIcon(asset)} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={fallbackAssetIcon} /></span>{asset}</button>{/each}
                 </div></div>
                 <p>Search also runs automatically 650ms after you change the amount, bank or intermediary.</p>
+                </div>
               </div>
             {/if}
           </div>
@@ -479,21 +503,75 @@
   position: relative;
 }
 
+.settingsBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 17, 14, 0.52);
+  backdrop-filter: blur(12px) saturate(115%);
+  -webkit-backdrop-filter: blur(12px) saturate(115%);
+  animation: backdropIn 0.2s ease-out;
+  touch-action: none;
+}
+
 .settingsMenu {
-  position: absolute;
-  top: calc(100% + 9px);
-  right: 0;
-  z-index: 80;
-  width: 310px;
-  max-height: min(680px, calc(100vh - 32px));
+  position: relative;
+  width: min(100%, 560px);
+  max-height: min(720px, 92vh);
   overflow-y: auto;
   padding: 17px;
-  border: 1px solid var(--color-border);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.97);
-  box-shadow: var(--shadow-pop);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-card);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 30px 80px rgba(17, 20, 18, 0.24);
   backdrop-filter: blur(24px);
-  animation: popIn 0.18s ease;
+  animation: dialogIn 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+  overscroll-behavior: contain;
+  touch-action: auto;
+}
+
+.settingsModalHeader {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.settingsClose {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--color-text-soft);
+  transition: background 0.14s ease, transform 0.14s ease;
+}
+
+.settingsClose:hover {
+  background: var(--color-panel);
+  transform: translateX(1px);
+}
+
+.settingsSheetHandle {
+  display: none;
+}
+
+@keyframes backdropIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes dialogIn {
+  from { opacity: 0; transform: translateY(16px) scale(0.975); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* The card owns the stacking context so its modal can cover the workspace. */
+.card.settingsActive {
+  z-index: 1200;
 }
 
 .settingsHead {
@@ -1340,15 +1418,6 @@
     font-size: 36px;
   }
 
-  .settingsMenu {
-    position: fixed;
-    top: auto;
-    right: 12px;
-    bottom: 12px;
-    left: 12px;
-    width: auto;
-  }
-
   .marketBar {
     gap: 10px;
   }
@@ -1842,6 +1911,39 @@
     border-radius: 13px;
   }
 
+  .settingsBackdrop {
+    place-items: end center;
+    padding: 0;
+  }
+
+  .settingsMenu {
+    width: 100%;
+    max-height: 94vh;
+    padding: 10px 16px calc(18px + env(safe-area-inset-bottom));
+    border-radius: 25px 25px 0 0;
+    animation: settingsSheetIn 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .settingsModalHeader {
+    min-height: 30px;
+    justify-content: space-between;
+  }
+
+  .settingsSheetHandle {
+    display: block;
+    width: 38px;
+    height: 5px;
+    margin: 0 auto;
+    border-radius: var(--radius-pill);
+    background: var(--color-border-strong);
+  }
+
+  .settingsClose {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+  }
+
   .moneyPanel {
     min-height: 178px;
   }
@@ -1862,6 +1964,11 @@
   .methodControls .networkButton {
     flex: 0 0 auto;
   }
+}
+
+@keyframes settingsSheetIn {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* Dark theme: graphite surfaces with the existing lime route accents. */
