@@ -2,7 +2,7 @@
   import { afterUpdate, onMount, onDestroy } from "svelte";
   import { fetchCorridors, fetchP2pRoutes, type ExchangeCorridor, type RouteCandidate } from "$lib/exchange";
   import { FALLBACK_NETWORK, fetchNetworks, type CryptoNetwork } from "$lib/networks";
-  import { assetIcon, venueIcon } from "$lib/icons";
+  import { assetIcon, networkIcon, venueIcon } from "$lib/icons";
   import { CRYPTO_ASSETS, DIGITAL_ASSETS, paymentMethodFavicon, paymentMethodsFor, type PaymentMethod } from "$lib/payment-methods";
   import SidePanel from "./SidePanel.svelte";
 
@@ -311,7 +311,7 @@
         <div class="methodControls"><button type="button" class="methodTrigger" on:click={() => void openMethodPicker("source")} aria-label={`Select sending ${sourceMethod?.kind === "wallet" ? "asset" : "bank"}: ${sourceMethod?.name ?? "none"}`}>
           <span class="methodAvatar" style:background-color={paymentMethodFavicon(sourceMethod) ? "transparent" : sourceMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(sourceMethod)}<img src={paymentMethodFavicon(sourceMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{:else}<span>{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{/if}</span>
           <span class="methodText"><strong>{sourceMethod?.name ?? "Select bank"}</strong><small>{sourceMethod?.kind === "wallet" ? `${sourceMethod.currency} · ${sourceNetwork?.name ?? "Loading networks…"}` : corridor ? locationLabel(sourceCountry, sourceCurrency) : "Unavailable"}</small></span><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
-        </button>{#if sourceMethod?.kind === "wallet" && sourceNetwork}<div class="networkControl"><button type="button" class="networkButton" on:click={() => void openNetworkPicker("source")} aria-haspopup="dialog"><span class="networkDot" aria-hidden="true">♦</span><span class="networkCopy"><small>Network</small><strong>{sourceNetwork.name}</strong></span><span class="networkChevron" aria-hidden="true">⌄</span></button></div>{/if}</div>
+        </button>{#if sourceMethod?.kind === "wallet" && sourceNetwork}<div class="networkControl"><button type="button" class="networkButton" on:click={() => void openNetworkPicker("source")} aria-haspopup="dialog"><span class="networkDot" aria-hidden="true"><img src={networkIcon(sourceNetwork.name)} alt="" width="18" height="18" loading="lazy" decoding="async" /></span><span class="networkCopy"><small>Network</small><strong>{sourceNetwork.name}</strong></span><span class="networkChevron" aria-hidden="true">⌄</span></button></div>{/if}</div>
         <div class="walletSupport"><span>Supported wallets</span><div><b>◈</b><b>◉</b><b>W</b><small>+ more</small></div></div>
       </div>
       <div class="flowBridge"><span class="bridgeLine" aria-hidden="true"></span><button type="button" class:bridgeIconReversed={directionReversed} class="bridgeIcon" on:click={swapDirection} aria-label="Swap sender and recipient" title="Swap sender and recipient"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M10 4v12m0 0-4-4m4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></button></div>
@@ -321,7 +321,7 @@
         <div class="methodControls"><button type="button" class="methodTrigger" on:click={() => void openMethodPicker("target")} aria-label={`Select recipient ${targetMethod?.kind === "wallet" ? "asset" : "bank"}: ${targetMethod?.name ?? "none"}`}>
           <span class="methodAvatar" style:background-color={paymentMethodFavicon(targetMethod) ? "transparent" : targetMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(targetMethod)}<img src={paymentMethodFavicon(targetMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{:else}<span>{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{/if}</span>
           <span class="methodText"><strong>{targetMethod?.name ?? "Select bank"}</strong><small>{targetMethod?.kind === "wallet" ? `${targetMethod.currency} · ${targetNetwork?.name ?? "Loading networks…"}` : corridor ? locationLabel(targetCountry, targetCurrency) : "Unavailable"}</small></span><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
-        </button>{#if targetMethod?.kind === "wallet" && targetNetwork}<div class="networkControl"><button type="button" class="networkButton" on:click={() => void openNetworkPicker("target")} aria-haspopup="dialog"><span class="networkDot" aria-hidden="true">♦</span><span class="networkCopy"><small>Network</small><strong>{targetNetwork.name}</strong></span><span class="networkChevron" aria-hidden="true">⌄</span></button></div>{/if}</div>
+        </button>{#if targetMethod?.kind === "wallet" && targetNetwork}<div class="networkControl"><button type="button" class="networkButton" on:click={() => void openNetworkPicker("target")} aria-haspopup="dialog"><span class="networkDot" aria-hidden="true"><img src={networkIcon(targetNetwork.name)} alt="" width="18" height="18" loading="lazy" decoding="async" /></span><span class="networkCopy"><small>Network</small><strong>{targetNetwork.name}</strong></span><span class="networkChevron" aria-hidden="true">⌄</span></button></div>{/if}</div>
         <div class="walletSupport"><span>Supported wallets</span><div><b>◈</b><b>◉</b><b>W</b><small>+ more</small></div></div>
       </div>
       {#if refreshSeconds > 0}<div class="marketBar"><div class="marketState"><span class="refreshProgress" role="img" aria-label={secondsUntilRefresh === null ? "Auto-refresh is off" : `Refresh in ${secondsUntilRefresh} seconds`}><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle class="refreshTrack" cx="9" cy="9" r="7" pathLength="100" /><circle class="refreshFill" cx="9" cy="9" r="7" pathLength="100" style:stroke-dashoffset={`${100 - refreshProgress}`} /></svg></span><div><span>{lastUpdatedAt ? `Updated ${Math.max(0, Math.floor((clock - lastUpdatedAt) / 1000))}s ago` : "Public P2P sources only · no order placement"}</span></div></div>{#if secondsUntilRefresh !== null}<span class="nextRefresh">{secondsUntilRefresh}s</span>{/if}</div>{/if}
@@ -1768,12 +1768,16 @@
   height: 18px;
   flex: 0 0 auto;
   place-items: center;
+  overflow: hidden;
   border-radius: 50%;
-  background: #627eea;
-  color: #fff;
-  font-family: Arial, sans-serif;
-  font-size: 10px;
-  font-weight: 700;
+  background: #eef2ea;
+}
+
+.networkDot img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .networkCopy {
@@ -1882,11 +1886,14 @@
   .card {
     padding: 16px;
     border-radius: 13px;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 
   .settingsBackdrop {
     position: fixed;
     inset: 0;
+    height: 100dvh;
     z-index: 1100;
     display: grid;
     place-items: end center;
@@ -1903,7 +1910,7 @@
     top: auto;
     right: auto;
     width: 100%;
-    max-height: 94vh;
+    max-height: min(650px, 94dvh);
     padding: 10px 16px calc(18px + env(safe-area-inset-bottom));
     border-radius: 14px 14px 0 0;
     animation: settingsSheetIn 0.24s cubic-bezier(0.22, 1, 0.36, 1);
@@ -1929,10 +1936,7 @@
   }
 
   .settingsClose {
-    display: grid;
-    position: absolute;
-    top: 10px;
-    right: 12px;
+    display: none;
   }
 
   .moneyPanel {

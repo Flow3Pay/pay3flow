@@ -1,6 +1,7 @@
 <script lang="ts">
   import { afterUpdate, onDestroy } from "svelte";
   import type { CryptoNetwork } from "$lib/networks";
+  import { networkIcon } from "$lib/icons";
 
   export let open: boolean;
   export let networks: CryptoNetwork[];
@@ -79,7 +80,7 @@
         {#each networks as network (network.id)}
           {@const isSelected = network.id === selected?.id}
           <button type="button" role="option" aria-selected={isSelected} class="methodRow" data-selected={isSelected || undefined} on:click={() => onSelect(network)}>
-            <span class="methodLogo" style="background-color:#627eea" aria-hidden="true">♦</span>
+            <span class="methodLogo" style="background-color:#eef2ea" aria-hidden="true"><img src={networkIcon(network.name)} alt="" width="46" height="46" loading="lazy" decoding="async" /></span>
             <span class="methodCopy"><span class="methodName">{network.name}</span><span class="methodMeta">{network.currencies.join(" · ")}</span></span>
             {#if isSelected}<svg class="check" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="currentColor" /><path d="m6 10.2 2.7 2.5 5.3-5.6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>{/if}
           </button>
