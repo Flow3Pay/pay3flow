@@ -216,7 +216,7 @@
   }
   function endSettingsDrag() {
     if (!settingsDragging) return;
-    const shouldClose = settingsDragDistance > 96 || (settingsDialog && settingsDragDistance > settingsDialog.clientHeight * 0.24);
+    const shouldClose = settingsDragDistance > 72 || (settingsDialog && settingsDragDistance > settingsDialog.clientHeight * 0.18);
     settingsDragging = false;
     if (shouldClose) {
       closeSettings();
@@ -881,7 +881,9 @@
   color: var(--color-text);
   text-align: left;
   box-shadow: 0 5px 15px rgba(21, 24, 20, 0.05);
-  backdrop-filter: blur(12px);
+  /* Avoid repaint-heavy backdrop sampling while the browser is zooming. */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -1907,6 +1909,8 @@
 
   .workspace {
     gap: 14px;
+    animation: none;
+    transform: none;
   }
 
   .card {
@@ -1936,7 +1940,9 @@
     top: auto;
     right: auto;
     width: 100%;
+    height: calc(100dvh - 16px);
     max-height: calc(100dvh - 16px);
+    box-sizing: border-box;
     padding: 10px 16px calc(18px + env(safe-area-inset-bottom));
     border-radius: 14px 14px 0 0;
     animation: settingsSheetIn 0.24s cubic-bezier(0.22, 1, 0.36, 1);
@@ -1959,12 +1965,29 @@
   }
 
   .settingsSheetHandle {
-    display: block;
+    display: flex;
+    width: 100%;
+    height: 30px;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    border-radius: 0;
+    background: transparent;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
+
+  .settingsSheetHandle:active {
+    cursor: grabbing;
+  }
+
+  .settingsSheetHandle::after {
     width: 38px;
     height: 5px;
-    margin: 0 auto;
     border-radius: var(--radius-pill);
     background: var(--color-border-strong);
+    content: "";
   }
 
   .settingsClose {
