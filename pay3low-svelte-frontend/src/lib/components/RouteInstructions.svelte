@@ -5,6 +5,10 @@
 
   export let route: RouteCandidate;
   export let onClose: () => void;
+  let modal: HTMLDivElement;
+  let dragging = false;
+  let dragStartY = 0;
+  let dragDistance = 0;
   const VENUE_NAMES: Record<string, string> = { binance: "Binance", bitget: "Bitget", bybit: "Bybit", okx: "OKX", rapira: "Rapira" };
   const venueName = (value?: string) => value ? VENUE_NAMES[value.toLowerCase()] ?? value : "P2P market";
   const money = (minor?: number, currency?: string) => minor == null ? "—" : `${(minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })} ${currency ?? ""}`;
@@ -27,10 +31,39 @@
     return null;
   }
   function backdrop(event: MouseEvent) { if (event.target === event.currentTarget) onClose(); }
+  function startSheetDrag(event: PointerEvent) {
+    dragging = true;
+    dragStartY = event.clientY;
+    dragDistance = 0;
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  }
+  function moveSheetDrag(event: PointerEvent) {
+    if (!dragging) return;
+    dragDistance = Math.max(0, event.clientY - dragStartY);
+    modal?.style.setProperty("--sheet-drag", `${dragDistance}px`);
+  }
+  function endSheetDrag() {
+    if (!dragging) return;
+    const shouldClose = dragDistance > 96 || (modal && dragDistance > modal.clientHeight * 0.24);
+    dragging = false;
+    if (shouldClose) {
+      onClose();
+    } else {
+      modal?.style.removeProperty("--sheet-drag");
+    }
+  }
   onMount(() => {
     const handler = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    const previousOverflow = document.body.style.overflow;
+    const previousOverscrollBehavior = document.body.style.overscrollBehavior;
+    document.body.style.overflow = "hidden";
+    document.body.style.overscrollBehavior = "none";
     document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.body.style.overscrollBehavior = previousOverscrollBehavior;
+      document.removeEventListener("keydown", handler);
+    };
   });
   $: entry = route.legs.find((leg) => leg.kind === "entry");
   $: exit = route.legs.find((leg) => leg.kind === "exit");
@@ -44,7 +77,8 @@
 </script>
 
 <div class="backdrop" role="presentation" on:mousedown={backdrop}>
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="route-instructions-title" tabindex="-1">
+  <div class:dragging class="modal" bind:this={modal} role="dialog" aria-modal="true" aria-labelledby="route-instructions-title" tabindex="-1">
+    <button type="button" class="sheetHandle" aria-label="Close instructions by dragging down" on:pointerdown={startSheetDrag} on:pointermove={moveSheetDrag} on:pointerup={endSheetDrag} on:pointercancel={endSheetDrag}><span aria-hidden="true">⌃</span></button>
     <div class="header"><div><span class="eyebrow">Selected route</span><h2 id="route-instructions-title">How to complete this exchange</h2><p>Estimated output: <strong>{money(route.target_amount_minor, route.target_currency)}</strong></p></div><button type="button" class="closeButton" on:click={onClose} aria-label="Close instructions">×</button></div>
     <div class="workflow">
       {#if cryptoToCrypto && route.market_path}
@@ -82,6 +116,7 @@
   backdrop-filter: blur(18px) saturate(120%);
   -webkit-backdrop-filter: blur(18px) saturate(120%);
   animation: fadeIn 0.2s ease;
+  touch-action: none;
 }
 
 .modal {
@@ -96,6 +131,18 @@
   box-shadow: 0 35px 110px rgba(0, 0, 0, 0.3);
   color: var(--color-text);
   animation: modalIn 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  touch-action: auto;
+  overscroll-behavior: contain;
+  transform: translateY(var(--sheet-drag, 0));
+  transition: transform 0.24s ease;
+}
+
+.modal.dragging {
+  transition: none;
+}
+
+.sheetHandle {
+  display: none;
 }
 
 .modal::-webkit-scrollbar {
@@ -422,13 +469,43 @@
 
 @media (max-width: 560px) {
   .backdrop {
-    padding: 12px;
+    align-items: end;
+    padding: 0;
   }
 
   .modal {
-    max-height: calc(100vh - 24px);
-    padding: 22px 18px;
-    border-radius: 23px;
+    width: 100%;
+    max-height: min(90vh, 760px);
+    padding: 8px 18px max(18px, env(safe-area-inset-bottom));
+    border-radius: 23px 23px 0 0;
+    transform: translateY(var(--sheet-drag, 0));
+  }
+
+  .sheetHandle {
+    display: flex;
+    width: 100%;
+    height: 30px;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-faint);
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
+
+  .sheetHandle:active {
+    cursor: grabbing;
+  }
+
+  .sheetHandle span {
+    display: grid;
+    width: 42px;
+    height: 20px;
+    place-items: center;
+    border-top: 3px solid currentColor;
+    border-radius: 999px;
+    font-size: 18px;
+    line-height: 10px;
   }
 
   .header h2 {

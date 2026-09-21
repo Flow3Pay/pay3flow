@@ -9,6 +9,7 @@
   export let onSelect: (network: CryptoNetwork) => void;
   let wasOpen = false;
   let previousOverflow = "";
+  let previousOverscrollBehavior = "";
   const onKeyDown = (event: KeyboardEvent) => event.key === "Escape" && onClose();
 
   afterUpdate(() => {
@@ -16,15 +17,21 @@
     wasOpen = open;
     if (open) {
       previousOverflow = document.body.style.overflow;
+      previousOverscrollBehavior = document.body.style.overscrollBehavior;
       document.body.style.overflow = "hidden";
+      document.body.style.overscrollBehavior = "none";
       window.addEventListener("keydown", onKeyDown);
     } else {
       document.body.style.overflow = previousOverflow;
+      document.body.style.overscrollBehavior = previousOverscrollBehavior;
       window.removeEventListener("keydown", onKeyDown);
     }
   });
   onDestroy(() => {
-    if (typeof document !== "undefined" && wasOpen) document.body.style.overflow = previousOverflow;
+    if (typeof document !== "undefined" && wasOpen) {
+      document.body.style.overflow = previousOverflow;
+      document.body.style.overscrollBehavior = previousOverscrollBehavior;
+    }
     if (typeof window !== "undefined") window.removeEventListener("keydown", onKeyDown);
   });
 </script>
@@ -63,6 +70,7 @@
   backdrop-filter: blur(18px) saturate(120%);
   -webkit-backdrop-filter: blur(18px) saturate(120%);
   animation: backdropIn 0.2s ease-out;
+  touch-action: none;
 }
 
 .dialog {
@@ -74,6 +82,8 @@
   background: rgba(250, 250, 246, 0.98);
   box-shadow: 0 38px 120px rgba(0, 0, 0, 0.35);
   animation: dialogIn 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  touch-action: auto;
+  overscroll-behavior: contain;
 }
 
 .titleBar,
