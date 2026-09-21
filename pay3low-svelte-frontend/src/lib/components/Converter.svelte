@@ -73,7 +73,7 @@
     return { sourceCurrency: decodeURIComponent(match[1]).toUpperCase(), targetCurrency: decodeURIComponent(match[2]).toUpperCase(), amount: value && /^[0-9.,\s]+$/.test(value) ? value : null };
   }
   function normalizeAmount(value: string) {
-    const sanitized = value.normalize("NFKC").replace(/[\u00a0\u200b-\u200d\ufeff]/g, "").replace(/[٫٬]/g, ".").replace(/[^0-9.,]/g, "");
+    const sanitized = value.normalize("NFKC").replace(/[\u00a0\u200b-\u200d\ufeff]/g, "").replace(/[бБ]/g, ",").replace(/[юЮ٫٬]/g, ".").replace(/[^0-9.,]/g, "");
     const separator = Math.max(sanitized.lastIndexOf("."), sanitized.lastIndexOf(","));
     if (separator < 0) return sanitized.replace(/^0+(?=\d)/, "") || "0";
     const integer = sanitized.slice(0, separator).replace(/[.,]/g, "").replace(/^0+(?=\d)/, "") || "0";

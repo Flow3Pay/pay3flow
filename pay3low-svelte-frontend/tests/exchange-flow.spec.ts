@@ -195,6 +195,10 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await amountInput.press("End");
   await amountInput.type("123");
   await expect(amountInput).toHaveValue("123");
+  await amountInput.fill("12б5");
+  await expect(amountInput).toHaveValue("12,5");
+  await amountInput.fill("12ю5");
+  await expect(amountInput).toHaveValue("12.5");
   await amountInput.fill("0");
 
   const swapDirection = page.getByRole("button", { name: "Swap sender and recipient" });
