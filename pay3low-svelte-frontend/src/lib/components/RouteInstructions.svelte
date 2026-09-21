@@ -78,7 +78,7 @@
 
 <div class="backdrop" role="presentation" on:mousedown={backdrop}>
   <div class:dragging class="modal" bind:this={modal} role="dialog" aria-modal="true" aria-labelledby="route-instructions-title" tabindex="-1">
-    <button type="button" class="sheetHandle" aria-label="Close instructions by dragging down" on:pointerdown={startSheetDrag} on:pointermove={moveSheetDrag} on:pointerup={endSheetDrag} on:pointercancel={endSheetDrag}><span aria-hidden="true">⌃</span></button>
+    <button type="button" class="sheetHandle" aria-label="Close instructions by dragging down" on:pointerdown={startSheetDrag} on:pointermove={moveSheetDrag} on:pointerup={endSheetDrag} on:pointercancel={endSheetDrag}><span aria-hidden="true"></span></button>
     <div class="header"><div><span class="eyebrow">Selected route</span><h2 id="route-instructions-title">How to complete this exchange</h2><p>Estimated output: <strong>{money(route.target_amount_minor, route.target_currency)}</strong></p></div><button type="button" class="closeButton" on:click={onClose} aria-label="Close instructions">×</button></div>
     <div class="workflow">
       {#if cryptoToCrypto && route.market_path}
@@ -498,14 +498,11 @@
   }
 
   .sheetHandle span {
-    display: grid;
-    width: 42px;
-    height: 20px;
-    place-items: center;
-    border-top: 3px solid currentColor;
+    display: block;
+    width: 38px;
+    height: 5px;
     border-radius: 999px;
-    font-size: 18px;
-    line-height: 10px;
+    background: currentColor;
   }
 
   .header h2 {

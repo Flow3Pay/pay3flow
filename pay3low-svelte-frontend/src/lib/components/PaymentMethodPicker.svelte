@@ -20,6 +20,10 @@
   let previousOverflow = "";
   let previousOverscrollBehavior = "";
   let focusTimer: number | undefined;
+  let dialog: HTMLDivElement;
+  let dragging = false;
+  let dragStartY = 0;
+  let dragDistance = 0;
 
   function close() {
     query = "";
@@ -28,6 +32,30 @@
 
   function onKeyDown(event: KeyboardEvent) {
     if (event.key === "Escape") close();
+  }
+
+  function startSheetDrag(event: PointerEvent) {
+    dragging = true;
+    dragStartY = event.clientY;
+    dragDistance = 0;
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  }
+
+  function moveSheetDrag(event: PointerEvent) {
+    if (!dragging) return;
+    dragDistance = Math.max(0, event.clientY - dragStartY);
+    dialog?.style.setProperty("--sheet-drag", `${dragDistance}px`);
+  }
+
+  function endSheetDrag() {
+    if (!dragging) return;
+    const shouldClose = dragDistance > 96 || (dialog && dragDistance > dialog.clientHeight * 0.24);
+    dragging = false;
+    if (shouldClose) {
+      close();
+    } else {
+      dialog?.style.removeProperty("--sheet-drag");
+    }
   }
 
   afterUpdate(() => {
@@ -95,7 +123,10 @@
 
 {#if open}
   <div class="backdrop" on:mousedown={close} role="presentation">
-    <div class="dialog" role="dialog" aria-modal="true" aria-label={title} tabindex="-1" on:mousedown|stopPropagation>
+    <div class:dragging class="dialog" bind:this={dialog} role="dialog" aria-modal="true" aria-label={title} tabindex="-1" on:mousedown|stopPropagation>
+      <button type="button" class="sheetHandle" aria-label="Close payment method picker by dragging down" on:pointerdown={startSheetDrag} on:pointermove={moveSheetDrag} on:pointerup={endSheetDrag} on:pointercancel={endSheetDrag}>
+        <span aria-hidden="true"></span>
+      </button>
       <div class="titleBar">
         <div class="titleGroup">
           <button type="button" class="backButton" on:click={close} aria-label="Close payment method picker">
@@ -215,6 +246,10 @@
 .backButton:hover {
   background: var(--color-panel);
   transform: translateX(-1px);
+}
+
+.sheetHandle {
+  display: none;
 }
 
 .searchRow {
@@ -823,9 +858,44 @@
 }
 
 @media (max-width: 700px) {
+  .sheetHandle {
+    display: flex;
+    width: 100%;
+    height: 30px;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    color: var(--color-text-faint);
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
+
+  .sheetHandle:active {
+    cursor: grabbing;
+  }
+
+  .sheetHandle span {
+    display: block;
+    width: 38px;
+    height: 5px;
+    border-radius: 999px;
+    background: currentColor;
+  }
+
+  .backButton {
+    display: none;
+  }
+
   .dialog {
     max-height: 94vh;
     border-radius: 14px 14px 0 0;
+    transform: translateY(var(--sheet-drag, 0px));
+    transition: transform 0.24s ease;
+  }
+
+  .dialog.dragging {
+    transition: none;
   }
 
   .body {
