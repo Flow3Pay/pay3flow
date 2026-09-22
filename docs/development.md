@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Docker Engine and Docker Compose
-- `curl` and `jq` for the shell smoke test
+- Ruby 3.1+ for the exchange smoke test
 - Node.js and npm for frontend-only work
 - Rust tooling for backend-only work, if you are not using Docker
 
@@ -59,8 +59,8 @@ test setup.
 Before opening a change:
 
 1. Run the relevant Rust or frontend checks.
-2. Run `./scripts/exchange-flow.sh` against a fresh development stack.
-3. Run `./scripts/secret-audit.sh`.
+2. Run `ruby ./scripts/exchange_flow.rb` against a fresh development stack.
+3. Run `ruby ./scripts/secret_audit.rb`.
 4. Confirm new endpoints, states, and configuration are documented.
 5. Confirm user consent and settlement disclosures still appear in the UI.
 

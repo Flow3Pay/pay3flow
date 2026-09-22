@@ -12,7 +12,7 @@ and Redis or externally managed URLs.
 
 1. Review the code and database migration changes.
 2. Run formatting, backend tests, frontend checks/build, and the secret audit.
-3. Start an isolated environment and run `scripts/exchange-flow.sh`.
+3. Start an isolated environment and run `ruby scripts/exchange_flow.rb`.
 4. Check health endpoints and inspect logs for startup or migration errors.
 5. Verify the public frontend displays fees, route details, settlement-asset
    disclosures, and consent before funding.

@@ -50,7 +50,7 @@ limit ownership, four-eyes admin approval and tested rollback/runbooks.
 
 ## Operational checks
 
-Run `scripts/secret-audit.sh`, backend tests, frontend lint/build, the exchange
+Run `ruby scripts/secret_audit.rb`, backend tests, frontend lint/build, the exchange
 smoke script and Playwright before release. Rotate the development JWT, admin,
 database and encryption values; no default from `.env.example` or compose is a
 production secret. Logs must retain IDs, statuses and reason codes, never PAN,

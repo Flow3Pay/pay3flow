@@ -59,7 +59,7 @@ scoring engine, and settlement state machine. Acquiring adapters and the old
 
 ## Quick start
 
-Requirements: Docker Compose, `curl`, and `jq` for the smoke test.
+Requirements: Docker Compose and Ruby 3.1+ for the smoke test.
 
 ```bash
 docker compose up -d --build
@@ -72,7 +72,7 @@ Open the frontend at <http://localhost:3000>.
 Run the exchange smoke test after the services are healthy:
 
 ```bash
-./scripts/exchange-flow.sh
+./scripts/exchange_flow.rb
 ```
 
 The smoke test covers corridor validation, idempotent order creation, fmatch

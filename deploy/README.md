@@ -1,9 +1,9 @@
 # k3s deployment
 
 The flake renders Kubernetes resources for the services that exist in this
-checkout: the Rust backend, the SvelteKit frontend, PostgreSQL, and Redis. The
-upstream README mentions `fmatch`, but that service is not present in the
-current source tree, so it is not deployed here.
+checkout: the Rust backend and SvelteKit frontend, plus optional in-cluster
+PostgreSQL and Redis. The upstream README mentions `fmatch`, but that service
+is not present in the current source tree, so it is not deployed here.
 
 ## Prerequisites
 
@@ -63,7 +63,9 @@ revision when deploying a fork or another commit.
 
 ## Use external PostgreSQL and Redis
 
-Set both external URLs and switch the mode before rendering:
+Use the separate external configuration example in
+[`deploy/external.env.example`](external.env.example), or export the same
+variables before rendering:
 
 ```sh
 export PAY3FLOW_DATABASE_MODE=external
@@ -72,9 +74,9 @@ export PAY3FLOW_REDIS_URL='rediss://:password@redis.example.com:6379'
 nix run .#deploy
 ```
 
-In external mode the in-cluster PostgreSQL and Redis StatefulSets are rendered
-with zero replicas. Their Services remain harmlessly present so switching
-back to in-cluster mode does not require changing object names.
+In external mode the application manifest does not include PostgreSQL or Redis
+resources at all. In-cluster services are rendered only when
+`PAY3FLOW_DATABASE_MODE=in-cluster`.
 
 ## TLS and routing
 
