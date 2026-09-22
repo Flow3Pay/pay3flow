@@ -7,11 +7,20 @@ use crate::p2p::service::{Advertiser, P2pOffer, P2pSearchQuery, P2pSide, P2pSour
 pub(crate) struct OkxP2pSource {
     client: reqwest::Client,
     url: String,
+    timeout: std::time::Duration,
 }
 
 impl OkxP2pSource {
-    pub(crate) fn new(client: reqwest::Client, url: String) -> Self {
-        Self { client, url }
+    pub(crate) fn new(
+        client: reqwest::Client,
+        url: String,
+        timeout: std::time::Duration,
+    ) -> Self {
+        Self {
+            client,
+            url,
+            timeout,
+        }
     }
 }
 
@@ -19,6 +28,10 @@ impl OkxP2pSource {
 impl P2pSource for OkxP2pSource {
     fn name(&self) -> &'static str {
         "okx"
+    }
+
+    fn timeout(&self, _default: std::time::Duration) -> std::time::Duration {
+        self.timeout
     }
 
     async fn search(&self, query: &P2pSearchQuery) -> Result<Vec<P2pOffer>> {

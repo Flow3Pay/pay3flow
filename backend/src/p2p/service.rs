@@ -251,6 +251,9 @@ pub struct P2pSearchResponse {
 #[async_trait]
 pub(crate) trait P2pSource: Send + Sync {
     fn name(&self) -> &'static str;
+    fn timeout(&self, default: Duration) -> Duration {
+        default
+    }
     async fn search(&self, query: &P2pSearchQuery) -> Result<Vec<P2pOffer>>;
 }
 
@@ -274,8 +277,11 @@ struct CachedSearch {
 impl P2pSearchService {
     pub fn from_config(config: &Config) -> Result<Self> {
         let timeout = Duration::from_millis(config.p2p_search_timeout_ms.clamp(250, 30_000));
+        let okx_timeout = Duration::from_millis(
+            config.p2p_okx_search_timeout_ms.clamp(250, 30_000),
+        );
         let client = reqwest::Client::builder()
-            .timeout(timeout)
+            .timeout(timeout.max(okx_timeout))
             .user_agent("Pay3Flow-P2P-Search/0.1")
             .build()
             .context("failed to build P2P HTTP client")?;
@@ -299,6 +305,7 @@ impl P2pSearchService {
             sources.push(Arc::new(OkxP2pSource::new(
                 client.clone(),
                 config.p2p_okx_url.clone(),
+                okx_timeout,
             )));
             market_sources.push(Arc::new(OkxSpotSource::new(client.clone())));
         }
@@ -396,7 +403,8 @@ impl P2pSearchService {
 
         let searches = selected_sources.into_iter().map(|source| async {
             let started = Instant::now();
-            let result = tokio::time::timeout(self.timeout, source.search(&query)).await;
+            let timeout = source.timeout(self.timeout);
+            let result = tokio::time::timeout(timeout, source.search(&query)).await;
             let elapsed = started.elapsed().as_millis();
             match result {
                 Ok(Ok(offers)) => {
@@ -431,7 +439,7 @@ impl P2pSearchService {
                         offers_found: 0,
                         error: Some(format!(
                             "source timed out after {} ms",
-                            self.timeout.as_millis()
+                            timeout.as_millis()
                         )),
                     },
                 ),

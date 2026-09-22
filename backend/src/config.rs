@@ -31,6 +31,7 @@ pub struct Config {
     /// Public P2P advertisement search. This is read-only and never places orders.
     pub p2p_search_enabled: bool,
     pub p2p_search_timeout_ms: u64,
+    pub p2p_okx_search_timeout_ms: u64,
     pub p2p_search_cache_ttl_ms: u64,
     pub p2p_binance_enabled: bool,
     pub p2p_binance_url: String,
@@ -91,6 +92,10 @@ impl Config {
                 .ok()
                 .and_then(|s| s.parse::<u64>().ok())
                 .unwrap_or(4_000),
+            p2p_okx_search_timeout_ms: env::var("P2P_OKX_SEARCH_TIMEOUT_MS")
+                .ok()
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(10_000),
             p2p_search_cache_ttl_ms: env::var("P2P_SEARCH_CACHE_TTL_MS")
                 .ok()
                 .and_then(|s| s.parse::<u64>().ok())

@@ -114,6 +114,7 @@ and payment confirmation are not verified by this read-only layer.
 ```text
 P2P_SEARCH_ENABLED=true
 P2P_SEARCH_TIMEOUT_MS=4000
+P2P_OKX_SEARCH_TIMEOUT_MS=10000
 P2P_SEARCH_CACHE_TTL_MS=5000
 P2P_BINANCE_ENABLED=true
 P2P_BYBIT_ENABLED=true

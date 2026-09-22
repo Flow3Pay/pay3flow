@@ -40,7 +40,8 @@ private keys or copy development keys into a production image.
 | `SERVICE_FEE_PERCENT` | Service fee used by legacy payment paths |
 | `PAIRS_CACHE_TTL_SECS` | Exchange-pair catalog cache lifetime |
 | `P2P_SEARCH_ENABLED` | Enable read-only P2P search |
-| `P2P_SEARCH_TIMEOUT_MS` | Per-search timeout |
+| `P2P_SEARCH_TIMEOUT_MS` | Per-search timeout (4 seconds by default) |
+| `P2P_OKX_SEARCH_TIMEOUT_MS` | OKX-only P2P search timeout (10 seconds by default) |
 | `P2P_SEARCH_CACHE_TTL_MS` | P2P search cache lifetime |
 | `P2P_SEARCH_ASSETS` | Comma-separated intermediary assets |
 | `P2P_<VENUE>_ENABLED` | Enable a public read-only venue adapter |
