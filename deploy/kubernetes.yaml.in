@@ -1,0 +1,407 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: $PAY3FLOW_NAMESPACE
+  labels:
+    app.kubernetes.io/part-of: pay3flow
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pay3flow-kaniko
+  namespace: $PAY3FLOW_NAMESPACE
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pay3flow-config
+  namespace: $PAY3FLOW_NAMESPACE
+data:
+  SOURCE_REPOSITORY: "$PAY3FLOW_SOURCE_REPOSITORY"
+  SOURCE_REVISION: "$PAY3FLOW_SOURCE_REVISION"
+  IMAGE_REGISTRY: "$PAY3FLOW_IMAGE_REGISTRY"
+  IMAGE_TAG: "$PAY3FLOW_IMAGE_TAG"
+  DATABASE_MODE: "$PAY3FLOW_DATABASE_MODE"
+  INGRESS_HOST: "$PAY3FLOW_INGRESS_HOST"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pay3flow-secrets
+  namespace: $PAY3FLOW_NAMESPACE
+type: Opaque
+stringData:
+  POSTGRES_PASSWORD: "$PAY3FLOW_POSTGRES_PASSWORD"
+  DATABASE_URL: "$PAY3FLOW_DATABASE_URL"
+  REDIS_URL: "$PAY3FLOW_REDIS_URL"
+  JWT_SECRET: "$PAY3FLOW_JWT_SECRET"
+  SECRETS_KEY: "$PAY3FLOW_SECRETS_KEY"
+  ADMIN_TOKEN: "$PAY3FLOW_ADMIN_TOKEN"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pay3flow-build-backend
+  namespace: $PAY3FLOW_NAMESPACE
+  labels:
+    app.kubernetes.io/name: pay3flow
+    app.kubernetes.io/component: image-build
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pay3flow
+        app.kubernetes.io/component: image-build
+    spec:
+      restartPolicy: Never
+      serviceAccountName: pay3flow-kaniko
+      imagePullSecrets:
+        - name: pay3flow-registry
+      volumes:
+        - name: source
+          emptyDir: {}
+      initContainers:
+        - name: checkout
+          image: alpine/git:2.47.2
+          envFrom:
+            - configMapRef:
+                name: pay3flow-config
+          command: ["/bin/sh", "-c"]
+          args:
+            - >-
+              git clone --no-checkout --depth 1 "$SOURCE_REPOSITORY" /workspace/source &&
+              cd /workspace/source &&
+              git fetch --depth 1 origin "$SOURCE_REVISION" &&
+              git checkout --detach "$SOURCE_REVISION"
+          volumeMounts:
+            - name: source
+              mountPath: /workspace/source
+      containers:
+        - name: kaniko
+          image: gcr.io/kaniko-project/executor:v1.23.2
+          envFrom:
+            - configMapRef:
+                name: pay3flow-config
+          args:
+            - --context=dir:///workspace/source
+            - --dockerfile=/workspace/source/backend/Dockerfile
+            - --destination=$(IMAGE_REGISTRY)/backend:$(IMAGE_TAG)
+            - --cache=true
+            - --cache-repo=$(IMAGE_REGISTRY)/cache
+          volumeMounts:
+            - name: source
+              mountPath: /workspace/source
+            - name: registry
+              mountPath: /kaniko/.docker
+      volumes:
+        - name: registry
+          secret:
+            secretName: pay3flow-registry
+            items:
+              - key: .dockerconfigjson
+                path: config.json
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pay3flow-build-frontend
+  namespace: $PAY3FLOW_NAMESPACE
+  labels:
+    app.kubernetes.io/name: pay3flow
+    app.kubernetes.io/component: image-build
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pay3flow
+        app.kubernetes.io/component: image-build
+    spec:
+      restartPolicy: Never
+      serviceAccountName: pay3flow-kaniko
+      imagePullSecrets:
+        - name: pay3flow-registry
+      volumes:
+        - name: source
+          emptyDir: {}
+      initContainers:
+        - name: checkout
+          image: alpine/git:2.47.2
+          envFrom:
+            - configMapRef:
+                name: pay3flow-config
+          command: ["/bin/sh", "-c"]
+          args:
+            - >-
+              git clone --no-checkout --depth 1 "$SOURCE_REPOSITORY" /workspace/source &&
+              cd /workspace/source &&
+              git fetch --depth 1 origin "$SOURCE_REVISION" &&
+              git checkout --detach "$SOURCE_REVISION"
+          volumeMounts:
+            - name: source
+              mountPath: /workspace/source
+      containers:
+        - name: kaniko
+          image: gcr.io/kaniko-project/executor:v1.23.2
+          envFrom:
+            - configMapRef:
+                name: pay3flow-config
+          args:
+            - --context=dir:///workspace/source/pay3low-svelte-frontend
+            - --dockerfile=/workspace/source/pay3low-svelte-frontend/Dockerfile
+            - --destination=$(IMAGE_REGISTRY)/frontend:$(IMAGE_TAG)
+            - --cache=true
+            - --cache-repo=$(IMAGE_REGISTRY)/cache
+          volumeMounts:
+            - name: source
+              mountPath: /workspace/source
+            - name: registry
+              mountPath: /kaniko/.docker
+      volumes:
+        - name: registry
+          secret:
+            secretName: pay3flow-registry
+            items:
+              - key: .dockerconfigjson
+                path: config.json
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pay3flow-backend
+  namespace: $PAY3FLOW_NAMESPACE
+spec:
+  selector:
+    app.kubernetes.io/name: pay3flow-backend
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pay3flow-backend
+  namespace: $PAY3FLOW_NAMESPACE
+  labels:
+    app.kubernetes.io/name: pay3flow-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pay3flow-backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pay3flow-backend
+    spec:
+      imagePullSecrets:
+        - name: pay3flow-registry
+      containers:
+        - name: backend
+          image: $PAY3FLOW_IMAGE_REGISTRY/backend:$PAY3FLOW_IMAGE_TAG
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: RUST_LOG
+              value: info
+            - name: HTTP_ADDR
+              value: 0.0.0.0:8080
+            - name: AP_ORIGIN
+              value: "$PAY3FLOW_AP_ORIGIN"
+            - name: AP_HANDLE
+              value: "$PAY3FLOW_AP_HANDLE"
+            - name: AP_KEY_PATH
+              value: /app/data/ap-key.pem
+            - name: AP_REQUIRE_SIGNATURES
+              value: "$PAY3FLOW_AP_REQUIRE_SIGNATURES"
+            - name: FMATCH_INBOX
+              value: "$PAY3FLOW_FMATCH_INBOX"
+            - name: FMATCH_ACTOR_ID
+              value: "$PAY3FLOW_FMATCH_ACTOR_ID"
+            - name: FX_SOURCE
+              value: "$PAY3FLOW_FX_SOURCE"
+            - name: P2P_SEARCH_ENABLED
+              value: "$PAY3FLOW_P2P_SEARCH_ENABLED"
+            - name: P2P_BINANCE_ENABLED
+              value: "$PAY3FLOW_P2P_BINANCE_ENABLED"
+            - name: P2P_BYBIT_ENABLED
+              value: "$PAY3FLOW_P2P_BYBIT_ENABLED"
+            - name: P2P_OKX_ENABLED
+              value: "$PAY3FLOW_P2P_OKX_ENABLED"
+            - name: P2P_BITGET_ENABLED
+              value: "$PAY3FLOW_P2P_BITGET_ENABLED"
+            - name: P2P_RAPIRA_ENABLED
+              value: "$PAY3FLOW_P2P_RAPIRA_ENABLED"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: pay3flow-secrets
+                  key: DATABASE_URL
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: pay3flow-secrets
+                  key: REDIS_URL
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: pay3flow-secrets
+                  key: JWT_SECRET
+            - name: SECRETS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: pay3flow-secrets
+                  key: SECRETS_KEY
+            - name: ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: pay3flow-secrets
+                  key: ADMIN_TOKEN
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          volumeMounts:
+            - name: backend-data
+              mountPath: /app/data
+      volumes:
+        - name: backend-data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pay3flow-frontend
+  namespace: $PAY3FLOW_NAMESPACE
+spec:
+  selector:
+    app.kubernetes.io/name: pay3flow-frontend
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pay3flow-frontend
+  namespace: $PAY3FLOW_NAMESPACE
+  labels:
+    app.kubernetes.io/name: pay3flow-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pay3flow-frontend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pay3flow-frontend
+    spec:
+      imagePullSecrets:
+        - name: pay3flow-registry
+      containers:
+        - name: frontend
+          image: $PAY3FLOW_IMAGE_REGISTRY/frontend:$PAY3FLOW_IMAGE_TAG
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: HOST
+              value: 0.0.0.0
+            - name: PORT
+              value: "3000"
+            - name: PUBLIC_API_URL
+              value: "$PAY3FLOW_PUBLIC_API_URL"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pay3flow
+  namespace: $PAY3FLOW_NAMESPACE
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+spec:
+  ingressClassName: $PAY3FLOW_INGRESS_CLASS
+  rules:
+    - host: $PAY3FLOW_INGRESS_HOST
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: pay3flow-backend
+                port:
+                  name: http
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: pay3flow-backend
+                port:
+                  name: http
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: pay3flow-backend
+                port:
+                  name: http
+          - path: /inbox
+            pathType: Prefix
+            backend:
+              service:
+                name: pay3flow-backend
+                port:
+                  name: http
+          - path: /actor
+            pathType: Prefix
+            backend:
+              service:
+                name: pay3flow-backend
+                port:
+                  name: http
+          - path: /.well-known
+            pathType: Prefix
+            backend:
+              service:
+                name: pay3flow-backend
+                port:
+                  name: http
+          - path: /routing
+            pathType: Prefix
+            backend:
+              service:
+                name: pay3flow-backend
+                port:
+                  name: http
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pay3flow-frontend
+                port:
+                  name: http
+$PAY3FLOW_INGRESS_TLS_BLOCK

@@ -3,11 +3,16 @@
 Pay3Flow is currently an experimental MVP. The Compose setup is intended for
 development and demonstrations, not as a production deployment blueprint.
 
+For k3s, use the repository flake and [`deploy/README.md`](../deploy/README.md).
+It renders Kubernetes resources, builds the backend and frontend with
+in-cluster Kaniko Jobs, and supports either persistent in-cluster PostgreSQL
+and Redis or externally managed URLs.
+
 ## Release sequence
 
 1. Review the code and database migration changes.
 2. Run formatting, backend tests, frontend checks/build, and the secret audit.
-3. Start an isolated environment and run `scripts/exchange-flow.sh`.
+3. Start an isolated environment and run `ruby scripts/exchange_flow.rb`.
 4. Check health endpoints and inspect logs for startup or migration errors.
 5. Verify the public frontend displays fees, route details, settlement-asset
    disclosures, and consent before funding.
