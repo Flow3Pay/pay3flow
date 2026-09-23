@@ -485,6 +485,7 @@ test("search venues bounce in the loader and refresh stops spinning after the fi
   await mockBackend(page);
 
   let sendFirstRoute: (() => void) | undefined;
+  let sendSecondRoute: (() => void) | undefined;
   let finishSearch: (() => void) | undefined;
   await page.routeWebSocket(/\/ws\/p2p\/routes$/, (socket) => {
     socket.onMessage((message) => {
@@ -513,7 +514,7 @@ test("search venues bounce in the loader and refresh stops spinning after the fi
         },
         source_url: `https://example.com/${adId}`,
       });
-      const response = {
+      const firstResponse = {
         search_id: "00000000-0000-4000-8000-000000000106",
         routes_found: 1,
         searched_at: "2026-09-23T10:00:00Z",
@@ -543,10 +544,24 @@ test("search venues bounce in the loader and refresh stops spinning after the fi
           warnings: [],
         }],
       };
+      const finalResponse = {
+        ...firstResponse,
+        routes_found: 2,
+        routes: [...firstResponse.routes, {
+          ...firstResponse.routes[0],
+          route_id: "route-streamed-second",
+          rank: 2,
+          target_amount: "20280.00",
+          effective_rate: "0.2028",
+          entry_offer: offer("bybit", "entry-live-2", "AMD"),
+          exit_offer: offer("bybit", "exit-live-2", "RUB"),
+        }],
+      };
 
-      socket.send(JSON.stringify({ type: "search_started", search_id: response.search_id, routes_found: 0 }));
-      sendFirstRoute = () => socket.send(JSON.stringify({ type: "routes_updated", ...response }));
-      finishSearch = () => socket.send(JSON.stringify({ type: "search_finished", ...response }));
+      socket.send(JSON.stringify({ type: "search_started", search_id: firstResponse.search_id, routes_found: 0 }));
+      sendFirstRoute = () => socket.send(JSON.stringify({ type: "routes_updated", ...firstResponse }));
+      sendSecondRoute = () => socket.send(JSON.stringify({ type: "routes_updated", ...finalResponse }));
+      finishSearch = () => socket.send(JSON.stringify({ type: "search_finished", ...finalResponse }));
     });
   });
 
@@ -555,10 +570,12 @@ test("search venues bounce in the loader and refresh stops spinning after the fi
   await page.getByTestId("start-search").click();
 
   await expect.poll(() => Boolean(sendFirstRoute)).toBe(true);
-  const searchingVenues = page.getByTestId("searching-venue");
+  const panelTop = page.locator("#routes .panelTop");
+  const searchingVenues = panelTop.getByTestId("searching-venue");
   await expect(searchingVenues).toHaveCount(2);
-  await expect(searchingVenues.nth(0)).toHaveAttribute("title", "Binance");
-  await expect(searchingVenues.nth(1)).toHaveAttribute("title", "Bybit");
+  await expect(searchingVenues.nth(0)).toHaveAttribute("title", "Searching Binance");
+  await expect(searchingVenues.nth(1)).toHaveAttribute("title", "Searching Bybit");
+  await expect(searchingVenues.nth(0)).toHaveCSS("width", "32px");
   await expect(searchingVenues.nth(0)).toHaveCSS("animation-delay", "0s");
   await expect(searchingVenues.nth(1)).toHaveCSS("animation-delay", "0.13s");
 
@@ -566,8 +583,19 @@ test("search venues bounce in the loader and refresh stops spinning after the fi
   await expect(refreshButton.locator("svg")).toHaveClass(/refreshSpin/);
   sendFirstRoute?.();
   await expect(page.getByTestId("complete-route")).toHaveCount(1);
+  const foundVenues = panelTop.locator(".resultSummary").getByTestId("found-venue");
+  await expect(foundVenues).toHaveCount(1);
+  await expect(foundVenues.first()).toHaveAttribute("title", "Found on Binance");
+  await expect(searchingVenues).toHaveCount(1);
+  await expect(searchingVenues.first()).toHaveAttribute("title", "Searching Bybit");
   await expect(refreshButton).toBeDisabled();
   await expect(refreshButton.locator("svg")).not.toHaveClass(/refreshSpin/);
+
+  sendSecondRoute?.();
+  await expect(page.getByTestId("complete-route")).toHaveCount(2);
+  await expect(foundVenues).toHaveCount(2);
+  await expect(foundVenues.nth(1)).toHaveAttribute("title", "Found on Bybit");
+  await expect(searchingVenues).toHaveCount(0);
 
   finishSearch?.();
   await expect(refreshButton).toBeEnabled();

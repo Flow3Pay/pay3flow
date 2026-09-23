@@ -14,6 +14,7 @@
   export let onOpenInstructions: (route: RouteCandidate) => void;
   export let searching = false;
   export let searchingVenues: { id: string; label: string; iconUrl: string }[] = [];
+  export let foundVenues: { id: string; label: string; iconUrl: string }[] = [];
   export let searched = false;
   export let hasAmount = false;
 
@@ -34,6 +35,7 @@
   const reduceMotion = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const routeFlipDuration = (distance: number) => reduceMotion() ? 0 : Math.min(680, 260 + distance * 0.65);
   const routeEnterDuration = () => reduceMotion() ? 0 : 380;
+  $: pendingVenues = searchingVenues.filter((venue) => !foundVenues.some((found) => found.id === venue.id));
 
   function workflowSteps(route: RouteCandidate): Step[] {
     const entry = route.legs.find((leg) => leg.kind === "entry");
@@ -62,7 +64,35 @@
 
 <aside class="side active" aria-label="Found routes" aria-busy={searching} id="routes">
   <div class="panel">
-    <div class="panelTop"><div>{#if hasAmount}<strong>Send {sourceCurrency} → {targetCurrency}</strong><small aria-live="polite">{routeCountLabel(routesFound)}{searching ? " · searching…" : ""}</small>{#if routesFound > routes.length && routes.length}<small class="resultLimit">Showing top {routes.length}</small>{/if}{:else}<strong>Awaiting your intent</strong>{/if}</div></div>
+    <div class="panelTop">
+      <div class="panelHeading">
+        {#if hasAmount}
+          <strong>Send {sourceCurrency} → {targetCurrency}</strong>
+          <span class="resultSummary">
+            <small aria-live="polite">{routeCountLabel(routesFound)}{searching ? " · searching…" : ""}</small>
+            {#if foundVenues.length}
+              <span class="foundVenues" aria-label={`Routes found on ${foundVenues.map((venue) => venue.label).join(", ")}`}>
+                {#each foundVenues as venue, index (venue.id)}
+                  <span class="foundVenue" data-testid="found-venue" title={`Found on ${venue.label}`} style:animation-delay={`${index * 70}ms`}>
+                    <img src={venue.iconUrl} alt="" width="18" height="18" decoding="async" on:error={(event) => fallbackVenueIcon(event, venue.id)} />
+                  </span>
+                {/each}
+              </span>
+            {/if}
+          </span>
+          {#if routesFound > routes.length && routes.length}<small class="resultLimit">Showing top {routes.length}</small>{/if}
+        {:else}<strong>Awaiting your intent</strong>{/if}
+      </div>
+      {#if searching && pendingVenues.length}
+        <div class="searchingVenues" aria-label={`Searching ${pendingVenues.map((venue) => venue.label).join(", ")}`}>
+          {#each pendingVenues as venue, index (venue.id)}
+            <span class="searchingVenue" data-testid="searching-venue" title={`Searching ${venue.label}`} style:animation-delay={`${index * 130}ms`}>
+              <img src={venue.iconUrl} alt="" width="20" height="20" decoding="async" on:error={(event) => fallbackVenueIcon(event, venue.id)} />
+            </span>
+          {/each}
+        </div>
+      {/if}
+    </div>
     {#if routes.length > 0}
       <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
       <div class="routeGroups" data-testid="route-groups" role="region" tabindex="0" aria-label="Found routes">
@@ -109,15 +139,6 @@
         {#each [0, 1, 2, 3, 4] as item}
           <div class="skeletonCard" style:animation-delay={`${item * 80}ms`}><span class="skeletonShort"></span><span class="skeletonLong"></span><span class="skeletonMedium"></span></div>
         {/each}
-        {#if searchingVenues.length}
-          <div class="searchingVenues" aria-hidden="true">
-            {#each searchingVenues as venue, index (venue.id)}
-              <span class="searchingVenue" data-testid="searching-venue" title={venue.label} style:animation-delay={`${index * 130}ms`}>
-                <img src={venue.iconUrl} alt="" width="34" height="34" decoding="async" on:error={(event) => fallbackVenueIcon(event, venue.id)} />
-              </span>
-            {/each}
-          </div>
-        {/if}
       </div>
     {:else}
       <div class="emptyState">
@@ -177,14 +198,52 @@
 
 .panelTop {
   min-height: 48px;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
 }
 
-.panelTop > div {
+.panelHeading {
   display: flex;
+  min-width: 0;
   flex-direction: column;
   gap: 3px;
+}
+
+.resultSummary,
+.foundVenues,
+.searchingVenues {
+  display: flex;
+  align-items: center;
+}
+
+.resultSummary {
+  min-height: 24px;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.foundVenues {
+  gap: 4px;
+}
+
+.foundVenue {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid rgba(185, 242, 39, 0.34);
+  border-radius: 8px;
+  background: rgba(185, 242, 39, 0.1);
+  animation: foundVenueIn 0.52s cubic-bezier(0.22, 1.42, 0.36, 1) both;
+  will-change: transform, opacity;
+}
+
+.foundVenue img {
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  object-fit: contain;
 }
 
 .panelTop strong {
@@ -507,36 +566,30 @@
 }
 
 .searchingVenues {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  display: flex;
-  flex-wrap: wrap;
-  align-content: center;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 28px;
-  pointer-events: none;
+  min-height: 34px;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  gap: 6px;
+  padding-top: 1px;
 }
 
 .searchingVenue {
   display: grid;
-  width: 52px;
-  height: 52px;
+  width: 32px;
+  height: 32px;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 17px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 11px;
   background: rgba(27, 30, 26, 0.92);
-  box-shadow: 0 12px 30px rgba(9, 12, 8, 0.22);
+  box-shadow: 0 8px 18px rgba(9, 12, 8, 0.18);
   animation: venueBounce 1.3s cubic-bezier(0.45, 0, 0.55, 1) infinite;
   will-change: transform;
 }
 
 .searchingVenue img {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
   object-fit: contain;
 }
 
@@ -677,8 +730,14 @@
 
 @keyframes venueBounce {
   0%, 45%, 100% { transform: translateY(0) scale(1); }
-  18% { transform: translateY(-13px) scale(1.06); }
-  28% { transform: translateY(2px) scale(0.98); }
+  18% { transform: translateY(-7px) scale(1.05); }
+  28% { transform: translateY(1px) scale(0.98); }
+}
+
+@keyframes foundVenueIn {
+  0% { opacity: 0; transform: translate(9px, -5px) scale(0.72); }
+  72% { opacity: 1; transform: translate(-1px, 1px) scale(1.06); }
+  100% { opacity: 1; transform: translate(0, 0) scale(1); }
 }
 
 @keyframes pathPulse {
@@ -807,6 +866,11 @@
   box-shadow: 0 14px 34px rgba(22, 25, 21, 0.14);
 }
 
+.foundVenue {
+  border-color: #cce29a;
+  background: #f1f8df;
+}
+
 .skeletonShort,
 .skeletonLong,
 .skeletonMedium {
@@ -857,7 +921,8 @@
 @media (prefers-reduced-motion: reduce) {
   .routeList > li,
   .routeCard,
-  .searchingVenue {
+  .searchingVenue,
+  .foundVenue {
     animation: none;
     transition: none;
   }
@@ -880,6 +945,11 @@
   border-color: #454545;
   background: rgba(32, 32, 32, 0.96);
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.3);
+}
+
+:global(html[data-theme="dark"]) .foundVenue {
+  border-color: rgba(181, 245, 0, 0.34);
+  background: rgba(181, 245, 0, 0.09);
 }
 
 :global(html[data-theme="dark"]) .routeBest,
