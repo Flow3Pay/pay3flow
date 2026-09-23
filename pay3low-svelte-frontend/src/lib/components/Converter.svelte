@@ -36,6 +36,7 @@
   let selectedSources: P2pSource[] = [];
   let selectedIntermediaryAssets: string[] = [];
   let searching = false;
+  let awaitingFirstRoute = false;
   let lastUpdatedAt: number | null = null;
   let clock = Date.now();
   let error: string | null = null;
@@ -62,6 +63,7 @@
   let paymentPickerComponent: typeof import("./PaymentMethodPicker.svelte").default | null = null;
   let networkPickerComponent: typeof import("./NetworkPicker.svelte").default | null = null;
   let routeInstructionsComponent: typeof import("./RouteInstructions.svelte").default | null = null;
+  let searchingVenues: P2pSourceOption[] = [];
 
   function readSharedExchange() {
     const match = window.location.hash.match(/^#\/swap\/([^/?#]+)\/([^/?#]+)(?:\?([^#]*))?$/i);
@@ -183,6 +185,7 @@
   $: previewRoute = selected ?? routes.find((route) => route.status === "complete" && route.is_current_best) ?? routes.find((route) => route.status === "complete") ?? null;
   $: secondsUntilRefresh = refreshSeconds && lastUpdatedAt ? Math.max(0, refreshSeconds - Math.floor((clock - lastUpdatedAt) / 1000)) : null;
   $: refreshProgress = secondsUntilRefresh !== null && refreshSeconds ? ((refreshSeconds - secondsUntilRefresh) / refreshSeconds) * 100 : 0;
+  $: searchingVenues = selectedSources.map((source) => p2pSources.find((item) => item.id === source) ?? { id: source, label: source, iconUrl: venueIcon(source), searchable: true });
   $: searchSignature = `${corridor?.id ?? ""}:${sourceMethod?.id ?? ""}:${sourceNetwork?.id ?? ""}:${targetMethod?.id ?? ""}:${targetNetwork?.id ?? ""}:${amount}:${selectedSources.join(",")}:${selectedIntermediaryAssets.join(",")}:${directionReversed}`;
   $: scheduleAutomaticSearch(searchSignature, preferencesLoaded, urlReady, hasAmount, initialSearchReady);
   $: manageRefresh(refreshSeconds, lastUpdatedAt, hasAmount);
@@ -208,7 +211,7 @@
     if (seconds && updatedAt && validAmount) refreshTimer = window.setInterval(startSearch, seconds * 1000);
   }
   function resetResults() {
-    controller?.abort(); routes = []; routesFound = 0; selected = null; instructionsRoute = null; lastUpdatedAt = null; searching = false; error = null;
+    controller?.abort(); routes = []; routesFound = 0; selected = null; instructionsRoute = null; lastUpdatedAt = null; searching = false; awaitingFirstRoute = false; error = null;
     if (refreshTimer) window.clearInterval(refreshTimer);
   }
   function updateAmount(value: string) { initialSearchReady = true; amount = normalizeAmount(value); resetResults(); }
@@ -269,7 +272,7 @@
   async function startSearch() {
     if (!corridor || !sourceMethod || !targetMethod) return;
     const value = amountNumber(amount); if (!Number.isFinite(value) || value <= 0) return resetResults();
-    controller?.abort(); controller = new AbortController(); const signal = controller.signal; const currentRequest = ++requestId; searching = true; routesFound = 0; error = null;
+    controller?.abort(); controller = new AbortController(); const signal = controller.signal; const currentRequest = ++requestId; searching = true; awaitingFirstRoute = true; routesFound = 0; error = null;
     try {
       const sourceWallet = sourceMethod.kind === "wallet", targetWallet = targetMethod.kind === "wallet";
       if ((sourceWallet && !sourceNetwork) || (targetWallet && !targetNetwork)) throw new Error("No compatible network is available for the selected cryptocurrency");
@@ -283,18 +286,21 @@
         response = await streamP2pRoutes(liveQuery, anonymousId, signal, (event) => {
           if (currentRequest !== requestId) return;
           if (event.type === "search_started") routesFound = event.routes_found;
-          if (event.type === "routes_updated") applySearchResponse(event);
+          if (event.type === "routes_updated") {
+            applySearchResponse(event);
+            if (event.routes.length > 0) awaitingFirstRoute = false;
+          }
         });
       } catch (streamError) {
         if (signal.aborted || currentRequest !== requestId) return;
         response = await fetchP2pRoutes({ ...liveQuery, signal, anonymousId });
       }
       if (currentRequest !== requestId) return;
-      applySearchResponse(response); lastUpdatedAt = Date.now(); clock = Date.now();
+      applySearchResponse(response); awaitingFirstRoute = false; lastUpdatedAt = Date.now(); clock = Date.now();
     } catch (cause) {
       if (signal.aborted || currentRequest !== requestId) return;
       error = cause instanceof Error ? cause.message : "Could not search live P2P markets";
-    } finally { if (currentRequest === requestId) searching = false; }
+    } finally { if (currentRequest === requestId) { searching = false; awaitingFirstRoute = false; } }
   }
   function toggleSource(source: P2pSource) { initialSearchReady = true; selectedSources = selectedSources.includes(source) ? (selectedSources.length === 1 ? selectedSources : selectedSources.filter((item) => item !== source)) : [...selectedSources, source]; resetResults(); }
   function toggleAsset(asset: string) { initialSearchReady = true; selectedIntermediaryAssets = selectedIntermediaryAssets.includes(asset) ? selectedIntermediaryAssets.filter((item) => item !== asset) : [...selectedIntermediaryAssets, asset]; resetResults(); }
@@ -417,7 +423,7 @@
       <div class="cardTop">
         <div class="modeTabs" aria-label="Exchange mode"><button type="button" class="modeActive">Bridge</button><button type="button" disabled>History</button></div>
         <div class="cardActions">
-          <button type="button" class="refreshButton" on:click={startSearch} disabled={!hasAmount || searching} aria-label="Refresh routes now"><svg class:refreshSpin={searching} width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M16.2 7.1A6.8 6.8 0 1 0 16.7 12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /><path d="M13.1 3.8h3.6v3.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
+          <button type="button" class="refreshButton" on:click={startSearch} disabled={!hasAmount || searching} aria-label="Refresh routes now"><svg class:refreshSpin={awaitingFirstRoute} width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M16.2 7.1A6.8 6.8 0 1 0 16.7 12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /><path d="M13.1 3.8h3.6v3.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
           <div class="settingsWrap" bind:this={settingsElement}>
             <button type="button" class="settingsButton" on:click={() => settingsOpen = !settingsOpen} aria-haspopup="dialog" aria-expanded={settingsOpen} aria-label="Route refresh settings"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 6.8a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4Z" stroke="currentColor" stroke-width="1.6" /><path d="M16.2 11.3a6.5 6.5 0 0 0 0-2.6l1.5-1.1-1.8-3.1-1.8.8a6.7 6.7 0 0 0-2.2-1.3L11.7 2H8.3L8 4a6.7 6.7 0 0 0-2.2 1.3L4 4.5 2.2 7.6l1.5 1.1a6.5 6.5 0 0 0 0 2.6l-1.5 1.1L4 15.5l1.8-.8A6.7 6.7 0 0 0 8 16l.3 2h3.4l.3-2a6.7 6.7 0 0 0 2.2-1.3l1.8.8 1.8-3.1-1.6-1.1Z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
             {#if settingsOpen}
@@ -460,7 +466,7 @@
       <button type="button" class="cta" disabled={!hasAmount || (!previewRoute && (searching || !corridor))} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? "Open swap instructions" : "Find routes"}>{#if previewRoute}Swap <span>↗</span>{:else if searching}<span class="spinner"></span> Finding routes{:else if hasAmount}Find routes <span>↗</span>{:else}Enter an amount to begin{/if}</button>
       {#if error}<div class="errorBox" role="alert">{error}</div>{/if}
     </div>
-    <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={(route) => selected = route} onOpenInstructions={openInstructions} {searching} searched={lastUpdatedAt !== null} {hasAmount} />
+    <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={(route) => selected = route} onOpenInstructions={openInstructions} {searching} {searchingVenues} searched={lastUpdatedAt !== null} {hasAmount} />
   </div>
   {#if paymentPickerComponent}<svelte:component this={paymentPickerComponent} open={methodPicker === "source"} title="Choose where you pay from" role="sender" {networks} selected={sourceMethod} selectedNetwork={sourceNetwork} onClose={() => methodPicker = null} onSelect={chooseSource} /><svelte:component this={paymentPickerComponent} open={methodPicker === "target"} title="Choose where the recipient gets paid" role="recipient" {networks} selected={targetMethod} selectedNetwork={targetNetwork} onClose={() => methodPicker = null} onSelect={chooseTarget} />{/if}
   {#if networkPickerComponent}<svelte:component this={networkPickerComponent} open={networkPicker !== null} networks={networkPicker === "source" ? sourceNetworks : targetNetworks} selected={networkPicker === "source" ? sourceNetwork : targetNetwork} onClose={() => networkPicker = null} onSelect={selectNetwork} />{/if}

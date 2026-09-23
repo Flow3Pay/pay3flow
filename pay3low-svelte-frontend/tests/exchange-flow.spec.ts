@@ -481,6 +481,98 @@ test("catalog providers can be selected", async ({ page }) => {
   await expect(whitebird).toHaveAttribute("aria-pressed", "true");
 });
 
+test("search venues bounce in the loader and refresh stops spinning after the first route", async ({ page }) => {
+  await mockBackend(page);
+
+  let sendFirstRoute: (() => void) | undefined;
+  let finishSearch: (() => void) | undefined;
+  await page.routeWebSocket(/\/ws\/p2p\/routes$/, (socket) => {
+    socket.onMessage((message) => {
+      const request = JSON.parse(String(message));
+      expect(request.query.sources).toBe("binance,bybit");
+
+      const offer = (source: string, adId: string, fiat: string) => ({
+        source,
+        ad_id: adId,
+        fiat,
+        asset: "USDT",
+        price: "1",
+        available_asset: "1000000",
+        min_fiat: "1000",
+        max_fiat: "10000000",
+        payment_methods: ["Bank transfer"],
+        pay_time_limit_minutes: 15,
+        advertiser: {
+          id: `masked-${adId}`,
+          nickname: `${source}-merchant`,
+          user_type: "merchant",
+          is_merchant: true,
+          is_verified: true,
+          completed_orders_30d: 300,
+          completion_rate_30d: 0.99,
+        },
+        source_url: `https://example.com/${adId}`,
+      });
+      const response = {
+        search_id: "00000000-0000-4000-8000-000000000106",
+        routes_found: 1,
+        searched_at: "2026-09-23T10:00:00Z",
+        source_fiat: "AMD",
+        target_fiat: "RUB",
+        source_amount: "100000.00",
+        assets_searched: ["USDT"],
+        can_exchange_to_target: true,
+        routes: [{
+          route_id: "route-streamed-first",
+          rank: 1,
+          asset: "USDT",
+          entry_network: "internal",
+          source_fiat: "AMD",
+          source_amount: "100000.00",
+          acquired_asset_amount: "253.16",
+          target_fiat: "RUB",
+          target_amount: "20350.00",
+          effective_rate: "0.2035",
+          same_venue: true,
+          requires_asset_transfer: false,
+          transfer_fee_included: true,
+          route_kind: "fiat_to_fiat",
+          payment_methods_verified: true,
+          entry_offer: offer("binance", "entry-live", "AMD"),
+          exit_offer: offer("binance", "exit-live", "RUB"),
+          warnings: [],
+        }],
+      };
+
+      socket.send(JSON.stringify({ type: "search_started", search_id: response.search_id, routes_found: 0 }));
+      sendFirstRoute = () => socket.send(JSON.stringify({ type: "routes_updated", ...response }));
+      finishSearch = () => socket.send(JSON.stringify({ type: "search_finished", ...response }));
+    });
+  });
+
+  await openApp(page);
+  await page.getByLabel("Amount to send").fill("100000");
+  await page.getByTestId("start-search").click();
+
+  await expect.poll(() => Boolean(sendFirstRoute)).toBe(true);
+  const searchingVenues = page.getByTestId("searching-venue");
+  await expect(searchingVenues).toHaveCount(2);
+  await expect(searchingVenues.nth(0)).toHaveAttribute("title", "Binance");
+  await expect(searchingVenues.nth(1)).toHaveAttribute("title", "Bybit");
+  await expect(searchingVenues.nth(0)).toHaveCSS("animation-delay", "0s");
+  await expect(searchingVenues.nth(1)).toHaveCSS("animation-delay", "0.13s");
+
+  const refreshButton = page.getByRole("button", { name: "Refresh routes now" });
+  await expect(refreshButton.locator("svg")).toHaveClass(/refreshSpin/);
+  sendFirstRoute?.();
+  await expect(page.getByTestId("complete-route")).toHaveCount(1);
+  await expect(refreshButton).toBeDisabled();
+  await expect(refreshButton.locator("svg")).not.toHaveClass(/refreshSpin/);
+
+  finishSearch?.();
+  await expect(refreshButton).toBeEnabled();
+});
+
 test("cryptocurrency search binds the selected asset to its network", async ({ page }) => {
   await mockBackend(page);
   await openApp(page);
@@ -592,12 +684,12 @@ test("tracked service opens unlock anonymous feedback", async ({ page }) => {
     "color",
     "rgb(243, 243, 243)",
   );
-  await expect(instructions.getByRole("button", { name: "Like" })).toHaveCSS(
+  await expect(instructions.getByRole("button", { name: "Like", exact: true })).toHaveCSS(
     "background-color",
     "rgb(43, 43, 43)",
   );
-  await instructions.getByRole("button", { name: "Like" }).click();
-  await expect(instructions.getByRole("button", { name: "Like" })).toHaveAttribute("aria-pressed", "true");
+  await instructions.getByRole("button", { name: "Like", exact: true }).click();
+  await expect(instructions.getByRole("button", { name: "Like", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(instructions.getByLabel("851 likes")).toBeVisible();
 });
 

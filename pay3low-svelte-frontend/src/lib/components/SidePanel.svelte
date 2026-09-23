@@ -13,6 +13,7 @@
   export let onSelect: (route: RouteCandidate) => void;
   export let onOpenInstructions: (route: RouteCandidate) => void;
   export let searching = false;
+  export let searchingVenues: { id: string; label: string; iconUrl: string }[] = [];
   export let searched = false;
   export let hasAmount = false;
 
@@ -108,6 +109,15 @@
         {#each [0, 1, 2, 3, 4] as item}
           <div class="skeletonCard" style:animation-delay={`${item * 80}ms`}><span class="skeletonShort"></span><span class="skeletonLong"></span><span class="skeletonMedium"></span></div>
         {/each}
+        {#if searchingVenues.length}
+          <div class="searchingVenues" aria-hidden="true">
+            {#each searchingVenues as venue, index (venue.id)}
+              <span class="searchingVenue" data-testid="searching-venue" title={venue.label} style:animation-delay={`${index * 130}ms`}>
+                <img src={venue.iconUrl} alt="" width="34" height="34" decoding="async" on:error={(event) => fallbackVenueIcon(event, venue.id)} />
+              </span>
+            {/each}
+          </div>
+        {/if}
       </div>
     {:else}
       <div class="emptyState">
@@ -487,12 +497,47 @@
 }
 
 .skeletonList {
+  position: relative;
   display: flex;
   min-height: 0;
   flex: 1;
   flex-direction: column;
   gap: 9px;
   margin-top: 14px;
+}
+
+.searchingVenues {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: center;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 28px;
+  pointer-events: none;
+}
+
+.searchingVenue {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 17px;
+  background: rgba(27, 30, 26, 0.92);
+  box-shadow: 0 12px 30px rgba(9, 12, 8, 0.22);
+  animation: venueBounce 1.3s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  will-change: transform;
+}
+
+.searchingVenue img {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  object-fit: contain;
 }
 
 .skeletonCard {
@@ -630,6 +675,12 @@
   to { opacity: 1; }
 }
 
+@keyframes venueBounce {
+  0%, 45%, 100% { transform: translateY(0) scale(1); }
+  18% { transform: translateY(-13px) scale(1.06); }
+  28% { transform: translateY(2px) scale(0.98); }
+}
+
 @keyframes pathPulse {
   0%, 100% { opacity: 0.3; transform: scale(0.7); }
   50% { opacity: 1; transform: scale(1.15); }
@@ -750,6 +801,12 @@
   background: #f4f8f1;
 }
 
+.searchingVenue {
+  border-color: var(--color-border-strong);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 14px 34px rgba(22, 25, 21, 0.14);
+}
+
 .skeletonShort,
 .skeletonLong,
 .skeletonMedium {
@@ -799,7 +856,9 @@
 
 @media (prefers-reduced-motion: reduce) {
   .routeList > li,
-  .routeCard {
+  .routeCard,
+  .searchingVenue {
+    animation: none;
     transition: none;
   }
 }
@@ -815,6 +874,12 @@
 :global(html[data-theme="dark"]) .emptyNode {
   border-color: #383838;
   background: #202020;
+}
+
+:global(html[data-theme="dark"]) .searchingVenue {
+  border-color: #454545;
+  background: rgba(32, 32, 32, 0.96);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.3);
 }
 
 :global(html[data-theme="dark"]) .routeBest,
