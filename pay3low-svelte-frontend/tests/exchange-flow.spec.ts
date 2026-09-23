@@ -51,6 +51,13 @@ async function mockBackend(page: Page) {
         { id: "bitcoin", name: "Bitcoin", currencies: ["BTC"] },
       ]);
     }
+    if (url.pathname === "/api/providers") {
+      return json([
+        { slug: "binance", name: "Binance", side: "sell", source_url: "https://p2p.binance.com", currencies: ["AMD", "RUB"], banks: [], searchable: true },
+        { slug: "bybit", name: "Bybit", side: "sell", source_url: "https://www.bybit.com/fiat/trade/otc", currencies: ["AMD", "RUB"], banks: [], searchable: true },
+        { slug: "whitebird", name: "Whitebird Sell", side: "sell", source_url: "https://whitebird.io", currencies: ["BYN", "USD", "EUR", "RUB"], banks: [], searchable: false },
+      ]);
+    }
     if (url.pathname === "/api/service-executions/open" && method === "POST") {
       return json({
         execution_id: "00000000-0000-4000-8000-000000000301",
@@ -218,6 +225,8 @@ async function mockBackend(page: Page) {
       }
       expect(url.searchParams.get("source_payment_method")).toBe("IDBank");
       expect(url.searchParams.get("target_payment_method")).toBe("Alfa-Bank");
+      expect(url.searchParams.get("source_fiat")).toBe("AMD");
+      expect(url.searchParams.get("target_fiat")).toBe("RUB");
       expect(url.searchParams.get("allow_cross_venue")).toBe("true");
       const routes = Array.from({ length: 12 }, (_, index) => {
         const best = index === 0;
@@ -388,6 +397,40 @@ test("cross-venue instructions include a numbered transfer step", async ({ page 
   await expect(instructions.getByRole("heading", { name: "Transfer USDT to Bybit" })).toBeVisible();
   await expect(instructions.getByText("select the exact Ethereum (ERC-20) network on both venues", { exact: false })).toBeVisible();
   await expect(instructions.getByText("Wait for Bybit to credit the deposit before continuing.")).toBeVisible();
+});
+
+test("selected bank currencies override the reversed corridor", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page);
+
+  await page.getByRole("button", { name: "Swap sender and recipient" }).click();
+  await page.getByRole("button", { name: "Select sending bank: Sberbank" }).click();
+  const sourcePicker = page.getByRole("dialog", { name: "Choose where you pay from" });
+  await sourcePicker.getByLabel("Search banks and payment methods").fill("IDBank");
+  await sourcePicker.getByRole("option", { name: /IDBank/ }).click();
+
+  await page.getByRole("button", { name: "Select recipient bank: Ameriabank" }).click();
+  const targetPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
+  await targetPicker.getByLabel("Search banks and payment methods").fill("Alfa");
+  await targetPicker.getByRole("option", { name: /Alfa-Bank/ }).click();
+
+  await page.getByLabel("Amount to send").fill("100000");
+  await page.getByTestId("start-search").click();
+
+  await expect(page.getByText("Estimated RUB")).toBeVisible();
+  await expect(page).toHaveURL(/#\/swap\/AMD\/RUB\?amount=100000$/);
+});
+
+test("catalog providers can be selected", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page);
+
+  await page.getByRole("button", { name: "Route refresh settings" }).click();
+  const whitebird = page.getByRole("button", { name: "Whitebird" });
+
+  await expect(whitebird).toBeEnabled();
+  await whitebird.click();
+  await expect(whitebird).toHaveAttribute("aria-pressed", "true");
 });
 
 test("cryptocurrency search binds the selected asset to its network", async ({ page }) => {

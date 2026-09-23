@@ -417,10 +417,6 @@ impl P2pSearchService {
                     })
                 })
                 .collect::<Vec<_>>();
-        if selected_sources.is_empty() {
-            bail!("none of the requested P2P sources are enabled");
-        }
-
         let searches = selected_sources.into_iter().map(|source| async {
             let started = Instant::now();
             let timeout = source.timeout(self.timeout);
@@ -741,6 +737,37 @@ mod tests {
         assert_eq!(response.sources[0].source, "two");
         assert_eq!(response.offers.len(), 1);
         assert_eq!(response.offers[0].source, "two");
+    }
+
+    #[tokio::test]
+    async fn unavailable_requested_source_returns_an_empty_result() {
+        let service = P2pSearchService::with_sources(
+            vec![Arc::new(StubSource {
+                name: "one",
+                offers: vec![offer("one", "362", "1", "100000", 20)],
+                delay: Duration::ZERO,
+            })],
+            Duration::from_secs(1),
+        );
+
+        let response = service
+            .search(P2pSearchQuery {
+                fiat: "AMD".into(),
+                asset: "USDT".into(),
+                side: P2pSide::BuyCrypto,
+                amount: None,
+                payment_method: None,
+                merchant_only: None,
+                min_orders: None,
+                min_completion_rate: None,
+                limit: None,
+                sources: Some("whitebird".into()),
+            })
+            .await
+            .expect("an unavailable catalog source must not fail the whole route search");
+
+        assert!(response.offers.is_empty());
+        assert!(response.sources.is_empty());
     }
 
     #[test]
