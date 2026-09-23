@@ -20,9 +20,7 @@ use crate::service_reputation::{
 };
 
 #[derive(Debug, Deserialize)]
-pub struct RouteHttpQuery {
-    #[serde(flatten)]
-    query: P2pRouteSearchQuery,
+pub struct RouteHttpMetadata {
     anonymous_id: Option<Uuid>,
 }
 
@@ -65,7 +63,8 @@ pub async fn search(
 /// unique route before the response's display limit is applied.
 pub async fn routes(
     State(state): State<AppState>,
-    Query(request): Query<RouteHttpQuery>,
+    Query(query): Query<P2pRouteSearchQuery>,
+    Query(metadata): Query<RouteHttpMetadata>,
 ) -> Result<Json<P2pRouteSearchResponse>, AppError> {
     let search_id = Uuid::new_v4();
     state
@@ -73,7 +72,7 @@ pub async fn routes(
         .start_search(search_id)
         .await
         .map_err(map_reputation_error)?;
-    let response = state.p2p.search_routes(request.query).await;
+    let response = state.p2p.search_routes(query).await;
     let mut response = match response {
         Ok(mut response) => {
             response.search_id = search_id;
@@ -88,7 +87,7 @@ pub async fn routes(
             return Err(AppError::BadRequest(error.to_string()));
         }
     };
-    if let Err(error) = enrich_routes(&state, &mut response, request.anonymous_id).await {
+    if let Err(error) = enrich_routes(&state, &mut response, metadata.anonymous_id).await {
         let _ = state
             .reputation
             .update_search(search_id, response.routes_found, "failed")
@@ -495,5 +494,39 @@ fn map_reputation_error(error: ReputationError) -> AppError {
             AppError::BadRequest(error.to_string())
         }
         ReputationError::Internal(error) => AppError::Internal(error),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::extract::Query;
+    use axum::http::Uri;
+
+    use super::{P2pRouteSearchQuery, RouteHttpMetadata};
+
+    #[test]
+    fn route_http_query_parses_numeric_and_boolean_url_values() {
+        let uri: Uri = concat!(
+            "/api/p2p/routes?source_fiat=USDC&target_fiat=RUB&source_amount=100",
+            "&target_payment_method=Sberbank&sources=whitebird&allow_cross_venue=true",
+            "&min_orders=20&min_completion_rate=0.9&limit=40",
+            "&anonymous_id=aa1f91d5-410f-404d-85a5-de7438a29eb9"
+        )
+        .parse()
+        .unwrap();
+
+        let Query(query) = Query::<P2pRouteSearchQuery>::try_from_uri(&uri).unwrap();
+        let Query(metadata) = Query::<RouteHttpMetadata>::try_from_uri(&uri).unwrap();
+
+        assert_eq!(query.source_amount, 100.0);
+        assert_eq!(query.min_orders, Some(20));
+        assert_eq!(query.min_completion_rate, Some(0.9));
+        assert_eq!(query.allow_cross_venue, Some(true));
+        assert_eq!(query.limit, Some(40));
+        assert_eq!(query.sources.as_deref(), Some("whitebird"));
+        assert_eq!(
+            metadata.anonymous_id.unwrap().to_string(),
+            "aa1f91d5-410f-404d-85a5-de7438a29eb9"
+        );
     }
 }

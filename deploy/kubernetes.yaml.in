@@ -203,7 +203,7 @@ spec:
       containers:
         - name: backend
           image: $PAY3FLOW_IMAGE_REGISTRY/backend:$PAY3FLOW_IMAGE_TAG
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - name: http
               containerPort: 8080
@@ -319,7 +319,7 @@ spec:
       containers:
         - name: frontend
           image: $PAY3FLOW_IMAGE_REGISTRY/frontend:$PAY3FLOW_IMAGE_TAG
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - name: http
               containerPort: 3000

@@ -31,6 +31,7 @@ module Pay3flow
 
       puts "Waiting for Kaniko image-build Jobs..."
       run!(kubectl, "-n", namespace, "wait", "--for=condition=complete", "--timeout=30m", "job/pay3flow-build-backend", "job/pay3flow-build-frontend")
+      run!(kubectl, "-n", namespace, "rollout", "restart", "deployment/pay3flow-backend", "deployment/pay3flow-frontend")
       run!(kubectl, "-n", namespace, "rollout", "status", "--timeout=10m", "deployment/pay3flow-backend", "deployment/pay3flow-frontend")
     end
 
