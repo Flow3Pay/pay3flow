@@ -10,8 +10,15 @@ pub async fn list(
     State(state): State<AppState>,
     Query(filters): Query<ProviderFilters>,
 ) -> Result<Json<Vec<Provider>>, AppError> {
+    let searchable = state.p2p.searchable_sources();
     crate::providers::list(&state.pool, filters)
         .await
+        .map(|mut providers| {
+            providers.iter_mut().for_each(|provider| {
+                provider.searchable = searchable.contains(provider.slug.as_str());
+            });
+            providers
+        })
         .map(Json)
         .map_err(AppError::from)
 }

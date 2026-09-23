@@ -114,6 +114,10 @@ Regenerate the migration and rebuild it.
 ## Reading and removing providers
 
 Provider rows are available through `GET /api/providers`, with optional
-`operation`, `currency`, and `bank` query parameters. Removing a Providerfile
-does not delete historical database rows automatically; disable or remove such
-rows with an explicit migration.
+`operation`, `currency`, and `bank` query parameters. Each response item also
+contains `searchable`: it is `true` only when the corresponding live P2P or
+market source is enabled in the running backend. The frontend may show
+catalog-only providers, but must not submit them as live search sources.
+
+Removing a Providerfile does not delete historical database rows automatically;
+disable or remove such rows with an explicit migration.

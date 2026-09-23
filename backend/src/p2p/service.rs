@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::{Duration, Instant};
@@ -386,6 +386,18 @@ impl P2pSearchService {
         self
     }
 
+    pub fn searchable_sources(&self) -> HashSet<&'static str> {
+        if !self.enabled {
+            return HashSet::new();
+        }
+
+        self.sources
+            .iter()
+            .map(|source| source.name())
+            .chain(self.market_sources.iter().map(|source| source.name()))
+            .collect()
+    }
+
     pub async fn search(&self, query: P2pSearchQuery) -> Result<P2pSearchResponse> {
         if !self.enabled {
             bail!("P2P search is disabled");
@@ -729,6 +741,28 @@ mod tests {
         assert_eq!(response.sources[0].source, "two");
         assert_eq!(response.offers.len(), 1);
         assert_eq!(response.offers[0].source, "two");
+    }
+
+    #[test]
+    fn reports_only_configured_search_sources() {
+        let service = P2pSearchService::with_sources(
+            vec![
+                Arc::new(StubSource {
+                    name: "one",
+                    offers: Vec::new(),
+                    delay: Duration::ZERO,
+                }),
+                Arc::new(StubSource {
+                    name: "two",
+                    offers: Vec::new(),
+                    delay: Duration::ZERO,
+                }),
+            ],
+            Duration::from_secs(1),
+        );
+
+        assert_eq!(service.searchable_sources(), HashSet::from(["one", "two"]));
+        assert!(!service.searchable_sources().contains("whitebird"));
     }
 
     #[tokio::test]

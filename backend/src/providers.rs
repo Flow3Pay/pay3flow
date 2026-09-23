@@ -13,6 +13,7 @@ pub struct Provider {
     pub name: String,
     pub currencies: Vec<String>,
     pub banks: Vec<String>,
+    pub searchable: bool,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -54,6 +55,7 @@ ORDER BY name, operation, slug
             name: row.get("name"),
             currencies: row.get("currencies"),
             banks: row.get("banks"),
+            searchable: false,
         })
         .collect())
 }

@@ -25,6 +25,7 @@ export interface ProviderDefinition {
   name: string;
   currencies: string[];
   banks: string[];
+  searchable: boolean;
 }
 
 export interface ExchangeOrder {
