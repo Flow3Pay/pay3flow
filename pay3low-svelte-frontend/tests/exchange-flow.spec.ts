@@ -84,13 +84,61 @@ async function mockBackend(page: Page) {
         advertiser: {
           id: source === "bybit" ? `masked-${adId}` : null,
           nickname: `${source}-merchant`,
+          user_type: "merchant" as string | null,
           is_merchant: true,
           is_verified: true,
-          completed_orders_30d: 300,
-          completion_rate_30d: 0.99,
+          completed_orders_30d: 300 as number | null,
+          completion_rate_30d: 0.99 as number | null,
         },
         source_url: `https://example.com/${adId}`,
       });
+      if (url.searchParams.get("source_fiat") === "USDC") {
+        expect(url.searchParams.get("source_network")).toBe("ethereum");
+        const whitebird = offer("whitebird", "whitebird-sell-RUB-USDC", "RUB", "USDC");
+        whitebird.price = "83.4295";
+        whitebird.payment_methods = [];
+        whitebird.advertiser = {
+          ...whitebird.advertiser,
+          id: null,
+          nickname: "Whitebird",
+          user_type: "service",
+          completed_orders_30d: null,
+          completion_rate_30d: null,
+        };
+        whitebird.source_url = "https://whitebird.io/";
+        return json({
+          search_id: "00000000-0000-4000-8000-000000000105",
+          routes_found: 1,
+          searched_at: "2026-09-23T10:00:00Z",
+          source_fiat: "USDC",
+          target_fiat: "RUB",
+          source_amount: "100.00",
+          assets_searched: ["USDC"],
+          can_exchange_to_target: true,
+          routes: [{
+            route_id: "route-usdc-whitebird-rub",
+            rank: 1,
+            asset: "USDC",
+            entry_network: "ethereum",
+            source_network: "ethereum",
+            target_network: null,
+            source_fiat: "USDC",
+            source_amount: "100.00000000",
+            acquired_asset_amount: "100.00000000",
+            target_fiat: "RUB",
+            target_amount: "8342.95",
+            effective_rate: "83.42950000",
+            same_venue: true,
+            requires_asset_transfer: false,
+            transfer_fee_included: true,
+            route_kind: "crypto_to_fiat",
+            payment_methods_verified: false,
+            entry_offer: null,
+            exit_offer: whitebird,
+            warnings: ["Search estimate only."],
+          }],
+        });
+      }
       if (url.searchParams.get("source_fiat") === "USDT") {
         expect(url.searchParams.get("source_network")).toBe("ethereum");
         expect(url.searchParams.has("source_payment_method")).toBe(false);
@@ -455,6 +503,63 @@ test("cryptocurrency search binds the selected asset to its network", async ({ p
     "aria-label",
     "USDT Tether · Ethereum (ERC-20) (Binance) → RUB",
   );
+});
+
+test("direct Whitebird exchange uses provider wording and local venue icons", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page);
+
+  await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
+  const picker = page.getByRole("dialog", { name: "Choose where you pay from" });
+  await picker.getByLabel("Search banks and payment methods").fill("USDC ERC20");
+  await picker.getByRole("option", { name: /USD Coin USDC · Ethereum \(ERC-20\)/ }).click();
+
+  await page.getByLabel("Amount to send").fill("100");
+  await page.getByTestId("start-search").click();
+  const route = page.getByTestId("complete-route");
+  await expect(route).toHaveCount(1);
+  await expect(route.locator(".workflow")).toHaveAttribute(
+    "aria-label",
+    "USDC USD Coin · Ethereum (ERC-20) (Whitebird) → RUB",
+  );
+  await expect(route.locator(".workflowVenueIcon img")).toHaveAttribute(
+    "src",
+    "/icons/venues/whitebird.png",
+  );
+
+  await route.locator(".routeAmount").click();
+  const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
+  await expect(instructions.getByText("Direct exchange on Whitebird", { exact: true })).toBeVisible();
+  await expect(instructions.getByRole("link", { name: "Open Whitebird exchange" })).toHaveAttribute(
+    "href",
+    "https://whitebird.io/",
+  );
+  await expect(instructions.getByText("Find by nickname", { exact: true })).toHaveCount(0);
+  await expect(instructions.locator(".adHint")).toHaveCount(0);
+  await expect(instructions.locator(".counterpartyAvatar .avatarLogo")).toHaveAttribute(
+    "src",
+    "/icons/venues/whitebird.png",
+  );
+});
+
+test("Armenian bank picker uses the downloaded local icons", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page);
+
+  await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
+  const picker = page.getByRole("dialog", { name: "Choose where you pay from" });
+  const icons = [
+    ["Ameriabank", "/icons/assets/ameriabank.png"],
+    ["IDBank", "/icons/assets/idbank.png"],
+    ["Ardshinbank", "/icons/assets/ardshinbank.png"],
+    ["Inecobank", "/icons/assets/inecobank.png"],
+    ["Evocabank", "/icons/assets/evocabank.png"],
+  ] as const;
+
+  for (const [name, src] of icons) {
+    await picker.getByLabel("Search banks and payment methods").fill(name);
+    await expect(picker.getByRole("option", { name: new RegExp(name) }).locator("img")).toHaveAttribute("src", src);
+  }
 });
 
 test("tracked service opens unlock anonymous feedback", async ({ page }) => {

@@ -141,6 +141,7 @@ export interface CryptoMarketPath {
 export interface P2pAdvertiser {
   id?: string | null;
   nickname: string;
+  user_type?: string | null;
   is_merchant: boolean;
   is_verified: boolean;
   completed_orders_30d: number | null;

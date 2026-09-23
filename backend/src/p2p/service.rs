@@ -9,7 +9,9 @@ use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use futures::future::join_all;
+use futures::stream::{FuturesUnordered, StreamExt};
 use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc;
 
 use crate::config::Config;
 use crate::db::DbPool;
@@ -404,6 +406,22 @@ impl P2pSearchService {
     }
 
     pub async fn search(&self, query: P2pSearchQuery) -> Result<P2pSearchResponse> {
+        self.run_search(query, None).await
+    }
+
+    pub(crate) async fn stream_search(
+        &self,
+        query: P2pSearchQuery,
+        updates: mpsc::Sender<P2pSearchResponse>,
+    ) -> Result<P2pSearchResponse> {
+        self.run_search(query, Some(updates)).await
+    }
+
+    async fn run_search(
+        &self,
+        query: P2pSearchQuery,
+        updates: Option<mpsc::Sender<P2pSearchResponse>>,
+    ) -> Result<P2pSearchResponse> {
         if !self.enabled {
             bail!("P2P search is disabled");
         }
@@ -411,6 +429,9 @@ impl P2pSearchService {
         let cache_key = serde_json::to_string(&query).context("failed to build P2P cache key")?;
         if let Some(mut response) = self.cached(&cache_key) {
             response.cached = true;
+            if let Some(updates) = updates {
+                let _ = updates.send(response.clone()).await;
+            }
             return Ok(response);
         }
         let selected_sources =
@@ -421,66 +442,72 @@ impl P2pSearchService {
                         requested.split(',').any(|name| name == source.name())
                     })
                 })
+                .cloned()
                 .collect::<Vec<_>>();
-        let searches = selected_sources.into_iter().map(|source| async {
-            let started = Instant::now();
-            let timeout = source.timeout(self.timeout);
-            let result = tokio::time::timeout(timeout, source.search(&query)).await;
-            let elapsed = started.elapsed().as_millis();
-            match result {
-                Ok(Ok(offers)) => {
-                    let count = offers.len();
-                    (
-                        offers,
-                        SourceStatus {
-                            source: source.name().to_string(),
-                            ok: true,
-                            latency_ms: elapsed,
-                            offers_found: count,
-                            error: None,
-                        },
-                    )
+        let mut searches = selected_sources
+            .into_iter()
+            .map(|source| {
+                let query = query.clone();
+                async move {
+                    let started = Instant::now();
+                    let timeout = source.timeout(self.timeout);
+                    let result = tokio::time::timeout(timeout, source.search(&query)).await;
+                    let elapsed = started.elapsed().as_millis();
+                    match result {
+                        Ok(Ok(offers)) => {
+                            let count = offers.len();
+                            (
+                                offers,
+                                SourceStatus {
+                                    source: source.name().to_string(),
+                                    ok: true,
+                                    latency_ms: elapsed,
+                                    offers_found: count,
+                                    error: None,
+                                },
+                            )
+                        }
+                        Ok(Err(error)) => (
+                            Vec::new(),
+                            SourceStatus {
+                                source: source.name().to_string(),
+                                ok: false,
+                                latency_ms: elapsed,
+                                offers_found: 0,
+                                error: Some(error.to_string()),
+                            },
+                        ),
+                        Err(_) => (
+                            Vec::new(),
+                            SourceStatus {
+                                source: source.name().to_string(),
+                                ok: false,
+                                latency_ms: elapsed,
+                                offers_found: 0,
+                                error: Some(format!(
+                                    "source timed out after {} ms",
+                                    timeout.as_millis()
+                                )),
+                            },
+                        ),
+                    }
                 }
-                Ok(Err(error)) => (
-                    Vec::new(),
-                    SourceStatus {
-                        source: source.name().to_string(),
-                        ok: false,
-                        latency_ms: elapsed,
-                        offers_found: 0,
-                        error: Some(error.to_string()),
-                    },
-                ),
-                Err(_) => (
-                    Vec::new(),
-                    SourceStatus {
-                        source: source.name().to_string(),
-                        ok: false,
-                        latency_ms: elapsed,
-                        offers_found: 0,
-                        error: Some(format!("source timed out after {} ms", timeout.as_millis())),
-                    },
-                ),
+            })
+            .collect::<FuturesUnordered<_>>();
+
+        let mut collected_offers = Vec::new();
+        let mut sources = Vec::new();
+        while let Some((offers, status)) = searches.next().await {
+            collected_offers.extend(offers);
+            sources.push(status);
+            if let Some(updates) = &updates {
+                let response =
+                    build_search_response(query.clone(), &collected_offers, sources.clone(), false);
+                let _ = updates.send(response).await;
             }
-        });
+        }
 
-        let results = join_all(searches).await;
-        let mut offers = results
-            .iter()
-            .flat_map(|(offers, _)| offers.iter().cloned())
-            .filter(|offer| offer.matches(&query))
-            .collect::<Vec<_>>();
-        sort_offers(&mut offers, query.side);
-        offers.truncate(query.limit.unwrap_or(DEFAULT_LIMIT));
-        let sources = results.into_iter().map(|(_, status)| status).collect();
-
-        let response = P2pSearchResponse {
-            query,
-            searched_at: Utc::now(),
-            cached: false,
-            offers,
-            sources,
-        };
+        let response = build_search_response(query, &collected_offers, sources, false);
         if response.sources.iter().any(|source| source.ok) {
             self.cache_response(cache_key, response.clone());
         }
@@ -534,6 +561,58 @@ impl P2pSearchService {
             (name, result)
         }))
         .await
+    }
+
+    pub(crate) async fn stream_market_tickers(
+        &self,
+        requested_sources: Option<&str>,
+        updates: mpsc::Sender<(String, Result<Vec<CryptoTicker>>)>,
+    ) {
+        let mut searches = self
+            .market_sources
+            .iter()
+            .filter(|source| {
+                requested_sources
+                    .is_none_or(|requested| requested.split(',').any(|name| name == source.name()))
+            })
+            .cloned()
+            .map(|source| async move {
+                let name = source.name().to_string();
+                let result = tokio::time::timeout(source.timeout(self.timeout), source.tickers())
+                    .await
+                    .map_err(|_| anyhow::anyhow!("{} spot ticker request timed out", name))
+                    .and_then(|result| result);
+                (name, result)
+            })
+            .collect::<FuturesUnordered<_>>();
+
+        while let Some(result) = searches.next().await {
+            if updates.send(result).await.is_err() {
+                return;
+            }
+        }
+    }
+}
+
+fn build_search_response(
+    query: P2pSearchQuery,
+    collected_offers: &[P2pOffer],
+    sources: Vec<SourceStatus>,
+    cached: bool,
+) -> P2pSearchResponse {
+    let mut offers = collected_offers
+        .iter()
+        .filter(|offer| offer.matches(&query))
+        .cloned()
+        .collect::<Vec<_>>();
+    sort_offers(&mut offers, query.side);
+    offers.truncate(query.limit.unwrap_or(DEFAULT_LIMIT));
+    P2pSearchResponse {
+        query,
+        searched_at: Utc::now(),
+        cached,
+        offers,
+        sources,
     }
 }
 

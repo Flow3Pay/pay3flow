@@ -47,7 +47,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     color: "#6d2c91",
     initials: "AM",
     popular: true,
-    iconUrl: "/icons/assets/ameriabank.webp",
+    iconUrl: "/icons/assets/ameriabank.png",
     p2pQuery: "Ameriabank",
   },
   {
@@ -60,7 +60,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     color: "#21a366",
     initials: "ID",
     popular: true,
-    iconUrl: "/icons/assets/idbank.svg",
+    iconUrl: "/icons/assets/idbank.png",
     p2pQuery: "IDBank",
   },
   {
@@ -84,7 +84,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     kind: "bank",
     color: "#0877bd",
     initials: "AR",
-    iconUrl: "/icons/assets/ardshinbank.svg",
+    iconUrl: "/icons/assets/ardshinbank.png",
     p2pQuery: "Ardshinbank",
   },
   {
@@ -96,6 +96,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     kind: "bank",
     color: "#263f91",
     initials: "IN",
+    iconUrl: "/icons/assets/inecobank.png",
     p2pQuery: "Inecobank",
   },
   {
@@ -107,6 +108,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     kind: "bank",
     color: "#111827",
     initials: "EV",
+    iconUrl: "/icons/assets/evocabank.png",
     p2pQuery: "Evocabank",
   },
   {

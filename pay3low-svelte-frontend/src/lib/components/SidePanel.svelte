@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { flip } from "svelte/animate";
+  import { quintOut } from "svelte/easing";
+  import { fly } from "svelte/transition";
   import type { RouteCandidate } from "$lib/exchange";
   import { assetIcon, dislikeIcon, likeIcon, networkIcon, venueIcon } from "$lib/icons";
 
@@ -14,9 +17,9 @@
   export let hasAmount = false;
 
   const ASSET_NAMES: Record<string, string> = { BTC: "Bitcoin", ETH: "Ether", USDC: "USD Coin", USDT: "Tether" };
-  const VENUE_NAMES: Record<string, string> = { binance: "Binance", bitget: "Bitget", bybit: "Bybit", okx: "OKX", rapira: "Rapira" };
+  const VENUE_NAMES: Record<string, string> = { binance: "Binance", bitget: "Bitget", bybit: "Bybit", okx: "OKX", rapira: "Rapira", whitebird: "Whitebird" };
   const VENUE_ICONS: Record<string, string> = {
-    binance: venueIcon("binance"), bybit: venueIcon("bybit"), okx: venueIcon("okx"), bitget: venueIcon("bitget"), rapira: venueIcon("rapira"),
+    binance: venueIcon("binance"), bybit: venueIcon("bybit"), okx: venueIcon("okx"), bitget: venueIcon("bitget"), rapira: venueIcon("rapira"), whitebird: venueIcon("whitebird"),
   };
   const FIAT_MARKS: Record<string, string> = { AMD: "🇦🇲", RUB: "🇷🇺", BYN: "🇧🇾" };
   type Step = { currency: string; network?: string; provider?: string; iconUrl?: string };
@@ -27,6 +30,9 @@
   const spreadLabel = (bps: number) => Math.abs(bps / 100) < 0.005 ? "Same output" : `${Math.abs(bps / 100).toFixed(2)}% less`;
   const compact = (value: number) => Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(value);
   const routeCountLabel = (count: number) => `${count} ${count === 1 ? "route" : "routes"} found`;
+  const reduceMotion = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const routeFlipDuration = (distance: number) => reduceMotion() ? 0 : Math.min(680, 260 + distance * 0.65);
+  const routeEnterDuration = () => reduceMotion() ? 0 : 380;
 
   function workflowSteps(route: RouteCandidate): Step[] {
     const entry = route.legs.find((leg) => leg.kind === "entry");
@@ -62,7 +68,7 @@
         <ul class="routeList">
           {#each routes as route, index (route.route_id)}
             {@const complete = route.status === "complete"}
-            <li><div class="routeCardShell">
+            <li animate:flip={{ duration: routeFlipDuration, easing: quintOut }} in:fly={{ y: 18, duration: routeEnterDuration(), easing: quintOut }}><div class="routeCardShell">
               <button type="button" class:routeBest={route.is_current_best} class:selected={route.route_id === selectedRouteId} class="routeCard" disabled={!complete} on:click={(event) => cardClick(event, route)} data-testid={complete ? "complete-route" : "partial-route"}>
                 <span class="routeTopline"><span class="routeRank">#{String(index + 1).padStart(2, "0")}</span>{#if route.is_current_best}<span class="bestBadge">Best route</span>{:else}<span class="deltaBadge">{spreadLabel(route.spread_bps)}</span>{/if}</span>
                 <span class="routeAmount">{money(route.target_amount_minor, route.target_currency)}</span>
@@ -283,6 +289,7 @@
 .routeList > li {
   content-visibility: auto;
   contain-intrinsic-size: 0 132px;
+  will-change: transform, opacity;
 }
 
 .routeCardShell {
@@ -787,6 +794,13 @@
   .panel {
     height: 520px;
     padding: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .routeList > li,
+  .routeCard {
+    transition: none;
   }
 }
 
