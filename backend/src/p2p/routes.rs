@@ -953,7 +953,7 @@ mod tests {
 
     #[async_trait]
     impl P2pSource for ProgressiveSource {
-        fn name(&self) -> &'static str {
+        fn name(&self) -> &str {
             "bybit"
         }
 

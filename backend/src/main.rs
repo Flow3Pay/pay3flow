@@ -74,7 +74,8 @@ async fn main() -> anyhow::Result<()> {
     );
 
     let network_catalog = pay3flow_backend::networks::NetworkCatalog::load(&pool).await?;
-    let p2p = pay3flow_backend::p2p::P2pSearchService::from_config(&cfg, network_catalog)?;
+    let p2p = pay3flow_backend::p2p::P2pSearchService::from_database(&cfg, network_catalog, &pool)
+        .await?;
     let reputation =
         pay3flow_backend::service_reputation::ServiceReputation::new(pool.clone(), &cfg.jwt_secret);
 

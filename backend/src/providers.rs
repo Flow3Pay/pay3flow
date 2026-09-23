@@ -1,8 +1,9 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::db::DbPool;
+use crate::provider_adapter::{ProviderAdapters, WorkflowConfig};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Provider {
@@ -14,6 +15,15 @@ pub struct Provider {
     pub currencies: Vec<String>,
     pub banks: Vec<String>,
     pub searchable: bool,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ProviderAdapterRecord {
+    pub slug: String,
+    pub source_url: String,
+    pub display_name: String,
+    pub config: Option<ProviderAdapters>,
+    pub workflow: Option<WorkflowConfig>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -58,6 +68,76 @@ ORDER BY name, operation, slug
             searchable: false,
         })
         .collect())
+}
+
+pub(crate) async fn adapters(pool: &DbPool) -> Result<Vec<ProviderAdapterRecord>> {
+    let client = pool.get().await?;
+    let rows = client
+        .query(
+            r#"
+SELECT slug,
+       MIN(source_url) AS source_url,
+       MIN(name) AS display_name,
+       array_agg(operation ORDER BY operation) AS operations,
+       adapter,
+       workflow
+FROM providers
+WHERE status = 'enabled'
+  AND (adapter <> '{}'::JSONB OR workflow <> '{}'::JSONB)
+GROUP BY slug, adapter, workflow
+ORDER BY slug
+"#,
+            &[],
+        )
+        .await?;
+
+    rows.into_iter()
+        .map(|row| {
+            let slug: String = row.get("slug");
+            let value: serde_json::Value = row.get("adapter");
+            let config: Option<ProviderAdapters> =
+                (!value.as_object().is_some_and(serde_json::Map::is_empty))
+                    .then(|| serde_json::from_value(value))
+                    .transpose()
+                    .with_context(|| format!("invalid Providerfile adapter stored for `{slug}`"))?;
+            let workflow_value: serde_json::Value = row.get("workflow");
+            let workflow: Option<WorkflowConfig> = (!workflow_value
+                .as_object()
+                .is_some_and(serde_json::Map::is_empty))
+            .then(|| serde_json::from_value(workflow_value))
+            .transpose()
+            .with_context(|| format!("invalid Providerfile workflow stored for `{slug}`"))?;
+            let operations: Vec<String> = row.get("operations");
+            let has_buy = operations.iter().any(|operation| operation == "buy");
+            let has_sell = operations.iter().any(|operation| operation == "sell");
+            if let Some(config) = &config {
+                config
+                    .validate(has_buy, has_sell, &slug)
+                    .map_err(anyhow::Error::msg)?;
+            }
+            if let Some(workflow) = &workflow {
+                workflow
+                    .validate(has_buy, has_sell, &slug)
+                    .map_err(anyhow::Error::msg)?;
+            }
+            let display_name: String = row.get("display_name");
+            Ok(ProviderAdapterRecord {
+                slug,
+                source_url: row.get("source_url"),
+                display_name: provider_display_name(&display_name),
+                config,
+                workflow,
+            })
+        })
+        .collect()
+}
+
+fn provider_display_name(name: &str) -> String {
+    name.trim()
+        .strip_suffix(" Buy")
+        .or_else(|| name.trim().strip_suffix(" Sell"))
+        .unwrap_or(name.trim())
+        .to_string()
 }
 
 fn normalized(value: Option<String>, uppercase: bool) -> Option<String> {

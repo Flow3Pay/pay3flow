@@ -8,6 +8,7 @@ pub mod networks;
 pub mod p2p;
 pub mod pairs;
 pub mod payments;
+pub mod provider_adapter;
 pub mod providers;
 pub mod quotes;
 pub mod routing;

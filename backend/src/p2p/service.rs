@@ -11,15 +11,11 @@ use futures::future::join_all;
 use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
+use crate::db::DbPool;
 use crate::networks::NetworkCatalog;
-use crate::p2p::spot::{
-    BinanceSpotSource, BitgetSpotSource, BybitSpotSource, CryptoMarketSource, CryptoTicker,
-    OkxSpotSource,
-};
-use crate::p2p::{
-    binance::BinanceP2pSource, bitget::BitgetP2pSource, bybit::BybitP2pSource, okx::OkxP2pSource,
-    rapira::RapiraP2pSource,
-};
+use crate::p2p::declarative::{DeclarativeMarketSource, DeclarativeP2pSource};
+use crate::p2p::spot::{CryptoMarketSource, CryptoTicker};
+use crate::p2p::workflow::WorkflowP2pSource;
 
 const DEFAULT_LIMIT: usize = 20;
 const MAX_LIMIT: usize = 100;
@@ -251,7 +247,7 @@ pub struct P2pSearchResponse {
 
 #[async_trait]
 pub(crate) trait P2pSource: Send + Sync {
-    fn name(&self) -> &'static str;
+    fn name(&self) -> &str;
     fn timeout(&self, default: Duration) -> Duration {
         default
     }
@@ -278,50 +274,41 @@ struct CachedSearch {
 
 impl P2pSearchService {
     pub fn from_config(config: &Config, networks: NetworkCatalog) -> Result<Self> {
+        Self::from_provider_records(config, networks, Vec::new())
+    }
+
+    pub async fn from_database(
+        config: &Config,
+        networks: NetworkCatalog,
+        pool: &DbPool,
+    ) -> Result<Self> {
+        let records = crate::providers::adapters(pool).await?;
+        Self::from_provider_records(config, networks, records)
+    }
+
+    fn from_provider_records(
+        config: &Config,
+        networks: NetworkCatalog,
+        records: Vec<crate::providers::ProviderAdapterRecord>,
+    ) -> Result<Self> {
         let timeout = Duration::from_millis(config.p2p_search_timeout_ms.clamp(250, 30_000));
-        let okx_timeout =
-            Duration::from_millis(config.p2p_okx_search_timeout_ms.clamp(250, 30_000));
         let client = reqwest::Client::builder()
-            .timeout(timeout.max(okx_timeout))
+            .timeout(Duration::from_secs(30))
             .user_agent("Pay3Flow-P2P-Search/0.1")
             .build()
             .context("failed to build P2P HTTP client")?;
         let mut sources: Vec<Arc<dyn P2pSource>> = Vec::new();
         let mut market_sources: Vec<Arc<dyn CryptoMarketSource>> = Vec::new();
-        if config.p2p_binance_enabled {
-            sources.push(Arc::new(BinanceP2pSource::new(
-                client.clone(),
-                config.p2p_binance_url.clone(),
-            )));
-            market_sources.push(Arc::new(BinanceSpotSource::new(client.clone())));
-        }
-        if config.p2p_bybit_enabled {
-            sources.push(Arc::new(BybitP2pSource::new(
-                client.clone(),
-                config.p2p_bybit_url.clone(),
-            )));
-            market_sources.push(Arc::new(BybitSpotSource::new(client.clone())));
-        }
-        if config.p2p_okx_enabled {
-            sources.push(Arc::new(OkxP2pSource::new(
-                client.clone(),
-                config.p2p_okx_url.clone(),
-                okx_timeout,
-            )));
-            market_sources.push(Arc::new(OkxSpotSource::new(client.clone())));
-        }
-        if config.p2p_bitget_enabled {
-            sources.push(Arc::new(BitgetP2pSource::new(
-                client.clone(),
-                config.p2p_bitget_url.clone(),
-            )));
-            market_sources.push(Arc::new(BitgetSpotSource::new(client.clone())));
-        }
-        if config.p2p_rapira_enabled {
-            sources.push(Arc::new(RapiraP2pSource::new(
-                client.clone(),
-                config.p2p_rapira_url.clone(),
-            )));
+        for record in &records {
+            if let Some(source) = DeclarativeP2pSource::from_record(client.clone(), record) {
+                sources.push(Arc::new(source));
+            }
+            if let Some(source) = DeclarativeMarketSource::from_record(client.clone(), record) {
+                market_sources.push(Arc::new(source));
+            }
+            if let Some(source) = WorkflowP2pSource::from_record(record) {
+                sources.push(Arc::new(source));
+            }
         }
         let default_assets = if config.p2p_search_assets.is_empty() {
             networks.assets()
@@ -386,15 +373,19 @@ impl P2pSearchService {
         self
     }
 
-    pub fn searchable_sources(&self) -> HashSet<&'static str> {
+    pub fn searchable_sources(&self) -> HashSet<String> {
         if !self.enabled {
             return HashSet::new();
         }
 
         self.sources
             .iter()
-            .map(|source| source.name())
-            .chain(self.market_sources.iter().map(|source| source.name()))
+            .map(|source| source.name().to_string())
+            .chain(
+                self.market_sources
+                    .iter()
+                    .map(|source| source.name().to_string()),
+            )
             .collect()
     }
 
@@ -522,7 +513,7 @@ impl P2pSearchService {
 
         join_all(selected_sources.into_iter().map(|source| async move {
             let name = source.name().to_string();
-            let result = tokio::time::timeout(self.timeout, source.tickers())
+            let result = tokio::time::timeout(source.timeout(self.timeout), source.tickers())
                 .await
                 .map_err(|_| anyhow::anyhow!("{} spot ticker request timed out", name))
                 .and_then(|result| result);
@@ -577,7 +568,7 @@ mod tests {
 
     #[async_trait]
     impl P2pSource for StubSource {
-        fn name(&self) -> &'static str {
+        fn name(&self) -> &str {
             self.name
         }
 
@@ -788,7 +779,10 @@ mod tests {
             Duration::from_secs(1),
         );
 
-        assert_eq!(service.searchable_sources(), HashSet::from(["one", "two"]));
+        assert_eq!(
+            service.searchable_sources(),
+            HashSet::from(["one".to_string(), "two".to_string()])
+        );
         assert!(!service.searchable_sources().contains("whitebird"));
     }
 

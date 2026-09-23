@@ -9,3 +9,63 @@ source_url = "https://www.bitget.com"
 name = "Bitget Buy"
 currency = ["usd", "rub", "eur", "amd"]
 banks = []
+
+[adapter.p2p]
+kind = "http_json"
+endpoint = "https://www.bitget.com/v1/p2p/pub/adv/queryAdvList"
+method = "POST"
+headers = { Origin = "https://www.bitget.com", Referer = "https://www.bitget.com/p2p-trade" }
+timeout_ms = 4000
+supported_assets = ["USDT", "USDC", "BTC", "ETH"]
+
+[adapter.p2p.buy]
+request_json = '''{"side":1,"pageNo":1,"pageSize":"{{limit_number}}","coinCode":"{{asset}}","fiatCode":"{{fiat}}"}'''
+items_pointer = "/data/dataList"
+success_pointer = "/code"
+success_value = "00000"
+error_pointer = "/msg"
+
+[adapter.p2p.sell]
+request_json = '''{"side":2,"pageNo":1,"pageSize":"{{limit_number}}","coinCode":"{{asset}}","fiatCode":"{{fiat}}"}'''
+items_pointer = "/data/dataList"
+success_pointer = "/code"
+success_value = "00000"
+error_pointer = "/msg"
+
+[adapter.p2p.offer]
+ad_id_pointer = "/adNo"
+fiat_pointer = "/fiatCode"
+asset_pointer = "/coinCode"
+price_pointer = "/price"
+available_asset_pointer = "/editAmount"
+min_fiat_pointer = "/minAmount"
+max_fiat_pointer = "/maxAmount"
+payment_methods_pointer = "/paymethodInfo"
+payment_method_value_pointer = "/paymethodName"
+pay_time_limit_pointer = "/payDuration"
+advertiser_id_pointer = "/encryptUserId"
+advertiser_nickname_pointer = "/nickName"
+advertiser_user_type_pointer = "/certifiedMerchant"
+verified_from_merchant = true
+completed_orders_pointer = "/thirtyTunoverNum"
+completion_rate_pointer = "/thirtyCompletionRate"
+positive_rate_pointer = "/goodEvaluationRate"
+source_url_template = "https://www.bitget.com/p2p-trade/{{side}}?fiatName={{fiat}}"
+advertiser_profile_url_template = "https://www.bitget.com/p2p-trade/user/{{item:/encryptUserId}}"
+
+[[adapter.p2p.offer.merchant_conditions]]
+pointer = "/certifiedMerchant"
+operator = "truthy"
+
+[adapter.market]
+kind = "http_json"
+endpoint = "https://api.bitget.com/api/v2/spot/market/tickers"
+method = "GET"
+timeout_ms = 4000
+items_pointer = "/data"
+symbol_pointer = "/symbol"
+bid_pointer = "/bidPr"
+ask_pointer = "/askPr"
+success_pointer = "/code"
+success_value = "00000"
+error_pointer = "/msg"

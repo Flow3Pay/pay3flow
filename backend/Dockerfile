@@ -9,7 +9,9 @@ COPY backend/migrations backend/migrations
 RUN touch backend/src/main.rs && cargo build --release --bin pay3flow-backend --manifest-path backend/Cargo.toml
 
 FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates chromium \
+    && rm -rf /var/lib/apt/lists/*
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE=/usr/bin/chromium
 WORKDIR /app
 COPY --from=builder /app/backend/target/release/pay3flow-backend /usr/local/bin/pay3flow-backend
 RUN mkdir -p /app/data

@@ -1,11 +1,118 @@
 [sell]
-source_url = "https://whitebird.io"
+source_url = "https://whitebird.io/"
 name = "Whitebird Sell"
 currency = ["byn", "usd", "eur", "rub"]
 banks = []
 
 [buy]
-source_url = "https://whitebird.io"
+source_url = "https://whitebird.io/"
 name = "Whitebird Buy"
 currency = ["byn", "usd", "eur", "rub"]
 banks = []
+
+[workflow]
+source_url = "https://whitebird.io/"
+get_exchange = "https://whitebird.io/exchanger"
+timeout_ms = 30000
+navigation_retries = 1
+navigation_retry_delay_ms = 1000
+supported_assets = ["TRX", "USDT", "ETH", "USDC", "BTC", "BNB", "GRAM", "SOL"]
+fiat_probe_amount = 1000
+asset_probe_amount = 100
+default_min_fiat = 1
+default_max_fiat = 1000000000
+default_available_asset = 1000000000
+is_merchant = true
+is_verified = true
+
+[workflow.buy]
+amount_mode = "fiat_probe"
+
+[[workflow.buy.steps]]
+action = "wait_for"
+selector = 'input[name="amountFrom"]'
+
+[[workflow.buy.steps]]
+action = "react_select"
+selector = 'div:has(> input[name="currencyFrom"]) > div'
+value = "{{fiat}}"
+
+[[workflow.buy.steps]]
+action = "wait"
+milliseconds = 800
+
+[[workflow.buy.steps]]
+action = "react_select"
+selector = 'div:has(> input[name="currencyTo"]) > div'
+value = "{{asset}}"
+
+[[workflow.buy.steps]]
+action = "wait"
+milliseconds = 800
+
+[[workflow.buy.steps]]
+action = "fill"
+selector = 'input[name="amountFrom"]'
+value = "{{amount}}"
+
+[[workflow.buy.steps]]
+action = "wait_for"
+selector = 'input[name="amountTo"]'
+
+[[workflow.buy.steps]]
+action = "wait"
+milliseconds = 800
+
+[workflow.buy.fiat_amount]
+selector = 'input[name="amountFrom"]'
+property = "value"
+
+[workflow.buy.asset_amount]
+selector = 'input[name="amountTo"]'
+property = "value"
+
+[workflow.sell]
+amount_mode = "asset_probe"
+
+[[workflow.sell.steps]]
+action = "wait_for"
+selector = 'input[name="amountFrom"]'
+
+[[workflow.sell.steps]]
+action = "react_select"
+selector = 'div:has(> input[name="currencyFrom"]) > div'
+value = "{{asset}}"
+
+[[workflow.sell.steps]]
+action = "wait"
+milliseconds = 800
+
+[[workflow.sell.steps]]
+action = "react_select"
+selector = 'div:has(> input[name="currencyTo"]) > div'
+value = "{{fiat}}"
+
+[[workflow.sell.steps]]
+action = "wait"
+milliseconds = 800
+
+[[workflow.sell.steps]]
+action = "fill"
+selector = 'input[name="amountFrom"]'
+value = "{{amount}}"
+
+[[workflow.sell.steps]]
+action = "wait_for"
+selector = 'input[name="amountTo"]'
+
+[[workflow.sell.steps]]
+action = "wait"
+milliseconds = 800
+
+[workflow.sell.fiat_amount]
+selector = 'input[name="amountTo"]'
+property = "value"
+
+[workflow.sell.asset_amount]
+selector = 'input[name="amountFrom"]'
+property = "value"

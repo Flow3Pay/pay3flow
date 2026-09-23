@@ -9,3 +9,67 @@ source_url = "https://www.binance.com"
 name = "Binance Buy"
 currency = ["usd", "rub", "eur", "amd"]
 banks = []
+
+[adapter.p2p]
+kind = "http_json"
+endpoint = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
+method = "POST"
+headers = { Origin = "https://www.binance.com", Referer = "https://www.binance.com/" }
+timeout_ms = 4000
+max_results = 20
+supported_assets = ["USDT", "USDC", "BTC", "ETH", "BNB"]
+
+[adapter.p2p.buy]
+request_json = '''{"fiat":"{{fiat}}","page":1,"rows":"{{limit_number}}","tradeType":"BUY","asset":"{{asset}}","countries":[],"proMerchantAds":false,"shieldMerchantAds":false,"publisherType":null,"payTypes":[],"additionalKycVerifyFilter":0}'''
+items_pointer = "/data"
+success_pointer = "/code"
+success_value = "000000"
+error_pointer = "/message"
+
+[adapter.p2p.sell]
+request_json = '''{"fiat":"{{fiat}}","page":1,"rows":"{{limit_number}}","tradeType":"SELL","asset":"{{asset}}","countries":[],"proMerchantAds":false,"shieldMerchantAds":false,"publisherType":null,"payTypes":[],"additionalKycVerifyFilter":0}'''
+items_pointer = "/data"
+success_pointer = "/code"
+success_value = "000000"
+error_pointer = "/message"
+
+[adapter.p2p.offer]
+ad_id_pointer = "/adv/advNo"
+fiat_pointer = "/adv/fiatUnit"
+asset_pointer = "/adv/asset"
+price_pointer = "/adv/price"
+available_asset_pointer = "/adv/tradableQuantity"
+min_fiat_pointer = "/adv/minSingleTransAmount"
+max_fiat_pointer = "/adv/maxSingleTransAmount"
+payment_methods_pointer = "/adv/tradeMethods"
+payment_method_value_pointer = "/tradeMethodName"
+payment_method_fallback_pointer = "/identifier"
+pay_time_limit_pointer = "/adv/payTimeLimit"
+advertiser_id_pointer = "/advertiser/userNo"
+advertiser_nickname_pointer = "/advertiser/nickName"
+advertiser_user_type_pointer = "/advertiser/userType"
+verified_from_merchant = true
+completed_orders_pointer = "/advertiser/monthOrderCount"
+completion_rate_pointer = "/advertiser/monthFinishRate"
+positive_rate_pointer = "/advertiser/positiveRate"
+source_url_template = "https://c2c.binance.com/en/adv?code={{item:/adv/advNo}}"
+source_url_is_exact = true
+advertiser_profile_url_template = "https://c2c.binance.com/en/advertiserDetail?advertiserNo={{item:/advertiser/userNo}}"
+
+[[adapter.p2p.offer.merchant_conditions]]
+pointer = "/advertiser/merchantGroupMember"
+operator = "truthy"
+
+[[adapter.p2p.offer.merchant_conditions]]
+pointer = "/advertiser/userType"
+operator = "equals_ci"
+value = "merchant"
+
+[adapter.market]
+kind = "http_json"
+endpoint = "https://api.binance.com/api/v3/ticker/bookTicker"
+method = "GET"
+timeout_ms = 4000
+symbol_pointer = "/symbol"
+bid_pointer = "/bidPrice"
+ask_pointer = "/askPrice"

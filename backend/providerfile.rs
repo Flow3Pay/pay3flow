@@ -3,6 +3,7 @@ use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use pay3flow_backend::provider_adapter::{ProviderAdapters, WorkflowConfig};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -10,6 +11,8 @@ use serde::Deserialize;
 struct RawProviderFile {
     buy: Option<RawProvider>,
     sell: Option<RawProvider>,
+    adapter: Option<ProviderAdapters>,
+    workflow: Option<WorkflowConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -38,7 +41,7 @@ impl Operation {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ProviderDefinition {
     pub slug: String,
     pub operation: Operation,
@@ -46,6 +49,8 @@ pub struct ProviderDefinition {
     pub name: String,
     pub currencies: Vec<String>,
     pub banks: Vec<String>,
+    pub adapter: Option<ProviderAdapters>,
+    pub workflow: Option<WorkflowConfig>,
     pub source_file: String,
 }
 
@@ -73,10 +78,42 @@ pub fn parse(
         )));
     }
 
+    if let Some(adapter) = &raw.adapter {
+        adapter
+            .validate(raw.buy.is_some(), raw.sell.is_some(), source_file)
+            .map_err(ProviderFileError)?;
+    }
+    if let Some(workflow) = &raw.workflow {
+        workflow
+            .validate(raw.buy.is_some(), raw.sell.is_some(), source_file)
+            .map_err(ProviderFileError)?;
+    }
+    if raw.workflow.is_some()
+        && raw
+            .adapter
+            .as_ref()
+            .is_some_and(|adapter| adapter.p2p.is_some())
+    {
+        return Err(ProviderFileError(format!(
+            "{source_file}: configure either [adapter.p2p] or [workflow], not both"
+        )));
+    }
+
+    let adapter = raw.adapter;
+    let workflow = raw.workflow;
     [(Operation::Buy, raw.buy), (Operation::Sell, raw.sell)]
         .into_iter()
         .filter_map(|(operation, provider)| provider.map(|provider| (operation, provider)))
-        .map(|(operation, provider)| normalize(provider, slug, operation, source_file))
+        .map(|(operation, provider)| {
+            normalize(
+                provider,
+                slug,
+                operation,
+                source_file,
+                adapter.clone(),
+                workflow.clone(),
+            )
+        })
         .collect()
 }
 
@@ -118,20 +155,34 @@ pub fn render_sql(definitions: &[ProviderDefinition]) -> String {
     for definition in definitions {
         let currencies = sql_array(&definition.currencies);
         let banks = sql_array(&definition.banks);
+        let adapter = definition
+            .adapter
+            .as_ref()
+            .map(|adapter| serde_json::to_string(adapter).expect("adapter config is serializable"))
+            .unwrap_or_else(|| "{}".into());
+        let workflow = definition
+            .workflow
+            .as_ref()
+            .map(|workflow| serde_json::to_string(workflow).expect("workflow is serializable"))
+            .unwrap_or_else(|| "{}".into());
         sql.push_str(&format!(
-            "INSERT INTO providers (slug, operation, source_url, name, currencies, banks, source_file)\n\
-             VALUES ({}, {}, {}, {}, {currencies}, {banks}, {})\n\
+            "INSERT INTO providers (slug, operation, source_url, name, currencies, banks, adapter, workflow, source_file)\n\
+             VALUES ({}, {}, {}, {}, {currencies}, {banks}, {}::JSONB, {}::JSONB, {})\n\
              ON CONFLICT (slug, operation) DO UPDATE SET\n\
                  source_url = EXCLUDED.source_url,\n\
                  name = EXCLUDED.name,\n\
                  currencies = EXCLUDED.currencies,\n\
                  banks = EXCLUDED.banks,\n\
+                 adapter = EXCLUDED.adapter,\n\
+                 workflow = EXCLUDED.workflow,\n\
                  source_file = EXCLUDED.source_file,\n\
                  updated_at = now();\n\n",
             sql_string(&definition.slug),
             sql_string(definition.operation.as_str()),
             sql_string(&definition.source_url),
             sql_string(&definition.name),
+            sql_string(&adapter),
+            sql_string(&workflow),
             sql_string(&definition.source_file),
         ));
     }
@@ -146,6 +197,8 @@ fn normalize(
     slug: &str,
     operation: Operation,
     source_file: &str,
+    adapter: Option<ProviderAdapters>,
+    workflow: Option<WorkflowConfig>,
 ) -> Result<ProviderDefinition, ProviderFileError> {
     let source_url = raw.source_url.trim().to_string();
     if !source_url.starts_with("https://") && !source_url.starts_with("http://") {
@@ -185,6 +238,8 @@ fn normalize(
         name,
         currencies,
         banks: normalized_values(raw.banks, false),
+        adapter,
+        workflow,
         source_file: source_file.to_string(),
     })
 }
@@ -284,6 +339,43 @@ currency = ["usd", "rub", "eur", "amd"]
 name = "Rate Buy"
 "#;
 
+    const HTTP_JSON_EXAMPLE: &str = r#"
+[adapter.p2p]
+kind = "http_json"
+endpoint = "https://api.provider.example/v1/quote"
+method = "POST"
+headers = { Origin = "https://provider.example" }
+asset_codes = { USDT = "USDT_TRC" }
+fiat_probe_amount = 1000
+asset_probe_amount = 100
+default_min_fiat = 1
+default_max_fiat = 1000000000
+default_available_asset = 1000000000
+
+[adapter.p2p.buy]
+amount_mode = "fiat_probe"
+request_json = '''{"from":"{{fiat}}","to":"{{asset}}","amount":"{{amount}}"}'''
+
+[adapter.p2p.sell]
+amount_mode = "asset_probe"
+request_json = '''{"from":"{{asset}}","to":"{{fiat}}","amount":"{{amount}}"}'''
+
+[adapter.p2p.offer]
+ad_id_pointer = "/id"
+fiat_amount_pointer = "/output/amount"
+asset_amount_pointer = "/input/amount"
+
+[sell]
+source_url = "https://provider.example"
+name = "Example Sell"
+currency = ["rub"]
+
+[buy]
+source_url = "https://provider.example"
+name = "Example Buy"
+currency = ["rub"]
+"#;
+
     #[test]
     fn parses_and_normalizes_the_documented_shape() {
         let definitions = parse(EXAMPLE, "rate-am", "rate-am/Providerfile").unwrap();
@@ -302,6 +394,11 @@ name = "Rate Buy"
     }
 
     #[test]
+    fn accepts_a_declarative_http_json_adapter() {
+        assert!(parse(HTTP_JSON_EXAMPLE, "example", "example/Providerfile").is_ok());
+    }
+
+    #[test]
     fn escapes_values_in_generated_sql() {
         let definitions = parse(
             &EXAMPLE.replace("Rate Buy", "Banker's Buy"),
@@ -311,5 +408,15 @@ name = "Rate Buy"
         .unwrap();
 
         assert!(render_sql(&definitions).contains("Banker''s Buy"));
+    }
+
+    #[test]
+    fn validates_every_checked_in_providerfile() {
+        let providers = Path::new(env!("CARGO_MANIFEST_DIR")).join("providers");
+        let sql = compile_dir(&providers).unwrap();
+
+        assert!(sql.contains("'whitebird'"));
+        assert!(sql.contains("'binance'"));
+        assert!(sql.contains("workflow"));
     }
 }

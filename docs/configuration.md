@@ -40,14 +40,14 @@ private keys or copy development keys into a production image.
 | `SERVICE_FEE_PERCENT` | Service fee used by legacy payment paths |
 | `PAIRS_CACHE_TTL_SECS` | Exchange-pair catalog cache lifetime |
 | `P2P_SEARCH_ENABLED` | Enable read-only P2P search |
-| `P2P_SEARCH_TIMEOUT_MS` | Per-search timeout (4 seconds by default) |
-| `P2P_OKX_SEARCH_TIMEOUT_MS` | OKX-only P2P search timeout (10 seconds by default) |
+| `P2P_SEARCH_TIMEOUT_MS` | Default per-source timeout (4 seconds by default); a Providerfile may override it |
 | `P2P_SEARCH_CACHE_TTL_MS` | P2P search cache lifetime |
 | `P2P_SEARCH_ASSETS` | Optional comma-separated intermediary assets; defaults to the migrated network catalog |
-| `P2P_<VENUE>_ENABLED` | Enable a public read-only venue adapter |
+| `PLAYWRIGHT_CHROMIUM_EXECUTABLE` | Chromium binary used by Providerfile browser workflows |
+| `P2P_WORKFLOW_DEBUG_SCREENSHOT` | Optional failure-screenshot path for workflow diagnostics |
 
-Current venue flags are `P2P_BINANCE_ENABLED`, `P2P_BYBIT_ENABLED`,
-`P2P_OKX_ENABLED`, `P2P_BITGET_ENABLED`, and `P2P_RAPIRA_ENABLED`.
+Individual sources, endpoints, mappings, and timeouts are defined in
+Providerfiles and stored in the database migration, not environment flags.
 
 ## Production rules
 

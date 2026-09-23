@@ -12,3 +12,57 @@ source_url = "https://provider.example"
 name = "Example Provider Buy"
 currency = ["usd", "rub", "eur", "amd"]
 banks = []
+
+# Delete this section if the provider is catalog-only. For a JSON API use
+# [adapter.p2p] instead; complete examples are in binance/, bybit/, okx/,
+# bitget/, and rapira/. Browser workflow reference: docs/providerfiles.md.
+[workflow]
+source_url = "https://provider.example"
+get_exchange = "https://provider.example/exchange"
+timeout_ms = 30000
+supported_assets = ["USDT"]
+fiat_probe_amount = 1000
+asset_probe_amount = 100
+default_min_fiat = 1
+default_max_fiat = 1000000000
+default_available_asset = 1000000000
+
+[workflow.buy]
+amount_mode = "fiat_probe"
+
+[[workflow.buy.steps]]
+action = "fill"
+selector = 'input[name="fromAmount"]'
+value = "{{amount}}"
+
+[[workflow.buy.steps]]
+action = "wait"
+milliseconds = 500
+
+[workflow.buy.fiat_amount]
+selector = 'input[name="fromAmount"]'
+property = "value"
+
+[workflow.buy.asset_amount]
+selector = 'input[name="toAmount"]'
+property = "value"
+
+[workflow.sell]
+amount_mode = "asset_probe"
+
+[[workflow.sell.steps]]
+action = "fill"
+selector = 'input[name="fromAmount"]'
+value = "{{amount}}"
+
+[[workflow.sell.steps]]
+action = "wait"
+milliseconds = 500
+
+[workflow.sell.fiat_amount]
+selector = 'input[name="toAmount"]'
+property = "value"
+
+[workflow.sell.asset_amount]
+selector = 'input[name="fromAmount"]'
+property = "value"
