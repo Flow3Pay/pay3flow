@@ -11,7 +11,7 @@ module Pay3flow
       "PAY3FLOW_SOURCE_REPOSITORY" => "https://github.com/Flow3Pay/pay3flow.git",
       "PAY3FLOW_SOURCE_REVISION" => "c3ce63cc06209638e47bcf9c94e65ad66f802da9",
       "PAY3FLOW_INGRESS_HOST" => "pay3flow.lefine.pro",
-      "PAY3FLOW_INGRESS_CLASS" => "traefik",
+     "PAY3FLOW_INGRESS_CLASS" => "traefik",
       "PAY3FLOW_INGRESS_TLS_SECRET" => "",
       "PAY3FLOW_STORAGE_CLASS" => "local-path",
       "PAY3FLOW_DATABASE_MODE" => "in-cluster",
