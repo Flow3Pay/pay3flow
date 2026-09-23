@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title>Pay3Flow</title>
+  <rect width="64" height="64" rx="18" fill="#b9f227"/>
+  <path d="M12 18.46 32 7l20 11.46v27.08L32 57 12 45.54Z" fill="#171a17"/>
+  <path d="m21 25.15 11-6.4 11 6.4-11 6.4-11-6.4Zm0 12.12 11 6.4 11-6.4" fill="none" stroke="#b9f227" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

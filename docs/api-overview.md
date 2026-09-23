@@ -77,6 +77,7 @@ GET  /api/payments/:id
 POST /api/providers/:provider/webhooks
 GET  /api/banks
 GET  /api/networks
+GET  /api/providers
 GET  /api/exchange-pairs
 GET  /api/p2p/search
 GET  /api/p2p/routes

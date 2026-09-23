@@ -88,6 +88,34 @@ export interface RouteCandidate {
   exit_offer_snapshot?: P2pOffer;
   warnings?: string[];
   legs: RouteLeg[];
+  services?: ServiceStats[];
+  reputation?: CombinedReputation;
+  service_links?: ServiceLink[];
+}
+
+export type ServiceVote = "like" | "dislike";
+
+export interface ServiceStats {
+  id: string;
+  slug: string;
+  display_name: string;
+  executions_total: number;
+  likes_total: number;
+  dislikes_total: number;
+  viewer_vote?: ServiceVote;
+}
+
+export interface CombinedReputation {
+  executions_average: number;
+  likes_average: number;
+  dislikes_average: number;
+}
+
+export interface ServiceLink {
+  service_id: string;
+  service_slug: string;
+  kind: "entry" | "exit" | "market_source" | "market_target";
+  tracking_token: string;
 }
 
 export interface CryptoMarketPath {
@@ -126,6 +154,7 @@ export interface P2pOffer {
 }
 
 export interface P2pRoute {
+  route_id?: string;
   rank: number;
   asset: string;
   entry_network?: string | null;
@@ -147,9 +176,14 @@ export interface P2pRoute {
   entry_offer?: P2pOffer;
   exit_offer?: P2pOffer;
   warnings: string[];
+  services?: ServiceStats[];
+  reputation?: CombinedReputation;
+  service_links?: ServiceLink[];
 }
 
 export interface P2pRouteSearchResponse {
+  search_id?: string;
+  routes_found?: number;
   searched_at: string;
   source_fiat: string;
   target_fiat: string;
@@ -157,6 +191,18 @@ export interface P2pRouteSearchResponse {
   assets_searched: string[];
   can_exchange_to_target: boolean;
   routes: P2pRoute[];
+}
+
+export type P2pRouteStreamEvent =
+  | { type: "search_started"; search_id: string; routes_found: number }
+  | ({ type: "routes_updated" | "search_finished" } & P2pRouteSearchResponse)
+  | { type: "search_failed"; search_id?: string; error: string };
+
+export interface ServiceExecutionOpen {
+  execution_id: string;
+  newly_recorded: boolean;
+  redirect_url: string;
+  service: ServiceStats;
 }
 
 export type LiveRouteEvent =
@@ -243,6 +289,7 @@ export function fetchP2pRoutes(query: {
   allowCrossVenue?: boolean;
   limit?: number;
   signal?: AbortSignal;
+  anonymousId?: string;
 }): Promise<P2pRouteSearchResponse> {
   const params = new URLSearchParams({
     source_fiat: query.sourceFiat,
@@ -277,7 +324,96 @@ export function fetchP2pRoutes(query: {
   if (query.sources?.length) {
     params.set("sources", query.sources.join(","));
   }
+  if (query.anonymousId) {
+    params.set("anonymous_id", query.anonymousId);
+  }
   return request(`/api/p2p/routes?${params.toString()}`, { signal: query.signal });
+}
+
+type P2pLiveQuery = Omit<Parameters<typeof fetchP2pRoutes>[0], "signal" | "anonymousId">;
+
+function routeQueryPayload(query: P2pLiveQuery): Record<string, unknown> {
+  return {
+    source_fiat: query.sourceFiat,
+    target_fiat: query.targetFiat,
+    source_amount: query.sourceAmount,
+    intermediary_assets: query.intermediaryAssets?.join(","),
+    assets: query.assets?.join(","),
+    bridge_fiat: query.bridgeFiat,
+    source_network: query.sourceNetwork,
+    target_network: query.targetNetwork,
+    source_payment_method: query.sourcePaymentMethod,
+    target_payment_method: query.targetPaymentMethod,
+    sources: query.sources?.join(","),
+    allow_cross_venue: query.allowCrossVenue ?? true,
+    min_orders: 20,
+    min_completion_rate: 0.9,
+    limit: query.limit ?? 40,
+  };
+}
+
+export function streamP2pRoutes(
+  query: P2pLiveQuery,
+  anonymousId: string,
+  signal: AbortSignal,
+  onEvent: (event: P2pRouteStreamEvent) => void,
+): Promise<P2pRouteSearchResponse> {
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(wsUrl("/ws/p2p/routes"));
+    let settled = false;
+    const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      socket.close();
+      reject(error);
+    };
+    const abort = () => fail(new DOMException("Route search cancelled", "AbortError"));
+    signal.addEventListener("abort", abort, { once: true });
+    socket.onopen = () => {
+      socket.send(JSON.stringify({ anonymous_id: anonymousId, query: routeQueryPayload(query) }));
+    };
+    socket.onmessage = (message) => {
+      try {
+        const event = JSON.parse(message.data as string) as P2pRouteStreamEvent;
+        onEvent(event);
+        if (event.type === "search_failed") {
+          fail(new Error(event.error));
+        } else if (event.type === "search_finished") {
+          settled = true;
+          signal.removeEventListener("abort", abort);
+          socket.close();
+          resolve(event);
+        }
+      } catch {
+        fail(new Error("Invalid live route response"));
+      }
+    };
+    socket.onerror = () => fail(new Error("Live route stream unavailable"));
+    socket.onclose = () => {
+      if (!settled) fail(new Error("Live route stream closed before completion"));
+    };
+  });
+}
+
+export function recordServiceOpen(
+  anonymousId: string,
+  trackingToken: string,
+): Promise<ServiceExecutionOpen> {
+  return request("/api/service-executions/open", {
+    method: "POST",
+    body: JSON.stringify({ anonymous_id: anonymousId, tracking_token: trackingToken }),
+  });
+}
+
+export function setServiceVote(
+  serviceId: string,
+  anonymousId: string,
+  vote: ServiceVote | null,
+): Promise<ServiceStats> {
+  return request(`/api/services/${serviceId}/vote`, {
+    method: "PUT",
+    body: JSON.stringify({ anonymous_id: anonymousId, vote }),
+  });
 }
 
 export function createOrder(

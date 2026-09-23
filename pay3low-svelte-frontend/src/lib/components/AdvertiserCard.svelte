@@ -1,8 +1,10 @@
 <script lang="ts">
-  import type { P2pOffer } from "$lib/exchange";
+  import type { P2pOffer, ServiceLink } from "$lib/exchange";
   import { venueIcon } from "$lib/icons";
   export let offer: P2pOffer | undefined;
   export let label: string;
+  export let serviceLink: ServiceLink | undefined = undefined;
+  export let onOpenService: (link: ServiceLink) => void = () => {};
   const VENUE_NAMES: Record<string, string> = { binance: "Binance", bitget: "Bitget", bybit: "Bybit", okx: "OKX", rapira: "Rapira" };
   const VENUE_ICONS: Record<string, string> = { binance: venueIcon("binance"), bybit: venueIcon("bybit"), okx: venueIcon("okx"), bitget: venueIcon("bitget"), rapira: venueIcon("rapira") };
   const venueName = (value?: string) => value ? VENUE_NAMES[value.toLowerCase()] ?? value : "P2P market";
@@ -29,7 +31,7 @@
     </div>
     <div class="metrics"><span><b>{percentage(offer.advertiser.completion_rate_30d)}</b> completion</span><span><b>{offer.advertiser.completed_orders_30d ?? "—"}</b> orders / 30d</span><span><b>{offer.price} {offer.fiat}</b> rate</span></div>
     <span class="paymentLine">Payment: {offer.payment_methods.length ? offer.payment_methods.join(", ") : "confirm on venue"}</span>
-    <a href={actionUrl} target="_blank" rel="noreferrer noopener" class="profileLink">{actionLabel} <span>↗</span></a>
+    {#if serviceLink}<button type="button" class="profileLink" on:click={() => onOpenService(serviceLink!)}>{actionLabel} <span>↗</span></button>{:else}<a href={actionUrl} target="_blank" rel="noreferrer noopener" class="profileLink">{actionLabel} <span>↗</span></a>{/if}
     {#if !profileUrl}<small class="adHint">Match the nickname and ad ID {offer.ad_id} before opening an order.</small>{/if}
   </div>
 {/if}
@@ -285,6 +287,9 @@
 .profileLink {
   display: inline-block;
   margin-top: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: #587b08;
   font-size: 10px;
   font-weight: 850;

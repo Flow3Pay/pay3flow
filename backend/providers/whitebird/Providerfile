@@ -1,0 +1,11 @@
+[sell]
+source_url = "https://whitebird.io"
+name = "Whitebird Sell"
+currency = ["byn", "usd", "eur", "rub"]
+banks = []
+
+[buy]
+source_url = "https://whitebird.io"
+name = "Whitebird Buy"
+currency = ["byn", "usd", "eur", "rub"]
+banks = []

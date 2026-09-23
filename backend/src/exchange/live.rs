@@ -18,10 +18,10 @@ const QUOTE_TTL_MINUTES: i64 = 5;
 
 #[derive(Debug, Clone)]
 struct MockRouteProfile {
-    asset: &'static str,
-    network: &'static str,
-    entry_provider: &'static str,
-    exit_provider: &'static str,
+    asset: String,
+    network: String,
+    entry_provider: String,
+    exit_provider: String,
     entry_delay_ms: u64,
     exit_delay_ms: u64,
     rate_bps: i64,
@@ -149,7 +149,8 @@ async fn live_search_task(
     send(&tx, LiveRouteEvent::SearchStarted { order_id: order.id }).await?;
 
     let solver = select_solver(&pool, &order).await?;
-    let mut route_rx = spawn_mock_route_tasks(order.clone(), solver);
+    let profiles = load_mock_profiles(&pool).await?;
+    let mut route_rx = spawn_mock_route_tasks(order.clone(), solver, profiles);
     let mut best: Option<ScoredQuote> = None;
 
     while let Some(result) = route_rx.recv().await {
@@ -316,9 +317,10 @@ async fn select_solver(pool: &DbPool, order: &ExchangeOrder) -> Result<ExchangeS
 fn spawn_mock_route_tasks(
     order: ExchangeOrder,
     solver: ExchangeSolver,
+    profiles: Vec<MockRouteProfile>,
 ) -> mpsc::Receiver<RouteSearchResult> {
-    let (tx, rx) = mpsc::channel(mock_profiles().len());
-    for profile in mock_profiles() {
+    let (tx, rx) = mpsc::channel(profiles.len().max(1));
+    for profile in profiles {
         let tx = tx.clone();
         let order = order.clone();
         let solver = solver.clone();
@@ -408,15 +410,15 @@ fn build_live_quote(
             "solver_slug": &solver.slug,
             "entry": {
                 "from": &order.source_currency,
-                "to": profile.asset,
-                "network": profile.network,
-                "provider": profile.entry_provider,
+                "to": &profile.asset,
+                "network": &profile.network,
+                "provider": &profile.entry_provider,
             },
             "exit": {
-                "from": profile.asset,
-                "network": profile.network,
+                "from": &profile.asset,
+                "network": &profile.network,
                 "to": &order.target_currency,
-                "provider": profile.exit_provider,
+                "provider": &profile.exit_provider,
             },
             "requires_manual_review": false,
         }),
@@ -424,70 +426,45 @@ fn build_live_quote(
         score: None,
         raw_response: Some(json!({
             "source": "mock_live_search",
-            "asset": profile.asset,
-            "network": profile.network,
-            "entry_provider": profile.entry_provider,
-            "exit_provider": profile.exit_provider,
+            "asset": &profile.asset,
+            "network": &profile.network,
+            "entry_provider": &profile.entry_provider,
+            "exit_provider": &profile.exit_provider,
             "spread_bps": profile.spread_bps,
         })),
     })
 }
 
-fn mock_profiles() -> Vec<MockRouteProfile> {
-    vec![
-        MockRouteProfile {
-            asset: "USDT",
-            network: "ERC20",
-            entry_provider: "am-p2p-mock",
-            exit_provider: "ru-buyer-mock",
-            entry_delay_ms: 120,
-            exit_delay_ms: 160,
-            rate_bps: 2_035,
-            fee_minor: 1_200,
-            eta_minutes: 12,
-            spread_bps: 8,
-            risk_score: 18,
-        },
-        MockRouteProfile {
-            asset: "ETH",
-            network: "Ethereum",
-            entry_provider: "am-eth-desk-mock",
-            exit_provider: "ru-eth-buyer-mock",
-            entry_delay_ms: 180,
-            exit_delay_ms: 220,
-            rate_bps: 2_018,
-            fee_minor: 1_800,
-            eta_minutes: 18,
-            spread_bps: 0,
-            risk_score: 22,
-        },
-        MockRouteProfile {
-            asset: "BTC",
-            network: "Binance",
-            entry_provider: "am-btc-p2p-mock",
-            exit_provider: "ru-btc-rail-mock",
-            entry_delay_ms: 90,
-            exit_delay_ms: 300,
-            rate_bps: 2_012,
-            fee_minor: 2_100,
-            eta_minutes: 24,
-            spread_bps: -8,
-            risk_score: 28,
-        },
-        MockRouteProfile {
-            asset: "SOL",
-            network: "Solana",
-            entry_provider: "am-sol-liquidity-mock",
-            exit_provider: "ru-sol-buyer-mock",
-            entry_delay_ms: 240,
-            exit_delay_ms: 130,
-            rate_bps: 2_026,
-            fee_minor: 1_500,
-            eta_minutes: 15,
-            spread_bps: 3,
-            risk_score: 20,
-        },
-    ]
+async fn load_mock_profiles(pool: &DbPool) -> Result<Vec<MockRouteProfile>> {
+    let client = pool.get().await?;
+    let rows = client
+        .query(
+            r#"
+SELECT asset, network, entry_provider, exit_provider, entry_delay_ms,
+       exit_delay_ms, rate_bps, fee_minor, eta_minutes, spread_bps, risk_score
+FROM mock_route_profiles
+WHERE status = 'enabled'
+ORDER BY slug
+"#,
+            &[],
+        )
+        .await?;
+    Ok(rows
+        .into_iter()
+        .map(|row| MockRouteProfile {
+            asset: row.get("asset"),
+            network: row.get("network"),
+            entry_provider: row.get("entry_provider"),
+            exit_provider: row.get("exit_provider"),
+            entry_delay_ms: row.get::<_, i64>("entry_delay_ms") as u64,
+            exit_delay_ms: row.get::<_, i64>("exit_delay_ms") as u64,
+            rate_bps: row.get("rate_bps"),
+            fee_minor: row.get("fee_minor"),
+            eta_minutes: row.get("eta_minutes"),
+            spread_bps: row.get("spread_bps"),
+            risk_score: row.get("risk_score"),
+        })
+        .collect())
 }
 
 fn partial_legs(order: &ExchangeOrder, profile: &MockRouteProfile) -> Vec<RouteLeg> {
@@ -537,6 +514,92 @@ mod tests {
     use super::*;
     use crate::exchange::status::{FundingInstructionStatus, SolverStatus};
     use serde_json::Value;
+
+    fn test_profiles() -> Vec<MockRouteProfile> {
+        [
+            (
+                "USDT",
+                "ERC20",
+                "am-p2p-mock",
+                "ru-buyer-mock",
+                120,
+                160,
+                2_035,
+                1_200,
+                12,
+                8,
+                18,
+            ),
+            (
+                "ETH",
+                "Ethereum",
+                "am-eth-desk-mock",
+                "ru-eth-buyer-mock",
+                180,
+                220,
+                2_018,
+                1_800,
+                18,
+                0,
+                22,
+            ),
+            (
+                "BTC",
+                "Binance",
+                "am-btc-p2p-mock",
+                "ru-btc-rail-mock",
+                90,
+                300,
+                2_012,
+                2_100,
+                24,
+                -8,
+                28,
+            ),
+            (
+                "SOL",
+                "Solana",
+                "am-sol-liquidity-mock",
+                "ru-sol-buyer-mock",
+                240,
+                130,
+                2_026,
+                1_500,
+                15,
+                3,
+                20,
+            ),
+        ]
+        .into_iter()
+        .map(
+            |(
+                asset,
+                network,
+                entry,
+                exit,
+                entry_delay_ms,
+                exit_delay_ms,
+                rate_bps,
+                fee_minor,
+                eta_minutes,
+                spread_bps,
+                risk_score,
+            )| MockRouteProfile {
+                asset: asset.into(),
+                network: network.into(),
+                entry_provider: entry.into(),
+                exit_provider: exit.into(),
+                entry_delay_ms,
+                exit_delay_ms,
+                rate_bps,
+                fee_minor,
+                eta_minutes,
+                spread_bps,
+                risk_score,
+            },
+        )
+        .collect()
+    }
 
     fn order() -> ExchangeOrder {
         ExchangeOrder {
@@ -589,7 +652,7 @@ mod tests {
 
     #[test]
     fn mock_profiles_cover_plan2_assets() {
-        let assets = mock_profiles()
+        let assets = test_profiles()
             .into_iter()
             .map(|profile| (profile.asset, profile.network))
             .collect::<Vec<_>>();
@@ -597,10 +660,10 @@ mod tests {
         assert_eq!(
             assets,
             vec![
-                ("USDT", "ERC20"),
-                ("ETH", "Ethereum"),
-                ("BTC", "Binance"),
-                ("SOL", "Solana"),
+                ("USDT".to_string(), "ERC20".to_string()),
+                ("ETH".to_string(), "Ethereum".to_string()),
+                ("BTC".to_string(), "Binance".to_string()),
+                ("SOL".to_string(), "Solana".to_string()),
             ]
         );
     }
@@ -609,7 +672,7 @@ mod tests {
     fn live_quote_contains_route_plan_and_positive_target() {
         let order = order();
         let solver = solver();
-        let profile = mock_profiles().remove(0);
+        let profile = test_profiles().remove(0);
 
         let quote = build_live_quote(&order, &solver, &profile).expect("quote is valid");
         assert_eq!(quote.source_currency, "AMD");
@@ -629,7 +692,7 @@ mod tests {
     #[test]
     fn partial_and_complete_legs_expose_expected_statuses() {
         let order = order();
-        let profile = mock_profiles().remove(0);
+        let profile = test_profiles().remove(0);
 
         let partial = partial_legs(&order, &profile);
         assert_eq!(partial[0].status, "found");

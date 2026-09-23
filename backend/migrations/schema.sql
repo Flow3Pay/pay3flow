@@ -4,6 +4,75 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Public service adoption and reputation. Counters are materialized so route
+-- search responses can include them without aggregating the event tables.
+CREATE TABLE IF NOT EXISTS services (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    slug TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL,
+    executions_total BIGINT NOT NULL DEFAULT 0 CHECK (executions_total >= 0),
+    likes_total BIGINT NOT NULL DEFAULT 0 CHECK (likes_total >= 0),
+    dislikes_total BIGINT NOT NULL DEFAULT 0 CHECK (dislikes_total >= 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+INSERT INTO services (slug, display_name)
+VALUES
+    ('binance', 'Binance'),
+    ('bybit', 'Bybit'),
+    ('okx', 'OKX'),
+    ('bitget', 'Bitget'),
+    ('rapira', 'Rapira')
+ON CONFLICT (slug) DO UPDATE SET
+    display_name = EXCLUDED.display_name,
+    updated_at = now()
+WHERE services.display_name IS DISTINCT FROM EXCLUDED.display_name;
+
+CREATE TABLE IF NOT EXISTS route_searches (
+    id UUID PRIMARY KEY,
+    status TEXT NOT NULL DEFAULT 'searching'
+        CHECK (status IN ('searching', 'finished', 'failed')),
+    routes_found BIGINT NOT NULL DEFAULT 0 CHECK (routes_found >= 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS route_searches_created_idx
+    ON route_searches (created_at DESC);
+
+CREATE TABLE IF NOT EXISTS service_executions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    service_id UUID NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+    -- Keep execution evidence immutable: deleting a search must not silently
+    -- remove executions while leaving its materialized service counter intact.
+    search_id UUID NOT NULL REFERENCES route_searches(id),
+    route_id TEXT NOT NULL,
+    anonymous_id UUID NOT NULL,
+    status TEXT NOT NULL DEFAULT 'started'
+        CHECK (status IN ('started', 'success', 'failed', 'cancelled')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (anonymous_id, service_id, search_id, route_id)
+);
+
+CREATE INDEX IF NOT EXISTS service_executions_service_idx
+    ON service_executions (service_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS service_executions_anonymous_idx
+    ON service_executions (anonymous_id, service_id);
+
+CREATE TABLE IF NOT EXISTS service_votes (
+    anonymous_id UUID NOT NULL,
+    service_id UUID NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+    vote TEXT NOT NULL CHECK (vote IN ('like', 'dislike')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (anonymous_id, service_id)
+);
+
+CREATE INDEX IF NOT EXISTS service_votes_service_idx
+    ON service_votes (service_id);
+
 CREATE TABLE IF NOT EXISTS activitypub_deliveries (
     activity_id TEXT NOT NULL,
     target TEXT NOT NULL,
@@ -74,6 +143,31 @@ CREATE TABLE IF NOT EXISTS provider_webhooks (
     received_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     processed_at TIMESTAMPTZ
 );
+
+-- Providerfile catalog. Providerfiles are compiled to idempotent SQL before
+-- the Rust crate is rebuilt; the running application only reads these rows.
+CREATE TABLE IF NOT EXISTS providers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    slug TEXT NOT NULL,
+    operation TEXT NOT NULL CHECK (operation IN ('buy', 'sell')),
+    source_url TEXT NOT NULL,
+    name TEXT NOT NULL,
+    currencies TEXT[] NOT NULL DEFAULT '{}',
+    banks TEXT[] NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'enabled'
+        CHECK (status IN ('enabled', 'disabled')),
+    source_file TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (slug, operation)
+);
+
+CREATE INDEX IF NOT EXISTS providers_status_operation_idx
+    ON providers (status, operation);
+CREATE INDEX IF NOT EXISTS providers_currencies_idx
+    ON providers USING GIN (currencies);
+CREATE INDEX IF NOT EXISTS providers_banks_idx
+    ON providers USING GIN (banks);
 
 -- Core transaction record.
 CREATE TABLE IF NOT EXISTS transactions (
@@ -162,6 +256,24 @@ CREATE TABLE IF NOT EXISTS banks (
 CREATE UNIQUE INDEX IF NOT EXISTS banks_name_idx ON banks (name);
 CREATE INDEX IF NOT EXISTS banks_status_idx ON banks (status);
 CREATE INDEX IF NOT EXISTS banks_role_idx ON banks (role);
+
+-- Crypto networks exposed by GET /api/networks and used to validate route
+-- requests. The rows themselves live in the catalog data migration.
+CREATE TABLE IF NOT EXISTS crypto_networks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    slug TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    currencies TEXT[] NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'enabled'
+        CHECK (status IN ('enabled', 'disabled')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS crypto_networks_status_idx
+    ON crypto_networks (status, slug);
+CREATE INDEX IF NOT EXISTS crypto_networks_currencies_idx
+    ON crypto_networks USING GIN (currencies);
 
 -- === PLAN2 EX-2: solver-based exchange domain ===
 
@@ -252,6 +364,26 @@ CREATE TABLE IF NOT EXISTS exchange_solvers (
 
 CREATE INDEX IF NOT EXISTS exchange_solvers_status_idx
     ON exchange_solvers (status);
+
+-- Development live-search profiles. Even mock candidates are data returned to
+-- clients, so their catalog is migrated rather than compiled into Rust.
+CREATE TABLE IF NOT EXISTS mock_route_profiles (
+    slug TEXT PRIMARY KEY,
+    asset TEXT NOT NULL,
+    network TEXT NOT NULL,
+    entry_provider TEXT NOT NULL,
+    exit_provider TEXT NOT NULL,
+    entry_delay_ms BIGINT NOT NULL CHECK (entry_delay_ms >= 0),
+    exit_delay_ms BIGINT NOT NULL CHECK (exit_delay_ms >= 0),
+    rate_bps BIGINT NOT NULL,
+    fee_minor BIGINT NOT NULL CHECK (fee_minor >= 0),
+    eta_minutes INTEGER NOT NULL CHECK (eta_minutes > 0),
+    spread_bps INTEGER NOT NULL,
+    risk_score INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'enabled'
+        CHECK (status IN ('enabled', 'disabled')),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
 CREATE TABLE IF NOT EXISTS exchange_quotes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

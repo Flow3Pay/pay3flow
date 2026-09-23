@@ -11,6 +11,7 @@ use futures::future::join_all;
 use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
+use crate::networks::NetworkCatalog;
 use crate::p2p::spot::{
     BinanceSpotSource, BitgetSpotSource, BybitSpotSource, CryptoMarketSource, CryptoTicker,
     OkxSpotSource,
@@ -266,6 +267,7 @@ pub struct P2pSearchService {
     sources: Arc<[Arc<dyn P2pSource>]>,
     market_sources: Arc<[Arc<dyn CryptoMarketSource>]>,
     pub(crate) default_assets: Arc<[String]>,
+    pub(crate) networks: NetworkCatalog,
 }
 
 #[derive(Clone)]
@@ -275,11 +277,10 @@ struct CachedSearch {
 }
 
 impl P2pSearchService {
-    pub fn from_config(config: &Config) -> Result<Self> {
+    pub fn from_config(config: &Config, networks: NetworkCatalog) -> Result<Self> {
         let timeout = Duration::from_millis(config.p2p_search_timeout_ms.clamp(250, 30_000));
-        let okx_timeout = Duration::from_millis(
-            config.p2p_okx_search_timeout_ms.clamp(250, 30_000),
-        );
+        let okx_timeout =
+            Duration::from_millis(config.p2p_okx_search_timeout_ms.clamp(250, 30_000));
         let client = reqwest::Client::builder()
             .timeout(timeout.max(okx_timeout))
             .user_agent("Pay3Flow-P2P-Search/0.1")
@@ -322,6 +323,11 @@ impl P2pSearchService {
                 config.p2p_rapira_url.clone(),
             )));
         }
+        let default_assets = if config.p2p_search_assets.is_empty() {
+            networks.assets()
+        } else {
+            config.p2p_search_assets.clone()
+        };
         Ok(Self {
             enabled: config.p2p_search_enabled,
             timeout,
@@ -329,7 +335,8 @@ impl P2pSearchService {
             cache: Arc::new(RwLock::new(HashMap::new())),
             sources: sources.into(),
             market_sources: market_sources.into(),
-            default_assets: config.p2p_search_assets.clone().into(),
+            default_assets: default_assets.into(),
+            networks,
         })
     }
 
@@ -369,6 +376,7 @@ impl P2pSearchService {
                 "SUI".into(),
             ]
             .into(),
+            networks: NetworkCatalog::test_default(),
         }
     }
 
@@ -437,10 +445,7 @@ impl P2pSearchService {
                         ok: false,
                         latency_ms: elapsed,
                         offers_found: 0,
-                        error: Some(format!(
-                            "source timed out after {} ms",
-                            timeout.as_millis()
-                        )),
+                        error: Some(format!("source timed out after {} ms", timeout.as_millis())),
                     },
                 ),
             }

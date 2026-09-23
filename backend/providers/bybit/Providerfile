@@ -1,0 +1,11 @@
+[sell]
+source_url = "https://www.bybit.com"
+name = "Bybit Sell"
+currency = ["usd", "rub", "eur", "amd"]
+banks = []
+
+[buy]
+source_url = "https://www.bybit.com"
+name = "Bybit Buy"
+currency = ["usd", "rub", "eur", "amd"]
+banks = []

@@ -43,7 +43,7 @@ private keys or copy development keys into a production image.
 | `P2P_SEARCH_TIMEOUT_MS` | Per-search timeout (4 seconds by default) |
 | `P2P_OKX_SEARCH_TIMEOUT_MS` | OKX-only P2P search timeout (10 seconds by default) |
 | `P2P_SEARCH_CACHE_TTL_MS` | P2P search cache lifetime |
-| `P2P_SEARCH_ASSETS` | Comma-separated intermediary assets |
+| `P2P_SEARCH_ASSETS` | Optional comma-separated intermediary assets; defaults to the migrated network catalog |
 | `P2P_<VENUE>_ENABLED` | Enable a public read-only venue adapter |
 
 Current venue flags are `P2P_BINANCE_ENABLED`, `P2P_BYBIT_ENABLED`,

@@ -97,6 +97,10 @@ impl ActorIdentity {
         self.inbox.trim_end_matches("/inbox").to_string() + "/marketplace/resources/acquiring"
     }
 
+    pub fn exchange_resource(&self) -> String {
+        self.inbox.trim_end_matches("/inbox").to_string() + "/marketplace/resources/exchange"
+    }
+
     pub fn sign_bytes(&self, message: &[u8]) -> Vec<u8> {
         self.private_key.sign(message).to_vec()
     }
@@ -120,6 +124,14 @@ impl ActorIdentity {
                 public_key_pem: self.public_key_pem.clone(),
             }),
             attachment: vec![
+                json!({
+                    "type": "Service",
+                    "resourceConformsTo": self.exchange_resource(),
+                    "action": "deliverService",
+                    "purpose": "offer",
+                    "interface": format!("{}/marketplace/interfaces/exchange", self.inbox.trim_end_matches("/inbox")),
+                    "inbox": self.inbox,
+                }),
                 json!({
                     "type": "Service",
                     "resourceConformsTo": self.capability_resource(),
@@ -209,10 +221,20 @@ mod tests {
         let cap = &doc["attachment"][0];
         assert_eq!(
             cap["resourceConformsTo"],
-            json!("https://pay3flow.local/marketplace/resources/acquiring")
+            json!("https://pay3flow.local/marketplace/resources/exchange")
         );
         assert_eq!(cap["action"], json!("deliverService"));
         assert_eq!(cap["purpose"], json!("offer"));
+        assert_eq!(
+            cap["interface"],
+            json!("https://pay3flow.local/marketplace/interfaces/exchange")
+        );
+
+        let legacy_cap = &doc["attachment"][1];
+        assert_eq!(
+            legacy_cap["resourceConformsTo"],
+            json!("https://pay3flow.local/marketplace/resources/acquiring")
+        );
 
         let wf = id.webfinger("https://pay3flow.local/actor/pay3flow");
         assert_eq!(wf["subject"], json!("acct:pay3flow@pay3flow.local"));

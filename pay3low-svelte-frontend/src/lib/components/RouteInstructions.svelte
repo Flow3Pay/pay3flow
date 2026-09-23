@@ -1,10 +1,13 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import type { RouteCandidate } from "$lib/exchange";
+  import type { RouteCandidate, ServiceLink, ServiceStats, ServiceVote } from "$lib/exchange";
   import AdvertiserCard from "./AdvertiserCard.svelte";
 
   export let route: RouteCandidate;
   export let onClose: () => void;
+  export let usedServiceIds: string[] = [];
+  export let onOpenService: (link: ServiceLink) => void = () => {};
+  export let onVote: (service: ServiceStats, vote: ServiceVote | null) => void = () => {};
   let modal: HTMLDivElement;
   let dragging = false;
   let dragStartY = 0;
@@ -13,6 +16,9 @@
   const venueName = (value?: string) => value ? VENUE_NAMES[value.toLowerCase()] ?? value : "P2P market";
   const money = (minor?: number, currency?: string) => minor == null ? "—" : `${(minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })} ${currency ?? ""}`;
   const marketRate = (value: string) => Number.isFinite(Number(value)) ? Number(value).toLocaleString("en-US", { maximumFractionDigits: 12, useGrouping: false }) : value;
+  const compact = (value: number) => Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(value);
+  const linkFor = (kind: ServiceLink["kind"]) => route.service_links?.find((link) => link.kind === kind);
+  const chooseVote = (service: ServiceStats, vote: ServiceVote) => onVote(service, service.viewer_vote === vote ? null : vote);
 
   function spotPair(symbol: string, firstAsset: string, secondAsset: string) {
     const normalized = symbol.replace(/[^a-z0-9]/gi, "").toUpperCase();
@@ -71,7 +77,9 @@
   $: exitVenue = venueName(exit?.provider);
   $: crossVenue = Boolean(entry && exit && entry.provider !== exit.provider);
   $: cryptoToCrypto = route.route_kind === "crypto_to_crypto";
-  $: cryptoToFiat = route.route_kind === "crypto_to_fiat";
+  $: transferNetwork = route.entry_network && route.entry_network.toLowerCase() !== "internal" ? route.entry_network : null;
+  $: transferStepNumber = route.entry_offer_snapshot ? 2 : 1;
+  $: exitStepNumber = (route.entry_offer_snapshot ? 1 : 0) + (crossVenue ? 1 : 0) + 1;
   $: firstMarketUrl = route.market_path ? spotUrl(route.market_path.venue, route.market_path.source_pair, route.source_currency, route.bridge_currency ?? route.target_currency ?? route.entry_asset) : null;
   $: secondMarketUrl = route.market_path && route.bridge_currency ? spotUrl(route.market_path.venue, route.market_path.target_pair, route.bridge_currency, route.target_currency ?? route.entry_asset) : null;
 </script>
@@ -79,27 +87,74 @@
 <div class="backdrop" role="presentation" on:mousedown={backdrop}>
   <div class:dragging class="modal" bind:this={modal} role="dialog" aria-modal="true" aria-labelledby="route-instructions-title" tabindex="-1">
     <button type="button" class="sheetHandle" aria-label="Close instructions by dragging down" on:pointerdown={startSheetDrag} on:pointermove={moveSheetDrag} on:pointerup={endSheetDrag} on:pointercancel={endSheetDrag}><span aria-hidden="true"></span></button>
-    <div class="header"><div><span class="eyebrow">Selected route</span><h2 id="route-instructions-title">How to complete this exchange</h2><p>Estimated output: <strong>{money(route.target_amount_minor, route.target_currency)}</strong></p></div><button type="button" class="closeButton" on:click={onClose} aria-label="Close instructions">×</button></div>
-    <div class="workflow">
+    <div class="header"><div><span class="eyebrow">Selected route</span><h2 id="route-instructions-title">How to complete this exchange</h2><p class="intro">Complete each step in order. You stay in control—Pay3Flow never places an order or moves your funds.</p><p class="estimate">Estimated output: <strong>{money(route.target_amount_minor, route.target_currency)}</strong></p></div><button type="button" class="closeButton" on:click={onClose} aria-label="Close instructions">×</button></div>
+    <ol class="workflow" aria-label="Exchange steps">
       {#if cryptoToCrypto && route.market_path}
         {@const market = route.market_path}
-        <article class="step"><span class="stepNumber">01</span><div>
-          <strong>{route.bridge_currency ? `Swap ${route.source_currency} → ${route.bridge_currency} → ${route.target_currency}` : `Swap ${route.source_currency} → ${route.target_currency}`}</strong>
-          <p>This route uses the {venueName(market.venue)} exchange order book, not a P2P advertiser, so there is no user profile. Open the spot pair below to place the trade.</p>
+        <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">1</span><div class="stepBody">
+          <h3>{route.bridge_currency ? `Convert ${route.source_currency} to ${route.bridge_currency}` : `Convert ${route.source_currency} to ${route.target_currency}`}</h3>
+          <p class="stepSummary">Use the {market.source_pair} spot market on {venueName(market.venue)}. This is an exchange order book, so there is no P2P advertiser to contact.</p>
+          <ul class="checklist">
+            <li>Confirm the pair converts {route.source_currency} into {route.bridge_currency ?? route.target_currency}.</li>
+            <li>Review the live price, trading fee, and expected amount before submitting the order.</li>
+            <li>Wait until the converted balance is available before continuing.</li>
+          </ul>
           <div class="counterparty"><div class="counterpartyTopline"><span class="counterpartyLabel">Spot market</span><span class="profileBadge">{venueName(market.venue)}</span></div><strong class="advertiser">{market.source_pair}</strong><span class="venueLine">Conversion rate {marketRate(market.source_rate)}</span>
-            {#if firstMarketUrl}<a href={firstMarketUrl} target="_blank" rel="noreferrer noopener" class="profileLink">Open {market.source_pair} on {venueName(market.venue)} <span>↗</span></a>{/if}
-            {#if route.bridge_currency}<span class="paymentLine">{market.target_pair} · second leg rate {marketRate(market.target_rate)}</span>{#if secondMarketUrl}<a href={secondMarketUrl} target="_blank" rel="noreferrer noopener" class="profileLink">Open {market.target_pair} on {venueName(market.venue)} <span>↗</span></a>{/if}{/if}
+            {#if linkFor("market_source")}<button type="button" class="profileLink" on:click={() => onOpenService(linkFor("market_source")!)}>Open {market.source_pair} on {venueName(market.venue)} <span>↗</span></button>{:else if firstMarketUrl}<a href={firstMarketUrl} target="_blank" rel="noreferrer noopener" class="profileLink">Open {market.source_pair} on {venueName(market.venue)} <span>↗</span></a>{/if}
           </div>
-        </div></article>
+        </div></li>
+        {#if route.bridge_currency}
+          <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">2</span><div class="stepBody">
+            <h3>Convert {route.bridge_currency} to {route.target_currency}</h3>
+            <p class="stepSummary">Complete the second conversion on {venueName(market.venue)} only after the first trade has settled into your available balance.</p>
+            <ul class="checklist">
+              <li>Open {market.target_pair} and confirm it converts {route.bridge_currency} into {route.target_currency}.</li>
+              <li>Review the live price, trading fee, and final amount before submitting the order.</li>
+              <li>Confirm the destination asset and network before withdrawing it from the venue.</li>
+            </ul>
+            <div class="counterparty"><div class="counterpartyTopline"><span class="counterpartyLabel">Spot market</span><span class="profileBadge">{venueName(market.venue)}</span></div><strong class="advertiser">{market.target_pair}</strong><span class="venueLine">Conversion rate {marketRate(market.target_rate)}</span>
+              {#if linkFor("market_target")}<button type="button" class="profileLink" on:click={() => onOpenService(linkFor("market_target")!)}>Open {market.target_pair} on {venueName(market.venue)} <span>↗</span></button>{:else if secondMarketUrl}<a href={secondMarketUrl} target="_blank" rel="noreferrer noopener" class="profileLink">Open {market.target_pair} on {venueName(market.venue)} <span>↗</span></a>{/if}
+            </div>
+          </div></li>
+        {/if}
       {/if}
       {#if route.entry_offer_snapshot}
-        <article class="step"><span class="stepNumber">01</span><div><strong>{cryptoToCrypto ? `Sell ${route.source_currency} for ${route.bridge_currency}` : `Buy ${route.entry_asset} for ${money(route.source_amount_minor, route.source_currency)}`}</strong><p>{cryptoToCrypto ? "Open the buyer's profile, verify the rate and limits, then complete the crypto sale on the venue." : "Open the seller's profile, verify the rate and limits, then send the fiat payment using the selected bank."}</p><AdvertiserCard offer={route.entry_offer_snapshot} label={`${cryptoToCrypto ? "Buyer" : "Seller"} on ${entryVenue}`} /></div></article>
+        <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">1</span><div class="stepBody">
+          <h3>{cryptoToCrypto ? `Sell ${route.source_currency} for ${route.bridge_currency ?? route.entry_asset}` : `Buy ${route.entry_asset} for ${money(route.source_amount_minor, route.source_currency)}`}</h3>
+          <p class="stepSummary">{cryptoToCrypto ? `Open the buyer's profile on ${entryVenue} and create the first P2P order.` : `Open the seller's profile on ${entryVenue}, create the P2P order, and pay with the selected payment method.`}</p>
+          <ul class="checklist">
+            <li>Match the advertiser nickname and ad ID before creating the order.</li>
+            <li>Confirm the live rate, order limits, and payment method on {entryVenue}.</li>
+            <li>{cryptoToCrypto ? "Release the asset only after you have independently confirmed receipt of the payment." : "Use only the payment details shown inside the order, then mark it paid after sending the transfer."}</li>
+          </ul>
+          <AdvertiserCard offer={route.entry_offer_snapshot} label={`${cryptoToCrypto ? "Buyer" : "Seller"} on ${entryVenue}`} serviceLink={linkFor("entry")} {onOpenService} />
+        </div></li>
       {/if}
-      {#if crossVenue}<article class="step"><span class="stepNumber">02</span><div><strong>Transfer {route.entry_asset} to {exitVenue}</strong><p>Send the asset to the second venue only after checking the exact network, address and transfer fee.</p></div></article>{/if}
+      {#if crossVenue}
+        <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">{transferStepNumber}</span><div class="stepBody">
+          <h3>Transfer {route.entry_asset} to {exitVenue}</h3>
+          <p class="stepSummary">Move the purchased asset from {entryVenue} to your deposit address on {exitVenue} before opening the next P2P order.</p>
+          <ul class="checklist">
+            <li>{#if transferNetwork}Copy the deposit address from {exitVenue} and select the exact {transferNetwork} network on both venues.{:else}Confirm that both venues support the same asset and network, then copy the deposit address from {exitVenue}.{/if}</li>
+            <li>Check the full address, any required memo or tag, and the withdrawal fee before confirming.</li>
+            <li>Wait for {exitVenue} to credit the deposit before continuing.</li>
+          </ul>
+        </div></li>
+      {/if}
       {#if route.exit_offer_snapshot}
-        <article class="step"><span class="stepNumber">{crossVenue ? "03" : route.entry_offer_snapshot ? "02" : "01"}</span><div><strong>{cryptoToCrypto ? `Buy ${route.target_currency} with ${route.bridge_currency}` : cryptoToFiat ? `Sell ${route.entry_asset} for ${money(route.target_amount_minor, route.target_currency)}` : `Sell ${route.entry_asset} for ${money(route.target_amount_minor, route.target_currency)}`}</strong><p>{cryptoToCrypto ? "Open the seller's profile, verify the network and limits, then buy the destination asset on the venue." : "Open the buyer's profile, verify the recipient payment method and create the P2P order only on the venue."}</p><AdvertiserCard offer={route.exit_offer_snapshot} label={`${cryptoToCrypto ? "Seller" : "Buyer"} on ${exitVenue}`} /></div></article>
+        <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">{exitStepNumber}</span><div class="stepBody">
+          <h3>{cryptoToCrypto ? `Buy ${route.target_currency} with ${route.bridge_currency ?? route.entry_asset}` : `Sell ${route.entry_asset} for ${money(route.target_amount_minor, route.target_currency)}`}</h3>
+          <p class="stepSummary">{cryptoToCrypto ? `Open the seller's profile on ${exitVenue} and create the destination-asset order.` : `Open the buyer's profile on ${exitVenue} and create the sell order using the selected recipient payment method.`}</p>
+          <ul class="checklist">
+            <li>Match the advertiser nickname and ad ID before creating the order.</li>
+            <li>Confirm the live rate, order limits, {cryptoToCrypto ? "asset network" : "recipient payment method"}, and expected amount.</li>
+            <li>{cryptoToCrypto ? `Confirm the ${route.target_currency} balance and network before withdrawing.` : "Release the asset only after you have independently confirmed the payment in your bank or payment account."}</li>
+          </ul>
+          <AdvertiserCard offer={route.exit_offer_snapshot} label={`${cryptoToCrypto ? "Seller" : "Buyer"} on ${exitVenue}`} serviceLink={linkFor("exit")} {onOpenService} />
+        </div></li>
       {/if}
-    </div>
+    </ol>
+    {#if route.services?.length}<section class="serviceReputation" aria-label="Service reputation">{#each route.services as service (service.id)}<article><strong>{service.display_name}</strong><div class="serviceMetrics"><span>Used {compact(service.executions_total)} times</span><span>👍 {compact(service.likes_total)}</span><span>👎 {compact(service.dislikes_total)}</span></div>{#if usedServiceIds.includes(service.id) || service.viewer_vote}<div class="votePrompt"><span>Was this service useful?</span><div><button type="button" class:active={service.viewer_vote === "like"} aria-pressed={service.viewer_vote === "like"} on:click={() => chooseVote(service, "like")}>👍 Like</button><button type="button" class:active={service.viewer_vote === "dislike"} aria-pressed={service.viewer_vote === "dislike"} on:click={() => chooseVote(service, "dislike")}>👎 Dislike</button></div></div>{/if}</article>{/each}</section>{/if}
     <div class="warning"><strong>Important</strong><span>Rates, limits and ads can change. Confirm the user, payment details and network on the exchange before sending money. Pay3Flow never creates the order or moves funds.</span>{#each route.warnings ?? [] as warning}<span>{warning}</span>{/each}</div>
   </div>
 </div>
@@ -174,10 +229,19 @@
   margin: 0;
   color: var(--color-text-soft);
   font-size: 12px;
+  line-height: 1.5;
 }
 
 .header p strong {
   color: var(--color-text);
+}
+
+.header .intro {
+  max-width: 420px;
+}
+
+.header .estimate {
+  margin-top: 8px;
 }
 
 .closeButton {
@@ -197,46 +261,103 @@
 }
 
 .workflow {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 25px;
+  display: grid;
+  gap: 0;
+  margin: 28px 0 0;
+  padding: 0;
+  list-style: none;
 }
 
 .step {
+  position: relative;
   display: grid;
-  grid-template-columns: 34px 1fr;
-  gap: 13px;
-  padding: 15px;
-  border: 1px solid var(--color-border);
-  border-radius: 17px;
-  background: rgba(255, 255, 255, 0.72);
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 16px;
+  padding: 0 0 30px;
+}
+
+.step:last-child {
+  padding-bottom: 0;
+}
+
+.step:not(:last-child)::before {
+  position: absolute;
+  top: 40px;
+  bottom: 0;
+  left: 19px;
+  width: 2px;
+  border-radius: 999px;
+  background: #d9e5d1;
+  content: "";
 }
 
 .stepNumber {
+  position: relative;
+  z-index: 1;
   display: grid;
-  width: 30px;
-  height: 30px;
+  width: 40px;
+  height: 40px;
   place-items: center;
-  border-radius: 10px;
+  border: 1px solid #76951e;
+  border-radius: 50%;
   background: var(--color-primary);
   color: var(--color-accent);
   font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 800;
-}
-
-.step strong {
-  display: block;
   font-size: 13px;
-  line-height: 1.35;
+  font-weight: 800;
+  box-shadow: 0 0 0 5px rgba(181, 224, 58, 0.12);
 }
 
-.step p {
-  margin: 6px 0 10px;
+.stepBody {
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.step h3 {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: -0.025em;
+  line-height: 1.3;
+}
+
+.step .stepSummary {
+  margin: 7px 0 0;
+  color: var(--color-text-soft);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.checklist {
+  display: grid;
+  gap: 7px;
+  margin: 13px 0 0;
+  padding: 0;
   color: var(--color-text-soft);
   font-size: 11px;
   line-height: 1.5;
+  list-style: none;
+}
+
+.checklist li {
+  position: relative;
+  padding-left: 19px;
+}
+
+.checklist li::before {
+  position: absolute;
+  top: 0.12em;
+  left: 0;
+  display: grid;
+  width: 14px;
+  height: 14px;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(109, 152, 0, 0.13);
+  color: #5f8308;
+  content: "✓";
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1;
 }
 
 .counterparty {
@@ -368,10 +489,69 @@
 .profileLink {
   display: inline-block;
   margin-top: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: #587b08;
   font-size: 10px;
   font-weight: 850;
   text-decoration: none;
+}
+
+.serviceReputation {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.serviceReputation article {
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.serviceReputation article > strong {
+  font-size: 13px;
+}
+
+.serviceMetrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 7px;
+  color: var(--color-text-soft);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.votePrompt {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-soft);
+  font-size: 11px;
+}
+
+.votePrompt > div {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.votePrompt button {
+  padding: 7px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--color-text-soft);
+  font-size: 10px;
+}
+
+.votePrompt button.active {
+  border-color: rgba(111, 83, 190, 0.4);
+  background: rgba(111, 83, 190, 0.1);
+  color: var(--color-violet);
 }
 
 .profileLink:hover {
@@ -444,27 +624,9 @@
   border-radius: 9px;
 }
 
-.step {
-  border-radius: 10px;
-  background: #fbfcfa;
-  transition: border-color 0.14s ease, background 0.14s ease, transform 0.14s ease;
-}
-
-.step:hover {
-  border-color: #b7cead;
-  background: #fff;
-  transform: translateX(2px);
-}
-
 .counterparty {
   border-color: #d4e4c5;
   background: #f4f8f1;
-}
-
-.stepNumber {
-  border-radius: 8px;
-  background: var(--color-primary);
-  color: var(--color-accent);
 }
 
 @media (max-width: 560px) {
@@ -508,6 +670,31 @@
   .header h2 {
     font-size: 23px;
   }
+
+  .workflow {
+    margin-top: 24px;
+  }
+
+  .step {
+    grid-template-columns: 36px minmax(0, 1fr);
+    gap: 12px;
+    padding-bottom: 26px;
+  }
+
+  .step:not(:last-child)::before {
+    top: 35px;
+    left: 16px;
+  }
+
+  .stepNumber {
+    width: 34px;
+    height: 34px;
+    font-size: 11px;
+  }
+
+  .step h3 {
+    font-size: 15px;
+  }
 }
 
 :global(html[data-theme="dark"]) .modal {
@@ -517,15 +704,46 @@
 }
 
 :global(html[data-theme="dark"]) .closeButton,
-:global(html[data-theme="dark"]) .step,
 :global(html[data-theme="dark"]) .counterparty {
   border-color: #3b3b3b;
   background: #222222;
 }
 
-:global(html[data-theme="dark"]) .step:hover {
-  border-color: #555555;
-  background: #2a2a2a;
+:global(html[data-theme="dark"]) .step:not(:last-child)::before {
+  background: #3c4435;
+}
+
+:global(html[data-theme="dark"]) .stepNumber {
+  border-color: #91b52b;
+  box-shadow: 0 0 0 5px rgba(181, 224, 58, 0.08);
+}
+
+:global(html[data-theme="dark"]) .checklist li::before {
+  background: rgba(181, 224, 58, 0.12);
+  color: var(--color-accent);
+}
+
+:global(html[data-theme="dark"]) .serviceReputation article {
+  border-color: #3b3b3b;
+  background: #222222;
+  color: var(--color-text);
+}
+
+:global(html[data-theme="dark"]) .votePrompt button {
+  border-color: #464646;
+  background: #2b2b2b;
+  color: var(--color-text);
+}
+
+:global(html[data-theme="dark"]) .votePrompt button:hover {
+  border-color: #606060;
+  background: #333333;
+}
+
+:global(html[data-theme="dark"]) .votePrompt button.active {
+  border-color: rgba(162, 141, 255, 0.55);
+  background: rgba(162, 141, 255, 0.16);
+  color: var(--color-violet);
 }
 
 :global(html[data-theme="dark"]) .avatarVenue {

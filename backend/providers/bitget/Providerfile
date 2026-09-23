@@ -1,0 +1,11 @@
+[sell]
+source_url = "https://www.bitget.com"
+name = "Bitget Sell"
+currency = ["usd", "rub", "eur", "amd"]
+banks = []
+
+[buy]
+source_url = "https://www.bitget.com"
+name = "Bitget Buy"
+currency = ["usd", "rub", "eur", "amd"]
+banks = []

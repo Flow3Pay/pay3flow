@@ -1,0 +1,11 @@
+[sell]
+source_url = "https://cifra-broker.ru"
+name = "Cifra Broker Sell"
+currency = ["rub", "usd", "eur", "cny"]
+banks = []
+
+[buy]
+source_url = "https://cifra-broker.ru"
+name = "Cifra Broker Buy"
+currency = ["rub", "usd", "eur", "cny"]
+banks = []

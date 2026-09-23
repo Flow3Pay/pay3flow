@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use axum::http::Response;
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use axum::Router;
 use tower_http::classify::ServerErrorsFailureClass;
 use tower_http::cors::CorsLayer;
@@ -11,7 +11,7 @@ use tracing::Level;
 use crate::core::state::AppState;
 use crate::server::routing::{
     activitypub, auth, banks, exchange, matcher, networks, oauth, p2p, pairs, payments,
-    payments_ws, rates, solver, ws,
+    payments_ws, providers, rates, solver, ws,
 };
 
 pub fn router(state: AppState) -> Router {
@@ -24,6 +24,7 @@ pub fn router(state: AppState) -> Router {
         .route("/ws", get(ws::ws_handler))
         .route("/ws/rates", get(rates::rates_ws))
         .route("/ws/payments", get(payments_ws::payments_ws))
+        .route("/ws/p2p/routes", get(p2p::routes_ws))
         .route("/api/payments", post(payments::create))
         .route("/api/payments", get(payments::list))
         .route("/api/payments/:id", get(payments::get))
@@ -103,17 +104,41 @@ pub fn router(state: AppState) -> Router {
         .route("/api/networks", get(networks::list))
         .route("/api/p2p/search", get(p2p::search))
         .route("/api/p2p/routes", get(p2p::routes))
+        .route("/api/service-executions/open", post(p2p::open_execution))
+        .route("/api/services/:id/vote", put(p2p::set_vote))
         .route("/api/admin/banks", post(banks::admin_create))
         .route(
             "/api/admin/banks/:name/status",
             post(banks::admin_set_status),
         )
+        .route("/api/providers", get(providers::list))
         .route("/api/providers/:provider/webhooks", post(payments::webhook))
         .route("/api/debug/quote", post(rates::debug_quote))
         .route("/routing/fallback", post(matcher::fallback))
         .route("/.well-known/webfinger", get(activitypub::webfinger))
         .route("/actor", get(activitypub::actor_collection))
         .route("/actor/:handle", get(activitypub::actor_document_by_handle))
+        .route(
+            "/marketplace/resources/exchange",
+            get(activitypub::exchange_resource),
+        )
+        .route(
+            "/marketplace/proposals/exchange",
+            get(activitypub::exchange_proposal),
+        )
+        .route(
+            "/marketplace/interfaces/exchange",
+            get(activitypub::exchange_interface),
+        )
+        .route(
+            "/marketplace/shapes/exchange-input",
+            get(activitypub::exchange_input_shape),
+        )
+        .route(
+            "/marketplace/shapes/exchange-output",
+            get(activitypub::exchange_output_shape),
+        )
+        .route("/marketplace/preview", post(activitypub::exchange_preview))
         .route("/candidates", get(activitypub::candidates))
         .route("/api/debug/task", post(activitypub::debug_task))
         .route("/inbox", post(activitypub::inbox_shared))

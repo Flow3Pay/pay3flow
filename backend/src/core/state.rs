@@ -7,6 +7,7 @@ use crate::p2p::P2pSearchService;
 use crate::pairs::ExchangePairsService;
 use crate::payments::PaymentService;
 use crate::routing::RoutePicker;
+use crate::service_reputation::ServiceReputation;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -25,6 +26,8 @@ pub struct AppState {
     pub redis: Option<RedisPool>,
     /// Read-only fan-out search over public P2P advertisement boards.
     pub p2p: P2pSearchService,
+    /// Global usage and feedback for services shown in public route results.
+    pub reputation: ServiceReputation,
 }
 
 impl AppState {
@@ -40,6 +43,7 @@ impl AppState {
         admin_token: String,
         redis: Option<RedisPool>,
         p2p: P2pSearchService,
+        reputation: ServiceReputation,
     ) -> Self {
         Self {
             pool,
@@ -52,6 +56,7 @@ impl AppState {
             admin_token,
             redis,
             p2p,
+            reputation,
         }
     }
 }

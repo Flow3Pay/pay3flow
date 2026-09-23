@@ -305,8 +305,9 @@ impl PaymentService {
             return Ok(None);
         }
         // Our own curated real-provider pool.
-        let pool = crate::routing::profile::seed_pool();
-        if let Some(slug) = pool
+        if let Some(slug) = self
+            .picker
+            .pool
             .iter()
             .find(|p| name.starts_with(&p.name))
             .map(|p| p.slug.clone())

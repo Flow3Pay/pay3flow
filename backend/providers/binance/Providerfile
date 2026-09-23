@@ -1,0 +1,11 @@
+[sell]
+source_url = "https://www.binance.com"
+name = "Binance Sell"
+currency = ["usd", "rub", "eur", "amd"]
+banks = []
+
+[buy]
+source_url = "https://www.binance.com"
+name = "Binance Buy"
+currency = ["usd", "rub", "eur", "amd"]
+banks = []

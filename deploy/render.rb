@@ -10,7 +10,7 @@ module Pay3flow
       "PAY3FLOW_IMAGE_TAG" => "dev",
       "PAY3FLOW_SOURCE_REPOSITORY" => "https://github.com/Flow3Pay/pay3flow.git",
       "PAY3FLOW_SOURCE_REVISION" => "c3ce63cc06209638e47bcf9c94e65ad66f802da9",
-      "PAY3FLOW_INGRESS_HOST" => "pay3flow.example.invalid",
+      "PAY3FLOW_INGRESS_HOST" => "pay3flow.lefine.pro",
       "PAY3FLOW_INGRESS_CLASS" => "traefik",
       "PAY3FLOW_INGRESS_TLS_SECRET" => "",
       "PAY3FLOW_STORAGE_CLASS" => "local-path",
@@ -22,17 +22,17 @@ module Pay3flow
       "PAY3FLOW_SECRETS_KEY" => "change-me-secrets",
       "PAY3FLOW_ADMIN_TOKEN" => "change-me-admin",
       "PAY3FLOW_AP_HANDLE" => "pay3flow",
-      "PAY3FLOW_AP_REQUIRE_SIGNATURES" => "false",
-      "PAY3FLOW_FMATCH_INBOX" => "http://fmatch:7277/inbox/actra",
-      "PAY3FLOW_FMATCH_ACTOR_ID" => "http://fmatch:7277/actor/actra",
+      "PAY3FLOW_AP_REQUIRE_SIGNATURES" => "true",
+      "PAY3FLOW_FMATCH_INBOX" => "https://lefine.pro/inbox/actra",
+      "PAY3FLOW_FMATCH_ACTOR_ID" => "https://lefine.pro/actors/actra",
       "PAY3FLOW_PUBLIC_API_URL" => "",
       "PAY3FLOW_FX_SOURCE" => "mock",
       "PAY3FLOW_P2P_SEARCH_ENABLED" => "true",
-      "PAY3FLOW_P2P_BINANCE_ENABLED" => "false",
-      "PAY3FLOW_P2P_BYBIT_ENABLED" => "false",
-      "PAY3FLOW_P2P_OKX_ENABLED" => "false",
-      "PAY3FLOW_P2P_BITGET_ENABLED" => "false",
-      "PAY3FLOW_P2P_RAPIRA_ENABLED" => "false"
+      "PAY3FLOW_P2P_BINANCE_ENABLED" => "true",
+      "PAY3FLOW_P2P_BYBIT_ENABLED" => "true",
+      "PAY3FLOW_P2P_OKX_ENABLED" => "true",
+      "PAY3FLOW_P2P_BITGET_ENABLED" => "true",
+      "PAY3FLOW_P2P_RAPIRA_ENABLED" => "true"
     }.freeze
 
     module_function

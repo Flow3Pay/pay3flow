@@ -1,0 +1,11 @@
+[sell]
+source_url = "https://www.okx.com"
+name = "OKX Sell"
+currency = ["usd", "rub", "eur", "amd"]
+banks = []
+
+[buy]
+source_url = "https://www.okx.com"
+name = "OKX Buy"
+currency = ["usd", "rub", "eur", "amd"]
+banks = []

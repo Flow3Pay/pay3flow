@@ -3,6 +3,9 @@
   import { assetIcon, networkIcon, venueIcon } from "$lib/icons";
 
   export let routes: RouteCandidate[];
+  export let routesFound = 0;
+  export let sourceCurrency = "";
+  export let targetCurrency = "";
   export let selectedRouteId: string | null;
   export let onSelect: (route: RouteCandidate) => void;
   export let onOpenInstructions: (route: RouteCandidate) => void;
@@ -22,6 +25,8 @@
   const assetLabel = (currency?: string) => !currency ? "—" : ASSET_NAMES[currency.toUpperCase()] ? `${currency} ${ASSET_NAMES[currency.toUpperCase()]}` : currency;
   const money = (minor?: number, currency?: string) => minor == null ? "—" : `${(minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2, useGrouping: false })} ${currency ?? ""}`;
   const spreadLabel = (bps: number) => Math.abs(bps / 100) < 0.005 ? "Same output" : `${Math.abs(bps / 100).toFixed(2)}% less`;
+  const compact = (value: number) => Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(value);
+  const routeCountLabel = (count: number) => `${count} ${count === 1 ? "route" : "routes"} found`;
 
   function workflowSteps(route: RouteCandidate): Step[] {
     const entry = route.legs.find((leg) => leg.kind === "entry");
@@ -50,14 +55,8 @@
 
 <aside class="side active" aria-label="Found routes" aria-busy={searching} id="routes">
   <div class="panel">
-    <div class="panelTop"><div><strong>{routes.length ? "Live market paths" : "Awaiting your intent"}</strong></div></div>
-    {#if searching}
-      <div class="skeletonList" aria-label="Searching live routes">
-        {#each [0, 1, 2, 3, 4] as item}
-          <div class="skeletonCard" style:animation-delay={`${item * 80}ms`}><span class="skeletonShort"></span><span class="skeletonLong"></span><span class="skeletonMedium"></span></div>
-        {/each}
-      </div>
-    {:else if routes.length > 0}
+    <div class="panelTop"><div>{#if hasAmount}<strong>Send {sourceCurrency} → {targetCurrency}</strong><small aria-live="polite">{routeCountLabel(routesFound)}{searching ? " · searching…" : ""}</small>{#if routesFound > routes.length && routes.length}<small class="resultLimit">Showing top {routes.length}</small>{/if}{:else}<strong>Awaiting your intent</strong>{/if}</div></div>
+    {#if routes.length > 0}
       <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
       <div class="routeGroups" data-testid="route-groups" role="region" tabindex="0" aria-label="Found routes">
         <ul class="routeList">
@@ -92,10 +91,17 @@
                     </span>
                   {/each}
                 </span>
+                {#if route.reputation}<span class="routeReputation"><span>Used {compact(route.reputation.executions_average)} times</span><span>👍 {compact(route.reputation.likes_average)}</span><span>👎 {compact(route.reputation.dislikes_average)}</span></span>{/if}
               </button>
             </div></li>
           {/each}
         </ul>
+      </div>
+    {:else if searching}
+      <div class="skeletonList" aria-label="Searching live routes">
+        {#each [0, 1, 2, 3, 4] as item}
+          <div class="skeletonCard" style:animation-delay={`${item * 80}ms`}><span class="skeletonShort"></span><span class="skeletonLong"></span><span class="skeletonMedium"></span></div>
+        {/each}
       </div>
     {:else}
       <div class="emptyState">
@@ -169,6 +175,26 @@
   font-size: 16px;
   font-weight: 700;
   letter-spacing: -0.025em;
+}
+
+.panelTop small {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 11px;
+}
+
+.panelTop .resultLimit {
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 9px;
+}
+
+.routeReputation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  margin-top: 10px;
+  color: rgba(255, 255, 255, 0.58);
+  font-family: var(--font-mono);
+  font-size: 9px;
 }
 
 .liveBadge,
@@ -623,6 +649,11 @@
   color: var(--color-text);
 }
 
+.panelTop small,
+.routeReputation {
+  color: var(--color-text-soft);
+}
+
 .panelTop {
   transform: translateY(-5px);
 }
@@ -770,6 +801,11 @@
 :global(html[data-theme="dark"]) .deltaBadge,
 :global(html[data-theme="dark"]) .emptyVenues span {
   background: #2b2b2b;
+}
+
+:global(html[data-theme="dark"]) .panelTop small,
+:global(html[data-theme="dark"]) .routeReputation {
+  color: rgba(255, 255, 255, 0.58);
 }
 
 :global(html[data-theme="dark"]) .workflow,

@@ -6,7 +6,7 @@ RUN mkdir -p backend/src && echo "fn main(){}" > backend/src/main.rs \
     && cargo build --release --manifest-path backend/Cargo.toml 2>/dev/null; rm -rf backend/src
 COPY backend/src backend/src
 COPY backend/migrations backend/migrations
-RUN touch backend/src/main.rs && cargo build --release --bins --manifest-path backend/Cargo.toml
+RUN touch backend/src/main.rs && cargo build --release --bin pay3flow-backend --manifest-path backend/Cargo.toml
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*

@@ -29,6 +29,9 @@ to remove the local database and cache volumes.
 ## Backend workflow
 
 The backend lives in `backend/` and applies the SQL schema during startup.
+Providerfiles are converted into a committed SQL migration before the Rust
+build and are never read by the running service; see
+[`providerfiles.md`](providerfiles.md).
 Useful commands when Rust is installed:
 
 ```bash

@@ -1,0 +1,11 @@
+[sell]
+source_url = "https://rapira.net"
+name = "Rapira Sell"
+currency = ["rub"]
+banks = []
+
+[buy]
+source_url = "https://rapira.net"
+name = "Rapira Buy"
+currency = ["rub"]
+banks = []

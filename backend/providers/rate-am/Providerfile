@@ -1,0 +1,11 @@
+[sell]
+source_url = "https://rate.am"
+name = "Rate Sell"
+currency = ["usd", "rub", "eur", "amd"]
+banks = [""]
+
+[buy]
+source_url = "https://rate.am"
+banks = [""]
+currency = ["usd", "rub", "eur", "amd"]
+name = "Rate Buy"
