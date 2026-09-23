@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::{Duration, Instant};
@@ -291,6 +292,15 @@ impl P2pSearchService {
         networks: NetworkCatalog,
         records: Vec<crate::providers::ProviderAdapterRecord>,
     ) -> Result<Self> {
+        if records.iter().any(|record| record.workflow.is_some()) {
+            playwright_rs::server::driver::get_driver_executable()
+                .map_err(|error| anyhow::anyhow!("Playwright driver is unavailable: {error}"))?;
+            if let Ok(executable) = std::env::var("PLAYWRIGHT_CHROMIUM_EXECUTABLE") {
+                if !Path::new(&executable).is_file() {
+                    bail!("PLAYWRIGHT_CHROMIUM_EXECUTABLE points to missing file `{executable}`");
+                }
+            }
+        }
         let timeout = Duration::from_millis(config.p2p_search_timeout_ms.clamp(250, 30_000));
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))

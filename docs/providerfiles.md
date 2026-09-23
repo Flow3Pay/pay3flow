@@ -129,8 +129,12 @@ decimal comma and spaces as grouping separators are supported.
 `navigation_retries` is useful for SPAs whose JavaScript chunks occasionally
 fail during the first navigation. TLS verification remains enabled. In the
 provided Docker image Chromium is installed and
-`PLAYWRIGHT_CHROMIUM_EXECUTABLE` is configured automatically. For local runs,
-point that environment variable to a compatible Chromium binary. Set
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE` is configured automatically. The image also
+copies the Playwright Node driver from the build stage and exposes it through
+`PLAYWRIGHT_DRIVER_PATH`; both the driver and browser are required. For local
+runs, point the Chromium variable to a compatible binary and, when the driver
+is stored outside Cargo's build directory, set `PLAYWRIGHT_DRIVER_PATH` to its
+directory. Set
 `P2P_WORKFLOW_DEBUG_SCREENSHOT` to a file path to save a screenshot when a
 workflow step fails.
 

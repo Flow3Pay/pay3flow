@@ -398,19 +398,10 @@ fn side_name(side: P2pSide) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::p2p::routes::P2pRouteSearchQuery;
+    use crate::p2p::service::P2pSearchService;
 
-    #[test]
-    fn parses_decimal_comma_and_grouped_numbers() {
-        assert_eq!(parse_localized_number("1,416969 TRX").unwrap(), 1.416969);
-        assert_eq!(
-            parse_localized_number("1 190 654,07").unwrap(),
-            1_190_654.07
-        );
-    }
-
-    #[tokio::test]
-    #[ignore = "calls the live Whitebird website and requires Chromium"]
-    async fn live_whitebird_workflow_returns_buy_and_sell_quotes() {
+    fn whitebird_source() -> WorkflowP2pSource {
         let document: toml::Value =
             toml::from_str(include_str!("../../providers/whitebird/Providerfile")).unwrap();
         let workflow: WorkflowConfig = document
@@ -426,7 +417,22 @@ mod tests {
             config: None,
             workflow: Some(workflow),
         };
-        let source = WorkflowP2pSource::from_record(&record).unwrap();
+        WorkflowP2pSource::from_record(&record).unwrap()
+    }
+
+    #[test]
+    fn parses_decimal_comma_and_grouped_numbers() {
+        assert_eq!(parse_localized_number("1,416969 TRX").unwrap(), 1.416969);
+        assert_eq!(
+            parse_localized_number("1 190 654,07").unwrap(),
+            1_190_654.07
+        );
+    }
+
+    #[tokio::test]
+    #[ignore = "calls the live Whitebird website and requires Chromium"]
+    async fn live_whitebird_workflow_returns_buy_and_sell_quotes() {
+        let source = whitebird_source();
         for side in [P2pSide::BuyCrypto, P2pSide::SellCrypto] {
             let offers = source
                 .search(&P2pSearchQuery {
@@ -448,5 +454,46 @@ mod tests {
             assert_eq!(offers[0].side, side);
             assert!(offers[0].price.parse::<f64>().unwrap() > 0.0);
         }
+    }
+
+    #[tokio::test]
+    #[ignore = "calls the live Whitebird website and requires Chromium"]
+    async fn live_whitebird_builds_user_selected_usdc_to_sberbank_route() {
+        let service = P2pSearchService::with_sources(
+            vec![Arc::new(whitebird_source())],
+            Duration::from_secs(30),
+        );
+        let response = service
+            .search_routes(P2pRouteSearchQuery {
+                source_fiat: "USDC".into(),
+                target_fiat: "RUB".into(),
+                source_amount: 100.0,
+                source_network: None,
+                target_network: None,
+                bridge_fiat: None,
+                assets: None,
+                intermediary_assets: None,
+                source_payment_method: None,
+                target_payment_method: Some("Sberbank".into()),
+                merchant_only: None,
+                min_orders: None,
+                min_completion_rate: None,
+                allow_cross_venue: None,
+                max_price_deviation_bps: None,
+                limit: Some(10),
+                sources: Some("whitebird".into()),
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(
+            response.routes_found,
+            1,
+            "{}",
+            serde_json::to_string_pretty(&response).unwrap()
+        );
+        assert_eq!(response.routes[0].asset, "USDC");
+        assert_eq!(response.routes[0].target_fiat, "RUB");
+        assert!(!response.routes[0].payment_methods_verified);
     }
 }
