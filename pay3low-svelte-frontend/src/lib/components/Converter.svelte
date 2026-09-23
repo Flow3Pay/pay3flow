@@ -236,6 +236,14 @@
     routeInstructionsComponent ??= (await import("./RouteInstructions.svelte")).default;
   }
 
+  function runPrimaryAction() {
+    if (previewRoute) {
+      void openInstructions(previewRoute);
+      return;
+    }
+    void startSearch();
+  }
+
   async function openService(link: ServiceLink) {
     const popup = window.open("about:blank", "_blank");
     if (popup) popup.opener = null;
@@ -449,7 +457,7 @@
         </button>{#if targetMethod?.kind === "wallet" && targetNetwork}<div class="networkControl"><button type="button" class="networkButton" on:click={() => void openNetworkPicker("target")} aria-haspopup="dialog"><span class="networkDot" aria-hidden="true"><img src={networkIcon(targetNetwork.name)} alt="" width="18" height="18" loading="lazy" decoding="async" /></span><span class="networkCopy"><small>Network</small><strong>{targetNetwork.name}</strong></span><span class="networkChevron" aria-hidden="true">⌄</span></button></div>{/if}</div>
       </div>
       {#if refreshSeconds > 0}<div class="marketBar"><div class="marketState"><span class="refreshProgress" role="img" aria-label={secondsUntilRefresh === null ? "Auto-refresh is off" : `Refresh in ${secondsUntilRefresh} seconds`}><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle class="refreshTrack" cx="9" cy="9" r="7" pathLength="100" /><circle class="refreshFill" cx="9" cy="9" r="7" pathLength="100" style:stroke-dashoffset={`${100 - refreshProgress}`} /></svg></span><div><span>{lastUpdatedAt ? `Updated ${Math.max(0, Math.floor((clock - lastUpdatedAt) / 1000))}s ago` : "Public P2P sources only · no order placement"}</span></div></div>{#if secondsUntilRefresh !== null}<span class="nextRefresh">{secondsUntilRefresh}s</span>{/if}</div>{/if}
-      <button type="button" class="cta" disabled={!hasAmount || searching || !corridor} on:click={startSearch} data-testid="start-search" aria-label="Search routes">{#if searching}<span class="spinner"></span> Searching every path{:else if hasAmount}Search routes <span>↗</span>{:else}Enter an amount to begin{/if}</button>
+      <button type="button" class="cta" disabled={!hasAmount || (!previewRoute && (searching || !corridor))} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? "Open swap instructions" : "Find routes"}>{#if previewRoute}Swap <span>↗</span>{:else if searching}<span class="spinner"></span> Finding routes{:else if hasAmount}Find routes <span>↗</span>{:else}Enter an amount to begin{/if}</button>
       {#if error}<div class="errorBox" role="alert">{error}</div>{/if}
     </div>
     <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={(route) => selected = route} onOpenInstructions={openInstructions} {searching} searched={lastUpdatedAt !== null} {hasAmount} />

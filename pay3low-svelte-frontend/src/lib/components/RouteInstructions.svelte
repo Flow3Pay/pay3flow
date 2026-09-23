@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import type { RouteCandidate, ServiceLink, ServiceStats, ServiceVote } from "$lib/exchange";
+  import { dislikeIcon, likeIcon } from "$lib/icons";
   import AdvertiserCard from "./AdvertiserCard.svelte";
 
   export let route: RouteCandidate;
@@ -154,7 +155,7 @@
         </div></li>
       {/if}
     </ol>
-    {#if route.services?.length}<section class="serviceReputation" aria-label="Service reputation">{#each route.services as service (service.id)}<article><strong>{service.display_name}</strong><div class="serviceMetrics"><span>Used {compact(service.executions_total)} times</span><span>👍 {compact(service.likes_total)}</span><span>👎 {compact(service.dislikes_total)}</span></div>{#if usedServiceIds.includes(service.id) || service.viewer_vote}<div class="votePrompt"><span>Was this service useful?</span><div><button type="button" class:active={service.viewer_vote === "like"} aria-pressed={service.viewer_vote === "like"} on:click={() => chooseVote(service, "like")}>👍 Like</button><button type="button" class:active={service.viewer_vote === "dislike"} aria-pressed={service.viewer_vote === "dislike"} on:click={() => chooseVote(service, "dislike")}>👎 Dislike</button></div></div>{/if}</article>{/each}</section>{/if}
+    {#if route.services?.length}<section class="serviceReputation" aria-label="Service reputation">{#each route.services as service (service.id)}<article><strong>{service.display_name}</strong><div class="serviceMetrics"><span>Used {compact(service.executions_total)} times</span><span class="reputationMetric" aria-label={`${compact(service.likes_total)} likes`}><img src={likeIcon} alt="" aria-hidden="true" />{compact(service.likes_total)}</span><span class="reputationMetric" aria-label={`${compact(service.dislikes_total)} dislikes`}><img src={dislikeIcon} alt="" aria-hidden="true" />{compact(service.dislikes_total)}</span></div>{#if usedServiceIds.includes(service.id) || service.viewer_vote}<div class="votePrompt"><span>Was this service useful?</span><div><button type="button" class:active={service.viewer_vote === "like"} aria-pressed={service.viewer_vote === "like"} on:click={() => chooseVote(service, "like")}><img src={likeIcon} alt="" aria-hidden="true" />Like</button><button type="button" class:active={service.viewer_vote === "dislike"} aria-pressed={service.viewer_vote === "dislike"} on:click={() => chooseVote(service, "dislike")}><img src={dislikeIcon} alt="" aria-hidden="true" />Dislike</button></div></div>{/if}</article>{/each}</section>{/if}
     <div class="warning"><strong>Important</strong><span>Rates, limits and ads can change. Confirm the user, payment details and network on the exchange before sending money. Pay3Flow never creates the order or moves funds.</span>{#each route.warnings ?? [] as warning}<span>{warning}</span>{/each}</div>
   </div>
 </div>
@@ -525,6 +526,18 @@
   font-size: 10px;
 }
 
+.reputationMetric {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.reputationMetric img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
 .votePrompt {
   margin-top: 12px;
   padding-top: 12px;
@@ -540,12 +553,21 @@
 }
 
 .votePrompt button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   padding: 7px 10px;
   border: 1px solid var(--color-border);
   border-radius: 10px;
   background: #fff;
   color: var(--color-text-soft);
   font-size: 10px;
+}
+
+.votePrompt button img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
 }
 
 .votePrompt button.active {

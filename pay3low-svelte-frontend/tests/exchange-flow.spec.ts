@@ -487,13 +487,13 @@ test("tracked service opens unlock anonymous feedback", async ({ page }) => {
     "color",
     "rgb(243, 243, 243)",
   );
-  await expect(instructions.getByRole("button", { name: "👍 Like" })).toHaveCSS(
+  await expect(instructions.getByRole("button", { name: "Like" })).toHaveCSS(
     "background-color",
     "rgb(43, 43, 43)",
   );
-  await instructions.getByRole("button", { name: "👍 Like" }).click();
-  await expect(instructions.getByRole("button", { name: "👍 Like" })).toHaveAttribute("aria-pressed", "true");
-  await expect(instructions.getByText("👍 851")).toBeVisible();
+  await instructions.getByRole("button", { name: "Like" }).click();
+  await expect(instructions.getByRole("button", { name: "Like" })).toHaveAttribute("aria-pressed", "true");
+  await expect(instructions.getByLabel("851 likes")).toBeVisible();
 });
 
 test("crypto route keeps distinct source and target networks", async ({ page }) => {

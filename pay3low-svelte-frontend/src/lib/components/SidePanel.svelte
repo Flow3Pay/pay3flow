@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { RouteCandidate } from "$lib/exchange";
-  import { assetIcon, networkIcon, venueIcon } from "$lib/icons";
+  import { assetIcon, dislikeIcon, likeIcon, networkIcon, venueIcon } from "$lib/icons";
 
   export let routes: RouteCandidate[];
   export let routesFound = 0;
@@ -91,7 +91,7 @@
                     </span>
                   {/each}
                 </span>
-                {#if route.reputation}<span class="routeReputation"><span>Used {compact(route.reputation.executions_average)} times</span><span>👍 {compact(route.reputation.likes_average)}</span><span>👎 {compact(route.reputation.dislikes_average)}</span></span>{/if}
+                {#if route.reputation}<span class="routeReputation"><span>Used {compact(route.reputation.executions_average)} times</span><span class="reputationMetric" aria-label={`${compact(route.reputation.likes_average)} likes`}><img src={likeIcon} alt="" aria-hidden="true" />{compact(route.reputation.likes_average)}</span><span class="reputationMetric" aria-label={`${compact(route.reputation.dislikes_average)} dislikes`}><img src={dislikeIcon} alt="" aria-hidden="true" />{compact(route.reputation.dislikes_average)}</span></span>{/if}
               </button>
             </div></li>
           {/each}
@@ -195,6 +195,18 @@
   color: rgba(255, 255, 255, 0.58);
   font-family: var(--font-mono);
   font-size: 9px;
+}
+
+.reputationMetric {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.reputationMetric img {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
 }
 
 .liveBadge,
