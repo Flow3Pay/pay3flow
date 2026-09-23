@@ -1,0 +1,14 @@
+# Copy this file to providers/<provider-slug>/Providerfile and replace the
+# example values. The parent directory becomes the provider slug.
+
+[sell]
+source_url = "https://provider.example"
+name = "Example Provider Sell"
+currency = ["usd", "rub", "eur", "amd"]
+banks = []
+
+[buy]
+source_url = "https://provider.example"
+name = "Example Provider Buy"
+currency = ["usd", "rub", "eur", "amd"]
+banks = []

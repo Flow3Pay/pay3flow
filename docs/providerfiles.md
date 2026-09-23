@@ -7,6 +7,13 @@ own directory under `backend/providers`; the directory path becomes its slug:
 backend/providers/rate-am/Providerfile  ->  rate-am
 ```
 
+Start from the copyable example:
+
+```bash
+mkdir -p backend/providers/my-provider
+cp backend/providers/Providerfile.example backend/providers/my-provider/Providerfile
+```
+
 A file may contain a `buy` section, a `sell` section, or both:
 
 ```toml
