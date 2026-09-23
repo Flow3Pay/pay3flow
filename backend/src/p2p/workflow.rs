@@ -468,7 +468,7 @@ mod tests {
                 source_fiat: "USDC".into(),
                 target_fiat: "RUB".into(),
                 source_amount: 100.0,
-                source_network: None,
+                source_network: Some("ethereum".into()),
                 target_network: None,
                 bridge_fiat: None,
                 assets: None,
@@ -476,8 +476,8 @@ mod tests {
                 source_payment_method: None,
                 target_payment_method: Some("Sberbank".into()),
                 merchant_only: None,
-                min_orders: None,
-                min_completion_rate: None,
+                min_orders: Some(20),
+                min_completion_rate: Some(0.9),
                 allow_cross_venue: None,
                 max_price_deviation_bps: None,
                 limit: Some(10),
@@ -492,8 +492,13 @@ mod tests {
             "{}",
             serde_json::to_string_pretty(&response).unwrap()
         );
-        assert_eq!(response.routes[0].asset, "USDC");
-        assert_eq!(response.routes[0].target_fiat, "RUB");
-        assert!(!response.routes[0].payment_methods_verified);
+        let route = &response.routes[0];
+        assert_eq!(route.asset, "USDC");
+        assert_eq!(route.target_fiat, "RUB");
+        assert_eq!(route.route_kind, "crypto_to_fiat");
+        assert!(route.target_amount.parse::<f64>().unwrap() > 0.0);
+        assert_eq!(route.exit_offer.as_ref().unwrap().source, "whitebird");
+        assert_eq!(route.source_network.as_deref(), Some("ethereum"));
+        assert!(!route.payment_methods_verified);
     }
 }

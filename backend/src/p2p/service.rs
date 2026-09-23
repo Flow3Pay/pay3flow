@@ -196,14 +196,18 @@ impl P2pOffer {
         if query.merchant_only.unwrap_or(false) && !self.advertiser.is_merchant {
             return false;
         }
-        if query.min_orders.is_some_and(|minimum| {
-            self.advertiser.completed_orders_30d.unwrap_or_default() < minimum
-        }) {
+        if query
+            .min_orders
+            .zip(self.advertiser.completed_orders_30d)
+            .is_some_and(|(minimum, actual)| actual < minimum)
+        {
             return false;
         }
-        if query.min_completion_rate.is_some_and(|minimum| {
-            self.advertiser.completion_rate_30d.unwrap_or_default() < minimum
-        }) {
+        if query
+            .min_completion_rate
+            .zip(self.advertiser.completion_rate_30d)
+            .is_some_and(|(minimum, actual)| actual < minimum)
+        {
             return false;
         }
         if let Some(payment_method) = &query.payment_method {
@@ -615,6 +619,38 @@ mod tests {
             source_url: "https://example.test".into(),
             source_url_is_exact: false,
         }
+    }
+
+    #[test]
+    fn reputation_filters_keep_offers_when_metrics_are_not_published() {
+        let query = P2pSearchQuery {
+            fiat: "RUB".into(),
+            asset: "USDC".into(),
+            side: P2pSide::SellCrypto,
+            amount: Some(100.0),
+            payment_method: Some("Sberbank".into()),
+            merchant_only: None,
+            min_orders: Some(20),
+            min_completion_rate: Some(0.9),
+            limit: Some(10),
+            sources: Some("whitebird".into()),
+        };
+        let mut direct_exchange = offer("whitebird", "84.7", "1", "100000", 100);
+        direct_exchange.side = P2pSide::SellCrypto;
+        direct_exchange.fiat = "RUB".into();
+        direct_exchange.asset = "USDC".into();
+        direct_exchange.payment_methods.clear();
+        direct_exchange.advertiser.completed_orders_30d = None;
+        direct_exchange.advertiser.completion_rate_30d = None;
+
+        assert!(direct_exchange.matches(&query));
+
+        direct_exchange.advertiser.completed_orders_30d = Some(19);
+        assert!(!direct_exchange.matches(&query));
+
+        direct_exchange.advertiser.completed_orders_30d = None;
+        direct_exchange.advertiser.completion_rate_30d = Some(0.89);
+        assert!(!direct_exchange.matches(&query));
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
