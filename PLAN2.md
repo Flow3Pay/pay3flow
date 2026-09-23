@@ -177,7 +177,7 @@ Before real money:
   switches;
 - test backups, rollback, incident response, and operator runbooks.
 
-Run `scripts/secret-audit.sh`, backend tests, frontend checks/build, the
+Run `ruby scripts/secret_audit.rb`, backend tests, frontend checks/build, the
 exchange smoke test, and Playwright before release. Development values from
 `.env.example` and `docker-compose.yml` are not production secrets.
 

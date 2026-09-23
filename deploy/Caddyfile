@@ -1,0 +1,15 @@
+# The target k3s host runs Caddy on ports 80/443 and has Traefik disabled.
+# Keep backend routes ahead of the frontend catch-all so ActivityPub, API,
+# health, and WebSocket requests reach the Rust service.
+pay3flow.lefine.pro {
+    encode gzip
+
+    @backend path /api* /ws* /health* /inbox* /actor* /.well-known* /routing* /marketplace* /candidates*
+    handle @backend {
+        reverse_proxy 127.0.0.1:30081
+    }
+
+    handle {
+        reverse_proxy 127.0.0.1:30080
+    }
+}

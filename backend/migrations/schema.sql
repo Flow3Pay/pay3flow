@@ -4,6 +4,75 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Public service adoption and reputation. Counters are materialized so route
+-- search responses can include them without aggregating the event tables.
+CREATE TABLE IF NOT EXISTS services (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    slug TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL,
+    executions_total BIGINT NOT NULL DEFAULT 0 CHECK (executions_total >= 0),
+    likes_total BIGINT NOT NULL DEFAULT 0 CHECK (likes_total >= 0),
+    dislikes_total BIGINT NOT NULL DEFAULT 0 CHECK (dislikes_total >= 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+INSERT INTO services (slug, display_name)
+VALUES
+    ('binance', 'Binance'),
+    ('bybit', 'Bybit'),
+    ('okx', 'OKX'),
+    ('bitget', 'Bitget'),
+    ('rapira', 'Rapira')
+ON CONFLICT (slug) DO UPDATE SET
+    display_name = EXCLUDED.display_name,
+    updated_at = now()
+WHERE services.display_name IS DISTINCT FROM EXCLUDED.display_name;
+
+CREATE TABLE IF NOT EXISTS route_searches (
+    id UUID PRIMARY KEY,
+    status TEXT NOT NULL DEFAULT 'searching'
+        CHECK (status IN ('searching', 'finished', 'failed')),
+    routes_found BIGINT NOT NULL DEFAULT 0 CHECK (routes_found >= 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS route_searches_created_idx
+    ON route_searches (created_at DESC);
+
+CREATE TABLE IF NOT EXISTS service_executions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    service_id UUID NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+    -- Keep execution evidence immutable: deleting a search must not silently
+    -- remove executions while leaving its materialized service counter intact.
+    search_id UUID NOT NULL REFERENCES route_searches(id),
+    route_id TEXT NOT NULL,
+    anonymous_id UUID NOT NULL,
+    status TEXT NOT NULL DEFAULT 'started'
+        CHECK (status IN ('started', 'success', 'failed', 'cancelled')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (anonymous_id, service_id, search_id, route_id)
+);
+
+CREATE INDEX IF NOT EXISTS service_executions_service_idx
+    ON service_executions (service_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS service_executions_anonymous_idx
+    ON service_executions (anonymous_id, service_id);
+
+CREATE TABLE IF NOT EXISTS service_votes (
+    anonymous_id UUID NOT NULL,
+    service_id UUID NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+    vote TEXT NOT NULL CHECK (vote IN ('like', 'dislike')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (anonymous_id, service_id)
+);
+
+CREATE INDEX IF NOT EXISTS service_votes_service_idx
+    ON service_votes (service_id);
+
 CREATE TABLE IF NOT EXISTS activitypub_deliveries (
     activity_id TEXT NOT NULL,
     target TEXT NOT NULL,

@@ -88,6 +88,8 @@ async fn main() -> anyhow::Result<()> {
     );
 
     let p2p = pay3flow_backend::p2p::P2pSearchService::from_config(&cfg)?;
+    let reputation =
+        pay3flow_backend::service_reputation::ServiceReputation::new(pool.clone(), &cfg.jwt_secret);
 
     let state = AppState::new(
         pool,
@@ -100,6 +102,7 @@ async fn main() -> anyhow::Result<()> {
         cfg.admin_token,
         redis_pool,
         p2p,
+        reputation,
     );
 
     tracing::info!(
@@ -127,7 +130,15 @@ async fn main() -> anyhow::Result<()> {
             .deliver(&self_seed.identity, &self_seed.fmatch_inbox, &follow)
             .await
         {
-            Ok(outcome) => tracing::info!(?outcome, "self-seed follow"),
+            Ok(outcome) => {
+                tracing::info!(?outcome, "self-seed follow");
+                match self_seed.publish_exchange_proposal().await {
+                    Ok(outcome) => {
+                        tracing::info!(?outcome, "published exchange proposal to fmatch")
+                    }
+                    Err(error) => tracing::warn!(%error, "exchange proposal publication failed"),
+                }
+            }
             Err(e) => tracing::warn!(error = %e, "self-seed follow failed"),
         }
     });

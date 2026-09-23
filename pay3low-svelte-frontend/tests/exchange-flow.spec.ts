@@ -1,4 +1,23 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
+
+async function expectNumberedTimeline(instructions: Locator, numbers: string[]) {
+  const steps = instructions.getByTestId("instruction-step");
+  await expect(steps).toHaveCount(numbers.length);
+  await expect(steps.locator(".stepNumber")).toHaveText(numbers);
+  const markerShape = await steps.locator(".stepNumber").first().evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return { width: rect.width, height: rect.height, radius: getComputedStyle(element).borderRadius };
+  });
+  expect(Math.abs(markerShape.width - markerShape.height)).toBeLessThan(0.1);
+  expect(markerShape.radius).toBe("50%");
+}
+
+async function openApp(page: Page) {
+  await page.goto("/");
+  await expect
+    .poll(() => page.locator(".appShell").evaluate((element) => getComputedStyle(element, "::before").backgroundImage))
+    .not.toBe("none");
+}
 
 async function mockBackend(page: Page) {
   await page.route("http://localhost:8080/api/**", async (route) => {
@@ -32,6 +51,17 @@ async function mockBackend(page: Page) {
         { id: "bitcoin", name: "Bitcoin", currencies: ["BTC"] },
       ]);
     }
+    if (url.pathname === "/api/service-executions/open" && method === "POST") {
+      return json({
+        execution_id: "00000000-0000-4000-8000-000000000301",
+        newly_recorded: true,
+        redirect_url: "about:blank",
+        service: { id: "00000000-0000-4000-8000-000000000202", slug: "bybit", display_name: "Bybit", executions_total: 6201, likes_total: 850, dislikes_total: 40 },
+      });
+    }
+    if (url.pathname === "/api/services/00000000-0000-4000-8000-000000000202/vote" && method === "PUT") {
+      return json({ id: "00000000-0000-4000-8000-000000000202", slug: "bybit", display_name: "Bybit", executions_total: 6201, likes_total: 851, dislikes_total: 40, viewer_vote: "like" });
+    }
     if (url.pathname === "/api/p2p/routes") {
       const offer = (source: string, adId: string, fiat: string, asset: string) => ({
         source,
@@ -58,6 +88,8 @@ async function mockBackend(page: Page) {
         expect(url.searchParams.get("source_network")).toBe("ethereum");
         expect(url.searchParams.has("source_payment_method")).toBe(false);
         return json({
+          search_id: "00000000-0000-4000-8000-000000000101",
+          routes_found: 1,
           searched_at: "2026-09-19T10:00:00Z",
           source_fiat: "USDT",
           target_fiat: "RUB",
@@ -65,6 +97,7 @@ async function mockBackend(page: Page) {
           assets_searched: ["USDT"],
           can_exchange_to_target: true,
           routes: [{
+            route_id: "route-usdt-rub",
             rank: 1,
             asset: "USDT",
             entry_network: "ethereum",
@@ -84,6 +117,8 @@ async function mockBackend(page: Page) {
             entry_offer: null,
             exit_offer: offer("binance", "exit-erc20", "RUB", "USDT"),
             warnings: ["Search estimate only."],
+            services: [{ id: "00000000-0000-4000-8000-000000000201", slug: "binance", display_name: "Binance", executions_total: 12400, likes_total: 1800, dislikes_total: 74 }],
+            reputation: { executions_average: 12400, likes_average: 1800, dislikes_average: 74 },
           }],
         });
       }
@@ -91,6 +126,8 @@ async function mockBackend(page: Page) {
         expect(url.searchParams.get("source_network")).toBe("base");
         expect(url.searchParams.get("target_network")).toBe("ton");
         return json({
+          search_id: "00000000-0000-4000-8000-000000000102",
+          routes_found: 1,
           searched_at: "2026-09-19T10:00:00Z",
           source_fiat: "ETH",
           target_fiat: "USDT",
@@ -98,6 +135,7 @@ async function mockBackend(page: Page) {
           assets_searched: ["USDT"],
           can_exchange_to_target: true,
           routes: [{
+            route_id: "route-eth-usdt",
             rank: 1,
             asset: "USDT",
             entry_network: "base",
@@ -126,6 +164,55 @@ async function mockBackend(page: Page) {
             entry_offer: null,
             exit_offer: null,
             warnings: ["Network availability is not verified."],
+            services: [{ id: "00000000-0000-4000-8000-000000000201", slug: "binance", display_name: "Binance", executions_total: 12400, likes_total: 1800, dislikes_total: 74 }],
+            reputation: { executions_average: 12400, likes_average: 1800, dislikes_average: 74 },
+          }],
+        });
+      }
+      if (url.searchParams.get("source_fiat") === "BTC") {
+        expect(url.searchParams.get("source_network")).toBe("bitcoin");
+        expect(url.searchParams.get("target_network")).toBe("ton");
+        return json({
+          search_id: "00000000-0000-4000-8000-000000000104",
+          routes_found: 1,
+          searched_at: "2026-09-19T10:00:00Z",
+          source_fiat: "BTC",
+          target_fiat: "USDT",
+          source_amount: "0.002",
+          assets_searched: ["USDC"],
+          can_exchange_to_target: true,
+          routes: [{
+            route_id: "route-btc-usdc-usdt",
+            rank: 1,
+            asset: "USDC",
+            entry_network: "bitcoin",
+            source_network: "bitcoin",
+            target_network: "ton",
+            source_fiat: "BTC",
+            source_amount: "0.002000000000",
+            acquired_asset_amount: "126.000000000000",
+            target_fiat: "USDT",
+            target_amount: "125.800000000000",
+            effective_rate: "62900.000000000000",
+            same_venue: true,
+            requires_asset_transfer: false,
+            transfer_fee_included: false,
+            route_kind: "crypto_to_crypto",
+            bridge_currency: "USDC",
+            market_path: {
+              venue: "binance",
+              source_pair: "BTCUSDC",
+              target_pair: "USDCUSDT",
+              source_rate: "63000.000000000000",
+              target_rate: "0.998400000000",
+              intermediary_amount: "126.000000000000",
+            },
+            payment_methods_verified: true,
+            entry_offer: null,
+            exit_offer: null,
+            warnings: ["Network availability is not verified."],
+            services: [{ id: "00000000-0000-4000-8000-000000000201", slug: "binance", display_name: "Binance", executions_total: 12400, likes_total: 1800, dislikes_total: 74 }],
+            reputation: { executions_average: 12400, likes_average: 1800, dislikes_average: 74 },
           }],
         });
       }
@@ -136,7 +223,9 @@ async function mockBackend(page: Page) {
         const best = index === 0;
         const asset = index % 2 === 0 ? "USDT" : "USDC";
         const venue = index % 2 === 0 ? "binance" : "bybit";
+        const exitVenue = index === 2 ? "bybit" : venue;
         return {
+          route_id: `route-${index + 1}`,
           rank: index + 1,
           asset,
           source_fiat: "AMD",
@@ -145,16 +234,25 @@ async function mockBackend(page: Page) {
           target_fiat: "RUB",
           target_amount: best ? "20350.00" : (20120 - index * 20).toFixed(2),
           effective_rate: best ? "0.20350000" : "0.20100000",
-          same_venue: true,
-          requires_asset_transfer: false,
+          entry_network: index === 2 ? "ethereum" : undefined,
+          same_venue: index !== 2,
+          requires_asset_transfer: index === 2,
           transfer_fee_included: true,
           payment_methods_verified: best,
           entry_offer: offer(venue, `entry-${index + 1}`, "AMD", asset),
-          exit_offer: offer(venue, `exit-${index + 1}`, "RUB", asset),
+          exit_offer: offer(exitVenue, `exit-${index + 1}`, "RUB", asset),
           warnings: ["Search estimate only."],
+          services: [{ id: venue === "binance" ? "00000000-0000-4000-8000-000000000201" : "00000000-0000-4000-8000-000000000202", slug: venue, display_name: venue === "binance" ? "Binance" : "Bybit", executions_total: best ? 12400 : 6200, likes_total: best ? 1800 : 850, dislikes_total: best ? 74 : 40 }],
+          reputation: { executions_average: best ? 12400 : 6200, likes_average: best ? 1800 : 850, dislikes_average: best ? 74 : 40 },
+          service_links: index === 1 ? [
+            { service_id: "00000000-0000-4000-8000-000000000202", service_slug: "bybit", kind: "entry", tracking_token: "entry-token" },
+            { service_id: "00000000-0000-4000-8000-000000000202", service_slug: "bybit", kind: "exit", tracking_token: "exit-token" },
+          ] : [],
         };
       });
       return json({
+        search_id: "00000000-0000-4000-8000-000000000103",
+        routes_found: 24,
         searched_at: "2026-09-19T10:00:00Z",
         source_fiat: "AMD",
         target_fiat: "RUB",
@@ -170,7 +268,7 @@ async function mockBackend(page: Page) {
 
 test("public P2P route search → open step-by-step instructions", async ({ page }) => {
   await mockBackend(page);
-  await page.goto("/");
+  await openApp(page);
 
   const backgroundPattern = await expect
     .poll(() => page.locator(".appShell").evaluate((element) => getComputedStyle(element, "::before").backgroundImage))
@@ -228,6 +326,9 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await amountInput.fill("100000");
   await page.getByTestId("start-search").click();
   await expect(page.getByTestId("complete-route")).toHaveCount(12);
+  await expect(page.getByText("24 routes found")).toBeVisible();
+  await expect(page.getByText("Showing top 12")).toBeVisible();
+  await expect(page.getByTestId("complete-route").first()).toContainText("Used 12.4K times");
   await expect(page.getByTestId("complete-route").first()).toContainText("20350 RUB");
   await expect(page.getByTestId("complete-route").first().locator(".workflow")).toHaveAttribute(
     "aria-label",
@@ -247,23 +348,51 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await page.getByTestId("complete-route").first().locator(".routeAmount").click();
   const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
   await expect(instructions).toBeVisible();
+  await expect(instructions.getByRole("list", { name: "Exchange steps" })).toBeVisible();
+  await expectNumberedTimeline(instructions, ["1", "2"]);
   await expect(instructions.getByText("Buy USDT for 100,000 AMD")).toBeVisible();
+  await expect(instructions.getByText("Match the advertiser nickname and ad ID before creating the order.")).toHaveCount(2);
+  await expect(instructions.getByText("Release the asset only after you have independently confirmed the payment in your bank or payment account.")).toBeVisible();
   const offerLinks = instructions.getByRole("link", { name: /Open Binance P2P and find binance-merchant/ });
   await expect(offerLinks.first()).toHaveAttribute(
     "href",
     "https://example.com/entry-1",
   );
   await expect(offerLinks).toHaveCount(2);
-  await instructions.getByRole("button", { name: "Close instructions" }).click();
+  await instructions.getByRole("button", { name: "Close instructions", exact: true }).click();
   await expect(instructions).toBeHidden();
 
   await swapDirection.click();
   await expect(amountInput).toHaveValue("20350");
 });
 
+test("cross-venue instructions include a numbered transfer step", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page);
+
+  await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
+  const sourcePicker = page.getByRole("dialog", { name: "Choose where you pay from" });
+  await sourcePicker.getByLabel("Search banks and payment methods").fill("IDBank");
+  await sourcePicker.getByRole("option", { name: /IDBank/ }).click();
+  await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
+  const targetPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
+  await targetPicker.getByLabel("Search banks and payment methods").fill("Alfa");
+  await targetPicker.getByRole("option", { name: /Alfa-Bank/ }).click();
+  await page.getByLabel("Amount to send").fill("100000");
+  await page.getByTestId("start-search").click();
+  await expect(page.getByTestId("complete-route")).toHaveCount(12);
+
+  await page.getByTestId("complete-route").nth(2).locator(".routeAmount").click();
+  const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
+  await expectNumberedTimeline(instructions, ["1", "2", "3"]);
+  await expect(instructions.getByRole("heading", { name: "Transfer USDT to Bybit" })).toBeVisible();
+  await expect(instructions.getByText("select the exact Ethereum (ERC-20) network on both venues", { exact: false })).toBeVisible();
+  await expect(instructions.getByText("Wait for Bybit to credit the deposit before continuing.")).toBeVisible();
+});
+
 test("cryptocurrency search binds the selected asset to its network", async ({ page }) => {
   await mockBackend(page);
-  await page.goto("/");
+  await openApp(page);
 
   await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
   const picker = page.getByRole("dialog", { name: "Choose where you pay from" });
@@ -285,9 +414,48 @@ test("cryptocurrency search binds the selected asset to its network", async ({ p
   );
 });
 
+test("tracked service opens unlock anonymous feedback", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page);
+  await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
+  const sourcePicker = page.getByRole("dialog", { name: "Choose where you pay from" });
+  await sourcePicker.getByLabel("Search banks and payment methods").fill("IDBank");
+  await sourcePicker.getByRole("option", { name: /IDBank/ }).click();
+  await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
+  const targetPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
+  await targetPicker.getByLabel("Search banks and payment methods").fill("Alfa");
+  await targetPicker.getByRole("option", { name: /Alfa-Bank/ }).click();
+  await page.getByLabel("Amount to send").fill("100000");
+  await page.getByTestId("start-search").click();
+  await expect(page.getByTestId("complete-route")).toHaveCount(12);
+
+  await page.getByTestId("complete-route").nth(1).locator(".routeAmount").click();
+  const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
+  await instructions.getByRole("button", { name: "Open Bybit profile" }).first().click();
+  await expect(instructions.getByText("Was this service useful?")).toBeVisible();
+  await page.evaluate(() => {
+    document.documentElement.dataset.theme = "dark";
+  });
+  await expect(instructions.locator(".serviceReputation article").first()).toHaveCSS(
+    "background-color",
+    "rgb(34, 34, 34)",
+  );
+  await expect(instructions.locator(".serviceReputation article strong").first()).toHaveCSS(
+    "color",
+    "rgb(243, 243, 243)",
+  );
+  await expect(instructions.getByRole("button", { name: "👍 Like" })).toHaveCSS(
+    "background-color",
+    "rgb(43, 43, 43)",
+  );
+  await instructions.getByRole("button", { name: "👍 Like" }).click();
+  await expect(instructions.getByRole("button", { name: "👍 Like" })).toHaveAttribute("aria-pressed", "true");
+  await expect(instructions.getByText("👍 851")).toBeVisible();
+});
+
 test("crypto route keeps distinct source and target networks", async ({ page }) => {
   await mockBackend(page);
-  await page.goto("/");
+  await openApp(page);
 
   await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
   const sourcePicker = page.getByRole("dialog", { name: "Choose where you pay from" });
@@ -305,11 +473,44 @@ test("crypto route keeps distinct source and target networks", async ({ page }) 
   await expect(page.getByTestId("complete-route")).toContainText(
     "ETH Ether · Base → USDT Tether · TON (Binance)",
   );
+
+  await page.getByTestId("complete-route").locator(".routeAmount").click();
+  const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
+  await expectNumberedTimeline(instructions, ["1"]);
+  await expect(instructions.getByRole("heading", { name: "Convert ETH to USDT" })).toBeVisible();
+  await expect(instructions.getByText("Confirm the pair converts ETH into USDT.")).toBeVisible();
+});
+
+test("bridged spot instructions split both market trades into separate steps", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page);
+
+  await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
+  const sourcePicker = page.getByRole("dialog", { name: "Choose where you pay from" });
+  await sourcePicker.getByLabel("Search banks and payment methods").fill("BTC Bitcoin");
+  await sourcePicker.getByRole("option", { name: /Bitcoin BTC · Bitcoin/ }).click();
+
+  await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
+  const targetPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
+  await targetPicker.getByLabel("Search banks and payment methods").fill("USDT TON");
+  await targetPicker.getByRole("option", { name: /Tether USDT · TON/ }).click();
+
+  await page.getByLabel("Amount to send").fill("0.002");
+  await page.getByTestId("start-search").click();
+  await expect(page.getByTestId("complete-route")).toHaveCount(1);
+  await page.getByTestId("complete-route").locator(".routeAmount").click();
+
+  const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
+  await expectNumberedTimeline(instructions, ["1", "2"]);
+  await expect(instructions.getByRole("heading", { name: "Convert BTC to USDC" })).toBeVisible();
+  await expect(instructions.getByRole("heading", { name: "Convert USDC to USDT" })).toBeVisible();
+  await expect(instructions.getByText("BTCUSDC", { exact: true })).toBeVisible();
+  await expect(instructions.getByText("USDCUSDT", { exact: true })).toBeVisible();
 });
 
 test("same asset on different networks reports unavailable bridge provider", async ({ page }) => {
   await mockBackend(page);
-  await page.goto("/");
+  await openApp(page);
 
   await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
   const sourcePicker = page.getByRole("dialog", { name: "Choose where you pay from" });

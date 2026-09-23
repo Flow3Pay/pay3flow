@@ -1,9 +1,9 @@
 # k3s deployment
 
 The flake renders Kubernetes resources for the services that exist in this
-checkout: the Rust backend, the SvelteKit frontend, PostgreSQL, and Redis. The
-upstream README mentions `fmatch`, but that service is not present in the
-current source tree, so it is not deployed here.
+checkout: the Rust backend and SvelteKit frontend, plus optional in-cluster
+PostgreSQL and Redis. The upstream README mentions `fmatch`, but that service
+is not present in the current source tree, so it is not deployed here.
 
 ## Prerequisites
 
@@ -33,12 +33,19 @@ before rendering or deploying:
 ```sh
 export PAY3FLOW_IMAGE_REGISTRY=registry.example.com/team/pay3flow
 export PAY3FLOW_IMAGE_TAG="$(git rev-parse --short=12 HEAD)"
-export PAY3FLOW_INGRESS_HOST=pay3flow.example.com
-export PAY3FLOW_INGRESS_TLS_SECRET=pay3flow-tls
+export PAY3FLOW_INGRESS_HOST=pay3flow.lefine.pro
+# Leave empty when Caddy terminates TLS on the production host.
+export PAY3FLOW_INGRESS_TLS_SECRET=''
 export PAY3FLOW_JWT_SECRET='replace-with-a-long-random-value'
 export PAY3FLOW_SECRETS_KEY='replace-with-application-key-material'
 export PAY3FLOW_ADMIN_TOKEN='replace-with-a-random-admin-token'
 export PAY3FLOW_POSTGRES_PASSWORD='replace-with-a-random-database-password'
+export PAY3FLOW_AP_REQUIRE_SIGNATURES='true'
+
+# Lefine's production Fmatch actor. The dedicated Pay3Flow deployment does not
+# run a second Fmatch instance.
+export PAY3FLOW_FMATCH_INBOX='https://lefine.pro/inbox/actra'
+export PAY3FLOW_FMATCH_ACTOR_ID='https://lefine.pro/actors/actra'
 ```
 
 ## Deploy with in-cluster PostgreSQL and Redis
@@ -63,7 +70,9 @@ revision when deploying a fork or another commit.
 
 ## Use external PostgreSQL and Redis
 
-Set both external URLs and switch the mode before rendering:
+Use the separate external configuration example in
+[`deploy/external.env.example`](external.env.example), or export the same
+variables before rendering:
 
 ```sh
 export PAY3FLOW_DATABASE_MODE=external
@@ -72,9 +81,9 @@ export PAY3FLOW_REDIS_URL='rediss://:password@redis.example.com:6379'
 nix run .#deploy
 ```
 
-In external mode the in-cluster PostgreSQL and Redis StatefulSets are rendered
-with zero replicas. Their Services remain harmlessly present so switching
-back to in-cluster mode does not require changing object names.
+In external mode the application manifest does not include PostgreSQL or Redis
+resources at all. In-cluster services are rendered only when
+`PAY3FLOW_DATABASE_MODE=in-cluster`.
 
 ## TLS and routing
 
@@ -82,6 +91,12 @@ The Ingress routes `/api`, `/ws`, `/health`, ActivityPub paths, and `/routing`
 to the backend; all other paths go to the frontend. Leaving
 `PAY3FLOW_PUBLIC_API_URL` empty makes the frontend use the browser's current
 origin, including WebSocket scheme conversion.
+
+On the Lefine production host, k3s runs without Traefik and Caddy terminates
+TLS. Apply [`Caddyfile`](Caddyfile) to the host's Caddy configuration after
+deploying the manifests. The backend and frontend Services are NodePorts
+`30081` and `30080`, respectively, so Caddy can route the public hostname to
+the correct service.
 
 The backend creates its schema on startup. Back up external or persistent data
 before changing image revisions, and do not use the development secret values

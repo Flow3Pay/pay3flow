@@ -2,6 +2,7 @@ pub mod actor;
 pub mod context;
 pub mod delivery;
 pub mod error;
+pub mod fep8fba;
 pub mod inbox;
 pub mod model;
 pub mod service;

@@ -4,6 +4,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde_json::{json, Value};
 
+use crate::activitypub::fep8fba;
 use crate::activitypub::model::AcquirerCandidate;
 use crate::core::state::AppState;
 
@@ -55,6 +56,37 @@ pub async fn actor_document_by_handle(
             .into_response();
     }
     Json(state.ap.identity.to_document()).into_response()
+}
+
+pub async fn exchange_resource(State(state): State<AppState>) -> Json<Value> {
+    Json(fep8fba::exchange_resource(&state.ap.origin))
+}
+
+pub async fn exchange_proposal(State(state): State<AppState>) -> Json<Value> {
+    Json(fep8fba::exchange_proposal(
+        &state.ap.origin,
+        &state.ap.identity.actor_id,
+        &state.ap.fmatch_actor_id,
+    ))
+}
+
+pub async fn exchange_interface(State(state): State<AppState>) -> Json<Value> {
+    Json(fep8fba::interface_collection(&state.ap.origin))
+}
+
+pub async fn exchange_input_shape(State(state): State<AppState>) -> Json<Value> {
+    Json(fep8fba::input_shape(&state.ap.origin))
+}
+
+pub async fn exchange_output_shape(State(state): State<AppState>) -> Json<Value> {
+    Json(fep8fba::output_shape(&state.ap.origin))
+}
+
+pub async fn exchange_preview(
+    state: State<AppState>,
+    payload: Json<fep8fba::PreviewInput>,
+) -> Response {
+    fep8fba::preview(state, payload).await
 }
 
 /// `/candidates` — debug endpoint: the most recently received candidate list.

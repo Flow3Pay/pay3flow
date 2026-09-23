@@ -6,6 +6,7 @@ use tokio::sync::RwLock;
 use crate::activitypub::actor::ActorIdentity;
 use crate::activitypub::delivery::{DeliveryClient, DeliveryOutcome};
 use crate::activitypub::error::ActivityPubError;
+use crate::activitypub::fep8fba;
 use crate::activitypub::model::{request_proposal, AcquirerCandidate};
 use crate::db::DbPool;
 
@@ -83,6 +84,18 @@ impl Service {
         );
         self.delivery
             .deliver_with_response(&self.identity, &self.fmatch_inbox, &activity)
+            .await
+    }
+
+    /// Advertise the exchange capability to the configured Fmatch actor.
+    pub async fn publish_exchange_proposal(&self) -> Result<DeliveryOutcome, ActivityPubError> {
+        let activity = fep8fba::create_exchange_proposal(
+            &self.origin,
+            &self.identity.actor_id,
+            &self.fmatch_actor_id,
+        );
+        self.delivery
+            .deliver(&self.identity, &self.fmatch_inbox, &activity)
             .await
     }
 }
