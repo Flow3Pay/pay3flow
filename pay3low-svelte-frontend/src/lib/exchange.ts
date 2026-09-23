@@ -17,6 +17,16 @@ export interface CorridorsResponse {
   terms_version: string;
 }
 
+export interface ProviderDefinition {
+  id: string;
+  slug: string;
+  operation: "buy" | "sell";
+  source_url: string;
+  name: string;
+  currencies: string[];
+  banks: string[];
+}
+
 export interface ExchangeOrder {
   id: string;
   source_country: string;
@@ -272,6 +282,10 @@ export async function authenticate(email: string, code: string): Promise<string>
 
 export function fetchCorridors(): Promise<CorridorsResponse> {
   return request("/api/exchange/corridors");
+}
+
+export function fetchProviders(): Promise<ProviderDefinition[]> {
+  return request("/api/providers");
 }
 
 export function fetchP2pRoutes(query: {

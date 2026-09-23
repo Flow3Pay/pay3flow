@@ -1,6 +1,6 @@
 <script lang="ts">
   import { afterUpdate, onMount, onDestroy } from "svelte";
-  import { fetchCorridors, fetchP2pRoutes, recordServiceOpen, setServiceVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote } from "$lib/exchange";
+  import { fetchCorridors, fetchP2pRoutes, fetchProviders, recordServiceOpen, setServiceVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderDefinition, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote } from "$lib/exchange";
   import { FALLBACK_NETWORK, fetchNetworks, type CryptoNetwork } from "$lib/networks";
   import { assetIcon, networkIcon, venueIcon } from "$lib/icons";
   import { CRYPTO_ASSETS, DIGITAL_ASSETS, PAYMENT_METHODS, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
@@ -9,15 +9,8 @@
   type RefreshSeconds = 0 | 5 | 15 | 30 | 60;
   type PickerSide = "source" | "target" | null;
   const REFRESH_OPTIONS: RefreshSeconds[] = [0, 5, 15, 30, 60];
-  const P2P_SOURCES = [
-    { id: "binance", label: "Binance", iconUrl: venueIcon("binance") },
-    { id: "bybit", label: "Bybit", iconUrl: venueIcon("bybit") },
-    { id: "okx", label: "OKX", iconUrl: venueIcon("okx") },
-    { id: "bitget", label: "Bitget", iconUrl: venueIcon("bitget") },
-    { id: "rapira", label: "Rapira", iconUrl: venueIcon("rapira") },
-  ] as const;
-  type P2pSource = (typeof P2P_SOURCES)[number]["id"];
-  const DEFAULT_SOURCES = P2P_SOURCES.map((source) => source.id);
+  type P2pSource = string;
+  type P2pSourceOption = { id: P2pSource; label: string; iconUrl: string };
   const INTERMEDIARY_ASSETS = CRYPTO_ASSETS.map(([currency]) => currency);
   const BANK_METHODS = PAYMENT_METHODS.filter((method) => method.kind === "bank");
   const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", sources: "pay3flow.exchange.p2p-sources", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets", anonymousId: "pay3flow.reputation.anonymous-id" };
@@ -39,7 +32,8 @@
   let networkPicker: PickerSide = null;
   let settingsOpen = false;
   let refreshSeconds: RefreshSeconds = 15;
-  let selectedSources: P2pSource[] = [...DEFAULT_SOURCES];
+  let p2pSources: P2pSourceOption[] = [];
+  let selectedSources: P2pSource[] = [];
   let selectedIntermediaryAssets: string[] = [];
   let searching = false;
   let lastUpdatedAt: number | null = null;
@@ -88,6 +82,25 @@
   const intermediaryIcon = (asset: string) => assetIcon(asset);
   const networkName = (id: string | null | undefined) => !id ? "internal" : networks.find((network) => network.id === id)?.name ?? id;
   const locationLabel = (country: string, currency: string) => { try { return `${new Intl.DisplayNames(["en"], { type: "region" }).of(country) ?? country} · ${currency}`; } catch { return `${country} · ${currency}`; } };
+
+  function providerLabel(provider: ProviderDefinition) {
+    const label = provider.name.replace(/\s+(buy|sell)$/i, "").trim();
+    return label || provider.slug;
+  }
+
+  function providerSources(providers: ProviderDefinition[]): P2pSourceOption[] {
+    const sources = new Map<string, P2pSourceOption>();
+    for (const provider of providers) {
+      if (!sources.has(provider.slug)) {
+        sources.set(provider.slug, {
+          id: provider.slug,
+          label: providerLabel(provider),
+          iconUrl: venueIcon(provider.slug),
+        });
+      }
+    }
+    return [...sources.values()].sort((left, right) => left.label.localeCompare(right.label));
+  }
 
   function mapRoutes(response: Awaited<ReturnType<typeof fetchP2pRoutes>>): RouteCandidate[] {
     const bestTarget = Number(response.routes[0]?.target_amount ?? 0);
@@ -315,12 +328,13 @@
 
   onMount(() => {
     const shared = readSharedExchange();
+    let savedSourceIds: string[] = [];
     try {
       anonymousId = anonymousBrowserId();
       amount = shared?.amount ?? localStorage.getItem(STORAGE.amount) ?? "0";
       corridorId = localStorage.getItem(STORAGE.corridor) ?? ""; sourceMethodId = localStorage.getItem(STORAGE.sourceMethod) ?? sourceMethodId; targetMethodId = localStorage.getItem(STORAGE.targetMethod) ?? targetMethodId;
       const savedDirection = localStorage.getItem(STORAGE.direction); if (savedDirection != null) directionReversed = savedDirection === "true";
-      const savedSources = localStorage.getItem(STORAGE.sources)?.split(",").filter((value): value is P2pSource => P2P_SOURCES.some((source) => source.id === value)); if (savedSources?.length) selectedSources = [...new Set(savedSources)];
+      savedSourceIds = localStorage.getItem(STORAGE.sources)?.split(",").map((value) => value.trim()).filter(Boolean) ?? [];
       const savedAssets = localStorage.getItem(STORAGE.assets); if (savedAssets != null) selectedIntermediaryAssets = [...new Set(savedAssets.split(",").filter((asset) => INTERMEDIARY_ASSETS.includes(asset as (typeof INTERMEDIARY_ASSETS)[number])))];
       const savedRefresh = Number(localStorage.getItem(STORAGE.refresh)); if (REFRESH_OPTIONS.includes(savedRefresh as RefreshSeconds)) refreshSeconds = savedRefresh as RefreshSeconds;
     } catch {}
@@ -329,6 +343,12 @@
     // still enable the normal debounced search immediately.
     initialSearchTimer = window.setTimeout(() => initialSearchReady = true, 1500);
     fetchNetworks().then((items) => { if (items.length) networks = items; }).catch(() => {});
+    fetchProviders().then((providers) => {
+      p2pSources = providerSources(providers);
+      const available = new Set(p2pSources.map((source) => source.id));
+      const restored = [...new Set(savedSourceIds.filter((source) => available.has(source)))];
+      selectedSources = restored.length ? restored : p2pSources.map((source) => source.id);
+    }).catch((cause: Error) => error ??= cause.message);
     fetchCorridors().then((response) => {
       const savedDirection = localStorage.getItem(STORAGE.direction);
       const sharedCorridor = shared ? response.items.find((item) => (item.source_currency === shared.sourceCurrency && item.target_currency === shared.targetCurrency) || (item.source_currency === shared.targetCurrency && item.target_currency === shared.sourceCurrency)) : null;
@@ -391,7 +411,7 @@
                 <div class="settingsModalHeader"><span class="settingsSheetHandle" aria-hidden="true" on:pointerdown={startSettingsDrag} on:pointermove={moveSettingsDrag} on:pointerup={endSettingsDrag} on:pointercancel={endSettingsDrag}></span><button type="button" class="settingsClose" on:click={closeSettings} aria-label="Close route settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button></div>
                 <div class="settingsHead"><div><strong>Auto-refresh</strong><span>Keep market routes current</span></div><span class={refreshSeconds ? "onBadge" : "offBadge"}>{refreshSeconds ? "On" : "Off"}</span></div>
                 <div class="refreshOptions">{#each REFRESH_OPTIONS as seconds}<button type="button" aria-pressed={refreshSeconds === seconds} on:click={() => { refreshSeconds = seconds; settingsOpen = false; }}>{seconds === 0 ? "Off" : `${seconds}s`}</button>{/each}</div>
-                <div class="sourceSettings"><span class="sourceSettingsLabel">Search exchanges</span><div class="sourceOptions exchangeOptions" aria-label="Exchanges to search">{#each P2P_SOURCES as source}{@const enabled = selectedSources.includes(source.id)}<button type="button" class:sourceOptionActive={enabled} class="sourceOption" aria-pressed={enabled} on:click={() => toggleSource(source.id)}><span class="sourceOptionIcon" aria-hidden="true"><img src={source.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackSourceIcon(event, source.id)} /></span>{source.label}</button>{/each}</div></div>
+                <div class="sourceSettings"><span class="sourceSettingsLabel">Search exchanges</span><div class="sourceOptions exchangeOptions" aria-label="Exchanges to search">{#each p2pSources as source}{@const enabled = selectedSources.includes(source.id)}<button type="button" class:sourceOptionActive={enabled} class="sourceOption" aria-pressed={enabled} on:click={() => toggleSource(source.id)}><span class="sourceOptionIcon" aria-hidden="true"><img src={source.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackSourceIcon(event, source.id)} /></span>{source.label}</button>{/each}</div></div>
                 <div class="sourceSettings"><div class="intermediarySettingsHead"><span class="sourceSettingsLabel">Cryptocurrency intermediary</span><small>{selectedIntermediaryAssets.length ? `${selectedIntermediaryAssets.length} selected` : "All available"}</small></div><div class="sourceOptions intermediaryOptions" aria-label="Cryptocurrency intermediaries">
                   <button type="button" class:sourceOptionActive={selectedIntermediaryAssets.length === 0} class="sourceOption" aria-pressed={selectedIntermediaryAssets.length === 0} on:click={() => { selectedIntermediaryAssets = []; resetResults(); }}>All available</button>
                   {#each INTERMEDIARY_ASSETS as asset}{@const enabled = selectedIntermediaryAssets.includes(asset)}<button type="button" class:sourceOptionActive={enabled} class="sourceOption" aria-pressed={enabled} on:click={() => toggleAsset(asset)}><span class="intermediaryAssetIcon" aria-hidden="true"><img src={intermediaryIcon(asset)} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={fallbackAssetIcon} /></span>{asset}</button>{/each}
