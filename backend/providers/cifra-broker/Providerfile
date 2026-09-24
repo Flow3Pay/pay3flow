@@ -1,11 +1,66 @@
 [sell]
-source_url = "https://cifra-broker.ru"
-name = "Cifra Broker Sell"
-currency = ["rub", "usd", "eur", "cny"]
+source_url = "https://cifra.by/"
+name = "Cifra Markets Sell"
+currency = ["byn", "rub", "usd"]
 banks = []
 
 [buy]
-source_url = "https://cifra-broker.ru"
-name = "Cifra Broker Buy"
-currency = ["rub", "usd", "eur", "cny"]
+source_url = "https://cifra.by/"
+name = "Cifra Markets Buy"
+currency = ["byn", "rub", "usd"]
 banks = []
+
+# The public calculator exposes fiat codes/rates and crypto codes/rates as
+# parallel arrays. The generic rate-table adapter joins them by array index and
+# returns the same indicative conversion rate shown on cifra.by.
+[adapter.p2p]
+kind = "http_json"
+endpoint = "https://api.cifra-broker.by/api/site/ticker-calculator"
+method = "GET"
+headers = { Origin = "https://cifra.by", Referer = "https://cifra.by/", Accept-Language = "ru-RU,ru;q=0.9", User-Agent = "Mozilla/5.0 (compatible; Pay3Flow/0.1)" }
+timeout_ms = 5000
+supported_assets = ["USDT", "USDC", "BTC", "BNB", "SOL", "TRX", "DOGE", "LTC", "DAI", "XRP", "ADA", "DOT", "LINK", "AVAX", "BCH", "NEAR", "APT", "ATOM", "UNI", "SUI"]
+default_min_fiat = 1
+default_max_fiat = 1000000000
+default_available_asset = 1000000000
+
+[adapter.p2p.buy]
+query = { key = "pay3flow" }
+success_pointer = "/success"
+success_value = "true"
+error_pointer = "/message"
+
+[adapter.p2p.sell]
+query = { key = "pay3flow" }
+success_pointer = "/success"
+success_value = "true"
+error_pointer = "/message"
+
+[adapter.p2p.rate_table]
+fiat_items_pointer = "/data/currenciesReal"
+fiat_code_pointer = "/code"
+fiat_rate_pointer = "/rate/value"
+asset_items_pointer = "/data/currenciesNotReal"
+asset_code_pointer = "/code"
+asset_rates_pointer = "/data/currenciesNotRealRate"
+fiat_codes = { RUB = "RUR" }
+source_url = "https://tradernet.by/authentication/signup"
+
+# The public catalog contains the complete IMEX spot list. It has no public
+# order-book spread, so the last traded price is used as both sides of the
+# indicative market quote.
+[adapter.market]
+kind = "http_json"
+endpoint = "https://api.cifra-broker.by/api/site/ticker"
+method = "POST"
+headers = { Origin = "https://cifra.by", Referer = "https://cifra.by/catalog", Accept-Language = "ru-RU,ru;q=0.9", User-Agent = "Mozilla/5.0 (compatible; Pay3Flow/0.1)" }
+request_json = '''{"limit":1000,"tags":[]}'''
+timeout_ms = 5000
+items_pointer = "/data/ticker"
+symbol_pointer = "/name"
+bid_pointer = "/ltp"
+ask_pointer = "/ltp"
+symbol_remove = "-"
+success_pointer = "/success"
+success_value = "true"
+error_pointer = "/message"

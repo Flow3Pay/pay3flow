@@ -456,6 +456,7 @@ fn spot_url(venue: &str, symbol: &str, first_asset: &str, second_asset: &str) ->
             quote.to_ascii_lowercase()
         )),
         "bitget" => Some(format!("https://www.bitget.com/spot/{base}{quote}")),
+        "cifra-broker" => Some("https://tradernet.by/authentication/signup".into()),
         _ => None,
     }
 }

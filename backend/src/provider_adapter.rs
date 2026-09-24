@@ -124,6 +124,22 @@ pub struct P2pAdapterConfig {
     pub buy: Option<P2pOperation>,
     pub sell: Option<P2pOperation>,
     pub offer: Option<OfferMapping>,
+    pub rate_table: Option<RateTableConfig>,
+}
+
+/// A calculator response whose asset codes and rates are stored in parallel arrays.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RateTableConfig {
+    pub fiat_items_pointer: String,
+    pub fiat_code_pointer: String,
+    pub fiat_rate_pointer: String,
+    pub asset_items_pointer: String,
+    pub asset_code_pointer: String,
+    pub asset_rates_pointer: String,
+    #[serde(default)]
+    pub fiat_codes: BTreeMap<String, String>,
+    pub source_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -432,6 +448,9 @@ impl P2pAdapterConfig {
                 ));
             }
         }
+        if let Some(rate_table) = &self.rate_table {
+            rate_table.validate(context)?;
+        }
         for (field, value) in [
             ("fiat_probe_amount", self.fiat_probe_amount),
             ("asset_probe_amount", self.asset_probe_amount),
@@ -468,12 +487,14 @@ impl P2pAdapterConfig {
                 .as_ref()
                 .ok_or_else(|| format!("{context}: adapter/p2p/buy is required for [buy]"))?;
             operation.validate(&self.method, self, context, "buy")?;
-            operation
-                .offer
-                .as_ref()
-                .or(self.offer.as_ref())
-                .ok_or_else(|| format!("{context}: no offer mapping is configured for buy"))?
-                .validate(self, context)?;
+            if self.rate_table.is_none() {
+                operation
+                    .offer
+                    .as_ref()
+                    .or(self.offer.as_ref())
+                    .ok_or_else(|| format!("{context}: no offer mapping is configured for buy"))?
+                    .validate(self, context)?;
+            }
         }
         if has_sell {
             let operation = self
@@ -481,12 +502,47 @@ impl P2pAdapterConfig {
                 .as_ref()
                 .ok_or_else(|| format!("{context}: adapter/p2p/sell is required for [sell]"))?;
             operation.validate(&self.method, self, context, "sell")?;
-            operation
-                .offer
-                .as_ref()
-                .or(self.offer.as_ref())
-                .ok_or_else(|| format!("{context}: no offer mapping is configured for sell"))?
-                .validate(self, context)?;
+            if self.rate_table.is_none() {
+                operation
+                    .offer
+                    .as_ref()
+                    .or(self.offer.as_ref())
+                    .ok_or_else(|| format!("{context}: no offer mapping is configured for sell"))?
+                    .validate(self, context)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl RateTableConfig {
+    fn validate(&self, context: &str) -> Result<(), String> {
+        validate_pointers(
+            [
+                Some(self.fiat_items_pointer.as_str()),
+                Some(self.fiat_code_pointer.as_str()),
+                Some(self.fiat_rate_pointer.as_str()),
+                Some(self.asset_items_pointer.as_str()),
+                Some(self.asset_code_pointer.as_str()),
+                Some(self.asset_rates_pointer.as_str()),
+            ],
+            context,
+        )?;
+        for (canonical, remote) in &self.fiat_codes {
+            if !valid_asset_code(canonical) || !valid_remote_asset_code(remote) {
+                return Err(format!(
+                    "{context}: adapter/p2p/rate_table/fiat_codes is invalid"
+                ));
+            }
+        }
+        if self
+            .source_url
+            .as_ref()
+            .is_some_and(|url| !url.starts_with("https://") && !url.starts_with("http://"))
+        {
+            return Err(format!(
+                "{context}: adapter/p2p/rate_table/source_url must use http or https"
+            ));
         }
         Ok(())
     }

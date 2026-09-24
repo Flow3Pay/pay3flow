@@ -12,7 +12,7 @@ use crate::p2p::service::{
 use crate::p2p::spot::{CryptoMarketSource, CryptoTicker};
 use crate::provider_adapter::{
     environment_variable, MarketAdapterConfig, OfferMapping, P2pAdapterConfig, P2pOperation,
-    ValueCondition,
+    RateTableConfig, ValueCondition,
 };
 use crate::providers::ProviderAdapterRecord;
 
@@ -173,6 +173,96 @@ impl DeclarativeP2pSource {
             source_url_is_exact: mapping.source_url_is_exact,
         })
     }
+
+    fn rate_table_offer(
+        &self,
+        response: &Value,
+        query: &P2pSearchQuery,
+        table: &RateTableConfig,
+    ) -> Result<Option<P2pOffer>> {
+        let remote_fiat = table
+            .fiat_codes
+            .get(&query.fiat)
+            .map(String::as_str)
+            .unwrap_or(&query.fiat);
+        let fiat_rate = response
+            .pointer(&table.fiat_items_pointer)
+            .and_then(Value::as_array)
+            .and_then(|items| {
+                items.iter().find_map(|item| {
+                    (optional_string(item, Some(&table.fiat_code_pointer)).as_deref()
+                        == Some(remote_fiat))
+                    .then(|| required_number(item, &table.fiat_rate_pointer, "fiat rate"))
+                })
+            })
+            .transpose()?;
+        let asset_index = response
+            .pointer(&table.asset_items_pointer)
+            .and_then(Value::as_array)
+            .and_then(|items| {
+                items.iter().position(|item| {
+                    optional_string(item, Some(&table.asset_code_pointer)).as_deref()
+                        == Some(query.asset.as_str())
+                })
+            });
+        let asset_rate = asset_index
+            .and_then(|index| {
+                response
+                    .pointer(&table.asset_rates_pointer)
+                    .and_then(Value::as_array)
+                    .and_then(|rates| rates.get(index))
+                    .and_then(value_number)
+            })
+            .filter(|rate| rate.is_finite() && *rate > 0.0);
+        let Some(price) = fiat_rate
+            .zip(asset_rate)
+            .map(|(fiat_rate, asset_rate)| fiat_rate * asset_rate)
+            .filter(|price| price.is_finite() && *price > 0.0)
+        else {
+            return Ok(None);
+        };
+
+        Ok(Some(P2pOffer {
+            market: P2pOfferMarket::DirectExchange,
+            source: self.slug.clone(),
+            ad_id: format!(
+                "{}-{}-{}-{}",
+                self.slug,
+                side_name(query.side),
+                query.fiat,
+                query.asset
+            ),
+            side: query.side,
+            fiat: query.fiat.clone(),
+            asset: query.asset.clone(),
+            price: number_to_string(price),
+            available_asset: number_to_string(
+                self.config
+                    .default_available_asset
+                    .unwrap_or(1_000_000_000.0),
+            ),
+            min_fiat: number_to_string(self.config.default_min_fiat.unwrap_or(1.0)),
+            max_fiat: number_to_string(self.config.default_max_fiat.unwrap_or(1_000_000_000.0)),
+            payment_methods: Vec::new(),
+            pay_time_limit_minutes: None,
+            advertiser: Advertiser {
+                id: None,
+                nickname: self.display_name.clone(),
+                user_type: Some("service".into()),
+                is_merchant: true,
+                is_verified: true,
+                completed_orders_30d: None,
+                completion_rate_30d: None,
+                positive_rate: None,
+            },
+            advertiser_profile_url: None,
+            source_url: table
+                .source_url
+                .clone()
+                .unwrap_or_else(|| self.source_url.clone()),
+            source_url_is_exact: false,
+        }))
+    }
 }
 
 #[async_trait]
@@ -208,11 +298,6 @@ impl P2pSource for DeclarativeP2pSource {
         }
 
         let operation = self.operation(query.side)?;
-        let mapping = operation
-            .offer
-            .as_ref()
-            .or(self.config.offer.as_ref())
-            .ok_or_else(|| anyhow!("{} has no offer mapping for this operation", self.slug))?;
         let values = self.template_values(query, operation)?;
         let response = send_json(
             &self.client,
@@ -233,6 +318,16 @@ impl P2pSource for DeclarativeP2pSource {
             operation.error_pointer.as_deref(),
             &self.slug,
         )?;
+        if let Some(table) = &self.config.rate_table {
+            return self
+                .rate_table_offer(&response, query, table)
+                .map(|offer| offer.into_iter().collect());
+        }
+        let mapping = operation
+            .offer
+            .as_ref()
+            .or(self.config.offer.as_ref())
+            .ok_or_else(|| anyhow!("{} has no offer mapping for this operation", self.slug))?;
         response_items(&response, operation.items_pointer.as_deref())?
             .into_iter()
             .take(query.fetch_limit())
@@ -676,6 +771,21 @@ mod tests {
     use super::*;
     use crate::provider_adapter::ProviderAdapters;
 
+    fn cifra_source() -> DeclarativeP2pSource {
+        let document: toml::Value =
+            toml::from_str(include_str!("../../providers/cifra-broker/Providerfile")).unwrap();
+        let adapters: ProviderAdapters =
+            document.get("adapter").unwrap().clone().try_into().unwrap();
+        let record = ProviderAdapterRecord {
+            slug: "cifra-broker".into(),
+            source_url: "https://cifra.by/".into(),
+            display_name: "Cifra Markets".into(),
+            config: Some(adapters),
+            workflow: None,
+        };
+        DeclarativeP2pSource::from_record(Client::new(), &record).unwrap()
+    }
+
     #[test]
     fn renders_typed_and_string_request_placeholders() {
         let mut value: Value = serde_json::from_str(
@@ -741,5 +851,95 @@ mod tests {
         assert_eq!(offer.payment_methods, ["IDBank"]);
         assert!(offer.advertiser.is_merchant);
         assert!(offer.source_url_is_exact);
+    }
+
+    #[test]
+    fn maps_an_aligned_rate_table_using_only_its_providerfile() {
+        let source = cifra_source();
+        let response: Value = serde_json::from_str(
+            r#"{"data":{"currenciesReal":[{"code":"RUR","rate":{"value":84.5}}],"currenciesNotReal":[{"code":"BTC"},{"code":"USDT"}],"currenciesNotRealRate":[85000,1]}}"#,
+        )
+        .unwrap();
+        let query = P2pSearchQuery {
+            fiat: "RUB".into(),
+            asset: "BTC".into(),
+            side: P2pSide::BuyCrypto,
+            amount: Some(100_000.0),
+            payment_method: None,
+            merchant_only: None,
+            min_orders: None,
+            min_completion_rate: None,
+            limit: Some(20),
+            sources: Some("cifra-broker".into()),
+        };
+
+        let offer = source
+            .rate_table_offer(
+                &response,
+                &query,
+                source.config.rate_table.as_ref().unwrap(),
+            )
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(offer.market, P2pOfferMarket::DirectExchange);
+        assert_eq!(offer.fiat, "RUB");
+        assert_eq!(offer.asset, "BTC");
+        assert_eq!(offer.price, "7182500");
+        assert_eq!(
+            offer.source_url,
+            "https://tradernet.by/authentication/signup"
+        );
+        assert!(offer.advertiser.is_verified);
+    }
+
+    #[tokio::test]
+    #[ignore = "calls the live Cifra Markets API"]
+    async fn live_cifra_rate_table_returns_buy_and_sell_quotes() {
+        let source = cifra_source();
+        for side in [P2pSide::BuyCrypto, P2pSide::SellCrypto] {
+            let offers = source
+                .search(&P2pSearchQuery {
+                    fiat: "RUB".into(),
+                    asset: "USDT".into(),
+                    side,
+                    amount: Some(1_000.0),
+                    payment_method: None,
+                    merchant_only: None,
+                    min_orders: None,
+                    min_completion_rate: None,
+                    limit: Some(1),
+                    sources: Some("cifra-broker".into()),
+                })
+                .await
+                .unwrap();
+
+            assert_eq!(offers.len(), 1);
+            assert_eq!(offers[0].market, P2pOfferMarket::DirectExchange);
+            assert!(offers[0].price.parse::<f64>().unwrap() > 0.0);
+        }
+    }
+
+    #[tokio::test]
+    #[ignore = "calls the live Cifra Markets API"]
+    async fn live_cifra_market_returns_imex_tickers() {
+        let document: toml::Value =
+            toml::from_str(include_str!("../../providers/cifra-broker/Providerfile")).unwrap();
+        let adapters: ProviderAdapters =
+            document.get("adapter").unwrap().clone().try_into().unwrap();
+        let record = ProviderAdapterRecord {
+            slug: "cifra-broker".into(),
+            source_url: "https://cifra.by/".into(),
+            display_name: "Cifra Markets".into(),
+            config: Some(adapters),
+            workflow: None,
+        };
+        let source = DeclarativeMarketSource::from_record(Client::new(), &record).unwrap();
+
+        let tickers = source.tickers().await.unwrap();
+
+        assert!(tickers
+            .iter()
+            .any(|ticker| ticker.symbol == "BTCUSDT" && ticker.bid > 0.0));
     }
 }

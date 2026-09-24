@@ -10,7 +10,7 @@
   let dragging = false;
   let dragStartY = 0;
   let dragDistance = 0;
-  const VENUE_NAMES: Record<string, string> = { binance: "Binance", bitget: "Bitget", bybit: "Bybit", okx: "OKX", rapira: "Rapira", whitebird: "Whitebird" };
+  const VENUE_NAMES: Record<string, string> = { binance: "Binance", bitget: "Bitget", bybit: "Bybit", okx: "OKX", rapira: "Rapira", whitebird: "Whitebird", "cifra-broker": "Cifra Markets" };
   const venueName = (value?: string) => value ? VENUE_NAMES[value.toLowerCase()] ?? value : "P2P market";
   const isDirectOffer = (offer?: RouteCandidate["entry_offer_snapshot"]) => offer?.advertiser.user_type === "service" || offer?.source.toLowerCase() === "whitebird";
   const money = (minor?: number, currency?: string) => minor == null ? "—" : `${(minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })} ${currency ?? ""}`;
@@ -31,6 +31,7 @@
     if (key === "bybit") return `https://www.bybit.com/trade/spot/${pair.base}/${pair.quote}`;
     if (key === "okx") return `https://www.okx.com/trade-spot/${pair.base.toLowerCase()}-${pair.quote.toLowerCase()}`;
     if (key === "bitget") return `https://www.bitget.com/spot/${pair.base}${pair.quote}`;
+    if (key === "cifra-broker") return "https://tradernet.by/authentication/signup";
     return null;
   }
   function backdrop(event: MouseEvent) { if (event.target === event.currentTarget) onClose(); }

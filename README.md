@@ -28,12 +28,12 @@ still be available when the venue is opened.
 | Bitget | Public P2P API and spot ticker | P2P ads plus crypto market paths |
 | Rapira | Public P2P API | `USDT/RUB` P2P ads |
 | Whitebird | Browser workflow over the public exchanger | Direct fiat/crypto quotes, including `USDC/RUB` |
+| Cifra Markets | Public calculator and IMEX market API | Direct RUB/BYN/USD crypto quotes and crypto market paths |
 
 Provider capabilities live in
 [`backend/providers/*/Providerfile`](backend/providers/). They are compiled
 into [`backend/migrations/providers.sql`](backend/migrations/providers.sql) and
-loaded into PostgreSQL when the backend starts. `Cifra Broker` is present in
-the provider directory, but does not currently have a live search adapter.
+loaded into PostgreSQL when the backend starts.
 
 ## How live routing works
 
@@ -45,9 +45,11 @@ flowchart LR
     api --> p2p[P2P APIs]
     api --> spot[Spot tickers]
     api --> whitebird[Whitebird workflow]
+    api --> cifra[Cifra Markets API]
     p2p --> ranker[Route builder and ranker]
     spot --> ranker
     whitebird --> ranker
+    cifra --> ranker
     ranker -->|progressive snapshots| browser
 ```
 
@@ -108,7 +110,7 @@ curl -G 'http://localhost:8080/api/p2p/routes' \
   --data-urlencode 'target_fiat=RUB' \
   --data-urlencode 'source_amount=100' \
   --data-urlencode 'target_payment_method=Sberbank' \
-  --data-urlencode 'sources=binance,bybit,okx,bitget,rapira,whitebird' \
+  --data-urlencode 'sources=binance,bybit,okx,bitget,rapira,whitebird,cifra-broker' \
   --data-urlencode 'allow_cross_venue=true' \
   --data-urlencode 'limit=40'
 ```
@@ -157,7 +159,7 @@ request after the socket opens:
     "target_fiat": "RUB",
     "source_amount": 100,
     "target_payment_method": "Sberbank",
-    "sources": "binance,bybit,okx,bitget,rapira,whitebird",
+    "sources": "binance,bybit,okx,bitget,rapira,whitebird,cifra-broker",
     "allow_cross_venue": true,
     "min_orders": 20,
     "min_completion_rate": 0.9,
@@ -187,7 +189,7 @@ curl -G 'http://localhost:8080/api/p2p/search' \
   --data-urlencode 'side=sell' \
   --data-urlencode 'amount=100' \
   --data-urlencode 'payment_method=Sberbank' \
-  --data-urlencode 'sources=binance,bybit,okx,bitget,whitebird'
+  --data-urlencode 'sources=binance,bybit,okx,bitget,whitebird,cifra-broker'
 ```
 
 ## Main API surface

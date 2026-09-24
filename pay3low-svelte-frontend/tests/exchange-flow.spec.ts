@@ -55,6 +55,7 @@ async function mockBackend(page: Page) {
       return json([
         { slug: "binance", name: "Binance", side: "sell", source_url: "https://p2p.binance.com", currencies: ["AMD", "RUB"], banks: [], searchable: true },
         { slug: "bybit", name: "Bybit", side: "sell", source_url: "https://www.bybit.com/fiat/trade/otc", currencies: ["AMD", "RUB"], banks: [], searchable: true },
+        { slug: "cifra-broker", name: "Cifra Markets Sell", side: "sell", source_url: "https://cifra.by/", currencies: ["BYN", "RUB", "USD"], banks: [], searchable: true },
         { slug: "whitebird", name: "Whitebird Sell", side: "sell", source_url: "https://whitebird.io", currencies: ["BYN", "USD", "EUR", "RUB"], banks: [], searchable: false },
       ]);
     }
@@ -475,7 +476,11 @@ test("catalog providers can be selected", async ({ page }) => {
 
   await page.getByRole("button", { name: "Route refresh settings" }).click();
   const whitebird = page.getByRole("button", { name: "Whitebird" });
+  const cifra = page.getByRole("button", { name: "Cifra Markets" });
 
+  await expect(cifra).toBeEnabled();
+  await expect(cifra).toHaveAttribute("aria-pressed", "true");
+  await expect(cifra.locator("img")).toHaveAttribute("src", "/icons/venues/cifra-broker.png");
   await expect(whitebird).toBeEnabled();
   await whitebird.click();
   await expect(whitebird).toHaveAttribute("aria-pressed", "true");
@@ -492,7 +497,7 @@ test("search venues bounce in the loader and refresh stops spinning after the fi
     socketConnections += 1;
     socket.onMessage((message) => {
       const request = JSON.parse(String(message));
-      expect(request.query.sources).toBe("binance,bybit,whitebird");
+      expect(request.query.sources).toBe("binance,bybit,cifra-broker,whitebird");
 
       const offer = (source: string, adId: string, fiat: string) => ({
         source,
@@ -568,9 +573,15 @@ test("search venues bounce in the loader and refresh stops spinning after the fi
   });
 
   await openApp(page);
-  await page.getByRole("button", { name: "Route refresh settings" }).click();
+  const settingsButton = page.getByRole("button", { name: "Route refresh settings" });
+  await settingsButton.click();
   await page.getByRole("button", { name: "Whitebird" }).click();
-  await page.getByRole("button", { name: "Route refresh settings" }).click();
+  if ((page.viewportSize()?.width ?? 0) <= 640) {
+    await page.locator(".settingsBackdrop").dispatchEvent("mousedown");
+  } else {
+    await settingsButton.click();
+  }
+  await expect(page.getByRole("dialog", { name: "Refresh settings" })).toHaveCount(0);
   await page.getByLabel("Amount to send").fill("100000");
   await page.getByTestId("start-search").click();
 
@@ -579,10 +590,11 @@ test("search venues bounce in the loader and refresh stops spinning after the fi
   expect(socketConnections).toBe(1);
   const panelTop = page.locator("#routes .panelTop");
   const searchingVenues = panelTop.getByTestId("searching-venue");
-  await expect(searchingVenues).toHaveCount(3);
+  await expect(searchingVenues).toHaveCount(4);
   await expect(searchingVenues.nth(0)).toHaveAttribute("title", "Searching Binance");
   await expect(searchingVenues.nth(1)).toHaveAttribute("title", "Searching Bybit");
-  await expect(searchingVenues.nth(2)).toHaveAttribute("title", "Searching Whitebird");
+  await expect(searchingVenues.nth(2)).toHaveAttribute("title", "Searching Cifra Markets");
+  await expect(searchingVenues.nth(3)).toHaveAttribute("title", "Searching Whitebird");
   await expect(searchingVenues.nth(0)).toHaveCSS("width", "32px");
   await expect(searchingVenues.nth(0)).toHaveCSS("animation-delay", "0s");
   await expect(searchingVenues.nth(1)).toHaveCSS("animation-delay", "0.13s");
@@ -595,8 +607,8 @@ test("search venues bounce in the loader and refresh stops spinning after the fi
   const foundVenues = panelTop.locator(".resultSummary").getByTestId("found-venue");
   await expect(foundVenues).toHaveCount(1);
   await expect(foundVenues.first()).toHaveAttribute("title", "Found on Bybit");
-  await expect(searchingVenues).toHaveCount(2);
-  await expect(searchingVenues.nth(1)).toHaveAttribute("title", "Searching Whitebird");
+  await expect(searchingVenues).toHaveCount(3);
+  await expect(searchingVenues.nth(2)).toHaveAttribute("title", "Searching Whitebird");
   await expect(refreshButton).toBeDisabled();
   await expect(refreshButton.locator("svg")).not.toHaveClass(/refreshSpin/);
 
@@ -606,7 +618,7 @@ test("search venues bounce in the loader and refresh stops spinning after the fi
   await expect(page.getByTestId("complete-route").first()).toHaveClass(/selected/);
   await expect(foundVenues).toHaveCount(2);
   await expect(foundVenues.nth(1)).toHaveAttribute("title", "Found on Whitebird");
-  await expect(searchingVenues).toHaveCount(1);
+  await expect(searchingVenues).toHaveCount(2);
 
   await page.getByTestId("complete-route").nth(1).click();
   await expect(page.getByTestId("complete-route").nth(1)).toHaveClass(/selected/);

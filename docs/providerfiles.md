@@ -182,6 +182,15 @@ the secret itself.
 Providerfile may contain a browser workflow plus a market adapter, but it may
 not define both `[workflow]` and `[adapter.p2p]`.
 
+For public calculators that return fiat rates and asset rates in separate,
+index-aligned arrays, add `[adapter.p2p.rate_table]`. Point it at the fiat item
+array (including its code and rate fields), the asset item array and the
+parallel asset-rate array. `fiat_codes` maps local codes to provider codes such
+as `RUB = "RUR"`; `source_url` can lead to the provider's account or trading
+flow. The adapter emits a verified direct-exchange quote and uses the product
+of the selected fiat and asset rates as fiat units per asset. See the complete
+Cifra Markets example in `backend/providers/cifra-broker/Providerfile`.
+
 ## Generate and verify the migration
 
 Generate SQL without applying it to a database:

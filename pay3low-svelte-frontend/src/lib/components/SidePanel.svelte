@@ -20,9 +20,9 @@
   export let hasAmount = false;
 
   const ASSET_NAMES: Record<string, string> = { BTC: "Bitcoin", ETH: "Ether", USDC: "USD Coin", USDT: "Tether" };
-  const VENUE_NAMES: Record<string, string> = { binance: "Binance", bitget: "Bitget", bybit: "Bybit", okx: "OKX", rapira: "Rapira", whitebird: "Whitebird" };
+  const VENUE_NAMES: Record<string, string> = { binance: "Binance", bitget: "Bitget", bybit: "Bybit", okx: "OKX", rapira: "Rapira", whitebird: "Whitebird", "cifra-broker": "Cifra Markets" };
   const VENUE_ICONS: Record<string, string> = {
-    binance: venueIcon("binance"), bybit: venueIcon("bybit"), okx: venueIcon("okx"), bitget: venueIcon("bitget"), rapira: venueIcon("rapira"), whitebird: venueIcon("whitebird"),
+    binance: venueIcon("binance"), bybit: venueIcon("bybit"), okx: venueIcon("okx"), bitget: venueIcon("bitget"), rapira: venueIcon("rapira"), whitebird: venueIcon("whitebird"), "cifra-broker": venueIcon("cifra-broker"),
   };
   const FIAT_MARKS: Record<string, string> = { AMD: "🇦🇲", RUB: "🇷🇺", BYN: "🇧🇾" };
   type Step = { currency: string; network?: string; provider?: string; iconUrl?: string };
