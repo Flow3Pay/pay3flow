@@ -20,7 +20,7 @@ cp backend/providers/Providerfile.example backend/providers/my-provider/Provider
 ```
 
 The directory path becomes the slug. For example,
-`backend/providers/rate-am/Providerfile` becomes `rate-am`.
+`backend/providers/my-provider/Providerfile` becomes `my-provider`.
 
 Every file needs `[buy]`, `[sell]`, or both:
 

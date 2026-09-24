@@ -1,6 +1,10 @@
 -- Generated from providers/**/Providerfile. Do not edit by hand.
 -- Regenerate with: cargo run --bin providerfile
 -- The application embeds this migration; Providerfiles are not read at runtime.
+DELETE FROM providers
+WHERE source_file LIKE '%/Providerfile'
+AND (slug, operation) NOT IN (('binance', 'buy'), ('binance', 'sell'), ('bitget', 'buy'), ('bitget', 'sell'), ('bybit', 'buy'), ('bybit', 'sell'), ('cifra-broker', 'buy'), ('cifra-broker', 'sell'), ('okx', 'buy'), ('okx', 'sell'), ('rapira', 'buy'), ('rapira', 'sell'), ('whitebird', 'buy'), ('whitebird', 'sell'));
+
 INSERT INTO providers (slug, operation, source_url, name, currencies, banks, adapter, workflow, source_file)
 VALUES ('binance', 'buy', 'https://www.binance.com', 'Binance Buy', ARRAY['AMD', 'EUR', 'RUB', 'USD']::TEXT[], ARRAY[]::TEXT[], '{"p2p":{"kind":"http_json","endpoint":"https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search","method":"POST","headers":{"Origin":"https://www.binance.com","Referer":"https://www.binance.com/"},"asset_codes":{},"supported_assets":["USDT","USDC","BTC","ETH","BNB"],"timeout_ms":4000,"max_results":20,"fiat_probe_amount":null,"asset_probe_amount":null,"default_min_fiat":null,"default_max_fiat":null,"default_available_asset":null,"buy":{"query":{},"request_json":"{\"fiat\":\"{{fiat}}\",\"page\":1,\"rows\":\"{{limit_number}}\",\"tradeType\":\"BUY\",\"asset\":\"{{asset}}\",\"countries\":[],\"proMerchantAds\":false,\"shieldMerchantAds\":false,\"publisherType\":null,\"payTypes\":[],\"additionalKycVerifyFilter\":0}","amount_mode":"query_or_empty","items_pointer":"/data","success_pointer":"/code","success_value":"000000","success_missing_allowed":false,"error_pointer":"/message","offer":null},"sell":{"query":{},"request_json":"{\"fiat\":\"{{fiat}}\",\"page\":1,\"rows\":\"{{limit_number}}\",\"tradeType\":\"SELL\",\"asset\":\"{{asset}}\",\"countries\":[],\"proMerchantAds\":false,\"shieldMerchantAds\":false,\"publisherType\":null,\"payTypes\":[],\"additionalKycVerifyFilter\":0}","amount_mode":"query_or_empty","items_pointer":"/data","success_pointer":"/code","success_value":"000000","success_missing_allowed":false,"error_pointer":"/message","offer":null},"offer":{"ad_id_pointer":"/adv/advNo","fiat_pointer":"/adv/fiatUnit","asset_pointer":"/adv/asset","price_pointer":"/adv/price","fiat_amount_pointer":null,"asset_amount_pointer":null,"price_inverted":false,"available_asset_pointer":"/adv/tradableQuantity","min_fiat_pointer":"/adv/minSingleTransAmount","max_fiat_pointer":"/adv/maxSingleTransAmount","payment_methods_pointer":"/adv/tradeMethods","payment_method_value_pointer":"/tradeMethodName","payment_method_fallback_pointer":"/identifier","pay_time_limit_pointer":"/adv/payTimeLimit","advertiser_id_pointer":"/advertiser/userNo","advertiser_nickname_pointer":"/advertiser/nickName","advertiser_user_type_pointer":"/advertiser/userType","merchant_conditions":[{"pointer":"/advertiser/merchantGroupMember","operator":"truthy","value":null},{"pointer":"/advertiser/userType","operator":"equals_ci","value":"merchant"}],"verified_conditions":[],"merchant_default":false,"verified_default":false,"verified_from_merchant":true,"completed_orders_pointer":"/advertiser/monthOrderCount","completion_rate_pointer":"/advertiser/monthFinishRate","positive_rate_pointer":"/advertiser/positiveRate","source_url_template":"https://c2c.binance.com/en/adv?code={{item:/adv/advNo}}","source_url_is_exact":true,"advertiser_profile_url_template":"https://c2c.binance.com/en/advertiserDetail?advertiserNo={{item:/advertiser/userNo}}"}},"market":{"kind":"http_json","endpoint":"https://api.binance.com/api/v3/ticker/bookTicker","method":"GET","headers":{},"query":{},"request_json":null,"timeout_ms":4000,"items_pointer":null,"symbol_pointer":"/symbol","bid_pointer":"/bidPrice","ask_pointer":"/askPrice","symbol_remove":null,"success_pointer":null,"success_value":null,"success_missing_allowed":false,"error_pointer":null}}'::JSONB, '{}'::JSONB, 'binance/Providerfile')
 ON CONFLICT (slug, operation) DO UPDATE SET
@@ -135,30 +139,6 @@ updated_at = now();
 
 INSERT INTO providers (slug, operation, source_url, name, currencies, banks, adapter, workflow, source_file)
 VALUES ('rapira', 'sell', 'https://rapira.net', 'Rapira Sell', ARRAY['RUB']::TEXT[], ARRAY[]::TEXT[], '{"p2p":{"kind":"http_json","endpoint":"https://api.rapira.net/otc/offers/page-query/v2","method":"GET","headers":{"Origin":"https://rapira.net","Referer":"https://rapira.net/ru/p2p/BUY?p=1"},"asset_codes":{},"supported_assets":["USDT"],"timeout_ms":4000,"max_results":100,"fiat_probe_amount":null,"asset_probe_amount":null,"default_min_fiat":null,"default_max_fiat":null,"default_available_asset":null,"buy":{"query":{"amount":"{{amount}}","externalCoinUnit":"{{fiat}}","internalCoinUnit":"{{asset}}","listingType":"RECOMMENDED","merchantSide":"SELL","pageNo":"1","pageSize":"{{limit}}","paymentIds":"","showOnlyEligible":"false","sortByNumberOfMutualOrders":"false"},"request_json":null,"amount_mode":"query_or_empty","items_pointer":"/content","success_pointer":"/code","success_value":"0","success_missing_allowed":true,"error_pointer":"/message","offer":null},"sell":{"query":{"amount":"{{amount}}","externalCoinUnit":"{{fiat}}","internalCoinUnit":"{{asset}}","listingType":"RECOMMENDED","merchantSide":"BUY","pageNo":"1","pageSize":"{{limit}}","paymentIds":"","showOnlyEligible":"false","sortByNumberOfMutualOrders":"false"},"request_json":null,"amount_mode":"query_or_empty","items_pointer":"/content","success_pointer":"/code","success_value":"0","success_missing_allowed":true,"error_pointer":"/message","offer":null},"offer":{"ad_id_pointer":"/advertiseId","fiat_pointer":"/externalCoinUnit","asset_pointer":"/internalCoinUnit","price_pointer":"/price","fiat_amount_pointer":null,"asset_amount_pointer":null,"price_inverted":false,"available_asset_pointer":"/quantity","min_fiat_pointer":"/minLimit","max_fiat_pointer":"/maxLimit","payment_methods_pointer":"/paymentTypes","payment_method_value_pointer":"/paymentName","payment_method_fallback_pointer":null,"pay_time_limit_pointer":"/timeLimit","advertiser_id_pointer":"/merchant/profileUid","advertiser_nickname_pointer":"/merchant/username","advertiser_user_type_pointer":"/merchant/p2pLevel","merchant_conditions":[],"verified_conditions":[{"pointer":"/merchant/p2pLevel","operator":"equals_ci","value":"verified"},{"pointer":"/merchant/p2pLevel","operator":"equals_ci","value":"trusted"},{"pointer":"/merchant/p2pLevel","operator":"equals_ci","value":"premium"}],"merchant_default":true,"verified_default":false,"verified_from_merchant":false,"completed_orders_pointer":"/merchant/totalTerminatedAfterAcceptCount","completion_rate_pointer":"/merchant/totalCompletedPercent","positive_rate_pointer":null,"source_url_template":"https://rapira.net/p2p?adId={{item:/advertiseId}}","source_url_is_exact":true,"advertiser_profile_url_template":"https://rapira.net/ru/p2p/profileUser?p=1&profileUid={{item:/merchant/profileUid}}&msp=1"}},"market":null}'::JSONB, '{}'::JSONB, 'rapira/Providerfile')
-ON CONFLICT (slug, operation) DO UPDATE SET
-source_url = EXCLUDED.source_url,
-name = EXCLUDED.name,
-currencies = EXCLUDED.currencies,
-banks = EXCLUDED.banks,
-adapter = EXCLUDED.adapter,
-workflow = EXCLUDED.workflow,
-source_file = EXCLUDED.source_file,
-updated_at = now();
-
-INSERT INTO providers (slug, operation, source_url, name, currencies, banks, adapter, workflow, source_file)
-VALUES ('rate-am', 'buy', 'https://rate.am', 'Rate Buy', ARRAY['AMD', 'EUR', 'RUB', 'USD']::TEXT[], ARRAY[]::TEXT[], '{}'::JSONB, '{}'::JSONB, 'rate-am/Providerfile')
-ON CONFLICT (slug, operation) DO UPDATE SET
-source_url = EXCLUDED.source_url,
-name = EXCLUDED.name,
-currencies = EXCLUDED.currencies,
-banks = EXCLUDED.banks,
-adapter = EXCLUDED.adapter,
-workflow = EXCLUDED.workflow,
-source_file = EXCLUDED.source_file,
-updated_at = now();
-
-INSERT INTO providers (slug, operation, source_url, name, currencies, banks, adapter, workflow, source_file)
-VALUES ('rate-am', 'sell', 'https://rate.am', 'Rate Sell', ARRAY['AMD', 'EUR', 'RUB', 'USD']::TEXT[], ARRAY[]::TEXT[], '{}'::JSONB, '{}'::JSONB, 'rate-am/Providerfile')
 ON CONFLICT (slug, operation) DO UPDATE SET
 source_url = EXCLUDED.source_url,
 name = EXCLUDED.name,

@@ -32,9 +32,8 @@ still be available when the venue is opened.
 Provider capabilities live in
 [`backend/providers/*/Providerfile`](backend/providers/). They are compiled
 into [`backend/migrations/providers.sql`](backend/migrations/providers.sql) and
-loaded into PostgreSQL when the backend starts. `Cifra Broker` and `Rate.am`
-are present in the provider directory, but do not currently have live search
-adapters.
+loaded into PostgreSQL when the backend starts. `Cifra Broker` is present in
+the provider directory, but does not currently have a live search adapter.
 
 ## How live routing works
 

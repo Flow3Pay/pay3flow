@@ -152,6 +152,26 @@ pub fn render_sql(definitions: &[ProviderDefinition]) -> String {
          -- Regenerate with: cargo run --bin providerfile\n\
          -- The application embeds this migration; Providerfiles are not read at runtime.\n",
     );
+    if definitions.is_empty() {
+        sql.push_str("DELETE FROM providers WHERE source_file LIKE '%/Providerfile';\n");
+    } else {
+        let identities = definitions
+            .iter()
+            .map(|definition| {
+                format!(
+                    "({}, {})",
+                    sql_string(&definition.slug),
+                    sql_string(definition.operation.as_str())
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        sql.push_str(&format!(
+            "DELETE FROM providers\n\
+             WHERE source_file LIKE '%/Providerfile'\n\
+               AND (slug, operation) NOT IN ({identities});\n\n"
+        ));
+    }
     for definition in definitions {
         let currencies = sql_array(&definition.currencies);
         let banks = sql_array(&definition.banks);
@@ -327,16 +347,16 @@ mod tests {
 
     const EXAMPLE: &str = r#"
 [sell]
-source_url = "https://rate.am"
-name = "Rate Sell"
+source_url = "https://exchange.example"
+name = "Example Sell"
 currency = ["usd", "rub", "eur", "amd"]
 banks = [""]
 
 [buy]
-source_url = "https://rate.am"
+source_url = "https://exchange.example"
 banks = [""]
 currency = ["usd", "rub", "eur", "amd"]
-name = "Rate Buy"
+name = "Example Buy"
 "#;
 
     const HTTP_JSON_EXAMPLE: &str = r#"
@@ -378,7 +398,7 @@ currency = ["rub"]
 
     #[test]
     fn parses_and_normalizes_the_documented_shape() {
-        let definitions = parse(EXAMPLE, "rate-am", "rate-am/Providerfile").unwrap();
+        let definitions = parse(EXAMPLE, "example", "example/Providerfile").unwrap();
 
         assert_eq!(definitions.len(), 2);
         assert_eq!(definitions[0].operation, Operation::Buy);
@@ -390,7 +410,7 @@ currency = ["rub"]
     #[test]
     fn rejects_unknown_fields_instead_of_ignoring_typos() {
         let invalid = EXAMPLE.replace("source_url", "sorce_url");
-        assert!(parse(&invalid, "rate-am", "Providerfile").is_err());
+        assert!(parse(&invalid, "example", "Providerfile").is_err());
     }
 
     #[test]
@@ -401,13 +421,22 @@ currency = ["rub"]
     #[test]
     fn escapes_values_in_generated_sql() {
         let definitions = parse(
-            &EXAMPLE.replace("Rate Buy", "Banker's Buy"),
-            "rate-am",
-            "rate-am/Providerfile",
+            &EXAMPLE.replace("Example Buy", "Banker's Buy"),
+            "example",
+            "example/Providerfile",
         )
         .unwrap();
 
         assert!(render_sql(&definitions).contains("Banker''s Buy"));
+    }
+
+    #[test]
+    fn generated_sql_removes_deleted_providerfiles() {
+        let definitions = parse(EXAMPLE, "example", "example/Providerfile").unwrap();
+        let sql = render_sql(&definitions);
+
+        assert!(sql.contains("DELETE FROM providers"));
+        assert!(sql.contains("(slug, operation) NOT IN (('example', 'buy'), ('example', 'sell'))"));
     }
 
     #[test]
