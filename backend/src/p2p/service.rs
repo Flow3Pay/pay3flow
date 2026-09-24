@@ -126,6 +126,8 @@ pub struct Advertiser {
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct P2pOffer {
+    #[serde(skip)]
+    pub(crate) market: P2pOfferMarket,
     pub source: String,
     pub ad_id: String,
     pub side: P2pSide,
@@ -144,6 +146,12 @@ pub struct P2pOffer {
     /// True only when the venue URL addresses this exact advertisement.
     /// Public market URLs must not be presented as exact offer links.
     pub source_url_is_exact: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum P2pOfferMarket {
+    P2p,
+    DirectExchange,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -706,6 +714,7 @@ mod tests {
 
     fn offer(source: &str, price: &str, min: &str, max: &str, orders: u64) -> P2pOffer {
         P2pOffer {
+            market: P2pOfferMarket::P2p,
             source: source.into(),
             ad_id: format!("{source}-{price}"),
             side: P2pSide::BuyCrypto,

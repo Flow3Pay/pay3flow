@@ -10,8 +10,8 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use crate::p2p::service::{
-    normalize_sources, P2pOffer, P2pSearchQuery, P2pSearchResponse, P2pSearchService, P2pSide,
-    PaymentMethodMatch, SourceStatus,
+    normalize_sources, P2pOffer, P2pOfferMarket, P2pSearchQuery, P2pSearchResponse,
+    P2pSearchService, P2pSide, PaymentMethodMatch, SourceStatus,
 };
 use crate::p2p::spot::CryptoTicker;
 use crate::service_reputation::{CombinedReputation, RouteServiceStats, ServiceLink};
@@ -888,6 +888,7 @@ fn reject_price_outliers(offers: Vec<P2pOffer>, max_deviation_bps: u32) -> Vec<P
     }
     let mut prices = offers
         .iter()
+        .filter(|offer| offer.market == P2pOfferMarket::P2p)
         .filter_map(|offer| offer.price.parse::<f64>().ok())
         .filter(|price| price.is_finite() && *price > 0.0)
         .collect::<Vec<_>>();
@@ -900,10 +901,11 @@ fn reject_price_outliers(offers: Vec<P2pOffer>, max_deviation_bps: u32) -> Vec<P
     offers
         .into_iter()
         .filter(|offer| {
-            offer
-                .price
-                .parse::<f64>()
-                .is_ok_and(|price| (price - median).abs() <= maximum_deviation)
+            offer.market == P2pOfferMarket::DirectExchange
+                || offer
+                    .price
+                    .parse::<f64>()
+                    .is_ok_and(|price| (price - median).abs() <= maximum_deviation)
         })
         .collect()
 }
@@ -1350,6 +1352,7 @@ mod tests {
 
     fn offer(source: &str, side: P2pSide, price: &str, min: &str, max: &str) -> P2pOffer {
         P2pOffer {
+            market: crate::p2p::service::P2pOfferMarket::P2p,
             source: source.into(),
             ad_id: format!("{source}-{price}"),
             side,
@@ -1692,6 +1695,23 @@ mod tests {
         ];
         let filtered = reject_price_outliers(offers, 1_000);
         assert_eq!(filtered.len(), 2);
+    }
+
+    #[test]
+    fn keeps_direct_exchange_quotes_outside_the_p2p_median() {
+        let mut direct = offer("whitebird", P2pSide::SellCrypto, "70", "1", "100000");
+        direct.market = crate::p2p::service::P2pOfferMarket::DirectExchange;
+        let offers = vec![
+            offer("a", P2pSide::SellCrypto, "80", "1", "100000"),
+            offer("b", P2pSide::SellCrypto, "81", "1", "100000"),
+            offer("c", P2pSide::SellCrypto, "82", "1", "100000"),
+            direct,
+        ];
+
+        let filtered = reject_price_outliers(offers, 1_000);
+
+        assert_eq!(filtered.len(), 4);
+        assert!(filtered.iter().any(|offer| offer.source == "whitebird"));
     }
 
     #[test]

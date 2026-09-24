@@ -6,7 +6,9 @@ use async_trait::async_trait;
 use reqwest::{Client, Method};
 use serde_json::{Number, Value};
 
-use crate::p2p::service::{Advertiser, P2pOffer, P2pSearchQuery, P2pSide, P2pSource};
+use crate::p2p::service::{
+    Advertiser, P2pOffer, P2pOfferMarket, P2pSearchQuery, P2pSide, P2pSource,
+};
 use crate::p2p::spot::{CryptoMarketSource, CryptoTicker};
 use crate::provider_adapter::{
     environment_variable, MarketAdapterConfig, OfferMapping, P2pAdapterConfig, P2pOperation,
@@ -134,6 +136,7 @@ impl DeclarativeP2pSource {
             .unwrap_or_else(|| self.source_url.clone());
 
         Ok(P2pOffer {
+            market: P2pOfferMarket::P2p,
             source: self.slug.clone(),
             ad_id: optional_string(item, mapping.ad_id_pointer.as_deref()).unwrap_or_else(|| {
                 format!("{}-{}-{}-{}", self.slug, side_name(query.side), fiat, asset)

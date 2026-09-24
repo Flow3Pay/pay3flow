@@ -7,7 +7,9 @@ use playwright_rs::{LaunchOptions, Page, Playwright};
 use serde_json::Value;
 use tokio::sync::Semaphore;
 
-use crate::p2p::service::{Advertiser, P2pOffer, P2pSearchQuery, P2pSide, P2pSource};
+use crate::p2p::service::{
+    Advertiser, P2pOffer, P2pOfferMarket, P2pSearchQuery, P2pSide, P2pSource,
+};
 use crate::provider_adapter::{WorkflowConfig, WorkflowOperation, WorkflowRead, WorkflowStep};
 use crate::providers::ProviderAdapterRecord;
 
@@ -198,6 +200,7 @@ impl P2pSource for WorkflowP2pSource {
             bail!("{} workflow returned an invalid exchange rate", self.slug);
         }
         Ok(vec![P2pOffer {
+            market: P2pOfferMarket::DirectExchange,
             source: self.slug.clone(),
             ad_id: format!(
                 "{}-{}-{}-{}",
