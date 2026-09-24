@@ -1,17 +1,11 @@
 [sell]
-source_url = "https://bestchange.biz/ru"
+source_url = "https://bestchange.app/?lang=en"
 name = "BestChange Sell"
 currency = ["rub", "usd", "eur", "byn"]
 banks = []
 
 [buy]
-source_url = "https://bestchange.biz/ru"
+source_url = "https://bestchange.app/?lang=en"
 name = "BestChange Buy"
 currency = ["rub", "usd", "eur", "byn"]
 banks = []
-
-[adapter.bestchange]
-endpoint = "https://bestchange.biz"
-language = "ru"
-timeout_ms = 10000
-max_results = 100

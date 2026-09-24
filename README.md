@@ -28,14 +28,12 @@ still be available when the venue is opened.
 | Bitget | Public P2P API and spot ticker | P2P ads plus crypto market paths |
 | Rapira | Public P2P API | `USDT/RUB` P2P ads |
 | Whitebird | Browser workflow over the public exchanger | Direct fiat/crypto quotes, including `USDC/RUB` |
-| BestChange | Public direction pages, one offer per monitored exchanger | Individual exchanger offers with displayed rate, name, and link |
 | Cifra Markets | Public calculator and IMEX market API | Direct RUB/BYN/USD crypto quotes and crypto market paths |
 
-The catalog also includes Exnode and Dzengi as selectable venue entries. Their
-live offer APIs are not enabled yet. BestChange live search uses its public
-direction pages without an API key; it returns the individual exchange offers
-that BestChange found for the requested direction and amount, instead of adding
-a single calculator rate.
+The catalog also includes Exnode, Dzengi, and BestChange. They are currently
+selectable venue entries with links and local icons; live route adapters are
+not enabled yet because their public quote endpoints require a site workflow
+or API credentials.
 
 Provider capabilities live in
 [`backend/providers/*/Providerfile`](backend/providers/). They are compiled
