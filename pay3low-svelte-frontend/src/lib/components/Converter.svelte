@@ -437,7 +437,7 @@
   });
 </script>
 
-<section class="shell" id="transfer">
+<section class="shell" class:localeLong={activeLocale !== "en"} id="transfer">
   <div class="hero"><h1>{t("Move money.", {}, activeLocale)} <span>{t("Keep more.", {}, activeLocale)}</span></h1><p>{t("Stop spending hours searching for an exchange.", {}, activeLocale)}</p></div>
   <div class="workspace">
     <div class="card">
@@ -1595,6 +1595,24 @@
   color: var(--color-text-soft);
   font-size: 13px;
   line-height: 1.55;
+}
+
+/* Translated headlines can be longer than the compact English headline. */
+.hero h1 {
+  max-width: 100%;
+  text-wrap: balance;
+}
+
+.hero h1 span {
+  white-space: normal;
+}
+
+@media (min-width: 981px) {
+  .shell.localeLong .hero h1 {
+    max-width: 900px;
+    font-size: clamp(42px, 5vw, 68px);
+    white-space: normal;
+  }
 }
 
 .workspace {
