@@ -182,6 +182,30 @@ the secret itself.
 Providerfile may contain a browser workflow plus a market adapter, but it may
 not define both `[workflow]` and `[adapter.p2p]`.
 
+## BestChange public offer adapter
+
+BestChange is different from a calculator: its public direction page contains
+one row per monitored exchanger. Pay3Flow requests that page with the selected
+`fromAmount`, reads each exchanger link, name, and displayed pair of amounts,
+and converts every row into a separate offer. The route search can therefore
+rank and combine the actual exchangers found for the requested amount.
+
+```toml
+[adapter.bestchange]
+endpoint = "https://bestchange.biz"
+language = "ru"
+timeout_ms = 10000
+max_results = 100
+```
+
+No API key is required. The adapter first reads the public exchange-unit
+catalog to resolve payment methods and networks such as `visa-mastercard-rub`
+and `tether-trc20`, then requests URLs such as
+`/ru/visa-mastercard-rub-to-tether-trc20?fromAmount=10000`.
+
+This intentionally depends on BestChange's public HTML and may need adjustment
+if their markup changes or their site rate-limits automated requests.
+
 For public calculators that return fiat rates and asset rates in separate,
 index-aligned arrays, add `[adapter.p2p.rate_table]`. Point it at the fiat item
 array (including its code and rate fields), the asset item array and the

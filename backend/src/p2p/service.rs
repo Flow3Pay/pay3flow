@@ -16,6 +16,7 @@ use tokio::sync::mpsc;
 use crate::config::Config;
 use crate::db::DbPool;
 use crate::networks::NetworkCatalog;
+use crate::p2p::bestchange::BestChangeSource;
 use crate::p2p::declarative::{DeclarativeMarketSource, DeclarativeP2pSource};
 use crate::p2p::spot::{CryptoMarketSource, CryptoTicker};
 use crate::p2p::workflow::WorkflowP2pSource;
@@ -326,6 +327,9 @@ impl P2pSearchService {
         let mut sources: Vec<Arc<dyn P2pSource>> = Vec::new();
         let mut market_sources: Vec<Arc<dyn CryptoMarketSource>> = Vec::new();
         for record in &records {
+            if let Some(source) = BestChangeSource::from_record(client.clone(), record) {
+                sources.push(Arc::new(source));
+            }
             if let Some(source) = DeclarativeP2pSource::from_record(client.clone(), record) {
                 sources.push(Arc::new(source));
             }

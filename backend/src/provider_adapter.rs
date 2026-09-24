@@ -17,6 +17,24 @@ const REQUEST_PLACEHOLDERS: [&str; 6] = [
 pub struct ProviderAdapters {
     pub p2p: Option<P2pAdapterConfig>,
     pub market: Option<MarketAdapterConfig>,
+    pub bestchange: Option<BestChangeAdapterConfig>,
+}
+
+/// Configuration for the public BestChange exchange page adapter.
+///
+/// BestChange renders one row per exchanger in the public direction page. The
+/// adapter resolves the public exchange-unit slugs, requests that page with
+/// `fromAmount`, and converts each rendered row into an offer.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BestChangeAdapterConfig {
+    pub endpoint: String,
+    #[serde(default = "default_bestchange_language")]
+    pub language: String,
+    #[serde(default = "default_timeout_ms")]
+    pub timeout_ms: u64,
+    #[serde(default = "default_bestchange_max_results")]
+    pub max_results: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -235,9 +253,9 @@ pub struct MarketAdapterConfig {
 
 impl ProviderAdapters {
     pub fn validate(&self, has_buy: bool, has_sell: bool, context: &str) -> Result<(), String> {
-        if self.p2p.is_none() && self.market.is_none() {
+        if self.p2p.is_none() && self.market.is_none() && self.bestchange.is_none() {
             return Err(format!(
-                "{context}: adapter must contain [adapter.p2p] or [adapter.market]"
+                "{context}: adapter must contain [adapter.p2p], [adapter.market], or [adapter.bestchange]"
             ));
         }
         if let Some(p2p) = &self.p2p {
@@ -245,6 +263,35 @@ impl ProviderAdapters {
         }
         if let Some(market) = &self.market {
             market.validate(context)?;
+        }
+        if let Some(bestchange) = &self.bestchange {
+            bestchange.validate(context)?;
+        }
+        Ok(())
+    }
+}
+
+impl BestChangeAdapterConfig {
+    fn validate(&self, context: &str) -> Result<(), String> {
+        if !self.endpoint.starts_with("https://") && !self.endpoint.starts_with("http://") {
+            return Err(format!(
+                "{context}: BestChange endpoint must use http or https"
+            ));
+        }
+        if self.language.trim().is_empty() || self.language.len() > 8 {
+            return Err(format!(
+                "{context}: BestChange language must be 1-8 characters"
+            ));
+        }
+        if !(250..=30_000).contains(&self.timeout_ms) {
+            return Err(format!(
+                "{context}: BestChange timeout_ms must be between 250 and 30000"
+            ));
+        }
+        if self.max_results == 0 {
+            return Err(format!(
+                "{context}: BestChange max_results must be positive"
+            ));
         }
         Ok(())
     }
@@ -888,6 +935,14 @@ fn default_method() -> String {
 
 fn default_timeout_ms() -> u64 {
     10_000
+}
+
+fn default_bestchange_language() -> String {
+    "en".into()
+}
+
+fn default_bestchange_max_results() -> usize {
+    100
 }
 
 fn default_navigation_retry_delay_ms() -> u64 {
