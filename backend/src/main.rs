@@ -23,7 +23,8 @@ async fn main() -> anyhow::Result<()> {
 
     let ap = pay3flow_backend::service::build_activitypub_service(&cfg, pool.clone(), identity);
 
-    let picker = pay3flow_backend::routing::RoutePicker::from_seeds();
+    let acquirer_pool = pay3flow_backend::routing::profile::load_pool(&pool).await?;
+    let picker = pay3flow_backend::routing::RoutePicker::new(acquirer_pool);
 
     let providers =
         pay3flow_backend::payments::providers::ProviderRegistry::from_providers(vec![Box::new(
@@ -61,33 +62,20 @@ async fn main() -> anyhow::Result<()> {
         )
     };
 
-    // Bank exchange-pair router (PLAN 2△ / 46a-46c): seed the catalog once at
-    // startup (idempotent upsert), then hand the cached reader service to the
-    // router. Admin edits land on the next GET because the cache is
-    // invalidated on every admin write.
-    let seeded_pairs = pay3flow_backend::pairs::seed::seed_exchange_pairs(&pool).await?;
-    tracing::info!(pairs = seeded_pairs, "exchange-pair router catalog seeded");
+    // Catalog rows are installed by migrations, not by application startup.
     let pairs = pay3flow_backend::pairs::ExchangePairsService::new(
         pool.clone(),
         std::time::Duration::from_secs(cfg.pairs_cache_ttl_secs),
     );
 
-    // Bank directory (PLAN 2△): seed the worldwide catalog once at startup
-    // (idempotent upsert), then hand the cached reader service to the router.
-    let seeded_banks = pay3flow_backend::banks::seed::seed_banks(&pool).await?;
-    tracing::info!(banks = seeded_banks, "bank directory seeded");
     let banks = pay3flow_backend::banks::BanksService::new(
         pool.clone(),
         std::time::Duration::from_secs(cfg.pairs_cache_ttl_secs),
     );
 
-    let seeded_fake_solvers = pay3flow_backend::exchange::seed::seed_fake_solvers(&pool).await?;
-    tracing::info!(
-        solvers = seeded_fake_solvers,
-        "fake exchange solvers seeded"
-    );
-
-    let p2p = pay3flow_backend::p2p::P2pSearchService::from_config(&cfg)?;
+    let network_catalog = pay3flow_backend::networks::NetworkCatalog::load(&pool).await?;
+    let p2p = pay3flow_backend::p2p::P2pSearchService::from_database(&cfg, network_catalog, &pool)
+        .await?;
     let reputation =
         pay3flow_backend::service_reputation::ServiceReputation::new(pool.clone(), &cfg.jwt_secret);
 

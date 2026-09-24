@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::activitypub::model::AcquirerCandidate;
-use crate::routing::profile::{seed_pool, AcquirerProfile};
+use crate::routing::profile::AcquirerProfile;
 use crate::routing::request::PaymentRequest;
 
 /// Local rules-based selector used when fmatch is unreachable.
@@ -86,10 +86,10 @@ pub struct RoutePicker {
 }
 
 impl RoutePicker {
-    pub fn from_seeds() -> Self {
+    pub fn new(pool: Vec<AcquirerProfile>) -> Self {
         Self {
             matcher: FallbackMatcher,
-            pool: seed_pool(),
+            pool,
         }
     }
 
@@ -181,7 +181,7 @@ const EU_MEMBERS: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::routing::profile::seed_pool;
+    use crate::routing::profile::test_pool;
 
     fn with_geo(mut req: PaymentRequest, geo: &str) -> PaymentRequest {
         req.to_geo = Some(geo.to_string());
@@ -192,7 +192,7 @@ mod tests {
     fn cheapest_eu_candidate_wins() {
         let matcher = FallbackMatcher;
         let req = with_geo(PaymentRequest::new(100.0, "EUR", "PayPal", "VISA"), "NL");
-        let cands = matcher.select(&req, &seed_pool());
+        let cands = matcher.select(&req, &test_pool());
         assert_eq!(cands[0].name, "Mollie");
         assert_eq!(cands[0].rank, 1);
         assert!(cands[0].price.unwrap() < cands[1].price.unwrap());
@@ -202,7 +202,7 @@ mod tests {
     fn unsupported_currency_excluded() {
         let matcher = FallbackMatcher;
         let req = with_geo(PaymentRequest::new(100.0, "GBP", "Bank", "IBAN"), "NL");
-        let cands = matcher.select(&req, &seed_pool());
+        let cands = matcher.select(&req, &test_pool());
         assert!(cands.iter().all(|c| c.name != "Mollie"));
         assert!(cands.iter().any(|c| c.name == "Adyen"));
     }
@@ -215,7 +215,7 @@ mod tests {
             PaymentRequest::new(100.0, "EUR", "PayPal", "VISA BelorusBank"),
             "BY",
         );
-        let cands = matcher.select(&req, &seed_pool());
+        let cands = matcher.select(&req, &test_pool());
         assert!(!cands.is_empty());
         for c in &cands {
             assert!(["Wise", "Payoneer"].contains(&c.name.as_str()));
@@ -230,14 +230,14 @@ mod tests {
             PaymentRequest::new(150_000.0, "USD", "PayPal", "Bank"),
             "US",
         );
-        let cands = matcher.select(&req, &seed_pool());
+        let cands = matcher.select(&req, &test_pool());
         assert!(cands.iter().all(|c| c.name != "Stripe"));
         assert!(cands.iter().any(|c| c.name == "Checkout.com"));
     }
 
     #[test]
     fn inactive_acquirer_excluded() {
-        let mut pool = seed_pool();
+        let mut pool = test_pool();
         for profile in &mut pool {
             if profile.name == "Adyen" {
                 profile.status = "disabled".to_string();
@@ -253,12 +253,12 @@ mod tests {
     fn no_eligible_leaves_empty_list() {
         let matcher = FallbackMatcher;
         let req = PaymentRequest::new(100.0, "XYZ", "PayPal", "Bank");
-        assert!(matcher.select(&req, &seed_pool()).is_empty());
+        assert!(matcher.select(&req, &test_pool()).is_empty());
     }
 
     #[test]
     fn picker_prefers_fmatch_when_available() {
-        let picker = RoutePicker::from_seeds();
+        let picker = RoutePicker::new(test_pool());
         let req = with_geo(PaymentRequest::new(100.0, "EUR", "PayPal", "VISA"), "NL");
         let with_fmatch = vec![AcquirerCandidate {
             name: "FakeAcquirer".into(),
@@ -276,7 +276,7 @@ mod tests {
 
     #[test]
     fn picker_falls_back_when_fmatch_unreachable() {
-        let picker = RoutePicker::from_seeds();
+        let picker = RoutePicker::new(test_pool());
         let req = with_geo(PaymentRequest::new(100.0, "EUR", "PayPal", "VISA"), "NL");
         let res = picker.resolve(&req, None);
         assert_eq!(res.source, RouteSource::Fallback);

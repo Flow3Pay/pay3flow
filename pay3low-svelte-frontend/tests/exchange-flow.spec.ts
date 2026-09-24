@@ -51,6 +51,13 @@ async function mockBackend(page: Page) {
         { id: "bitcoin", name: "Bitcoin", currencies: ["BTC"] },
       ]);
     }
+    if (url.pathname === "/api/providers") {
+      return json([
+        { slug: "binance", name: "Binance", side: "sell", source_url: "https://p2p.binance.com", currencies: ["AMD", "RUB"], banks: [], searchable: true },
+        { slug: "bybit", name: "Bybit", side: "sell", source_url: "https://www.bybit.com/fiat/trade/otc", currencies: ["AMD", "RUB"], banks: [], searchable: true },
+        { slug: "whitebird", name: "Whitebird Sell", side: "sell", source_url: "https://whitebird.io", currencies: ["BYN", "USD", "EUR", "RUB"], banks: [], searchable: false },
+      ]);
+    }
     if (url.pathname === "/api/service-executions/open" && method === "POST") {
       return json({
         execution_id: "00000000-0000-4000-8000-000000000301",
@@ -77,13 +84,61 @@ async function mockBackend(page: Page) {
         advertiser: {
           id: source === "bybit" ? `masked-${adId}` : null,
           nickname: `${source}-merchant`,
+          user_type: "merchant" as string | null,
           is_merchant: true,
           is_verified: true,
-          completed_orders_30d: 300,
-          completion_rate_30d: 0.99,
+          completed_orders_30d: 300 as number | null,
+          completion_rate_30d: 0.99 as number | null,
         },
         source_url: `https://example.com/${adId}`,
       });
+      if (url.searchParams.get("source_fiat") === "USDC") {
+        expect(url.searchParams.get("source_network")).toBe("ethereum");
+        const whitebird = offer("whitebird", "whitebird-sell-RUB-USDC", "RUB", "USDC");
+        whitebird.price = "83.4295";
+        whitebird.payment_methods = [];
+        whitebird.advertiser = {
+          ...whitebird.advertiser,
+          id: null,
+          nickname: "Whitebird",
+          user_type: "service",
+          completed_orders_30d: null,
+          completion_rate_30d: null,
+        };
+        whitebird.source_url = "https://whitebird.io/";
+        return json({
+          search_id: "00000000-0000-4000-8000-000000000105",
+          routes_found: 1,
+          searched_at: "2026-09-23T10:00:00Z",
+          source_fiat: "USDC",
+          target_fiat: "RUB",
+          source_amount: "100.00",
+          assets_searched: ["USDC"],
+          can_exchange_to_target: true,
+          routes: [{
+            route_id: "route-usdc-whitebird-rub",
+            rank: 1,
+            asset: "USDC",
+            entry_network: "ethereum",
+            source_network: "ethereum",
+            target_network: null,
+            source_fiat: "USDC",
+            source_amount: "100.00000000",
+            acquired_asset_amount: "100.00000000",
+            target_fiat: "RUB",
+            target_amount: "8342.95",
+            effective_rate: "83.42950000",
+            same_venue: true,
+            requires_asset_transfer: false,
+            transfer_fee_included: true,
+            route_kind: "crypto_to_fiat",
+            payment_methods_verified: false,
+            entry_offer: null,
+            exit_offer: whitebird,
+            warnings: ["Search estimate only."],
+          }],
+        });
+      }
       if (url.searchParams.get("source_fiat") === "USDT") {
         expect(url.searchParams.get("source_network")).toBe("ethereum");
         expect(url.searchParams.has("source_payment_method")).toBe(false);
@@ -218,6 +273,8 @@ async function mockBackend(page: Page) {
       }
       expect(url.searchParams.get("source_payment_method")).toBe("IDBank");
       expect(url.searchParams.get("target_payment_method")).toBe("Alfa-Bank");
+      expect(url.searchParams.get("source_fiat")).toBe("AMD");
+      expect(url.searchParams.get("target_fiat")).toBe("RUB");
       expect(url.searchParams.get("allow_cross_venue")).toBe("true");
       const routes = Array.from({ length: 12 }, (_, index) => {
         const best = index === 0;
@@ -390,6 +447,175 @@ test("cross-venue instructions include a numbered transfer step", async ({ page 
   await expect(instructions.getByText("Wait for Bybit to credit the deposit before continuing.")).toBeVisible();
 });
 
+test("selected bank currencies override the reversed corridor", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page);
+
+  await page.getByRole("button", { name: "Swap sender and recipient" }).click();
+  await page.getByRole("button", { name: "Select sending bank: Sberbank" }).click();
+  const sourcePicker = page.getByRole("dialog", { name: "Choose where you pay from" });
+  await sourcePicker.getByLabel("Search banks and payment methods").fill("IDBank");
+  await sourcePicker.getByRole("option", { name: /IDBank/ }).click();
+
+  await page.getByRole("button", { name: "Select recipient bank: Ameriabank" }).click();
+  const targetPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
+  await targetPicker.getByLabel("Search banks and payment methods").fill("Alfa");
+  await targetPicker.getByRole("option", { name: /Alfa-Bank/ }).click();
+
+  await page.getByLabel("Amount to send").fill("100000");
+  await page.getByTestId("start-search").click();
+
+  await expect(page.getByText("Estimated RUB")).toBeVisible();
+  await expect(page).toHaveURL(/#\/swap\/AMD\/RUB\?amount=100000$/);
+});
+
+test("catalog providers can be selected", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page);
+
+  await page.getByRole("button", { name: "Route refresh settings" }).click();
+  const whitebird = page.getByRole("button", { name: "Whitebird" });
+
+  await expect(whitebird).toBeEnabled();
+  await whitebird.click();
+  await expect(whitebird).toHaveAttribute("aria-pressed", "true");
+});
+
+test("search venues bounce in the loader and refresh stops spinning after the first route", async ({ page }) => {
+  await mockBackend(page);
+
+  let sendFirstRoute: (() => void) | undefined;
+  let sendSecondRoute: (() => void) | undefined;
+  let finishSearch: (() => void) | undefined;
+  let socketConnections = 0;
+  await page.routeWebSocket(/\/ws\/p2p\/routes$/, (socket) => {
+    socketConnections += 1;
+    socket.onMessage((message) => {
+      const request = JSON.parse(String(message));
+      expect(request.query.sources).toBe("binance,bybit,whitebird");
+
+      const offer = (source: string, adId: string, fiat: string) => ({
+        source,
+        ad_id: adId,
+        fiat,
+        asset: "USDT",
+        price: "1",
+        available_asset: "1000000",
+        min_fiat: "1000",
+        max_fiat: "10000000",
+        payment_methods: ["Bank transfer"],
+        pay_time_limit_minutes: 15,
+        advertiser: {
+          id: `masked-${adId}`,
+          nickname: `${source}-merchant`,
+          user_type: "merchant",
+          is_merchant: true,
+          is_verified: true,
+          completed_orders_30d: 300,
+          completion_rate_30d: 0.99,
+        },
+        source_url: `https://example.com/${adId}`,
+      });
+      const firstResponse = {
+        search_id: "00000000-0000-4000-8000-000000000106",
+        routes_found: 1,
+        searched_at: "2026-09-23T10:00:00Z",
+        source_fiat: "AMD",
+        target_fiat: "RUB",
+        source_amount: "100000.00",
+        assets_searched: ["USDT"],
+        can_exchange_to_target: true,
+        routes: [{
+          route_id: "route-streamed-first",
+          rank: 1,
+          asset: "USDT",
+          entry_network: "internal",
+          source_fiat: "AMD",
+          source_amount: "100000.00",
+          acquired_asset_amount: "253.16",
+          target_fiat: "RUB",
+          target_amount: "20350.00",
+          effective_rate: "0.2035",
+          same_venue: true,
+          requires_asset_transfer: false,
+          transfer_fee_included: true,
+          route_kind: "fiat_to_fiat",
+          payment_methods_verified: true,
+          entry_offer: offer("bybit", "entry-live", "AMD"),
+          exit_offer: offer("bybit", "exit-live", "RUB"),
+          warnings: [],
+        }],
+      };
+      const finalResponse = {
+        ...firstResponse,
+        routes_found: 2,
+        routes: [{
+          ...firstResponse.routes[0],
+          route_id: "route-streamed-second",
+          rank: 1,
+          target_amount: "20420.00",
+          effective_rate: "0.2042",
+          entry_offer: offer("whitebird", "entry-live-2", "AMD"),
+          exit_offer: offer("whitebird", "exit-live-2", "RUB"),
+        }, { ...firstResponse.routes[0], rank: 2 }],
+      };
+
+      socket.send(JSON.stringify({ type: "search_started", search_id: firstResponse.search_id, routes_found: 0 }));
+      sendFirstRoute = () => socket.send(JSON.stringify({ type: "routes_updated", ...firstResponse }));
+      sendSecondRoute = () => socket.send(JSON.stringify({ type: "routes_updated", ...finalResponse }));
+      finishSearch = () => socket.send(JSON.stringify({ type: "search_finished", ...finalResponse }));
+    });
+  });
+
+  await openApp(page);
+  await page.getByRole("button", { name: "Route refresh settings" }).click();
+  await page.getByRole("button", { name: "Whitebird" }).click();
+  await page.getByRole("button", { name: "Route refresh settings" }).click();
+  await page.getByLabel("Amount to send").fill("100000");
+  await page.getByTestId("start-search").click();
+
+  await expect.poll(() => Boolean(sendFirstRoute)).toBe(true);
+  await page.waitForTimeout(750);
+  expect(socketConnections).toBe(1);
+  const panelTop = page.locator("#routes .panelTop");
+  const searchingVenues = panelTop.getByTestId("searching-venue");
+  await expect(searchingVenues).toHaveCount(3);
+  await expect(searchingVenues.nth(0)).toHaveAttribute("title", "Searching Binance");
+  await expect(searchingVenues.nth(1)).toHaveAttribute("title", "Searching Bybit");
+  await expect(searchingVenues.nth(2)).toHaveAttribute("title", "Searching Whitebird");
+  await expect(searchingVenues.nth(0)).toHaveCSS("width", "32px");
+  await expect(searchingVenues.nth(0)).toHaveCSS("animation-delay", "0s");
+  await expect(searchingVenues.nth(1)).toHaveCSS("animation-delay", "0.13s");
+
+  const refreshButton = page.getByRole("button", { name: "Refresh routes now" });
+  await expect(refreshButton.locator("svg")).toHaveClass(/refreshSpin/);
+  sendFirstRoute?.();
+  await expect(page.getByTestId("complete-route")).toHaveCount(1);
+  await expect(page.getByTestId("complete-route").first()).toHaveClass(/selected/);
+  const foundVenues = panelTop.locator(".resultSummary").getByTestId("found-venue");
+  await expect(foundVenues).toHaveCount(1);
+  await expect(foundVenues.first()).toHaveAttribute("title", "Found on Bybit");
+  await expect(searchingVenues).toHaveCount(2);
+  await expect(searchingVenues.nth(1)).toHaveAttribute("title", "Searching Whitebird");
+  await expect(refreshButton).toBeDisabled();
+  await expect(refreshButton.locator("svg")).not.toHaveClass(/refreshSpin/);
+
+  sendSecondRoute?.();
+  await expect(page.getByTestId("complete-route")).toHaveCount(2);
+  await expect(page.getByTestId("complete-route").first()).toContainText("20420 RUB");
+  await expect(page.getByTestId("complete-route").first()).toHaveClass(/selected/);
+  await expect(foundVenues).toHaveCount(2);
+  await expect(foundVenues.nth(1)).toHaveAttribute("title", "Found on Whitebird");
+  await expect(searchingVenues).toHaveCount(1);
+
+  await page.getByTestId("complete-route").nth(1).click();
+  await expect(page.getByTestId("complete-route").nth(1)).toHaveClass(/selected/);
+  finishSearch?.();
+  await expect(refreshButton).toBeEnabled();
+  await expect(searchingVenues).toHaveCount(0);
+  await expect(page.getByTestId("complete-route").nth(1)).toHaveClass(/selected/);
+});
+
 test("cryptocurrency search binds the selected asset to its network", async ({ page }) => {
   await mockBackend(page);
   await openApp(page);
@@ -412,6 +638,63 @@ test("cryptocurrency search binds the selected asset to its network", async ({ p
     "aria-label",
     "USDT Tether · Ethereum (ERC-20) (Binance) → RUB",
   );
+});
+
+test("direct Whitebird exchange uses provider wording and local venue icons", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page);
+
+  await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
+  const picker = page.getByRole("dialog", { name: "Choose where you pay from" });
+  await picker.getByLabel("Search banks and payment methods").fill("USDC ERC20");
+  await picker.getByRole("option", { name: /USD Coin USDC · Ethereum \(ERC-20\)/ }).click();
+
+  await page.getByLabel("Amount to send").fill("100");
+  await page.getByTestId("start-search").click();
+  const route = page.getByTestId("complete-route");
+  await expect(route).toHaveCount(1);
+  await expect(route.locator(".workflow")).toHaveAttribute(
+    "aria-label",
+    "USDC USD Coin · Ethereum (ERC-20) (Whitebird) → RUB",
+  );
+  await expect(route.locator(".workflowVenueIcon img")).toHaveAttribute(
+    "src",
+    "/icons/venues/whitebird.png",
+  );
+
+  await route.locator(".routeAmount").click();
+  const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
+  await expect(instructions.getByText("Direct exchange on Whitebird", { exact: true })).toBeVisible();
+  await expect(instructions.getByRole("link", { name: "Open Whitebird exchange" })).toHaveAttribute(
+    "href",
+    "https://whitebird.io/",
+  );
+  await expect(instructions.getByText("Find by nickname", { exact: true })).toHaveCount(0);
+  await expect(instructions.locator(".adHint")).toHaveCount(0);
+  await expect(instructions.locator(".counterpartyAvatar .avatarLogo")).toHaveAttribute(
+    "src",
+    "/icons/venues/whitebird.png",
+  );
+});
+
+test("Armenian bank picker uses the downloaded local icons", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page);
+
+  await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
+  const picker = page.getByRole("dialog", { name: "Choose where you pay from" });
+  const icons = [
+    ["Ameriabank", "/icons/assets/ameriabank.png"],
+    ["IDBank", "/icons/assets/idbank.png"],
+    ["Ardshinbank", "/icons/assets/ardshinbank.png"],
+    ["Inecobank", "/icons/assets/inecobank.png"],
+    ["Evocabank", "/icons/assets/evocabank.png"],
+  ] as const;
+
+  for (const [name, src] of icons) {
+    await picker.getByLabel("Search banks and payment methods").fill(name);
+    await expect(picker.getByRole("option", { name: new RegExp(name) }).locator("img")).toHaveAttribute("src", src);
+  }
 });
 
 test("tracked service opens unlock anonymous feedback", async ({ page }) => {
@@ -444,13 +727,13 @@ test("tracked service opens unlock anonymous feedback", async ({ page }) => {
     "color",
     "rgb(243, 243, 243)",
   );
-  await expect(instructions.getByRole("button", { name: "👍 Like" })).toHaveCSS(
+  await expect(instructions.getByRole("button", { name: "Like", exact: true })).toHaveCSS(
     "background-color",
     "rgb(43, 43, 43)",
   );
-  await instructions.getByRole("button", { name: "👍 Like" }).click();
-  await expect(instructions.getByRole("button", { name: "👍 Like" })).toHaveAttribute("aria-pressed", "true");
-  await expect(instructions.getByText("👍 851")).toBeVisible();
+  await instructions.getByRole("button", { name: "Like", exact: true }).click();
+  await expect(instructions.getByRole("button", { name: "Like", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(instructions.getByLabel("851 likes")).toBeVisible();
 });
 
 test("crypto route keeps distinct source and target networks", async ({ page }) => {

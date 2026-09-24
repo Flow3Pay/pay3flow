@@ -1,6 +1,9 @@
 <script lang="ts">
+  import { flip } from "svelte/animate";
+  import { quintOut } from "svelte/easing";
+  import { fly } from "svelte/transition";
   import type { RouteCandidate } from "$lib/exchange";
-  import { assetIcon, networkIcon, venueIcon } from "$lib/icons";
+  import { assetIcon, dislikeIcon, likeIcon, networkIcon, venueIcon } from "$lib/icons";
 
   export let routes: RouteCandidate[];
   export let routesFound = 0;
@@ -10,13 +13,15 @@
   export let onSelect: (route: RouteCandidate) => void;
   export let onOpenInstructions: (route: RouteCandidate) => void;
   export let searching = false;
+  export let searchingVenues: { id: string; label: string; iconUrl: string }[] = [];
+  export let foundVenues: { id: string; label: string; iconUrl: string }[] = [];
   export let searched = false;
   export let hasAmount = false;
 
   const ASSET_NAMES: Record<string, string> = { BTC: "Bitcoin", ETH: "Ether", USDC: "USD Coin", USDT: "Tether" };
-  const VENUE_NAMES: Record<string, string> = { binance: "Binance", bitget: "Bitget", bybit: "Bybit", okx: "OKX", rapira: "Rapira" };
+  const VENUE_NAMES: Record<string, string> = { binance: "Binance", bitget: "Bitget", bybit: "Bybit", okx: "OKX", rapira: "Rapira", whitebird: "Whitebird" };
   const VENUE_ICONS: Record<string, string> = {
-    binance: venueIcon("binance"), bybit: venueIcon("bybit"), okx: venueIcon("okx"), bitget: venueIcon("bitget"), rapira: venueIcon("rapira"),
+    binance: venueIcon("binance"), bybit: venueIcon("bybit"), okx: venueIcon("okx"), bitget: venueIcon("bitget"), rapira: venueIcon("rapira"), whitebird: venueIcon("whitebird"),
   };
   const FIAT_MARKS: Record<string, string> = { AMD: "🇦🇲", RUB: "🇷🇺", BYN: "🇧🇾" };
   type Step = { currency: string; network?: string; provider?: string; iconUrl?: string };
@@ -27,6 +32,10 @@
   const spreadLabel = (bps: number) => Math.abs(bps / 100) < 0.005 ? "Same output" : `${Math.abs(bps / 100).toFixed(2)}% less`;
   const compact = (value: number) => Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(value);
   const routeCountLabel = (count: number) => `${count} ${count === 1 ? "route" : "routes"} found`;
+  const reduceMotion = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const routeFlipDuration = (distance: number) => reduceMotion() ? 0 : Math.min(680, 260 + distance * 0.65);
+  const routeEnterDuration = () => reduceMotion() ? 0 : 380;
+  $: pendingVenues = searchingVenues.filter((venue) => !foundVenues.some((found) => found.id === venue.id));
 
   function workflowSteps(route: RouteCandidate): Step[] {
     const entry = route.legs.find((leg) => leg.kind === "entry");
@@ -55,14 +64,42 @@
 
 <aside class="side active" aria-label="Found routes" aria-busy={searching} id="routes">
   <div class="panel">
-    <div class="panelTop"><div>{#if hasAmount}<strong>Send {sourceCurrency} → {targetCurrency}</strong><small aria-live="polite">{routeCountLabel(routesFound)}{searching ? " · searching…" : ""}</small>{#if routesFound > routes.length && routes.length}<small class="resultLimit">Showing top {routes.length}</small>{/if}{:else}<strong>Awaiting your intent</strong>{/if}</div></div>
+    <div class="panelTop">
+      <div class="panelHeading">
+        {#if hasAmount}
+          <strong>Send {sourceCurrency} → {targetCurrency}</strong>
+          <span class="resultSummary">
+            <small aria-live="polite">{routeCountLabel(routesFound)}{searching ? " · searching…" : ""}</small>
+            {#if foundVenues.length}
+              <span class="foundVenues" aria-label={`Routes found on ${foundVenues.map((venue) => venue.label).join(", ")}`}>
+                {#each foundVenues as venue, index (venue.id)}
+                  <span class="foundVenue" data-testid="found-venue" title={`Found on ${venue.label}`} style:animation-delay={`${index * 70}ms`}>
+                    <img src={venue.iconUrl} alt="" width="18" height="18" decoding="async" on:error={(event) => fallbackVenueIcon(event, venue.id)} />
+                  </span>
+                {/each}
+              </span>
+            {/if}
+          </span>
+          {#if routesFound > routes.length && routes.length}<small class="resultLimit">Showing top {routes.length}</small>{/if}
+        {:else}<strong>Awaiting your intent</strong>{/if}
+      </div>
+      {#if searching && pendingVenues.length}
+        <div class="searchingVenues" aria-label={`Searching ${pendingVenues.map((venue) => venue.label).join(", ")}`}>
+          {#each pendingVenues as venue, index (venue.id)}
+            <span class="searchingVenue" data-testid="searching-venue" title={`Searching ${venue.label}`} style:animation-delay={`${index * 130}ms`}>
+              <img src={venue.iconUrl} alt="" width="20" height="20" decoding="async" on:error={(event) => fallbackVenueIcon(event, venue.id)} />
+            </span>
+          {/each}
+        </div>
+      {/if}
+    </div>
     {#if routes.length > 0}
       <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
       <div class="routeGroups" data-testid="route-groups" role="region" tabindex="0" aria-label="Found routes">
         <ul class="routeList">
           {#each routes as route, index (route.route_id)}
             {@const complete = route.status === "complete"}
-            <li><div class="routeCardShell">
+            <li animate:flip={{ duration: routeFlipDuration, easing: quintOut }} in:fly={{ y: 18, duration: routeEnterDuration(), easing: quintOut }}><div class="routeCardShell">
               <button type="button" class:routeBest={route.is_current_best} class:selected={route.route_id === selectedRouteId} class="routeCard" disabled={!complete} on:click={(event) => cardClick(event, route)} data-testid={complete ? "complete-route" : "partial-route"}>
                 <span class="routeTopline"><span class="routeRank">#{String(index + 1).padStart(2, "0")}</span>{#if route.is_current_best}<span class="bestBadge">Best route</span>{:else}<span class="deltaBadge">{spreadLabel(route.spread_bps)}</span>{/if}</span>
                 <span class="routeAmount">{money(route.target_amount_minor, route.target_currency)}</span>
@@ -91,7 +128,7 @@
                     </span>
                   {/each}
                 </span>
-                {#if route.reputation}<span class="routeReputation"><span>Used {compact(route.reputation.executions_average)} times</span><span>👍 {compact(route.reputation.likes_average)}</span><span>👎 {compact(route.reputation.dislikes_average)}</span></span>{/if}
+                {#if route.reputation}<span class="routeReputation"><span>Used {compact(route.reputation.executions_average)} times</span><span class="reputationMetric" aria-label={`${compact(route.reputation.likes_average)} likes`}><img src={likeIcon} alt="" aria-hidden="true" />{compact(route.reputation.likes_average)}</span><span class="reputationMetric" aria-label={`${compact(route.reputation.dislikes_average)} dislikes`}><img src={dislikeIcon} alt="" aria-hidden="true" />{compact(route.reputation.dislikes_average)}</span></span>{/if}
               </button>
             </div></li>
           {/each}
@@ -161,14 +198,52 @@
 
 .panelTop {
   min-height: 48px;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
 }
 
-.panelTop > div {
+.panelHeading {
   display: flex;
+  min-width: 0;
   flex-direction: column;
   gap: 3px;
+}
+
+.resultSummary,
+.foundVenues,
+.searchingVenues {
+  display: flex;
+  align-items: center;
+}
+
+.resultSummary {
+  min-height: 24px;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.foundVenues {
+  gap: 4px;
+}
+
+.foundVenue {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid rgba(185, 242, 39, 0.34);
+  border-radius: 8px;
+  background: rgba(185, 242, 39, 0.1);
+  animation: foundVenueIn 0.52s cubic-bezier(0.22, 1.42, 0.36, 1) both;
+  will-change: transform, opacity;
+}
+
+.foundVenue img {
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  object-fit: contain;
 }
 
 .panelTop strong {
@@ -195,6 +270,18 @@
   color: rgba(255, 255, 255, 0.58);
   font-family: var(--font-mono);
   font-size: 9px;
+}
+
+.reputationMetric {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.reputationMetric img {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
 }
 
 .liveBadge,
@@ -271,6 +358,7 @@
 .routeList > li {
   content-visibility: auto;
   contain-intrinsic-size: 0 132px;
+  will-change: transform, opacity;
 }
 
 .routeCardShell {
@@ -468,12 +556,41 @@
 }
 
 .skeletonList {
+  position: relative;
   display: flex;
   min-height: 0;
   flex: 1;
   flex-direction: column;
   gap: 9px;
   margin-top: 14px;
+}
+
+.searchingVenues {
+  min-height: 34px;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  gap: 6px;
+  padding-top: 1px;
+}
+
+.searchingVenue {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 11px;
+  background: rgba(27, 30, 26, 0.92);
+  box-shadow: 0 8px 18px rgba(9, 12, 8, 0.18);
+  animation: venueBounce 1.3s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  will-change: transform;
+}
+
+.searchingVenue img {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  object-fit: contain;
 }
 
 .skeletonCard {
@@ -611,6 +728,18 @@
   to { opacity: 1; }
 }
 
+@keyframes venueBounce {
+  0%, 45%, 100% { transform: translateY(0) scale(1); }
+  18% { transform: translateY(-7px) scale(1.05); }
+  28% { transform: translateY(1px) scale(0.98); }
+}
+
+@keyframes foundVenueIn {
+  0% { opacity: 0; transform: translate(9px, -5px) scale(0.72); }
+  72% { opacity: 1; transform: translate(-1px, 1px) scale(1.06); }
+  100% { opacity: 1; transform: translate(0, 0) scale(1); }
+}
+
 @keyframes pathPulse {
   0%, 100% { opacity: 0.3; transform: scale(0.7); }
   50% { opacity: 1; transform: scale(1.15); }
@@ -731,6 +860,17 @@
   background: #f4f8f1;
 }
 
+.searchingVenue {
+  border-color: var(--color-border-strong);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 14px 34px rgba(22, 25, 21, 0.14);
+}
+
+.foundVenue {
+  border-color: #cce29a;
+  background: #f1f8df;
+}
+
 .skeletonShort,
 .skeletonLong,
 .skeletonMedium {
@@ -778,6 +918,16 @@
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .routeList > li,
+  .routeCard,
+  .searchingVenue,
+  .foundVenue {
+    animation: none;
+    transition: none;
+  }
+}
+
 :global(html[data-theme="dark"]) .panel {
   border-color: var(--color-border-strong);
   background: rgba(25, 25, 25, 0.96);
@@ -789,6 +939,17 @@
 :global(html[data-theme="dark"]) .emptyNode {
   border-color: #383838;
   background: #202020;
+}
+
+:global(html[data-theme="dark"]) .searchingVenue {
+  border-color: #454545;
+  background: rgba(32, 32, 32, 0.96);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.3);
+}
+
+:global(html[data-theme="dark"]) .foundVenue {
+  border-color: rgba(181, 245, 0, 0.34);
+  background: rgba(181, 245, 0, 0.09);
 }
 
 :global(html[data-theme="dark"]) .routeBest,

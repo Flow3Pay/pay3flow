@@ -144,6 +144,38 @@ CREATE TABLE IF NOT EXISTS provider_webhooks (
     processed_at TIMESTAMPTZ
 );
 
+-- Providerfile catalog. Providerfiles are compiled to idempotent SQL before
+-- the Rust crate is rebuilt; the running application only reads these rows.
+CREATE TABLE IF NOT EXISTS providers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    slug TEXT NOT NULL,
+    operation TEXT NOT NULL CHECK (operation IN ('buy', 'sell')),
+    source_url TEXT NOT NULL,
+    name TEXT NOT NULL,
+    currencies TEXT[] NOT NULL DEFAULT '{}',
+    banks TEXT[] NOT NULL DEFAULT '{}',
+    adapter JSONB NOT NULL DEFAULT '{}'::JSONB,
+    workflow JSONB NOT NULL DEFAULT '{}'::JSONB,
+    status TEXT NOT NULL DEFAULT 'enabled'
+        CHECK (status IN ('enabled', 'disabled')),
+    source_file TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (slug, operation)
+);
+
+ALTER TABLE providers
+    ADD COLUMN IF NOT EXISTS adapter JSONB NOT NULL DEFAULT '{}'::JSONB;
+ALTER TABLE providers
+    ADD COLUMN IF NOT EXISTS workflow JSONB NOT NULL DEFAULT '{}'::JSONB;
+
+CREATE INDEX IF NOT EXISTS providers_status_operation_idx
+    ON providers (status, operation);
+CREATE INDEX IF NOT EXISTS providers_currencies_idx
+    ON providers USING GIN (currencies);
+CREATE INDEX IF NOT EXISTS providers_banks_idx
+    ON providers USING GIN (banks);
+
 -- Core transaction record.
 CREATE TABLE IF NOT EXISTS transactions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -231,6 +263,24 @@ CREATE TABLE IF NOT EXISTS banks (
 CREATE UNIQUE INDEX IF NOT EXISTS banks_name_idx ON banks (name);
 CREATE INDEX IF NOT EXISTS banks_status_idx ON banks (status);
 CREATE INDEX IF NOT EXISTS banks_role_idx ON banks (role);
+
+-- Crypto networks exposed by GET /api/networks and used to validate route
+-- requests. The rows themselves live in the catalog data migration.
+CREATE TABLE IF NOT EXISTS crypto_networks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    slug TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    currencies TEXT[] NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'enabled'
+        CHECK (status IN ('enabled', 'disabled')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS crypto_networks_status_idx
+    ON crypto_networks (status, slug);
+CREATE INDEX IF NOT EXISTS crypto_networks_currencies_idx
+    ON crypto_networks USING GIN (currencies);
 
 -- === PLAN2 EX-2: solver-based exchange domain ===
 
@@ -321,6 +371,26 @@ CREATE TABLE IF NOT EXISTS exchange_solvers (
 
 CREATE INDEX IF NOT EXISTS exchange_solvers_status_idx
     ON exchange_solvers (status);
+
+-- Development live-search profiles. Even mock candidates are data returned to
+-- clients, so their catalog is migrated rather than compiled into Rust.
+CREATE TABLE IF NOT EXISTS mock_route_profiles (
+    slug TEXT PRIMARY KEY,
+    asset TEXT NOT NULL,
+    network TEXT NOT NULL,
+    entry_provider TEXT NOT NULL,
+    exit_provider TEXT NOT NULL,
+    entry_delay_ms BIGINT NOT NULL CHECK (entry_delay_ms >= 0),
+    exit_delay_ms BIGINT NOT NULL CHECK (exit_delay_ms >= 0),
+    rate_bps BIGINT NOT NULL,
+    fee_minor BIGINT NOT NULL CHECK (fee_minor >= 0),
+    eta_minutes INTEGER NOT NULL CHECK (eta_minutes > 0),
+    spread_bps INTEGER NOT NULL,
+    risk_score INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'enabled'
+        CHECK (status IN ('enabled', 'disabled')),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
 CREATE TABLE IF NOT EXISTS exchange_quotes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

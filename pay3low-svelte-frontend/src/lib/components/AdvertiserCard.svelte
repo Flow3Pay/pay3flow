@@ -5,15 +5,17 @@
   export let label: string;
   export let serviceLink: ServiceLink | undefined = undefined;
   export let onOpenService: (link: ServiceLink) => void = () => {};
-  const VENUE_NAMES: Record<string, string> = { binance: "Binance", bitget: "Bitget", bybit: "Bybit", okx: "OKX", rapira: "Rapira" };
-  const VENUE_ICONS: Record<string, string> = { binance: venueIcon("binance"), bybit: venueIcon("bybit"), okx: venueIcon("okx"), bitget: venueIcon("bitget"), rapira: venueIcon("rapira") };
+  const VENUE_NAMES: Record<string, string> = { binance: "Binance", bitget: "Bitget", bybit: "Bybit", okx: "OKX", rapira: "Rapira", whitebird: "Whitebird" };
+  const VENUE_ICONS: Record<string, string> = { binance: venueIcon("binance"), bybit: venueIcon("bybit"), okx: venueIcon("okx"), bitget: venueIcon("bitget"), rapira: venueIcon("rapira"), whitebird: venueIcon("whitebird") };
   const venueName = (value?: string) => value ? VENUE_NAMES[value.toLowerCase()] ?? value : "P2P market";
   const percentage = (value?: number | null) => value == null ? "—" : `${(value * 100).toFixed(1)}%`;
   const profileFallback = (value: P2pOffer) => value.source.toLowerCase() === "bybit" && value.advertiser.id ? `https://www.bybit.com/en/p2p/profile/${encodeURIComponent(value.advertiser.id)}/${encodeURIComponent(value.asset)}/${encodeURIComponent(value.fiat)}/item` : null;
   $: venue = offer ? venueName(offer.source) : "";
+  $: directExchange = offer?.advertiser.user_type === "service" || offer?.source.toLowerCase() === "whitebird";
+  $: offerIcon = offer ? VENUE_ICONS[offer.source.toLowerCase()] : undefined;
   $: profileUrl = offer ? offer.advertiser_profile_url ?? profileFallback(offer) : null;
   $: actionUrl = offer ? profileUrl ?? offer.source_url : "";
-  $: actionLabel = offer ? (profileUrl ? `Open ${venue} profile` : `Open ${venue} P2P and find ${offer.advertiser.nickname}`) : "";
+  $: actionLabel = offer ? (directExchange ? `Open ${venue} exchange` : profileUrl ? `Open ${venue} profile` : `Open ${venue} P2P and find ${offer.advertiser.nickname}`) : "";
   function fallbackVenueIcon(event: Event, source: string) {
     const image = event.currentTarget as HTMLImageElement;
     image.onerror = null;
@@ -26,13 +28,20 @@
 {:else}
   <div class="counterparty">
     <div class="counterpartyIdentity">
-      <span class="counterpartyAvatar" aria-hidden="true"><span class="avatarInitial">{offer.advertiser.nickname.trim().charAt(0).toUpperCase() || "?"}</span>{#if VENUE_ICONS[offer.source.toLowerCase()]}<span class="avatarVenue"><img src={VENUE_ICONS[offer.source.toLowerCase()]} alt="" width="16" height="16" loading="lazy" decoding="async" on:error={(event) => fallbackVenueIcon(event, offer?.source ?? "")} /></span>{/if}</span>
-      <div class="counterpartyIdentityCopy"><div class="counterpartyTopline"><span class="counterpartyLabel">{label}</span><span class={profileUrl ? "profileBadge" : "manualBadge"}>{profileUrl ? "User profile" : "Find by nickname"}</span></div><strong class="advertiser">{offer.advertiser.nickname}</strong><span class="venueLine">{venue} · {offer.advertiser.is_merchant ? "Merchant" : "Advertiser"}</span></div>
+      <span class:directExchangeAvatar={directExchange} class="counterpartyAvatar" aria-hidden="true">
+        {#if directExchange && offerIcon}
+          <img class="avatarLogo" src={offerIcon} alt="" width="42" height="42" loading="lazy" decoding="async" on:error={(event) => fallbackVenueIcon(event, offer?.source ?? "")} />
+        {:else}
+          <span class="avatarInitial">{offer.advertiser.nickname.trim().charAt(0).toUpperCase() || "?"}</span>
+          {#if offerIcon}<span class="avatarVenue"><img src={offerIcon} alt="" width="16" height="16" loading="lazy" decoding="async" on:error={(event) => fallbackVenueIcon(event, offer?.source ?? "")} /></span>{/if}
+        {/if}
+      </span>
+      <div class="counterpartyIdentityCopy"><div class="counterpartyTopline"><span class="counterpartyLabel">{label}</span><span class={directExchange || profileUrl ? "profileBadge" : "manualBadge"}>{directExchange ? "Direct exchange" : profileUrl ? "User profile" : "Find by nickname"}</span></div><strong class="advertiser">{offer.advertiser.nickname}</strong><span class="venueLine">{venue} · {directExchange ? "Exchange service" : offer.advertiser.is_merchant ? "Merchant" : "Advertiser"}</span></div>
     </div>
-    <div class="metrics"><span><b>{percentage(offer.advertiser.completion_rate_30d)}</b> completion</span><span><b>{offer.advertiser.completed_orders_30d ?? "—"}</b> orders / 30d</span><span><b>{offer.price} {offer.fiat}</b> rate</span></div>
-    <span class="paymentLine">Payment: {offer.payment_methods.length ? offer.payment_methods.join(", ") : "confirm on venue"}</span>
+    <div class="metrics">{#if !directExchange}<span><b>{percentage(offer.advertiser.completion_rate_30d)}</b> completion</span><span><b>{offer.advertiser.completed_orders_30d ?? "—"}</b> orders / 30d</span>{/if}<span><b>{offer.price} {offer.fiat}</b> rate</span></div>
+    <span class="paymentLine">{directExchange ? "Settlement" : "Payment"}: {offer.payment_methods.length ? offer.payment_methods.join(", ") : "confirm on provider"}</span>
     {#if serviceLink}<button type="button" class="profileLink" on:click={() => onOpenService(serviceLink!)}>{actionLabel} <span>↗</span></button>{:else}<a href={actionUrl} target="_blank" rel="noreferrer noopener" class="profileLink">{actionLabel} <span>↗</span></a>{/if}
-    {#if !profileUrl}<small class="adHint">Match the nickname and ad ID {offer.ad_id} before opening an order.</small>{/if}
+    {#if !directExchange && !profileUrl}<small class="adHint">Match the nickname and ad ID {offer.ad_id} before opening an order.</small>{/if}
   </div>
 {/if}
 
@@ -199,6 +208,20 @@
   font-size: 16px;
   font-weight: 850;
   box-shadow: 0 5px 12px rgba(55, 77, 52, 0.12);
+}
+
+.counterpartyAvatar.directExchangeAvatar {
+  overflow: hidden;
+  border-color: var(--color-border);
+  background: #fff;
+}
+
+.avatarLogo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 4px;
+  object-fit: contain;
 }
 
 .avatarVenue {

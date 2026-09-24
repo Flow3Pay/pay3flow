@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::{Duration, Instant};
@@ -8,17 +9,16 @@ use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use futures::future::join_all;
+use futures::stream::{FuturesUnordered, StreamExt};
 use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc;
 
 use crate::config::Config;
-use crate::p2p::spot::{
-    BinanceSpotSource, BitgetSpotSource, BybitSpotSource, CryptoMarketSource, CryptoTicker,
-    OkxSpotSource,
-};
-use crate::p2p::{
-    binance::BinanceP2pSource, bitget::BitgetP2pSource, bybit::BybitP2pSource, okx::OkxP2pSource,
-    rapira::RapiraP2pSource,
-};
+use crate::db::DbPool;
+use crate::networks::NetworkCatalog;
+use crate::p2p::declarative::{DeclarativeMarketSource, DeclarativeP2pSource};
+use crate::p2p::spot::{CryptoMarketSource, CryptoTicker};
+use crate::p2p::workflow::WorkflowP2pSource;
 
 const DEFAULT_LIMIT: usize = 20;
 const MAX_LIMIT: usize = 100;
@@ -126,6 +126,8 @@ pub struct Advertiser {
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct P2pOffer {
+    #[serde(skip)]
+    pub(crate) market: P2pOfferMarket,
     pub source: String,
     pub ad_id: String,
     pub side: P2pSide,
@@ -144,6 +146,12 @@ pub struct P2pOffer {
     /// True only when the venue URL addresses this exact advertisement.
     /// Public market URLs must not be presented as exact offer links.
     pub source_url_is_exact: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum P2pOfferMarket {
+    P2p,
+    DirectExchange,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -198,14 +206,18 @@ impl P2pOffer {
         if query.merchant_only.unwrap_or(false) && !self.advertiser.is_merchant {
             return false;
         }
-        if query.min_orders.is_some_and(|minimum| {
-            self.advertiser.completed_orders_30d.unwrap_or_default() < minimum
-        }) {
+        if query
+            .min_orders
+            .zip(self.advertiser.completed_orders_30d)
+            .is_some_and(|(minimum, actual)| actual < minimum)
+        {
             return false;
         }
-        if query.min_completion_rate.is_some_and(|minimum| {
-            self.advertiser.completion_rate_30d.unwrap_or_default() < minimum
-        }) {
+        if query
+            .min_completion_rate
+            .zip(self.advertiser.completion_rate_30d)
+            .is_some_and(|(minimum, actual)| actual < minimum)
+        {
             return false;
         }
         if let Some(payment_method) = &query.payment_method {
@@ -250,7 +262,7 @@ pub struct P2pSearchResponse {
 
 #[async_trait]
 pub(crate) trait P2pSource: Send + Sync {
-    fn name(&self) -> &'static str;
+    fn name(&self) -> &str;
     fn timeout(&self, default: Duration) -> Duration {
         default
     }
@@ -266,6 +278,7 @@ pub struct P2pSearchService {
     sources: Arc<[Arc<dyn P2pSource>]>,
     market_sources: Arc<[Arc<dyn CryptoMarketSource>]>,
     pub(crate) default_assets: Arc<[String]>,
+    pub(crate) networks: NetworkCatalog,
 }
 
 #[derive(Clone)]
@@ -275,53 +288,57 @@ struct CachedSearch {
 }
 
 impl P2pSearchService {
-    pub fn from_config(config: &Config) -> Result<Self> {
+    pub fn from_config(config: &Config, networks: NetworkCatalog) -> Result<Self> {
+        Self::from_provider_records(config, networks, Vec::new())
+    }
+
+    pub async fn from_database(
+        config: &Config,
+        networks: NetworkCatalog,
+        pool: &DbPool,
+    ) -> Result<Self> {
+        let records = crate::providers::adapters(pool).await?;
+        Self::from_provider_records(config, networks, records)
+    }
+
+    fn from_provider_records(
+        config: &Config,
+        networks: NetworkCatalog,
+        records: Vec<crate::providers::ProviderAdapterRecord>,
+    ) -> Result<Self> {
+        if records.iter().any(|record| record.workflow.is_some()) {
+            playwright_rs::server::driver::get_driver_executable()
+                .map_err(|error| anyhow::anyhow!("Playwright driver is unavailable: {error}"))?;
+            if let Ok(executable) = std::env::var("PLAYWRIGHT_CHROMIUM_EXECUTABLE") {
+                if !Path::new(&executable).is_file() {
+                    bail!("PLAYWRIGHT_CHROMIUM_EXECUTABLE points to missing file `{executable}`");
+                }
+            }
+        }
         let timeout = Duration::from_millis(config.p2p_search_timeout_ms.clamp(250, 30_000));
-        let okx_timeout = Duration::from_millis(
-            config.p2p_okx_search_timeout_ms.clamp(250, 30_000),
-        );
         let client = reqwest::Client::builder()
-            .timeout(timeout.max(okx_timeout))
+            .timeout(Duration::from_secs(30))
             .user_agent("Pay3Flow-P2P-Search/0.1")
             .build()
             .context("failed to build P2P HTTP client")?;
         let mut sources: Vec<Arc<dyn P2pSource>> = Vec::new();
         let mut market_sources: Vec<Arc<dyn CryptoMarketSource>> = Vec::new();
-        if config.p2p_binance_enabled {
-            sources.push(Arc::new(BinanceP2pSource::new(
-                client.clone(),
-                config.p2p_binance_url.clone(),
-            )));
-            market_sources.push(Arc::new(BinanceSpotSource::new(client.clone())));
+        for record in &records {
+            if let Some(source) = DeclarativeP2pSource::from_record(client.clone(), record) {
+                sources.push(Arc::new(source));
+            }
+            if let Some(source) = DeclarativeMarketSource::from_record(client.clone(), record) {
+                market_sources.push(Arc::new(source));
+            }
+            if let Some(source) = WorkflowP2pSource::from_record(record) {
+                sources.push(Arc::new(source));
+            }
         }
-        if config.p2p_bybit_enabled {
-            sources.push(Arc::new(BybitP2pSource::new(
-                client.clone(),
-                config.p2p_bybit_url.clone(),
-            )));
-            market_sources.push(Arc::new(BybitSpotSource::new(client.clone())));
-        }
-        if config.p2p_okx_enabled {
-            sources.push(Arc::new(OkxP2pSource::new(
-                client.clone(),
-                config.p2p_okx_url.clone(),
-                okx_timeout,
-            )));
-            market_sources.push(Arc::new(OkxSpotSource::new(client.clone())));
-        }
-        if config.p2p_bitget_enabled {
-            sources.push(Arc::new(BitgetP2pSource::new(
-                client.clone(),
-                config.p2p_bitget_url.clone(),
-            )));
-            market_sources.push(Arc::new(BitgetSpotSource::new(client.clone())));
-        }
-        if config.p2p_rapira_enabled {
-            sources.push(Arc::new(RapiraP2pSource::new(
-                client.clone(),
-                config.p2p_rapira_url.clone(),
-            )));
-        }
+        let default_assets = if config.p2p_search_assets.is_empty() {
+            networks.assets()
+        } else {
+            config.p2p_search_assets.clone()
+        };
         Ok(Self {
             enabled: config.p2p_search_enabled,
             timeout,
@@ -329,7 +346,8 @@ impl P2pSearchService {
             cache: Arc::new(RwLock::new(HashMap::new())),
             sources: sources.into(),
             market_sources: market_sources.into(),
-            default_assets: config.p2p_search_assets.clone().into(),
+            default_assets: default_assets.into(),
+            networks,
         })
     }
 
@@ -369,6 +387,7 @@ impl P2pSearchService {
                 "SUI".into(),
             ]
             .into(),
+            networks: NetworkCatalog::test_default(),
         }
     }
 
@@ -378,7 +397,39 @@ impl P2pSearchService {
         self
     }
 
+    pub fn searchable_sources(&self) -> HashSet<String> {
+        if !self.enabled {
+            return HashSet::new();
+        }
+
+        self.sources
+            .iter()
+            .map(|source| source.name().to_string())
+            .chain(
+                self.market_sources
+                    .iter()
+                    .map(|source| source.name().to_string()),
+            )
+            .collect()
+    }
+
     pub async fn search(&self, query: P2pSearchQuery) -> Result<P2pSearchResponse> {
+        self.run_search(query, None).await
+    }
+
+    pub(crate) async fn stream_search(
+        &self,
+        query: P2pSearchQuery,
+        updates: mpsc::Sender<P2pSearchResponse>,
+    ) -> Result<P2pSearchResponse> {
+        self.run_search(query, Some(updates)).await
+    }
+
+    async fn run_search(
+        &self,
+        query: P2pSearchQuery,
+        updates: Option<mpsc::Sender<P2pSearchResponse>>,
+    ) -> Result<P2pSearchResponse> {
         if !self.enabled {
             bail!("P2P search is disabled");
         }
@@ -386,6 +437,9 @@ impl P2pSearchService {
         let cache_key = serde_json::to_string(&query).context("failed to build P2P cache key")?;
         if let Some(mut response) = self.cached(&cache_key) {
             response.cached = true;
+            if let Some(updates) = updates {
+                let _ = updates.send(response.clone()).await;
+            }
             return Ok(response);
         }
         let selected_sources =
@@ -396,73 +450,72 @@ impl P2pSearchService {
                         requested.split(',').any(|name| name == source.name())
                     })
                 })
+                .cloned()
                 .collect::<Vec<_>>();
-        if selected_sources.is_empty() {
-            bail!("none of the requested P2P sources are enabled");
+        let mut searches = selected_sources
+            .into_iter()
+            .map(|source| {
+                let query = query.clone();
+                async move {
+                    let started = Instant::now();
+                    let timeout = source.timeout(self.timeout);
+                    let result = tokio::time::timeout(timeout, source.search(&query)).await;
+                    let elapsed = started.elapsed().as_millis();
+                    match result {
+                        Ok(Ok(offers)) => {
+                            let count = offers.len();
+                            (
+                                offers,
+                                SourceStatus {
+                                    source: source.name().to_string(),
+                                    ok: true,
+                                    latency_ms: elapsed,
+                                    offers_found: count,
+                                    error: None,
+                                },
+                            )
+                        }
+                        Ok(Err(error)) => (
+                            Vec::new(),
+                            SourceStatus {
+                                source: source.name().to_string(),
+                                ok: false,
+                                latency_ms: elapsed,
+                                offers_found: 0,
+                                error: Some(error.to_string()),
+                            },
+                        ),
+                        Err(_) => (
+                            Vec::new(),
+                            SourceStatus {
+                                source: source.name().to_string(),
+                                ok: false,
+                                latency_ms: elapsed,
+                                offers_found: 0,
+                                error: Some(format!(
+                                    "source timed out after {} ms",
+                                    timeout.as_millis()
+                                )),
+                            },
+                        ),
+                    }
+                }
+            })
+            .collect::<FuturesUnordered<_>>();
+
+        let mut collected_offers = Vec::new();
+        let mut sources = Vec::new();
+        while let Some((offers, status)) = searches.next().await {
+            collected_offers.extend(offers);
+            sources.push(status);
+            if let Some(updates) = &updates {
+                let response =
+                    build_search_response(query.clone(), &collected_offers, sources.clone(), false);
+                let _ = updates.send(response).await;
+            }
         }
 
-        let searches = selected_sources.into_iter().map(|source| async {
-            let started = Instant::now();
-            let timeout = source.timeout(self.timeout);
-            let result = tokio::time::timeout(timeout, source.search(&query)).await;
-            let elapsed = started.elapsed().as_millis();
-            match result {
-                Ok(Ok(offers)) => {
-                    let count = offers.len();
-                    (
-                        offers,
-                        SourceStatus {
-                            source: source.name().to_string(),
-                            ok: true,
-                            latency_ms: elapsed,
-                            offers_found: count,
-                            error: None,
-                        },
-                    )
-                }
-                Ok(Err(error)) => (
-                    Vec::new(),
-                    SourceStatus {
-                        source: source.name().to_string(),
-                        ok: false,
-                        latency_ms: elapsed,
-                        offers_found: 0,
-                        error: Some(error.to_string()),
-                    },
-                ),
-                Err(_) => (
-                    Vec::new(),
-                    SourceStatus {
-                        source: source.name().to_string(),
-                        ok: false,
-                        latency_ms: elapsed,
-                        offers_found: 0,
-                        error: Some(format!(
-                            "source timed out after {} ms",
-                            timeout.as_millis()
-                        )),
-                    },
-                ),
-            }
-        });
-
-        let results = join_all(searches).await;
-        let mut offers = results
-            .iter()
-            .flat_map(|(offers, _)| offers.iter().cloned())
-            .filter(|offer| offer.matches(&query))
-            .collect::<Vec<_>>();
-        sort_offers(&mut offers, query.side);
-        offers.truncate(query.limit.unwrap_or(DEFAULT_LIMIT));
-        let sources = results.into_iter().map(|(_, status)| status).collect();
-
-        let response = P2pSearchResponse {
-            query,
-            searched_at: Utc::now(),
-            cached: false,
-            offers,
-            sources,
-        };
+        let response = build_search_response(query, &collected_offers, sources, false);
         if response.sources.iter().any(|source| source.ok) {
             self.cache_response(cache_key, response.clone());
         }
@@ -509,7 +562,7 @@ impl P2pSearchService {
 
         join_all(selected_sources.into_iter().map(|source| async move {
             let name = source.name().to_string();
-            let result = tokio::time::timeout(self.timeout, source.tickers())
+            let result = tokio::time::timeout(source.timeout(self.timeout), source.tickers())
                 .await
                 .map_err(|_| anyhow::anyhow!("{} spot ticker request timed out", name))
                 .and_then(|result| result);
@@ -517,6 +570,91 @@ impl P2pSearchService {
         }))
         .await
     }
+
+    pub(crate) async fn stream_market_tickers(
+        &self,
+        requested_sources: Option<&str>,
+        updates: mpsc::Sender<(String, Result<Vec<CryptoTicker>>)>,
+    ) {
+        let mut searches = self
+            .market_sources
+            .iter()
+            .filter(|source| {
+                requested_sources
+                    .is_none_or(|requested| requested.split(',').any(|name| name == source.name()))
+            })
+            .cloned()
+            .map(|source| async move {
+                let name = source.name().to_string();
+                let result = tokio::time::timeout(source.timeout(self.timeout), source.tickers())
+                    .await
+                    .map_err(|_| anyhow::anyhow!("{} spot ticker request timed out", name))
+                    .and_then(|result| result);
+                (name, result)
+            })
+            .collect::<FuturesUnordered<_>>();
+
+        while let Some(result) = searches.next().await {
+            if updates.send(result).await.is_err() {
+                return;
+            }
+        }
+    }
+}
+
+fn build_search_response(
+    query: P2pSearchQuery,
+    collected_offers: &[P2pOffer],
+    sources: Vec<SourceStatus>,
+    cached: bool,
+) -> P2pSearchResponse {
+    let mut offers = collected_offers
+        .iter()
+        .filter(|offer| offer.matches(&query))
+        .cloned()
+        .collect::<Vec<_>>();
+    sort_offers(&mut offers, query.side);
+    truncate_offers_preserving_sources(&mut offers, query.limit.unwrap_or(DEFAULT_LIMIT));
+    P2pSearchResponse {
+        query,
+        searched_at: Utc::now(),
+        cached,
+        offers,
+        sources,
+    }
+}
+
+fn truncate_offers_preserving_sources(offers: &mut Vec<P2pOffer>, limit: usize) {
+    if offers.len() <= limit {
+        return;
+    }
+
+    let reserved_indices = {
+        let mut represented_sources = HashSet::new();
+        offers
+            .iter()
+            .enumerate()
+            .filter_map(|(index, offer)| {
+                represented_sources
+                    .insert(offer.source.as_str())
+                    .then_some(index)
+            })
+            .take(limit)
+            .collect::<HashSet<_>>()
+    };
+    let mut remaining = limit.saturating_sub(reserved_indices.len());
+    let mut index = 0;
+    offers.retain(|_| {
+        let reserved = reserved_indices.contains(&index);
+        index += 1;
+        reserved
+            || if remaining > 0 {
+                remaining -= 1;
+                true
+            } else {
+                false
+            }
+    });
 }
 
 fn sort_offers(offers: &mut [P2pOffer], side: P2pSide) {
@@ -564,7 +702,7 @@ mod tests {
 
     #[async_trait]
     impl P2pSource for StubSource {
-        fn name(&self) -> &'static str {
+        fn name(&self) -> &str {
             self.name
         }
 
@@ -576,6 +714,7 @@ mod tests {
 
     fn offer(source: &str, price: &str, min: &str, max: &str, orders: u64) -> P2pOffer {
         P2pOffer {
+            market: P2pOfferMarket::P2p,
             source: source.into(),
             ad_id: format!("{source}-{price}"),
             side: P2pSide::BuyCrypto,
@@ -601,6 +740,85 @@ mod tests {
             source_url: "https://example.test".into(),
             source_url_is_exact: false,
         }
+    }
+
+    #[test]
+    fn reputation_filters_keep_offers_when_metrics_are_not_published() {
+        let query = P2pSearchQuery {
+            fiat: "RUB".into(),
+            asset: "USDC".into(),
+            side: P2pSide::SellCrypto,
+            amount: Some(100.0),
+            payment_method: Some("Sberbank".into()),
+            merchant_only: None,
+            min_orders: Some(20),
+            min_completion_rate: Some(0.9),
+            limit: Some(10),
+            sources: Some("whitebird".into()),
+        };
+        let mut direct_exchange = offer("whitebird", "84.7", "1", "100000", 100);
+        direct_exchange.side = P2pSide::SellCrypto;
+        direct_exchange.fiat = "RUB".into();
+        direct_exchange.asset = "USDC".into();
+        direct_exchange.payment_methods.clear();
+        direct_exchange.advertiser.completed_orders_30d = None;
+        direct_exchange.advertiser.completion_rate_30d = None;
+
+        assert!(direct_exchange.matches(&query));
+
+        direct_exchange.advertiser.completed_orders_30d = Some(19);
+        assert!(!direct_exchange.matches(&query));
+
+        direct_exchange.advertiser.completed_orders_30d = None;
+        direct_exchange.advertiser.completion_rate_30d = Some(0.89);
+        assert!(!direct_exchange.matches(&query));
+    }
+
+    #[test]
+    fn global_limit_keeps_the_best_offer_from_each_source() {
+        let query = P2pSearchQuery {
+            fiat: "RUB".into(),
+            asset: "USDC".into(),
+            side: P2pSide::SellCrypto,
+            amount: None,
+            payment_method: None,
+            merchant_only: None,
+            min_orders: None,
+            min_completion_rate: None,
+            limit: Some(60),
+            sources: Some("bybit,whitebird".into()),
+        };
+        let mut offers = (0..60)
+            .map(|index| {
+                let mut offer = offer(
+                    "bybit",
+                    &format!("{}", 90.0 - f64::from(index) / 100.0),
+                    "1",
+                    "100000",
+                    100,
+                );
+                offer.side = P2pSide::SellCrypto;
+                offer.fiat = "RUB".into();
+                offer.asset = "USDC".into();
+                offer
+            })
+            .collect::<Vec<_>>();
+        let mut whitebird = offer("whitebird", "84.7", "1", "100000", 0);
+        whitebird.side = P2pSide::SellCrypto;
+        whitebird.fiat = "RUB".into();
+        whitebird.asset = "USDC".into();
+        whitebird.payment_methods.clear();
+        whitebird.advertiser.completed_orders_30d = None;
+        whitebird.advertiser.completion_rate_30d = None;
+        offers.push(whitebird);
+
+        let response = build_search_response(query, &offers, Vec::new(), false);
+
+        assert_eq!(response.offers.len(), 60);
+        assert!(response
+            .offers
+            .iter()
+            .any(|offer| offer.source == "whitebird"));
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -724,6 +942,62 @@ mod tests {
         assert_eq!(response.sources[0].source, "two");
         assert_eq!(response.offers.len(), 1);
         assert_eq!(response.offers[0].source, "two");
+    }
+
+    #[tokio::test]
+    async fn unavailable_requested_source_returns_an_empty_result() {
+        let service = P2pSearchService::with_sources(
+            vec![Arc::new(StubSource {
+                name: "one",
+                offers: vec![offer("one", "362", "1", "100000", 20)],
+                delay: Duration::ZERO,
+            })],
+            Duration::from_secs(1),
+        );
+
+        let response = service
+            .search(P2pSearchQuery {
+                fiat: "AMD".into(),
+                asset: "USDT".into(),
+                side: P2pSide::BuyCrypto,
+                amount: None,
+                payment_method: None,
+                merchant_only: None,
+                min_orders: None,
+                min_completion_rate: None,
+                limit: None,
+                sources: Some("whitebird".into()),
+            })
+            .await
+            .expect("an unavailable catalog source must not fail the whole route search");
+
+        assert!(response.offers.is_empty());
+        assert!(response.sources.is_empty());
+    }
+
+    #[test]
+    fn reports_only_configured_search_sources() {
+        let service = P2pSearchService::with_sources(
+            vec![
+                Arc::new(StubSource {
+                    name: "one",
+                    offers: Vec::new(),
+                    delay: Duration::ZERO,
+                }),
+                Arc::new(StubSource {
+                    name: "two",
+                    offers: Vec::new(),
+                    delay: Duration::ZERO,
+                }),
+            ],
+            Duration::from_secs(1),
+        );
+
+        assert_eq!(
+            service.searchable_sources(),
+            HashSet::from(["one".to_string(), "two".to_string()])
+        );
+        assert!(!service.searchable_sources().contains("whitebird"));
     }
 
     #[tokio::test]

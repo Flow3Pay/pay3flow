@@ -1,0 +1,79 @@
+[sell]
+source_url = "https://www.bybit.com"
+name = "Bybit Sell"
+currency = ["usd", "rub", "eur", "amd"]
+banks = []
+
+[buy]
+source_url = "https://www.bybit.com"
+name = "Bybit Buy"
+currency = ["usd", "rub", "eur", "amd"]
+banks = []
+
+[adapter.p2p]
+kind = "http_json"
+endpoint = "https://api2.bybit.com/fiat/otc/item/online"
+method = "POST"
+headers = { Origin = "https://www.bybit.com", Referer = "https://www.bybit.com/" }
+timeout_ms = 4000
+supported_assets = ["USDT", "USDC", "BTC", "ETH"]
+
+[adapter.p2p.buy]
+request_json = '''{"userId":"","tokenId":"{{asset}}","currencyId":"{{fiat}}","payment":[],"side":"1","size":"{{limit}}","page":"1","amount":"{{amount}}","authMaker":false,"canTrade":false}'''
+items_pointer = "/result/items"
+success_pointer = "/ret_code"
+success_value = "0"
+error_pointer = "/ret_msg"
+
+[adapter.p2p.sell]
+request_json = '''{"userId":"","tokenId":"{{asset}}","currencyId":"{{fiat}}","payment":[],"side":"0","size":"{{limit}}","page":"1","amount":"{{amount}}","authMaker":false,"canTrade":false}'''
+items_pointer = "/result/items"
+success_pointer = "/ret_code"
+success_value = "0"
+error_pointer = "/ret_msg"
+
+[adapter.p2p.offer]
+ad_id_pointer = "/id"
+fiat_pointer = "/currencyId"
+asset_pointer = "/tokenId"
+price_pointer = "/price"
+available_asset_pointer = "/quantity"
+min_fiat_pointer = "/minAmount"
+max_fiat_pointer = "/maxAmount"
+payment_methods_pointer = "/payments"
+pay_time_limit_pointer = "/paymentPeriod"
+advertiser_id_pointer = "/userMaskId"
+advertiser_nickname_pointer = "/nickName"
+advertiser_user_type_pointer = "/userType"
+completed_orders_pointer = "/recentOrderNum"
+completion_rate_pointer = "/recentExecuteRate"
+source_url_template = "https://www.bybit.com/fiat/trade/otc/?token={{asset}}&fiat={{fiat}}"
+advertiser_profile_url_template = "https://www.bybit.com/en/p2p/profile/{{item:/userMaskId}}/{{asset}}/{{fiat}}/item"
+
+[[adapter.p2p.offer.merchant_conditions]]
+pointer = "/authTag"
+operator = "non_empty"
+
+[[adapter.p2p.offer.merchant_conditions]]
+pointer = "/userType"
+operator = "not_equals_ci"
+value = "personal"
+
+[[adapter.p2p.offer.verified_conditions]]
+pointer = "/authStatus"
+operator = "equals"
+value = "1"
+
+[adapter.market]
+kind = "http_json"
+endpoint = "https://api.bybit.com/v5/market/tickers"
+method = "GET"
+query = { category = "spot" }
+timeout_ms = 4000
+items_pointer = "/result/list"
+symbol_pointer = "/symbol"
+bid_pointer = "/bid1Price"
+ask_pointer = "/ask1Price"
+success_pointer = "/retCode"
+success_value = "0"
+error_pointer = "/retMsg"

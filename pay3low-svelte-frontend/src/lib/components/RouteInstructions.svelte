@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import type { RouteCandidate, ServiceLink, ServiceStats, ServiceVote } from "$lib/exchange";
+  import { dislikeIcon, likeIcon } from "$lib/icons";
   import AdvertiserCard from "./AdvertiserCard.svelte";
 
   export let route: RouteCandidate;
@@ -12,8 +13,9 @@
   let dragging = false;
   let dragStartY = 0;
   let dragDistance = 0;
-  const VENUE_NAMES: Record<string, string> = { binance: "Binance", bitget: "Bitget", bybit: "Bybit", okx: "OKX", rapira: "Rapira" };
+  const VENUE_NAMES: Record<string, string> = { binance: "Binance", bitget: "Bitget", bybit: "Bybit", okx: "OKX", rapira: "Rapira", whitebird: "Whitebird" };
   const venueName = (value?: string) => value ? VENUE_NAMES[value.toLowerCase()] ?? value : "P2P market";
+  const isDirectOffer = (offer?: RouteCandidate["entry_offer_snapshot"]) => offer?.advertiser.user_type === "service" || offer?.source.toLowerCase() === "whitebird";
   const money = (minor?: number, currency?: string) => minor == null ? "—" : `${(minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })} ${currency ?? ""}`;
   const marketRate = (value: string) => Number.isFinite(Number(value)) ? Number(value).toLocaleString("en-US", { maximumFractionDigits: 12, useGrouping: false }) : value;
   const compact = (value: number) => Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(value);
@@ -75,6 +77,8 @@
   $: exit = route.legs.find((leg) => leg.kind === "exit");
   $: entryVenue = venueName(entry?.provider);
   $: exitVenue = venueName(exit?.provider);
+  $: entryDirect = isDirectOffer(route.entry_offer_snapshot);
+  $: exitDirect = isDirectOffer(route.exit_offer_snapshot);
   $: crossVenue = Boolean(entry && exit && entry.provider !== exit.provider);
   $: cryptoToCrypto = route.route_kind === "crypto_to_crypto";
   $: transferNetwork = route.entry_network && route.entry_network.toLowerCase() !== "internal" ? route.entry_network : null;
@@ -121,13 +125,22 @@
       {#if route.entry_offer_snapshot}
         <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">1</span><div class="stepBody">
           <h3>{cryptoToCrypto ? `Sell ${route.source_currency} for ${route.bridge_currency ?? route.entry_asset}` : `Buy ${route.entry_asset} for ${money(route.source_amount_minor, route.source_currency)}`}</h3>
-          <p class="stepSummary">{cryptoToCrypto ? `Open the buyer's profile on ${entryVenue} and create the first P2P order.` : `Open the seller's profile on ${entryVenue}, create the P2P order, and pay with the selected payment method.`}</p>
-          <ul class="checklist">
-            <li>Match the advertiser nickname and ad ID before creating the order.</li>
-            <li>Confirm the live rate, order limits, and payment method on {entryVenue}.</li>
-            <li>{cryptoToCrypto ? "Release the asset only after you have independently confirmed receipt of the payment." : "Use only the payment details shown inside the order, then mark it paid after sending the transfer."}</li>
-          </ul>
-          <AdvertiserCard offer={route.entry_offer_snapshot} label={`${cryptoToCrypto ? "Buyer" : "Seller"} on ${entryVenue}`} serviceLink={linkFor("entry")} {onOpenService} />
+          {#if entryDirect}
+            <p class="stepSummary">Open the direct exchange on {entryVenue}, review the live quote, and complete the conversion in the provider flow.</p>
+            <ul class="checklist">
+              <li>Confirm the currencies, amount, live rate, fees, and limits before continuing.</li>
+              <li>Complete any login or verification required by {entryVenue} and follow its payment instructions.</li>
+              <li>Confirm the converted balance is available before continuing to the next step.</li>
+            </ul>
+          {:else}
+            <p class="stepSummary">{cryptoToCrypto ? `Open the buyer's profile on ${entryVenue} and create the first P2P order.` : `Open the seller's profile on ${entryVenue}, create the P2P order, and pay with the selected payment method.`}</p>
+            <ul class="checklist">
+              <li>Match the advertiser nickname and ad ID before creating the order.</li>
+              <li>Confirm the live rate, order limits, and payment method on {entryVenue}.</li>
+              <li>{cryptoToCrypto ? "Release the asset only after you have independently confirmed receipt of the payment." : "Use only the payment details shown inside the order, then mark it paid after sending the transfer."}</li>
+            </ul>
+          {/if}
+          <AdvertiserCard offer={route.entry_offer_snapshot} label={entryDirect ? `Direct exchange on ${entryVenue}` : `${cryptoToCrypto ? "Buyer" : "Seller"} on ${entryVenue}`} serviceLink={linkFor("entry")} {onOpenService} />
         </div></li>
       {/if}
       {#if crossVenue}
@@ -144,18 +157,27 @@
       {#if route.exit_offer_snapshot}
         <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">{exitStepNumber}</span><div class="stepBody">
           <h3>{cryptoToCrypto ? `Buy ${route.target_currency} with ${route.bridge_currency ?? route.entry_asset}` : `Sell ${route.entry_asset} for ${money(route.target_amount_minor, route.target_currency)}`}</h3>
-          <p class="stepSummary">{cryptoToCrypto ? `Open the seller's profile on ${exitVenue} and create the destination-asset order.` : `Open the buyer's profile on ${exitVenue} and create the sell order using the selected recipient payment method.`}</p>
-          <ul class="checklist">
-            <li>Match the advertiser nickname and ad ID before creating the order.</li>
-            <li>Confirm the live rate, order limits, {cryptoToCrypto ? "asset network" : "recipient payment method"}, and expected amount.</li>
-            <li>{cryptoToCrypto ? `Confirm the ${route.target_currency} balance and network before withdrawing.` : "Release the asset only after you have independently confirmed the payment in your bank or payment account."}</li>
-          </ul>
-          <AdvertiserCard offer={route.exit_offer_snapshot} label={`${cryptoToCrypto ? "Seller" : "Buyer"} on ${exitVenue}`} serviceLink={linkFor("exit")} {onOpenService} />
+          {#if exitDirect}
+            <p class="stepSummary">Open the direct exchange on {exitVenue}, review the live quote, and complete the conversion in the provider flow.</p>
+            <ul class="checklist">
+              <li>Confirm the currencies, amount, live rate, fees, and limits before continuing.</li>
+              <li>Complete any login or verification required by {exitVenue} and follow its transfer instructions.</li>
+              <li>Confirm the payout reached your destination account before considering the exchange complete.</li>
+            </ul>
+          {:else}
+            <p class="stepSummary">{cryptoToCrypto ? `Open the seller's profile on ${exitVenue} and create the destination-asset order.` : `Open the buyer's profile on ${exitVenue} and create the sell order using the selected recipient payment method.`}</p>
+            <ul class="checklist">
+              <li>Match the advertiser nickname and ad ID before creating the order.</li>
+              <li>Confirm the live rate, order limits, {cryptoToCrypto ? "asset network" : "recipient payment method"}, and expected amount.</li>
+              <li>{cryptoToCrypto ? `Confirm the ${route.target_currency} balance and network before withdrawing.` : "Release the asset only after you have independently confirmed the payment in your bank or payment account."}</li>
+            </ul>
+          {/if}
+          <AdvertiserCard offer={route.exit_offer_snapshot} label={exitDirect ? `Direct exchange on ${exitVenue}` : `${cryptoToCrypto ? "Seller" : "Buyer"} on ${exitVenue}`} serviceLink={linkFor("exit")} {onOpenService} />
         </div></li>
       {/if}
     </ol>
-    {#if route.services?.length}<section class="serviceReputation" aria-label="Service reputation">{#each route.services as service (service.id)}<article><strong>{service.display_name}</strong><div class="serviceMetrics"><span>Used {compact(service.executions_total)} times</span><span>👍 {compact(service.likes_total)}</span><span>👎 {compact(service.dislikes_total)}</span></div>{#if usedServiceIds.includes(service.id) || service.viewer_vote}<div class="votePrompt"><span>Was this service useful?</span><div><button type="button" class:active={service.viewer_vote === "like"} aria-pressed={service.viewer_vote === "like"} on:click={() => chooseVote(service, "like")}>👍 Like</button><button type="button" class:active={service.viewer_vote === "dislike"} aria-pressed={service.viewer_vote === "dislike"} on:click={() => chooseVote(service, "dislike")}>👎 Dislike</button></div></div>{/if}</article>{/each}</section>{/if}
-    <div class="warning"><strong>Important</strong><span>Rates, limits and ads can change. Confirm the user, payment details and network on the exchange before sending money. Pay3Flow never creates the order or moves funds.</span>{#each route.warnings ?? [] as warning}<span>{warning}</span>{/each}</div>
+    {#if route.services?.length}<section class="serviceReputation" aria-label="Service reputation">{#each route.services as service (service.id)}<article><strong>{service.display_name}</strong><div class="serviceMetrics"><span>Used {compact(service.executions_total)} times</span><span class="reputationMetric" aria-label={`${compact(service.likes_total)} likes`}><img src={likeIcon} alt="" aria-hidden="true" />{compact(service.likes_total)}</span><span class="reputationMetric" aria-label={`${compact(service.dislikes_total)} dislikes`}><img src={dislikeIcon} alt="" aria-hidden="true" />{compact(service.dislikes_total)}</span></div>{#if usedServiceIds.includes(service.id) || service.viewer_vote}<div class="votePrompt"><span>Was this service useful?</span><div><button type="button" class:active={service.viewer_vote === "like"} aria-pressed={service.viewer_vote === "like"} on:click={() => chooseVote(service, "like")}><img src={likeIcon} alt="" aria-hidden="true" />Like</button><button type="button" class:active={service.viewer_vote === "dislike"} aria-pressed={service.viewer_vote === "dislike"} on:click={() => chooseVote(service, "dislike")}><img src={dislikeIcon} alt="" aria-hidden="true" />Dislike</button></div></div>{/if}</article>{/each}</section>{/if}
+    <div class="warning"><strong>Important</strong><span>Rates, limits and offers can change. Confirm the provider or counterparty, payment details, and network before sending money. Pay3Flow never creates the order or moves funds.</span>{#each route.warnings ?? [] as warning}<span>{warning}</span>{/each}</div>
   </div>
 </div>
 
@@ -525,6 +547,18 @@
   font-size: 10px;
 }
 
+.reputationMetric {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.reputationMetric img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
 .votePrompt {
   margin-top: 12px;
   padding-top: 12px;
@@ -540,12 +574,21 @@
 }
 
 .votePrompt button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   padding: 7px 10px;
   border: 1px solid var(--color-border);
   border-radius: 10px;
   background: #fff;
   color: var(--color-text-soft);
   font-size: 10px;
+}
+
+.votePrompt button img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
 }
 
 .votePrompt button.active {

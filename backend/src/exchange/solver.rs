@@ -7,10 +7,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::time::sleep;
 
-use crate::exchange::model::{
-    ExchangeOrder, ExchangeSolver, Minor, NewExchangeQuote, NewExchangeSolver,
-};
-use crate::exchange::status::{OrderStatus, QuoteStatus, SolverStatus};
+use crate::exchange::model::{ExchangeOrder, ExchangeSolver, Minor, NewExchangeQuote};
+use crate::exchange::status::{OrderStatus, QuoteStatus};
 
 pub const FAST_LOW_LIMIT_SLUG: &str = "fast-low-limit";
 pub const SLOW_BETTER_RATE_SLUG: &str = "slow-better-rate";
@@ -30,65 +28,24 @@ impl Default for FakeSolverBehavior {
     }
 }
 
+#[derive(Debug, Deserialize)]
+struct FakeFeeModel {
+    #[serde(rename = "type")]
+    model_type: String,
+    rate_bps: i64,
+    fee_minor: Minor,
+    eta_minutes: i32,
+}
+
 #[derive(Debug, Clone)]
-pub struct FakeSolver {
-    pub slug: &'static str,
-    pub display_name: &'static str,
-    pub rate_bps: i64,
-    pub fee_minor: Minor,
-    pub eta_minutes: i32,
-    pub min_amount_minor: Option<Minor>,
-    pub max_amount_minor: Option<Minor>,
-    pub risk_score: i32,
-}
-
-impl FakeSolver {
-    pub fn as_new_solver(&self) -> NewExchangeSolver {
-        NewExchangeSolver {
-            slug: self.slug.to_string(),
-            actor_id: Some(format!("https://pay3flow.local/solvers/{}", self.slug)),
-            handle: Some(self.slug.to_string()),
-            display_name: self.display_name.to_string(),
-            status: SolverStatus::Active,
-            countries: json!(["AM", "RU"]),
-            currencies: json!(["AMD", "RUB"]),
-            rails: json!(["card", "bank", "bank_card", "wallet"]),
-            min_amount_minor: self.min_amount_minor,
-            max_amount_minor: self.max_amount_minor,
-            fee_model: json!({
-                "type": "fake_solver",
-                "rate_bps": self.rate_bps,
-                "fee_minor": self.fee_minor,
-                "eta_minutes": self.eta_minutes,
-            }),
-            risk_score: self.risk_score,
-        }
-    }
-}
-
-pub fn fake_solvers() -> Vec<FakeSolver> {
-    vec![
-        FakeSolver {
-            slug: FAST_LOW_LIMIT_SLUG,
-            display_name: "Fast Low Limit",
-            rate_bps: 2_000,
-            fee_minor: 300,
-            eta_minutes: 5,
-            min_amount_minor: Some(1_000),
-            max_amount_minor: Some(10_000_000),
-            risk_score: 15,
-        },
-        FakeSolver {
-            slug: SLOW_BETTER_RATE_SLUG,
-            display_name: "Slow Better Rate",
-            rate_bps: 2_150,
-            fee_minor: 150,
-            eta_minutes: 45,
-            min_amount_minor: Some(1_000),
-            max_amount_minor: Some(100_000_000),
-            risk_score: 25,
-        },
-    ]
+struct FakeSolverProfile {
+    slug: String,
+    rate_bps: i64,
+    fee_minor: Minor,
+    eta_minutes: i32,
+    min_amount_minor: Option<Minor>,
+    max_amount_minor: Option<Minor>,
+    risk_score: i32,
 }
 
 #[derive(Debug, Clone)]
@@ -132,10 +89,23 @@ impl Default for MockRouteQuoteSource {
 }
 
 impl MockRouteQuoteSource {
-    fn profile_for(&self, slug: &str) -> Option<FakeSolver> {
-        fake_solvers()
-            .into_iter()
-            .find(|solver| solver.slug == slug)
+    fn profile_for(&self, solver: &ExchangeSolver) -> Result<FakeSolverProfile> {
+        let fee_model: FakeFeeModel = serde_json::from_value(solver.fee_model.clone())?;
+        if fee_model.model_type != "fake_solver" {
+            bail!(
+                "solver {} is not backed by the mock quote source",
+                solver.slug
+            );
+        }
+        Ok(FakeSolverProfile {
+            slug: solver.slug.clone(),
+            rate_bps: fee_model.rate_bps,
+            fee_minor: fee_model.fee_minor,
+            eta_minutes: fee_model.eta_minutes,
+            min_amount_minor: solver.min_amount_minor,
+            max_amount_minor: solver.max_amount_minor,
+            risk_score: solver.risk_score,
+        })
     }
 }
 
@@ -164,10 +134,13 @@ impl RouteQuoteSource for MockRouteQuoteSource {
                 }
             }
             FakeSolverBehavior::Success => {
-                let Some(profile) = self.profile_for(&request.solver.slug) else {
-                    return RouteQuoteOutcome::Rejected {
-                        reason: format!("unknown fake solver: {}", request.solver.slug),
-                    };
+                let profile = match self.profile_for(&request.solver) {
+                    Ok(profile) => profile,
+                    Err(error) => {
+                        return RouteQuoteOutcome::Rejected {
+                            reason: error.to_string(),
+                        }
+                    }
                 };
                 match build_quote(&request.order, &request.solver, &profile, Utc::now()) {
                     Ok(quote) => RouteQuoteOutcome::Success { quote },
@@ -224,7 +197,7 @@ pub fn validate_quote(
 fn build_quote(
     order: &ExchangeOrder,
     solver: &ExchangeSolver,
-    profile: &FakeSolver,
+    profile: &FakeSolverProfile,
     now: DateTime<Utc>,
 ) -> Result<NewExchangeQuote> {
     if let Some(min) = profile.min_amount_minor {
@@ -267,7 +240,11 @@ fn build_quote(
     Ok(quote)
 }
 
-fn settlement_plan(order: &ExchangeOrder, solver: &ExchangeSolver, profile: &FakeSolver) -> Value {
+fn settlement_plan(
+    order: &ExchangeOrder,
+    solver: &ExchangeSolver,
+    profile: &FakeSolverProfile,
+) -> Value {
     json!({
         "type": "fake_solver_route",
         "solver_slug": &solver.slug,
@@ -294,7 +271,7 @@ fn settlement_plan(order: &ExchangeOrder, solver: &ExchangeSolver, profile: &Fak
 mod tests {
     use super::*;
     use crate::exchange::model::ExchangeSolver;
-    use crate::exchange::status::FundingInstructionStatus;
+    use crate::exchange::status::{FundingInstructionStatus, SolverStatus};
     use uuid::Uuid;
 
     fn order(status: OrderStatus) -> ExchangeOrder {
@@ -338,7 +315,12 @@ mod tests {
             rails: json!(["card", "bank_card"]),
             min_amount_minor: Some(1_000),
             max_amount_minor: Some(10_000_000),
-            fee_model: json!({}),
+            fee_model: json!({
+                "type": "fake_solver",
+                "rate_bps": 2_000,
+                "fee_minor": 300,
+                "eta_minutes": 5,
+            }),
             risk_score: 15,
             last_seen_at: None,
             created_at: Utc::now(),
@@ -398,10 +380,9 @@ mod tests {
         let now = Utc::now();
         let order = order(OrderStatus::Quoting);
         let active_solver = solver(SolverStatus::Active, FAST_LOW_LIMIT_SLUG);
-        let profile = fake_solvers()
-            .into_iter()
-            .find(|solver| solver.slug == FAST_LOW_LIMIT_SLUG)
-            .expect("fast solver exists");
+        let profile = MockRouteQuoteSource::default()
+            .profile_for(&active_solver)
+            .expect("database fee model is valid");
         let mut quote = build_quote(&order, &active_solver, &profile, now).expect("valid quote");
 
         quote.expires_at = now;

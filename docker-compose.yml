@@ -59,16 +59,7 @@ services:
       PAIRS_CACHE_TTL_SECS: "300"
       P2P_SEARCH_ENABLED: "true"
       P2P_SEARCH_TIMEOUT_MS: "4000"
-      P2P_OKX_SEARCH_TIMEOUT_MS: "10000"
       P2P_SEARCH_CACHE_TTL_MS: "5000"
-      # Public read-only P2P sources. Override individual flags to disable a
-      # venue whose public endpoint is unavailable in the deployment region.
-      P2P_BINANCE_ENABLED: ${P2P_BINANCE_ENABLED:-true}
-      P2P_BYBIT_ENABLED: ${P2P_BYBIT_ENABLED:-true}
-      P2P_OKX_ENABLED: ${P2P_OKX_ENABLED:-true}
-      P2P_BITGET_ENABLED: ${P2P_BITGET_ENABLED:-true}
-      P2P_RAPIRA_ENABLED: ${P2P_RAPIRA_ENABLED:-true}
-      P2P_SEARCH_ASSETS: "USDT,USDC,BTC,ETH,BNB,SOL,TRX,TON,DOGE,LTC,DAI,FDUSD,XRP,ADA,DOT,LINK,AVAX,MATIC,BCH,NEAR,APT,ATOM,UNI,SUI"
     volumes:
       - backend_data:/app/data
     depends_on:

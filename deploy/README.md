@@ -51,7 +51,9 @@ export PAY3FLOW_FMATCH_ACTOR_ID='https://lefine.pro/actors/actra'
 ## Deploy with in-cluster PostgreSQL and Redis
 
 The deployment app deletes and recreates the two build Jobs on each run, then
-waits for both images and the application rollouts:
+waits for both images, restarts both Deployments, and waits for their rollouts.
+Application Pods always pull the requested image tag, so rebuilding a reused
+development tag cannot leave an older backend running:
 
 ```sh
 nix run .#deploy
@@ -64,9 +66,10 @@ nix run .#render-manifests > /tmp/pay3flow.yaml
 kubectl apply --dry-run=client -f /tmp/pay3flow.yaml
 ```
 
-The default image build Jobs clone the repository at the pinned revision in
-`PAY3FLOW_SOURCE_REVISION`. Override `PAY3FLOW_SOURCE_REPOSITORY` and that
-revision when deploying a fork or another commit.
+The image build Jobs clone `master` by default. Set
+`PAY3FLOW_SOURCE_REVISION="$(git rev-parse HEAD)"` for a reproducible deployment,
+or override `PAY3FLOW_SOURCE_REPOSITORY` and the revision when deploying a fork
+or another commit.
 
 ## Use external PostgreSQL and Redis
 

@@ -1,0 +1,81 @@
+[sell]
+source_url = "https://www.okx.com"
+name = "OKX Sell"
+currency = ["usd", "rub", "eur", "amd"]
+banks = []
+
+[buy]
+source_url = "https://www.okx.com"
+name = "OKX Buy"
+currency = ["usd", "rub", "eur", "amd"]
+banks = []
+
+[adapter.p2p]
+kind = "http_json"
+endpoint = "https://www.okx.com/v3/c2c/tradingOrders/books"
+method = "GET"
+headers = { Origin = "https://www.okx.com", Referer = "https://www.okx.com/p2p-markets/" }
+timeout_ms = 10000
+supported_assets = ["USDT", "USDC", "BTC", "ETH"]
+
+[adapter.p2p.buy]
+query = { quoteCurrency = "{{fiat}}", baseCurrency = "{{asset}}", side = "sell", paymentMethod = "all", userType = "all", showTrade = "false", showFollow = "false", showAlreadyTraded = "false", isAbleFilter = "false", urlId = "0" }
+items_pointer = "/data/sell"
+success_pointer = "/code"
+success_value = "0"
+error_pointer = "/detailMsg"
+
+[adapter.p2p.sell]
+query = { quoteCurrency = "{{fiat}}", baseCurrency = "{{asset}}", side = "buy", paymentMethod = "all", userType = "all", showTrade = "false", showFollow = "false", showAlreadyTraded = "false", isAbleFilter = "false", urlId = "0" }
+items_pointer = "/data/buy"
+success_pointer = "/code"
+success_value = "0"
+error_pointer = "/detailMsg"
+
+[adapter.p2p.offer]
+ad_id_pointer = "/id"
+fiat_pointer = "/quoteCurrency"
+asset_pointer = "/baseCurrency"
+price_pointer = "/price"
+available_asset_pointer = "/availableAmount"
+min_fiat_pointer = "/quoteMinAmountPerOrder"
+max_fiat_pointer = "/quoteMaxAmountPerOrder"
+payment_methods_pointer = "/paymentMethods"
+pay_time_limit_pointer = "/paymentTimeoutMinutes"
+advertiser_id_pointer = "/publicUserId"
+advertiser_nickname_pointer = "/nickName"
+advertiser_user_type_pointer = "/userType"
+verified_from_merchant = true
+completed_orders_pointer = "/completedOrderQuantity"
+completion_rate_pointer = "/completedRate"
+positive_rate_pointer = "/posReviewPercentage"
+source_url_template = "https://www.okx.com/p2p-markets/{{fiat_lower}}/{{side}}-{{asset_lower}}"
+advertiser_profile_url_template = "https://www.okx.com/p2p/ads-merchant?publicUserId={{item:/publicUserId}}"
+
+[[adapter.p2p.offer.merchant_conditions]]
+pointer = "/isInstitution"
+operator = "truthy"
+
+[[adapter.p2p.offer.merchant_conditions]]
+pointer = "/merchantId"
+operator = "non_empty"
+
+[[adapter.p2p.offer.merchant_conditions]]
+pointer = "/userType"
+operator = "equals_ci"
+value = "merchant"
+
+[adapter.market]
+kind = "http_json"
+endpoint = "https://www.okx.com/api/v5/market/tickers"
+method = "GET"
+query = { instType = "SPOT" }
+timeout_ms = 10000
+items_pointer = "/data"
+symbol_pointer = "/instId"
+bid_pointer = "/bidPx"
+ask_pointer = "/askPx"
+symbol_remove = "-"
+success_pointer = "/code"
+success_value = "0"
+error_pointer = "/msg"

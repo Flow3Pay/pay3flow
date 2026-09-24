@@ -11,7 +11,7 @@ use tracing::Level;
 use crate::core::state::AppState;
 use crate::server::routing::{
     activitypub, auth, banks, exchange, matcher, networks, oauth, p2p, pairs, payments,
-    payments_ws, rates, solver, ws,
+    payments_ws, providers, rates, solver, ws,
 };
 
 pub fn router(state: AppState) -> Router {
@@ -111,6 +111,7 @@ pub fn router(state: AppState) -> Router {
             "/api/admin/banks/:name/status",
             post(banks::admin_set_status),
         )
+        .route("/api/providers", get(providers::list))
         .route("/api/providers/:provider/webhooks", post(payments::webhook))
         .route("/api/debug/quote", post(rates::debug_quote))
         .route("/routing/fallback", post(matcher::fallback))

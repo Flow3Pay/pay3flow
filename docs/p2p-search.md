@@ -114,19 +114,14 @@ and payment confirmation are not verified by this read-only layer.
 ```text
 P2P_SEARCH_ENABLED=true
 P2P_SEARCH_TIMEOUT_MS=4000
-P2P_OKX_SEARCH_TIMEOUT_MS=10000
 P2P_SEARCH_CACHE_TTL_MS=5000
-P2P_BINANCE_ENABLED=true
-P2P_BYBIT_ENABLED=true
-P2P_OKX_ENABLED=true
-P2P_BITGET_ENABLED=true
-P2P_RAPIRA_ENABLED=true
 P2P_SEARCH_ASSETS=USDT,USDC,BTC,ETH,BNB,SOL,TRX,TON,DOGE,LTC,DAI,FDUSD,XRP,ADA,DOT,LINK,AVAX,MATIC,BCH,NEAR,APT,ATOM,UNI,SUI
+PLAYWRIGHT_CHROMIUM_EXECUTABLE=/usr/bin/chromium
 ```
 
-Endpoint URLs can be overridden with `P2P_BINANCE_URL`, `P2P_BYBIT_URL`,
-`P2P_OKX_URL`, `P2P_BITGET_URL`, and `P2P_RAPIRA_URL` for tests or when a venue
-changes its public endpoint.
+Sources, endpoint URLs, response mappings, and browser workflows are declared
+in `backend/providers/*/Providerfile`. Regenerate the provider migration and
+rebuild after changing one; see `docs/providerfiles.md`.
 
 Run the opt-in live smoke test:
 

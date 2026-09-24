@@ -5,7 +5,6 @@ pub mod ledger;
 pub mod live;
 pub mod model;
 pub mod repo;
-pub mod seed;
 pub mod solver;
 pub mod status;
 

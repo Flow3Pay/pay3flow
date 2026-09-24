@@ -17,6 +17,17 @@ export interface CorridorsResponse {
   terms_version: string;
 }
 
+export interface ProviderDefinition {
+  id: string;
+  slug: string;
+  operation: "buy" | "sell";
+  source_url: string;
+  name: string;
+  currencies: string[];
+  banks: string[];
+  searchable: boolean;
+}
+
 export interface ExchangeOrder {
   id: string;
   source_country: string;
@@ -130,6 +141,7 @@ export interface CryptoMarketPath {
 export interface P2pAdvertiser {
   id?: string | null;
   nickname: string;
+  user_type?: string | null;
   is_merchant: boolean;
   is_verified: boolean;
   completed_orders_30d: number | null;
@@ -272,6 +284,10 @@ export async function authenticate(email: string, code: string): Promise<string>
 
 export function fetchCorridors(): Promise<CorridorsResponse> {
   return request("/api/exchange/corridors");
+}
+
+export function fetchProviders(): Promise<ProviderDefinition[]> {
+  return request("/api/providers");
 }
 
 export function fetchP2pRoutes(query: {

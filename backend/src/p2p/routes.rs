@@ -10,8 +10,8 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use crate::p2p::service::{
-    normalize_sources, P2pOffer, P2pSearchQuery, P2pSearchService, P2pSide, PaymentMethodMatch,
-    SourceStatus,
+    normalize_sources, P2pOffer, P2pOfferMarket, P2pSearchQuery, P2pSearchResponse,
+    P2pSearchService, P2pSide, PaymentMethodMatch, SourceStatus,
 };
 use crate::p2p::spot::CryptoTicker;
 use crate::service_reputation::{CombinedReputation, RouteServiceStats, ServiceLink};
@@ -138,6 +138,12 @@ struct NormalizedRouteQuery {
     sources: Option<String>,
 }
 
+struct FiatAssetProgress {
+    asset: String,
+    entry: P2pSearchResponse,
+    exit: P2pSearchResponse,
+}
+
 impl P2pSearchService {
     pub async fn search_routes(
         &self,
@@ -161,156 +167,309 @@ impl P2pSearchService {
         search_id: Uuid,
         updates: Option<mpsc::Sender<P2pRouteSearchResponse>>,
     ) -> Result<P2pRouteSearchResponse> {
-        let query = normalize_query(query, &self.default_assets)?;
+        let query = normalize_query(query, &self.default_assets, &self.networks)?;
         let mut routes = HashMap::new();
         let mut asset_statuses = Vec::new();
         match (
-            is_crypto(&query.source_currency),
-            is_crypto(&query.target_currency),
+            self.networks.is_supported_asset(&query.source_currency),
+            self.networks.is_supported_asset(&query.target_currency),
         ) {
             (false, false) => {
-                let mut searches = query
-                    .assets
-                    .iter()
-                    .map(|asset| async {
-                        let entry_query = leg_query(
-                            &query.source_currency,
-                            asset,
-                            P2pSide::BuyCrypto,
-                            Some(query.source_amount),
-                            query.source_payment_method.clone(),
-                            &query,
-                        );
-                        let exit_query = leg_query(
-                            &query.target_currency,
-                            asset,
-                            P2pSide::SellCrypto,
-                            None,
-                            query.target_payment_method.clone(),
-                            &query,
-                        );
-                        let (entry, exit) =
-                            tokio::join!(self.search(entry_query), self.search(exit_query));
-                        (asset.clone(), entry, exit)
-                    })
-                    .collect::<FuturesUnordered<_>>();
+                if updates.is_some() {
+                    let (progress_updates, mut progress_snapshots) = mpsc::channel(128);
+                    let mut searches = query
+                        .assets
+                        .iter()
+                        .map(|asset| {
+                            let entry_query = leg_query(
+                                &query.source_currency,
+                                asset,
+                                P2pSide::BuyCrypto,
+                                Some(query.source_amount),
+                                query.source_payment_method.clone(),
+                                &query,
+                            );
+                            let exit_query = leg_query(
+                                &query.target_currency,
+                                asset,
+                                P2pSide::SellCrypto,
+                                None,
+                                query.target_payment_method.clone(),
+                                &query,
+                            );
+                            stream_fiat_asset_search(
+                                self,
+                                asset.clone(),
+                                entry_query,
+                                exit_query,
+                                progress_updates.clone(),
+                            )
+                        })
+                        .collect::<FuturesUnordered<_>>();
+                    drop(progress_updates);
+                    let mut sources_seen = HashMap::new();
 
-                while let Some((asset, entry, exit)) = searches.next().await {
-                    let entry = entry?;
-                    let exit = exit?;
-                    let entry_offers =
-                        reject_price_outliers(entry.offers, query.max_price_deviation_bps);
-                    let exit_offers =
-                        reject_price_outliers(exit.offers, query.max_price_deviation_bps);
-                    let mut discovered = Vec::new();
-                    compose_fiat_routes(
-                        &mut discovered,
-                        &query,
-                        &asset,
-                        &entry_offers,
-                        &exit_offers,
-                    );
-                    let routes_built = merge_routes(&mut routes, discovered);
-                    push_asset_status(
-                        &mut asset_statuses,
-                        asset,
-                        &entry.sources,
-                        &exit.sources,
-                        &entry_offers,
-                        &exit_offers,
-                        routes_built,
-                    );
-                    publish_update(
-                        updates.as_ref(),
-                        response_snapshot(search_id, &query, &routes, &asset_statuses),
-                    )
-                    .await;
+                    while !searches.is_empty() {
+                        tokio::select! {
+                            progress = progress_snapshots.recv() => {
+                                let Some(progress) = progress else { continue };
+                                let counts = (progress.entry.sources.len(), progress.exit.sources.len());
+                                if sources_seen.get(&progress.asset) == Some(&counts) {
+                                    continue;
+                                }
+                                sources_seen.insert(progress.asset.clone(), counts);
+                                apply_fiat_asset_response(
+                                    &mut routes,
+                                    &mut asset_statuses,
+                                    &query,
+                                    &progress.asset,
+                                    &progress.entry,
+                                    &progress.exit,
+                                );
+                                publish_update(
+                                    updates.as_ref(),
+                                    response_snapshot(search_id, &query, &routes, &asset_statuses),
+                                ).await;
+                            }
+                            result = searches.next() => {
+                                let Some(result) = result else { break };
+                                let (asset, entry, exit) = result?;
+                                let counts = (entry.sources.len(), exit.sources.len());
+                                if sources_seen.get(&asset) != Some(&counts) {
+                                    sources_seen.insert(asset.clone(), counts);
+                                    apply_fiat_asset_response(
+                                        &mut routes,
+                                        &mut asset_statuses,
+                                        &query,
+                                        &asset,
+                                        &entry,
+                                        &exit,
+                                    );
+                                    publish_update(
+                                        updates.as_ref(),
+                                        response_snapshot(search_id, &query, &routes, &asset_statuses),
+                                    ).await;
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    let mut searches = query
+                        .assets
+                        .iter()
+                        .map(|asset| async {
+                            let entry_query = leg_query(
+                                &query.source_currency,
+                                asset,
+                                P2pSide::BuyCrypto,
+                                Some(query.source_amount),
+                                query.source_payment_method.clone(),
+                                &query,
+                            );
+                            let exit_query = leg_query(
+                                &query.target_currency,
+                                asset,
+                                P2pSide::SellCrypto,
+                                None,
+                                query.target_payment_method.clone(),
+                                &query,
+                            );
+                            let (entry, exit) =
+                                tokio::join!(self.search(entry_query), self.search(exit_query));
+                            (asset.clone(), entry, exit)
+                        })
+                        .collect::<FuturesUnordered<_>>();
+
+                    while let Some((asset, entry, exit)) = searches.next().await {
+                        apply_fiat_asset_response(
+                            &mut routes,
+                            &mut asset_statuses,
+                            &query,
+                            &asset,
+                            &entry?,
+                            &exit?,
+                        );
+                    }
                 }
             }
             (false, true) => {
                 let asset = query.target_currency.clone();
-                let response = self
-                    .search(leg_query(
-                        &query.source_currency,
-                        &asset,
-                        P2pSide::BuyCrypto,
-                        Some(query.source_amount),
-                        query.source_payment_method.clone(),
-                        &query,
-                    ))
-                    .await?;
-                let offers = reject_price_outliers(response.offers, query.max_price_deviation_bps);
-                let mut discovered = Vec::new();
-                compose_fiat_to_crypto_routes(&mut discovered, &query, &asset, &offers);
-                let routes_built = merge_routes(&mut routes, discovered);
-                push_asset_status(
-                    &mut asset_statuses,
-                    asset,
-                    &response.sources,
-                    &[],
-                    &offers,
-                    &[],
-                    routes_built,
+                let leg = leg_query(
+                    &query.source_currency,
+                    &asset,
+                    P2pSide::BuyCrypto,
+                    Some(query.source_amount),
+                    query.source_payment_method.clone(),
+                    &query,
                 );
-                publish_update(
-                    updates.as_ref(),
-                    response_snapshot(search_id, &query, &routes, &asset_statuses),
-                )
-                .await;
+                if updates.is_some() {
+                    let (leg_updates, mut leg_snapshots) = mpsc::channel(16);
+                    let search = self.stream_search(leg, leg_updates);
+                    tokio::pin!(search);
+                    let mut sources_seen = 0;
+                    loop {
+                        tokio::select! {
+                            response = leg_snapshots.recv() => {
+                                let Some(response) = response else { continue };
+                                sources_seen = response.sources.len();
+                                apply_fiat_to_crypto_response(
+                                    &mut routes,
+                                    &mut asset_statuses,
+                                    &query,
+                                    &asset,
+                                    &response,
+                                );
+                                publish_update(
+                                    updates.as_ref(),
+                                    response_snapshot(search_id, &query, &routes, &asset_statuses),
+                                ).await;
+                            }
+                            result = &mut search => {
+                                let response = result?;
+                                if response.sources.len() > sources_seen {
+                                    apply_fiat_to_crypto_response(
+                                        &mut routes,
+                                        &mut asset_statuses,
+                                        &query,
+                                        &asset,
+                                        &response,
+                                    );
+                                    publish_update(
+                                        updates.as_ref(),
+                                        response_snapshot(search_id, &query, &routes, &asset_statuses),
+                                    ).await;
+                                }
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    let response = self.search(leg).await?;
+                    apply_fiat_to_crypto_response(
+                        &mut routes,
+                        &mut asset_statuses,
+                        &query,
+                        &asset,
+                        &response,
+                    );
+                }
             }
             (true, false) => {
                 let asset = query.source_currency.clone();
-                let response = self
-                    .search(leg_query(
-                        &query.target_currency,
-                        &asset,
-                        P2pSide::SellCrypto,
-                        None,
-                        query.target_payment_method.clone(),
-                        &query,
-                    ))
-                    .await?;
-                let offers = reject_price_outliers(response.offers, query.max_price_deviation_bps);
-                let mut discovered = Vec::new();
-                compose_crypto_to_fiat_routes(&mut discovered, &query, &asset, &offers);
-                let routes_built = merge_routes(&mut routes, discovered);
-                push_asset_status(
-                    &mut asset_statuses,
-                    asset,
-                    &[],
-                    &response.sources,
-                    &[],
-                    &offers,
-                    routes_built,
+                let leg = leg_query(
+                    &query.target_currency,
+                    &asset,
+                    P2pSide::SellCrypto,
+                    None,
+                    query.target_payment_method.clone(),
+                    &query,
                 );
-                publish_update(
-                    updates.as_ref(),
-                    response_snapshot(search_id, &query, &routes, &asset_statuses),
-                )
-                .await;
+                if updates.is_some() {
+                    let (leg_updates, mut leg_snapshots) = mpsc::channel(16);
+                    let search = self.stream_search(leg, leg_updates);
+                    tokio::pin!(search);
+                    let mut sources_seen = 0;
+                    loop {
+                        tokio::select! {
+                            response = leg_snapshots.recv() => {
+                                let Some(response) = response else { continue };
+                                sources_seen = response.sources.len();
+                                apply_crypto_to_fiat_response(
+                                    &mut routes,
+                                    &mut asset_statuses,
+                                    &query,
+                                    &asset,
+                                    &response,
+                                );
+                                publish_update(
+                                    updates.as_ref(),
+                                    response_snapshot(search_id, &query, &routes, &asset_statuses),
+                                ).await;
+                            }
+                            result = &mut search => {
+                                let response = result?;
+                                if response.sources.len() > sources_seen {
+                                    apply_crypto_to_fiat_response(
+                                        &mut routes,
+                                        &mut asset_statuses,
+                                        &query,
+                                        &asset,
+                                        &response,
+                                    );
+                                    publish_update(
+                                        updates.as_ref(),
+                                        response_snapshot(search_id, &query, &routes, &asset_statuses),
+                                    ).await;
+                                }
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    let response = self.search(leg).await?;
+                    apply_crypto_to_fiat_response(
+                        &mut routes,
+                        &mut asset_statuses,
+                        &query,
+                        &asset,
+                        &response,
+                    );
+                }
             }
             (true, true) => {
                 let source_asset = query.source_currency.clone();
                 let target_asset = query.target_currency.clone();
-                for (venue, result) in self.search_market_tickers(query.sources.as_deref()).await {
-                    let Ok(tickers) = result else {
-                        continue;
-                    };
-                    let mut discovered = Vec::new();
-                    compose_crypto_market_routes(
-                        &mut discovered,
-                        &query,
-                        &venue,
-                        &source_asset,
-                        &target_asset,
-                        &tickers,
-                    );
-                    merge_routes(&mut routes, discovered);
-                    publish_update(
-                        updates.as_ref(),
-                        response_snapshot(search_id, &query, &routes, &asset_statuses),
-                    )
-                    .await;
+                if updates.is_some() {
+                    let (market_updates, mut market_snapshots) = mpsc::channel(8);
+                    let search =
+                        self.stream_market_tickers(query.sources.as_deref(), market_updates);
+                    tokio::pin!(search);
+                    loop {
+                        tokio::select! {
+                            result = market_snapshots.recv() => {
+                                let Some(result) = result else { continue };
+                                if apply_crypto_market_result(
+                                    &mut routes,
+                                    &query,
+                                    &source_asset,
+                                    &target_asset,
+                                    result,
+                                ) {
+                                    publish_update(
+                                        updates.as_ref(),
+                                        response_snapshot(search_id, &query, &routes, &asset_statuses),
+                                    ).await;
+                                }
+                            }
+                            () = &mut search => {
+                                while let Ok(result) = market_snapshots.try_recv() {
+                                    if apply_crypto_market_result(
+                                        &mut routes,
+                                        &query,
+                                        &source_asset,
+                                        &target_asset,
+                                        result,
+                                    ) {
+                                        publish_update(
+                                            updates.as_ref(),
+                                            response_snapshot(search_id, &query, &routes, &asset_statuses),
+                                        ).await;
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    for result in self.search_market_tickers(query.sources.as_deref()).await {
+                        apply_crypto_market_result(
+                            &mut routes,
+                            &query,
+                            &source_asset,
+                            &target_asset,
+                            result,
+                        );
+                    }
                 }
             }
         }
@@ -330,6 +489,187 @@ async fn publish_update(
     if let Some(updates) = updates {
         let _ = updates.send(response).await;
     }
+}
+
+async fn stream_fiat_asset_search(
+    service: &P2pSearchService,
+    asset: String,
+    entry_query: P2pSearchQuery,
+    exit_query: P2pSearchQuery,
+    progress: mpsc::Sender<FiatAssetProgress>,
+) -> Result<(String, P2pSearchResponse, P2pSearchResponse)> {
+    let (entry_updates, mut entry_snapshots) = mpsc::channel(16);
+    let (exit_updates, mut exit_snapshots) = mpsc::channel(16);
+    let entry_search = service.stream_search(entry_query, entry_updates);
+    let exit_search = service.stream_search(exit_query, exit_updates);
+    tokio::pin!(entry_search);
+    tokio::pin!(exit_search);
+
+    let mut entry = None;
+    let mut exit = None;
+    let mut entry_done = false;
+    let mut exit_done = false;
+    let mut entry_channel_open = true;
+    let mut exit_channel_open = true;
+
+    while !entry_done || !exit_done {
+        let changed = tokio::select! {
+            snapshot = entry_snapshots.recv(), if entry_channel_open => {
+                match snapshot {
+                    Some(snapshot) => {
+                        entry = Some(snapshot);
+                        true
+                    }
+                    None => {
+                        entry_channel_open = false;
+                        false
+                    }
+                }
+            }
+            snapshot = exit_snapshots.recv(), if exit_channel_open => {
+                match snapshot {
+                    Some(snapshot) => {
+                        exit = Some(snapshot);
+                        true
+                    }
+                    None => {
+                        exit_channel_open = false;
+                        false
+                    }
+                }
+            }
+            result = &mut entry_search, if !entry_done => {
+                entry = Some(result?);
+                entry_done = true;
+                entry_channel_open = false;
+                true
+            }
+            result = &mut exit_search, if !exit_done => {
+                exit = Some(result?);
+                exit_done = true;
+                exit_channel_open = false;
+                true
+            }
+        };
+
+        if changed {
+            if let (Some(entry), Some(exit)) = (&entry, &exit) {
+                if progress
+                    .send(FiatAssetProgress {
+                        asset: asset.clone(),
+                        entry: entry.clone(),
+                        exit: exit.clone(),
+                    })
+                    .await
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        }
+    }
+
+    let entry = entry.ok_or_else(|| anyhow::anyhow!("entry search returned no response"))?;
+    let exit = exit.ok_or_else(|| anyhow::anyhow!("exit search returned no response"))?;
+    Ok((asset, entry, exit))
+}
+
+fn apply_fiat_asset_response(
+    routes: &mut HashMap<String, P2pRoute>,
+    asset_statuses: &mut Vec<RouteAssetStatus>,
+    query: &NormalizedRouteQuery,
+    asset: &str,
+    entry: &P2pSearchResponse,
+    exit: &P2pSearchResponse,
+) {
+    let entry_offers = reject_price_outliers(entry.offers.clone(), query.max_price_deviation_bps);
+    let exit_offers = reject_price_outliers(exit.offers.clone(), query.max_price_deviation_bps);
+    let mut discovered = Vec::new();
+    compose_fiat_routes(&mut discovered, query, asset, &entry_offers, &exit_offers);
+    let routes_built = discovered.len();
+    routes.retain(|_, route| route.route_kind != "fiat_to_fiat" || route.asset != asset);
+    merge_routes(routes, discovered);
+    upsert_asset_status(
+        asset_statuses,
+        asset.to_string(),
+        &entry.sources,
+        &exit.sources,
+        &entry_offers,
+        &exit_offers,
+        routes_built,
+    );
+}
+
+fn apply_fiat_to_crypto_response(
+    routes: &mut HashMap<String, P2pRoute>,
+    asset_statuses: &mut Vec<RouteAssetStatus>,
+    query: &NormalizedRouteQuery,
+    asset: &str,
+    response: &P2pSearchResponse,
+) {
+    let offers = reject_price_outliers(response.offers.clone(), query.max_price_deviation_bps);
+    let mut discovered = Vec::new();
+    compose_fiat_to_crypto_routes(&mut discovered, query, asset, &offers);
+    let routes_built = discovered.len();
+    routes.clear();
+    merge_routes(routes, discovered);
+    upsert_asset_status(
+        asset_statuses,
+        asset.to_string(),
+        &response.sources,
+        &[],
+        &offers,
+        &[],
+        routes_built,
+    );
+}
+
+fn apply_crypto_to_fiat_response(
+    routes: &mut HashMap<String, P2pRoute>,
+    asset_statuses: &mut Vec<RouteAssetStatus>,
+    query: &NormalizedRouteQuery,
+    asset: &str,
+    response: &P2pSearchResponse,
+) {
+    let offers = reject_price_outliers(response.offers.clone(), query.max_price_deviation_bps);
+    let mut discovered = Vec::new();
+    compose_crypto_to_fiat_routes(&mut discovered, query, asset, &offers);
+    let routes_built = discovered.len();
+    routes.clear();
+    merge_routes(routes, discovered);
+    upsert_asset_status(
+        asset_statuses,
+        asset.to_string(),
+        &[],
+        &response.sources,
+        &[],
+        &offers,
+        routes_built,
+    );
+}
+
+fn apply_crypto_market_result(
+    routes: &mut HashMap<String, P2pRoute>,
+    query: &NormalizedRouteQuery,
+    source_asset: &str,
+    target_asset: &str,
+    result: (String, Result<Vec<CryptoTicker>>),
+) -> bool {
+    let (venue, result) = result;
+    let Ok(tickers) = result else {
+        return false;
+    };
+    let mut discovered = Vec::new();
+    compose_crypto_market_routes(
+        &mut discovered,
+        query,
+        &venue,
+        source_asset,
+        target_asset,
+        &tickers,
+    );
+    merge_routes(routes, discovered);
+    true
 }
 
 fn response_snapshot(
@@ -423,6 +763,7 @@ fn route_fingerprint(route: &P2pRoute) -> String {
 fn normalize_query(
     query: P2pRouteSearchQuery,
     default_assets: &[String],
+    networks: &crate::networks::NetworkCatalog,
 ) -> Result<NormalizedRouteQuery> {
     if !query.source_amount.is_finite() || query.source_amount <= 0.0 {
         bail!("source_amount must be a positive finite number");
@@ -459,8 +800,8 @@ fn normalize_query(
     if max_price_deviation_bps > 5_000 {
         bail!("max_price_deviation_bps must not exceed 5000");
     }
-    let source_network = validate_network(&query.source_network, &source_currency)?;
-    let target_network = validate_network(&query.target_network, &target_currency)?;
+    let source_network = validate_network(networks, &query.source_network, &source_currency)?;
+    let target_network = validate_network(networks, &query.target_network, &target_currency)?;
     if source_currency.eq_ignore_ascii_case(&target_currency) {
         match (&source_network, &target_network) {
             (Some(source_network), Some(target_network)) if source_network != target_network => {
@@ -494,7 +835,11 @@ fn normalize_query(
     })
 }
 
-fn validate_network(network_id: &Option<String>, currency: &str) -> Result<Option<String>> {
+fn validate_network(
+    networks: &crate::networks::NetworkCatalog,
+    network_id: &Option<String>,
+    currency: &str,
+) -> Result<Option<String>> {
     let Some(network_id) = network_id
         .as_deref()
         .map(str::trim)
@@ -502,21 +847,11 @@ fn validate_network(network_id: &Option<String>, currency: &str) -> Result<Optio
     else {
         return Ok(None);
     };
-    let network = crate::networks::catalog().into_iter().find(|network| {
-        network.id.eq_ignore_ascii_case(network_id)
-            && network
-                .currencies
-                .iter()
-                .any(|item| item.eq_ignore_ascii_case(currency))
-    });
+    let network = networks.compatible_network(network_id, currency);
     match network {
-        Some(network) => Ok(Some(network.id)),
+        Some(network) => Ok(Some(network.id.clone())),
         None => bail!("network {network_id} is not compatible with {currency}"),
     }
-}
-
-fn is_crypto(currency: &str) -> bool {
-    crate::networks::is_supported_asset(currency)
 }
 
 fn trimmed(value: Option<String>) -> Option<String> {
@@ -553,6 +888,7 @@ fn reject_price_outliers(offers: Vec<P2pOffer>, max_deviation_bps: u32) -> Vec<P
     }
     let mut prices = offers
         .iter()
+        .filter(|offer| offer.market == P2pOfferMarket::P2p)
         .filter_map(|offer| offer.price.parse::<f64>().ok())
         .filter(|price| price.is_finite() && *price > 0.0)
         .collect::<Vec<_>>();
@@ -565,10 +901,11 @@ fn reject_price_outliers(offers: Vec<P2pOffer>, max_deviation_bps: u32) -> Vec<P
     offers
         .into_iter()
         .filter(|offer| {
-            offer
-                .price
-                .parse::<f64>()
-                .is_ok_and(|price| (price - median).abs() <= maximum_deviation)
+            offer.market == P2pOfferMarket::DirectExchange
+                || offer
+                    .price
+                    .parse::<f64>()
+                    .is_ok_and(|price| (price - median).abs() <= maximum_deviation)
         })
         .collect()
 }
@@ -898,7 +1235,7 @@ fn conversion_quote(tickers: &[CryptoTicker], from: &str, to: &str) -> Option<Co
         })
 }
 
-fn push_asset_status(
+fn upsert_asset_status(
     statuses: &mut Vec<RouteAssetStatus>,
     asset: String,
     entry_sources: &[SourceStatus],
@@ -907,7 +1244,7 @@ fn push_asset_status(
     exit_offers: &[P2pOffer],
     routes_built: usize,
 ) {
-    statuses.push(RouteAssetStatus {
+    let status = RouteAssetStatus {
         asset,
         entry_offers: entry_offers.len(),
         exit_offers: exit_offers.len(),
@@ -915,7 +1252,15 @@ fn push_asset_status(
         can_exchange_to_target: routes_built > 0,
         entry_sources: entry_sources.to_vec(),
         exit_sources: exit_sources.to_vec(),
-    });
+    };
+    if let Some(current) = statuses
+        .iter_mut()
+        .find(|current| current.asset == status.asset)
+    {
+        *current = status;
+    } else {
+        statuses.push(status);
+    }
 }
 
 fn positive_number(value: &str) -> Option<f64> {
@@ -956,9 +1301,15 @@ mod tests {
 
     struct ProgressiveSource;
 
+    struct DelayedRouteSource {
+        name: &'static str,
+        delay: Duration,
+        price: &'static str,
+    }
+
     #[async_trait]
     impl P2pSource for ProgressiveSource {
-        fn name(&self) -> &'static str {
+        fn name(&self) -> &str {
             "bybit"
         }
 
@@ -983,8 +1334,25 @@ mod tests {
         }
     }
 
+    #[async_trait]
+    impl P2pSource for DelayedRouteSource {
+        fn name(&self) -> &str {
+            self.name
+        }
+
+        async fn search(&self, query: &P2pSearchQuery) -> Result<Vec<P2pOffer>> {
+            tokio::time::sleep(self.delay).await;
+            let mut result = offer(self.name, query.side, self.price, "1", "1000000");
+            result.fiat.clone_from(&query.fiat);
+            result.asset.clone_from(&query.asset);
+            result.ad_id = format!("{}-{:?}", self.name, query.side);
+            Ok(vec![result])
+        }
+    }
+
     fn offer(source: &str, side: P2pSide, price: &str, min: &str, max: &str) -> P2pOffer {
         P2pOffer {
+            market: crate::p2p::service::P2pOfferMarket::P2p,
             source: source.into(),
             ad_id: format!("{source}-{price}"),
             side,
@@ -1038,15 +1406,20 @@ mod tests {
     }
 
     #[test]
-    fn recognizes_every_exchange_asset_as_crypto() {
-        for asset in crate::networks::CRYPTO_ASSETS {
-            assert!(is_crypto(asset), "asset should use crypto routing: {asset}");
+    fn recognizes_assets_present_in_the_network_catalog_as_crypto() {
+        let networks = crate::networks::NetworkCatalog::test_default();
+        for asset in ["BTC", "ETH", "USDT", "USDC", "TRX", "TON"] {
+            assert!(
+                networks.is_supported_asset(asset),
+                "asset should use crypto routing: {asset}"
+            );
         }
-        assert!(!is_crypto("AMD"));
+        assert!(!networks.is_supported_asset("AMD"));
     }
 
     #[test]
     fn network_validation_rejects_incompatible_assets() {
+        let networks = crate::networks::NetworkCatalog::test_default();
         let cases = [
             ("ethereum", "ETH", true),
             ("ethereum", "BTC", false),
@@ -1059,7 +1432,7 @@ mod tests {
 
         for (network, asset, expected) in cases {
             assert_eq!(
-                validate_network(&Some(network.to_string()), asset).is_ok(),
+                validate_network(&networks, &Some(network.to_string()), asset).is_ok(),
                 expected,
                 "network={network}, asset={asset}"
             );
@@ -1089,6 +1462,7 @@ mod tests {
                 sources: None,
             },
             &["USDT".into()],
+            &crate::networks::NetworkCatalog::test_default(),
         )
         .err()
         .expect("same-asset cross-network request should be rejected without a bridge provider");
@@ -1122,6 +1496,7 @@ mod tests {
                 sources: None,
             },
             &["USDT".into()],
+            &crate::networks::NetworkCatalog::test_default(),
         )
         .unwrap();
         let mut routes = Vec::new();
@@ -1233,6 +1608,67 @@ mod tests {
         assert_eq!(final_response.search_id, search_id);
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn route_stream_publishes_a_fast_provider_before_slower_providers_finish() {
+        let service = P2pSearchService::with_sources(
+            vec![
+                Arc::new(DelayedRouteSource {
+                    name: "fast",
+                    delay: Duration::from_millis(10),
+                    price: "84",
+                }),
+                Arc::new(DelayedRouteSource {
+                    name: "slow",
+                    delay: Duration::from_millis(250),
+                    price: "85",
+                }),
+            ],
+            Duration::from_secs(1),
+        );
+        let (updates, mut snapshots) = mpsc::channel(4);
+        let search_id = Uuid::new_v4();
+        let task = tokio::spawn(async move {
+            service
+                .stream_routes(
+                    P2pRouteSearchQuery {
+                        source_fiat: "USDC".into(),
+                        target_fiat: "RUB".into(),
+                        source_amount: 100.0,
+                        source_network: Some("ethereum".into()),
+                        target_network: None,
+                        bridge_fiat: None,
+                        assets: None,
+                        intermediary_assets: None,
+                        source_payment_method: None,
+                        target_payment_method: Some("Sberbank".into()),
+                        merchant_only: Some(false),
+                        min_orders: None,
+                        min_completion_rate: None,
+                        allow_cross_venue: Some(true),
+                        max_price_deviation_bps: Some(1_000),
+                        limit: Some(40),
+                        sources: None,
+                    },
+                    search_id,
+                    updates,
+                )
+                .await
+        });
+
+        let first = tokio::time::timeout(Duration::from_millis(100), snapshots.recv())
+            .await
+            .expect("fast provider should stream before the slow provider finishes")
+            .expect("first provider snapshot");
+        assert_eq!(first.routes_found, 1);
+        assert_eq!(first.routes[0].exit_offer.as_ref().unwrap().source, "fast");
+        assert!(!task.is_finished());
+
+        let second = snapshots.recv().await.expect("second provider snapshot");
+        let final_response = task.await.unwrap().unwrap();
+        assert_eq!(second.routes_found, 2);
+        assert_eq!(final_response.routes_found, 2);
+    }
+
     #[test]
     fn rejects_cross_venue_and_impossible_target_limit() {
         let entry = offer("binance", P2pSide::BuyCrypto, "400", "1000", "200000");
@@ -1259,6 +1695,23 @@ mod tests {
         ];
         let filtered = reject_price_outliers(offers, 1_000);
         assert_eq!(filtered.len(), 2);
+    }
+
+    #[test]
+    fn keeps_direct_exchange_quotes_outside_the_p2p_median() {
+        let mut direct = offer("whitebird", P2pSide::SellCrypto, "70", "1", "100000");
+        direct.market = crate::p2p::service::P2pOfferMarket::DirectExchange;
+        let offers = vec![
+            offer("a", P2pSide::SellCrypto, "80", "1", "100000"),
+            offer("b", P2pSide::SellCrypto, "81", "1", "100000"),
+            offer("c", P2pSide::SellCrypto, "82", "1", "100000"),
+            direct,
+        ];
+
+        let filtered = reject_price_outliers(offers, 1_000);
+
+        assert_eq!(filtered.len(), 4);
+        assert!(filtered.iter().any(|offer| offer.source == "whitebird"));
     }
 
     #[test]
@@ -1348,7 +1801,9 @@ mod tests {
     #[ignore = "calls live Binance, Bybit, OKX, Bitget and Rapira public P2P endpoints"]
     async fn live_amd_to_rub_route_search() {
         let config = Config::from_env().unwrap();
-        let service = P2pSearchService::from_config(&config).unwrap();
+        let service =
+            P2pSearchService::from_config(&config, crate::networks::NetworkCatalog::test_default())
+                .unwrap();
         let response = service
             .search_routes(P2pRouteSearchQuery {
                 source_fiat: "AMD".into(),
@@ -1386,7 +1841,9 @@ mod tests {
     #[ignore = "calls live Binance, Bybit, OKX, Bitget and Rapira public P2P endpoints"]
     async fn live_bank_filtered_amd_to_rub_route_search() {
         let config = Config::from_env().unwrap();
-        let service = P2pSearchService::from_config(&config).unwrap();
+        let service =
+            P2pSearchService::from_config(&config, crate::networks::NetworkCatalog::test_default())
+                .unwrap();
         let response = service
             .search_routes(P2pRouteSearchQuery {
                 source_fiat: "AMD".into(),

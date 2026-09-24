@@ -1,0 +1,72 @@
+[sell]
+source_url = "https://rapira.net"
+name = "Rapira Sell"
+currency = ["rub"]
+banks = []
+
+[buy]
+source_url = "https://rapira.net"
+name = "Rapira Buy"
+currency = ["rub"]
+banks = []
+
+[adapter.p2p]
+kind = "http_json"
+endpoint = "https://api.rapira.net/otc/offers/page-query/v2"
+method = "GET"
+headers = { Origin = "https://rapira.net", Referer = "https://rapira.net/ru/p2p/BUY?p=1" }
+timeout_ms = 4000
+max_results = 100
+supported_assets = ["USDT"]
+
+[adapter.p2p.buy]
+query = { listingType = "RECOMMENDED", merchantSide = "SELL", internalCoinUnit = "{{asset}}", externalCoinUnit = "{{fiat}}", paymentIds = "", showOnlyEligible = "false", sortByNumberOfMutualOrders = "false", amount = "{{amount}}", pageNo = "1", pageSize = "{{limit}}" }
+items_pointer = "/content"
+success_pointer = "/code"
+success_value = "0"
+success_missing_allowed = true
+error_pointer = "/message"
+
+[adapter.p2p.sell]
+query = { listingType = "RECOMMENDED", merchantSide = "BUY", internalCoinUnit = "{{asset}}", externalCoinUnit = "{{fiat}}", paymentIds = "", showOnlyEligible = "false", sortByNumberOfMutualOrders = "false", amount = "{{amount}}", pageNo = "1", pageSize = "{{limit}}" }
+items_pointer = "/content"
+success_pointer = "/code"
+success_value = "0"
+success_missing_allowed = true
+error_pointer = "/message"
+
+[adapter.p2p.offer]
+ad_id_pointer = "/advertiseId"
+fiat_pointer = "/externalCoinUnit"
+asset_pointer = "/internalCoinUnit"
+price_pointer = "/price"
+available_asset_pointer = "/quantity"
+min_fiat_pointer = "/minLimit"
+max_fiat_pointer = "/maxLimit"
+payment_methods_pointer = "/paymentTypes"
+payment_method_value_pointer = "/paymentName"
+pay_time_limit_pointer = "/timeLimit"
+advertiser_id_pointer = "/merchant/profileUid"
+advertiser_nickname_pointer = "/merchant/username"
+advertiser_user_type_pointer = "/merchant/p2pLevel"
+merchant_default = true
+completed_orders_pointer = "/merchant/totalTerminatedAfterAcceptCount"
+completion_rate_pointer = "/merchant/totalCompletedPercent"
+source_url_template = "https://rapira.net/p2p?adId={{item:/advertiseId}}"
+source_url_is_exact = true
+advertiser_profile_url_template = "https://rapira.net/ru/p2p/profileUser?p=1&profileUid={{item:/merchant/profileUid}}&msp=1"
+
+[[adapter.p2p.offer.verified_conditions]]
+pointer = "/merchant/p2pLevel"
+operator = "equals_ci"
+value = "verified"
+
+[[adapter.p2p.offer.verified_conditions]]
+pointer = "/merchant/p2pLevel"
+operator = "equals_ci"
+value = "trusted"
+
+[[adapter.p2p.offer.verified_conditions]]
+pointer = "/merchant/p2pLevel"
+operator = "equals_ci"
+value = "premium"

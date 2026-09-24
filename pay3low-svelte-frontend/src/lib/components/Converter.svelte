@@ -1,6 +1,6 @@
 <script lang="ts">
   import { afterUpdate, onMount, onDestroy } from "svelte";
-  import { fetchCorridors, fetchP2pRoutes, recordServiceOpen, setServiceVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote } from "$lib/exchange";
+  import { fetchCorridors, fetchP2pRoutes, fetchProviders, recordServiceOpen, setServiceVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderDefinition, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote } from "$lib/exchange";
   import { FALLBACK_NETWORK, fetchNetworks, type CryptoNetwork } from "$lib/networks";
   import { assetIcon, networkIcon, venueIcon } from "$lib/icons";
   import { CRYPTO_ASSETS, DIGITAL_ASSETS, PAYMENT_METHODS, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
@@ -9,15 +9,8 @@
   type RefreshSeconds = 0 | 5 | 15 | 30 | 60;
   type PickerSide = "source" | "target" | null;
   const REFRESH_OPTIONS: RefreshSeconds[] = [0, 5, 15, 30, 60];
-  const P2P_SOURCES = [
-    { id: "binance", label: "Binance", iconUrl: venueIcon("binance") },
-    { id: "bybit", label: "Bybit", iconUrl: venueIcon("bybit") },
-    { id: "okx", label: "OKX", iconUrl: venueIcon("okx") },
-    { id: "bitget", label: "Bitget", iconUrl: venueIcon("bitget") },
-    { id: "rapira", label: "Rapira", iconUrl: venueIcon("rapira") },
-  ] as const;
-  type P2pSource = (typeof P2P_SOURCES)[number]["id"];
-  const DEFAULT_SOURCES = P2P_SOURCES.map((source) => source.id);
+  type P2pSource = string;
+  type P2pSourceOption = { id: P2pSource; label: string; iconUrl: string; searchable: boolean };
   const INTERMEDIARY_ASSETS = CRYPTO_ASSETS.map(([currency]) => currency);
   const BANK_METHODS = PAYMENT_METHODS.filter((method) => method.kind === "bank");
   const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", sources: "pay3flow.exchange.p2p-sources", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets", anonymousId: "pay3flow.reputation.anonymous-id" };
@@ -28,6 +21,7 @@
   let routes: RouteCandidate[] = [];
   let routesFound = 0;
   let selected: RouteCandidate | null = null;
+  let selectionPinnedByUser = false;
   let instructionsRoute: RouteCandidate | null = null;
   let sourceMethodId = "am-ameriabank";
   let targetMethodId = "ru-sberbank";
@@ -39,9 +33,11 @@
   let networkPicker: PickerSide = null;
   let settingsOpen = false;
   let refreshSeconds: RefreshSeconds = 15;
-  let selectedSources: P2pSource[] = [...DEFAULT_SOURCES];
+  let p2pSources: P2pSourceOption[] = [];
+  let selectedSources: P2pSource[] = [];
   let selectedIntermediaryAssets: string[] = [];
   let searching = false;
+  let awaitingFirstRoute = false;
   let lastUpdatedAt: number | null = null;
   let clock = Date.now();
   let error: string | null = null;
@@ -68,6 +64,8 @@
   let paymentPickerComponent: typeof import("./PaymentMethodPicker.svelte").default | null = null;
   let networkPickerComponent: typeof import("./NetworkPicker.svelte").default | null = null;
   let routeInstructionsComponent: typeof import("./RouteInstructions.svelte").default | null = null;
+  let searchingVenues: P2pSourceOption[] = [];
+  let foundVenues: P2pSourceOption[] = [];
 
   function readSharedExchange() {
     const match = window.location.hash.match(/^#\/swap\/([^/?#]+)\/([^/?#]+)(?:\?([^#]*))?$/i);
@@ -88,6 +86,29 @@
   const intermediaryIcon = (asset: string) => assetIcon(asset);
   const networkName = (id: string | null | undefined) => !id ? "internal" : networks.find((network) => network.id === id)?.name ?? id;
   const locationLabel = (country: string, currency: string) => { try { return `${new Intl.DisplayNames(["en"], { type: "region" }).of(country) ?? country} · ${currency}`; } catch { return `${country} · ${currency}`; } };
+
+  function providerLabel(provider: ProviderDefinition) {
+    const label = provider.name.replace(/\s+(buy|sell)$/i, "").trim();
+    return label || provider.slug;
+  }
+
+  function providerSources(providers: ProviderDefinition[]): P2pSourceOption[] {
+    const sources = new Map<string, P2pSourceOption>();
+    for (const provider of providers) {
+      const existing = sources.get(provider.slug);
+      if (existing) {
+        existing.searchable ||= provider.searchable;
+      } else {
+        sources.set(provider.slug, {
+          id: provider.slug,
+          label: providerLabel(provider),
+          iconUrl: venueIcon(provider.slug),
+          searchable: provider.searchable,
+        });
+      }
+    }
+    return [...sources.values()].sort((left, right) => left.label.localeCompare(right.label));
+  }
 
   function mapRoutes(response: Awaited<ReturnType<typeof fetchP2pRoutes>>): RouteCandidate[] {
     const bestTarget = Number(response.routes[0]?.target_amount ?? 0);
@@ -122,10 +143,26 @@
 
   function applySearchResponse(response: P2pRouteSearchResponse) {
     const nextRoutes = mapRoutes(response);
+    const knownVenues = new Set(foundVenues.map((venue) => venue.id));
+    const newlyFound = nextRoutes
+      .flatMap((route) => route.legs.map((leg) => leg.provider.toLowerCase()))
+      .filter((venue, index, venues) => !knownVenues.has(venue) && venues.indexOf(venue) === index)
+      .map((venue) => p2pSources.find((item) => item.id === venue) ?? { id: venue, label: venue.charAt(0).toUpperCase() + venue.slice(1), iconUrl: venueIcon(venue), searchable: true });
+    if (newlyFound.length) foundVenues = [...foundVenues, ...newlyFound];
     routesFound = response.routes_found ?? nextRoutes.length;
     routes = nextRoutes;
-    selected = routes.find((route) => route.route_id === selected?.route_id) ?? routes.find((route) => route.is_current_best) ?? routes[0] ?? null;
+    const bestRoute = routes.find((route) => route.is_current_best) ?? routes[0] ?? null;
+    if (selectionPinnedByUser) {
+      const pinnedRoute = routes.find((route) => route.route_id === selected?.route_id);
+      if (pinnedRoute) selected = pinnedRoute;
+      else { selectionPinnedByUser = false; selected = bestRoute; }
+    } else selected = bestRoute;
     if (instructionsRoute) instructionsRoute = routes.find((route) => route.route_id === instructionsRoute?.route_id) ?? instructionsRoute;
+  }
+
+  function selectRoute(route: RouteCandidate) {
+    selected = route;
+    selectionPinnedByUser = true;
   }
 
   function replaceServiceStats(service: ServiceStats) {
@@ -156,6 +193,8 @@
   $: targetMethods = [...BANK_METHODS.filter((method) => method.role === "recipient" || method.role === "both"), ...DIGITAL_ASSETS];
   $: sourceMethod = sourceMethods.find((method) => method.id === sourceMethodId) ?? (sourceCountry ? sourceMethods[0] : null);
   $: targetMethod = targetMethods.find((method) => method.id === targetMethodId) ?? (targetCountry ? targetMethods[0] : null);
+  $: selectedSourceCurrency = sourceMethod?.currency || sourceCurrency;
+  $: selectedTargetCurrency = targetMethod?.currency || targetCurrency;
   $: sourceNetworks = sourceMethod?.kind === "wallet" ? networks.filter((network) => network.currencies.includes(sourceMethod!.currency)) : [];
   $: targetNetworks = targetMethod?.kind === "wallet" ? networks.filter((network) => network.currencies.includes(targetMethod!.currency)) : [];
   $: sourceNetwork = sourceNetworks.find((network) => network.id === sourceNetworkId) ?? sourceNetworks[0];
@@ -164,11 +203,12 @@
   $: previewRoute = selected ?? routes.find((route) => route.status === "complete" && route.is_current_best) ?? routes.find((route) => route.status === "complete") ?? null;
   $: secondsUntilRefresh = refreshSeconds && lastUpdatedAt ? Math.max(0, refreshSeconds - Math.floor((clock - lastUpdatedAt) / 1000)) : null;
   $: refreshProgress = secondsUntilRefresh !== null && refreshSeconds ? ((refreshSeconds - secondsUntilRefresh) / refreshSeconds) * 100 : 0;
+  $: searchingVenues = selectedSources.map((source) => p2pSources.find((item) => item.id === source) ?? { id: source, label: source, iconUrl: venueIcon(source), searchable: true });
   $: searchSignature = `${corridor?.id ?? ""}:${sourceMethod?.id ?? ""}:${sourceNetwork?.id ?? ""}:${targetMethod?.id ?? ""}:${targetNetwork?.id ?? ""}:${amount}:${selectedSources.join(",")}:${selectedIntermediaryAssets.join(",")}:${directionReversed}`;
   $: scheduleAutomaticSearch(searchSignature, preferencesLoaded, urlReady, hasAmount, initialSearchReady);
   $: manageRefresh(refreshSeconds, lastUpdatedAt, hasAmount);
   $: if (preferencesLoaded) persistPreferences(amount, refreshSeconds, selectedSources, selectedIntermediaryAssets, corridorId, sourceMethodId, targetMethodId, directionReversed);
-  $: if (urlReady && corridor && sourceCurrency && targetCurrency) updateHash(sourceCurrency, targetCurrency, amount);
+  $: if (urlReady && corridor && selectedSourceCurrency && selectedTargetCurrency) updateHash(selectedSourceCurrency, selectedTargetCurrency, amount);
 
   function persistPreferences(value: string, refresh: RefreshSeconds, sources: P2pSource[], assets: string[], corridorValue: string, sourceMethodValue: string, targetMethodValue: string, reversed: boolean) {
     try {
@@ -182,6 +222,7 @@
   }
   function scheduleAutomaticSearch(_signature: string, loaded: boolean, ready: boolean, validAmount: boolean, initialReady: boolean) {
     if (debounceTimer) window.clearTimeout(debounceTimer);
+    debounceTimer = undefined;
     if (loaded && ready && initialReady && corridor && sourceMethod && targetMethod && validAmount) debounceTimer = window.setTimeout(startSearch, 650);
   }
   function manageRefresh(seconds: RefreshSeconds, updatedAt: number | null, validAmount: boolean) {
@@ -189,7 +230,7 @@
     if (seconds && updatedAt && validAmount) refreshTimer = window.setInterval(startSearch, seconds * 1000);
   }
   function resetResults() {
-    controller?.abort(); routes = []; routesFound = 0; selected = null; instructionsRoute = null; lastUpdatedAt = null; searching = false; error = null;
+    controller?.abort(); routes = []; routesFound = 0; selected = null; selectionPinnedByUser = false; instructionsRoute = null; lastUpdatedAt = null; searching = false; awaitingFirstRoute = false; foundVenues = []; error = null;
     if (refreshTimer) window.clearInterval(refreshTimer);
   }
   function updateAmount(value: string) { initialSearchReady = true; amount = normalizeAmount(value); resetResults(); }
@@ -217,6 +258,14 @@
     routeInstructionsComponent ??= (await import("./RouteInstructions.svelte")).default;
   }
 
+  function runPrimaryAction() {
+    if (previewRoute) {
+      void openInstructions(previewRoute);
+      return;
+    }
+    void startSearch();
+  }
+
   async function openService(link: ServiceLink) {
     const popup = window.open("about:blank", "_blank");
     if (popup) popup.opener = null;
@@ -240,9 +289,11 @@
   }
 
   async function startSearch() {
+    if (debounceTimer) window.clearTimeout(debounceTimer);
+    debounceTimer = undefined;
     if (!corridor || !sourceMethod || !targetMethod) return;
     const value = amountNumber(amount); if (!Number.isFinite(value) || value <= 0) return resetResults();
-    controller?.abort(); controller = new AbortController(); const signal = controller.signal; const currentRequest = ++requestId; searching = true; routesFound = 0; error = null;
+    controller?.abort(); controller = new AbortController(); const signal = controller.signal; const currentRequest = ++requestId; searching = true; awaitingFirstRoute = true; routesFound = 0; foundVenues = []; error = null;
     try {
       const sourceWallet = sourceMethod.kind === "wallet", targetWallet = targetMethod.kind === "wallet";
       if ((sourceWallet && !sourceNetwork) || (targetWallet && !targetNetwork)) throw new Error("No compatible network is available for the selected cryptocurrency");
@@ -250,24 +301,27 @@
         if (sourceNetwork?.id === targetNetwork?.id) throw new Error("Choose a different cryptocurrency or network for the destination");
         throw new Error(`Cross-network bridge routes are not available yet. No live bridge provider is configured for ${sourceMethod.currency}: ${sourceNetwork?.name} → ${targetNetwork?.name}.`);
       }
-      const liveQuery = { sourceFiat: sourceWallet ? sourceMethod.currency : sourceCurrency, targetFiat: targetWallet ? targetMethod.currency : targetCurrency, sourceAmount: value, intermediaryAssets: !sourceWallet && !targetWallet && selectedIntermediaryAssets.length ? selectedIntermediaryAssets : undefined, sourceNetwork: sourceWallet ? sourceNetwork?.id : undefined, targetNetwork: targetWallet ? targetNetwork?.id : undefined, sourcePaymentMethod: sourceWallet ? undefined : sourceMethod.p2pQuery, targetPaymentMethod: targetWallet ? undefined : targetMethod.p2pQuery, sources: selectedSources, allowCrossVenue: true, limit: 40 };
+      const liveQuery = { sourceFiat: selectedSourceCurrency, targetFiat: selectedTargetCurrency, sourceAmount: value, intermediaryAssets: !sourceWallet && !targetWallet && selectedIntermediaryAssets.length ? selectedIntermediaryAssets : undefined, sourceNetwork: sourceWallet ? sourceNetwork?.id : undefined, targetNetwork: targetWallet ? targetNetwork?.id : undefined, sourcePaymentMethod: sourceWallet ? undefined : sourceMethod.p2pQuery, targetPaymentMethod: targetWallet ? undefined : targetMethod.p2pQuery, sources: selectedSources, allowCrossVenue: true, limit: 40 };
       let response: P2pRouteSearchResponse;
       try {
         response = await streamP2pRoutes(liveQuery, anonymousId, signal, (event) => {
           if (currentRequest !== requestId) return;
           if (event.type === "search_started") routesFound = event.routes_found;
-          if (event.type === "routes_updated") applySearchResponse(event);
+          if (event.type === "routes_updated") {
+            applySearchResponse(event);
+            if (event.routes.length > 0) awaitingFirstRoute = false;
+          }
         });
       } catch (streamError) {
         if (signal.aborted || currentRequest !== requestId) return;
         response = await fetchP2pRoutes({ ...liveQuery, signal, anonymousId });
       }
       if (currentRequest !== requestId) return;
-      applySearchResponse(response); lastUpdatedAt = Date.now(); clock = Date.now();
+      applySearchResponse(response); awaitingFirstRoute = false; lastUpdatedAt = Date.now(); clock = Date.now();
     } catch (cause) {
       if (signal.aborted || currentRequest !== requestId) return;
       error = cause instanceof Error ? cause.message : "Could not search live P2P markets";
-    } finally { if (currentRequest === requestId) searching = false; }
+    } finally { if (currentRequest === requestId) { searching = false; awaitingFirstRoute = false; } }
   }
   function toggleSource(source: P2pSource) { initialSearchReady = true; selectedSources = selectedSources.includes(source) ? (selectedSources.length === 1 ? selectedSources : selectedSources.filter((item) => item !== source)) : [...selectedSources, source]; resetResults(); }
   function toggleAsset(asset: string) { initialSearchReady = true; selectedIntermediaryAssets = selectedIntermediaryAssets.includes(asset) ? selectedIntermediaryAssets.filter((item) => item !== asset) : [...selectedIntermediaryAssets, asset]; resetResults(); }
@@ -315,12 +369,13 @@
 
   onMount(() => {
     const shared = readSharedExchange();
+    let savedSourceIds: string[] = [];
     try {
       anonymousId = anonymousBrowserId();
       amount = shared?.amount ?? localStorage.getItem(STORAGE.amount) ?? "0";
       corridorId = localStorage.getItem(STORAGE.corridor) ?? ""; sourceMethodId = localStorage.getItem(STORAGE.sourceMethod) ?? sourceMethodId; targetMethodId = localStorage.getItem(STORAGE.targetMethod) ?? targetMethodId;
       const savedDirection = localStorage.getItem(STORAGE.direction); if (savedDirection != null) directionReversed = savedDirection === "true";
-      const savedSources = localStorage.getItem(STORAGE.sources)?.split(",").filter((value): value is P2pSource => P2P_SOURCES.some((source) => source.id === value)); if (savedSources?.length) selectedSources = [...new Set(savedSources)];
+      savedSourceIds = localStorage.getItem(STORAGE.sources)?.split(",").map((value) => value.trim()).filter(Boolean) ?? [];
       const savedAssets = localStorage.getItem(STORAGE.assets); if (savedAssets != null) selectedIntermediaryAssets = [...new Set(savedAssets.split(",").filter((asset) => INTERMEDIARY_ASSETS.includes(asset as (typeof INTERMEDIARY_ASSETS)[number])))];
       const savedRefresh = Number(localStorage.getItem(STORAGE.refresh)); if (REFRESH_OPTIONS.includes(savedRefresh as RefreshSeconds)) refreshSeconds = savedRefresh as RefreshSeconds;
     } catch {}
@@ -329,6 +384,13 @@
     // still enable the normal debounced search immediately.
     initialSearchTimer = window.setTimeout(() => initialSearchReady = true, 1500);
     fetchNetworks().then((items) => { if (items.length) networks = items; }).catch(() => {});
+    fetchProviders().then((providers) => {
+      p2pSources = providerSources(providers);
+      const catalog = new Set(p2pSources.map((source) => source.id));
+      const live = p2pSources.filter((source) => source.searchable).map((source) => source.id);
+      const restored = [...new Set(savedSourceIds.filter((source) => catalog.has(source)))];
+      selectedSources = restored.length ? restored : live;
+    }).catch((cause: Error) => error ??= cause.message);
     fetchCorridors().then((response) => {
       const savedDirection = localStorage.getItem(STORAGE.direction);
       const sharedCorridor = shared ? response.items.find((item) => (item.source_currency === shared.sourceCurrency && item.target_currency === shared.targetCurrency) || (item.source_currency === shared.targetCurrency && item.target_currency === shared.sourceCurrency)) : null;
@@ -382,7 +444,7 @@
       <div class="cardTop">
         <div class="modeTabs" aria-label="Exchange mode"><button type="button" class="modeActive">Bridge</button><button type="button" disabled>History</button></div>
         <div class="cardActions">
-          <button type="button" class="refreshButton" on:click={startSearch} disabled={!hasAmount || searching} aria-label="Refresh routes now"><svg class:refreshSpin={searching} width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M16.2 7.1A6.8 6.8 0 1 0 16.7 12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /><path d="M13.1 3.8h3.6v3.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
+          <button type="button" class="refreshButton" on:click={startSearch} disabled={!hasAmount || searching} aria-label="Refresh routes now"><svg class:refreshSpin={awaitingFirstRoute} width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M16.2 7.1A6.8 6.8 0 1 0 16.7 12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /><path d="M13.1 3.8h3.6v3.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
           <div class="settingsWrap" bind:this={settingsElement}>
             <button type="button" class="settingsButton" on:click={() => settingsOpen = !settingsOpen} aria-haspopup="dialog" aria-expanded={settingsOpen} aria-label="Route refresh settings"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 6.8a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4Z" stroke="currentColor" stroke-width="1.6" /><path d="M16.2 11.3a6.5 6.5 0 0 0 0-2.6l1.5-1.1-1.8-3.1-1.8.8a6.7 6.7 0 0 0-2.2-1.3L11.7 2H8.3L8 4a6.7 6.7 0 0 0-2.2 1.3L4 4.5 2.2 7.6l1.5 1.1a6.5 6.5 0 0 0 0 2.6l-1.5 1.1L4 15.5l1.8-.8A6.7 6.7 0 0 0 8 16l.3 2h3.4l.3-2a6.7 6.7 0 0 0 2.2-1.3l1.8.8 1.8-3.1-1.6-1.1Z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
             {#if settingsOpen}
@@ -391,7 +453,7 @@
                 <div class="settingsModalHeader"><span class="settingsSheetHandle" aria-hidden="true" on:pointerdown={startSettingsDrag} on:pointermove={moveSettingsDrag} on:pointerup={endSettingsDrag} on:pointercancel={endSettingsDrag}></span><button type="button" class="settingsClose" on:click={closeSettings} aria-label="Close route settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button></div>
                 <div class="settingsHead"><div><strong>Auto-refresh</strong><span>Keep market routes current</span></div><span class={refreshSeconds ? "onBadge" : "offBadge"}>{refreshSeconds ? "On" : "Off"}</span></div>
                 <div class="refreshOptions">{#each REFRESH_OPTIONS as seconds}<button type="button" aria-pressed={refreshSeconds === seconds} on:click={() => { refreshSeconds = seconds; settingsOpen = false; }}>{seconds === 0 ? "Off" : `${seconds}s`}</button>{/each}</div>
-                <div class="sourceSettings"><span class="sourceSettingsLabel">Search exchanges</span><div class="sourceOptions exchangeOptions" aria-label="Exchanges to search">{#each P2P_SOURCES as source}{@const enabled = selectedSources.includes(source.id)}<button type="button" class:sourceOptionActive={enabled} class="sourceOption" aria-pressed={enabled} on:click={() => toggleSource(source.id)}><span class="sourceOptionIcon" aria-hidden="true"><img src={source.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackSourceIcon(event, source.id)} /></span>{source.label}</button>{/each}</div></div>
+                <div class="sourceSettings"><span class="sourceSettingsLabel">Search exchanges</span><div class="sourceOptions exchangeOptions" aria-label="Exchanges to search">{#each p2pSources as source}{@const enabled = selectedSources.includes(source.id)}<button type="button" class:sourceOptionActive={enabled} class="sourceOption" aria-pressed={enabled} title={source.searchable ? `Search ${source.label}` : `Select ${source.label}`} on:click={() => toggleSource(source.id)}><span class="sourceOptionIcon" aria-hidden="true"><img src={source.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackSourceIcon(event, source.id)} /></span>{source.label}</button>{/each}</div></div>
                 <div class="sourceSettings"><div class="intermediarySettingsHead"><span class="sourceSettingsLabel">Cryptocurrency intermediary</span><small>{selectedIntermediaryAssets.length ? `${selectedIntermediaryAssets.length} selected` : "All available"}</small></div><div class="sourceOptions intermediaryOptions" aria-label="Cryptocurrency intermediaries">
                   <button type="button" class:sourceOptionActive={selectedIntermediaryAssets.length === 0} class="sourceOption" aria-pressed={selectedIntermediaryAssets.length === 0} on:click={() => { selectedIntermediaryAssets = []; resetResults(); }}>All available</button>
                   {#each INTERMEDIARY_ASSETS as asset}{@const enabled = selectedIntermediaryAssets.includes(asset)}<button type="button" class:sourceOptionActive={enabled} class="sourceOption" aria-pressed={enabled} on:click={() => toggleAsset(asset)}><span class="intermediaryAssetIcon" aria-hidden="true"><img src={intermediaryIcon(asset)} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={fallbackAssetIcon} /></span>{asset}</button>{/each}
@@ -406,7 +468,7 @@
 
       <div class="intentLabel"><span>Sell</span></div>
       <div class="moneyPanel moneyPanelSource">
-        <div class="panelCopy"><label for="exchange-amount">You send</label><input id="exchange-amount" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={amount} on:focus={(event) => event.currentTarget.select()} on:input={(event) => updateAmount(event.currentTarget.value)} aria-label="Amount to send" /><span class="currencyHint">{sourceMethod?.currency || sourceCurrency || "AMD"} available via {sourceMethod?.kind === "wallet" ? "digital wallet" : "bank transfer"}</span></div>
+        <div class="panelCopy"><label for="exchange-amount">You send</label><input id="exchange-amount" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={amount} on:focus={(event) => event.currentTarget.select()} on:input={(event) => updateAmount(event.currentTarget.value)} aria-label="Amount to send" /><span class="currencyHint">{selectedSourceCurrency || "AMD"} available via {sourceMethod?.kind === "wallet" ? "digital wallet" : "bank transfer"}</span></div>
         <div class="methodControls"><button type="button" class="methodTrigger" on:click={() => void openMethodPicker("source")} aria-label={`Select sending ${sourceMethod?.kind === "wallet" ? "asset" : "bank"}: ${sourceMethod?.name ?? "none"}`}>
           <span class="methodAvatar" style:background-color={paymentMethodFavicon(sourceMethod) ? "transparent" : sourceMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(sourceMethod)}<img src={paymentMethodFavicon(sourceMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{:else}<span>{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{/if}</span>
           <span class="methodText"><strong>{sourceMethod?.name ?? "Select bank"}</strong><small>{sourceMethod?.kind === "wallet" ? `${sourceMethod.currency} · ${sourceNetwork?.name ?? "Loading networks…"}` : sourceMethod ? locationLabel(sourceMethod.country, sourceMethod.currency) : corridor ? locationLabel(sourceCountry, sourceCurrency) : "Unavailable"}</small></span><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
@@ -422,10 +484,10 @@
         </button>{#if targetMethod?.kind === "wallet" && targetNetwork}<div class="networkControl"><button type="button" class="networkButton" on:click={() => void openNetworkPicker("target")} aria-haspopup="dialog"><span class="networkDot" aria-hidden="true"><img src={networkIcon(targetNetwork.name)} alt="" width="18" height="18" loading="lazy" decoding="async" /></span><span class="networkCopy"><small>Network</small><strong>{targetNetwork.name}</strong></span><span class="networkChevron" aria-hidden="true">⌄</span></button></div>{/if}</div>
       </div>
       {#if refreshSeconds > 0}<div class="marketBar"><div class="marketState"><span class="refreshProgress" role="img" aria-label={secondsUntilRefresh === null ? "Auto-refresh is off" : `Refresh in ${secondsUntilRefresh} seconds`}><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle class="refreshTrack" cx="9" cy="9" r="7" pathLength="100" /><circle class="refreshFill" cx="9" cy="9" r="7" pathLength="100" style:stroke-dashoffset={`${100 - refreshProgress}`} /></svg></span><div><span>{lastUpdatedAt ? `Updated ${Math.max(0, Math.floor((clock - lastUpdatedAt) / 1000))}s ago` : "Public P2P sources only · no order placement"}</span></div></div>{#if secondsUntilRefresh !== null}<span class="nextRefresh">{secondsUntilRefresh}s</span>{/if}</div>{/if}
-      <button type="button" class="cta" disabled={!hasAmount || searching || !corridor} on:click={startSearch} data-testid="start-search" aria-label="Search routes">{#if searching}<span class="spinner"></span> Searching every path{:else if hasAmount}Search routes <span>↗</span>{:else}Enter an amount to begin{/if}</button>
+      <button type="button" class="cta" disabled={!hasAmount || (!previewRoute && (searching || !corridor))} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? "Open swap instructions" : "Find routes"}>{#if previewRoute}Swap <span>↗</span>{:else if searching}<span class="spinner"></span> Finding routes{:else if hasAmount}Find routes <span>↗</span>{:else}Enter an amount to begin{/if}</button>
       {#if error}<div class="errorBox" role="alert">{error}</div>{/if}
     </div>
-    <SidePanel {routes} {routesFound} sourceCurrency={sourceMethod?.currency || sourceCurrency} targetCurrency={targetMethod?.currency || targetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={(route) => selected = route} onOpenInstructions={openInstructions} {searching} searched={lastUpdatedAt !== null} {hasAmount} />
+    <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} {searching} {searchingVenues} {foundVenues} searched={lastUpdatedAt !== null} {hasAmount} />
   </div>
   {#if paymentPickerComponent}<svelte:component this={paymentPickerComponent} open={methodPicker === "source"} title="Choose where you pay from" role="sender" {networks} selected={sourceMethod} selectedNetwork={sourceNetwork} onClose={() => methodPicker = null} onSelect={chooseSource} /><svelte:component this={paymentPickerComponent} open={methodPicker === "target"} title="Choose where the recipient gets paid" role="recipient" {networks} selected={targetMethod} selectedNetwork={targetNetwork} onClose={() => methodPicker = null} onSelect={chooseTarget} />{/if}
   {#if networkPickerComponent}<svelte:component this={networkPickerComponent} open={networkPicker !== null} networks={networkPicker === "source" ? sourceNetworks : targetNetworks} selected={networkPicker === "source" ? sourceNetwork : targetNetwork} onClose={() => networkPicker = null} onSelect={selectNetwork} />{/if}

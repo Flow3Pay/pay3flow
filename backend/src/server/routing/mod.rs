@@ -10,6 +10,7 @@ pub mod p2p;
 pub mod pairs;
 pub mod payments;
 pub mod payments_ws;
+pub mod providers;
 pub mod rates;
 pub mod solver;
 pub mod ws;

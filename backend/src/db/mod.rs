@@ -17,8 +17,15 @@ pub async fn build_pool(url: &str) -> Result<DbPool> {
 
 pub async fn apply_schema(pool: &DbPool) -> Result<()> {
     let client = pool.get().await?;
-    let sql = include_str!("../../migrations/schema.sql");
-    client.batch_execute(sql).await?;
+    client
+        .batch_execute(include_str!("../../migrations/schema.sql"))
+        .await?;
+    client
+        .batch_execute(include_str!("../../migrations/catalogs.sql"))
+        .await?;
+    client
+        .batch_execute(include_str!("../../migrations/providers.sql"))
+        .await?;
     Ok(())
 }
 

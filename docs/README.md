@@ -26,6 +26,7 @@ explicitly say `planned`, `research`, or `legacy`.
 ## Product, research, and operations
 
 - [`p2p-search.md`](p2p-search.md) — read-only P2P route search.
+- [`providerfiles.md`](providerfiles.md) — universal Providerfile parser and generated provider catalog migration.
 - [`public-p2p-sources.md`](public-p2p-sources.md) — source policy and privacy boundaries.
 - [`route-aggregation-research.md`](route-aggregation-research.md) — possible future quote sources.
 - [`cow-services-analysis.md`](cow-services-analysis.md) — what is useful from the CoW reference checkout.
