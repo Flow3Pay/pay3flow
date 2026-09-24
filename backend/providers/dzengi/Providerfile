@@ -1,0 +1,11 @@
+[sell]
+source_url = "https://dzengi.com/ru/kalkulyator-kriptovalyut"
+name = "Dzengi Sell"
+currency = ["byn", "usd", "eur", "rub"]
+banks = []
+
+[buy]
+source_url = "https://dzengi.com/ru/kalkulyator-kriptovalyut"
+name = "Dzengi Buy"
+currency = ["byn", "usd", "eur", "rub"]
+banks = []

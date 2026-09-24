@@ -1,0 +1,11 @@
+[sell]
+source_url = "https://exnode.ru/exchange"
+name = "Exnode Sell"
+currency = ["rub", "usd", "eur", "byn"]
+banks = []
+
+[buy]
+source_url = "https://exnode.ru/exchange"
+name = "Exnode Buy"
+currency = ["rub", "usd", "eur", "byn"]
+banks = []

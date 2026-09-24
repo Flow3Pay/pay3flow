@@ -57,6 +57,9 @@ async function mockBackend(page: Page) {
         { slug: "bybit", name: "Bybit", side: "sell", source_url: "https://www.bybit.com/fiat/trade/otc", currencies: ["AMD", "RUB"], banks: [], searchable: true },
         { slug: "cifra-broker", name: "Cifra Markets Sell", side: "sell", source_url: "https://cifra.by/", currencies: ["BYN", "RUB", "USD"], banks: [], searchable: true },
         { slug: "whitebird", name: "Whitebird Sell", side: "sell", source_url: "https://whitebird.io", currencies: ["BYN", "USD", "EUR", "RUB"], banks: [], searchable: false },
+        { slug: "bestchange", name: "BestChange Sell", side: "sell", source_url: "https://bestchange.app/?lang=en", currencies: ["BYN", "EUR", "RUB", "USD"], banks: [], searchable: false },
+        { slug: "dzengi", name: "Dzengi Sell", side: "sell", source_url: "https://dzengi.com/ru/kalkulyator-kriptovalyut", currencies: ["BYN", "EUR", "RUB", "USD"], banks: [], searchable: false },
+        { slug: "exnode", name: "Exnode Sell", side: "sell", source_url: "https://exnode.ru/exchange", currencies: ["BYN", "EUR", "RUB", "USD"], banks: [], searchable: false },
       ]);
     }
     if (url.pathname === "/api/service-executions/open" && method === "POST") {
@@ -477,6 +480,9 @@ test("catalog providers can be selected", async ({ page }) => {
   await page.getByRole("button", { name: "Route refresh settings" }).click();
   const whitebird = page.getByRole("button", { name: "Whitebird" });
   const cifra = page.getByRole("button", { name: "Cifra Markets" });
+  const bestchange = page.getByRole("button", { name: "BestChange" });
+  const dzengi = page.getByRole("button", { name: "Dzengi" });
+  const exnode = page.getByRole("button", { name: "Exnode" });
 
   await expect(cifra).toBeEnabled();
   await expect(cifra).toHaveAttribute("aria-pressed", "true");
@@ -484,6 +490,13 @@ test("catalog providers can be selected", async ({ page }) => {
   await expect(whitebird).toBeEnabled();
   await whitebird.click();
   await expect(whitebird).toHaveAttribute("aria-pressed", "true");
+  for (const [button, icon] of [[bestchange, "/icons/venues/bestchange.svg"], [dzengi, "/icons/venues/dzengi.png"], [exnode, "/icons/venues/exnode.svg"]] as const) {
+    await expect(button).toBeEnabled();
+    await expect(button).toHaveAttribute("aria-pressed", "false");
+    await expect(button.locator("img")).toHaveAttribute("src", icon);
+    await button.click();
+    await expect(button).toHaveAttribute("aria-pressed", "true");
+  }
 });
 
 test("search venues bounce in the loader and refresh stops spinning after the first route", async ({ page }) => {

@@ -1,4 +1,4 @@
-const LOCAL_VENUE_ICONS = new Set(["binance", "bybit", "okx", "bitget", "rapira", "whitebird", "cifra-broker"]);
+const LOCAL_VENUE_ICONS = new Set(["binance", "bybit", "okx", "bitget", "rapira", "whitebird", "cifra-broker", "exnode", "dzengi", "bestchange"]);
 const LOCAL_ASSET_ICONS = new Set([
   "ada", "apt", "atom", "avax", "bch", "bnb", "btc", "dai", "doge", "dot", "eth", "fdusd",
   "link", "ltc", "matic", "near", "sol", "sui", "ton", "trx", "uni", "usdc", "usdt", "xrp",
@@ -32,7 +32,7 @@ const NETWORK_ASSETS: Array<[RegExp, string]> = [
 /** Returns a static asset served by this frontend. */
 export function venueIcon(venue: string): string {
   const key = venue.toLowerCase();
-  const extension = key === "binance" || key === "bybit" || key === "bitget" || key === "rapira" || key === "whitebird" || key === "cifra-broker" ? "png" : "svg";
+  const extension = key === "binance" || key === "bybit" || key === "bitget" || key === "rapira" || key === "whitebird" || key === "cifra-broker" || key === "dzengi" ? "png" : "svg";
   return LOCAL_VENUE_ICONS.has(key)
     ? `/icons/venues/${key}.${extension}`
     : "/icons/venues/generic.svg";

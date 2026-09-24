@@ -1,0 +1,11 @@
+[sell]
+source_url = "https://bestchange.app/?lang=en"
+name = "BestChange Sell"
+currency = ["rub", "usd", "eur", "byn"]
+banks = []
+
+[buy]
+source_url = "https://bestchange.app/?lang=en"
+name = "BestChange Buy"
+currency = ["rub", "usd", "eur", "byn"]
+banks = []

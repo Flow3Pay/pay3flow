@@ -14,7 +14,8 @@
   type P2pSourceOption = { id: P2pSource; label: string; iconUrl: string; searchable: boolean };
   const INTERMEDIARY_ASSETS = CRYPTO_ASSETS.map(([currency]) => currency);
   const BANK_METHODS = PAYMENT_METHODS.filter((method) => method.kind === "bank");
-  const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", sources: "pay3flow.exchange.p2p-sources", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets", anonymousId: "pay3flow.reputation.anonymous-id" };
+  const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", sources: "pay3flow.exchange.p2p-sources", sourcesVersion: "pay3flow.exchange.p2p-sources-version", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets", anonymousId: "pay3flow.reputation.anonymous-id" };
+  const SOURCE_PREFERENCES_VERSION = "2";
 
   let corridors: ExchangeCorridor[] = [];
   let corridorId = "";
@@ -219,7 +220,7 @@
 
   function persistPreferences(value: string, refresh: RefreshSeconds, sources: P2pSource[], assets: string[], corridorValue: string, sourceMethodValue: string, targetMethodValue: string, reversed: boolean) {
     try {
-      localStorage.setItem(STORAGE.amount, value); localStorage.setItem(STORAGE.refresh, String(refresh)); localStorage.setItem(STORAGE.sources, sources.join(",")); localStorage.setItem(STORAGE.assets, assets.join(",")); localStorage.setItem(STORAGE.corridor, corridorValue); localStorage.setItem(STORAGE.sourceMethod, sourceMethodValue); localStorage.setItem(STORAGE.targetMethod, targetMethodValue); localStorage.setItem(STORAGE.direction, String(reversed));
+      localStorage.setItem(STORAGE.amount, value); localStorage.setItem(STORAGE.refresh, String(refresh)); localStorage.setItem(STORAGE.sources, sources.join(",")); localStorage.setItem(STORAGE.sourcesVersion, SOURCE_PREFERENCES_VERSION); localStorage.setItem(STORAGE.assets, assets.join(",")); localStorage.setItem(STORAGE.corridor, corridorValue); localStorage.setItem(STORAGE.sourceMethod, sourceMethodValue); localStorage.setItem(STORAGE.targetMethod, targetMethodValue); localStorage.setItem(STORAGE.direction, String(reversed));
     } catch {}
   }
   function updateHash(source: string, target: string, value: string) {
@@ -376,12 +377,14 @@
   onMount(() => {
     const shared = readSharedExchange();
     let savedSourceIds: string[] = [];
+    let savedSourcePreferencesVersion = "";
     try {
       anonymousId = anonymousBrowserId();
       amount = shared?.amount ?? localStorage.getItem(STORAGE.amount) ?? "0";
       corridorId = localStorage.getItem(STORAGE.corridor) ?? ""; sourceMethodId = localStorage.getItem(STORAGE.sourceMethod) ?? sourceMethodId; targetMethodId = localStorage.getItem(STORAGE.targetMethod) ?? targetMethodId;
       const savedDirection = localStorage.getItem(STORAGE.direction); if (savedDirection != null) directionReversed = savedDirection === "true";
       savedSourceIds = localStorage.getItem(STORAGE.sources)?.split(",").map((value) => value.trim()).filter(Boolean) ?? [];
+      savedSourcePreferencesVersion = localStorage.getItem(STORAGE.sourcesVersion) ?? "";
       const savedAssets = localStorage.getItem(STORAGE.assets); if (savedAssets != null) selectedIntermediaryAssets = [...new Set(savedAssets.split(",").filter((asset) => INTERMEDIARY_ASSETS.includes(asset as (typeof INTERMEDIARY_ASSETS)[number])))];
       const savedRefresh = Number(localStorage.getItem(STORAGE.refresh)); if (REFRESH_OPTIONS.includes(savedRefresh as RefreshSeconds)) refreshSeconds = savedRefresh as RefreshSeconds;
     } catch {}
@@ -395,7 +398,7 @@
       const catalog = new Set(p2pSources.map((source) => source.id));
       const live = p2pSources.filter((source) => source.searchable).map((source) => source.id);
       const restored = [...new Set(savedSourceIds.filter((source) => catalog.has(source)))];
-      selectedSources = restored.length ? restored : live;
+      selectedSources = savedSourcePreferencesVersion === SOURCE_PREFERENCES_VERSION && restored.length ? restored : live;
     }).catch((cause: Error) => error ??= cause.message);
     fetchCorridors().then((response) => {
       const savedDirection = localStorage.getItem(STORAGE.direction);

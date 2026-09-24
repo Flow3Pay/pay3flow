@@ -30,6 +30,11 @@ still be available when the venue is opened.
 | Whitebird | Browser workflow over the public exchanger | Direct fiat/crypto quotes, including `USDC/RUB` |
 | Cifra Markets | Public calculator and IMEX market API | Direct RUB/BYN/USD crypto quotes and crypto market paths |
 
+The catalog also includes Exnode, Dzengi, and BestChange. They are currently
+selectable venue entries with links and local icons; live route adapters are
+not enabled yet because their public quote endpoints require a site workflow
+or API credentials.
+
 Provider capabilities live in
 [`backend/providers/*/Providerfile`](backend/providers/). They are compiled
 into [`backend/migrations/providers.sql`](backend/migrations/providers.sql) and
