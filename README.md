@@ -1,182 +1,331 @@
 # Pay3Flow
 
-Pay3Flow is an experimental cross-border exchange platform. It turns a user
-intent into an exchange order, discovers eligible solvers, compares quotes,
-collects explicit funding consent, and records settlement proofs.
+Pay3Flow is an experimental live route aggregator for exchanging fiat and
+crypto across public P2P markets, direct exchangers, and spot markets. The web
+application searches the selected venues in parallel, streams results as each
+venue responds, and keeps the best route at the top of the ranking.
 
-The current implementation is an MVP with a mock TOKEN ledger and fake/local
-solvers. It is not production-ready payment infrastructure and must not be
-used to process real funds without a separate legal, compliance, security, and
-operational review.
-
-## Product model
-
-The primary flow is a solver-based exchange rather than a provider picker:
+Pay3Flow currently supports four route shapes:
 
 ```text
-user intent -> exchange order -> solver discovery -> quote auction
-             -> selected route -> funding instruction -> settlement -> proof
+fiat   -> crypto -> fiat     AMD -> USDT -> RUB
+fiat   -> crypto             RUB -> USDC
+crypto -> fiat               USDC (ERC-20) -> RUB
+crypto -> crypto             USDC (ERC-20) -> ETH
 ```
 
-The first target corridor is `AM/AMD -> RU/RUB`, but country and currency are
-data fields and the domain model is designed for additional corridors.
+Search results are public market estimates. Pay3Flow does not place an order,
+contact an advertiser, hold funds, or guarantee that a displayed offer will
+still be available when the venue is opened.
 
-The settlement model has two conceptual legs:
+## Current search sources
 
-1. `TOKEN-leg`: a reserve, transfer, or internal accounting step. The MVP uses
-   a mock ledger.
-2. `money-leg`: local delivery to the recipient through the selected rail.
+| Source | Integration | Coverage used by the router |
+| --- | --- | --- |
+| Binance | Public P2P API and spot ticker | P2P ads plus crypto market paths |
+| Bybit | Public P2P API and spot ticker | P2P ads plus crypto market paths |
+| OKX | Public P2P API and spot ticker | P2P ads plus crypto market paths |
+| Bitget | Public P2P API and spot ticker | P2P ads plus crypto market paths |
+| Rapira | Public P2P API | `USDT/RUB` P2P ads |
+| Whitebird | Browser workflow over the public exchanger | Direct fiat/crypto quotes, including `USDC/RUB` |
 
-The user must see and accept the route, amount, fees, timing, and any TOKEN or
-crypto settlement asset involved. Pay3Flow must never present a multi-leg
-route as an undisclosed direct fiat transfer.
+Provider capabilities live in
+[`backend/providers/*/Providerfile`](backend/providers/). They are compiled
+into [`backend/migrations/providers.sql`](backend/migrations/providers.sql) and
+loaded into PostgreSQL when the backend starts. `Cifra Broker` and `Rate.am`
+are present in the provider directory, but do not currently have live search
+adapters.
 
-## Service topology
-
-| Service | Directory | Stack | Responsibility |
-| --- | --- | --- | --- |
-| Web frontend | `pay3low-svelte-frontend/` | SvelteKit + TypeScript | Exchange form, quotes, route details, status and history |
-| Backend | `backend/` | Rust, Axum, PostgreSQL, Redis | Auth, orders, discovery, auction, settlement state and API |
-| fmatch | `fmatch/` | Rust, Axum, ActivityPub | Federated solver discovery and candidate matching |
-| CoW reference | `cowprotocol-services/` | Rust | Local reference for orderbook and solver-auction patterns; not a production dependency |
+## How live routing works
 
 ```mermaid
-graph LR
-    client[Browser] --> frontend[Frontend :3000]
-    frontend -->|REST / WebSocket| backend[Backend :8080]
-    backend --> postgres[(PostgreSQL)]
-    backend --> redis[(Redis)]
-    backend <-->|ActivityPub discovery| fmatch[fmatch :7277]
-    fmatch --> fmatchdb[(fmatch PostgreSQL)]
-    fmatch --> typesense[(Typesense)]
-    backend -->|quotes and settlement| solvers[Solvers / liquidity rails]
+flowchart LR
+    browser[Browser :3000] -->|REST and WebSocket| api[Axum API :8080]
+    api --> postgres[(PostgreSQL)]
+    api --> redis[(Redis)]
+    api --> p2p[P2P APIs]
+    api --> spot[Spot tickers]
+    api --> whitebird[Whitebird workflow]
+    p2p --> ranker[Route builder and ranker]
+    spot --> ranker
+    whitebird --> ranker
+    ranker -->|progressive snapshots| browser
 ```
 
-`fmatch` returns candidates; it does not select the final Pay3Flow winner and
-does not own settlement. The backend remains the orderbook, quote collector,
-scoring engine, and settlement state machine. Acquiring adapters and the old
-`transactions/routes` flow remain available as legacy or fallback rails.
+- Selected sources and intermediary assets are searched concurrently.
+- `/ws/p2p/routes` publishes a new ranked snapshot whenever another source
+  finishes; the UI does not wait for every venue before showing results.
+- A failed or slow source is reported in route status data without discarding
+  results already returned by other sources.
+- Routes with verified payment-method matches rank first, followed by target
+  amount and same-venue execution.
+- The best route remains selected while results arrive unless the user has
+  explicitly selected another route.
+- Public P2P ads are protected by price-deviation filtering. Direct exchanger
+  quotes such as Whitebird are retained as independent quotes rather than
+  compared as if they were P2P ads.
 
-## Quick start
+## Quick start with Docker
 
-Requirements: Docker Compose and Ruby 3.1+ for the smoke test.
+Requirements: Docker with Compose support.
+
+Start the live-routing stack:
 
 ```bash
-docker compose up -d --build
+docker compose up -d --build postgres redis backend pay3low-svelte-frontend
 curl -fsS http://localhost:8080/health
-curl -fsS http://localhost:7277/health
 ```
 
-Open the frontend at <http://localhost:3000>.
+Open <http://localhost:3000>. The API is available at
+<http://localhost:8080>.
 
-Run the exchange smoke test after the services are healthy:
+The backend image includes Chromium and the Playwright driver required by the
+Whitebird workflow. The compose file also contains the older `fmatch` stack;
+that stack needs a separate `fmatch/` checkout and is not required for the
+read-only live route search.
+
+To stop the stack:
 
 ```bash
-./scripts/exchange_flow.rb
+docker compose down
 ```
 
-The smoke test covers corridor validation, idempotent order creation, fmatch
-discovery or fallback, quote selection, the consent gate, proof handling,
-disputes, kill switches, audit history, and order history.
+## Route search API
 
-For a local frontend-only workflow, see
-[`pay3low-svelte-frontend/README.md`](pay3low-svelte-frontend/README.md). For
-development and testing conventions, see [`docs/development.md`](docs/development.md).
+### Complete routes
 
-## Useful API endpoints
+`GET /api/p2p/routes` builds and ranks complete routes. Despite the legacy
+field names `source_fiat` and `target_fiat`, either side may be a supported
+crypto asset. Use `source_network` or `target_network` when a crypto asset is
+selected.
 
-The API is still evolving. The most useful MVP endpoints are:
+For example, sell 100 USDC on Ethereum for RUB received through Sberbank and
+search every live source:
 
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| `GET` | `/health` | Backend health check |
-| `POST` | `/api/auth/register` | Register a demo user |
-| `POST` | `/api/auth/login` | Log in with the demo code flow |
-| `GET` | `/api/exchange/corridors` | List enabled exchange corridors |
-| `POST` | `/api/exchange/orders` | Create an exchange order |
-| `GET` | `/api/exchange/orders/:id` | Read an order and its current state |
-| `POST` | `/api/exchange/orders/:id/discover` | Discover solver candidates |
-| `POST` | `/api/exchange/orders/:id/auction` | Collect quotes and select a route |
-| `POST` | `/api/exchange/orders/:id/confirm` | Lock a selected quote and show funding instructions |
-| `POST` | `/api/exchange/orders/:id/funding/confirm` | Record explicit user consent and start the MVP settlement flow |
-| `POST` | `/api/exchange/orders/:id/proof` | Submit a settlement proof |
-| `GET` | `/api/exchange/orders/:id/live` | Stream order route updates over WebSocket |
-| `GET` | `/api/p2p/routes` | Read-only multi-leg P2P route search |
+```bash
+curl -G 'http://localhost:8080/api/p2p/routes' \
+  --data-urlencode 'source_fiat=USDC' \
+  --data-urlencode 'source_network=ethereum' \
+  --data-urlencode 'target_fiat=RUB' \
+  --data-urlencode 'source_amount=100' \
+  --data-urlencode 'target_payment_method=Sberbank' \
+  --data-urlencode 'sources=binance,bybit,okx,bitget,rapira,whitebird' \
+  --data-urlencode 'allow_cross_venue=true' \
+  --data-urlencode 'limit=40'
+```
 
-See [`docs/api-overview.md`](docs/api-overview.md) for request examples and
-the complete route families.
-
-## P2P route search
-
-The P2P search is read-only. It looks for routes such as
-`AMD -> intermediary asset -> RUB`, checks limits and completion data, and
-streams or ranks complete routes. It does not create orders on external
-platforms, authenticate to them, or collect full card details.
+Search a fiat-to-fiat route through one of several crypto assets:
 
 ```bash
 curl -G 'http://localhost:8080/api/p2p/routes' \
   --data-urlencode 'source_fiat=AMD' \
   --data-urlencode 'target_fiat=RUB' \
   --data-urlencode 'source_amount=100000' \
-  --data-urlencode 'intermediary_assets=USDT,USDC,BTC,ETH,BNB,SOL,TRX,TON' \
-  --data-urlencode 'min_orders=20' \
-  --data-urlencode 'min_completion_rate=0.9'
+  --data-urlencode 'intermediary_assets=USDT,USDC,BTC,ETH' \
+  --data-urlencode 'allow_cross_venue=true'
 ```
 
-Details are in [`docs/p2p-search.md`](docs/p2p-search.md) and the source policy
-is documented in [`docs/public-p2p-sources.md`](docs/public-p2p-sources.md).
+Useful route parameters:
+
+| Parameter | Meaning |
+| --- | --- |
+| `source_fiat`, `target_fiat` | Source and target currency or asset codes |
+| `source_amount` | Positive amount in source-currency units |
+| `source_network`, `target_network` | Canonical network IDs from `/api/networks` |
+| `intermediary_assets` | Comma-separated crypto bridges for fiat-to-fiat routes |
+| `source_payment_method`, `target_payment_method` | Bank or payment-method filters |
+| `sources` | Comma-separated source slugs; omit to search all configured adapters |
+| `allow_cross_venue` | Allow routes whose legs execute on different venues |
+| `merchant_only` | Keep merchant ads only |
+| `min_orders` | Minimum completed orders reported by a venue |
+| `min_completion_rate` | Completion-rate fraction from `0` to `1` |
+| `max_price_deviation_bps` | P2P outlier threshold; default `1000` (10%) |
+| `limit` | Returned route limit from `1` to `100`; default `20` |
+
+`routes_found` counts all unique valid routes before `limit` is applied.
+
+### Progressive WebSocket search
+
+Connect to `ws://localhost:8080/ws/p2p/routes` and send exactly one JSON
+request after the socket opens:
+
+```json
+{
+  "anonymous_id": "2a97cff7-20ab-4550-a9bf-4ec5509510a0",
+  "query": {
+    "source_fiat": "USDC",
+    "source_network": "ethereum",
+    "target_fiat": "RUB",
+    "source_amount": 100,
+    "target_payment_method": "Sberbank",
+    "sources": "binance,bybit,okx,bitget,rapira,whitebird",
+    "allow_cross_venue": true,
+    "min_orders": 20,
+    "min_completion_rate": 0.9,
+    "limit": 40
+  }
+}
+```
+
+The server responds with:
+
+1. `search_started` — the search ID was allocated.
+2. Zero or more `routes_updated` snapshots — sources are still completing.
+3. `search_finished` with the final snapshot, or `search_failed`.
+
+Every `routes_updated` and `search_finished` event has the same fields as the
+REST response, plus `type`.
+
+### Single P2P leg
+
+`GET /api/p2p/search` returns raw public advertisements for one fiat/asset
+side. It is useful for adapter diagnostics; the main UI uses complete routes.
+
+```bash
+curl -G 'http://localhost:8080/api/p2p/search' \
+  --data-urlencode 'fiat=RUB' \
+  --data-urlencode 'asset=USDC' \
+  --data-urlencode 'side=sell' \
+  --data-urlencode 'amount=100' \
+  --data-urlencode 'payment_method=Sberbank' \
+  --data-urlencode 'sources=binance,bybit,okx,bitget,whitebird'
+```
+
+## Main API surface
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/health` | Backend liveness check |
+| `GET` | `/api/providers` | Database-backed provider catalog |
+| `GET` | `/api/banks` | Bank and payment-method catalog |
+| `GET` | `/api/networks` | Crypto networks and compatible assets |
+| `GET` | `/api/p2p/search` | Search one P2P/direct-exchange leg |
+| `GET` | `/api/p2p/routes` | Build a final ranked route snapshot |
+| `WS` | `/ws/p2p/routes` | Stream progressive ranked snapshots |
+| `POST` | `/api/service-executions/open` | Record that a route service link was opened |
+| `PUT` | `/api/services/{id}/vote` | Add, change, or remove anonymous feedback |
+
+The repository also retains authentication, payments, ActivityPub discovery,
+and the earlier `/api/exchange/orders` workflow. Those APIs are secondary to
+the current live-routing UI; see
+[`docs/api-overview.md`](docs/api-overview.md) for their route families.
+
+## Local development
+
+### Backend
+
+Requirements: Rust 1.97+, PostgreSQL 16, Redis 7, Chromium, and a Playwright
+driver when workflow-based sources are enabled.
+
+```bash
+cargo test --manifest-path backend/Cargo.toml
+cargo run --manifest-path backend/Cargo.toml --bin pay3flow-backend
+```
+
+The default local database URL uses port `5432`. The Docker PostgreSQL service
+is exposed on port `5435`, so set the URL when running the backend on the host:
+
+```bash
+DATABASE_URL=postgres://pay3flow:pay3flow@localhost:5435/pay3flow \
+REDIS_URL=redis://localhost:6379 \
+cargo run --manifest-path backend/Cargo.toml --bin pay3flow-backend
+```
+
+When a Providerfile changes, regenerate its embedded SQL and check the diff:
+
+```bash
+cargo run --manifest-path backend/Cargo.toml --bin providerfile -- generate
+cargo run --manifest-path backend/Cargo.toml --bin providerfile -- check
+```
+
+### Frontend
+
+Requirements: Node.js 24 and npm.
+
+```bash
+cd pay3low-svelte-frontend
+npm ci
+PUBLIC_API_URL=http://localhost:8080 npm run dev
+```
+
+Verification commands:
+
+```bash
+npm run check
+npm run build
+npm run test:e2e
+```
+
+Production builds run with `npm start`, which serves the adapter-node output
+through [`server.mjs`](pay3low-svelte-frontend/server.mjs).
+
+## Configuration
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `HTTP_ADDR` | `0.0.0.0:8080` | Backend listen address |
+| `DATABASE_URL` | local PostgreSQL URL | Backend database |
+| `REDIS_URL` | `redis://127.0.0.1:6379` | Cache connection; set empty to disable |
+| `P2P_SEARCH_ENABLED` | `true` | Enable public route search |
+| `P2P_SEARCH_TIMEOUT_MS` | `4000` | Default adapter timeout, clamped to 250–30000 ms |
+| `P2P_SEARCH_CACHE_TTL_MS` | `5000` | In-memory leg-search cache TTL |
+| `P2P_SEARCH_ASSETS` | network catalog | Default fiat-to-fiat intermediary assets |
+| `PLAYWRIGHT_CHROMIUM_EXECUTABLE` | unset | Chromium executable for workflow sources |
+| `PUBLIC_API_URL` | `http://localhost:8080` | Browser-visible backend URL |
+
+Individual Providerfiles may override the default timeout. Whitebird currently
+uses a 30-second workflow timeout because its public quote is rendered in a
+browser.
 
 ## Repository layout
 
 ```text
 pay3flow/
-├── backend/                    # Rust API, domain logic and migrations
-├── fmatch/                     # ActivityPub solver matcher
-├── cowprotocol-services/       # Local upstream reference checkout
-├── pay3low-svelte-frontend/    # SvelteKit web application
-├── docs/                       # Architecture, API, operations and domain docs
-├── scripts/                    # Smoke, health and secret-audit scripts
+├── backend/
+│   ├── providers/             # Providerfiles and adapter definitions
+│   ├── migrations/            # Schema, catalogs and generated provider SQL
+│   └── src/                   # Rust API and routing logic
+├── pay3low-svelte-frontend/   # SvelteKit application
+├── deploy/                    # Kubernetes templates and render scripts
+├── docs/                      # Design, API and operations notes
+├── scripts/                   # Health, smoke and secret-audit scripts
 ├── docker-compose.yml
-└── LICENSE                     # GNU AGPL v3 or later
+└── flake.nix                  # Nix deployment helpers
 ```
 
 ## Development ports
 
-| Service | Host port | Purpose |
-| --- | ---: | --- |
-| Frontend | `3000` | SvelteKit application |
-| Backend | `8080` | REST API, ActivityPub and WebSocket endpoints |
-| Backend PostgreSQL | `5435` | Pay3Flow database |
-| Redis | `6379` | Cache and short-lived quote data |
-| fmatch | `7277` | ActivityPub matcher |
-| fmatch PostgreSQL | `5433` | fmatch database |
-| Typesense | `8108` | fmatch search index |
+| Service | Host port |
+| --- | ---: |
+| Frontend | `3000` |
+| Backend REST/WebSocket API | `8080` |
+| PostgreSQL | `5435` |
+| Redis | `6379` |
 
-## Documentation map
+The optional legacy fmatch services use `7277`, `5433`, and `8108`.
 
-- [`docs/README.md`](docs/README.md) — documentation index and reading paths.
-- [`docs/architecture.md`](docs/architecture.md) — service boundaries and data flow.
-- [`docs/development.md`](docs/development.md) — local development and verification.
-- [`docs/configuration.md`](docs/configuration.md) — environment variables and secrets.
-- [`docs/deployment.md`](docs/deployment.md) — deployment checklist and production blockers.
-- [`docs/api-overview.md`](docs/api-overview.md) — API route families and examples.
-- [`docs/exchange-domain.md`](docs/exchange-domain.md) — tables, invariants and states.
-- [`docs/exchange-risk-compliance.md`](docs/exchange-risk-compliance.md) — safety gates.
-- [`docs/backend-to-fmatch.org`](docs/backend-to-fmatch.org) — ActivityPub request contract.
-- [`docs/fmatch-api.md`](docs/fmatch-api.md) — fmatch surfaces and activity types.
-- [`docs/fmatch-offer-schema.md`](docs/fmatch-offer-schema.md) — solver offer format.
-- [`docs/p2p-search.md`](docs/p2p-search.md) — read-only P2P route search.
-- [`docs/route-aggregation-research.md`](docs/route-aggregation-research.md) — future quote sources.
-- [`docs/roadmap-cow.md`](docs/roadmap-cow.md) — CoW-style migration roadmap.
-- [`docs/glossary.md`](docs/glossary.md) — domain vocabulary.
+## Safety and limitations
+
+- This is experimental software, not production-ready payment infrastructure.
+- External sites can change or rate-limit undocumented public endpoints at any
+  time.
+- Payment-method names are not equally detailed across venues. The response
+  exposes `payment_methods_verified` and route warnings when matching is
+  uncertain.
+- Cross-venue routes may require an external asset transfer. Check the route's
+  `requires_asset_transfer`, network, fee, and warning fields before acting.
+- Legal, compliance, sanctions, tax, custody, security, and operational review
+  remain the responsibility of any real deployment.
+
+## Further documentation
+
+- [`docs/p2p-search.md`](docs/p2p-search.md) — route-search internals and source behavior.
+- [`docs/providerfiles.md`](docs/providerfiles.md) — declarative provider adapter format.
+- [`docs/api-overview.md`](docs/api-overview.md) — broader API families.
+- [`docs/development.md`](docs/development.md) — development and test conventions.
+- [`docs/deployment.md`](docs/deployment.md) — deployment checklist and blockers.
 
 ## License
 
 Pay3Flow is licensed under the GNU Affero General Public License, version 3 or
 any later version (`AGPL-3.0-or-later`). See [`LICENSE`](LICENSE).
-
-The AGPL requires recipients who convey covered modified or derivative works,
-including network-accessible modified versions, to receive the corresponding
-source under the same license terms. It does not automatically relicense every
-independent program that merely communicates with Pay3Flow; consult the license
-text and qualified legal counsel for a specific distribution or integration.
