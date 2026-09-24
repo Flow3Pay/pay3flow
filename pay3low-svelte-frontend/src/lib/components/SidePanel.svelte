@@ -2,7 +2,7 @@
   import { flip } from "svelte/animate";
   import { quintOut } from "svelte/easing";
   import { fly } from "svelte/transition";
-  import type { RouteCandidate, ServiceStats, ServiceVote } from "$lib/exchange";
+  import type { RouteCandidate, ServiceVote } from "$lib/exchange";
   import { assetIcon, dislikeIcon, likeIcon, networkIcon, venueIcon } from "$lib/icons";
 
   export let routes: RouteCandidate[];
@@ -12,7 +12,7 @@
   export let selectedRouteId: string | null;
   export let onSelect: (route: RouteCandidate) => void;
   export let onOpenInstructions: (route: RouteCandidate) => void;
-  export let onVote: (service: ServiceStats, vote: ServiceVote) => void;
+  export let onVote: (route: RouteCandidate, vote: ServiceVote) => void;
   export let searching = false;
   export let searchingVenues: { id: string; label: string; iconUrl: string }[] = [];
   export let foundVenues: { id: string; label: string; iconUrl: string }[] = [];
@@ -131,7 +131,7 @@
                   {/each}
                 </span>
               </button>
-              {#if route.reputation || (complete && route.services?.length)}<div class="routeFeedback" aria-label="Route feedback">{#if route.reputation}<span>Used {compact(route.reputation.executions_average)} times</span>{/if}{#if complete}{#each route.services ?? [] as service (service.id)}<span class="serviceVote">{#if route.services && route.services.length > 1}<span class="serviceVoteName">{service.display_name}</span>{/if}<button type="button" class:active={service.viewer_vote === "like"} aria-label={`Like ${service.display_name} route`} aria-pressed={service.viewer_vote === "like"} title={`Like ${service.display_name}`} on:click={() => onVote(service, "like")}><img src={likeIcon} alt="" aria-hidden="true" />{#if service.viewer_vote}<span aria-label={`${compact(service.likes_total)} likes`}>{compact(service.likes_total)}</span>{/if}</button><button type="button" class:active={service.viewer_vote === "dislike"} aria-label={`Dislike ${service.display_name} route`} aria-pressed={service.viewer_vote === "dislike"} title={`Dislike ${service.display_name}`} on:click={() => onVote(service, "dislike")}><img src={dislikeIcon} alt="" aria-hidden="true" />{#if service.viewer_vote}<span aria-label={`${compact(service.dislikes_total)} dislikes`}>{compact(service.dislikes_total)}</span>{/if}</button></span>{/each}{/if}</div>{/if}
+              {#if route.reputation || (complete && route.feedback)}<div class="routeFeedback" aria-label="Route feedback">{#if route.reputation}<span>Used {compact(route.reputation.executions_average)} times</span>{/if}{#if complete && route.feedback}<span class="serviceVote routeVote"><button type="button" class:active={route.feedback.viewer_vote === "like"} aria-label="Like this route" aria-pressed={route.feedback.viewer_vote === "like"} title="Like this route" on:click={() => onVote(route, "like")}><img src={likeIcon} alt="" aria-hidden="true" />{#if route.feedback.viewer_vote}<span aria-label={`${compact(route.feedback.likes_total)} likes`}>{compact(route.feedback.likes_total)}</span>{/if}</button><button type="button" class:active={route.feedback.viewer_vote === "dislike"} aria-label="Dislike this route" aria-pressed={route.feedback.viewer_vote === "dislike"} title="Dislike this route" on:click={() => onVote(route, "dislike")}><img src={dislikeIcon} alt="" aria-hidden="true" />{#if route.feedback.viewer_vote}<span aria-label={`${compact(route.feedback.dislikes_total)} dislikes`}>{compact(route.feedback.dislikes_total)}</span>{/if}</button></span>{/if}</div>{/if}
               </div>
             </div></li>
           {/each}

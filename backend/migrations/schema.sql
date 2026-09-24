@@ -73,6 +73,20 @@ CREATE TABLE IF NOT EXISTS service_votes (
 CREATE INDEX IF NOT EXISTS service_votes_service_idx
     ON service_votes (service_id);
 
+-- Route feedback belongs to the concrete route shown to the viewer, not to
+-- the exchange service used by one of its legs.
+CREATE TABLE IF NOT EXISTS route_votes (
+    anonymous_id UUID NOT NULL,
+    route_id TEXT NOT NULL,
+    vote TEXT NOT NULL CHECK (vote IN ('like', 'dislike')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (anonymous_id, route_id)
+);
+
+CREATE INDEX IF NOT EXISTS route_votes_route_idx
+    ON route_votes (route_id);
+
 CREATE TABLE IF NOT EXISTS activitypub_deliveries (
     activity_id TEXT NOT NULL,
     target TEXT NOT NULL,

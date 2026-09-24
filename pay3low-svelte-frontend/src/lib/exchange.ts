@@ -101,6 +101,7 @@ export interface RouteCandidate {
   legs: RouteLeg[];
   services?: ServiceStats[];
   reputation?: CombinedReputation;
+  feedback?: RouteFeedback;
   service_links?: ServiceLink[];
 }
 
@@ -111,6 +112,12 @@ export interface ServiceStats {
   slug: string;
   display_name: string;
   executions_total: number;
+  likes_total: number;
+  dislikes_total: number;
+  viewer_vote?: ServiceVote;
+}
+
+export interface RouteFeedback {
   likes_total: number;
   dislikes_total: number;
   viewer_vote?: ServiceVote;
@@ -190,6 +197,7 @@ export interface P2pRoute {
   warnings: string[];
   services?: ServiceStats[];
   reputation?: CombinedReputation;
+  feedback?: RouteFeedback;
   service_links?: ServiceLink[];
 }
 
@@ -427,6 +435,17 @@ export function setServiceVote(
   vote: ServiceVote,
 ): Promise<ServiceStats> {
   return request(`/api/services/${serviceId}/vote`, {
+    method: "PUT",
+    body: JSON.stringify({ anonymous_id: anonymousId, vote }),
+  });
+}
+
+export function setRouteVote(
+  routeId: string,
+  anonymousId: string,
+  vote: ServiceVote,
+): Promise<RouteFeedback> {
+  return request(`/api/routes/${encodeURIComponent(routeId)}/vote`, {
     method: "PUT",
     body: JSON.stringify({ anonymous_id: anonymousId, vote }),
   });

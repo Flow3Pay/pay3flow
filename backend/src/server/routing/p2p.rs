@@ -273,6 +273,20 @@ pub async fn set_vote(
     Ok(Json(service))
 }
 
+pub async fn set_route_vote(
+    State(state): State<AppState>,
+    Path(route_id): Path<String>,
+    Json(request): Json<VoteRequest>,
+) -> Result<Json<crate::service_reputation::RouteFeedback>, AppError> {
+    let feedback = state
+        .reputation
+        .set_route_vote(&route_id, request.anonymous_id, request.vote)
+        .await
+        .map_err(map_reputation_error)?;
+    tracing::info!(route_id = %route_id, vote = ?feedback.viewer_vote, "route.vote.updated");
+    Ok(Json(feedback))
+}
+
 async fn enrich_routes(
     state: &AppState,
     response: &mut P2pRouteSearchResponse,
@@ -290,6 +304,16 @@ async fn enrich_routes(
         .stats_for_slugs(&slugs, anonymous_id)
         .await
         .map_err(map_reputation_error)?;
+    let route_ids = response
+        .routes
+        .iter()
+        .map(|route| route.route_id.clone())
+        .collect::<Vec<_>>();
+    let feedback = state
+        .reputation
+        .feedback_for_routes(&route_ids, anonymous_id)
+        .await
+        .map_err(map_reputation_error)?;
 
     for route in &mut response.routes {
         let route_slugs = route_service_slugs(route);
@@ -299,6 +323,7 @@ async fn enrich_routes(
             .map(|stats| RouteServiceStats { stats })
             .collect();
         route.reputation = Some(average_reputation(&route.services));
+        route.feedback = feedback.get(&route.route_id).cloned();
         route.service_links = route_links(state, response.search_id, route, &stats)?;
     }
     Ok(())

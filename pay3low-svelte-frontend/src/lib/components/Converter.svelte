@@ -1,6 +1,6 @@
 <script lang="ts">
   import { afterUpdate, onMount, onDestroy } from "svelte";
-  import { fetchCorridors, fetchP2pRoutes, fetchProviders, recordServiceOpen, setServiceVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderDefinition, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote } from "$lib/exchange";
+  import { fetchCorridors, fetchP2pRoutes, fetchProviders, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderDefinition, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote } from "$lib/exchange";
   import { FALLBACK_NETWORK, fetchNetworks, type CryptoNetwork } from "$lib/networks";
   import { assetIcon, networkIcon, venueIcon } from "$lib/icons";
   import { CRYPTO_ASSETS, DIGITAL_ASSETS, PAYMENT_METHODS, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
@@ -128,7 +128,7 @@
         entry_offer_url: entryOffer?.source_url, entry_offer_is_exact: entryOffer?.source_url_is_exact, entry_offer_ad_id: entryOffer?.ad_id,
         exit_offer_url: exitOffer?.source_url, exit_offer_is_exact: exitOffer?.source_url_is_exact, exit_offer_ad_id: exitOffer?.ad_id,
         entry_offer_snapshot: entryOffer, exit_offer_snapshot: exitOffer, warnings: route.warnings,
-        services: route.services, reputation: route.reputation, service_links: route.service_links,
+        services: route.services, reputation: route.reputation, feedback: route.feedback ?? { likes_total: 0, dislikes_total: 0 }, service_links: route.service_links,
         legs: route.market_path ? [{ kind: "entry" as const, from: route.source_fiat, to: route.bridge_currency ?? route.target_fiat, provider: route.market_path.venue, status: "found" as const }, ...(route.bridge_currency ? [{ kind: "exit" as const, from: route.bridge_currency, to: route.target_fiat, provider: route.market_path.venue, status: "found" as const }] : [])] : [...(entryOffer ? [{ kind: "entry" as const, from: route.source_fiat, to: route.bridge_currency ?? route.asset, provider: entryOffer.source, status: "found" as const }] : []), ...(exitOffer ? [{ kind: "exit" as const, from: route.bridge_currency ?? route.asset, to: route.target_fiat, provider: exitOffer.source, status: "found" as const }] : [])],
       };
     });
@@ -181,6 +181,12 @@
         },
       };
     });
+    selected = routes.find((route) => route.route_id === selected?.route_id) ?? selected;
+    instructionsRoute = routes.find((route) => route.route_id === instructionsRoute?.route_id) ?? instructionsRoute;
+  }
+
+  function replaceRouteFeedback(routeId: string, feedback: RouteCandidate["feedback"]) {
+    routes = routes.map((route) => route.route_id === routeId ? { ...route, feedback } : route);
     selected = routes.find((route) => route.route_id === selected?.route_id) ?? selected;
     instructionsRoute = routes.find((route) => route.route_id === instructionsRoute?.route_id) ?? instructionsRoute;
   }
@@ -280,11 +286,11 @@
     }
   }
 
-  async function voteForService(service: ServiceStats, vote: ServiceVote) {
+  async function voteForRoute(route: RouteCandidate, vote: ServiceVote) {
     try {
-      replaceServiceStats(await setServiceVote(service.id, anonymousId, vote));
+      replaceRouteFeedback(route.route_id, await setRouteVote(route.route_id, anonymousId, vote));
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : "Could not save your feedback";
+      error = cause instanceof Error ? cause.message : "Could not save your route feedback";
     }
   }
 
@@ -487,7 +493,7 @@
       <button type="button" class="cta" disabled={!hasAmount || (!previewRoute && (searching || !corridor))} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? "Open swap instructions" : "Find routes"}>{#if previewRoute}Swap <span>↗</span>{:else if searching}<span class="spinner"></span> Finding routes{:else if hasAmount}Find routes <span>↗</span>{:else}Enter an amount to begin{/if}</button>
       {#if error}<div class="errorBox" role="alert">{error}</div>{/if}
     </div>
-    <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForService} {searching} {searchingVenues} {foundVenues} searched={lastUpdatedAt !== null} {hasAmount} />
+    <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {searchingVenues} {foundVenues} searched={lastUpdatedAt !== null} {hasAmount} />
   </div>
   {#if paymentPickerComponent}<svelte:component this={paymentPickerComponent} open={methodPicker === "source"} title="Choose where you pay from" role="sender" {networks} selected={sourceMethod} selectedNetwork={sourceNetwork} onClose={() => methodPicker = null} onSelect={chooseSource} /><svelte:component this={paymentPickerComponent} open={methodPicker === "target"} title="Choose where the recipient gets paid" role="recipient" {networks} selected={targetMethod} selectedNetwork={targetNetwork} onClose={() => methodPicker = null} onSelect={chooseTarget} />{/if}
   {#if networkPickerComponent}<svelte:component this={networkPickerComponent} open={networkPicker !== null} networks={networkPicker === "source" ? sourceNetworks : targetNetworks} selected={networkPicker === "source" ? sourceNetwork : targetNetwork} onClose={() => networkPicker = null} onSelect={selectNetwork} />{/if}

@@ -67,8 +67,8 @@ async function mockBackend(page: Page) {
         service: { id: "00000000-0000-4000-8000-000000000202", slug: "bybit", display_name: "Bybit", executions_total: 6201, likes_total: 850, dislikes_total: 40 },
       });
     }
-    if (url.pathname === "/api/services/00000000-0000-4000-8000-000000000202/vote" && method === "PUT") {
-      return json({ id: "00000000-0000-4000-8000-000000000202", slug: "bybit", display_name: "Bybit", executions_total: 6201, likes_total: 851, dislikes_total: 40, viewer_vote: "like" });
+    if (url.pathname === "/api/routes/route-2/vote" && method === "PUT") {
+      return json({ likes_total: 1, dislikes_total: 0, viewer_vote: "like" });
     }
     if (url.pathname === "/api/p2p/routes") {
       const offer = (source: string, adId: string, fiat: string, asset: string) => ({
@@ -725,8 +725,8 @@ test("anonymous vote reveals service reputation", async ({ page }) => {
   await expect(page.getByTestId("complete-route")).toHaveCount(12);
 
   const routeCard = page.getByTestId("complete-route").nth(1);
-  await expect(routeCard.getByRole("button", { name: "Like Bybit route", exact: true })).toBeVisible();
-  await expect(routeCard.getByRole("button", { name: "Dislike Bybit route", exact: true })).toBeVisible();
+  await expect(routeCard.getByRole("button", { name: "Like this route", exact: true })).toBeVisible();
+  await expect(routeCard.getByRole("button", { name: "Dislike this route", exact: true })).toBeVisible();
   await expect(routeCard.getByLabel("850 likes")).toHaveCount(0);
   await expect(routeCard.getByLabel("40 dislikes")).toHaveCount(0);
   await page.evaluate(() => {
@@ -737,10 +737,10 @@ test("anonymous vote reveals service reputation", async ({ page }) => {
     "rgb(32, 32, 32)",
   );
   await expect(routeCard.locator(".routeFeedback")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
-  await routeCard.getByRole("button", { name: "Like Bybit route", exact: true }).click();
-  await expect(routeCard.getByRole("button", { name: "Like Bybit route", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await expect(routeCard.getByRole("button", { name: "Like Bybit route", exact: true })).toHaveCSS("color", "rgb(197, 255, 34)");
-  await expect(routeCard.getByLabel("851 likes")).toBeVisible();
+  await routeCard.getByRole("button", { name: "Like this route", exact: true }).click();
+  await expect(routeCard.getByRole("button", { name: "Like this route", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(routeCard.getByRole("button", { name: "Like this route", exact: true })).toHaveCSS("color", "rgb(197, 255, 34)");
+  await expect(routeCard.getByLabel("1 likes")).toBeVisible();
 });
 
 test("crypto route keeps distinct source and target networks", async ({ page }) => {

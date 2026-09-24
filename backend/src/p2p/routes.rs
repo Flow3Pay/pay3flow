@@ -14,7 +14,9 @@ use crate::p2p::service::{
     P2pSearchService, P2pSide, PaymentMethodMatch, SourceStatus,
 };
 use crate::p2p::spot::CryptoTicker;
-use crate::service_reputation::{CombinedReputation, RouteServiceStats, ServiceLink};
+use crate::service_reputation::{
+    CombinedReputation, RouteFeedback, RouteServiceStats, ServiceLink,
+};
 
 const DEFAULT_ROUTE_LIMIT: usize = 20;
 const MAX_ROUTE_LIMIT: usize = 100;
@@ -81,6 +83,8 @@ pub struct P2pRoute {
     pub services: Vec<RouteServiceStats>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reputation: Option<CombinedReputation>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub feedback: Option<RouteFeedback>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub service_links: Vec<ServiceLink>,
 }
@@ -733,12 +737,26 @@ fn route_fingerprint(route: &P2pRoute) -> String {
     let entry = route
         .entry_offer
         .as_ref()
-        .map(|offer| format!("{}:{}", offer.source, offer.ad_id))
+        .map(|offer| {
+            format!(
+                "{}:{}:{}",
+                offer.source,
+                offer.ad_id,
+                offer.payment_methods.join(",")
+            )
+        })
         .unwrap_or_default();
     let exit = route
         .exit_offer
         .as_ref()
-        .map(|offer| format!("{}:{}", offer.source, offer.ad_id))
+        .map(|offer| {
+            format!(
+                "{}:{}:{}",
+                offer.source,
+                offer.ad_id,
+                offer.payment_methods.join(",")
+            )
+        })
         .unwrap_or_default();
     let market = route
         .market_path
@@ -746,9 +764,11 @@ fn route_fingerprint(route: &P2pRoute) -> String {
         .map(|path| format!("{}:{}:{}", path.venue, path.source_pair, path.target_pair))
         .unwrap_or_default();
     let identity = format!(
-        "{}|{}|{}|{}|{}|{}|{}|{}|{}",
+        "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
         route.route_kind,
         route.asset,
+        route.source_fiat,
+        route.target_fiat,
         route.source_network.as_deref().unwrap_or_default(),
         route.target_network.as_deref().unwrap_or_default(),
         route.bridge_currency.as_deref().unwrap_or_default(),
@@ -1008,6 +1028,7 @@ fn compose_fiat_routes(
                 warnings,
                 services: Vec::new(),
                 reputation: None,
+                feedback: None,
                 service_links: Vec::new(),
             });
         }
@@ -1060,6 +1081,7 @@ fn compose_fiat_to_crypto_routes(
             ],
             services: Vec::new(),
             reputation: None,
+            feedback: None,
             service_links: Vec::new(),
         });
     }
@@ -1115,6 +1137,7 @@ fn compose_crypto_to_fiat_routes(
             ],
             services: Vec::new(),
             reputation: None,
+            feedback: None,
             service_links: Vec::new(),
         });
     }
@@ -1203,6 +1226,7 @@ fn compose_crypto_market_routes(
             ],
             services: Vec::new(),
             reputation: None,
+            feedback: None,
             service_links: Vec::new(),
         });
     }

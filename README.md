@@ -205,11 +205,16 @@ curl -G 'http://localhost:8080/api/p2p/search' \
 | `WS` | `/ws/p2p/routes` | Stream progressive ranked snapshots |
 | `POST` | `/api/service-executions/open` | Record that a route service link was opened |
 | `PUT` | `/api/services/{id}/vote` | Add or change anonymous feedback |
+| `PUT` | `/api/routes/{route_id}/vote` | Add or change anonymous feedback for one concrete route |
 
 The live-routing UI keeps a random browser identifier in local storage; it is
 not connected to a registered user. A browser can keep one like or dislike per
 service, stored in `service_votes`. Like and dislike totals are revealed in the
 UI only after that browser has voted for the service.
+
+Route-card feedback is separate: it is stored in `route_votes` by the concrete
+route fingerprint, so a vote on one composed route is not copied to every route
+that happens to use the same exchange service.
 
 The repository also retains authentication, payments, ActivityPub discovery,
 and the earlier `/api/exchange/orders` workflow. Those APIs are secondary to

@@ -98,6 +98,15 @@ pub struct CombinedReputation {
     pub dislikes_average: i64,
 }
 
+/// Anonymous feedback for one concrete route shown in a search result.
+#[derive(Debug, Clone, Serialize)]
+pub struct RouteFeedback {
+    pub likes_total: i64,
+    pub dislikes_total: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub viewer_vote: Option<VoteChoice>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct ExecutionOpen {
     pub execution_id: Uuid,
@@ -219,6 +228,40 @@ WHERE s.slug = ANY($1)
             .into_iter()
             .map(row_to_stats)
             .map(|stats| (stats.slug.clone(), stats))
+            .collect())
+    }
+
+    pub async fn feedback_for_routes(
+        &self,
+        route_ids: &[String],
+        anonymous_id: Option<Uuid>,
+    ) -> Result<HashMap<String, RouteFeedback>, ReputationError> {
+        if route_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let client = self.pool.get().await?;
+        let rows = client
+            .query(
+                r#"
+SELECT requested.route_id,
+       COUNT(votes.*) FILTER (WHERE votes.vote = 'like')::BIGINT,
+       COUNT(votes.*) FILTER (WHERE votes.vote = 'dislike')::BIGINT,
+       viewer.vote
+FROM unnest($1::TEXT[]) AS requested(route_id)
+LEFT JOIN route_votes votes ON votes.route_id = requested.route_id
+LEFT JOIN route_votes viewer
+  ON viewer.route_id = requested.route_id AND viewer.anonymous_id = $2
+GROUP BY requested.route_id, viewer.vote
+"#,
+                &[&route_ids, &anonymous_id],
+            )
+            .await?;
+        Ok(rows
+            .into_iter()
+            .map(|row| {
+                let route_id = row.get::<_, String>(0);
+                (route_id, route_feedback_from_row(row, 1))
+            })
             .collect())
     }
 
@@ -399,6 +442,44 @@ FROM services WHERE id = $1
         transaction.commit().await?;
         Ok(stats)
     }
+
+    pub async fn set_route_vote(
+        &self,
+        route_id: &str,
+        anonymous_id: Uuid,
+        vote: VoteChoice,
+    ) -> Result<RouteFeedback, ReputationError> {
+        let mut client = self.pool.get().await?;
+        let transaction = client.transaction().await?;
+        transaction
+            .execute(
+                r#"
+INSERT INTO route_votes (anonymous_id, route_id, vote)
+VALUES ($1, $2, $3)
+ON CONFLICT (anonymous_id, route_id) DO UPDATE SET
+    vote = EXCLUDED.vote,
+    updated_at = now()
+"#,
+                &[&anonymous_id, &route_id, &vote.as_str()],
+            )
+            .await?;
+        let row = transaction
+            .query_one(
+                r#"
+SELECT COUNT(*) FILTER (WHERE vote = 'like')::BIGINT,
+       COUNT(*) FILTER (WHERE vote = 'dislike')::BIGINT,
+       (SELECT vote::TEXT FROM route_votes
+        WHERE route_id = $1 AND anonymous_id = $2)
+FROM route_votes
+WHERE route_id = $1
+"#,
+                &[&route_id, &anonymous_id],
+            )
+            .await?;
+        let feedback = route_feedback_from_row(row, 0);
+        transaction.commit().await?;
+        Ok(feedback)
+    }
 }
 
 pub fn average_reputation(services: &[RouteServiceStats]) -> CombinedReputation {
@@ -443,6 +524,17 @@ fn row_to_stats(row: tokio_postgres::Row) -> ServiceStats {
         dislikes_total: row.get(5),
         viewer_vote: row
             .get::<_, Option<String>>(6)
+            .as_deref()
+            .and_then(VoteChoice::parse),
+    }
+}
+
+fn route_feedback_from_row(row: tokio_postgres::Row, offset: usize) -> RouteFeedback {
+    RouteFeedback {
+        likes_total: row.get(offset),
+        dislikes_total: row.get(offset + 1),
+        viewer_vote: row
+            .get::<_, Option<String>>(offset + 2)
             .as_deref()
             .and_then(VoteChoice::parse),
     }
