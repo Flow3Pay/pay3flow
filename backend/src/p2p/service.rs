@@ -606,7 +606,7 @@ fn build_search_response(
         .cloned()
         .collect::<Vec<_>>();
     sort_offers(&mut offers, query.side);
-    offers.truncate(query.limit.unwrap_or(DEFAULT_LIMIT));
+    truncate_offers_preserving_sources(&mut offers, query.limit.unwrap_or(DEFAULT_LIMIT));
     P2pSearchResponse {
         query,
         searched_at: Utc::now(),
@@ -614,6 +614,39 @@ fn build_search_response(
         offers,
         sources,
     }
+}
+
+fn truncate_offers_preserving_sources(offers: &mut Vec<P2pOffer>, limit: usize) {
+    if offers.len() <= limit {
+        return;
+    }
+
+    let reserved_indices = {
+        let mut represented_sources = HashSet::new();
+        offers
+            .iter()
+            .enumerate()
+            .filter_map(|(index, offer)| {
+                represented_sources
+                    .insert(offer.source.as_str())
+                    .then_some(index)
+            })
+            .take(limit)
+            .collect::<HashSet<_>>()
+    };
+    let mut remaining = limit.saturating_sub(reserved_indices.len());
+    let mut index = 0;
+    offers.retain(|_| {
+        let reserved = reserved_indices.contains(&index);
+        index += 1;
+        reserved
+            || if remaining > 0 {
+                remaining -= 1;
+                true
+            } else {
+                false
+            }
+    });
 }
 
 fn sort_offers(offers: &mut [P2pOffer], side: P2pSide) {
@@ -730,6 +763,53 @@ mod tests {
         direct_exchange.advertiser.completed_orders_30d = None;
         direct_exchange.advertiser.completion_rate_30d = Some(0.89);
         assert!(!direct_exchange.matches(&query));
+    }
+
+    #[test]
+    fn global_limit_keeps_the_best_offer_from_each_source() {
+        let query = P2pSearchQuery {
+            fiat: "RUB".into(),
+            asset: "USDC".into(),
+            side: P2pSide::SellCrypto,
+            amount: None,
+            payment_method: None,
+            merchant_only: None,
+            min_orders: None,
+            min_completion_rate: None,
+            limit: Some(60),
+            sources: Some("bybit,whitebird".into()),
+        };
+        let mut offers = (0..60)
+            .map(|index| {
+                let mut offer = offer(
+                    "bybit",
+                    &format!("{}", 90.0 - f64::from(index) / 100.0),
+                    "1",
+                    "100000",
+                    100,
+                );
+                offer.side = P2pSide::SellCrypto;
+                offer.fiat = "RUB".into();
+                offer.asset = "USDC".into();
+                offer
+            })
+            .collect::<Vec<_>>();
+        let mut whitebird = offer("whitebird", "84.7", "1", "100000", 0);
+        whitebird.side = P2pSide::SellCrypto;
+        whitebird.fiat = "RUB".into();
+        whitebird.asset = "USDC".into();
+        whitebird.payment_methods.clear();
+        whitebird.advertiser.completed_orders_30d = None;
+        whitebird.advertiser.completion_rate_30d = None;
+        offers.push(whitebird);
+
+        let response = build_search_response(query, &offers, Vec::new(), false);
+
+        assert_eq!(response.offers.len(), 60);
+        assert!(response
+            .offers
+            .iter()
+            .any(|offer| offer.source == "whitebird"));
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
