@@ -487,10 +487,12 @@ test("search venues bounce in the loader and refresh stops spinning after the fi
   let sendFirstRoute: (() => void) | undefined;
   let sendSecondRoute: (() => void) | undefined;
   let finishSearch: (() => void) | undefined;
+  let socketConnections = 0;
   await page.routeWebSocket(/\/ws\/p2p\/routes$/, (socket) => {
+    socketConnections += 1;
     socket.onMessage((message) => {
       const request = JSON.parse(String(message));
-      expect(request.query.sources).toBe("binance,bybit");
+      expect(request.query.sources).toBe("binance,bybit,whitebird");
 
       const offer = (source: string, adId: string, fiat: string) => ({
         source,
@@ -539,23 +541,23 @@ test("search venues bounce in the loader and refresh stops spinning after the fi
           transfer_fee_included: true,
           route_kind: "fiat_to_fiat",
           payment_methods_verified: true,
-          entry_offer: offer("binance", "entry-live", "AMD"),
-          exit_offer: offer("binance", "exit-live", "RUB"),
+          entry_offer: offer("bybit", "entry-live", "AMD"),
+          exit_offer: offer("bybit", "exit-live", "RUB"),
           warnings: [],
         }],
       };
       const finalResponse = {
         ...firstResponse,
         routes_found: 2,
-        routes: [...firstResponse.routes, {
+        routes: [{
           ...firstResponse.routes[0],
           route_id: "route-streamed-second",
-          rank: 2,
-          target_amount: "20280.00",
-          effective_rate: "0.2028",
-          entry_offer: offer("bybit", "entry-live-2", "AMD"),
-          exit_offer: offer("bybit", "exit-live-2", "RUB"),
-        }],
+          rank: 1,
+          target_amount: "20420.00",
+          effective_rate: "0.2042",
+          entry_offer: offer("whitebird", "entry-live-2", "AMD"),
+          exit_offer: offer("whitebird", "exit-live-2", "RUB"),
+        }, { ...firstResponse.routes[0], rank: 2 }],
       };
 
       socket.send(JSON.stringify({ type: "search_started", search_id: firstResponse.search_id, routes_found: 0 }));
@@ -566,15 +568,21 @@ test("search venues bounce in the loader and refresh stops spinning after the fi
   });
 
   await openApp(page);
+  await page.getByRole("button", { name: "Route refresh settings" }).click();
+  await page.getByRole("button", { name: "Whitebird" }).click();
+  await page.getByRole("button", { name: "Route refresh settings" }).click();
   await page.getByLabel("Amount to send").fill("100000");
   await page.getByTestId("start-search").click();
 
   await expect.poll(() => Boolean(sendFirstRoute)).toBe(true);
+  await page.waitForTimeout(750);
+  expect(socketConnections).toBe(1);
   const panelTop = page.locator("#routes .panelTop");
   const searchingVenues = panelTop.getByTestId("searching-venue");
-  await expect(searchingVenues).toHaveCount(2);
+  await expect(searchingVenues).toHaveCount(3);
   await expect(searchingVenues.nth(0)).toHaveAttribute("title", "Searching Binance");
   await expect(searchingVenues.nth(1)).toHaveAttribute("title", "Searching Bybit");
+  await expect(searchingVenues.nth(2)).toHaveAttribute("title", "Searching Whitebird");
   await expect(searchingVenues.nth(0)).toHaveCSS("width", "32px");
   await expect(searchingVenues.nth(0)).toHaveCSS("animation-delay", "0s");
   await expect(searchingVenues.nth(1)).toHaveCSS("animation-delay", "0.13s");
@@ -583,22 +591,29 @@ test("search venues bounce in the loader and refresh stops spinning after the fi
   await expect(refreshButton.locator("svg")).toHaveClass(/refreshSpin/);
   sendFirstRoute?.();
   await expect(page.getByTestId("complete-route")).toHaveCount(1);
+  await expect(page.getByTestId("complete-route").first()).toHaveClass(/selected/);
   const foundVenues = panelTop.locator(".resultSummary").getByTestId("found-venue");
   await expect(foundVenues).toHaveCount(1);
-  await expect(foundVenues.first()).toHaveAttribute("title", "Found on Binance");
-  await expect(searchingVenues).toHaveCount(1);
-  await expect(searchingVenues.first()).toHaveAttribute("title", "Searching Bybit");
+  await expect(foundVenues.first()).toHaveAttribute("title", "Found on Bybit");
+  await expect(searchingVenues).toHaveCount(2);
+  await expect(searchingVenues.nth(1)).toHaveAttribute("title", "Searching Whitebird");
   await expect(refreshButton).toBeDisabled();
   await expect(refreshButton.locator("svg")).not.toHaveClass(/refreshSpin/);
 
   sendSecondRoute?.();
   await expect(page.getByTestId("complete-route")).toHaveCount(2);
+  await expect(page.getByTestId("complete-route").first()).toContainText("20420 RUB");
+  await expect(page.getByTestId("complete-route").first()).toHaveClass(/selected/);
   await expect(foundVenues).toHaveCount(2);
-  await expect(foundVenues.nth(1)).toHaveAttribute("title", "Found on Bybit");
-  await expect(searchingVenues).toHaveCount(0);
+  await expect(foundVenues.nth(1)).toHaveAttribute("title", "Found on Whitebird");
+  await expect(searchingVenues).toHaveCount(1);
 
+  await page.getByTestId("complete-route").nth(1).click();
+  await expect(page.getByTestId("complete-route").nth(1)).toHaveClass(/selected/);
   finishSearch?.();
   await expect(refreshButton).toBeEnabled();
+  await expect(searchingVenues).toHaveCount(0);
+  await expect(page.getByTestId("complete-route").nth(1)).toHaveClass(/selected/);
 });
 
 test("cryptocurrency search binds the selected asset to its network", async ({ page }) => {

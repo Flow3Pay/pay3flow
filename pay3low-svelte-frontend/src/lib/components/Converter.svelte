@@ -21,6 +21,7 @@
   let routes: RouteCandidate[] = [];
   let routesFound = 0;
   let selected: RouteCandidate | null = null;
+  let selectionPinnedByUser = false;
   let instructionsRoute: RouteCandidate | null = null;
   let sourceMethodId = "am-ameriabank";
   let targetMethodId = "ru-sberbank";
@@ -150,8 +151,18 @@
     if (newlyFound.length) foundVenues = [...foundVenues, ...newlyFound];
     routesFound = response.routes_found ?? nextRoutes.length;
     routes = nextRoutes;
-    selected = routes.find((route) => route.route_id === selected?.route_id) ?? routes.find((route) => route.is_current_best) ?? routes[0] ?? null;
+    const bestRoute = routes.find((route) => route.is_current_best) ?? routes[0] ?? null;
+    if (selectionPinnedByUser) {
+      const pinnedRoute = routes.find((route) => route.route_id === selected?.route_id);
+      if (pinnedRoute) selected = pinnedRoute;
+      else { selectionPinnedByUser = false; selected = bestRoute; }
+    } else selected = bestRoute;
     if (instructionsRoute) instructionsRoute = routes.find((route) => route.route_id === instructionsRoute?.route_id) ?? instructionsRoute;
+  }
+
+  function selectRoute(route: RouteCandidate) {
+    selected = route;
+    selectionPinnedByUser = true;
   }
 
   function replaceServiceStats(service: ServiceStats) {
@@ -211,6 +222,7 @@
   }
   function scheduleAutomaticSearch(_signature: string, loaded: boolean, ready: boolean, validAmount: boolean, initialReady: boolean) {
     if (debounceTimer) window.clearTimeout(debounceTimer);
+    debounceTimer = undefined;
     if (loaded && ready && initialReady && corridor && sourceMethod && targetMethod && validAmount) debounceTimer = window.setTimeout(startSearch, 650);
   }
   function manageRefresh(seconds: RefreshSeconds, updatedAt: number | null, validAmount: boolean) {
@@ -218,7 +230,7 @@
     if (seconds && updatedAt && validAmount) refreshTimer = window.setInterval(startSearch, seconds * 1000);
   }
   function resetResults() {
-    controller?.abort(); routes = []; routesFound = 0; selected = null; instructionsRoute = null; lastUpdatedAt = null; searching = false; awaitingFirstRoute = false; foundVenues = []; error = null;
+    controller?.abort(); routes = []; routesFound = 0; selected = null; selectionPinnedByUser = false; instructionsRoute = null; lastUpdatedAt = null; searching = false; awaitingFirstRoute = false; foundVenues = []; error = null;
     if (refreshTimer) window.clearInterval(refreshTimer);
   }
   function updateAmount(value: string) { initialSearchReady = true; amount = normalizeAmount(value); resetResults(); }
@@ -277,6 +289,8 @@
   }
 
   async function startSearch() {
+    if (debounceTimer) window.clearTimeout(debounceTimer);
+    debounceTimer = undefined;
     if (!corridor || !sourceMethod || !targetMethod) return;
     const value = amountNumber(amount); if (!Number.isFinite(value) || value <= 0) return resetResults();
     controller?.abort(); controller = new AbortController(); const signal = controller.signal; const currentRequest = ++requestId; searching = true; awaitingFirstRoute = true; routesFound = 0; foundVenues = []; error = null;
@@ -473,7 +487,7 @@
       <button type="button" class="cta" disabled={!hasAmount || (!previewRoute && (searching || !corridor))} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? "Open swap instructions" : "Find routes"}>{#if previewRoute}Swap <span>↗</span>{:else if searching}<span class="spinner"></span> Finding routes{:else if hasAmount}Find routes <span>↗</span>{:else}Enter an amount to begin{/if}</button>
       {#if error}<div class="errorBox" role="alert">{error}</div>{/if}
     </div>
-    <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={(route) => selected = route} onOpenInstructions={openInstructions} {searching} {searchingVenues} {foundVenues} searched={lastUpdatedAt !== null} {hasAmount} />
+    <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} {searching} {searchingVenues} {foundVenues} searched={lastUpdatedAt !== null} {hasAmount} />
   </div>
   {#if paymentPickerComponent}<svelte:component this={paymentPickerComponent} open={methodPicker === "source"} title="Choose where you pay from" role="sender" {networks} selected={sourceMethod} selectedNetwork={sourceNetwork} onClose={() => methodPicker = null} onSelect={chooseSource} /><svelte:component this={paymentPickerComponent} open={methodPicker === "target"} title="Choose where the recipient gets paid" role="recipient" {networks} selected={targetMethod} selectedNetwork={targetNetwork} onClose={() => methodPicker = null} onSelect={chooseTarget} />{/if}
   {#if networkPickerComponent}<svelte:component this={networkPickerComponent} open={networkPicker !== null} networks={networkPicker === "source" ? sourceNetworks : targetNetworks} selected={networkPicker === "source" ? sourceNetwork : targetNetwork} onClose={() => networkPicker = null} onSelect={selectNetwork} />{/if}
