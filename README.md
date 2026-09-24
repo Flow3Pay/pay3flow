@@ -203,7 +203,12 @@ curl -G 'http://localhost:8080/api/p2p/search' \
 | `GET` | `/api/p2p/routes` | Build a final ranked route snapshot |
 | `WS` | `/ws/p2p/routes` | Stream progressive ranked snapshots |
 | `POST` | `/api/service-executions/open` | Record that a route service link was opened |
-| `PUT` | `/api/services/{id}/vote` | Add, change, or remove anonymous feedback |
+| `PUT` | `/api/services/{id}/vote` | Add or change anonymous feedback |
+
+The live-routing UI keeps a random browser identifier in local storage; it is
+not connected to a registered user. A browser can keep one like or dislike per
+service, stored in `service_votes`. Like and dislike totals are revealed in the
+UI only after that browser has voted for the service.
 
 The repository also retains authentication, payments, ActivityPub discovery,
 and the earlier `/api/exchange/orders` workflow. Those APIs are secondary to

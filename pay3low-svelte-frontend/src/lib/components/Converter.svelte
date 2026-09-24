@@ -42,7 +42,6 @@
   let clock = Date.now();
   let error: string | null = null;
   let anonymousId = "";
-  let usedServiceIds: string[] = [];
   let settingsElement: HTMLDivElement;
   let settingsDialog: HTMLDivElement;
   let settingsDragging = false;
@@ -272,7 +271,6 @@
     try {
       const execution = await recordServiceOpen(anonymousId, link.tracking_token);
       replaceServiceStats(execution.service);
-      if (!usedServiceIds.includes(execution.service.id)) usedServiceIds = [...usedServiceIds, execution.service.id];
       if (popup) popup.location.replace(execution.redirect_url); else window.open(execution.redirect_url, "_blank", "noopener,noreferrer");
     } catch (cause) {
       popup?.close();
@@ -280,7 +278,7 @@
     }
   }
 
-  async function voteForService(service: ServiceStats, vote: ServiceVote | null) {
+  async function voteForService(service: ServiceStats, vote: ServiceVote) {
     try {
       replaceServiceStats(await setServiceVote(service.id, anonymousId, vote));
     } catch (cause) {
@@ -491,7 +489,7 @@
   </div>
   {#if paymentPickerComponent}<svelte:component this={paymentPickerComponent} open={methodPicker === "source"} title="Choose where you pay from" role="sender" {networks} selected={sourceMethod} selectedNetwork={sourceNetwork} onClose={() => methodPicker = null} onSelect={chooseSource} /><svelte:component this={paymentPickerComponent} open={methodPicker === "target"} title="Choose where the recipient gets paid" role="recipient" {networks} selected={targetMethod} selectedNetwork={targetNetwork} onClose={() => methodPicker = null} onSelect={chooseTarget} />{/if}
   {#if networkPickerComponent}<svelte:component this={networkPickerComponent} open={networkPicker !== null} networks={networkPicker === "source" ? sourceNetworks : targetNetworks} selected={networkPicker === "source" ? sourceNetwork : targetNetwork} onClose={() => networkPicker = null} onSelect={selectNetwork} />{/if}
-  {#if routeInstructionsComponent && instructionsRoute}<svelte:component this={routeInstructionsComponent} route={instructionsRoute} {usedServiceIds} onOpenService={openService} onVote={voteForService} onClose={() => instructionsRoute = null} />{/if}
+  {#if routeInstructionsComponent && instructionsRoute}<svelte:component this={routeInstructionsComponent} route={instructionsRoute} onOpenService={openService} onVote={voteForService} onClose={() => instructionsRoute = null} />{/if}
 </section>
 
 <style>

@@ -128,7 +128,7 @@
                     </span>
                   {/each}
                 </span>
-                {#if route.reputation}<span class="routeReputation"><span>Used {compact(route.reputation.executions_average)} times</span><span class="reputationMetric" aria-label={`${compact(route.reputation.likes_average)} likes`}><img src={likeIcon} alt="" aria-hidden="true" />{compact(route.reputation.likes_average)}</span><span class="reputationMetric" aria-label={`${compact(route.reputation.dislikes_average)} dislikes`}><img src={dislikeIcon} alt="" aria-hidden="true" />{compact(route.reputation.dislikes_average)}</span></span>{/if}
+                {#if route.reputation}<span class="routeReputation"><span>Used {compact(route.reputation.executions_average)} times</span>{#if route.services?.some((service) => service.viewer_vote)}<span class="reputationMetric" aria-label={`${compact(route.reputation.likes_average)} likes`}><img src={likeIcon} alt="" aria-hidden="true" />{compact(route.reputation.likes_average)}</span><span class="reputationMetric" aria-label={`${compact(route.reputation.dislikes_average)} dislikes`}><img src={dislikeIcon} alt="" aria-hidden="true" />{compact(route.reputation.dislikes_average)}</span>{/if}</span>{/if}
               </button>
             </div></li>
           {/each}

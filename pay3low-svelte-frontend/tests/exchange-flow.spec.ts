@@ -697,7 +697,7 @@ test("Armenian bank picker uses the downloaded local icons", async ({ page }) =>
   }
 });
 
-test("tracked service opens unlock anonymous feedback", async ({ page }) => {
+test("anonymous vote reveals service reputation", async ({ page }) => {
   await mockBackend(page);
   await openApp(page);
   await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
@@ -714,8 +714,9 @@ test("tracked service opens unlock anonymous feedback", async ({ page }) => {
 
   await page.getByTestId("complete-route").nth(1).locator(".routeAmount").click();
   const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
-  await instructions.getByRole("button", { name: "Open Bybit profile" }).first().click();
   await expect(instructions.getByText("Was this service useful?")).toBeVisible();
+  await expect(instructions.getByLabel("850 likes")).toHaveCount(0);
+  await expect(instructions.getByLabel("40 dislikes")).toHaveCount(0);
   await page.evaluate(() => {
     document.documentElement.dataset.theme = "dark";
   });

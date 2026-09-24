@@ -6,9 +6,8 @@
 
   export let route: RouteCandidate;
   export let onClose: () => void;
-  export let usedServiceIds: string[] = [];
   export let onOpenService: (link: ServiceLink) => void = () => {};
-  export let onVote: (service: ServiceStats, vote: ServiceVote | null) => void = () => {};
+  export let onVote: (service: ServiceStats, vote: ServiceVote) => void = () => {};
   let modal: HTMLDivElement;
   let dragging = false;
   let dragStartY = 0;
@@ -20,7 +19,7 @@
   const marketRate = (value: string) => Number.isFinite(Number(value)) ? Number(value).toLocaleString("en-US", { maximumFractionDigits: 12, useGrouping: false }) : value;
   const compact = (value: number) => Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(value);
   const linkFor = (kind: ServiceLink["kind"]) => route.service_links?.find((link) => link.kind === kind);
-  const chooseVote = (service: ServiceStats, vote: ServiceVote) => onVote(service, service.viewer_vote === vote ? null : vote);
+  const chooseVote = (service: ServiceStats, vote: ServiceVote) => onVote(service, vote);
 
   function spotPair(symbol: string, firstAsset: string, secondAsset: string) {
     const normalized = symbol.replace(/[^a-z0-9]/gi, "").toUpperCase();
@@ -176,7 +175,7 @@
         </div></li>
       {/if}
     </ol>
-    {#if route.services?.length}<section class="serviceReputation" aria-label="Service reputation">{#each route.services as service (service.id)}<article><strong>{service.display_name}</strong><div class="serviceMetrics"><span>Used {compact(service.executions_total)} times</span><span class="reputationMetric" aria-label={`${compact(service.likes_total)} likes`}><img src={likeIcon} alt="" aria-hidden="true" />{compact(service.likes_total)}</span><span class="reputationMetric" aria-label={`${compact(service.dislikes_total)} dislikes`}><img src={dislikeIcon} alt="" aria-hidden="true" />{compact(service.dislikes_total)}</span></div>{#if usedServiceIds.includes(service.id) || service.viewer_vote}<div class="votePrompt"><span>Was this service useful?</span><div><button type="button" class:active={service.viewer_vote === "like"} aria-pressed={service.viewer_vote === "like"} on:click={() => chooseVote(service, "like")}><img src={likeIcon} alt="" aria-hidden="true" />Like</button><button type="button" class:active={service.viewer_vote === "dislike"} aria-pressed={service.viewer_vote === "dislike"} on:click={() => chooseVote(service, "dislike")}><img src={dislikeIcon} alt="" aria-hidden="true" />Dislike</button></div></div>{/if}</article>{/each}</section>{/if}
+    {#if route.services?.length}<section class="serviceReputation" aria-label="Service reputation">{#each route.services as service (service.id)}<article><strong>{service.display_name}</strong><div class="serviceMetrics"><span>Used {compact(service.executions_total)} times</span>{#if service.viewer_vote}<span class="reputationMetric" aria-label={`${compact(service.likes_total)} likes`}><img src={likeIcon} alt="" aria-hidden="true" />{compact(service.likes_total)}</span><span class="reputationMetric" aria-label={`${compact(service.dislikes_total)} dislikes`}><img src={dislikeIcon} alt="" aria-hidden="true" />{compact(service.dislikes_total)}</span>{:else}<span>Vote to reveal rating</span>{/if}</div><div class="votePrompt"><span>Was this service useful?</span><div><button type="button" class:active={service.viewer_vote === "like"} aria-pressed={service.viewer_vote === "like"} on:click={() => chooseVote(service, "like")}><img src={likeIcon} alt="" aria-hidden="true" />Like</button><button type="button" class:active={service.viewer_vote === "dislike"} aria-pressed={service.viewer_vote === "dislike"} on:click={() => chooseVote(service, "dislike")}><img src={dislikeIcon} alt="" aria-hidden="true" />Dislike</button></div></div></article>{/each}</section>{/if}
     <div class="warning"><strong>Important</strong><span>Rates, limits and offers can change. Confirm the provider or counterparty, payment details, and network before sending money. Pay3Flow never creates the order or moves funds.</span>{#each route.warnings ?? [] as warning}<span>{warning}</span>{/each}</div>
   </div>
 </div>

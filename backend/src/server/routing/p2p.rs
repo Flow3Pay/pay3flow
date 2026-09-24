@@ -42,7 +42,7 @@ pub struct OpenExecutionRequest {
 #[serde(deny_unknown_fields)]
 pub struct VoteRequest {
     anonymous_id: Uuid,
-    vote: Option<VoteChoice>,
+    vote: VoteChoice,
 }
 
 /// Read-only live search over configured public P2P advertisement sources.
@@ -490,9 +490,7 @@ fn error_message(error: AppError) -> String {
 fn map_reputation_error(error: ReputationError) -> AppError {
     match error {
         ReputationError::ServiceNotFound => AppError::NotFound(error.to_string()),
-        ReputationError::ExecutionRequired | ReputationError::InvalidTrackingToken => {
-            AppError::BadRequest(error.to_string())
-        }
+        ReputationError::InvalidTrackingToken => AppError::BadRequest(error.to_string()),
         ReputationError::Internal(error) => AppError::Internal(error),
     }
 }
@@ -502,7 +500,7 @@ mod tests {
     use axum::extract::Query;
     use axum::http::Uri;
 
-    use super::{P2pRouteSearchQuery, RouteHttpMetadata};
+    use super::{P2pRouteSearchQuery, RouteHttpMetadata, VoteChoice, VoteRequest};
 
     #[test]
     fn route_http_query_parses_numeric_and_boolean_url_values() {
@@ -528,5 +526,32 @@ mod tests {
             metadata.anonymous_id.unwrap().to_string(),
             "aa1f91d5-410f-404d-85a5-de7438a29eb9"
         );
+    }
+
+    #[test]
+    fn vote_request_accepts_an_anonymous_browser_vote() {
+        let request: VoteRequest = serde_json::from_value(serde_json::json!({
+            "anonymous_id": "aa1f91d5-410f-404d-85a5-de7438a29eb9",
+            "vote": "dislike"
+        }))
+        .unwrap();
+
+        assert_eq!(
+            request.anonymous_id.to_string(),
+            "aa1f91d5-410f-404d-85a5-de7438a29eb9"
+        );
+        assert_eq!(request.vote, VoteChoice::Dislike);
+    }
+
+    #[test]
+    fn vote_request_requires_a_choice() {
+        for vote in [serde_json::Value::Null, serde_json::json!("unknown")] {
+            let payload = serde_json::json!({
+                "anonymous_id": "aa1f91d5-410f-404d-85a5-de7438a29eb9",
+                "vote": vote
+            });
+
+            assert!(serde_json::from_value::<VoteRequest>(payload).is_err());
+        }
     }
 }

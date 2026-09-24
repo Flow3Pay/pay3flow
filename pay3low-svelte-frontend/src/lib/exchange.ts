@@ -424,7 +424,7 @@ export function recordServiceOpen(
 export function setServiceVote(
   serviceId: string,
   anonymousId: string,
-  vote: ServiceVote | null,
+  vote: ServiceVote,
 ): Promise<ServiceStats> {
   return request(`/api/services/${serviceId}/vote`, {
     method: "PUT",

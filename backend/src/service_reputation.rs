@@ -14,8 +14,6 @@ const TRACKING_TOKEN_TTL_SECS: u64 = 30 * 60;
 pub enum ReputationError {
     #[error("service not found")]
     ServiceNotFound,
-    #[error("use the service before rating it")]
-    ExecutionRequired,
     #[error("invalid or expired service link")]
     InvalidTrackingToken,
     #[error(transparent)]
@@ -336,7 +334,7 @@ WHERE s.id = $1
         &self,
         service_id: Uuid,
         anonymous_id: Uuid,
-        vote: Option<VoteChoice>,
+        vote: VoteChoice,
     ) -> Result<ServiceStats, ReputationError> {
         let mut client = self.pool.get().await?;
         let transaction = client.transaction().await?;
@@ -350,21 +348,6 @@ WHERE s.id = $1
         if !service_exists {
             return Err(ReputationError::ServiceNotFound);
         }
-        let has_execution = transaction
-            .query_opt(
-                r#"
-SELECT 1 FROM service_executions
-WHERE service_id = $1 AND anonymous_id = $2
-LIMIT 1
-"#,
-                &[&service_id, &anonymous_id],
-            )
-            .await?
-            .is_some();
-        if !has_execution {
-            return Err(ReputationError::ExecutionRequired);
-        }
-
         let previous = transaction
             .query_opt(
                 r#"
@@ -377,30 +360,18 @@ FOR UPDATE
             .await?
             .and_then(|row| VoteChoice::parse(row.get::<_, String>(0).as_str()));
 
-        match vote {
-            Some(next) => {
-                transaction
-                    .execute(
-                        r#"
+        transaction
+            .execute(
+                r#"
 INSERT INTO service_votes (anonymous_id, service_id, vote)
 VALUES ($1, $2, $3)
 ON CONFLICT (anonymous_id, service_id) DO UPDATE SET
     vote = EXCLUDED.vote,
     updated_at = now()
 "#,
-                        &[&anonymous_id, &service_id, &next.as_str()],
-                    )
-                    .await?;
-            }
-            None => {
-                transaction
-                    .execute(
-                        "DELETE FROM service_votes WHERE anonymous_id = $1 AND service_id = $2",
-                        &[&anonymous_id, &service_id],
-                    )
-                    .await?;
-            }
-        }
+                &[&anonymous_id, &service_id, &vote.as_str()],
+            )
+            .await?;
 
         let (likes_delta, dislikes_delta) = vote_deltas(previous, vote);
         transaction
@@ -421,7 +392,7 @@ WHERE id = $1
 SELECT id, slug, display_name, executions_total, likes_total, dislikes_total, $2::TEXT
 FROM services WHERE id = $1
 "#,
-                &[&service_id, &vote.map(VoteChoice::as_str)],
+                &[&service_id, &vote.as_str()],
             )
             .await?;
         let stats = row_to_stats(row);
@@ -451,14 +422,14 @@ fn valid_destination(destination_url: &str) -> bool {
         .is_ok_and(|url| matches!(url.scheme(), "http" | "https") && url.host_str().is_some())
 }
 
-fn vote_deltas(previous: Option<VoteChoice>, next: Option<VoteChoice>) -> (i64, i64) {
+fn vote_deltas(previous: Option<VoteChoice>, next: VoteChoice) -> (i64, i64) {
     let contribution = |vote| match vote {
         Some(VoteChoice::Like) => (1, 0),
         Some(VoteChoice::Dislike) => (0, 1),
         None => (0, 0),
     };
     let (old_like, old_dislike) = contribution(previous);
-    let (new_like, new_dislike) = contribution(next);
+    let (new_like, new_dislike) = contribution(Some(next));
     (new_like - old_like, new_dislike - old_dislike)
 }
 
@@ -490,13 +461,12 @@ mod tests {
     #[test]
     fn vote_transition_deltas_cover_every_state_change() {
         let cases = [
-            (None, Some(VoteChoice::Like), (1, 0)),
-            (None, Some(VoteChoice::Dislike), (0, 1)),
-            (Some(VoteChoice::Like), Some(VoteChoice::Dislike), (-1, 1)),
-            (Some(VoteChoice::Dislike), Some(VoteChoice::Like), (1, -1)),
-            (Some(VoteChoice::Like), None, (-1, 0)),
-            (Some(VoteChoice::Dislike), None, (0, -1)),
-            (Some(VoteChoice::Like), Some(VoteChoice::Like), (0, 0)),
+            (None, VoteChoice::Like, (1, 0)),
+            (None, VoteChoice::Dislike, (0, 1)),
+            (Some(VoteChoice::Like), VoteChoice::Dislike, (-1, 1)),
+            (Some(VoteChoice::Dislike), VoteChoice::Like, (1, -1)),
+            (Some(VoteChoice::Like), VoteChoice::Like, (0, 0)),
+            (Some(VoteChoice::Dislike), VoteChoice::Dislike, (0, 0)),
         ];
         for (previous, next, expected) in cases {
             assert_eq!(
