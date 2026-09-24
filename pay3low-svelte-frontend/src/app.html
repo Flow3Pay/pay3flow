@@ -14,6 +14,8 @@
         document.documentElement.dataset.theme = savedTheme === "light" || savedTheme === "dark"
           ? savedTheme
           : matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        const savedLocale = localStorage.getItem("pay3flow-locale");
+        if (savedLocale === "en" || savedLocale === "ru" || savedLocale === "hy") document.documentElement.lang = savedLocale;
       } catch (_) {}
     </script>
     %sveltekit.head%

@@ -4,6 +4,7 @@
   import { FALLBACK_NETWORK, fetchNetworks, type CryptoNetwork } from "$lib/networks";
   import { assetIcon, networkIcon, venueIcon } from "$lib/icons";
   import { CRYPTO_ASSETS, DIGITAL_ASSETS, PAYMENT_METHODS, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
+  import { locale, t } from "$lib/i18n";
   import SidePanel from "./SidePanel.svelte";
 
   type RefreshSeconds = 0 | 5 | 15 | 30 | 60;
@@ -65,6 +66,7 @@
   let routeInstructionsComponent: typeof import("./RouteInstructions.svelte").default | null = null;
   let searchingVenues: P2pSourceOption[] = [];
   let foundVenues: P2pSourceOption[] = [];
+  $: activeLocale = $locale;
 
   function readSharedExchange() {
     const match = window.location.hash.match(/^#\/swap\/([^/?#]+)\/([^/?#]+)(?:\?([^#]*))?$/i);
@@ -84,7 +86,7 @@
   const amountFromMinor = (minor?: number) => minor == null ? "0" : (minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2, useGrouping: false });
   const intermediaryIcon = (asset: string) => assetIcon(asset);
   const networkName = (id: string | null | undefined) => !id ? "internal" : networks.find((network) => network.id === id)?.name ?? id;
-  const locationLabel = (country: string, currency: string) => { try { return `${new Intl.DisplayNames(["en"], { type: "region" }).of(country) ?? country} · ${currency}`; } catch { return `${country} · ${currency}`; } };
+  const locationLabel = (country: string, currency: string) => { try { return `${new Intl.DisplayNames([activeLocale], { type: "region" }).of(country) ?? country} · ${currency}`; } catch { return `${country} · ${currency}`; } };
 
   function providerLabel(provider: ProviderDefinition) {
     const label = provider.name.replace(/\s+(buy|sell)$/i, "").trim();
@@ -436,11 +438,11 @@
 </script>
 
 <section class="shell" id="transfer">
-  <div class="hero"><h1>Move money. <span>Keep more.</span></h1><p>Stop spending hours searching for an exchange.</p></div>
+  <div class="hero"><h1>{t("Move money.", {}, activeLocale)} <span>{t("Keep more.", {}, activeLocale)}</span></h1><p>{t("Stop spending hours searching for an exchange.", {}, activeLocale)}</p></div>
   <div class="workspace">
     <div class="card">
       <div class="cardTop">
-        <div class="modeTabs" aria-label="Exchange mode"><button type="button" class="modeActive">Bridge</button><button type="button" disabled>History</button></div>
+        <div class="modeTabs" aria-label={t("Exchange mode", {}, activeLocale)}><button type="button" class="modeActive">{t("Bridge", {}, activeLocale)}</button><button type="button" disabled>{t("History", {}, activeLocale)}</button></div>
         <div class="cardActions">
           <button type="button" class="refreshButton" on:click={startSearch} disabled={!hasAmount || searching} aria-label="Refresh routes now"><svg class:refreshSpin={awaitingFirstRoute} width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M16.2 7.1A6.8 6.8 0 1 0 16.7 12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /><path d="M13.1 3.8h3.6v3.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
           <div class="settingsWrap" bind:this={settingsElement}>
