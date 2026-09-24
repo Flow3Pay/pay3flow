@@ -1,13 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import type { RouteCandidate, ServiceLink, ServiceStats, ServiceVote } from "$lib/exchange";
-  import { dislikeIcon, likeIcon } from "$lib/icons";
+  import type { RouteCandidate, ServiceLink } from "$lib/exchange";
   import AdvertiserCard from "./AdvertiserCard.svelte";
 
   export let route: RouteCandidate;
   export let onClose: () => void;
   export let onOpenService: (link: ServiceLink) => void = () => {};
-  export let onVote: (service: ServiceStats, vote: ServiceVote) => void = () => {};
   let modal: HTMLDivElement;
   let dragging = false;
   let dragStartY = 0;
@@ -17,9 +15,7 @@
   const isDirectOffer = (offer?: RouteCandidate["entry_offer_snapshot"]) => offer?.advertiser.user_type === "service" || offer?.source.toLowerCase() === "whitebird";
   const money = (minor?: number, currency?: string) => minor == null ? "—" : `${(minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })} ${currency ?? ""}`;
   const marketRate = (value: string) => Number.isFinite(Number(value)) ? Number(value).toLocaleString("en-US", { maximumFractionDigits: 12, useGrouping: false }) : value;
-  const compact = (value: number) => Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(value);
   const linkFor = (kind: ServiceLink["kind"]) => route.service_links?.find((link) => link.kind === kind);
-  const chooseVote = (service: ServiceStats, vote: ServiceVote) => onVote(service, vote);
 
   function spotPair(symbol: string, firstAsset: string, secondAsset: string) {
     const normalized = symbol.replace(/[^a-z0-9]/gi, "").toUpperCase();
@@ -175,7 +171,6 @@
         </div></li>
       {/if}
     </ol>
-    {#if route.services?.length}<section class="serviceReputation" aria-label="Service reputation">{#each route.services as service (service.id)}<article><strong>{service.display_name}</strong><div class="serviceMetrics"><span>Used {compact(service.executions_total)} times</span>{#if service.viewer_vote}<span class="reputationMetric" aria-label={`${compact(service.likes_total)} likes`}><img src={likeIcon} alt="" aria-hidden="true" />{compact(service.likes_total)}</span><span class="reputationMetric" aria-label={`${compact(service.dislikes_total)} dislikes`}><img src={dislikeIcon} alt="" aria-hidden="true" />{compact(service.dislikes_total)}</span>{:else}<span>Vote to reveal rating</span>{/if}</div><div class="votePrompt"><span>Was this service useful?</span><div><button type="button" class:active={service.viewer_vote === "like"} aria-pressed={service.viewer_vote === "like"} on:click={() => chooseVote(service, "like")}><img src={likeIcon} alt="" aria-hidden="true" />Like</button><button type="button" class:active={service.viewer_vote === "dislike"} aria-pressed={service.viewer_vote === "dislike"} on:click={() => chooseVote(service, "dislike")}><img src={dislikeIcon} alt="" aria-hidden="true" />Dislike</button></div></div></article>{/each}</section>{/if}
     <div class="warning"><strong>Important</strong><span>Rates, limits and offers can change. Confirm the provider or counterparty, payment details, and network before sending money. Pay3Flow never creates the order or moves funds.</span>{#each route.warnings ?? [] as warning}<span>{warning}</span>{/each}</div>
   </div>
 </div>
@@ -519,83 +514,6 @@
   text-decoration: none;
 }
 
-.serviceReputation {
-  display: grid;
-  gap: 10px;
-  margin-top: 16px;
-}
-
-.serviceReputation article {
-  padding: 14px;
-  border: 1px solid var(--color-border);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.72);
-}
-
-.serviceReputation article > strong {
-  font-size: 13px;
-}
-
-.serviceMetrics {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
-  margin-top: 7px;
-  color: var(--color-text-soft);
-  font-family: var(--font-mono);
-  font-size: 10px;
-}
-
-.reputationMetric {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.reputationMetric img {
-  width: 16px;
-  height: 16px;
-  object-fit: contain;
-}
-
-.votePrompt {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--color-border);
-  color: var(--color-text-soft);
-  font-size: 11px;
-}
-
-.votePrompt > div {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.votePrompt button {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 7px 10px;
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  background: #fff;
-  color: var(--color-text-soft);
-  font-size: 10px;
-}
-
-.votePrompt button img {
-  width: 16px;
-  height: 16px;
-  object-fit: contain;
-}
-
-.votePrompt button.active {
-  border-color: rgba(111, 83, 190, 0.4);
-  background: rgba(111, 83, 190, 0.1);
-  color: var(--color-violet);
-}
-
 .profileLink:hover {
   text-decoration: underline;
 }
@@ -763,29 +681,6 @@
 :global(html[data-theme="dark"]) .checklist li::before {
   background: rgba(181, 224, 58, 0.12);
   color: var(--color-accent);
-}
-
-:global(html[data-theme="dark"]) .serviceReputation article {
-  border-color: #3b3b3b;
-  background: #222222;
-  color: var(--color-text);
-}
-
-:global(html[data-theme="dark"]) .votePrompt button {
-  border-color: #464646;
-  background: #2b2b2b;
-  color: var(--color-text);
-}
-
-:global(html[data-theme="dark"]) .votePrompt button:hover {
-  border-color: #606060;
-  background: #333333;
-}
-
-:global(html[data-theme="dark"]) .votePrompt button.active {
-  border-color: rgba(162, 141, 255, 0.55);
-  background: rgba(162, 141, 255, 0.16);
-  color: var(--color-violet);
 }
 
 :global(html[data-theme="dark"]) .avatarVenue {

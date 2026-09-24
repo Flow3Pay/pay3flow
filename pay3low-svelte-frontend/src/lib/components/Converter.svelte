@@ -485,11 +485,11 @@
       <button type="button" class="cta" disabled={!hasAmount || (!previewRoute && (searching || !corridor))} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? "Open swap instructions" : "Find routes"}>{#if previewRoute}Swap <span>↗</span>{:else if searching}<span class="spinner"></span> Finding routes{:else if hasAmount}Find routes <span>↗</span>{:else}Enter an amount to begin{/if}</button>
       {#if error}<div class="errorBox" role="alert">{error}</div>{/if}
     </div>
-    <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} {searching} {searchingVenues} {foundVenues} searched={lastUpdatedAt !== null} {hasAmount} />
+    <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForService} {searching} {searchingVenues} {foundVenues} searched={lastUpdatedAt !== null} {hasAmount} />
   </div>
   {#if paymentPickerComponent}<svelte:component this={paymentPickerComponent} open={methodPicker === "source"} title="Choose where you pay from" role="sender" {networks} selected={sourceMethod} selectedNetwork={sourceNetwork} onClose={() => methodPicker = null} onSelect={chooseSource} /><svelte:component this={paymentPickerComponent} open={methodPicker === "target"} title="Choose where the recipient gets paid" role="recipient" {networks} selected={targetMethod} selectedNetwork={targetNetwork} onClose={() => methodPicker = null} onSelect={chooseTarget} />{/if}
   {#if networkPickerComponent}<svelte:component this={networkPickerComponent} open={networkPicker !== null} networks={networkPicker === "source" ? sourceNetworks : targetNetworks} selected={networkPicker === "source" ? sourceNetwork : targetNetwork} onClose={() => networkPicker = null} onSelect={selectNetwork} />{/if}
-  {#if routeInstructionsComponent && instructionsRoute}<svelte:component this={routeInstructionsComponent} route={instructionsRoute} onOpenService={openService} onVote={voteForService} onClose={() => instructionsRoute = null} />{/if}
+  {#if routeInstructionsComponent && instructionsRoute}<svelte:component this={routeInstructionsComponent} route={instructionsRoute} onOpenService={openService} onClose={() => instructionsRoute = null} />{/if}
 </section>
 
 <style>
