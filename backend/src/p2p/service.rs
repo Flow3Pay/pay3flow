@@ -102,10 +102,12 @@ pub(crate) fn normalize_sources(value: Option<String>) -> Result<Option<String>>
         bail!("sources must contain at least one source");
     }
     if sources.iter().any(|source| {
-        !(2..=32).contains(&source.len())
-            || !source.bytes().all(|byte| byte.is_ascii_alphanumeric())
+        !(1..=64).contains(&source.len())
+            || !source
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
     }) {
-        bail!("sources must contain only 2-32 character alphanumeric names");
+        bail!("sources must contain only valid 1-64 character provider slugs");
     }
     sources.sort_unstable();
     sources.dedup();
@@ -693,6 +695,16 @@ fn sort_offers(offers: &mut [P2pOffer], side: P2pSide) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn source_names_accept_providerfile_slug_characters() {
+        assert_eq!(
+            normalize_sources(Some("Cifra-Broker,foo_bar".into()))
+                .expect("Providerfile slugs should be valid source names")
+                .as_deref(),
+            Some("cifra-broker,foo_bar")
+        );
+    }
 
     struct StubSource {
         name: &'static str,
