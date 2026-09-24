@@ -127,6 +127,31 @@ const messages: Record<Locale, Record<string, string>> = {
     "Release the asset only after you have independently confirmed receipt of the payment.": "Освобождайте актив только после самостоятельного подтверждения получения оплаты.",
     "Use only the payment details shown inside the order, then mark it paid after sending the transfer.": "Используйте только платёжные реквизиты из ордера, а после перевода отметьте его как оплаченный.",
     "Release the asset only after you have independently confirmed the payment in your bank or payment account.": "Освобождайте актив только после самостоятельного подтверждения оплаты в банке или платёжном аккаунте.",
+    "Convert {from} to {to}": "Конвертировать {from} в {to}",
+    "Use the {pair} spot market on {venue}. This is an exchange order book, so there is no P2P advertiser to contact.": "Используйте спотовый рынок {pair} на {venue}. Это биржевой стакан, поэтому связываться с P2P-рекламодателем не нужно.",
+    "Confirm the pair converts {from} into {to}.": "Убедитесь, что пара конвертирует {from} в {to}.",
+    "Open {pair} and confirm it converts {from} into {to}.": "Откройте {pair} и убедитесь, что он конвертирует {from} в {to}.",
+    "Conversion rate {rate}": "Курс конвертации {rate}",
+    "Open {pair} on {venue}": "Открыть {pair} на {venue}",
+    "Complete the second conversion on {venue} only after the first trade has settled into your available balance.": "Выполняйте вторую конвертацию на {venue} только после зачисления первой сделки на доступный баланс.",
+    "Open {role}'s profile on {venue} and create the first P2P order.": "Откройте профиль {role} на {venue} и создайте первый P2P-ордер.",
+    "Open the seller's profile on {venue}, create the P2P order, and pay with the selected payment method.": "Откройте профиль продавца на {venue}, создайте P2P-ордер и оплатите выбранным способом.",
+    "Open the buyer's profile on {venue} and create the sell order using the selected recipient payment method.": "Откройте профиль покупателя на {venue} и создайте ордер на продажу выбранным способом получения.",
+    "Open the direct exchange on {venue}, review the live quote, and complete the conversion in the provider flow.": "Откройте прямой обмен на {venue}, проверьте актуальную котировку и завершите конвертацию в интерфейсе поставщика.",
+    "Complete any login or verification required by {venue} and follow its payment instructions.": "Пройдите необходимый вход или проверку на {venue} и следуйте его платёжным инструкциям.",
+    "Complete any login or verification required by {venue} and follow its transfer instructions.": "Пройдите необходимый вход или проверку на {venue} и следуйте его инструкциям по переводу.",
+    "Confirm the live rate, order limits, and payment method on {venue}.": "Проверьте актуальный курс, лимиты ордера и способ оплаты на {venue}.",
+    "Transfer {asset} to {venue}": "Перевести {asset} на {venue}",
+    "Move the purchased asset from {from} to your deposit address on {to} before opening the next P2P order.": "Переведите купленный актив с {from} на депозитный адрес {to} перед открытием следующего P2P-ордера.",
+    "Copy the deposit address from {venue} and select the exact {network} network on both venues.": "Скопируйте депозитный адрес в {venue} и выберите точную сеть {network} на обеих площадках.",
+    "Confirm that both venues support the same asset and network, then copy the deposit address from {venue}.": "Убедитесь, что обе площадки поддерживают один актив и сеть, затем скопируйте депозитный адрес в {venue}.",
+    "Wait for {venue} to credit the deposit before continuing.": "Прежде чем продолжить, дождитесь зачисления депозита на {venue}.",
+    "Buy {asset} for {amount}": "Купить {asset} за {amount}",
+    "Sell {asset} for {amount}": "Продать {asset} за {amount}",
+    "Buy {asset} with {bridge}": "Купить {asset} за {bridge}",
+    "Confirm the {asset} balance and network before withdrawing.": "Перед выводом проверьте баланс {asset} и сеть.",
+    "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.": "Только оценка спотового рынка: торговые комиссии, проскальзывание и исполнение не гарантированы.",
+    "Deposit and withdrawal network availability and fees are not verified by the selected venue.": "Выбранная площадка не проверяет доступность сетей и комиссии за пополнение и вывод.",
   },
   hy: {
     "Switch language": "Փոխել լեզուն",
@@ -246,6 +271,31 @@ const messages: Record<Locale, Record<string, string>> = {
     "Release the asset only after you have independently confirmed receipt of the payment.": "Ակտիվը բաց թողեք միայն վճարման ստացումը ինքնուրույն հաստատելուց հետո։",
     "Use only the payment details shown inside the order, then mark it paid after sending the transfer.": "Օգտագործեք միայն պատվերի մեջ նշված վճարման տվյալները և փոխանցումից հետո նշեք այն որպես վճարված։",
     "Release the asset only after you have independently confirmed the payment in your bank or payment account.": "Ակտիվը բաց թողեք միայն բանկում կամ վճարային հաշվին վճարումը ինքնուրույն հաստատելուց հետո։",
+    "Convert {from} to {to}": "Փոխարկել {from}-ը {to}-ի",
+    "Use the {pair} spot market on {venue}. This is an exchange order book, so there is no P2P advertiser to contact.": "Օգտագործեք {venue}-ի {pair} սփոթ շուկան։ Սա բորսայի պատվերների գիրք է, ուստի P2P գովազդատուի հետ կապվել պետք չէ։",
+    "Confirm the pair converts {from} into {to}.": "Հաստատեք, որ զույգը փոխարկում է {from}-ը {to}-ի։",
+    "Open {pair} and confirm it converts {from} into {to}.": "Բացեք {pair}-ը և հաստատեք, որ այն փոխարկում է {from}-ը {to}-ի։",
+    "Conversion rate {rate}": "Փոխարկման փոխարժեք՝ {rate}",
+    "Open {pair} on {venue}": "Բացել {pair}-ը {venue}-ում",
+    "Complete the second conversion on {venue} only after the first trade has settled into your available balance.": "Երկրորդ փոխարկումը {venue}-ում կատարեք միայն առաջին գործարքի հասանելի մնացորդում մուտքագրվելուց հետո։",
+    "Open {role}'s profile on {venue} and create the first P2P order.": "Բացեք {role}-ի պրոֆիլը {venue}-ում և ստեղծեք առաջին P2P պատվերը։",
+    "Open the seller's profile on {venue}, create the P2P order, and pay with the selected payment method.": "Բացեք վաճառողի պրոֆիլը {venue}-ում, ստեղծեք P2P պատվերը և վճարեք ընտրված եղանակով։",
+    "Open the buyer's profile on {venue} and create the sell order using the selected recipient payment method.": "Բացեք գնորդի պրոֆիլը {venue}-ում և ստեղծեք վաճառքի պատվերը՝ օգտագործելով ստացման ընտրված եղանակը։",
+    "Open the direct exchange on {venue}, review the live quote, and complete the conversion in the provider flow.": "Բացեք ուղղակի փոխանակումը {venue}-ում, ստուգեք ընթացիկ գնանշումը և ավարտեք փոխարկումը մատակարարի հոսքում։",
+    "Complete any login or verification required by {venue} and follow its payment instructions.": "Կատարեք {venue}-ի պահանջած մուտքը կամ ստուգումը և հետևեք վճարման հրահանգներին։",
+    "Complete any login or verification required by {venue} and follow its transfer instructions.": "Կատարեք {venue}-ի պահանջած մուտքը կամ ստուգումը և հետևեք փոխանցման հրահանգներին։",
+    "Confirm the live rate, order limits, and payment method on {venue}.": "Ստուգեք ընթացիկ փոխարժեքը, պատվերի սահմանաչափերը և վճարման եղանակը {venue}-ում։",
+    "Transfer {asset} to {venue}": "Փոխանցել {asset}-ը {venue}",
+    "Move the purchased asset from {from} to your deposit address on {to} before opening the next P2P order.": "Հաջորդ P2P պատվերը բացելուց առաջ գնված ակտիվը {from}-ից փոխանցեք {to}-ի ավանդի հասցեին։",
+    "Copy the deposit address from {venue} and select the exact {network} network on both venues.": "Պատճենեք ավանդի հասցեն {venue}-ից և երկու հարթակներում ընտրեք ճիշտ {network} ցանցը։",
+    "Confirm that both venues support the same asset and network, then copy the deposit address from {venue}.": "Հաստատեք, որ երկու հարթակներն էլ աջակցում են նույն ակտիվին և ցանցին, ապա պատճենեք ավանդի հասցեն {venue}-ից։",
+    "Wait for {venue} to credit the deposit before continuing.": "Շարունակելուց առաջ սպասեք, մինչև {venue}-ն մուտքագրի ավանդը։",
+    "Buy {asset} for {amount}": "Գնել {asset}-ը {amount}-ով",
+    "Sell {asset} for {amount}": "Վաճառել {asset}-ը {amount}-ով",
+    "Buy {asset} with {bridge}": "Գնել {asset}-ը {bridge}-ով",
+    "Confirm the {asset} balance and network before withdrawing.": "Դուրս բերելուց առաջ ստուգեք {asset}-ի մնացորդը և ցանցը։",
+    "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.": "Միայն սփոթ շուկայի գնահատական է․ առևտրային միջնորդավճարները, սայթաքումը և կատարումը երաշխավորված չեն։",
+    "Deposit and withdrawal network availability and fees are not verified by the selected venue.": "Ընտրված հարթակը չի ստուգում ցանցերի հասանելիությունն ու մուտքագրման և դուրսբերման միջնորդավճարները։",
   },
 };
 
@@ -306,6 +356,48 @@ export function localize(node: HTMLElement) {
       if (match) translated = t("Search {label}", { label: match[1] }, language);
       match = trimmed.match(/^Select (.+)$/);
       if (match) translated = t("Select {label}", { label: match[1] }, language);
+      match = trimmed.match(/^Convert (\S+) to (\S+)$/);
+      if (match) translated = t("Convert {from} to {to}", { from: match[1], to: match[2] }, language);
+      match = trimmed.match(/^Use the (.+) spot market on (.+)\. This is an exchange order book, so there is no P2P advertiser to contact\.$/);
+      if (match) translated = t("Use the {pair} spot market on {venue}. This is an exchange order book, so there is no P2P advertiser to contact.", { pair: match[1], venue: match[2] }, language);
+      match = trimmed.match(/^Confirm the pair converts (\S+) into (\S+)\.$/);
+      if (match) translated = t("Confirm the pair converts {from} into {to}.", { from: match[1], to: match[2] }, language);
+      match = trimmed.match(/^Open (\S+) and confirm it converts (\S+) into (\S+)\.$/);
+      if (match) translated = t("Open {pair} and confirm it converts {from} into {to}.", { pair: match[1], from: match[2], to: match[3] }, language);
+      match = trimmed.match(/^Conversion rate (.+)$/);
+      if (match) translated = t("Conversion rate {rate}", { rate: match[1] }, language);
+      match = trimmed.match(/^Open (\S+) on (.+)$/);
+      if (match) translated = t("Open {pair} on {venue}", { pair: match[1], venue: match[2] }, language);
+      match = trimmed.match(/^Complete the second conversion on (.+) only after the first trade has settled into your available balance\.$/);
+      if (match) translated = t("Complete the second conversion on {venue} only after the first trade has settled into your available balance.", { venue: match[1] }, language);
+      match = trimmed.match(/^Open the (buyer|seller)'s profile on (.+) and create the first P2P order\.$/);
+      if (match) translated = t("Open {role}'s profile on {venue} and create the first P2P order.", { role: match[1], venue: match[2] }, language);
+      match = trimmed.match(/^Open the seller's profile on (.+), create the P2P order, and pay with the selected payment method\.$/);
+      if (match) translated = t("Open the seller's profile on {venue}, create the P2P order, and pay with the selected payment method.", { venue: match[1] }, language);
+      match = trimmed.match(/^Open the buyer's profile on (.+) and create the sell order using the selected recipient payment method\.$/);
+      if (match) translated = t("Open the buyer's profile on {venue} and create the sell order using the selected recipient payment method.", { venue: match[1] }, language);
+      match = trimmed.match(/^Open the direct exchange on (.+), review the live quote, and complete the conversion in the provider flow\.$/);
+      if (match) translated = t("Open the direct exchange on {venue}, review the live quote, and complete the conversion in the provider flow.", { venue: match[1] }, language);
+      match = trimmed.match(/^Complete any login or verification required by (.+) and follow its (payment|transfer) instructions\.$/);
+      if (match) translated = t(`Complete any login or verification required by {venue} and follow its ${match[2]} instructions.`, { venue: match[1] }, language);
+      match = trimmed.match(/^Confirm the live rate, order limits, and payment method on (.+)\.$/);
+      if (match) translated = t("Confirm the live rate, order limits, and payment method on {venue}.", { venue: match[1] }, language);
+      match = trimmed.match(/^Transfer (\S+) to (.+)$/);
+      if (match) translated = t("Transfer {asset} to {venue}", { asset: match[1], venue: match[2] }, language);
+      match = trimmed.match(/^Move the purchased asset from (.+) to your deposit address on (.+) before opening the next P2P order\.$/);
+      if (match) translated = t("Move the purchased asset from {from} to your deposit address on {to} before opening the next P2P order.", { from: match[1], to: match[2] }, language);
+      match = trimmed.match(/^Copy the deposit address from (.+) and select the exact (.+) network on both venues\.$/);
+      if (match) translated = t("Copy the deposit address from {venue} and select the exact {network} network on both venues.", { venue: match[1], network: match[2] }, language);
+      match = trimmed.match(/^Confirm that both venues support the same asset and network, then copy the deposit address from (.+)\.$/);
+      if (match) translated = t("Confirm that both venues support the same asset and network, then copy the deposit address from {venue}.", { venue: match[1] }, language);
+      match = trimmed.match(/^Wait for (.+) to credit the deposit before continuing\.$/);
+      if (match) translated = t("Wait for {venue} to credit the deposit before continuing.", { venue: match[1] }, language);
+      match = trimmed.match(/^(Buy|Sell) (\S+) for (.+)$/);
+      if (match) translated = t(`${match[1]} {asset} for {amount}`, { asset: match[2], amount: match[3] }, language);
+      match = trimmed.match(/^Buy (\S+) with (.+)$/);
+      if (match) translated = t("Buy {asset} with {bridge}", { asset: match[1], bridge: match[2] }, language);
+      match = trimmed.match(/^Confirm the (\S+) balance and network before withdrawing\.$/);
+      if (match) translated = t("Confirm the {asset} balance and network before withdrawing.", { asset: match[1] }, language);
     }
     return translated === trimmed ? value : value.replace(trimmed, translated);
   }
