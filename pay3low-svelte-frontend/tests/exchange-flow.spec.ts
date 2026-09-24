@@ -712,7 +712,7 @@ test("anonymous vote reveals service reputation", async ({ page }) => {
   await page.getByTestId("start-search").click();
   await expect(page.getByTestId("complete-route")).toHaveCount(12);
 
-  const routeCard = page.getByTestId("complete-route").nth(1).locator("..");
+  const routeCard = page.getByTestId("complete-route").nth(1);
   await expect(routeCard.getByRole("button", { name: "Like Bybit route", exact: true })).toBeVisible();
   await expect(routeCard.getByRole("button", { name: "Dislike Bybit route", exact: true })).toBeVisible();
   await expect(routeCard.getByLabel("850 likes")).toHaveCount(0);
@@ -720,10 +720,11 @@ test("anonymous vote reveals service reputation", async ({ page }) => {
   await page.evaluate(() => {
     document.documentElement.dataset.theme = "dark";
   });
-  await expect(routeCard.locator(".routeFeedback")).toHaveCSS(
+  await expect(routeCard).toHaveCSS(
     "background-color",
     "rgb(32, 32, 32)",
   );
+  await expect(routeCard.locator(".routeFeedback")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   await routeCard.getByRole("button", { name: "Like Bybit route", exact: true }).click();
   await expect(routeCard.getByRole("button", { name: "Like Bybit route", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(routeCard.getByLabel("851 likes")).toBeVisible();

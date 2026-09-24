@@ -101,7 +101,8 @@
           {#each routes as route, index (route.route_id)}
             {@const complete = route.status === "complete"}
             <li animate:flip={{ duration: routeFlipDuration, easing: quintOut }} in:fly={{ y: 18, duration: routeEnterDuration(), easing: quintOut }}><div class="routeCardShell">
-              <button type="button" class:routeBest={route.is_current_best} class:selected={route.route_id === selectedRouteId} class:hasFeedback={complete && Boolean(route.services?.length)} class="routeCard" disabled={!complete} on:click={(event) => cardClick(event, route)} data-testid={complete ? "complete-route" : "partial-route"}>
+              <div class:routeBest={route.is_current_best} class:selected={route.route_id === selectedRouteId} class="routeCard" data-testid={complete ? "complete-route" : "partial-route"}>
+              <button type="button" class="routeCardMain" disabled={!complete} on:click={(event) => cardClick(event, route)}>
                 <span class="routeTopline"><span class="routeRank">#{String(index + 1).padStart(2, "0")}</span>{#if route.is_current_best}<span class="bestBadge">Best route</span>{:else}<span class="deltaBadge">{spreadLabel(route.spread_bps)}</span>{/if}</span>
                 <span class="routeAmount">{money(route.target_amount_minor, route.target_currency)}</span>
                 <span class="workflow" aria-label={workflowLabel(route)}>
@@ -129,9 +130,9 @@
                     </span>
                   {/each}
                 </span>
-                {#if route.reputation}<span class="routeReputation"><span>Used {compact(route.reputation.executions_average)} times</span></span>{/if}
               </button>
-              {#if complete && route.services?.length}<div class:routeFeedbackBest={route.is_current_best} class:routeFeedbackSelected={route.route_id === selectedRouteId} class="routeFeedback" aria-label="Route feedback">{#each route.services as service (service.id)}<div class="serviceVote">{#if route.services.length > 1}<span class="serviceVoteName">{service.display_name}</span>{/if}<div class="serviceVoteButtons"><button type="button" class:active={service.viewer_vote === "like"} aria-label={`Like ${service.display_name} route`} aria-pressed={service.viewer_vote === "like"} on:click={() => onVote(service, "like")}><img src={likeIcon} alt="" aria-hidden="true" />{#if service.viewer_vote}<span aria-label={`${compact(service.likes_total)} likes`}>{compact(service.likes_total)}</span>{:else}<span>Like</span>{/if}</button><button type="button" class:active={service.viewer_vote === "dislike"} aria-label={`Dislike ${service.display_name} route`} aria-pressed={service.viewer_vote === "dislike"} on:click={() => onVote(service, "dislike")}><img src={dislikeIcon} alt="" aria-hidden="true" />{#if service.viewer_vote}<span aria-label={`${compact(service.dislikes_total)} dislikes`}>{compact(service.dislikes_total)}</span>{:else}<span>Dislike</span>{/if}</button></div></div>{/each}</div>{/if}
+              {#if route.reputation || (complete && route.services?.length)}<div class="routeFeedback" aria-label="Route feedback">{#if route.reputation}<span>Used {compact(route.reputation.executions_average)} times</span>{/if}{#if complete}{#each route.services ?? [] as service (service.id)}<span class="serviceVote">{#if route.services && route.services.length > 1}<span class="serviceVoteName">{service.display_name}</span>{/if}<button type="button" class:active={service.viewer_vote === "like"} aria-label={`Like ${service.display_name} route`} aria-pressed={service.viewer_vote === "like"} title={`Like ${service.display_name}`} on:click={() => onVote(service, "like")}><img src={likeIcon} alt="" aria-hidden="true" />{#if service.viewer_vote}<span aria-label={`${compact(service.likes_total)} likes`}>{compact(service.likes_total)}</span>{/if}</button><button type="button" class:active={service.viewer_vote === "dislike"} aria-label={`Dislike ${service.display_name} route`} aria-pressed={service.viewer_vote === "dislike"} title={`Dislike ${service.display_name}`} on:click={() => onVote(service, "dislike")}><img src={dislikeIcon} alt="" aria-hidden="true" />{#if service.viewer_vote}<span aria-label={`${compact(service.dislikes_total)} dislikes`}>{compact(service.dislikes_total)}</span>{/if}</button></span>{/each}{/if}</div>{/if}
+              </div>
             </div></li>
           {/each}
         </ul>
@@ -264,28 +265,6 @@
   font-size: 9px;
 }
 
-.routeReputation {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px 12px;
-  margin-top: 10px;
-  color: rgba(255, 255, 255, 0.58);
-  font-family: var(--font-mono);
-  font-size: 9px;
-}
-
-.reputationMetric {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.reputationMetric img {
-  width: 14px;
-  height: 14px;
-  object-fit: contain;
-}
-
 .liveBadge,
 .searchBadge,
 .readyBadge {
@@ -369,7 +348,7 @@
   width: 100%;
   min-width: 0;
   flex-direction: column;
-  gap: 0;
+  gap: 7px;
 }
 
 .routeCard {
@@ -389,78 +368,67 @@
   transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
 }
 
-.routeCard.hasFeedback {
-  border-radius: 20px 20px 0 0;
+.routeCardMain {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
 }
 
 .routeFeedback {
-  display: grid;
-  gap: 7px;
-  padding: 9px 15px 12px;
-  border: 1px solid transparent;
-  border-top: 0;
-  border-radius: 0 0 20px 20px;
-  background: transparent;
-}
-
-.routeFeedbackBest {
-  border-color: rgba(185, 242, 39, 0.3);
-  background: linear-gradient(135deg, rgba(185, 242, 39, 0.095), rgba(255, 255, 255, 0.04));
-}
-
-.routeFeedbackSelected {
-  border-color: var(--color-accent);
-  box-shadow: inset 1px -1px 0 var(--color-accent), inset -1px 0 0 var(--color-accent);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 12px;
+  margin-top: 2px;
+  color: rgba(255, 255, 255, 0.58);
+  font-family: var(--font-mono);
+  font-size: 9px;
 }
 
 .serviceVote {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 3px;
 }
 
 .serviceVoteName {
   overflow: hidden;
-  color: rgba(255, 255, 255, 0.58);
-  font-size: 9px;
   font-weight: 750;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.serviceVoteButtons {
-  display: flex;
-  flex: 1;
-  gap: 7px;
-}
-
-.serviceVoteButtons button {
+.serviceVote button {
   display: inline-flex;
-  min-height: 30px;
-  flex: 1;
+  min-width: 24px;
+  min-height: 24px;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  padding: 5px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(255, 255, 255, 0.7);
+  gap: 3px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
   font-size: 9px;
-  font-weight: 750;
 }
 
-.serviceVoteButtons button:hover,
-.serviceVoteButtons button.active {
-  border-color: rgba(162, 141, 255, 0.5);
-  background: rgba(162, 141, 255, 0.13);
+.serviceVote button:hover,
+.serviceVote button.active {
+  background: rgba(162, 141, 255, 0.12);
   color: #c4b8ff;
 }
 
-.serviceVoteButtons img {
-  width: 15px;
-  height: 15px;
+.serviceVote img {
+  width: 14px;
+  height: 14px;
   object-fit: contain;
 }
 
@@ -856,7 +824,7 @@
 }
 
 .panelTop small,
-.routeReputation {
+.routeFeedback {
   color: var(--color-text-soft);
 }
 
@@ -893,39 +861,16 @@
   transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
 }
 
-.routeCard.hasFeedback {
-  border-radius: 10px 10px 0 0;
-}
-
 .routeFeedback {
-  border-color: var(--color-border);
-  border-radius: 0 0 10px 10px;
-  background: #fbfcfa;
-}
-
-.routeFeedbackBest {
-  border-color: #b5d27d;
-  background: #f3f9e8;
-}
-
-.routeFeedbackSelected {
-  border-color: var(--color-accent-strong);
-  box-shadow: inset 1px -1px 0 var(--color-accent-strong), inset -1px 0 0 var(--color-accent-strong);
+  color: var(--color-text-soft);
 }
 
 .serviceVoteName {
   color: var(--color-text-soft);
 }
 
-.serviceVoteButtons button {
-  border-color: var(--color-border);
-  background: #fff;
-  color: var(--color-text-soft);
-}
-
-.serviceVoteButtons button:hover,
-.serviceVoteButtons button.active {
-  border-color: rgba(111, 83, 190, 0.45);
+.serviceVote button:hover,
+.serviceVote button.active {
   background: rgba(111, 83, 190, 0.1);
   color: var(--color-violet);
 }
@@ -1049,36 +994,19 @@
 }
 
 :global(html[data-theme="dark"]) .routeCard,
-:global(html[data-theme="dark"]) .routeFeedback,
 :global(html[data-theme="dark"]) .skeletonCard,
 :global(html[data-theme="dark"]) .emptyNode {
   border-color: #383838;
   background: #202020;
 }
 
-:global(html[data-theme="dark"]) .routeFeedbackBest {
-  border-color: rgba(181, 245, 0, 0.38);
-  background: rgba(181, 245, 0, 0.08);
-}
-
-:global(html[data-theme="dark"]) .routeFeedbackSelected {
-  border-color: rgba(181, 245, 0, 0.38);
-  box-shadow: inset 1px -1px 0 rgba(181, 245, 0, 0.38), inset -1px 0 0 rgba(181, 245, 0, 0.38);
-}
-
+:global(html[data-theme="dark"]) .routeFeedback,
 :global(html[data-theme="dark"]) .serviceVoteName {
   color: rgba(255, 255, 255, 0.58);
 }
 
-:global(html[data-theme="dark"]) .serviceVoteButtons button {
-  border-color: #464646;
-  background: #2b2b2b;
-  color: var(--color-text);
-}
-
-:global(html[data-theme="dark"]) .serviceVoteButtons button:hover,
-:global(html[data-theme="dark"]) .serviceVoteButtons button.active {
-  border-color: rgba(162, 141, 255, 0.55);
+:global(html[data-theme="dark"]) .serviceVote button:hover,
+:global(html[data-theme="dark"]) .serviceVote button.active {
   background: rgba(162, 141, 255, 0.16);
   color: var(--color-violet);
 }
@@ -1107,7 +1035,7 @@
 }
 
 :global(html[data-theme="dark"]) .panelTop small,
-:global(html[data-theme="dark"]) .routeReputation {
+:global(html[data-theme="dark"]) .routeFeedback {
   color: rgba(255, 255, 255, 0.58);
 }
 
