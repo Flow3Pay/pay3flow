@@ -727,6 +727,7 @@ test("anonymous vote reveals service reputation", async ({ page }) => {
   await expect(routeCard.locator(".routeFeedback")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   await routeCard.getByRole("button", { name: "Like Bybit route", exact: true }).click();
   await expect(routeCard.getByRole("button", { name: "Like Bybit route", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(routeCard.getByRole("button", { name: "Like Bybit route", exact: true })).toHaveCSS("color", "rgb(197, 255, 34)");
   await expect(routeCard.getByLabel("851 likes")).toBeVisible();
 });
 

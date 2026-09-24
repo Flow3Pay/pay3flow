@@ -420,10 +420,13 @@
   font-size: 9px;
 }
 
-.serviceVote button:hover,
+.serviceVote button:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
 .serviceVote button.active {
-  background: rgba(162, 141, 255, 0.12);
-  color: #c4b8ff;
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
 }
 
 .serviceVote img {
@@ -869,10 +872,14 @@
   color: var(--color-text-soft);
 }
 
-.serviceVote button:hover,
+.serviceVote button:hover {
+  background: var(--color-panel-soft);
+  color: var(--color-text);
+}
+
 .serviceVote button.active {
-  background: rgba(111, 83, 190, 0.1);
-  color: var(--color-violet);
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
 }
 
 .routeBest {
@@ -1005,10 +1012,14 @@
   color: rgba(255, 255, 255, 0.58);
 }
 
-:global(html[data-theme="dark"]) .serviceVote button:hover,
+:global(html[data-theme="dark"]) .serviceVote button:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--color-text);
+}
+
 :global(html[data-theme="dark"]) .serviceVote button.active {
-  background: rgba(162, 141, 255, 0.16);
-  color: var(--color-violet);
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
 }
 
 :global(html[data-theme="dark"]) .searchingVenue {
