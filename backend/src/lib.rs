@@ -11,6 +11,7 @@ pub mod payments;
 pub mod provider_adapter;
 pub mod providers;
 pub mod quotes;
+pub mod route_engine;
 pub mod routing;
 pub mod server;
 pub mod service;

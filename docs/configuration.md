@@ -46,6 +46,25 @@ private keys or copy development keys into a production image.
 | `PLAYWRIGHT_CHROMIUM_EXECUTABLE` | Chromium binary used by Providerfile browser workflows |
 | `P2P_WORKFLOW_DEBUG_SCREENSHOT` | Optional failure-screenshot path for workflow diagnostics |
 
+## Internal route capabilities
+
+| Variable | Purpose | Development default |
+| --- | --- | --- |
+| `NEAR_INTENTS_URL` | 1Click API base URL; the adapter uses its `/v0` API | `https://1click.chaindefuser.com` |
+| `NEAR_INTENTS_JWT` | Optional JWT for authenticated NEAR Intents quote/status calls | unset |
+| `NEAR_INTENTS_QUOTE_RECIPIENT` | Valid destination-chain address used for internal dry quotes | unset |
+| `NEAR_INTENTS_QUOTE_REFUND_TO` | Valid origin-chain refund address used for internal dry quotes | unset |
+| `NEAR_INTENTS_REFRESH_SECS` | Supported-token and route-capability refresh interval | `300` |
+| `ROUTE_MAX_DEPTH` | Maximum internal route-edge depth, from 1 to 8 | `4` |
+| `ROUTE_SOURCE_FIATS` | Comma-separated fiat graph entry assets | `AMD` |
+| `ROUTE_P2P_ASSETS` | Comma-separated P2P assets used to create entry edges | `USDT,USDC,XRP` |
+| `ROUTE_INTENT_ASSETS` | Qualified assets eligible for NEAR Intents edges | `USDT@tron,USDC@solana,XRP@xrpl` |
+| `ROUTE_WITHDRAWALS` | Deployment-owned edges in `FROM>TO\|provider[\|fee]` form; fee is in the origin asset | unset |
+
+Route capabilities are published to fmatch as stable topology. Live prices and
+quote expiry stay inside Pay3Flow and are returned only for a route id already
+matched by fmatch; there is no new public route-search endpoint.
+
 Individual sources, endpoints, mappings, and timeouts are defined in
 Providerfiles and stored in the database migration, not environment flags.
 

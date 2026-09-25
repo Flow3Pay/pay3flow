@@ -6,8 +6,12 @@ use crate::db::DbPool;
 use crate::p2p::P2pSearchService;
 use crate::pairs::ExchangePairsService;
 use crate::payments::PaymentService;
+use crate::route_engine::{
+    LiveEdgeQuoteSource, NearIntentsProvider, RouteEngine, RouteQuoteService,
+};
 use crate::routing::RoutePicker;
 use crate::service_reputation::ServiceReputation;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -26,6 +30,12 @@ pub struct AppState {
     pub redis: Option<RedisPool>,
     /// Read-only fan-out search over public P2P advertisement boards.
     pub p2p: P2pSearchService,
+    /// Private route capability graph and stable fmatch route registry.
+    pub route_engine: RouteEngine,
+    /// NEAR Intents provider used by internal route pricing and refreshes.
+    pub near_intents: NearIntentsProvider,
+    /// Internal live quote service addressed by a previously published route id.
+    pub route_quotes: Arc<RouteQuoteService<LiveEdgeQuoteSource>>,
     /// Global usage and feedback for services shown in public route results.
     pub reputation: ServiceReputation,
 }
@@ -43,6 +53,9 @@ impl AppState {
         admin_token: String,
         redis: Option<RedisPool>,
         p2p: P2pSearchService,
+        route_engine: RouteEngine,
+        near_intents: NearIntentsProvider,
+        route_quotes: Arc<RouteQuoteService<LiveEdgeQuoteSource>>,
         reputation: ServiceReputation,
     ) -> Self {
         Self {
@@ -56,6 +69,9 @@ impl AppState {
             admin_token,
             redis,
             p2p,
+            route_engine,
+            near_intents,
+            route_quotes,
             reputation,
         }
     }

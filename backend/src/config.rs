@@ -33,6 +33,19 @@ pub struct Config {
     pub p2p_search_timeout_ms: u64,
     pub p2p_search_cache_ttl_ms: u64,
     pub p2p_search_assets: Vec<String>,
+    /// NEAR Intents 1-Click API configuration. The JWT is never logged or
+    /// serialized into a capability.
+    pub near_intents_url: String,
+    pub near_intents_jwt: Option<String>,
+    pub near_intents_quote_recipient: Option<String>,
+    pub near_intents_quote_refund_to: Option<String>,
+    pub near_intents_refresh_secs: u64,
+    /// Deployment-owned inputs for the private route capability graph.
+    pub route_max_depth: usize,
+    pub route_source_fiats: Vec<String>,
+    pub route_p2p_assets: Vec<String>,
+    pub route_intent_assets: Vec<String>,
+    pub route_withdrawals: Vec<String>,
 }
 
 impl Config {
@@ -91,6 +104,28 @@ impl Config {
                 .map(|asset| asset.trim().to_ascii_uppercase())
                 .filter(|asset| !asset.is_empty())
                 .collect(),
+            near_intents_url: env::var("NEAR_INTENTS_URL")
+                .unwrap_or_else(|_| "https://1click.chaindefuser.com".into()),
+            near_intents_jwt: env::var("NEAR_INTENTS_JWT")
+                .ok()
+                .filter(|value| !value.is_empty()),
+            near_intents_quote_recipient: optional_env("NEAR_INTENTS_QUOTE_RECIPIENT"),
+            near_intents_quote_refund_to: optional_env("NEAR_INTENTS_QUOTE_REFUND_TO"),
+            near_intents_refresh_secs: env::var("NEAR_INTENTS_REFRESH_SECS")
+                .ok()
+                .and_then(|value| value.parse::<u64>().ok())
+                .unwrap_or(300),
+            route_max_depth: env::var("ROUTE_MAX_DEPTH")
+                .ok()
+                .and_then(|value| value.parse::<usize>().ok())
+                .unwrap_or(4),
+            route_source_fiats: csv_env("ROUTE_SOURCE_FIATS", &["AMD"]),
+            route_p2p_assets: csv_env("ROUTE_P2P_ASSETS", &["USDT", "USDC", "XRP"]),
+            route_intent_assets: csv_env(
+                "ROUTE_INTENT_ASSETS",
+                &["USDT@tron", "USDC@solana", "XRP@xrpl"],
+            ),
+            route_withdrawals: csv_env("ROUTE_WITHDRAWALS", &[]),
         })
     }
 }
@@ -99,4 +134,26 @@ fn env_flag(name: &str, default: bool) -> bool {
     env::var(name)
         .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
         .unwrap_or(default)
+}
+
+fn optional_env(name: &str) -> Option<String> {
+    env::var(name)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn csv_env(name: &str, default: &[&str]) -> Vec<String> {
+    env::var(name)
+        .ok()
+        .map(|value| {
+            value
+                .split(',')
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .filter(|values: &Vec<String>| !values.is_empty())
+        .unwrap_or_else(|| default.iter().map(|value| (*value).to_string()).collect())
 }

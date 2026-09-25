@@ -58,5 +58,17 @@
           };
           default = self.apps.${pkgs.system}.render-manifests;
         });
+
+      devShells = forEachSystem ({ pkgs }:
+        {
+          default = pkgs.mkShell {
+            packages = [
+              pkgs.cargo
+              pkgs.clippy
+              pkgs.rustc
+              pkgs.rustfmt
+            ];
+          };
+        });
     };
 }
