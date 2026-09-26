@@ -125,18 +125,23 @@ not calculate or modify a quote.
 
 ## BestChange adapter
 
-Append this section to catalog operations to read BestChange direction pages:
+Append this section to catalog operations to read the official BestChange API:
 
 ```toml
 [adapter.bestchange]
-endpoint = "https://bestchange.biz"
+endpoint = "https://bestchange.app"
+api_key_env = "BESTCHANGE_API_KEY"
+public_endpoint = "https://www.bestchange.com"
+affiliate_id = "1234567"
 language = "ru"
 timeout_ms = 10000
 max_results = 100
 ```
 
-`endpoint` must use HTTP or HTTPS. `language` defaults to `"en"` and must be
-1–8 characters. `timeout_ms` defaults to `10000` and must be 250–30000.
+`endpoint` and `public_endpoint` must use HTTP or HTTPS. The value of
+`api_key_env` names an environment variable; the secret itself must never be
+stored in a Providerfile. `language` defaults to `"en"` and must be 1–8
+characters. `timeout_ms` defaults to `10000` and must be 250–30000.
 `max_results` defaults to `100` and must be positive.
 
 Complete example: `backend/providers/bestchange/Providerfile`.
@@ -655,7 +660,10 @@ Checked-in Rust examples: CoW Swap, NEAR Intents, and ID Pay.
 
 | Field | Required | Default | Meaning |
 | --- | --- | --- | --- |
-| `endpoint` | Yes | — | HTTP/HTTPS BestChange base URL. |
+| `endpoint` | Yes | — | HTTP/HTTPS BestChange API base URL. |
+| `api_key_env` | Yes | — | Environment variable containing the official API key. |
+| `public_endpoint` | Yes | — | User-facing BestChange base URL used for direction links. |
+| `affiliate_id` | No | — | Numeric referral ID appended to user-facing links; this is not the API key. |
 | `language` | No | `en` | 1–8 character direction-page language. |
 | `timeout_ms` | No | `10000` | 250–30000 ms. |
 | `max_results` | No | `100` | Positive result limit. |

@@ -31,7 +31,7 @@ still be available when the venue is opened.
 | Cifra Markets | Public calculator and IMEX market API | Direct RUB/BYN/USD crypto quotes and crypto market paths |
 | SkyLabs | Public homepage rate API | Direct AMD/USD fiat-to-crypto and crypto-to-fiat quotes |
 | bncex | Public calculator quote API | Direct AMD/USDT and AMD/USDC quotes; available as the AMD exit for RUB→AMD routes |
-| BestChange | Public catalog and direction pages | Aggregated exchanger offers |
+| BestChange | Official authenticated rates API | Aggregated exchanger offers |
 | Dzengi | Public market-data API | Crypto spot-market paths |
 | Exnode | HMAC-authenticated merchant quote API | Direct quotes when API credentials are configured |
 | CoW Swap | CoW Protocol quote API | Selectable same-chain crypto swap quotes for configured chains and tokens |
@@ -46,8 +46,10 @@ model and links to the [CoW Protocol documentation](https://docs.cow.fi/cow-prot
 CoW Swap and NEAR Intents are separate selectable exchanges. When selected,
 their quoted outputs are independent and can differ because each provider uses
 its own liquidity, execution costs, and fee model. Exnode is the only
-Providerfile adapter in the table that requires provider credentials. Set
-`EXNODE_API_PUBLIC` and `EXNODE_API_PRIVATE` to use it; the other listed
+Providerfile adapter in the table that requires a merchant key pair. Set
+`EXNODE_API_PUBLIC` and `EXNODE_API_PRIVATE` to use it. BestChange requires
+`BESTCHANGE_API_KEY` from the referral-program dashboard; the numeric referral
+ID used in public links is not an API key. The other listed
 public-data adapters make anonymous read-only requests.
 
 Provider capabilities live in

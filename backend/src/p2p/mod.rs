@@ -1,4 +1,3 @@
-mod bestchange;
 mod declarative;
 mod routes;
 mod service;
@@ -15,3 +14,4 @@ pub use service::{
     Advertiser, FiatRouteQuote, P2pOffer, P2pSearchQuery, P2pSearchResponse, P2pSearchService,
     P2pSide, PublicFiatRouteProvider, SourceStatus,
 };
+pub(crate) use service::{P2pOfferMarket, P2pSource};

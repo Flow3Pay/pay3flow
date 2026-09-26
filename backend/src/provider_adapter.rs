@@ -20,11 +20,16 @@ pub struct ProviderAdapters {
     pub bestchange: Option<BestChangeAdapterConfig>,
 }
 
-/// Configuration for the public BestChange direction-page adapter.
+/// Configuration for the official BestChange API adapter.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BestChangeAdapterConfig {
+    /// API base URL. The API key is read from `api_key_env` and appended only
+    /// while constructing requests; it is never stored in the provider row.
     pub endpoint: String,
+    pub api_key_env: String,
+    pub public_endpoint: String,
+    pub affiliate_id: Option<String>,
     #[serde(default = "default_bestchange_language")]
     pub language: String,
     #[serde(default = "default_timeout_ms")]
@@ -304,9 +309,26 @@ impl ProviderAdapters {
 
 impl BestChangeAdapterConfig {
     fn validate(&self, context: &str) -> Result<(), String> {
-        if !self.endpoint.starts_with("https://") && !self.endpoint.starts_with("http://") {
+        for (field, value) in [
+            ("endpoint", self.endpoint.as_str()),
+            ("public_endpoint", self.public_endpoint.as_str()),
+        ] {
+            if !value.starts_with("https://") && !value.starts_with("http://") {
+                return Err(format!(
+                    "{context}: BestChange {field} must use http or https"
+                ));
+            }
+        }
+        if !valid_environment_variable(&self.api_key_env) {
             return Err(format!(
-                "{context}: BestChange endpoint must use http or https"
+                "{context}: BestChange api_key_env is not a valid environment variable"
+            ));
+        }
+        if self.affiliate_id.as_deref().is_some_and(|value| {
+            value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit())
+        }) {
+            return Err(format!(
+                "{context}: BestChange affiliate_id must contain only digits"
             ));
         }
         if self.language.trim().is_empty() || self.language.len() > 8 {

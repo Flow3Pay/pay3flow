@@ -1,17 +1,568 @@
+[code]
+language = "rust"
+source = '''
+use std::collections::HashMap;
+use std::time::Duration;
+
+use anyhow::{anyhow, bail, Context, Result};
+use async_trait::async_trait;
+use reqwest::{Client, Url};
+use serde::de::DeserializeOwned;
+use serde::Deserialize;
+use tokio::sync::OnceCell;
+
+use crate::p2p::{
+    Advertiser, P2pOffer, P2pOfferMarket, P2pSearchQuery, P2pSide, P2pSource,
+};
+use crate::provider_adapter::BestChangeAdapterConfig;
+use crate::providers::ProviderAdapterRecord;
+
+const MAX_UNIT_COMBINATIONS: usize = 12;
+const DEFAULT_MAX_AMOUNT: f64 = 1_000_000_000_000_000.0;
+
+#[derive(Debug, Clone)]
+struct CatalogUnit {
+    id: u64,
+    code: String,
+    slug: String,
+    search_text: String,
+    order: usize,
+}
+
+#[derive(Debug, Clone)]
+struct CatalogChanger {
+    name: String,
+    profile_url: Option<String>,
+}
+
+#[derive(Debug)]
+struct Catalog {
+    units: Vec<CatalogUnit>,
+    changers: HashMap<u64, CatalogChanger>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CurrencyResponse {
+    #[serde(default)]
+    currencies: Vec<ApiCurrency>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ApiCurrency {
+    id: u64,
+    name: String,
+    urlname: String,
+    viewname: String,
+    code: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChangerResponse {
+    #[serde(default)]
+    changers: Vec<ApiChanger>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ApiChanger {
+    id: u64,
+    name: String,
+    #[serde(default)]
+    pages: HashMap<String, String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RateResponse {
+    #[serde(default)]
+    rates: HashMap<String, Vec<ApiRate>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ApiRate {
+    changer: u64,
+    rate: ApiNumber,
+    reserve: Option<ApiNumber>,
+    inmin: Option<ApiNumber>,
+    inmax: Option<ApiNumber>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum ApiNumber {
+    Number(f64),
+    Text(String),
+}
+
+impl ApiNumber {
+    fn value(&self) -> Option<f64> {
+        let value = match self {
+            Self::Number(value) => *value,
+            Self::Text(value) => value.replace(',', ".").parse().ok()?,
+        };
+        value.is_finite().then_some(value)
+    }
+}
+
+pub(crate) struct BestChangeSource {
+    client: Client,
+    slug: String,
+    config: BestChangeAdapterConfig,
+    metadata: OnceCell<Catalog>,
+}
+
+impl BestChangeSource {
+    pub(crate) fn from_record(client: Client, record: &ProviderAdapterRecord) -> Option<Self> {
+        let config = record.config.as_ref()?.bestchange.clone()?;
+        Some(Self {
+            client,
+            slug: record.slug.clone(),
+            config,
+            metadata: OnceCell::new(),
+        })
+    }
+
+    fn api_url(&self, resource: &str) -> Result<Url> {
+        let key = std::env::var(&self.config.api_key_env).with_context(|| {
+            format!(
+                "BestChange requires environment variable `{}`",
+                self.config.api_key_env
+            )
+        })?;
+        let key = key.trim();
+        if key.is_empty() {
+            bail!(
+                "BestChange environment variable `{}` is empty",
+                self.config.api_key_env
+            );
+        }
+        let mut url = Url::parse(&self.config.endpoint).context("invalid BestChange API URL")?;
+        {
+            let mut segments = url
+                .path_segments_mut()
+                .map_err(|_| anyhow!("BestChange API URL cannot be a base URL"))?;
+            segments.pop_if_empty().push("v2").push(key);
+            for segment in resource.split('/') {
+                segments.push(segment);
+            }
+        }
+        Ok(url)
+    }
+
+    async fn api_json<T: DeserializeOwned>(&self, resource: &str) -> Result<T> {
+        let url = self.api_url(resource)?;
+        let response = self
+            .client
+            .get(url)
+            .header(reqwest::header::ACCEPT, "application/json")
+            .send()
+            .await
+            .map_err(|error| anyhow!(error.without_url()))
+            .context("BestChange API request failed")?;
+        let status = response.status();
+        let body = response
+            .bytes()
+            .await
+            .context("cannot read BestChange API response")?;
+        if !status.is_success() {
+            bail!(
+                "BestChange API returned HTTP {status}: {}",
+                truncate(&String::from_utf8_lossy(&body), 240)
+            );
+        }
+        serde_json::from_slice(&body).context("BestChange API returned invalid JSON")
+    }
+
+    async fn metadata(&self) -> Result<&Catalog> {
+        self.metadata
+            .get_or_try_init(|| async {
+                let currency_path = format!("currencies/{}", self.config.language);
+                let changer_path = format!("changers/{}", self.config.language);
+                let (currencies, changers) = tokio::try_join!(
+                    self.api_json::<CurrencyResponse>(&currency_path),
+                    self.api_json::<ChangerResponse>(&changer_path),
+                )?;
+                if currencies.currencies.is_empty() {
+                    bail!("BestChange API returned an empty currency catalog");
+                }
+                Ok(catalog(currencies, changers, &self.config.language))
+            })
+            .await
+            .map_err(|error: anyhow::Error| error)
+    }
+
+    fn direction_url(&self, from: &CatalogUnit, to: &CatalogUnit, amount: Option<f64>) -> String {
+        let mut url = format!(
+            "{}/{}-to-{}.html",
+            self.config.public_endpoint.trim_end_matches('/'),
+            from.slug,
+            to.slug
+        );
+        let mut parameters = Vec::new();
+        if let Some(affiliate_id) = self.config.affiliate_id.as_deref() {
+            parameters.push(format!("p={affiliate_id}"));
+        }
+        if let Some(amount) = amount.filter(|value| value.is_finite() && *value > 0.0) {
+            parameters.push(format!("fromAmount={}", number(amount)));
+        }
+        if !parameters.is_empty() {
+            url.push('?');
+            url.push_str(&parameters.join("&"));
+        }
+        url
+    }
+
+    fn offers_from_rates(
+        &self,
+        query: &P2pSearchQuery,
+        catalog: &Catalog,
+        combinations: &[(&CatalogUnit, &CatalogUnit)],
+        response: &RateResponse,
+    ) -> Vec<P2pOffer> {
+        let mut offers = Vec::new();
+        'pairs: for (from, to) in combinations {
+            let pair = format!("{}-{}", from.id, to.id);
+            let Some(rates) = response.rates.get(&pair) else {
+                continue;
+            };
+            for (index, row) in rates.iter().enumerate() {
+                let Some(rate) = row.rate.value().filter(|value| *value > 0.0) else {
+                    continue;
+                };
+                let source_min = row.inmin.as_ref().and_then(ApiNumber::value);
+                let source_max = row.inmax.as_ref().and_then(ApiNumber::value);
+                let target_reserve = row.reserve.as_ref().and_then(ApiNumber::value);
+                let (price, available_asset, min_fiat, max_fiat) = match query.side {
+                    P2pSide::BuyCrypto => (
+                        1.0 / rate,
+                        target_reserve.unwrap_or(DEFAULT_MAX_AMOUNT),
+                        source_min.unwrap_or(0.0),
+                        source_max.unwrap_or(DEFAULT_MAX_AMOUNT),
+                    ),
+                    P2pSide::SellCrypto => (
+                        rate,
+                        DEFAULT_MAX_AMOUNT,
+                        source_min.map(|value| value * rate).unwrap_or(0.0),
+                        source_max
+                            .map(|value| value * rate)
+                            .unwrap_or(DEFAULT_MAX_AMOUNT),
+                    ),
+                };
+                if !price.is_finite() || price <= 0.0 {
+                    continue;
+                }
+                let changer = catalog.changers.get(&row.changer);
+                offers.push(P2pOffer {
+                    market: P2pOfferMarket::P2p,
+                    source: self.slug.clone(),
+                    ad_id: format!(
+                        "bestchange-api-{}-{}-{}-{index}",
+                        from.id, to.id, row.changer
+                    ),
+                    side: query.side,
+                    fiat: query.fiat.clone(),
+                    asset: query.asset.clone(),
+                    price: number(price),
+                    available_asset: number(available_asset),
+                    min_fiat: number(min_fiat),
+                    max_fiat: number(max_fiat),
+                    payment_methods: query.payment_method.clone().into_iter().collect(),
+                    pay_time_limit_minutes: None,
+                    advertiser: Advertiser {
+                        id: Some(row.changer.to_string()),
+                        nickname: changer
+                            .map(|changer| changer.name.clone())
+                            .unwrap_or_else(|| format!("BestChange exchanger {}", row.changer)),
+                        user_type: Some("service".into()),
+                        is_merchant: true,
+                        is_verified: false,
+                        completed_orders_30d: None,
+                        completion_rate_30d: None,
+                        positive_rate: None,
+                    },
+                    advertiser_profile_url: changer
+                        .and_then(|changer| changer.profile_url.clone()),
+                    source_url: self.direction_url(from, to, query.amount),
+                    source_url_is_exact: false,
+                });
+                if offers.len() >= self.config.max_results {
+                    break 'pairs;
+                }
+            }
+        }
+        offers
+    }
+}
+
+#[async_trait]
+impl P2pSource for BestChangeSource {
+    fn name(&self) -> &str {
+        &self.slug
+    }
+
+    fn timeout(&self, _default: Duration) -> Duration {
+        Duration::from_millis(self.config.timeout_ms)
+    }
+
+    async fn search(&self, query: &P2pSearchQuery) -> Result<Vec<P2pOffer>> {
+        let catalog = self.metadata().await?;
+        let (from_code, to_code) = match query.side {
+            P2pSide::BuyCrypto => (&query.fiat, &query.asset),
+            P2pSide::SellCrypto => (&query.asset, &query.fiat),
+        };
+        let from_units = select_units(
+            &catalog.units,
+            from_code,
+            query.payment_method.as_deref(),
+            3,
+        );
+        let to_units = select_units(&catalog.units, to_code, None, 6);
+        if from_units.is_empty() || to_units.is_empty() {
+            bail!(
+                "BestChange has no exchange-unit mapping for {from_code} -> {to_code}"
+            );
+        }
+        let combinations = from_units
+            .iter()
+            .flat_map(|from| to_units.iter().map(move |to| (*from, *to)))
+            .take(MAX_UNIT_COMBINATIONS)
+            .collect::<Vec<_>>();
+        let pair_list = combinations
+            .iter()
+            .map(|(from, to)| format!("{}-{}", from.id, to.id))
+            .collect::<Vec<_>>()
+            .join("+");
+        let rates = self
+            .api_json::<RateResponse>(&format!("rates/{pair_list}"))
+            .await?;
+        Ok(self.offers_from_rates(query, catalog, &combinations, &rates))
+    }
+}
+
+fn catalog(
+    currencies: CurrencyResponse,
+    changers: ChangerResponse,
+    language: &str,
+) -> Catalog {
+    let units = currencies
+        .currencies
+        .into_iter()
+        .enumerate()
+        .map(|(order, currency)| {
+            let search_text = normalize(&format!(
+                "{} {} {}",
+                currency.name, currency.viewname, currency.urlname
+            ));
+            CatalogUnit {
+                id: currency.id,
+                code: currency.code,
+                slug: currency.urlname,
+                search_text,
+                order,
+            }
+        })
+        .collect();
+    let changers = changers
+        .changers
+        .into_iter()
+        .map(|changer| {
+            let profile_url = changer.pages.get(language).cloned();
+            (
+                changer.id,
+                CatalogChanger {
+                    name: changer.name,
+                    profile_url,
+                },
+            )
+        })
+        .collect();
+    Catalog { units, changers }
+}
+
+fn select_units<'a>(
+    units: &'a [CatalogUnit],
+    code: &str,
+    payment_method: Option<&str>,
+    limit: usize,
+) -> Vec<&'a CatalogUnit> {
+    let code = normalize(code);
+    let payment = payment_method.map(normalize);
+    let mut candidates = units
+        .iter()
+        .filter(|unit| normalize(&unit.code) == code)
+        .filter(|unit| {
+            payment.as_deref().is_none_or(|payment| {
+                unit.search_text.contains(payment)
+                    || (payment.contains("visa") && unit.slug.starts_with("visa-mastercard-"))
+            })
+        })
+        .collect::<Vec<_>>();
+    candidates.sort_by_key(|unit| {
+        let exact = payment
+            .as_deref()
+            .is_some_and(|payment| normalize(&unit.slug).contains(payment));
+        (!exact, unit.order)
+    });
+    candidates.dedup_by_key(|unit| unit.id);
+    candidates.truncate(limit);
+    candidates
+}
+
+fn normalize(value: &str) -> String {
+    value
+        .chars()
+        .filter(|character| character.is_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+fn number(value: f64) -> String {
+    let mut formatted = format!("{value:.12}");
+    while formatted.contains('.') && formatted.ends_with('0') {
+        formatted.pop();
+    }
+    if formatted.ends_with('.') {
+        formatted.pop();
+    }
+    formatted
+}
+
+fn truncate(value: &str, max_len: usize) -> String {
+    value.chars().take(max_len).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn source() -> BestChangeSource {
+        BestChangeSource {
+            client: Client::new(),
+            slug: "bestchange".into(),
+            config: BestChangeAdapterConfig {
+                endpoint: "https://bestchange.app".into(),
+                api_key_env: "BESTCHANGE_API_KEY".into(),
+                public_endpoint: "https://www.bestchange.com".into(),
+                affiliate_id: Some("1345467".into()),
+                language: "en".into(),
+                timeout_ms: 10_000,
+                max_results: 100,
+            },
+            metadata: OnceCell::new(),
+        }
+    }
+
+    fn query(side: P2pSide) -> P2pSearchQuery {
+        P2pSearchQuery {
+            fiat: "RUB".into(),
+            asset: "USDT".into(),
+            side,
+            amount: Some(10_000.0),
+            payment_method: Some("Visa Mastercard".into()),
+            merchant_only: None,
+            min_orders: None,
+            min_completion_rate: None,
+            limit: Some(20),
+            sources: Some("bestchange".into()),
+        }
+    }
+
+    #[test]
+    fn maps_official_api_rates_and_keeps_affiliate_link() {
+        let source = source();
+        let units = vec![
+            CatalogUnit {
+                id: 42,
+                code: "RUB".into(),
+                slug: "visa-mastercard-rub".into(),
+                search_text: "visamastercardrub".into(),
+                order: 0,
+            },
+            CatalogUnit {
+                id: 10,
+                code: "USDT".into(),
+                slug: "tether-trc20".into(),
+                search_text: "tethertrc20usdt".into(),
+                order: 1,
+            },
+        ];
+        let catalog = Catalog {
+            units: units.clone(),
+            changers: HashMap::from([(
+                1163,
+                CatalogChanger {
+                    name: "ExampleExchange".into(),
+                    profile_url: Some(
+                        "https://www.bestchange.com/example-exchanger.html".into(),
+                    ),
+                },
+            )]),
+        };
+        let response: RateResponse = serde_json::from_str(
+            r#"{"rates":{"42-10":[{"changer":1163,"rate":0.011,"reserve":"5000","inmin":"1000","inmax":"100000"}]}}"#,
+        )
+        .unwrap();
+
+        let offers = source.offers_from_rates(
+            &query(P2pSide::BuyCrypto),
+            &catalog,
+            &[(&units[0], &units[1])],
+            &response,
+        );
+
+        assert_eq!(offers.len(), 1);
+        assert_eq!(offers[0].advertiser.nickname, "ExampleExchange");
+        assert_eq!(offers[0].price, "90.909090909091");
+        assert_eq!(offers[0].min_fiat, "1000");
+        assert_eq!(offers[0].max_fiat, "100000");
+        assert_eq!(
+            offers[0].source_url,
+            "https://www.bestchange.com/visa-mastercard-rub-to-tether-trc20.html?p=1345467&fromAmount=10000"
+        );
+    }
+
+    #[test]
+    fn selects_payment_unit_from_the_api_catalog() {
+        let units = vec![
+            CatalogUnit {
+                id: 1,
+                code: "RUB".into(),
+                slug: "cash-ruble".into(),
+                search_text: "cashruble".into(),
+                order: 0,
+            },
+            CatalogUnit {
+                id: 2,
+                code: "RUB".into(),
+                slug: "visa-mastercard-rub".into(),
+                search_text: "visamastercardbankcardrub".into(),
+                order: 1,
+            },
+        ];
+
+        assert_eq!(
+            select_units(&units, "RUB", Some("Visa Mastercard"), 3)[0].id,
+            2
+        );
+    }
+}
+'''
+
 [sell]
-source_url = "https://bestchange.biz/ru"
+source_url = "https://www.bestchange.com/?p=1345467"
 name = "BestChange Sell"
 currency = ["rub", "usd", "eur", "byn"]
 banks = []
 
 [buy]
-source_url = "https://bestchange.biz/ru"
+source_url = "https://www.bestchange.com/?p=1345467"
 name = "BestChange Buy"
 currency = ["rub", "usd", "eur", "byn"]
 banks = []
 
 [adapter.bestchange]
-endpoint = "https://bestchange.biz"
+endpoint = "https://bestchange.app"
+api_key_env = "BESTCHANGE_API_KEY"
+public_endpoint = "https://www.bestchange.com"
+affiliate_id = "1345467"
 language = "ru"
 timeout_ms = 10000
 max_results = 100

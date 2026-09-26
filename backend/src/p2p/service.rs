@@ -13,10 +13,10 @@ use futures::stream::{FuturesUnordered, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, Semaphore};
 
+use crate::compiled_provider_code::bestchange::BestChangeSource;
 use crate::config::Config;
 use crate::db::DbPool;
 use crate::networks::NetworkCatalog;
-use crate::p2p::bestchange::BestChangeSource;
 use crate::p2p::declarative::{DeclarativeMarketSource, DeclarativeP2pSource};
 use crate::p2p::spot::{CryptoMarketSource, CryptoTicker};
 use crate::p2p::workflow::WorkflowP2pSource;
