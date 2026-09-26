@@ -1021,6 +1021,21 @@ mod tests {
         DeclarativeP2pSource::from_record(Client::new(), &record).unwrap()
     }
 
+    fn exnode_source() -> DeclarativeP2pSource {
+        let document: toml::Value =
+            toml::from_str(include_str!("../../providers/exnode/Providerfile")).unwrap();
+        let adapters: ProviderAdapters =
+            document.get("adapter").unwrap().clone().try_into().unwrap();
+        let record = ProviderAdapterRecord {
+            slug: "exnode".into(),
+            source_url: "https://exnode.ru/exchange".into(),
+            display_name: "Exnode".into(),
+            config: Some(adapters),
+            workflow: None,
+        };
+        DeclarativeP2pSource::from_record(Client::new(), &record).unwrap()
+    }
+
     #[test]
     fn renders_typed_and_string_request_placeholders() {
         let mut value: Value = serde_json::from_str(
@@ -1088,6 +1103,57 @@ mod tests {
             offer.payment_method_match("Sberbank"),
             PaymentMethodMatch::Unknown
         );
+    }
+
+    #[test]
+    fn maps_exnode_public_p2p_offer() {
+        let source = exnode_source();
+        let response: Value = serde_json::from_str(
+            r#"{
+                "offer": {
+                    "internal_id": "offer-1",
+                    "crypto_token": "USDTTRC",
+                    "course": 92.5,
+                    "liquidity_crypto": 1000,
+                    "limit_min": 1000,
+                    "limit_max": 100000,
+                    "paymentMethod": [{"tech": "SBERRUB"}]
+                },
+                "user": {
+                    "client_id": 42,
+                    "nickname": "exnode-maker",
+                    "merchant": true,
+                    "isVerified": true,
+                    "tradesCompleted": 321,
+                    "tradesCompletedPercent": 99.5
+                }
+            }"#,
+        )
+        .unwrap();
+        let query = P2pSearchQuery {
+            fiat: "RUB".into(),
+            asset: "USDT".into(),
+            side: P2pSide::BuyCrypto,
+            amount: Some(10_000.0),
+            payment_method: None,
+            merchant_only: None,
+            min_orders: None,
+            min_completion_rate: None,
+            limit: Some(20),
+            sources: Some("exnode".into()),
+        };
+
+        let offer = source
+            .into_offer(&response, &query, source.config.offer.as_ref().unwrap())
+            .unwrap();
+        assert_eq!(offer.ad_id, "offer-1");
+        assert_eq!(offer.asset, "USDT");
+        assert_eq!(offer.price, "92.5");
+        assert_eq!(offer.payment_methods, ["SBERRUB"]);
+        assert!(offer.advertiser.is_merchant);
+        assert!(offer.advertiser.is_verified);
+        assert_eq!(offer.advertiser.completed_orders_30d, Some(321));
+        assert_eq!(offer.advertiser.completion_rate_30d, Some(0.995));
     }
 
     #[test]

@@ -11,7 +11,7 @@ money.
   direct-quote APIs. Bitcoin Center is restricted to AMD bank transfers and
   USDT on Solana.
 - BestChange public catalog and direction pages.
-- Exnode authenticated quote API when its environment credentials are set.
+- Exnode's public P2P advertisement API.
 - Binance, Bybit, OKX, Bitget, MEXC, Cifra Markets, and Dzengi spot tickers for
   crypto-to-crypto paths.
 

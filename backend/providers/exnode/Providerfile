@@ -1,46 +1,51 @@
 [sell]
 source_url = "https://exnode.ru/exchange"
 name = "Exnode Sell"
-currency = ["rub", "usd", "eur", "byn"]
+currency = ["rub", "kzt", "uzs", "tjs"]
 banks = []
 
 [buy]
 source_url = "https://exnode.ru/exchange"
 name = "Exnode Buy"
-currency = ["rub", "usd", "eur", "byn"]
+currency = ["rub", "kzt", "uzs", "tjs"]
 banks = []
 
-# Exnode exposes a quote endpoint, but protects it with the public/private API
-# key pair from the merchant account. The backend signs the request at runtime;
-# set EXNODE_API_PUBLIC and EXNODE_API_PRIVATE to enable live Exnode offers.
+# Exnode's public P2P market endpoint does not require merchant API keys.
 [adapter.p2p]
 kind = "http_json"
-endpoint = "https://my.exnode.io/api/order/exchange_rate"
-method = "POST"
+endpoint = "https://api4.exnode.ru/api/proxy/4/market/offers/active"
+method = "GET"
+headers = { User-Agent = "Mozilla/5.0", Ua = "Mozilla/5.0" }
 timeout_ms = 10000
 asset_codes = { USDT = "USDTTRC" }
-supported_assets = ["USDT", "BTC", "ETH", "LTC", "DOGE", "TRX", "USDC"]
+supported_fiats = ["RUB", "KZT", "UZS", "TJS"]
+supported_assets = ["USDT"]
 default_min_fiat = 1
 default_max_fiat = 1000000000
 default_available_asset = 1000000000
 
-[adapter.p2p.auth]
-kind = "hmac_sha512_timestamp_body"
-public_key_env = "EXNODE_API_PUBLIC"
-private_key_env = "EXNODE_API_PRIVATE"
-
 [adapter.p2p.buy]
-request_json = '''{"token_from":"{{fiat}}","token_to":"{{asset}}"}'''
-
-[adapter.p2p.buy.offer]
-price_pointer = "/exchange_rate"
-price_inverted = true
+query = { fiat = "{{fiat}}", crypto = "{{asset}}", banks = "", amount = "", type = "buy", page = "1", limit = "{{limit_number}}", sort = "rate_asc" }
+items_pointer = "/info"
 
 [adapter.p2p.sell]
-request_json = '''{"token_from":"{{asset}}","token_to":"{{fiat}}"}'''
+query = { fiat = "{{fiat}}", crypto = "{{asset}}", banks = "", amount = "", type = "sell", page = "1", limit = "{{limit_number}}", sort = "rate_desc" }
+items_pointer = "/info"
 
 [adapter.p2p.offer]
-price_pointer = "/exchange_rate"
-merchant_default = true
-verified_default = true
+ad_id_pointer = "/offer/internal_id"
+asset_pointer = "/offer/crypto_token"
+price_pointer = "/offer/course"
+available_asset_pointer = "/offer/liquidity_crypto"
+min_fiat_pointer = "/offer/limit_min"
+max_fiat_pointer = "/offer/limit_max"
+payment_methods_pointer = "/offer/paymentMethod"
+payment_method_value_pointer = "/tech"
+advertiser_id_pointer = "/user/client_id"
+advertiser_nickname_pointer = "/user/nickname"
+advertiser_user_type_pointer = "/user/merchant"
+merchant_conditions = [{ pointer = "/user/merchant", operator = "truthy" }]
+verified_conditions = [{ pointer = "/user/isVerified", operator = "truthy" }]
+completed_orders_pointer = "/user/tradesCompleted"
+completion_rate_pointer = "/user/tradesCompletedPercent"
 source_url_is_exact = false

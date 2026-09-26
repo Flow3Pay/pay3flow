@@ -35,7 +35,7 @@ still be available when the venue is opened.
 | Bitcoin Center | Public route API | AMD bank transfer ↔ USDT on Solana, including the reported output fee |
 | BestChange | Official authenticated rates API | Aggregated exchanger offers |
 | Dzengi | Public market-data API | Crypto spot-market paths |
-| Exnode | HMAC-authenticated merchant quote API | Direct quotes when API credentials are configured |
+| Exnode | Public P2P API | Exnode P2P advertisements |
 | CoW Swap | CoW Protocol quote API | Selectable same-chain crypto swap quotes for configured chains and tokens |
 | NEAR Intents | 1Click quote API | Selectable cross-chain and same-chain crypto swap quotes from the live token catalog |
 | Symbiosis | Official cross-chain swap API | Selectable cross-chain crypto quotes from the live Symbiosis token catalog |
@@ -50,9 +50,7 @@ CoW Swap, NEAR Intents, and Symbiosis are separate selectable exchanges. When se
 their quoted outputs are independent and can differ because each provider uses
 its own liquidity, execution costs, and fee model. Symbiosis uses a read-only
 preview address for route discovery; execution must be re-quoted with the
-user's wallet addresses. Exnode is the only
-Providerfile adapter in the table that requires a merchant key pair. Set
-`EXNODE_API_PUBLIC` and `EXNODE_API_PRIVATE` to use it. BestChange requires
+user's wallet addresses. BestChange requires
 `BESTCHANGE_API_KEY` from the referral-program dashboard; the numeric referral
 ID used in public links is not an API key. The other listed
 public-data adapters make anonymous read-only requests.
@@ -116,7 +114,7 @@ Start the live-routing stack:
 
 ```bash
 cp backend/.env.example backend/.env
-# Add BESTCHANGE_API_KEY and, optionally, the EXNODE_API_* credentials.
+# Add BESTCHANGE_API_KEY if you use the BestChange source.
 docker compose up -d --build postgres redis backend pay3low-svelte-frontend
 curl -fsS http://localhost:8080/health
 ```

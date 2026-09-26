@@ -882,12 +882,11 @@ cargo check --manifest-path backend/Cargo.toml
 | BestChange | `backend/providers/bestchange/Providerfile` |
 | Papa Change joined public APIs | `backend/providers/papa-change/Providerfile` |
 | POST P2P ads and rich offer mapping | Binance, Bybit, Bitget |
-| GET P2P ads | OKX, Rapira |
+| GET P2P ads | OKX, Rapira, Exnode |
 | Direct quote with per-direction amount mapping | Whitebird |
 | Direct quote with endpoint templates | SkyLabs |
 | Direct quote with a fixed output fee | Bitcoin Center |
 | Aligned rate table | Cifra Markets |
-| HMAC-authenticated quote | Exnode |
 | Spot tickers | Binance, Bybit, Bitget, OKX, Cifra Markets, Dzengi |
 | Browser workflow template | `backend/providers/Providerfile.example` |
 | Inline Rust | CoW Swap, NEAR Intents, ID Pay |
