@@ -1738,7 +1738,7 @@ fn response_snapshot(
     let routes_found = routes.len();
     let mut visible_routes = routes.values().cloned().collect::<Vec<_>>();
     sort_routes(&mut visible_routes);
-    visible_routes.truncate(query.limit);
+    truncate_routes_preserving_providers(&mut visible_routes, query.limit);
     for (index, route) in visible_routes.iter_mut().enumerate() {
         route.rank = index + 1;
     }
@@ -1754,6 +1754,61 @@ fn response_snapshot(
         routes: visible_routes,
         asset_statuses: asset_statuses.to_vec(),
     }
+}
+
+fn truncate_routes_preserving_providers(routes: &mut Vec<P2pRoute>, limit: usize) {
+    if routes.len() <= limit {
+        return;
+    }
+
+    let reserved_indices = {
+        let mut represented_providers = HashSet::new();
+        routes
+            .iter()
+            .enumerate()
+            .filter_map(|(index, route)| {
+                route_provider_names(route)
+                    .iter()
+                    .any(|provider| represented_providers.insert(*provider))
+                    .then_some(index)
+            })
+            .take(limit)
+            .collect::<HashSet<_>>()
+    };
+    let mut remaining = limit.saturating_sub(reserved_indices.len());
+    let mut index = 0;
+    routes.retain(|_| {
+        let reserved = reserved_indices.contains(&index);
+        index += 1;
+        reserved
+            || if remaining > 0 {
+                remaining -= 1;
+                true
+            } else {
+                false
+            }
+    });
+}
+
+fn route_provider_names(route: &P2pRoute) -> Vec<&str> {
+    let mut providers = Vec::new();
+    if let Some(provider) = route.route_provider.as_deref() {
+        providers.push(provider);
+    }
+    if let Some(provider) = route.market_path.as_ref().map(|path| path.venue.as_str()) {
+        providers.push(provider);
+    }
+    if let Some(provider) = route
+        .entry_offer
+        .as_ref()
+        .map(|offer| offer.source.as_str())
+    {
+        providers.push(provider);
+    }
+    if let Some(provider) = route.exit_offer.as_ref().map(|offer| offer.source.as_str()) {
+        providers.push(provider);
+    }
+    providers
 }
 
 fn sort_routes(routes: &mut [P2pRoute]) {
@@ -3398,7 +3453,7 @@ mod tests {
     #[test]
     fn route_count_deduplicates_before_applying_the_display_limit() {
         let mut normalized = query(false);
-        normalized.limit = 1;
+        normalized.limit = 40;
         let mut discovered = Vec::new();
         compose_fiat_routes(
             &mut discovered,
@@ -3410,15 +3465,30 @@ mod tests {
             ],
             &[offer("bybit", P2pSide::SellCrypto, "80", "1000", "100000")],
         );
-        let duplicate = discovered[0].clone();
         let mut all_routes = HashMap::new();
-        assert_eq!(merge_routes(&mut all_routes, discovered), 2);
-        assert_eq!(merge_routes(&mut all_routes, vec![duplicate]), 0);
+        let bybit = discovered[0].clone();
+        for index in 0..40 {
+            let mut route = bybit.clone();
+            route.route_id = format!("bybit-{index}");
+            route.target_amount = format!("{}", 1_000 + index);
+            all_routes.insert(route.route_id.clone(), route);
+        }
+        let mut id_pay = bybit;
+        id_pay.route_id = "id-pay".into();
+        id_pay.route_provider = Some("id-pay".into());
+        id_pay.entry_offer = None;
+        id_pay.exit_offer = None;
+        id_pay.target_amount = "1".into();
+        id_pay.warnings.clear();
+        all_routes.insert(id_pay.route_id.clone(), id_pay);
 
         let snapshot = response_snapshot(Uuid::nil(), &normalized, &all_routes, &[]);
-        assert_eq!(snapshot.routes_found, 2);
-        assert_eq!(snapshot.routes.len(), 1);
-        assert!(!snapshot.routes[0].route_id.is_empty());
+        assert_eq!(snapshot.routes_found, 41);
+        assert_eq!(snapshot.routes.len(), 40);
+        assert!(snapshot
+            .routes
+            .iter()
+            .any(|route| route.route_id == "id-pay"));
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
