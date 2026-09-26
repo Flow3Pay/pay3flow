@@ -4,7 +4,7 @@ use axum::http::{header::CONTENT_TYPE, HeaderValue, Request, Response};
 use axum::response::IntoResponse;
 use axum::routing::{get, post, put};
 use axum::Router;
-use scalar_api_reference::axum::router as scalar_router;
+use scalar_api_reference::axum::scalar_response;
 use serde_json::json;
 use tower_http::classify::ServerErrorsFailureClass;
 use tower_http::cors::CorsLayer;
@@ -26,7 +26,19 @@ pub fn router(state: AppState) -> Router {
         "hideModels": false
     });
 
-    let scalar_routes = scalar_router("/scalar", &scalar_configuration).with_state(());
+    // `scalar_api_reference` 0.1.x does not include its `scalar.js` asset in
+    // the published crate. Its router therefore serves an HTML page that
+    // points at a guaranteed 404 (`/scalar/scalar.js`). Use the crate's CDN
+    // fallback instead, which keeps the documentation page functional.
+    let scalar_routes = Router::new()
+        .route(
+            "/scalar",
+            get(move || {
+                let configuration = scalar_configuration.clone();
+                async move { scalar_response(&configuration, None) }
+            }),
+        )
+        .with_state(());
 
     Router::new()
         .merge(scalar_routes)
