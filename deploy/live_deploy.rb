@@ -117,9 +117,9 @@ module Pay3flow
       source_backend_id=${source_backend_id#sha256:}
       source_frontend_id=${source_frontend_id#sha256:}
       runtime_backend_id=$(sudo "$k3s" crictl images | awk -v tag="$image_tag" \
-        '$1 == "localhost/pay3flow/backend" && $2 == tag { print $3; exit }')
+        '$1 == "localhost/pay3flow/backend" && $2 == tag { id=$3 } END { print id }')
       runtime_frontend_id=$(sudo "$k3s" crictl images | awk -v tag="$image_tag" \
-        '$1 == "localhost/pay3flow/frontend" && $2 == tag { print $3; exit }')
+        '$1 == "localhost/pay3flow/frontend" && $2 == tag { id=$3 } END { print id }')
 
       if [[ ${source_backend_id:0:12} != "${runtime_backend_id:0:12}" ]]; then
         echo "Imported backend image ID does not match the build output." >&2
