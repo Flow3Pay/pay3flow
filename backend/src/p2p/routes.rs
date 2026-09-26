@@ -3451,7 +3451,7 @@ mod tests {
     }
 
     #[test]
-    fn route_count_deduplicates_before_applying_the_display_limit() {
+    fn route_limit_preserves_a_lower_ranked_provider_route() {
         let mut normalized = query(false);
         normalized.limit = 40;
         let mut discovered = Vec::new();
