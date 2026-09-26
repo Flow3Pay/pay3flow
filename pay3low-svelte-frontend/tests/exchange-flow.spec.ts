@@ -570,6 +570,8 @@ test("public P2P route search → open step-by-step instructions", async ({ page
 
   await amountInput.fill("100000");
   await page.getByTestId("start-search").click();
+  await expect(page.getByTestId("route-render-progress")).toContainText("Showing 6 now");
+  await expect(page.getByTestId("complete-route")).toHaveCount(6);
   await expect(page.getByTestId("complete-route")).toHaveCount(12);
   await expect(page.getByText("24 routes found")).toBeVisible();
   await expect(page.getByText("Showing top 12")).toBeVisible();
@@ -798,16 +800,18 @@ test("search venues bounce in the loader and refresh stops spinning after the fi
         can_exchange_to_target: true,
         asset_statuses: [{
           asset: "USDT",
-          entry_offers: 3,
+          entry_offers: 4,
           exit_offers: 2,
           routes_built: 1,
           can_exchange_to_target: true,
           entry_sources: [
             { source: "bybit", ok: true, latency_ms: 10, offers_found: 1, error: null },
             { source: "skylabs", ok: true, latency_ms: 15, offers_found: 2, error: null },
+            { source: "bncex", ok: true, latency_ms: 18, offers_found: 1, error: null },
+            { source: "bitcoin-center", ok: true, latency_ms: 19, offers_found: 1, error: null },
             { source: "binance", ok: true, latency_ms: 20, offers_found: 0, error: null },
           ],
-          exit_sources: [{ source: "okx", ok: true, latency_ms: 12, offers_found: 1, error: null }],
+          exit_sources: [{ source: "okx", ok: true, latency_ms: 12, offers_found: 0, error: null }],
         }],
         routes: [{
           route_id: "route-streamed-first",
@@ -886,13 +890,14 @@ test("search venues bounce in the loader and refresh stops spinning after the fi
   await expect(page.getByTestId("complete-route")).toHaveCount(1);
   await expect(page.getByTestId("complete-route").first()).toHaveClass(/selected/);
   const foundVenues = panelTop.locator(".resultSummary").getByTestId("found-venue");
-  await expect(foundVenues).toHaveCount(3);
+  await expect(foundVenues).toHaveCount(4);
   await expect(foundVenues.first()).toHaveAttribute("title", "Found on Bybit");
   await expect(foundVenues.nth(1)).toHaveAttribute("title", "Found on SkyLabs");
-  await expect(foundVenues.nth(2)).toHaveAttribute("title", "Found on Okx");
+  await expect(foundVenues.nth(2)).toHaveAttribute("title", "Found on Bncex");
+  await expect(foundVenues.nth(3)).toHaveAttribute("title", "Found on Bitcoin Center");
   await expect(searchingVenues).toHaveCount(5);
-  await expect(searchingVenues.nth(4)).toHaveAttribute("title", "Searching Whitebird");
-  await expect(panelTop.getByTestId("searching-venues-overflow")).toHaveCount(0);
+  await expect(searchingVenues.nth(4)).toHaveAttribute("title", "Searching NEAR 1Click");
+  await expect(panelTop.getByTestId("searching-venues-overflow")).toHaveCount(1);
   await expect(refreshButton).toBeDisabled();
   await expect(refreshButton.locator("svg")).not.toHaveClass(/refreshSpin/);
 
@@ -900,8 +905,10 @@ test("search venues bounce in the loader and refresh stops spinning after the fi
   await expect(page.getByTestId("complete-route")).toHaveCount(2);
   await expect(page.getByTestId("complete-route").first()).toContainText("20420 RUB");
   await expect(page.getByTestId("complete-route").first()).toHaveClass(/selected/);
-  await expect(foundVenues).toHaveCount(2);
-  await expect(foundVenues.nth(1)).toHaveAttribute("title", "Found on Whitebird");
+  await expect(foundVenues).toHaveCount(5);
+  for (const title of ["Whitebird", "Bybit", "SkyLabs", "Bncex", "Bitcoin Center"]) {
+    await expect(panelTop.locator(`[data-testid="found-venue"][title="Found on ${title}"]`)).toHaveCount(1);
+  }
   await expect(searchingVenues).toHaveCount(4);
 
   await page.getByTestId("complete-route").nth(1).click();

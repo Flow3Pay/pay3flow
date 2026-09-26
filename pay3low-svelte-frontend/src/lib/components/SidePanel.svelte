@@ -14,6 +14,7 @@
   export let onOpenInstructions: (route: RouteCandidate) => void;
   export let onVote: (route: RouteCandidate, vote: ServiceVote) => void;
   export let searching = false;
+  export let renderingRoutes = false;
   export let searchingVenues: { id: string; label: string; iconUrl: string }[] = [];
   export let foundVenues: { id: string; label: string; iconUrl: string }[] = [];
   export let venueNames: Record<string, string> = {};
@@ -36,8 +37,8 @@
   const compact = (value: number) => Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(value);
   const routeCountLabel = (count: number) => `${count} ${count === 1 ? "route" : "routes"} found`;
   const reduceMotion = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const routeFlipDuration = (distance: number) => reduceMotion() ? 0 : Math.min(680, 260 + distance * 0.65);
-  const routeEnterDuration = () => reduceMotion() ? 0 : 380;
+  const routeFlipDuration = (distance: number) => reduceMotion() || routes.length > 12 ? 0 : Math.min(680, 260 + distance * 0.65);
+  const routeEnterDuration = () => reduceMotion() || routes.length > 12 ? 0 : 380;
   $: pendingVenues = searchingVenues.filter((venue) => !foundVenues.some((found) => found.id === venue.id));
   $: visiblePendingVenues = pendingVenues.slice(0, 5);
   $: hasHiddenPendingVenues = pendingVenues.length > visiblePendingVenues.length;
@@ -109,7 +110,7 @@
               </span>
             {/if}
           </span>
-          {#if routesFound > routes.length && routes.length}<small class="resultLimit">Showing top {routes.length}</small>{/if}
+          {#if renderingRoutes}<small class="resultLimit" data-testid="route-render-progress">Showing {routes.length} now · loading more…</small>{:else if routesFound > routes.length && routes.length}<small class="resultLimit">Showing top {routes.length}</small>{/if}
         {:else}<strong>Awaiting your intent</strong>{/if}
       </div>
       {#if searching && pendingVenues.length}
@@ -346,6 +347,7 @@
   margin-top: 14px;
   padding-right: 6px;
   overflow-y: auto;
+  overflow-anchor: none;
   overscroll-behavior: contain;
   scrollbar-width: none;
   contain: layout paint;

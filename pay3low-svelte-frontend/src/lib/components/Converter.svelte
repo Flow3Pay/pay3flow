@@ -13,6 +13,9 @@
   type P2pSource = string;
   type ProviderSearchMode = "selectable" | "always_on" | "catalog_only";
   type P2pSourceOption = { id: P2pSource; label: string; iconUrl: string; searchable: boolean; searchMode: ProviderSearchMode; feeDescription?: string };
+  const INITIAL_ROUTE_BATCH_SIZE = 6;
+  const ROUTE_BATCH_SIZE = 6;
+  const ROUTE_BATCH_DELAY_MS = 150;
   const INTERMEDIARY_ASSETS = CRYPTO_ASSETS.map(([currency]) => currency);
   const BANK_METHODS = PAYMENT_METHODS.filter((method) => method.kind === "bank");
   const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", sources: "pay3flow.exchange.p2p-sources", knownSources: "pay3flow.exchange.known-p2p-sources", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", sourceNetwork: "pay3flow.exchange.source-network", targetNetwork: "pay3flow.exchange.target-network", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets", anonymousId: "pay3flow.reputation.anonymous-id" };
@@ -63,6 +66,9 @@
   let refreshTimer: number | undefined;
   let clockTimer: number | undefined;
   let initialSearchTimer: number | undefined;
+  let routeRenderTimer: number | undefined;
+  let routeRenderVersion = 0;
+  let renderingRoutes = false;
   let initialSearchReady = false;
   let paymentPickerComponent: typeof import("./PaymentMethodPicker.svelte").default | null = null;
   let networkPickerComponent: typeof import("./NetworkPicker.svelte").default | null = null;
@@ -187,29 +193,69 @@
     return created;
   }
 
+  function foundVenueOptions(visibleRoutes: RouteCandidate[]): P2pSourceOption[] {
+    const ids = new Set<string>();
+    for (const route of visibleRoutes) {
+      for (const provider of [
+        ...route.legs.map((leg) => leg.provider),
+        ...(route.route_provider ? [route.route_provider] : []),
+      ]) {
+        const id = provider.toLowerCase();
+        if (id) ids.add(id);
+      }
+    }
+    return [...ids].map((id) =>
+      p2pSources.find((item) => item.id.toLowerCase() === id)
+        ?? { id, label: id.split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" "), iconUrl: venueIcon(id), searchable: true, searchMode: "selectable" as const },
+    );
+  }
+
+  function cancelRouteRendering() {
+    routeRenderVersion += 1;
+    renderingRoutes = false;
+    if (routeRenderTimer) window.clearTimeout(routeRenderTimer);
+    routeRenderTimer = undefined;
+  }
+
+  function displayRoutes(nextRoutes: RouteCandidate[]) {
+    routes = nextRoutes;
+    foundVenues = foundVenueOptions(nextRoutes);
+  }
+
+  function renderRoutesProgressively(nextRoutes: RouteCandidate[]) {
+    const preservedCount = routes.length > 0 && routes.every((route, index) => route.route_id === nextRoutes[index]?.route_id)
+      ? routes.length
+      : 0;
+    cancelRouteRendering();
+    const version = routeRenderVersion;
+    const initialCount = Math.min(Math.max(INITIAL_ROUTE_BATCH_SIZE, preservedCount), nextRoutes.length);
+    displayRoutes(nextRoutes.slice(0, initialCount));
+    renderingRoutes = initialCount < nextRoutes.length;
+    if (!renderingRoutes) return;
+
+    const revealNextBatch = () => {
+      if (version !== routeRenderVersion) return;
+      const nextCount = Math.min(routes.length + ROUTE_BATCH_SIZE, nextRoutes.length);
+      displayRoutes(nextRoutes.slice(0, nextCount));
+      renderingRoutes = nextCount < nextRoutes.length;
+      routeRenderTimer = renderingRoutes
+        ? window.setTimeout(revealNextBatch, ROUTE_BATCH_DELAY_MS)
+        : undefined;
+    };
+    routeRenderTimer = window.setTimeout(revealNextBatch, ROUTE_BATCH_DELAY_MS);
+  }
+
   function applySearchResponse(response: P2pRouteSearchResponse) {
     const nextRoutes = mapRoutes(response);
-    const knownVenues = new Set(foundVenues.map((venue) => venue.id));
-    const venuesWithOffers = (response.asset_statuses ?? [])
-      .flatMap((status) => [...status.entry_sources, ...status.exit_sources])
-      .filter((source) => source.offers_found > 0)
-      .map((source) => source.source.toLowerCase());
-    const newlyFound = [
-      ...nextRoutes.flatMap((route) => [...route.legs.map((leg) => leg.provider.toLowerCase()), ...(route.route_provider ? [route.route_provider.toLowerCase()] : [])]),
-      ...venuesWithOffers,
-    ]
-      .filter((venue, index, venues) => !knownVenues.has(venue) && venues.indexOf(venue) === index)
-      .map((venue) => p2pSources.find((item) => item.id === venue) ?? { id: venue, label: venue.charAt(0).toUpperCase() + venue.slice(1), iconUrl: venueIcon(venue), searchable: true, searchMode: "selectable" as const });
-    if (newlyFound.length) foundVenues = [...foundVenues, ...newlyFound];
     routesFound = response.routes_found ?? nextRoutes.length;
-    routes = nextRoutes;
-    const bestRoute = routes.find((route) => route.is_current_best) ?? routes[0] ?? null;
+    renderRoutesProgressively(nextRoutes);
+    const bestRoute = nextRoutes.find((route) => route.is_current_best) ?? nextRoutes[0] ?? null;
     if (selectionPinnedByUser) {
-      const pinnedRoute = routes.find((route) => route.route_id === selected?.route_id);
+      const pinnedRoute = nextRoutes.find((route) => route.route_id === selected?.route_id);
       if (pinnedRoute) selected = pinnedRoute;
       else { selectionPinnedByUser = false; selected = bestRoute; }
     } else selected = bestRoute;
-    if (instructionsRoute) instructionsRoute = routes.find((route) => route.route_id === instructionsRoute?.route_id) ?? instructionsRoute;
+    if (instructionsRoute) instructionsRoute = nextRoutes.find((route) => route.route_id === instructionsRoute?.route_id) ?? instructionsRoute;
   }
 
   function selectRoute(route: RouteCandidate) {
@@ -290,7 +336,7 @@
     if (seconds && updatedAt && validAmount) refreshTimer = window.setInterval(startSearch, seconds * 1000);
   }
   function resetResults() {
-    controller?.abort(); routes = []; routesFound = 0; selected = null; selectionPinnedByUser = false; instructionsRoute = null; lastUpdatedAt = null; searching = false; awaitingFirstRoute = false; foundVenues = []; error = null;
+    controller?.abort(); cancelRouteRendering(); displayRoutes([]); routesFound = 0; selected = null; selectionPinnedByUser = false; instructionsRoute = null; lastUpdatedAt = null; searching = false; awaitingFirstRoute = false; error = null;
     if (refreshTimer) window.clearInterval(refreshTimer);
   }
   function updateAmount(value: string) { initialSearchReady = true; amount = normalizeAmount(value); resetResults(); }
@@ -363,7 +409,7 @@
       error = `Choose different networks for ${selectedSourceCurrency}; the same asset on the same network is not a swap route.`;
       return;
     }
-    controller?.abort(); controller = new AbortController(); const signal = controller.signal; const currentRequest = ++requestId; searching = true; awaitingFirstRoute = true; routesFound = 0; foundVenues = []; error = null;
+    controller?.abort(); cancelRouteRendering(); controller = new AbortController(); const signal = controller.signal; const currentRequest = ++requestId; searching = true; awaitingFirstRoute = true; routesFound = 0; error = null;
     try {
       const liveQuery = { sourceFiat: selectedSourceCurrency, targetFiat: selectedTargetCurrency, sourceAmount: value, intermediaryAssets: !sourceWallet && !targetWallet && selectedIntermediaryAssets.length ? selectedIntermediaryAssets : undefined, sourceNetwork: sourceWallet ? sourceNetwork?.id : undefined, targetNetwork: targetWallet ? targetNetwork?.id : undefined, sourcePaymentMethod: sourceWallet ? undefined : sourceMethod.p2pQuery, targetPaymentMethod: targetWallet ? undefined : targetMethod.p2pQuery, sources: selectedSources, allowCrossVenue: true, limit: 40 };
       let response: P2pRouteSearchResponse;
@@ -452,6 +498,7 @@
     fetchNetworks().then((items) => { if (items.length) networks = items; }).catch(() => {});
     fetchProviders().then((providers) => {
       p2pSources = providerSources(providers);
+      foundVenues = foundVenueOptions(routes);
       venueNames = Object.fromEntries(p2pSources.map((provider) => [provider.id.toLowerCase(), provider.label]));
       const catalog = new Set(p2pSources.map((source) => source.id));
       const live = p2pSources.filter((source) => source.searchMode === "selectable").map((source) => source.id);
@@ -494,6 +541,7 @@
   });
   onDestroy(() => {
     controller?.abort();
+    cancelRouteRendering();
     if (debounceTimer) clearTimeout(debounceTimer);
     if (refreshTimer) clearInterval(refreshTimer);
     if (clockTimer) clearInterval(clockTimer);
@@ -574,7 +622,7 @@
       <button type="button" class="cta" disabled={!hasAmount || (!previewRoute && (searching || !corridor))} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? "Open swap instructions" : "Find routes"}>{#if previewRoute}Swap <span>↗</span>{:else if searching}<span class="spinner"></span> Finding routes{:else if hasAmount}Find routes <span>↗</span>{:else}Enter an amount to begin{/if}</button>
       {#if error}<div class="errorBox" role="alert">{error}</div>{/if}
     </div>
-    <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {searchingVenues} {foundVenues} {venueNames} searched={lastUpdatedAt !== null} {hasAmount} />
+    <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {renderingRoutes} {searchingVenues} {foundVenues} {venueNames} searched={lastUpdatedAt !== null} {hasAmount} />
   </div>
   {#if paymentPickerComponent}<svelte:component this={paymentPickerComponent} open={methodPicker === "source"} title="Choose where you pay from" role="sender" {networks} selected={sourceMethod} selectedNetwork={sourceNetwork} onClose={() => methodPicker = null} onSelect={chooseSource} /><svelte:component this={paymentPickerComponent} open={methodPicker === "target"} title="Choose where the recipient gets paid" role="recipient" {networks} selected={targetMethod} selectedNetwork={targetNetwork} onClose={() => methodPicker = null} onSelect={chooseTarget} />{/if}
   {#if networkPickerComponent}<svelte:component this={networkPickerComponent} open={networkPicker !== null} networks={networkPicker === "source" ? sourceNetworks : targetNetworks} selected={networkPicker === "source" ? sourceNetwork : targetNetwork} onClose={() => networkPicker = null} onSelect={selectNetwork} />{/if}
