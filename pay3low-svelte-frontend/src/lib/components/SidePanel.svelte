@@ -25,7 +25,6 @@
   type Step = { currency: string; network?: string; provider?: string; iconUrl?: string };
 
   const venueName = (value?: string) => value ? venueNames[value.toLowerCase()] ?? value : "Searching";
-  const quoteProvider = (route: RouteCandidate) => route.route_provider ?? (route.entry_offer_snapshot?.advertiser.user_type === "service" ? route.entry_offer_snapshot.source : undefined);
   const assetLabel = (currency?: string) => !currency ? "—" : ASSET_NAMES[currency.toUpperCase()] ? `${currency} ${ASSET_NAMES[currency.toUpperCase()]}` : currency;
   const money = (minor?: number, currency?: string, exact?: string) => {
     if (exact && ["BTC", "ETH", "USDC", "USDT", "SOL", "TRX", "TON", "XRP", "ADA", "AVAX", "DOT", "LINK", "LTC", "BCH", "BNB", "DOGE", "MATIC", "NEAR", "SUI", "APT", "ATOM", "UNI", "DAI", "FDUSD"].includes(currency?.toUpperCase() ?? "")) {
@@ -40,6 +39,8 @@
   const routeFlipDuration = (distance: number) => reduceMotion() ? 0 : Math.min(680, 260 + distance * 0.65);
   const routeEnterDuration = () => reduceMotion() ? 0 : 380;
   $: pendingVenues = searchingVenues.filter((venue) => !foundVenues.some((found) => found.id === venue.id));
+  $: visiblePendingVenues = pendingVenues.slice(0, 5);
+  $: hasHiddenPendingVenues = pendingVenues.length > visiblePendingVenues.length;
 
   function pathStepProvider(route: RouteCandidate, index: number, lastIndex: number) {
     if (index === 0) return undefined;
@@ -113,11 +114,12 @@
       </div>
       {#if searching && pendingVenues.length}
         <div class="searchingVenues" aria-label={`Searching ${pendingVenues.map((venue) => venue.label).join(", ")}`}>
-          {#each pendingVenues as venue, index (venue.id)}
+          {#each visiblePendingVenues as venue, index (venue.id)}
             <span class="searchingVenue" data-testid="searching-venue" title={`Searching ${venue.label}`} style:animation-delay={`${index * 130}ms`}>
               <img src={venue.iconUrl} alt="" width="20" height="20" decoding="async" on:error={(event) => fallbackVenueIcon(event, venue.id)} />
             </span>
           {/each}
+          {#if hasHiddenPendingVenues}<span class="searchingVenuesOverflow" data-testid="searching-venues-overflow" aria-hidden="true">...</span>{/if}
         </div>
       {/if}
     </div>
@@ -130,7 +132,7 @@
             <li animate:flip={{ duration: routeFlipDuration, easing: quintOut }} in:fly={{ y: 18, duration: routeEnterDuration(), easing: quintOut }}><div class="routeCardShell">
               <div class:routeBest={route.is_current_best} class:selected={route.route_id === selectedRouteId} class="routeCard" data-testid={complete ? "complete-route" : "partial-route"}>
               <button type="button" class="routeCardMain" disabled={!complete} aria-pressed={route.route_id === selectedRouteId} aria-label={`Select route ${index + 1}: ${money(route.target_amount_minor, route.target_currency, route.target_amount)}`} on:click={(event) => cardClick(event, route)}>
-                <span class="routeTopline"><span class="routeRank">#{String(index + 1).padStart(2, "0")}</span><span class="routeBadges">{#if quoteProvider(route)}<span class="quoteBadge">Quote by {venueName(quoteProvider(route))}</span>{/if}{#if route.is_current_best}<span class="bestBadge">Best route</span>{:else}<span class="deltaBadge">{spreadLabel(route.spread_bps)}</span>{/if}</span></span>
+                <span class="routeTopline"><span class="routeRank">#{String(index + 1).padStart(2, "0")}</span><span class="routeBadges">{#if route.is_current_best}<span class="bestBadge">Best route</span>{:else}<span class="deltaBadge">{spreadLabel(route.spread_bps)}</span>{/if}</span></span>
                 <span class="routeAmount">{money(route.target_amount_minor, route.target_currency, route.target_amount)}</span>
                 <span class="workflow" aria-label={workflowLabel(route)}>
                   {#each workflowSteps(route) as step, stepIndex}
@@ -500,19 +502,13 @@
 }
 
 .bestBadge,
-.deltaBadge,
-.quoteBadge {
+.deltaBadge {
   padding: 4px 8px;
   border-radius: var(--radius-pill);
   font-size: 7px;
   font-weight: 850;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-}
-
-.quoteBadge {
-  background: rgba(117, 88, 246, 0.14);
-  color: #b8a8ff;
 }
 
 .bestBadge {
@@ -689,6 +685,17 @@
   box-shadow: 0 8px 18px rgba(9, 12, 8, 0.18);
   animation: venueBounce 1.3s cubic-bezier(0.45, 0, 0.55, 1) infinite;
   will-change: transform;
+}
+
+.searchingVenuesOverflow {
+  display: grid;
+  width: 20px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.58);
+  font-weight: 800;
+  letter-spacing: 0.08em;
 }
 
 .searchingVenue img {
@@ -971,11 +978,6 @@
 .deltaBadge {
   background: #eef4e9;
   color: var(--color-text-soft);
-}
-
-.quoteBadge {
-  background: #eeeaff;
-  color: #5f43cf;
 }
 
 .routeAmount {

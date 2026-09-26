@@ -825,14 +825,13 @@ test("search venues bounce in the loader and refresh stops spinning after the fi
   expect(socketConnections).toBe(1);
   const panelTop = page.locator("#routes .panelTop");
   const searchingVenues = panelTop.getByTestId("searching-venue");
-  await expect(searchingVenues).toHaveCount(7);
+  await expect(searchingVenues).toHaveCount(5);
   await expect(searchingVenues.nth(0)).toHaveAttribute("title", "Searching Binance");
   await expect(searchingVenues.nth(1)).toHaveAttribute("title", "Searching Bybit");
   await expect(searchingVenues.nth(2)).toHaveAttribute("title", "Searching Cifra Markets");
   await expect(searchingVenues.nth(3)).toHaveAttribute("title", "Searching CoW Protocol Live");
   await expect(searchingVenues.nth(4)).toHaveAttribute("title", "Searching ID Pay Live");
-  await expect(searchingVenues.nth(5)).toHaveAttribute("title", "Searching NEAR 1Click");
-  await expect(searchingVenues.nth(6)).toHaveAttribute("title", "Searching Whitebird");
+  await expect(panelTop.getByTestId("searching-venues-overflow")).toHaveText("...");
   await expect(searchingVenues.nth(0)).toHaveCSS("width", "32px");
   await expect(searchingVenues.nth(0)).toHaveCSS("animation-delay", "0s");
   await expect(searchingVenues.nth(1)).toHaveCSS("animation-delay", "0.13s");
@@ -847,6 +846,7 @@ test("search venues bounce in the loader and refresh stops spinning after the fi
   await expect(foundVenues.first()).toHaveAttribute("title", "Found on Bybit");
   await expect(searchingVenues).toHaveCount(5);
   await expect(searchingVenues.nth(4)).toHaveAttribute("title", "Searching Whitebird");
+  await expect(panelTop.getByTestId("searching-venues-overflow")).toHaveCount(0);
   await expect(refreshButton).toBeDisabled();
   await expect(refreshButton.locator("svg")).not.toHaveClass(/refreshSpin/);
 
@@ -910,9 +910,9 @@ test("direct provider quotes keep their API names and independent prices", async
   const cards = page.getByTestId("complete-route");
   await expect(cards).toHaveCount(2);
   await expect(cards.nth(0)).toContainText("99.6 USDC");
-  await expect(cards.nth(0)).toContainText("Quote by NEAR 1Click");
+  await expect(cards.nth(0)).not.toContainText("Quote by");
   await expect(cards.nth(1)).toContainText("97.3 USDC");
-  await expect(cards.nth(1)).toContainText("Quote by CoW Protocol Live");
+  await expect(cards.nth(1)).not.toContainText("Quote by");
   await expect(cards.nth(0).locator(".workflow")).toHaveAttribute(
     "aria-label",
     "USDT Tether · ethereum → USDC USD Coin · ethereum (NEAR 1Click)",
@@ -933,7 +933,7 @@ test("ID Pay provides a direct AMD to RUB route with its API name", async ({ pag
   const route = page.getByTestId("complete-route");
   await expect(route).toHaveCount(1);
   await expect(route).toContainText("10,000 RUB");
-  await expect(route).toContainText("Quote by ID Pay Live");
+  await expect(route).not.toContainText("Quote by");
   await expect(route.locator(".workflow")).toHaveAttribute(
     "aria-label",
     "AMD → RUB (ID Pay Live)",
