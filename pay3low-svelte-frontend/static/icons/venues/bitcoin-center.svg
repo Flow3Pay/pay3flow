@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Bitcoin Center">
+  <defs>
+    <linearGradient id="bc" x1="8" y1="56" x2="54" y2="8" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f9ca1a"/>
+      <stop offset="1" stop-color="#ec6c2d"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#101012"/>
+  <path d="M13 47h8V35h-8zm15 0h8V27h-8zm15 0h8V17h-8z" fill="url(#bc)"/>
+  <path d="M13 29 27 20l10 4L51 11m-9 0h9v9" fill="none" stroke="#f9ca1a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

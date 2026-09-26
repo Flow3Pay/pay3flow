@@ -274,6 +274,10 @@ failed condition, `error_pointer` supplies the error text when possible.
 An offer mapping must provide either `price_pointer` or both
 `fiat_amount_pointer` and `asset_amount_pointer`; the latter calculates
 `fiat_amount / asset_amount`. `price_inverted = true` then returns `1 / price`.
+`output_fee_pointer` maps a fixed fee deducted from the provider's output and
+converts the base rate into a net effective rate. Fee-bearing buy mappings must
+use `amount_mode = "fiat_probe"`; fee-bearing sell mappings must use
+`amount_mode = "asset_probe"`, so the mapper always knows the quoted input.
 Availability and min/max fiat each need either a pointer or the corresponding
 adapter default.
 
@@ -718,6 +722,7 @@ requirements described earlier.
 | `fiat_pointer`, `asset_pointer` | Currency codes; otherwise the query codes are used. |
 | `price_pointer` | Fiat units per asset. |
 | `fiat_amount_pointer`, `asset_amount_pointer` | Alternative price calculation; must appear together. |
+| `output_fee_pointer` | Fixed fee deducted from the quoted output; folded into the effective price. |
 | `price_inverted` | Invert the mapped/calculated price. |
 | `available_asset_pointer` | Available asset amount. |
 | `min_fiat_pointer`, `max_fiat_pointer` | Fiat order limits. |
@@ -843,6 +848,7 @@ cargo check --manifest-path backend/Cargo.toml
 | GET P2P ads | OKX, Rapira |
 | Direct quote with per-direction amount mapping | Whitebird |
 | Direct quote with endpoint templates | SkyLabs |
+| Direct quote with a fixed output fee | Bitcoin Center |
 | Aligned rate table | Cifra Markets |
 | HMAC-authenticated quote | Exnode |
 | Spot tickers | Binance, Bybit, Bitget, OKX, Cifra Markets, Dzengi |

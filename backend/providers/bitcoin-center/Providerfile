@@ -1,0 +1,79 @@
+# Bitcoin Center's public route endpoint powers its AMD bank-transfer
+# calculator. This declaration intentionally selects USDT on Solana (USDTSOL)
+# rather than treating every USDT network as interchangeable.
+
+[buy]
+source_url = "https://www.bitcoincenter.am/en/?from=WIREAMD&to=USDTSOL"
+name = "Bitcoin Center Buy"
+currency = ["amd"]
+banks = ["Bank Transfer"]
+
+[sell]
+source_url = "https://www.bitcoincenter.am/en/?from=USDTSOL&to=WIREAMD"
+name = "Bitcoin Center Sell"
+currency = ["amd"]
+banks = ["Bank Transfer"]
+
+[adapter.p2p]
+kind = "http_json"
+market = "direct_exchange"
+endpoint = "https://www.bitcoincenter.am/service/api/v1/public/exchanger/route/get/one/"
+method = "GET"
+headers = { Accept = "application/json", Lang = "en", Origin = "https://www.bitcoincenter.am", Referer = "https://www.bitcoincenter.am/en/" }
+asset_codes = { USDT = "USDTSOL" }
+supported_assets = ["USDT"]
+supported_fiats = ["AMD"]
+fiat_probe_amount = 100000
+asset_probe_amount = 100
+default_min_fiat = 50000
+default_max_fiat = 10000000
+default_available_asset = 1000000000
+timeout_ms = 5000
+
+[adapter.p2p.buy]
+amount_mode = "fiat_probe"
+query = { id = "6a75d602f50f4685ab92bfd0", lang = "en" }
+success_pointer = "/success"
+success_value = "true"
+error_pointer = "/error/message"
+
+[adapter.p2p.buy.offer]
+ad_id_pointer = "/data/route/routeId"
+fiat_pointer = "/data/route/from/symbol"
+asset_pointer = "/data/route/to/xml"
+price_pointer = "/data/route/rate/in"
+output_fee_pointer = "/data/route/rate/outFeeAmount"
+available_asset_pointer = "/data/route/rate/amount"
+min_fiat_pointer = "/data/route/from/min"
+max_fiat_pointer = "/data/route/from/max"
+payment_methods_pointer = "/data/route/from/name"
+pay_time_limit_pointer = "/data/route/orderTTL"
+merchant_default = true
+verified_default = true
+source_url_template = "https://www.bitcoincenter.am/en/?from=WIREAMD&to=USDTSOL"
+source_url_is_exact = true
+
+[adapter.p2p.sell]
+amount_mode = "asset_probe"
+query = { id = "6a75d54ef50f4685ab92bdd3", lang = "en" }
+success_pointer = "/success"
+success_value = "true"
+error_pointer = "/error/message"
+
+[adapter.p2p.sell.offer]
+ad_id_pointer = "/data/route/routeId"
+fiat_pointer = "/data/route/to/symbol"
+asset_pointer = "/data/route/from/xml"
+price_pointer = "/data/route/rate/out"
+output_fee_pointer = "/data/route/rate/outFeeAmount"
+payment_methods_pointer = "/data/route/to/name"
+pay_time_limit_pointer = "/data/route/orderTTL"
+merchant_default = true
+verified_default = true
+source_url_template = "https://www.bitcoincenter.am/en/?from=USDTSOL&to=WIREAMD"
+source_url_is_exact = true
+
+[fees]
+kind = "quote_dependent"
+description = "The effective Pay3Flow rate includes Bitcoin Center's fixed output fee reported by the live route API; bank and blockchain charges may still apply."
+docs_url = "https://www.bitcoincenter.am/en/?from=WIREAMD&to=USDTSOL"

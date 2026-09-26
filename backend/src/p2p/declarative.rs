@@ -97,7 +97,9 @@ impl DeclarativeP2pSource {
             .iter()
             .find_map(|(canonical, remote)| (remote == &remote_asset).then(|| canonical.clone()))
             .unwrap_or(remote_asset);
-        let price = mapped_price(item, mapping)?;
+        let operation = self.operation(query.side)?;
+        let input_amount = self.template_values(query, operation)?.amount;
+        let price = mapped_price(item, mapping, query.side, input_amount)?;
         let available_asset = mapped_number_string(
             item,
             mapping.available_asset_pointer.as_deref(),
@@ -620,7 +622,12 @@ fn response_items<'a>(response: &'a Value, pointer: Option<&str>) -> Result<Vec<
     }
 }
 
-fn mapped_price(item: &Value, mapping: &OfferMapping) -> Result<String> {
+fn mapped_price(
+    item: &Value,
+    mapping: &OfferMapping,
+    side: P2pSide,
+    input_amount: Option<f64>,
+) -> Result<String> {
     let mut price = if let Some(pointer) = mapping.price_pointer.as_deref() {
         required_number(item, pointer, "price")?
     } else {
@@ -644,6 +651,26 @@ fn mapped_price(item: &Value, mapping: &OfferMapping) -> Result<String> {
     };
     if mapping.price_inverted {
         price = 1.0 / price;
+    }
+    if let Some(pointer) = mapping.output_fee_pointer.as_deref() {
+        let fee = required_number(item, pointer, "output fee")?;
+        if fee < 0.0 {
+            bail!("mapped output fee must not be negative");
+        }
+        let input = input_amount
+            .filter(|amount| amount.is_finite() && *amount > 0.0)
+            .ok_or_else(|| anyhow!("an input amount is required to apply the output fee"))?;
+        let net_output = match side {
+            P2pSide::BuyCrypto => input / price - fee,
+            P2pSide::SellCrypto => input * price - fee,
+        };
+        if !net_output.is_finite() || net_output <= 0.0 {
+            bail!("mapped output fee consumes the quoted output");
+        }
+        price = match side {
+            P2pSide::BuyCrypto => input / net_output,
+            P2pSide::SellCrypto => net_output / input,
+        };
     }
     if !price.is_finite() || price <= 0.0 {
         bail!("mapped price is not a positive finite number");
@@ -899,6 +926,21 @@ mod tests {
         DeclarativeP2pSource::from_record(Client::new(), &record).unwrap()
     }
 
+    fn bitcoin_center_source() -> DeclarativeP2pSource {
+        let document: toml::Value =
+            toml::from_str(include_str!("../../providers/bitcoin-center/Providerfile")).unwrap();
+        let adapters: ProviderAdapters =
+            document.get("adapter").unwrap().clone().try_into().unwrap();
+        let record = ProviderAdapterRecord {
+            slug: "bitcoin-center".into(),
+            source_url: "https://www.bitcoincenter.am/en/".into(),
+            display_name: "Bitcoin Center".into(),
+            config: Some(adapters),
+            workflow: None,
+        };
+        DeclarativeP2pSource::from_record(Client::new(), &record).unwrap()
+    }
+
     #[test]
     fn renders_typed_and_string_request_placeholders() {
         let mut value: Value = serde_json::from_str(
@@ -1128,6 +1170,92 @@ mod tests {
         assert!(source.supports_fiat("AMD"));
         assert!(source.supports_fiat("amd"));
         assert!(!source.supports_fiat("RUB"));
+    }
+
+    #[test]
+    fn maps_bitcoin_center_sol_usdt_rate_with_output_fee() {
+        let source = bitcoin_center_source();
+        let response: Value = serde_json::from_str(
+            r#"{"success":true,"data":{"route":{"from":{"name":"Bank Transfer","symbol":"AMD","xml":"WIREAMD","min":"50000","max":"10000000"},"to":{"name":"USDT (SOL) Solana","symbol":"USDT","xml":"USDTSOL"},"rate":{"in":365.33760001,"out":1,"amount":"99996854.963213","outFeeAmount":5},"routeId":"6a75d602f50f4685ab92bfd0","orderTTL":30}}}"#,
+        )
+        .unwrap();
+        let query = P2pSearchQuery {
+            fiat: "AMD".into(),
+            asset: "USDT".into(),
+            side: P2pSide::BuyCrypto,
+            amount: Some(100_000.0),
+            payment_method: None,
+            merchant_only: None,
+            min_orders: None,
+            min_completion_rate: None,
+            limit: Some(1),
+            sources: Some("bitcoin-center".into()),
+        };
+        let mapping = source.config.buy.as_ref().unwrap().offer.as_ref().unwrap();
+
+        let offer = source.into_offer(&response, &query, mapping).unwrap();
+
+        assert_eq!(offer.market, P2pOfferMarket::DirectExchange);
+        assert_eq!(offer.fiat, "AMD");
+        assert_eq!(offer.asset, "USDT");
+        assert_eq!(offer.payment_methods, ["Bank Transfer"]);
+        assert_eq!(offer.pay_time_limit_minutes, Some(30));
+        assert_eq!(
+            offer.source_url,
+            "https://www.bitcoincenter.am/en/?from=WIREAMD&to=USDTSOL"
+        );
+        assert!(offer.source_url_is_exact);
+        assert!((offer.price.parse::<f64>().unwrap() - 372.135351825745).abs() < 0.000001);
+
+        let reverse: Value = serde_json::from_str(
+            r#"{"success":true,"data":{"route":{"from":{"name":"USDT (SOL) Solana","symbol":"USDT","xml":"USDTSOL","min":"141.670335","max":"28334.069734"},"to":{"name":"Bank Transfer","symbol":"AMD","xml":"WIREAMD"},"rate":{"in":1,"out":352.93203883,"amount":"9984863629","outFeeAmount":0},"routeId":"6a75d54ef50f4685ab92bdd3","orderTTL":30}}}"#,
+        )
+        .unwrap();
+        let mut sell_query = query;
+        sell_query.side = P2pSide::SellCrypto;
+        sell_query.amount = None;
+        let sell_mapping = source.config.sell.as_ref().unwrap().offer.as_ref().unwrap();
+        let sell_offer = source
+            .into_offer(&reverse, &sell_query, sell_mapping)
+            .unwrap();
+
+        assert_eq!(sell_offer.fiat, "AMD");
+        assert_eq!(sell_offer.asset, "USDT");
+        assert_eq!(sell_offer.price, "352.93203883");
+        assert_eq!(sell_offer.payment_methods, ["Bank Transfer"]);
+        assert_eq!(
+            sell_offer.source_url,
+            "https://www.bitcoincenter.am/en/?from=USDTSOL&to=WIREAMD"
+        );
+    }
+
+    #[tokio::test]
+    #[ignore = "calls the live Bitcoin Center route API"]
+    async fn live_bitcoin_center_api_returns_sol_usdt_routes() {
+        let source = bitcoin_center_source();
+        for side in [P2pSide::BuyCrypto, P2pSide::SellCrypto] {
+            let offers = source
+                .search(&P2pSearchQuery {
+                    fiat: "AMD".into(),
+                    asset: "USDT".into(),
+                    side,
+                    amount: (side == P2pSide::BuyCrypto).then_some(100_000.0),
+                    payment_method: Some("Bank Transfer".into()),
+                    merchant_only: None,
+                    min_orders: None,
+                    min_completion_rate: None,
+                    limit: Some(1),
+                    sources: Some("bitcoin-center".into()),
+                })
+                .await
+                .unwrap();
+
+            assert_eq!(offers.len(), 1);
+            assert_eq!(offers[0].market, P2pOfferMarket::DirectExchange);
+            assert_eq!(offers[0].side, side);
+            assert!(offers[0].price.parse::<f64>().unwrap() > 0.0);
+            assert!(offers[0].source_url.contains("USDTSOL"));
+        }
     }
 
     #[tokio::test]

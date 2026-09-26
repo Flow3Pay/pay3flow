@@ -7,7 +7,9 @@ money.
 ## Sources
 
 - Binance, Bybit, OKX, Bitget, and Rapira public P2P advertisement lists.
-- Whitebird, Cifra Markets, and SkyLabs public direct-quote APIs.
+- Whitebird, Cifra Markets, SkyLabs, bncex, and Bitcoin Center public
+  direct-quote APIs. Bitcoin Center is restricted to AMD bank transfers and
+  USDT on Solana.
 - BestChange public catalog and direction pages.
 - Exnode authenticated quote API when its environment credentials are set.
 - Binance, Bybit, OKX, Bitget, Cifra Markets, and Dzengi spot tickers for

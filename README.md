@@ -31,6 +31,7 @@ still be available when the venue is opened.
 | Cifra Markets | Public calculator and IMEX market API | Direct RUB/BYN/USD crypto quotes and crypto market paths |
 | SkyLabs | Public homepage rate API | Direct AMD/USD fiat-to-crypto and crypto-to-fiat quotes |
 | bncex | Public calculator quote API | Direct AMD/USDT and AMD/USDC quotes; available as the AMD exit for RUB→AMD routes |
+| Bitcoin Center | Public route API | AMD bank transfer ↔ USDT on Solana, including the reported output fee |
 | BestChange | Official authenticated rates API | Aggregated exchanger offers |
 | Dzengi | Public market-data API | Crypto spot-market paths |
 | Exnode | HMAC-authenticated merchant quote API | Direct quotes when API credentials are configured |
@@ -70,12 +71,14 @@ flowchart LR
     api --> cifra[Cifra Markets API]
     api --> skylabs[SkyLabs homepage API]
     api --> bncex[bncex calculator API]
+    api --> bitcoincenter[Bitcoin Center route API]
     p2p --> ranker[Route builder and ranker]
     spot --> ranker
     whitebird --> ranker
     cifra --> ranker
     skylabs --> ranker
     bncex --> ranker
+    bitcoincenter --> ranker
     ranker -->|progressive snapshots| browser
 ```
 

@@ -222,6 +222,9 @@ pub struct OfferMapping {
     pub price_pointer: Option<String>,
     pub fiat_amount_pointer: Option<String>,
     pub asset_amount_pointer: Option<String>,
+    /// Fixed fee deducted from the quoted output amount.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_fee_pointer: Option<String>,
     #[serde(default)]
     pub price_inverted: bool,
     pub available_asset_pointer: Option<String>,
@@ -689,6 +692,19 @@ impl P2pOperation {
                 "{context}: adapter/p2p/asset_probe_amount is required by {operation}"
             ));
         }
+        let mapping = self.offer.as_ref().or(adapter.offer.as_ref());
+        let fee_amount_mode = match operation {
+            "buy" => "fiat_probe",
+            "sell" => "asset_probe",
+            _ => unreachable!("validated operation name"),
+        };
+        if mapping.is_some_and(|mapping| mapping.output_fee_pointer.is_some())
+            && self.amount_mode != fee_amount_mode
+        {
+            return Err(format!(
+                "{context}: adapter/p2p/{operation}/amount_mode must be {fee_amount_mode} when output_fee_pointer is set"
+            ));
+        }
         validate_success_pair(
             self.success_pointer.as_deref(),
             self.success_value.as_deref(),
@@ -749,6 +765,7 @@ impl OfferMapping {
                 self.price_pointer.as_deref(),
                 self.fiat_amount_pointer.as_deref(),
                 self.asset_amount_pointer.as_deref(),
+                self.output_fee_pointer.as_deref(),
                 self.available_asset_pointer.as_deref(),
                 self.min_fiat_pointer.as_deref(),
                 self.max_fiat_pointer.as_deref(),
