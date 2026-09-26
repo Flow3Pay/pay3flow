@@ -20,13 +20,19 @@
             load "${./deploy/render.rb}"
             Pay3flow::Render.main(ARGV)
           '';
-          deployScript = pkgs.writeScriptBin "deploy-pay3flow-k8s" ''
+          deployK8sScript = pkgs.writeScriptBin "deploy-pay3flow-k8s" ''
             #!${pkgs.ruby}/bin/ruby
             ENV["PAY3FLOW_K8S_TEMPLATE"] ||= "${applicationTemplate}"
             ENV["PAY3FLOW_K8S_SERVICES_TEMPLATE"] ||= "${servicesTemplate}"
             load "${./deploy/render.rb}"
             load "${./deploy/deploy.rb}"
             Pay3flow::Deploy.main(ARGV)
+          '';
+          deployLiveScript = pkgs.writeScriptBin "deploy-pay3flow-live" ''
+            #!${pkgs.ruby}/bin/ruby
+            ENV["PATH"] = "${pkgs.lib.makeBinPath (with pkgs; [ curl git openssh rsync ])}:#{ENV.fetch("PATH", "")}"
+            load "${./deploy/live_deploy.rb}"
+            Pay3flow::LiveDeploy.main(ARGV)
           '';
           manifests = pkgs.runCommand "pay3flow-kubernetes.yaml" {
             nativeBuildInputs = [ pkgs.ruby ];
@@ -39,7 +45,8 @@
         in {
           kubernetes-manifests = manifests;
           render-manifests = renderScript;
-          deploy = deployScript;
+          deploy = deployLiveScript;
+          deploy-k8s = deployK8sScript;
           default = manifests;
         });
 
@@ -47,6 +54,7 @@
         let
           render = self.packages.${pkgs.system}.render-manifests;
           deploy = self.packages.${pkgs.system}.deploy;
+          deploy-k8s = self.packages.${pkgs.system}.deploy-k8s;
         in {
           render-manifests = {
             type = "app";
@@ -54,7 +62,11 @@
           };
           deploy = {
             type = "app";
-            program = "${deploy}/bin/deploy-pay3flow-k8s";
+            program = "${deploy}/bin/deploy-pay3flow-live";
+          };
+          deploy-k8s = {
+            type = "app";
+            program = "${deploy-k8s}/bin/deploy-pay3flow-k8s";
           };
           default = self.apps.${pkgs.system}.render-manifests;
         });

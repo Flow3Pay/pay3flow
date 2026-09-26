@@ -58,7 +58,28 @@ renderer writes them into the `config.toml` ConfigMap mounted at `/app/config.to
 Database, Redis, JWT, encryption, admin, BestChange, Symbiosis, and NEAR Intents credentials remain
 Kubernetes Secret environment variables.
 
-## Deploy with in-cluster PostgreSQL and Redis
+## One-command production deploy
+
+The Flake's production Ruby app builds immutable images on the host and imports
+them into k3s, so deploying the current committed revision is one command:
+
+```sh
+nix run .#deploy
+```
+
+The command requires a clean Git worktree and existing SSH access to the
+production host. It stages a credential-free release, builds the backend and
+frontend in parallel, imports and verifies both images, rolls out the two
+Deployments, rolls back their images if readiness fails, and checks the public
+home, health, and provider endpoints. See `nix run .#deploy -- --help` for
+host, identity, namespace, URL, and image-tag overrides.
+
+The cluster and `pay3flow-secrets` must already be bootstrapped. In particular,
+the Secret must contain `BESTCHANGE_API_KEY` and `SYMBIOSIS_PARTNER_ID` (the
+latter may be an empty value for the public API tier). `backend/.env` is never
+copied to the host.
+
+## Deploy with in-cluster PostgreSQL and Redis via a registry
 
 The deployment app deletes and recreates the two build Jobs on each run, then
 waits for both images, restarts both Deployments, and waits for their rollouts.
@@ -66,7 +87,7 @@ Application Pods always pull the requested image tag, so rebuilding a reused
 development tag cannot leave an older backend running:
 
 ```sh
-nix run .#deploy
+nix run .#deploy-k8s
 ```
 
 For inspection without applying anything:
@@ -91,7 +112,7 @@ variables before rendering:
 export PAY3FLOW_DATABASE_MODE=external
 export PAY3FLOW_DATABASE_URL='postgres://user:password@db.example.com:5432/pay3flow?sslmode=require'
 export PAY3FLOW_REDIS_URL='rediss://:password@redis.example.com:6379'
-nix run .#deploy
+nix run .#deploy-k8s
 ```
 
 In external mode the application manifest does not include PostgreSQL or Redis
