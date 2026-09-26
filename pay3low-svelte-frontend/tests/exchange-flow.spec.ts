@@ -19,6 +19,20 @@ async function openApp(page: Page) {
     .not.toBe("none");
 }
 
+async function openCryptoPicker(page: Page, side: "sending" | "recipient", currency = "USDT") {
+  await page.getByRole("button", { name: new RegExp(`^Select ${side} currency:`) }).click();
+  const currencyPicker = page.getByRole("dialog", { name: "Choose currency" });
+  await currencyPicker.getByRole("option", { name: new RegExp(`^${currency}\\b`) }).click();
+  return page.getByRole("dialog", { name: "Choose crypto network" });
+}
+
+async function chooseCrypto(page: Page, side: "sending" | "recipient", search: string) {
+  const [currency] = search.split(/\s+/, 1);
+  const picker = await openCryptoPicker(page, side, currency);
+  await picker.getByLabel("Search crypto networks").fill(search);
+  return picker;
+}
+
 async function mockBackend(page: Page, options: { includeNewProviders?: boolean; routeCount?: number } = {}) {
   await page.route("http://localhost:8080/api/**", async (route) => {
     const url = new URL(route.request().url());
@@ -1040,20 +1054,51 @@ test("reordered progressive snapshots do not restart card rendering at 100", asy
   finishSearch?.();
 });
 
+test("currency is primary and crypto exposes token, network, and wallet roles", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page);
+
+  await expect(page.getByRole("button", { name: "Select sending currency: AMD" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Select recipient currency: RUB" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Select sending currency: AMD" }).click();
+  const currencyPicker = page.getByRole("dialog", { name: "Choose currency" });
+  await expect(currencyPicker.getByRole("option", { name: /^USDT\b/ })).toBeVisible();
+  await expect(currencyPicker.getByRole("option", { name: /^BTC\b/ })).toBeVisible();
+  await expect(currencyPicker.getByRole("option", { name: /^NEAR\b/ })).toBeVisible();
+  await currencyPicker.getByRole("option", { name: /^USDT\b/ }).click();
+  await expect(page.getByRole("button", { name: "Select sending currency: USDT" })).toBeVisible();
+  await expect(page.getByLabel("Sender wallet address")).toBeVisible();
+  await page.getByLabel("Sender wallet address").fill("0xsender");
+
+  await page.getByRole("button", { name: "Select recipient currency: RUB" }).click();
+  await page.getByRole("dialog", { name: "Choose currency" }).getByRole("option", { name: /^USDT\b/ }).click();
+  await expect(page.getByRole("button", { name: "Select recipient currency: USDT" })).toBeVisible();
+  await expect(page.getByLabel("Recipient wallet address")).toBeVisible();
+  await page.getByLabel("Recipient wallet address").fill("0xrecipient");
+
+  await page.getByRole("button", { name: /^Select recipient network:/ }).click();
+  const networkPicker = page.getByRole("dialog", { name: "Choose crypto network" });
+  await networkPicker.getByLabel("Search crypto networks").fill("NEAR");
+  await expect(networkPicker.getByRole("option", { name: /NEAR/ })).toHaveCount(1);
+
+  await page.getByRole("button", { name: "Swap sender and recipient" }).click();
+  await expect(page.getByLabel("Sender wallet address")).toHaveValue("0xrecipient");
+  await expect(page.getByLabel("Recipient wallet address")).toHaveValue("0xsender");
+});
+
 test("cryptocurrency search binds the selected asset to its network", async ({ page }) => {
   await mockBackend(page);
   await openApp(page);
 
-  await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
-  const picker = page.getByRole("dialog", { name: "Choose where you pay from" });
-  await picker.getByLabel("Search banks and payment methods").fill("USDT ERC20");
+  const picker = await chooseCrypto(page, "sending", "USDT ERC20");
 
-  const ethereumUsdt = picker.getByRole("option", { name: /Tether USDT · Ethereum \(ERC-20\)/ });
+  const ethereumUsdt = picker.getByRole("option", { name: /Ethereum \(ERC-20\).*USDT/ });
   await expect(ethereumUsdt).toHaveCount(1);
   await ethereumUsdt.click();
 
-  const selectedAsset = page.getByRole("button", { name: "Select sending asset: Tether" });
-  await expect(selectedAsset).toContainText("USDT · Ethereum (ERC-20)");
+  const selectedNetwork = page.getByRole("button", { name: /Select sending network: Ethereum \(ERC-20\)/ });
+  await expect(selectedNetwork).toContainText("USDT · Crypto network");
 
   await page.getByLabel("Amount to send").fill("125");
   await page.getByTestId("start-search").click();
@@ -1068,15 +1113,11 @@ test("direct provider quotes keep their API names and independent prices", async
   await mockBackend(page);
   await openApp(page);
 
-  await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
-  const sourcePicker = page.getByRole("dialog", { name: "Choose where you pay from" });
-  await sourcePicker.getByLabel("Search banks and payment methods").fill("USDT ERC20");
-  await sourcePicker.getByRole("option", { name: /Tether USDT · Ethereum \(ERC-20\)/ }).click();
+  const sourcePicker = await chooseCrypto(page, "sending", "USDT ERC20");
+  await sourcePicker.getByRole("option", { name: /Ethereum \(ERC-20\).*USDT/ }).click();
 
-  await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
-  const targetPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
-  await targetPicker.getByLabel("Search banks and payment methods").fill("USDC ERC20");
-  await targetPicker.getByRole("option", { name: /USD Coin USDC · Ethereum \(ERC-20\)/ }).click();
+  const targetPicker = await chooseCrypto(page, "recipient", "USDC ERC20");
+  await targetPicker.getByRole("option", { name: /Ethereum \(ERC-20\).*USDC/ }).click();
 
   await page.getByLabel("Amount to send").fill("100");
   await page.getByTestId("start-search").click();
@@ -1123,10 +1164,8 @@ test("small AMD to BTC@near routes keep crypto precision", async ({ page }) => {
   await mockBackend(page);
   await openApp(page);
 
-  await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
-  const targetPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
-  await targetPicker.getByLabel("Search banks and payment methods").fill("BTC NEAR");
-  await targetPicker.getByRole("option", { name: /Bitcoin BTC · NEAR/ }).click();
+  const targetPicker = await chooseCrypto(page, "recipient", "BTC NEAR");
+  await targetPicker.getByRole("option", { name: /NEAR.*BTC/ }).click();
 
   await page.getByLabel("Amount to send").fill("10000");
   await page.getByTestId("start-search").click();
@@ -1150,10 +1189,8 @@ test("direct Whitebird exchange uses provider wording and local venue icons", as
   await mockBackend(page);
   await openApp(page);
 
-  await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
-  const picker = page.getByRole("dialog", { name: "Choose where you pay from" });
-  await picker.getByLabel("Search banks and payment methods").fill("USDC ERC20");
-  await picker.getByRole("option", { name: /USD Coin USDC · Ethereum \(ERC-20\)/ }).click();
+  const picker = await chooseCrypto(page, "sending", "USDC ERC20");
+  await picker.getByRole("option", { name: /Ethereum \(ERC-20\).*USDC/ }).click();
 
   await page.getByLabel("Amount to send").fill("100");
   await page.getByTestId("start-search").click();
@@ -1241,15 +1278,11 @@ test("crypto route keeps distinct source and target networks", async ({ page }) 
   await mockBackend(page);
   await openApp(page);
 
-  await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
-  const sourcePicker = page.getByRole("dialog", { name: "Choose where you pay from" });
-  await sourcePicker.getByLabel("Search banks and payment methods").fill("ETH Base");
-  await sourcePicker.getByRole("option", { name: /Ethereum ETH · Base/ }).click();
+  const sourcePicker = await chooseCrypto(page, "sending", "ETH Base");
+  await sourcePicker.getByRole("option", { name: /Base.*ETH/ }).click();
 
-  await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
-  const targetPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
-  await targetPicker.getByLabel("Search banks and payment methods").fill("USDT TON");
-  await targetPicker.getByRole("option", { name: /Tether USDT · TON/ }).click();
+  const targetPicker = await chooseCrypto(page, "recipient", "USDT TON");
+  await targetPicker.getByRole("option", { name: /TON.*USDT/ }).click();
 
   await page.getByLabel("Amount to send").fill("0.03");
   await page.getByTestId("start-search").click();
@@ -1269,22 +1302,17 @@ test("bridged spot instructions split both market trades into separate steps", a
   await mockBackend(page);
   await openApp(page);
 
-  await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
-  const sourcePicker = page.getByRole("dialog", { name: "Choose where you pay from" });
-  await sourcePicker.getByLabel("Search banks and payment methods").fill("BTC Bitcoin");
-  await sourcePicker.getByRole("option", { name: /Bitcoin BTC · Bitcoin/ }).click();
+  const sourcePicker = await chooseCrypto(page, "sending", "BTC Bitcoin");
+  await sourcePicker.getByRole("option", { name: /Bitcoin.*BTC/ }).click();
 
-  await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
-  const targetPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
-  await targetPicker.getByLabel("Search banks and payment methods").fill("USDT TON");
-  await targetPicker.getByRole("option", { name: /Tether USDT · TON/ }).click();
+  const targetPicker = await chooseCrypto(page, "recipient", "USDT TON");
+  await targetPicker.getByRole("option", { name: /TON.*USDT/ }).click();
 
   await page.getByLabel("Amount to send").fill("0.002");
   await page.getByTestId("start-search").click();
   await expect(page.getByTestId("complete-route")).toHaveCount(1);
   await page.reload();
-  await expect(page.getByRole("button", { name: "Select sending asset: Bitcoin" })).toContainText("Bitcoin");
-  await expect(page.locator(".moneyPanelSource .networkCopy strong")).toHaveText("Bitcoin");
+  await expect(page.getByRole("button", { name: /Select sending network: Bitcoin/ })).toContainText("BTC · Crypto network");
   await expect(page.getByTestId("complete-route")).toHaveCount(1);
   await page.getByTestId("complete-route").locator(".routeAmount").click();
 
@@ -1300,15 +1328,11 @@ test("same asset on different networks reports unavailable bridge provider", asy
   await mockBackend(page);
   await openApp(page);
 
-  await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
-  const sourcePicker = page.getByRole("dialog", { name: "Choose where you pay from" });
-  await sourcePicker.getByLabel("Search banks and payment methods").fill("USDT TRC20");
-  await sourcePicker.getByRole("option", { name: /Tether USDT · TRON \(TRC-20\)/ }).click();
+  const sourcePicker = await chooseCrypto(page, "sending", "USDT TRC20");
+  await sourcePicker.getByRole("option", { name: /TRON \(TRC-20\).*USDT/ }).click();
 
-  await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
-  const targetPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
-  await targetPicker.getByLabel("Search banks and payment methods").fill("USDT TON");
-  await targetPicker.getByRole("option", { name: /Tether USDT · TON/ }).click();
+  const targetPicker = await chooseCrypto(page, "recipient", "USDT TON");
+  await targetPicker.getByRole("option", { name: /TON.*USDT/ }).click();
 
   await page.getByLabel("Amount to send").fill("125");
   await page.getByTestId("start-search").click();

@@ -9,6 +9,8 @@
   export let networks: CryptoNetwork[];
   export let selected: PaymentMethod | null;
   export let selectedNetwork: CryptoNetwork | undefined;
+  export let currencyKind: "fiat" | "crypto" = "fiat";
+  export let currency = "";
   export let onClose: () => void;
   export let onSelect: (method: PaymentMethod, network?: CryptoNetwork) => void;
 
@@ -106,20 +108,23 @@
     if (fallback) fallback.style.display = "inline";
   }
 
-  // Both sides can use the same bank directory. The selected corridor still
-  // controls the exchange route; this keeps banks from disappearing when the
-  // direction is swapped between Sell and Buy.
-  $: banks = BANK_METHODS.filter((method) => method.role === role || method.role === "both");
-  $: assetsForRole = DIGITAL_ASSETS.filter((method) => method.role === role || method.role === "both");
-  $: options = [
-    ...banks.map((method): Option => ({ method })),
-    ...assetsForRole.flatMap((method): Option[] => {
-      const compatible = networks.filter((network) => network.currencies.includes(method.currency));
-      return compatible.length ? compatible.map((network) => ({ method, network })) : [{ method }];
-    }),
-  ];
+  // The primary currency selector owns fiat-vs-crypto. This picker only owns
+  // the secondary settlement choice: a bank for fiat or an asset/network pair
+  // for crypto.
+  $: banks = BANK_METHODS.filter((method) =>
+    (method.role === role || method.role === "both") && method.currency === currency,
+  );
+  $: assetsForRole = DIGITAL_ASSETS.filter((method) =>
+    (method.role === role || method.role === "both") && method.currency === currency,
+  );
+  $: options = currencyKind === "crypto"
+    ? assetsForRole.flatMap((method): Option[] => {
+        const compatible = networks.filter((network) => network.currencies.includes(method.currency));
+        return compatible.length ? compatible.map((network) => ({ method, network })) : [{ method }];
+      })
+    : banks.map((method): Option => ({ method }));
   $: filtered = query.trim() ? options.filter((option) => matchesSearch(option, query)) : options;
-  $: popular = filtered.filter(({ method }) => method.popular);
+  $: popular = filtered.filter(({ method }) => method.kind === "bank" && method.popular);
   $: assets = filtered.filter(({ method }) => method.kind === "wallet");
   $: all = filtered.filter(({ method }) => !method.popular && method.kind === "bank");
 </script>
@@ -141,15 +146,15 @@
       <div class="searchRow">
         <label class="searchBox">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" /><path d="m20 20-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
-          <input bind:this={input} bind:value={query} placeholder="Search banks, assets or networks…" aria-label="Search banks and payment methods" />
+          <input bind:this={input} bind:value={query} placeholder={currencyKind === "crypto" ? "Search networks…" : "Search banks…"} aria-label={currencyKind === "crypto" ? "Search crypto networks" : "Search banks and payment methods"} />
         </label>
       </div>
       <div class="body">
-        <div class="methods" role="listbox" aria-label="Payment methods">
+        <div class="methods" role="listbox" aria-label={currencyKind === "crypto" ? "Crypto networks" : "Banks and payment methods"}>
           {#if filtered.length === 0}
-            <div class="empty"><strong>No payment methods found</strong><span>Try a different bank name.</span></div>
+            <div class="empty"><strong>No {currencyKind === "crypto" ? "crypto networks" : "banks"} found</strong><span>Try a different search.</span></div>
           {/if}
-          {#each [["Popular banks", popular], ["Digital assets", assets], ["All payment methods", all]] as group}
+          {#each currencyKind === "crypto" ? [["Networks", assets]] : [["Popular banks", popular], ["All payment methods", all]] as group}
             {@const label = group[0] as string}
             {@const rows = group[1] as Option[]}
             {#if rows.length > 0}
@@ -164,8 +169,8 @@
                       {#if logo(method)}<img src={logo(method) ?? ""} alt="" width="42" height="42" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{method.initials}</span>{:else}<span>{method.initials}</span>{/if}
                     </span>
                     <span class="methodCopy">
-                      <span class="methodName">{method.name}</span>
-                      <span class="methodMeta">{method.kind === "bank" ? `Bank transfer · ${method.currency}` : `${method.currency} · ${network?.name ?? "Digital wallet"}`}</span>
+                      <span class="methodName">{method.kind === "bank" ? method.name : network?.name ?? "Digital wallet"}</span>
+                      <span class="methodMeta">{method.kind === "bank" ? `Bank transfer · ${method.currency}` : `${method.currency} · Crypto network`}</span>
                     </span>
                     {#if isSelected}
                       <svg class="check" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="currentColor" /><path d="m6 10.2 2.7 2.5 5.3-5.6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
