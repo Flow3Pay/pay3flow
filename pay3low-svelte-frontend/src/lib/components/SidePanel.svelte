@@ -183,7 +183,6 @@
       <div class="emptyState">
         <div class="emptyVisual" aria-hidden="true"><span class="emptyNode">AM</span><span class="emptyPath"><i></i><i></i><i></i></span><span class="emptyNode">RU</span></div>
         <div><strong>{searched && hasAmount ? "No routes found" : hasAmount ? "Preparing market scan" : "Your routes will appear here"}</strong><p>{searched && hasAmount ? "No compatible live offers were found for this amount and payment method." : hasAmount ? "Pay3Flow is ready to compare entry assets, venues and recipient payout options." : "Enter an amount and we will assemble live cross-border paths in real time."}</p></div>
-        {#if searchingVenues.length}<div class="emptyVenues">{#each searchingVenues.slice(0, 5) as venue}<span>{venue.label}</span>{/each}</div>{/if}
       </div>
     {/if}
   </div>
@@ -229,8 +228,7 @@
 .liveBadge,
 .searchBadge,
 .readyBadge,
-.emptyVisual,
-.emptyVenues {
+.emptyVisual {
   display: flex;
   align-items: center;
 }
@@ -470,6 +468,7 @@
   width: 14px;
   height: 14px;
   object-fit: contain;
+  filter: brightness(0) saturate(100%) invert(34%) sepia(9%) saturate(956%) hue-rotate(72deg) brightness(91%) contrast(88%);
 }
 
 .routeBest {
@@ -815,23 +814,6 @@
   line-height: 1.65;
 }
 
-.emptyVenues {
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
-  margin-top: 26px;
-}
-
-.emptyVenues span {
-  padding: 6px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: var(--radius-pill);
-  color: rgba(255, 255, 255, 0.32);
-  font-size: 7px;
-  font-weight: 850;
-  letter-spacing: 0.08em;
-}
-
 @keyframes pulse {
   0%, 100% { opacity: 0.5; transform: scale(0.8); }
   50% { opacity: 1; transform: scale(1.15); }
@@ -1034,13 +1016,8 @@
   color: var(--color-text);
 }
 
-.emptyState p,
-.emptyVenues span {
+.emptyState p {
   color: var(--color-text-faint);
-}
-
-.emptyVenues span {
-  border-color: var(--color-border);
 }
 
 @media (max-width: 640px) {
@@ -1088,6 +1065,10 @@
   color: var(--color-accent-strong);
 }
 
+:global(html[data-theme="dark"]) .serviceVote img {
+  filter: none;
+}
+
 :global(html[data-theme="dark"]) .searchingVenue {
   border-color: #454545;
   background: rgba(32, 32, 32, 0.96);
@@ -1106,8 +1087,7 @@
 }
 
 :global(html[data-theme="dark"]) .routeRank,
-:global(html[data-theme="dark"]) .deltaBadge,
-:global(html[data-theme="dark"]) .emptyVenues span {
+:global(html[data-theme="dark"]) .deltaBadge {
   background: #2b2b2b;
 }
 

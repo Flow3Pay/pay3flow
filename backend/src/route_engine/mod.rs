@@ -455,6 +455,8 @@ pub struct PublicRouteQuote {
     pub provider: String,
     pub quote_id: Option<String>,
     pub description: Option<String>,
+    /// Public page where the user can review the provider or quoted route.
+    pub source_url: Option<String>,
     pub from: Asset,
     pub to: Asset,
     pub input: Amount,

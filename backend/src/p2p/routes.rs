@@ -83,6 +83,8 @@ pub struct P2pRoute {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub route_provider: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub route_provider_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub provider_quote_id: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub route_path: Vec<String>,
@@ -804,6 +806,7 @@ impl P2pSearchService {
                     bridge_currency: None,
                     market_path: None,
                     route_provider: Some(provider_name.clone()),
+                    route_provider_url: quote.source_url,
                     provider_quote_id: quote.quote_id.clone(),
                     route_path: quote
                         .path
@@ -1064,6 +1067,7 @@ impl P2pSearchService {
                                         bridge_currency: None,
                                         market_path: None,
                                         route_provider: Some(provider),
+                                        route_provider_url: quote.source_url,
                                         provider_quote_id: quote.quote_id.clone(),
                                         route_path: std::iter::once(query.source_currency.clone())
                                             .chain(quote.path.into_iter().map(|asset| asset.to_string()))
@@ -1209,6 +1213,7 @@ impl P2pSearchService {
                                 bridge_currency: None,
                                 market_path: None,
                                 route_provider: Some(provider.clone()),
+                                route_provider_url: route_quote.source_url.clone(),
                                 provider_quote_id: route_quote.quote_id.clone(),
                                 route_path: route_quote
                                     .path
@@ -1388,6 +1393,7 @@ impl P2pSearchService {
                     bridge_currency: None,
                     market_path: None,
                     route_provider: Some(provider_name.clone()),
+                    route_provider_url: route_quote.source_url.clone(),
                     provider_quote_id: route_quote.quote_id.clone(),
                     route_path: std::iter::once(query.source_currency.clone())
                         .chain(route_quote.path.into_iter().map(|asset| asset.to_string()))
@@ -1518,6 +1524,7 @@ impl P2pSearchService {
                 bridge_currency: None,
                 market_path: None,
                 route_provider: None,
+                route_provider_url: None,
                 provider_quote_id: None,
                 route_path: Vec::new(),
                 route_fees: Vec::new(),
@@ -2192,6 +2199,7 @@ fn compose_fiat_routes(
                 bridge_currency: None,
                 market_path: None,
                 route_provider: None,
+                route_provider_url: None,
                 provider_quote_id: None,
                 route_path: Vec::new(),
                 route_fees: Vec::new(),
@@ -2257,6 +2265,7 @@ fn compose_fiat_to_crypto_routes(
             bridge_currency: None,
             market_path: None,
             route_provider: None,
+            route_provider_url: None,
             provider_quote_id: None,
             route_path: Vec::new(),
             route_fees: Vec::new(),
@@ -2327,6 +2336,7 @@ fn compose_crypto_to_fiat_routes(
             bridge_currency: None,
             market_path: None,
             route_provider: None,
+            route_provider_url: None,
             provider_quote_id: None,
             route_path: Vec::new(),
             route_fees: Vec::new(),
@@ -2438,6 +2448,7 @@ fn compose_crypto_market_routes(
             bridge_currency,
             market_path: Some(path),
             route_provider: None,
+            route_provider_url: None,
             provider_quote_id: None,
             route_path: Vec::new(),
             route_fees: Vec::new(),
@@ -2629,6 +2640,7 @@ mod tests {
                 provider: self.name.into(),
                 quote_id: None,
                 description: None,
+                source_url: None,
                 from: from.clone(),
                 to: to.clone(),
                 input: amount,
@@ -2659,6 +2671,7 @@ mod tests {
                 provider: self.name.into(),
                 quote_id: None,
                 description: None,
+                source_url: None,
                 from: from.clone(),
                 to: to.clone(),
                 input: amount,
@@ -2700,6 +2713,7 @@ mod tests {
                 provider: self.name().into(),
                 quote_id: None,
                 description: None,
+                source_url: None,
                 from: from.clone(),
                 to: to.clone(),
                 input: amount,

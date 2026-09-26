@@ -130,6 +130,7 @@
             <li>Review the quoted output, provider fees, expiry, and any destination address or memo requirements.</li>
             <li>Do not send funds after the quote expires; request a fresh route first.</li>
           </ul>
+          {#if route.route_provider_url}<a href={route.route_provider_url} target="_blank" rel="noreferrer noopener" class="profileLink">Open {venueName(route.route_provider)} <span>↗</span></a>{/if}
         </div></li>
       {/if}
       {#if cryptoToCrypto && route.market_path}
@@ -194,6 +195,7 @@
             <li>Review the live quote, provider fees, expiry, and any address or memo requirements.</li>
             <li>Wait for the destination balance to arrive before considering the exchange complete.</li>
           </ul>
+          {#if route.route_provider_url}<a href={route.route_provider_url} target="_blank" rel="noreferrer noopener" class="profileLink">Open {venueName(route.route_provider)} <span>↗</span></a>{/if}
         </div></li>
       {/if}
       {#if crossVenue}

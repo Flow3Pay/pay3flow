@@ -468,6 +468,13 @@ impl PublicRouteProvider for BestChangeSource {
                         .map(|exchanger| exchanger.name.clone())
                         .unwrap_or_else(|| format!("BestChange exchanger {}", row.changer)),
                 ),
+                source_url: Some(
+                    exchanger
+                        .and_then(|exchanger| exchanger.profile_url.clone())
+                        .unwrap_or_else(|| {
+                            self.direction_url(from_unit, to_unit, Some(input))
+                        }),
+                ),
                 from: from.clone(),
                 to: to.clone(),
                 input: amount.clone(),

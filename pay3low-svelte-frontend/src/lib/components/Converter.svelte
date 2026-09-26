@@ -2,7 +2,7 @@
   import { afterUpdate, onMount, onDestroy } from "svelte";
   import { fetchCorridors, fetchP2pRoutes, fetchProviders, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderDefinition, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote } from "$lib/exchange";
   import { FALLBACK_NETWORK, fetchNetworks, type CryptoNetwork } from "$lib/networks";
-  import { assetIcon, networkIcon, venueIcon } from "$lib/icons";
+  import { assetIcon, networkIcon, swapIcon, venueIcon } from "$lib/icons";
   import { CRYPTO_ASSETS, DIGITAL_ASSETS, PAYMENT_METHODS, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
   import { locale, t } from "$lib/i18n";
   import SidePanel from "./SidePanel.svelte";
@@ -176,7 +176,7 @@
         target_amount_minor: Math.round(targetAmount * 100), target_amount: route.target_amount, target_currency: route.target_fiat,
         target_method_icon_url: targetMethod?.kind === "bank" ? paymentMethodFavicon(targetMethod) ?? undefined : undefined,
         route_kind: route.route_kind, bridge_currency: route.bridge_currency, market_path: route.market_path,
-        route_provider: route.route_provider, route_path: route.route_path, route_fees: route.route_fees, quote_expires_at: route.quote_expires_at,
+        route_provider: route.route_provider, route_provider_url: route.route_provider_url, route_path: route.route_path, route_fees: route.route_fees, quote_expires_at: route.quote_expires_at,
         spread_bps: bestTarget > 0 && Number.isFinite(targetAmount) ? Math.round((targetAmount / bestTarget - 1) * 10_000) : 0,
         is_current_best: index === 0, is_live_market: true, payment_methods_verified: route.payment_methods_verified,
         entry_offer_url: entryOffer?.source_url, entry_offer_is_exact: entryOffer?.source_url_is_exact, entry_offer_ad_id: entryOffer?.ad_id,
@@ -622,7 +622,7 @@
           <span class="methodText"><strong>{sourceMethod?.name ?? "Select bank"}</strong><small>{sourceMethod?.kind === "wallet" ? `${sourceMethod.currency} · ${sourceNetwork?.name ?? "Loading networks…"}` : sourceMethod ? locationLabel(sourceMethod.country, sourceMethod.currency) : corridor ? locationLabel(sourceCountry, sourceCurrency) : "Unavailable"}</small></span><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
         </button>{#if sourceMethod?.kind === "wallet" && sourceNetwork}<div class="networkControl"><button type="button" class="networkButton" on:click={() => void openNetworkPicker("source")} aria-haspopup="dialog"><span class="networkDot" aria-hidden="true"><img src={networkIcon(sourceNetwork.name)} alt="" width="18" height="18" loading="lazy" decoding="async" /></span><span class="networkCopy"><small>Network</small><strong>{sourceNetwork.name}</strong></span><span class="networkChevron" aria-hidden="true">⌄</span></button></div>{/if}</div>
       </div>
-      <div class="flowBridge"><span class="bridgeLine" aria-hidden="true"></span><button type="button" class:bridgeIconReversed={directionReversed} class="bridgeIcon" on:click={swapDirection} aria-label="Swap sender and recipient" title="Swap sender and recipient"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M10 4v12m0 0-4-4m4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></button></div>
+      <div class="flowBridge"><span class="bridgeLine" aria-hidden="true"></span><button type="button" class:bridgeIconReversed={directionReversed} class="bridgeIcon" on:click={swapDirection} aria-label="Swap sender and recipient" title="Swap sender and recipient"><img src={swapIcon} alt="" width="18" height="18" aria-hidden="true" /></button></div>
       <div class="intentLabel intentLabelBuy"><span>Buy</span></div>
       <div class="moneyPanel moneyPanelTarget">
         <div class="panelCopy"><label for="exchange-output">Recipient gets</label><output id="exchange-output" class={previewRoute ? "amountOutput" : "amountOutputEmpty"}>{amountFromRoute(previewRoute)}</output><span class="currencyHint">{targetMethod?.kind === "wallet" ? `${targetMethod.currency} available via digital wallet` : previewRoute ? `Estimated ${previewRoute.target_currency}` : "Live estimate appears here"}</span></div>
@@ -967,7 +967,15 @@
 }
 
 .exchangeModalOptions {
+  grid-template-rows: repeat(9, minmax(32px, auto));
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(130px, 1fr);
   margin-top: 14px;
+}
+
+.exchangesMenu {
+  width: max-content;
+  max-width: min(640px, calc(100vw - 32px));
 }
 
 .alwaysOnProviders {
@@ -1320,11 +1328,14 @@
   transform: scale(0.96);
 }
 
-.bridgeIcon svg {
+.bridgeIcon img {
+  width: 14px;
+  height: 14px;
+  filter: brightness(0) saturate(100%) invert(51%) sepia(23%) saturate(1100%) hue-rotate(37deg) brightness(88%) contrast(88%);
   transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.bridgeIconReversed svg {
+.bridgeIconReversed img {
   transform: rotate(180deg);
 }
 
@@ -2024,11 +2035,6 @@
   box-shadow: none;
 }
 
-.bridgeIcon svg {
-  width: 14px;
-  height: 14px;
-}
-
 .bridgeIcon:hover {
   box-shadow: 0 4px 12px rgba(53, 84, 43, 0.1);
   transform: translateY(-1px) scale(1.04);
@@ -2257,6 +2263,18 @@
     transition: transform 0.24s ease;
   }
 
+  .exchangesMenu {
+    width: 100%;
+    max-width: none;
+  }
+
+  .exchangeModalOptions {
+    grid-auto-flow: row;
+    grid-template-rows: none;
+    grid-auto-columns: auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .settingsMenu.settingsDragging {
     transition: none;
   }
@@ -2381,6 +2399,10 @@
   border-color: #505050;
   background: #272727;
   color: var(--color-accent);
+}
+
+:global(html[data-theme="dark"]) .bridgeIcon img {
+  filter: brightness(0) saturate(100%) invert(78%) sepia(39%) saturate(849%) hue-rotate(35deg) brightness(106%) contrast(102%);
 }
 
 :global(html[data-theme="dark"]) .networkButton,

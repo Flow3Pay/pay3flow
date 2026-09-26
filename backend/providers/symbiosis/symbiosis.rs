@@ -273,6 +273,7 @@ impl PublicRouteProvider for SymbiosisRouteProvider {
                 .get("kind")
                 .and_then(Value::as_str)
                 .map(str::to_string),
+            source_url: None,
             from: from.clone(),
             to: to.clone(),
             input: amount,

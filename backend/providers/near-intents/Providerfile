@@ -325,6 +325,7 @@ impl PublicRouteProvider for NearIntentsProvider {
             provider: self.name().to_string(),
             quote_id: None,
             description: None,
+            source_url: None,
             from: quote.from.clone(),
             to: quote.to.clone(),
             input: quote.input,

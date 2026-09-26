@@ -97,6 +97,7 @@ export interface RouteCandidate {
   bridge_currency?: string | null;
   market_path?: CryptoMarketPath;
   route_provider?: string | null;
+  route_provider_url?: string | null;
   route_path?: string[];
   route_fees?: { asset: string; amount: string }[];
   quote_expires_at?: string | null;
@@ -210,6 +211,7 @@ export interface P2pRoute {
   bridge_currency?: string | null;
   market_path?: CryptoMarketPath;
   route_provider?: string | null;
+  route_provider_url?: string | null;
   route_path?: string[];
   route_fees?: { asset: string; amount: string }[];
   quote_expires_at?: string | null;
