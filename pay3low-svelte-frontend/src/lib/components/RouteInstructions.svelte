@@ -47,11 +47,12 @@
   }
   function spotUrl(venue: string, symbol: string, first: string, second: string) {
     const pair = spotPair(symbol, first, second), key = venue.toLowerCase();
-    if (!pair) return ({ binance: "https://www.binance.com/en/trade", bybit: "https://www.bybit.com/trade/spot/", okx: "https://www.okx.com/trade-spot/", bitget: "https://www.bitget.com/spot/" } as Record<string, string>)[key] ?? null;
+    if (!pair) return ({ binance: "https://www.binance.com/en/trade", bybit: "https://www.bybit.com/trade/spot/", okx: "https://www.okx.com/trade-spot/", bitget: "https://www.bitget.com/spot/", mexc: "https://www.mexc.com/exchange/" } as Record<string, string>)[key] ?? null;
     if (key === "binance") return `https://www.binance.com/en/trade/${pair.base}_${pair.quote}?type=spot`;
     if (key === "bybit") return `https://www.bybit.com/trade/spot/${pair.base}/${pair.quote}`;
     if (key === "okx") return `https://www.okx.com/trade-spot/${pair.base.toLowerCase()}-${pair.quote.toLowerCase()}`;
     if (key === "bitget") return `https://www.bitget.com/spot/${pair.base}${pair.quote}`;
+    if (key === "mexc") return `https://www.mexc.com/exchange/${pair.base}_${pair.quote}`;
     if (key === "cifra-broker") return "https://tradernet.by/authentication/signup";
     return null;
   }

@@ -6,13 +6,13 @@ money.
 
 ## Sources
 
-- Binance, Bybit, OKX, Bitget, and Rapira public P2P advertisement lists.
+- Binance, Bybit, OKX, Bitget, MEXC, and Rapira public P2P advertisement lists.
 - Whitebird, Cifra Markets, SkyLabs, bncex, and Bitcoin Center public
   direct-quote APIs. Bitcoin Center is restricted to AMD bank transfers and
   USDT on Solana.
 - BestChange public catalog and direction pages.
 - Exnode authenticated quote API when its environment credentials are set.
-- Binance, Bybit, OKX, Bitget, Cifra Markets, and Dzengi spot tickers for
+- Binance, Bybit, OKX, Bitget, MEXC, Cifra Markets, and Dzengi spot tickers for
   crypto-to-crypto paths.
 
 Providerfile-backed sources are discovered from the generated provider catalog;
@@ -50,7 +50,8 @@ the advertiser profile and nickname; when no stable profile URL is available,
 they open the venue's P2P market and tell the user to find the advertiser by
 nickname and verify the ad ID. Routes keep valuable offers even when a venue
 only provides a generic market URL. Binance, Bybit, OKX, Bitget, and Rapira
-expose public advertiser profile URLs. Rapira currently contributes only to
+expose public advertiser profile URLs; MEXC currently uses its generic P2P
+market URL. Rapira currently contributes only to
 the USDT/RUB market.
 
 `payment_method` accepts the bank selected in the frontend. Named payment

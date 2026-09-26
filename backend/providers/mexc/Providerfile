@@ -1,0 +1,83 @@
+[sell]
+source_url = "https://www.mexc.com/buy-crypto/p2p"
+name = "MEXC Sell"
+currency = ["usd", "rub", "eur", "amd"]
+banks = []
+
+[buy]
+source_url = "https://www.mexc.com/buy-crypto/p2p"
+name = "MEXC Buy"
+currency = ["usd", "rub", "eur", "amd"]
+banks = []
+
+[adapter.p2p]
+kind = "http_json"
+endpoint = "https://www.mexc.co/api/platform/p2p/api/market"
+method = "GET"
+headers = { Accept = "application/json", Origin = "https://www.mexc.co", Referer = "https://www.mexc.co/en-NG/buy-crypto/p2p", X-Client = "WEB", X-Device-Id = "unknowndeviceid" }
+timeout_ms = 10000
+max_results = 20
+asset_codes = { USDT = "128f589271cb4951b03e71e6323eb7be", USDC = "34309140878b4ae99f195ac091d49bab", BTC = "febc9973be4d4d53bb374476239eb219", ETH = "93c38b0169214f8689763ce9a63a73ff" }
+supported_assets = ["USDT", "USDC", "BTC", "ETH"]
+
+[adapter.p2p.buy]
+query = { blockTrade = "false", countryCode = "", tradeType = "BUY", currency = "{{fiat}}", payMethod = "", amount = "{{amount}}", coinId = "{{asset}}", page = "1", pageSize = "{{limit_number}}", certifiedMerchant = "false", allowTrade = "false", haveTrade = "false", follow = "false", adsType = "1", adOrderSortField = "", adOrderSort = "" }
+items_pointer = "/data"
+success_pointer = "/code"
+success_value = "0"
+error_pointer = "/msg"
+
+[adapter.p2p.sell]
+query = { blockTrade = "false", countryCode = "", tradeType = "SELL", currency = "{{fiat}}", payMethod = "", amount = "{{amount}}", coinId = "{{asset}}", page = "1", pageSize = "{{limit_number}}", certifiedMerchant = "false", allowTrade = "false", haveTrade = "false", follow = "false", adsType = "1", adOrderSortField = "", adOrderSort = "" }
+items_pointer = "/data"
+success_pointer = "/code"
+success_value = "0"
+error_pointer = "/msg"
+
+[adapter.p2p.offer]
+ad_id_pointer = "/id"
+fiat_pointer = "/currency"
+asset_pointer = "/coinName"
+price_pointer = "/price"
+available_asset_pointer = "/availableQuantity"
+min_fiat_pointer = "/minTradeLimit"
+max_fiat_pointer = "/maxTradeLimit"
+payment_methods_pointer = "/payMethod"
+pay_time_limit_pointer = "/expirationTime"
+advertiser_id_pointer = "/merchant/memberId"
+advertiser_nickname_pointer = "/merchant/nickName"
+advertiser_user_type_pointer = "/merchant/merchantType"
+verified_from_merchant = true
+completed_orders_pointer = "/merchantStatistics/doneLastMonthCount"
+completion_rate_pointer = "/merchantStatistics/thirtyDayCompletionRate"
+positive_rate_pointer = "/merchantStatistics/goodRate"
+source_url_template = "https://www.mexc.com/buy-crypto/p2p"
+
+[[adapter.p2p.offer.merchant_conditions]]
+pointer = "/merchant/merchantType"
+operator = "equals_ci"
+value = "merchant"
+
+[[adapter.p2p.offer.merchant_conditions]]
+pointer = "/merchant/merchantType"
+operator = "equals_ci"
+value = "prime"
+
+[[adapter.p2p.offer.merchant_conditions]]
+pointer = "/merchant/merchantType"
+operator = "equals_ci"
+value = "legacy"
+
+[[adapter.p2p.offer.merchant_conditions]]
+pointer = "/merchant/merchantType"
+operator = "equals_ci"
+value = "biz"
+
+[adapter.market]
+kind = "http_json"
+endpoint = "https://api.mexc.com/api/v3/ticker/bookTicker"
+method = "GET"
+timeout_ms = 4000
+symbol_pointer = "/symbol"
+bid_pointer = "/bidPrice"
+ask_pointer = "/askPrice"

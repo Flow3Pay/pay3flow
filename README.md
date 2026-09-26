@@ -26,6 +26,7 @@ still be available when the venue is opened.
 | Bybit | Public P2P API and spot ticker | P2P ads plus crypto market paths |
 | OKX | Public P2P API and spot ticker | P2P ads plus crypto market paths |
 | Bitget | Public P2P API and spot ticker | P2P ads plus crypto market paths |
+| MEXC | Public P2P API and spot ticker | P2P ads plus crypto market paths |
 | Rapira | Public P2P API | `USDT/RUB` P2P ads |
 | Whitebird | Anonymous quote API used by the public exchanger | Direct fiat/crypto quotes, including `USDC/RUB` |
 | Cifra Markets | Public calculator and IMEX market API | Direct RUB/BYN/USD crypto quotes and crypto market paths |

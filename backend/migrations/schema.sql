@@ -23,6 +23,7 @@ VALUES
     ('bybit', 'Bybit'),
     ('okx', 'OKX'),
     ('bitget', 'Bitget'),
+    ('mexc', 'MEXC'),
     ('rapira', 'Rapira')
 ON CONFLICT (slug) DO UPDATE SET
     display_name = EXCLUDED.display_name,
