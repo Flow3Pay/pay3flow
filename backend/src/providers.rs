@@ -5,6 +5,14 @@ use uuid::Uuid;
 use crate::db::DbPool;
 use crate::provider_adapter::{ProviderAdapters, WorkflowConfig};
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderFeeModel {
+    pub kind: String,
+    pub description: String,
+    pub docs_url: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct Provider {
     pub id: Uuid,
@@ -14,6 +22,7 @@ pub struct Provider {
     pub name: String,
     pub currencies: Vec<String>,
     pub banks: Vec<String>,
+    pub fee_model: Option<ProviderFeeModel>,
     pub searchable: bool,
 }
 
@@ -42,7 +51,7 @@ pub async fn list(pool: &DbPool, filters: ProviderFilters) -> Result<Vec<Provide
     let statement = client
         .prepare_cached(
             r#"
-SELECT id, slug, operation, source_url, name, currencies, banks
+SELECT id, slug, operation, source_url, name, currencies, banks, fee_model
 FROM providers
 WHERE status = 'enabled'
   AND ($1::TEXT IS NULL OR operation = $1)
@@ -55,19 +64,26 @@ ORDER BY name, operation, slug
     let rows = client
         .query(&statement, &[&operation, &currency, &bank])
         .await?;
-    Ok(rows
-        .into_iter()
-        .map(|row| Provider {
-            id: row.get("id"),
-            slug: row.get("slug"),
-            operation: row.get("operation"),
-            source_url: row.get("source_url"),
-            name: row.get("name"),
-            currencies: row.get("currencies"),
-            banks: row.get("banks"),
-            searchable: false,
+    rows.into_iter()
+        .map(|row| {
+            let fee_value: serde_json::Value = row.get("fee_model");
+            let fee_model = (!fee_value.as_object().is_some_and(serde_json::Map::is_empty))
+                .then(|| serde_json::from_value(fee_value))
+                .transpose()
+                .with_context(|| "invalid Providerfile fee model stored in providers")?;
+            Ok(Provider {
+                id: row.get("id"),
+                slug: row.get("slug"),
+                operation: row.get("operation"),
+                source_url: row.get("source_url"),
+                name: row.get("name"),
+                currencies: row.get("currencies"),
+                banks: row.get("banks"),
+                fee_model,
+                searchable: false,
+            })
         })
-        .collect())
+        .collect()
 }
 
 pub(crate) async fn adapters(pool: &DbPool) -> Result<Vec<ProviderAdapterRecord>> {

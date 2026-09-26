@@ -49,6 +49,7 @@ async function mockBackend(page: Page) {
         { id: "tron", name: "TRON (TRC-20)", currencies: ["TRX", "USDT"] },
         { id: "ton", name: "TON", currencies: ["TON", "USDT"] },
         { id: "bitcoin", name: "Bitcoin", currencies: ["BTC"] },
+        { id: "near", name: "NEAR", currencies: ["BTC", "USDT"] },
       ]);
     }
     if (url.pathname === "/api/providers") {
@@ -96,6 +97,46 @@ async function mockBackend(page: Page) {
         },
         source_url: `https://example.com/${adId}`,
       });
+      if (url.searchParams.get("source_fiat") === "RUB" && url.searchParams.get("target_fiat") === "RUB") {
+        const sbpOffer = (source: string, adId: string, fiat: string) => ({
+          ...offer(source, adId, fiat, "USDT"),
+          payment_methods: ["СБП"],
+        });
+        expect(url.searchParams.get("source_payment_method")).toBe("Sberbank");
+        expect(url.searchParams.get("target_payment_method")).toBe("Alfa-Bank");
+        return json({
+          search_id: "00000000-0000-4000-8000-000000000107",
+          routes_found: 1,
+          searched_at: "2026-09-25T10:00:00Z",
+          source_fiat: "RUB",
+          target_fiat: "RUB",
+          source_amount: "10000.00",
+          assets_searched: ["USDT"],
+          can_exchange_to_target: true,
+          routes: [{
+            route_id: "route-rub-sber-alfa-sbp",
+            rank: 1,
+            asset: "USDT",
+            entry_network: null,
+            source_network: null,
+            target_network: null,
+            source_fiat: "RUB",
+            source_amount: "10000.00",
+            acquired_asset_amount: "100.00000000",
+            target_fiat: "RUB",
+            target_amount: "9900.00",
+            effective_rate: "0.99000000",
+            same_venue: true,
+            requires_asset_transfer: false,
+            transfer_fee_included: true,
+            route_kind: "fiat_to_fiat",
+            payment_methods_verified: true,
+            entry_offer: sbpOffer("binance", "entry-rub-sbp", "RUB"),
+            exit_offer: sbpOffer("binance", "exit-rub-sbp", "RUB"),
+            warnings: ["Search estimate only."],
+          }],
+        });
+      }
       if (url.searchParams.get("source_fiat") === "USDC") {
         expect(url.searchParams.get("source_network")).toBe("ethereum");
         const whitebird = offer("whitebird", "whitebird-sell-RUB-USDC", "RUB", "USDC");
@@ -275,6 +316,45 @@ async function mockBackend(page: Page) {
           }],
         });
       }
+      if (url.searchParams.get("source_fiat") === "AMD" && url.searchParams.get("target_fiat") === "BTC") {
+        expect(url.searchParams.get("source_amount")).toBe("10000");
+        expect(url.searchParams.get("target_network")).toBe("near");
+        expect(url.searchParams.get("source_payment_method")).toBe("Ameriabank");
+        return json({
+          search_id: "00000000-0000-4000-8000-000000000106",
+          routes_found: 1,
+          searched_at: "2026-09-25T10:00:00Z",
+          source_fiat: "AMD",
+          target_fiat: "BTC",
+          source_amount: "10000.00",
+          assets_searched: ["USDT"],
+          can_exchange_to_target: true,
+          routes: [{
+            route_id: "route-amd-usdt-btc-near",
+            rank: 1,
+            asset: "USDT",
+            entry_network: "optimism",
+            source_network: null,
+            target_network: "near",
+            source_fiat: "AMD",
+            source_amount: "10000.00",
+            acquired_asset_amount: "2.77777778",
+            target_fiat: "BTC",
+            target_amount: "0.00032478",
+            effective_rate: "0.000000032478",
+            same_venue: false,
+            requires_asset_transfer: true,
+            transfer_fee_included: true,
+            route_kind: "fiat_to_crypto",
+            route_provider: "near-intents",
+            route_path: ["AMD", "USDT@optimism", "BTC@near"],
+            payment_methods_verified: true,
+            entry_offer: offer("bybit", "entry-amd-usdt", "AMD", "USDT"),
+            exit_offer: null,
+            warnings: ["Live dry quote from near-intents; execution and wallet compatibility are not verified."],
+          }],
+        });
+      }
       expect(url.searchParams.get("source_payment_method")).toBe("IDBank");
       expect(url.searchParams.get("target_payment_method")).toBe("Alfa-Bank");
       expect(url.searchParams.get("source_fiat")).toBe("AMD");
@@ -391,6 +471,12 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await expect(page.getByText("Showing top 12")).toBeVisible();
   await expect(page.getByTestId("complete-route").first()).toContainText("Used 12.4K times");
   await expect(page.getByTestId("complete-route").first()).toContainText("20350 RUB");
+  const bestRoute = page.getByTestId("complete-route").first();
+  const alternativeRoute = page.getByTestId("complete-route").nth(1);
+  await alternativeRoute.getByRole("button", { name: /Select route 2:/ }).click();
+  await expect(alternativeRoute).toHaveClass(/selected/);
+  await expect(bestRoute).not.toHaveClass(/selected/);
+  await expect(alternativeRoute.getByRole("button", { name: /Select route 2:/ })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByTestId("complete-route").first().locator(".workflow")).toHaveAttribute(
     "aria-label",
     "AMD → USDT Tether (Binance) → RUB (Binance)",
@@ -412,6 +498,7 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await expect(instructions.getByRole("list", { name: "Exchange steps" })).toBeVisible();
   await expectNumberedTimeline(instructions, ["1", "2"]);
   await expect(instructions.getByText("Buy USDT for 100,000 AMD")).toBeVisible();
+  await expect(instructions.getByText("Bank fees: IDBank: 0.75% bank fee")).toBeVisible();
   await expect(instructions.getByText("Match the advertiser nickname and ad ID before creating the order.")).toHaveCount(2);
   await expect(instructions.getByText("Release the asset only after you have independently confirmed the payment in your bank or payment account.")).toBeVisible();
   const offerLinks = instructions.getByRole("link", { name: /Open Binance P2P and find binance-merchant/ });
@@ -425,6 +512,33 @@ test("public P2P route search → open step-by-step instructions", async ({ page
 
   await swapDirection.click();
   await expect(amountInput).toHaveValue("20350");
+});
+
+test("RUB to RUB bank routes explain SBP payment", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page);
+
+  await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
+  const sourcePicker = page.getByRole("dialog", { name: "Choose where you pay from" });
+  await sourcePicker.getByLabel("Search banks and payment methods").fill("Sberbank");
+  await sourcePicker.getByRole("option", { name: /Sberbank/ }).click();
+
+  await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
+  const targetPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
+  await targetPicker.getByLabel("Search banks and payment methods").fill("Alfa");
+  await targetPicker.getByRole("option", { name: /Alfa-Bank/ }).click();
+
+  await page.getByLabel("Amount to send").fill("10000");
+  await page.getByTestId("start-search").click();
+  const route = page.getByTestId("complete-route").first();
+  await expect(route).toBeVisible();
+  await route.locator(".routeAmount").click();
+
+  const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
+  await expectNumberedTimeline(instructions, ["1", "2"]);
+  await expect(instructions.getByText("Buy USDT for 10,000 RUB")).toBeVisible();
+  await expect(instructions.getByText("For RUB, use СБП from Sberbank using the exact recipient details shown in the order.")).toBeVisible();
+  await expect(instructions.getByText("For RUB payout to Alfa-Bank, confirm the СБП transfer has arrived before releasing the crypto.")).toBeVisible();
 });
 
 test("cross-venue instructions include a numbered transfer step", async ({ page }) => {
@@ -663,6 +777,33 @@ test("cryptocurrency search binds the selected asset to its network", async ({ p
     "aria-label",
     "USDT Tether · Ethereum (ERC-20) (Binance) → RUB",
   );
+});
+
+test("small AMD to BTC@near routes keep crypto precision", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page);
+
+  await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
+  const targetPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
+  await targetPicker.getByLabel("Search banks and payment methods").fill("BTC NEAR");
+  await targetPicker.getByRole("option", { name: /Bitcoin BTC · NEAR/ }).click();
+
+  await page.getByLabel("Amount to send").fill("10000");
+  await page.getByTestId("start-search").click();
+
+  const route = page.getByTestId("complete-route").first();
+  await expect(route).toBeVisible();
+  await expect(route.locator(".routeAmount")).toHaveText("0.00032478 BTC");
+  await expect(page.locator("#exchange-output")).toHaveText("0.00032478");
+  await expect(route.locator(".workflow")).toHaveAttribute(
+    "aria-label",
+    "AMD → USDT Tether · optimism (NEAR Intents) → BTC Bitcoin · NEAR (NEAR Intents)",
+  );
+  await route.locator(".routeAmount").click();
+  const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
+  await expectNumberedTimeline(instructions, ["1", "2"]);
+  await expect(instructions.getByText("Buy USDT for 10,000 AMD")).toBeVisible();
+  await expect(instructions.getByRole("heading", { name: "Swap USDT for BTC via NEAR Intents" })).toBeVisible();
 });
 
 test("direct Whitebird exchange uses provider wording and local venue icons", async ({ page }) => {

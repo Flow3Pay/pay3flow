@@ -11,11 +11,10 @@
   type PickerSide = "source" | "target" | null;
   const REFRESH_OPTIONS: RefreshSeconds[] = [0, 5, 15, 30, 60];
   type P2pSource = string;
-  type P2pSourceOption = { id: P2pSource; label: string; iconUrl: string; searchable: boolean };
+  type P2pSourceOption = { id: P2pSource; label: string; iconUrl: string; searchable: boolean; feeDescription?: string };
   const INTERMEDIARY_ASSETS = CRYPTO_ASSETS.map(([currency]) => currency);
   const BANK_METHODS = PAYMENT_METHODS.filter((method) => method.kind === "bank");
-  const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", sources: "pay3flow.exchange.p2p-sources", sourcesVersion: "pay3flow.exchange.p2p-sources-version", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets", anonymousId: "pay3flow.reputation.anonymous-id" };
-  const SOURCE_PREFERENCES_VERSION = "2";
+  const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", sources: "pay3flow.exchange.p2p-sources", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets", anonymousId: "pay3flow.reputation.anonymous-id" };
 
   let corridors: ExchangeCorridor[] = [];
   let corridorId = "";
@@ -84,7 +83,15 @@
     return `${integer}${sanitized[separator]}${sanitized.slice(separator + 1).replace(/[.,]/g, "")}`;
   }
   const amountNumber = (value: string) => Number(normalizeAmount(value).replace(",", "."));
+  const CRYPTO_CURRENCIES: Set<string> = new Set(CRYPTO_ASSETS.map(([currency]) => currency));
   const amountFromMinor = (minor?: number) => minor == null ? "0" : (minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2, useGrouping: false });
+  const amountFromRoute = (route?: RouteCandidate | null) => {
+    if (!route) return "0";
+    if (route.target_amount && CRYPTO_CURRENCIES.has(route.target_currency?.toUpperCase() ?? "")) {
+      return Number(route.target_amount).toLocaleString("en-US", { maximumFractionDigits: 8, useGrouping: false });
+    }
+    return amountFromMinor(route.target_amount_minor);
+  };
   const intermediaryIcon = (asset: string) => assetIcon(asset);
   const networkName = (id: string | null | undefined) => !id ? "internal" : networks.find((network) => network.id === id)?.name ?? id;
   const locationLabel = (country: string, currency: string) => { try { return `${new Intl.DisplayNames([activeLocale], { type: "region" }).of(country) ?? country} · ${currency}`; } catch { return `${country} · ${currency}`; } };
@@ -100,37 +107,62 @@
       const existing = sources.get(provider.slug);
       if (existing) {
         existing.searchable ||= provider.searchable;
+        existing.feeDescription ||= provider.fee_model?.description;
       } else {
         sources.set(provider.slug, {
           id: provider.slug,
           label: providerLabel(provider),
           iconUrl: venueIcon(provider.slug),
           searchable: provider.searchable,
+          feeDescription: provider.fee_model?.description,
         });
       }
     }
     return [...sources.values()].sort((left, right) => left.label.localeCompare(right.label));
   }
 
+  const sourceTitle = (source: P2pSourceOption) => {
+    const action = source.searchable ? `Search ${source.label}` : `Select ${source.label} (catalog-only)`;
+    return source.feeDescription ? `${action}. Fee model: ${source.feeDescription}` : action;
+  };
+
   function mapRoutes(response: Awaited<ReturnType<typeof fetchP2pRoutes>>): RouteCandidate[] {
     const bestTarget = Number(response.routes[0]?.target_amount ?? 0);
     return response.routes.map((route, index) => {
-      const entryOffer = route.entry_offer, exitOffer = route.exit_offer, targetAmount = Number(route.target_amount);
+    const entryOffer = route.entry_offer, exitOffer = route.exit_offer, targetAmount = Number(route.target_amount);
+      const legs = route.route_provider
+        ? entryOffer
+          ? [
+              { kind: "entry" as const, from: route.source_fiat, to: entryOffer.asset, provider: entryOffer.source, status: "found" as const },
+              { kind: "exit" as const, from: entryOffer.asset, to: route.target_fiat, provider: route.route_provider, status: "found" as const },
+            ]
+          : [{ kind: "entry" as const, from: route.source_fiat, to: route.target_fiat, provider: route.route_provider, status: "found" as const }]
+        : route.market_path
+          ? [{ kind: "entry" as const, from: route.source_fiat, to: route.bridge_currency ?? route.target_fiat, provider: route.market_path.venue, status: "found" as const }, ...(route.bridge_currency ? [{ kind: "exit" as const, from: route.bridge_currency, to: route.target_fiat, provider: route.market_path.venue, status: "found" as const }] : [])]
+          : [...(entryOffer ? [{ kind: "entry" as const, from: route.source_fiat, to: route.bridge_currency ?? route.asset, provider: entryOffer.source, status: "found" as const }] : []), ...(exitOffer ? [{ kind: "exit" as const, from: route.bridge_currency ?? route.asset, to: route.target_fiat, provider: exitOffer.source, status: "found" as const }] : [])];
+      const fallbackRouteId = route.market_path
+        ? `spot:${route.market_path.venue}:${route.market_path.source_pair}:${route.market_path.target_pair}`
+        : `live:${entryOffer?.source ?? "direct"}:${entryOffer?.ad_id ?? "none"}:${exitOffer?.source ?? "direct"}:${exitOffer?.ad_id ?? "none"}:${route.route_path?.join(",") ?? ""}`;
       return {
-        route_id: route.route_id ?? (route.market_path ? `spot:${route.market_path.venue}:${route.market_path.source_pair}:${route.market_path.target_pair}` : `live:${entryOffer?.source ?? "direct"}:${entryOffer?.ad_id ?? "none"}:${exitOffer?.source ?? "direct"}:${exitOffer?.ad_id ?? "none"}`),
+        route_id: route.route_id?.trim() || fallbackRouteId,
         status: "complete", source_amount_minor: Math.round(Number(route.source_amount) * 100), source_currency: route.source_fiat,
+        source_payment_method: sourceMethod?.kind === "bank" ? sourceMethod.name : undefined,
+        target_payment_method: targetMethod?.kind === "bank" ? targetMethod.name : undefined,
+        source_bank_fee_percent: sourceMethod?.kind === "bank" ? sourceMethod.bankFeePercent : undefined,
+        target_bank_fee_percent: targetMethod?.kind === "bank" ? targetMethod.bankFeePercent : undefined,
         source_method_icon_url: sourceMethod?.kind === "bank" ? paymentMethodFavicon(sourceMethod) ?? undefined : undefined,
         entry_asset: route.asset, entry_network: networkName(route.entry_network), source_network: route.source_network ? networkName(route.source_network) : undefined, target_network: route.target_network ? networkName(route.target_network) : undefined,
-        target_amount_minor: Math.round(targetAmount * 100), target_currency: route.target_fiat,
+        target_amount_minor: Math.round(targetAmount * 100), target_amount: route.target_amount, target_currency: route.target_fiat,
         target_method_icon_url: targetMethod?.kind === "bank" ? paymentMethodFavicon(targetMethod) ?? undefined : undefined,
         route_kind: route.route_kind, bridge_currency: route.bridge_currency, market_path: route.market_path,
+        route_provider: route.route_provider, route_path: route.route_path, route_fees: route.route_fees, quote_expires_at: route.quote_expires_at,
         spread_bps: bestTarget > 0 && Number.isFinite(targetAmount) ? Math.round((targetAmount / bestTarget - 1) * 10_000) : 0,
         is_current_best: index === 0, is_live_market: true, payment_methods_verified: route.payment_methods_verified,
         entry_offer_url: entryOffer?.source_url, entry_offer_is_exact: entryOffer?.source_url_is_exact, entry_offer_ad_id: entryOffer?.ad_id,
         exit_offer_url: exitOffer?.source_url, exit_offer_is_exact: exitOffer?.source_url_is_exact, exit_offer_ad_id: exitOffer?.ad_id,
         entry_offer_snapshot: entryOffer, exit_offer_snapshot: exitOffer, warnings: route.warnings,
         services: route.services, reputation: route.reputation, feedback: route.feedback ?? { likes_total: 0, dislikes_total: 0 }, service_links: route.service_links,
-        legs: route.market_path ? [{ kind: "entry" as const, from: route.source_fiat, to: route.bridge_currency ?? route.target_fiat, provider: route.market_path.venue, status: "found" as const }, ...(route.bridge_currency ? [{ kind: "exit" as const, from: route.bridge_currency, to: route.target_fiat, provider: route.market_path.venue, status: "found" as const }] : [])] : [...(entryOffer ? [{ kind: "entry" as const, from: route.source_fiat, to: route.bridge_currency ?? route.asset, provider: entryOffer.source, status: "found" as const }] : []), ...(exitOffer ? [{ kind: "exit" as const, from: route.bridge_currency ?? route.asset, to: route.target_fiat, provider: exitOffer.source, status: "found" as const }] : [])],
+        legs,
       };
     });
   }
@@ -220,7 +252,7 @@
 
   function persistPreferences(value: string, refresh: RefreshSeconds, sources: P2pSource[], assets: string[], corridorValue: string, sourceMethodValue: string, targetMethodValue: string, reversed: boolean) {
     try {
-      localStorage.setItem(STORAGE.amount, value); localStorage.setItem(STORAGE.refresh, String(refresh)); localStorage.setItem(STORAGE.sources, sources.join(",")); localStorage.setItem(STORAGE.sourcesVersion, SOURCE_PREFERENCES_VERSION); localStorage.setItem(STORAGE.assets, assets.join(",")); localStorage.setItem(STORAGE.corridor, corridorValue); localStorage.setItem(STORAGE.sourceMethod, sourceMethodValue); localStorage.setItem(STORAGE.targetMethod, targetMethodValue); localStorage.setItem(STORAGE.direction, String(reversed));
+      localStorage.setItem(STORAGE.amount, value); localStorage.setItem(STORAGE.refresh, String(refresh)); localStorage.setItem(STORAGE.sources, sources.join(",")); localStorage.setItem(STORAGE.assets, assets.join(",")); localStorage.setItem(STORAGE.corridor, corridorValue); localStorage.setItem(STORAGE.sourceMethod, sourceMethodValue); localStorage.setItem(STORAGE.targetMethod, targetMethodValue); localStorage.setItem(STORAGE.direction, String(reversed));
     } catch {}
   }
   function updateHash(source: string, target: string, value: string) {
@@ -246,7 +278,7 @@
     if (!corridor) return;
     initialSearchReady = true;
     const nextSource = targetMethod?.id ?? "", nextTarget = sourceMethod?.id ?? "";
-    if (previewRoute?.target_amount_minor != null) amount = amountFromMinor(previewRoute.target_amount_minor);
+    if (previewRoute?.target_amount_minor != null) amount = amountFromRoute(previewRoute);
     directionReversed = !directionReversed; sourceMethodId = nextSource; targetMethodId = nextTarget;
     sourceNetworkId = targetNetwork?.id ?? FALLBACK_NETWORK.id; targetNetworkId = sourceNetwork?.id ?? FALLBACK_NETWORK.id; resetResults();
   }
@@ -300,14 +332,19 @@
     debounceTimer = undefined;
     if (!corridor || !sourceMethod || !targetMethod) return;
     const value = amountNumber(amount); if (!Number.isFinite(value) || value <= 0) return resetResults();
+    const sourceWallet = sourceMethod.kind === "wallet", targetWallet = targetMethod.kind === "wallet";
+    if ((sourceWallet && !sourceNetwork) || (targetWallet && !targetNetwork)) {
+      resetResults();
+      error = "No compatible network is available for the selected cryptocurrency";
+      return;
+    }
+    if (sourceWallet && targetWallet && selectedSourceCurrency.toUpperCase() === selectedTargetCurrency.toUpperCase() && sourceNetwork?.id === targetNetwork?.id) {
+      resetResults();
+      error = `Choose different networks for ${selectedSourceCurrency}; the same asset on the same network is not a swap route.`;
+      return;
+    }
     controller?.abort(); controller = new AbortController(); const signal = controller.signal; const currentRequest = ++requestId; searching = true; awaitingFirstRoute = true; routesFound = 0; foundVenues = []; error = null;
     try {
-      const sourceWallet = sourceMethod.kind === "wallet", targetWallet = targetMethod.kind === "wallet";
-      if ((sourceWallet && !sourceNetwork) || (targetWallet && !targetNetwork)) throw new Error("No compatible network is available for the selected cryptocurrency");
-      if (sourceWallet && targetWallet && sourceMethod.currency === targetMethod.currency) {
-        if (sourceNetwork?.id === targetNetwork?.id) throw new Error("Choose a different cryptocurrency or network for the destination");
-        throw new Error(`Cross-network bridge routes are not available yet. No live bridge provider is configured for ${sourceMethod.currency}: ${sourceNetwork?.name} → ${targetNetwork?.name}.`);
-      }
       const liveQuery = { sourceFiat: selectedSourceCurrency, targetFiat: selectedTargetCurrency, sourceAmount: value, intermediaryAssets: !sourceWallet && !targetWallet && selectedIntermediaryAssets.length ? selectedIntermediaryAssets : undefined, sourceNetwork: sourceWallet ? sourceNetwork?.id : undefined, targetNetwork: targetWallet ? targetNetwork?.id : undefined, sourcePaymentMethod: sourceWallet ? undefined : sourceMethod.p2pQuery, targetPaymentMethod: targetWallet ? undefined : targetMethod.p2pQuery, sources: selectedSources, allowCrossVenue: true, limit: 40 };
       let response: P2pRouteSearchResponse;
       try {
@@ -377,14 +414,12 @@
   onMount(() => {
     const shared = readSharedExchange();
     let savedSourceIds: string[] = [];
-    let savedSourcePreferencesVersion = "";
     try {
       anonymousId = anonymousBrowserId();
       amount = shared?.amount ?? localStorage.getItem(STORAGE.amount) ?? "0";
       corridorId = localStorage.getItem(STORAGE.corridor) ?? ""; sourceMethodId = localStorage.getItem(STORAGE.sourceMethod) ?? sourceMethodId; targetMethodId = localStorage.getItem(STORAGE.targetMethod) ?? targetMethodId;
       const savedDirection = localStorage.getItem(STORAGE.direction); if (savedDirection != null) directionReversed = savedDirection === "true";
       savedSourceIds = localStorage.getItem(STORAGE.sources)?.split(",").map((value) => value.trim()).filter(Boolean) ?? [];
-      savedSourcePreferencesVersion = localStorage.getItem(STORAGE.sourcesVersion) ?? "";
       const savedAssets = localStorage.getItem(STORAGE.assets); if (savedAssets != null) selectedIntermediaryAssets = [...new Set(savedAssets.split(",").filter((asset) => INTERMEDIARY_ASSETS.includes(asset as (typeof INTERMEDIARY_ASSETS)[number])))];
       const savedRefresh = Number(localStorage.getItem(STORAGE.refresh)); if (REFRESH_OPTIONS.includes(savedRefresh as RefreshSeconds)) refreshSeconds = savedRefresh as RefreshSeconds;
     } catch {}
@@ -397,8 +432,8 @@
       p2pSources = providerSources(providers);
       const catalog = new Set(p2pSources.map((source) => source.id));
       const live = p2pSources.filter((source) => source.searchable).map((source) => source.id);
-      const restored = [...new Set(savedSourceIds.filter((source) => catalog.has(source)))];
-      selectedSources = savedSourcePreferencesVersion === SOURCE_PREFERENCES_VERSION && restored.length ? restored : live;
+      const restored = [...new Set(savedSourceIds.filter((source) => catalog.has(source) && p2pSources.find((item) => item.id === source)?.searchable))];
+      selectedSources = restored.length ? restored : live;
     }).catch((cause: Error) => error ??= cause.message);
     fetchCorridors().then((response) => {
       const savedDirection = localStorage.getItem(STORAGE.direction);
@@ -462,7 +497,7 @@
                 <div class="settingsModalHeader"><span class="settingsSheetHandle" aria-hidden="true" on:pointerdown={startSettingsDrag} on:pointermove={moveSettingsDrag} on:pointerup={endSettingsDrag} on:pointercancel={endSettingsDrag}></span><button type="button" class="settingsClose" on:click={closeSettings} aria-label="Close route settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button></div>
                 <div class="settingsHead"><div><strong>Auto-refresh</strong><span>Keep market routes current</span></div><span class={refreshSeconds ? "onBadge" : "offBadge"}>{refreshSeconds ? "On" : "Off"}</span></div>
                 <div class="refreshOptions">{#each REFRESH_OPTIONS as seconds}<button type="button" aria-pressed={refreshSeconds === seconds} on:click={() => { refreshSeconds = seconds; settingsOpen = false; }}>{seconds === 0 ? "Off" : `${seconds}s`}</button>{/each}</div>
-                <div class="sourceSettings"><span class="sourceSettingsLabel">Search exchanges</span><div class="sourceOptions exchangeOptions" aria-label="Exchanges to search">{#each p2pSources as source}{@const enabled = selectedSources.includes(source.id)}<button type="button" class:sourceOptionActive={enabled} class="sourceOption" aria-pressed={enabled} title={source.searchable ? `Search ${source.label}` : `Select ${source.label}`} on:click={() => toggleSource(source.id)}><span class="sourceOptionIcon" aria-hidden="true"><img src={source.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackSourceIcon(event, source.id)} /></span>{source.label}</button>{/each}</div></div>
+                <div class="sourceSettings"><span class="sourceSettingsLabel">Search exchanges</span><div class="sourceOptions exchangeOptions" aria-label="Exchanges to search">{#each p2pSources as source}{@const enabled = selectedSources.includes(source.id)}<button type="button" class:sourceOptionActive={enabled} class="sourceOption" aria-pressed={enabled} title={sourceTitle(source)} on:click={() => toggleSource(source.id)}><span class="sourceOptionIcon" aria-hidden="true"><img src={source.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackSourceIcon(event, source.id)} /></span>{source.label}</button>{/each}</div></div>
                 <div class="sourceSettings"><div class="intermediarySettingsHead"><span class="sourceSettingsLabel">Cryptocurrency intermediary</span><small>{selectedIntermediaryAssets.length ? `${selectedIntermediaryAssets.length} selected` : "All available"}</small></div><div class="sourceOptions intermediaryOptions" aria-label="Cryptocurrency intermediaries">
                   <button type="button" class:sourceOptionActive={selectedIntermediaryAssets.length === 0} class="sourceOption" aria-pressed={selectedIntermediaryAssets.length === 0} on:click={() => { selectedIntermediaryAssets = []; resetResults(); }}>All available</button>
                   {#each INTERMEDIARY_ASSETS as asset}{@const enabled = selectedIntermediaryAssets.includes(asset)}<button type="button" class:sourceOptionActive={enabled} class="sourceOption" aria-pressed={enabled} on:click={() => toggleAsset(asset)}><span class="intermediaryAssetIcon" aria-hidden="true"><img src={intermediaryIcon(asset)} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={fallbackAssetIcon} /></span>{asset}</button>{/each}
@@ -486,7 +521,7 @@
       <div class="flowBridge"><span class="bridgeLine" aria-hidden="true"></span><button type="button" class:bridgeIconReversed={directionReversed} class="bridgeIcon" on:click={swapDirection} aria-label="Swap sender and recipient" title="Swap sender and recipient"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M10 4v12m0 0-4-4m4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></button></div>
       <div class="intentLabel intentLabelBuy"><span>Buy</span></div>
       <div class="moneyPanel moneyPanelTarget">
-        <div class="panelCopy"><label for="exchange-output">Recipient gets</label><output id="exchange-output" class={previewRoute ? "amountOutput" : "amountOutputEmpty"}>{amountFromMinor(previewRoute?.target_amount_minor)}</output><span class="currencyHint">{targetMethod?.kind === "wallet" ? `${targetMethod.currency} available via digital wallet` : previewRoute ? `Estimated ${previewRoute.target_currency}` : "Live estimate appears here"}</span></div>
+        <div class="panelCopy"><label for="exchange-output">Recipient gets</label><output id="exchange-output" class={previewRoute ? "amountOutput" : "amountOutputEmpty"}>{amountFromRoute(previewRoute)}</output><span class="currencyHint">{targetMethod?.kind === "wallet" ? `${targetMethod.currency} available via digital wallet` : previewRoute ? `Estimated ${previewRoute.target_currency}` : "Live estimate appears here"}</span></div>
         <div class="methodControls"><button type="button" class="methodTrigger" on:click={() => void openMethodPicker("target")} aria-label={`Select recipient ${targetMethod?.kind === "wallet" ? "asset" : "bank"}: ${targetMethod?.name ?? "none"}`}>
           <span class="methodAvatar" style:background-color={paymentMethodFavicon(targetMethod) ? "transparent" : targetMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(targetMethod)}<img src={paymentMethodFavicon(targetMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{:else}<span>{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{/if}</span>
           <span class="methodText"><strong>{targetMethod?.name ?? "Select bank"}</strong><small>{targetMethod?.kind === "wallet" ? `${targetMethod.currency} · ${targetNetwork?.name ?? "Loading networks…"}` : targetMethod ? locationLabel(targetMethod.country, targetMethod.currency) : corridor ? locationLabel(targetCountry, targetCurrency) : "Unavailable"}</small></span><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>

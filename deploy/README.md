@@ -39,6 +39,7 @@ export PAY3FLOW_INGRESS_TLS_SECRET=''
 export PAY3FLOW_JWT_SECRET='replace-with-a-long-random-value'
 export PAY3FLOW_SECRETS_KEY='replace-with-application-key-material'
 export PAY3FLOW_ADMIN_TOKEN='replace-with-a-random-admin-token'
+export PAY3FLOW_NEAR_INTENTS_JWT='replace-with-the-NEAR-Intents-JWT'
 export PAY3FLOW_POSTGRES_PASSWORD='replace-with-a-random-database-password'
 export PAY3FLOW_AP_REQUIRE_SIGNATURES='true'
 
@@ -47,6 +48,12 @@ export PAY3FLOW_AP_REQUIRE_SIGNATURES='true'
 export PAY3FLOW_FMATCH_INBOX='https://lefine.pro/inbox/actra'
 export PAY3FLOW_FMATCH_ACTOR_ID='https://lefine.pro/actors/actra'
 ```
+
+The `PAY3FLOW_*` values above are inputs to the manifest renderer. The backend
+Pod does not receive these non-secret settings as environment variables; the
+renderer writes them into the `config.toml` ConfigMap mounted at `/app/config.toml`.
+Database, Redis, JWT, encryption, admin, and NEAR Intents credentials remain
+Kubernetes Secret environment variables.
 
 ## Deploy with in-cluster PostgreSQL and Redis
 

@@ -8,6 +8,7 @@ use tokio_postgres::types::ToSql;
 use crate::activitypub::model::AcquirerCandidate;
 use crate::core::state::AppState;
 use crate::db::DbPool;
+use crate::route_engine::{Amount, Asset};
 
 const DEFAULT_HANDLE: &str = "pay3flow";
 
@@ -101,6 +102,13 @@ async fn handle_generic(
 ) -> Result<Response, StatusCode> {
     let atype = activity.get("type").and_then(Value::as_str).unwrap_or("");
 
+    if atype == "Proposal"
+        && activity.get("purpose").and_then(Value::as_str) == Some("request")
+        && activity.get("command").and_then(Value::as_str) == Some("quote")
+    {
+        return handle_quote_request(state, activity).await;
+    }
+
     let candidates = AcquirerCandidate::from_reply(activity);
     if !candidates.is_empty() {
         state.ap.received_candidates(&candidates).await;
@@ -126,6 +134,82 @@ async fn handle_generic(
     }
 
     Ok(Json(json!({"status": "accepted"})).into_response())
+}
+
+async fn handle_quote_request(state: &AppState, activity: &Value) -> Result<Response, StatusCode> {
+    let requester = activity
+        .get("attributedTo")
+        .or_else(|| activity.get("actor"))
+        .and_then(Value::as_str);
+    if requester != Some(state.ap.fmatch_actor_id.as_str()) {
+        tracing::warn!(
+            ?requester,
+            "rejected route quote request from a non-fmatch actor"
+        );
+        return Err(StatusCode::FORBIDDEN);
+    }
+    let fields = activity
+        .get("content")
+        .and_then(Value::as_str)
+        .map(parse_fields)
+        .ok_or(StatusCode::BAD_REQUEST)?;
+    let route_id = fields.get("route_id").ok_or(StatusCode::BAD_REQUEST)?;
+    let (amount_value, asset_value) =
+        quote_amount_fields(&fields).ok_or(StatusCode::BAD_REQUEST)?;
+    let asset = Asset::parse(asset_value).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let amount = Amount::new(amount_value, asset).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let quote = state
+        .route_quotes
+        .quote(route_id, amount)
+        .await
+        .map_err(|error| {
+            tracing::warn!(%error, route_id, "fmatch route quote failed");
+            StatusCode::NOT_FOUND
+        })?;
+    Ok(Json(json!({
+        "@context": [
+            "https://www.w3.org/ns/activitystreams",
+            "https://w3id.org/fep/0837"
+        ],
+        "type": "Offer",
+        "id": format!("{}/route-quotes/{}", state.ap.origin, quote.quote_id),
+        "actor": &state.ap.identity.actor_id,
+        "object": {
+            "type": "RouteQuote",
+            "route_id": quote.route_id,
+            "quote_id": quote.quote_id.clone(),
+            "input": quote.input,
+            "output": quote.output,
+            "fees": quote.fees,
+            "available": quote.available,
+            "expires_at": quote.expires_at,
+        }
+    }))
+    .into_response())
+}
+
+fn parse_fields(content: &str) -> std::collections::HashMap<String, String> {
+    content
+        .split(';')
+        .filter_map(|part| part.split_once('='))
+        .map(|(key, value)| (key.trim().to_string(), value.trim().to_string()))
+        .collect()
+}
+
+fn quote_amount_fields(
+    fields: &std::collections::HashMap<String, String>,
+) -> Option<(String, &str)> {
+    let amount = fields.get("amount")?.trim();
+    if let Some(asset) = fields.get("asset") {
+        return Some((amount.to_string(), asset.trim()));
+    }
+    let mut parts = amount.split_whitespace();
+    let value = parts.next()?;
+    let asset = parts.next()?;
+    if parts.next().is_some() {
+        return None;
+    }
+    Some((value.to_string(), asset))
 }
 
 async fn verify_inbound_signature(
@@ -193,4 +277,30 @@ async fn record_inbound(pool: &DbPool, id: &str) -> Result<(), StatusCode> {
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn quote_amount_accepts_explicit_or_compound_asset_fields() {
+        let explicit = parse_fields("route_id=r; amount=500000; asset=AMD");
+        assert_eq!(
+            quote_amount_fields(&explicit),
+            Some(("500000".to_string(), "AMD"))
+        );
+
+        let compound = parse_fields("route_id=r; amount=500000 AMD");
+        assert_eq!(
+            quote_amount_fields(&compound),
+            Some(("500000".to_string(), "AMD"))
+        );
+    }
+
+    #[test]
+    fn quote_amount_rejects_ambiguous_compound_values() {
+        let fields = parse_fields("route_id=r; amount=500000 AMD extra");
+        assert!(quote_amount_fields(&fields).is_none());
+    }
 }

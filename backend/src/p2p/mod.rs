@@ -1,3 +1,4 @@
+mod bestchange;
 mod declarative;
 mod routes;
 mod service;
@@ -6,6 +7,7 @@ mod workflow;
 
 pub use routes::{
     CryptoMarketPath, P2pRoute, P2pRouteSearchQuery, P2pRouteSearchResponse, RouteAssetStatus,
+    RouteFee,
 };
 pub use service::{
     Advertiser, P2pOffer, P2pSearchQuery, P2pSearchResponse, P2pSearchService, P2pSide,

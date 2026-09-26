@@ -9,3 +9,15 @@ source_url = "https://dzengi.com/ru/kalkulyator-kriptovalyut"
 name = "Dzengi Buy"
 currency = ["byn", "usd", "eur", "rub"]
 banks = []
+
+# Public market-data endpoint. This makes Dzengi available for crypto-to-
+# crypto route discovery without requiring an account or API key.
+[adapter.market]
+kind = "http_json"
+endpoint = "https://api-adapter.dzengi.com/api/v1/ticker/24hr"
+method = "GET"
+timeout_ms = 10000
+symbol_pointer = "/symbol"
+bid_pointer = "/bidPrice"
+ask_pointer = "/askPrice"
+symbol_remove = "/"

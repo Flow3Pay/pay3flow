@@ -21,6 +21,7 @@ ENV PLAYWRIGHT_DRIVER_PATH=/opt/playwright-driver
 WORKDIR /app
 COPY --from=builder /app/backend/target/release/pay3flow-backend /usr/local/bin/pay3flow-backend
 COPY --from=builder /app/playwright-driver /opt/playwright-driver
+COPY config.toml /app/config.toml
 RUN mkdir -p /app/data
 EXPOSE 8080
 CMD ["pay3flow-backend"]

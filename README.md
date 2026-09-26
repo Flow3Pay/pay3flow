@@ -29,6 +29,12 @@ still be available when the venue is opened.
 | Rapira | Public P2P API | `USDT/RUB` P2P ads |
 | Whitebird | Browser workflow over the public exchanger | Direct fiat/crypto quotes, including `USDC/RUB` |
 | Cifra Markets | Public calculator and IMEX market API | Direct RUB/BYN/USD crypto quotes and crypto market paths |
+| CoW Swap | Catalog-only CoW Protocol venue | Chain-specific crypto swaps; live route adapter not enabled |
+
+CoW Swap fees are quote-dependent rather than a universal fixed percentage.
+The live quote accounts for execution costs, while liquidity, gas, and optional
+partner fees can affect the result. The provider directory exposes this fee
+model and links to the [CoW Protocol documentation](https://docs.cow.fi/cow-protocol).
 
 The catalog also includes Exnode, Dzengi, and BestChange. They are currently
 selectable venue entries with links and local icons; live route adapters are
@@ -277,21 +283,16 @@ through [`server.mjs`](pay3low-svelte-frontend/server.mjs).
 
 ## Configuration
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `HTTP_ADDR` | `0.0.0.0:8080` | Backend listen address |
-| `DATABASE_URL` | local PostgreSQL URL | Backend database |
-| `REDIS_URL` | `redis://127.0.0.1:6379` | Cache connection; set empty to disable |
-| `P2P_SEARCH_ENABLED` | `true` | Enable public route search |
-| `P2P_SEARCH_TIMEOUT_MS` | `4000` | Default adapter timeout, clamped to 250–30000 ms |
-| `P2P_SEARCH_CACHE_TTL_MS` | `5000` | In-memory leg-search cache TTL |
-| `P2P_SEARCH_ASSETS` | network catalog | Default fiat-to-fiat intermediary assets |
-| `PLAYWRIGHT_CHROMIUM_EXECUTABLE` | unset | Chromium executable for workflow sources |
-| `PUBLIC_API_URL` | `http://localhost:8080` | Browser-visible backend URL |
+Non-secret backend settings live in [`config.toml`](config.toml), including
+listener, ActivityPub, FX, P2P, route, NEAR Intents, and optional CoW settings.
+Use TOML arrays for lists. Credentials and connection strings remain
+environment-only: `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `SECRETS_KEY`,
+`ADMIN_TOKEN`, and `NEAR_INTENTS_JWT`.
 
-Individual Providerfiles may override the default timeout. Whitebird currently
-uses a 30-second workflow timeout because its public quote is rendered in a
-browser.
+See [`docs/configuration.md`](docs/configuration.md) for the schema and the
+secret boundary. Individual Providerfiles may override the default timeout.
+Whitebird currently uses a 30-second workflow timeout because its public quote
+is rendered in a browser.
 
 ## Repository layout
 

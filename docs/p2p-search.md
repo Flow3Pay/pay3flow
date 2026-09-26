@@ -65,7 +65,7 @@ GET /api/p2p/routes?source_fiat=AMD&target_fiat=RUB&source_amount=100000&interme
 ```
 
 `intermediary_assets` accepts one or more comma-separated crypto codes. If it is
-omitted, the backend searches the full `P2P_SEARCH_ASSETS` catalog. The older
+omitted, the backend searches the configured `p2p_search_assets` catalog. The older
 `assets` parameter remains supported as a compatibility alias.
 
 For every asset the backend concurrently searches:
@@ -111,13 +111,17 @@ and payment confirmation are not verified by this read-only layer.
 
 ## Configuration
 
-```text
-P2P_SEARCH_ENABLED=true
-P2P_SEARCH_TIMEOUT_MS=4000
-P2P_SEARCH_CACHE_TTL_MS=5000
-P2P_SEARCH_ASSETS=USDT,USDC,BTC,ETH,BNB,SOL,TRX,TON,DOGE,LTC,DAI,FDUSD,XRP,ADA,DOT,LINK,AVAX,MATIC,BCH,NEAR,APT,ATOM,UNI,SUI
-PLAYWRIGHT_CHROMIUM_EXECUTABLE=/usr/bin/chromium
+The backend search settings are TOML keys in [`config.toml`](../config.toml):
+
+```toml
+p2p_search_enabled = true
+p2p_search_timeout_ms = 4000
+p2p_search_cache_ttl_ms = 5000
+p2p_search_assets = ["USDT", "USDC", "BTC", "ETH", "BNB", "SOL", "TRX"]
+playwright_chromium_executable = "/usr/bin/chromium"
 ```
+
+`p2p_workflow_debug_screenshot` can also be set in TOML for failure diagnostics.
 
 Sources, endpoint URLs, response mappings, and browser workflows are declared
 in `backend/providers/*/Providerfile`. Regenerate the provider migration and

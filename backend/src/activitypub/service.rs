@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use futures::StreamExt;
 use serde_json::Value;
 use tokio::sync::RwLock;
 
@@ -9,6 +10,7 @@ use crate::activitypub::error::ActivityPubError;
 use crate::activitypub::fep8fba;
 use crate::activitypub::model::{request_proposal, AcquirerCandidate};
 use crate::db::DbPool;
+use crate::route_engine::RouteCapability;
 
 /// Centralized state for the ActivityPub module.
 #[derive(Clone)]
@@ -96,6 +98,77 @@ impl Service {
         );
         self.delivery
             .deliver(&self.identity, &self.fmatch_inbox, &activity)
+            .await
+    }
+
+    /// Publish one stable route capability to fmatch.
+    ///
+    /// The proposal contains topology and capability metadata only.  It never
+    /// contains a live price; fmatch must request a private Pay3Flow quote
+    /// after matching this capability.  Reusing the same proposal id makes
+    /// publication idempotent and lets fmatch upsert a refreshed capability.
+    pub async fn publish_route_capability(
+        &self,
+        route: &RouteCapability,
+    ) -> Result<DeliveryOutcome, ActivityPubError> {
+        let route_slug = route.id.replace(':', "-");
+        let proposal_id = format!(
+            "{}/marketplace/routes/{}",
+            self.origin.trim_end_matches('/'),
+            route_slug
+        );
+        let status = if route.enabled { "enabled" } else { "disabled" };
+        let path = route
+            .path
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(" -> ");
+        let content = format!(
+            "route_id={}; from={}; to={}; path={}; capabilities={}; status={}; quote=internal",
+            route.id,
+            route.from,
+            route.to,
+            path,
+            route.capabilities.join(","),
+            status
+        );
+        let proposal = crate::activitypub::model::Proposal {
+            id: proposal_id,
+            purpose: "offer".into(),
+            attributed_to: self.identity.actor_id.clone(),
+            name: format!("Pay3Flow route {}", route.id),
+            content,
+            resource_conforms_to: format!(
+                "{}/marketplace/resources/exchange",
+                self.origin.trim_end_matches('/')
+            ),
+            action: "deliverService".into(),
+            resource_unit: "route".into(),
+            attachments: vec![serde_json::json!({
+                "type": "PropertyValue",
+                "name": "pay3flow:routeCapability",
+                "value": route,
+            })],
+        };
+        self.delivery
+            .deliver(&self.identity, &self.fmatch_inbox, &proposal.to_activity())
+            .await
+    }
+
+    /// Reconcile and publish capabilities, including disabled tombstones for
+    /// routes that disappeared during the latest provider refresh.
+    pub async fn publish_route_reconciliation(
+        &self,
+        reconciliation: &crate::route_engine::RouteReconciliation,
+    ) -> Vec<Result<DeliveryOutcome, ActivityPubError>> {
+        reconciliation
+            .upsert
+            .iter()
+            .chain(reconciliation.disable.iter())
+            .map(|route| self.publish_route_capability(route))
+            .collect::<futures::stream::FuturesUnordered<_>>()
+            .collect()
             .await
     }
 }

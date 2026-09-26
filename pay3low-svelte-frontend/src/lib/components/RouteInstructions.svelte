@@ -10,12 +10,33 @@
   let dragging = false;
   let dragStartY = 0;
   let dragDistance = 0;
-  const VENUE_NAMES: Record<string, string> = { binance: "Binance", bitget: "Bitget", bybit: "Bybit", okx: "OKX", rapira: "Rapira", whitebird: "Whitebird", exnode: "Exnode", dzengi: "Dzengi", bestchange: "BestChange", "cifra-broker": "Cifra Markets" };
-  const venueName = (value?: string) => value ? VENUE_NAMES[value.toLowerCase()] ?? value : "P2P market";
-  const isDirectOffer = (offer?: RouteCandidate["entry_offer_snapshot"]) => offer?.advertiser.user_type === "service" || (offer ? new Set(["whitebird", "exnode", "dzengi", "bestchange"]).has(offer.source.toLowerCase()) : false);
-  const money = (minor?: number, currency?: string) => minor == null ? "—" : `${(minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })} ${currency ?? ""}`;
+  const VENUE_NAMES: Record<string, string> = { binance: "Binance", bitget: "Bitget", bybit: "Bybit", okx: "OKX", rapira: "Rapira", whitebird: "Whitebird", "cifra-broker": "Cifra Markets", bestchange: "BestChange", dzengi: "Dzengi", exnode: "Exnode" };
+  const venueName = (value?: string | null) => value ? VENUE_NAMES[value.toLowerCase()] ?? value : "P2P market";
+  const isDirectOffer = (offer?: RouteCandidate["entry_offer_snapshot"]) => offer?.advertiser.user_type === "service" || offer?.source.toLowerCase() === "whitebird";
+  const money = (minor?: number, currency?: string, exact?: string) => {
+    if (exact && ["BTC", "ETH", "USDC", "USDT", "SOL", "TRX", "TON", "XRP", "ADA", "AVAX", "DOT", "LINK", "LTC", "BCH", "BNB", "DOGE", "MATIC", "NEAR", "SUI", "APT", "ATOM", "UNI", "DAI", "FDUSD"].includes(currency?.toUpperCase() ?? "")) {
+      return `${Number(exact).toLocaleString("en-US", { maximumFractionDigits: 8 })} ${currency ?? ""}`;
+    }
+    return minor == null ? "—" : `${(minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })} ${currency ?? ""}`;
+  };
   const marketRate = (value: string) => Number.isFinite(Number(value)) ? Number(value).toLocaleString("en-US", { maximumFractionDigits: 12, useGrouping: false }) : value;
   const linkFor = (kind: ServiceLink["kind"]) => route.service_links?.find((link) => link.kind === kind);
+  const bankFeeLabel = (bank?: string, percent?: number) => {
+    if (!bank || percent == null) return null;
+    return percent === 0 ? `${bank}: no bank fee` : `${bank}: ${percent.toFixed(2)}% bank fee`;
+  };
+  const rubPaymentInstruction = (currency: string | undefined, bank: string | undefined, direction: "send" | "receive", offer?: RouteCandidate["entry_offer_snapshot"]) => {
+    if (currency?.toUpperCase() !== "RUB" || !bank) return null;
+    const supportsSbp = offer?.payment_methods.some((method) => /сбп|sbp|fast payment/i.test(method)) ?? false;
+    if (direction === "send") {
+      return supportsSbp
+        ? `For RUB, use СБП from ${bank} using the exact recipient details shown in the order.`
+        : `For RUB, use СБП from ${bank} only if the advertiser lists it; otherwise use the payment method shown in the order.`;
+    }
+    return supportsSbp
+      ? `For RUB payout to ${bank}, confirm the СБП transfer has arrived before releasing the crypto.`
+      : `For RUB payout to ${bank}, use СБП only if the order supports it and confirm the money has arrived before releasing the crypto.`;
+  };
 
   function spotPair(symbol: string, firstAsset: string, secondAsset: string) {
     const normalized = symbol.replace(/[^a-z0-9]/gi, "").toUpperCase();
@@ -75,11 +96,20 @@
   $: exitVenue = venueName(exit?.provider);
   $: entryDirect = isDirectOffer(route.entry_offer_snapshot);
   $: exitDirect = isDirectOffer(route.exit_offer_snapshot);
-  $: crossVenue = Boolean(entry && exit && entry.provider !== exit.provider);
+  $: crossVenue = Boolean(entry && exit && !route.route_provider && entry.provider !== exit.provider);
   $: cryptoToCrypto = route.route_kind === "crypto_to_crypto";
+  $: providerSwap = Boolean(route.route_provider && (route.entry_offer_snapshot || route.exit_offer_snapshot));
+  $: providerSwapStepNumber = route.entry_offer_snapshot ? 2 : 1;
   $: transferNetwork = route.entry_network && route.entry_network.toLowerCase() !== "internal" ? route.entry_network : null;
   $: transferStepNumber = route.entry_offer_snapshot ? 2 : 1;
-  $: exitStepNumber = (route.entry_offer_snapshot ? 1 : 0) + (crossVenue ? 1 : 0) + 1;
+  $: exitStepNumber = (route.entry_offer_snapshot ? 1 : 0) + (providerSwap ? 1 : 0) + (crossVenue ? 1 : 0) + 1;
+  $: entryAsset = route.entry_offer_snapshot?.asset ?? route.entry_asset;
+  $: providerSwapFrom = route.entry_offer_snapshot?.asset ?? route.source_currency;
+  $: providerSwapTo = route.exit_offer_snapshot?.asset ?? route.target_currency;
+  $: sourceFeeLabel = bankFeeLabel(route.source_payment_method, route.source_bank_fee_percent);
+  $: targetFeeLabel = bankFeeLabel(route.target_payment_method, route.target_bank_fee_percent);
+  $: sourceRubInstruction = rubPaymentInstruction(route.source_currency, route.source_payment_method, "send", route.entry_offer_snapshot);
+  $: targetRubInstruction = rubPaymentInstruction(route.target_currency, route.target_payment_method, "receive", route.exit_offer_snapshot);
   $: firstMarketUrl = route.market_path ? spotUrl(route.market_path.venue, route.market_path.source_pair, route.source_currency, route.bridge_currency ?? route.target_currency ?? route.entry_asset) : null;
   $: secondMarketUrl = route.market_path && route.bridge_currency ? spotUrl(route.market_path.venue, route.market_path.target_pair, route.bridge_currency, route.target_currency ?? route.entry_asset) : null;
 </script>
@@ -87,8 +117,20 @@
 <div class="backdrop" role="presentation" on:mousedown={backdrop}>
   <div class:dragging class="modal" bind:this={modal} role="dialog" aria-modal="true" aria-labelledby="route-instructions-title" tabindex="-1">
     <button type="button" class="sheetHandle" aria-label="Close instructions by dragging down" on:pointerdown={startSheetDrag} on:pointermove={moveSheetDrag} on:pointerup={endSheetDrag} on:pointercancel={endSheetDrag}><span aria-hidden="true"></span></button>
-    <div class="header"><div><span class="eyebrow">Selected route</span><h2 id="route-instructions-title">How to complete this exchange</h2><p class="intro">Complete each step in order. You stay in control—Pay3Flow never places an order or moves your funds.</p><p class="estimate">Estimated output: <strong>{money(route.target_amount_minor, route.target_currency)}</strong></p></div><button type="button" class="closeButton" on:click={onClose} aria-label="Close instructions">×</button></div>
+    <div class="header"><div><span class="eyebrow">Selected route</span><h2 id="route-instructions-title">How to complete this exchange</h2><p class="intro">Complete each step in order. You stay in control—Pay3Flow never places an order or moves your funds.</p><p class="estimate">Estimated output: <strong>{money(route.target_amount_minor, route.target_currency, route.target_amount)}</strong></p>{#if sourceFeeLabel || targetFeeLabel}<p class="feeSummary">Bank fees: {[sourceFeeLabel, targetFeeLabel].filter(Boolean).join(" · ")}</p>{/if}</div><button type="button" class="closeButton" on:click={onClose} aria-label="Close instructions">×</button></div>
     <ol class="workflow" aria-label="Exchange steps">
+      {#if route.route_provider && !providerSwap}
+        <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">1</span><div class="stepBody">
+          <h3>Route through {venueName(route.route_provider)}</h3>
+          <p class="stepSummary">This is a live dry quote for a cross-network asset route. Pay3Flow does not execute the transfer or move funds.</p>
+          {#if route.route_path?.length}<p class="routePath">{route.route_path.join(" → ")}</p>{/if}
+          <ul class="checklist">
+            <li>Confirm the source and destination asset networks in the provider flow.</li>
+            <li>Review the quoted output, provider fees, expiry, and any destination address or memo requirements.</li>
+            <li>Do not send funds after the quote expires; request a fresh route first.</li>
+          </ul>
+        </div></li>
+      {/if}
       {#if cryptoToCrypto && route.market_path}
         {@const market = route.market_path}
         <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">1</span><div class="stepBody">
@@ -120,7 +162,7 @@
       {/if}
       {#if route.entry_offer_snapshot}
         <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">1</span><div class="stepBody">
-          <h3>{cryptoToCrypto ? `Sell ${route.source_currency} for ${route.bridge_currency ?? route.entry_asset}` : `Buy ${route.entry_asset} for ${money(route.source_amount_minor, route.source_currency)}`}</h3>
+          <h3>{cryptoToCrypto ? `Sell ${route.source_currency} for ${route.bridge_currency ?? route.entry_asset}` : `Buy ${entryAsset} for ${money(route.source_amount_minor, route.source_currency)}`}</h3>
           {#if entryDirect}
             <p class="stepSummary">Open the direct exchange on {entryVenue}, review the live quote, and complete the conversion in the provider flow.</p>
             <ul class="checklist">
@@ -133,10 +175,24 @@
             <ul class="checklist">
               <li>Match the advertiser nickname and ad ID before creating the order.</li>
               <li>Confirm the live rate, order limits, and payment method on {entryVenue}.</li>
+              {#if sourceFeeLabel}<li>{sourceFeeLabel} is an estimate; confirm the final bank tariff before sending.</li>{/if}
+              {#if sourceRubInstruction}<li>{sourceRubInstruction}</li>{/if}
               <li>{cryptoToCrypto ? "Release the asset only after you have independently confirmed receipt of the payment." : "Use only the payment details shown inside the order, then mark it paid after sending the transfer."}</li>
             </ul>
           {/if}
           <AdvertiserCard offer={route.entry_offer_snapshot} label={entryDirect ? `Direct exchange on ${entryVenue}` : `${cryptoToCrypto ? "Buyer" : "Seller"} on ${entryVenue}`} serviceLink={linkFor("entry")} {onOpenService} />
+        </div></li>
+      {/if}
+      {#if providerSwap}
+        <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">{providerSwapStepNumber}</span><div class="stepBody">
+          <h3>Swap {providerSwapFrom} for {providerSwapTo} via {venueName(route.route_provider)}</h3>
+          <p class="stepSummary">{route.entry_offer_snapshot ? `After buying ${providerSwapFrom} with fiat, deposit it into ${venueName(route.route_provider)} and complete the swap into ${providerSwapTo}.` : `Deposit ${providerSwapFrom} into ${venueName(route.route_provider)} and complete the swap into ${providerSwapTo}.`}</p>
+          {#if route.route_path?.length}<p class="routePath">{route.route_path.join(" → ")}</p>{/if}
+          <ul class="checklist">
+            <li>Confirm the source asset, destination asset, and exact networks before sending.</li>
+            <li>Review the live quote, provider fees, expiry, and any address or memo requirements.</li>
+            <li>Wait for the destination balance to arrive before considering the exchange complete.</li>
+          </ul>
         </div></li>
       {/if}
       {#if crossVenue}
@@ -152,7 +208,7 @@
       {/if}
       {#if route.exit_offer_snapshot}
         <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">{exitStepNumber}</span><div class="stepBody">
-          <h3>{cryptoToCrypto ? `Buy ${route.target_currency} with ${route.bridge_currency ?? route.entry_asset}` : `Sell ${route.entry_asset} for ${money(route.target_amount_minor, route.target_currency)}`}</h3>
+          <h3>{cryptoToCrypto ? `Buy ${route.target_currency} with ${route.bridge_currency ?? route.entry_asset}` : `Sell ${route.entry_asset} for ${money(route.target_amount_minor, route.target_currency, route.target_amount)}`}</h3>
           {#if exitDirect}
             <p class="stepSummary">Open the direct exchange on {exitVenue}, review the live quote, and complete the conversion in the provider flow.</p>
             <ul class="checklist">
@@ -165,6 +221,8 @@
             <ul class="checklist">
               <li>Match the advertiser nickname and ad ID before creating the order.</li>
               <li>Confirm the live rate, order limits, {cryptoToCrypto ? "asset network" : "recipient payment method"}, and expected amount.</li>
+              {#if targetFeeLabel}<li>{targetFeeLabel} is an estimate; confirm the final bank tariff before accepting the payout.</li>{/if}
+              {#if targetRubInstruction}<li>{targetRubInstruction}</li>{/if}
               <li>{cryptoToCrypto ? `Confirm the ${route.target_currency} balance and network before withdrawing.` : "Release the asset only after you have independently confirmed the payment in your bank or payment account."}</li>
             </ul>
           {/if}

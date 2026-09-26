@@ -20,6 +20,8 @@ export interface PaymentMethod {
   initials: string;
   popular?: boolean;
   iconUrl?: string;
+  /** Estimated bank transfer fee for the selected local payment method. */
+  bankFeePercent?: number;
   /** Name fragment understood by the public P2P venue filters. */
   p2pQuery: string;
 }
@@ -48,6 +50,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     initials: "AM",
     popular: true,
     iconUrl: "/icons/assets/ameriabank.png",
+    bankFeePercent: 0,
     p2pQuery: "Ameriabank",
   },
   {
@@ -61,6 +64,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     initials: "ID",
     popular: true,
     iconUrl: "/icons/assets/idbank.png",
+    bankFeePercent: 0.75,
     p2pQuery: "IDBank",
   },
   {
@@ -73,6 +77,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     color: "#ef7f1a",
     initials: "AC",
     popular: true,
+    bankFeePercent: 0,
     p2pQuery: "ACBA",
   },
   {
@@ -97,6 +102,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     color: "#263f91",
     initials: "IN",
     iconUrl: "/icons/assets/inecobank.png",
+    bankFeePercent: 0.75,
     p2pQuery: "Inecobank",
   },
   {

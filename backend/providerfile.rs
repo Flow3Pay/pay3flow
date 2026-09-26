@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use pay3flow_backend::provider_adapter::{ProviderAdapters, WorkflowConfig};
+use pay3flow_backend::providers::ProviderFeeModel;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -13,6 +14,7 @@ struct RawProviderFile {
     sell: Option<RawProvider>,
     adapter: Option<ProviderAdapters>,
     workflow: Option<WorkflowConfig>,
+    fees: Option<ProviderFeeModel>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -51,6 +53,7 @@ pub struct ProviderDefinition {
     pub banks: Vec<String>,
     pub adapter: Option<ProviderAdapters>,
     pub workflow: Option<WorkflowConfig>,
+    pub fee_model: Option<ProviderFeeModel>,
     pub source_file: String,
 }
 
@@ -101,6 +104,7 @@ pub fn parse(
 
     let adapter = raw.adapter;
     let workflow = raw.workflow;
+    let fee_model = raw.fees.map(normalize_fee_model).transpose()?;
     [(Operation::Buy, raw.buy), (Operation::Sell, raw.sell)]
         .into_iter()
         .filter_map(|(operation, provider)| provider.map(|provider| (operation, provider)))
@@ -112,6 +116,7 @@ pub fn parse(
                 source_file,
                 adapter.clone(),
                 workflow.clone(),
+                fee_model.clone(),
             )
         })
         .collect()
@@ -185,9 +190,14 @@ pub fn render_sql(definitions: &[ProviderDefinition]) -> String {
             .as_ref()
             .map(|workflow| serde_json::to_string(workflow).expect("workflow is serializable"))
             .unwrap_or_else(|| "{}".into());
+        let fee_model = definition
+            .fee_model
+            .as_ref()
+            .map(|fee_model| serde_json::to_string(fee_model).expect("fee model is serializable"))
+            .unwrap_or_else(|| "{}".into());
         sql.push_str(&format!(
-            "INSERT INTO providers (slug, operation, source_url, name, currencies, banks, adapter, workflow, source_file)\n\
-             VALUES ({}, {}, {}, {}, {currencies}, {banks}, {}::JSONB, {}::JSONB, {})\n\
+            "INSERT INTO providers (slug, operation, source_url, name, currencies, banks, adapter, workflow, fee_model, source_file)\n\
+             VALUES ({}, {}, {}, {}, {currencies}, {banks}, {}::JSONB, {}::JSONB, {}::JSONB, {})\n\
              ON CONFLICT (slug, operation) DO UPDATE SET\n\
                  source_url = EXCLUDED.source_url,\n\
                  name = EXCLUDED.name,\n\
@@ -195,6 +205,7 @@ pub fn render_sql(definitions: &[ProviderDefinition]) -> String {
                  banks = EXCLUDED.banks,\n\
                  adapter = EXCLUDED.adapter,\n\
                  workflow = EXCLUDED.workflow,\n\
+                 fee_model = EXCLUDED.fee_model,\n\
                  source_file = EXCLUDED.source_file,\n\
                  updated_at = now();\n\n",
             sql_string(&definition.slug),
@@ -203,6 +214,7 @@ pub fn render_sql(definitions: &[ProviderDefinition]) -> String {
             sql_string(&definition.name),
             sql_string(&adapter),
             sql_string(&workflow),
+            sql_string(&fee_model),
             sql_string(&definition.source_file),
         ));
     }
@@ -219,6 +231,7 @@ fn normalize(
     source_file: &str,
     adapter: Option<ProviderAdapters>,
     workflow: Option<WorkflowConfig>,
+    fee_model: Option<ProviderFeeModel>,
 ) -> Result<ProviderDefinition, ProviderFileError> {
     let source_url = raw.source_url.trim().to_string();
     if !source_url.starts_with("https://") && !source_url.starts_with("http://") {
@@ -260,7 +273,32 @@ fn normalize(
         banks: normalized_values(raw.banks, false),
         adapter,
         workflow,
+        fee_model,
         source_file: source_file.to_string(),
+    })
+}
+
+fn normalize_fee_model(fee_model: ProviderFeeModel) -> Result<ProviderFeeModel, ProviderFileError> {
+    let kind = fee_model.kind.trim().to_ascii_lowercase();
+    if kind.is_empty() {
+        return Err(ProviderFileError("fees/kind must not be empty".into()));
+    }
+    let description = fee_model.description.trim().to_string();
+    if description.is_empty() {
+        return Err(ProviderFileError(
+            "fees/description must not be empty".into(),
+        ));
+    }
+    let docs_url = fee_model.docs_url.trim().to_string();
+    if !docs_url.starts_with("https://") && !docs_url.starts_with("http://") {
+        return Err(ProviderFileError(
+            "fees/docs_url must use http or https".into(),
+        ));
+    }
+    Ok(ProviderFeeModel {
+        kind,
+        description,
+        docs_url,
     })
 }
 
@@ -396,6 +434,18 @@ name = "Example Buy"
 currency = ["rub"]
 "#;
 
+    const FEE_METADATA_EXAMPLE: &str = r#"
+[sell]
+source_url = "https://provider.example"
+name = "Example Sell"
+currency = ["eth"]
+
+[fees]
+kind = "quote_dependent"
+description = "The fee is returned by the quote."
+docs_url = "https://provider.example/docs/fees"
+"#;
+
     #[test]
     fn parses_and_normalizes_the_documented_shape() {
         let definitions = parse(EXAMPLE, "example", "example/Providerfile").unwrap();
@@ -416,6 +466,18 @@ currency = ["rub"]
     #[test]
     fn accepts_a_declarative_http_json_adapter() {
         assert!(parse(HTTP_JSON_EXAMPLE, "example", "example/Providerfile").is_ok());
+    }
+
+    #[test]
+    fn parses_and_renders_fee_metadata() {
+        let definitions = parse(FEE_METADATA_EXAMPLE, "example", "example/Providerfile").unwrap();
+
+        assert_eq!(
+            definitions[0].fee_model.as_ref().unwrap().kind,
+            "quote_dependent"
+        );
+        assert!(render_sql(&definitions).contains("fee_model"));
+        assert!(render_sql(&definitions).contains("quote_dependent"));
     }
 
     #[test]

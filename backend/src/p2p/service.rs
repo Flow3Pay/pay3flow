@@ -11,14 +11,16 @@ use chrono::{DateTime, Utc};
 use futures::future::join_all;
 use futures::stream::{FuturesUnordered, StreamExt};
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Semaphore};
 
 use crate::config::Config;
 use crate::db::DbPool;
 use crate::networks::NetworkCatalog;
+use crate::p2p::bestchange::BestChangeSource;
 use crate::p2p::declarative::{DeclarativeMarketSource, DeclarativeP2pSource};
 use crate::p2p::spot::{CryptoMarketSource, CryptoTicker};
 use crate::p2p::workflow::WorkflowP2pSource;
+use crate::route_engine::PublicRouteProvider;
 
 const DEFAULT_LIMIT: usize = 20;
 const MAX_LIMIT: usize = 100;
@@ -281,7 +283,13 @@ pub struct P2pSearchService {
     market_sources: Arc<[Arc<dyn CryptoMarketSource>]>,
     pub(crate) default_assets: Arc<[String]>,
     pub(crate) networks: NetworkCatalog,
+    pub(crate) route_providers: Arc<[Arc<dyn PublicRouteProvider>]>,
+    pub(crate) quote_semaphore: Arc<Semaphore>,
 }
+
+// Keep all route combinations, but avoid opening an unbounded number of
+// external quote requests at the same time.
+const MAX_CONCURRENT_PROVIDER_QUOTES: usize = 16;
 
 #[derive(Clone)]
 struct CachedSearch {
@@ -291,27 +299,29 @@ struct CachedSearch {
 
 impl P2pSearchService {
     pub fn from_config(config: &Config, networks: NetworkCatalog) -> Result<Self> {
-        Self::from_provider_records(config, networks, Vec::new())
+        Self::from_provider_records(config, networks, Vec::new(), Vec::new())
     }
 
     pub async fn from_database(
         config: &Config,
         networks: NetworkCatalog,
         pool: &DbPool,
+        route_providers: Vec<Arc<dyn PublicRouteProvider>>,
     ) -> Result<Self> {
         let records = crate::providers::adapters(pool).await?;
-        Self::from_provider_records(config, networks, records)
+        Self::from_provider_records(config, networks, records, route_providers)
     }
 
     fn from_provider_records(
         config: &Config,
         networks: NetworkCatalog,
         records: Vec<crate::providers::ProviderAdapterRecord>,
+        route_providers: Vec<Arc<dyn PublicRouteProvider>>,
     ) -> Result<Self> {
         if records.iter().any(|record| record.workflow.is_some()) {
             playwright_rs::server::driver::get_driver_executable()
                 .map_err(|error| anyhow::anyhow!("Playwright driver is unavailable: {error}"))?;
-            if let Ok(executable) = std::env::var("PLAYWRIGHT_CHROMIUM_EXECUTABLE") {
+            if let Some(executable) = config.playwright_chromium_executable.as_deref() {
                 if !Path::new(&executable).is_file() {
                     bail!("PLAYWRIGHT_CHROMIUM_EXECUTABLE points to missing file `{executable}`");
                 }
@@ -326,13 +336,20 @@ impl P2pSearchService {
         let mut sources: Vec<Arc<dyn P2pSource>> = Vec::new();
         let mut market_sources: Vec<Arc<dyn CryptoMarketSource>> = Vec::new();
         for record in &records {
+            if let Some(source) = BestChangeSource::from_record(client.clone(), record) {
+                sources.push(Arc::new(source));
+            }
             if let Some(source) = DeclarativeP2pSource::from_record(client.clone(), record) {
                 sources.push(Arc::new(source));
             }
             if let Some(source) = DeclarativeMarketSource::from_record(client.clone(), record) {
                 market_sources.push(Arc::new(source));
             }
-            if let Some(source) = WorkflowP2pSource::from_record(record) {
+            if let Some(source) = WorkflowP2pSource::from_record(
+                record,
+                config.playwright_chromium_executable.clone(),
+                config.p2p_workflow_debug_screenshot.clone(),
+            ) {
                 sources.push(Arc::new(source));
             }
         }
@@ -350,6 +367,8 @@ impl P2pSearchService {
             market_sources: market_sources.into(),
             default_assets: default_assets.into(),
             networks,
+            route_providers: route_providers.into(),
+            quote_semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_PROVIDER_QUOTES)),
         })
     }
 
@@ -390,12 +409,23 @@ impl P2pSearchService {
             ]
             .into(),
             networks: NetworkCatalog::test_default(),
+            route_providers: Vec::new().into(),
+            quote_semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_PROVIDER_QUOTES)),
         }
     }
 
     #[cfg(test)]
     fn with_cache_ttl(mut self, cache_ttl: Duration) -> Self {
         self.cache_ttl = cache_ttl;
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_route_providers(
+        mut self,
+        providers: Vec<Arc<dyn PublicRouteProvider>>,
+    ) -> Self {
+        self.route_providers = providers.into();
         self
     }
 
@@ -428,6 +458,34 @@ impl P2pSearchService {
     }
 
     async fn run_search(
+        &self,
+        query: P2pSearchQuery,
+        updates: Option<mpsc::Sender<P2pSearchResponse>>,
+    ) -> Result<P2pSearchResponse> {
+        let response = self.run_search_once(query.clone(), updates.clone()).await?;
+        if !response.offers.is_empty() {
+            return Ok(response);
+        }
+
+        let mut fallback_query = query;
+        if fallback_query.payment_method.is_some() {
+            fallback_query.payment_method = None;
+            let response = self
+                .run_search_once(fallback_query.clone(), updates.clone())
+                .await?;
+            if !response.offers.is_empty() {
+                return Ok(response);
+            }
+        }
+        if fallback_query.min_orders.is_some() || fallback_query.min_completion_rate.is_some() {
+            fallback_query.min_orders = None;
+            fallback_query.min_completion_rate = None;
+            return self.run_search_once(fallback_query, updates).await;
+        }
+        Ok(response)
+    }
+
+    async fn run_search_once(
         &self,
         query: P2pSearchQuery,
         updates: Option<mpsc::Sender<P2pSearchResponse>>,
@@ -517,7 +575,7 @@ impl P2pSearchService {
             }
         }
 
-        let response = build_search_response(query, &collected_offers, sources, false);
+        let response = build_search_response(query.clone(), &collected_offers, sources, false);
         if response.sources.iter().any(|source| source.ok) {
             self.cache_response(cache_key, response.clone());
         }

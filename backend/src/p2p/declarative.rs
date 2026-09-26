@@ -3,8 +3,10 @@ use std::time::Duration;
 
 use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
+use hmac::{Hmac, Mac};
 use reqwest::{Client, Method};
 use serde_json::{Number, Value};
+use sha2::Sha512;
 
 use crate::p2p::service::{
     Advertiser, P2pOffer, P2pOfferMarket, P2pSearchQuery, P2pSide, P2pSource,
@@ -304,6 +306,7 @@ impl P2pSource for DeclarativeP2pSource {
             &self.config.method,
             &self.config.endpoint,
             &self.config.headers,
+            self.config.auth.as_ref(),
             &operation.query,
             operation.request_json.as_deref(),
             &values,
@@ -374,6 +377,7 @@ impl CryptoMarketSource for DeclarativeMarketSource {
             &self.config.method,
             &self.config.endpoint,
             &self.config.headers,
+            None,
             &self.config.query,
             self.config.request_json.as_deref(),
             &values,
@@ -417,6 +421,7 @@ async fn send_json(
     method: &str,
     endpoint: &str,
     headers: &BTreeMap<String, String>,
+    auth: Option<&crate::provider_adapter::HmacAuthConfig>,
     query: &BTreeMap<String, String>,
     request_json: Option<&str>,
     values: &TemplateValues<'_>,
@@ -440,11 +445,48 @@ async fn send_json(
             .collect::<Vec<_>>();
         request = request.query(&query);
     }
+    let mut request_body = None;
     if let Some(template) = request_json {
         let mut body: Value = serde_json::from_str(template)
             .with_context(|| format!("invalid request template for {source}"))?;
         render_request_json(&mut body, values)?;
         request = request.json(&body);
+        request_body = Some(body);
+    }
+    if let Some(auth) = auth {
+        let public_key = std::env::var(&auth.public_key_env).with_context(|| {
+            format!(
+                "{source} requires environment variable `{}`",
+                auth.public_key_env
+            )
+        })?;
+        let private_key = std::env::var(&auth.private_key_env).with_context(|| {
+            format!(
+                "{source} requires environment variable `{}`",
+                auth.private_key_env
+            )
+        })?;
+        let timestamp = chrono::Utc::now().timestamp().to_string();
+        let body = request_body
+            .as_ref()
+            .map(serde_json::to_vec)
+            .transpose()
+            .context("failed to serialize authenticated request body")?
+            .unwrap_or_default();
+        let mut mac = Hmac::<Sha512>::new_from_slice(private_key.as_bytes())
+            .map_err(|_| anyhow!("invalid HMAC key for {source}"))?;
+        mac.update(timestamp.as_bytes());
+        mac.update(&body);
+        let signature = mac
+            .finalize()
+            .into_bytes()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        request = request
+            .header(&auth.public_key_header, public_key)
+            .header(&auth.timestamp_header, timestamp)
+            .header(&auth.signature_header, signature);
     }
     let response = request
         .send()

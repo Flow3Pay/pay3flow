@@ -43,6 +43,22 @@ normalized to uppercase, duplicates are removed, and empty bank names are
 ignored. A file with only these sections is visible in the catalog but is not
 searched for live quotes.
 
+### Fee metadata
+
+Catalog-only or quote-based venues may describe their fee model with a shared
+`[fees]` section:
+
+```toml
+[fees]
+kind = "quote_dependent"
+description = "Fees are included in the live quote and can vary by execution."
+docs_url = "https://provider.example/docs/fees"
+```
+
+The metadata is returned by `GET /api/providers` as `fee_model`. It is
+descriptive only; a live adapter must provide the actual fee for a specific
+quote. Do not encode a fixed percentage unless the provider guarantees one.
+
 ## Browser workflow
 
 Use `[workflow]` when the rate is calculated by an interactive page. Describe
@@ -129,13 +145,11 @@ decimal comma and spaces as grouping separators are supported.
 `navigation_retries` is useful for SPAs whose JavaScript chunks occasionally
 fail during the first navigation. TLS verification remains enabled. In the
 provided Docker image Chromium is installed and
-`PLAYWRIGHT_CHROMIUM_EXECUTABLE` is configured automatically. The image also
+`playwright_chromium_executable` is configured in `config.toml`. The image also
 copies the Playwright Node driver from the build stage and exposes it through
 `PLAYWRIGHT_DRIVER_PATH`; both the driver and browser are required. For local
-runs, point the Chromium variable to a compatible binary and, when the driver
-is stored outside Cargo's build directory, set `PLAYWRIGHT_DRIVER_PATH` to its
-directory. Set
-`P2P_WORKFLOW_DEBUG_SCREENSHOT` to a file path to save a screenshot when a
+runs, set `playwright_chromium_executable` to a compatible binary. Set
+`p2p_workflow_debug_screenshot` to a file path to save a screenshot when a
 workflow step fails.
 
 ## HTTP/JSON adapter

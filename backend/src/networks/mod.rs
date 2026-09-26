@@ -39,6 +39,19 @@ impl NetworkCatalog {
         })
     }
 
+    pub fn compatible_networks(&self, currency: &str) -> Vec<CryptoNetwork> {
+        self.0
+            .iter()
+            .filter(|network| {
+                network
+                    .currencies
+                    .iter()
+                    .any(|asset| asset.eq_ignore_ascii_case(currency.trim()))
+            })
+            .cloned()
+            .collect()
+    }
+
     pub fn assets(&self) -> Vec<String> {
         self.0
             .iter()

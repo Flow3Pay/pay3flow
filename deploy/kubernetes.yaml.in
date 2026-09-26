@@ -23,6 +23,56 @@ data:
   IMAGE_TAG: "$PAY3FLOW_IMAGE_TAG"
   DATABASE_MODE: "$PAY3FLOW_DATABASE_MODE"
   INGRESS_HOST: "$PAY3FLOW_INGRESS_HOST"
+  config.toml: |
+    log_filter = "info"
+    http_addr = "0.0.0.0:8080"
+    ap_origin = "$PAY3FLOW_AP_ORIGIN"
+    ap_handle = "$PAY3FLOW_AP_HANDLE"
+    ap_key_path = "/app/data/ap-key.pem"
+    ap_require_signatures = $PAY3FLOW_AP_REQUIRE_SIGNATURES
+    fmatch_inbox = "$PAY3FLOW_FMATCH_INBOX"
+    fmatch_actor_id = "$PAY3FLOW_FMATCH_ACTOR_ID"
+    fx_source = "$PAY3FLOW_FX_SOURCE"
+    p2p_search_enabled = $PAY3FLOW_P2P_SEARCH_ENABLED
+    near_intents_url = "https://1click.chaindefuser.com"
+    near_intents_refresh_secs = 300
+    route_max_depth = 4
+    route_source_fiats = ["AMD", "RUB"]
+    route_p2p_assets = ["USDT", "USDC", "XRP"]
+    route_intent_assets = ["USDT@tron", "USDT@avalanche-c", "USDT@solana", "USDC@solana", "XRP@xrpl"]
+    route_withdrawals = []
+    cow_api_urls = ["ethereum=https://api.cow.fi/mainnet"]
+    cow_tokens = [
+      "ethereum:USDT=0xdAC17F958D2ee523a2206206994597C13D831ec7",
+      "ethereum:USDC=0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    ]
+    cow_quote_address = "0x0000000000000000000000000000000000000001"
+    near_intents_quote_recipient = "So11111111111111111111111111111111111111112"
+    near_intents_quote_refund_to = "0x8ba1f109551bD432803012645Ac136ddd64DBA72"
+    # Public dry-quote addresses selected by origin/destination network.
+    # Executable swaps must use the user's wallet addresses.
+    near_intents_quote_recipients = [
+      "solana=So11111111111111111111111111111111111111112",
+      "bitcoin=bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+      "near=wrap.near",
+      "ethereum=0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+      "avalanche-c=0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+      "arbitrum-one=0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+      "bnb-smart-chain=0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+      "optimism=0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+      "polygon-pos=0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+    ]
+    near_intents_quote_refunds = [
+      "solana=So11111111111111111111111111111111111111112",
+      "bitcoin=bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+      "near=wrap.near",
+      "ethereum=0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+      "avalanche-c=0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+      "arbitrum-one=0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+      "bnb-smart-chain=0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+      "optimism=0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+      "polygon-pos=0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+    ]
 ---
 apiVersion: v1
 kind: Secret
@@ -37,6 +87,7 @@ stringData:
   JWT_SECRET: "$PAY3FLOW_JWT_SECRET"
   SECRETS_KEY: "$PAY3FLOW_SECRETS_KEY"
   ADMIN_TOKEN: "$PAY3FLOW_ADMIN_TOKEN"
+  NEAR_INTENTS_JWT: "$PAY3FLOW_NEAR_INTENTS_JWT"
 ---
 apiVersion: batch/v1
 kind: Job
@@ -208,36 +259,6 @@ spec:
             - name: http
               containerPort: 8080
           env:
-            - name: RUST_LOG
-              value: info
-            - name: HTTP_ADDR
-              value: 0.0.0.0:8080
-            - name: AP_ORIGIN
-              value: "$PAY3FLOW_AP_ORIGIN"
-            - name: AP_HANDLE
-              value: "$PAY3FLOW_AP_HANDLE"
-            - name: AP_KEY_PATH
-              value: /app/data/ap-key.pem
-            - name: AP_REQUIRE_SIGNATURES
-              value: "$PAY3FLOW_AP_REQUIRE_SIGNATURES"
-            - name: FMATCH_INBOX
-              value: "$PAY3FLOW_FMATCH_INBOX"
-            - name: FMATCH_ACTOR_ID
-              value: "$PAY3FLOW_FMATCH_ACTOR_ID"
-            - name: FX_SOURCE
-              value: "$PAY3FLOW_FX_SOURCE"
-            - name: P2P_SEARCH_ENABLED
-              value: "$PAY3FLOW_P2P_SEARCH_ENABLED"
-            - name: P2P_BINANCE_ENABLED
-              value: "$PAY3FLOW_P2P_BINANCE_ENABLED"
-            - name: P2P_BYBIT_ENABLED
-              value: "$PAY3FLOW_P2P_BYBIT_ENABLED"
-            - name: P2P_OKX_ENABLED
-              value: "$PAY3FLOW_P2P_OKX_ENABLED"
-            - name: P2P_BITGET_ENABLED
-              value: "$PAY3FLOW_P2P_BITGET_ENABLED"
-            - name: P2P_RAPIRA_ENABLED
-              value: "$PAY3FLOW_P2P_RAPIRA_ENABLED"
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
@@ -263,6 +284,11 @@ spec:
                 secretKeyRef:
                   name: pay3flow-secrets
                   key: ADMIN_TOKEN
+            - name: NEAR_INTENTS_JWT
+              valueFrom:
+                secretKeyRef:
+                  name: pay3flow-secrets
+                  key: NEAR_INTENTS_JWT
           readinessProbe:
             httpGet:
               path: /health
@@ -278,9 +304,15 @@ spec:
           volumeMounts:
             - name: backend-data
               mountPath: /app/data
+            - name: backend-config
+              mountPath: /app/config.toml
+              subPath: config.toml
       volumes:
         - name: backend-data
           emptyDir: {}
+        - name: backend-config
+          configMap:
+            name: pay3flow-config
 ---
 apiVersion: v1
 kind: Service
