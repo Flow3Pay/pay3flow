@@ -1820,15 +1820,15 @@ fn route_provider_names(route: &P2pRoute) -> Vec<&str> {
 
 fn sort_routes(routes: &mut [P2pRoute]) {
     routes.sort_by(|left, right| {
-        right
-            .payment_methods_verified
-            .cmp(&left.payment_methods_verified)
-            .then_with(|| right.same_venue.cmp(&left.same_venue))
+        route_target(right)
+            .partial_cmp(&route_target(left))
+            .unwrap_or(Ordering::Equal)
             .then_with(|| {
-                route_target(right)
-                    .partial_cmp(&route_target(left))
-                    .unwrap_or(Ordering::Equal)
+                right
+                    .payment_methods_verified
+                    .cmp(&left.payment_methods_verified)
             })
+            .then_with(|| right.same_venue.cmp(&left.same_venue))
             .then_with(|| left.route_id.cmp(&right.route_id))
     });
 }
@@ -3506,7 +3506,7 @@ mod tests {
     }
 
     #[test]
-    fn route_quality_ranks_a_same_venue_route_before_a_better_payout() {
+    fn route_sort_prefers_higher_payout_before_route_quality() {
         let normalized = query(true);
         let mut discovered = Vec::new();
         compose_fiat_routes(
@@ -3531,8 +3531,37 @@ mod tests {
         let mut routes = vec![cross_venue, same_venue];
         sort_routes(&mut routes);
 
-        assert_eq!(routes[0].route_id, "same-venue");
-        assert_eq!(routes[1].route_id, "cross-venue");
+        assert_eq!(routes[0].route_id, "cross-venue");
+        assert_eq!(routes[1].route_id, "same-venue");
+    }
+
+    #[test]
+    fn route_sort_uses_quality_as_a_tie_breaker() {
+        let normalized = query(true);
+        let mut discovered = Vec::new();
+        compose_fiat_routes(
+            &mut discovered,
+            &normalized,
+            "USDT",
+            &[offer("bybit", P2pSide::BuyCrypto, "400", "1000", "200000")],
+            &[offer("bybit", P2pSide::SellCrypto, "80", "1000", "100000")],
+        );
+        let base = discovered.pop().expect("test route should be composed");
+
+        let mut unverified = base.clone();
+        unverified.route_id = "unverified".into();
+        unverified.payment_methods_verified = false;
+        unverified.target_amount = "20000.00".into();
+
+        let mut verified = base;
+        verified.route_id = "verified".into();
+        verified.target_amount = "20000.00".into();
+
+        let mut routes = vec![unverified, verified];
+        sort_routes(&mut routes);
+
+        assert_eq!(routes[0].route_id, "verified");
+        assert_eq!(routes[1].route_id, "unverified");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
