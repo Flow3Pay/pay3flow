@@ -15,7 +15,7 @@
   type P2pSourceOption = { id: P2pSource; label: string; iconUrl: string; searchable: boolean; searchMode: ProviderSearchMode; feeDescription?: string };
   const INITIAL_ROUTE_BATCH_SIZE = 100;
   const ROUTE_BATCH_SIZE = 100;
-  const ROUTE_BATCH_DELAY_MS = 50;
+  const ROUTE_BATCH_DELAY_MS = 10;
   const INTERMEDIARY_ASSETS = CRYPTO_ASSETS.map(([currency]) => currency);
   const BANK_METHODS = PAYMENT_METHODS.filter((method) => method.kind === "bank");
   const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", sources: "pay3flow.exchange.p2p-sources", knownSources: "pay3flow.exchange.known-p2p-sources", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", sourceNetwork: "pay3flow.exchange.source-network", targetNetwork: "pay3flow.exchange.target-network", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets", anonymousId: "pay3flow.reputation.anonymous-id" };
@@ -69,6 +69,7 @@
   let routeRenderTimer: number | undefined;
   let routeRenderFrame: number | undefined;
   let routeRenderVersion = 0;
+  let revealedRouteCount = 0;
   let renderingRoutes = false;
   let initialSearchReady = false;
   let paymentPickerComponent: typeof import("./PaymentMethodPicker.svelte").default | null = null;
@@ -216,13 +217,11 @@
   }
 
   function renderRoutesProgressively(nextRoutes: RouteCandidate[]) {
-    const preservedCount = routes.length > 0 && routes.every((route, index) => route.route_id === nextRoutes[index]?.route_id)
-      ? routes.length
-      : 0;
     cancelRouteRendering();
     const version = routeRenderVersion;
-    const initialCount = Math.min(Math.max(INITIAL_ROUTE_BATCH_SIZE, preservedCount), nextRoutes.length);
+    const initialCount = Math.min(Math.max(INITIAL_ROUTE_BATCH_SIZE, revealedRouteCount), nextRoutes.length);
     displayRoutes(nextRoutes.slice(0, initialCount));
+    revealedRouteCount = initialCount;
     renderingRoutes = initialCount < nextRoutes.length;
     if (!renderingRoutes) return;
 
@@ -236,8 +235,9 @@
     const revealNextBatch = () => {
       if (version !== routeRenderVersion) return;
       routeRenderTimer = undefined;
-      const nextCount = Math.min(routes.length + ROUTE_BATCH_SIZE, nextRoutes.length);
+      const nextCount = Math.min(revealedRouteCount + ROUTE_BATCH_SIZE, nextRoutes.length);
       displayRoutes(nextRoutes.slice(0, nextCount));
+      revealedRouteCount = nextCount;
       renderingRoutes = nextCount < nextRoutes.length;
       if (renderingRoutes) scheduleNextBatch(revealNextBatch);
     };
@@ -260,7 +260,7 @@
       .filter((source, index, sources) => source && sources.indexOf(source) === index);
     foundVenueIds = [...new Set([...foundVenueIds, ...newlyFoundVenueIds])];
     foundVenues = foundVenueOptions();
-    routesFound = response.routes_found ?? nextRoutes.length;
+    routesFound = Math.max(routesFound, response.routes_found ?? nextRoutes.length);
     renderRoutesProgressively(nextRoutes);
     const bestRoute = nextRoutes.find((route) => route.is_current_best) ?? nextRoutes[0] ?? null;
     if (selectionPinnedByUser) {
@@ -349,7 +349,7 @@
     if (seconds && updatedAt && validAmount) refreshTimer = window.setInterval(startSearch, seconds * 1000);
   }
   function resetResults() {
-    controller?.abort(); cancelRouteRendering(); displayRoutes([]); routesFound = 0; selected = null; selectionPinnedByUser = false; instructionsRoute = null; lastUpdatedAt = null; searching = false; awaitingFirstRoute = false; foundVenueIds = []; foundVenues = []; error = null;
+    controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; displayRoutes([]); routesFound = 0; selected = null; selectionPinnedByUser = false; instructionsRoute = null; lastUpdatedAt = null; searching = false; awaitingFirstRoute = false; foundVenueIds = []; foundVenues = []; error = null;
     if (refreshTimer) window.clearInterval(refreshTimer);
   }
   function updateAmount(value: string) { initialSearchReady = true; amount = normalizeAmount(value); resetResults(); }
@@ -422,14 +422,14 @@
       error = `Choose different networks for ${selectedSourceCurrency}; the same asset on the same network is not a swap route.`;
       return;
     }
-    controller?.abort(); cancelRouteRendering(); controller = new AbortController(); const signal = controller.signal; const currentRequest = ++requestId; searching = true; awaitingFirstRoute = true; routesFound = 0; foundVenueIds = []; foundVenues = []; error = null;
+    controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; controller = new AbortController(); const signal = controller.signal; const currentRequest = ++requestId; searching = true; awaitingFirstRoute = true; routesFound = 0; foundVenueIds = []; foundVenues = []; error = null;
     try {
       const liveQuery = { sourceFiat: selectedSourceCurrency, targetFiat: selectedTargetCurrency, sourceAmount: value, intermediaryAssets: !sourceWallet && !targetWallet && selectedIntermediaryAssets.length ? selectedIntermediaryAssets : undefined, sourceNetwork: sourceWallet ? sourceNetwork?.id : undefined, targetNetwork: targetWallet ? targetNetwork?.id : undefined, sourcePaymentMethod: sourceWallet ? undefined : sourceMethod.p2pQuery, targetPaymentMethod: targetWallet ? undefined : targetMethod.p2pQuery, sources: selectedSources, allowCrossVenue: true, limit: 40 };
       let response: P2pRouteSearchResponse;
       try {
         response = await streamP2pRoutes(liveQuery, anonymousId, signal, (event) => {
           if (currentRequest !== requestId) return;
-          if (event.type === "search_started") routesFound = event.routes_found;
+          if (event.type === "search_started") routesFound = Math.max(routesFound, event.routes_found);
           if (event.type === "routes_updated") {
             applySearchResponse(event);
             if (event.routes.length > 0) awaitingFirstRoute = false;

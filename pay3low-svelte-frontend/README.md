@@ -30,10 +30,12 @@ snapshot replaces its cards.
 
 Snapshots containing up to 100 routes are rendered in one update. Larger
 snapshots are rendered in batches of 100 routes. After each batch, the
-frontend yields for a browser animation frame and waits 50 ms before rendering
-the next batch. Starting a newer search cancels any pending frame or timer from
-the older snapshot. This keeps large DOM updates responsive without delaying
-normal search results.
+frontend yields for a browser animation frame and waits 10 ms before rendering
+the next batch. A reordered progressive snapshot keeps the number of cards
+already revealed instead of restarting at 100, and the found-route counter is
+monotonic for the duration of a search. Starting a newer search cancels any
+pending frame or timer from the older snapshot. This keeps large DOM updates
+responsive without delaying normal search results.
 
 ## Verification and production build
 

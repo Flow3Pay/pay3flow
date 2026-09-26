@@ -588,7 +588,7 @@ test("public P2P route search → open step-by-step instructions", async ({ page
     (window as Window & { __routeRenderSamples?: Array<{ count: number; at: number }> }).__routeRenderSamples ?? [],
   );
   expect(routeRenderSamples.map((sample) => sample.count)).toEqual([100, 101]);
-  expect(routeRenderSamples[1].at - routeRenderSamples[0].at).toBeGreaterThanOrEqual(40);
+  expect(routeRenderSamples[1].at - routeRenderSamples[0].at).toBeGreaterThanOrEqual(5);
   await expect(page.getByTestId("complete-route").first()).toContainText("Used 12.4K times");
   await expect(page.getByTestId("complete-route").first()).toContainText("20350 RUB");
   const bestRoute = page.getByTestId("complete-route").first();
@@ -759,10 +759,15 @@ test("saved provider choices adopt new providers and retain later deselections",
     await expect(picker.getByRole("button", { name })).toHaveAttribute("aria-pressed", "true");
   }
   const symbiosis = picker.getByRole("button", { name: "Symbiosis" });
+  await expect(symbiosis.locator("img")).toHaveAttribute("src", "/icons/venues/symbiosis.png");
   await symbiosis.click();
   await expect(symbiosis).toHaveAttribute("aria-pressed", "false");
 
+  const providersReloaded = page.waitForResponse((response) =>
+    response.url().endsWith("/api/providers") && response.ok(),
+  );
   await page.reload();
+  await providersReloaded;
   await page.getByRole("button", { name: "Choose exchanges" }).click();
   await expect(page.getByRole("dialog", { name: "Exchange settings" }).getByRole("button", { name: "Symbiosis" }))
     .toHaveAttribute("aria-pressed", "false");
@@ -931,6 +936,110 @@ test("search venues announce providers reported by route statuses", async ({ pag
   await expect(refreshButton).toBeEnabled();
   await expect(searchingVenues).toHaveCount(0);
   await expect(page.getByTestId("complete-route").nth(1)).toHaveClass(/selected/);
+});
+
+test("reordered progressive snapshots do not restart card rendering at 100", async ({ page }) => {
+  await mockBackend(page);
+
+  let sendFirstSnapshot: (() => void) | undefined;
+  let sendReorderedSnapshot: (() => void) | undefined;
+  let finishSearch: (() => void) | undefined;
+  await page.routeWebSocket(/\/ws\/p2p\/routes$/, (socket) => {
+    socket.onMessage(() => {
+      const offer = (adId: string) => ({
+        source: "bybit",
+        ad_id: adId,
+        fiat: "AMD",
+        asset: "USDT",
+        price: "1",
+        available_asset: "1000000",
+        min_fiat: "1000",
+        max_fiat: "10000000",
+        payment_methods: ["Bank transfer"],
+        pay_time_limit_minutes: 15,
+        advertiser: {
+          id: `masked-${adId}`,
+          nickname: "bybit-merchant",
+          user_type: "merchant",
+          is_merchant: true,
+          is_verified: true,
+          completed_orders_30d: 300,
+          completion_rate_30d: 0.99,
+        },
+        source_url: `https://example.com/${adId}`,
+      });
+      const route = (index: number) => ({
+        route_id: `route-progressive-${index}`,
+        rank: index + 1,
+        asset: "USDT",
+        entry_network: "internal",
+        source_fiat: "AMD",
+        source_amount: "100000.00",
+        acquired_asset_amount: "253.16",
+        target_fiat: "RUB",
+        target_amount: String(20_500 - index),
+        effective_rate: "0.205",
+        same_venue: true,
+        requires_asset_transfer: false,
+        transfer_fee_included: true,
+        route_kind: "fiat_to_fiat",
+        payment_methods_verified: true,
+        entry_offer: offer(`entry-${index}`),
+        exit_offer: { ...offer(`exit-${index}`), fiat: "RUB" },
+        warnings: [],
+      });
+      const firstRoutes = Array.from({ length: 101 }, (_, index) => route(index));
+      const reorderedRoutes = [
+        ...firstRoutes.slice().reverse(),
+        ...Array.from({ length: 100 }, (_, index) => route(index + firstRoutes.length)),
+      ];
+      const response = (routes: ReturnType<typeof route>[], routesFound: number) => ({
+        search_id: "00000000-0000-4000-8000-000000000108",
+        routes_found: routesFound,
+        searched_at: "2026-09-26T10:00:00Z",
+        source_fiat: "AMD",
+        target_fiat: "RUB",
+        source_amount: "100000.00",
+        assets_searched: ["USDT"],
+        can_exchange_to_target: true,
+        routes,
+      });
+      const firstResponse = response(firstRoutes, 250);
+      const reorderedResponse = response(reorderedRoutes, 201);
+
+      socket.send(JSON.stringify({ type: "search_started", search_id: firstResponse.search_id, routes_found: 0 }));
+      sendFirstSnapshot = () => socket.send(JSON.stringify({ type: "routes_updated", ...firstResponse }));
+      sendReorderedSnapshot = () => socket.send(JSON.stringify({ type: "routes_updated", ...reorderedResponse }));
+      finishSearch = () => socket.send(JSON.stringify({ type: "search_finished", ...reorderedResponse }));
+    });
+  });
+
+  await openApp(page);
+  await page.getByLabel("Amount to send").fill("100000");
+  await page.getByTestId("start-search").click();
+  await expect.poll(() => Boolean(sendFirstSnapshot)).toBe(true);
+
+  sendFirstSnapshot?.();
+  await expect(page.getByTestId("complete-route")).toHaveCount(101);
+  await expect(page.getByText("250 routes found")).toBeVisible();
+  await page.evaluate(() => {
+    const browserWindow = window as Window & { __routeCountSamples?: number[] };
+    browserWindow.__routeCountSamples = [];
+    new MutationObserver(() => {
+      browserWindow.__routeCountSamples?.push(document.querySelectorAll('[data-testid="complete-route"]').length);
+    }).observe(document.querySelector("#routes")!, { childList: true, subtree: true });
+  });
+
+  sendReorderedSnapshot?.();
+  await expect(page.getByTestId("complete-route")).toHaveCount(201);
+  await expect(page.getByText("250 routes found")).toBeVisible();
+  const counts = await page.evaluate(() =>
+    (window as Window & { __routeCountSamples?: number[] }).__routeCountSamples ?? [],
+  );
+  expect(counts.length).toBeGreaterThan(0);
+  expect(Math.min(...counts)).toBeGreaterThanOrEqual(101);
+
+  finishSearch?.();
 });
 
 test("cryptocurrency search binds the selected asset to its network", async ({ page }) => {

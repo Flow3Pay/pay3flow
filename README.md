@@ -99,8 +99,10 @@ flowchart LR
   matching offers but those offers did not produce a ranked route.
 - Route cards are rendered immediately for responses of up to 100 items. For
   larger snapshots, the frontend renders 100 cards per batch, waits for a
-  browser paint and then 50 ms before the next batch. A newer search cancels
-  the remaining batches from the previous snapshot.
+  browser paint and then 10 ms before the next batch. Progressive snapshots
+  preserve the number of cards already revealed even when ranking changes, so
+  neither the list nor its found-route counter collapses and grows again. A
+  newer search cancels the remaining batches from the previous snapshot.
 - Public P2P ads are protected by price-deviation filtering. Direct exchanger
   quotes such as Whitebird and SkyLabs are retained as independent quotes
   rather than compared as if they were P2P ads.
