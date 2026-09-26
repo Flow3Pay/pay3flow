@@ -94,6 +94,13 @@ flowchart LR
   amount and same-venue execution.
 - The best route remains selected while results arrive unless the user has
   explicitly selected another route.
+- Venue icons summarize successful source statuses, not only cards that made
+  the final ranking. An icon therefore remains visible when a venue returned
+  matching offers but those offers did not produce a ranked route.
+- Route cards are rendered immediately for responses of up to 100 items. For
+  larger snapshots, the frontend renders 100 cards per batch, waits for a
+  browser paint and then 50 ms before the next batch. A newer search cancels
+  the remaining batches from the previous snapshot.
 - Public P2P ads are protected by price-deviation filtering. Direct exchanger
   quotes such as Whitebird and SkyLabs are retained as independent quotes
   rather than compared as if they were P2P ads.

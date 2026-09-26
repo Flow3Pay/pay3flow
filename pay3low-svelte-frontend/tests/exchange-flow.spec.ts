@@ -19,7 +19,7 @@ async function openApp(page: Page) {
     .not.toBe("none");
 }
 
-async function mockBackend(page: Page, options: { includeNewProviders?: boolean } = {}) {
+async function mockBackend(page: Page, options: { includeNewProviders?: boolean; routeCount?: number } = {}) {
   await page.route("http://localhost:8080/api/**", async (route) => {
     const url = new URL(route.request().url());
     const method = route.request().method();
@@ -461,7 +461,7 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean 
       expect(url.searchParams.get("source_fiat")).toBe("AMD");
       expect(url.searchParams.get("target_fiat")).toBe("RUB");
       expect(url.searchParams.get("allow_cross_venue")).toBe("true");
-      const routes = Array.from({ length: 12 }, (_, index) => {
+      const routes = Array.from({ length: options.routeCount ?? 12 }, (_, index) => {
         const best = index === 0;
         const asset = index % 2 === 0 ? "USDT" : "USDC";
         const venue = index % 2 === 0 ? "binance" : "bybit";
@@ -494,7 +494,7 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean 
       });
       return json({
         search_id: "00000000-0000-4000-8000-000000000103",
-        routes_found: 24,
+        routes_found: options.routeCount ?? 24,
         searched_at: "2026-09-19T10:00:00Z",
         source_fiat: "AMD",
         target_fiat: "RUB",
@@ -509,7 +509,7 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean 
 }
 
 test("public P2P route search → open step-by-step instructions", async ({ page }) => {
-  await mockBackend(page);
+  await mockBackend(page, { routeCount: 101 });
   await openApp(page);
 
   const backgroundPattern = await expect
@@ -568,13 +568,27 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await targetPicker.getByRole("option", { name: /Alfa-Bank/ }).click();
   await expect(page.getByRole("button", { name: "Select recipient bank: Alfa-Bank" })).toBeVisible();
 
+  await page.evaluate(() => {
+    const browserWindow = window as Window & { __routeRenderSamples?: Array<{ count: number; at: number }> };
+    browserWindow.__routeRenderSamples = [];
+    let previousCount = 0;
+    new MutationObserver(() => {
+      const count = document.querySelectorAll('[data-testid="complete-route"]').length;
+      if (count > 0 && count !== previousCount) {
+        browserWindow.__routeRenderSamples?.push({ count, at: performance.now() });
+        previousCount = count;
+      }
+    }).observe(document.body, { childList: true, subtree: true });
+  });
   await amountInput.fill("100000");
   await page.getByTestId("start-search").click();
-  await expect(page.getByTestId("route-render-progress")).toContainText("Showing 6 now");
-  await expect(page.getByTestId("complete-route")).toHaveCount(6);
-  await expect(page.getByTestId("complete-route")).toHaveCount(12);
-  await expect(page.getByText("24 routes found")).toBeVisible();
-  await expect(page.getByText("Showing top 12")).toBeVisible();
+  await expect(page.getByTestId("complete-route")).toHaveCount(101);
+  await expect(page.getByText("101 routes found")).toBeVisible();
+  const routeRenderSamples = await page.evaluate(() =>
+    (window as Window & { __routeRenderSamples?: Array<{ count: number; at: number }> }).__routeRenderSamples ?? [],
+  );
+  expect(routeRenderSamples.map((sample) => sample.count)).toEqual([100, 101]);
+  expect(routeRenderSamples[1].at - routeRenderSamples[0].at).toBeGreaterThanOrEqual(40);
   await expect(page.getByTestId("complete-route").first()).toContainText("Used 12.4K times");
   await expect(page.getByTestId("complete-route").first()).toContainText("20350 RUB");
   const bestRoute = page.getByTestId("complete-route").first();

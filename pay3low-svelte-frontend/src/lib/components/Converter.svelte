@@ -13,9 +13,9 @@
   type P2pSource = string;
   type ProviderSearchMode = "selectable" | "always_on" | "catalog_only";
   type P2pSourceOption = { id: P2pSource; label: string; iconUrl: string; searchable: boolean; searchMode: ProviderSearchMode; feeDescription?: string };
-  const INITIAL_ROUTE_BATCH_SIZE = 6;
-  const ROUTE_BATCH_SIZE = 6;
-  const ROUTE_BATCH_DELAY_MS = 150;
+  const INITIAL_ROUTE_BATCH_SIZE = 100;
+  const ROUTE_BATCH_SIZE = 100;
+  const ROUTE_BATCH_DELAY_MS = 50;
   const INTERMEDIARY_ASSETS = CRYPTO_ASSETS.map(([currency]) => currency);
   const BANK_METHODS = PAYMENT_METHODS.filter((method) => method.kind === "bank");
   const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", sources: "pay3flow.exchange.p2p-sources", knownSources: "pay3flow.exchange.known-p2p-sources", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", sourceNetwork: "pay3flow.exchange.source-network", targetNetwork: "pay3flow.exchange.target-network", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets", anonymousId: "pay3flow.reputation.anonymous-id" };
@@ -67,6 +67,7 @@
   let clockTimer: number | undefined;
   let initialSearchTimer: number | undefined;
   let routeRenderTimer: number | undefined;
+  let routeRenderFrame: number | undefined;
   let routeRenderVersion = 0;
   let renderingRoutes = false;
   let initialSearchReady = false;
@@ -204,8 +205,10 @@
   function cancelRouteRendering() {
     routeRenderVersion += 1;
     renderingRoutes = false;
-    if (routeRenderTimer) window.clearTimeout(routeRenderTimer);
+    if (routeRenderTimer !== undefined) window.clearTimeout(routeRenderTimer);
+    if (routeRenderFrame !== undefined) window.cancelAnimationFrame(routeRenderFrame);
     routeRenderTimer = undefined;
+    routeRenderFrame = undefined;
   }
 
   function displayRoutes(nextRoutes: RouteCandidate[]) {
@@ -223,16 +226,22 @@
     renderingRoutes = initialCount < nextRoutes.length;
     if (!renderingRoutes) return;
 
+    const scheduleNextBatch = (callback: () => void) => {
+      routeRenderFrame = window.requestAnimationFrame(() => {
+        routeRenderFrame = undefined;
+        if (version !== routeRenderVersion) return;
+        routeRenderTimer = window.setTimeout(callback, ROUTE_BATCH_DELAY_MS);
+      });
+    };
     const revealNextBatch = () => {
       if (version !== routeRenderVersion) return;
+      routeRenderTimer = undefined;
       const nextCount = Math.min(routes.length + ROUTE_BATCH_SIZE, nextRoutes.length);
       displayRoutes(nextRoutes.slice(0, nextCount));
       renderingRoutes = nextCount < nextRoutes.length;
-      routeRenderTimer = renderingRoutes
-        ? window.setTimeout(revealNextBatch, ROUTE_BATCH_DELAY_MS)
-        : undefined;
+      if (renderingRoutes) scheduleNextBatch(revealNextBatch);
     };
-    routeRenderTimer = window.setTimeout(revealNextBatch, ROUTE_BATCH_DELAY_MS);
+    scheduleNextBatch(revealNextBatch);
   }
 
   function applySearchResponse(response: P2pRouteSearchResponse) {
