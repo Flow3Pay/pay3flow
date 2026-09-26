@@ -19,7 +19,7 @@ async function openApp(page: Page) {
     .not.toBe("none");
 }
 
-async function mockBackend(page: Page) {
+async function mockBackend(page: Page, options: { includeNewProviders?: boolean } = {}) {
   await page.route("http://localhost:8080/api/**", async (route) => {
     const url = new URL(route.request().url());
     const method = route.request().method();
@@ -53,7 +53,7 @@ async function mockBackend(page: Page) {
       ]);
     }
     if (url.pathname === "/api/providers") {
-      return json([
+      const providers: Array<Record<string, unknown>> = [
         { slug: "binance", name: "Binance", side: "sell", source_url: "https://p2p.binance.com", currencies: ["AMD", "RUB"], banks: [], searchable: true },
         { slug: "bybit", name: "Bybit", side: "sell", source_url: "https://www.bybit.com/fiat/trade/otc", currencies: ["AMD", "RUB"], banks: [], searchable: true },
         { slug: "cifra-broker", name: "Cifra Markets Sell", side: "sell", source_url: "https://cifra.by/", currencies: ["BYN", "RUB", "USD"], banks: [], searchable: true },
@@ -64,7 +64,16 @@ async function mockBackend(page: Page) {
         { slug: "cow-swap", name: "CoW Protocol Live Sell", side: "sell", source_url: "https://swap.cow.fi", currencies: ["USDC", "USDT"], banks: [], searchable: true, search_mode: "selectable" },
         { slug: "near-intents", name: "NEAR 1Click Sell", side: "sell", source_url: "https://1click.chaindefuser.com", currencies: ["BTC", "USDT"], banks: [], searchable: true, search_mode: "selectable" },
         { slug: "id-pay", name: "ID Pay Live Sell", side: "sell", source_url: "https://id-pay.ru/", currencies: ["AMD", "RUB"], banks: [], searchable: true, search_mode: "selectable" },
-      ]);
+      ];
+      if (options.includeNewProviders) {
+        providers.push(
+          { slug: "bitcoin-center", name: "Bitcoin Center Buy", side: "buy", source_url: "https://www.bitcoincenter.am", currencies: ["AMD"], banks: ["Bank Transfer"], searchable: true, search_mode: "selectable" },
+          { slug: "bncex", name: "bncex Buy", side: "buy", source_url: "https://www.bncex.com/en", currencies: ["AMD"], banks: [], searchable: true, search_mode: "selectable" },
+          { slug: "skylabs", name: "SkyLabs Buy", side: "buy", source_url: "https://skylabs.world", currencies: ["AMD"], banks: [], searchable: true, search_mode: "selectable" },
+          { slug: "symbiosis", name: "Symbiosis Buy", side: "buy", source_url: "https://api.symbiosis.finance", currencies: [], banks: [], searchable: true, search_mode: "selectable" },
+        );
+      }
+      return json(providers);
     }
     if (url.pathname === "/api/service-executions/open" && method === "POST") {
       return json({
@@ -719,6 +728,28 @@ test("catalog and direct quote providers are separately selectable", async ({ pa
   await expect(idPay).toBeEnabled();
   await expect(idPay).toHaveAttribute("aria-pressed", "true");
   await expect(idPay.locator("img")).toHaveAttribute("src", "/icons/venues/id-pay.svg");
+});
+
+test("saved provider choices adopt new providers and retain later deselections", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("pay3flow.exchange.p2p-sources", "cow-swap");
+  });
+  await mockBackend(page, { includeNewProviders: true });
+  await openApp(page);
+
+  await page.getByRole("button", { name: "Choose exchanges" }).click();
+  const picker = page.getByRole("dialog", { name: "Exchange settings" });
+  for (const name of ["Bitcoin Center", "bncex", "SkyLabs", "Symbiosis"]) {
+    await expect(picker.getByRole("button", { name })).toHaveAttribute("aria-pressed", "true");
+  }
+  const symbiosis = picker.getByRole("button", { name: "Symbiosis" });
+  await symbiosis.click();
+  await expect(symbiosis).toHaveAttribute("aria-pressed", "false");
+
+  await page.reload();
+  await page.getByRole("button", { name: "Choose exchanges" }).click();
+  await expect(page.getByRole("dialog", { name: "Exchange settings" }).getByRole("button", { name: "Symbiosis" }))
+    .toHaveAttribute("aria-pressed", "false");
 });
 
 test("search venues bounce in the loader and refresh stops spinning after the first route", async ({ page }) => {

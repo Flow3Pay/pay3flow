@@ -167,15 +167,31 @@ struct NormalizedRouteQuery {
     sources: Option<String>,
 }
 
+#[derive(Clone)]
+struct RouteProviderCapability {
+    provider: Arc<dyn PublicRouteProvider>,
+    assets: HashSet<Asset>,
+}
+
+impl RouteProviderCapability {
+    fn supports(&self, from: &Asset, to: &Asset) -> bool {
+        self.assets.contains(from) && self.assets.contains(to)
+    }
+}
+
 async fn quote_all_provider_refs(
-    providers: Arc<[Arc<dyn PublicRouteProvider>]>,
+    providers: Arc<[RouteProviderCapability]>,
     from: Asset,
     to: Asset,
     amount: Amount,
     quote_semaphore: Arc<tokio::sync::Semaphore>,
 ) -> Vec<(String, PublicRouteQuote)> {
     let mut searches = FuturesUnordered::new();
-    for provider in providers.iter().cloned() {
+    for capability in providers
+        .iter()
+        .filter(|capability| capability.supports(&from, &to))
+    {
+        let provider = capability.provider.clone();
         let from = from.clone();
         let to = to.clone();
         let amount = amount.clone();
@@ -691,7 +707,11 @@ impl P2pSearchService {
 
     async fn search_provider_routes(&self, query: &NormalizedRouteQuery) -> Vec<P2pRoute> {
         let providers = self.route_providers_for_query(query);
-        let provider_assets = Self::provider_assets_for(&providers).await;
+        let capabilities = Self::provider_capabilities(&providers).await;
+        let provider_assets = capabilities
+            .iter()
+            .flat_map(|capability| capability.assets.iter().cloned())
+            .collect::<Vec<_>>();
         let source_networks = self.assets_on_network(
             &query.source_currency,
             query.source_network.as_deref(),
@@ -715,18 +735,21 @@ impl P2pSearchService {
                         .source_currency
                         .eq_ignore_ascii_case(&query.target_currency))
             })
-            .take(MAX_PROVIDER_NETWORK_PAIRS)
             .collect::<Vec<_>>();
         let mut searches = FuturesUnordered::new();
-        for (source, target) in network_pairs {
-            for provider in providers.iter().cloned() {
+        for capability in capabilities.iter() {
+            for (source, target) in network_pairs
+                .iter()
+                .filter(|(source, target)| capability.supports(source, target))
+                .take(MAX_PROVIDER_NETWORK_PAIRS)
+            {
                 let from = source.clone();
                 let to = target.clone();
                 let Ok(amount) = Amount::from_f64(query.source_amount, from.clone()) else {
                     continue;
                 };
                 searches.push(quote_provider_many(
-                    provider,
+                    capability.provider.clone(),
                     from,
                     to,
                     amount,
@@ -812,6 +835,19 @@ impl P2pSearchService {
 
     async fn provider_assets(&self) -> Vec<Asset> {
         Self::provider_assets_for(&self.route_providers).await
+    }
+
+    async fn provider_capabilities(
+        providers: &[Arc<dyn PublicRouteProvider>],
+    ) -> Arc<[RouteProviderCapability]> {
+        let mut capabilities = Vec::with_capacity(providers.len());
+        for provider in providers {
+            capabilities.push(RouteProviderCapability {
+                provider: provider.clone(),
+                assets: provider.supported_assets().await.into_iter().collect(),
+            });
+        }
+        capabilities.into()
     }
 
     async fn provider_assets_for(providers: &[Arc<dyn PublicRouteProvider>]) -> Vec<Asset> {
@@ -912,6 +948,7 @@ impl P2pSearchService {
         query: &NormalizedRouteQuery,
     ) -> Vec<P2pRoute> {
         let providers = self.route_providers_for_query(query);
+        let capabilities = Self::provider_capabilities(&providers).await;
         let provider_assets = Self::provider_assets_for(&providers).await;
         let target_assets = self.assets_on_network(
             &query.target_currency,
@@ -972,7 +1009,7 @@ impl P2pSearchService {
                         let Ok(amount) = Amount::from_f64(acquired, intermediary.clone()) else {
                             continue;
                         };
-                        let providers = providers.clone();
+                        let capabilities = capabilities.clone();
                         let intermediary = intermediary.clone();
                         let target = target.clone();
                         let offer = offer.clone();
@@ -980,7 +1017,7 @@ impl P2pSearchService {
                         let quote_semaphore = self.quote_semaphore.clone();
                         searches.push(async move {
                             quote_all_provider_refs(
-                                providers,
+                                capabilities,
                                 intermediary,
                                 target,
                                 amount,
@@ -1068,6 +1105,7 @@ impl P2pSearchService {
         query: &NormalizedRouteQuery,
     ) -> Vec<P2pRoute> {
         let providers = self.route_providers_for_query(query);
+        let capabilities = Self::provider_capabilities(&providers).await;
         let provider_assets = Self::provider_assets_for(&providers).await;
         let source_assets = self.assets_on_network(
             &query.source_currency,
@@ -1105,7 +1143,7 @@ impl P2pSearchService {
                 let Ok(amount) = Amount::from_f64(query.source_amount, source.clone()) else {
                     continue;
                 };
-                let providers = providers.clone();
+                let capabilities = capabilities.clone();
                 let source = source.clone();
                 let intermediary = intermediary.clone();
                 let exit_offers = exit_offers.clone();
@@ -1116,7 +1154,7 @@ impl P2pSearchService {
                 let quote_semaphore = self.quote_semaphore.clone();
                 searches.push(async move {
                     quote_all_provider_refs(
-                        providers,
+                        capabilities,
                         source,
                         intermediary,
                         amount,
@@ -1212,6 +1250,7 @@ impl P2pSearchService {
     async fn search_fiat_provider_routes(&self, query: &NormalizedRouteQuery) -> Vec<P2pRoute> {
         let mut searches = FuturesUnordered::new();
         let providers = self.route_providers_for_query(query);
+        let capabilities = Self::provider_capabilities(&providers).await;
         let provider_assets = Self::provider_assets_for(&providers).await;
         for asset in self.intermediary_assets(query).await {
             let source_networks = self.assets_on_network(
@@ -1235,7 +1274,6 @@ impl P2pSearchService {
                         .filter(move |target| source.location != target.location)
                         .map(move |target| (source.clone(), target.clone()))
                 })
-                .take(MAX_PROVIDER_NETWORK_PAIRS)
                 .collect::<Vec<_>>();
             if network_pairs.is_empty() {
                 continue;
@@ -1281,19 +1319,22 @@ impl P2pSearchService {
                 {
                     continue;
                 }
-                for (source_network, target_network) in &network_pairs {
-                    let from = source_network.clone();
-                    let to = target_network.clone();
-                    let Ok(amount) = Amount::from_f64(source_amount, from.clone()) else {
-                        continue;
-                    };
-                    for provider in providers.iter().cloned() {
-                        let entry_offer = entry_offer.clone();
-                        let exit_offers = exit_offers.clone();
+                for capability in capabilities.iter() {
+                    for (from, to) in network_pairs
+                        .iter()
+                        .filter(|(from, to)| capability.supports(from, to))
+                        .take(MAX_PROVIDER_NETWORK_PAIRS)
+                    {
                         let from = from.clone();
                         let to = to.clone();
+                        let Ok(amount) = Amount::from_f64(source_amount, from.clone()) else {
+                            continue;
+                        };
+                        let entry_offer = entry_offer.clone();
+                        let exit_offers = exit_offers.clone();
                         let amount = amount.clone();
                         let quote_semaphore = self.quote_semaphore.clone();
+                        let provider = capability.provider.clone();
                         searches.push(async move {
                             let (provider_name, quote) =
                                 quote_provider(provider, from, to, amount, quote_semaphore).await?;
@@ -2444,6 +2485,7 @@ fn fixed(value: f64, scale: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::time::Duration;
 
@@ -2504,6 +2546,43 @@ mod tests {
         name: &'static str,
         multiplier: f64,
         fee: &'static str,
+    }
+
+    struct RecordingRouteProvider {
+        name: &'static str,
+        assets: Vec<Asset>,
+        unsupported_calls: Arc<AtomicUsize>,
+    }
+
+    #[async_trait]
+    impl PublicRouteProvider for RecordingRouteProvider {
+        fn name(&self) -> &str {
+            self.name
+        }
+
+        async fn supported_assets(&self) -> Vec<Asset> {
+            self.assets.clone()
+        }
+
+        async fn quote(&self, from: Asset, to: Asset, amount: Amount) -> Result<PublicRouteQuote> {
+            if !self.assets.contains(&from) || !self.assets.contains(&to) {
+                self.unsupported_calls.fetch_add(1, Ordering::Relaxed);
+                anyhow::bail!("unsupported route dispatched to {}", self.name);
+            }
+            let output = amount.value.parse::<f64>().unwrap() * 0.99;
+            Ok(PublicRouteQuote {
+                provider: self.name.into(),
+                quote_id: None,
+                description: None,
+                from: from.clone(),
+                to: to.clone(),
+                input: amount,
+                output: Amount::from_f64(output, to.clone())?,
+                fees: Vec::new(),
+                expires_at: None,
+                path: vec![from, to],
+            })
+        }
     }
 
     #[async_trait]
@@ -2996,6 +3075,62 @@ mod tests {
             .await
             .unwrap();
         assert!(excluded.routes.is_empty());
+    }
+
+    #[tokio::test]
+    async fn dispatches_only_provider_supported_network_pairs() {
+        let ethereum_unsupported = Arc::new(AtomicUsize::new(0));
+        let tron_unsupported = Arc::new(AtomicUsize::new(0));
+        let service = P2pSearchService::with_sources(Vec::new(), Duration::from_secs(1))
+            .with_route_providers(vec![
+                Arc::new(RecordingRouteProvider {
+                    name: "record-ethereum",
+                    assets: ["USDT@ethereum", "USDC@ethereum"]
+                        .into_iter()
+                        .map(|asset| Asset::parse(asset).unwrap())
+                        .collect(),
+                    unsupported_calls: ethereum_unsupported.clone(),
+                }),
+                Arc::new(RecordingRouteProvider {
+                    name: "record-tron",
+                    assets: ["USDT@tron", "USDC@tron"]
+                        .into_iter()
+                        .map(|asset| Asset::parse(asset).unwrap())
+                        .collect(),
+                    unsupported_calls: tron_unsupported.clone(),
+                }),
+            ]);
+
+        let response = service
+            .search_routes(P2pRouteSearchQuery {
+                source_fiat: "USDT".into(),
+                target_fiat: "USDC".into(),
+                source_amount: 100.0,
+                source_network: None,
+                target_network: None,
+                bridge_fiat: None,
+                assets: None,
+                intermediary_assets: None,
+                source_payment_method: None,
+                target_payment_method: None,
+                merchant_only: None,
+                min_orders: None,
+                min_completion_rate: None,
+                allow_cross_venue: None,
+                max_price_deviation_bps: None,
+                limit: Some(20),
+                sources: Some("record-ethereum,record-tron".into()),
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(response.routes.len(), 2);
+        assert!(response
+            .routes
+            .iter()
+            .all(|route| route.source_network == route.target_network));
+        assert_eq!(ethereum_unsupported.load(Ordering::Relaxed), 0);
+        assert_eq!(tron_unsupported.load(Ordering::Relaxed), 0);
     }
 
     #[tokio::test]
