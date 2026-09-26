@@ -9,6 +9,7 @@ RUN mkdir -p backend/src && echo "fn main(){}" > backend/src/main.rs \
 COPY backend/src backend/src
 COPY backend/migrations backend/migrations
 COPY backend/build.rs backend/build.rs
+COPY backend/providerfile_code.rs backend/providerfile_code.rs
 COPY backend/providers backend/providers
 RUN touch backend/src/main.rs && cargo build --release --bin pay3flow-backend --manifest-path backend/Cargo.toml \
     && driver_dir="$(find /app/playwright-driver-cache -mindepth 1 -maxdepth 1 -type d -name 'playwright-*' -print -quit)" \
