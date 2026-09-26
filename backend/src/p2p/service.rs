@@ -346,7 +346,7 @@ impl P2pSearchService {
         config: &Config,
         networks: NetworkCatalog,
         records: Vec<crate::providers::ProviderAdapterRecord>,
-        route_providers: Vec<Arc<dyn PublicRouteProvider>>,
+        mut route_providers: Vec<Arc<dyn PublicRouteProvider>>,
         fiat_route_providers: Vec<Arc<dyn PublicFiatRouteProvider>>,
     ) -> Result<Self> {
         if records.iter().any(|record| record.workflow.is_some()) {
@@ -368,7 +368,9 @@ impl P2pSearchService {
         let mut market_sources: Vec<Arc<dyn CryptoMarketSource>> = Vec::new();
         for record in &records {
             if let Some(source) = BestChangeSource::from_record(client.clone(), record) {
-                sources.push(Arc::new(source));
+                let source = Arc::new(source);
+                sources.push(source.clone());
+                route_providers.push(source);
             }
             if let Some(source) = DeclarativeP2pSource::from_record(client.clone(), record) {
                 sources.push(Arc::new(source));
