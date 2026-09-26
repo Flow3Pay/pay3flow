@@ -129,6 +129,8 @@ pub struct P2pAdapterConfig {
     pub asset_codes: BTreeMap<String, String>,
     #[serde(default)]
     pub supported_assets: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub supported_fiats: Vec<String>,
     #[serde(default = "default_timeout_ms")]
     pub timeout_ms: u64,
     pub max_results: Option<usize>,
@@ -510,6 +512,13 @@ impl P2pAdapterConfig {
             context,
         )?;
         validate_headers(&self.headers, context)?;
+        for fiat in &self.supported_fiats {
+            if !valid_asset_code(fiat) {
+                return Err(format!(
+                    "{context}: adapter/p2p/supported_fiats contains invalid code `{fiat}`"
+                ));
+            }
+        }
         for asset in &self.supported_assets {
             if !valid_asset_code(asset) {
                 return Err(format!(

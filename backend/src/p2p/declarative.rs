@@ -45,6 +45,15 @@ impl DeclarativeP2pSource {
         .ok_or_else(|| anyhow!("{} does not support this operation", self.slug))
     }
 
+    fn supports_fiat(&self, fiat: &str) -> bool {
+        self.config.supported_fiats.is_empty()
+            || self
+                .config
+                .supported_fiats
+                .iter()
+                .any(|supported| supported.eq_ignore_ascii_case(fiat))
+    }
+
     fn template_values<'a>(
         &'a self,
         query: &'a P2pSearchQuery,
@@ -285,6 +294,9 @@ impl P2pSource for DeclarativeP2pSource {
     }
 
     async fn search(&self, query: &P2pSearchQuery) -> Result<Vec<P2pOffer>> {
+        if !self.supports_fiat(&query.fiat) {
+            return Ok(Vec::new());
+        }
         if !self.config.supported_assets.is_empty()
             && !self
                 .config
@@ -872,6 +884,21 @@ mod tests {
         DeclarativeP2pSource::from_record(Client::new(), &record).unwrap()
     }
 
+    fn bncex_source() -> DeclarativeP2pSource {
+        let document: toml::Value =
+            toml::from_str(include_str!("../../providers/bncex/Providerfile")).unwrap();
+        let adapters: ProviderAdapters =
+            document.get("adapter").unwrap().clone().try_into().unwrap();
+        let record = ProviderAdapterRecord {
+            slug: "bncex".into(),
+            source_url: "https://www.bncex.com/en".into(),
+            display_name: "bncex".into(),
+            config: Some(adapters),
+            workflow: None,
+        };
+        DeclarativeP2pSource::from_record(Client::new(), &record).unwrap()
+    }
+
     #[test]
     fn renders_typed_and_string_request_placeholders() {
         let mut value: Value = serde_json::from_str(
@@ -1011,6 +1038,124 @@ mod tests {
         assert!(offer.advertiser.is_verified);
         assert_eq!(offer.source_url, "https://whitebird.io/exchanger");
         assert!(!offer.source_url_is_exact);
+    }
+
+    #[test]
+    fn maps_bncex_buy_and_sell_quotes_as_direct_amd_offers() {
+        let source = bncex_source();
+        let query = P2pSearchQuery {
+            fiat: "AMD".into(),
+            asset: "USDT".into(),
+            side: P2pSide::BuyCrypto,
+            amount: Some(100_000.0),
+            payment_method: None,
+            merchant_only: None,
+            min_orders: None,
+            min_completion_rate: None,
+            limit: Some(1),
+            sources: Some("bncex".into()),
+        };
+        let buy: Value = serde_json::from_str(
+            r#"{"token":"USDT","type":"BUY_USDT","network":"TRC20","paymentMethod":"NON_CASH","amountAmd":100000,"amountUsdt":267.09143962316284,"rate":365.5,"networkFeeApplied":2.5,"exchangeFeePercentageApplied":1.5}"#,
+        )
+        .unwrap();
+        let buy_offer = source
+            .into_offer(
+                &buy,
+                &query,
+                source.config.buy.as_ref().unwrap().offer.as_ref().unwrap(),
+            )
+            .unwrap();
+
+        assert_eq!(buy_offer.market, P2pOfferMarket::DirectExchange);
+        assert_eq!(buy_offer.fiat, "AMD");
+        assert_eq!(buy_offer.asset, "USDT");
+        assert!((buy_offer.price.parse::<f64>().unwrap() - 374.403613).abs() < 0.000001);
+
+        let sell: Value = serde_json::from_str(
+            r#"{"token":"USDT","type":"SELL_USDT","network":"TRC20","paymentMethod":"NON_CASH","amountAmd":35306,"amountUsdt":100,"rate":361,"networkFeeApplied":2.5,"exchangeFeePercentageApplied":2.2}"#,
+        )
+        .unwrap();
+        let mut sell_query = query;
+        sell_query.side = P2pSide::SellCrypto;
+        let sell_offer = source
+            .into_offer(
+                &sell,
+                &sell_query,
+                source.config.sell.as_ref().unwrap().offer.as_ref().unwrap(),
+            )
+            .unwrap();
+
+        assert_eq!(sell_offer.market, P2pOfferMarket::DirectExchange);
+        assert_eq!(sell_offer.price, "353.06");
+        assert_eq!(sell_offer.source_url, "https://www.bncex.com/en");
+        assert!(sell_offer.advertiser.is_verified);
+    }
+
+    #[test]
+    fn renders_bncex_quote_request_from_its_providerfile() {
+        let source = bncex_source();
+        let query = P2pSearchQuery {
+            fiat: "AMD".into(),
+            asset: "USDC".into(),
+            side: P2pSide::BuyCrypto,
+            amount: Some(250_000.0),
+            payment_method: None,
+            merchant_only: None,
+            min_orders: None,
+            min_completion_rate: None,
+            limit: Some(1),
+            sources: Some("bncex".into()),
+        };
+        let operation = source.operation(query.side).unwrap();
+        let values = source.template_values(&query, operation).unwrap();
+        let mut body: Value =
+            serde_json::from_str(operation.request_json.as_deref().unwrap()).unwrap();
+
+        render_request_json(&mut body, &values).unwrap();
+
+        assert_eq!(body["type"], "BUY_USDC");
+        assert_eq!(body["token"], "USDC");
+        assert_eq!(body["network"], "TRC20");
+        assert_eq!(body["paymentMethod"], "NON_CASH");
+        assert_eq!(body["amountAmd"].as_f64(), Some(250_000.0));
+    }
+
+    #[test]
+    fn limits_bncex_quotes_to_amd_legs() {
+        let source = bncex_source();
+
+        assert!(source.supports_fiat("AMD"));
+        assert!(source.supports_fiat("amd"));
+        assert!(!source.supports_fiat("RUB"));
+    }
+
+    #[tokio::test]
+    #[ignore = "calls the live bncex quote API"]
+    async fn live_bncex_api_returns_buy_and_sell_quotes() {
+        let source = bncex_source();
+        for side in [P2pSide::BuyCrypto, P2pSide::SellCrypto] {
+            let offers = source
+                .search(&P2pSearchQuery {
+                    fiat: "AMD".into(),
+                    asset: "USDT".into(),
+                    side,
+                    amount: (side == P2pSide::BuyCrypto).then_some(100_000.0),
+                    payment_method: None,
+                    merchant_only: None,
+                    min_orders: None,
+                    min_completion_rate: None,
+                    limit: Some(1),
+                    sources: Some("bncex".into()),
+                })
+                .await
+                .unwrap();
+
+            assert_eq!(offers.len(), 1);
+            assert_eq!(offers[0].market, P2pOfferMarket::DirectExchange);
+            assert_eq!(offers[0].side, side);
+            assert!(offers[0].price.parse::<f64>().unwrap() > 0.0);
+        }
     }
 
     #[tokio::test]

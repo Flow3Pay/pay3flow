@@ -1,0 +1,58 @@
+# bncex exposes the quote used by its public AMD/stablecoin calculator. Quotes
+# include the selected transfer network and the amount-tiered exchange fee.
+
+[buy]
+source_url = "https://www.bncex.com/en"
+name = "bncex Buy"
+currency = ["amd"]
+banks = []
+
+[sell]
+source_url = "https://www.bncex.com/en"
+name = "bncex Sell"
+currency = ["amd"]
+banks = []
+
+[adapter.p2p]
+kind = "http_json"
+market = "direct_exchange"
+endpoint = "https://www.bncex.com/api/exchange/quote"
+method = "POST"
+headers = { Origin = "https://www.bncex.com", Referer = "https://www.bncex.com/en", Accept = "application/json" }
+supported_assets = ["USDT", "USDC"]
+supported_fiats = ["AMD"]
+fiat_probe_amount = 100000
+asset_probe_amount = 100
+default_min_fiat = 10000
+default_max_fiat = 50000000
+default_available_asset = 1000000000
+timeout_ms = 5000
+
+[adapter.p2p.buy]
+amount_mode = "fiat_probe"
+request_json = '''{"type":"BUY_{{asset}}","network":"TRC20","paymentMethod":"NON_CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}'''
+
+[adapter.p2p.buy.offer]
+fiat_amount_pointer = "/amountAmd"
+asset_amount_pointer = "/amountUsdt"
+asset_pointer = "/token"
+merchant_default = true
+verified_default = true
+source_url_template = "https://www.bncex.com/en"
+
+[adapter.p2p.sell]
+amount_mode = "asset_probe"
+request_json = '''{"type":"SELL_{{asset}}","network":"TRC20","paymentMethod":"NON_CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}'''
+
+[adapter.p2p.sell.offer]
+fiat_amount_pointer = "/amountAmd"
+asset_amount_pointer = "/amountUsdt"
+asset_pointer = "/token"
+merchant_default = true
+verified_default = true
+source_url_template = "https://www.bncex.com/en"
+
+[fees]
+kind = "quote_dependent"
+description = "The live calculator quote includes bncex's amount-tiered exchange percentage and selected network fee. Bank or card charges may be separate."
+docs_url = "https://www.bncex.com/en"

@@ -2695,6 +2695,29 @@ mod tests {
         assert!(routes[0].same_venue);
     }
 
+    #[test]
+    fn composes_rub_to_amd_with_bncex_as_the_exit() {
+        let mut route_query = query(true);
+        route_query.source_currency = "RUB".into();
+        route_query.target_currency = "AMD".into();
+        let mut entry = offer("bybit", P2pSide::BuyCrypto, "80", "1000", "1000000");
+        entry.fiat = "RUB".into();
+        let mut exit = offer("bncex", P2pSide::SellCrypto, "353.06", "10000", "50000000");
+        exit.fiat = "AMD".into();
+        exit.market = P2pOfferMarket::DirectExchange;
+
+        let mut routes = Vec::new();
+        compose_fiat_routes(&mut routes, &route_query, "USDT", &[entry], &[exit]);
+
+        assert_eq!(routes.len(), 1);
+        assert_eq!(routes[0].source_fiat, "RUB");
+        assert_eq!(routes[0].target_fiat, "AMD");
+        assert_eq!(routes[0].entry_offer.as_ref().unwrap().source, "bybit");
+        assert_eq!(routes[0].exit_offer.as_ref().unwrap().source, "bncex");
+        assert!(!routes[0].same_venue);
+        assert!(routes[0].requires_asset_transfer);
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn composes_fiat_provider_route_across_intermediary_networks() {
         let service = P2pSearchService::with_sources(

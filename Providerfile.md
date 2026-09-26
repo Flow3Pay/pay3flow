@@ -166,6 +166,7 @@ method = "POST"
 headers = { Origin = "https://provider.example", Referer = "https://provider.example/p2p" }
 asset_codes = { USDT = "USDT_TRC" }
 supported_assets = ["USDT", "BTC", "ETH"]
+supported_fiats = ["USD", "EUR"]
 timeout_ms = 5000
 max_results = 50
 
@@ -670,6 +671,7 @@ Checked-in Rust examples: CoW Swap, NEAR Intents, and ID Pay.
 | `headers` | No | `{}` | Static headers or whole-value environment references. |
 | `asset_codes` | No | `{}` | Canonical-to-provider asset codes. |
 | `supported_assets` | No | `[]` | Empty means no adapter-level asset filter. |
+| `supported_fiats` | No | `[]` | Empty means no adapter-level fiat filter. Use this when an endpoint is fixed to specific fiat currencies. |
 | `timeout_ms` | No | `10000` | 250–30000 ms. |
 | `max_results` | No | request limit | 1–100. |
 | `fiat_probe_amount` | By mode | — | Positive finite fallback fiat amount. |
