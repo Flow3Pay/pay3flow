@@ -60,7 +60,6 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
         { slug: "whitebird", name: "Whitebird Sell", side: "sell", source_url: "https://whitebird.io", currencies: ["BYN", "USD", "EUR", "RUB"], banks: [], searchable: false },
         { slug: "bestchange", name: "BestChange Sell", side: "sell", source_url: "https://bestchange.app/?lang=en", currencies: ["BYN", "EUR", "RUB", "USD"], banks: [], searchable: false },
         { slug: "dzengi", name: "Dzengi Sell", side: "sell", source_url: "https://dzengi.com/ru/kalkulyator-kriptovalyut", currencies: ["BYN", "EUR", "RUB", "USD"], banks: [], searchable: false },
-        { slug: "exnode", name: "Exnode Sell", side: "sell", source_url: "https://exnode.ru/exchange", currencies: ["BYN", "EUR", "RUB", "USD"], banks: [], searchable: false },
         { slug: "cow-swap", name: "CoW Protocol Live Sell", side: "sell", source_url: "https://swap.cow.fi", currencies: ["USDC", "USDT"], banks: [], searchable: true, search_mode: "selectable" },
         { slug: "near-intents", name: "NEAR 1Click Sell", side: "sell", source_url: "https://1click.chaindefuser.com", currencies: ["BTC", "USDT"], banks: [], searchable: true, search_mode: "selectable" },
         { slug: "id-pay", name: "ID Pay Live Sell", side: "sell", source_url: "https://id-pay.ru/", currencies: ["AMD", "RUB"], banks: [], searchable: true, search_mode: "selectable" },
@@ -717,7 +716,6 @@ test("catalog and direct quote providers are separately selectable", async ({ pa
   const cifra = page.getByRole("button", { name: "Cifra Markets" });
   const bestchange = page.getByRole("button", { name: "BestChange" });
   const dzengi = page.getByRole("button", { name: "Dzengi" });
-  const exnode = page.getByRole("button", { name: "Exnode" });
   const cow = page.getByRole("button", { name: "CoW Protocol Live" });
   const near = page.getByRole("button", { name: "NEAR 1Click" });
   const idPay = page.getByRole("button", { name: "ID Pay Live" });
@@ -728,7 +726,7 @@ test("catalog and direct quote providers are separately selectable", async ({ pa
   await expect(whitebird).toBeEnabled();
   await whitebird.click();
   await expect(whitebird).toHaveAttribute("aria-pressed", "true");
-  for (const [button, icon] of [[bestchange, "/icons/venues/bestchange.svg"], [dzengi, "/icons/venues/dzengi.svg"], [exnode, "/icons/venues/exnode.svg"]] as const) {
+  for (const [button, icon] of [[bestchange, "/icons/venues/bestchange.svg"], [dzengi, "/icons/venues/dzengi.svg"]] as const) {
     await expect(button).toBeEnabled();
     await expect(button).toHaveAttribute("aria-pressed", "false");
     await expect(button.locator("img")).toHaveAttribute("src", icon);

@@ -66,12 +66,6 @@ impl DeclarativeP2pSource {
             .get(&query.asset)
             .map(String::as_str)
             .unwrap_or(&query.asset);
-        let fiat_code = self
-            .config
-            .fiat_codes
-            .get(&query.fiat)
-            .map(String::as_str)
-            .unwrap_or(&query.fiat);
         let amount = match operation.amount_mode.as_str() {
             "query_or_empty" => query.amount,
             "fiat_probe" => query.amount.or(self.config.fiat_probe_amount),
@@ -80,7 +74,6 @@ impl DeclarativeP2pSource {
         };
         Ok(TemplateValues {
             fiat: &query.fiat,
-            fiat_code,
             asset,
             amount,
             limit: query
@@ -447,7 +440,6 @@ impl CryptoMarketSource for DeclarativeMarketSource {
     async fn tickers(&self) -> Result<Vec<CryptoTicker>> {
         let values = TemplateValues {
             fiat: "",
-            fiat_code: "",
             asset: "",
             amount: None,
             limit: 100,
@@ -491,7 +483,6 @@ impl CryptoMarketSource for DeclarativeMarketSource {
 
 struct TemplateValues<'a> {
     fiat: &'a str,
-    fiat_code: &'a str,
     asset: &'a str,
     amount: Option<f64>,
     limit: usize,
@@ -618,7 +609,6 @@ fn render_request_json(value: &mut Value, values: &TemplateValues<'_>) -> Result
 fn render_request_string(template: &str, values: &TemplateValues<'_>) -> String {
     template
         .replace("{{fiat}}", values.fiat)
-        .replace("{{fiat_code}}", values.fiat_code)
         .replace("{{asset}}", values.asset)
         .replace(
             "{{amount_number}}",
@@ -1031,32 +1021,16 @@ mod tests {
         DeclarativeP2pSource::from_record(Client::new(), &record).unwrap()
     }
 
-    fn exnode_source() -> DeclarativeP2pSource {
-        let document: toml::Value =
-            toml::from_str(include_str!("../../providers/exnode/Providerfile")).unwrap();
-        let adapters: ProviderAdapters =
-            document.get("adapter").unwrap().clone().try_into().unwrap();
-        let record = ProviderAdapterRecord {
-            slug: "exnode".into(),
-            source_url: "https://exnode.ru/exchange".into(),
-            display_name: "Exnode".into(),
-            config: Some(adapters),
-            workflow: None,
-        };
-        DeclarativeP2pSource::from_record(Client::new(), &record).unwrap()
-    }
-
     #[test]
     fn renders_typed_and_string_request_placeholders() {
         let mut value: Value = serde_json::from_str(
-            r#"{"amount":"{{amount}}","size":"{{limit}}","limit":"{{limit_number}}","fiat_code":"{{fiat_code}}"}"#,
+            r#"{"amount":"{{amount}}","size":"{{limit}}","limit":"{{limit_number}}"}"#,
         )
         .unwrap();
         render_request_json(
             &mut value,
             &TemplateValues {
                 fiat: "RUB",
-                fiat_code: "RUB",
                 asset: "USDT_TRC",
                 amount: Some(1_000.0),
                 limit: 20,
@@ -1066,7 +1040,6 @@ mod tests {
         assert_eq!(value["amount"], "1000");
         assert_eq!(value["size"], "20");
         assert_eq!(value["limit"], 20);
-        assert_eq!(value["fiat_code"], "RUB");
     }
 
     #[test]
@@ -1114,62 +1087,6 @@ mod tests {
         assert_eq!(
             offer.payment_method_match("Sberbank"),
             PaymentMethodMatch::Unknown
-        );
-    }
-
-    #[test]
-    fn maps_exnode_public_monitor_offer() {
-        let source = exnode_source();
-        let response: Value = serde_json::from_str(
-            r#"{
-                "from_currency": "SBPRUB",
-                "to_currency": "USDTTRC20",
-                "in": 94.0485,
-                "out": 1,
-                "exchanger_id": 2175944,
-                "minamount": 20000,
-                "maxamount": 120000,
-                "exchanger": {
-                    "id": 2175944,
-                    "name": "Finex24",
-                    "url_site": "https://finex24.io/?cur_from=SBPRUB&cur_to=USDTTRC20"
-                },
-                "reviews": {"positive": 1417}
-            }"#,
-        )
-        .unwrap();
-        let query = P2pSearchQuery {
-            fiat: "RUB".into(),
-            asset: "USDT".into(),
-            side: P2pSide::BuyCrypto,
-            amount: Some(10_000.0),
-            payment_method: None,
-            merchant_only: None,
-            min_orders: None,
-            min_completion_rate: None,
-            limit: Some(20),
-            sources: Some("exnode".into()),
-        };
-
-        let mapping = source
-            .operation(P2pSide::BuyCrypto)
-            .unwrap()
-            .offer
-            .as_ref()
-            .unwrap();
-        let offer = source.into_offer(&response, &query, mapping).unwrap();
-        assert_eq!(offer.ad_id, "2175944");
-        assert_eq!(offer.asset, "USDT");
-        assert_eq!(offer.price, "94.0485");
-        assert_eq!(offer.payment_methods, ["SBPRUB"]);
-        assert!(offer.advertiser.is_merchant);
-        assert!(offer.advertiser.is_verified);
-        assert_eq!(offer.advertiser.nickname, "Finex24");
-        assert_eq!(offer.min_fiat, "20000");
-        assert_eq!(offer.max_fiat, "120000");
-        assert_eq!(
-            offer.source_url,
-            "https://finex24.io/?cur_from=SBPRUB&cur_to=USDTTRC20"
         );
     }
 

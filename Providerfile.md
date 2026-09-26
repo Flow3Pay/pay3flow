@@ -481,7 +481,7 @@ The three header names are optional and default to the values shown. The
 environment variable names must contain only uppercase ASCII letters, digits,
 and `_`. The signature is lowercase hex HMAC-SHA512 over the decimal Unix
 timestamp followed by the serialized JSON request body. Never store secrets in
-a Providerfile. Complete example: `backend/providers/exnode/Providerfile`.
+a Providerfile.
 
 ## Spot-market adapter
 
@@ -883,7 +883,6 @@ cargo check --manifest-path backend/Cargo.toml
 | Papa Change joined public APIs | `backend/providers/papa-change/Providerfile` |
 | POST P2P ads and rich offer mapping | Binance, Bybit, Bitget |
 | GET P2P ads | OKX, Rapira |
-| GET monitoring rates | Exnode |
 | Direct quote with per-direction amount mapping | Whitebird |
 | Direct quote with endpoint templates | SkyLabs |
 | Direct quote with a fixed output fee | Bitcoin Center |

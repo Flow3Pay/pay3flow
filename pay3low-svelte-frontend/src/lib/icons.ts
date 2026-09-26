@@ -1,4 +1,4 @@
-const LOCAL_VENUE_ICONS = new Set(["binance", "bybit", "okx", "bitget", "mexc", "rapira", "whitebird", "cifra-broker", "cow-swap", "bestchange", "bitcoin-center", "bncex", "dzengi", "exnode", "id-pay", "skylabs", "papa-change", "symbiosis"]);
+const LOCAL_VENUE_ICONS = new Set(["binance", "bybit", "okx", "bitget", "mexc", "rapira", "whitebird", "cifra-broker", "cow-swap", "bestchange", "bitcoin-center", "bncex", "dzengi", "id-pay", "skylabs", "papa-change", "symbiosis"]);
 const PNG_VENUE_ICONS = new Set(["binance", "bybit", "bitget", "mexc", "rapira", "whitebird", "cifra-broker", "papa-change", "symbiosis"]);
 const LOCAL_ASSET_ICONS = new Set([
   "ada", "apt", "atom", "avax", "bch", "bnb", "btc", "dai", "doge", "dot", "eth", "fdusd",
