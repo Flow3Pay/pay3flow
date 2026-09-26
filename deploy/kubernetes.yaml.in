@@ -88,6 +88,7 @@ stringData:
   SECRETS_KEY: "$PAY3FLOW_SECRETS_KEY"
   ADMIN_TOKEN: "$PAY3FLOW_ADMIN_TOKEN"
   NEAR_INTENTS_JWT: "$PAY3FLOW_NEAR_INTENTS_JWT"
+  BESTCHANGE_API_KEY: "$PAY3FLOW_BESTCHANGE_API_KEY"
 ---
 apiVersion: batch/v1
 kind: Job
@@ -289,6 +290,11 @@ spec:
                 secretKeyRef:
                   name: pay3flow-secrets
                   key: NEAR_INTENTS_JWT
+            - name: BESTCHANGE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: pay3flow-secrets
+                  key: BESTCHANGE_API_KEY
           readinessProbe:
             httpGet:
               path: /health

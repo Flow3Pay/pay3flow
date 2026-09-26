@@ -22,6 +22,7 @@ module Pay3flow
       "PAY3FLOW_SECRETS_KEY" => "change-me-secrets",
       "PAY3FLOW_ADMIN_TOKEN" => "change-me-admin",
       "PAY3FLOW_NEAR_INTENTS_JWT" => "",
+      "PAY3FLOW_BESTCHANGE_API_KEY" => "",
       "PAY3FLOW_AP_HANDLE" => "pay3flow",
       "PAY3FLOW_AP_REQUIRE_SIGNATURES" => "true",
       "PAY3FLOW_FMATCH_INBOX" => "https://lefine.pro/inbox/actra",
