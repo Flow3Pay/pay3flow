@@ -15,7 +15,7 @@
   type P2pSourceOption = { id: P2pSource; label: string; iconUrl: string; searchable: boolean; searchMode: ProviderSearchMode; feeDescription?: string };
   const INTERMEDIARY_ASSETS = CRYPTO_ASSETS.map(([currency]) => currency);
   const BANK_METHODS = PAYMENT_METHODS.filter((method) => method.kind === "bank");
-  const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", sources: "pay3flow.exchange.p2p-sources", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets", anonymousId: "pay3flow.reputation.anonymous-id" };
+  const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", sources: "pay3flow.exchange.p2p-sources", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", sourceNetwork: "pay3flow.exchange.source-network", targetNetwork: "pay3flow.exchange.target-network", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets", anonymousId: "pay3flow.reputation.anonymous-id" };
 
   let corridors: ExchangeCorridor[] = [];
   let corridorId = "";
@@ -190,8 +190,14 @@
   function applySearchResponse(response: P2pRouteSearchResponse) {
     const nextRoutes = mapRoutes(response);
     const knownVenues = new Set(foundVenues.map((venue) => venue.id));
-    const newlyFound = nextRoutes
-      .flatMap((route) => [...route.legs.map((leg) => leg.provider.toLowerCase()), ...(route.route_provider ? [route.route_provider.toLowerCase()] : [])])
+    const venuesWithOffers = (response.asset_statuses ?? [])
+      .flatMap((status) => [...status.entry_sources, ...status.exit_sources])
+      .filter((source) => source.offers_found > 0)
+      .map((source) => source.source.toLowerCase());
+    const newlyFound = [
+      ...nextRoutes.flatMap((route) => [...route.legs.map((leg) => leg.provider.toLowerCase()), ...(route.route_provider ? [route.route_provider.toLowerCase()] : [])]),
+      ...venuesWithOffers,
+    ]
       .filter((venue, index, venues) => !knownVenues.has(venue) && venues.indexOf(venue) === index)
       .map((venue) => p2pSources.find((item) => item.id === venue) ?? { id: venue, label: venue.charAt(0).toUpperCase() + venue.slice(1), iconUrl: venueIcon(venue), searchable: true, searchMode: "selectable" as const });
     if (newlyFound.length) foundVenues = [...foundVenues, ...newlyFound];
@@ -261,12 +267,12 @@
   $: searchSignature = `${corridor?.id ?? ""}:${sourceMethod?.id ?? ""}:${sourceNetwork?.id ?? ""}:${targetMethod?.id ?? ""}:${targetNetwork?.id ?? ""}:${amount}:${selectedSources.join(",")}:${selectedIntermediaryAssets.join(",")}:${directionReversed}`;
   $: scheduleAutomaticSearch(searchSignature, preferencesLoaded, urlReady, hasAmount, initialSearchReady);
   $: manageRefresh(refreshSeconds, lastUpdatedAt, hasAmount);
-  $: if (preferencesLoaded) persistPreferences(amount, refreshSeconds, selectedSources, selectedIntermediaryAssets, corridorId, sourceMethodId, targetMethodId, directionReversed);
+  $: if (preferencesLoaded) persistPreferences(amount, refreshSeconds, selectedSources, selectedIntermediaryAssets, corridorId, sourceMethodId, targetMethodId, sourceNetwork?.id ?? sourceNetworkId, targetNetwork?.id ?? targetNetworkId, directionReversed);
   $: if (urlReady && corridor && selectedSourceCurrency && selectedTargetCurrency) updateHash(selectedSourceCurrency, selectedTargetCurrency, amount);
 
-  function persistPreferences(value: string, refresh: RefreshSeconds, sources: P2pSource[], assets: string[], corridorValue: string, sourceMethodValue: string, targetMethodValue: string, reversed: boolean) {
+  function persistPreferences(value: string, refresh: RefreshSeconds, sources: P2pSource[], assets: string[], corridorValue: string, sourceMethodValue: string, targetMethodValue: string, sourceNetworkValue: string, targetNetworkValue: string, reversed: boolean) {
     try {
-      localStorage.setItem(STORAGE.amount, value); localStorage.setItem(STORAGE.refresh, String(refresh)); localStorage.setItem(STORAGE.sources, sources.join(",")); localStorage.setItem(STORAGE.assets, assets.join(",")); localStorage.setItem(STORAGE.corridor, corridorValue); localStorage.setItem(STORAGE.sourceMethod, sourceMethodValue); localStorage.setItem(STORAGE.targetMethod, targetMethodValue); localStorage.setItem(STORAGE.direction, String(reversed));
+      localStorage.setItem(STORAGE.amount, value); localStorage.setItem(STORAGE.refresh, String(refresh)); localStorage.setItem(STORAGE.sources, sources.join(",")); localStorage.setItem(STORAGE.assets, assets.join(",")); localStorage.setItem(STORAGE.corridor, corridorValue); localStorage.setItem(STORAGE.sourceMethod, sourceMethodValue); localStorage.setItem(STORAGE.targetMethod, targetMethodValue); localStorage.setItem(STORAGE.sourceNetwork, sourceNetworkValue); localStorage.setItem(STORAGE.targetNetwork, targetNetworkValue); localStorage.setItem(STORAGE.direction, String(reversed));
     } catch {}
   }
   function updateHash(source: string, target: string, value: string) {
@@ -431,7 +437,7 @@
     try {
       anonymousId = anonymousBrowserId();
       amount = shared?.amount ?? localStorage.getItem(STORAGE.amount) ?? "0";
-      corridorId = localStorage.getItem(STORAGE.corridor) ?? ""; sourceMethodId = localStorage.getItem(STORAGE.sourceMethod) ?? sourceMethodId; targetMethodId = localStorage.getItem(STORAGE.targetMethod) ?? targetMethodId;
+      corridorId = localStorage.getItem(STORAGE.corridor) ?? ""; sourceMethodId = localStorage.getItem(STORAGE.sourceMethod) ?? sourceMethodId; targetMethodId = localStorage.getItem(STORAGE.targetMethod) ?? targetMethodId; sourceNetworkId = localStorage.getItem(STORAGE.sourceNetwork) ?? sourceNetworkId; targetNetworkId = localStorage.getItem(STORAGE.targetNetwork) ?? targetNetworkId;
       const savedDirection = localStorage.getItem(STORAGE.direction); if (savedDirection != null) directionReversed = savedDirection === "true";
       savedSourceIds = localStorage.getItem(STORAGE.sources)?.split(",").map((value) => value.trim()).filter(Boolean) ?? [];
       const savedAssets = localStorage.getItem(STORAGE.assets); if (savedAssets != null) selectedIntermediaryAssets = [...new Set(savedAssets.split(",").filter((asset) => INTERMEDIARY_ASSETS.includes(asset as (typeof INTERMEDIARY_ASSETS)[number])))];

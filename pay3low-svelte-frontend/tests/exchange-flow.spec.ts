@@ -765,6 +765,19 @@ test("search venues bounce in the loader and refresh stops spinning after the fi
         source_amount: "100000.00",
         assets_searched: ["USDT"],
         can_exchange_to_target: true,
+        asset_statuses: [{
+          asset: "USDT",
+          entry_offers: 3,
+          exit_offers: 2,
+          routes_built: 1,
+          can_exchange_to_target: true,
+          entry_sources: [
+            { source: "bybit", ok: true, latency_ms: 10, offers_found: 1, error: null },
+            { source: "skylabs", ok: true, latency_ms: 15, offers_found: 2, error: null },
+            { source: "binance", ok: true, latency_ms: 20, offers_found: 0, error: null },
+          ],
+          exit_sources: [{ source: "okx", ok: true, latency_ms: 12, offers_found: 1, error: null }],
+        }],
         routes: [{
           route_id: "route-streamed-first",
           rank: 1,
@@ -842,8 +855,10 @@ test("search venues bounce in the loader and refresh stops spinning after the fi
   await expect(page.getByTestId("complete-route")).toHaveCount(1);
   await expect(page.getByTestId("complete-route").first()).toHaveClass(/selected/);
   const foundVenues = panelTop.locator(".resultSummary").getByTestId("found-venue");
-  await expect(foundVenues).toHaveCount(1);
+  await expect(foundVenues).toHaveCount(3);
   await expect(foundVenues.first()).toHaveAttribute("title", "Found on Bybit");
+  await expect(foundVenues.nth(1)).toHaveAttribute("title", "Found on SkyLabs");
+  await expect(foundVenues.nth(2)).toHaveAttribute("title", "Found on Okx");
   await expect(searchingVenues).toHaveCount(5);
   await expect(searchingVenues.nth(4)).toHaveAttribute("title", "Searching Whitebird");
   await expect(panelTop.getByTestId("searching-venues-overflow")).toHaveCount(0);
@@ -1107,6 +1122,10 @@ test("bridged spot instructions split both market trades into separate steps", a
 
   await page.getByLabel("Amount to send").fill("0.002");
   await page.getByTestId("start-search").click();
+  await expect(page.getByTestId("complete-route")).toHaveCount(1);
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Select sending asset: Bitcoin" })).toContainText("Bitcoin");
+  await expect(page.locator(".moneyPanelSource .networkCopy strong")).toHaveText("Bitcoin");
   await expect(page.getByTestId("complete-route")).toHaveCount(1);
   await page.getByTestId("complete-route").locator(".routeAmount").click();
 

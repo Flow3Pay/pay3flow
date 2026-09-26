@@ -233,6 +233,25 @@ export interface P2pRouteSearchResponse {
   assets_searched: string[];
   can_exchange_to_target: boolean;
   routes: P2pRoute[];
+  asset_statuses?: RouteAssetStatus[];
+}
+
+export interface SourceStatus {
+  source: string;
+  ok: boolean;
+  latency_ms: number;
+  offers_found: number;
+  error?: string | null;
+}
+
+export interface RouteAssetStatus {
+  asset: string;
+  entry_offers: number;
+  exit_offers: number;
+  routes_built: number;
+  can_exchange_to_target: boolean;
+  entry_sources: SourceStatus[];
+  exit_sources: SourceStatus[];
 }
 
 export type P2pRouteStreamEvent =
