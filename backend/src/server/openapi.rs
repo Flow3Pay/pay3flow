@@ -17,39 +17,194 @@ fn api_document() -> Value {
         "info": {
             "title": "Pay3Flow API",
             "version": env!("CARGO_PKG_VERSION"),
-            "description": "Public REST, WebSocket, routing and ActivityPub surfaces exposed by Pay3Flow. WebSocket operations are listed for discovery; use a WebSocket client to interact with them."
+            "description": "Pay3Flow routes payments and cross-border exchanges between fiat and digital-asset rails.\n\n## Quick start\n\n1. Register or log in with an email and one-time code.\n2. Copy the returned `token` into the **Authorize** dialog as a bearer token.\n3. Create a payment or exchange order.\n\nAmounts in exchange endpoints use the smallest currency unit (for example, cents). Amounts in the payment endpoint are decimal currency units. `Idempotency-Key` is recommended for every request that creates or confirms a transaction.\n\nWebSocket endpoints are listed for discovery; use a WebSocket client to interact with them."
         },
         "servers": [{ "url": "/", "description": "Current Pay3Flow origin" }],
         "tags": [
-            { "name": "System" },
-            { "name": "Authentication" },
-            { "name": "Payments" },
-            { "name": "Exchange" },
-            { "name": "Solver" },
-            { "name": "Catalogs" },
-            { "name": "Routing" },
-            { "name": "Administration" },
-            { "name": "WebSockets" },
-            { "name": "ActivityPub" },
-            { "name": "Debug" }
+            { "name": "System", "description": "Health and metrics endpoints." },
+            { "name": "Authentication", "description": "Create a user session and inspect the current user. The returned JWT is used by protected endpoints." },
+            { "name": "Payments", "description": "Create and monitor one-step payments." },
+            { "name": "Exchange", "description": "Create an exchange order, discover solvers, select a quote and track settlement." },
+            { "name": "Solver", "description": "Solver-facing order and quote endpoints." },
+            { "name": "Catalogs", "description": "Public banks, networks, providers and exchange-pair catalogs." },
+            { "name": "Routing", "description": "P2P search, route execution and route reputation." },
+            { "name": "Administration", "description": "Protected operational controls. These endpoints require the configured admin bearer token." },
+            { "name": "WebSockets", "description": "Real-time rates, payment events and route updates." },
+            { "name": "ActivityPub", "description": "Federation and marketplace discovery endpoints." },
+            { "name": "Debug", "description": "Development and diagnostics endpoints; do not expose them publicly without access controls." }
         ],
         "paths": paths,
-        "components": {
-            "securitySchemes": {
-                "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT" },
-                "adminBearerAuth": { "type": "http", "scheme": "bearer", "description": "Admin token supplied by the backend configuration." }
+        "components": components()
+    })
+}
+
+fn components() -> Value {
+    json!({
+        "securitySchemes": {
+            "bearerAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT",
+                "description": "JWT returned by `/api/auth/register` or `/api/auth/login`."
             },
-            "schemas": {
-                "JsonObject": { "type": "object", "additionalProperties": true },
-                "JsonResponse": { "type": "object", "additionalProperties": true },
-                "Error": {
-                    "type": "object",
-                    "properties": {
-                        "error": { "type": "string" },
-                        "message": { "type": "string" }
-                    },
-                    "additionalProperties": true
+            "adminBearerAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "description": "Admin token configured by the backend operator."
+            }
+        },
+        "schemas": {
+            "AuthCodeRequest": {
+                "type": "object",
+                "required": ["email", "code"],
+                "properties": {
+                    "email": { "type": "string", "format": "email", "example": "user@example.com" },
+                    "code": { "type": "string", "description": "One-time code delivered to the email address.", "example": "123456" }
                 }
+            },
+            "AuthToken": {
+                "type": "object",
+                "required": ["token"],
+                "properties": { "token": { "type": "string", "description": "JWT bearer token." } }
+            },
+            "User": {
+                "type": "object",
+                "required": ["id", "email"],
+                "properties": {
+                    "id": { "type": "string", "format": "uuid" },
+                    "email": { "type": "string", "format": "email" }
+                }
+            },
+            "NewPayment": {
+                "type": "object",
+                "required": ["amount", "currency", "from", "to"],
+                "properties": {
+                    "amount": { "type": "number", "format": "double", "minimum": 0, "exclusiveMinimum": true, "example": 100.5 },
+                    "currency": { "type": "string", "description": "Source currency, for example EUR.", "example": "EUR" },
+                    "from": { "type": "string", "description": "Source account or payment address.", "example": "sender@example.com" },
+                    "to": { "type": "string", "description": "Destination account or payment address.", "example": "recipient@example.com" },
+                    "to_geo": { "type": "string", "description": "Optional destination country or region.", "example": "DE" },
+                    "method": { "type": "string", "description": "Optional payment method.", "example": "bank_transfer" },
+                    "to_currency": { "type": "string", "description": "Optional destination currency for conversion.", "example": "USD" }
+                }
+            },
+            "PaymentView": {
+                "type": "object",
+                "required": ["transaction"],
+                "properties": {
+                    "transaction": { "$ref": "#/components/schemas/Transaction" },
+                    "route": { "$ref": "#/components/schemas/Route" },
+                    "quote": { "$ref": "#/components/schemas/Quote" }
+                }
+            },
+            "Transaction": {
+                "type": "object",
+                "description": "Persisted payment. Amount fields are in minor currency units.",
+                "properties": {
+                    "id": { "type": "string", "format": "uuid" },
+                    "status": { "type": "string", "enum": ["pending", "matched", "executing", "done", "failed"] },
+                    "from_amount": { "type": "integer", "format": "int64" },
+                    "from_currency": { "type": "string" },
+                    "to_amount": { "type": "integer", "format": "int64", "nullable": true },
+                    "to_currency": { "type": "string", "nullable": true },
+                    "from_account": { "type": "string" },
+                    "to_account": { "type": "string" },
+                    "method": { "type": "string", "nullable": true },
+                    "fees": { "type": "integer", "format": "int64" },
+                    "provider": { "type": "string", "nullable": true },
+                    "external_id": { "type": "string", "nullable": true },
+                    "created_at": { "type": "string", "format": "date-time" },
+                    "updated_at": { "type": "string", "format": "date-time" }
+                }
+            },
+            "Route": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string", "format": "uuid" },
+                    "acquirer_slug": { "type": "string" },
+                    "fee_percent": { "type": "number", "format": "double" },
+                    "exchange_rate": { "type": "number", "format": "double", "nullable": true },
+                    "status": { "type": "string" },
+                    "source": { "type": "string" }
+                }
+            },
+            "Quote": {
+                "type": "object",
+                "properties": {
+                    "request": { "$ref": "#/components/schemas/PaymentRequest" },
+                    "source": { "type": "string" },
+                    "candidates": { "type": "array", "items": { "$ref": "#/components/schemas/JsonObject" } },
+                    "best": { "$ref": "#/components/schemas/JsonObject", "nullable": true },
+                    "quoted_at": { "type": "string", "format": "date-time" }
+                }
+            },
+            "PaymentRequest": {
+                "allOf": [{ "$ref": "#/components/schemas/NewPayment" }]
+            },
+            "CreateExchangeOrder": {
+                "type": "object",
+                "required": ["source_country", "source_currency", "source_amount_minor", "source_method_type", "target_country", "target_currency", "target_method_type"],
+                "properties": {
+                    "source_country": { "type": "string", "example": "RU" },
+                    "source_currency": { "type": "string", "example": "RUB" },
+                    "source_amount_minor": { "type": "integer", "format": "int64", "description": "Amount in the smallest source-currency unit.", "example": 100000 },
+                    "source_method_type": { "type": "string", "example": "bank_card" },
+                    "source_method_ref": { "type": "string", "nullable": true },
+                    "target_country": { "type": "string", "example": "DE" },
+                    "target_currency": { "type": "string", "example": "EUR" },
+                    "target_amount_min_minor": { "type": "integer", "format": "int64", "nullable": true },
+                    "target_method_type": { "type": "string", "example": "bank_transfer" },
+                    "target_method_ref": { "type": "string", "nullable": true },
+                    "deadline_at": { "type": "string", "format": "date-time", "nullable": true }
+                }
+            },
+            "ExchangeOrder": {
+                "type": "object",
+                "description": "Exchange order and its current lifecycle state.",
+                "properties": {
+                    "id": { "type": "string", "format": "uuid" },
+                    "status": { "type": "string", "enum": ["created", "discovering", "quoting", "quoted", "locked", "token_settling", "money_settling", "proof_pending", "done", "failed", "expired", "cancelled", "disputed"] },
+                    "funding_status": { "type": "string" },
+                    "source_currency": { "type": "string" },
+                    "source_amount_minor": { "type": "integer", "format": "int64" },
+                    "target_currency": { "type": "string" },
+                    "target_amount_min_minor": { "type": "integer", "format": "int64", "nullable": true },
+                    "selected_quote_id": { "type": "string", "format": "uuid", "nullable": true },
+                    "failure_code": { "type": "string", "nullable": true },
+                    "failure_message": { "type": "string", "nullable": true },
+                    "created_at": { "type": "string", "format": "date-time" },
+                    "updated_at": { "type": "string", "format": "date-time" }
+                }
+            },
+            "ConfirmOrderRequest": {
+                "type": "object",
+                "properties": { "quote_id": { "type": "string", "format": "uuid", "nullable": true } }
+            },
+            "FundingConfirmRequest": {
+                "type": "object",
+                "required": ["accepts_terms", "terms_version"],
+                "properties": {
+                    "accepts_terms": { "type": "boolean", "example": true },
+                    "terms_version": { "type": "string", "example": "2026-01" }
+                }
+            },
+            "SubmitProofRequest": {
+                "type": "object",
+                "required": ["proof_type", "proof_payload"],
+                "properties": {
+                    "proof_type": { "type": "string", "example": "bank_transfer_receipt" },
+                    "proof_payload": { "type": "object", "additionalProperties": true }
+                }
+            },
+            "JsonObject": { "type": "object", "additionalProperties": true },
+            "JsonResponse": { "type": "object", "additionalProperties": true },
+            "Error": {
+                "type": "object",
+                "properties": {
+                    "error": { "type": "string", "example": "unauthorized" },
+                    "message": { "type": "string", "example": "invalid or expired token" }
+                },
+                "additionalProperties": true
             }
         }
     })
@@ -678,10 +833,7 @@ fn add_operation(paths: &mut Map<String, Value>, operation: Operation) {
         "description": description,
         "tags": [tag],
         "responses": {
-            "200": {
-                "description": "Successful response",
-                "content": { "application/json": { "schema": { "$ref": "#/components/schemas/JsonResponse" } } }
-            },
+            "200": success_response(path, method),
             "400": { "description": "Invalid request", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
             "401": { "description": "Authentication required" },
             "404": { "description": "Resource not found" }
@@ -691,11 +843,15 @@ fn add_operation(paths: &mut Map<String, Value>, operation: Operation) {
     if request_body {
         operation["requestBody"] = json!({
             "required": true,
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/JsonObject" } } }
+            "content": { "application/json": { "schema": request_schema(path, method) } }
         });
     }
     if requires_auth {
-        operation["security"] = json!([{ "bearerAuth": [] }]);
+        operation["security"] = if path.starts_with("/api/admin/") {
+            json!([{ "adminBearerAuth": [] }])
+        } else {
+            json!([{ "bearerAuth": [] }])
+        };
     }
 
     let parameters: Vec<Value> = path
@@ -708,10 +864,149 @@ fn add_operation(paths: &mut Map<String, Value>, operation: Operation) {
         operation["parameters"] = json!(parameters);
     }
 
+    let extra_parameters = extra_parameters(path, method);
+    if !extra_parameters.is_empty() {
+        operation["parameters"] = match operation.get("parameters").cloned() {
+            Some(Value::Array(mut parameters)) => {
+                parameters.extend(extra_parameters);
+                Value::Array(parameters)
+            }
+            _ => Value::Array(extra_parameters),
+        };
+    }
+
     paths
         .entry(path.to_owned())
         .or_insert_with(|| json!({}))
         .as_object_mut()
         .expect("OpenAPI path item must be an object")
         .insert(method.to_owned(), operation);
+}
+
+fn schema_ref(name: &str) -> Value {
+    json!({ "$ref": format!("#/components/schemas/{name}") })
+}
+
+fn array_schema(name: &str) -> Value {
+    json!({ "type": "array", "items": schema_ref(name) })
+}
+
+fn request_schema(path: &str, method: &str) -> Value {
+    let name = match (path, method) {
+        ("/api/auth/register", "post") | ("/api/auth/login", "post") => "AuthCodeRequest",
+        ("/api/payments", "post") => "NewPayment",
+        ("/api/exchange/orders", "post") => "CreateExchangeOrder",
+        ("/api/exchange/orders/{id}/confirm", "post") => "ConfirmOrderRequest",
+        ("/api/exchange/orders/{id}/funding/confirm", "post") => "FundingConfirmRequest",
+        ("/api/exchange/orders/{id}/proof", "post") => "SubmitProofRequest",
+        _ => "JsonObject",
+    };
+    schema_ref(name)
+}
+
+fn response_schema(path: &str, method: &str) -> Value {
+    match (path, method) {
+        ("/api/auth/register", "post")
+        | ("/api/auth/login", "post")
+        | ("/api/auth/oauth/{provider}", "post") => schema_ref("AuthToken"),
+        ("/api/auth/me", "get") => schema_ref("User"),
+        ("/api/payments", "post") | ("/api/payments/{id}", "get") => schema_ref("PaymentView"),
+        ("/api/payments", "get") => array_schema("PaymentView"),
+        ("/api/exchange/orders", "post")
+        | ("/api/exchange/orders/{id}", "get")
+        | ("/api/exchange/orders/{id}/cancel", "post") => schema_ref("ExchangeOrder"),
+        ("/api/exchange/orders", "get") => array_schema("ExchangeOrder"),
+        ("/api/exchange/orders/{id}/confirm", "post")
+        | ("/api/exchange/orders/{id}/funding/confirm", "post") => schema_ref("JsonResponse"),
+        _ => schema_ref("JsonResponse"),
+    }
+}
+
+fn success_response(path: &str, method: &str) -> Value {
+    match (path, method) {
+        ("/health", "get") => json!({
+            "description": "The backend is reachable.",
+            "content": { "text/plain": { "schema": { "type": "string", "example": "ok" } } }
+        }),
+        ("/metrics", "get") => json!({
+            "description": "Prometheus metrics.",
+            "content": { "text/plain": { "schema": { "type": "string" } } }
+        }),
+        ("/api/exchange/orders/{id}/live", "get")
+        | ("/ws", "get")
+        | ("/ws/rates", "get")
+        | ("/ws/payments", "get")
+        | ("/ws/p2p/routes", "get") => json!({
+            "description": "WebSocket upgrade. Connect with a WebSocket client to exchange JSON messages.",
+            "headers": { "Upgrade": { "schema": { "type": "string", "example": "websocket" } } }
+        }),
+        _ => json!({
+            "description": "Successful response",
+            "content": { "application/json": { "schema": response_schema(path, method) } }
+        }),
+    }
+}
+
+fn extra_parameters(path: &str, method: &str) -> Vec<Value> {
+    let mut parameters = Vec::new();
+    if path == "/api/exchange/orders" && method == "get" {
+        parameters.push(json!({
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of orders to return (1–100).",
+            "required": false,
+            "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 }
+        }));
+    }
+    if path == "/api/exchange/orders/{id}/live" && method == "get" {
+        parameters.push(json!({
+            "name": "access_token",
+            "in": "query",
+            "description": "Optional JWT for WebSocket clients that cannot send an Authorization header.",
+            "required": false,
+            "schema": { "type": "string" }
+        }));
+    }
+    if path == "/api/payments" && method == "post"
+        || path == "/api/exchange/orders" && method == "post"
+    {
+        parameters.push(json!({
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Stable key used to safely retry a create request.",
+            "required": false,
+            "schema": { "type": "string", "example": "payment-2026-09-26-001" }
+        }));
+    }
+    parameters
+}
+
+#[cfg(test)]
+mod tests {
+    use super::api_document;
+
+    #[test]
+    fn documents_auth_and_real_request_schemas() {
+        let document = api_document();
+        let login = &document["paths"]["/api/auth/login"]["post"];
+        assert_eq!(
+            login["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+            "#/components/schemas/AuthCodeRequest"
+        );
+        assert_eq!(
+            login["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+            "#/components/schemas/AuthToken"
+        );
+        assert!(login["description"]
+            .as_str()
+            .is_some_and(|value| !value.is_empty()));
+        assert!(document["components"]["schemas"]["NewPayment"].is_object());
+    }
+
+    #[test]
+    fn uses_admin_security_for_admin_operations() {
+        let document = api_document();
+        let operation = &document["paths"]["/api/admin/exchange/controls"]["post"];
+        assert!(operation["security"][0]["adminBearerAuth"].is_array());
+    }
 }
