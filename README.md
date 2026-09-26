@@ -35,7 +35,7 @@ still be available when the venue is opened.
 | Bitcoin Center | Public route API | AMD bank transfer ↔ USDT on Solana, including the reported output fee |
 | BestChange | Official authenticated rates API | Aggregated exchanger offers |
 | Dzengi | Public market-data API | Crypto spot-market paths |
-| Exnode | Public P2P API | Exnode P2P advertisements |
+| Exnode | Public monitoring API | Exnode-listed exchange services |
 | CoW Swap | CoW Protocol quote API | Selectable same-chain crypto swap quotes for configured chains and tokens |
 | NEAR Intents | 1Click quote API | Selectable cross-chain and same-chain crypto swap quotes from the live token catalog |
 | Symbiosis | Official cross-chain swap API | Selectable cross-chain crypto quotes from the live Symbiosis token catalog |

@@ -2,8 +2,9 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-const REQUEST_PLACEHOLDERS: [&str; 6] = [
+const REQUEST_PLACEHOLDERS: [&str; 7] = [
     "fiat",
+    "fiat_code",
     "asset",
     "amount",
     "amount_number",
@@ -149,6 +150,8 @@ pub struct P2pAdapterConfig {
     pub headers: BTreeMap<String, String>,
     #[serde(default)]
     pub asset_codes: BTreeMap<String, String>,
+    #[serde(default)]
+    pub fiat_codes: BTreeMap<String, String>,
     #[serde(default)]
     pub supported_assets: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -620,6 +623,13 @@ impl P2pAdapterConfig {
             if !valid_asset_code(canonical) || !valid_remote_asset_code(remote) {
                 return Err(format!(
                     "{context}: adapter/p2p/asset_codes contains an invalid mapping"
+                ));
+            }
+        }
+        for (canonical, remote) in &self.fiat_codes {
+            if !valid_asset_code(canonical) || !valid_remote_asset_code(remote) {
+                return Err(format!(
+                    "{context}: adapter/p2p/fiat_codes contains an invalid mapping"
                 ));
             }
         }

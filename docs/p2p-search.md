@@ -11,7 +11,8 @@ money.
   direct-quote APIs. Bitcoin Center is restricted to AMD bank transfers and
   USDT on Solana.
 - BestChange public catalog and direction pages.
-- Exnode's public P2P advertisement API.
+- Exnode's public monitoring rates API, which exposes the exchange services
+  listed for a fiat/crypto route without merchant API keys.
 - Binance, Bybit, OKX, Bitget, MEXC, Cifra Markets, and Dzengi spot tickers for
   crypto-to-crypto paths.
 

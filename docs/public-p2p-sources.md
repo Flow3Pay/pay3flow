@@ -18,7 +18,7 @@ places orders, reserves crypto, or collects full payment-card credentials.
 | SkyLabs | Public homepage rate endpoint | Anonymous JSON requests | Enabled for direct AMD/USD quotes |
 | BestChange | Public catalog and direction pages | Anonymous HTML reads; page format may change | Enabled as an aggregated exchanger source |
 | Dzengi | Public market ticker | Anonymous JSON requests | Enabled for crypto spot paths |
-| Exnode | Public P2P advertisement API | Anonymous read-only requests; formats may change | Enabled through the generic Providerfile HTTP adapter |
+| Exnode | Public monitoring rates API | Anonymous read-only requests; formats may change | Enabled through the generic Providerfile HTTP adapter as direct-exchange offers |
 | ID Pay | Public server-rendered AMD/RUB rate | Anonymous page read | Enabled as a direct fiat route provider |
 
 Do not describe these sources as settlement executors. Providerfile adapters
