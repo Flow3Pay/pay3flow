@@ -108,7 +108,11 @@ impl DeclarativeP2pSource {
             "maximum fiat",
         )?;
         let advertiser_id = optional_string(item, mapping.advertiser_id_pointer.as_deref());
-        let user_type = optional_string(item, mapping.advertiser_user_type_pointer.as_deref());
+        let user_type = if self.config.market == P2pAdapterMarket::DirectExchange {
+            Some("service".into())
+        } else {
+            optional_string(item, mapping.advertiser_user_type_pointer.as_deref())
+        };
         let is_merchant = mapping.merchant_default
             || mapping
                 .merchant_conditions
@@ -304,10 +308,17 @@ impl P2pSource for DeclarativeP2pSource {
 
         let operation = self.operation(query.side)?;
         let values = self.template_values(query, operation)?;
+        let endpoint = render_request_string(
+            operation
+                .endpoint
+                .as_deref()
+                .unwrap_or(&self.config.endpoint),
+            &values,
+        );
         let response = send_json(
             &self.client,
             &self.config.method,
-            &self.config.endpoint,
+            &endpoint,
             &self.config.headers,
             self.config.auth.as_ref(),
             &operation.query,
@@ -846,6 +857,21 @@ mod tests {
         DeclarativeP2pSource::from_record(Client::new(), &record).unwrap()
     }
 
+    fn skylabs_source() -> DeclarativeP2pSource {
+        let document: toml::Value =
+            toml::from_str(include_str!("../../providers/skylabs/Providerfile")).unwrap();
+        let adapters: ProviderAdapters =
+            document.get("adapter").unwrap().clone().try_into().unwrap();
+        let record = ProviderAdapterRecord {
+            slug: "skylabs".into(),
+            source_url: "https://skylabs.world/".into(),
+            display_name: "SkyLabs".into(),
+            config: Some(adapters),
+            workflow: None,
+        };
+        DeclarativeP2pSource::from_record(Client::new(), &record).unwrap()
+    }
+
     #[test]
     fn renders_typed_and_string_request_placeholders() {
         let mut value: Value = serde_json::from_str(
@@ -1015,6 +1041,57 @@ mod tests {
         }
     }
 
+    #[test]
+    fn maps_skylabs_homepage_rate_as_a_direct_exchange() {
+        let source = skylabs_source();
+        let response: Value = serde_json::from_str(r#"{"status":true,"result":365.5}"#).unwrap();
+        let query = P2pSearchQuery {
+            fiat: "AMD".into(),
+            asset: "USDT".into(),
+            side: P2pSide::BuyCrypto,
+            amount: Some(100_000.0),
+            payment_method: None,
+            merchant_only: None,
+            min_orders: None,
+            min_completion_rate: None,
+            limit: Some(1),
+            sources: Some("skylabs".into()),
+        };
+
+        let offer = source
+            .into_offer(&response, &query, source.config.offer.as_ref().unwrap())
+            .unwrap();
+
+        assert_eq!(offer.market, P2pOfferMarket::DirectExchange);
+        assert_eq!(offer.price, "365.5");
+        assert_eq!(offer.advertiser.user_type.as_deref(), Some("service"));
+        assert_eq!(offer.source_url, "https://skylabs.world/#rates");
+    }
+
+    #[test]
+    fn renders_operation_specific_endpoint_placeholders() {
+        let source = skylabs_source();
+        let query = P2pSearchQuery {
+            fiat: "AMD".into(),
+            asset: "USDT".into(),
+            side: P2pSide::BuyCrypto,
+            amount: Some(100_000.0),
+            payment_method: None,
+            merchant_only: None,
+            min_orders: None,
+            min_completion_rate: None,
+            limit: Some(1),
+            sources: Some("skylabs".into()),
+        };
+        let operation = source.operation(query.side).unwrap();
+        let values = source.template_values(&query, operation).unwrap();
+
+        assert_eq!(
+            render_request_string(operation.endpoint.as_deref().unwrap(), &values),
+            "https://api.skylabs.world/api/rate/USDT/AMD/sell"
+        );
+    }
+
     #[tokio::test]
     #[ignore = "calls the live Cifra Markets API"]
     async fn live_cifra_rate_table_returns_buy_and_sell_quotes() {
@@ -1063,5 +1140,33 @@ mod tests {
         assert!(tickers
             .iter()
             .any(|ticker| ticker.symbol == "BTCUSDT" && ticker.bid > 0.0));
+    }
+
+    #[tokio::test]
+    #[ignore = "calls the live SkyLabs homepage API"]
+    async fn live_skylabs_returns_distinct_buy_and_sell_quotes() {
+        let source = skylabs_source();
+        let mut prices = Vec::new();
+        for side in [P2pSide::BuyCrypto, P2pSide::SellCrypto] {
+            let offers = source
+                .search(&P2pSearchQuery {
+                    fiat: "AMD".into(),
+                    asset: "USDT".into(),
+                    side,
+                    amount: Some(100_000.0),
+                    payment_method: None,
+                    merchant_only: None,
+                    min_orders: None,
+                    min_completion_rate: None,
+                    limit: Some(1),
+                    sources: Some("skylabs".into()),
+                })
+                .await
+                .unwrap();
+            assert_eq!(offers.len(), 1);
+            assert_eq!(offers[0].market, P2pOfferMarket::DirectExchange);
+            prices.push(offers[0].price.parse::<f64>().unwrap());
+        }
+        assert!(prices[0] > prices[1]);
     }
 }

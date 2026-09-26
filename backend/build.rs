@@ -5,6 +5,11 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
+#[path = "providerfile_code.rs"]
+mod providerfile_code;
+
+use providerfile_code::{normalize_path_source, CodeSource};
+
 #[derive(Deserialize)]
 struct Providerfile {
     code: Option<CodeBlock>,
@@ -14,7 +19,7 @@ struct Providerfile {
 #[serde(deny_unknown_fields)]
 struct CodeBlock {
     language: String,
-    source: String,
+    source: CodeSource,
 }
 
 fn main() {
@@ -29,7 +34,9 @@ fn main() {
     for path in files {
         let contents = fs::read_to_string(&path)
             .unwrap_or_else(|error| panic!("cannot read {}: {error}", path.display()));
-        let provider: Providerfile = toml::from_str(&contents)
+        let normalized = normalize_path_source(&contents)
+            .unwrap_or_else(|error| panic!("cannot parse {}: {error}", path.display()));
+        let provider: Providerfile = toml::from_str(&normalized)
             .unwrap_or_else(|error| panic!("cannot parse {}: {error}", path.display()));
         let Some(code) = provider.code else { continue };
         assert_eq!(
@@ -38,11 +45,17 @@ fn main() {
             "{}: [code].language must be `rust`",
             path.display()
         );
-        assert!(
-            !code.source.trim().is_empty(),
-            "{}: [code].source must not be empty",
-            path.display()
-        );
+        let source = code
+            .source
+            .load(&path)
+            .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+        if let Some(source_path) = code
+            .source
+            .external_path(&path)
+            .unwrap_or_else(|error| panic!("{}: {error}", path.display()))
+        {
+            println!("cargo:rerun-if-changed={}", source_path.display());
+        }
         let relative = path
             .strip_prefix(&providers)
             .expect("Providerfile must be below providers/");
@@ -60,7 +73,7 @@ fn main() {
             .join("-");
         let module = slug.replace('-', "_");
         writeln!(generated, "pub mod {module} {{").unwrap();
-        generated.push_str(&code.source);
+        generated.push_str(&source);
         generated.push_str("\n}\n");
     }
 

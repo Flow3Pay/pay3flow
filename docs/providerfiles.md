@@ -77,6 +77,25 @@ pub struct ExampleRouteProvider;
 '''
 ```
 
+The Rust source may instead live next to the `Providerfile` (or in one of its
+subdirectories):
+
+```toml
+[code]
+language = "rust"
+source = path["adapter.rs"]
+```
+
+The equivalent standard TOML form is also accepted:
+
+```toml
+source = { path = "adapter.rs" }
+```
+
+Paths are relative to the directory containing the `Providerfile`, must point
+to a `.rs` file, and cannot be absolute or contain `..`. Changes to the
+referenced file trigger a backend rebuild.
+
 `backend/build.rs` scans every `providers/**/Providerfile` during compilation.
 Each code block becomes a module below `crate::compiled_provider_code`; hyphens
 in the provider slug become underscores, so `my-provider` is emitted as
@@ -84,11 +103,12 @@ in the provider slug become underscores, so `my-provider` is emitted as
 Cargo to rebuild the generated module. Invalid Rust fails the backend build,
 just like invalid code in a normal library.
 
-Only `language = "rust"` is accepted and `source` must not be empty. The code
-runs with the backend's dependencies and permissions, so review it exactly as
-code under `src` and never put credentials in it. Add any required third-party
-crate to `backend/Cargo.toml`; Providerfiles cannot declare dependencies on
-their own. CoW Swap, NEAR Intents, and ID Pay are checked-in examples.
+Only `language = "rust"` is accepted. Inline source and referenced files must
+not be empty. The code runs with the backend's dependencies and permissions,
+so review it exactly as code under `src` and never put credentials in it. Add
+any required third-party crate to `backend/Cargo.toml`; Providerfiles cannot
+declare dependencies on their own. CoW Swap, NEAR Intents, and ID Pay are
+checked-in examples.
 
 The `[code]` body is not copied into the providers SQL and is never compiled or
 evaluated at runtime.
@@ -217,6 +237,20 @@ available_asset_pointer = "/available"
 min_fiat_pointer = "/min"
 max_fiat_pointer = "/max"
 advertiser_nickname_pointer = "/merchant/name"
+```
+
+For APIs that put pair parameters in the URL, an operation can override the
+common endpoint and use request placeholders. Set `offer_market = "direct_exchange"`
+when the response is a provider quote rather than a public P2P advertisement:
+
+```toml
+[adapter.p2p]
+kind = "http_json"
+endpoint = "https://api.provider.example/rates"
+offer_market = "direct_exchange"
+
+[adapter.p2p.buy]
+endpoint = "https://api.provider.example/rate/{{asset}}/{{fiat}}/sell"
 ```
 
 Request templates support `{{fiat}}`, `{{asset}}`, `{{amount}}`,

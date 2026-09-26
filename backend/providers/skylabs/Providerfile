@@ -1,0 +1,47 @@
+[sell]
+source_url = "https://skylabs.world/"
+name = "SkyLabs Sell"
+currency = ["amd", "usd"]
+banks = []
+
+[buy]
+source_url = "https://skylabs.world/"
+name = "SkyLabs Buy"
+currency = ["amd", "usd"]
+banks = []
+
+# The homepage rate table requests one public rate per asset, fiat currency,
+# and direction. SkyLabs names the direction from its own perspective, so a
+# customer buying crypto uses its `sell` rate and vice versa.
+[adapter.p2p]
+kind = "http_json"
+endpoint = "https://api.skylabs.world/api/rate/all"
+method = "GET"
+headers = { Origin = "https://skylabs.world", Referer = "https://skylabs.world/" }
+timeout_ms = 5000
+supported_assets = ["BTC", "ETH", "USDT", "BNB", "TRX", "USDC", "TON", "LTC", "MATIC"]
+default_min_fiat = 1
+default_max_fiat = 1000000000
+default_available_asset = 1000000000
+market = "direct_exchange"
+
+[adapter.p2p.buy]
+endpoint = "https://api.skylabs.world/api/rate/{{asset}}/{{fiat}}/sell"
+success_pointer = "/status"
+success_value = "true"
+
+[adapter.p2p.sell]
+endpoint = "https://api.skylabs.world/api/rate/{{asset}}/{{fiat}}/buy"
+success_pointer = "/status"
+success_value = "true"
+
+[adapter.p2p.offer]
+price_pointer = "/result"
+merchant_default = true
+verified_default = true
+source_url_template = "https://skylabs.world/#rates"
+
+[fees]
+kind = "quote_dependent"
+description = "The public homepage buy/sell rate is used. Terminal, bank, wallet, conversion, and network fees are separate and may vary by payment method."
+docs_url = "https://skylabs.world/#calc"

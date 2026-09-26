@@ -7,6 +7,11 @@ use pay3flow_backend::provider_adapter::{ProviderAdapters, WorkflowConfig};
 use pay3flow_backend::providers::ProviderFeeModel;
 use serde::Deserialize;
 
+#[path = "providerfile_code.rs"]
+mod providerfile_code;
+
+use providerfile_code::{normalize_path_source, CodeSource};
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawProviderFile {
@@ -22,7 +27,7 @@ struct RawProviderFile {
 #[serde(deny_unknown_fields)]
 struct RawCodeBlock {
     language: String,
-    source: String,
+    source: CodeSource,
 }
 
 #[derive(Debug, Deserialize)]
@@ -81,7 +86,18 @@ pub fn parse(
     slug: &str,
     source_file: &str,
 ) -> Result<Vec<ProviderDefinition>, ProviderFileError> {
-    let raw: RawProviderFile = toml::from_str(contents)
+    parse_with_path(contents, slug, source_file, None)
+}
+
+fn parse_with_path(
+    contents: &str,
+    slug: &str,
+    source_file: &str,
+    providerfile_path: Option<&Path>,
+) -> Result<Vec<ProviderDefinition>, ProviderFileError> {
+    let normalized = normalize_path_source(contents)
+        .map_err(|error| ProviderFileError(format!("{source_file}: {error}")))?;
+    let raw: RawProviderFile = toml::from_str(&normalized)
         .map_err(|error| ProviderFileError(format!("{source_file}: {error}")))?;
     if raw.buy.is_none() && raw.sell.is_none() {
         return Err(ProviderFileError(format!(
@@ -89,10 +105,18 @@ pub fn parse(
         )));
     }
     if let Some(code) = &raw.code {
-        if code.language != "rust" || code.source.trim().is_empty() {
+        if code.language != "rust" {
             return Err(ProviderFileError(format!(
-                "{source_file}: [code] requires language = \"rust\" and non-empty source"
+                "{source_file}: [code].language must be \"rust\""
             )));
+        }
+        code.source
+            .validate()
+            .map_err(|error| ProviderFileError(format!("{source_file}: {error}")))?;
+        if let Some(path) = providerfile_path {
+            code.source
+                .load(path)
+                .map_err(|error| ProviderFileError(format!("{source_file}: {error}")))?;
         }
     }
 
@@ -151,7 +175,7 @@ pub fn compile_dir(root: &Path) -> Result<String, ProviderFileError> {
         let contents = fs::read_to_string(&path).map_err(|error| {
             ProviderFileError(format!("cannot read {}: {error}", path.display()))
         })?;
-        for definition in parse(&contents, &slug, &source_file)? {
+        for definition in parse_with_path(&contents, &slug, &source_file, Some(&path))? {
             let identity = (definition.slug.clone(), definition.operation);
             if !identities.insert(identity) {
                 return Err(ProviderFileError(format!(
@@ -502,6 +526,48 @@ currency = ["eth"]
     }
 
     #[test]
+    fn accepts_compile_time_rust_code_from_a_path() {
+        let external = CODE_EXAMPLE.replace(
+            "source = '''\npub struct ExampleRouteProvider;\n'''",
+            "source = path[\"adapter.rs\"]",
+        );
+
+        assert!(parse(&external, "example", "example/Providerfile").is_ok());
+    }
+
+    #[test]
+    fn compile_dir_loads_external_rust_code() {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "pay3flow-providerfile-{}-{unique}",
+            std::process::id()
+        ));
+        let provider = root.join("external");
+        fs::create_dir_all(&provider).unwrap();
+        fs::write(
+            provider.join("Providerfile"),
+            CODE_EXAMPLE.replace(
+                "source = '''\npub struct ExampleRouteProvider;\n'''",
+                "source = path[\"adapter.rs\"]",
+            ),
+        )
+        .unwrap();
+        fs::write(
+            provider.join("adapter.rs"),
+            "pub struct ExternalRouteProvider;\n",
+        )
+        .unwrap();
+
+        let result = compile_dir(&root);
+        fs::remove_dir_all(&root).unwrap();
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
     fn rejects_unsupported_or_empty_code() {
         assert!(parse(
             &CODE_EXAMPLE.replace("language = \"rust\"", "language = \"javascript\""),
@@ -560,6 +626,7 @@ currency = ["eth"]
         assert!(sql.contains("'cow-swap'"));
         assert!(sql.contains("'near-intents'"));
         assert!(sql.contains("'id-pay'"));
+        assert!(sql.contains("'skylabs'"));
         assert!(sql.contains("workflow"));
     }
 }

@@ -6,7 +6,7 @@
   export let venueNames: Record<string, string> = {};
   export let serviceLink: ServiceLink | undefined = undefined;
   export let onOpenService: (link: ServiceLink) => void = () => {};
-  const VENUE_ICONS: Record<string, string> = { binance: venueIcon("binance"), bybit: venueIcon("bybit"), okx: venueIcon("okx"), bitget: venueIcon("bitget"), rapira: venueIcon("rapira"), whitebird: venueIcon("whitebird"), "cifra-broker": venueIcon("cifra-broker"), bestchange: venueIcon("bestchange"), dzengi: venueIcon("dzengi"), exnode: venueIcon("exnode") };
+  const VENUE_ICONS: Record<string, string> = { binance: venueIcon("binance"), bybit: venueIcon("bybit"), okx: venueIcon("okx"), bitget: venueIcon("bitget"), rapira: venueIcon("rapira"), whitebird: venueIcon("whitebird"), "cifra-broker": venueIcon("cifra-broker"), bestchange: venueIcon("bestchange"), dzengi: venueIcon("dzengi"), exnode: venueIcon("exnode"), skylabs: venueIcon("skylabs") };
   const venueName = (value?: string) => value ? venueNames[value.toLowerCase()] ?? value : "P2P market";
   const percentage = (value?: number | null) => value == null ? "—" : `${(value * 100).toFixed(1)}%`;
   const profileFallback = (value: P2pOffer) => value.source.toLowerCase() === "bybit" && value.advertiser.id ? `https://www.bybit.com/en/p2p/profile/${encodeURIComponent(value.advertiser.id)}/${encodeURIComponent(value.asset)}/${encodeURIComponent(value.fiat)}/item` : null;

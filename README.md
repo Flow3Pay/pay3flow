@@ -62,10 +62,12 @@ flowchart LR
     api --> spot[Spot tickers]
     api --> whitebird[Whitebird quote API]
     api --> cifra[Cifra Markets API]
+    api --> skylabs[SkyLabs homepage API]
     p2p --> ranker[Route builder and ranker]
     spot --> ranker
     whitebird --> ranker
     cifra --> ranker
+    skylabs --> ranker
     ranker -->|progressive snapshots| browser
 ```
 
@@ -127,7 +129,7 @@ curl -G 'http://localhost:8080/api/p2p/routes' \
   --data-urlencode 'target_fiat=RUB' \
   --data-urlencode 'source_amount=100' \
   --data-urlencode 'target_payment_method=Sberbank' \
-  --data-urlencode 'sources=binance,bybit,okx,bitget,rapira,whitebird,cifra-broker' \
+  --data-urlencode 'sources=binance,bybit,okx,bitget,rapira,whitebird,cifra-broker,skylabs' \
   --data-urlencode 'allow_cross_venue=true' \
   --data-urlencode 'limit=40'
 ```
@@ -176,7 +178,7 @@ request after the socket opens:
     "target_fiat": "RUB",
     "source_amount": 100,
     "target_payment_method": "Sberbank",
-    "sources": "binance,bybit,okx,bitget,rapira,whitebird,cifra-broker",
+    "sources": "binance,bybit,okx,bitget,rapira,whitebird,cifra-broker,skylabs",
     "allow_cross_venue": true,
     "min_orders": 20,
     "min_completion_rate": 0.9,
@@ -206,7 +208,7 @@ curl -G 'http://localhost:8080/api/p2p/search' \
   --data-urlencode 'side=sell' \
   --data-urlencode 'amount=100' \
   --data-urlencode 'payment_method=Sberbank' \
-  --data-urlencode 'sources=binance,bybit,okx,bitget,whitebird,cifra-broker'
+  --data-urlencode 'sources=binance,bybit,okx,bitget,whitebird,cifra-broker,skylabs'
 ```
 
 ## Main API surface

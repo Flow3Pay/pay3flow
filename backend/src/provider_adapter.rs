@@ -190,6 +190,8 @@ pub struct RateTableConfig {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct P2pOperation {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub endpoint: Option<String>,
     #[serde(default)]
     pub query: BTreeMap<String, String>,
     pub request_json: Option<String>,
@@ -630,6 +632,10 @@ impl P2pOperation {
         context: &str,
         operation: &str,
     ) -> Result<(), String> {
+        if let Some(endpoint) = &self.endpoint {
+            validate_http(&adapter.kind, endpoint, method, adapter.timeout_ms, context)?;
+            validate_request_placeholders(endpoint, context)?;
+        }
         if let Some(auth) = &adapter.auth {
             auth.validate(context)?;
         }
