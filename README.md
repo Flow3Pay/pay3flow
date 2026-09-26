@@ -29,6 +29,10 @@ still be available when the venue is opened.
 | Rapira | Public P2P API | `USDT/RUB` P2P ads |
 | Whitebird | Anonymous quote API used by the public exchanger | Direct fiat/crypto quotes, including `USDC/RUB` |
 | Cifra Markets | Public calculator and IMEX market API | Direct RUB/BYN/USD crypto quotes and crypto market paths |
+| SkyLabs | Public homepage rate API | Direct AMD/USD fiat-to-crypto and crypto-to-fiat quotes |
+| BestChange | Public catalog and direction pages | Aggregated exchanger offers |
+| Dzengi | Public market-data API | Crypto spot-market paths |
+| Exnode | HMAC-authenticated merchant quote API | Direct quotes when API credentials are configured |
 | CoW Swap | CoW Protocol quote API | Selectable same-chain crypto swap quotes for configured chains and tokens |
 | NEAR Intents | 1Click quote API | Selectable cross-chain and same-chain crypto swap quotes from the live token catalog |
 | ID Pay | Public server-rendered calculator rate | Selectable direct AMD/RUB and RUB/AMD transfer estimates |
@@ -40,11 +44,10 @@ model and links to the [CoW Protocol documentation](https://docs.cow.fi/cow-prot
 
 CoW Swap and NEAR Intents are separate selectable exchanges. When selected,
 their quoted outputs are independent and can differ because each provider uses
-its own liquidity, execution costs, and fee model. The catalog also includes
-Exnode, Dzengi, and BestChange. They are
-currently selectable venue entries with links and local icons; live route
-adapters are not enabled yet because their public quote endpoints require a
-site workflow or API credentials.
+its own liquidity, execution costs, and fee model. Exnode is the only
+Providerfile adapter in the table that requires provider credentials. Set
+`EXNODE_API_PUBLIC` and `EXNODE_API_PRIVATE` to use it; the other listed
+public-data adapters make anonymous read-only requests.
 
 Provider capabilities live in
 [`backend/providers/*/Providerfile`](backend/providers/). They are compiled
@@ -81,8 +84,8 @@ flowchart LR
 - The best route remains selected while results arrive unless the user has
   explicitly selected another route.
 - Public P2P ads are protected by price-deviation filtering. Direct exchanger
-  quotes such as Whitebird are retained as independent quotes rather than
-  compared as if they were P2P ads.
+  quotes such as Whitebird and SkyLabs are retained as independent quotes
+  rather than compared as if they were P2P ads.
 
 ## Quick start with Docker
 
