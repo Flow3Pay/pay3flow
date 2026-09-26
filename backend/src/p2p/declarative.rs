@@ -751,9 +751,27 @@ fn payment_methods(item: &Value, mapping: &OfferMapping) -> Vec<String> {
         .unwrap_or_else(|| std::slice::from_ref(value));
     values
         .iter()
-        .filter_map(|value| {
+        .flat_map(|value| {
             if let Some(value) = scalar_string(value).filter(|value| !value.is_empty()) {
-                return Some(value);
+                // Several venues, including MEXC, return opaque payment
+                // method IDs as one comma-separated scalar (`"1,12,14"`).
+                // Keep named methods intact, but expose numeric IDs
+                // individually so unknown-method matching can recognize them.
+                if value.contains(',') {
+                    let parts = value
+                        .split(',')
+                        .map(str::trim)
+                        .filter(|part| !part.is_empty())
+                        .collect::<Vec<_>>();
+                    if !parts.is_empty()
+                        && parts
+                            .iter()
+                            .all(|part| part.bytes().all(|byte| byte.is_ascii_digit()))
+                    {
+                        return parts.into_iter().map(str::to_owned).collect::<Vec<_>>();
+                    }
+                }
+                return vec![value];
             }
             mapping
                 .payment_method_value_pointer
@@ -769,6 +787,8 @@ fn payment_methods(item: &Value, mapping: &OfferMapping) -> Vec<String> {
                         .and_then(scalar_string)
                         .filter(|value| !value.is_empty())
                 })
+                .into_iter()
+                .collect::<Vec<_>>()
         })
         .collect()
 }
@@ -908,6 +928,7 @@ fn compact_json(value: &Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::p2p::service::PaymentMethodMatch;
     use crate::provider_adapter::ProviderAdapters;
 
     fn cifra_source() -> DeclarativeP2pSource {
@@ -985,6 +1006,21 @@ mod tests {
         DeclarativeP2pSource::from_record(Client::new(), &record).unwrap()
     }
 
+    fn mexc_source() -> DeclarativeP2pSource {
+        let document: toml::Value =
+            toml::from_str(include_str!("../../providers/mexc/Providerfile")).unwrap();
+        let adapters: ProviderAdapters =
+            document.get("adapter").unwrap().clone().try_into().unwrap();
+        let record = ProviderAdapterRecord {
+            slug: "mexc".into(),
+            source_url: "https://www.mexc.com/buy-crypto/p2p".into(),
+            display_name: "MEXC".into(),
+            config: Some(adapters),
+            workflow: None,
+        };
+        DeclarativeP2pSource::from_record(Client::new(), &record).unwrap()
+    }
+
     #[test]
     fn renders_typed_and_string_request_placeholders() {
         let mut value: Value = serde_json::from_str(
@@ -1010,6 +1046,48 @@ mod tests {
     fn normalizes_percentage_rates() {
         let item: Value = serde_json::from_str(r#"{"rate":"99.5%"}"#).unwrap();
         assert_eq!(optional_rate(&item, Some("/rate")), Some(0.995));
+    }
+
+    #[test]
+    fn splits_mexc_numeric_payment_method_lists() {
+        let source = mexc_source();
+        let response: Value = serde_json::from_str(
+            r#"{
+                "id":"ad-1",
+                "price":250000,
+                "availableQuantity":1.0,
+                "coinName":"ETH",
+                "currency":"RUB",
+                "payMethod":"1,12,14",
+                "expirationTime":15,
+                "minTradeLimit":1000,
+                "maxTradeLimit":100000,
+                "merchant":{"memberId":"merchant-1","nickName":"Trader","merchantType":"merchant"},
+                "merchantStatistics":{"doneLastMonthCount":100,"thirtyDayCompletionRate":0.99,"goodRate":"100"}
+            }"#,
+        )
+        .unwrap();
+        let query = P2pSearchQuery {
+            fiat: "RUB".into(),
+            asset: "ETH".into(),
+            side: P2pSide::BuyCrypto,
+            amount: Some(10_000.0),
+            payment_method: Some("Sberbank".into()),
+            merchant_only: None,
+            min_orders: None,
+            min_completion_rate: None,
+            limit: Some(20),
+            sources: Some("mexc".into()),
+        };
+
+        let offer = source
+            .into_offer(&response, &query, source.config.offer.as_ref().unwrap())
+            .unwrap();
+        assert_eq!(offer.payment_methods, ["1", "12", "14"]);
+        assert_eq!(
+            offer.payment_method_match("Sberbank"),
+            PaymentMethodMatch::Unknown
+        );
     }
 
     #[test]
