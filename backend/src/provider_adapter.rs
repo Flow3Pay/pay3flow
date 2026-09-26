@@ -18,6 +18,8 @@ pub struct ProviderAdapters {
     pub p2p: Option<P2pAdapterConfig>,
     pub market: Option<MarketAdapterConfig>,
     pub bestchange: Option<BestChangeAdapterConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub papa_change: Option<PapaChangeAdapterConfig>,
 }
 
 /// Configuration for the official BestChange API adapter.
@@ -34,6 +36,21 @@ pub struct BestChangeAdapterConfig {
     pub language: String,
     #[serde(default = "default_timeout_ms")]
     pub timeout_ms: u64,
+    #[serde(default = "default_bestchange_max_results")]
+    pub max_results: usize,
+}
+
+/// Public Papa Change catalog and exchange-rate endpoints.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PapaChangeAdapterConfig {
+    pub directions_endpoint: String,
+    pub rates_endpoint: String,
+    pub public_endpoint: String,
+    #[serde(default = "default_timeout_ms")]
+    pub timeout_ms: u64,
+    #[serde(default = "default_papa_change_cache_ttl_ms")]
+    pub cache_ttl_ms: u64,
     #[serde(default = "default_bestchange_max_results")]
     pub max_results: usize,
 }
@@ -296,9 +313,13 @@ pub struct MarketAdapterConfig {
 
 impl ProviderAdapters {
     pub fn validate(&self, has_buy: bool, has_sell: bool, context: &str) -> Result<(), String> {
-        if self.p2p.is_none() && self.market.is_none() && self.bestchange.is_none() {
+        if self.p2p.is_none()
+            && self.market.is_none()
+            && self.bestchange.is_none()
+            && self.papa_change.is_none()
+        {
             return Err(format!(
-                "{context}: adapter must contain [adapter.p2p], [adapter.market], or [adapter.bestchange]"
+                "{context}: adapter must contain [adapter.p2p], [adapter.market], [adapter.bestchange], or [adapter.papa_change]"
             ));
         }
         if let Some(p2p) = &self.p2p {
@@ -309,6 +330,9 @@ impl ProviderAdapters {
         }
         if let Some(bestchange) = &self.bestchange {
             bestchange.validate(context)?;
+        }
+        if let Some(papa_change) = &self.papa_change {
+            papa_change.validate(context)?;
         }
         Ok(())
     }
@@ -351,6 +375,38 @@ impl BestChangeAdapterConfig {
         if self.max_results == 0 {
             return Err(format!(
                 "{context}: BestChange max_results must be positive"
+            ));
+        }
+        Ok(())
+    }
+}
+
+impl PapaChangeAdapterConfig {
+    fn validate(&self, context: &str) -> Result<(), String> {
+        for (field, value) in [
+            ("directions_endpoint", self.directions_endpoint.as_str()),
+            ("rates_endpoint", self.rates_endpoint.as_str()),
+            ("public_endpoint", self.public_endpoint.as_str()),
+        ] {
+            if !value.starts_with("https://") && !value.starts_with("http://") {
+                return Err(format!(
+                    "{context}: Papa Change {field} must use http or https"
+                ));
+            }
+        }
+        if !(250..=30_000).contains(&self.timeout_ms) {
+            return Err(format!(
+                "{context}: Papa Change timeout_ms must be between 250 and 30000"
+            ));
+        }
+        if !(1_000..=60_000).contains(&self.cache_ttl_ms) {
+            return Err(format!(
+                "{context}: Papa Change cache_ttl_ms must be between 1000 and 60000"
+            ));
+        }
+        if !(1..=100).contains(&self.max_results) {
+            return Err(format!(
+                "{context}: Papa Change max_results must be between 1 and 100"
             ));
         }
         Ok(())
@@ -1083,6 +1139,10 @@ fn default_bestchange_language() -> String {
 
 fn default_bestchange_max_results() -> usize {
     100
+}
+
+fn default_papa_change_cache_ttl_ms() -> u64 {
+    30_000
 }
 
 fn default_navigation_retry_delay_ms() -> u64 {

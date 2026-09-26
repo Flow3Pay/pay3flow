@@ -627,6 +627,7 @@ currency = ["eth"]
         assert!(sql.contains("'near-intents'"));
         assert!(sql.contains("'id-pay'"));
         assert!(sql.contains("'skylabs'"));
+        assert!(sql.contains("'papa-change'"));
         assert!(sql.contains("workflow"));
     }
 }

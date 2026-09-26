@@ -73,6 +73,7 @@ are optional and can be combined as follows:
 | `[adapter.p2p]` | P2P ads or direct quotes over JSON | Cannot coexist with `[workflow]`. |
 | `[adapter.market]` | Spot bid/ask tickers over JSON | Can coexist with another adapter or workflow. |
 | `[adapter.bestchange]` | BestChange direction pages | Can coexist with other adapter sections, though normally used alone. |
+| `[adapter.papa_change]` | Papa Change public directions and rates | Intended for the Papa Change Providerfile and its compiled Rust adapter. |
 | `[workflow]` | Browser-driven calculator | Cannot coexist with `[adapter.p2p]`. |
 | `[code]` | Trusted Rust compiled into the backend | Independent of declarative sections. |
 
@@ -145,6 +146,24 @@ characters. `timeout_ms` defaults to `10000` and must be 250–30000.
 `max_results` defaults to `100` and must be positive.
 
 Complete example: `backend/providers/bestchange/Providerfile`.
+
+## Papa Change adapter
+
+Papa Change publishes directions, reserves, limits, and per-currency rates in
+two public JSON resources. The compiled adapter joins those resources and
+applies each direction's commission and amount-tiered rate:
+
+```toml
+[adapter.papa_change]
+directions_endpoint = "https://api.papa-change.biz/users-directions/get-all-available"
+rates_endpoint = "https://api.papa-change.biz/exchange-rates-api/get-all"
+public_endpoint = "https://papa-change.biz/"
+timeout_ms = 10000
+cache_ttl_ms = 30000
+max_results = 100
+```
+
+Complete example: `backend/providers/papa-change/Providerfile`.
 
 ## HTTP/JSON P2P adapter
 
@@ -677,6 +696,17 @@ Checked-in Rust examples: CoW Swap, NEAR Intents, and ID Pay.
 | `timeout_ms` | No | `10000` | 250–30000 ms. |
 | `max_results` | No | `100` | Positive result limit. |
 
+### `adapter.papa_change`
+
+| Field | Required | Default | Meaning |
+| --- | --- | --- | --- |
+| `directions_endpoint` | Yes | — | Public directions, limits, and exchange catalog URL. |
+| `rates_endpoint` | Yes | — | Public per-exchange rate-table URL. |
+| `public_endpoint` | Yes | — | User-facing Papa Change URL used for direction links. |
+| `timeout_ms` | No | `10000` | 250–30000 ms. |
+| `cache_ttl_ms` | No | `30000` | 1000–60000 ms; shared snapshot cache lifetime. |
+| `max_results` | No | `100` | 1–100 offers returned per query. |
+
 ### `adapter.p2p`
 
 | Field | Required | Default | Meaning |
@@ -850,6 +880,7 @@ cargo check --manifest-path backend/Cargo.toml
 | --- | --- |
 | Catalog only | `backend/providers/Providerfile.example` after removing `[workflow]` |
 | BestChange | `backend/providers/bestchange/Providerfile` |
+| Papa Change joined public APIs | `backend/providers/papa-change/Providerfile` |
 | POST P2P ads and rich offer mapping | Binance, Bybit, Bitget |
 | GET P2P ads | OKX, Rapira |
 | Direct quote with per-direction amount mapping | Whitebird |

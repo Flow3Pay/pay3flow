@@ -75,7 +75,6 @@
   let routeInstructionsComponent: typeof import("./RouteInstructions.svelte").default | null = null;
   let searchingVenues: P2pSourceOption[] = [];
   let foundVenues: P2pSourceOption[] = [];
-  let foundVenueIds: string[] = [];
   $: activeLocale = $locale;
   $: modalOpen = settingsOpen || exchangesOpen;
 
@@ -194,8 +193,18 @@
     return created;
   }
 
-  function foundVenueOptions(): P2pSourceOption[] {
-    return foundVenueIds.map((id) =>
+  function foundVenueOptions(visibleRoutes: RouteCandidate[]): P2pSourceOption[] {
+    const ids = new Set<string>();
+    for (const route of visibleRoutes) {
+      for (const provider of [
+        ...route.legs.map((leg) => leg.provider),
+        ...(route.route_provider ? [route.route_provider] : []),
+      ]) {
+        const id = provider.toLowerCase();
+        if (id) ids.add(id);
+      }
+    }
+    return [...ids].map((id) =>
       p2pSources.find((item) => item.id.toLowerCase() === id)
         ?? { id, label: id.split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" "), iconUrl: venueIcon(id), searchable: true, searchMode: "selectable" as const },
     );
@@ -210,6 +219,7 @@
 
   function displayRoutes(nextRoutes: RouteCandidate[]) {
     routes = nextRoutes;
+    foundVenues = foundVenueOptions(nextRoutes);
   }
 
   function renderRoutesProgressively(nextRoutes: RouteCandidate[]) {
@@ -237,20 +247,6 @@
 
   function applySearchResponse(response: P2pRouteSearchResponse) {
     const nextRoutes = mapRoutes(response);
-    const newlyFoundVenueIds = [
-      ...nextRoutes.flatMap((route) => [
-        ...route.legs.map((leg) => leg.provider),
-        ...(route.route_provider ? [route.route_provider] : []),
-      ]),
-      ...(response.asset_statuses ?? [])
-        .flatMap((status) => [...status.entry_sources, ...status.exit_sources])
-        .filter((source) => source.offers_found > 0)
-        .map((source) => source.source),
-    ]
-      .map((source) => source.toLowerCase())
-      .filter((source, index, sources) => source && sources.indexOf(source) === index);
-    foundVenueIds = [...new Set([...foundVenueIds, ...newlyFoundVenueIds])];
-    foundVenues = foundVenueOptions();
     routesFound = response.routes_found ?? nextRoutes.length;
     renderRoutesProgressively(nextRoutes);
     const bestRoute = nextRoutes.find((route) => route.is_current_best) ?? nextRoutes[0] ?? null;
@@ -340,7 +336,7 @@
     if (seconds && updatedAt && validAmount) refreshTimer = window.setInterval(startSearch, seconds * 1000);
   }
   function resetResults() {
-    controller?.abort(); cancelRouteRendering(); displayRoutes([]); routesFound = 0; selected = null; selectionPinnedByUser = false; instructionsRoute = null; lastUpdatedAt = null; searching = false; awaitingFirstRoute = false; foundVenueIds = []; foundVenues = []; error = null;
+    controller?.abort(); cancelRouteRendering(); displayRoutes([]); routesFound = 0; selected = null; selectionPinnedByUser = false; instructionsRoute = null; lastUpdatedAt = null; searching = false; awaitingFirstRoute = false; error = null;
     if (refreshTimer) window.clearInterval(refreshTimer);
   }
   function updateAmount(value: string) { initialSearchReady = true; amount = normalizeAmount(value); resetResults(); }
@@ -413,7 +409,7 @@
       error = `Choose different networks for ${selectedSourceCurrency}; the same asset on the same network is not a swap route.`;
       return;
     }
-    controller?.abort(); cancelRouteRendering(); controller = new AbortController(); const signal = controller.signal; const currentRequest = ++requestId; searching = true; awaitingFirstRoute = true; routesFound = 0; foundVenueIds = []; foundVenues = []; error = null;
+    controller?.abort(); cancelRouteRendering(); controller = new AbortController(); const signal = controller.signal; const currentRequest = ++requestId; searching = true; awaitingFirstRoute = true; routesFound = 0; error = null;
     try {
       const liveQuery = { sourceFiat: selectedSourceCurrency, targetFiat: selectedTargetCurrency, sourceAmount: value, intermediaryAssets: !sourceWallet && !targetWallet && selectedIntermediaryAssets.length ? selectedIntermediaryAssets : undefined, sourceNetwork: sourceWallet ? sourceNetwork?.id : undefined, targetNetwork: targetWallet ? targetNetwork?.id : undefined, sourcePaymentMethod: sourceWallet ? undefined : sourceMethod.p2pQuery, targetPaymentMethod: targetWallet ? undefined : targetMethod.p2pQuery, sources: selectedSources, allowCrossVenue: true, limit: 40 };
       let response: P2pRouteSearchResponse;
@@ -502,7 +498,7 @@
     fetchNetworks().then((items) => { if (items.length) networks = items; }).catch(() => {});
     fetchProviders().then((providers) => {
       p2pSources = providerSources(providers);
-      foundVenues = foundVenueOptions();
+      foundVenues = foundVenueOptions(routes);
       venueNames = Object.fromEntries(p2pSources.map((provider) => [provider.id.toLowerCase(), provider.label]));
       const catalog = new Set(p2pSources.map((source) => source.id));
       const live = p2pSources.filter((source) => source.searchMode === "selectable").map((source) => source.id);

@@ -1,0 +1,32 @@
+# Papa Change exposes its public exchange catalog and rate table separately.
+# The compiled adapter joins them, applies direction fees and amount tiers, and
+# caches the shared snapshot so route searches do not repeatedly download it.
+
+[code]
+language = "rust"
+source = path["papa_change.rs"]
+
+[sell]
+source_url = "https://papa-change.biz/"
+name = "Papa Change Sell"
+currency = ["rub", "uah", "kzt", "uzs", "eur", "usd", "aed", "try", "kgs", "cad"]
+banks = []
+
+[buy]
+source_url = "https://papa-change.biz/"
+name = "Papa Change Buy"
+currency = ["rub", "uah", "kzt", "uzs", "eur", "usd", "aed", "try", "kgs", "cad"]
+banks = []
+
+[adapter.papa_change]
+directions_endpoint = "https://api.papa-change.biz/users-directions/get-all-available"
+rates_endpoint = "https://api.papa-change.biz/exchange-rates-api/get-all"
+public_endpoint = "https://papa-change.biz/"
+timeout_ms = 10000
+cache_ttl_ms = 30000
+max_results = 100
+
+[fees]
+kind = "included_in_quote"
+description = "The live rate includes Papa Change's direction commission and public amount-tiered rate; payment-system and blockchain fees may still apply."
+docs_url = "https://papa-change.biz/agreement"

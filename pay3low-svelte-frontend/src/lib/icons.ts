@@ -1,4 +1,5 @@
-const LOCAL_VENUE_ICONS = new Set(["binance", "bybit", "okx", "bitget", "rapira", "whitebird", "cifra-broker", "cow-swap", "bestchange", "bitcoin-center", "bncex", "dzengi", "exnode", "id-pay", "skylabs"]);
+const LOCAL_VENUE_ICONS = new Set(["binance", "bybit", "okx", "bitget", "rapira", "whitebird", "cifra-broker", "cow-swap", "bestchange", "bitcoin-center", "bncex", "dzengi", "exnode", "id-pay", "skylabs", "papa-change"]);
+const PNG_VENUE_ICONS = new Set(["binance", "bybit", "bitget", "rapira", "whitebird", "cifra-broker", "papa-change"]);
 const LOCAL_ASSET_ICONS = new Set([
   "ada", "apt", "atom", "avax", "bch", "bnb", "btc", "dai", "doge", "dot", "eth", "fdusd",
   "link", "ltc", "matic", "near", "sol", "sui", "ton", "trx", "uni", "usdc", "usdt", "xrp",
@@ -33,7 +34,7 @@ const NETWORK_ASSETS: Array<[RegExp, string]> = [
 export function venueIcon(venue: string): string {
   const key = venue.toLowerCase();
   if (key === "near-intents") return "/icons/assets/near.webp";
-  const extension = key === "binance" || key === "bybit" || key === "bitget" || key === "rapira" || key === "whitebird" || key === "cifra-broker" ? "png" : "svg";
+  const extension = PNG_VENUE_ICONS.has(key) ? "png" : "svg";
   const filename = key === "cow-swap" ? "cow-swap-favicon.svg" : `${key}.${extension}`;
   return LOCAL_VENUE_ICONS.has(key)
     ? `/icons/venues/${filename}`

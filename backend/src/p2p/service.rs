@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, Semaphore};
 
 use crate::compiled_provider_code::bestchange::BestChangeSource;
+use crate::compiled_provider_code::papa_change::PapaChangeSource;
 use crate::config::Config;
 use crate::db::DbPool;
 use crate::networks::NetworkCatalog;
@@ -373,6 +374,9 @@ impl P2pSearchService {
                 let source = Arc::new(source);
                 sources.push(source.clone());
                 route_providers.push(source);
+            }
+            if let Some(source) = PapaChangeSource::from_record(client.clone(), record) {
+                sources.push(Arc::new(source));
             }
             if let Some(source) = DeclarativeP2pSource::from_record(client.clone(), record) {
                 sources.push(Arc::new(source));
