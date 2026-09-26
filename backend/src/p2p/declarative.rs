@@ -1208,12 +1208,40 @@ mod tests {
         assert_eq!(body["paymentMethod"], "NON_CASH");
         assert_eq!(body["amountAmd"].as_f64(), Some(250_000.0));
 
-        let solana_template = operation.request_json_variants.first().unwrap();
+        assert_eq!(operation.request_json_variants.len(), 8);
+        let solana_template = operation
+            .request_json_variants
+            .iter()
+            .find(|template| template.contains("SOLANA"))
+            .unwrap();
         let mut solana_body: Value = serde_json::from_str(solana_template).unwrap();
         render_request_json(&mut solana_body, &values).unwrap();
         assert_eq!(solana_body["type"], "BUY_USDC");
         assert_eq!(solana_body["network"], "SOLANA");
         assert_eq!(solana_body["amountAmd"].as_f64(), Some(250_000.0));
+
+        let networks = operation
+            .request_json_variants
+            .iter()
+            .map(|template| {
+                let mut body: Value = serde_json::from_str(template).unwrap();
+                render_request_json(&mut body, &values).unwrap();
+                body["network"].as_str().unwrap().to_string()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            networks,
+            [
+                "ETH",
+                "BSC",
+                "POLYGON",
+                "ARBITRUM",
+                "OPTIMISM",
+                "BASE",
+                "AVALANCHE",
+                "SOLANA"
+            ]
+        );
     }
 
     #[test]
