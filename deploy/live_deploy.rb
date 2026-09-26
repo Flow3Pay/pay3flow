@@ -97,8 +97,20 @@ module Pay3flow
       echo "Importing images into k3s..."
       # Import separately. Combined archives can assign both tags to one image
       # with the containerd version currently running on the production host.
-      "$podman" save "$backend_image" | sudo "$k3s" ctr images import - >/dev/null
-      "$podman" save "$frontend_image" | sudo "$k3s" ctr images import - >/dev/null
+      # Temporary archives also avoid a pipefail/SIGPIPE race when containerd
+      # recognizes an already-cached image and closes stdin before podman exits.
+      backend_archive=$(mktemp /tmp/pay3flow-backend-image.XXXXXX.tar)
+      frontend_archive=$(mktemp /tmp/pay3flow-frontend-image.XXXXXX.tar)
+      cleanup_archives() {
+        rm -f "$backend_archive" "$frontend_archive"
+      }
+      trap cleanup_archives EXIT
+      "$podman" save --output "$backend_archive" "$backend_image"
+      "$podman" save --output "$frontend_archive" "$frontend_image"
+      sudo "$k3s" ctr images import "$backend_archive" >/dev/null
+      sudo "$k3s" ctr images import "$frontend_archive" >/dev/null
+      cleanup_archives
+      trap - EXIT
 
       source_backend_id=$("$podman" image inspect --format '{{.Id}}' "$backend_image")
       source_frontend_id=$("$podman" image inspect --format '{{.Id}}' "$frontend_image")
