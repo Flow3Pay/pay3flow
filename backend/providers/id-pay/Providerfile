@@ -131,6 +131,21 @@ mod tests {
         assert!((IdPayRouteProvider::convert("RUB", "AMD", 100.0, rate).unwrap() - 422.69).abs() < 0.000001);
         assert!((IdPayRouteProvider::convert("AMD", "RUB", 422.69, rate).unwrap() - 100.0).abs() < 0.000001);
     }
+
+    #[tokio::test]
+    #[ignore = "requires network access"]
+    async fn live_homepage_returns_quotes_in_both_directions() {
+        let provider = IdPayRouteProvider::new().unwrap();
+
+        let rub_to_amd = provider.quote("RUB", "AMD", 100.0).await.unwrap();
+        let amd_to_rub = provider
+            .quote("AMD", "RUB", rub_to_amd.target_amount)
+            .await
+            .unwrap();
+
+        assert!(rub_to_amd.target_amount > 100.0);
+        assert!((amd_to_rub.target_amount - 100.0).abs() < 0.01);
+    }
 }
 '''
 

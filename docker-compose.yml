@@ -37,6 +37,9 @@ services:
       dockerfile: backend/Dockerfile
     container_name: pay3flow-backend
     restart: unless-stopped
+    env_file:
+      - path: ./backend/.env
+        required: false
     ports:
       - "8080:8080"
     environment:
@@ -60,9 +63,6 @@ services:
       P2P_SEARCH_ENABLED: "true"
       P2P_SEARCH_TIMEOUT_MS: "4000"
       P2P_SEARCH_CACHE_TTL_MS: "5000"
-      BESTCHANGE_API_KEY: ${BESTCHANGE_API_KEY:-}
-      EXNODE_API_PUBLIC: ${EXNODE_API_PUBLIC:-}
-      EXNODE_API_PRIVATE: ${EXNODE_API_PRIVATE:-}
     volumes:
       - backend_data:/app/data
     depends_on:

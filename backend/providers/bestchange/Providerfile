@@ -24,6 +24,7 @@ const DEFAULT_MAX_AMOUNT: f64 = 1_000_000_000_000_000.0;
 struct CatalogUnit {
     id: u64,
     code: String,
+    crypto: bool,
     slug: String,
     search_text: String,
     order: usize,
@@ -54,6 +55,7 @@ struct ApiCurrency {
     urlname: String,
     viewname: String,
     code: String,
+    crypto: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -232,19 +234,24 @@ impl BestChangeSource {
                 let target_reserve = row.reserve.as_ref().and_then(ApiNumber::value);
                 let (price, available_asset, min_fiat, max_fiat) = match query.side {
                     P2pSide::BuyCrypto => (
-                        1.0 / rate,
+                        rate,
                         target_reserve.unwrap_or(DEFAULT_MAX_AMOUNT),
                         source_min.unwrap_or(0.0),
                         source_max.unwrap_or(DEFAULT_MAX_AMOUNT),
                     ),
-                    P2pSide::SellCrypto => (
-                        rate,
-                        DEFAULT_MAX_AMOUNT,
-                        source_min.map(|value| value * rate).unwrap_or(0.0),
-                        source_max
-                            .map(|value| value * rate)
-                            .unwrap_or(DEFAULT_MAX_AMOUNT),
-                    ),
+                    P2pSide::SellCrypto => {
+                        let price = 1.0 / rate;
+                        (
+                            price,
+                            target_reserve
+                                .map(|reserve| reserve / price)
+                                .unwrap_or(DEFAULT_MAX_AMOUNT),
+                            source_min.map(|value| value * price).unwrap_or(0.0),
+                            source_max
+                                .map(|value| value * price)
+                                .unwrap_or(DEFAULT_MAX_AMOUNT),
+                        )
+                    }
                 };
                 if !price.is_finite() || price <= 0.0 {
                     continue;
@@ -308,13 +315,24 @@ impl P2pSource for BestChangeSource {
             P2pSide::BuyCrypto => (&query.fiat, &query.asset),
             P2pSide::SellCrypto => (&query.asset, &query.fiat),
         };
+        let (from_payment, to_payment) = match query.side {
+            P2pSide::BuyCrypto => (query.payment_method.as_deref(), None),
+            P2pSide::SellCrypto => (None, query.payment_method.as_deref()),
+        };
         let from_units = select_units(
             &catalog.units,
             from_code,
-            query.payment_method.as_deref(),
+            from_payment,
+            matches!(query.side, P2pSide::SellCrypto),
             3,
         );
-        let to_units = select_units(&catalog.units, to_code, None, 6);
+        let to_units = select_units(
+            &catalog.units,
+            to_code,
+            to_payment,
+            matches!(query.side, P2pSide::BuyCrypto),
+            6,
+        );
         if from_units.is_empty() || to_units.is_empty() {
             bail!(
                 "BestChange has no exchange-unit mapping for {from_code} -> {to_code}"
@@ -354,6 +372,7 @@ fn catalog(
             CatalogUnit {
                 id: currency.id,
                 code: currency.code,
+                crypto: currency.crypto,
                 slug: currency.urlname,
                 search_text,
                 order,
@@ -381,13 +400,20 @@ fn select_units<'a>(
     units: &'a [CatalogUnit],
     code: &str,
     payment_method: Option<&str>,
+    crypto: bool,
     limit: usize,
 ) -> Vec<&'a CatalogUnit> {
     let code = normalize(code);
-    let payment = payment_method.map(normalize);
+    let payment = payment_method.map(normalize_payment_method);
     let mut candidates = units
         .iter()
-        .filter(|unit| normalize(&unit.code) == code)
+        .filter(|unit| unit.crypto == crypto)
+        .filter(|unit| {
+            let unit_code = normalize(&unit.code);
+            unit_code == code
+                || (crypto && unit_code.starts_with(&code))
+                || (!crypto && unit_code.ends_with(&code))
+        })
         .filter(|unit| {
             payment.as_deref().is_none_or(|payment| {
                 unit.search_text.contains(payment)
@@ -412,6 +438,15 @@ fn normalize(value: &str) -> String {
         .filter(|character| character.is_alphanumeric())
         .flat_map(char::to_lowercase)
         .collect()
+}
+
+fn normalize_payment_method(value: &str) -> String {
+    let normalized = normalize(value);
+    match normalized.as_str() {
+        "tbank" | "тбанк" | "tinkoffbank" => "tinkoff".into(),
+        "sber" => "sberbank".into(),
+        _ => normalized,
+    }
 }
 
 fn number(value: f64) -> String {
@@ -471,14 +506,16 @@ mod tests {
         let units = vec![
             CatalogUnit {
                 id: 42,
-                code: "RUB".into(),
+                code: "CARDRUB".into(),
+                crypto: false,
                 slug: "visa-mastercard-rub".into(),
                 search_text: "visamastercardrub".into(),
                 order: 0,
             },
             CatalogUnit {
                 id: 10,
-                code: "USDT".into(),
+                code: "USDTTRC20".into(),
+                crypto: true,
                 slug: "tether-trc20".into(),
                 search_text: "tethertrc20usdt".into(),
                 order: 1,
@@ -497,7 +534,7 @@ mod tests {
             )]),
         };
         let response: RateResponse = serde_json::from_str(
-            r#"{"rates":{"42-10":[{"changer":1163,"rate":0.011,"reserve":"5000","inmin":"1000","inmax":"100000"}]}}"#,
+            r#"{"rates":{"42-10":[{"changer":1163,"rate":93.3949,"reserve":"5000","inmin":"1000","inmax":"100000"}]}}"#,
         )
         .unwrap();
 
@@ -510,7 +547,7 @@ mod tests {
 
         assert_eq!(offers.len(), 1);
         assert_eq!(offers[0].advertiser.nickname, "ExampleExchange");
-        assert_eq!(offers[0].price, "90.909090909091");
+        assert_eq!(offers[0].price, "93.3949");
         assert_eq!(offers[0].min_fiat, "1000");
         assert_eq!(offers[0].max_fiat, "100000");
         assert_eq!(
@@ -520,18 +557,63 @@ mod tests {
     }
 
     #[test]
+    fn converts_sell_rate_to_fiat_per_asset() {
+        let source = source();
+        let units = vec![
+            CatalogUnit {
+                id: 10,
+                code: "USDTTRC20".into(),
+                crypto: true,
+                slug: "tether-trc20".into(),
+                search_text: "tethertrc20usdt".into(),
+                order: 0,
+            },
+            CatalogUnit {
+                id: 59,
+                code: "CARDRUB".into(),
+                crypto: false,
+                slug: "visa-mastercard-rub".into(),
+                search_text: "visamastercardrub".into(),
+                order: 1,
+            },
+        ];
+        let catalog = Catalog {
+            units: units.clone(),
+            changers: HashMap::new(),
+        };
+        let response: RateResponse = serde_json::from_str(
+            r#"{"rates":{"10-59":[{"changer":79,"rate":"0.0125","reserve":"1000000","inmin":"80","inmax":"1000"}]}}"#,
+        )
+        .unwrap();
+
+        let offers = source.offers_from_rates(
+            &query(P2pSide::SellCrypto),
+            &catalog,
+            &[(&units[0], &units[1])],
+            &response,
+        );
+
+        assert_eq!(offers[0].price, "80");
+        assert_eq!(offers[0].available_asset, "12500");
+        assert_eq!(offers[0].min_fiat, "6400");
+        assert_eq!(offers[0].max_fiat, "80000");
+    }
+
+    #[test]
     fn selects_payment_unit_from_the_api_catalog() {
         let units = vec![
             CatalogUnit {
                 id: 1,
-                code: "RUB".into(),
+                code: "CASHRUB".into(),
+                crypto: false,
                 slug: "cash-ruble".into(),
                 search_text: "cashruble".into(),
                 order: 0,
             },
             CatalogUnit {
                 id: 2,
-                code: "RUB".into(),
+                code: "CARDRUB".into(),
+                crypto: false,
                 slug: "visa-mastercard-rub".into(),
                 search_text: "visamastercardbankcardrub".into(),
                 order: 1,
@@ -539,9 +621,66 @@ mod tests {
         ];
 
         assert_eq!(
-            select_units(&units, "RUB", Some("Visa Mastercard"), 3)[0].id,
+            select_units(&units, "RUB", Some("Visa Mastercard"), false, 3)[0].id,
             2
         );
+    }
+
+    #[test]
+    fn separates_fiat_usd_from_usdt_networks() {
+        let units = vec![
+            CatalogUnit {
+                id: 1,
+                code: "CARDUSD".into(),
+                crypto: false,
+                slug: "visa-mastercard-usd".into(),
+                search_text: "visamastercardusd".into(),
+                order: 0,
+            },
+            CatalogUnit {
+                id: 2,
+                code: "USDTTRC20".into(),
+                crypto: true,
+                slug: "tether-trc20".into(),
+                search_text: "tethertrc20usdt".into(),
+                order: 1,
+            },
+        ];
+
+        assert_eq!(select_units(&units, "USD", None, false, 3)[0].id, 1);
+        assert_eq!(select_units(&units, "USDT", None, true, 3)[0].id, 2);
+    }
+
+    #[test]
+    fn maps_t_bank_name_to_bestchange_tinkoff_unit() {
+        let units = vec![CatalogUnit {
+            id: 105,
+            code: "TCSBRUB".into(),
+            crypto: false,
+            slug: "tinkoff".into(),
+            search_text: "rubtinkoff".into(),
+            order: 0,
+        }];
+
+        assert_eq!(select_units(&units, "RUB", Some("T-Bank"), false, 3)[0].id, 105);
+    }
+
+    #[tokio::test]
+    #[ignore = "requires BESTCHANGE_API_KEY and network access"]
+    async fn live_official_api_returns_buy_and_sell_offers() {
+        let source = source();
+
+        let buy = source.search(&query(P2pSide::BuyCrypto)).await.unwrap();
+        let sell = source.search(&query(P2pSide::SellCrypto)).await.unwrap();
+
+        assert!(!buy.is_empty());
+        assert!(!sell.is_empty());
+        assert!(buy.iter().all(|offer| offer.price.parse::<f64>().unwrap() > 1.0));
+        assert!(sell.iter().all(|offer| offer.price.parse::<f64>().unwrap() > 1.0));
+        assert!(buy
+            .iter()
+            .chain(&sell)
+            .all(|offer| offer.source_url.contains("p=1345467")));
     }
 }
 '''

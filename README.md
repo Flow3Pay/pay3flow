@@ -99,6 +99,8 @@ Requirements: Docker with Compose support.
 Start the live-routing stack:
 
 ```bash
+cp backend/.env.example backend/.env
+# Add BESTCHANGE_API_KEY and, optionally, the EXNODE_API_* credentials.
 docker compose up -d --build postgres redis backend pay3low-svelte-frontend
 curl -fsS http://localhost:8080/health
 ```
@@ -257,6 +259,7 @@ driver when workflow-based sources are enabled.
 
 ```bash
 cargo test --manifest-path backend/Cargo.toml
+set -a; source backend/.env; set +a
 cargo run --manifest-path backend/Cargo.toml --bin pay3flow-backend
 ```
 
