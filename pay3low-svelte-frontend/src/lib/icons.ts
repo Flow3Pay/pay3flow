@@ -33,8 +33,9 @@ const NETWORK_ASSETS: Array<[RegExp, string]> = [
 export function venueIcon(venue: string): string {
   const key = venue.toLowerCase();
   const extension = key === "binance" || key === "bybit" || key === "bitget" || key === "rapira" || key === "whitebird" || key === "cifra-broker" ? "png" : "svg";
+  const filename = key === "cow-swap" ? "cow-swap-favicon.svg" : `${key}.${extension}`;
   return LOCAL_VENUE_ICONS.has(key)
-    ? `/icons/venues/${key}.${extension}`
+    ? `/icons/venues/${filename}`
     : "/icons/venues/generic.svg";
 }
 

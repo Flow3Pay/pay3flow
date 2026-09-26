@@ -446,7 +446,7 @@ test("public P2P route search → open step-by-step instructions", async ({ page
 
   await page.getByRole("button", { name: "Route refresh settings" }).click();
   const refreshSettings = page.getByRole("dialog", { name: "Refresh settings" });
-  if ((page.viewportSize()?.width ?? 0) > 640) await expect(refreshSettings).toHaveCSS("width", "430px");
+  if ((page.viewportSize()?.width ?? 0) > 640) await expect(refreshSettings).toHaveCSS("width", "310px");
   await refreshSettings.getByRole("button", { name: "5m" }).click();
   await expect.poll(() => page.evaluate(() => localStorage.getItem("pay3flow.exchange.refresh-seconds"))).toBe("300");
 
@@ -591,9 +591,11 @@ test("catalog providers can be selected", async ({ page }) => {
   await mockBackend(page);
   await openApp(page);
 
-  await page.getByRole("button", { name: "Route refresh settings" }).click();
+  await page.getByRole("button", { name: "Choose exchanges" }).click();
+  await expect(page.getByRole("dialog", { name: "Exchange settings" })).toBeVisible();
   const whitebird = page.getByRole("button", { name: "Whitebird" });
   const cifra = page.getByRole("button", { name: "Cifra Markets" });
+  const cowSwap = page.getByRole("button", { name: "CoW Swap" });
 
   await expect(cifra).toBeEnabled();
   await expect(cifra).toHaveAttribute("aria-pressed", "true");
@@ -601,6 +603,7 @@ test("catalog providers can be selected", async ({ page }) => {
   await expect(whitebird).toBeEnabled();
   await whitebird.click();
   await expect(whitebird).toHaveAttribute("aria-pressed", "true");
+  await expect(cowSwap.locator("img")).toHaveAttribute("src", "/icons/venues/cow-swap-favicon.svg");
 });
 
 test("search venues bounce in the loader and refresh stops spinning after the first route", async ({ page }) => {
@@ -690,15 +693,15 @@ test("search venues bounce in the loader and refresh stops spinning after the fi
   });
 
   await openApp(page);
-  const settingsButton = page.getByRole("button", { name: "Route refresh settings" });
-  await settingsButton.click();
+  const exchangesButton = page.getByRole("button", { name: "Choose exchanges" });
+  await exchangesButton.click();
   await page.getByRole("button", { name: "Whitebird" }).click();
   if ((page.viewportSize()?.width ?? 0) <= 640) {
     await page.locator(".settingsBackdrop").dispatchEvent("mousedown");
   } else {
-    await settingsButton.click();
+    await exchangesButton.click();
   }
-  await expect(page.getByRole("dialog", { name: "Refresh settings" })).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Exchange settings" })).toHaveCount(0);
   await page.getByLabel("Amount to send").fill("100000");
   await page.getByTestId("start-search").click();
 
