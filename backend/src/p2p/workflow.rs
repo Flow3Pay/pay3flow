@@ -20,14 +20,22 @@ pub(crate) struct WorkflowP2pSource {
     slug: String,
     display_name: String,
     config: WorkflowConfig,
+    chromium_executable: Option<String>,
+    debug_screenshot: Option<String>,
 }
 
 impl WorkflowP2pSource {
-    pub(crate) fn from_record(record: &ProviderAdapterRecord) -> Option<Self> {
+    pub(crate) fn from_record(
+        record: &ProviderAdapterRecord,
+        chromium_executable: Option<String>,
+        debug_screenshot: Option<String>,
+    ) -> Option<Self> {
         record.workflow.clone().map(|config| Self {
             slug: record.slug.clone(),
             display_name: record.display_name.clone(),
             config,
+            chromium_executable,
+            debug_screenshot,
         })
     }
 
@@ -81,8 +89,8 @@ impl WorkflowP2pSource {
             "--disable-dev-shm-usage".into(),
             "--no-sandbox".into(),
         ]);
-        if let Ok(executable) = std::env::var("PLAYWRIGHT_CHROMIUM_EXECUTABLE") {
-            launch_options = launch_options.executable_path(executable);
+        if let Some(executable) = &self.chromium_executable {
+            launch_options = launch_options.executable_path(executable.clone());
         }
         let browser = browser_type
             .launch_with_options(launch_options)
@@ -134,7 +142,7 @@ impl WorkflowP2pSource {
             }
             for step in &operation.steps {
                 if let Err(error) = execute_step(&page, step, values).await {
-                    if let Ok(path) = std::env::var("P2P_WORKFLOW_DEBUG_SCREENSHOT") {
+                    if let Some(path) = &self.debug_screenshot {
                         let _ = page.screenshot_to_file(std::path::Path::new(&path), None).await;
                     }
                     let page_url = page.url();
@@ -420,7 +428,7 @@ mod tests {
             config: None,
             workflow: Some(workflow),
         };
-        WorkflowP2pSource::from_record(&record).unwrap()
+        WorkflowP2pSource::from_record(&record, None, None).unwrap()
     }
 
     #[test]

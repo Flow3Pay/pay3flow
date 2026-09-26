@@ -8,19 +8,19 @@ use pay3flow_backend::db;
 use pay3flow_backend::payments::rates::Rates;
 use pay3flow_backend::payments::service::{PaymentConfig, PaymentService};
 use pay3flow_backend::route_engine::{
-    Asset, LiveEdgeQuoteSource, NearIntentsProvider, RouteEngine, RouteGraphConfig,
-    RouteQuoteService, RouteRefreshConfig,
+    Asset, CowRouteProvider, LiveEdgeQuoteSource, NearIntentsProvider, PublicRouteProvider,
+    RouteEngine, RouteGraphConfig, RouteQuoteService, RouteRefreshConfig,
 };
 use pay3flow_backend::server::routing;
 use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let cfg = Config::load()?;
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
+        .with_env_filter(EnvFilter::new(&cfg.log_filter))
         .init();
 
-    let cfg = Config::from_env()?;
     let pool = db::build_pool(&cfg.database_url).await?;
     db::apply_schema(&pool).await?;
 
@@ -78,13 +78,10 @@ async fn main() -> anyhow::Result<()> {
         std::time::Duration::from_secs(cfg.pairs_cache_ttl_secs),
     );
 
-    let network_catalog = pay3flow_backend::networks::NetworkCatalog::load(&pool).await?;
-    let p2p = pay3flow_backend::p2p::P2pSearchService::from_database(&cfg, network_catalog, &pool)
-        .await?;
     let near_intents = {
         let provider =
             NearIntentsProvider::new(cfg.near_intents_url.clone(), cfg.near_intents_jwt.clone())?;
-        match (
+        let provider = match (
             cfg.near_intents_quote_recipient.clone(),
             cfg.near_intents_quote_refund_to.clone(),
         ) {
@@ -92,8 +89,29 @@ async fn main() -> anyhow::Result<()> {
                 provider.with_quote_addresses(recipient, refund_to)?
             }
             _ => provider,
-        }
+        };
+        provider.with_quote_network_addresses(
+            &cfg.near_intents_quote_recipients,
+            &cfg.near_intents_quote_refunds,
+        )?
     };
+    let mut public_route_providers: Vec<Arc<dyn PublicRouteProvider>> =
+        vec![Arc::new(near_intents.clone())];
+    if let Some(cow) = CowRouteProvider::from_config(
+        &cfg.cow_api_urls,
+        &cfg.cow_tokens,
+        cfg.cow_quote_address.as_deref(),
+    )? {
+        public_route_providers.push(Arc::new(cow));
+    }
+    let network_catalog = pay3flow_backend::networks::NetworkCatalog::load(&pool).await?;
+    let p2p = pay3flow_backend::p2p::P2pSearchService::from_database(
+        &cfg,
+        network_catalog,
+        &pool,
+        public_route_providers,
+    )
+    .await?;
     let route_engine = RouteEngine::new(RouteGraphConfig {
         max_depth: cfg.route_max_depth,
     })?;

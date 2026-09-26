@@ -20,16 +20,21 @@
   export let hasAmount = false;
 
   const ASSET_NAMES: Record<string, string> = { BTC: "Bitcoin", ETH: "Ether", USDC: "USD Coin", USDT: "Tether" };
-  const VENUE_NAMES: Record<string, string> = { binance: "Binance", bitget: "Bitget", bybit: "Bybit", okx: "OKX", rapira: "Rapira", whitebird: "Whitebird", "cifra-broker": "Cifra Markets" };
+  const VENUE_NAMES: Record<string, string> = { binance: "Binance", bitget: "Bitget", bybit: "Bybit", okx: "OKX", rapira: "Rapira", whitebird: "Whitebird", "cifra-broker": "Cifra Markets", bestchange: "BestChange", dzengi: "Dzengi", exnode: "Exnode", "near-intents": "NEAR Intents", "cow-swap": "CoW Swap" };
   const VENUE_ICONS: Record<string, string> = {
-    binance: venueIcon("binance"), bybit: venueIcon("bybit"), okx: venueIcon("okx"), bitget: venueIcon("bitget"), rapira: venueIcon("rapira"), whitebird: venueIcon("whitebird"), "cifra-broker": venueIcon("cifra-broker"),
+    binance: venueIcon("binance"), bybit: venueIcon("bybit"), okx: venueIcon("okx"), bitget: venueIcon("bitget"), rapira: venueIcon("rapira"), whitebird: venueIcon("whitebird"), "cifra-broker": venueIcon("cifra-broker"), bestchange: venueIcon("bestchange"), dzengi: venueIcon("dzengi"), exnode: venueIcon("exnode"), "near-intents": venueIcon("near-intents"), "cow-swap": venueIcon("cow-swap"),
   };
   const FIAT_MARKS: Record<string, string> = { AMD: "🇦🇲", RUB: "🇷🇺", BYN: "🇧🇾" };
   type Step = { currency: string; network?: string; provider?: string; iconUrl?: string };
 
   const venueName = (value?: string) => value ? VENUE_NAMES[value.toLowerCase()] ?? value : "Searching";
   const assetLabel = (currency?: string) => !currency ? "—" : ASSET_NAMES[currency.toUpperCase()] ? `${currency} ${ASSET_NAMES[currency.toUpperCase()]}` : currency;
-  const money = (minor?: number, currency?: string) => minor == null ? "—" : `${(minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2, useGrouping: false })} ${currency ?? ""}`;
+  const money = (minor?: number, currency?: string, exact?: string) => {
+    if (exact && ["BTC", "ETH", "USDC", "USDT", "SOL", "TRX", "TON", "XRP", "ADA", "AVAX", "DOT", "LINK", "LTC", "BCH", "BNB", "DOGE", "MATIC", "NEAR", "SUI", "APT", "ATOM", "UNI", "DAI", "FDUSD"].includes(currency?.toUpperCase() ?? "")) {
+      return `${Number(exact).toLocaleString("en-US", { maximumFractionDigits: 8, useGrouping: false })} ${currency ?? ""}`;
+    }
+    return minor == null ? "—" : `${(minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2, useGrouping: false })} ${currency ?? ""}`;
+  };
   const spreadLabel = (bps: number) => Math.abs(bps / 100) < 0.005 ? "Same output" : `${Math.abs(bps / 100).toFixed(2)}% less`;
   const compact = (value: number) => Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(value);
   const routeCountLabel = (count: number) => `${count} ${count === 1 ? "route" : "routes"} found`;
@@ -43,6 +48,12 @@
     const exit = route.legs.find((leg) => leg.kind === "exit");
     const source = route.source_currency ?? "—";
     const target = route.target_currency ?? "—";
+    if (route.route_path?.length) {
+      return route.route_path.map((qualified, index) => {
+        const [currency, network] = qualified.split("@", 2);
+        return { currency, network, provider: index === 0 ? undefined : route.route_provider ?? undefined };
+      });
+    }
     if (!entry && exit) return [{ currency: source, network: route.source_network, provider: exit.provider, iconUrl: route.source_method_icon_url }, { currency: target, iconUrl: route.target_method_icon_url }];
     if (entry && !exit) return [{ currency: source, network: route.source_network, iconUrl: route.source_method_icon_url }, { currency: target, network: route.target_network, provider: entry.provider, iconUrl: route.target_method_icon_url }];
     if (route.bridge_currency) return [{ currency: source, network: route.source_network, provider: entry?.provider, iconUrl: route.source_method_icon_url }, { currency: route.bridge_currency }, { currency: target, network: route.target_network, provider: exit?.provider, iconUrl: route.target_method_icon_url }];
@@ -102,9 +113,9 @@
             {@const complete = route.status === "complete"}
             <li animate:flip={{ duration: routeFlipDuration, easing: quintOut }} in:fly={{ y: 18, duration: routeEnterDuration(), easing: quintOut }}><div class="routeCardShell">
               <div class:routeBest={route.is_current_best} class:selected={route.route_id === selectedRouteId} class="routeCard" data-testid={complete ? "complete-route" : "partial-route"}>
-              <button type="button" class="routeCardMain" disabled={!complete} on:click={(event) => cardClick(event, route)}>
+              <button type="button" class="routeCardMain" disabled={!complete} aria-pressed={route.route_id === selectedRouteId} aria-label={`Select route ${index + 1}: ${money(route.target_amount_minor, route.target_currency, route.target_amount)}`} on:click={(event) => cardClick(event, route)}>
                 <span class="routeTopline"><span class="routeRank">#{String(index + 1).padStart(2, "0")}</span>{#if route.is_current_best}<span class="bestBadge">Best route</span>{:else}<span class="deltaBadge">{spreadLabel(route.spread_bps)}</span>{/if}</span>
-                <span class="routeAmount">{money(route.target_amount_minor, route.target_currency)}</span>
+                <span class="routeAmount">{money(route.target_amount_minor, route.target_currency, route.target_amount)}</span>
                 <span class="workflow" aria-label={workflowLabel(route)}>
                   {#each workflowSteps(route) as step, stepIndex}
                     <span class="workflowPart">
@@ -130,6 +141,12 @@
                     </span>
                   {/each}
                 </span>
+                {#if route.route_fees?.length || route.quote_expires_at}
+                  <span class="routeQuoteMeta">
+                    {#if route.route_fees?.length}Fee {route.route_fees.map((fee) => `${fee.amount} ${fee.asset}`).join(" + ")}{/if}
+                    {#if route.quote_expires_at} · Quote expires {new Date(route.quote_expires_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{/if}
+                  </span>
+                {/if}
               </button>
               {#if route.reputation || (complete && route.feedback)}<div class="routeFeedback" aria-label="Route feedback">{#if route.reputation}<span>Used {compact(route.reputation.executions_average)} times</span>{/if}{#if complete && route.feedback}<span class="serviceVote routeVote"><button type="button" class:active={route.feedback.viewer_vote === "like"} aria-label="Like this route" aria-pressed={route.feedback.viewer_vote === "like"} title="Like this route" on:click={() => onVote(route, "like")}><img src={likeIcon} alt="" aria-hidden="true" />{#if route.feedback.viewer_vote}<span aria-label={`${compact(route.feedback.likes_total)} likes`}>{compact(route.feedback.likes_total)}</span>{/if}</button><button type="button" class:active={route.feedback.viewer_vote === "dislike"} aria-label="Dislike this route" aria-pressed={route.feedback.viewer_vote === "dislike"} title="Dislike this route" on:click={() => onVote(route, "dislike")}><img src={dislikeIcon} alt="" aria-hidden="true" />{#if route.feedback.viewer_vote}<span aria-label={`${compact(route.feedback.dislikes_total)} dislikes`}>{compact(route.feedback.dislikes_total)}</span>{/if}</button></span>{/if}</div>{/if}
               </div>
@@ -513,6 +530,17 @@
   font-size: 9px;
   font-weight: 650;
   line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.routeQuoteMeta {
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 8px;
+  line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

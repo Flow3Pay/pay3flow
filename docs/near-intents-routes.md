@@ -32,19 +32,40 @@ are not included in route capabilities or logs.
 
 ## Refresh configuration
 
-The background capability refresh reads:
+The background capability refresh reads these keys from `config.toml`:
 
-```text
-NEAR_INTENTS_URL=https://1click.chaindefuser.com
-NEAR_INTENTS_QUOTE_RECIPIENT=<valid destination-chain address>
-NEAR_INTENTS_QUOTE_REFUND_TO=<valid origin-chain address>
-NEAR_INTENTS_REFRESH_SECS=300
-ROUTE_MAX_DEPTH=4
-ROUTE_SOURCE_FIATS=AMD
-ROUTE_P2P_ASSETS=USDT,USDC,XRP
-ROUTE_INTENT_ASSETS=USDT@tron,USDC@solana,XRP@xrpl
-ROUTE_WITHDRAWALS=USDT@binance>USDT@tron|binance|1.5
+```toml
+near_intents_url = "https://1click.chaindefuser.com"
+near_intents_quote_recipient = "<valid destination-chain address>"
+near_intents_quote_refund_to = "<valid origin-chain address>"
+near_intents_quote_recipients = [
+  "solana=<valid Solana address>",
+  "bitcoin=<valid Bitcoin address>",
+  "near=<valid NEAR account>",
+  "avalanche-c=<valid EVM address>",
+]
+near_intents_quote_refunds = [
+  "solana=<valid Solana address>",
+  "bitcoin=<valid Bitcoin address>",
+  "near=<valid NEAR account>",
+  "ethereum=<valid EVM address>",
+]
+near_intents_refresh_secs = 300
+route_max_depth = 4
+route_source_fiats = ["AMD", "RUB"]
+route_p2p_assets = ["USDT", "USDC", "XRP"]
+route_intent_assets = ["USDT@tron", "USDT@solana", "USDC@solana", "XRP@xrpl"]
+route_withdrawals = ["USDT@binance>USDT@tron|binance|1.5"]
 ```
+
+The authenticated 1-Click credential remains environment-only as
+`NEAR_INTENTS_JWT`.
+
+The public route search also composes the same live intent quotes with fiat
+entry and exit offers. For example, a RUB → AMD search can return a path such
+as `RUB → USDT@tron → USDT@solana → AMD` when the configured P2P offers and
+NEAR Intents token catalog both support those legs. The route is a dry quote
+for display; Pay3Flow does not create an order or move funds.
 
 `ROUTE_WITHDRAWALS` is deployment-owned capability data. Each entry has the
 form `FROM>TO|provider[|fee]`; an optional fee is denominated in the origin

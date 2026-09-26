@@ -1,0 +1,82 @@
+# Non-secret Pay3Flow runtime configuration.
+#
+# Credentials and connection strings that may contain credentials remain
+# environment-only: DATABASE_URL, REDIS_URL, JWT_SECRET, SECRETS_KEY,
+# ADMIN_TOKEN, and NEAR_INTENTS_JWT.
+
+log_filter = "info"
+http_addr = "0.0.0.0:8080"
+
+ap_origin = "http://localhost:8080"
+ap_handle = "pay3flow"
+ap_key_path = "./data/ap-key.pem"
+ap_require_signatures = false
+fmatch_inbox = "http://localhost:7277/inbox/actra"
+fmatch_actor_id = "http://localhost:7277/actor/actra"
+
+service_fee_percent = 0.7
+fx_source = "mock"
+fx_url = "https://api.frankfurter.app/latest"
+fx_cache_ttl_secs = 300
+fx_margin_percent = 1.0
+pairs_cache_ttl_secs = 300
+
+p2p_search_enabled = true
+p2p_search_timeout_ms = 4000
+p2p_search_cache_ttl_ms = 5000
+p2p_search_assets = []
+# Optional local browser workflow settings.
+# playwright_chromium_executable = "/usr/bin/chromium"
+# p2p_workflow_debug_screenshot = "/tmp/pay3flow-workflow-failure.png"
+
+near_intents_url = "https://1click.chaindefuser.com"
+# Set these only to public, valid addresses when enabling live dry quotes.
+# near_intents_quote_recipient = "..."
+# near_intents_quote_refund_to = "..."
+near_intents_refresh_secs = 300
+
+route_max_depth = 4
+route_source_fiats = ["AMD", "RUB"]
+route_p2p_assets = ["USDT", "USDC", "XRP"]
+route_intent_assets = ["USDT@tron", "USDT@avalanche-c", "USDT@solana", "USDC@solana", "XRP@xrpl"]
+route_withdrawals = []
+
+# Optional CoW Protocol same-chain quote adapter. Each endpoint is
+# "chain=url" and each token is "chain:SYMBOL=address". CoW does not bridge
+# assets between chains; cross-chain routes use a configured bridge provider.
+cow_api_urls = ["ethereum=https://api.cow.fi/mainnet"]
+cow_tokens = [
+  "ethereum:USDT=0xdAC17F958D2ee523a2206206994597C13D831ec7",
+  "ethereum:USDC=0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+]
+# Read-only quote address. Execution must use the user's wallet address.
+cow_quote_address = "0x0000000000000000000000000000000000000001"
+
+# Read-only NEAR Intents quote addresses for the configured Avalanche -> Solana
+# preview. Replace with wallet addresses before enabling executable swaps.
+near_intents_quote_recipient = "So11111111111111111111111111111111111111112"
+near_intents_quote_refund_to = "0x8ba1f109551bD432803012645Ac136ddd64DBA72"
+# Per-network public preview addresses. These are used only for dry quotes;
+# execution must use the user's wallet addresses.
+near_intents_quote_recipients = [
+  "solana=So11111111111111111111111111111111111111112",
+  "bitcoin=bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+  "near=wrap.near",
+  "ethereum=0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+  "avalanche-c=0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+  "arbitrum-one=0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+  "bnb-smart-chain=0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+  "optimism=0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+  "polygon-pos=0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+]
+near_intents_quote_refunds = [
+  "solana=So11111111111111111111111111111111111111112",
+  "bitcoin=bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+  "near=wrap.near",
+  "ethereum=0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+  "avalanche-c=0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+  "arbitrum-one=0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+  "bnb-smart-chain=0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+  "optimism=0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+  "polygon-pos=0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+]

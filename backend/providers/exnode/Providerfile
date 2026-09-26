@@ -1,0 +1,46 @@
+[sell]
+source_url = "https://exnode.ru/exchange"
+name = "Exnode Sell"
+currency = ["rub", "usd", "eur", "byn"]
+banks = []
+
+[buy]
+source_url = "https://exnode.ru/exchange"
+name = "Exnode Buy"
+currency = ["rub", "usd", "eur", "byn"]
+banks = []
+
+# Exnode exposes a quote endpoint, but protects it with the public/private API
+# key pair from the merchant account. The backend signs the request at runtime;
+# set EXNODE_API_PUBLIC and EXNODE_API_PRIVATE to enable live Exnode offers.
+[adapter.p2p]
+kind = "http_json"
+endpoint = "https://my.exnode.io/api/order/exchange_rate"
+method = "POST"
+timeout_ms = 10000
+asset_codes = { USDT = "USDTTRC" }
+supported_assets = ["USDT", "BTC", "ETH", "LTC", "DOGE", "TRX", "USDC"]
+default_min_fiat = 1
+default_max_fiat = 1000000000
+default_available_asset = 1000000000
+
+[adapter.p2p.auth]
+kind = "hmac_sha512_timestamp_body"
+public_key_env = "EXNODE_API_PUBLIC"
+private_key_env = "EXNODE_API_PRIVATE"
+
+[adapter.p2p.buy]
+request_json = '''{"token_from":"{{fiat}}","token_to":"{{asset}}"}'''
+
+[adapter.p2p.buy.offer]
+price_pointer = "/exchange_rate"
+price_inverted = true
+
+[adapter.p2p.sell]
+request_json = '''{"token_from":"{{asset}}","token_to":"{{fiat}}"}'''
+
+[adapter.p2p.offer]
+price_pointer = "/exchange_rate"
+merchant_default = true
+verified_default = true
+source_url_is_exact = false

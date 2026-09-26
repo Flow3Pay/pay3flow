@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title>CoW Swap</title>
+  <rect width="64" height="64" rx="16" fill="#202020"/>
+  <path fill="#fff" d="M17 30.2c0-8.1 6.6-14.7 14.7-14.7 6.8 0 12.6 4.6 14.3 10.9l-4.7 1.2a10 10 0 0 0-19.5 2.6c0 5.5 4.5 10 10 10 4.7 0 8.7-3.3 9.7-7.7l4.8 1.1A14.8 14.8 0 0 1 31.8 45C23.6 45 17 38.4 17 30.2Z"/>
+  <circle cx="27.2" cy="28.2" r="2.5" fill="#202020"/>
+  <circle cx="36.8" cy="28.2" r="2.5" fill="#202020"/>
+  <path fill="#fff" d="M23.5 15.8 18 10.5l-1.7 1.8 6.1 6.1 1.1-2.6Zm17 0 5.5-5.3 1.7 1.8-6.1 6.1-1.1-2.6Z"/>
+</svg>

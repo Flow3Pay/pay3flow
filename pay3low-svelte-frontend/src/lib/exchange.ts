@@ -25,7 +25,14 @@ export interface ProviderDefinition {
   name: string;
   currencies: string[];
   banks: string[];
+  fee_model?: ProviderFeeModel | null;
   searchable: boolean;
+}
+
+export interface ProviderFeeModel {
+  kind: string;
+  description: string;
+  docs_url: string;
 }
 
 export interface ExchangeOrder {
@@ -72,17 +79,26 @@ export interface RouteCandidate {
   status: "partial" | "complete";
   source_amount_minor: number;
   source_currency: string;
+  source_payment_method?: string;
+  target_payment_method?: string;
+  source_bank_fee_percent?: number;
+  target_bank_fee_percent?: number;
   source_method_icon_url?: string;
   entry_asset: string;
   entry_network: string;
   source_network?: string;
   target_network?: string;
   target_amount_minor?: number;
+  target_amount?: string;
   target_currency?: string;
   target_method_icon_url?: string;
   route_kind?: "fiat_to_fiat" | "fiat_to_crypto" | "crypto_to_fiat" | "crypto_to_crypto";
   bridge_currency?: string | null;
   market_path?: CryptoMarketPath;
+  route_provider?: string | null;
+  route_path?: string[];
+  route_fees?: { asset: string; amount: string }[];
+  quote_expires_at?: string | null;
   spread_bps: number;
   fee_minor?: number;
   eta_minutes?: number;
@@ -191,6 +207,10 @@ export interface P2pRoute {
   route_kind?: "fiat_to_fiat" | "fiat_to_crypto" | "crypto_to_fiat" | "crypto_to_crypto";
   bridge_currency?: string | null;
   market_path?: CryptoMarketPath;
+  route_provider?: string | null;
+  route_path?: string[];
+  route_fees?: { asset: string; amount: string }[];
+  quote_expires_at?: string | null;
   payment_methods_verified: boolean;
   entry_offer?: P2pOffer;
   exit_offer?: P2pOffer;

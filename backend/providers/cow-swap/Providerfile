@@ -1,0 +1,20 @@
+# CoW Swap is listed in the directory as a catalog-only venue. Its quote and
+# settlement flow is chain-specific, so it is not enabled as a live fiat/P2P
+# source by the generic provider search adapter.
+
+[sell]
+source_url = "https://swap.cow.fi"
+name = "CoW Swap Sell"
+currency = ["eth", "weth", "usdc", "usdt", "dai", "cow"]
+banks = []
+
+[buy]
+source_url = "https://swap.cow.fi"
+name = "CoW Swap Buy"
+currency = ["eth", "weth", "usdc", "usdt", "dai", "cow"]
+banks = []
+
+[fees]
+kind = "quote_dependent"
+description = "No universal fixed protocol percentage: market-order costs are included in the live quote; liquidity, gas, and optional partner fees can affect execution."
+docs_url = "https://docs.cow.fi/cow-protocol"
