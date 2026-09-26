@@ -323,6 +323,8 @@ impl PublicRouteProvider for NearIntentsProvider {
         let quote = QuoteProvider::quote(self, from, to, amount).await?;
         Ok(PublicRouteQuote {
             provider: self.name().to_string(),
+            quote_id: None,
+            description: None,
             from: quote.from.clone(),
             to: quote.to.clone(),
             input: quote.input,

@@ -378,6 +378,19 @@ impl PublicRouteProvider for BestChangeSource {
     }
 
     async fn quote(&self, from: Asset, to: Asset, amount: Amount) -> Result<PublicRouteQuote> {
+        self.quotes(from, to, amount)
+            .await?
+            .into_iter()
+            .next()
+            .context("BestChange has no offer covering the requested amount")
+    }
+
+    async fn quotes(
+        &self,
+        from: Asset,
+        to: Asset,
+        amount: Amount,
+    ) -> Result<Vec<PublicRouteQuote>> {
         if amount.asset != from {
             bail!("BestChange quote amount asset does not match the source asset");
         }
@@ -412,7 +425,7 @@ impl PublicRouteProvider for BestChangeSource {
             .get(&pair)
             .context("BestChange returned no rates for the requested pair")?;
 
-        let mut selected = None;
+        let mut quotes = Vec::new();
         for row in rates {
             let Some(rate) = row.rate.value().filter(|rate| *rate > 0.0) else {
                 continue;
@@ -441,21 +454,31 @@ impl PublicRouteProvider for BestChangeSource {
             {
                 continue;
             }
-            selected = Some(output);
-            break;
+            let exchanger = catalog.changers.get(&row.changer);
+            quotes.push(PublicRouteQuote {
+                provider: self.slug.clone(),
+                quote_id: Some(format!("{}-{}-{}", from_unit.id, to_unit.id, row.changer)),
+                description: Some(
+                    exchanger
+                        .map(|exchanger| exchanger.name.clone())
+                        .unwrap_or_else(|| format!("BestChange exchanger {}", row.changer)),
+                ),
+                from: from.clone(),
+                to: to.clone(),
+                input: amount.clone(),
+                output: Amount::new(number(output), to.clone())?,
+                fees: Vec::new(),
+                expires_at: None,
+                path: vec![from.clone(), to.clone()],
+            });
+            if quotes.len() >= self.config.max_results {
+                break;
+            }
         }
-        let output = selected.context("BestChange has no offer covering the requested amount")?;
-
-        Ok(PublicRouteQuote {
-            provider: self.slug.clone(),
-            from: from.clone(),
-            to: to.clone(),
-            input: amount,
-            output: Amount::new(number(output), to.clone())?,
-            fees: Vec::new(),
-            expires_at: None,
-            path: vec![from, to],
-        })
+        if quotes.is_empty() {
+            bail!("BestChange has no offer covering the requested amount");
+        }
+        Ok(quotes)
     }
 }
 
@@ -930,11 +953,15 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(!response.routes.is_empty());
+        assert!(response.routes.len() > 1);
         assert!(response
             .routes
             .iter()
             .all(|route| route.route_provider.as_deref() == Some("bestchange")));
+        assert!(response
+            .routes
+            .iter()
+            .all(|route| route.provider_quote_id.is_some()));
     }
 }
 '''

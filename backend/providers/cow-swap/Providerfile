@@ -178,6 +178,8 @@ impl PublicRouteProvider for CowRouteProvider {
             .transpose()?;
         Ok(PublicRouteQuote {
             provider: self.name().to_string(),
+            quote_id: None,
+            description: None,
             from: from.clone(),
             to: to.clone(),
             input: amount,

@@ -449,6 +449,8 @@ pub struct NearQuote {
 #[derive(Debug, Clone)]
 pub struct PublicRouteQuote {
     pub provider: String,
+    pub quote_id: Option<String>,
+    pub description: Option<String>,
     pub from: Asset,
     pub to: Asset,
     pub input: Amount,
@@ -465,6 +467,14 @@ pub trait PublicRouteProvider: Send + Sync {
         Vec::new()
     }
     async fn quote(&self, from: Asset, to: Asset, amount: Amount) -> Result<PublicRouteQuote>;
+    async fn quotes(
+        &self,
+        from: Asset,
+        to: Asset,
+        amount: Amount,
+    ) -> Result<Vec<PublicRouteQuote>> {
+        Ok(vec![self.quote(from, to, amount).await?])
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

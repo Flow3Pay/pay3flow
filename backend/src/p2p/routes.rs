@@ -82,6 +82,8 @@ pub struct P2pRoute {
     pub market_path: Option<CryptoMarketPath>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub route_provider: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_quote_id: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub route_path: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -244,6 +246,61 @@ async fn quote_provider(
                 to = %to_label,
                 amount = %amount_label,
                 "public route quote timed out"
+            );
+            None
+        }
+    }
+}
+
+async fn quote_provider_many(
+    provider: Arc<dyn PublicRouteProvider>,
+    from: Asset,
+    to: Asset,
+    amount: Amount,
+    quote_semaphore: Arc<tokio::sync::Semaphore>,
+) -> Option<(String, Vec<PublicRouteQuote>)> {
+    let provider_name = provider.name().to_string();
+    let from_label = from.to_string();
+    let to_label = to.to_string();
+    let amount_label = amount.value.clone();
+    let _permit = match quote_semaphore.acquire_owned().await {
+        Ok(permit) => permit,
+        Err(error) => {
+            tracing::warn!(
+                %error,
+                provider = %provider_name,
+                "provider quote semaphore closed"
+            );
+            return None;
+        }
+    };
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(12),
+        provider.quotes(from, to, amount),
+    )
+    .await;
+    match result {
+        Ok(Ok(quotes)) if !quotes.is_empty() => Some((provider_name, quotes)),
+        Ok(Ok(_)) => None,
+        Ok(Err(error)) => {
+            tracing::warn!(
+                %error,
+                provider = %provider_name,
+                from = %from_label,
+                to = %to_label,
+                amount = %amount_label,
+                "public route quotes failed"
+            );
+            None
+        }
+        Err(error) => {
+            tracing::warn!(
+                %error,
+                provider = %provider_name,
+                from = %from_label,
+                to = %to_label,
+                amount = %amount_label,
+                "public route quotes timed out"
             );
             None
         }
@@ -668,7 +725,7 @@ impl P2pSearchService {
                 let Ok(amount) = Amount::from_f64(query.source_amount, from.clone()) else {
                     continue;
                 };
-                searches.push(quote_provider(
+                searches.push(quote_provider_many(
                     provider,
                     from,
                     to,
@@ -680,69 +737,75 @@ impl P2pSearchService {
 
         let mut routes = Vec::new();
         while let Some(result) = searches.next().await {
-            let Some((provider_name, quote)) = result else {
+            let Some((provider_name, quotes)) = result else {
                 continue;
             };
-            let Ok(input_value) = quote.input.value.parse::<f64>() else {
-                continue;
-            };
-            let Ok(output_value) = quote.output.value.parse::<f64>() else {
-                continue;
-            };
-            if !input_value.is_finite() || !output_value.is_finite() || output_value <= 0.0 {
-                continue;
-            }
-            let source_network = quote.from.location.clone();
-            let target_network = quote.to.location.clone();
-            let mut warnings = vec![format!(
+            for quote in quotes {
+                let Ok(input_value) = quote.input.value.parse::<f64>() else {
+                    continue;
+                };
+                let Ok(output_value) = quote.output.value.parse::<f64>() else {
+                    continue;
+                };
+                if !input_value.is_finite() || !output_value.is_finite() || output_value <= 0.0 {
+                    continue;
+                }
+                let source_network = quote.from.location.clone();
+                let target_network = quote.to.location.clone();
+                let mut warnings = vec![format!(
                 "Live dry quote from {provider_name}; execution and wallet compatibility are not verified."
             )];
-            if source_network != target_network {
-                warnings.push("Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending.".into());
+                if let Some(description) = quote.description.as_deref() {
+                    warnings.push(format!("Quoted exchanger: {description}."));
+                }
+                if source_network != target_network {
+                    warnings.push("Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending.".into());
+                }
+                routes.push(P2pRoute {
+                    route_id: String::new(),
+                    rank: 0,
+                    asset: quote.to.symbol.clone(),
+                    entry_network: source_network.clone(),
+                    source_network,
+                    target_network,
+                    source_fiat: quote.from.symbol.clone(),
+                    source_amount: quote.input.value.clone(),
+                    acquired_asset_amount: quote.output.value.clone(),
+                    target_fiat: quote.to.symbol.clone(),
+                    target_amount: quote.output.value,
+                    effective_rate: fixed(output_value / input_value, 12),
+                    same_venue: false,
+                    requires_asset_transfer: true,
+                    transfer_fee_included: !quote.fees.is_empty(),
+                    route_kind: "crypto_to_crypto".into(),
+                    bridge_currency: None,
+                    market_path: None,
+                    route_provider: Some(provider_name.clone()),
+                    provider_quote_id: quote.quote_id.clone(),
+                    route_path: quote
+                        .path
+                        .into_iter()
+                        .map(|asset| asset.to_string())
+                        .collect(),
+                    route_fees: quote
+                        .fees
+                        .into_iter()
+                        .map(|fee| RouteFee {
+                            asset: fee.asset.to_string(),
+                            amount: fee.value,
+                        })
+                        .collect(),
+                    quote_expires_at: quote.expires_at,
+                    payment_methods_verified: true,
+                    entry_offer: None,
+                    exit_offer: None,
+                    warnings,
+                    services: Vec::new(),
+                    reputation: None,
+                    feedback: None,
+                    service_links: Vec::new(),
+                });
             }
-            routes.push(P2pRoute {
-                route_id: String::new(),
-                rank: 0,
-                asset: quote.to.symbol.clone(),
-                entry_network: source_network.clone(),
-                source_network,
-                target_network,
-                source_fiat: quote.from.symbol.clone(),
-                source_amount: quote.input.value.clone(),
-                acquired_asset_amount: quote.output.value.clone(),
-                target_fiat: quote.to.symbol.clone(),
-                target_amount: quote.output.value,
-                effective_rate: fixed(output_value / input_value, 12),
-                same_venue: false,
-                requires_asset_transfer: true,
-                transfer_fee_included: !quote.fees.is_empty(),
-                route_kind: "crypto_to_crypto".into(),
-                bridge_currency: None,
-                market_path: None,
-                route_provider: Some(provider_name),
-                route_path: quote
-                    .path
-                    .into_iter()
-                    .map(|asset| asset.to_string())
-                    .collect(),
-                route_fees: quote
-                    .fees
-                    .into_iter()
-                    .map(|fee| RouteFee {
-                        asset: fee.asset.to_string(),
-                        amount: fee.value,
-                    })
-                    .collect(),
-                quote_expires_at: quote.expires_at,
-                payment_methods_verified: true,
-                entry_offer: None,
-                exit_offer: None,
-                warnings,
-                services: Vec::new(),
-                reputation: None,
-                feedback: None,
-                service_links: Vec::new(),
-            });
         }
         routes
     }
@@ -961,6 +1024,7 @@ impl P2pSearchService {
                                         bridge_currency: None,
                                         market_path: None,
                                         route_provider: Some(provider),
+                                        provider_quote_id: quote.quote_id.clone(),
                                         route_path: std::iter::once(query.source_currency.clone())
                                             .chain(quote.path.into_iter().map(|asset| asset.to_string()))
                                             .collect(),
@@ -1103,6 +1167,7 @@ impl P2pSearchService {
                                 bridge_currency: None,
                                 market_path: None,
                                 route_provider: Some(provider.clone()),
+                                provider_quote_id: route_quote.quote_id.clone(),
                                 route_path: route_quote
                                     .path
                                     .into_iter()
@@ -1278,6 +1343,7 @@ impl P2pSearchService {
                     bridge_currency: None,
                     market_path: None,
                     route_provider: Some(provider_name.clone()),
+                    provider_quote_id: route_quote.quote_id.clone(),
                     route_path: std::iter::once(query.source_currency.clone())
                         .chain(route_quote.path.into_iter().map(|asset| asset.to_string()))
                         .chain(std::iter::once(query.target_currency.clone()))
@@ -1406,6 +1472,7 @@ impl P2pSearchService {
                 bridge_currency: None,
                 market_path: None,
                 route_provider: None,
+                provider_quote_id: None,
                 route_path: Vec::new(),
                 route_fees: Vec::new(),
                 quote_expires_at: None,
@@ -1703,7 +1770,7 @@ fn route_fingerprint(route: &P2pRoute) -> String {
         .as_ref()
         .map(|path| format!("{}:{}:{}", path.venue, path.source_pair, path.target_pair))
         .unwrap_or_default();
-    let identity = format!(
+    let mut identity = format!(
         "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
         route.route_kind,
         route.asset,
@@ -1719,6 +1786,10 @@ fn route_fingerprint(route: &P2pRoute) -> String {
         market,
         route.source_amount,
     );
+    if let Some(quote_id) = route.provider_quote_id.as_deref() {
+        identity.push('|');
+        identity.push_str(quote_id);
+    }
     format!("{:x}", Sha256::digest(identity.as_bytes()))
 }
 
@@ -2017,6 +2088,7 @@ fn compose_fiat_routes(
                 bridge_currency: None,
                 market_path: None,
                 route_provider: None,
+                provider_quote_id: None,
                 route_path: Vec::new(),
                 route_fees: Vec::new(),
                 quote_expires_at: None,
@@ -2072,6 +2144,7 @@ fn compose_fiat_to_crypto_routes(
             bridge_currency: None,
             market_path: None,
             route_provider: None,
+            provider_quote_id: None,
             route_path: Vec::new(),
             route_fees: Vec::new(),
             quote_expires_at: None,
@@ -2132,6 +2205,7 @@ fn compose_crypto_to_fiat_routes(
             bridge_currency: None,
             market_path: None,
             route_provider: None,
+            provider_quote_id: None,
             route_path: Vec::new(),
             route_fees: Vec::new(),
             quote_expires_at: None,
@@ -2224,6 +2298,7 @@ fn compose_crypto_market_routes(
             bridge_currency,
             market_path: Some(path),
             route_provider: None,
+            provider_quote_id: None,
             route_path: Vec::new(),
             route_fees: Vec::new(),
             quote_expires_at: None,
@@ -2404,6 +2479,8 @@ mod tests {
             let output = amount.value.parse::<f64>().unwrap() * self.multiplier;
             Ok(PublicRouteQuote {
                 provider: self.name.into(),
+                quote_id: None,
+                description: None,
                 from: from.clone(),
                 to: to.clone(),
                 input: amount,
@@ -2443,6 +2520,8 @@ mod tests {
             let value = amount.value.parse::<f64>().unwrap() * 0.98;
             Ok(PublicRouteQuote {
                 provider: self.name().into(),
+                quote_id: None,
+                description: None,
                 from: from.clone(),
                 to: to.clone(),
                 input: amount,
