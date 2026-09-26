@@ -632,8 +632,8 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await expectNumberedTimeline(instructions, ["1", "2"]);
   await expect(instructions.getByText("Buy USDT for 100,000 AMD")).toBeVisible();
   await expect(instructions.getByText("Bank fees: IDBank: 0.75% bank fee")).toBeVisible();
-  await expect(instructions.getByText("Match the advertiser nickname and ad ID before creating the order.")).toHaveCount(2);
-  await expect(instructions.getByText("Release the asset only after you have independently confirmed the payment in your bank or payment account.")).toBeVisible();
+  await expect(instructions.getByText("Before creating the order, compare the nickname and advertisement ID.")).toHaveCount(2);
+  await expect(instructions.getByText("Release the asset only after you personally see the payment in your bank or payment account.")).toBeVisible();
   const offerLinks = instructions.getByRole("link", { name: /Open Binance P2P and find binance-merchant/ });
   await expect(offerLinks.first()).toHaveAttribute(
     "href",
@@ -670,8 +670,8 @@ test("RUB to RUB bank routes explain SBP payment", async ({ page }) => {
   const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
   await expectNumberedTimeline(instructions, ["1", "2"]);
   await expect(instructions.getByText("Buy USDT for 10,000 RUB")).toBeVisible();
-  await expect(instructions.getByText("For RUB, use СБП from Sberbank using the exact recipient details shown in the order.")).toBeVisible();
-  await expect(instructions.getByText("For RUB payout to Alfa-Bank, confirm the СБП transfer has arrived before releasing the crypto.")).toBeVisible();
+  await expect(instructions.getByText("For RUB, use SBP from Sberbank using the exact recipient details shown in the order.")).toBeVisible();
+  await expect(instructions.getByText("For RUB payout to Alfa-Bank, confirm the SBP transfer has arrived before releasing the crypto.")).toBeVisible();
 });
 
 test("cross-venue instructions include a numbered transfer step", async ({ page }) => {
@@ -694,8 +694,8 @@ test("cross-venue instructions include a numbered transfer step", async ({ page 
   const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
   await expectNumberedTimeline(instructions, ["1", "2", "3"]);
   await expect(instructions.getByRole("heading", { name: "Transfer USDT to Bybit" })).toBeVisible();
-  await expect(instructions.getByText("select the exact Ethereum (ERC-20) network on both venues", { exact: false })).toBeVisible();
-  await expect(instructions.getByText("Wait for Bybit to credit the deposit before continuing.")).toBeVisible();
+  await expect(instructions.getByText("Choose the exact Ethereum (ERC-20) network on both platforms", { exact: false })).toBeVisible();
+  await expect(instructions.getByText("Wait until Bybit shows the deposit as received before continuing.")).toBeVisible();
 });
 
 test("selected bank currencies override the reversed corridor", async ({ page }) => {
@@ -1295,7 +1295,7 @@ test("crypto route keeps distinct source and target networks", async ({ page }) 
   const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
   await expectNumberedTimeline(instructions, ["1"]);
   await expect(instructions.getByRole("heading", { name: "Convert ETH to USDT" })).toBeVisible();
-  await expect(instructions.getByText("Confirm the pair converts ETH into USDT.")).toBeVisible();
+  await expect(instructions.getByText("First check that the pair changes ETH into USDT.")).toBeVisible();
 });
 
 test("bridged spot instructions split both market trades into separate steps", async ({ page }) => {

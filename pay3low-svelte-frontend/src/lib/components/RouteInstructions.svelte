@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import type { RouteCandidate, ServiceLink } from "$lib/exchange";
+  import { locale, t } from "$lib/i18n";
   import AdvertiserCard from "./AdvertiserCard.svelte";
 
   export let route: RouteCandidate;
@@ -12,6 +13,8 @@
   let dragStartY = 0;
   let dragDistance = 0;
   const venueName = (value?: string | null) => value ? venueNames[value.toLowerCase()] ?? value : "P2P market";
+  $: language = $locale;
+  const copy = (key: string, params: Record<string, string | number> = {}) => t(key, params, language);
   const isDirectOffer = (offer?: RouteCandidate["entry_offer_snapshot"]) => offer?.advertiser.user_type === "service" || offer?.source.toLowerCase() === "whitebird";
   const money = (minor?: number, currency?: string, exact?: string) => {
     if (exact && ["BTC", "ETH", "USDC", "USDT", "SOL", "TRX", "TON", "XRP", "ADA", "AVAX", "DOT", "LINK", "LTC", "BCH", "BNB", "DOGE", "MATIC", "NEAR", "SUI", "APT", "ATOM", "UNI", "DAI", "FDUSD"].includes(currency?.toUpperCase() ?? "")) {
@@ -23,19 +26,19 @@
   const linkFor = (kind: ServiceLink["kind"]) => route.service_links?.find((link) => link.kind === kind);
   const bankFeeLabel = (bank?: string, percent?: number) => {
     if (!bank || percent == null) return null;
-    return percent === 0 ? `${bank}: no bank fee` : `${bank}: ${percent.toFixed(2)}% bank fee`;
+    return percent === 0 ? copy("{bank}: no bank fee", { bank }) : copy("{bank}: {percent}% bank fee", { bank, percent: percent.toFixed(2) });
   };
   const rubPaymentInstruction = (currency: string | undefined, bank: string | undefined, direction: "send" | "receive", offer?: RouteCandidate["entry_offer_snapshot"]) => {
     if (currency?.toUpperCase() !== "RUB" || !bank) return null;
     const supportsSbp = offer?.payment_methods.some((method) => /сбп|sbp|fast payment/i.test(method)) ?? false;
     if (direction === "send") {
       return supportsSbp
-        ? `For RUB, use СБП from ${bank} using the exact recipient details shown in the order.`
-        : `For RUB, use СБП from ${bank} only if the advertiser lists it; otherwise use the payment method shown in the order.`;
+        ? copy("For RUB, use SBP from {bank} using the exact recipient details shown in the order.", { bank })
+        : copy("For RUB, use SBP from {bank} only if the advertiser lists it; otherwise use the payment method shown in the order.", { bank });
     }
     return supportsSbp
-      ? `For RUB payout to ${bank}, confirm the СБП transfer has arrived before releasing the crypto.`
-      : `For RUB payout to ${bank}, use СБП only if the order supports it and confirm the money has arrived before releasing the crypto.`;
+      ? copy("For RUB payout to {bank}, confirm the SBP transfer has arrived before releasing the crypto.", { bank })
+      : copy("For RUB payout to {bank}, use SBP only if the order supports it and confirm the money has arrived before releasing the crypto.", { bank });
   };
 
   function spotPair(symbol: string, firstAsset: string, secondAsset: string) {
@@ -101,140 +104,150 @@
   $: crossVenue = Boolean(entry && exit && !route.route_provider && entry.provider !== exit.provider);
   $: cryptoToCrypto = route.route_kind === "crypto_to_crypto";
   $: providerSwap = Boolean(route.route_provider && (route.entry_offer_snapshot || route.exit_offer_snapshot));
-  $: providerSwapStepNumber = route.entry_offer_snapshot ? 2 : 1;
   $: transferNetwork = route.entry_network && route.entry_network.toLowerCase() !== "internal" ? route.entry_network : null;
-  $: transferStepNumber = route.entry_offer_snapshot ? 2 : 1;
-  $: exitStepNumber = (route.entry_offer_snapshot ? 1 : 0) + (providerSwap ? 1 : 0) + (crossVenue ? 1 : 0) + 1;
   $: entryAsset = route.entry_offer_snapshot?.asset ?? route.entry_asset;
   $: providerSwapFrom = route.entry_offer_snapshot?.asset ?? route.source_currency;
   $: providerSwapTo = route.exit_offer_snapshot?.asset ?? route.target_currency;
-  $: sourceFeeLabel = bankFeeLabel(route.source_payment_method, route.source_bank_fee_percent);
-  $: targetFeeLabel = bankFeeLabel(route.target_payment_method, route.target_bank_fee_percent);
-  $: sourceRubInstruction = rubPaymentInstruction(route.source_currency, route.source_payment_method, "send", route.entry_offer_snapshot);
-  $: targetRubInstruction = rubPaymentInstruction(route.target_currency, route.target_payment_method, "receive", route.exit_offer_snapshot);
+  $: sourceFeeLabel = language && bankFeeLabel(route.source_payment_method, route.source_bank_fee_percent);
+  $: targetFeeLabel = language && bankFeeLabel(route.target_payment_method, route.target_bank_fee_percent);
+  $: sourceRubInstruction = language && rubPaymentInstruction(route.source_currency, route.source_payment_method, "send", route.entry_offer_snapshot);
+  $: targetRubInstruction = language && rubPaymentInstruction(route.target_currency, route.target_payment_method, "receive", route.exit_offer_snapshot);
   $: firstMarketUrl = route.market_path ? spotUrl(route.market_path.venue, route.market_path.source_pair, route.source_currency, route.bridge_currency ?? route.target_currency ?? route.entry_asset) : null;
   $: secondMarketUrl = route.market_path && route.bridge_currency ? spotUrl(route.market_path.venue, route.market_path.target_pair, route.bridge_currency, route.target_currency ?? route.entry_asset) : null;
+  $: standaloneProvider = Boolean(route.route_provider && !providerSwap);
+  $: marketStepCount = cryptoToCrypto && route.market_path ? (route.bridge_currency ? 2 : 1) : 0;
+  $: entryStepNumber = (standaloneProvider ? 1 : 0) + marketStepCount + 1;
+  $: providerStepNumber = entryStepNumber + (route.entry_offer_snapshot ? 1 : 0);
+  $: transferStepNumber = providerStepNumber + (providerSwap ? 1 : 0);
+  $: exitStepNumber = transferStepNumber + (crossVenue ? 1 : 0);
+  const warningText = (warning: string) => {
+    let match = warning.match(/^Live dry quote from (.+); execution and wallet compatibility are not verified\.$/);
+    if (match) return copy("Live dry quote from {provider}; execution and wallet compatibility are not verified.", { provider: match[1] });
+    match = warning.match(/^Quoted exchanger: (.+)\.$/);
+    if (match) return copy("Quoted exchanger: {description}.", { description: match[1] });
+    return copy(warning);
+  };
 </script>
 
 <div class="backdrop" role="presentation" on:mousedown={backdrop}>
   <div class:dragging class="modal" bind:this={modal} role="dialog" aria-modal="true" aria-labelledby="route-instructions-title" tabindex="-1">
-    <button type="button" class="sheetHandle" aria-label="Close instructions by dragging down" on:pointerdown={startSheetDrag} on:pointermove={moveSheetDrag} on:pointerup={endSheetDrag} on:pointercancel={endSheetDrag}><span aria-hidden="true"></span></button>
-    <div class="header"><div><span class="eyebrow">Selected route</span><h2 id="route-instructions-title">How to complete this exchange</h2><p class="intro">Complete each step in order. You stay in control—Pay3Flow never places an order or moves your funds.</p><p class="estimate">Estimated output: <strong>{money(route.target_amount_minor, route.target_currency, route.target_amount)}</strong></p>{#if sourceFeeLabel || targetFeeLabel}<p class="feeSummary">Bank fees: {[sourceFeeLabel, targetFeeLabel].filter(Boolean).join(" · ")}</p>{/if}</div><button type="button" class="closeButton" on:click={onClose} aria-label="Close instructions">×</button></div>
-    <ol class="workflow" aria-label="Exchange steps">
+    <button type="button" class="sheetHandle" aria-label={copy("Close instructions by dragging down")} on:pointerdown={startSheetDrag} on:pointermove={moveSheetDrag} on:pointerup={endSheetDrag} on:pointercancel={endSheetDrag}><span aria-hidden="true"></span></button>
+    <div class="header"><div><span class="eyebrow">{copy("Selected route")}</span><h2 id="route-instructions-title">{copy("How to complete this exchange")}</h2><p class="intro">{copy("Complete each step in order. You stay in control—Pay3Flow never places an order or moves your funds.")}</p><p class="estimate">{copy("Estimated output:")} <strong>{money(route.target_amount_minor, route.target_currency, route.target_amount)}</strong></p>{#if sourceFeeLabel || targetFeeLabel}<p class="feeSummary">{copy("Bank fees:")} {[sourceFeeLabel, targetFeeLabel].filter(Boolean).join(" · ")}</p>{/if}</div><button type="button" class="closeButton" on:click={onClose} aria-label={copy("Close instructions")}>×</button></div>
+    <ol class="workflow" aria-label={copy("Exchange steps")}>
       {#if route.route_provider && !providerSwap}
         <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">1</span><div class="stepBody">
-          <h3>Route through {venueName(route.route_provider)}</h3>
-          <p class="stepSummary">This is a live dry quote for a cross-network asset route. Pay3Flow does not execute the transfer or move funds.</p>
+          <h3>{copy("Route through {venue}", { venue: venueName(route.route_provider) })}</h3>
+          <p class="stepSummary">{copy("This is a current estimate only. Pay3Flow does not send money or make the exchange for you.")}</p>
           {#if route.route_path?.length}<p class="routePath">{route.route_path.join(" → ")}</p>{/if}
           <ul class="checklist">
-            <li>Confirm the source and destination asset networks in the provider flow.</li>
-            <li>Review the quoted output, provider fees, expiry, and any destination address or memo requirements.</li>
-            <li>Do not send funds after the quote expires; request a fresh route first.</li>
+            <li>{copy("Check which asset and network you send, and which asset and network you receive.")}</li>
+            <li>{copy("Check the amount you will receive, the provider fee, how long the quote is valid, and whether a memo or tag is required.")}</li>
+            <li>{copy("Never send money after the quote expires. Get a new quote first.")}</li>
           </ul>
-          {#if route.route_provider_url}<a href={route.route_provider_url} target="_blank" rel="noreferrer noopener" class="profileLink">Open {venueName(route.route_provider)} <span>↗</span></a>{/if}
+          {#if route.route_provider_url}<a href={route.route_provider_url} target="_blank" rel="noreferrer noopener" class="profileLink">{copy("Open {venue}", { venue: venueName(route.route_provider) })} <span>↗</span></a>{/if}
         </div></li>
       {/if}
       {#if cryptoToCrypto && route.market_path}
         {@const market = route.market_path}
         <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">1</span><div class="stepBody">
-          <h3>{route.bridge_currency ? `Convert ${route.source_currency} to ${route.bridge_currency}` : `Convert ${route.source_currency} to ${route.target_currency}`}</h3>
-          <p class="stepSummary">Use the {market.source_pair} spot market on {venueName(market.venue)}. This is an exchange order book, so there is no P2P advertiser to contact.</p>
+          <h3>{copy("Convert {from} to {to}", { from: route.source_currency, to: route.bridge_currency ?? route.target_currency ?? "" })}</h3>
+          <p class="stepSummary">{copy("This is a normal exchange on {venue}. There is no separate person to message.", { venue: venueName(market.venue) })}</p>
           <ul class="checklist">
-            <li>Confirm the pair converts {route.source_currency} into {route.bridge_currency ?? route.target_currency}.</li>
-            <li>Review the live price, trading fee, and expected amount before submitting the order.</li>
-            <li>Wait until the converted balance is available before continuing.</li>
+            <li>{copy("First check that the pair changes {from} into {to}.", { from: route.source_currency, to: route.bridge_currency ?? route.target_currency ?? "" })}</li>
+            <li>{copy("Check the current price, fee, and amount you should receive before pressing the exchange button.")}</li>
+            <li>{copy("Wait until the new balance appears before doing the next step.")}</li>
           </ul>
-          <div class="counterparty"><div class="counterpartyTopline"><span class="counterpartyLabel">Spot market</span><span class="profileBadge">{venueName(market.venue)}</span></div><strong class="advertiser">{market.source_pair}</strong><span class="venueLine">Conversion rate {marketRate(market.source_rate)}</span>
-            {#if linkFor("market_source")}<button type="button" class="profileLink" on:click={() => onOpenService(linkFor("market_source")!)}>Open {market.source_pair} on {venueName(market.venue)} <span>↗</span></button>{:else if firstMarketUrl}<a href={firstMarketUrl} target="_blank" rel="noreferrer noopener" class="profileLink">Open {market.source_pair} on {venueName(market.venue)} <span>↗</span></a>{/if}
+          <div class="counterparty"><div class="counterpartyTopline"><span class="counterpartyLabel">{copy("Spot market")}</span><span class="profileBadge">{venueName(market.venue)}</span></div><strong class="advertiser">{market.source_pair}</strong><span class="venueLine">{copy("Conversion rate {rate}", { rate: marketRate(market.source_rate) })}</span>
+            {#if linkFor("market_source")}<button type="button" class="profileLink" on:click={() => onOpenService(linkFor("market_source")!)}>{copy("Open {pair} on {venue}", { pair: market.source_pair, venue: venueName(market.venue) })} <span>↗</span></button>{:else if firstMarketUrl}<a href={firstMarketUrl} target="_blank" rel="noreferrer noopener" class="profileLink">{copy("Open {pair} on {venue}", { pair: market.source_pair, venue: venueName(market.venue) })} <span>↗</span></a>{/if}
           </div>
         </div></li>
         {#if route.bridge_currency}
           <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">2</span><div class="stepBody">
-            <h3>Convert {route.bridge_currency} to {route.target_currency}</h3>
-            <p class="stepSummary">Complete the second conversion on {venueName(market.venue)} only after the first trade has settled into your available balance.</p>
+            <h3>{copy("Convert {from} to {to}", { from: route.bridge_currency, to: route.target_currency ?? "" })}</h3>
+            <p class="stepSummary">{copy("Do the second exchange on {venue} only after the first balance is available.", { venue: venueName(market.venue) })}</p>
             <ul class="checklist">
-              <li>Open {market.target_pair} and confirm it converts {route.bridge_currency} into {route.target_currency}.</li>
-              <li>Review the live price, trading fee, and final amount before submitting the order.</li>
-              <li>Confirm the destination asset and network before withdrawing it from the venue.</li>
+              <li>{copy("Open {pair} and check that it changes {from} into {to}.", { pair: market.target_pair, from: route.bridge_currency, to: route.target_currency ?? "" })}</li>
+              <li>{copy("Check the current price, fee, and amount you should receive before pressing the exchange button.")}</li>
+              <li>{copy("Before withdrawing, check the receiving asset and the network one more time.")}</li>
             </ul>
-            <div class="counterparty"><div class="counterpartyTopline"><span class="counterpartyLabel">Spot market</span><span class="profileBadge">{venueName(market.venue)}</span></div><strong class="advertiser">{market.target_pair}</strong><span class="venueLine">Conversion rate {marketRate(market.target_rate)}</span>
-              {#if linkFor("market_target")}<button type="button" class="profileLink" on:click={() => onOpenService(linkFor("market_target")!)}>Open {market.target_pair} on {venueName(market.venue)} <span>↗</span></button>{:else if secondMarketUrl}<a href={secondMarketUrl} target="_blank" rel="noreferrer noopener" class="profileLink">Open {market.target_pair} on {venueName(market.venue)} <span>↗</span></a>{/if}
+            <div class="counterparty"><div class="counterpartyTopline"><span class="counterpartyLabel">{copy("Spot market")}</span><span class="profileBadge">{venueName(market.venue)}</span></div><strong class="advertiser">{market.target_pair}</strong><span class="venueLine">{copy("Conversion rate {rate}", { rate: marketRate(market.target_rate) })}</span>
+              {#if linkFor("market_target")}<button type="button" class="profileLink" on:click={() => onOpenService(linkFor("market_target")!)}>{copy("Open {pair} on {venue}", { pair: market.target_pair, venue: venueName(market.venue) })} <span>↗</span></button>{:else if secondMarketUrl}<a href={secondMarketUrl} target="_blank" rel="noreferrer noopener" class="profileLink">{copy("Open {pair} on {venue}", { pair: market.target_pair, venue: venueName(market.venue) })} <span>↗</span></a>{/if}
             </div>
           </div></li>
         {/if}
       {/if}
       {#if route.entry_offer_snapshot}
-        <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">1</span><div class="stepBody">
-          <h3>{directFiat ? `Transfer ${route.source_currency} to ${route.target_currency} via ${entryVenue}` : cryptoToCrypto ? `Sell ${route.source_currency} for ${route.bridge_currency ?? route.entry_asset}` : `Buy ${entryAsset} for ${money(route.source_amount_minor, route.source_currency)}`}</h3>
+        <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">{entryStepNumber}</span><div class="stepBody">
+          <h3>{directFiat ? copy("Transfer {from} to {to} via {venue}", { from: route.source_currency, to: route.target_currency ?? "", venue: entryVenue }) : cryptoToCrypto ? copy("Sell {asset} for {amount}", { asset: route.source_currency, amount: route.bridge_currency ?? route.entry_asset }) : copy("Buy {asset} for {amount}", { asset: entryAsset, amount: money(route.source_amount_minor, route.source_currency) })}</h3>
           {#if entryDirect}
-            <p class="stepSummary">Open the direct exchange on {entryVenue}, review the live quote, and complete the conversion in the provider flow.</p>
+            <p class="stepSummary">{copy("Open the direct exchange on {venue}, check the final amount, and follow the provider's instructions.", { venue: entryVenue })}</p>
             <ul class="checklist">
-              <li>Confirm the currencies, amount, live rate, fees, and limits before continuing.</li>
-              <li>Complete any login or verification required by {entryVenue} and follow its payment instructions.</li>
-              <li>Confirm the converted balance is available before continuing to the next step.</li>
+              <li>{copy("Check the currencies, amount, current rate, fee, and limits before continuing.")}</li>
+              <li>{copy("Sign in or complete verification on {venue}, if it asks you to, then follow the payment instructions shown there.", { venue: entryVenue })}</li>
+              <li>{copy("After the exchange, check that the new balance is available before continuing.")}</li>
             </ul>
           {:else}
-            <p class="stepSummary">{cryptoToCrypto ? `Open the buyer's profile on ${entryVenue} and create the first P2P order.` : `Open the seller's profile on ${entryVenue}, create the P2P order, and pay with the selected payment method.`}</p>
+            <p class="stepSummary">{cryptoToCrypto ? copy("Open the buyer's profile on {venue} and create the first P2P order.", { venue: entryVenue }) : copy("Open the seller's profile on {venue}, create the P2P order, and pay using the selected method.", { venue: entryVenue })}</p>
             <ul class="checklist">
-              <li>Match the advertiser nickname and ad ID before creating the order.</li>
-              <li>Confirm the live rate, order limits, and payment method on {entryVenue}.</li>
-              {#if sourceFeeLabel}<li>{sourceFeeLabel} is an estimate; confirm the final bank tariff before sending.</li>{/if}
+              <li>{copy("Before creating the order, compare the nickname and advertisement ID.")}</li>
+              <li>{copy("Check the current rate, order limits, and payment method on {venue}.", { venue: entryVenue })}</li>
+              {#if sourceFeeLabel}<li>{copy("This bank fee is only an estimate. Check the final bank fee before sending.")}</li>{/if}
               {#if sourceRubInstruction}<li>{sourceRubInstruction}</li>{/if}
-              <li>{cryptoToCrypto ? "Release the asset only after you have independently confirmed receipt of the payment." : "Use only the payment details shown inside the order, then mark it paid after sending the transfer."}</li>
+              <li>{cryptoToCrypto ? copy("Release the asset only after you personally see that the payment has arrived.") : copy("Use only the payment details shown inside the order. After sending, mark the order as paid.")}</li>
             </ul>
           {/if}
-          <AdvertiserCard offer={route.entry_offer_snapshot} label={entryDirect ? `Direct exchange on ${entryVenue}` : `${cryptoToCrypto ? "Buyer" : "Seller"} on ${entryVenue}`} serviceLink={linkFor("entry")} {venueNames} {onOpenService} />
+          <AdvertiserCard offer={route.entry_offer_snapshot} label={entryDirect ? copy("Direct exchange on {venue}", { venue: entryVenue }) : `${cryptoToCrypto ? copy("Buyer") : copy("Seller")} ${copy("on {venue}", { venue: entryVenue })}`} serviceLink={linkFor("entry")} {venueNames} {onOpenService} />
         </div></li>
       {/if}
       {#if providerSwap}
-        <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">{providerSwapStepNumber}</span><div class="stepBody">
-          <h3>Swap {providerSwapFrom} for {providerSwapTo} via {venueName(route.route_provider)}</h3>
-          <p class="stepSummary">{route.entry_offer_snapshot ? `After buying ${providerSwapFrom} with fiat, deposit it into ${venueName(route.route_provider)} and complete the swap into ${providerSwapTo}.` : `Deposit ${providerSwapFrom} into ${venueName(route.route_provider)} and complete the swap into ${providerSwapTo}.`}</p>
+        <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">{providerStepNumber}</span><div class="stepBody">
+          <h3>{copy("Swap {from} for {to} via {venue}", { from: providerSwapFrom ?? "", to: providerSwapTo ?? "", venue: venueName(route.route_provider) })}</h3>
+          <p class="stepSummary">{route.entry_offer_snapshot ? copy("After you get {from}, send it to {venue} and exchange it for {to}.", { from: providerSwapFrom ?? "", venue: venueName(route.route_provider), to: providerSwapTo ?? "" }) : copy("Send {from} to {venue} first, then exchange it for {to}.", { from: providerSwapFrom ?? "", venue: venueName(route.route_provider), to: providerSwapTo ?? "" })}</p>
           {#if route.route_path?.length}<p class="routePath">{route.route_path.join(" → ")}</p>{/if}
           <ul class="checklist">
-            <li>Confirm the source asset, destination asset, and exact networks before sending.</li>
-            <li>Review the live quote, provider fees, expiry, and any address or memo requirements.</li>
-            <li>Wait for the destination balance to arrive before considering the exchange complete.</li>
+            <li>{copy("Before sending, check the asset, the receiving asset, and the exact network.")}</li>
+            <li>{copy("Check the current rate, provider fee, quote expiry, and any address, memo, or tag requirement.")}</li>
+            <li>{copy("Wait until the new balance appears before considering this step finished.")}</li>
           </ul>
-          {#if route.route_provider_url}<a href={route.route_provider_url} target="_blank" rel="noreferrer noopener" class="profileLink">Open {venueName(route.route_provider)} <span>↗</span></a>{/if}
+          {#if route.route_provider_url}<a href={route.route_provider_url} target="_blank" rel="noreferrer noopener" class="profileLink">{copy("Open {venue}", { venue: venueName(route.route_provider) })} <span>↗</span></a>{/if}
         </div></li>
       {/if}
       {#if crossVenue}
         <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">{transferStepNumber}</span><div class="stepBody">
-          <h3>Transfer {route.entry_asset} to {exitVenue}</h3>
-          <p class="stepSummary">Move the purchased asset from {entryVenue} to your deposit address on {exitVenue} before opening the next P2P order.</p>
+          <h3>{copy("Transfer {asset} to {venue}", { asset: route.entry_asset, venue: exitVenue })}</h3>
+          <p class="stepSummary">{copy("Send the purchased asset from {from} to the deposit address on {to} before opening the next order.", { from: entryVenue, to: exitVenue })}</p>
           <ul class="checklist">
-            <li>{#if transferNetwork}Copy the deposit address from {exitVenue} and select the exact {transferNetwork} network on both venues.{:else}Confirm that both venues support the same asset and network, then copy the deposit address from {exitVenue}.{/if}</li>
-            <li>Check the full address, any required memo or tag, and the withdrawal fee before confirming.</li>
-            <li>Wait for {exitVenue} to credit the deposit before continuing.</li>
+            <li>{#if transferNetwork}{copy("Copy the deposit address from {venue}. Choose the exact {network} network on both platforms.", { venue: exitVenue, network: transferNetwork })}{:else}{copy("First check that both platforms support the same asset and network. Then copy the deposit address from {venue}.", { venue: exitVenue })}{/if}</li>
+            <li>{copy("Check the complete address, memo or tag if required, and the withdrawal fee before confirming.")}</li>
+            <li>{copy("Wait until {venue} shows the deposit as received before continuing.", { venue: exitVenue })}</li>
           </ul>
         </div></li>
       {/if}
       {#if route.exit_offer_snapshot}
         <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">{exitStepNumber}</span><div class="stepBody">
-          <h3>{cryptoToCrypto ? `Buy ${route.target_currency} with ${route.bridge_currency ?? route.entry_asset}` : `Sell ${route.entry_asset} for ${money(route.target_amount_minor, route.target_currency, route.target_amount)}`}</h3>
+          <h3>{cryptoToCrypto ? copy("Buy {asset} with {bridge}", { asset: route.target_currency ?? "", bridge: route.bridge_currency ?? route.entry_asset }) : copy("Sell {asset} for {amount}", { asset: route.entry_asset, amount: money(route.target_amount_minor, route.target_currency, route.target_amount) })}</h3>
           {#if exitDirect}
-            <p class="stepSummary">Open the direct exchange on {exitVenue}, review the live quote, and complete the conversion in the provider flow.</p>
+            <p class="stepSummary">{copy("Open the direct exchange on {venue}, check the final amount, and follow the provider's instructions.", { venue: exitVenue })}</p>
             <ul class="checklist">
-              <li>Confirm the currencies, amount, live rate, fees, and limits before continuing.</li>
-              <li>Complete any login or verification required by {exitVenue} and follow its transfer instructions.</li>
-              <li>Confirm the payout reached your destination account before considering the exchange complete.</li>
+              <li>{copy("Check the currencies, amount, current rate, fee, and limits before continuing.")}</li>
+              <li>{copy("Sign in or complete verification on {venue}, if it asks you to, then follow the payment instructions shown there.", { venue: exitVenue })}</li>
+              <li>{copy("After the sale, check that the money has arrived in your account before considering the exchange finished.")}</li>
             </ul>
           {:else}
-            <p class="stepSummary">{cryptoToCrypto ? `Open the seller's profile on ${exitVenue} and create the destination-asset order.` : `Open the buyer's profile on ${exitVenue} and create the sell order using the selected recipient payment method.`}</p>
+            <p class="stepSummary">{cryptoToCrypto ? copy("Open the seller's profile on {venue} and create the order for the asset you want to receive.", { venue: exitVenue }) : copy("Open the buyer's profile on {venue} and create a sell order using the selected payment method.", { venue: exitVenue })}</p>
             <ul class="checklist">
-              <li>Match the advertiser nickname and ad ID before creating the order.</li>
-              <li>Confirm the live rate, order limits, {cryptoToCrypto ? "asset network" : "recipient payment method"}, and expected amount.</li>
-              {#if targetFeeLabel}<li>{targetFeeLabel} is an estimate; confirm the final bank tariff before accepting the payout.</li>{/if}
+              <li>{copy("Before creating the order, compare the nickname and advertisement ID.")}</li>
+              <li>{copy("Check the current rate, order limits, {thing}, and expected amount.", { thing: cryptoToCrypto ? copy("asset network") : copy("recipient payment method") })}</li>
+              {#if targetFeeLabel}<li>{copy("This bank fee is only an estimate. Check the final fee before accepting the payout.")}</li>{/if}
               {#if targetRubInstruction}<li>{targetRubInstruction}</li>{/if}
-              <li>{cryptoToCrypto ? `Confirm the ${route.target_currency} balance and network before withdrawing.` : "Release the asset only after you have independently confirmed the payment in your bank or payment account."}</li>
+              <li>{cryptoToCrypto ? copy("Confirm the {asset} balance and network before withdrawing.", { asset: route.target_currency ?? "" }) : copy("Release the asset only after you personally see the payment in your bank or payment account.")}</li>
             </ul>
           {/if}
-          <AdvertiserCard offer={route.exit_offer_snapshot} label={exitDirect ? `Direct exchange on ${exitVenue}` : `${cryptoToCrypto ? "Seller" : "Buyer"} on ${exitVenue}`} serviceLink={linkFor("exit")} {venueNames} {onOpenService} />
+          <AdvertiserCard offer={route.exit_offer_snapshot} label={exitDirect ? copy("Direct exchange on {venue}", { venue: exitVenue }) : `${cryptoToCrypto ? copy("Seller") : copy("Buyer")} ${copy("on {venue}", { venue: exitVenue })}`} serviceLink={linkFor("exit")} {venueNames} {onOpenService} />
         </div></li>
       {/if}
     </ol>
-    <div class="warning"><strong>Important</strong><span>Rates, limits and offers can change. Confirm the provider or counterparty, payment details, and network before sending money. Pay3Flow never creates the order or moves funds.</span>{#each route.warnings ?? [] as warning}<span>{warning}</span>{/each}</div>
+    <div class="warning"><strong>{copy("Important")}</strong><span>{copy("Rates, limits, and offers can change. Check the provider, payment details, and network before sending money. Pay3Flow does not create orders or move money.")}</span>{#each route.warnings ?? [] as warning}<span>{warningText(warning)}</span>{/each}</div>
   </div>
 </div>
 

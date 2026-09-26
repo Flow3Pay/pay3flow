@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { P2pOffer, ServiceLink } from "$lib/exchange";
   import { venueIcon } from "$lib/icons";
+  import { locale, t } from "$lib/i18n";
   export let offer: P2pOffer | undefined;
   export let label: string;
   export let venueNames: Record<string, string> = {};
@@ -8,6 +9,8 @@
   export let onOpenService: (link: ServiceLink) => void = () => {};
   const VENUE_ICONS: Record<string, string> = { binance: venueIcon("binance"), bybit: venueIcon("bybit"), okx: venueIcon("okx"), bitget: venueIcon("bitget"), rapira: venueIcon("rapira"), whitebird: venueIcon("whitebird"), "cifra-broker": venueIcon("cifra-broker"), bestchange: venueIcon("bestchange"), dzengi: venueIcon("dzengi"), skylabs: venueIcon("skylabs") };
   const venueName = (value?: string) => value ? venueNames[value.toLowerCase()] ?? value : "P2P market";
+  $: language = $locale;
+  const copy = (key: string, params: Record<string, string | number> = {}) => t(key, params, language);
   const percentage = (value?: number | null) => value == null ? "—" : `${(value * 100).toFixed(1)}%`;
   const profileFallback = (value: P2pOffer) => value.source.toLowerCase() === "bybit" && value.advertiser.id ? `https://www.bybit.com/en/p2p/profile/${encodeURIComponent(value.advertiser.id)}/${encodeURIComponent(value.asset)}/${encodeURIComponent(value.fiat)}/item` : null;
   $: venue = offer ? venueName(offer.source) : "";
@@ -15,7 +18,7 @@
   $: offerIcon = offer ? VENUE_ICONS[offer.source.toLowerCase()] : undefined;
   $: profileUrl = offer ? offer.advertiser_profile_url ?? profileFallback(offer) : null;
   $: actionUrl = offer ? profileUrl ?? offer.source_url : "";
-  $: actionLabel = offer ? (directExchange ? `Open ${venue} exchange` : profileUrl ? `Open ${venue} profile` : `Open ${venue} P2P and find ${offer.advertiser.nickname}`) : "";
+  $: actionLabel = offer ? (directExchange ? copy("Open {venue} exchange", { venue }) : profileUrl ? copy("Open {venue} profile", { venue }) : copy("Open {venue} P2P and find {nickname}", { venue, nickname: offer.advertiser.nickname })) : "";
   function fallbackVenueIcon(event: Event, source: string) {
     const image = event.currentTarget as HTMLImageElement;
     image.onerror = null;
@@ -24,7 +27,7 @@
 </script>
 
 {#if !offer}
-  <div class="counterparty missing"><span class="counterpartyLabel">{label}</span><strong>Advertiser details unavailable</strong></div>
+  <div class="counterparty missing"><span class="counterpartyLabel">{label}</span><strong>{copy("Advertiser details unavailable")}</strong></div>
 {:else}
   <div class="counterparty">
     <div class="counterpartyIdentity">
@@ -36,12 +39,12 @@
           {#if offerIcon}<span class="avatarVenue"><img src={offerIcon} alt="" width="16" height="16" loading="lazy" decoding="async" on:error={(event) => fallbackVenueIcon(event, offer?.source ?? "")} /></span>{/if}
         {/if}
       </span>
-      <div class="counterpartyIdentityCopy"><div class="counterpartyTopline"><span class="counterpartyLabel">{label}</span><span class={directExchange || profileUrl ? "profileBadge" : "manualBadge"}>{directExchange ? "Direct exchange" : profileUrl ? "User profile" : "Find by nickname"}</span></div><strong class="advertiser">{offer.advertiser.nickname}</strong><span class="venueLine">{venue} · {directExchange ? "Exchange service" : offer.advertiser.is_merchant ? "Merchant" : "Advertiser"}</span></div>
+      <div class="counterpartyIdentityCopy"><div class="counterpartyTopline"><span class="counterpartyLabel">{label}</span><span class={directExchange || profileUrl ? "profileBadge" : "manualBadge"}>{directExchange ? copy("Direct exchange") : profileUrl ? copy("User profile") : copy("Find by nickname")}</span></div><strong class="advertiser">{offer.advertiser.nickname}</strong><span class="venueLine">{venue} · {directExchange ? copy("Exchange service") : offer.advertiser.is_merchant ? copy("Merchant") : copy("Advertiser")}</span></div>
     </div>
-    <div class="metrics">{#if !directExchange}<span><b>{percentage(offer.advertiser.completion_rate_30d)}</b> completion</span><span><b>{offer.advertiser.completed_orders_30d ?? "—"}</b> orders / 30d</span>{/if}<span><b>{offer.price} {offer.fiat}</b> rate</span></div>
-    <span class="paymentLine">{directExchange ? "Settlement" : "Payment"}: {offer.payment_methods.length ? offer.payment_methods.join(", ") : "confirm on provider"}</span>
+    <div class="metrics">{#if !directExchange}<span><b>{percentage(offer.advertiser.completion_rate_30d)}</b> {copy("completion")}</span><span><b>{offer.advertiser.completed_orders_30d ?? "—"}</b> {copy("orders / 30d")}</span>{/if}<span><b>{offer.price} {offer.fiat}</b> {copy("rate")}</span></div>
+    <span class="paymentLine">{directExchange ? copy("Settlement") : copy("Payment")}: {offer.payment_methods.length ? offer.payment_methods.join(", ") : copy("confirm on provider")}</span>
     {#if serviceLink}<button type="button" class="profileLink" on:click={() => onOpenService(serviceLink!)}>{actionLabel} <span>↗</span></button>{:else}<a href={actionUrl} target="_blank" rel="noreferrer noopener" class="profileLink">{actionLabel} <span>↗</span></a>{/if}
-    {#if !directExchange && !profileUrl}<small class="adHint">Match the nickname and ad ID {offer.ad_id} before opening an order.</small>{/if}
+    {#if !directExchange && !profileUrl}<small class="adHint">{copy("Match the nickname and ad ID {id} before opening an order.", { id: offer.ad_id })}</small>{/if}
   </div>
 {/if}
 
