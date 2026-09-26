@@ -608,12 +608,15 @@ impl P2pSearchService {
                 }
             }
         }
-        let provider_routes = match (source_is_crypto, target_is_crypto) {
+        let mut provider_routes = match (source_is_crypto, target_is_crypto) {
             (false, true) => self.search_fiat_to_crypto_provider_routes(&query).await,
             (true, false) => self.search_crypto_to_fiat_provider_routes(&query).await,
             (false, false) => self.search_fiat_provider_routes(&query).await,
             (true, true) => Vec::new(),
         };
+        if !source_is_crypto && !target_is_crypto {
+            provider_routes.extend(self.search_direct_fiat_routes(&query).await);
+        }
         if merge_routes(&mut routes, provider_routes) > 0 {
             publish_update(
                 updates.as_ref(),
@@ -630,7 +633,8 @@ impl P2pSearchService {
     }
 
     async fn search_provider_routes(&self, query: &NormalizedRouteQuery) -> Vec<P2pRoute> {
-        let provider_assets = self.provider_assets().await;
+        let providers = self.route_providers_for_query(query);
+        let provider_assets = Self::provider_assets_for(&providers).await;
         let source_networks = self.assets_on_network(
             &query.source_currency,
             query.source_network.as_deref(),
@@ -658,7 +662,7 @@ impl P2pSearchService {
             .collect::<Vec<_>>();
         let mut searches = FuturesUnordered::new();
         for (source, target) in network_pairs {
-            for provider in self.route_providers.iter().cloned() {
+            for provider in providers.iter().cloned() {
                 let from = source.clone();
                 let to = target.clone();
                 let Ok(amount) = Amount::from_f64(query.source_amount, from.clone()) else {
@@ -744,8 +748,12 @@ impl P2pSearchService {
     }
 
     async fn provider_assets(&self) -> Vec<Asset> {
+        Self::provider_assets_for(&self.route_providers).await
+    }
+
+    async fn provider_assets_for(providers: &[Arc<dyn PublicRouteProvider>]) -> Vec<Asset> {
         let mut assets = Vec::new();
-        for provider in self.route_providers.iter().cloned() {
+        for provider in providers {
             assets.extend(provider.supported_assets().await);
         }
         assets.sort_by_key(|asset| asset.to_string());
@@ -753,8 +761,21 @@ impl P2pSearchService {
         assets
     }
 
+    fn route_providers_for_query(
+        &self,
+        query: &NormalizedRouteQuery,
+    ) -> Arc<[Arc<dyn PublicRouteProvider>]> {
+        self.route_providers
+            .iter()
+            .filter(|provider| source_selected(query, provider.name()))
+            .cloned()
+            .collect::<Vec<_>>()
+            .into()
+    }
+
     async fn intermediary_assets(&self, query: &NormalizedRouteQuery) -> Vec<Asset> {
-        let provider_assets = self.provider_assets().await;
+        let providers = self.route_providers_for_query(query);
+        let provider_assets = Self::provider_assets_for(&providers).await;
         let allowed_symbols = query.assets.iter().collect::<HashSet<_>>();
         let mut assets = if query.assets_explicit {
             provider_assets
@@ -827,7 +848,8 @@ impl P2pSearchService {
         &self,
         query: &NormalizedRouteQuery,
     ) -> Vec<P2pRoute> {
-        let provider_assets = self.provider_assets().await;
+        let providers = self.route_providers_for_query(query);
+        let provider_assets = Self::provider_assets_for(&providers).await;
         let target_assets = self.assets_on_network(
             &query.target_currency,
             query.target_network.as_deref(),
@@ -884,7 +906,7 @@ impl P2pSearchService {
                         let Ok(amount) = Amount::from_f64(acquired, intermediary.clone()) else {
                             continue;
                         };
-                        let providers = self.route_providers.clone();
+                        let providers = providers.clone();
                         let intermediary = intermediary.clone();
                         let target = target.clone();
                         let offer = offer.clone();
@@ -978,7 +1000,8 @@ impl P2pSearchService {
         &self,
         query: &NormalizedRouteQuery,
     ) -> Vec<P2pRoute> {
-        let provider_assets = self.provider_assets().await;
+        let providers = self.route_providers_for_query(query);
+        let provider_assets = Self::provider_assets_for(&providers).await;
         let source_assets = self.assets_on_network(
             &query.source_currency,
             query.source_network.as_deref(),
@@ -1014,7 +1037,7 @@ impl P2pSearchService {
                 let Ok(amount) = Amount::from_f64(query.source_amount, source.clone()) else {
                     continue;
                 };
-                let providers = self.route_providers.clone();
+                let providers = providers.clone();
                 let source = source.clone();
                 let intermediary = intermediary.clone();
                 let exit_offers = exit_offers.clone();
@@ -1119,7 +1142,8 @@ impl P2pSearchService {
 
     async fn search_fiat_provider_routes(&self, query: &NormalizedRouteQuery) -> Vec<P2pRoute> {
         let mut searches = FuturesUnordered::new();
-        let provider_assets = self.provider_assets().await;
+        let providers = self.route_providers_for_query(query);
+        let provider_assets = Self::provider_assets_for(&providers).await;
         for asset in self.intermediary_assets(query).await {
             let source_networks = self.assets_on_network(
                 &asset.symbol,
@@ -1194,7 +1218,7 @@ impl P2pSearchService {
                     let Ok(amount) = Amount::from_f64(source_amount, from.clone()) else {
                         continue;
                     };
-                    for provider in self.route_providers.iter().cloned() {
+                    for provider in providers.iter().cloned() {
                         let entry_offer = entry_offer.clone();
                         let exit_offers = exit_offers.clone();
                         let from = from.clone();
@@ -1280,6 +1304,123 @@ impl P2pSearchService {
                     service_links: Vec::new(),
                 });
             }
+        }
+        routes
+    }
+
+    async fn search_direct_fiat_routes(&self, query: &NormalizedRouteQuery) -> Vec<P2pRoute> {
+        let mut searches = FuturesUnordered::new();
+        for provider in self
+            .fiat_route_providers
+            .iter()
+            .filter(|provider| source_selected(query, provider.name()))
+            .cloned()
+        {
+            if !provider.supports_pair(&query.source_currency, &query.target_currency) {
+                continue;
+            }
+            let source_currency = query.source_currency.clone();
+            let target_currency = query.target_currency.clone();
+            let source_amount = query.source_amount;
+            searches.push(async move {
+                provider
+                    .quote(&source_currency, &target_currency, source_amount)
+                    .await
+                    .ok()
+            });
+        }
+
+        let mut routes = Vec::new();
+        while let Some(Some(quote)) = searches.next().await {
+            if !quote.source_amount.is_finite()
+                || quote.source_amount <= 0.0
+                || !quote.target_amount.is_finite()
+                || quote.target_amount <= 0.0
+                || !quote
+                    .source_currency
+                    .eq_ignore_ascii_case(&query.source_currency)
+                || !quote
+                    .target_currency
+                    .eq_ignore_ascii_case(&query.target_currency)
+            {
+                continue;
+            }
+            let price = quote.source_amount / quote.target_amount;
+            let mut payment_methods = [
+                query.source_payment_method.clone(),
+                query.target_payment_method.clone(),
+            ]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
+            payment_methods.sort();
+            payment_methods.dedup();
+            let offer = P2pOffer {
+                market: P2pOfferMarket::DirectExchange,
+                source: quote.provider.clone(),
+                ad_id: format!(
+                    "indicative-{}-{}",
+                    quote.source_currency.to_ascii_lowercase(),
+                    quote.target_currency.to_ascii_lowercase()
+                ),
+                side: P2pSide::BuyCrypto,
+                fiat: quote.source_currency.clone(),
+                asset: quote.target_currency.clone(),
+                price: fixed(price, 12),
+                available_asset: "1000000000".into(),
+                min_fiat: "1".into(),
+                max_fiat: "1000000000".into(),
+                payment_methods,
+                pay_time_limit_minutes: None,
+                advertiser: crate::p2p::service::Advertiser {
+                    id: None,
+                    nickname: quote.provider.clone(),
+                    user_type: Some("service".into()),
+                    is_merchant: true,
+                    is_verified: true,
+                    completed_orders_30d: None,
+                    completion_rate_30d: None,
+                    positive_rate: None,
+                },
+                advertiser_profile_url: None,
+                source_url: quote.source_url,
+                source_url_is_exact: false,
+            };
+            routes.push(P2pRoute {
+                route_id: String::new(),
+                rank: 0,
+                asset: quote.target_currency.clone(),
+                entry_network: None,
+                source_network: None,
+                target_network: None,
+                source_fiat: quote.source_currency,
+                source_amount: fixed(quote.source_amount, 2),
+                acquired_asset_amount: fixed(quote.target_amount, 2),
+                target_fiat: quote.target_currency,
+                target_amount: fixed(quote.target_amount, 2),
+                effective_rate: fixed(quote.target_amount / quote.source_amount, 12),
+                same_venue: true,
+                requires_asset_transfer: false,
+                transfer_fee_included: true,
+                route_kind: "fiat_to_fiat".into(),
+                bridge_currency: None,
+                market_path: None,
+                route_provider: None,
+                route_path: Vec::new(),
+                route_fees: Vec::new(),
+                quote_expires_at: None,
+                payment_methods_verified: false,
+                entry_offer: Some(offer),
+                exit_offer: None,
+                warnings: vec![
+                    "Indicative direct-transfer quote; confirm the live rate, account eligibility, transfer limits, and recipient details with the provider before sending."
+                        .into(),
+                ],
+                services: Vec::new(),
+                reputation: None,
+                feedback: None,
+                service_links: Vec::new(),
+            });
         }
         routes
     }
@@ -1665,6 +1806,13 @@ fn normalize_query(
             .clamp(1, MAX_ROUTE_LIMIT),
         sources: normalize_sources(query.sources)?,
     })
+}
+
+fn source_selected(query: &NormalizedRouteQuery, provider: &str) -> bool {
+    query
+        .sources
+        .as_deref()
+        .is_none_or(|sources| sources.split(',').any(|source| source == provider))
 }
 
 fn intermediary_asset_priority(symbol: &str, target_symbol: &str) -> u8 {
@@ -2182,7 +2330,7 @@ mod tests {
 
     use crate::config::Config;
     use crate::p2p::service::P2pSource;
-    use crate::p2p::Advertiser;
+    use crate::p2p::{Advertiser, FiatRouteQuote, PublicFiatRouteProvider};
     use crate::route_engine::{PublicRouteProvider, PublicRouteQuote};
     use async_trait::async_trait;
 
@@ -2195,6 +2343,77 @@ mod tests {
     }
 
     struct FixedIntentProvider;
+
+    struct FixedFiatRouteProvider;
+
+    #[async_trait]
+    impl PublicFiatRouteProvider for FixedFiatRouteProvider {
+        fn name(&self) -> &str {
+            "id-pay"
+        }
+
+        fn supports_pair(&self, source_currency: &str, target_currency: &str) -> bool {
+            matches!(
+                (source_currency, target_currency),
+                ("AMD", "RUB") | ("RUB", "AMD")
+            )
+        }
+
+        async fn quote(
+            &self,
+            source_currency: &str,
+            target_currency: &str,
+            source_amount: f64,
+        ) -> Result<FiatRouteQuote> {
+            let target_amount = if source_currency == "RUB" {
+                source_amount * 4.0
+            } else {
+                source_amount / 4.0
+            };
+            Ok(FiatRouteQuote {
+                provider: self.name().into(),
+                source_url: "https://id-pay.ru/".into(),
+                source_currency: source_currency.into(),
+                target_currency: target_currency.into(),
+                source_amount,
+                target_amount,
+            })
+        }
+    }
+
+    struct PricedRouteProvider {
+        name: &'static str,
+        multiplier: f64,
+        fee: &'static str,
+    }
+
+    #[async_trait]
+    impl PublicRouteProvider for PricedRouteProvider {
+        fn name(&self) -> &str {
+            self.name
+        }
+
+        async fn supported_assets(&self) -> Vec<Asset> {
+            ["USDT", "USDC"]
+                .into_iter()
+                .map(|symbol| Asset::new(symbol, Some("ethereum")).unwrap())
+                .collect()
+        }
+
+        async fn quote(&self, from: Asset, to: Asset, amount: Amount) -> Result<PublicRouteQuote> {
+            let output = amount.value.parse::<f64>().unwrap() * self.multiplier;
+            Ok(PublicRouteQuote {
+                provider: self.name.into(),
+                from: from.clone(),
+                to: to.clone(),
+                input: amount,
+                output: Amount::from_f64(output, to.clone())?,
+                fees: vec![Amount::new(self.fee, from.clone())?],
+                expires_at: DateTime::from_timestamp(1_900_000_000, 0),
+                path: vec![from, to],
+            })
+        }
+    }
 
     #[async_trait]
     impl PublicRouteProvider for FixedIntentProvider {
@@ -2516,6 +2735,137 @@ mod tests {
         assert_eq!(route.entry_offer.as_ref().unwrap().source, "bybit");
         assert_eq!(route.exit_offer.as_ref().unwrap().source, "bybit");
         assert!(route.route_fees[0].asset.starts_with("USDT@"));
+    }
+
+    #[tokio::test]
+    async fn keeps_independent_quotes_from_multiple_route_providers() {
+        let service = P2pSearchService::with_sources(Vec::new(), Duration::from_secs(1))
+            .with_route_providers(vec![
+                Arc::new(PricedRouteProvider {
+                    name: "near-intents",
+                    multiplier: 0.99,
+                    fee: "0.25",
+                }),
+                Arc::new(PricedRouteProvider {
+                    name: "cow-swap",
+                    multiplier: 0.97,
+                    fee: "2.5",
+                }),
+            ]);
+
+        let response = service
+            .search_routes(P2pRouteSearchQuery {
+                source_fiat: "USDT".into(),
+                target_fiat: "USDC".into(),
+                source_amount: 100.0,
+                source_network: Some("ethereum".into()),
+                target_network: Some("ethereum".into()),
+                bridge_fiat: None,
+                assets: None,
+                intermediary_assets: None,
+                source_payment_method: None,
+                target_payment_method: None,
+                merchant_only: None,
+                min_orders: None,
+                min_completion_rate: None,
+                allow_cross_venue: None,
+                max_price_deviation_bps: None,
+                limit: Some(20),
+                sources: Some("near-intents,cow-swap".into()),
+            })
+            .await
+            .unwrap();
+
+        let near = response
+            .routes
+            .iter()
+            .find(|route| route.route_provider.as_deref() == Some("near-intents"))
+            .unwrap();
+        let cow = response
+            .routes
+            .iter()
+            .find(|route| route.route_provider.as_deref() == Some("cow-swap"))
+            .unwrap();
+        assert_eq!(near.target_amount, "99");
+        assert_eq!(cow.target_amount, "97");
+        assert_eq!(near.route_fees[0].amount, "0.25");
+        assert_eq!(cow.route_fees[0].amount, "2.5");
+        assert_eq!(near.quote_expires_at, cow.quote_expires_at);
+        assert_ne!(near.route_id, cow.route_id);
+
+        let excluded = service
+            .search_routes(P2pRouteSearchQuery {
+                source_fiat: "USDT".into(),
+                target_fiat: "USDC".into(),
+                source_amount: 100.0,
+                source_network: Some("ethereum".into()),
+                target_network: Some("ethereum".into()),
+                bridge_fiat: None,
+                assets: None,
+                intermediary_assets: None,
+                source_payment_method: None,
+                target_payment_method: None,
+                merchant_only: None,
+                min_orders: None,
+                min_completion_rate: None,
+                allow_cross_venue: None,
+                max_price_deviation_bps: None,
+                limit: Some(20),
+                sources: Some("binance".into()),
+            })
+            .await
+            .unwrap();
+        assert!(excluded.routes.is_empty());
+    }
+
+    #[tokio::test]
+    async fn adds_direct_fiat_quotes_in_both_amd_rub_directions() {
+        let service = P2pSearchService::with_sources(Vec::new(), Duration::from_secs(1))
+            .with_fiat_route_providers(vec![Arc::new(FixedFiatRouteProvider)]);
+        assert!(service.route_provider_names().contains("id-pay"));
+        for (source_fiat, target_fiat, source_amount, expected_target) in [
+            ("AMD", "RUB", 400.0, "100.00"),
+            ("RUB", "AMD", 100.0, "400.00"),
+        ] {
+            let response = service
+                .search_routes(P2pRouteSearchQuery {
+                    source_fiat: source_fiat.into(),
+                    target_fiat: target_fiat.into(),
+                    source_amount,
+                    source_network: None,
+                    target_network: None,
+                    bridge_fiat: None,
+                    assets: None,
+                    intermediary_assets: None,
+                    source_payment_method: None,
+                    target_payment_method: None,
+                    merchant_only: None,
+                    min_orders: None,
+                    min_completion_rate: None,
+                    allow_cross_venue: None,
+                    max_price_deviation_bps: None,
+                    limit: Some(20),
+                    sources: Some("id-pay".into()),
+                })
+                .await
+                .unwrap();
+            let route = response
+                .routes
+                .iter()
+                .find(|route| {
+                    route
+                        .entry_offer
+                        .as_ref()
+                        .map(|offer| offer.source.as_str())
+                        == Some("id-pay")
+                })
+                .unwrap();
+            assert_eq!(route.target_amount, expected_target);
+            assert_eq!(route.route_kind, "fiat_to_fiat");
+            assert!(route.same_venue);
+            assert!(!route.requires_asset_transfer);
+            assert!(route.route_provider.is_none());
+        }
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

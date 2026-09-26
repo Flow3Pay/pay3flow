@@ -1,6 +1,9 @@
 pub mod activitypub;
 pub mod banks;
 pub mod config;
+pub mod compiled_provider_code {
+    include!(concat!(env!("OUT_DIR"), "/provider_code.rs"));
+}
 pub mod core;
 pub mod db;
 pub mod exchange;

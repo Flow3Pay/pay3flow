@@ -61,6 +61,9 @@ async function mockBackend(page: Page) {
         { slug: "bestchange", name: "BestChange Sell", side: "sell", source_url: "https://bestchange.app/?lang=en", currencies: ["BYN", "EUR", "RUB", "USD"], banks: [], searchable: false },
         { slug: "dzengi", name: "Dzengi Sell", side: "sell", source_url: "https://dzengi.com/ru/kalkulyator-kriptovalyut", currencies: ["BYN", "EUR", "RUB", "USD"], banks: [], searchable: false },
         { slug: "exnode", name: "Exnode Sell", side: "sell", source_url: "https://exnode.ru/exchange", currencies: ["BYN", "EUR", "RUB", "USD"], banks: [], searchable: false },
+        { slug: "cow-swap", name: "CoW Protocol Live Sell", side: "sell", source_url: "https://swap.cow.fi", currencies: ["USDC", "USDT"], banks: [], searchable: true, search_mode: "selectable" },
+        { slug: "near-intents", name: "NEAR 1Click Sell", side: "sell", source_url: "https://1click.chaindefuser.com", currencies: ["BTC", "USDT"], banks: [], searchable: true, search_mode: "selectable" },
+        { slug: "id-pay", name: "ID Pay Live Sell", side: "sell", source_url: "https://id-pay.ru/", currencies: ["AMD", "RUB"], banks: [], searchable: true, search_mode: "selectable" },
       ]);
     }
     if (url.pathname === "/api/service-executions/open" && method === "POST") {
@@ -183,6 +186,52 @@ async function mockBackend(page: Page) {
             warnings: ["Search estimate only."],
           }],
         });
+      }
+      if (url.searchParams.get("source_fiat") === "USDT" && url.searchParams.get("target_fiat") === "USDC") {
+        expect(url.searchParams.get("source_network")).toBe("ethereum");
+        expect(url.searchParams.get("target_network")).toBe("ethereum");
+        const directRoute = (provider: string, amount: string, rank: number) => ({
+          route_id: `route-usdt-usdc-${provider}`,
+          rank,
+          asset: "USDC",
+          entry_network: "ethereum",
+          source_network: "ethereum",
+          target_network: "ethereum",
+          source_fiat: "USDT",
+          source_amount: "100",
+          acquired_asset_amount: amount,
+          target_fiat: "USDC",
+          target_amount: amount,
+          effective_rate: (Number(amount) / 100).toFixed(12),
+          same_venue: false,
+          requires_asset_transfer: true,
+          transfer_fee_included: true,
+          route_kind: "crypto_to_crypto",
+          route_provider: provider,
+          route_path: ["USDT@ethereum", "USDC@ethereum"],
+          route_fees: [{ asset: "USDT@ethereum", amount: provider === "cow-swap" ? "2.5" : "0.25" }],
+          quote_expires_at: "2030-03-17T17:46:40Z",
+          payment_methods_verified: true,
+          entry_offer: null,
+          exit_offer: null,
+          warnings: [`Live dry quote from ${provider}.`],
+        });
+        return json({
+          search_id: "00000000-0000-4000-8000-000000000107",
+          routes_found: 2,
+          searched_at: "2026-09-26T10:00:00Z",
+          source_fiat: "USDT",
+          target_fiat: "USDC",
+          source_amount: "100",
+          assets_searched: [],
+          can_exchange_to_target: true,
+          routes: [directRoute("near-intents", "99.6", 1), directRoute("cow-swap", "97.3", 2)],
+        });
+      }
+      if (url.searchParams.get("source_fiat") === "USDT" && url.searchParams.get("target_fiat") === "USDT") {
+        expect(url.searchParams.get("source_network")).toBe("tron");
+        expect(url.searchParams.get("target_network")).toBe("ton");
+        return json({ error: "No live bridge provider is configured for USDT: TRON (TRC-20) → TON" }, 400);
       }
       if (url.searchParams.get("source_fiat") === "USDT") {
         expect(url.searchParams.get("source_network")).toBe("ethereum");
@@ -355,6 +404,49 @@ async function mockBackend(page: Page) {
           }],
         });
       }
+      if (url.searchParams.get("source_fiat") === "AMD" && url.searchParams.get("target_fiat") === "RUB" && url.searchParams.get("source_amount") === "42269") {
+        const idPay = offer("id-pay", "indicative-amd-rub", "AMD", "RUB");
+        idPay.price = "4.2269";
+        idPay.payment_methods = ["IDBank", "Alfa-Bank"];
+        idPay.advertiser = {
+          ...idPay.advertiser,
+          id: null,
+          nickname: "ID Pay",
+          user_type: "service",
+          completed_orders_30d: null,
+          completion_rate_30d: null,
+        };
+        idPay.source_url = "https://id-pay.ru/";
+        return json({
+          search_id: "00000000-0000-4000-8000-000000000108",
+          routes_found: 1,
+          searched_at: "2026-09-26T11:00:00Z",
+          source_fiat: "AMD",
+          target_fiat: "RUB",
+          source_amount: "42269.00",
+          assets_searched: [],
+          can_exchange_to_target: true,
+          routes: [{
+            route_id: "route-amd-rub-id-pay",
+            rank: 1,
+            asset: "RUB",
+            source_fiat: "AMD",
+            source_amount: "42269.00",
+            acquired_asset_amount: "10000.00",
+            target_fiat: "RUB",
+            target_amount: "10000.00",
+            effective_rate: "0.23657900",
+            same_venue: true,
+            requires_asset_transfer: false,
+            transfer_fee_included: true,
+            route_kind: "fiat_to_fiat",
+            payment_methods_verified: false,
+            entry_offer: idPay,
+            exit_offer: null,
+            warnings: ["Indicative direct-transfer quote."],
+          }],
+        });
+      }
       expect(url.searchParams.get("source_payment_method")).toBe("IDBank");
       expect(url.searchParams.get("target_payment_method")).toBe("Alfa-Bank");
       expect(url.searchParams.get("source_fiat")).toBe("AMD");
@@ -476,7 +568,7 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await expect(page.getByTestId("complete-route").first()).toContainText("20350 RUB");
   const bestRoute = page.getByTestId("complete-route").first();
   const alternativeRoute = page.getByTestId("complete-route").nth(1);
-  await alternativeRoute.getByRole("button", { name: /Select route 2:/ }).click();
+  await alternativeRoute.locator(".routeRank").click();
   await expect(alternativeRoute).toHaveClass(/selected/);
   await expect(bestRoute).not.toHaveClass(/selected/);
   await expect(alternativeRoute.getByRole("button", { name: /Select route 2:/ })).toHaveAttribute("aria-pressed", "true");
@@ -590,7 +682,7 @@ test("selected bank currencies override the reversed corridor", async ({ page })
   await expect(page).toHaveURL(/#\/swap\/AMD\/RUB\?amount=100000$/);
 });
 
-test("catalog providers can be selected", async ({ page }) => {
+test("catalog and direct quote providers are separately selectable", async ({ page }) => {
   await mockBackend(page);
   await openApp(page);
 
@@ -601,7 +693,9 @@ test("catalog providers can be selected", async ({ page }) => {
   const bestchange = page.getByRole("button", { name: "BestChange" });
   const dzengi = page.getByRole("button", { name: "Dzengi" });
   const exnode = page.getByRole("button", { name: "Exnode" });
-  const cowSwap = page.getByRole("button", { name: "CoW Swap" });
+  const cow = page.getByRole("button", { name: "CoW Protocol Live" });
+  const near = page.getByRole("button", { name: "NEAR 1Click" });
+  const idPay = page.getByRole("button", { name: "ID Pay Live" });
 
   await expect(cifra).toBeEnabled();
   await expect(cifra).toHaveAttribute("aria-pressed", "true");
@@ -609,14 +703,22 @@ test("catalog providers can be selected", async ({ page }) => {
   await expect(whitebird).toBeEnabled();
   await whitebird.click();
   await expect(whitebird).toHaveAttribute("aria-pressed", "true");
-  for (const [button, icon] of [[bestchange, "/icons/venues/bestchange.svg"], [dzengi, "/icons/venues/dzengi.png"], [exnode, "/icons/venues/exnode.svg"]] as const) {
+  for (const [button, icon] of [[bestchange, "/icons/venues/bestchange.svg"], [dzengi, "/icons/venues/dzengi.svg"], [exnode, "/icons/venues/exnode.svg"]] as const) {
     await expect(button).toBeEnabled();
     await expect(button).toHaveAttribute("aria-pressed", "false");
     await expect(button.locator("img")).toHaveAttribute("src", icon);
     await button.click();
     await expect(button).toHaveAttribute("aria-pressed", "true");
   }
-  await expect(cowSwap.locator("img")).toHaveAttribute("src", "/icons/venues/cow-swap-favicon.svg");
+  await expect(cow).toBeEnabled();
+  await expect(cow).toHaveAttribute("aria-pressed", "true");
+  await expect(cow.locator("img")).toHaveAttribute("src", "/icons/venues/cow-swap-favicon.svg");
+  await expect(near).toBeEnabled();
+  await expect(near).toHaveAttribute("aria-pressed", "true");
+  await expect(near.locator("img")).toHaveAttribute("src", "/icons/assets/near.webp");
+  await expect(idPay).toBeEnabled();
+  await expect(idPay).toHaveAttribute("aria-pressed", "true");
+  await expect(idPay.locator("img")).toHaveAttribute("src", "/icons/venues/id-pay.svg");
 });
 
 test("search venues bounce in the loader and refresh stops spinning after the first route", async ({ page }) => {
@@ -630,7 +732,7 @@ test("search venues bounce in the loader and refresh stops spinning after the fi
     socketConnections += 1;
     socket.onMessage((message) => {
       const request = JSON.parse(String(message));
-      expect(request.query.sources).toBe("binance,bybit,cifra-broker,whitebird");
+      expect(request.query.sources).toBe("binance,bybit,cifra-broker,cow-swap,id-pay,near-intents,whitebird");
 
       const offer = (source: string, adId: string, fiat: string) => ({
         source,
@@ -723,11 +825,14 @@ test("search venues bounce in the loader and refresh stops spinning after the fi
   expect(socketConnections).toBe(1);
   const panelTop = page.locator("#routes .panelTop");
   const searchingVenues = panelTop.getByTestId("searching-venue");
-  await expect(searchingVenues).toHaveCount(4);
+  await expect(searchingVenues).toHaveCount(7);
   await expect(searchingVenues.nth(0)).toHaveAttribute("title", "Searching Binance");
   await expect(searchingVenues.nth(1)).toHaveAttribute("title", "Searching Bybit");
   await expect(searchingVenues.nth(2)).toHaveAttribute("title", "Searching Cifra Markets");
-  await expect(searchingVenues.nth(3)).toHaveAttribute("title", "Searching Whitebird");
+  await expect(searchingVenues.nth(3)).toHaveAttribute("title", "Searching CoW Protocol Live");
+  await expect(searchingVenues.nth(4)).toHaveAttribute("title", "Searching ID Pay Live");
+  await expect(searchingVenues.nth(5)).toHaveAttribute("title", "Searching NEAR 1Click");
+  await expect(searchingVenues.nth(6)).toHaveAttribute("title", "Searching Whitebird");
   await expect(searchingVenues.nth(0)).toHaveCSS("width", "32px");
   await expect(searchingVenues.nth(0)).toHaveCSS("animation-delay", "0s");
   await expect(searchingVenues.nth(1)).toHaveCSS("animation-delay", "0.13s");
@@ -740,8 +845,8 @@ test("search venues bounce in the loader and refresh stops spinning after the fi
   const foundVenues = panelTop.locator(".resultSummary").getByTestId("found-venue");
   await expect(foundVenues).toHaveCount(1);
   await expect(foundVenues.first()).toHaveAttribute("title", "Found on Bybit");
-  await expect(searchingVenues).toHaveCount(3);
-  await expect(searchingVenues.nth(2)).toHaveAttribute("title", "Searching Whitebird");
+  await expect(searchingVenues).toHaveCount(5);
+  await expect(searchingVenues.nth(4)).toHaveAttribute("title", "Searching Whitebird");
   await expect(refreshButton).toBeDisabled();
   await expect(refreshButton.locator("svg")).not.toHaveClass(/refreshSpin/);
 
@@ -751,7 +856,7 @@ test("search venues bounce in the loader and refresh stops spinning after the fi
   await expect(page.getByTestId("complete-route").first()).toHaveClass(/selected/);
   await expect(foundVenues).toHaveCount(2);
   await expect(foundVenues.nth(1)).toHaveAttribute("title", "Found on Whitebird");
-  await expect(searchingVenues).toHaveCount(2);
+  await expect(searchingVenues).toHaveCount(4);
 
   await page.getByTestId("complete-route").nth(1).click();
   await expect(page.getByTestId("complete-route").nth(1)).toHaveClass(/selected/);
@@ -785,6 +890,61 @@ test("cryptocurrency search binds the selected asset to its network", async ({ p
   );
 });
 
+test("direct provider quotes keep their API names and independent prices", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page);
+
+  await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
+  const sourcePicker = page.getByRole("dialog", { name: "Choose where you pay from" });
+  await sourcePicker.getByLabel("Search banks and payment methods").fill("USDT ERC20");
+  await sourcePicker.getByRole("option", { name: /Tether USDT · Ethereum \(ERC-20\)/ }).click();
+
+  await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
+  const targetPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
+  await targetPicker.getByLabel("Search banks and payment methods").fill("USDC ERC20");
+  await targetPicker.getByRole("option", { name: /USD Coin USDC · Ethereum \(ERC-20\)/ }).click();
+
+  await page.getByLabel("Amount to send").fill("100");
+  await page.getByTestId("start-search").click();
+
+  const cards = page.getByTestId("complete-route");
+  await expect(cards).toHaveCount(2);
+  await expect(cards.nth(0)).toContainText("99.6 USDC");
+  await expect(cards.nth(0)).toContainText("Quote by NEAR 1Click");
+  await expect(cards.nth(1)).toContainText("97.3 USDC");
+  await expect(cards.nth(1)).toContainText("Quote by CoW Protocol Live");
+  await expect(cards.nth(0).locator(".workflow")).toHaveAttribute(
+    "aria-label",
+    "USDT Tether · ethereum → USDC USD Coin · ethereum (NEAR 1Click)",
+  );
+  await expect(cards.nth(1).locator(".workflow")).toHaveAttribute(
+    "aria-label",
+    "USDT Tether · ethereum → USDC USD Coin · ethereum (CoW Protocol Live)",
+  );
+});
+
+test("ID Pay provides a direct AMD to RUB route with its API name", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page);
+
+  await page.getByLabel("Amount to send").fill("42269");
+  await page.getByTestId("start-search").click();
+
+  const route = page.getByTestId("complete-route");
+  await expect(route).toHaveCount(1);
+  await expect(route).toContainText("10,000 RUB");
+  await expect(route).toContainText("Quote by ID Pay Live");
+  await expect(route.locator(".workflow")).toHaveAttribute(
+    "aria-label",
+    "AMD → RUB (ID Pay Live)",
+  );
+
+  await route.locator(".routeAmount").click();
+  const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
+  await expect(instructions.getByRole("heading", { name: "Transfer AMD to RUB via ID Pay Live" })).toBeVisible();
+  await expect(instructions.getByRole("link", { name: "Open ID Pay Live exchange" })).toHaveAttribute("href", "https://id-pay.ru/");
+});
+
 test("small AMD to BTC@near routes keep crypto precision", async ({ page }) => {
   await mockBackend(page);
   await openApp(page);
@@ -803,13 +963,13 @@ test("small AMD to BTC@near routes keep crypto precision", async ({ page }) => {
   await expect(page.locator("#exchange-output")).toHaveText("0.00032478");
   await expect(route.locator(".workflow")).toHaveAttribute(
     "aria-label",
-    "AMD → USDT Tether · optimism (NEAR Intents) → BTC Bitcoin · NEAR (NEAR Intents)",
+    "AMD → USDT Tether · optimism (Bybit) → BTC Bitcoin · near (NEAR 1Click)",
   );
   await route.locator(".routeAmount").click();
   const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
   await expectNumberedTimeline(instructions, ["1", "2"]);
   await expect(instructions.getByText("Buy USDT for 10,000 AMD")).toBeVisible();
-  await expect(instructions.getByRole("heading", { name: "Swap USDT for BTC via NEAR Intents" })).toBeVisible();
+  await expect(instructions.getByRole("heading", { name: "Swap USDT for BTC via NEAR 1Click" })).toBeVisible();
 });
 
 test("direct Whitebird exchange uses provider wording and local venue icons", async ({ page }) => {

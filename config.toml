@@ -48,6 +48,7 @@ cow_api_urls = ["ethereum=https://api.cow.fi/mainnet"]
 cow_tokens = [
   "ethereum:USDT=0xdAC17F958D2ee523a2206206994597C13D831ec7",
   "ethereum:USDC=0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+  "ethereum:ETH=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
 ]
 # Read-only quote address. Execution must use the user's wallet address.
 cow_quote_address = "0x0000000000000000000000000000000000000001"

@@ -16,18 +16,16 @@
   export let searching = false;
   export let searchingVenues: { id: string; label: string; iconUrl: string }[] = [];
   export let foundVenues: { id: string; label: string; iconUrl: string }[] = [];
+  export let venueNames: Record<string, string> = {};
   export let searched = false;
   export let hasAmount = false;
 
   const ASSET_NAMES: Record<string, string> = { BTC: "Bitcoin", ETH: "Ether", USDC: "USD Coin", USDT: "Tether" };
-  const VENUE_NAMES: Record<string, string> = { binance: "Binance", bitget: "Bitget", bybit: "Bybit", okx: "OKX", rapira: "Rapira", whitebird: "Whitebird", "cifra-broker": "Cifra Markets", bestchange: "BestChange", dzengi: "Dzengi", exnode: "Exnode", "near-intents": "NEAR Intents", "cow-swap": "CoW Swap" };
-  const VENUE_ICONS: Record<string, string> = {
-    binance: venueIcon("binance"), bybit: venueIcon("bybit"), okx: venueIcon("okx"), bitget: venueIcon("bitget"), rapira: venueIcon("rapira"), whitebird: venueIcon("whitebird"), "cifra-broker": venueIcon("cifra-broker"), bestchange: venueIcon("bestchange"), dzengi: venueIcon("dzengi"), exnode: venueIcon("exnode"), "near-intents": venueIcon("near-intents"), "cow-swap": venueIcon("cow-swap"),
-  };
   const FIAT_MARKS: Record<string, string> = { AMD: "🇦🇲", RUB: "🇷🇺", BYN: "🇧🇾" };
   type Step = { currency: string; network?: string; provider?: string; iconUrl?: string };
 
-  const venueName = (value?: string) => value ? VENUE_NAMES[value.toLowerCase()] ?? value : "Searching";
+  const venueName = (value?: string) => value ? venueNames[value.toLowerCase()] ?? value : "Searching";
+  const quoteProvider = (route: RouteCandidate) => route.route_provider ?? (route.entry_offer_snapshot?.advertiser.user_type === "service" ? route.entry_offer_snapshot.source : undefined);
   const assetLabel = (currency?: string) => !currency ? "—" : ASSET_NAMES[currency.toUpperCase()] ? `${currency} ${ASSET_NAMES[currency.toUpperCase()]}` : currency;
   const money = (minor?: number, currency?: string, exact?: string) => {
     if (exact && ["BTC", "ETH", "USDC", "USDT", "SOL", "TRX", "TON", "XRP", "ADA", "AVAX", "DOT", "LINK", "LTC", "BCH", "BNB", "DOGE", "MATIC", "NEAR", "SUI", "APT", "ATOM", "UNI", "DAI", "FDUSD"].includes(currency?.toUpperCase() ?? "")) {
@@ -43,6 +41,24 @@
   const routeEnterDuration = () => reduceMotion() ? 0 : 380;
   $: pendingVenues = searchingVenues.filter((venue) => !foundVenues.some((found) => found.id === venue.id));
 
+  function pathStepProvider(route: RouteCandidate, index: number, lastIndex: number) {
+    if (index === 0) return undefined;
+    if (route.route_kind === "fiat_to_fiat") {
+      if (index === 1 && route.entry_offer_snapshot) return route.entry_offer_snapshot.source;
+      if (index === lastIndex && route.exit_offer_snapshot) return route.exit_offer_snapshot.source;
+      return route.route_provider ?? undefined;
+    }
+    if (route.route_kind === "fiat_to_crypto") {
+      if (index === 1 && route.entry_offer_snapshot) return route.entry_offer_snapshot.source;
+      return route.route_provider ?? undefined;
+    }
+    if (route.route_kind === "crypto_to_fiat") {
+      if (index === lastIndex && route.exit_offer_snapshot) return route.exit_offer_snapshot.source;
+      return route.route_provider ?? undefined;
+    }
+    return route.route_provider ?? undefined;
+  }
+
   function workflowSteps(route: RouteCandidate): Step[] {
     const entry = route.legs.find((leg) => leg.kind === "entry");
     const exit = route.legs.find((leg) => leg.kind === "exit");
@@ -51,7 +67,7 @@
     if (route.route_path?.length) {
       return route.route_path.map((qualified, index) => {
         const [currency, network] = qualified.split("@", 2);
-        return { currency, network, provider: index === 0 ? undefined : route.route_provider ?? undefined };
+        return { currency, network, provider: pathStepProvider(route, index, route.route_path!.length - 1) };
       });
     }
     if (!entry && exit) return [{ currency: source, network: route.source_network, provider: exit.provider, iconUrl: route.source_method_icon_url }, { currency: target, iconUrl: route.target_method_icon_url }];
@@ -114,7 +130,7 @@
             <li animate:flip={{ duration: routeFlipDuration, easing: quintOut }} in:fly={{ y: 18, duration: routeEnterDuration(), easing: quintOut }}><div class="routeCardShell">
               <div class:routeBest={route.is_current_best} class:selected={route.route_id === selectedRouteId} class="routeCard" data-testid={complete ? "complete-route" : "partial-route"}>
               <button type="button" class="routeCardMain" disabled={!complete} aria-pressed={route.route_id === selectedRouteId} aria-label={`Select route ${index + 1}: ${money(route.target_amount_minor, route.target_currency, route.target_amount)}`} on:click={(event) => cardClick(event, route)}>
-                <span class="routeTopline"><span class="routeRank">#{String(index + 1).padStart(2, "0")}</span>{#if route.is_current_best}<span class="bestBadge">Best route</span>{:else}<span class="deltaBadge">{spreadLabel(route.spread_bps)}</span>{/if}</span>
+                <span class="routeTopline"><span class="routeRank">#{String(index + 1).padStart(2, "0")}</span><span class="routeBadges">{#if quoteProvider(route)}<span class="quoteBadge">Quote by {venueName(quoteProvider(route))}</span>{/if}{#if route.is_current_best}<span class="bestBadge">Best route</span>{:else}<span class="deltaBadge">{spreadLabel(route.spread_bps)}</span>{/if}</span></span>
                 <span class="routeAmount">{money(route.target_amount_minor, route.target_currency, route.target_amount)}</span>
                 <span class="workflow" aria-label={workflowLabel(route)}>
                   {#each workflowSteps(route) as step, stepIndex}
@@ -136,7 +152,7 @@
                         {/if}
                       </span>
                       {#if step.provider}
-                        <span class="workflowVenue"><span aria-hidden="true">(</span>{#if VENUE_ICONS[step.provider.toLowerCase()]}<span class="workflowVenueIcon" aria-hidden="true"><img src={VENUE_ICONS[step.provider.toLowerCase()]} alt="" width="12" height="12" loading="lazy" decoding="async" on:error={(event) => fallbackVenueIcon(event, step.provider ?? "")} /></span>{/if}<span>{venueName(step.provider)}</span><span aria-hidden="true">)</span></span>
+                        <span class="workflowVenue"><span aria-hidden="true">(</span><span class="workflowVenueIcon" aria-hidden="true"><img src={venueIcon(step.provider)} alt="" width="12" height="12" loading="lazy" decoding="async" on:error={(event) => fallbackVenueIcon(event, step.provider ?? "")} /></span><span>{venueName(step.provider)}</span><span aria-hidden="true">)</span></span>
                       {/if}
                     </span>
                   {/each}
@@ -164,7 +180,7 @@
       <div class="emptyState">
         <div class="emptyVisual" aria-hidden="true"><span class="emptyNode">AM</span><span class="emptyPath"><i></i><i></i><i></i></span><span class="emptyNode">RU</span></div>
         <div><strong>{searched && hasAmount ? "No routes found" : hasAmount ? "Preparing market scan" : "Your routes will appear here"}</strong><p>{searched && hasAmount ? "No compatible live offers were found for this amount and payment method." : hasAmount ? "Pay3Flow is ready to compare entry assets, venues and recipient payout options." : "Enter an amount and we will assemble live cross-border paths in real time."}</p></div>
-        <div class="emptyVenues"><span>BINANCE</span><span>BYBIT</span><span>OKX</span><span>BITGET</span><span>RAPIRA</span></div>
+        {#if searchingVenues.length}<div class="emptyVenues">{#each searchingVenues.slice(0, 5) as venue}<span>{venue.label}</span>{/each}</div>{/if}
       </div>
     {/if}
   </div>
@@ -476,14 +492,27 @@
   font-size: 8px;
 }
 
+.routeBadges {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
 .bestBadge,
-.deltaBadge {
+.deltaBadge,
+.quoteBadge {
   padding: 4px 8px;
   border-radius: var(--radius-pill);
   font-size: 7px;
   font-weight: 850;
   letter-spacing: 0.07em;
   text-transform: uppercase;
+}
+
+.quoteBadge {
+  background: rgba(117, 88, 246, 0.14);
+  color: #b8a8ff;
 }
 
 .bestBadge {
@@ -942,6 +971,11 @@
 .deltaBadge {
   background: #eef4e9;
   color: var(--color-text-soft);
+}
+
+.quoteBadge {
+  background: #eeeaff;
+  color: #5f43cf;
 }
 
 .routeAmount {

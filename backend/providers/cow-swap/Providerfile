@@ -1,6 +1,194 @@
-# CoW Swap is listed in the directory as a catalog-only venue. Its quote and
-# settlement flow is chain-specific, so it is not enabled as a live fiat/P2P
-# source by the generic provider search adapter.
+# CoW Swap is a selectable direct quote provider. Its chain-specific Rust
+# implementation is compiled from this Providerfile into the backend binary.
+
+[code]
+language = "rust"
+source = '''
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
+
+use anyhow::{bail, Context, Result};
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
+use reqwest::Client;
+use serde_json::{json, Value};
+
+use crate::route_engine::{
+    atomic_to_decimal, decimal_to_atomic, ensure_success, first_string, Amount, Asset,
+    PublicRouteProvider, PublicRouteQuote, DEFAULT_QUOTE_TTL,
+};
+
+#[derive(Clone)]
+pub struct CowRouteProvider {
+    client: Client,
+    endpoints: Arc<HashMap<String, String>>,
+    tokens: Arc<HashMap<(String, String), String>>,
+    quote_address: String,
+}
+
+impl CowRouteProvider {
+    pub fn from_config(
+        api_urls: &[String],
+        token_entries: &[String],
+        quote_address: Option<&str>,
+    ) -> Result<Option<Self>> {
+        let Some(quote_address) = quote_address
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        else {
+            return Ok(None);
+        };
+        let endpoints = api_urls
+            .iter()
+            .filter_map(|entry| entry.split_once('='))
+            .map(|(chain, url)| (chain.trim().to_ascii_lowercase(), url.trim().to_string()))
+            .filter(|(chain, url)| !chain.is_empty() && !url.is_empty())
+            .collect::<HashMap<_, _>>();
+        let tokens = token_entries
+            .iter()
+            .filter_map(|entry| entry.split_once('='))
+            .filter_map(|(key, address)| {
+                key.split_once(':')
+                    .map(|(chain, symbol)| (chain, symbol, address))
+            })
+            .map(|(chain, symbol, address)| {
+                (
+                    (
+                        chain.trim().to_ascii_lowercase(),
+                        symbol.trim().to_ascii_uppercase(),
+                    ),
+                    address.trim().to_string(),
+                )
+            })
+            .filter(|((chain, symbol), address)| {
+                !chain.is_empty() && !symbol.is_empty() && !address.is_empty()
+            })
+            .collect::<HashMap<_, _>>();
+        if endpoints.is_empty() || tokens.is_empty() {
+            return Ok(None);
+        }
+        let client = Client::builder()
+            .timeout(Duration::from_secs(20))
+            .user_agent("Pay3Flow-CoW-Protocol/0.1")
+            .build()
+            .context("failed to build CoW Protocol client")?;
+        Ok(Some(Self {
+            client,
+            endpoints: Arc::new(endpoints),
+            tokens: Arc::new(tokens),
+            quote_address: quote_address.to_string(),
+        }))
+    }
+
+    fn decimals(symbol: &str) -> u8 {
+        match symbol.to_ascii_uppercase().as_str() {
+            "USDC" | "USDT" | "FDUSD" => 6,
+            _ => 18,
+        }
+    }
+
+    fn quote_url(base: &str) -> String {
+        let base = base.trim_end_matches('/');
+        if base.ends_with("/api/v1/quote") {
+            base.to_string()
+        } else {
+            format!("{base}/api/v1/quote")
+        }
+    }
+}
+
+#[async_trait]
+impl PublicRouteProvider for CowRouteProvider {
+    fn name(&self) -> &str {
+        "cow-swap"
+    }
+
+    async fn supported_assets(&self) -> Vec<Asset> {
+        self.tokens
+            .keys()
+            .filter_map(|(chain, symbol)| Asset::new(symbol, Some(chain)).ok())
+            .collect()
+    }
+
+    async fn quote(&self, from: Asset, to: Asset, amount: Amount) -> Result<PublicRouteQuote> {
+        let from_chain = from
+            .location
+            .clone()
+            .context("CoW origin chain is required")?;
+        let to_chain = to
+            .location
+            .clone()
+            .context("CoW destination chain is required")?;
+        if from_chain != to_chain {
+            bail!("CoW Protocol does not provide a cross-chain quote");
+        }
+        let chain = from_chain.to_ascii_lowercase();
+        let endpoint = self
+            .endpoints
+            .get(&chain)
+            .with_context(|| format!("CoW endpoint is not configured for {chain}"))?;
+        let sell_token = self
+            .tokens
+            .get(&(chain.clone(), from.symbol.to_ascii_uppercase()))
+            .with_context(|| format!("CoW token address is not configured for {from}"))?;
+        let buy_token = self
+            .tokens
+            .get(&(chain.clone(), to.symbol.to_ascii_uppercase()))
+            .with_context(|| format!("CoW token address is not configured for {to}"))?;
+        let sell_amount = decimal_to_atomic(&amount.value, Some(Self::decimals(&from.symbol)))?;
+        let valid_to = (Utc::now() + chrono::Duration::from_std(DEFAULT_QUOTE_TTL)?).timestamp();
+        let body = json!({
+            "sellToken": sell_token,
+            "buyToken": buy_token,
+            "sellAmountBeforeFee": sell_amount,
+            "from": self.quote_address,
+            "receiver": self.quote_address,
+            "kind": "sell",
+            "partiallyFillable": false,
+            "validTo": valid_to,
+        });
+        let response = self
+            .client
+            .post(Self::quote_url(endpoint))
+            .json(&body)
+            .send()
+            .await
+            .context("request CoW Protocol quote")?;
+        ensure_success(response.status(), "request CoW Protocol quote")?;
+        let raw = response
+            .json::<Value>()
+            .await
+            .context("decode CoW Protocol quote")?;
+        let quote = raw.get("quote").unwrap_or(&raw);
+        let buy_amount = first_string(quote, &["buyAmount", "buy_amount"])
+            .context("CoW quote did not include buyAmount")?;
+        let fee_amount = first_string(quote, &["feeAmount", "fee_amount", "surplusFeeAmount"]);
+        let output = Amount::new(
+            atomic_to_decimal(&buy_amount, Self::decimals(&to.symbol))?,
+            to.clone(),
+        )?;
+        let fee = fee_amount
+            .map(|fee| {
+                Amount::new(
+                    atomic_to_decimal(&fee, Self::decimals(&from.symbol))?,
+                    from.clone(),
+                )
+            })
+            .transpose()?;
+        Ok(PublicRouteQuote {
+            provider: self.name().to_string(),
+            from: from.clone(),
+            to: to.clone(),
+            input: amount,
+            output,
+            fees: fee.into_iter().collect(),
+            expires_at: DateTime::from_timestamp(valid_to, 0),
+            path: vec![from, to],
+        })
+    }
+}
+'''
 
 [sell]
 source_url = "https://swap.cow.fi"

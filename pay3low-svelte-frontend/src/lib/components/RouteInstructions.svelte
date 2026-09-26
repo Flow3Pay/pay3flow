@@ -4,14 +4,14 @@
   import AdvertiserCard from "./AdvertiserCard.svelte";
 
   export let route: RouteCandidate;
+  export let venueNames: Record<string, string> = {};
   export let onClose: () => void;
   export let onOpenService: (link: ServiceLink) => void = () => {};
   let modal: HTMLDivElement;
   let dragging = false;
   let dragStartY = 0;
   let dragDistance = 0;
-  const VENUE_NAMES: Record<string, string> = { binance: "Binance", bitget: "Bitget", bybit: "Bybit", okx: "OKX", rapira: "Rapira", whitebird: "Whitebird", "cifra-broker": "Cifra Markets", bestchange: "BestChange", dzengi: "Dzengi", exnode: "Exnode" };
-  const venueName = (value?: string | null) => value ? VENUE_NAMES[value.toLowerCase()] ?? value : "P2P market";
+  const venueName = (value?: string | null) => value ? venueNames[value.toLowerCase()] ?? value : "P2P market";
   const isDirectOffer = (offer?: RouteCandidate["entry_offer_snapshot"]) => offer?.advertiser.user_type === "service" || offer?.source.toLowerCase() === "whitebird";
   const money = (minor?: number, currency?: string, exact?: string) => {
     if (exact && ["BTC", "ETH", "USDC", "USDT", "SOL", "TRX", "TON", "XRP", "ADA", "AVAX", "DOT", "LINK", "LTC", "BCH", "BNB", "DOGE", "MATIC", "NEAR", "SUI", "APT", "ATOM", "UNI", "DAI", "FDUSD"].includes(currency?.toUpperCase() ?? "")) {
@@ -96,6 +96,7 @@
   $: exitVenue = venueName(exit?.provider);
   $: entryDirect = isDirectOffer(route.entry_offer_snapshot);
   $: exitDirect = isDirectOffer(route.exit_offer_snapshot);
+  $: directFiat = route.route_kind === "fiat_to_fiat" && entryDirect && !route.exit_offer_snapshot && !route.route_provider;
   $: crossVenue = Boolean(entry && exit && !route.route_provider && entry.provider !== exit.provider);
   $: cryptoToCrypto = route.route_kind === "crypto_to_crypto";
   $: providerSwap = Boolean(route.route_provider && (route.entry_offer_snapshot || route.exit_offer_snapshot));
@@ -162,7 +163,7 @@
       {/if}
       {#if route.entry_offer_snapshot}
         <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">1</span><div class="stepBody">
-          <h3>{cryptoToCrypto ? `Sell ${route.source_currency} for ${route.bridge_currency ?? route.entry_asset}` : `Buy ${entryAsset} for ${money(route.source_amount_minor, route.source_currency)}`}</h3>
+          <h3>{directFiat ? `Transfer ${route.source_currency} to ${route.target_currency} via ${entryVenue}` : cryptoToCrypto ? `Sell ${route.source_currency} for ${route.bridge_currency ?? route.entry_asset}` : `Buy ${entryAsset} for ${money(route.source_amount_minor, route.source_currency)}`}</h3>
           {#if entryDirect}
             <p class="stepSummary">Open the direct exchange on {entryVenue}, review the live quote, and complete the conversion in the provider flow.</p>
             <ul class="checklist">
@@ -180,7 +181,7 @@
               <li>{cryptoToCrypto ? "Release the asset only after you have independently confirmed receipt of the payment." : "Use only the payment details shown inside the order, then mark it paid after sending the transfer."}</li>
             </ul>
           {/if}
-          <AdvertiserCard offer={route.entry_offer_snapshot} label={entryDirect ? `Direct exchange on ${entryVenue}` : `${cryptoToCrypto ? "Buyer" : "Seller"} on ${entryVenue}`} serviceLink={linkFor("entry")} {onOpenService} />
+          <AdvertiserCard offer={route.entry_offer_snapshot} label={entryDirect ? `Direct exchange on ${entryVenue}` : `${cryptoToCrypto ? "Buyer" : "Seller"} on ${entryVenue}`} serviceLink={linkFor("entry")} {venueNames} {onOpenService} />
         </div></li>
       {/if}
       {#if providerSwap}
@@ -226,7 +227,7 @@
               <li>{cryptoToCrypto ? `Confirm the ${route.target_currency} balance and network before withdrawing.` : "Release the asset only after you have independently confirmed the payment in your bank or payment account."}</li>
             </ul>
           {/if}
-          <AdvertiserCard offer={route.exit_offer_snapshot} label={exitDirect ? `Direct exchange on ${exitVenue}` : `${cryptoToCrypto ? "Seller" : "Buyer"} on ${exitVenue}`} serviceLink={linkFor("exit")} {onOpenService} />
+          <AdvertiserCard offer={route.exit_offer_snapshot} label={exitDirect ? `Direct exchange on ${exitVenue}` : `${cryptoToCrypto ? "Seller" : "Buyer"} on ${exitVenue}`} serviceLink={linkFor("exit")} {venueNames} {onOpenService} />
         </div></li>
       {/if}
     </ol>

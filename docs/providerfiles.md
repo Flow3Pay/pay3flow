@@ -6,9 +6,10 @@ engine supports catalog-only providers, public HTTP/JSON APIs, and browser
 workflows for calculators without a suitable public API.
 
 The application never reads Providerfiles at runtime. The generator validates
-them and writes JSON configuration into `backend/migrations/providers.sql`.
-That SQL is embedded during the backend build and applied to PostgreSQL when
-the built application starts.
+their declarative sections and writes JSON configuration into
+`backend/migrations/providers.sql`. The build script compiles an optional Rust
+`[code]` section directly into the backend crate. The SQL and generated Rust
+modules are therefore already part of the binary when it starts.
 
 ## Add a provider
 
@@ -58,6 +59,39 @@ docs_url = "https://provider.example/docs/fees"
 The metadata is returned by `GET /api/providers` as `fee_model`. It is
 descriptive only; a live adapter must provide the actual fee for a specific
 quote. Do not encode a fixed percentage unless the provider guarantees one.
+
+## Compile-time Rust code
+
+Use `[code]` only when a provider cannot be expressed by the generic HTTP or
+browser adapters. The source is trusted application code, not a runtime script:
+
+```toml
+[code]
+language = "rust"
+source = '''
+use async_trait::async_trait;
+
+pub struct ExampleRouteProvider;
+
+// Implement the Pay3Flow provider traits here.
+'''
+```
+
+`backend/build.rs` scans every `providers/**/Providerfile` during compilation.
+Each code block becomes a module below `crate::compiled_provider_code`; hyphens
+in the provider slug become underscores, so `my-provider` is emitted as
+`crate::compiled_provider_code::my_provider`. Changing a Providerfile causes
+Cargo to rebuild the generated module. Invalid Rust fails the backend build,
+just like invalid code in a normal library.
+
+Only `language = "rust"` is accepted and `source` must not be empty. The code
+runs with the backend's dependencies and permissions, so review it exactly as
+code under `src` and never put credentials in it. Add any required third-party
+crate to `backend/Cargo.toml`; Providerfiles cannot declare dependencies on
+their own. CoW Swap, NEAR Intents, and ID Pay are checked-in examples.
+
+The `[code]` body is not copied into the providers SQL and is never compiled or
+evaluated at runtime.
 
 ## Browser workflow
 

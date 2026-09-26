@@ -12,16 +12,21 @@ use std::time::Duration;
 use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use reqwest::{Client, StatusCode};
+use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+#[cfg(test)]
+use serde_json::json;
+use serde_json::Value;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-const DEFAULT_INTENTS_URL: &str = "https://1click.chaindefuser.com";
-const DEFAULT_SLIPPAGE_BPS: u32 = 100;
-const DEFAULT_QUOTE_TTL: Duration = Duration::from_secs(180);
-const DEFAULT_QUOTE_WAITING_TIME_MS: u64 = 1_000;
+pub use crate::compiled_provider_code::cow_swap::CowRouteProvider;
+pub use crate::compiled_provider_code::near_intents::NearIntentsProvider;
+
+pub(crate) const DEFAULT_INTENTS_URL: &str = "https://1click.chaindefuser.com";
+pub(crate) const DEFAULT_SLIPPAGE_BPS: u32 = 100;
+pub(crate) const DEFAULT_QUOTE_TTL: Duration = Duration::from_secs(180);
+pub(crate) const DEFAULT_QUOTE_WAITING_TIME_MS: u64 = 1_000;
 
 /// A currency/token plus its chain or venue.  A missing location is valid for
 /// fiat currencies; crypto assets must be qualified before entering a graph.
@@ -487,458 +492,6 @@ pub trait QuoteProvider: Send + Sync {
     async fn quote(&self, from: Asset, to: Asset, amount: Amount) -> Result<NearQuote>;
 }
 
-/// NEAR Intents 1-Click provider.  The provider is read-only by default:
-/// `quote` requests a dry quote, while `executable_quote` must be called
-/// explicitly by the later execution flow.
-#[derive(Clone)]
-pub struct NearIntentsProvider {
-    client: Client,
-    base_url: String,
-    jwt: Option<String>,
-    slippage_bps: u32,
-    quote_ttl: Duration,
-    tokens: Arc<RwLock<Vec<NearToken>>>,
-    quote_recipient: Option<String>,
-    quote_refund_to: Option<String>,
-    quote_recipients: Arc<HashMap<String, String>>,
-    quote_refunds: Arc<HashMap<String, String>>,
-}
-
-impl NearIntentsProvider {
-    pub fn new(base_url: impl Into<String>, jwt: Option<String>) -> Result<Self> {
-        let client = Client::builder()
-            .timeout(Duration::from_secs(20))
-            .user_agent("Pay3Flow-NEAR-Intents/0.1")
-            .build()
-            .context("failed to build NEAR Intents client")?;
-        Ok(Self {
-            client,
-            base_url: base_url.into().trim_end_matches('/').to_string(),
-            jwt,
-            slippage_bps: DEFAULT_SLIPPAGE_BPS,
-            quote_ttl: DEFAULT_QUOTE_TTL,
-            tokens: Arc::new(RwLock::new(Vec::new())),
-            quote_recipient: None,
-            quote_refund_to: None,
-            quote_recipients: Arc::new(HashMap::new()),
-            quote_refunds: Arc::new(HashMap::new()),
-        })
-    }
-
-    pub fn with_default_url() -> Result<Self> {
-        Self::new(DEFAULT_INTENTS_URL, None)
-    }
-
-    pub fn with_slippage_bps(mut self, slippage_bps: u32) -> Result<Self> {
-        if slippage_bps > 10_000 {
-            bail!("slippage must be at most 10000 basis points");
-        }
-        self.slippage_bps = slippage_bps;
-        Ok(self)
-    }
-
-    /// Configure valid destination and refund addresses for dry quotes made
-    /// through the `QuoteProvider` trait.  The 1Click API validates these
-    /// addresses even when `dry=true`; executable quotes receive their
-    /// addresses directly through `NearQuoteRequest`.
-    pub fn with_quote_addresses(
-        mut self,
-        recipient: impl Into<String>,
-        refund_to: impl Into<String>,
-    ) -> Result<Self> {
-        let recipient = recipient.into();
-        let refund_to = refund_to.into();
-        if recipient.trim().is_empty() || refund_to.trim().is_empty() {
-            bail!("NEAR Intents quote addresses cannot be empty");
-        }
-        self.quote_recipient = Some(recipient);
-        self.quote_refund_to = Some(refund_to);
-        Ok(self)
-    }
-
-    pub fn with_quote_network_addresses(
-        mut self,
-        recipients: &[String],
-        refunds: &[String],
-    ) -> Result<Self> {
-        self.quote_recipients = Arc::new(parse_network_addresses(recipients)?);
-        self.quote_refunds = Arc::new(parse_network_addresses(refunds)?);
-        Ok(self)
-    }
-
-    fn preview_address(
-        addresses: &HashMap<String, String>,
-        fallback: Option<&str>,
-        asset: &Asset,
-        label: &str,
-    ) -> Result<String> {
-        addresses
-            .get(asset.location.as_deref().unwrap_or_default())
-            .cloned()
-            .or_else(|| fallback.map(str::to_owned))
-            .with_context(|| format!("NEAR Intents quote {label} is not configured for {asset}"))
-    }
-
-    pub async fn load_supported_tokens(&self) -> Result<Vec<NearToken>> {
-        let mut request = self.client.get(self.endpoint("tokens"));
-        if let Some(jwt) = &self.jwt {
-            request = request.bearer_auth(jwt);
-        }
-        let response = request.send().await.context("fetch NEAR Intents tokens")?;
-        ensure_success(response.status(), "fetch NEAR Intents tokens")?;
-        let tokens = response
-            .json::<Vec<NearToken>>()
-            .await
-            .context("decode NEAR Intents token list")?;
-        *self.tokens.write().await = tokens.clone();
-        Ok(tokens)
-    }
-
-    pub async fn supported_tokens(&self) -> Vec<NearToken> {
-        self.tokens.read().await.clone()
-    }
-
-    #[cfg(test)]
-    fn set_supported_tokens(&self, tokens: Vec<NearToken>) {
-        if let Ok(mut guard) = self.tokens.try_write() {
-            *guard = tokens;
-        }
-    }
-
-    pub async fn route_available(&self, from: &Asset, to: &Asset) -> bool {
-        let tokens = self.tokens.read().await;
-        tokens.iter().any(|token| token.matches(from))
-            && tokens.iter().any(|token| token.matches(to))
-    }
-
-    pub async fn executable_quote(&self, request: NearQuoteRequest) -> Result<NearQuote> {
-        self.request_quote(NearQuoteRequest {
-            dry: false,
-            ..request
-        })
-        .await
-    }
-
-    pub async fn status(&self, deposit_address: &str) -> Result<NearSwapStatus> {
-        self.status_with_memo(deposit_address, None).await
-    }
-
-    pub async fn status_with_memo(
-        &self,
-        deposit_address: &str,
-        deposit_memo: Option<&str>,
-    ) -> Result<NearSwapStatus> {
-        let mut request = self
-            .client
-            .get(self.endpoint("status"))
-            .query(&[("depositAddress", deposit_address)]);
-        if let Some(deposit_memo) = deposit_memo {
-            request = request.query(&[("depositMemo", deposit_memo)]);
-        }
-        if let Some(jwt) = &self.jwt {
-            request = request.bearer_auth(jwt);
-        }
-        let response = request.send().await.context("fetch NEAR Intents status")?;
-        ensure_success(response.status(), "fetch NEAR Intents status")?;
-        let raw = response
-            .json::<Value>()
-            .await
-            .context("decode NEAR Intents status")?;
-        Ok(NearSwapStatus {
-            status: raw
-                .get("status")
-                .and_then(Value::as_str)
-                .unwrap_or("UNKNOWN")
-                .to_string(),
-            output_amount: first_string(&raw, &["amountOut", "amount_out"]),
-            raw,
-        })
-    }
-
-    async fn request_quote(&self, request: NearQuoteRequest) -> Result<NearQuote> {
-        if request.amount.asset != request.from {
-            bail!("quote amount asset must equal the origin asset");
-        }
-        if !request.from.qualified() || !request.to.qualified() {
-            bail!("NEAR Intents assets must include a blockchain location");
-        }
-        let (origin_asset, origin_decimals, destination_asset, destination_decimals) = {
-            let tokens = self.tokens.read().await;
-            let origin = tokens
-                .iter()
-                .find(|token| token.matches(&request.from))
-                .with_context(|| format!("unsupported NEAR Intents origin {}", request.from))?;
-            let destination = tokens
-                .iter()
-                .find(|token| token.matches(&request.to))
-                .with_context(|| format!("unsupported NEAR Intents destination {}", request.to))?;
-            (
-                origin.asset_id.clone(),
-                origin.decimals,
-                destination.asset_id.clone(),
-                destination.decimals,
-            )
-        };
-        let input_value = truncate_decimal(&request.amount.value, origin_decimals)?;
-        let input = Amount::new(input_value, request.from.clone())?;
-        let atomic_amount = decimal_to_atomic(&input.value, origin_decimals)?;
-        let body = json!({
-            "dry": request.dry,
-            "swapType": "EXACT_INPUT",
-            "slippageTolerance": request.slippage_bps,
-            "originAsset": origin_asset,
-            "destinationAsset": destination_asset,
-            "amount": atomic_amount,
-            "depositType": "ORIGIN_CHAIN",
-            "refundTo": request.refund_to,
-            "refundType": "ORIGIN_CHAIN",
-            "recipient": request.recipient,
-            "recipientType": "DESTINATION_CHAIN",
-            "deadline": (Utc::now() + chrono::Duration::from_std(self.quote_ttl)?).to_rfc3339(),
-            "quoteWaitingTimeMs": DEFAULT_QUOTE_WAITING_TIME_MS,
-        });
-        let mut builder = self.client.post(self.endpoint("quote"));
-        if let Some(jwt) = &self.jwt {
-            builder = builder.bearer_auth(jwt);
-        }
-        let response = builder
-            .json(&body)
-            .send()
-            .await
-            .context("request NEAR Intents quote")?;
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            let detail = body.chars().take(500).collect::<String>();
-            bail!("request NEAR Intents quote failed with HTTP {status}: {detail}");
-        }
-        let raw = response
-            .json::<Value>()
-            .await
-            .context("decode NEAR Intents quote")?;
-        let quote_payload = raw.get("quote").cloned().unwrap_or_else(|| raw.clone());
-        let mut quote = parse_near_quote_with_decimals(
-            quote_payload,
-            request.from,
-            request.to,
-            input,
-            request.dry,
-            destination_decimals,
-            origin_decimals,
-        )?;
-        quote.raw = raw;
-        Ok(quote)
-    }
-
-    fn endpoint(&self, path: &str) -> String {
-        let base = self
-            .base_url
-            .strip_suffix("/v0")
-            .unwrap_or(&self.base_url)
-            .trim_end_matches('/');
-        format!("{base}/v0/{path}")
-    }
-}
-
-#[async_trait]
-impl PublicRouteProvider for NearIntentsProvider {
-    fn name(&self) -> &str {
-        "near-intents"
-    }
-
-    async fn supported_assets(&self) -> Vec<Asset> {
-        let tokens = self.tokens.read().await;
-        tokens
-            .iter()
-            .filter_map(|token| token.asset().ok())
-            .collect()
-    }
-
-    async fn quote(&self, from: Asset, to: Asset, amount: Amount) -> Result<PublicRouteQuote> {
-        let quote = QuoteProvider::quote(self, from, to, amount).await?;
-        Ok(PublicRouteQuote {
-            provider: self.name().to_string(),
-            from: quote.from.clone(),
-            to: quote.to.clone(),
-            input: quote.input,
-            output: quote.output,
-            fees: quote.fee.into_iter().collect(),
-            expires_at: quote.expires_at,
-            path: vec![quote.from, quote.to],
-        })
-    }
-}
-
-#[derive(Clone)]
-pub struct CowRouteProvider {
-    client: Client,
-    endpoints: Arc<HashMap<String, String>>,
-    tokens: Arc<HashMap<(String, String), String>>,
-    quote_address: String,
-}
-
-impl CowRouteProvider {
-    pub fn from_config(
-        api_urls: &[String],
-        token_entries: &[String],
-        quote_address: Option<&str>,
-    ) -> Result<Option<Self>> {
-        let Some(quote_address) = quote_address
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        else {
-            return Ok(None);
-        };
-        let endpoints = api_urls
-            .iter()
-            .filter_map(|entry| entry.split_once('='))
-            .map(|(chain, url)| (chain.trim().to_ascii_lowercase(), url.trim().to_string()))
-            .filter(|(chain, url)| !chain.is_empty() && !url.is_empty())
-            .collect::<HashMap<_, _>>();
-        let tokens = token_entries
-            .iter()
-            .filter_map(|entry| entry.split_once('='))
-            .filter_map(|(key, address)| {
-                key.split_once(':')
-                    .map(|(chain, symbol)| (chain, symbol, address))
-            })
-            .map(|(chain, symbol, address)| {
-                (
-                    (
-                        chain.trim().to_ascii_lowercase(),
-                        symbol.trim().to_ascii_uppercase(),
-                    ),
-                    address.trim().to_string(),
-                )
-            })
-            .filter(|((chain, symbol), address)| {
-                !chain.is_empty() && !symbol.is_empty() && !address.is_empty()
-            })
-            .collect::<HashMap<_, _>>();
-        if endpoints.is_empty() || tokens.is_empty() {
-            return Ok(None);
-        }
-        let client = Client::builder()
-            .timeout(Duration::from_secs(20))
-            .user_agent("Pay3Flow-CoW-Protocol/0.1")
-            .build()
-            .context("failed to build CoW Protocol client")?;
-        Ok(Some(Self {
-            client,
-            endpoints: Arc::new(endpoints),
-            tokens: Arc::new(tokens),
-            quote_address: quote_address.to_string(),
-        }))
-    }
-
-    fn decimals(symbol: &str) -> u8 {
-        match symbol.to_ascii_uppercase().as_str() {
-            "USDC" | "USDT" | "FDUSD" => 6,
-            _ => 18,
-        }
-    }
-
-    fn quote_url(base: &str) -> String {
-        let base = base.trim_end_matches('/');
-        if base.ends_with("/api/v1/quote") {
-            base.to_string()
-        } else {
-            format!("{base}/api/v1/quote")
-        }
-    }
-}
-
-#[async_trait]
-impl PublicRouteProvider for CowRouteProvider {
-    fn name(&self) -> &str {
-        "cow-swap"
-    }
-
-    async fn supported_assets(&self) -> Vec<Asset> {
-        self.tokens
-            .keys()
-            .filter_map(|(chain, symbol)| Asset::new(symbol, Some(chain)).ok())
-            .collect()
-    }
-
-    async fn quote(&self, from: Asset, to: Asset, amount: Amount) -> Result<PublicRouteQuote> {
-        let from_chain = from
-            .location
-            .clone()
-            .context("CoW origin chain is required")?;
-        let to_chain = to
-            .location
-            .clone()
-            .context("CoW destination chain is required")?;
-        if from_chain != to_chain {
-            bail!("CoW Protocol does not provide a cross-chain quote");
-        }
-        let chain = from_chain.to_ascii_lowercase();
-        let endpoint = self
-            .endpoints
-            .get(&chain)
-            .with_context(|| format!("CoW endpoint is not configured for {chain}"))?;
-        let sell_token = self
-            .tokens
-            .get(&(chain.clone(), from.symbol.to_ascii_uppercase()))
-            .with_context(|| format!("CoW token address is not configured for {from}"))?;
-        let buy_token = self
-            .tokens
-            .get(&(chain.clone(), to.symbol.to_ascii_uppercase()))
-            .with_context(|| format!("CoW token address is not configured for {to}"))?;
-        let sell_amount = decimal_to_atomic(&amount.value, Some(Self::decimals(&from.symbol)))?;
-        let valid_to = (Utc::now() + chrono::Duration::from_std(DEFAULT_QUOTE_TTL)?).timestamp();
-        let body = json!({
-            "sellToken": sell_token,
-            "buyToken": buy_token,
-            "sellAmountBeforeFee": sell_amount,
-            "from": self.quote_address,
-            "receiver": self.quote_address,
-            "kind": "sell",
-            "partiallyFillable": false,
-            "validTo": valid_to,
-        });
-        let response = self
-            .client
-            .post(Self::quote_url(endpoint))
-            .json(&body)
-            .send()
-            .await
-            .context("request CoW Protocol quote")?;
-        ensure_success(response.status(), "request CoW Protocol quote")?;
-        let raw = response
-            .json::<Value>()
-            .await
-            .context("decode CoW Protocol quote")?;
-        let quote = raw.get("quote").unwrap_or(&raw);
-        let buy_amount = first_string(quote, &["buyAmount", "buy_amount"])
-            .context("CoW quote did not include buyAmount")?;
-        let fee_amount = first_string(quote, &["feeAmount", "fee_amount", "surplusFeeAmount"]);
-        let output = Amount::new(
-            atomic_to_decimal(&buy_amount, Self::decimals(&to.symbol))?,
-            to.clone(),
-        )?;
-        let fee = fee_amount
-            .map(|fee| {
-                Amount::new(
-                    atomic_to_decimal(&fee, Self::decimals(&from.symbol))?,
-                    from.clone(),
-                )
-            })
-            .transpose()?;
-        Ok(PublicRouteQuote {
-            provider: self.name().to_string(),
-            from: from.clone(),
-            to: to.clone(),
-            input: amount,
-            output,
-            fees: fee.into_iter().collect(),
-            expires_at: DateTime::from_timestamp(valid_to, 0),
-            path: vec![from, to],
-        })
-    }
-}
-
 /// Inputs used by the periodic capability refresh.  The list of fiat
 /// currencies and intermediates is deployment configuration, not user input.
 #[derive(Debug, Clone)]
@@ -1116,35 +669,7 @@ pub fn parse_route_edges(values: &[String]) -> Result<Vec<RouteEdge>> {
         .collect()
 }
 
-#[async_trait]
-impl QuoteProvider for NearIntentsProvider {
-    async fn quote(&self, from: Asset, to: Asset, amount: Amount) -> Result<NearQuote> {
-        let recipient = Self::preview_address(
-            &self.quote_recipients,
-            self.quote_recipient.as_deref(),
-            &to,
-            "recipient",
-        )?;
-        let refund_to = Self::preview_address(
-            &self.quote_refunds,
-            self.quote_refund_to.as_deref(),
-            &from,
-            "refund address",
-        )?;
-        let request = NearQuoteRequest {
-            from: from.clone(),
-            to,
-            amount,
-            recipient,
-            refund_to,
-            slippage_bps: self.slippage_bps,
-            dry: true,
-        };
-        self.request_quote(request).await
-    }
-}
-
-fn parse_network_addresses(entries: &[String]) -> Result<HashMap<String, String>> {
+pub(crate) fn parse_network_addresses(entries: &[String]) -> Result<HashMap<String, String>> {
     entries
         .iter()
         .map(|entry| {
@@ -1161,7 +686,7 @@ fn parse_network_addresses(entries: &[String]) -> Result<HashMap<String, String>
         .collect()
 }
 
-fn parse_near_quote_with_decimals(
+pub(crate) fn parse_near_quote_with_decimals(
     raw: Value,
     from: Asset,
     to: Asset,
@@ -1214,7 +739,7 @@ fn parse_near_quote_with_decimals(
     })
 }
 
-fn decimal_to_atomic(value: &str, decimals: Option<u8>) -> Result<String> {
+pub(crate) fn decimal_to_atomic(value: &str, decimals: Option<u8>) -> Result<String> {
     let Some(decimals) = decimals else {
         return Ok(value.trim().to_string());
     };
@@ -1238,7 +763,7 @@ fn decimal_to_atomic(value: &str, decimals: Option<u8>) -> Result<String> {
     Ok(atomic)
 }
 
-fn truncate_decimal(value: &str, decimals: Option<u8>) -> Result<String> {
+pub(crate) fn truncate_decimal(value: &str, decimals: Option<u8>) -> Result<String> {
     let value = value.trim();
     validate_decimal(value, false)?;
     let Some(decimals) = decimals else {
@@ -1251,7 +776,7 @@ fn truncate_decimal(value: &str, decimals: Option<u8>) -> Result<String> {
     Ok(format!("{whole}.{}", &fraction[..usize::from(decimals)]))
 }
 
-fn atomic_to_decimal(value: &str, decimals: u8) -> Result<String> {
+pub(crate) fn atomic_to_decimal(value: &str, decimals: u8) -> Result<String> {
     let value = value.trim();
     if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
         bail!("atomic amount must be an unsigned integer");
@@ -1277,7 +802,7 @@ fn atomic_to_decimal(value: &str, decimals: u8) -> Result<String> {
     }
 }
 
-fn first_string(value: &Value, keys: &[&str]) -> Option<String> {
+pub(crate) fn first_string(value: &Value, keys: &[&str]) -> Option<String> {
     keys.iter().find_map(|key| {
         value.get(*key).and_then(|value| match value {
             Value::String(value) => Some(value.clone()),
@@ -1287,7 +812,7 @@ fn first_string(value: &Value, keys: &[&str]) -> Option<String> {
     })
 }
 
-fn ensure_success(status: StatusCode, operation: &str) -> Result<()> {
+pub(crate) fn ensure_success(status: StatusCode, operation: &str) -> Result<()> {
     if status.is_success() {
         Ok(())
     } else {

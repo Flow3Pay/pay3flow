@@ -273,6 +273,28 @@ pub(crate) trait P2pSource: Send + Sync {
     async fn search(&self, query: &P2pSearchQuery) -> Result<Vec<P2pOffer>>;
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct FiatRouteQuote {
+    pub provider: String,
+    pub source_url: String,
+    pub source_currency: String,
+    pub target_currency: String,
+    pub source_amount: f64,
+    pub target_amount: f64,
+}
+
+#[async_trait]
+pub trait PublicFiatRouteProvider: Send + Sync {
+    fn name(&self) -> &str;
+    fn supports_pair(&self, source_currency: &str, target_currency: &str) -> bool;
+    async fn quote(
+        &self,
+        source_currency: &str,
+        target_currency: &str,
+        source_amount: f64,
+    ) -> Result<FiatRouteQuote>;
+}
+
 #[derive(Clone)]
 pub struct P2pSearchService {
     enabled: bool,
@@ -284,6 +306,7 @@ pub struct P2pSearchService {
     pub(crate) default_assets: Arc<[String]>,
     pub(crate) networks: NetworkCatalog,
     pub(crate) route_providers: Arc<[Arc<dyn PublicRouteProvider>]>,
+    pub(crate) fiat_route_providers: Arc<[Arc<dyn PublicFiatRouteProvider>]>,
     pub(crate) quote_semaphore: Arc<Semaphore>,
 }
 
@@ -299,7 +322,7 @@ struct CachedSearch {
 
 impl P2pSearchService {
     pub fn from_config(config: &Config, networks: NetworkCatalog) -> Result<Self> {
-        Self::from_provider_records(config, networks, Vec::new(), Vec::new())
+        Self::from_provider_records(config, networks, Vec::new(), Vec::new(), Vec::new())
     }
 
     pub async fn from_database(
@@ -307,9 +330,16 @@ impl P2pSearchService {
         networks: NetworkCatalog,
         pool: &DbPool,
         route_providers: Vec<Arc<dyn PublicRouteProvider>>,
+        fiat_route_providers: Vec<Arc<dyn PublicFiatRouteProvider>>,
     ) -> Result<Self> {
         let records = crate::providers::adapters(pool).await?;
-        Self::from_provider_records(config, networks, records, route_providers)
+        Self::from_provider_records(
+            config,
+            networks,
+            records,
+            route_providers,
+            fiat_route_providers,
+        )
     }
 
     fn from_provider_records(
@@ -317,6 +347,7 @@ impl P2pSearchService {
         networks: NetworkCatalog,
         records: Vec<crate::providers::ProviderAdapterRecord>,
         route_providers: Vec<Arc<dyn PublicRouteProvider>>,
+        fiat_route_providers: Vec<Arc<dyn PublicFiatRouteProvider>>,
     ) -> Result<Self> {
         if records.iter().any(|record| record.workflow.is_some()) {
             playwright_rs::server::driver::get_driver_executable()
@@ -368,6 +399,7 @@ impl P2pSearchService {
             default_assets: default_assets.into(),
             networks,
             route_providers: route_providers.into(),
+            fiat_route_providers: fiat_route_providers.into(),
             quote_semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_PROVIDER_QUOTES)),
         })
     }
@@ -410,6 +442,7 @@ impl P2pSearchService {
             .into(),
             networks: NetworkCatalog::test_default(),
             route_providers: Vec::new().into(),
+            fiat_route_providers: Vec::new().into(),
             quote_semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_PROVIDER_QUOTES)),
         }
     }
@@ -429,6 +462,15 @@ impl P2pSearchService {
         self
     }
 
+    #[cfg(test)]
+    pub(crate) fn with_fiat_route_providers(
+        mut self,
+        providers: Vec<Arc<dyn PublicFiatRouteProvider>>,
+    ) -> Self {
+        self.fiat_route_providers = providers.into();
+        self
+    }
+
     pub fn searchable_sources(&self) -> HashSet<String> {
         if !self.enabled {
             return HashSet::new();
@@ -441,6 +483,18 @@ impl P2pSearchService {
                 self.market_sources
                     .iter()
                     .map(|source| source.name().to_string()),
+            )
+            .collect()
+    }
+
+    pub fn route_provider_names(&self) -> HashSet<String> {
+        self.route_providers
+            .iter()
+            .map(|provider| provider.name().to_string())
+            .chain(
+                self.fiat_route_providers
+                    .iter()
+                    .map(|provider| provider.name().to_string()),
             )
             .collect()
     }
@@ -770,6 +824,24 @@ mod tests {
         delay: Duration,
     }
 
+    struct StubRouteProvider;
+
+    #[async_trait]
+    impl PublicRouteProvider for StubRouteProvider {
+        fn name(&self) -> &str {
+            "test-intents"
+        }
+
+        async fn quote(
+            &self,
+            _from: crate::route_engine::Asset,
+            _to: crate::route_engine::Asset,
+            _amount: crate::route_engine::Amount,
+        ) -> Result<crate::route_engine::PublicRouteQuote> {
+            bail!("route quoting is not used by this test")
+        }
+    }
+
     #[async_trait]
     impl P2pSource for StubSource {
         fn name(&self) -> &str {
@@ -1068,6 +1140,25 @@ mod tests {
             HashSet::from(["one".to_string(), "two".to_string()])
         );
         assert!(!service.searchable_sources().contains("whitebird"));
+    }
+
+    #[test]
+    fn reports_route_provider_names_separately() {
+        let service = P2pSearchService::with_sources(
+            vec![Arc::new(StubSource {
+                name: "one",
+                offers: Vec::new(),
+                delay: Duration::ZERO,
+            })],
+            Duration::from_secs(1),
+        )
+        .with_route_providers(vec![Arc::new(StubRouteProvider)]);
+
+        assert_eq!(
+            service.route_provider_names(),
+            HashSet::from(["test-intents".to_string()])
+        );
+        assert!(!service.searchable_sources().contains("test-intents"));
     }
 
     #[tokio::test]

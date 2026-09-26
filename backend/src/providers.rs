@@ -5,6 +5,14 @@ use uuid::Uuid;
 use crate::db::DbPool;
 use crate::provider_adapter::{ProviderAdapters, WorkflowConfig};
 
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ProviderSearchMode {
+    Selectable,
+    AlwaysOn,
+    CatalogOnly,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct ProviderFeeModel {
@@ -24,6 +32,7 @@ pub struct Provider {
     pub banks: Vec<String>,
     pub fee_model: Option<ProviderFeeModel>,
     pub searchable: bool,
+    pub search_mode: ProviderSearchMode,
 }
 
 #[derive(Debug, Clone)]
@@ -81,6 +90,7 @@ ORDER BY name, operation, slug
                 banks: row.get("banks"),
                 fee_model,
                 searchable: false,
+                search_mode: ProviderSearchMode::CatalogOnly,
             })
         })
         .collect()

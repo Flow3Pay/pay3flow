@@ -35,3 +35,7 @@ playwright-rs = { version = "0.18.1", default-features = false, features = ["rin
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["v4", "serde"] }
+
+[build-dependencies]
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"

@@ -27,6 +27,7 @@ export interface ProviderDefinition {
   banks: string[];
   fee_model?: ProviderFeeModel | null;
   searchable: boolean;
+  search_mode?: "selectable" | "always_on" | "catalog_only";
 }
 
 export interface ProviderFeeModel {

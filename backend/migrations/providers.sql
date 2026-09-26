@@ -3,7 +3,7 @@
 -- The application embeds this migration; Providerfiles are not read at runtime.
 DELETE FROM providers
 WHERE source_file LIKE '%/Providerfile'
-AND (slug, operation) NOT IN (('bestchange', 'buy'), ('bestchange', 'sell'), ('binance', 'buy'), ('binance', 'sell'), ('bitget', 'buy'), ('bitget', 'sell'), ('bybit', 'buy'), ('bybit', 'sell'), ('cifra-broker', 'buy'), ('cifra-broker', 'sell'), ('cow-swap', 'buy'), ('cow-swap', 'sell'), ('dzengi', 'buy'), ('dzengi', 'sell'), ('exnode', 'buy'), ('exnode', 'sell'), ('okx', 'buy'), ('okx', 'sell'), ('rapira', 'buy'), ('rapira', 'sell'), ('whitebird', 'buy'), ('whitebird', 'sell'));
+AND (slug, operation) NOT IN (('bestchange', 'buy'), ('bestchange', 'sell'), ('binance', 'buy'), ('binance', 'sell'), ('bitget', 'buy'), ('bitget', 'sell'), ('bybit', 'buy'), ('bybit', 'sell'), ('cifra-broker', 'buy'), ('cifra-broker', 'sell'), ('cow-swap', 'buy'), ('cow-swap', 'sell'), ('dzengi', 'buy'), ('dzengi', 'sell'), ('exnode', 'buy'), ('exnode', 'sell'), ('id-pay', 'buy'), ('id-pay', 'sell'), ('near-intents', 'buy'), ('near-intents', 'sell'), ('okx', 'buy'), ('okx', 'sell'), ('rapira', 'buy'), ('rapira', 'sell'), ('whitebird', 'buy'), ('whitebird', 'sell'));
 
 INSERT INTO providers (slug, operation, source_url, name, currencies, banks, adapter, workflow, fee_model, source_file)
 VALUES ('bestchange', 'buy', 'https://bestchange.biz/ru', 'BestChange Buy', ARRAY['BYN', 'EUR', 'RUB', 'USD']::TEXT[], ARRAY[]::TEXT[], '{"p2p":null,"market":null,"bestchange":{"endpoint":"https://bestchange.biz","language":"ru","timeout_ms":10000,"max_results":100}}'::JSONB, '{}'::JSONB, '{}'::JSONB, 'bestchange/Providerfile')
@@ -202,6 +202,58 @@ updated_at = now();
 
 INSERT INTO providers (slug, operation, source_url, name, currencies, banks, adapter, workflow, fee_model, source_file)
 VALUES ('exnode', 'sell', 'https://exnode.ru/exchange', 'Exnode Sell', ARRAY['BYN', 'EUR', 'RUB', 'USD']::TEXT[], ARRAY[]::TEXT[], '{"p2p":{"kind":"http_json","endpoint":"https://my.exnode.io/api/order/exchange_rate","method":"POST","headers":{},"asset_codes":{"USDT":"USDTTRC"},"supported_assets":["USDT","BTC","ETH","LTC","DOGE","TRX","USDC"],"timeout_ms":10000,"max_results":null,"fiat_probe_amount":null,"asset_probe_amount":null,"default_min_fiat":1.0,"default_max_fiat":1000000000.0,"default_available_asset":1000000000.0,"auth":{"kind":"hmac_sha512_timestamp_body","public_key_env":"EXNODE_API_PUBLIC","private_key_env":"EXNODE_API_PRIVATE","public_key_header":"ApiPublic","timestamp_header":"Timestamp","signature_header":"Signature"},"buy":{"query":{},"request_json":"{\"token_from\":\"{{fiat}}\",\"token_to\":\"{{asset}}\"}","amount_mode":"query_or_empty","items_pointer":null,"success_pointer":null,"success_value":null,"success_missing_allowed":false,"error_pointer":null,"offer":{"ad_id_pointer":null,"fiat_pointer":null,"asset_pointer":null,"price_pointer":"/exchange_rate","fiat_amount_pointer":null,"asset_amount_pointer":null,"price_inverted":true,"available_asset_pointer":null,"min_fiat_pointer":null,"max_fiat_pointer":null,"payment_methods_pointer":null,"payment_method_value_pointer":null,"payment_method_fallback_pointer":null,"pay_time_limit_pointer":null,"advertiser_id_pointer":null,"advertiser_nickname_pointer":null,"advertiser_user_type_pointer":null,"merchant_conditions":[],"verified_conditions":[],"merchant_default":false,"verified_default":false,"verified_from_merchant":false,"completed_orders_pointer":null,"completion_rate_pointer":null,"positive_rate_pointer":null,"source_url_template":null,"source_url_is_exact":false,"advertiser_profile_url_template":null}},"sell":{"query":{},"request_json":"{\"token_from\":\"{{asset}}\",\"token_to\":\"{{fiat}}\"}","amount_mode":"query_or_empty","items_pointer":null,"success_pointer":null,"success_value":null,"success_missing_allowed":false,"error_pointer":null,"offer":null},"offer":{"ad_id_pointer":null,"fiat_pointer":null,"asset_pointer":null,"price_pointer":"/exchange_rate","fiat_amount_pointer":null,"asset_amount_pointer":null,"price_inverted":false,"available_asset_pointer":null,"min_fiat_pointer":null,"max_fiat_pointer":null,"payment_methods_pointer":null,"payment_method_value_pointer":null,"payment_method_fallback_pointer":null,"pay_time_limit_pointer":null,"advertiser_id_pointer":null,"advertiser_nickname_pointer":null,"advertiser_user_type_pointer":null,"merchant_conditions":[],"verified_conditions":[],"merchant_default":true,"verified_default":true,"verified_from_merchant":false,"completed_orders_pointer":null,"completion_rate_pointer":null,"positive_rate_pointer":null,"source_url_template":null,"source_url_is_exact":false,"advertiser_profile_url_template":null},"rate_table":null},"market":null,"bestchange":null}'::JSONB, '{}'::JSONB, '{}'::JSONB, 'exnode/Providerfile')
+ON CONFLICT (slug, operation) DO UPDATE SET
+source_url = EXCLUDED.source_url,
+name = EXCLUDED.name,
+currencies = EXCLUDED.currencies,
+banks = EXCLUDED.banks,
+adapter = EXCLUDED.adapter,
+workflow = EXCLUDED.workflow,
+fee_model = EXCLUDED.fee_model,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO providers (slug, operation, source_url, name, currencies, banks, adapter, workflow, fee_model, source_file)
+VALUES ('id-pay', 'buy', 'https://id-pay.ru/', 'ID Pay Buy', ARRAY['AMD', 'RUB']::TEXT[], ARRAY[]::TEXT[], '{}'::JSONB, '{}'::JSONB, '{"kind":"quote_dependent","description":"ID Pay advertises commission-free transfers for supported corridors; confirm the live rate and any card or bank charges before sending.","docs_url":"https://id-pay.ru/tariff/"}'::JSONB, 'id-pay/Providerfile')
+ON CONFLICT (slug, operation) DO UPDATE SET
+source_url = EXCLUDED.source_url,
+name = EXCLUDED.name,
+currencies = EXCLUDED.currencies,
+banks = EXCLUDED.banks,
+adapter = EXCLUDED.adapter,
+workflow = EXCLUDED.workflow,
+fee_model = EXCLUDED.fee_model,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO providers (slug, operation, source_url, name, currencies, banks, adapter, workflow, fee_model, source_file)
+VALUES ('id-pay', 'sell', 'https://id-pay.ru/', 'ID Pay Sell', ARRAY['AMD', 'RUB']::TEXT[], ARRAY[]::TEXT[], '{}'::JSONB, '{}'::JSONB, '{"kind":"quote_dependent","description":"ID Pay advertises commission-free transfers for supported corridors; confirm the live rate and any card or bank charges before sending.","docs_url":"https://id-pay.ru/tariff/"}'::JSONB, 'id-pay/Providerfile')
+ON CONFLICT (slug, operation) DO UPDATE SET
+source_url = EXCLUDED.source_url,
+name = EXCLUDED.name,
+currencies = EXCLUDED.currencies,
+banks = EXCLUDED.banks,
+adapter = EXCLUDED.adapter,
+workflow = EXCLUDED.workflow,
+fee_model = EXCLUDED.fee_model,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO providers (slug, operation, source_url, name, currencies, banks, adapter, workflow, fee_model, source_file)
+VALUES ('near-intents', 'buy', 'https://1click.chaindefuser.com', 'NEAR Intents Buy', ARRAY['BTC', 'DAI', 'ETH', 'NEAR', 'SOL', 'USDC', 'USDT', 'XRP']::TEXT[], ARRAY[]::TEXT[], '{}'::JSONB, '{}'::JSONB, '{"kind":"quote_dependent","description":"Fees and the guaranteed output are returned by each live NEAR Intents quote and may differ from other providers.","docs_url":"https://docs.near-intents.org/near-intents"}'::JSONB, 'near-intents/Providerfile')
+ON CONFLICT (slug, operation) DO UPDATE SET
+source_url = EXCLUDED.source_url,
+name = EXCLUDED.name,
+currencies = EXCLUDED.currencies,
+banks = EXCLUDED.banks,
+adapter = EXCLUDED.adapter,
+workflow = EXCLUDED.workflow,
+fee_model = EXCLUDED.fee_model,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO providers (slug, operation, source_url, name, currencies, banks, adapter, workflow, fee_model, source_file)
+VALUES ('near-intents', 'sell', 'https://1click.chaindefuser.com', 'NEAR Intents Sell', ARRAY['BTC', 'DAI', 'ETH', 'NEAR', 'SOL', 'USDC', 'USDT', 'XRP']::TEXT[], ARRAY[]::TEXT[], '{}'::JSONB, '{}'::JSONB, '{"kind":"quote_dependent","description":"Fees and the guaranteed output are returned by each live NEAR Intents quote and may differ from other providers.","docs_url":"https://docs.near-intents.org/near-intents"}'::JSONB, 'near-intents/Providerfile')
 ON CONFLICT (slug, operation) DO UPDATE SET
 source_url = EXCLUDED.source_url,
 name = EXCLUDED.name,

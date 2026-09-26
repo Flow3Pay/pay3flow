@@ -1,0 +1,353 @@
+# NEAR Intents is a selectable direct quote provider. Runtime token support is
+# loaded from the 1Click token catalog. Its Rust implementation is compiled
+# from this Providerfile into the backend binary.
+
+[code]
+language = "rust"
+source = '''
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
+
+use anyhow::{bail, Context, Result};
+use async_trait::async_trait;
+use chrono::Utc;
+use reqwest::Client;
+use serde_json::{json, Value};
+use tokio::sync::RwLock;
+
+use crate::route_engine::{
+    decimal_to_atomic, ensure_success, first_string,
+    parse_near_quote_with_decimals, parse_network_addresses, truncate_decimal, Amount, Asset,
+    NearQuote, NearQuoteRequest, NearSwapStatus, NearToken, PublicRouteProvider, PublicRouteQuote,
+    QuoteProvider, DEFAULT_INTENTS_URL, DEFAULT_QUOTE_TTL, DEFAULT_QUOTE_WAITING_TIME_MS,
+    DEFAULT_SLIPPAGE_BPS,
+};
+
+/// NEAR Intents 1-Click provider.  The provider is read-only by default:
+/// `quote` requests a dry quote, while `executable_quote` must be called
+/// explicitly by the later execution flow.
+#[derive(Clone)]
+pub struct NearIntentsProvider {
+    client: Client,
+    base_url: String,
+    jwt: Option<String>,
+    pub(crate) slippage_bps: u32,
+    quote_ttl: Duration,
+    tokens: Arc<RwLock<Vec<NearToken>>>,
+    pub(crate) quote_recipient: Option<String>,
+    pub(crate) quote_refund_to: Option<String>,
+    pub(crate) quote_recipients: Arc<HashMap<String, String>>,
+    pub(crate) quote_refunds: Arc<HashMap<String, String>>,
+}
+
+impl NearIntentsProvider {
+    pub fn new(base_url: impl Into<String>, jwt: Option<String>) -> Result<Self> {
+        let client = Client::builder()
+            .timeout(Duration::from_secs(20))
+            .user_agent("Pay3Flow-NEAR-Intents/0.1")
+            .build()
+            .context("failed to build NEAR Intents client")?;
+        Ok(Self {
+            client,
+            base_url: base_url.into().trim_end_matches('/').to_string(),
+            jwt,
+            slippage_bps: DEFAULT_SLIPPAGE_BPS,
+            quote_ttl: DEFAULT_QUOTE_TTL,
+            tokens: Arc::new(RwLock::new(Vec::new())),
+            quote_recipient: None,
+            quote_refund_to: None,
+            quote_recipients: Arc::new(HashMap::new()),
+            quote_refunds: Arc::new(HashMap::new()),
+        })
+    }
+
+    pub fn with_default_url() -> Result<Self> {
+        Self::new(DEFAULT_INTENTS_URL, None)
+    }
+
+    pub fn with_slippage_bps(mut self, slippage_bps: u32) -> Result<Self> {
+        if slippage_bps > 10_000 {
+            bail!("slippage must be at most 10000 basis points");
+        }
+        self.slippage_bps = slippage_bps;
+        Ok(self)
+    }
+
+    /// Configure valid destination and refund addresses for dry quotes made
+    /// through the `QuoteProvider` trait.  The 1Click API validates these
+    /// addresses even when `dry=true`; executable quotes receive their
+    /// addresses directly through `NearQuoteRequest`.
+    pub fn with_quote_addresses(
+        mut self,
+        recipient: impl Into<String>,
+        refund_to: impl Into<String>,
+    ) -> Result<Self> {
+        let recipient = recipient.into();
+        let refund_to = refund_to.into();
+        if recipient.trim().is_empty() || refund_to.trim().is_empty() {
+            bail!("NEAR Intents quote addresses cannot be empty");
+        }
+        self.quote_recipient = Some(recipient);
+        self.quote_refund_to = Some(refund_to);
+        Ok(self)
+    }
+
+    pub fn with_quote_network_addresses(
+        mut self,
+        recipients: &[String],
+        refunds: &[String],
+    ) -> Result<Self> {
+        self.quote_recipients = Arc::new(parse_network_addresses(recipients)?);
+        self.quote_refunds = Arc::new(parse_network_addresses(refunds)?);
+        Ok(self)
+    }
+
+    pub(crate) fn preview_address(
+        addresses: &HashMap<String, String>,
+        fallback: Option<&str>,
+        asset: &Asset,
+        label: &str,
+    ) -> Result<String> {
+        addresses
+            .get(asset.location.as_deref().unwrap_or_default())
+            .cloned()
+            .or_else(|| fallback.map(str::to_owned))
+            .with_context(|| format!("NEAR Intents quote {label} is not configured for {asset}"))
+    }
+
+    pub async fn load_supported_tokens(&self) -> Result<Vec<NearToken>> {
+        let mut request = self.client.get(self.endpoint("tokens"));
+        if let Some(jwt) = &self.jwt {
+            request = request.bearer_auth(jwt);
+        }
+        let response = request.send().await.context("fetch NEAR Intents tokens")?;
+        ensure_success(response.status(), "fetch NEAR Intents tokens")?;
+        let tokens = response
+            .json::<Vec<NearToken>>()
+            .await
+            .context("decode NEAR Intents token list")?;
+        *self.tokens.write().await = tokens.clone();
+        Ok(tokens)
+    }
+
+    pub async fn supported_tokens(&self) -> Vec<NearToken> {
+        self.tokens.read().await.clone()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_supported_tokens(&self, tokens: Vec<NearToken>) {
+        if let Ok(mut guard) = self.tokens.try_write() {
+            *guard = tokens;
+        }
+    }
+
+    pub async fn route_available(&self, from: &Asset, to: &Asset) -> bool {
+        let tokens = self.tokens.read().await;
+        tokens.iter().any(|token| token.matches(from))
+            && tokens.iter().any(|token| token.matches(to))
+    }
+
+    pub async fn executable_quote(&self, request: NearQuoteRequest) -> Result<NearQuote> {
+        self.request_quote(NearQuoteRequest {
+            dry: false,
+            ..request
+        })
+        .await
+    }
+
+    pub async fn status(&self, deposit_address: &str) -> Result<NearSwapStatus> {
+        self.status_with_memo(deposit_address, None).await
+    }
+
+    pub async fn status_with_memo(
+        &self,
+        deposit_address: &str,
+        deposit_memo: Option<&str>,
+    ) -> Result<NearSwapStatus> {
+        let mut request = self
+            .client
+            .get(self.endpoint("status"))
+            .query(&[("depositAddress", deposit_address)]);
+        if let Some(deposit_memo) = deposit_memo {
+            request = request.query(&[("depositMemo", deposit_memo)]);
+        }
+        if let Some(jwt) = &self.jwt {
+            request = request.bearer_auth(jwt);
+        }
+        let response = request.send().await.context("fetch NEAR Intents status")?;
+        ensure_success(response.status(), "fetch NEAR Intents status")?;
+        let raw = response
+            .json::<Value>()
+            .await
+            .context("decode NEAR Intents status")?;
+        Ok(NearSwapStatus {
+            status: raw
+                .get("status")
+                .and_then(Value::as_str)
+                .unwrap_or("UNKNOWN")
+                .to_string(),
+            output_amount: first_string(&raw, &["amountOut", "amount_out"]),
+            raw,
+        })
+    }
+
+    pub(crate) async fn request_quote(&self, request: NearQuoteRequest) -> Result<NearQuote> {
+        if request.amount.asset != request.from {
+            bail!("quote amount asset must equal the origin asset");
+        }
+        if !request.from.qualified() || !request.to.qualified() {
+            bail!("NEAR Intents assets must include a blockchain location");
+        }
+        let (origin_asset, origin_decimals, destination_asset, destination_decimals) = {
+            let tokens = self.tokens.read().await;
+            let origin = tokens
+                .iter()
+                .find(|token| token.matches(&request.from))
+                .with_context(|| format!("unsupported NEAR Intents origin {}", request.from))?;
+            let destination = tokens
+                .iter()
+                .find(|token| token.matches(&request.to))
+                .with_context(|| format!("unsupported NEAR Intents destination {}", request.to))?;
+            (
+                origin.asset_id.clone(),
+                origin.decimals,
+                destination.asset_id.clone(),
+                destination.decimals,
+            )
+        };
+        let input_value = truncate_decimal(&request.amount.value, origin_decimals)?;
+        let input = Amount::new(input_value, request.from.clone())?;
+        let atomic_amount = decimal_to_atomic(&input.value, origin_decimals)?;
+        let body = json!({
+            "dry": request.dry,
+            "swapType": "EXACT_INPUT",
+            "slippageTolerance": request.slippage_bps,
+            "originAsset": origin_asset,
+            "destinationAsset": destination_asset,
+            "amount": atomic_amount,
+            "depositType": "ORIGIN_CHAIN",
+            "refundTo": request.refund_to,
+            "refundType": "ORIGIN_CHAIN",
+            "recipient": request.recipient,
+            "recipientType": "DESTINATION_CHAIN",
+            "deadline": (Utc::now() + chrono::Duration::from_std(self.quote_ttl)?).to_rfc3339(),
+            "quoteWaitingTimeMs": DEFAULT_QUOTE_WAITING_TIME_MS,
+        });
+        let mut builder = self.client.post(self.endpoint("quote"));
+        if let Some(jwt) = &self.jwt {
+            builder = builder.bearer_auth(jwt);
+        }
+        let response = builder
+            .json(&body)
+            .send()
+            .await
+            .context("request NEAR Intents quote")?;
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            let detail = body.chars().take(500).collect::<String>();
+            bail!("request NEAR Intents quote failed with HTTP {status}: {detail}");
+        }
+        let raw = response
+            .json::<Value>()
+            .await
+            .context("decode NEAR Intents quote")?;
+        let quote_payload = raw.get("quote").cloned().unwrap_or_else(|| raw.clone());
+        let mut quote = parse_near_quote_with_decimals(
+            quote_payload,
+            request.from,
+            request.to,
+            input,
+            request.dry,
+            destination_decimals,
+            origin_decimals,
+        )?;
+        quote.raw = raw;
+        Ok(quote)
+    }
+
+    pub(crate) fn endpoint(&self, path: &str) -> String {
+        let base = self
+            .base_url
+            .strip_suffix("/v0")
+            .unwrap_or(&self.base_url)
+            .trim_end_matches('/');
+        format!("{base}/v0/{path}")
+    }
+}
+
+#[async_trait]
+impl QuoteProvider for NearIntentsProvider {
+    async fn quote(&self, from: Asset, to: Asset, amount: Amount) -> Result<NearQuote> {
+        let recipient = Self::preview_address(
+            &self.quote_recipients,
+            self.quote_recipient.as_deref(),
+            &to,
+            "recipient",
+        )?;
+        let refund_to = Self::preview_address(
+            &self.quote_refunds,
+            self.quote_refund_to.as_deref(),
+            &from,
+            "refund address",
+        )?;
+        let request = NearQuoteRequest {
+            from: from.clone(),
+            to,
+            amount,
+            recipient,
+            refund_to,
+            slippage_bps: self.slippage_bps,
+            dry: true,
+        };
+        self.request_quote(request).await
+    }
+}
+
+#[async_trait]
+impl PublicRouteProvider for NearIntentsProvider {
+    fn name(&self) -> &str {
+        "near-intents"
+    }
+
+    async fn supported_assets(&self) -> Vec<Asset> {
+        let tokens = self.tokens.read().await;
+        tokens
+            .iter()
+            .filter_map(|token| token.asset().ok())
+            .collect()
+    }
+
+    async fn quote(&self, from: Asset, to: Asset, amount: Amount) -> Result<PublicRouteQuote> {
+        let quote = QuoteProvider::quote(self, from, to, amount).await?;
+        Ok(PublicRouteQuote {
+            provider: self.name().to_string(),
+            from: quote.from.clone(),
+            to: quote.to.clone(),
+            input: quote.input,
+            output: quote.output,
+            fees: quote.fee.into_iter().collect(),
+            expires_at: quote.expires_at,
+            path: vec![quote.from, quote.to],
+        })
+    }
+}
+'''
+
+[sell]
+source_url = "https://1click.chaindefuser.com"
+name = "NEAR Intents Sell"
+currency = ["btc", "eth", "usdc", "usdt", "dai", "near", "sol", "xrp"]
+banks = []
+
+[buy]
+source_url = "https://1click.chaindefuser.com"
+name = "NEAR Intents Buy"
+currency = ["btc", "eth", "usdc", "usdt", "dai", "near", "sol", "xrp"]
+banks = []
+
+[fees]
+kind = "quote_dependent"
+description = "Fees and the guaranteed output are returned by each live NEAR Intents quote and may differ from other providers."
+docs_url = "https://docs.near-intents.org/near-intents"

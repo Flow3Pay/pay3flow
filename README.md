@@ -29,17 +29,22 @@ still be available when the venue is opened.
 | Rapira | Public P2P API | `USDT/RUB` P2P ads |
 | Whitebird | Browser workflow over the public exchanger | Direct fiat/crypto quotes, including `USDC/RUB` |
 | Cifra Markets | Public calculator and IMEX market API | Direct RUB/BYN/USD crypto quotes and crypto market paths |
-| CoW Swap | Catalog-only CoW Protocol venue | Chain-specific crypto swaps; live route adapter not enabled |
+| CoW Swap | CoW Protocol quote API | Selectable same-chain crypto swap quotes for configured chains and tokens |
+| NEAR Intents | 1Click quote API | Selectable cross-chain and same-chain crypto swap quotes from the live token catalog |
+| ID Pay | Public server-rendered calculator rate | Selectable direct AMD/RUB and RUB/AMD transfer estimates |
 
 CoW Swap fees are quote-dependent rather than a universal fixed percentage.
 The live quote accounts for execution costs, while liquidity, gas, and optional
 partner fees can affect the result. The provider directory exposes this fee
 model and links to the [CoW Protocol documentation](https://docs.cow.fi/cow-protocol).
 
-The catalog also includes Exnode, Dzengi, and BestChange. They are currently
-selectable venue entries with links and local icons; live route adapters are
-not enabled yet because their public quote endpoints require a site workflow
-or API credentials.
+CoW Swap and NEAR Intents are separate selectable exchanges. When selected,
+their quoted outputs are independent and can differ because each provider uses
+its own liquidity, execution costs, and fee model. The catalog also includes
+Exnode, Dzengi, and BestChange. They are
+currently selectable venue entries with links and local icons; live route
+adapters are not enabled yet because their public quote endpoints require a
+site workflow or API credentials.
 
 Provider capabilities live in
 [`backend/providers/*/Providerfile`](backend/providers/). They are compiled

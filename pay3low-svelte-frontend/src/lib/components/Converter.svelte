@@ -11,7 +11,8 @@
   type PickerSide = "source" | "target" | null;
   const REFRESH_OPTIONS: RefreshSeconds[] = [0, 5, 15, 30, 60, 300];
   type P2pSource = string;
-  type P2pSourceOption = { id: P2pSource; label: string; iconUrl: string; searchable: boolean; feeDescription?: string };
+  type ProviderSearchMode = "selectable" | "always_on" | "catalog_only";
+  type P2pSourceOption = { id: P2pSource; label: string; iconUrl: string; searchable: boolean; searchMode: ProviderSearchMode; feeDescription?: string };
   const INTERMEDIARY_ASSETS = CRYPTO_ASSETS.map(([currency]) => currency);
   const BANK_METHODS = PAYMENT_METHODS.filter((method) => method.kind === "bank");
   const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", sources: "pay3flow.exchange.p2p-sources", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets", anonymousId: "pay3flow.reputation.anonymous-id" };
@@ -36,6 +37,7 @@
   let exchangesOpen = false;
   let refreshSeconds: RefreshSeconds = 15;
   let p2pSources: P2pSourceOption[] = [];
+  let venueNames: Record<string, string> = {};
   let selectedSources: P2pSource[] = [];
   let selectedIntermediaryAssets: string[] = [];
   let searching = false;
@@ -108,8 +110,10 @@
     const sources = new Map<string, P2pSourceOption>();
     for (const provider of providers) {
       const existing = sources.get(provider.slug);
+      const searchMode = provider.search_mode ?? (provider.searchable ? "selectable" : "catalog_only");
       if (existing) {
         existing.searchable ||= provider.searchable;
+        if (searchMode === "always_on" || (searchMode === "selectable" && existing.searchMode === "catalog_only")) existing.searchMode = searchMode;
         existing.feeDescription ||= provider.fee_model?.description;
       } else {
         sources.set(provider.slug, {
@@ -117,6 +121,7 @@
           label: providerLabel(provider),
           iconUrl: venueIcon(provider.slug),
           searchable: provider.searchable,
+          searchMode,
           feeDescription: provider.fee_model?.description,
         });
       }
@@ -125,7 +130,7 @@
   }
 
   const sourceTitle = (source: P2pSourceOption) => {
-    const action = source.searchable ? `Search ${source.label}` : `Select ${source.label} (catalog-only)`;
+    const action = source.searchMode === "always_on" ? `Always compare ${source.label}` : source.searchable ? `Search ${source.label}` : `Select ${source.label} (catalog-only)`;
     return source.feeDescription ? `${action}. Fee model: ${source.feeDescription}` : action;
   };
 
@@ -134,12 +139,16 @@
     return response.routes.map((route, index) => {
     const entryOffer = route.entry_offer, exitOffer = route.exit_offer, targetAmount = Number(route.target_amount);
       const legs = route.route_provider
-        ? entryOffer
-          ? [
-              { kind: "entry" as const, from: route.source_fiat, to: entryOffer.asset, provider: entryOffer.source, status: "found" as const },
-              { kind: "exit" as const, from: entryOffer.asset, to: route.target_fiat, provider: route.route_provider, status: "found" as const },
-            ]
-          : [{ kind: "entry" as const, from: route.source_fiat, to: route.target_fiat, provider: route.route_provider, status: "found" as const }]
+        ? [
+            ...(entryOffer
+              ? [{ kind: "entry" as const, from: route.source_fiat, to: entryOffer.asset, provider: entryOffer.source, status: "found" as const }]
+              : [{ kind: "entry" as const, from: route.source_fiat, to: route.asset, provider: route.route_provider, status: "found" as const }]),
+            ...(exitOffer
+              ? [{ kind: "exit" as const, from: exitOffer.asset, to: route.target_fiat, provider: exitOffer.source, status: "found" as const }]
+              : entryOffer
+                ? [{ kind: "exit" as const, from: entryOffer.asset, to: route.target_fiat, provider: route.route_provider, status: "found" as const }]
+                : []),
+          ]
         : route.market_path
           ? [{ kind: "entry" as const, from: route.source_fiat, to: route.bridge_currency ?? route.target_fiat, provider: route.market_path.venue, status: "found" as const }, ...(route.bridge_currency ? [{ kind: "exit" as const, from: route.bridge_currency, to: route.target_fiat, provider: route.market_path.venue, status: "found" as const }] : [])]
           : [...(entryOffer ? [{ kind: "entry" as const, from: route.source_fiat, to: route.bridge_currency ?? route.asset, provider: entryOffer.source, status: "found" as const }] : []), ...(exitOffer ? [{ kind: "exit" as const, from: route.bridge_currency ?? route.asset, to: route.target_fiat, provider: exitOffer.source, status: "found" as const }] : [])];
@@ -182,9 +191,9 @@
     const nextRoutes = mapRoutes(response);
     const knownVenues = new Set(foundVenues.map((venue) => venue.id));
     const newlyFound = nextRoutes
-      .flatMap((route) => route.legs.map((leg) => leg.provider.toLowerCase()))
+      .flatMap((route) => [...route.legs.map((leg) => leg.provider.toLowerCase()), ...(route.route_provider ? [route.route_provider.toLowerCase()] : [])])
       .filter((venue, index, venues) => !knownVenues.has(venue) && venues.indexOf(venue) === index)
-      .map((venue) => p2pSources.find((item) => item.id === venue) ?? { id: venue, label: venue.charAt(0).toUpperCase() + venue.slice(1), iconUrl: venueIcon(venue), searchable: true });
+      .map((venue) => p2pSources.find((item) => item.id === venue) ?? { id: venue, label: venue.charAt(0).toUpperCase() + venue.slice(1), iconUrl: venueIcon(venue), searchable: true, searchMode: "selectable" as const });
     if (newlyFound.length) foundVenues = [...foundVenues, ...newlyFound];
     routesFound = response.routes_found ?? nextRoutes.length;
     routes = nextRoutes;
@@ -246,7 +255,9 @@
   $: previewRoute = selected ?? routes.find((route) => route.status === "complete" && route.is_current_best) ?? routes.find((route) => route.status === "complete") ?? null;
   $: secondsUntilRefresh = refreshSeconds && lastUpdatedAt ? Math.max(0, refreshSeconds - Math.floor((clock - lastUpdatedAt) / 1000)) : null;
   $: refreshProgress = secondsUntilRefresh !== null && refreshSeconds ? ((refreshSeconds - secondsUntilRefresh) / refreshSeconds) * 100 : 0;
-  $: searchingVenues = selectedSources.map((source) => p2pSources.find((item) => item.id === source) ?? { id: source, label: source, iconUrl: venueIcon(source), searchable: true });
+  $: exchangeChoices = p2pSources.filter((source) => source.searchMode !== "always_on");
+  $: alwaysOnProviders = p2pSources.filter((source) => source.searchMode === "always_on");
+  $: searchingVenues = [...new Set([...selectedSources, ...alwaysOnProviders.map((provider) => provider.id)])].map((source) => p2pSources.find((item) => item.id === source) ?? { id: source, label: source, iconUrl: venueIcon(source), searchable: true, searchMode: "selectable" as const });
   $: searchSignature = `${corridor?.id ?? ""}:${sourceMethod?.id ?? ""}:${sourceNetwork?.id ?? ""}:${targetMethod?.id ?? ""}:${targetNetwork?.id ?? ""}:${amount}:${selectedSources.join(",")}:${selectedIntermediaryAssets.join(",")}:${directionReversed}`;
   $: scheduleAutomaticSearch(searchSignature, preferencesLoaded, urlReady, hasAmount, initialSearchReady);
   $: manageRefresh(refreshSeconds, lastUpdatedAt, hasAmount);
@@ -433,9 +444,10 @@
     fetchNetworks().then((items) => { if (items.length) networks = items; }).catch(() => {});
     fetchProviders().then((providers) => {
       p2pSources = providerSources(providers);
+      venueNames = Object.fromEntries(p2pSources.map((provider) => [provider.id.toLowerCase(), provider.label]));
       const catalog = new Set(p2pSources.map((source) => source.id));
-      const live = p2pSources.filter((source) => source.searchable).map((source) => source.id);
-      const restored = [...new Set(savedSourceIds.filter((source) => catalog.has(source) && p2pSources.find((item) => item.id === source)?.searchable))];
+      const live = p2pSources.filter((source) => source.searchMode === "selectable").map((source) => source.id);
+      const restored = [...new Set(savedSourceIds.filter((source) => catalog.has(source) && p2pSources.find((item) => item.id === source)?.searchMode === "selectable"))];
       selectedSources = restored.length ? restored : live;
     }).catch((cause: Error) => error ??= cause.message);
     fetchCorridors().then((response) => {
@@ -499,7 +511,13 @@
                 <div class:settingsDragging class="settingsMenu exchangesMenu" bind:this={settingsDialog} role="dialog" aria-modal="true" aria-label="Exchange settings" tabindex="-1" on:mousedown|stopPropagation>
                   <div class="settingsModalHeader"><span class="settingsSheetHandle" aria-hidden="true" on:pointerdown={startSettingsDrag} on:pointermove={moveSettingsDrag} on:pointerup={endSettingsDrag} on:pointercancel={endSettingsDrag}></span><button type="button" class="settingsClose" on:click={closeSettings} aria-label="Close exchange settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button></div>
                   <div class="settingsHead"><div><strong>Search exchanges</strong><span>{selectedSources.length} selected</span></div></div>
-                  <div class="sourceOptions exchangeOptions exchangeModalOptions" aria-label="Exchanges to search">{#each p2pSources as source}{@const enabled = selectedSources.includes(source.id)}<button type="button" class:sourceOptionActive={enabled} class="sourceOption" aria-pressed={enabled} title={sourceTitle(source)} on:click={() => toggleSource(source.id)}><span class="sourceOptionIcon" aria-hidden="true"><img src={source.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackSourceIcon(event, source.id)} /></span>{source.label}</button>{/each}</div>
+                  <div class="sourceOptions exchangeOptions exchangeModalOptions" aria-label="Exchanges to search">{#each exchangeChoices as source}{@const enabled = selectedSources.includes(source.id)}<button type="button" class:sourceOptionActive={enabled} class="sourceOption" aria-pressed={enabled} title={sourceTitle(source)} on:click={() => toggleSource(source.id)}><span class="sourceOptionIcon" aria-hidden="true"><img src={source.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackSourceIcon(event, source.id)} /></span>{source.label}</button>{/each}</div>
+                  {#if alwaysOnProviders.length}
+                    <div class="alwaysOnProviders" aria-label="Direct quote providers">
+                      <div class="alwaysOnHeading"><strong>Direct quote providers</strong><span>Compared automatically</span></div>
+                      <div class="sourceOptions exchangeOptions">{#each alwaysOnProviders as provider}<div class="sourceOption alwaysOnProvider" title={sourceTitle(provider)}><span class="sourceOptionIcon" aria-hidden="true"><img src={provider.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackSourceIcon(event, provider.id)} /></span><span>{provider.label}</span><small>Always on</small></div>{/each}</div>
+                    </div>
+                  {/if}
                 </div>
               </div>
             {/if}
@@ -545,11 +563,11 @@
       <button type="button" class="cta" disabled={!hasAmount || (!previewRoute && (searching || !corridor))} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? "Open swap instructions" : "Find routes"}>{#if previewRoute}Swap <span>↗</span>{:else if searching}<span class="spinner"></span> Finding routes{:else if hasAmount}Find routes <span>↗</span>{:else}Enter an amount to begin{/if}</button>
       {#if error}<div class="errorBox" role="alert">{error}</div>{/if}
     </div>
-    <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {searchingVenues} {foundVenues} searched={lastUpdatedAt !== null} {hasAmount} />
+    <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {searchingVenues} {foundVenues} {venueNames} searched={lastUpdatedAt !== null} {hasAmount} />
   </div>
   {#if paymentPickerComponent}<svelte:component this={paymentPickerComponent} open={methodPicker === "source"} title="Choose where you pay from" role="sender" {networks} selected={sourceMethod} selectedNetwork={sourceNetwork} onClose={() => methodPicker = null} onSelect={chooseSource} /><svelte:component this={paymentPickerComponent} open={methodPicker === "target"} title="Choose where the recipient gets paid" role="recipient" {networks} selected={targetMethod} selectedNetwork={targetNetwork} onClose={() => methodPicker = null} onSelect={chooseTarget} />{/if}
   {#if networkPickerComponent}<svelte:component this={networkPickerComponent} open={networkPicker !== null} networks={networkPicker === "source" ? sourceNetworks : targetNetworks} selected={networkPicker === "source" ? sourceNetwork : targetNetwork} onClose={() => networkPicker = null} onSelect={selectNetwork} />{/if}
-  {#if routeInstructionsComponent && instructionsRoute}<svelte:component this={routeInstructionsComponent} route={instructionsRoute} onOpenService={openService} onClose={() => instructionsRoute = null} />{/if}
+  {#if routeInstructionsComponent && instructionsRoute}<svelte:component this={routeInstructionsComponent} route={instructionsRoute} {venueNames} onOpenService={openService} onClose={() => instructionsRoute = null} />{/if}
 </section>
 
 <style>
@@ -878,6 +896,44 @@
 
 .exchangeModalOptions {
   margin-top: 14px;
+}
+
+.alwaysOnProviders {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-border);
+}
+
+.alwaysOnHeading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.alwaysOnHeading strong {
+  font-size: 11px;
+}
+
+.alwaysOnHeading span {
+  color: var(--color-text-faint);
+  font-size: 9px;
+}
+
+.exchangeOptions .alwaysOnProvider {
+  justify-content: flex-start;
+  background: rgba(45, 142, 69, 0.07);
+  color: var(--color-text);
+}
+
+.alwaysOnProvider small {
+  margin-left: auto;
+  color: var(--color-good);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .intermediaryOptions {

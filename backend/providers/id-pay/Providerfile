@@ -1,0 +1,152 @@
+# ID Pay publishes the current AMD-per-RUB rate in the server-rendered data on
+# its public homepage. The provider supports direct transfers in both
+# directions; it is not modeled as a crypto or P2P intermediary.
+
+[code]
+language = "rust"
+source = '''
+use std::time::Duration;
+
+use anyhow::{bail, Context, Result};
+use async_trait::async_trait;
+use reqwest::Client;
+
+use crate::p2p::{FiatRouteQuote, PublicFiatRouteProvider};
+
+const SOURCE_URL: &str = "https://id-pay.ru/";
+
+#[derive(Clone)]
+pub struct IdPayRouteProvider {
+    client: Client,
+}
+
+impl IdPayRouteProvider {
+    pub fn new() -> Result<Self> {
+        let client = Client::builder()
+            .timeout(Duration::from_secs(15))
+            .user_agent("Pay3Flow-ID-Pay/0.1")
+            .build()
+            .context("failed to build ID Pay client")?;
+        Ok(Self { client })
+    }
+
+    fn parse_amd_rate(page: &str) -> Result<f64> {
+        let escaped = "\\\"amdRate\\\":\\\"";
+        let plain = "\"amdRate\":\"";
+        let value = if let Some(tail) = page.split_once(escaped).map(|(_, tail)| tail) {
+            tail.split("\\\"").next()
+        } else if let Some(tail) = page.split_once(plain).map(|(_, tail)| tail) {
+            tail.split('"').next()
+        } else {
+            None
+        }
+        .context("ID Pay page did not include amdRate")?;
+        let rate = value.parse::<f64>().context("invalid ID Pay amdRate")?;
+        if !rate.is_finite() || rate <= 0.0 {
+            bail!("ID Pay amdRate must be positive");
+        }
+        Ok(rate)
+    }
+
+    fn convert(source_currency: &str, target_currency: &str, amount: f64, amd_rate: f64) -> Result<f64> {
+        match (
+            source_currency.to_ascii_uppercase().as_str(),
+            target_currency.to_ascii_uppercase().as_str(),
+        ) {
+            ("RUB", "AMD") => Ok(amount * amd_rate),
+            ("AMD", "RUB") => Ok(amount / amd_rate),
+            _ => bail!("ID Pay supports only AMD/RUB direct transfers"),
+        }
+    }
+}
+
+#[async_trait]
+impl PublicFiatRouteProvider for IdPayRouteProvider {
+    fn name(&self) -> &str {
+        "id-pay"
+    }
+
+    fn supports_pair(&self, source_currency: &str, target_currency: &str) -> bool {
+        matches!(
+            (
+                source_currency.to_ascii_uppercase().as_str(),
+                target_currency.to_ascii_uppercase().as_str(),
+            ),
+            ("RUB", "AMD") | ("AMD", "RUB")
+        )
+    }
+
+    async fn quote(
+        &self,
+        source_currency: &str,
+        target_currency: &str,
+        source_amount: f64,
+    ) -> Result<FiatRouteQuote> {
+        if !source_amount.is_finite() || source_amount <= 0.0 {
+            bail!("ID Pay source amount must be positive");
+        }
+        if !self.supports_pair(source_currency, target_currency) {
+            bail!("ID Pay supports only AMD/RUB direct transfers");
+        }
+        let page = self
+            .client
+            .get(SOURCE_URL)
+            .send()
+            .await
+            .context("fetch ID Pay rate page")?
+            .error_for_status()
+            .context("fetch ID Pay rate page")?
+            .text()
+            .await
+            .context("read ID Pay rate page")?;
+        let amd_rate = Self::parse_amd_rate(&page)?;
+        let target_amount = Self::convert(
+            source_currency,
+            target_currency,
+            source_amount,
+            amd_rate,
+        )?;
+        Ok(FiatRouteQuote {
+            provider: self.name().into(),
+            source_url: SOURCE_URL.into(),
+            source_currency: source_currency.to_ascii_uppercase(),
+            target_currency: target_currency.to_ascii_uppercase(),
+            source_amount,
+            target_amount,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_server_rendered_rate_and_converts_both_directions() {
+        let rate = IdPayRouteProvider::parse_amd_rate(
+            r#"<script>\"rates\":{\"amdRate\":\"4.2269\"}</script>"#,
+        )
+        .unwrap();
+        assert_eq!(rate, 4.2269);
+        assert!((IdPayRouteProvider::convert("RUB", "AMD", 100.0, rate).unwrap() - 422.69).abs() < 0.000001);
+        assert!((IdPayRouteProvider::convert("AMD", "RUB", 422.69, rate).unwrap() - 100.0).abs() < 0.000001);
+    }
+}
+'''
+
+[buy]
+source_url = "https://id-pay.ru/"
+name = "ID Pay Buy"
+currency = ["amd", "rub"]
+banks = []
+
+[sell]
+source_url = "https://id-pay.ru/"
+name = "ID Pay Sell"
+currency = ["amd", "rub"]
+banks = []
+
+[fees]
+kind = "quote_dependent"
+description = "ID Pay advertises commission-free transfers for supported corridors; confirm the live rate and any card or bank charges before sending."
+docs_url = "https://id-pay.ru/tariff/"

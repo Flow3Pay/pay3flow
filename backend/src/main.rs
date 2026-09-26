@@ -5,6 +5,7 @@ use pay3flow_backend::config::Config;
 use pay3flow_backend::core::jwt::Jwt;
 use pay3flow_backend::core::state::AppState;
 use pay3flow_backend::db;
+use pay3flow_backend::p2p::{IdPayRouteProvider, PublicFiatRouteProvider};
 use pay3flow_backend::payments::rates::Rates;
 use pay3flow_backend::payments::service::{PaymentConfig, PaymentService};
 use pay3flow_backend::route_engine::{
@@ -104,12 +105,15 @@ async fn main() -> anyhow::Result<()> {
     )? {
         public_route_providers.push(Arc::new(cow));
     }
+    let public_fiat_route_providers: Vec<Arc<dyn PublicFiatRouteProvider>> =
+        vec![Arc::new(IdPayRouteProvider::new()?)];
     let network_catalog = pay3flow_backend::networks::NetworkCatalog::load(&pool).await?;
     let p2p = pay3flow_backend::p2p::P2pSearchService::from_database(
         &cfg,
         network_catalog,
         &pool,
         public_route_providers,
+        public_fiat_route_providers,
     )
     .await?;
     let route_engine = RouteEngine::new(RouteGraphConfig {

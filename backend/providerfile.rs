@@ -15,6 +15,14 @@ struct RawProviderFile {
     adapter: Option<ProviderAdapters>,
     workflow: Option<WorkflowConfig>,
     fees: Option<ProviderFeeModel>,
+    code: Option<RawCodeBlock>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawCodeBlock {
+    language: String,
+    source: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -79,6 +87,13 @@ pub fn parse(
         return Err(ProviderFileError(format!(
             "{source_file}: at least one [buy] or [sell] section is required"
         )));
+    }
+    if let Some(code) = &raw.code {
+        if code.language != "rust" || code.source.trim().is_empty() {
+            return Err(ProviderFileError(format!(
+                "{source_file}: [code] requires language = \"rust\" and non-empty source"
+            )));
+        }
     }
 
     if let Some(adapter) = &raw.adapter {
@@ -446,6 +461,19 @@ description = "The fee is returned by the quote."
 docs_url = "https://provider.example/docs/fees"
 "#;
 
+    const CODE_EXAMPLE: &str = r#"
+[code]
+language = "rust"
+source = '''
+pub struct ExampleRouteProvider;
+'''
+
+[sell]
+source_url = "https://provider.example"
+name = "Example Sell"
+currency = ["eth"]
+"#;
+
     #[test]
     fn parses_and_normalizes_the_documented_shape() {
         let definitions = parse(EXAMPLE, "example", "example/Providerfile").unwrap();
@@ -466,6 +494,27 @@ docs_url = "https://provider.example/docs/fees"
     #[test]
     fn accepts_a_declarative_http_json_adapter() {
         assert!(parse(HTTP_JSON_EXAMPLE, "example", "example/Providerfile").is_ok());
+    }
+
+    #[test]
+    fn accepts_compile_time_rust_code() {
+        assert!(parse(CODE_EXAMPLE, "example", "example/Providerfile").is_ok());
+    }
+
+    #[test]
+    fn rejects_unsupported_or_empty_code() {
+        assert!(parse(
+            &CODE_EXAMPLE.replace("language = \"rust\"", "language = \"javascript\""),
+            "example",
+            "example/Providerfile",
+        )
+        .is_err());
+        assert!(parse(
+            &CODE_EXAMPLE.replace("pub struct ExampleRouteProvider;", ""),
+            "example",
+            "example/Providerfile",
+        )
+        .is_err());
     }
 
     #[test]
@@ -508,6 +557,9 @@ docs_url = "https://provider.example/docs/fees"
 
         assert!(sql.contains("'whitebird'"));
         assert!(sql.contains("'binance'"));
+        assert!(sql.contains("'cow-swap'"));
+        assert!(sql.contains("'near-intents'"));
+        assert!(sql.contains("'id-pay'"));
         assert!(sql.contains("workflow"));
     }
 }
