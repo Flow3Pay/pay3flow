@@ -209,7 +209,9 @@ module Pay3flow
       puts "Deploying Pay3Flow #{revision} as #{image_tag} to #{remote}/#{namespace}"
       run!(*ssh, remote, "test -d #{release_name} || mkdir -m 0750 #{release_name}")
 
-      rsync_ssh = Shellwords.join(ssh)
+      # rsync parses -e itself rather than through a shell, so shell-escaped
+      # equals signs (for example BatchMode\=yes) are treated literally.
+      rsync_ssh = ssh.join(" ")
       run!(
         "rsync", "-az", "--delete",
         "--exclude=.git/", "--exclude=backend/.env",
