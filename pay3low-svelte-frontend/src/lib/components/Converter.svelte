@@ -7,9 +7,9 @@
   import { locale, t } from "$lib/i18n";
   import SidePanel from "./SidePanel.svelte";
 
-  type RefreshSeconds = 0 | 5 | 15 | 30 | 60;
+  type RefreshSeconds = 0 | 5 | 15 | 30 | 60 | 300;
   type PickerSide = "source" | "target" | null;
-  const REFRESH_OPTIONS: RefreshSeconds[] = [0, 5, 15, 30, 60];
+  const REFRESH_OPTIONS: RefreshSeconds[] = [0, 5, 15, 30, 60, 300];
   type P2pSource = string;
   type P2pSourceOption = { id: P2pSource; label: string; iconUrl: string; searchable: boolean; feeDescription?: string };
   const INTERMEDIARY_ASSETS = CRYPTO_ASSETS.map(([currency]) => currency);
@@ -33,6 +33,7 @@
   let targetNetworkId = FALLBACK_NETWORK.id;
   let networkPicker: PickerSide = null;
   let settingsOpen = false;
+  let exchangesOpen = false;
   let refreshSeconds: RefreshSeconds = 15;
   let p2pSources: P2pSourceOption[] = [];
   let selectedSources: P2pSource[] = [];
@@ -67,6 +68,7 @@
   let searchingVenues: P2pSourceOption[] = [];
   let foundVenues: P2pSourceOption[] = [];
   $: activeLocale = $locale;
+  $: modalOpen = settingsOpen || exchangesOpen;
 
   function readSharedExchange() {
     const match = window.location.hash.match(/^#\/swap\/([^/?#]+)\/([^/?#]+)(?:\?([^#]*))?$/i);
@@ -85,6 +87,7 @@
   const amountNumber = (value: string) => Number(normalizeAmount(value).replace(",", "."));
   const CRYPTO_CURRENCIES: Set<string> = new Set(CRYPTO_ASSETS.map(([currency]) => currency));
   const amountFromMinor = (minor?: number) => minor == null ? "0" : (minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2, useGrouping: false });
+  const refreshOptionLabel = (seconds: RefreshSeconds) => seconds === 0 ? "Off" : seconds < 60 ? `${seconds}s` : `${seconds / 60}m`;
   const amountFromRoute = (route?: RouteCandidate | null) => {
     if (!route) return "0";
     if (route.target_amount && CRYPTO_CURRENCIES.has(route.target_currency?.toUpperCase() ?? "")) {
@@ -369,8 +372,8 @@
   }
   function toggleSource(source: P2pSource) { initialSearchReady = true; selectedSources = selectedSources.includes(source) ? (selectedSources.length === 1 ? selectedSources : selectedSources.filter((item) => item !== source)) : [...selectedSources, source]; resetResults(); }
   function toggleAsset(asset: string) { initialSearchReady = true; selectedIntermediaryAssets = selectedIntermediaryAssets.includes(asset) ? selectedIntermediaryAssets.filter((item) => item !== asset) : [...selectedIntermediaryAssets, asset]; resetResults(); }
-  function onDocumentMouseDown(event: MouseEvent) { if (settingsOpen && settingsElement && !settingsElement.contains(event.target as Node)) settingsOpen = false; }
-  function closeSettings() { settingsOpen = false; }
+  function onDocumentMouseDown(event: MouseEvent) { if (modalOpen && settingsElement && !settingsElement.contains(event.target as Node)) closeSettings(); }
+  function closeSettings() { settingsOpen = false; exchangesOpen = false; }
   function onSettingsKeyDown(event: KeyboardEvent) { if (event.key === "Escape") closeSettings(); }
   function startSettingsDrag(event: PointerEvent) {
     if (!window.matchMedia("(max-width: 640px)").matches) return;
@@ -446,17 +449,17 @@
     clockTimer = window.setInterval(() => clock = Date.now(), 1000);
   });
   afterUpdate(() => {
-    if (settingsOpen === settingsWasOpen) return;
-    settingsWasOpen = settingsOpen;
-    if (settingsOpen) {
+    if (modalOpen === settingsWasOpen) return;
+    settingsWasOpen = modalOpen;
+    if (modalOpen) {
       settingsScrollLocked = window.matchMedia("(max-width: 640px)").matches;
       if (settingsScrollLocked) {
         previousOverflow = document.body.style.overflow;
         previousOverscrollBehavior = document.body.style.overscrollBehavior;
         document.body.style.overflow = "hidden";
         document.body.style.overscrollBehavior = "none";
-        window.addEventListener("keydown", onSettingsKeyDown);
       }
+      window.addEventListener("keydown", onSettingsKeyDown);
     } else {
       if (settingsScrollLocked) {
         document.body.style.overflow = previousOverflow;
@@ -487,17 +490,28 @@
     <div class="card">
       <div class="cardTop">
         <div class="modeTabs" aria-label={t("Exchange mode", {}, activeLocale)}><button type="button" class="modeActive">{t("Bridge", {}, activeLocale)}</button><button type="button" disabled>{t("History", {}, activeLocale)}</button></div>
-        <div class="cardActions">
+        <div class="cardActions" bind:this={settingsElement}>
           <button type="button" class="refreshButton" on:click={startSearch} disabled={!hasAmount || searching} aria-label="Refresh routes now"><svg class:refreshSpin={awaitingFirstRoute} width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M16.2 7.1A6.8 6.8 0 1 0 16.7 12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /><path d="M13.1 3.8h3.6v3.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
-          <div class="settingsWrap" bind:this={settingsElement}>
-            <button type="button" class="settingsButton" on:click={() => settingsOpen = !settingsOpen} aria-haspopup="dialog" aria-expanded={settingsOpen} aria-label="Route refresh settings"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 6.8a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4Z" stroke="currentColor" stroke-width="1.6" /><path d="M16.2 11.3a6.5 6.5 0 0 0 0-2.6l1.5-1.1-1.8-3.1-1.8.8a6.7 6.7 0 0 0-2.2-1.3L11.7 2H8.3L8 4a6.7 6.7 0 0 0-2.2 1.3L4 4.5 2.2 7.6l1.5 1.1a6.5 6.5 0 0 0 0 2.6l-1.5 1.1L4 15.5l1.8-.8A6.7 6.7 0 0 0 8 16l.3 2h3.4l.3-2a6.7 6.7 0 0 0 2.2-1.3l1.8.8 1.8-3.1-1.6-1.1Z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
+          <div class="settingsWrap">
+            <button type="button" class="exchangesButton" on:click={() => { settingsOpen = false; exchangesOpen = !exchangesOpen; }} aria-haspopup="dialog" aria-expanded={exchangesOpen} aria-label="Choose exchanges"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAACn0lEQVR4AbSVy0sVURzHZ9q0KcigiIyKrgUZRBS0SSgXLUKMIjAkEIKICHrgQqFF6tJFFEgXiqJNUemi6AGCyBVU0JWuBFHxgS8QUfAPuH6+xznHGe8493pF+X3O7/x+5/c4c+aecZ+3x38FN8hms/vhPnyCL3CrkL3lbUChCnhDsRH4ASm4B1/xX0QnSmwDEs9APfSSLe6gf0KZ7/uV6NtwGCogUSINKHgFtEvt9jWZk1Dt+34KXsEEtofukYajkCiuAYW1q06iD8ILUNE6iv1jXrS4BlR4AhkKVsEHWMbetZgG7L6MSvpVdDH/A5OQKMRLmkJBylGufgRaM5gGzE6A5CNDNQxASx46WP8MNk45yh2n6Un8RmwDYwTDcY6nFprzUMP6I7BxteTXgCStQdgGx2RAmoQFdFFCrp6qnuQqnuI02tvaYExOQUAjTEMmBvkbFRfDUOCLNAh8xSk2kII0rFDhF0huarBP8E0GWK3L1Mojn4LKGORvJd6jqG70MHP9zFFGVhmfsVZqGlBgCXycR3A+Ru9E6gg+AO+oUSKY3wVd2LOmAYZ2Uo7+Dy9pciPEOXxJYj4fBFyGHHENWOkHvZjz6EyIUZrJxpUr7PgvXv3yrhO3IrD1HtbQY+EG13BMBeiLadFF0hNdYm070ZG0hRYPMW+j+Vy4AT6vgaGBhR4Ltv1yKgkzV4gdhOdQwuoDkOjJ3D2Q4z3DU4J0WZg6mWVmGqILkatBkE4j0iDwbyrOsxlLl89dfextJYhvIuAtG11ERxp8x6GzJm5DsBWM8trx6F9nOTruZss3Q6Di5ymuzwWmF2nQjkcvSy/VYo9rhKQ+1pOkm8UW4krRTtxLZmEVfoP9Oup4dFs78F1QBlqN4m62fA9ZV45CHesAAAD//3Y7g4QAAAAGSURBVAMAao5eF665v54AAAAASUVORK5CYII=" alt="" width="18" height="18" aria-hidden="true" /></button>
+            {#if exchangesOpen}
+              <div class="settingsBackdrop" on:mousedown={closeSettings} role="presentation">
+                <div class:settingsDragging class="settingsMenu exchangesMenu" bind:this={settingsDialog} role="dialog" aria-modal="true" aria-label="Exchange settings" tabindex="-1" on:mousedown|stopPropagation>
+                  <div class="settingsModalHeader"><span class="settingsSheetHandle" aria-hidden="true" on:pointerdown={startSettingsDrag} on:pointermove={moveSettingsDrag} on:pointerup={endSettingsDrag} on:pointercancel={endSettingsDrag}></span><button type="button" class="settingsClose" on:click={closeSettings} aria-label="Close exchange settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button></div>
+                  <div class="settingsHead"><div><strong>Search exchanges</strong><span>{selectedSources.length} selected</span></div></div>
+                  <div class="sourceOptions exchangeOptions exchangeModalOptions" aria-label="Exchanges to search">{#each p2pSources as source}{@const enabled = selectedSources.includes(source.id)}<button type="button" class:sourceOptionActive={enabled} class="sourceOption" aria-pressed={enabled} title={sourceTitle(source)} on:click={() => toggleSource(source.id)}><span class="sourceOptionIcon" aria-hidden="true"><img src={source.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackSourceIcon(event, source.id)} /></span>{source.label}</button>{/each}</div>
+                </div>
+              </div>
+            {/if}
+          </div>
+          <div class="settingsWrap">
+            <button type="button" class="settingsButton" on:click={() => { exchangesOpen = false; settingsOpen = !settingsOpen; }} aria-haspopup="dialog" aria-expanded={settingsOpen} aria-label="Route refresh settings"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 6.8a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4Z" stroke="currentColor" stroke-width="1.6" /><path d="M16.2 11.3a6.5 6.5 0 0 0 0-2.6l1.5-1.1-1.8-3.1-1.8.8a6.7 6.7 0 0 0-2.2-1.3L11.7 2H8.3L8 4a6.7 6.7 0 0 0-2.2 1.3L4 4.5 2.2 7.6l1.5 1.1a6.5 6.5 0 0 0 0 2.6l-1.5 1.1L4 15.5l1.8-.8A6.7 6.7 0 0 0 8 16l.3 2h3.4l.3-2a6.7 6.7 0 0 0 2.2-1.3l1.8.8 1.8-3.1-1.6-1.1Z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
             {#if settingsOpen}
               <div class="settingsBackdrop" on:mousedown={closeSettings} role="presentation">
                 <div class:settingsDragging class="settingsMenu" bind:this={settingsDialog} role="dialog" aria-modal="true" aria-label="Refresh settings" tabindex="-1" on:mousedown|stopPropagation>
                 <div class="settingsModalHeader"><span class="settingsSheetHandle" aria-hidden="true" on:pointerdown={startSettingsDrag} on:pointermove={moveSettingsDrag} on:pointerup={endSettingsDrag} on:pointercancel={endSettingsDrag}></span><button type="button" class="settingsClose" on:click={closeSettings} aria-label="Close route settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button></div>
                 <div class="settingsHead"><div><strong>Auto-refresh</strong><span>Keep market routes current</span></div><span class={refreshSeconds ? "onBadge" : "offBadge"}>{refreshSeconds ? "On" : "Off"}</span></div>
-                <div class="refreshOptions">{#each REFRESH_OPTIONS as seconds}<button type="button" aria-pressed={refreshSeconds === seconds} on:click={() => { refreshSeconds = seconds; settingsOpen = false; }}>{seconds === 0 ? "Off" : `${seconds}s`}</button>{/each}</div>
-                <div class="sourceSettings"><span class="sourceSettingsLabel">Search exchanges</span><div class="sourceOptions exchangeOptions" aria-label="Exchanges to search">{#each p2pSources as source}{@const enabled = selectedSources.includes(source.id)}<button type="button" class:sourceOptionActive={enabled} class="sourceOption" aria-pressed={enabled} title={sourceTitle(source)} on:click={() => toggleSource(source.id)}><span class="sourceOptionIcon" aria-hidden="true"><img src={source.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackSourceIcon(event, source.id)} /></span>{source.label}</button>{/each}</div></div>
+                <div class="refreshOptions">{#each REFRESH_OPTIONS as seconds}<button type="button" aria-pressed={refreshSeconds === seconds} on:click={() => { refreshSeconds = seconds; settingsOpen = false; }}>{refreshOptionLabel(seconds)}</button>{/each}</div>
                 <div class="sourceSettings"><div class="intermediarySettingsHead"><span class="sourceSettingsLabel">Cryptocurrency intermediary</span><small>{selectedIntermediaryAssets.length ? `${selectedIntermediaryAssets.length} selected` : "All available"}</small></div><div class="sourceOptions intermediaryOptions" aria-label="Cryptocurrency intermediaries">
                   <button type="button" class:sourceOptionActive={selectedIntermediaryAssets.length === 0} class="sourceOption" aria-pressed={selectedIntermediaryAssets.length === 0} on:click={() => { selectedIntermediaryAssets = []; resetResults(); }}>All available</button>
                   {#each INTERMEDIARY_ASSETS as asset}{@const enabled = selectedIntermediaryAssets.includes(asset)}<button type="button" class:sourceOptionActive={enabled} class="sourceOption" aria-pressed={enabled} on:click={() => toggleAsset(asset)}><span class="intermediaryAssetIcon" aria-hidden="true"><img src={intermediaryIcon(asset)} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={fallbackAssetIcon} /></span>{asset}</button>{/each}
@@ -687,6 +701,7 @@
 }
 
 .refreshButton,
+.exchangesButton,
 .settingsButton {
   display: grid;
   width: 39px;
@@ -699,6 +714,7 @@
 }
 
 .refreshButton:hover:not(:disabled),
+.exchangesButton:hover,
 .settingsButton:hover {
   border-color: var(--color-border);
   background: var(--color-panel);
@@ -707,6 +723,13 @@
 .refreshButton:disabled {
   cursor: not-allowed;
   opacity: 0.36;
+}
+
+.exchangesButton img {
+  display: block;
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
 }
 
 .refreshSpin {
@@ -796,7 +819,7 @@
 
 .refreshOptions {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 5px;
   margin: 17px 0 13px;
 }
@@ -851,6 +874,10 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
+}
+
+.exchangeModalOptions {
+  margin-top: 14px;
 }
 
 .intermediaryOptions {
@@ -1714,6 +1741,7 @@
 }
 
 .refreshButton,
+.exchangesButton,
 .settingsButton {
   width: 32px;
   height: 32px;
@@ -2181,6 +2209,7 @@
 }
 
 :global(html[data-theme="dark"]) .refreshButton:hover:not(:disabled),
+:global(html[data-theme="dark"]) .exchangesButton:hover,
 :global(html[data-theme="dark"]) .settingsButton:hover {
   background: #292929;
 }
