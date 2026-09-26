@@ -19,7 +19,7 @@ endpoint = "https://api.skylabs.world/api/rate/all"
 method = "GET"
 headers = { Origin = "https://skylabs.world", Referer = "https://skylabs.world/" }
 timeout_ms = 5000
-supported_assets = ["BTC", "ETH", "USDT", "BNB", "TRX", "USDC", "TON", "LTC", "MATIC"]
+supported_assets = ["BTC", "ETH", "USDT", "BNB", "TRX", "USDC", "TON", "LTC", "MATIC", "SOL"]
 default_min_fiat = 1
 default_max_fiat = 1000000000
 default_available_asset = 1000000000
@@ -40,6 +40,9 @@ price_pointer = "/result"
 merchant_default = true
 verified_default = true
 source_url_template = "https://skylabs.world/#rates"
+
+[adapter.p2p.offer.network_by_asset]
+SOL = "solana"
 
 [fees]
 kind = "quote_dependent"

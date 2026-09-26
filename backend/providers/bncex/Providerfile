@@ -31,6 +31,9 @@ timeout_ms = 5000
 [adapter.p2p.buy]
 amount_mode = "fiat_probe"
 request_json = '''{"type":"BUY_{{asset}}","network":"TRC20","paymentMethod":"NON_CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}'''
+request_json_variants = [
+    '''{"type":"BUY_{{asset}}","network":"SOLANA","paymentMethod":"NON_CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}'''
+]
 
 [adapter.p2p.buy.offer]
 fiat_amount_pointer = "/amountAmd"
@@ -44,6 +47,9 @@ source_url_template = "https://www.bncex.com/en"
 [adapter.p2p.sell]
 amount_mode = "asset_probe"
 request_json = '''{"type":"SELL_{{asset}}","network":"TRC20","paymentMethod":"NON_CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}'''
+request_json_variants = [
+    '''{"type":"SELL_{{asset}}","network":"SOLANA","paymentMethod":"NON_CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}'''
+]
 
 [adapter.p2p.sell.offer]
 fiat_amount_pointer = "/amountAmd"

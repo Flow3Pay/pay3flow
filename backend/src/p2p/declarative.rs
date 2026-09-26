@@ -100,6 +100,7 @@ impl DeclarativeP2pSource {
             .unwrap_or(remote_asset);
         let network = optional_string(item, mapping.network_pointer.as_deref())
             .or_else(|| mapping.network.clone())
+            .or_else(|| mapping.network_by_asset.get(&query.asset).cloned())
             .map(|network| canonical_network_id(&network));
         let operation = self.operation(query.side)?;
         let input_amount = self.template_values(query, operation)?.amount;
@@ -335,27 +336,27 @@ impl P2pSource for DeclarativeP2pSource {
                 .unwrap_or(&self.config.endpoint),
             &values,
         );
-        let response = send_json(
-            &self.client,
-            &self.config.method,
-            &endpoint,
-            &self.config.headers,
-            self.config.auth.as_ref(),
-            &operation.query,
-            operation.request_json.as_deref(),
-            &values,
-            &self.slug,
-        )
-        .await?;
-        validate_response(
-            &response,
-            operation.success_pointer.as_deref(),
-            operation.success_value.as_deref(),
-            operation.success_missing_allowed,
-            operation.error_pointer.as_deref(),
-            &self.slug,
-        )?;
         if let Some(table) = &self.config.rate_table {
+            let response = send_json(
+                &self.client,
+                &self.config.method,
+                &endpoint,
+                &self.config.headers,
+                self.config.auth.as_ref(),
+                &operation.query,
+                operation.request_json.as_deref(),
+                &values,
+                &self.slug,
+            )
+            .await?;
+            validate_response(
+                &response,
+                operation.success_pointer.as_deref(),
+                operation.success_value.as_deref(),
+                operation.success_missing_allowed,
+                operation.error_pointer.as_deref(),
+                &self.slug,
+            )?;
             return self
                 .rate_table_offer(&response, query, table)
                 .map(|offer| offer.into_iter().collect());
@@ -365,11 +366,48 @@ impl P2pSource for DeclarativeP2pSource {
             .as_ref()
             .or(self.config.offer.as_ref())
             .ok_or_else(|| anyhow!("{} has no offer mapping for this operation", self.slug))?;
-        response_items(&response, operation.items_pointer.as_deref())?
-            .into_iter()
-            .take(query.fetch_limit())
-            .map(|item| self.into_offer(item, query, mapping))
-            .collect()
+        let request_templates = operation
+            .request_json
+            .iter()
+            .chain(operation.request_json_variants.iter())
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        let request_templates = if request_templates.is_empty() {
+            vec![None]
+        } else {
+            request_templates.into_iter().map(Some).collect()
+        };
+        let mut offers = Vec::new();
+        for request_json in request_templates {
+            let response = send_json(
+                &self.client,
+                &self.config.method,
+                &endpoint,
+                &self.config.headers,
+                self.config.auth.as_ref(),
+                &operation.query,
+                request_json,
+                &values,
+                &self.slug,
+            )
+            .await?;
+            validate_response(
+                &response,
+                operation.success_pointer.as_deref(),
+                operation.success_value.as_deref(),
+                operation.success_missing_allowed,
+                operation.error_pointer.as_deref(),
+                &self.slug,
+            )?;
+            offers.extend(
+                response_items(&response, operation.items_pointer.as_deref())?
+                    .into_iter()
+                    .take(query.fetch_limit())
+                    .map(|item| self.into_offer(item, query, mapping))
+                    .collect::<Result<Vec<_>>>()?,
+            );
+        }
+        Ok(offers)
     }
 }
 
@@ -1169,6 +1207,44 @@ mod tests {
         assert_eq!(body["network"], "TRC20");
         assert_eq!(body["paymentMethod"], "NON_CASH");
         assert_eq!(body["amountAmd"].as_f64(), Some(250_000.0));
+
+        let solana_template = operation.request_json_variants.first().unwrap();
+        let mut solana_body: Value = serde_json::from_str(solana_template).unwrap();
+        render_request_json(&mut solana_body, &values).unwrap();
+        assert_eq!(solana_body["type"], "BUY_USDC");
+        assert_eq!(solana_body["network"], "SOLANA");
+        assert_eq!(solana_body["amountAmd"].as_f64(), Some(250_000.0));
+    }
+
+    #[test]
+    fn maps_bncex_solana_quote_to_a_solana_offer() {
+        let source = bncex_source();
+        let response: Value = serde_json::from_str(
+            r#"{"token":"USDT","type":"BUY_USDT","network":"SOLANA","paymentMethod":"NON_CASH","amountAmd":100000,"amountUsdt":267.0914396,"rate":365.5,"networkFeeApplied":2.5,"exchangeFeePercentageApplied":1.5}"#,
+        )
+        .unwrap();
+        let query = P2pSearchQuery {
+            fiat: "AMD".into(),
+            asset: "USDT".into(),
+            side: P2pSide::BuyCrypto,
+            amount: Some(100_000.0),
+            payment_method: None,
+            merchant_only: None,
+            min_orders: None,
+            min_completion_rate: None,
+            limit: Some(1),
+            sources: Some("bncex".into()),
+        };
+        let offer = source
+            .into_offer(
+                &response,
+                &query,
+                source.config.buy.as_ref().unwrap().offer.as_ref().unwrap(),
+            )
+            .unwrap();
+
+        assert_eq!(offer.network.as_deref(), Some("solana"));
+        assert_eq!(offer.asset, "USDT");
     }
 
     #[test]
@@ -1349,6 +1425,45 @@ mod tests {
         assert_eq!(offer.price, "365.5");
         assert_eq!(offer.advertiser.user_type.as_deref(), Some("service"));
         assert_eq!(offer.source_url, "https://skylabs.world/#rates");
+    }
+
+    #[test]
+    fn maps_skylabs_sol_rate_to_a_solana_offer() {
+        let source = skylabs_source();
+        let response: Value =
+            serde_json::from_str(r#"{"status":true,"result":44495.7605}"#).unwrap();
+        let query = P2pSearchQuery {
+            fiat: "AMD".into(),
+            asset: "SOL".into(),
+            side: P2pSide::BuyCrypto,
+            amount: Some(100_000.0),
+            payment_method: None,
+            merchant_only: None,
+            min_orders: None,
+            min_completion_rate: None,
+            limit: Some(1),
+            sources: Some("skylabs".into()),
+        };
+        let offer = source
+            .into_offer(&response, &query, source.config.offer.as_ref().unwrap())
+            .unwrap();
+
+        assert_eq!(offer.asset, "SOL");
+        assert_eq!(offer.network.as_deref(), Some("solana"));
+        assert_eq!(offer.price, "44495.7605");
+
+        let usdt_query = P2pSearchQuery {
+            asset: "USDT".into(),
+            ..query
+        };
+        let usdt_offer = source
+            .into_offer(
+                &response,
+                &usdt_query,
+                source.config.offer.as_ref().unwrap(),
+            )
+            .unwrap();
+        assert_eq!(usdt_offer.network, None);
     }
 
     #[test]

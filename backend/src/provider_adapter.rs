@@ -219,6 +219,9 @@ pub struct P2pOperation {
     #[serde(default)]
     pub query: BTreeMap<String, String>,
     pub request_json: Option<String>,
+    /// Additional request bodies used when a provider exposes multiple network rails.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub request_json_variants: Vec<String>,
     #[serde(default = "default_amount_mode")]
     pub amount_mode: String,
     pub items_pointer: Option<String>,
@@ -240,6 +243,8 @@ pub struct OfferMapping {
     pub network_pointer: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub network: Option<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub network_by_asset: BTreeMap<String, String>,
     pub price_pointer: Option<String>,
     pub fiat_amount_pointer: Option<String>,
     pub asset_amount_pointer: Option<String>,
