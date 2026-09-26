@@ -1,0 +1,24 @@
+# Symbiosis is a selectable cross-chain crypto quote provider. Its Rust
+# implementation loads the supported token catalog and requests read-only
+# quotes from the official API.
+
+[code]
+language = "rust"
+source = path["symbiosis.rs"]
+
+[sell]
+source_url = "https://api.symbiosis.finance/crosschain/docs/"
+name = "Symbiosis Sell"
+currency = ["btc", "eth", "usdc", "usdt", "sol", "xrp", "bnb", "avax", "matic", "trx", "ton"]
+banks = []
+
+[buy]
+source_url = "https://api.symbiosis.finance/crosschain/docs/"
+name = "Symbiosis Buy"
+currency = ["btc", "eth", "usdc", "usdt", "sol", "xrp", "bnb", "avax", "matic", "trx", "ton"]
+banks = []
+
+[fees]
+kind = "quote_dependent"
+description = "Symbiosis returns route and network fees with each live cross-chain quote; final execution costs depend on the selected route and network."
+docs_url = "https://api.symbiosis.finance/crosschain/docs/"

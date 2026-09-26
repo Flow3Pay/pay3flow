@@ -3,7 +3,7 @@
 -- The application embeds this migration; Providerfiles are not read at runtime.
 DELETE FROM providers
 WHERE source_file LIKE '%/Providerfile'
-AND (slug, operation) NOT IN (('bestchange', 'buy'), ('bestchange', 'sell'), ('binance', 'buy'), ('binance', 'sell'), ('bitcoin-center', 'buy'), ('bitcoin-center', 'sell'), ('bitget', 'buy'), ('bitget', 'sell'), ('bncex', 'buy'), ('bncex', 'sell'), ('bybit', 'buy'), ('bybit', 'sell'), ('cifra-broker', 'buy'), ('cifra-broker', 'sell'), ('cow-swap', 'buy'), ('cow-swap', 'sell'), ('dzengi', 'buy'), ('dzengi', 'sell'), ('exnode', 'buy'), ('exnode', 'sell'), ('id-pay', 'buy'), ('id-pay', 'sell'), ('near-intents', 'buy'), ('near-intents', 'sell'), ('okx', 'buy'), ('okx', 'sell'), ('rapira', 'buy'), ('rapira', 'sell'), ('skylabs', 'buy'), ('skylabs', 'sell'), ('whitebird', 'buy'), ('whitebird', 'sell'));
+AND (slug, operation) NOT IN (('bestchange', 'buy'), ('bestchange', 'sell'), ('binance', 'buy'), ('binance', 'sell'), ('bitcoin-center', 'buy'), ('bitcoin-center', 'sell'), ('bitget', 'buy'), ('bitget', 'sell'), ('bncex', 'buy'), ('bncex', 'sell'), ('bybit', 'buy'), ('bybit', 'sell'), ('cifra-broker', 'buy'), ('cifra-broker', 'sell'), ('cow-swap', 'buy'), ('cow-swap', 'sell'), ('dzengi', 'buy'), ('dzengi', 'sell'), ('exnode', 'buy'), ('exnode', 'sell'), ('id-pay', 'buy'), ('id-pay', 'sell'), ('near-intents', 'buy'), ('near-intents', 'sell'), ('okx', 'buy'), ('okx', 'sell'), ('rapira', 'buy'), ('rapira', 'sell'), ('skylabs', 'buy'), ('skylabs', 'sell'), ('symbiosis', 'buy'), ('symbiosis', 'sell'), ('whitebird', 'buy'), ('whitebird', 'sell'));
 
 INSERT INTO providers (slug, operation, source_url, name, currencies, banks, adapter, workflow, fee_model, source_file)
 VALUES ('bestchange', 'buy', 'https://www.bestchange.com/?p=1345467', 'BestChange Buy', ARRAY['BYN', 'EUR', 'RUB', 'USD']::TEXT[], ARRAY[]::TEXT[], '{"p2p":null,"market":null,"bestchange":{"endpoint":"https://bestchange.app","api_key_env":"BESTCHANGE_API_KEY","public_endpoint":"https://www.bestchange.com","affiliate_id":"1345467","language":"ru","timeout_ms":10000,"max_results":100}}'::JSONB, '{}'::JSONB, '{}'::JSONB, 'bestchange/Providerfile')
@@ -384,6 +384,32 @@ updated_at = now();
 
 INSERT INTO providers (slug, operation, source_url, name, currencies, banks, adapter, workflow, fee_model, source_file)
 VALUES ('skylabs', 'sell', 'https://skylabs.world/', 'SkyLabs Sell', ARRAY['AMD', 'USD']::TEXT[], ARRAY[]::TEXT[], '{"p2p":{"kind":"http_json","market":"direct_exchange","endpoint":"https://api.skylabs.world/api/rate/all","method":"GET","headers":{"Origin":"https://skylabs.world","Referer":"https://skylabs.world/"},"asset_codes":{},"supported_assets":["BTC","ETH","USDT","BNB","TRX","USDC","TON","LTC","MATIC"],"timeout_ms":5000,"max_results":null,"fiat_probe_amount":null,"asset_probe_amount":null,"default_min_fiat":1.0,"default_max_fiat":1000000000.0,"default_available_asset":1000000000.0,"auth":null,"buy":{"endpoint":"https://api.skylabs.world/api/rate/{{asset}}/{{fiat}}/sell","query":{},"request_json":null,"amount_mode":"query_or_empty","items_pointer":null,"success_pointer":"/status","success_value":"true","success_missing_allowed":false,"error_pointer":null,"offer":null},"sell":{"endpoint":"https://api.skylabs.world/api/rate/{{asset}}/{{fiat}}/buy","query":{},"request_json":null,"amount_mode":"query_or_empty","items_pointer":null,"success_pointer":"/status","success_value":"true","success_missing_allowed":false,"error_pointer":null,"offer":null},"offer":{"ad_id_pointer":null,"fiat_pointer":null,"asset_pointer":null,"price_pointer":"/result","fiat_amount_pointer":null,"asset_amount_pointer":null,"price_inverted":false,"available_asset_pointer":null,"min_fiat_pointer":null,"max_fiat_pointer":null,"payment_methods_pointer":null,"payment_method_value_pointer":null,"payment_method_fallback_pointer":null,"pay_time_limit_pointer":null,"advertiser_id_pointer":null,"advertiser_nickname_pointer":null,"advertiser_user_type_pointer":null,"merchant_conditions":[],"verified_conditions":[],"merchant_default":true,"verified_default":true,"verified_from_merchant":false,"completed_orders_pointer":null,"completion_rate_pointer":null,"positive_rate_pointer":null,"source_url_template":"https://skylabs.world/#rates","source_url_is_exact":false,"advertiser_profile_url_template":null},"rate_table":null},"market":null,"bestchange":null}'::JSONB, '{}'::JSONB, '{"kind":"quote_dependent","description":"The public homepage buy/sell rate is used. Terminal, bank, wallet, conversion, and network fees are separate and may vary by payment method.","docs_url":"https://skylabs.world/#calc"}'::JSONB, 'skylabs/Providerfile')
+ON CONFLICT (slug, operation) DO UPDATE SET
+source_url = EXCLUDED.source_url,
+name = EXCLUDED.name,
+currencies = EXCLUDED.currencies,
+banks = EXCLUDED.banks,
+adapter = EXCLUDED.adapter,
+workflow = EXCLUDED.workflow,
+fee_model = EXCLUDED.fee_model,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO providers (slug, operation, source_url, name, currencies, banks, adapter, workflow, fee_model, source_file)
+VALUES ('symbiosis', 'buy', 'https://api.symbiosis.finance/crosschain/docs/', 'Symbiosis Buy', ARRAY['AVAX', 'BNB', 'BTC', 'ETH', 'MATIC', 'SOL', 'TON', 'TRX', 'USDC', 'USDT', 'XRP']::TEXT[], ARRAY[]::TEXT[], '{}'::JSONB, '{}'::JSONB, '{"kind":"quote_dependent","description":"Symbiosis returns route and network fees with each live cross-chain quote; final execution costs depend on the selected route and network.","docs_url":"https://api.symbiosis.finance/crosschain/docs/"}'::JSONB, 'symbiosis/Providerfile')
+ON CONFLICT (slug, operation) DO UPDATE SET
+source_url = EXCLUDED.source_url,
+name = EXCLUDED.name,
+currencies = EXCLUDED.currencies,
+banks = EXCLUDED.banks,
+adapter = EXCLUDED.adapter,
+workflow = EXCLUDED.workflow,
+fee_model = EXCLUDED.fee_model,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO providers (slug, operation, source_url, name, currencies, banks, adapter, workflow, fee_model, source_file)
+VALUES ('symbiosis', 'sell', 'https://api.symbiosis.finance/crosschain/docs/', 'Symbiosis Sell', ARRAY['AVAX', 'BNB', 'BTC', 'ETH', 'MATIC', 'SOL', 'TON', 'TRX', 'USDC', 'USDT', 'XRP']::TEXT[], ARRAY[]::TEXT[], '{}'::JSONB, '{}'::JSONB, '{"kind":"quote_dependent","description":"Symbiosis returns route and network fees with each live cross-chain quote; final execution costs depend on the selected route and network.","docs_url":"https://api.symbiosis.finance/crosschain/docs/"}'::JSONB, 'symbiosis/Providerfile')
 ON CONFLICT (slug, operation) DO UPDATE SET
 source_url = EXCLUDED.source_url,
 name = EXCLUDED.name,

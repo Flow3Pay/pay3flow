@@ -41,6 +41,8 @@ export PAY3FLOW_SECRETS_KEY='replace-with-application-key-material'
 export PAY3FLOW_ADMIN_TOKEN='replace-with-a-random-admin-token'
 export PAY3FLOW_NEAR_INTENTS_JWT='replace-with-the-NEAR-Intents-JWT'
 export PAY3FLOW_BESTCHANGE_API_KEY='replace-with-the-BestChange-API-key'
+# Optional partner credential; leave empty for the public Symbiosis API tier.
+export PAY3FLOW_SYMBIOSIS_PARTNER_ID=''
 export PAY3FLOW_POSTGRES_PASSWORD='replace-with-a-random-database-password'
 export PAY3FLOW_AP_REQUIRE_SIGNATURES='true'
 
@@ -53,7 +55,7 @@ export PAY3FLOW_FMATCH_ACTOR_ID='https://lefine.pro/actors/actra'
 The `PAY3FLOW_*` values above are inputs to the manifest renderer. The backend
 Pod does not receive these non-secret settings as environment variables; the
 renderer writes them into the `config.toml` ConfigMap mounted at `/app/config.toml`.
-Database, Redis, JWT, encryption, admin, BestChange, and NEAR Intents credentials remain
+Database, Redis, JWT, encryption, admin, BestChange, Symbiosis, and NEAR Intents credentials remain
 Kubernetes Secret environment variables.
 
 ## Deploy with in-cluster PostgreSQL and Redis

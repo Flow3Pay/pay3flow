@@ -40,6 +40,11 @@ cow_tokens = [
   "ethereum:USDT=0xdAC17F958D2ee523a2206206994597C13D831ec7",
 ]
 cow_quote_address = "0x0000000000000000000000000000000000000001"
+
+# Optional Symbiosis cross-chain quotes.
+symbiosis_url = "https://api.symbiosis.finance/crosschain"
+symbiosis_quote_address = "0x0000000000000000000000000000000000000001"
+symbiosis_slippage_bps = 300
 ```
 
 The TOML schema rejects unknown keys. This intentionally prevents credentials
@@ -57,6 +62,7 @@ These values are never read from `config.toml`:
 | `SECRETS_KEY` | Encrypts stored sensitive values |
 | `ADMIN_TOKEN` | Protects admin exchange controls |
 | `NEAR_INTENTS_JWT` | Optional authenticated 1-Click API credential |
+| `SYMBIOSIS_PARTNER_ID` | Optional Symbiosis partner credential |
 
 Development fallbacks exist for local startup; replace them in every
 deployment that handles real users or funds.
@@ -72,6 +78,7 @@ deployment that handles real users or funds.
 | `near_intents_*` | 1-Click API endpoint, public quote addresses, and refresh interval |
 | `route_*` | Fiat, asset, withdrawal, and route-depth capabilities |
 | `cow_*` | Optional CoW same-chain quote endpoints and token metadata |
+| `symbiosis_*` | Symbiosis cross-chain quote endpoint, preview address, and slippage |
 
 Use TOML arrays for lists; the old comma-separated environment variables are no
 longer configuration inputs.

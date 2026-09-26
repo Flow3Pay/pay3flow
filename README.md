@@ -37,6 +37,7 @@ still be available when the venue is opened.
 | Exnode | HMAC-authenticated merchant quote API | Direct quotes when API credentials are configured |
 | CoW Swap | CoW Protocol quote API | Selectable same-chain crypto swap quotes for configured chains and tokens |
 | NEAR Intents | 1Click quote API | Selectable cross-chain and same-chain crypto swap quotes from the live token catalog |
+| Symbiosis | Official cross-chain swap API | Selectable cross-chain crypto quotes from the live Symbiosis token catalog |
 | ID Pay | Public server-rendered calculator rate | Selectable direct AMD/RUB and RUB/AMD transfer estimates |
 
 CoW Swap fees are quote-dependent rather than a universal fixed percentage.
@@ -44,9 +45,11 @@ The live quote accounts for execution costs, while liquidity, gas, and optional
 partner fees can affect the result. The provider directory exposes this fee
 model and links to the [CoW Protocol documentation](https://docs.cow.fi/cow-protocol).
 
-CoW Swap and NEAR Intents are separate selectable exchanges. When selected,
+CoW Swap, NEAR Intents, and Symbiosis are separate selectable exchanges. When selected,
 their quoted outputs are independent and can differ because each provider uses
-its own liquidity, execution costs, and fee model. Exnode is the only
+its own liquidity, execution costs, and fee model. Symbiosis uses a read-only
+preview address for route discovery; execution must be re-quoted with the
+user's wallet addresses. Exnode is the only
 Providerfile adapter in the table that requires a merchant key pair. Set
 `EXNODE_API_PUBLIC` and `EXNODE_API_PRIVATE` to use it. BestChange requires
 `BESTCHANGE_API_KEY` from the referral-program dashboard; the numeric referral
@@ -306,10 +309,10 @@ through [`server.mjs`](pay3low-svelte-frontend/server.mjs).
 ## Configuration
 
 Non-secret backend settings live in [`config.toml`](config.toml), including
-listener, ActivityPub, FX, P2P, route, NEAR Intents, and optional CoW settings.
+listener, ActivityPub, FX, P2P, route, NEAR Intents, Symbiosis, and optional CoW settings.
 Use TOML arrays for lists. Credentials and connection strings remain
 environment-only: `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `SECRETS_KEY`,
-`ADMIN_TOKEN`, and `NEAR_INTENTS_JWT`.
+`ADMIN_TOKEN`, `NEAR_INTENTS_JWT`, and the optional `SYMBIOSIS_PARTNER_ID`.
 
 See [`docs/configuration.md`](docs/configuration.md) for the schema and the
 secret boundary. Individual Providerfiles may override the default timeout.

@@ -10,7 +10,7 @@ use pay3flow_backend::payments::rates::Rates;
 use pay3flow_backend::payments::service::{PaymentConfig, PaymentService};
 use pay3flow_backend::route_engine::{
     Asset, CowRouteProvider, LiveEdgeQuoteSource, NearIntentsProvider, PublicRouteProvider,
-    RouteEngine, RouteGraphConfig, RouteQuoteService, RouteRefreshConfig,
+    RouteEngine, RouteGraphConfig, RouteQuoteService, RouteRefreshConfig, SymbiosisRouteProvider,
 };
 use pay3flow_backend::server::routing;
 use std::sync::Arc;
@@ -105,6 +105,12 @@ async fn main() -> anyhow::Result<()> {
     )? {
         public_route_providers.push(Arc::new(cow));
     }
+    public_route_providers.push(Arc::new(SymbiosisRouteProvider::new(
+        cfg.symbiosis_url.clone(),
+        cfg.symbiosis_partner_id.clone(),
+        cfg.symbiosis_quote_address.clone(),
+        cfg.symbiosis_slippage_bps,
+    )?));
     let public_fiat_route_providers: Vec<Arc<dyn PublicFiatRouteProvider>> =
         vec![Arc::new(IdPayRouteProvider::new()?)];
     let network_catalog = pay3flow_backend::networks::NetworkCatalog::load(&pool).await?;

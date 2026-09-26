@@ -2,7 +2,7 @@
 #
 # Credentials and connection strings that may contain credentials remain
 # environment-only: DATABASE_URL, REDIS_URL, JWT_SECRET, SECRETS_KEY,
-# ADMIN_TOKEN, and NEAR_INTENTS_JWT.
+# ADMIN_TOKEN, NEAR_INTENTS_JWT, and SYMBIOSIS_PARTNER_ID.
 
 log_filter = "info"
 http_addr = "0.0.0.0:8080"
@@ -52,6 +52,12 @@ cow_tokens = [
 ]
 # Read-only quote address. Execution must use the user's wallet address.
 cow_quote_address = "0x0000000000000000000000000000000000000001"
+
+# Optional Symbiosis cross-chain quote provider. The partner id remains
+# environment-only when a partner-specific API credential is required.
+symbiosis_url = "https://api.symbiosis.finance/crosschain"
+symbiosis_quote_address = "0x0000000000000000000000000000000000000001"
+symbiosis_slippage_bps = 300
 
 # Read-only NEAR Intents quote addresses for the configured Avalanche -> Solana
 # preview. Replace with wallet addresses before enabling executable swaps.

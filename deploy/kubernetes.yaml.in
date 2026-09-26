@@ -36,6 +36,9 @@ data:
     p2p_search_enabled = $PAY3FLOW_P2P_SEARCH_ENABLED
     near_intents_url = "https://1click.chaindefuser.com"
     near_intents_refresh_secs = 300
+    symbiosis_url = "https://api.symbiosis.finance/crosschain"
+    symbiosis_quote_address = "0x0000000000000000000000000000000000000001"
+    symbiosis_slippage_bps = 300
     route_max_depth = 4
     route_source_fiats = ["AMD", "RUB"]
     route_p2p_assets = ["USDT", "USDC", "XRP"]
@@ -89,6 +92,7 @@ stringData:
   ADMIN_TOKEN: "$PAY3FLOW_ADMIN_TOKEN"
   NEAR_INTENTS_JWT: "$PAY3FLOW_NEAR_INTENTS_JWT"
   BESTCHANGE_API_KEY: "$PAY3FLOW_BESTCHANGE_API_KEY"
+  SYMBIOSIS_PARTNER_ID: "$PAY3FLOW_SYMBIOSIS_PARTNER_ID"
 ---
 apiVersion: batch/v1
 kind: Job
@@ -295,6 +299,11 @@ spec:
                 secretKeyRef:
                   name: pay3flow-secrets
                   key: BESTCHANGE_API_KEY
+            - name: SYMBIOSIS_PARTNER_ID
+              valueFrom:
+                secretKeyRef:
+                  name: pay3flow-secrets
+                  key: SYMBIOSIS_PARTNER_ID
           readinessProbe:
             httpGet:
               path: /health
