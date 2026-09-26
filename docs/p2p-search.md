@@ -41,9 +41,10 @@ GET /api/p2p/search?fiat=AMD&asset=USDT&side=buy&amount=100000&min_orders=20&min
 - `sell`: give the crypto asset and receive fiat.
 
 The response contains normalized prices, fiat limits, available asset amount,
-payment methods, public advertiser reputation, source status, the advertiser
-profile URL when the venue exposes a stable public profile, and the source
-advertisement URL. `source_url_is_exact` marks whether the latter opens the
+the venue's fixed transfer network when known, payment methods, public
+advertiser reputation, source status, the advertiser profile URL when the
+venue exposes a stable public profile, and the source advertisement URL.
+`source_url_is_exact` marks whether the latter opens the
 exact advertisement returned by the source. The frontend instructions focus on
 the advertiser profile and nickname; when no stable profile URL is available,
 they open the venue's P2P market and tell the user to find the advertiser by

@@ -281,6 +281,11 @@ use `amount_mode = "fiat_probe"`; fee-bearing sell mappings must use
 Availability and min/max fiat each need either a pointer or the corresponding
 adapter default.
 
+`network_pointer` maps a provider response rail such as `TRC20` to the
+canonical route network (`tron`). For a fixed rail, use `network = "solana"`.
+Network-aware offers are excluded from direct and composed routes that request
+or require a different rail.
+
 The shared `[adapter.p2p.offer]` applies to both directions. Override it for one
 direction with `[adapter.p2p.buy.offer]` or `[adapter.p2p.sell.offer]`:
 
@@ -720,6 +725,7 @@ requirements described earlier.
 | --- | --- |
 | `ad_id_pointer` | Offer ID; otherwise a deterministic ID is generated. |
 | `fiat_pointer`, `asset_pointer` | Currency codes; otherwise the query codes are used. |
+| `network_pointer`, `network` | Dynamic or fixed transfer network for this offer. |
 | `price_pointer` | Fiat units per asset. |
 | `fiat_amount_pointer`, `asset_amount_pointer` | Alternative price calculation; must appear together. |
 | `output_fee_pointer` | Fixed fee deducted from the quoted output; folded into the effective price. |

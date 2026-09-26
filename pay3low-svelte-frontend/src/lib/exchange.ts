@@ -177,6 +177,7 @@ export interface P2pOffer {
   ad_id: string;
   fiat: string;
   asset: string;
+  network?: string | null;
   price: string;
   available_asset: string;
   min_fiat: string;

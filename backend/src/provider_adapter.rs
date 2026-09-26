@@ -219,6 +219,10 @@ pub struct OfferMapping {
     pub ad_id_pointer: Option<String>,
     pub fiat_pointer: Option<String>,
     pub asset_pointer: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub network_pointer: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub network: Option<String>,
     pub price_pointer: Option<String>,
     pub fiat_amount_pointer: Option<String>,
     pub asset_amount_pointer: Option<String>,
@@ -762,6 +766,7 @@ impl OfferMapping {
                 self.ad_id_pointer.as_deref(),
                 self.fiat_pointer.as_deref(),
                 self.asset_pointer.as_deref(),
+                self.network_pointer.as_deref(),
                 self.price_pointer.as_deref(),
                 self.fiat_amount_pointer.as_deref(),
                 self.asset_amount_pointer.as_deref(),
@@ -782,6 +787,13 @@ impl OfferMapping {
             ],
             context,
         )?;
+        if self
+            .network
+            .as_deref()
+            .is_some_and(|network| network.trim().is_empty())
+        {
+            return Err(format!("{context}: network must not be empty"));
+        }
         for condition in self
             .merchant_conditions
             .iter()

@@ -137,6 +137,8 @@ pub struct P2pOffer {
     pub side: P2pSide,
     pub fiat: String,
     pub asset: String,
+    /// Canonical transfer network when the venue fixes the asset rail.
+    pub network: Option<String>,
     /// Fiat units paid or received for one unit of `asset`.
     pub price: String,
     pub available_asset: String,
@@ -864,6 +866,7 @@ mod tests {
             side: P2pSide::BuyCrypto,
             fiat: "AMD".into(),
             asset: "USDT".into(),
+            network: None,
             price: price.into(),
             available_asset: "1000".into(),
             min_fiat: min.into(),

@@ -17,6 +17,7 @@ use crate::provider_adapter::{
     P2pOperation, RateTableConfig, ValueCondition,
 };
 use crate::providers::ProviderAdapterRecord;
+use crate::route_engine::canonical_network_id;
 
 pub(crate) struct DeclarativeP2pSource {
     client: Client,
@@ -97,6 +98,9 @@ impl DeclarativeP2pSource {
             .iter()
             .find_map(|(canonical, remote)| (remote == &remote_asset).then(|| canonical.clone()))
             .unwrap_or(remote_asset);
+        let network = optional_string(item, mapping.network_pointer.as_deref())
+            .or_else(|| mapping.network.clone())
+            .map(|network| canonical_network_id(&network));
         let operation = self.operation(query.side)?;
         let input_amount = self.template_values(query, operation)?.amount;
         let price = mapped_price(item, mapping, query.side, input_amount)?;
@@ -164,6 +168,7 @@ impl DeclarativeP2pSource {
             side: query.side,
             fiat,
             asset,
+            network,
             price,
             available_asset,
             min_fiat,
@@ -255,6 +260,7 @@ impl DeclarativeP2pSource {
             side: query.side,
             fiat: query.fiat.clone(),
             asset: query.asset.clone(),
+            network: None,
             price: number_to_string(price),
             available_asset: number_to_string(
                 self.config
@@ -1112,6 +1118,7 @@ mod tests {
         assert_eq!(buy_offer.market, P2pOfferMarket::DirectExchange);
         assert_eq!(buy_offer.fiat, "AMD");
         assert_eq!(buy_offer.asset, "USDT");
+        assert_eq!(buy_offer.network.as_deref(), Some("tron"));
         assert!((buy_offer.price.parse::<f64>().unwrap() - 374.403613).abs() < 0.000001);
 
         let sell: Value = serde_json::from_str(
@@ -1129,6 +1136,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(sell_offer.market, P2pOfferMarket::DirectExchange);
+        assert_eq!(sell_offer.network.as_deref(), Some("tron"));
         assert_eq!(sell_offer.price, "353.06");
         assert_eq!(sell_offer.source_url, "https://www.bncex.com/en");
         assert!(sell_offer.advertiser.is_verified);
@@ -1198,6 +1206,7 @@ mod tests {
         assert_eq!(offer.market, P2pOfferMarket::DirectExchange);
         assert_eq!(offer.fiat, "AMD");
         assert_eq!(offer.asset, "USDT");
+        assert_eq!(offer.network.as_deref(), Some("solana"));
         assert_eq!(offer.payment_methods, ["Bank Transfer"]);
         assert_eq!(offer.pay_time_limit_minutes, Some(30));
         assert_eq!(
@@ -1221,6 +1230,7 @@ mod tests {
 
         assert_eq!(sell_offer.fiat, "AMD");
         assert_eq!(sell_offer.asset, "USDT");
+        assert_eq!(sell_offer.network.as_deref(), Some("solana"));
         assert_eq!(sell_offer.price, "352.93203883");
         assert_eq!(sell_offer.payment_methods, ["Bank Transfer"]);
         assert_eq!(

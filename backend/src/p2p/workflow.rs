@@ -220,6 +220,7 @@ impl P2pSource for WorkflowP2pSource {
             side: query.side,
             fiat: query.fiat.clone(),
             asset: query.asset.clone(),
+            network: None,
             price: price.to_string(),
             available_asset: self.config.default_available_asset.to_string(),
             min_fiat: self.config.default_min_fiat.to_string(),

@@ -953,6 +953,9 @@ impl P2pSearchService {
             };
             for intermediary in &intermediaries {
                 for offer in entry.offers.iter().take(MAX_PROVIDER_OFFERS_PER_LEG) {
+                    if !offer_matches_network(offer, intermediary.location.as_deref()) {
+                        continue;
+                    }
                     let Some(price) = positive_number(&offer.price) else {
                         continue;
                     };
@@ -1093,6 +1096,7 @@ impl P2pSearchService {
                 .offers
                 .into_iter()
                 .take(MAX_PROVIDER_OFFERS_PER_LEG)
+                .filter(|offer| offer_matches_network(offer, intermediary.location.as_deref()))
                 .collect::<Vec<_>>();
             for source in &source_assets {
                 if *source == intermediary {
@@ -1432,6 +1436,7 @@ impl P2pSearchService {
                 side: P2pSide::BuyCrypto,
                 fiat: quote.source_currency.clone(),
                 asset: quote.target_currency.clone(),
+                network: None,
                 price: fixed(price, 12),
                 available_asset: "1000000000".into(),
                 min_fiat: "1".into(),
@@ -2013,6 +2018,9 @@ fn compose_fiat_routes(
             continue;
         }
         for exit in exit_offers {
+            if !offer_networks_compatible(entry, exit) {
+                continue;
+            }
             let same_venue = entry.source == exit.source;
             if !same_venue && !query.allow_cross_venue {
                 continue;
@@ -2072,7 +2080,7 @@ fn compose_fiat_routes(
                 route_id: String::new(),
                 rank: 0,
                 asset: asset.into(),
-                entry_network: None,
+                entry_network: entry.network.clone().or_else(|| exit.network.clone()),
                 source_network: query.source_network.clone(),
                 target_network: query.target_network.clone(),
                 source_fiat: query.source_currency.clone(),
@@ -2112,6 +2120,9 @@ fn compose_fiat_to_crypto_routes(
     offers: &[P2pOffer],
 ) {
     for offer in offers {
+        if !offer_matches_network(offer, query.target_network.as_deref()) {
+            continue;
+        }
         let Some(price) = positive_number(&offer.price) else {
             continue;
         };
@@ -2128,9 +2139,15 @@ fn compose_fiat_to_crypto_routes(
             route_id: String::new(),
             rank: 0,
             asset: asset.into(),
-            entry_network: query.target_network.clone(),
+            entry_network: query
+                .target_network
+                .clone()
+                .or_else(|| offer.network.clone()),
             source_network: query.source_network.clone(),
-            target_network: query.target_network.clone(),
+            target_network: query
+                .target_network
+                .clone()
+                .or_else(|| offer.network.clone()),
             source_fiat: query.source_currency.clone(),
             source_amount: fixed(query.source_amount, 8),
             acquired_asset_amount: fixed(target_amount, 8),
@@ -2169,6 +2186,9 @@ fn compose_crypto_to_fiat_routes(
     offers: &[P2pOffer],
 ) {
     for offer in offers {
+        if !offer_matches_network(offer, query.source_network.as_deref()) {
+            continue;
+        }
         let Some(price) = positive_number(&offer.price) else {
             continue;
         };
@@ -2189,8 +2209,14 @@ fn compose_crypto_to_fiat_routes(
             route_id: String::new(),
             rank: 0,
             asset: asset.into(),
-            entry_network: query.source_network.clone(),
-            source_network: query.source_network.clone(),
+            entry_network: query
+                .source_network
+                .clone()
+                .or_else(|| offer.network.clone()),
+            source_network: query
+                .source_network
+                .clone()
+                .or_else(|| offer.network.clone()),
             target_network: query.target_network.clone(),
             source_fiat: query.source_currency.clone(),
             source_amount: fixed(query.source_amount, 8),
@@ -2221,6 +2247,24 @@ fn compose_crypto_to_fiat_routes(
             service_links: Vec::new(),
         });
     }
+}
+
+fn offer_matches_network(offer: &P2pOffer, requested: Option<&str>) -> bool {
+    offer
+        .network
+        .as_deref()
+        .zip(requested)
+        .is_none_or(|(actual, requested)| {
+            canonical_network_id(actual) == canonical_network_id(requested)
+        })
+}
+
+fn offer_networks_compatible(entry: &P2pOffer, exit: &P2pOffer) -> bool {
+    entry
+        .network
+        .as_deref()
+        .zip(exit.network.as_deref())
+        .is_none_or(|(entry, exit)| canonical_network_id(entry) == canonical_network_id(exit))
 }
 
 fn compose_crypto_market_routes(
@@ -2592,6 +2636,7 @@ mod tests {
             }
             .into(),
             asset: "USDT".into(),
+            network: None,
             price: price.into(),
             available_asset: "10000".into(),
             min_fiat: min.into(),
@@ -2674,6 +2719,7 @@ mod tests {
         assert_eq!(canonical_network_id("avalanche"), "avalanche-c");
         assert_eq!(canonical_network_id("avax"), "avalanche-c");
         assert_eq!(canonical_network_id("sol"), "solana");
+        assert_eq!(canonical_network_id("TRC20"), "tron");
         assert_eq!(canonical_network_id("ethereum"), "ethereum");
     }
 
@@ -2756,6 +2802,38 @@ mod tests {
             serde_json::to_value(&routes[0]).unwrap()["entry_network"],
             "ethereum"
         );
+    }
+
+    #[test]
+    fn fixed_provider_network_rejects_incompatible_direct_and_composed_routes() {
+        let mut direct_query = query(false);
+        direct_query.target_currency = "USDT".into();
+        direct_query.target_network = Some("tron".into());
+        let mut solana_offer = offer(
+            "bitcoin-center",
+            P2pSide::BuyCrypto,
+            "372",
+            "50000",
+            "10000000",
+        );
+        solana_offer.network = Some("solana".into());
+        let mut routes = Vec::new();
+
+        compose_fiat_to_crypto_routes(&mut routes, &direct_query, "USDT", &[solana_offer.clone()]);
+
+        assert!(routes.is_empty());
+
+        let mut tron_exit = offer("bncex", P2pSide::SellCrypto, "353", "10000", "50000000");
+        tron_exit.network = Some("tron".into());
+        compose_fiat_routes(
+            &mut routes,
+            &query(true),
+            "USDT",
+            &[solana_offer],
+            &[tron_exit],
+        );
+
+        assert!(routes.is_empty());
     }
 
     #[test]

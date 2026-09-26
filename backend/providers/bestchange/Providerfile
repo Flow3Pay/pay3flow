@@ -269,6 +269,11 @@ impl BestChangeSource {
                     side: query.side,
                     fiat: query.fiat.clone(),
                     asset: query.asset.clone(),
+                    network: from
+                        .route_asset
+                        .as_ref()
+                        .or(to.route_asset.as_ref())
+                        .and_then(|asset| asset.location.clone()),
                     price: number(price),
                     available_asset: number(available_asset),
                     min_fiat: number(min_fiat),
