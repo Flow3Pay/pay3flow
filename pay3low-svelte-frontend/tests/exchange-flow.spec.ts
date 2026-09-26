@@ -754,7 +754,7 @@ test("saved provider choices adopt new providers and retain later deselections",
     .toHaveAttribute("aria-pressed", "false");
 });
 
-test("search venues bounce in the loader and only rendered route venues are announced", async ({ page }) => {
+test("search venues announce providers reported by route statuses", async ({ page }) => {
   await mockBackend(page);
 
   let sendFirstRoute: (() => void) | undefined;
@@ -890,11 +890,11 @@ test("search venues bounce in the loader and only rendered route venues are anno
   await expect(page.getByTestId("complete-route")).toHaveCount(1);
   await expect(page.getByTestId("complete-route").first()).toHaveClass(/selected/);
   const foundVenues = panelTop.locator(".resultSummary").getByTestId("found-venue");
-  await expect(foundVenues).toHaveCount(1);
+  await expect(foundVenues).toHaveCount(4);
   await expect(foundVenues.first()).toHaveAttribute("title", "Found on Bybit");
-  for (const statusOnlyVenue of ["SkyLabs", "Bncex", "Bitcoin Center"]) {
-    await expect(panelTop.locator(`[data-testid="found-venue"][title="Found on ${statusOnlyVenue}"]`)).toHaveCount(0);
-  }
+  await expect(foundVenues.nth(1)).toHaveAttribute("title", "Found on SkyLabs");
+  await expect(foundVenues.nth(2)).toHaveAttribute("title", "Found on Bncex");
+  await expect(foundVenues.nth(3)).toHaveAttribute("title", "Found on Bitcoin Center");
   await expect(searchingVenues).toHaveCount(5);
   await expect(searchingVenues.nth(4)).toHaveAttribute("title", "Searching NEAR 1Click");
   await expect(panelTop.getByTestId("searching-venues-overflow")).toHaveCount(1);
@@ -905,10 +905,11 @@ test("search venues bounce in the loader and only rendered route venues are anno
   await expect(page.getByTestId("complete-route")).toHaveCount(2);
   await expect(page.getByTestId("complete-route").first()).toContainText("20420 RUB");
   await expect(page.getByTestId("complete-route").first()).toHaveClass(/selected/);
-  await expect(foundVenues).toHaveCount(2);
-  await expect(foundVenues.first()).toHaveAttribute("title", "Found on Whitebird");
-  await expect(foundVenues.nth(1)).toHaveAttribute("title", "Found on Bybit");
-  await expect(searchingVenues).toHaveCount(5);
+  await expect(foundVenues).toHaveCount(5);
+  for (const title of ["Whitebird", "Bybit", "SkyLabs", "Bncex", "Bitcoin Center"]) {
+    await expect(panelTop.locator(`[data-testid="found-venue"][title="Found on ${title}"]`)).toHaveCount(1);
+  }
+  await expect(searchingVenues).toHaveCount(4);
 
   await page.getByTestId("complete-route").nth(1).click();
   await expect(page.getByTestId("complete-route").nth(1)).toHaveClass(/selected/);
