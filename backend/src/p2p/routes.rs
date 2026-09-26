@@ -1823,12 +1823,12 @@ fn sort_routes(routes: &mut [P2pRoute]) {
         right
             .payment_methods_verified
             .cmp(&left.payment_methods_verified)
+            .then_with(|| right.same_venue.cmp(&left.same_venue))
             .then_with(|| {
                 route_target(right)
                     .partial_cmp(&route_target(left))
                     .unwrap_or(Ordering::Equal)
             })
-            .then_with(|| right.same_venue.cmp(&left.same_venue))
             .then_with(|| left.route_id.cmp(&right.route_id))
     });
 }
@@ -3503,6 +3503,36 @@ mod tests {
             .routes
             .iter()
             .any(|route| route.route_id == "id-pay"));
+    }
+
+    #[test]
+    fn route_quality_ranks_a_same_venue_route_before_a_better_payout() {
+        let normalized = query(true);
+        let mut discovered = Vec::new();
+        compose_fiat_routes(
+            &mut discovered,
+            &normalized,
+            "USDT",
+            &[offer("bybit", P2pSide::BuyCrypto, "400", "1000", "200000")],
+            &[offer("bybit", P2pSide::SellCrypto, "80", "1000", "100000")],
+        );
+        let base = discovered.pop().expect("test route should be composed");
+
+        let mut same_venue = base.clone();
+        same_venue.route_id = "same-venue".into();
+        same_venue.target_amount = "20000.00".into();
+
+        let mut cross_venue = base;
+        cross_venue.route_id = "cross-venue".into();
+        cross_venue.same_venue = false;
+        cross_venue.requires_asset_transfer = true;
+        cross_venue.target_amount = "21000.00".into();
+
+        let mut routes = vec![cross_venue, same_venue];
+        sort_routes(&mut routes);
+
+        assert_eq!(routes[0].route_id, "same-venue");
+        assert_eq!(routes[1].route_id, "cross-venue");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

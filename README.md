@@ -90,8 +90,8 @@ flowchart LR
   finishes; the UI does not wait for every venue before showing results.
 - A failed or slow source is reported in route status data without discarding
   results already returned by other sources.
-- Routes with verified payment-method matches rank first, followed by target
-  amount and same-venue execution.
+- Routes are ranked by route quality first: verified payment-method matches,
+  same-venue execution, then the estimated target amount.
 - The best route remains selected while results arrive unless the user has
   explicitly selected another route.
 - Venue icons summarize successful source statuses, not only cards that made

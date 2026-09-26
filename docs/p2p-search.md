@@ -83,7 +83,8 @@ It then:
 3. calculates the acquired asset amount and checks entry liquidity;
 4. calculates the RUB output and checks the exit advertisement limits and
    liquidity;
-5. returns complete routes ordered by maximum estimated RUB output.
+5. returns complete routes ranked by verified payment methods, same-venue
+   execution, and then maximum estimated RUB output.
 
 The optional `sources` parameter limits both legs to a comma-separated list of
 loaded source slugs, for example `binance,okx,whitebird,skylabs`. If omitted,
