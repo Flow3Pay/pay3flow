@@ -1,0 +1,717 @@
+use axum::Json;
+use serde_json::{json, Map, Value};
+
+/// Return the OpenAPI document used by the Scalar API reference.
+pub async fn document() -> Json<Value> {
+    Json(api_document())
+}
+
+fn api_document() -> Value {
+    let mut paths = Map::new();
+    for operation in OPERATIONS {
+        add_operation(&mut paths, *operation);
+    }
+
+    json!({
+        "openapi": "3.0.3",
+        "info": {
+            "title": "Pay3Flow API",
+            "version": env!("CARGO_PKG_VERSION"),
+            "description": "Public REST, WebSocket, routing and ActivityPub surfaces exposed by Pay3Flow. WebSocket operations are listed for discovery; use a WebSocket client to interact with them."
+        },
+        "servers": [{ "url": "/", "description": "Current Pay3Flow origin" }],
+        "tags": [
+            { "name": "System" },
+            { "name": "Authentication" },
+            { "name": "Payments" },
+            { "name": "Exchange" },
+            { "name": "Solver" },
+            { "name": "Catalogs" },
+            { "name": "Routing" },
+            { "name": "Administration" },
+            { "name": "WebSockets" },
+            { "name": "ActivityPub" },
+            { "name": "Debug" }
+        ],
+        "paths": paths,
+        "components": {
+            "securitySchemes": {
+                "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT" },
+                "adminBearerAuth": { "type": "http", "scheme": "bearer", "description": "Admin token supplied by the backend configuration." }
+            },
+            "schemas": {
+                "JsonObject": { "type": "object", "additionalProperties": true },
+                "JsonResponse": { "type": "object", "additionalProperties": true },
+                "Error": {
+                    "type": "object",
+                    "properties": {
+                        "error": { "type": "string" },
+                        "message": { "type": "string" }
+                    },
+                    "additionalProperties": true
+                }
+            }
+        }
+    })
+}
+
+type Operation = (
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    bool,
+    bool,
+);
+
+const OPERATIONS: &[Operation] = &[
+    (
+        "/health",
+        "get",
+        "Health check",
+        "Returns `ok` when the API is reachable.",
+        "System",
+        false,
+        false,
+    ),
+    (
+        "/metrics",
+        "get",
+        "Metrics",
+        "Return backend Prometheus metrics.",
+        "System",
+        false,
+        false,
+    ),
+    (
+        "/api/auth/register",
+        "post",
+        "Register",
+        "Create an account with an email and one-time code.",
+        "Authentication",
+        true,
+        false,
+    ),
+    (
+        "/api/auth/login",
+        "post",
+        "Log in",
+        "Exchange an email and one-time code for a bearer token.",
+        "Authentication",
+        true,
+        false,
+    ),
+    (
+        "/api/auth/me",
+        "get",
+        "Current user",
+        "Return the authenticated user.",
+        "Authentication",
+        false,
+        true,
+    ),
+    (
+        "/api/auth/oauth/{provider}",
+        "post",
+        "OAuth login",
+        "Authenticate through a configured OAuth provider.",
+        "Authentication",
+        true,
+        false,
+    ),
+    (
+        "/api/payments",
+        "post",
+        "Create payment",
+        "Create and route a payment.",
+        "Payments",
+        true,
+        true,
+    ),
+    (
+        "/api/payments",
+        "get",
+        "List payments",
+        "List the authenticated user's payments.",
+        "Payments",
+        false,
+        true,
+    ),
+    (
+        "/api/payments/{id}",
+        "get",
+        "Get payment",
+        "Return one payment owned by the authenticated user.",
+        "Payments",
+        false,
+        true,
+    ),
+    (
+        "/api/providers/{provider}/webhooks",
+        "post",
+        "Provider webhook",
+        "Record an asynchronous provider event.",
+        "Payments",
+        true,
+        false,
+    ),
+    (
+        "/api/exchange/orders",
+        "post",
+        "Create exchange order",
+        "Create an idempotent exchange order.",
+        "Exchange",
+        true,
+        true,
+    ),
+    (
+        "/api/exchange/orders",
+        "get",
+        "List exchange orders",
+        "List exchange orders for the authenticated user.",
+        "Exchange",
+        false,
+        true,
+    ),
+    (
+        "/api/exchange/corridors",
+        "get",
+        "List corridors",
+        "List enabled exchange corridors and the active terms version.",
+        "Exchange",
+        false,
+        false,
+    ),
+    (
+        "/api/exchange/orders/{id}",
+        "get",
+        "Get exchange order",
+        "Return one exchange order owned by the authenticated user.",
+        "Exchange",
+        false,
+        true,
+    ),
+    (
+        "/api/exchange/orders/{id}/quotes",
+        "get",
+        "List order quotes",
+        "List quotes collected for an exchange order.",
+        "Exchange",
+        false,
+        true,
+    ),
+    (
+        "/api/exchange/orders/{id}/live",
+        "get",
+        "Live routes",
+        "Open a WebSocket stream of live routes for an exchange order.",
+        "Exchange",
+        false,
+        true,
+    ),
+    (
+        "/api/exchange/orders/{id}/discover",
+        "post",
+        "Discover solvers",
+        "Ask the marketplace for solver candidates.",
+        "Exchange",
+        false,
+        true,
+    ),
+    (
+        "/api/exchange/orders/{id}/auction",
+        "post",
+        "Run auction",
+        "Run quote selection for an exchange order.",
+        "Exchange",
+        false,
+        true,
+    ),
+    (
+        "/api/exchange/orders/{id}/confirm",
+        "post",
+        "Confirm exchange order",
+        "Confirm the selected quote and prepare settlement.",
+        "Exchange",
+        true,
+        true,
+    ),
+    (
+        "/api/exchange/orders/{id}/funding/confirm",
+        "post",
+        "Confirm funding",
+        "Confirm the funding terms for an exchange order.",
+        "Exchange",
+        true,
+        true,
+    ),
+    (
+        "/api/exchange/orders/{id}/manual-review",
+        "get",
+        "Get manual review",
+        "Return the manual-review state for an exchange order.",
+        "Exchange",
+        false,
+        true,
+    ),
+    (
+        "/api/exchange/orders/{id}/settlement",
+        "get",
+        "Get settlement",
+        "Return settlement details for an exchange order.",
+        "Exchange",
+        false,
+        true,
+    ),
+    (
+        "/api/exchange/orders/{id}/ledger",
+        "get",
+        "Get ledger",
+        "Return ledger operations for an exchange order.",
+        "Exchange",
+        false,
+        true,
+    ),
+    (
+        "/api/exchange/orders/{id}/proofs",
+        "get",
+        "List proofs",
+        "List submitted proofs for an exchange order.",
+        "Exchange",
+        false,
+        true,
+    ),
+    (
+        "/api/exchange/orders/{id}/proof",
+        "post",
+        "Submit proof",
+        "Submit a settlement proof for an exchange order.",
+        "Exchange",
+        true,
+        true,
+    ),
+    (
+        "/api/exchange/orders/{id}/cancel",
+        "post",
+        "Cancel exchange order",
+        "Cancel an exchange order owned by the authenticated user.",
+        "Exchange",
+        false,
+        true,
+    ),
+    (
+        "/api/debug/exchange/orders/{id}/audit",
+        "get",
+        "Get audit events",
+        "Return audit events for an exchange order.",
+        "Debug",
+        false,
+        true,
+    ),
+    (
+        "/api/solver/orders/open",
+        "get",
+        "Open solver orders",
+        "List open orders available to solvers.",
+        "Solver",
+        false,
+        false,
+    ),
+    (
+        "/api/solver/orders/{id}/quotes",
+        "post",
+        "Submit solver quote",
+        "Submit a quote for an open exchange order.",
+        "Solver",
+        true,
+        false,
+    ),
+    (
+        "/api/exchange-pairs",
+        "get",
+        "List exchange pairs",
+        "List enabled bank and asset exchange pairs.",
+        "Catalogs",
+        false,
+        false,
+    ),
+    (
+        "/api/banks",
+        "get",
+        "List banks",
+        "List enabled payment methods and banks.",
+        "Catalogs",
+        false,
+        false,
+    ),
+    (
+        "/api/networks",
+        "get",
+        "List networks",
+        "List supported crypto networks.",
+        "Catalogs",
+        false,
+        false,
+    ),
+    (
+        "/api/providers",
+        "get",
+        "List providers",
+        "List configured provider definitions.",
+        "Catalogs",
+        false,
+        false,
+    ),
+    (
+        "/api/p2p/search",
+        "get",
+        "Search P2P offers",
+        "Search public P2P offers for a payment route.",
+        "Routing",
+        false,
+        false,
+    ),
+    (
+        "/api/p2p/routes",
+        "get",
+        "List routes",
+        "Return currently available payment routes.",
+        "Routing",
+        false,
+        false,
+    ),
+    (
+        "/api/service-executions/open",
+        "post",
+        "Open service execution",
+        "Open a service execution for a selected route.",
+        "Routing",
+        true,
+        false,
+    ),
+    (
+        "/api/services/{id}/vote",
+        "put",
+        "Vote on service",
+        "Record a vote for a service execution.",
+        "Routing",
+        true,
+        false,
+    ),
+    (
+        "/api/routes/{route_id}/vote",
+        "put",
+        "Vote on route",
+        "Record a vote for a route.",
+        "Routing",
+        true,
+        false,
+    ),
+    (
+        "/api/debug/quote",
+        "post",
+        "Debug quote",
+        "Compute a quote through the HTTP debug surface.",
+        "Routing",
+        true,
+        false,
+    ),
+    (
+        "/routing/fallback",
+        "post",
+        "Fallback routing",
+        "Resolve a fallback routing request.",
+        "Routing",
+        true,
+        false,
+    ),
+    (
+        "/api/admin/exchange-pairs",
+        "post",
+        "Create exchange pair",
+        "Create or update an exchange pair. Requires the admin bearer token.",
+        "Administration",
+        true,
+        true,
+    ),
+    (
+        "/api/admin/exchange-pairs/{id}",
+        "post",
+        "Update exchange pair",
+        "Update an exchange pair. Requires the admin bearer token.",
+        "Administration",
+        true,
+        true,
+    ),
+    (
+        "/api/admin/exchange/controls",
+        "get",
+        "Get exchange controls",
+        "Read exchange controls. Requires the admin bearer token.",
+        "Administration",
+        false,
+        true,
+    ),
+    (
+        "/api/admin/exchange/controls",
+        "post",
+        "Update exchange controls",
+        "Update exchange controls. Requires the admin bearer token.",
+        "Administration",
+        true,
+        true,
+    ),
+    (
+        "/api/admin/exchange/corridors/{id}",
+        "post",
+        "Toggle corridor",
+        "Enable or disable an exchange corridor. Requires the admin bearer token.",
+        "Administration",
+        true,
+        true,
+    ),
+    (
+        "/api/admin/exchange/solvers/{id}",
+        "post",
+        "Set solver status",
+        "Change a solver status. Requires the admin bearer token.",
+        "Administration",
+        true,
+        true,
+    ),
+    (
+        "/api/admin/exchange/orders/{id}/manual-review",
+        "post",
+        "Resolve manual review",
+        "Resolve a manual review. Requires the admin bearer token.",
+        "Administration",
+        true,
+        true,
+    ),
+    (
+        "/api/admin/exchange/orders/{id}/dispute",
+        "post",
+        "Resolve dispute",
+        "Resolve an exchange dispute. Requires the admin bearer token.",
+        "Administration",
+        true,
+        true,
+    ),
+    (
+        "/api/admin/banks",
+        "post",
+        "Create bank",
+        "Create or update a bank. Requires the admin bearer token.",
+        "Administration",
+        true,
+        true,
+    ),
+    (
+        "/api/admin/banks/{name}/status",
+        "post",
+        "Set bank status",
+        "Enable or disable a bank. Requires the admin bearer token.",
+        "Administration",
+        true,
+        true,
+    ),
+    (
+        "/ws",
+        "get",
+        "Echo WebSocket",
+        "WebSocket echo endpoint.",
+        "WebSockets",
+        false,
+        false,
+    ),
+    (
+        "/ws/rates",
+        "get",
+        "Live rates WebSocket",
+        "WebSocket for live quote requests and responses.",
+        "WebSockets",
+        false,
+        false,
+    ),
+    (
+        "/ws/payments",
+        "get",
+        "Payment events WebSocket",
+        "WebSocket stream of payment status events.",
+        "WebSockets",
+        false,
+        false,
+    ),
+    (
+        "/ws/p2p/routes",
+        "get",
+        "P2P routes WebSocket",
+        "WebSocket stream for P2P route updates.",
+        "WebSockets",
+        false,
+        false,
+    ),
+    (
+        "/.well-known/webfinger",
+        "get",
+        "WebFinger",
+        "ActivityPub WebFinger discovery endpoint.",
+        "ActivityPub",
+        false,
+        false,
+    ),
+    (
+        "/actor",
+        "get",
+        "Actor collection",
+        "Return the ActivityPub actor collection.",
+        "ActivityPub",
+        false,
+        false,
+    ),
+    (
+        "/actor/{handle}",
+        "get",
+        "Actor document",
+        "Return an ActivityPub actor document by handle.",
+        "ActivityPub",
+        false,
+        false,
+    ),
+    (
+        "/marketplace/resources/exchange",
+        "get",
+        "Exchange resource",
+        "Return the exchange marketplace resource.",
+        "ActivityPub",
+        false,
+        false,
+    ),
+    (
+        "/marketplace/proposals/exchange",
+        "get",
+        "Exchange proposal",
+        "Return the exchange marketplace proposal.",
+        "ActivityPub",
+        false,
+        false,
+    ),
+    (
+        "/marketplace/interfaces/exchange",
+        "get",
+        "Exchange interface",
+        "Return the exchange marketplace interface.",
+        "ActivityPub",
+        false,
+        false,
+    ),
+    (
+        "/marketplace/shapes/exchange-input",
+        "get",
+        "Exchange input shape",
+        "Return the exchange input shape.",
+        "ActivityPub",
+        false,
+        false,
+    ),
+    (
+        "/marketplace/shapes/exchange-output",
+        "get",
+        "Exchange output shape",
+        "Return the exchange output shape.",
+        "ActivityPub",
+        false,
+        false,
+    ),
+    (
+        "/marketplace/preview",
+        "post",
+        "Preview exchange",
+        "Preview an exchange request.",
+        "ActivityPub",
+        true,
+        false,
+    ),
+    (
+        "/candidates",
+        "get",
+        "List candidates",
+        "Return marketplace candidates.",
+        "ActivityPub",
+        false,
+        false,
+    ),
+    (
+        "/api/debug/task",
+        "post",
+        "Debug task",
+        "Run a debug marketplace task.",
+        "Debug",
+        true,
+        false,
+    ),
+    (
+        "/inbox",
+        "post",
+        "Shared inbox",
+        "Receive an ActivityPub activity in the shared inbox.",
+        "ActivityPub",
+        true,
+        false,
+    ),
+    (
+        "/inbox/{handle}",
+        "post",
+        "Actor inbox",
+        "Receive an ActivityPub activity in a named inbox.",
+        "ActivityPub",
+        true,
+        false,
+    ),
+];
+
+fn add_operation(paths: &mut Map<String, Value>, operation: Operation) {
+    let (path, method, summary, description, tag, request_body, requires_auth) = operation;
+    let mut operation = json!({
+        "summary": summary,
+        "description": description,
+        "tags": [tag],
+        "responses": {
+            "200": {
+                "description": "Successful response",
+                "content": { "application/json": { "schema": { "$ref": "#/components/schemas/JsonResponse" } } }
+            },
+            "400": { "description": "Invalid request", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+            "401": { "description": "Authentication required" },
+            "404": { "description": "Resource not found" }
+        }
+    });
+
+    if request_body {
+        operation["requestBody"] = json!({
+            "required": true,
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/JsonObject" } } }
+        });
+    }
+    if requires_auth {
+        operation["security"] = json!([{ "bearerAuth": [] }]);
+    }
+
+    let parameters: Vec<Value> = path
+        .split('{')
+        .skip(1)
+        .filter_map(|part| part.split('}').next())
+        .map(|name| json!({ "name": name, "in": "path", "required": true, "schema": { "type": "string" } }))
+        .collect();
+    if !parameters.is_empty() {
+        operation["parameters"] = json!(parameters);
+    }
+
+    paths
+        .entry(path.to_owned())
+        .or_insert_with(|| json!({}))
+        .as_object_mut()
+        .expect("OpenAPI path item must be an object")
+        .insert(method.to_owned(), operation);
+}

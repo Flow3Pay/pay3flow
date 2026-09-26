@@ -4,7 +4,7 @@
 pay3flow.lefine.pro {
     encode gzip
 
-    @backend path /api* /ws* /health* /inbox* /actor* /.well-known* /routing* /marketplace* /candidates*
+    @backend path /api* /ws* /health* /metrics* /inbox* /actor* /.well-known* /routing* /marketplace* /candidates* /scalar* /openapi.json
     handle @backend {
         reverse_proxy 127.0.0.1:30081
     }

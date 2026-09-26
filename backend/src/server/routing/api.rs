@@ -1,22 +1,38 @@
 use std::time::Duration;
 
-use axum::http::Response;
+use axum::http::{header::CONTENT_TYPE, HeaderValue, Request, Response};
+use axum::response::IntoResponse;
 use axum::routing::{get, post, put};
 use axum::Router;
+use scalar_api_reference::axum::router as scalar_router;
+use serde_json::json;
 use tower_http::classify::ServerErrorsFailureClass;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 use tracing::Level;
 
 use crate::core::state::AppState;
+use crate::server::openapi;
 use crate::server::routing::{
     activitypub, auth, banks, exchange, matcher, networks, oauth, p2p, pairs, payments,
     payments_ws, providers, rates, solver, ws,
 };
 
 pub fn router(state: AppState) -> Router {
+    let scalar_configuration = json!({
+        "url": "/openapi.json",
+        "pageTitle": "Pay3Flow API Reference",
+        "hideClientButton": true,
+        "hideModels": false
+    });
+
+    let scalar_routes = scalar_router("/scalar", &scalar_configuration).with_state(());
+
     Router::new()
+        .merge(scalar_routes)
+        .route("/openapi.json", get(openapi::document))
         .route("/health", get(health))
+        .route("/metrics", get(metrics))
         .route("/api/auth/register", post(auth::register))
         .route("/api/auth/login", post(auth::login))
         .route("/api/auth/me", get(auth::me))
@@ -147,9 +163,11 @@ pub fn router(state: AppState) -> Router {
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
+                .on_request(observe_request)
                 .on_response(
                     |response: &Response<_>, latency: Duration, _span: &tracing::Span| {
                         let status = response.status();
+                        crate::observability::request_finished(status.as_u16(), latency);
                         if status.is_client_error() || status.is_server_error() {
                             tracing::error!(%status, ?latency, "request failed");
                         } else {
@@ -169,4 +187,18 @@ pub fn router(state: AppState) -> Router {
 
 pub async fn health() -> &'static str {
     "ok"
+}
+
+fn observe_request<B>(_: &Request<B>, _: &tracing::Span) {
+    crate::observability::request_started();
+}
+
+pub async fn metrics() -> impl IntoResponse {
+    (
+        [(
+            CONTENT_TYPE,
+            HeaderValue::from_static("text/plain; version=0.0.4; charset=utf-8"),
+        )],
+        crate::observability::render(),
+    )
 }

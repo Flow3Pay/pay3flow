@@ -8,6 +8,7 @@ pub mod core;
 pub mod db;
 pub mod exchange;
 pub mod networks;
+pub mod observability;
 pub mod p2p;
 pub mod pairs;
 pub mod payments;
