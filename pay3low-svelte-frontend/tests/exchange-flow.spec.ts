@@ -445,7 +445,10 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await expect(page.getByRole("button", { name: "Select sending bank: Ameriabank" })).toBeVisible();
 
   await page.getByRole("button", { name: "Route refresh settings" }).click();
-  await page.getByRole("button", { name: "30s" }).click();
+  const refreshSettings = page.getByRole("dialog", { name: "Refresh settings" });
+  if ((page.viewportSize()?.width ?? 0) > 640) await expect(refreshSettings).toHaveCSS("width", "430px");
+  await refreshSettings.getByRole("button", { name: "5m" }).click();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("pay3flow.exchange.refresh-seconds"))).toBe("300");
 
   await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
   const sourcePicker = page.getByRole("dialog", { name: "Choose where you pay from" });

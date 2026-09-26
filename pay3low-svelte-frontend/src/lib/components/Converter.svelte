@@ -7,9 +7,9 @@
   import { locale, t } from "$lib/i18n";
   import SidePanel from "./SidePanel.svelte";
 
-  type RefreshSeconds = 0 | 5 | 15 | 30 | 60;
+  type RefreshSeconds = 0 | 5 | 15 | 30 | 60 | 300;
   type PickerSide = "source" | "target" | null;
-  const REFRESH_OPTIONS: RefreshSeconds[] = [0, 5, 15, 30, 60];
+  const REFRESH_OPTIONS: RefreshSeconds[] = [0, 5, 15, 30, 60, 300];
   type P2pSource = string;
   type P2pSourceOption = { id: P2pSource; label: string; iconUrl: string; searchable: boolean; feeDescription?: string };
   const INTERMEDIARY_ASSETS = CRYPTO_ASSETS.map(([currency]) => currency);
@@ -85,6 +85,7 @@
   const amountNumber = (value: string) => Number(normalizeAmount(value).replace(",", "."));
   const CRYPTO_CURRENCIES: Set<string> = new Set(CRYPTO_ASSETS.map(([currency]) => currency));
   const amountFromMinor = (minor?: number) => minor == null ? "0" : (minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2, useGrouping: false });
+  const refreshOptionLabel = (seconds: RefreshSeconds) => seconds === 0 ? "Off" : seconds < 60 ? `${seconds}s` : `${seconds / 60}m`;
   const amountFromRoute = (route?: RouteCandidate | null) => {
     if (!route) return "0";
     if (route.target_amount && CRYPTO_CURRENCIES.has(route.target_currency?.toUpperCase() ?? "")) {
@@ -496,7 +497,7 @@
                 <div class:settingsDragging class="settingsMenu" bind:this={settingsDialog} role="dialog" aria-modal="true" aria-label="Refresh settings" tabindex="-1" on:mousedown|stopPropagation>
                 <div class="settingsModalHeader"><span class="settingsSheetHandle" aria-hidden="true" on:pointerdown={startSettingsDrag} on:pointermove={moveSettingsDrag} on:pointerup={endSettingsDrag} on:pointercancel={endSettingsDrag}></span><button type="button" class="settingsClose" on:click={closeSettings} aria-label="Close route settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button></div>
                 <div class="settingsHead"><div><strong>Auto-refresh</strong><span>Keep market routes current</span></div><span class={refreshSeconds ? "onBadge" : "offBadge"}>{refreshSeconds ? "On" : "Off"}</span></div>
-                <div class="refreshOptions">{#each REFRESH_OPTIONS as seconds}<button type="button" aria-pressed={refreshSeconds === seconds} on:click={() => { refreshSeconds = seconds; settingsOpen = false; }}>{seconds === 0 ? "Off" : `${seconds}s`}</button>{/each}</div>
+                <div class="refreshOptions">{#each REFRESH_OPTIONS as seconds}<button type="button" aria-pressed={refreshSeconds === seconds} on:click={() => { refreshSeconds = seconds; settingsOpen = false; }}>{refreshOptionLabel(seconds)}</button>{/each}</div>
                 <div class="sourceSettings"><span class="sourceSettingsLabel">Search exchanges</span><div class="sourceOptions exchangeOptions" aria-label="Exchanges to search">{#each p2pSources as source}{@const enabled = selectedSources.includes(source.id)}<button type="button" class:sourceOptionActive={enabled} class="sourceOption" aria-pressed={enabled} title={sourceTitle(source)} on:click={() => toggleSource(source.id)}><span class="sourceOptionIcon" aria-hidden="true"><img src={source.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackSourceIcon(event, source.id)} /></span>{source.label}</button>{/each}</div></div>
                 <div class="sourceSettings"><div class="intermediarySettingsHead"><span class="sourceSettingsLabel">Cryptocurrency intermediary</span><small>{selectedIntermediaryAssets.length ? `${selectedIntermediaryAssets.length} selected` : "All available"}</small></div><div class="sourceOptions intermediaryOptions" aria-label="Cryptocurrency intermediaries">
                   <button type="button" class:sourceOptionActive={selectedIntermediaryAssets.length === 0} class="sourceOption" aria-pressed={selectedIntermediaryAssets.length === 0} on:click={() => { selectedIntermediaryAssets = []; resetResults(); }}>All available</button>
@@ -726,7 +727,7 @@
   top: calc(100% + 9px);
   right: 0;
   z-index: 80;
-  width: 310px;
+  width: 430px;
   max-height: min(680px, calc(100vh - 32px));
   overflow-y: auto;
   padding: 17px;
@@ -796,7 +797,7 @@
 
 .refreshOptions {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 5px;
   margin: 17px 0 13px;
 }
