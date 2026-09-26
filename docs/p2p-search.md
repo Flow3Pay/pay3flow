@@ -125,7 +125,7 @@ playwright_chromium_executable = "/usr/bin/chromium"
 
 Sources, endpoint URLs, response mappings, and browser workflows are declared
 in `backend/providers/*/Providerfile`. Regenerate the provider migration and
-rebuild after changing one; see `docs/providerfiles.md`.
+rebuild after changing one; see [`../Providerfile.md`](../Providerfile.md).
 
 Run the opt-in live smoke test:
 

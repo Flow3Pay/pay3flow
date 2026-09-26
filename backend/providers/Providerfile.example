@@ -15,7 +15,7 @@ banks = []
 
 # Delete this section if the provider is catalog-only. For a JSON API use
 # [adapter.p2p] instead; complete examples are in binance/, bybit/, okx/,
-# bitget/, and rapira/. Browser workflow reference: docs/providerfiles.md.
+# bitget/, and rapira/. Full format reference: Providerfile.md.
 [workflow]
 source_url = "https://provider.example"
 get_exchange = "https://provider.example/exchange"

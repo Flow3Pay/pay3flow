@@ -344,7 +344,7 @@ The optional legacy fmatch services use `7277`, `5433`, and `8108`.
 ## Further documentation
 
 - [`docs/p2p-search.md`](docs/p2p-search.md) — route-search internals and source behavior.
-- [`docs/providerfiles.md`](docs/providerfiles.md) — declarative provider adapter format.
+- [`Providerfile.md`](Providerfile.md) — complete provider format and examples.
 - [`docs/api-overview.md`](docs/api-overview.md) — broader API families.
 - [`docs/development.md`](docs/development.md) — development and test conventions.
 - [`docs/deployment.md`](docs/deployment.md) — deployment checklist and blockers.
