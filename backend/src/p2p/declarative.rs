@@ -13,8 +13,8 @@ use crate::p2p::service::{
 };
 use crate::p2p::spot::{CryptoMarketSource, CryptoTicker};
 use crate::provider_adapter::{
-    environment_variable, MarketAdapterConfig, OfferMapping, P2pAdapterConfig, P2pOperation,
-    RateTableConfig, ValueCondition,
+    environment_variable, MarketAdapterConfig, OfferMapping, P2pAdapterConfig, P2pAdapterMarket,
+    P2pOperation, RateTableConfig, ValueCondition,
 };
 use crate::providers::ProviderAdapterRecord;
 
@@ -138,7 +138,10 @@ impl DeclarativeP2pSource {
             .unwrap_or_else(|| self.source_url.clone());
 
         Ok(P2pOffer {
-            market: P2pOfferMarket::P2p,
+            market: match self.config.market {
+                P2pAdapterMarket::P2p => P2pOfferMarket::P2p,
+                P2pAdapterMarket::DirectExchange => P2pOfferMarket::DirectExchange,
+            },
             source: self.slug.clone(),
             ad_id: optional_string(item, mapping.ad_id_pointer.as_deref()).unwrap_or_else(|| {
                 format!("{}-{}-{}-{}", self.slug, side_name(query.side), fiat, asset)
@@ -828,6 +831,21 @@ mod tests {
         DeclarativeP2pSource::from_record(Client::new(), &record).unwrap()
     }
 
+    fn whitebird_source() -> DeclarativeP2pSource {
+        let document: toml::Value =
+            toml::from_str(include_str!("../../providers/whitebird/Providerfile")).unwrap();
+        let adapters: ProviderAdapters =
+            document.get("adapter").unwrap().clone().try_into().unwrap();
+        let record = ProviderAdapterRecord {
+            slug: "whitebird".into(),
+            source_url: "https://whitebird.io/".into(),
+            display_name: "Whitebird".into(),
+            config: Some(adapters),
+            workflow: None,
+        };
+        DeclarativeP2pSource::from_record(Client::new(), &record).unwrap()
+    }
+
     #[test]
     fn renders_typed_and_string_request_placeholders() {
         let mut value: Value = serde_json::from_str(
@@ -933,6 +951,68 @@ mod tests {
             "https://tradernet.by/authentication/signup"
         );
         assert!(offer.advertiser.is_verified);
+    }
+
+    #[test]
+    fn maps_a_whitebird_quote_as_a_direct_exchange_offer() {
+        let source = whitebird_source();
+        let response: Value = serde_json::from_str(
+            r#"{"rate":"ETH/RUB","actualRateValue":"235251.2189","input":{"type":"FIAT_PROVIDER","asset":"RUB","amount":"10000","feeAmount":"250","provider":"ALFA"},"output":{"type":"CRYPTO_TRANSFER","asset":"ETH","amount":"0.04250775","feeAmount":"0.00000505"}}"#,
+        )
+        .unwrap();
+        let query = P2pSearchQuery {
+            fiat: "RUB".into(),
+            asset: "ETH".into(),
+            side: P2pSide::BuyCrypto,
+            amount: Some(10_000.0),
+            payment_method: None,
+            merchant_only: None,
+            min_orders: None,
+            min_completion_rate: None,
+            limit: Some(1),
+            sources: Some("whitebird".into()),
+        };
+        let mapping = source.config.buy.as_ref().unwrap().offer.as_ref().unwrap();
+
+        let offer = source.into_offer(&response, &query, mapping).unwrap();
+
+        assert_eq!(offer.market, P2pOfferMarket::DirectExchange);
+        assert_eq!(offer.ad_id, "whitebird-buy-RUB-ETH");
+        assert_eq!(offer.fiat, "RUB");
+        assert_eq!(offer.asset, "ETH");
+        assert!((offer.price.parse::<f64>().unwrap() - 235_251.2189).abs() < 0.01);
+        assert!(offer.advertiser.is_merchant);
+        assert!(offer.advertiser.is_verified);
+        assert_eq!(offer.source_url, "https://whitebird.io/exchanger");
+        assert!(!offer.source_url_is_exact);
+    }
+
+    #[tokio::test]
+    #[ignore = "calls the live Whitebird quote API"]
+    async fn live_whitebird_api_returns_buy_and_sell_quotes() {
+        let source = whitebird_source();
+        for side in [P2pSide::BuyCrypto, P2pSide::SellCrypto] {
+            let offers = source
+                .search(&P2pSearchQuery {
+                    fiat: "RUB".into(),
+                    asset: "ETH".into(),
+                    side,
+                    amount: (side == P2pSide::BuyCrypto).then_some(10_000.0),
+                    payment_method: None,
+                    merchant_only: None,
+                    min_orders: None,
+                    min_completion_rate: None,
+                    limit: Some(1),
+                    sources: Some("whitebird".into()),
+                })
+                .await
+                .unwrap();
+
+            assert_eq!(offers.len(), 1);
+            assert_eq!(offers[0].market, P2pOfferMarket::DirectExchange);
+            assert_eq!(offers[0].side, side);
+            assert!(offers[0].price.parse::<f64>().unwrap() > 0.0);
+        }
     }
 
     #[tokio::test]

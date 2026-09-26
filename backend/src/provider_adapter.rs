@@ -118,6 +118,8 @@ pub struct WorkflowRead {
 #[serde(deny_unknown_fields)]
 pub struct P2pAdapterConfig {
     pub kind: String,
+    #[serde(default, skip_serializing_if = "P2pAdapterMarket::is_p2p")]
+    pub market: P2pAdapterMarket,
     pub endpoint: String,
     #[serde(default = "default_method")]
     pub method: String,
@@ -140,6 +142,20 @@ pub struct P2pAdapterConfig {
     pub sell: Option<P2pOperation>,
     pub offer: Option<OfferMapping>,
     pub rate_table: Option<RateTableConfig>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum P2pAdapterMarket {
+    #[default]
+    P2p,
+    DirectExchange,
+}
+
+impl P2pAdapterMarket {
+    fn is_p2p(&self) -> bool {
+        *self == Self::P2p
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

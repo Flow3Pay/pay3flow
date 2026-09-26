@@ -156,8 +156,8 @@ property = "value"
 ```
 
 Define `[workflow.sell]` the same way, with crypto in `currencyFrom`, fiat in
-`currencyTo`, and `amount_mode = "asset_probe"`. See the complete, live-tested
-example in `backend/providers/whitebird/Providerfile`.
+`currencyTo`, and `amount_mode = "asset_probe"`. The generic workflow template
+is available in `backend/providers/Providerfile.example`.
 
 Available workflow actions are:
 
@@ -197,6 +197,7 @@ kind = "http_json"
 endpoint = "https://provider.example/api/offers"
 method = "POST"
 timeout_ms = 5000
+market = "direct_exchange" # omit for ordinary P2P advertisements
 supported_assets = ["USDT"]
 default_min_fiat = 1
 default_max_fiat = 1000000000

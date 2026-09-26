@@ -27,7 +27,7 @@ still be available when the venue is opened.
 | OKX | Public P2P API and spot ticker | P2P ads plus crypto market paths |
 | Bitget | Public P2P API and spot ticker | P2P ads plus crypto market paths |
 | Rapira | Public P2P API | `USDT/RUB` P2P ads |
-| Whitebird | Browser workflow over the public exchanger | Direct fiat/crypto quotes, including `USDC/RUB` |
+| Whitebird | Anonymous quote API used by the public exchanger | Direct fiat/crypto quotes, including `USDC/RUB` |
 | Cifra Markets | Public calculator and IMEX market API | Direct RUB/BYN/USD crypto quotes and crypto market paths |
 | CoW Swap | CoW Protocol quote API | Selectable same-chain crypto swap quotes for configured chains and tokens |
 | NEAR Intents | 1Click quote API | Selectable cross-chain and same-chain crypto swap quotes from the live token catalog |
@@ -60,7 +60,7 @@ flowchart LR
     api --> redis[(Redis)]
     api --> p2p[P2P APIs]
     api --> spot[Spot tickers]
-    api --> whitebird[Whitebird workflow]
+    api --> whitebird[Whitebird quote API]
     api --> cifra[Cifra Markets API]
     p2p --> ranker[Route builder and ranker]
     spot --> ranker
@@ -96,8 +96,9 @@ curl -fsS http://localhost:8080/health
 Open <http://localhost:3000>. The API is available at
 <http://localhost:8080>.
 
-The backend image includes Chromium and the Playwright driver required by the
-Whitebird workflow. The compose file also contains the older `fmatch` stack;
+The backend image includes Chromium and the Playwright driver for providers
+that use browser workflows; Whitebird itself uses its anonymous quote API. The
+compose file also contains the older `fmatch` stack;
 that stack needs a separate `fmatch/` checkout and is not required for the
 read-only live route search.
 
@@ -296,8 +297,7 @@ environment-only: `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `SECRETS_KEY`,
 
 See [`docs/configuration.md`](docs/configuration.md) for the schema and the
 secret boundary. Individual Providerfiles may override the default timeout.
-Whitebird currently uses a 30-second workflow timeout because its public quote
-is rendered in a browser.
+Whitebird currently uses a 5-second HTTP timeout for its anonymous quote API.
 
 ## Repository layout
 

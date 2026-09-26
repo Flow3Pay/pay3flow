@@ -10,109 +10,43 @@ name = "Whitebird Buy"
 currency = ["byn", "usd", "eur", "rub"]
 banks = []
 
-[workflow]
-source_url = "https://whitebird.io/"
-get_exchange = "https://whitebird.io/exchanger"
-timeout_ms = 30000
-navigation_retries = 1
-navigation_retry_delay_ms = 1000
+[adapter.p2p]
+kind = "http_json"
+market = "direct_exchange"
+endpoint = "https://api.whitebird.io/api/v3/exchange/client/quote"
+method = "POST"
+headers = { Origin = "https://whitebird.io", Referer = "https://whitebird.io/exchanger", Accept = "application/json" }
+asset_codes = { USDT = "USDT_TRC", USDC = "USDC_ERC" }
 supported_assets = ["TRX", "USDT", "ETH", "USDC", "BTC", "BNB", "GRAM", "SOL"]
 fiat_probe_amount = 1000
-asset_probe_amount = 100
+asset_probe_amount = 1
 default_min_fiat = 1
 default_max_fiat = 1000000000
 default_available_asset = 1000000000
-is_merchant = true
-is_verified = true
+timeout_ms = 5000
 
-[workflow.buy]
+[adapter.p2p.buy]
 amount_mode = "fiat_probe"
+request_json = '''{"input":{"asset":"{{fiat}}","type":"FIAT_PROVIDER","amount":"{{amount}}"},"output":{"asset":"{{asset}}","type":"CRYPTO_TRANSFER"},"merchantId":"11111111-1111-1111-1111-111111111111"}'''
 
-[[workflow.buy.steps]]
-action = "wait_for"
-selector = 'input[name="amountFrom"]'
+[adapter.p2p.buy.offer]
+fiat_pointer = "/input/asset"
+asset_pointer = "/output/asset"
+fiat_amount_pointer = "/input/amount"
+asset_amount_pointer = "/output/amount"
+merchant_default = true
+verified_default = true
+source_url_template = "https://whitebird.io/exchanger"
 
-[[workflow.buy.steps]]
-action = "react_select"
-selector = 'div:has(> input[name="currencyFrom"]) > div'
-value = "{{fiat}}"
-
-[[workflow.buy.steps]]
-action = "wait"
-milliseconds = 800
-
-[[workflow.buy.steps]]
-action = "react_select"
-selector = 'div:has(> input[name="currencyTo"]) > div'
-value = "{{asset}}"
-
-[[workflow.buy.steps]]
-action = "wait"
-milliseconds = 800
-
-[[workflow.buy.steps]]
-action = "fill"
-selector = 'input[name="amountFrom"]'
-value = "{{amount}}"
-
-[[workflow.buy.steps]]
-action = "wait_for"
-selector = 'input[name="amountTo"]'
-
-[[workflow.buy.steps]]
-action = "wait"
-milliseconds = 800
-
-[workflow.buy.fiat_amount]
-selector = 'input[name="amountFrom"]'
-property = "value"
-
-[workflow.buy.asset_amount]
-selector = 'input[name="amountTo"]'
-property = "value"
-
-[workflow.sell]
+[adapter.p2p.sell]
 amount_mode = "asset_probe"
+request_json = '''{"input":{"asset":"{{asset}}","type":"CRYPTO_TRANSFER","amount":"{{amount}}"},"output":{"asset":"{{fiat}}","type":"FIAT_PROVIDER"},"merchantId":"11111111-1111-1111-1111-111111111111"}'''
 
-[[workflow.sell.steps]]
-action = "wait_for"
-selector = 'input[name="amountFrom"]'
-
-[[workflow.sell.steps]]
-action = "react_select"
-selector = 'div:has(> input[name="currencyFrom"]) > div'
-value = "{{asset}}"
-
-[[workflow.sell.steps]]
-action = "wait"
-milliseconds = 800
-
-[[workflow.sell.steps]]
-action = "react_select"
-selector = 'div:has(> input[name="currencyTo"]) > div'
-value = "{{fiat}}"
-
-[[workflow.sell.steps]]
-action = "wait"
-milliseconds = 800
-
-[[workflow.sell.steps]]
-action = "fill"
-selector = 'input[name="amountFrom"]'
-value = "{{amount}}"
-
-[[workflow.sell.steps]]
-action = "wait_for"
-selector = 'input[name="amountTo"]'
-
-[[workflow.sell.steps]]
-action = "wait"
-milliseconds = 800
-
-[workflow.sell.fiat_amount]
-selector = 'input[name="amountTo"]'
-property = "value"
-
-[workflow.sell.asset_amount]
-selector = 'input[name="amountFrom"]'
-property = "value"
+[adapter.p2p.sell.offer]
+fiat_pointer = "/output/asset"
+asset_pointer = "/input/asset"
+fiat_amount_pointer = "/output/amount"
+asset_amount_pointer = "/input/amount"
+merchant_default = true
+verified_default = true
+source_url_template = "https://whitebird.io/exchanger"

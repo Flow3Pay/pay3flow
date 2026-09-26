@@ -1,8 +1,8 @@
 # Public P2P source policy
 
 Pay3Flow currently uses Binance, Bybit, OKX, Bitget, and Rapira as read-only
-advertisement sources. Whitebird is read through its public calculator with an
-anonymous Playwright workflow. These sources do not create trades.
+advertisement sources. Whitebird is read through the anonymous JSON quote
+endpoint used by its public calculator. These sources do not create trades.
 
 The search does not authenticate to third-party services, place orders, reserve
 crypto, or collect full payment-card credentials.
@@ -13,7 +13,7 @@ crypto, or collect full payment-card credentials.
 | --- | --- | --- | --- |
 | Binance, Bybit, OKX, Bitget | Public P2P advertisement endpoints | Anonymous read-only requests; formats may change | Enabled through generic Providerfile HTTP mappings |
 | Rapira P2P | Public read-only offers through `/otc/offers/page-query/v2` | No auth in the current adapter; format may change | Enabled as read-only; never creates trades |
-| Whitebird | Quote from the public `/exchanger` calculator | Anonymous Chromium workflow; no order submission | Enabled through the generic Providerfile workflow engine |
+| Whitebird | Quote from the public `/exchanger` calculator | Anonymous JSON request; no order submission | Enabled through the generic Providerfile HTTP adapter |
 | CoinGecko | Aggregated prices and market data | Plans and limits change; not P2P ads | Reference price only |
 | BestChange | Exchange rates and reserves | Official API requires an API key | Use only with a legitimate key |
 | Exnode | Exchange or merchant APIs | Requires keys and request signing | Do not use without registered access |
