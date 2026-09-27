@@ -653,12 +653,12 @@
               <div class="settingsBackdrop" on:mousedown={closeSettings} role="presentation">
                 <div class:settingsDragging class="settingsMenu" bind:this={settingsDialog} role="dialog" aria-modal="true" aria-label="Refresh settings" tabindex="-1" on:mousedown|stopPropagation>
                 <div class="settingsModalHeader"><span class="settingsSheetHandle" aria-hidden="true" on:pointerdown={startSettingsDrag} on:pointermove={moveSettingsDrag} on:pointerup={endSettingsDrag} on:pointercancel={endSettingsDrag}></span><button type="button" class="settingsClose" on:click={closeSettings} aria-label="Close route settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button></div>
-                <div class="settingsHead"><div><strong>Auto-refresh</strong><span>Keep market routes current</span></div><span class={refreshSeconds ? "onBadge" : "offBadge"}>{refreshSeconds ? "On" : "Off"}</span></div>
+                <div class="settingsHead"><div><strong>Auto-refresh</strong><span>Keep market routes current</span></div></div>
                 <div class="refreshOptions">{#each REFRESH_OPTIONS as seconds}<button type="button" aria-pressed={refreshSeconds === seconds} on:click={() => { refreshSeconds = seconds; settingsOpen = false; }}>{refreshOptionLabel(seconds)}</button>{/each}</div>
-                <div class="sourceSettings exchangeMethodSettings"><div class="intermediarySettingsHead"><span class="sourceSettingsLabel">{t("Exchange methods", {}, activeLocale)}</span><small>{selectedExchangeMethods.length} {t("selected", {}, activeLocale)}</small></div><div class="sourceOptions exchangeMethodOptions" aria-label={t("Exchange methods", {}, activeLocale)}>
+                <div class="sourceSettings exchangeMethodSettings"><div class="intermediarySettingsHead"><span class="sourceSettingsLabel">{t("Exchange methods", {}, activeLocale)}</span></div><div class="sourceOptions exchangeMethodOptions" aria-label={t("Exchange methods", {}, activeLocale)}>
                   {#each EXCHANGE_METHODS as method}{@const enabled = selectedExchangeMethods.includes(method)}<button type="button" class:sourceOptionActive={enabled} class="sourceOption" aria-pressed={enabled} on:click={() => toggleExchangeMethod(method)}>{method === "p2p" ? "P2P" : t("Exchangers", {}, activeLocale)}</button>{/each}
                 </div></div>
-                <div class="sourceSettings"><div class="intermediarySettingsHead"><span class="sourceSettingsLabel">Cryptocurrency intermediary</span><small>{selectedIntermediaryAssets.length ? `${selectedIntermediaryAssets.length} selected` : "All available"}</small></div><div class="sourceOptions intermediaryOptions" aria-label="Cryptocurrency intermediaries">
+                <div class="sourceSettings"><div class="intermediarySettingsHead"><span class="sourceSettingsLabel">Cryptocurrency intermediary</span></div><div class="sourceOptions intermediaryOptions" aria-label="Cryptocurrency intermediaries">
                   <button type="button" class:sourceOptionActive={selectedIntermediaryAssets.length === 0} class="sourceOption" aria-pressed={selectedIntermediaryAssets.length === 0} on:click={() => { selectedIntermediaryAssets = []; resetResults(); }}>All available</button>
                   {#each INTERMEDIARY_ASSETS as asset}{@const enabled = selectedIntermediaryAssets.includes(asset)}<button type="button" class:sourceOptionActive={enabled} class="sourceOption" aria-pressed={enabled} on:click={() => toggleAsset(asset)}><span class="intermediaryAssetIcon" aria-hidden="true"><img src={intermediaryIcon(asset)} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={fallbackAssetIcon} /></span>{asset}</button>{/each}
                 </div></div>
@@ -949,25 +949,6 @@
   color: var(--color-text-faint);
   font-size: 10px;
   line-height: 1.5;
-}
-
-.onBadge,
-.offBadge {
-  padding: 5px 8px;
-  border-radius: var(--radius-pill);
-  font-size: 9px !important;
-  font-weight: 800;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
-.onBadge {
-  background: rgba(45, 142, 69, 0.11);
-  color: var(--color-good) !important;
-}
-
-.offBadge {
-  background: var(--color-panel);
 }
 
 .refreshOptions {

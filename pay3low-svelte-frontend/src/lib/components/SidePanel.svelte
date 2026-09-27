@@ -3,6 +3,7 @@
   import { quintOut } from "svelte/easing";
   import { fly } from "svelte/transition";
   import type { RouteCandidate, ServiceVote } from "$lib/exchange";
+  import { locale, t } from "$lib/i18n";
   import { assetIcon, dislikeIcon, likeIcon, networkIcon, venueIcon } from "$lib/icons";
 
   export let routes: RouteCandidate[];
@@ -33,7 +34,9 @@
     }
     return minor == null ? "—" : `${(minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2, useGrouping: false })} ${currency ?? ""}`;
   };
-  const spreadLabel = (bps: number) => Math.abs(bps / 100) < 0.005 ? "Same output" : `${Math.abs(bps / 100).toFixed(2)}% less`;
+  const spreadLabel = (bps: number) => Math.abs(bps / 100) < 0.005
+    ? t("Same output", {}, $locale)
+    : t("{percent}% less", { percent: Math.abs(bps / 100).toFixed(2) }, $locale);
   const compact = (value: number) => Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(value);
   const routeCountLabel = (count: number) => `${count} ${count === 1 ? "route" : "routes"} found`;
   const reduceMotion = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -110,7 +113,7 @@
               </span>
             {/if}
           </span>
-          {#if renderingRoutes}<small class="resultLimit" data-testid="route-render-progress">Showing {routes.length} now · loading more…</small>{:else if routesFound > routes.length && routes.length}<small class="resultLimit">Showing top {routes.length}</small>{/if}
+          {#if renderingRoutes}<small class="resultLimit" data-testid="route-render-progress">Showing {routes.length} now · loading more…</small>{/if}
         {:else}<strong>Awaiting your intent</strong>{/if}
       </div>
       {#if searching && pendingVenues.length}

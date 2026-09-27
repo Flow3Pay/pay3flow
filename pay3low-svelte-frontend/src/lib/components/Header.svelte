@@ -29,7 +29,6 @@
         </svg>
       </span>
       <span class="wordmark">Pay3Flow</span>
-      <span class="beta">Beta</span>
     </a>
     <div class="actions">
       <a class="apiDocsLink" href={apiDocsHref} target="_blank" rel="noreferrer noopener" aria-label="Open API documentation">API DOCS</a>
@@ -97,17 +96,6 @@
   font-size: 17px;
   font-weight: 800;
   letter-spacing: -0.045em;
-}
-
-.beta {
-  padding: 4px 7px;
-  border-radius: var(--radius-pill);
-  background: var(--color-violet-soft);
-  color: var(--color-violet);
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .actions {
@@ -203,10 +191,6 @@
 
 :global(html[data-theme="dark"]) .logo {
   background: #080808;
-}
-
-:global(html[data-theme="dark"]) .beta {
-  color: var(--color-accent);
 }
 
 :global(html[data-theme="dark"]) .githubLink,
@@ -347,7 +331,6 @@
     border-radius: 18px;
   }
 
-  .beta,
   .profileAddress {
     display: none;
   }
@@ -384,11 +367,6 @@
   background: var(--color-primary);
   color: var(--color-accent);
   box-shadow: none;
-}
-
-.beta {
-  background: var(--color-accent-soft);
-  color: #668600;
 }
 
 .connect {

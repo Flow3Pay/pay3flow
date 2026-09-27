@@ -29,7 +29,6 @@ const messages: Record<Locale, Record<string, string>> = {
     "Search exchanges": "Искать на биржах",
     "Exchange methods": "Способы обмена",
     Exchangers: "Обменники",
-    selected: "выбрано",
     "Cryptocurrency intermediary": "Криптовалюта-посредник",
     "All available": "Все доступные",
     "Search also runs automatically 650ms after you change the amount, bank or intermediary.": "Поиск запускается автоматически через 650 мс после изменения суммы, банка или посредника.",
@@ -61,7 +60,7 @@ const messages: Record<Locale, Record<string, string>> = {
     "Awaiting your intent": "Ожидаем параметры обмена",
     "Best route": "Лучший маршрут",
     "Same output": "Та же сумма",
-    "Showing top {count}": "Показаны лучшие: {count}",
+    "{percent}% less": "на {percent}% меньше",
     "No routes found": "Маршруты не найдены",
     "Preparing market scan": "Подготавливаем поиск по рынку",
     "Your routes will appear here": "Здесь появятся ваши маршруты",
@@ -259,7 +258,6 @@ const messages: Record<Locale, Record<string, string>> = {
     "Search exchanges": "Փնտրել բորսաներում",
     "Exchange methods": "Փոխանակման եղանակներ",
     Exchangers: "Փոխանակման կետեր",
-    selected: "ընտրված է",
     "Cryptocurrency intermediary": "Միջնորդ կրիպտոարժույթ",
     "All available": "Բոլոր հասանելիները",
     "Search also runs automatically 650ms after you change the amount, bank or intermediary.": "Որոնումն ավտոմատ կսկսվի 650 մվ անց՝ գումարը, բանկը կամ միջնորդը փոխելուց հետո։",
@@ -291,7 +289,7 @@ const messages: Record<Locale, Record<string, string>> = {
     "Awaiting your intent": "Սպասում ենք փոխանակման տվյալներին",
     "Best route": "Լավագույն ուղղություն",
     "Same output": "Նույն արդյունքը",
-    "Showing top {count}": "Ցուցադրվում են լավագույն {count}-ը",
+    "{percent}% less": "{percent}%-ով պակաս",
     "No routes found": "Ուղղություններ չեն գտնվել",
     "Preparing market scan": "Պատրաստում ենք շուկայի որոնումը",
     "Your routes will appear here": "Ձեր ուղղությունները կհայտնվեն այստեղ",
@@ -516,8 +514,6 @@ export function localize(node: HTMLElement) {
       if (match) translated = t("Updated {seconds}s ago", { seconds: match[1] }, language);
       match = trimmed.match(/^Refresh in (\d+) seconds$/);
       if (match) translated = t("Refresh in {seconds} seconds", { seconds: match[1] }, language);
-      match = trimmed.match(/^Showing top (\d+)$/);
-      if (match) translated = t("Showing top {count}", { count: match[1] }, language);
       match = trimmed.match(/^(\d+) (route|routes) found$/);
       if (match) translated = `${match[1]} ${language === "ru" ? "маршрут" : language === "hy" ? "ուղղություն" : match[2]} ${language === "ru" ? "найдено" : language === "hy" ? "գտնվել է" : "found"}`;
       match = trimmed.match(/^Send ([^ ]+) → ([^ ]+)$/);
