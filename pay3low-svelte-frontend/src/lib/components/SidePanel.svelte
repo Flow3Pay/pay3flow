@@ -138,7 +138,10 @@
               <button type="button" class="routeCardMain" disabled={!complete} aria-pressed={route.route_id === selectedRouteId} aria-label={`Select route ${index + 1}: ${money(route.target_amount_minor, route.target_currency, route.target_amount)}`} on:click={(event) => cardClick(event, route)}>
                 <span class="routeTopline"><span class="routeRank">#{String(index + 1).padStart(2, "0")}</span><span class="routeBadges">{#if route.is_current_best}<span class="bestBadge">Best route</span>{:else}<span class="deltaBadge">{spreadLabel(route.spread_bps, $locale)}</span>{/if}</span></span>
                 <span class="routeAmount">{money(route.target_amount_minor, route.target_currency, route.target_amount)}</span>
-                <span class="workflow" aria-label={workflowLabel(route)}>
+              </button>
+              <div class="routeActionRow">
+                <button type="button" class="routeWorkflowButton" disabled={!complete} aria-label={workflowLabel(route)} on:click={(event) => cardClick(event, route)}>
+                  <span class="workflow">
                   {#each workflowSteps(route) as step, stepIndex}
                     <span class="workflowPart">
                       {#if stepIndex > 0}<span class="workflowArrow" aria-hidden="true">→</span>{/if}
@@ -162,15 +165,16 @@
                       {/if}
                     </span>
                   {/each}
-                </span>
-                {#if route.route_fees?.length || route.quote_expires_at}
-                  <span class="routeQuoteMeta">
-                    {#if route.route_fees?.length}Fee {route.route_fees.map((fee) => `${fee.amount} ${fee.asset}`).join(" + ")}{/if}
-                    {#if route.quote_expires_at} · Quote expires {new Date(route.quote_expires_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{/if}
                   </span>
-                {/if}
-              </button>
-              {#if complete && route.feedback}<div class="routeFeedback" aria-label="Route feedback"><span class="serviceVote routeVote"><button type="button" class:active={route.feedback.viewer_vote === "like"} aria-label="Like this route" aria-pressed={route.feedback.viewer_vote === "like"} title="Like this route" on:click={() => onVote(route, "like")}><img src={likeIcon} alt="" aria-hidden="true" />{#if route.feedback.viewer_vote}<span aria-label={`${compact(route.feedback.likes_total)} likes`}>{compact(route.feedback.likes_total)}</span>{/if}</button><button type="button" class:active={route.feedback.viewer_vote === "dislike"} aria-label="Dislike this route" aria-pressed={route.feedback.viewer_vote === "dislike"} title="Dislike this route" on:click={() => onVote(route, "dislike")}><img src={dislikeIcon} alt="" aria-hidden="true" />{#if route.feedback.viewer_vote}<span aria-label={`${compact(route.feedback.dislikes_total)} dislikes`}>{compact(route.feedback.dislikes_total)}</span>{/if}</button></span></div>{/if}
+                </button>
+                {#if complete && route.feedback}<div class="routeFeedback" aria-label="Route feedback"><span class="serviceVote routeVote"><button type="button" class:active={route.feedback.viewer_vote === "like"} aria-label="Like this route" aria-pressed={route.feedback.viewer_vote === "like"} title="Like this route" on:click={() => onVote(route, "like")}><img src={likeIcon} alt="" aria-hidden="true" />{#if route.feedback.viewer_vote}<span aria-label={`${compact(route.feedback.likes_total)} likes`}>{compact(route.feedback.likes_total)}</span>{/if}</button><button type="button" class:active={route.feedback.viewer_vote === "dislike"} aria-label="Dislike this route" aria-pressed={route.feedback.viewer_vote === "dislike"} title="Dislike this route" on:click={() => onVote(route, "dislike")}><img src={dislikeIcon} alt="" aria-hidden="true" />{#if route.feedback.viewer_vote}<span aria-label={`${compact(route.feedback.dislikes_total)} dislikes`}>{compact(route.feedback.dislikes_total)}</span>{/if}</button></span></div>{/if}
+              </div>
+              {#if route.route_fees?.length || route.quote_expires_at}
+                <span class="routeQuoteMeta">
+                  {#if route.route_fees?.length}Fee {route.route_fees.map((fee) => `${fee.amount} ${fee.asset}`).join(" + ")}{/if}
+                  {#if route.quote_expires_at} · Quote expires {new Date(route.quote_expires_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{/if}
+                </span>
+              {/if}
               </div>
             </div></li>
           {/each}
@@ -418,12 +422,40 @@
   text-align: left;
 }
 
+.routeActionRow {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.routeWorkflowButton {
+  display: block;
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.routeWorkflowButton:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
 .routeFeedback {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 5px 12px;
-  margin-top: 2px;
+  flex: 0 0 auto;
+  margin: 0;
   color: rgba(255, 255, 255, 0.58);
   font-family: var(--font-mono);
   font-size: 9px;
@@ -433,6 +465,13 @@
   display: inline-flex;
   align-items: center;
   gap: 3px;
+}
+
+.routeVote {
+  padding: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .serviceVoteName {
@@ -882,6 +921,11 @@
   color: var(--color-text-soft);
 }
 
+.routeVote {
+  border-color: var(--color-border);
+  background: #f4f8f1;
+}
+
 .panelTop {
   transform: translateY(-5px);
 }
@@ -1056,6 +1100,11 @@
 :global(html[data-theme="dark"]) .routeFeedback,
 :global(html[data-theme="dark"]) .serviceVoteName {
   color: rgba(255, 255, 255, 0.58);
+}
+
+:global(html[data-theme="dark"]) .routeVote {
+  border-color: #383838;
+  background: rgba(255, 255, 255, 0.04);
 }
 
 :global(html[data-theme="dark"]) .serviceVote button:hover {

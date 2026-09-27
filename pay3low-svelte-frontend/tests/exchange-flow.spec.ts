@@ -1500,6 +1500,9 @@ test("anonymous vote reveals service reputation", async ({ page }) => {
   await expect(page.getByTestId("complete-route")).toHaveCount(12);
 
   const routeCard = page.getByTestId("complete-route").nth(1);
+  const actionRow = routeCard.locator(".routeActionRow");
+  await expect(actionRow).toHaveCSS("display", "flex");
+  await expect(actionRow.locator(".routeWorkflowButton + .routeFeedback")).toHaveCount(1);
   await expect(routeCard.getByRole("button", { name: "Like this route", exact: true })).toBeVisible();
   await expect(routeCard.getByRole("button", { name: "Dislike this route", exact: true })).toBeVisible();
   await expect(routeCard.getByLabel("850 likes")).toHaveCount(0);
