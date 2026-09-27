@@ -25,7 +25,7 @@
   let dragging = false;
   let dragStartY = 0;
   let dragDistance = 0;
-  const BANK_METHODS = PAYMENT_METHODS.filter((method) => method.kind === "bank");
+  const FIAT_METHODS = PAYMENT_METHODS.filter((method) => method.kind !== "wallet");
 
   function close() {
     query = "";
@@ -111,7 +111,7 @@
   // The primary currency selector owns fiat-vs-crypto. This picker only owns
   // the secondary settlement choice: a bank for fiat or an asset/network pair
   // for crypto.
-  $: banks = BANK_METHODS.filter((method) =>
+  $: banks = FIAT_METHODS.filter((method) =>
     (method.role === role || method.role === "both") && method.currency === currency,
   );
   $: assetsForRole = DIGITAL_ASSETS.filter((method) =>
@@ -124,9 +124,9 @@
       })
     : banks.map((method): Option => ({ method }));
   $: filtered = query.trim() ? options.filter((option) => matchesSearch(option, query)) : options;
-  $: popular = filtered.filter(({ method }) => method.kind === "bank" && method.popular);
+  $: popular = filtered.filter(({ method }) => method.kind !== "wallet" && method.popular);
   $: assets = filtered.filter(({ method }) => method.kind === "wallet");
-  $: all = filtered.filter(({ method }) => !method.popular && method.kind === "bank");
+  $: all = filtered.filter(({ method }) => !method.popular && method.kind !== "wallet");
 </script>
 
 {#if open}
@@ -154,7 +154,7 @@
           {#if filtered.length === 0}
             <div class="empty"><strong>No {currencyKind === "crypto" ? "crypto networks" : "banks"} found</strong><span>Try a different search.</span></div>
           {/if}
-          {#each currencyKind === "crypto" ? [["Networks", assets]] : [["Popular banks", popular], ["All payment methods", all]] as group}
+          {#each currencyKind === "crypto" ? [["Networks", assets]] : [["Popular methods", popular], ["All payment methods", all]] as group}
             {@const label = group[0] as string}
             {@const rows = group[1] as Option[]}
             {#if rows.length > 0}
@@ -169,8 +169,8 @@
                       {#if logo(method)}<img src={logo(method) ?? ""} alt="" width="42" height="42" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{method.initials}</span>{:else}<span>{method.initials}</span>{/if}
                     </span>
                     <span class="methodCopy">
-                      <span class="methodName">{method.kind === "bank" ? method.name : network?.name ?? "Digital wallet"}</span>
-                      <span class="methodMeta">{method.kind === "bank" ? `Bank transfer · ${method.currency}` : `${method.currency} · Crypto network`}</span>
+                      <span class="methodName">{method.kind === "wallet" ? network?.name ?? "Digital wallet" : method.name}</span>
+                      <span class="methodMeta">{method.kind === "cash" ? `Cash settlement · ${method.currency}` : method.kind === "bank" ? `Bank transfer · ${method.currency}` : `${method.currency} · Crypto network`}</span>
                     </span>
                     {#if isSelected}
                       <svg class="check" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="currentColor" /><path d="m6 10.2 2.7 2.5 5.3-5.6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>

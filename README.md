@@ -5,10 +5,12 @@ crypto across public P2P markets, direct exchangers, and spot markets. The web
 application searches the selected venues in parallel, streams results as each
 venue responds, and keeps the best route at the top of the ranking.
 
-Pay3Flow currently supports four route shapes:
+Pay3Flow currently supports six route shapes:
 
 ```text
 fiat   -> crypto -> fiat     AMD -> USDT -> RUB
+cash   -> crypto -> fiat     USD cash -> USDT -> AMD
+bank   -> crypto -> bank     USD account <-> USDT <-> Armenian USD account
 fiat   -> crypto             RUB -> USDC
 crypto -> fiat               USDC (ERC-20) -> RUB
 crypto -> crypto             USDC (ERC-20) -> ETH

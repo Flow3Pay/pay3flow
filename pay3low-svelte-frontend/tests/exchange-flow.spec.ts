@@ -122,6 +122,88 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
         },
         source_url: `https://example.com/${adId}`,
       });
+      if (url.searchParams.get("source_fiat") === "USD" && url.searchParams.get("target_fiat") === "AMD") {
+        expect(url.searchParams.get("source_payment_method")).toBe("Cash");
+        expect(url.searchParams.get("target_payment_method")).toBe("Ameriabank");
+        const entry = offer("skylabs", "usd-cash-entry", "USD", "USDT");
+        entry.payment_methods = ["SkyLabs ATM"];
+        const exit = offer("skylabs", "amd-bank-exit", "AMD", "USDT");
+        exit.payment_methods = ["Ameriabank"];
+        return json({
+          search_id: "00000000-0000-4000-8000-000000000108",
+          routes_found: 1,
+          searched_at: "2026-09-27T10:00:00Z",
+          source_fiat: "USD",
+          target_fiat: "AMD",
+          source_amount: "12000.00",
+          assets_searched: ["USDT"],
+          can_exchange_to_target: true,
+          routes: [{
+            route_id: "route-usd-cash-amd",
+            rank: 1,
+            asset: "USDT",
+            entry_network: null,
+            source_network: null,
+            target_network: null,
+            source_fiat: "USD",
+            source_amount: "12000.00",
+            acquired_asset_amount: "12000.00",
+            target_fiat: "AMD",
+            target_amount: "4620000.00",
+            effective_rate: "385.00000000",
+            same_venue: true,
+            requires_asset_transfer: false,
+            transfer_fee_included: true,
+            route_kind: "fiat_to_fiat",
+            payment_methods_verified: true,
+            entry_offer: entry,
+            exit_offer: exit,
+            warnings: ["Cash exchange limits and identity checks are set by the provider."],
+          }],
+        });
+      }
+      if (url.searchParams.get("source_fiat") === "USD" && url.searchParams.get("target_fiat") === "USD") {
+        const sourcePaymentMethod = url.searchParams.get("source_payment_method");
+        const isReverseBankRoute = sourcePaymentMethod === "Ameriabank";
+        expect(sourcePaymentMethod).toBe(isReverseBankRoute ? "Ameriabank" : "Bank Transfer");
+        expect(url.searchParams.get("target_payment_method")).toBe("Bank Transfer");
+        const entry = offer(isReverseBankRoute ? "okx" : "skylabs", "usd-bank-entry", "USD", "USDT");
+        entry.payment_methods = [isReverseBankRoute ? "Ameriabank" : "Bank Transfer"];
+        const exit = offer("skylabs", "usd-bank-exit", "USD", "USDT");
+        exit.payment_methods = ["Bank Transfer"];
+        return json({
+          search_id: "00000000-0000-4000-8000-000000000109",
+          routes_found: 1,
+          searched_at: "2026-09-27T10:00:00Z",
+          source_fiat: "USD",
+          target_fiat: "USD",
+          source_amount: "12000.00",
+          assets_searched: ["USDT"],
+          can_exchange_to_target: true,
+          routes: [{
+            route_id: "route-usd-bank-usdt-usd-bank",
+            rank: 1,
+            asset: "USDT",
+            entry_network: "tron",
+            source_network: null,
+            target_network: null,
+            source_fiat: "USD",
+            source_amount: "12000.00",
+            acquired_asset_amount: "11881.18811881",
+            target_fiat: "USD",
+            target_amount: "11643.56",
+            effective_rate: "0.97029667",
+            same_venue: !isReverseBankRoute,
+            requires_asset_transfer: isReverseBankRoute,
+            transfer_fee_included: true,
+            route_kind: "fiat_to_fiat",
+            payment_methods_verified: true,
+            entry_offer: entry,
+            exit_offer: exit,
+            warnings: ["Bank-account eligibility and transfer limits must be confirmed with the provider."],
+          }],
+        });
+      }
       if (url.searchParams.get("source_fiat") === "RUB" && url.searchParams.get("target_fiat") === "RUB") {
         const sbpOffer = (source: string, adId: string, fiat: string) => ({
           ...offer(source, adId, fiat, "USDT"),
@@ -1085,6 +1167,91 @@ test("currency is primary and crypto exposes token, network, and wallet roles", 
   await page.getByRole("button", { name: "Swap sender and recipient" }).click();
   await expect(page.getByLabel("Sender wallet address")).toHaveValue("0xrecipient");
   await expect(page.getByLabel("Recipient wallet address")).toHaveValue("0xsender");
+});
+
+test("USD supports cash and Armenian dollar bank accounts", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page);
+
+  await page.getByRole("button", { name: "Select sending currency: AMD" }).click();
+  const sourceCurrencyPicker = page.getByRole("dialog", { name: "Choose currency" });
+  await expect(sourceCurrencyPicker.getByRole("option", { name: /^USD\b/ })).toBeVisible();
+  await sourceCurrencyPicker.getByRole("option", { name: /^USD\b/ }).click();
+
+  const cashMethod = page.getByRole("button", { name: "Select sending payment method: Cash USD" });
+  await expect(cashMethod).toBeVisible();
+  await expect(page.getByText("USD available via cash")).toBeVisible();
+  await cashMethod.click();
+  const methodPicker = page.getByRole("dialog", { name: "Choose where you pay from" });
+  await expect(methodPicker.getByRole("option", { name: /Cash USD/ })).toBeVisible();
+  await expect(methodPicker.getByRole("option", { name: /Armenian USD bank account/ })).toBeVisible();
+  await methodPicker.getByRole("option", { name: /Cash USD/ }).click();
+
+  await page.getByRole("button", { name: "Select recipient currency: RUB" }).click();
+  await page.getByRole("dialog", { name: "Choose currency" }).getByRole("option", { name: /^AMD\b/ }).click();
+  await expect(page.getByRole("button", { name: "Select recipient bank: Ameriabank" })).toBeVisible();
+
+  await page.getByLabel("Amount to send").fill("12000");
+  await page.getByTestId("start-search").click();
+  await expect(page.getByTestId("complete-route")).toHaveCount(1);
+  await expect(page.getByText("4620000 AMD")).toBeVisible();
+  await expect(page).toHaveURL(/#\/swap\/USD\/AMD\?amount=12000$/);
+});
+
+test("USD bank account routes through crypto to an Armenian USD account", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page);
+
+  await page.getByRole("button", { name: "Select sending currency: AMD" }).click();
+  await page.getByRole("dialog", { name: "Choose currency" }).getByRole("option", { name: /^USD\b/ }).click();
+
+  await page.getByRole("button", { name: "Select sending payment method: Cash USD" }).click();
+  const sourceMethodPicker = page.getByRole("dialog", { name: "Choose where you pay from" });
+  await sourceMethodPicker.getByRole("option", { name: /^USD bank account\b/ }).click();
+
+  await page.getByRole("button", { name: "Select recipient currency: RUB" }).click();
+  await page.getByRole("dialog", { name: "Choose currency" }).getByRole("option", { name: /^USD\b/ }).click();
+  await page.getByRole("button", { name: /Select recipient .*Cash USD/ }).click();
+  const targetMethodPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
+  await targetMethodPicker.getByRole("option", { name: /Armenian USD bank account/ }).click();
+
+  await page.getByLabel("Amount to send").fill("12000");
+  await page.getByTestId("start-search").click();
+
+  const route = page.getByTestId("complete-route");
+  await expect(route).toHaveCount(1);
+  await expect(route).toContainText("USDT");
+  await expect(page.getByText("11643.56 USD")).toBeVisible();
+  await expect(page).toHaveURL(/#\/swap\/USD\/USD\?amount=12000$/);
+});
+
+test("Armenian USD account routes through crypto to a USD bank account", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page);
+
+  await page.getByRole("button", { name: "Select sending currency: AMD" }).click();
+  await page.getByRole("dialog", { name: "Choose currency" }).getByRole("option", { name: /^USD\b/ }).click();
+
+  await page.getByRole("button", { name: "Select sending payment method: Cash USD" }).click();
+  const sourceMethodPicker = page.getByRole("dialog", { name: "Choose where you pay from" });
+  await sourceMethodPicker.getByRole("option", { name: /^Ameriabank USD account\b/ }).click();
+
+  await page.getByRole("button", { name: "Select recipient currency: RUB" }).click();
+  await page.getByRole("dialog", { name: "Choose currency" }).getByRole("option", { name: /^USD\b/ }).click();
+  await page.getByRole("button", { name: /Select recipient .*Cash USD/ }).click();
+  const targetMethodPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
+  await targetMethodPicker.getByRole("option", { name: /^USD bank account\b/ }).click();
+
+  await page.getByLabel("Amount to send").fill("12000");
+  await page.getByTestId("start-search").click();
+
+  const route = page.getByTestId("complete-route");
+  await expect(route).toHaveCount(1);
+  await expect(route).toContainText("USDT");
+  await expect(route).toContainText(/okx/i);
+  await expect(route).toContainText(/skylabs/i);
+  await expect(page.getByText("11643.56 USD")).toBeVisible();
+  await expect(page).toHaveURL(/#\/swap\/USD\/USD\?amount=12000$/);
 });
 
 test("cryptocurrency search binds the selected asset to its network", async ({ page }) => {

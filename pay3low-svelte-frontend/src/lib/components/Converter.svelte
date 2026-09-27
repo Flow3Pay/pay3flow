@@ -18,7 +18,7 @@
   const ROUTE_BATCH_SIZE = 100;
   const ROUTE_BATCH_DELAY_MS = 10;
   const INTERMEDIARY_ASSETS = CRYPTO_ASSETS.map(([currency]) => currency);
-  const BANK_METHODS = PAYMENT_METHODS.filter((method) => method.kind === "bank");
+  const FIAT_METHODS = PAYMENT_METHODS.filter((method) => method.kind !== "wallet");
   const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", sources: "pay3flow.exchange.p2p-sources", knownSources: "pay3flow.exchange.known-p2p-sources", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", sourceNetwork: "pay3flow.exchange.source-network", targetNetwork: "pay3flow.exchange.target-network", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets", anonymousId: "pay3flow.reputation.anonymous-id" };
 
   let corridors: ExchangeCorridor[] = [];
@@ -111,6 +111,10 @@
   const intermediaryIcon = (asset: string) => assetIcon(asset);
   const networkName = (id: string | null | undefined) => !id ? "internal" : networks.find((network) => network.id === id)?.name ?? id;
   const locationLabel = (country: string, currency: string) => { try { return `${new Intl.DisplayNames([activeLocale], { type: "region" }).of(country) ?? country} · ${currency}`; } catch { return `${country} · ${currency}`; } };
+  const methodNoun = (method: PaymentMethod | null | undefined) => method?.kind === "wallet" ? "network" : method?.kind === "cash" ? "payment method" : "bank";
+  const methodAvailability = (method: PaymentMethod | null | undefined) => method?.kind === "wallet" ? "digital wallet" : method?.kind === "cash" ? "cash" : "bank transfer";
+  const methodTitle = (method: PaymentMethod | null | undefined, network?: CryptoNetwork) => method?.kind === "wallet" ? network?.name ?? "Select network" : method?.name ?? "Select payment method";
+  const methodDetail = (method: PaymentMethod | null | undefined) => method?.kind === "wallet" ? `${method.currency} · Crypto network` : method?.kind === "cash" ? `${method.currency} · Cash settlement` : method ? locationLabel(method.country, method.currency) : "Unavailable";
 
   function providerLabel(provider: ProviderDefinition) {
     const label = provider.name.replace(/\s+(buy|sell)$/i, "").trim();
@@ -169,14 +173,14 @@
       return {
         route_id: route.route_id?.trim() || fallbackRouteId,
         status: "complete", source_amount_minor: Math.round(Number(route.source_amount) * 100), source_currency: route.source_fiat,
-        source_payment_method: sourceMethod?.kind === "bank" ? sourceMethod.name : undefined,
-        target_payment_method: targetMethod?.kind === "bank" ? targetMethod.name : undefined,
+        source_payment_method: sourceMethod?.kind !== "wallet" ? sourceMethod?.name : undefined,
+        target_payment_method: targetMethod?.kind !== "wallet" ? targetMethod?.name : undefined,
         source_bank_fee_percent: sourceMethod?.kind === "bank" ? sourceMethod.bankFeePercent : undefined,
         target_bank_fee_percent: targetMethod?.kind === "bank" ? targetMethod.bankFeePercent : undefined,
-        source_method_icon_url: sourceMethod?.kind === "bank" ? paymentMethodFavicon(sourceMethod) ?? undefined : undefined,
+        source_method_icon_url: sourceMethod?.kind !== "wallet" ? paymentMethodFavicon(sourceMethod) ?? undefined : undefined,
         entry_asset: route.asset, entry_network: networkName(route.entry_network), source_network: route.source_network ? networkName(route.source_network) : undefined, target_network: route.target_network ? networkName(route.target_network) : undefined,
         target_amount_minor: Math.round(targetAmount * 100), target_amount: route.target_amount, target_currency: route.target_fiat,
-        target_method_icon_url: targetMethod?.kind === "bank" ? paymentMethodFavicon(targetMethod) ?? undefined : undefined,
+        target_method_icon_url: targetMethod?.kind !== "wallet" ? paymentMethodFavicon(targetMethod) ?? undefined : undefined,
         route_kind: route.route_kind, bridge_currency: route.bridge_currency, market_path: route.market_path,
         route_provider: route.route_provider, route_provider_url: route.route_provider_url, route_path: route.route_path, route_fees: route.route_fees, quote_expires_at: route.quote_expires_at,
         spread_bps: bestTarget > 0 && Number.isFinite(targetAmount) ? Math.round((targetAmount / bestTarget - 1) * 10_000) : 0,
@@ -308,8 +312,8 @@
   $: sourceCurrency = corridor ? (directionReversed ? corridor.target_currency : corridor.source_currency) : "";
   $: targetCountry = corridor ? (directionReversed ? corridor.source_country : corridor.target_country) : "";
   $: targetCurrency = corridor ? (directionReversed ? corridor.source_currency : corridor.target_currency) : "";
-  $: sourceMethods = [...BANK_METHODS.filter((method) => method.role === "sender" || method.role === "both"), ...DIGITAL_ASSETS];
-  $: targetMethods = [...BANK_METHODS.filter((method) => method.role === "recipient" || method.role === "both"), ...DIGITAL_ASSETS];
+  $: sourceMethods = [...FIAT_METHODS.filter((method) => method.role === "sender" || method.role === "both"), ...DIGITAL_ASSETS];
+  $: targetMethods = [...FIAT_METHODS.filter((method) => method.role === "recipient" || method.role === "both"), ...DIGITAL_ASSETS];
   $: sourceMethod = sourceMethods.find((method) => method.id === sourceMethodId) ?? (sourceCountry ? sourceMethods[0] : null);
   $: targetMethod = targetMethods.find((method) => method.id === targetMethodId) ?? (targetCountry ? targetMethods[0] : null);
   $: sourceCurrencyChoice = sourceMethod?.currency || sourceCurrency;
@@ -369,15 +373,15 @@
     sourceWalletAddress = nextSourceAddress;
     targetWalletAddress = nextTargetAddress;
   }
-  function defaultBank(currency: string, role: "sender" | "recipient") {
-    return BANK_METHODS.find((method) => method.currency === currency && (method.role === role || method.role === "both"));
+  function defaultFiatMethod(currency: string, role: "sender" | "recipient") {
+    return FIAT_METHODS.find((method) => method.currency === currency && (method.role === role || method.role === "both"));
   }
   function defaultAsset(currency: string) {
     return DIGITAL_ASSETS.find((method) => method.currency === currency) ?? DIGITAL_ASSETS[0];
   }
   function chooseCurrency(side: Exclude<PickerSide, null>, choice: string) {
     const role = side === "source" ? "sender" : "recipient";
-    const next = CRYPTO_CURRENCIES.has(choice) ? defaultAsset(choice) : defaultBank(choice, role);
+    const next = CRYPTO_CURRENCIES.has(choice) ? defaultAsset(choice) : defaultFiatMethod(choice, role);
     if (!next) return;
     initialSearchReady = true;
     if (side === "source") {
@@ -647,12 +651,12 @@
 
       <div class="intentLabel"><span>Sell</span></div>
       <div class="moneyPanel moneyPanelSource">
-        <div class="panelCopy"><label for="exchange-amount">You send</label><input id="exchange-amount" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={amount} on:focus={(event) => event.currentTarget.select()} on:input={(event) => updateAmount(event.currentTarget.value)} aria-label="Amount to send" /><span class="currencyHint">{selectedSourceCurrency || "AMD"} available via {sourceMethod?.kind === "wallet" ? "digital wallet" : "bank transfer"}</span></div>
+        <div class="panelCopy"><label for="exchange-amount">You send</label><input id="exchange-amount" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={amount} on:focus={(event) => event.currentTarget.select()} on:input={(event) => updateAmount(event.currentTarget.value)} aria-label="Amount to send" /><span class="currencyHint">{selectedSourceCurrency || "AMD"} available via {methodAvailability(sourceMethod)}</span></div>
         <div class="methodControls">
           <button type="button" class="currencyTrigger" on:click={() => openCurrencyPicker("source")} aria-label={`Select sending currency: ${sourceCurrencyChoice}`}><strong>{sourceCurrencyChoice}</strong><span aria-hidden="true">⌄</span></button>
-          <button type="button" class="methodTrigger" on:click={() => void openMethodPicker("source")} aria-label={`Select sending ${sourceMethod?.kind === "wallet" ? "network" : "bank"}: ${sourceMethod?.kind === "wallet" ? sourceNetwork?.name ?? "none" : sourceMethod?.name ?? "none"}`}>
+          <button type="button" class="methodTrigger" on:click={() => void openMethodPicker("source")} aria-label={`Select sending ${methodNoun(sourceMethod)}: ${sourceMethod?.kind === "wallet" ? sourceNetwork?.name ?? "none" : sourceMethod?.name ?? "none"}`}>
             <span class="methodAvatar" style:background-color={paymentMethodFavicon(sourceMethod) ? "transparent" : sourceMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(sourceMethod)}<img src={paymentMethodFavicon(sourceMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{:else}<span>{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{/if}</span>
-            <span class="methodText"><strong>{sourceMethod?.kind === "wallet" ? sourceNetwork?.name ?? "Select network" : sourceMethod?.name ?? "Select bank"}</strong><small>{sourceMethod?.kind === "wallet" ? `${sourceMethod.currency} · Crypto network` : sourceMethod ? locationLabel(sourceMethod.country, sourceMethod.currency) : corridor ? locationLabel(sourceCountry, sourceCurrency) : "Unavailable"}</small></span><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+            <span class="methodText"><strong>{methodTitle(sourceMethod, sourceNetwork)}</strong><small>{sourceMethod ? methodDetail(sourceMethod) : corridor ? locationLabel(sourceCountry, sourceCurrency) : "Unavailable"}</small></span><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
           </button>
         </div>
       </div>
@@ -663,9 +667,9 @@
         <div class="panelCopy"><label for="exchange-output">Recipient gets</label><output id="exchange-output" class={previewRoute ? "amountOutput" : "amountOutputEmpty"}>{amountFromRoute(previewRoute)}</output><span class="currencyHint">{targetMethod?.kind === "wallet" ? `${targetMethod.currency} available via digital wallet` : previewRoute ? `Estimated ${previewRoute.target_currency}` : "Live estimate appears here"}</span></div>
         <div class="methodControls">
           <button type="button" class="currencyTrigger" on:click={() => openCurrencyPicker("target")} aria-label={`Select recipient currency: ${targetCurrencyChoice}`}><strong>{targetCurrencyChoice}</strong><span aria-hidden="true">⌄</span></button>
-          <button type="button" class="methodTrigger" on:click={() => void openMethodPicker("target")} aria-label={`Select recipient ${targetMethod?.kind === "wallet" ? "network" : "bank"}: ${targetMethod?.kind === "wallet" ? targetNetwork?.name ?? "none" : targetMethod?.name ?? "none"}`}>
+          <button type="button" class="methodTrigger" on:click={() => void openMethodPicker("target")} aria-label={`Select recipient ${methodNoun(targetMethod)}: ${targetMethod?.kind === "wallet" ? targetNetwork?.name ?? "none" : targetMethod?.name ?? "none"}`}>
             <span class="methodAvatar" style:background-color={paymentMethodFavicon(targetMethod) ? "transparent" : targetMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(targetMethod)}<img src={paymentMethodFavicon(targetMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{:else}<span>{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{/if}</span>
-            <span class="methodText"><strong>{targetMethod?.kind === "wallet" ? targetNetwork?.name ?? "Select network" : targetMethod?.name ?? "Select bank"}</strong><small>{targetMethod?.kind === "wallet" ? `${targetMethod.currency} · Crypto network` : targetMethod ? locationLabel(targetMethod.country, targetMethod.currency) : corridor ? locationLabel(targetCountry, targetCurrency) : "Unavailable"}</small></span><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+            <span class="methodText"><strong>{methodTitle(targetMethod, targetNetwork)}</strong><small>{targetMethod ? methodDetail(targetMethod) : corridor ? locationLabel(targetCountry, targetCurrency) : "Unavailable"}</small></span><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
           </button>
         </div>
       </div>

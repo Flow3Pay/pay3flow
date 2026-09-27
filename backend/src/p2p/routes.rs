@@ -3001,6 +3001,90 @@ mod tests {
     }
 
     #[test]
+    fn composes_usd_bank_accounts_through_crypto() {
+        let mut route_query = query(true);
+        route_query.source_currency = "USD".into();
+        route_query.target_currency = "USD".into();
+        route_query.source_amount = 12_000.0;
+        route_query.source_payment_method = Some("Bank Transfer".into());
+        route_query.target_payment_method = Some("Bank Transfer".into());
+
+        let mut entry = offer("skylabs", P2pSide::BuyCrypto, "1.01", "1", "1000000000");
+        entry.fiat = "USD".into();
+        entry.available_asset = "1000000000".into();
+        entry.payment_methods = vec!["Bank Transfer".into()];
+        entry.market = P2pOfferMarket::DirectExchange;
+
+        let mut exit = offer("skylabs", P2pSide::SellCrypto, "0.98", "1", "1000000000");
+        exit.fiat = "USD".into();
+        exit.available_asset = "1000000000".into();
+        exit.payment_methods = vec!["Bank Transfer".into()];
+        exit.market = P2pOfferMarket::DirectExchange;
+
+        let mut routes = Vec::new();
+        compose_fiat_routes(&mut routes, &route_query, "USDT", &[entry], &[exit]);
+
+        assert_eq!(routes.len(), 1);
+        let route = &routes[0];
+        assert_eq!(route.source_fiat, "USD");
+        assert_eq!(route.target_fiat, "USD");
+        assert_eq!(route.asset, "USDT");
+        assert!(route.same_venue);
+        assert!(route.payment_methods_verified);
+        assert_eq!(
+            route.entry_offer.as_ref().unwrap().payment_methods,
+            ["Bank Transfer"]
+        );
+        assert_eq!(
+            route.exit_offer.as_ref().unwrap().payment_methods,
+            ["Bank Transfer"]
+        );
+    }
+
+    #[test]
+    fn composes_armenian_usd_account_to_usd_bank_through_crypto() {
+        let mut route_query = query(true);
+        route_query.source_currency = "USD".into();
+        route_query.target_currency = "USD".into();
+        route_query.source_amount = 12_000.0;
+        route_query.source_payment_method = Some("Ameriabank".into());
+        route_query.target_payment_method = Some("Bank Transfer".into());
+
+        let mut entry = offer("okx", P2pSide::BuyCrypto, "1.01", "1", "1000000000");
+        entry.fiat = "USD".into();
+        entry.available_asset = "1000000000".into();
+        entry.payment_methods = vec!["Ameriabank".into()];
+
+        let mut exit = offer("skylabs", P2pSide::SellCrypto, "0.98", "1", "1000000000");
+        exit.fiat = "USD".into();
+        exit.available_asset = "1000000000".into();
+        exit.payment_methods = vec!["Bank Transfer".into()];
+        exit.market = P2pOfferMarket::DirectExchange;
+
+        let mut routes = Vec::new();
+        compose_fiat_routes(&mut routes, &route_query, "USDT", &[entry], &[exit]);
+
+        assert_eq!(routes.len(), 1);
+        let route = &routes[0];
+        assert_eq!(route.source_fiat, "USD");
+        assert_eq!(route.target_fiat, "USD");
+        assert_eq!(route.asset, "USDT");
+        assert_eq!(route.entry_offer.as_ref().unwrap().source, "okx");
+        assert_eq!(route.exit_offer.as_ref().unwrap().source, "skylabs");
+        assert!(!route.same_venue);
+        assert!(route.requires_asset_transfer);
+        assert!(route.payment_methods_verified);
+        assert_eq!(
+            route.entry_offer.as_ref().unwrap().payment_methods,
+            ["Ameriabank"]
+        );
+        assert_eq!(
+            route.exit_offer.as_ref().unwrap().payment_methods,
+            ["Bank Transfer"]
+        );
+    }
+
+    #[test]
     fn composes_rub_to_amd_with_bncex_as_the_exit() {
         let mut route_query = query(true);
         route_query.source_currency = "RUB".into();

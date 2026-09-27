@@ -246,6 +246,7 @@ fn canonical_payment_method(value: &str) -> String {
     match normalized.as_str() {
         "tbank" | "tinkoffbank" => "tinkoff".into(),
         "sber" => "sberbank".into(),
+        "cashusd" | "cashdollar" | "skylabsatm" => "cash".into(),
         other => other.into(),
     }
 }
@@ -1222,5 +1223,9 @@ mod tests {
             known.payment_method_match("ID Bank"),
             PaymentMethodMatch::Exact
         );
+
+        let mut cash = offer("skylabs", "360", "1", "100000", 20);
+        cash.payment_methods = vec!["SkyLabs ATM".into()];
+        assert_eq!(cash.payment_method_match("Cash"), PaymentMethodMatch::Exact);
     }
 }

@@ -8,6 +8,7 @@
   export let onSelect: (currency: string) => void;
 
   const choices = [
+    { id: "USD", name: "US dollar", mark: "$", color: "#168451" },
     { id: "RUB", name: "Russian ruble", mark: "₽", color: "#21a038" },
     { id: "AMD", name: "Armenian dram", mark: "֏", color: "#6d2c91" },
     ...CRYPTO_ASSETS.map(([id, name, color]) => ({ id, name, mark: id, color })),

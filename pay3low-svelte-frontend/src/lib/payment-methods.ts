@@ -15,7 +15,7 @@ export interface PaymentMethod {
   country: string;
   currency: string;
   role: PaymentMethodRole;
-  kind: "bank" | "wallet";
+  kind: "bank" | "cash" | "wallet";
   color: string;
   initials: string;
   popular?: boolean;
@@ -34,11 +34,62 @@ export interface PaymentMethod {
  * require changing the component.
  */
 export const PAYMENT_COUNTRIES: PaymentCountry[] = [
+  { code: "GLOBAL", name: "International", currency: "USD", mark: "$" },
   { code: "AM", name: "Armenia", currency: "AMD", mark: "AM" },
   { code: "RU", name: "Russia", currency: "RUB", mark: "RU" },
 ];
 
 export const PAYMENT_METHODS: PaymentMethod[] = [
+  {
+    id: "global-usd-cash",
+    name: "Cash USD",
+    country: "GLOBAL",
+    currency: "USD",
+    role: "both",
+    kind: "cash",
+    color: "#168451",
+    initials: "$",
+    popular: true,
+    p2pQuery: "Cash",
+  },
+  {
+    id: "global-usd-bank-account",
+    name: "USD bank account",
+    country: "GLOBAL",
+    currency: "USD",
+    role: "both",
+    kind: "bank",
+    color: "#315a9a",
+    initials: "USD",
+    popular: true,
+    p2pQuery: "Bank Transfer",
+  },
+  {
+    id: "am-ameriabank-usd-account",
+    name: "Ameriabank USD account",
+    country: "AM",
+    currency: "USD",
+    role: "sender",
+    kind: "bank",
+    color: "#6d2c91",
+    initials: "AM",
+    popular: true,
+    iconUrl: "/icons/assets/ameriabank.png",
+    bankFeePercent: 0,
+    p2pQuery: "Ameriabank",
+  },
+  {
+    id: "am-usd-bank-account",
+    name: "Armenian USD bank account",
+    country: "AM",
+    currency: "USD",
+    role: "both",
+    kind: "bank",
+    color: "#315a9a",
+    initials: "AM",
+    popular: true,
+    p2pQuery: "Bank Transfer",
+  },
   {
     id: "am-ameriabank",
     name: "Ameriabank",
