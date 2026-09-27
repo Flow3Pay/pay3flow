@@ -83,9 +83,8 @@
         <span aria-hidden="true"></span>
       </button>
       <div class="titleBar"><div class="titleGroup">
-        <button type="button" class="backButton" on:click={onClose} aria-label={mode === "currency" ? "Close currency picker" : "Close network picker"}><svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button>
         <h2 class="title">{mode === "currency" ? "Choose currency" : "Choose network"}</h2>
-      </div></div>
+      </div><button type="button" class="backButton" on:click={onClose} aria-label={mode === "currency" ? "Close currency picker" : "Close network picker"}><svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button></div>
       <div class="body"><div class="methods" role="listbox" aria-label={mode === "currency" ? "Currencies" : "Crypto networks"}><section class="section">
         <h3>{mode === "currency" ? "Available currencies" : "Available networks"}</h3>
         {#if mode === "currency"}

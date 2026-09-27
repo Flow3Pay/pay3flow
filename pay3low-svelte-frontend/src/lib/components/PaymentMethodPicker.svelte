@@ -151,11 +151,11 @@
       </button>
       <div class="titleBar">
         <div class="titleGroup">
-          <button type="button" class="backButton" on:click={close} aria-label="Close payment method picker">
-            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
-          </button>
           <h2 class="title">{title}</h2>
         </div>
+        <button type="button" class="backButton" on:click={close} aria-label="Close payment method picker">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
+        </button>
       </div>
       <div class="searchRow">
         <label class="searchBox">
