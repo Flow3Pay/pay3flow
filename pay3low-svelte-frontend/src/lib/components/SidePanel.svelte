@@ -3,7 +3,7 @@
   import { quintOut } from "svelte/easing";
   import { fly } from "svelte/transition";
   import type { RouteCandidate, ServiceVote } from "$lib/exchange";
-  import { locale, t } from "$lib/i18n";
+  import { formatRouteCount, locale, t, type Locale } from "$lib/i18n";
   import { assetIcon, dislikeIcon, likeIcon, networkIcon, venueIcon } from "$lib/icons";
 
   export let routes: RouteCandidate[];
@@ -34,11 +34,11 @@
     }
     return minor == null ? "—" : `${(minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2, useGrouping: false })} ${currency ?? ""}`;
   };
-  const spreadLabel = (bps: number) => Math.abs(bps / 100) < 0.005
-    ? t("Same output", {}, $locale)
-    : t("{percent}% less", { percent: Math.abs(bps / 100).toFixed(2) }, $locale);
+  const spreadLabel = (bps: number, language: Locale) => Math.abs(bps / 100) < 0.005
+    ? t("Same output", {}, language)
+    : t("{percent}% less", { percent: Math.abs(bps / 100).toFixed(2) }, language);
   const compact = (value: number) => Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(value);
-  const routeCountLabel = (count: number) => `${count} ${count === 1 ? "route" : "routes"} found`;
+  const routeCountLabel = (count: number, language: Locale) => formatRouteCount(count, language);
   const reduceMotion = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const routeFlipDuration = (distance: number) => reduceMotion() || routes.length > 12 ? 0 : Math.min(680, 260 + distance * 0.65);
   const routeEnterDuration = () => reduceMotion() || routes.length > 12 ? 0 : 380;
@@ -102,7 +102,7 @@
         {#if hasAmount}
           <strong>Send {sourceCurrency} → {targetCurrency}</strong>
           <span class="resultSummary">
-            <small aria-live="polite">{routeCountLabel(routesFound)}{searching ? " · searching…" : ""}</small>
+            <small aria-live="polite">{routeCountLabel(routesFound, $locale)}{searching ? " · searching…" : ""}</small>
             {#if foundVenues.length}
               <span class="foundVenues" aria-label={`Routes found on ${foundVenues.map((venue) => venue.label).join(", ")}`}>
                 {#each foundVenues as venue, index (venue.id)}
@@ -136,7 +136,7 @@
             <li animate:flip={{ duration: routeFlipDuration, easing: quintOut }} in:fly={{ y: 18, duration: routeEnterDuration(), easing: quintOut }}><div class="routeCardShell">
               <div class:routeBest={route.is_current_best} class:selected={route.route_id === selectedRouteId} class="routeCard" data-testid={complete ? "complete-route" : "partial-route"}>
               <button type="button" class="routeCardMain" disabled={!complete} aria-pressed={route.route_id === selectedRouteId} aria-label={`Select route ${index + 1}: ${money(route.target_amount_minor, route.target_currency, route.target_amount)}`} on:click={(event) => cardClick(event, route)}>
-                <span class="routeTopline"><span class="routeRank">#{String(index + 1).padStart(2, "0")}</span><span class="routeBadges">{#if route.is_current_best}<span class="bestBadge">Best route</span>{:else}<span class="deltaBadge">{spreadLabel(route.spread_bps)}</span>{/if}</span></span>
+                <span class="routeTopline"><span class="routeRank">#{String(index + 1).padStart(2, "0")}</span><span class="routeBadges">{#if route.is_current_best}<span class="bestBadge">Best route</span>{:else}<span class="deltaBadge">{spreadLabel(route.spread_bps, $locale)}</span>{/if}</span></span>
                 <span class="routeAmount">{money(route.target_amount_minor, route.target_currency, route.target_amount)}</span>
                 <span class="workflow" aria-label={workflowLabel(route)}>
                   {#each workflowSteps(route) as step, stepIndex}

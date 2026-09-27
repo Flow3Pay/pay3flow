@@ -677,6 +677,13 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await page.getByTestId("start-search").click();
   await expect(page.getByTestId("complete-route")).toHaveCount(101);
   await expect(page.getByText("101 routes found")).toBeVisible();
+  const routeCounter = page.locator(".resultSummary small[aria-live='polite']");
+  const languageToggle = page.locator(".languageToggle");
+  await languageToggle.click();
+  await expect(routeCounter).toHaveText("101 маршрут найден");
+  await languageToggle.click();
+  await languageToggle.click();
+  await expect(routeCounter).toHaveText("101 routes found");
   const routeRenderSamples = await page.evaluate(() =>
     (window as Window & { __routeRenderSamples?: Array<{ count: number; at: number }> }).__routeRenderSamples ?? [],
   );

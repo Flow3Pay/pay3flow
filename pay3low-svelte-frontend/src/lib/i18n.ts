@@ -493,6 +493,20 @@ export function t(key: string, params: Record<string, string | number> = {}, lan
 
 export const localeLabel = (language: Locale) => language === "ru" ? "RU" : language === "hy" ? "ՀԱՅ" : "EN";
 
+export function formatRouteCount(count: number, language: Locale) {
+  if (language === "ru") {
+    const absolute = Math.abs(count);
+    const lastTwo = absolute % 100;
+    const last = absolute % 10;
+    const one = last === 1 && lastTwo !== 11;
+    const few = last >= 2 && last <= 4 && !(lastTwo >= 12 && lastTwo <= 14);
+    const noun = one ? "маршрут" : few ? "маршрута" : "маршрутов";
+    return `${count} ${noun} ${one ? "найден" : "найдено"}`;
+  }
+  if (language === "hy") return `${count} ուղղություն է գտնվել`;
+  return `${count} ${count === 1 ? "route" : "routes"} found`;
+}
+
 /**
  * Translates legacy static copy in components that have not yet been migrated
  * to `t(...)`. Original text is kept per node so changing languages is safe.
@@ -514,8 +528,6 @@ export function localize(node: HTMLElement) {
       if (match) translated = t("Updated {seconds}s ago", { seconds: match[1] }, language);
       match = trimmed.match(/^Refresh in (\d+) seconds$/);
       if (match) translated = t("Refresh in {seconds} seconds", { seconds: match[1] }, language);
-      match = trimmed.match(/^(\d+) (route|routes) found$/);
-      if (match) translated = `${match[1]} ${language === "ru" ? "маршрут" : language === "hy" ? "ուղղություն" : match[2]} ${language === "ru" ? "найдено" : language === "hy" ? "գտնվել է" : "found"}`;
       match = trimmed.match(/^Send ([^ ]+) → ([^ ]+)$/);
       if (match) translated = `${language === "ru" ? "Отправить" : language === "hy" ? "Ուղարկել" : "Send"} ${match[1]} → ${match[2]}`;
       match = trimmed.match(/^Search (.+)$/);
