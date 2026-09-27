@@ -979,8 +979,8 @@
 .sourceSettingsLabel {
   display: block;
   margin-bottom: 8px;
-  color: var(--color-text-soft);
-  font-size: 10px;
+  color: var(--color-text);
+  font-size: 13px;
   font-weight: 800;
 }
 
