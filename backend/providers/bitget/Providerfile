@@ -1,3 +1,5 @@
+exchange_methods = ["p2p", "exchanger"]
+
 [sell]
 source_url = "https://www.bitget.com"
 name = "Bitget Sell"

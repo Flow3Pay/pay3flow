@@ -11,7 +11,7 @@ use crate::p2p::service::{
     Advertiser, P2pOffer, P2pOfferMarket, P2pSearchQuery, P2pSide, P2pSource,
 };
 use crate::provider_adapter::{WorkflowConfig, WorkflowOperation, WorkflowRead, WorkflowStep};
-use crate::providers::ProviderAdapterRecord;
+use crate::providers::{ProviderAdapterRecord, ProviderExchangeMethod};
 
 const MAX_CONCURRENT_BROWSERS: usize = 2;
 static BROWSER_SLOTS: OnceLock<Semaphore> = OnceLock::new();
@@ -30,6 +30,9 @@ impl WorkflowP2pSource {
         chromium_executable: Option<String>,
         debug_screenshot: Option<String>,
     ) -> Option<Self> {
+        if !record.supports(ProviderExchangeMethod::Exchanger) {
+            return None;
+        }
         record.workflow.clone().map(|config| Self {
             slug: record.slug.clone(),
             display_name: record.display_name.clone(),
@@ -179,6 +182,10 @@ impl WorkflowP2pSource {
 impl P2pSource for WorkflowP2pSource {
     fn name(&self) -> &str {
         &self.slug
+    }
+
+    fn market(&self) -> P2pOfferMarket {
+        P2pOfferMarket::DirectExchange
     }
 
     fn timeout(&self, _default: Duration) -> Duration {

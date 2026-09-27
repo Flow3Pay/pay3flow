@@ -1,3 +1,5 @@
+exchange_methods = ["exchanger"]
+
 [sell]
 source_url = "https://dzengi.com/ru/kalkulyator-kriptovalyut"
 name = "Dzengi Sell"

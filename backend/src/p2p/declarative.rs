@@ -16,7 +16,7 @@ use crate::provider_adapter::{
     environment_variable, MarketAdapterConfig, OfferMapping, P2pAdapterConfig, P2pAdapterMarket,
     P2pOperation, RateTableConfig, ValueCondition,
 };
-use crate::providers::ProviderAdapterRecord;
+use crate::providers::{ProviderAdapterRecord, ProviderExchangeMethod};
 use crate::route_engine::canonical_network_id;
 
 pub(crate) struct DeclarativeP2pSource {
@@ -29,7 +29,12 @@ pub(crate) struct DeclarativeP2pSource {
 
 impl DeclarativeP2pSource {
     pub(crate) fn from_record(client: Client, record: &ProviderAdapterRecord) -> Option<Self> {
-        record.config.as_ref()?.p2p.clone().map(|config| Self {
+        let config = record.config.as_ref()?.p2p.clone()?;
+        let method = match config.market {
+            P2pAdapterMarket::P2p => ProviderExchangeMethod::P2p,
+            P2pAdapterMarket::DirectExchange => ProviderExchangeMethod::Exchanger,
+        };
+        record.supports(method).then(|| Self {
             client,
             slug: record.slug.clone(),
             source_url: record.source_url.clone(),
@@ -302,6 +307,13 @@ impl P2pSource for DeclarativeP2pSource {
         &self.slug
     }
 
+    fn market(&self) -> P2pOfferMarket {
+        match self.config.market {
+            P2pAdapterMarket::P2p => P2pOfferMarket::P2p,
+            P2pAdapterMarket::DirectExchange => P2pOfferMarket::DirectExchange,
+        }
+    }
+
     fn timeout(&self, _default: Duration) -> Duration {
         Duration::from_millis(self.config.timeout_ms)
     }
@@ -423,11 +435,14 @@ pub(crate) struct DeclarativeMarketSource {
 
 impl DeclarativeMarketSource {
     pub(crate) fn from_record(client: Client, record: &ProviderAdapterRecord) -> Option<Self> {
-        record.config.as_ref()?.market.clone().map(|config| Self {
-            client,
-            slug: record.slug.clone(),
-            config,
-        })
+        let config = record.config.as_ref()?.market.clone()?;
+        record
+            .supports(ProviderExchangeMethod::Exchanger)
+            .then(|| Self {
+                client,
+                slug: record.slug.clone(),
+                config,
+            })
     }
 }
 
@@ -944,6 +959,7 @@ mod tests {
             slug: "cifra-broker".into(),
             source_url: "https://cifra.by/".into(),
             display_name: "Cifra Markets".into(),
+            exchange_methods: vec![crate::providers::ProviderExchangeMethod::Exchanger],
             config: Some(adapters),
             workflow: None,
         };
@@ -959,6 +975,7 @@ mod tests {
             slug: "whitebird".into(),
             source_url: "https://whitebird.io/".into(),
             display_name: "Whitebird".into(),
+            exchange_methods: vec![crate::providers::ProviderExchangeMethod::Exchanger],
             config: Some(adapters),
             workflow: None,
         };
@@ -974,6 +991,7 @@ mod tests {
             slug: "skylabs".into(),
             source_url: "https://skylabs.world/".into(),
             display_name: "SkyLabs".into(),
+            exchange_methods: vec![crate::providers::ProviderExchangeMethod::Exchanger],
             config: Some(adapters),
             workflow: None,
         };
@@ -989,6 +1007,7 @@ mod tests {
             slug: "bncex".into(),
             source_url: "https://www.bncex.com/en".into(),
             display_name: "bncex".into(),
+            exchange_methods: vec![crate::providers::ProviderExchangeMethod::Exchanger],
             config: Some(adapters),
             workflow: None,
         };
@@ -1004,6 +1023,7 @@ mod tests {
             slug: "bitcoin-center".into(),
             source_url: "https://www.bitcoincenter.am/en/".into(),
             display_name: "Bitcoin Center".into(),
+            exchange_methods: vec![crate::providers::ProviderExchangeMethod::Exchanger],
             config: Some(adapters),
             workflow: None,
         };
@@ -1019,6 +1039,10 @@ mod tests {
             slug: "mexc".into(),
             source_url: "https://www.mexc.com/buy-crypto/p2p".into(),
             display_name: "MEXC".into(),
+            exchange_methods: vec![
+                crate::providers::ProviderExchangeMethod::P2p,
+                crate::providers::ProviderExchangeMethod::Exchanger,
+            ],
             config: Some(adapters),
             workflow: None,
         };
@@ -1141,6 +1165,10 @@ mod tests {
             slug: "binance".into(),
             source_url: "https://www.binance.com".into(),
             display_name: "Binance".into(),
+            exchange_methods: vec![
+                crate::providers::ProviderExchangeMethod::P2p,
+                crate::providers::ProviderExchangeMethod::Exchanger,
+            ],
             config: Some(adapters),
             workflow: None,
         };
@@ -1675,6 +1703,7 @@ mod tests {
             slug: "cifra-broker".into(),
             source_url: "https://cifra.by/".into(),
             display_name: "Cifra Markets".into(),
+            exchange_methods: vec![crate::providers::ProviderExchangeMethod::Exchanger],
             config: Some(adapters),
             workflow: None,
         };

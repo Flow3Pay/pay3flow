@@ -1,3 +1,5 @@
+exchange_methods = ["exchanger"]
+
 [sell]
 source_url = "https://cifra.by/"
 name = "Cifra Markets Sell"
@@ -15,6 +17,7 @@ banks = []
 # returns the same indicative conversion rate shown on cifra.by.
 [adapter.p2p]
 kind = "http_json"
+market = "direct_exchange"
 endpoint = "https://api.cifra-broker.by/api/site/ticker-calculator"
 method = "GET"
 headers = { Origin = "https://cifra.by", Referer = "https://cifra.by/", Accept-Language = "ru-RU,ru;q=0.9", User-Agent = "Mozilla/5.0 (compatible; Pay3Flow/0.1)" }

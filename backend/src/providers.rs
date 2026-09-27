@@ -5,6 +5,22 @@ use uuid::Uuid;
 use crate::db::DbPool;
 use crate::provider_adapter::{ProviderAdapters, WorkflowConfig};
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum ProviderExchangeMethod {
+    P2p,
+    Exchanger,
+}
+
+impl ProviderExchangeMethod {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::P2p => "p2p",
+            Self::Exchanger => "exchanger",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderSearchMode {
@@ -30,6 +46,7 @@ pub struct Provider {
     pub name: String,
     pub currencies: Vec<String>,
     pub banks: Vec<String>,
+    pub exchange_methods: Vec<ProviderExchangeMethod>,
     pub fee_model: Option<ProviderFeeModel>,
     pub searchable: bool,
     pub search_mode: ProviderSearchMode,
@@ -40,8 +57,15 @@ pub(crate) struct ProviderAdapterRecord {
     pub slug: String,
     pub source_url: String,
     pub display_name: String,
+    pub exchange_methods: Vec<ProviderExchangeMethod>,
     pub config: Option<ProviderAdapters>,
     pub workflow: Option<WorkflowConfig>,
+}
+
+impl ProviderAdapterRecord {
+    pub(crate) fn supports(&self, method: ProviderExchangeMethod) -> bool {
+        self.exchange_methods.contains(&method)
+    }
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -60,7 +84,7 @@ pub async fn list(pool: &DbPool, filters: ProviderFilters) -> Result<Vec<Provide
     let statement = client
         .prepare_cached(
             r#"
-SELECT id, slug, operation, source_url, name, currencies, banks, fee_model
+SELECT id, slug, operation, source_url, name, currencies, banks, exchange_methods, fee_model
 FROM providers
 WHERE status = 'enabled'
   AND ($1::TEXT IS NULL OR operation = $1)
@@ -80,6 +104,12 @@ ORDER BY name, operation, slug
                 .then(|| serde_json::from_value(fee_value))
                 .transpose()
                 .with_context(|| "invalid Providerfile fee model stored in providers")?;
+            let exchange_methods = row
+                .get::<_, Vec<String>>("exchange_methods")
+                .into_iter()
+                .map(|method| serde_json::from_value(serde_json::Value::String(method)))
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .with_context(|| "invalid Providerfile exchange method stored in providers")?;
             Ok(Provider {
                 id: row.get("id"),
                 slug: row.get("slug"),
@@ -88,6 +118,7 @@ ORDER BY name, operation, slug
                 name: row.get("name"),
                 currencies: row.get("currencies"),
                 banks: row.get("banks"),
+                exchange_methods,
                 fee_model,
                 searchable: false,
                 search_mode: ProviderSearchMode::CatalogOnly,
@@ -104,13 +135,14 @@ pub(crate) async fn adapters(pool: &DbPool) -> Result<Vec<ProviderAdapterRecord>
 SELECT slug,
        MIN(source_url) AS source_url,
        MIN(name) AS display_name,
+       exchange_methods,
        array_agg(operation ORDER BY operation) AS operations,
        adapter,
        workflow
 FROM providers
 WHERE status = 'enabled'
   AND (adapter <> '{}'::JSONB OR workflow <> '{}'::JSONB)
-GROUP BY slug, adapter, workflow
+GROUP BY slug, exchange_methods, adapter, workflow
 ORDER BY slug
 "#,
             &[],
@@ -151,6 +183,12 @@ ORDER BY slug
                 slug,
                 source_url: row.get("source_url"),
                 display_name: provider_display_name(&display_name),
+                exchange_methods: row
+                    .get::<_, Vec<String>>("exchange_methods")
+                    .into_iter()
+                    .map(|method| serde_json::from_value(serde_json::Value::String(method)))
+                    .collect::<std::result::Result<Vec<_>, _>>()
+                    .with_context(|| "invalid Providerfile exchange method stored in providers")?,
                 config,
                 workflow,
             })

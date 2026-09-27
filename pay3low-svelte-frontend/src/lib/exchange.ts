@@ -25,6 +25,7 @@ export interface ProviderDefinition {
   name: string;
   currencies: string[];
   banks: string[];
+  exchange_methods: Array<"p2p" | "exchanger">;
   fee_model?: ProviderFeeModel | null;
   searchable: boolean;
   search_mode?: "selectable" | "always_on" | "catalog_only";
@@ -353,6 +354,7 @@ export function fetchP2pRoutes(query: {
   sourcePaymentMethod?: string;
   targetPaymentMethod?: string;
   sources?: string[];
+  exchangeMode?: "all" | "p2p" | "exchanger";
   allowCrossVenue?: boolean;
   limit?: number;
   signal?: AbortSignal;
@@ -391,6 +393,9 @@ export function fetchP2pRoutes(query: {
   if (query.sources?.length) {
     params.set("sources", query.sources.join(","));
   }
+  if (query.exchangeMode) {
+    params.set("exchange_mode", query.exchangeMode);
+  }
   if (query.anonymousId) {
     params.set("anonymous_id", query.anonymousId);
   }
@@ -412,6 +417,7 @@ function routeQueryPayload(query: P2pLiveQuery): Record<string, unknown> {
     source_payment_method: query.sourcePaymentMethod,
     target_payment_method: query.targetPaymentMethod,
     sources: query.sources?.join(","),
+    exchange_mode: query.exchangeMode ?? "all",
     allow_cross_venue: query.allowCrossVenue ?? true,
     min_orders: 20,
     min_completion_rate: 0.9,

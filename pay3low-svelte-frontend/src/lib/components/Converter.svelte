@@ -13,19 +13,21 @@
   type PickerSide = "source" | "target" | null;
   const REFRESH_OPTIONS: RefreshSeconds[] = [0, 5, 15, 30, 60, 300];
   type P2pSource = string;
+  type ExchangeMethod = "p2p" | "exchanger";
   type ProviderSearchMode = "selectable" | "always_on" | "catalog_only";
   type P2pSourceOption = { id: P2pSource; label: string; iconUrl: string; searchable: boolean; searchMode: ProviderSearchMode; feeDescription?: string };
   const INITIAL_ROUTE_BATCH_SIZE = 100;
   const ROUTE_BATCH_SIZE = 100;
   const ROUTE_BATCH_DELAY_MS = 10;
   const INTERMEDIARY_ASSETS = CRYPTO_ASSETS.map(([currency]) => currency);
+  const EXCHANGE_METHODS: ExchangeMethod[] = ["p2p", "exchanger"];
   const FIAT_METHODS = PAYMENT_METHODS.filter((method) => method.kind !== "wallet");
   const FIAT_CURRENCIES = [
     { id: "AMD", name: "Armenian dram", mark: "֏", color: "#6d2c91" },
     { id: "RUB", name: "Russian ruble", mark: "₽", color: "#21a038" },
     { id: "USD", name: "US dollar", mark: "$", color: "#168451" },
   ];
-  const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", sources: "pay3flow.exchange.p2p-sources", knownSources: "pay3flow.exchange.known-p2p-sources", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", sourceNetwork: "pay3flow.exchange.source-network", targetNetwork: "pay3flow.exchange.target-network", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets", anonymousId: "pay3flow.reputation.anonymous-id" };
+  const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", sources: "pay3flow.exchange.p2p-sources", knownSources: "pay3flow.exchange.known-p2p-sources", methods: "pay3flow.exchange.methods", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", sourceNetwork: "pay3flow.exchange.source-network", targetNetwork: "pay3flow.exchange.target-network", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets", anonymousId: "pay3flow.reputation.anonymous-id" };
 
   let corridors: ExchangeCorridor[] = [];
   let corridorId = "";
@@ -50,6 +52,7 @@
   let p2pSources: P2pSourceOption[] = [];
   let venueNames: Record<string, string> = {};
   let selectedSources: P2pSource[] = [];
+  let selectedExchangeMethods: ExchangeMethod[] = [...EXCHANGE_METHODS];
   let selectedIntermediaryAssets: string[] = [];
   let searching = false;
   let awaitingFirstRoute = false;
@@ -339,15 +342,16 @@
   $: exchangeChoices = p2pSources.filter((source) => source.searchMode !== "always_on");
   $: alwaysOnProviders = p2pSources.filter((source) => source.searchMode === "always_on");
   $: searchingVenues = [...new Set([...selectedSources, ...alwaysOnProviders.map((provider) => provider.id)])].map((source) => p2pSources.find((item) => item.id === source) ?? { id: source, label: source, iconUrl: venueIcon(source), searchable: true, searchMode: "selectable" as const });
-  $: searchSignature = `${corridor?.id ?? ""}:${sourceMethod?.id ?? ""}:${sourceNetwork?.id ?? ""}:${targetMethod?.id ?? ""}:${targetNetwork?.id ?? ""}:${amount}:${selectedSources.join(",")}:${selectedIntermediaryAssets.join(",")}:${directionReversed}`;
+  $: exchangeMode = selectedExchangeMethods.length === EXCHANGE_METHODS.length ? "all" as const : selectedExchangeMethods[0];
+  $: searchSignature = `${corridor?.id ?? ""}:${sourceMethod?.id ?? ""}:${sourceNetwork?.id ?? ""}:${targetMethod?.id ?? ""}:${targetNetwork?.id ?? ""}:${amount}:${selectedSources.join(",")}:${selectedExchangeMethods.join(",")}:${selectedIntermediaryAssets.join(",")}:${directionReversed}`;
   $: scheduleAutomaticSearch(searchSignature, preferencesLoaded, urlReady, hasAmount, initialSearchReady);
   $: manageRefresh(refreshSeconds, lastUpdatedAt, hasAmount);
-  $: if (preferencesLoaded) persistPreferences(amount, refreshSeconds, selectedSources, selectedIntermediaryAssets, corridorId, sourceMethodId, targetMethodId, sourceNetwork?.id ?? sourceNetworkId, targetNetwork?.id ?? targetNetworkId, directionReversed);
+  $: if (preferencesLoaded) persistPreferences(amount, refreshSeconds, selectedSources, selectedExchangeMethods, selectedIntermediaryAssets, corridorId, sourceMethodId, targetMethodId, sourceNetwork?.id ?? sourceNetworkId, targetNetwork?.id ?? targetNetworkId, directionReversed);
   $: if (urlReady && corridor && selectedSourceCurrency && selectedTargetCurrency) updateHash(selectedSourceCurrency, selectedTargetCurrency, amount);
 
-  function persistPreferences(value: string, refresh: RefreshSeconds, sources: P2pSource[], assets: string[], corridorValue: string, sourceMethodValue: string, targetMethodValue: string, sourceNetworkValue: string, targetNetworkValue: string, reversed: boolean) {
+  function persistPreferences(value: string, refresh: RefreshSeconds, sources: P2pSource[], methods: ExchangeMethod[], assets: string[], corridorValue: string, sourceMethodValue: string, targetMethodValue: string, sourceNetworkValue: string, targetNetworkValue: string, reversed: boolean) {
     try {
-      localStorage.setItem(STORAGE.amount, value); localStorage.setItem(STORAGE.refresh, String(refresh)); localStorage.setItem(STORAGE.sources, sources.join(",")); localStorage.setItem(STORAGE.assets, assets.join(",")); localStorage.setItem(STORAGE.corridor, corridorValue); localStorage.setItem(STORAGE.sourceMethod, sourceMethodValue); localStorage.setItem(STORAGE.targetMethod, targetMethodValue); localStorage.setItem(STORAGE.sourceNetwork, sourceNetworkValue); localStorage.setItem(STORAGE.targetNetwork, targetNetworkValue); localStorage.setItem(STORAGE.direction, String(reversed));
+      localStorage.setItem(STORAGE.amount, value); localStorage.setItem(STORAGE.refresh, String(refresh)); localStorage.setItem(STORAGE.sources, sources.join(",")); localStorage.setItem(STORAGE.methods, methods.join(",")); localStorage.setItem(STORAGE.assets, assets.join(",")); localStorage.setItem(STORAGE.corridor, corridorValue); localStorage.setItem(STORAGE.sourceMethod, sourceMethodValue); localStorage.setItem(STORAGE.targetMethod, targetMethodValue); localStorage.setItem(STORAGE.sourceNetwork, sourceNetworkValue); localStorage.setItem(STORAGE.targetNetwork, targetNetworkValue); localStorage.setItem(STORAGE.direction, String(reversed));
     } catch {}
   }
   function updateHash(source: string, target: string, value: string) {
@@ -470,7 +474,7 @@
     }
     controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; controller = new AbortController(); const signal = controller.signal; const currentRequest = ++requestId; searching = true; awaitingFirstRoute = true; routesFound = 0; foundVenueIds = []; foundVenues = []; error = null;
     try {
-      const liveQuery = { sourceFiat: selectedSourceCurrency, targetFiat: selectedTargetCurrency, sourceAmount: value, intermediaryAssets: !sourceWallet && !targetWallet && selectedIntermediaryAssets.length ? selectedIntermediaryAssets : undefined, sourceNetwork: sourceWallet ? sourceNetwork?.id : undefined, targetNetwork: targetWallet ? targetNetwork?.id : undefined, sourcePaymentMethod: sourceWallet ? undefined : sourceMethod.p2pQuery, targetPaymentMethod: targetWallet ? undefined : targetMethod.p2pQuery, sources: selectedSources, allowCrossVenue: true, limit: 40 };
+      const liveQuery = { sourceFiat: selectedSourceCurrency, targetFiat: selectedTargetCurrency, sourceAmount: value, intermediaryAssets: !sourceWallet && !targetWallet && selectedIntermediaryAssets.length ? selectedIntermediaryAssets : undefined, sourceNetwork: sourceWallet ? sourceNetwork?.id : undefined, targetNetwork: targetWallet ? targetNetwork?.id : undefined, sourcePaymentMethod: sourceWallet ? undefined : sourceMethod.p2pQuery, targetPaymentMethod: targetWallet ? undefined : targetMethod.p2pQuery, sources: selectedSources, exchangeMode, allowCrossVenue: true, limit: 40 };
       let response: P2pRouteSearchResponse;
       try {
         response = await streamP2pRoutes(liveQuery, anonymousId, signal, (event) => {
@@ -493,6 +497,7 @@
     } finally { if (currentRequest === requestId) { searching = false; awaitingFirstRoute = false; } }
   }
   function toggleSource(source: P2pSource) { initialSearchReady = true; selectedSources = selectedSources.includes(source) ? (selectedSources.length === 1 ? selectedSources : selectedSources.filter((item) => item !== source)) : [...selectedSources, source]; resetResults(); }
+  function toggleExchangeMethod(method: ExchangeMethod) { initialSearchReady = true; selectedExchangeMethods = selectedExchangeMethods.includes(method) ? (selectedExchangeMethods.length === 1 ? selectedExchangeMethods : selectedExchangeMethods.filter((item) => item !== method)) : EXCHANGE_METHODS.filter((item) => item === method || selectedExchangeMethods.includes(item)); resetResults(); }
   function toggleAsset(asset: string) { initialSearchReady = true; selectedIntermediaryAssets = selectedIntermediaryAssets.includes(asset) ? selectedIntermediaryAssets.filter((item) => item !== asset) : [...selectedIntermediaryAssets, asset]; resetResults(); }
   function onDocumentMouseDown(event: MouseEvent) { if (modalOpen && settingsElement && !settingsElement.contains(event.target as Node)) closeSettings(); }
   function closeSettings() { settingsOpen = false; exchangesOpen = false; }
@@ -547,6 +552,8 @@
       const savedDirection = localStorage.getItem(STORAGE.direction); if (savedDirection != null) directionReversed = savedDirection === "true";
       savedSourceIds = localStorage.getItem(STORAGE.sources)?.split(",").map((value) => value.trim()).filter(Boolean) ?? [];
       savedKnownSourceIds = localStorage.getItem(STORAGE.knownSources)?.split(",").map((value) => value.trim()).filter(Boolean) ?? [];
+      const savedMethods = localStorage.getItem(STORAGE.methods)?.split(",").filter((method): method is ExchangeMethod => EXCHANGE_METHODS.includes(method as ExchangeMethod)) ?? [];
+      if (savedMethods.length) selectedExchangeMethods = EXCHANGE_METHODS.filter((method) => savedMethods.includes(method));
       const savedAssets = localStorage.getItem(STORAGE.assets); if (savedAssets != null) selectedIntermediaryAssets = [...new Set(savedAssets.split(",").filter((asset) => INTERMEDIARY_ASSETS.includes(asset as (typeof INTERMEDIARY_ASSETS)[number])))];
       const savedRefresh = Number(localStorage.getItem(STORAGE.refresh)); if (REFRESH_OPTIONS.includes(savedRefresh as RefreshSeconds)) refreshSeconds = savedRefresh as RefreshSeconds;
     } catch {}
@@ -648,6 +655,9 @@
                 <div class="settingsModalHeader"><span class="settingsSheetHandle" aria-hidden="true" on:pointerdown={startSettingsDrag} on:pointermove={moveSettingsDrag} on:pointerup={endSettingsDrag} on:pointercancel={endSettingsDrag}></span><button type="button" class="settingsClose" on:click={closeSettings} aria-label="Close route settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button></div>
                 <div class="settingsHead"><div><strong>Auto-refresh</strong><span>Keep market routes current</span></div><span class={refreshSeconds ? "onBadge" : "offBadge"}>{refreshSeconds ? "On" : "Off"}</span></div>
                 <div class="refreshOptions">{#each REFRESH_OPTIONS as seconds}<button type="button" aria-pressed={refreshSeconds === seconds} on:click={() => { refreshSeconds = seconds; settingsOpen = false; }}>{refreshOptionLabel(seconds)}</button>{/each}</div>
+                <div class="sourceSettings exchangeMethodSettings"><div class="intermediarySettingsHead"><span class="sourceSettingsLabel">{t("Exchange methods", {}, activeLocale)}</span><small>{selectedExchangeMethods.length} {t("selected", {}, activeLocale)}</small></div><div class="sourceOptions exchangeMethodOptions" aria-label={t("Exchange methods", {}, activeLocale)}>
+                  {#each EXCHANGE_METHODS as method}{@const enabled = selectedExchangeMethods.includes(method)}<button type="button" class:sourceOptionActive={enabled} class="sourceOption" aria-pressed={enabled} on:click={() => toggleExchangeMethod(method)}>{method === "p2p" ? "P2P" : t("Exchangers", {}, activeLocale)}</button>{/each}
+                </div></div>
                 <div class="sourceSettings"><div class="intermediarySettingsHead"><span class="sourceSettingsLabel">Cryptocurrency intermediary</span><small>{selectedIntermediaryAssets.length ? `${selectedIntermediaryAssets.length} selected` : "All available"}</small></div><div class="sourceOptions intermediaryOptions" aria-label="Cryptocurrency intermediaries">
                   <button type="button" class:sourceOptionActive={selectedIntermediaryAssets.length === 0} class="sourceOption" aria-pressed={selectedIntermediaryAssets.length === 0} on:click={() => { selectedIntermediaryAssets = []; resetResults(); }}>All available</button>
                   {#each INTERMEDIARY_ASSETS as asset}{@const enabled = selectedIntermediaryAssets.includes(asset)}<button type="button" class:sourceOptionActive={enabled} class="sourceOption" aria-pressed={enabled} on:click={() => toggleAsset(asset)}><span class="intermediaryAssetIcon" aria-hidden="true"><img src={intermediaryIcon(asset)} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={fallbackAssetIcon} /></span>{asset}</button>{/each}
@@ -1017,6 +1027,12 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
+}
+
+.exchangeMethodOptions .sourceOption {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .exchangeModalOptions {

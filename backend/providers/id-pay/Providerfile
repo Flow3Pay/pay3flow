@@ -2,6 +2,8 @@
 # its public homepage. The provider supports direct transfers in both
 # directions; it is not modeled as a crypto or P2P intermediary.
 
+exchange_methods = ["exchanger"]
+
 [code]
 language = "rust"
 source = '''

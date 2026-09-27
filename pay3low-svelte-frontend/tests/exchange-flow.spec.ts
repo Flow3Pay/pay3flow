@@ -838,6 +838,44 @@ test("catalog and direct quote providers are separately selectable", async ({ pa
   await expect(idPay.locator("img")).toHaveAttribute("src", "/icons/venues/id-pay.svg");
 });
 
+test("exchange methods allow one or both choices and persist the selection", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page);
+
+  await page.getByRole("button", { name: "Route refresh settings" }).click();
+  let settings = page.getByRole("dialog", { name: "Refresh settings" });
+  const methods = settings.getByLabel("Exchange methods");
+  const p2p = methods.getByRole("button", { name: "P2P" });
+  const exchangers = methods.getByRole("button", { name: "Exchangers" });
+  await expect(p2p).toHaveAttribute("aria-pressed", "true");
+  await expect(exchangers).toHaveAttribute("aria-pressed", "true");
+
+  await p2p.click();
+  await expect(p2p).toHaveAttribute("aria-pressed", "false");
+  await exchangers.click();
+  await expect(exchangers).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("pay3flow.exchange.methods"))).toBe("exchanger");
+
+  await page.keyboard.press("Escape");
+  await page.reload();
+  await page.getByRole("button", { name: "Route refresh settings" }).click();
+  settings = page.getByRole("dialog", { name: "Refresh settings" });
+  await expect(settings.getByRole("button", { name: "P2P" })).toHaveAttribute("aria-pressed", "false");
+  await expect(settings.getByRole("button", { name: "Exchangers" })).toHaveAttribute("aria-pressed", "true");
+
+  await settings.getByRole("button", { name: "P2P" }).click();
+  await settings.getByRole("button", { name: "Exchangers" }).click();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("pay3flow.exchange.methods"))).toBe("p2p");
+
+  await page.keyboard.press("Escape");
+  const filteredRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return url.pathname === "/api/p2p/routes" && url.searchParams.get("exchange_mode") === "p2p";
+  });
+  await page.getByLabel("Amount to send").fill("100000");
+  await filteredRequest;
+});
+
 test("saved provider choices adopt new providers and retain later deselections", async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem("pay3flow.exchange.p2p-sources", "cow-swap");
@@ -877,6 +915,7 @@ test("search venues announce providers reported by route statuses", async ({ pag
     socket.onMessage((message) => {
       const request = JSON.parse(String(message));
       expect(request.query.sources).toBe("binance,bybit,cifra-broker,cow-swap,id-pay,near-intents,whitebird");
+      expect(request.query.exchange_mode).toBe("all");
 
       const offer = (source: string, adId: string, fiat: string) => ({
         source,

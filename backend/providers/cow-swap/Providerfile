@@ -1,6 +1,8 @@
 # CoW Swap is a selectable direct quote provider. Its chain-specific Rust
 # implementation is compiled from this Providerfile into the backend binary.
 
+exchange_methods = ["exchanger"]
+
 [code]
 language = "rust"
 source = '''

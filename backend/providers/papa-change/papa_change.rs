@@ -13,7 +13,7 @@ use crate::p2p::{
     Advertiser, P2pOffer, P2pOfferMarket, P2pSearchQuery, P2pSide, P2pSource,
 };
 use crate::provider_adapter::PapaChangeAdapterConfig;
-use crate::providers::ProviderAdapterRecord;
+use crate::providers::{ProviderAdapterRecord, ProviderExchangeMethod};
 
 #[derive(Debug, Deserialize)]
 struct CatalogResponse {
@@ -131,6 +131,9 @@ pub(crate) struct PapaChangeSource {
 
 impl PapaChangeSource {
     pub(crate) fn from_record(client: Client, record: &ProviderAdapterRecord) -> Option<Self> {
+        if !record.supports(ProviderExchangeMethod::Exchanger) {
+            return None;
+        }
         let config = record.config.as_ref()?.papa_change.clone()?;
         Some(Self::new(client, record.slug.clone(), config))
     }
@@ -279,6 +282,10 @@ impl PapaChangeSource {
 impl P2pSource for PapaChangeSource {
     fn name(&self) -> &str {
         &self.slug
+    }
+
+    fn market(&self) -> P2pOfferMarket {
+        P2pOfferMarket::DirectExchange
     }
 
     fn timeout(&self, default: Duration) -> Duration {
@@ -692,4 +699,3 @@ mod tests {
         }
     }
 }
-

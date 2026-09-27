@@ -30,6 +30,15 @@ const MAX_PROVIDER_ASSETS: usize = 12;
 const MAX_PROVIDER_NETWORK_PAIRS: usize = 32;
 const MAX_PROVIDER_OFFERS_PER_LEG: usize = 8;
 
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ExchangeMode {
+    #[default]
+    All,
+    P2p,
+    Exchanger,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct P2pRouteSearchQuery {
     pub source_fiat: String,
@@ -56,6 +65,9 @@ pub struct P2pRouteSearchQuery {
     pub limit: Option<usize>,
     /// Optional comma-separated list of P2P sources to query.
     pub sources: Option<String>,
+    /// Limit results to P2P offers, exchanger routes, or search both (default).
+    #[serde(default)]
+    pub exchange_mode: ExchangeMode,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -167,6 +179,35 @@ struct NormalizedRouteQuery {
     max_price_deviation_bps: u32,
     limit: usize,
     sources: Option<String>,
+    exchange_mode: ExchangeMode,
+}
+
+impl NormalizedRouteQuery {
+    fn includes_p2p(&self) -> bool {
+        matches!(self.exchange_mode, ExchangeMode::All | ExchangeMode::P2p)
+    }
+
+    fn includes_exchangers(&self) -> bool {
+        matches!(
+            self.exchange_mode,
+            ExchangeMode::All | ExchangeMode::Exchanger
+        )
+    }
+
+    fn offer_market(&self) -> Option<P2pOfferMarket> {
+        match self.exchange_mode {
+            ExchangeMode::All => None,
+            ExchangeMode::P2p => Some(P2pOfferMarket::P2p),
+            ExchangeMode::Exchanger => Some(P2pOfferMarket::DirectExchange),
+        }
+    }
+
+    fn accepts_offer(&self, offer: &P2pOffer) -> bool {
+        match offer.market {
+            P2pOfferMarket::P2p => self.includes_p2p(),
+            P2pOfferMarket::DirectExchange => self.includes_exchangers(),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -367,7 +408,7 @@ impl P2pSearchService {
             is_crypto_currency(&query.source_currency, &self.networks, &provider_assets);
         let target_is_crypto =
             is_crypto_currency(&query.target_currency, &self.networks, &provider_assets);
-        if source_is_crypto && target_is_crypto {
+        if source_is_crypto && target_is_crypto && query.includes_exchangers() {
             merge_routes(&mut routes, self.search_provider_routes(&query).await);
             if query
                 .source_network
@@ -412,6 +453,7 @@ impl P2pSearchService {
                                 asset.clone(),
                                 entry_query,
                                 exit_query,
+                                query.offer_market(),
                                 progress_updates.clone(),
                             )
                         })
@@ -484,8 +526,11 @@ impl P2pSearchService {
                                 query.target_payment_method.clone(),
                                 &query,
                             );
-                            let (entry, exit) =
-                                tokio::join!(self.search(entry_query), self.search(exit_query));
+                            let market = query.offer_market();
+                            let (entry, exit) = tokio::join!(
+                                self.search_market(entry_query, market),
+                                self.search_market(exit_query, market)
+                            );
                             (asset.clone(), entry, exit)
                         })
                         .collect::<FuturesUnordered<_>>();
@@ -514,7 +559,7 @@ impl P2pSearchService {
                 );
                 if updates.is_some() {
                     let (leg_updates, mut leg_snapshots) = mpsc::channel(16);
-                    let search = self.stream_search(leg, leg_updates);
+                    let search = self.stream_search_market(leg, leg_updates, query.offer_market());
                     tokio::pin!(search);
                     let mut sources_seen = 0;
                     loop {
@@ -554,7 +599,7 @@ impl P2pSearchService {
                         }
                     }
                 } else {
-                    let response = self.search(leg).await?;
+                    let response = self.search_market(leg, query.offer_market()).await?;
                     apply_fiat_to_crypto_response(
                         &mut routes,
                         &mut asset_statuses,
@@ -576,7 +621,7 @@ impl P2pSearchService {
                 );
                 if updates.is_some() {
                     let (leg_updates, mut leg_snapshots) = mpsc::channel(16);
-                    let search = self.stream_search(leg, leg_updates);
+                    let search = self.stream_search_market(leg, leg_updates, query.offer_market());
                     tokio::pin!(search);
                     let mut sources_seen = 0;
                     loop {
@@ -616,7 +661,7 @@ impl P2pSearchService {
                         }
                     }
                 } else {
-                    let response = self.search(leg).await?;
+                    let response = self.search_market(leg, query.offer_market()).await?;
                     apply_crypto_to_fiat_response(
                         &mut routes,
                         &mut asset_statuses,
@@ -626,7 +671,7 @@ impl P2pSearchService {
                     );
                 }
             }
-            (true, true) => {
+            (true, true) if query.includes_exchangers() => {
                 let source_asset = query.source_currency.clone();
                 let target_asset = query.target_currency.clone();
                 if updates.is_some() {
@@ -682,14 +727,19 @@ impl P2pSearchService {
                     }
                 }
             }
+            (true, true) => {}
         }
-        let mut provider_routes = match (source_is_crypto, target_is_crypto) {
-            (false, true) => self.search_fiat_to_crypto_provider_routes(&query).await,
-            (true, false) => self.search_crypto_to_fiat_provider_routes(&query).await,
-            (false, false) => self.search_fiat_provider_routes(&query).await,
-            (true, true) => Vec::new(),
+        let mut provider_routes = if query.includes_exchangers() {
+            match (source_is_crypto, target_is_crypto) {
+                (false, true) => self.search_fiat_to_crypto_provider_routes(&query).await,
+                (true, false) => self.search_crypto_to_fiat_provider_routes(&query).await,
+                (false, false) => self.search_fiat_provider_routes(&query).await,
+                (true, true) => Vec::new(),
+            }
+        } else {
+            Vec::new()
         };
-        if !source_is_crypto && !target_is_crypto {
+        if query.includes_exchangers() && !source_is_crypto && !target_is_crypto {
             provider_routes.extend(self.search_direct_fiat_routes(&query).await);
         }
         if merge_routes(&mut routes, provider_routes) > 0 {
@@ -974,14 +1024,17 @@ impl P2pSearchService {
             let query = query.clone();
             entry_searches.push(async move {
                 let entry = service
-                    .search(leg_query(
-                        &query.source_currency,
-                        &symbol,
-                        P2pSide::BuyCrypto,
-                        Some(query.source_amount),
-                        query.source_payment_method.clone(),
-                        &query,
-                    ))
+                    .search_market(
+                        leg_query(
+                            &query.source_currency,
+                            &symbol,
+                            P2pSide::BuyCrypto,
+                            Some(query.source_amount),
+                            query.source_payment_method.clone(),
+                            &query,
+                        ),
+                        query.offer_market(),
+                    )
                     .await;
                 (intermediaries, entry)
             });
@@ -992,7 +1045,12 @@ impl P2pSearchService {
                 continue;
             };
             for intermediary in &intermediaries {
-                for offer in entry.offers.iter().take(MAX_PROVIDER_OFFERS_PER_LEG) {
+                for offer in entry
+                    .offers
+                    .iter()
+                    .filter(|offer| query.accepts_offer(offer))
+                    .take(MAX_PROVIDER_OFFERS_PER_LEG)
+                {
                     if !offer_matches_network(offer, intermediary.location.as_deref()) {
                         continue;
                     }
@@ -1122,14 +1180,17 @@ impl P2pSearchService {
         let mut searches = FuturesUnordered::new();
         for intermediary in self.intermediary_assets(query).await {
             let Ok(exit) = self
-                .search(leg_query(
-                    &query.target_currency,
-                    &intermediary.symbol,
-                    P2pSide::SellCrypto,
-                    None,
-                    query.target_payment_method.clone(),
-                    query,
-                ))
+                .search_market(
+                    leg_query(
+                        &query.target_currency,
+                        &intermediary.symbol,
+                        P2pSide::SellCrypto,
+                        None,
+                        query.target_payment_method.clone(),
+                        query,
+                    ),
+                    query.offer_market(),
+                )
                 .await
             else {
                 continue;
@@ -1137,8 +1198,9 @@ impl P2pSearchService {
             let exit_offers = exit
                 .offers
                 .into_iter()
-                .take(MAX_PROVIDER_OFFERS_PER_LEG)
+                .filter(|offer| query.accepts_offer(offer))
                 .filter(|offer| offer_matches_network(offer, intermediary.location.as_deref()))
+                .take(MAX_PROVIDER_OFFERS_PER_LEG)
                 .collect::<Vec<_>>();
             for source in &source_assets {
                 if *source == intermediary {
@@ -1284,27 +1346,33 @@ impl P2pSearchService {
                 continue;
             }
             let Ok(entry) = self
-                .search(leg_query(
-                    &query.source_currency,
-                    &asset.symbol,
-                    P2pSide::BuyCrypto,
-                    Some(query.source_amount),
-                    query.source_payment_method.clone(),
-                    query,
-                ))
+                .search_market(
+                    leg_query(
+                        &query.source_currency,
+                        &asset.symbol,
+                        P2pSide::BuyCrypto,
+                        Some(query.source_amount),
+                        query.source_payment_method.clone(),
+                        query,
+                    ),
+                    query.offer_market(),
+                )
                 .await
             else {
                 continue;
             };
             let Ok(exit) = self
-                .search(leg_query(
-                    &query.target_currency,
-                    &asset.symbol,
-                    P2pSide::SellCrypto,
-                    None,
-                    query.target_payment_method.clone(),
-                    query,
-                ))
+                .search_market(
+                    leg_query(
+                        &query.target_currency,
+                        &asset.symbol,
+                        P2pSide::SellCrypto,
+                        None,
+                        query.target_payment_method.clone(),
+                        query,
+                    ),
+                    query.offer_market(),
+                )
                 .await
             else {
                 continue;
@@ -1312,9 +1380,15 @@ impl P2pSearchService {
             let exit_offers = exit
                 .offers
                 .into_iter()
+                .filter(|offer| query.accepts_offer(offer))
                 .take(MAX_PROVIDER_OFFERS_PER_LEG)
                 .collect::<Vec<_>>();
-            for entry_offer in entry.offers.into_iter().take(MAX_PROVIDER_OFFERS_PER_LEG) {
+            for entry_offer in entry
+                .offers
+                .into_iter()
+                .filter(|offer| query.accepts_offer(offer))
+                .take(MAX_PROVIDER_OFFERS_PER_LEG)
+            {
                 let Some(entry_price) = positive_number(&entry_offer.price) else {
                     continue;
                 };
@@ -1560,12 +1634,13 @@ async fn stream_fiat_asset_search(
     asset: String,
     entry_query: P2pSearchQuery,
     exit_query: P2pSearchQuery,
+    market: Option<P2pOfferMarket>,
     progress: mpsc::Sender<FiatAssetProgress>,
 ) -> Result<(String, P2pSearchResponse, P2pSearchResponse)> {
     let (entry_updates, mut entry_snapshots) = mpsc::channel(16);
     let (exit_updates, mut exit_snapshots) = mpsc::channel(16);
-    let entry_search = service.stream_search(entry_query, entry_updates);
-    let exit_search = service.stream_search(exit_query, exit_updates);
+    let entry_search = service.stream_search_market(entry_query, entry_updates, market);
+    let exit_search = service.stream_search_market(exit_query, exit_updates, market);
     tokio::pin!(entry_search);
     tokio::pin!(exit_search);
 
@@ -1646,8 +1721,14 @@ fn apply_fiat_asset_response(
     entry: &P2pSearchResponse,
     exit: &P2pSearchResponse,
 ) {
-    let entry_offers = reject_price_outliers(entry.offers.clone(), query.max_price_deviation_bps);
-    let exit_offers = reject_price_outliers(exit.offers.clone(), query.max_price_deviation_bps);
+    let entry_offers = reject_price_outliers(
+        matching_offers(&entry.offers, query),
+        query.max_price_deviation_bps,
+    );
+    let exit_offers = reject_price_outliers(
+        matching_offers(&exit.offers, query),
+        query.max_price_deviation_bps,
+    );
     let mut discovered = Vec::new();
     compose_fiat_routes(&mut discovered, query, asset, &entry_offers, &exit_offers);
     let routes_built = discovered.len();
@@ -1671,7 +1752,10 @@ fn apply_fiat_to_crypto_response(
     asset: &str,
     response: &P2pSearchResponse,
 ) {
-    let offers = reject_price_outliers(response.offers.clone(), query.max_price_deviation_bps);
+    let offers = reject_price_outliers(
+        matching_offers(&response.offers, query),
+        query.max_price_deviation_bps,
+    );
     let mut discovered = Vec::new();
     compose_fiat_to_crypto_routes(&mut discovered, query, asset, &offers);
     let routes_built = discovered.len();
@@ -1695,7 +1779,10 @@ fn apply_crypto_to_fiat_response(
     asset: &str,
     response: &P2pSearchResponse,
 ) {
-    let offers = reject_price_outliers(response.offers.clone(), query.max_price_deviation_bps);
+    let offers = reject_price_outliers(
+        matching_offers(&response.offers, query),
+        query.max_price_deviation_bps,
+    );
     let mut discovered = Vec::new();
     compose_crypto_to_fiat_routes(&mut discovered, query, asset, &offers);
     let routes_built = discovered.len();
@@ -1984,6 +2071,7 @@ fn normalize_query(
             .unwrap_or(DEFAULT_ROUTE_LIMIT)
             .clamp(1, MAX_ROUTE_LIMIT),
         sources: normalize_sources(query.sources)?,
+        exchange_mode: query.exchange_mode,
     })
 }
 
@@ -2073,6 +2161,14 @@ fn leg_query(
         limit: Some(LEG_SEARCH_LIMIT),
         sources: route.sources.clone(),
     }
+}
+
+fn matching_offers(offers: &[P2pOffer], query: &NormalizedRouteQuery) -> Vec<P2pOffer> {
+    offers
+        .iter()
+        .filter(|offer| query.accepts_offer(offer))
+        .cloned()
+        .collect()
 }
 
 fn reject_price_outliers(offers: Vec<P2pOffer>, max_deviation_bps: u32) -> Vec<P2pOffer> {
@@ -2698,6 +2794,7 @@ mod tests {
                 ("USDT", "near"),
                 ("USDT", "optimism"),
                 ("USDT", "scroll"),
+                ("USDT", "ton"),
                 ("USDC", "solana"),
                 ("BTC", "bitcoin"),
                 ("BTC", "near"),
@@ -2825,6 +2922,30 @@ mod tests {
             max_price_deviation_bps: 1_000,
             limit: 20,
             sources: None,
+            exchange_mode: ExchangeMode::All,
+        }
+    }
+
+    #[test]
+    fn exchange_mode_selects_p2p_exchangers_or_both() {
+        let p2p = offer("binance", P2pSide::BuyCrypto, "400", "1", "1000000");
+        let mut exchanger = offer("whitebird", P2pSide::BuyCrypto, "401", "1", "1000000");
+        exchanger.market = P2pOfferMarket::DirectExchange;
+        let offers = [p2p, exchanger];
+        let cases = [
+            (ExchangeMode::P2p, vec!["binance"]),
+            (ExchangeMode::Exchanger, vec!["whitebird"]),
+            (ExchangeMode::All, vec!["binance", "whitebird"]),
+        ];
+
+        for (exchange_mode, expected_sources) in cases {
+            let mut route_query = query(true);
+            route_query.exchange_mode = exchange_mode;
+            let actual_sources = matching_offers(&offers, &route_query)
+                .into_iter()
+                .map(|offer| offer.source)
+                .collect::<Vec<_>>();
+            assert_eq!(actual_sources, expected_sources, "mode: {exchange_mode:?}");
         }
     }
 
@@ -2892,6 +3013,7 @@ mod tests {
                 max_price_deviation_bps: Some(1_000),
                 limit: Some(20),
                 sources: None,
+                exchange_mode: ExchangeMode::All,
             },
             &["USDT".into()],
             &crate::networks::NetworkCatalog::test_default(),
@@ -2924,6 +3046,7 @@ mod tests {
                 max_price_deviation_bps: Some(1_000),
                 limit: Some(20),
                 sources: None,
+                exchange_mode: ExchangeMode::All,
             },
             &["USDT".into()],
             &crate::networks::NetworkCatalog::test_default(),
@@ -3133,6 +3256,7 @@ mod tests {
                 max_price_deviation_bps: Some(1_000),
                 limit: Some(40),
                 sources: None,
+                exchange_mode: ExchangeMode::All,
             })
             .await
             .unwrap();
@@ -3184,6 +3308,7 @@ mod tests {
                 max_price_deviation_bps: None,
                 limit: Some(20),
                 sources: Some("near-intents,cow-swap".into()),
+                exchange_mode: ExchangeMode::All,
             })
             .await
             .unwrap();
@@ -3224,6 +3349,7 @@ mod tests {
                 max_price_deviation_bps: None,
                 limit: Some(20),
                 sources: Some("binance".into()),
+                exchange_mode: ExchangeMode::All,
             })
             .await
             .unwrap();
@@ -3273,6 +3399,7 @@ mod tests {
                 max_price_deviation_bps: None,
                 limit: Some(20),
                 sources: Some("record-ethereum,record-tron".into()),
+                exchange_mode: ExchangeMode::All,
             })
             .await
             .unwrap();
@@ -3314,6 +3441,7 @@ mod tests {
                     max_price_deviation_bps: None,
                     limit: Some(20),
                     sources: Some("id-pay".into()),
+                    exchange_mode: ExchangeMode::All,
                 })
                 .await
                 .unwrap();
@@ -3362,6 +3490,7 @@ mod tests {
                 max_price_deviation_bps: Some(1_000),
                 limit: Some(40),
                 sources: None,
+                exchange_mode: ExchangeMode::All,
             })
             .await
             .unwrap();
@@ -3409,6 +3538,7 @@ mod tests {
                 max_price_deviation_bps: Some(1_000),
                 limit: Some(40),
                 sources: None,
+                exchange_mode: ExchangeMode::All,
             })
             .await
             .unwrap();
@@ -3477,6 +3607,7 @@ mod tests {
                     max_price_deviation_bps: Some(1_000),
                     limit: Some(40),
                     sources: None,
+                    exchange_mode: ExchangeMode::All,
                 })
                 .await
                 .unwrap();
@@ -3527,6 +3658,7 @@ mod tests {
                 max_price_deviation_bps: Some(1_000),
                 limit: Some(40),
                 sources: None,
+                exchange_mode: ExchangeMode::All,
             })
             .await
             .unwrap();
@@ -3677,6 +3809,7 @@ mod tests {
                         max_price_deviation_bps: Some(1_000),
                         limit: Some(40),
                         sources: Some("bybit".into()),
+                        exchange_mode: ExchangeMode::All,
                     },
                     search_id,
                     updates,
@@ -3733,6 +3866,7 @@ mod tests {
                         max_price_deviation_bps: Some(1_000),
                         limit: Some(40),
                         sources: None,
+                        exchange_mode: ExchangeMode::All,
                     },
                     search_id,
                     updates,
@@ -3853,6 +3987,7 @@ mod tests {
             max_price_deviation_bps: 1_000,
             limit: 20,
             sources: None,
+            exchange_mode: ExchangeMode::All,
         };
         let tickers = vec![
             CryptoTicker {
@@ -3909,6 +4044,7 @@ mod tests {
                 max_price_deviation_bps: Some(1_000),
                 limit: Some(10),
                 sources: None,
+                exchange_mode: ExchangeMode::All,
             })
             .await
             .unwrap();
@@ -3949,6 +4085,7 @@ mod tests {
                 max_price_deviation_bps: Some(1_000),
                 limit: Some(10),
                 sources: None,
+                exchange_mode: ExchangeMode::All,
             })
             .await
             .unwrap();

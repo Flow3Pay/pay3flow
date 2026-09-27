@@ -139,6 +139,10 @@ impl P2pSource for SkyLabsSource {
         "skylabs"
     }
 
+    fn market(&self) -> crate::p2p::P2pOfferMarket {
+        self.inner.market()
+    }
+
     fn timeout(&self, default: Duration) -> Duration {
         self.inner.timeout(default)
     }
@@ -359,6 +363,7 @@ mod tests {
             slug: "skylabs".into(),
             source_url: "https://skylabs.world/".into(),
             display_name: "SkyLabs".into(),
+            exchange_methods: vec![crate::providers::ProviderExchangeMethod::Exchanger],
             config: Some(config),
             workflow: None,
         };

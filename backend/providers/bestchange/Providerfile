@@ -1,3 +1,5 @@
+exchange_methods = ["exchanger"]
+
 [code]
 language = "rust"
 source = '''
@@ -115,6 +117,9 @@ pub(crate) struct BestChangeSource {
 
 impl BestChangeSource {
     pub(crate) fn from_record(client: Client, record: &ProviderAdapterRecord) -> Option<Self> {
+        if !record.supports(crate::providers::ProviderExchangeMethod::Exchanger) {
+            return None;
+        }
         let config = record.config.as_ref()?.bestchange.clone()?;
         Some(Self {
             client,
@@ -260,7 +265,9 @@ impl BestChangeSource {
                 }
                 let changer = catalog.changers.get(&row.changer);
                 offers.push(P2pOffer {
-                    market: P2pOfferMarket::P2p,
+                    // BestChange aggregates quotes from exchange services; these
+                    // are not advertisements from P2P counterparties.
+                    market: P2pOfferMarket::DirectExchange,
                     source: self.slug.clone(),
                     ad_id: format!(
                         "bestchange-api-{}-{}-{}-{index}",
@@ -310,6 +317,10 @@ impl BestChangeSource {
 impl P2pSource for BestChangeSource {
     fn name(&self) -> &str {
         &self.slug
+    }
+
+    fn market(&self) -> P2pOfferMarket {
+        P2pOfferMarket::DirectExchange
     }
 
     fn timeout(&self, _default: Duration) -> Duration {
@@ -961,6 +972,7 @@ mod tests {
                 max_price_deviation_bps: None,
                 limit: Some(40),
                 sources: Some("bestchange".into()),
+                exchange_mode: Default::default(),
             })
             .await
             .unwrap();

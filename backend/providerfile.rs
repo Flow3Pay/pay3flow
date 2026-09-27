@@ -3,8 +3,8 @@ use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use pay3flow_backend::provider_adapter::{ProviderAdapters, WorkflowConfig};
-use pay3flow_backend::providers::ProviderFeeModel;
+use pay3flow_backend::provider_adapter::{P2pAdapterMarket, ProviderAdapters, WorkflowConfig};
+use pay3flow_backend::providers::{ProviderExchangeMethod, ProviderFeeModel};
 use serde::Deserialize;
 
 #[path = "providerfile_code.rs"]
@@ -15,6 +15,7 @@ use providerfile_code::{normalize_path_source, CodeSource};
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawProviderFile {
+    exchange_methods: Vec<ProviderExchangeMethod>,
     buy: Option<RawProvider>,
     sell: Option<RawProvider>,
     adapter: Option<ProviderAdapters>,
@@ -59,6 +60,7 @@ impl Operation {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProviderDefinition {
     pub slug: String,
+    pub exchange_methods: Vec<ProviderExchangeMethod>,
     pub operation: Operation,
     pub source_url: String,
     pub name: String,
@@ -104,6 +106,11 @@ fn parse_with_path(
             "{source_file}: at least one [buy] or [sell] section is required"
         )));
     }
+    if raw.exchange_methods.is_empty() {
+        return Err(ProviderFileError(format!(
+            "{source_file}: exchange_methods must contain p2p, exchanger, or both"
+        )));
+    }
     if let Some(code) = &raw.code {
         if code.language != "rust" {
             return Err(ProviderFileError(format!(
@@ -124,11 +131,33 @@ fn parse_with_path(
         adapter
             .validate(raw.buy.is_some(), raw.sell.is_some(), source_file)
             .map_err(ProviderFileError)?;
+        if let Some(p2p) = &adapter.p2p {
+            let method = match p2p.market {
+                P2pAdapterMarket::P2p => ProviderExchangeMethod::P2p,
+                P2pAdapterMarket::DirectExchange => ProviderExchangeMethod::Exchanger,
+            };
+            require_exchange_method(&raw.exchange_methods, method, source_file, "adapter.p2p")?;
+        }
+        if adapter.market.is_some() || adapter.bestchange.is_some() || adapter.papa_change.is_some()
+        {
+            require_exchange_method(
+                &raw.exchange_methods,
+                ProviderExchangeMethod::Exchanger,
+                source_file,
+                "exchange adapter",
+            )?;
+        }
     }
     if let Some(workflow) = &raw.workflow {
         workflow
             .validate(raw.buy.is_some(), raw.sell.is_some(), source_file)
             .map_err(ProviderFileError)?;
+        require_exchange_method(
+            &raw.exchange_methods,
+            ProviderExchangeMethod::Exchanger,
+            source_file,
+            "workflow",
+        )?;
     }
     if raw.workflow.is_some()
         && raw
@@ -144,6 +173,12 @@ fn parse_with_path(
     let adapter = raw.adapter;
     let workflow = raw.workflow;
     let fee_model = raw.fees.map(normalize_fee_model).transpose()?;
+    let exchange_methods = raw
+        .exchange_methods
+        .into_iter()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
     [(Operation::Buy, raw.buy), (Operation::Sell, raw.sell)]
         .into_iter()
         .filter_map(|(operation, provider)| provider.map(|provider| (operation, provider)))
@@ -151,6 +186,7 @@ fn parse_with_path(
             normalize(
                 provider,
                 slug,
+                exchange_methods.clone(),
                 operation,
                 source_file,
                 adapter.clone(),
@@ -159,6 +195,22 @@ fn parse_with_path(
             )
         })
         .collect()
+}
+
+fn require_exchange_method(
+    methods: &[ProviderExchangeMethod],
+    required: ProviderExchangeMethod,
+    source_file: &str,
+    component: &str,
+) -> Result<(), ProviderFileError> {
+    if methods.contains(&required) {
+        Ok(())
+    } else {
+        Err(ProviderFileError(format!(
+            "{source_file}: {component} requires exchange_methods to include {}",
+            required.as_str()
+        )))
+    }
 }
 
 pub fn compile_dir(root: &Path) -> Result<String, ProviderFileError> {
@@ -219,6 +271,13 @@ pub fn render_sql(definitions: &[ProviderDefinition]) -> String {
     for definition in definitions {
         let currencies = sql_array(&definition.currencies);
         let banks = sql_array(&definition.banks);
+        let exchange_methods = sql_array(
+            &definition
+                .exchange_methods
+                .iter()
+                .map(|method| method.as_str().to_string())
+                .collect::<Vec<_>>(),
+        );
         let adapter = definition
             .adapter
             .as_ref()
@@ -235,13 +294,14 @@ pub fn render_sql(definitions: &[ProviderDefinition]) -> String {
             .map(|fee_model| serde_json::to_string(fee_model).expect("fee model is serializable"))
             .unwrap_or_else(|| "{}".into());
         sql.push_str(&format!(
-            "INSERT INTO providers (slug, operation, source_url, name, currencies, banks, adapter, workflow, fee_model, source_file)\n\
-             VALUES ({}, {}, {}, {}, {currencies}, {banks}, {}::JSONB, {}::JSONB, {}::JSONB, {})\n\
+            "INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, source_file)\n\
+             VALUES ({}, {}, {}, {}, {currencies}, {banks}, {exchange_methods}, {}::JSONB, {}::JSONB, {}::JSONB, {})\n\
              ON CONFLICT (slug, operation) DO UPDATE SET\n\
                  source_url = EXCLUDED.source_url,\n\
                  name = EXCLUDED.name,\n\
                  currencies = EXCLUDED.currencies,\n\
                  banks = EXCLUDED.banks,\n\
+                 exchange_methods = EXCLUDED.exchange_methods,\n\
                  adapter = EXCLUDED.adapter,\n\
                  workflow = EXCLUDED.workflow,\n\
                  fee_model = EXCLUDED.fee_model,\n\
@@ -266,6 +326,7 @@ pub fn render_sql(definitions: &[ProviderDefinition]) -> String {
 fn normalize(
     raw: RawProvider,
     slug: &str,
+    exchange_methods: Vec<ProviderExchangeMethod>,
     operation: Operation,
     source_file: &str,
     adapter: Option<ProviderAdapters>,
@@ -305,6 +366,7 @@ fn normalize(
 
     Ok(ProviderDefinition {
         slug: slug.to_string(),
+        exchange_methods,
         operation,
         source_url,
         name,
@@ -423,6 +485,8 @@ mod tests {
     use super::*;
 
     const EXAMPLE: &str = r#"
+exchange_methods = ["p2p", "exchanger"]
+
 [sell]
 source_url = "https://exchange.example"
 name = "Example Sell"
@@ -437,6 +501,8 @@ name = "Example Buy"
 "#;
 
     const HTTP_JSON_EXAMPLE: &str = r#"
+exchange_methods = ["p2p"]
+
 [adapter.p2p]
 kind = "http_json"
 endpoint = "https://api.provider.example/v1/quote"
@@ -474,6 +540,8 @@ currency = ["rub"]
 "#;
 
     const FEE_METADATA_EXAMPLE: &str = r#"
+exchange_methods = ["exchanger"]
+
 [sell]
 source_url = "https://provider.example"
 name = "Example Sell"
@@ -486,6 +554,8 @@ docs_url = "https://provider.example/docs/fees"
 "#;
 
     const CODE_EXAMPLE: &str = r#"
+exchange_methods = ["exchanger"]
+
 [code]
 language = "rust"
 source = '''
@@ -503,6 +573,13 @@ currency = ["eth"]
         let definitions = parse(EXAMPLE, "example", "example/Providerfile").unwrap();
 
         assert_eq!(definitions.len(), 2);
+        assert_eq!(
+            definitions[0].exchange_methods,
+            [
+                ProviderExchangeMethod::P2p,
+                ProviderExchangeMethod::Exchanger
+            ]
+        );
         assert_eq!(definitions[0].operation, Operation::Buy);
         assert_eq!(definitions[0].currencies, ["AMD", "EUR", "RUB", "USD"]);
         assert!(definitions[0].banks.is_empty());
@@ -518,6 +595,19 @@ currency = ["eth"]
     #[test]
     fn accepts_a_declarative_http_json_adapter() {
         assert!(parse(HTTP_JSON_EXAMPLE, "example", "example/Providerfile").is_ok());
+    }
+
+    #[test]
+    fn rejects_adapter_missing_its_exchange_method() {
+        let invalid = HTTP_JSON_EXAMPLE.replace(
+            "exchange_methods = [\"p2p\"]",
+            "exchange_methods = [\"exchanger\"]",
+        );
+
+        let error = parse(&invalid, "example", "example/Providerfile")
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("adapter.p2p requires exchange_methods to include p2p"));
     }
 
     #[test]

@@ -1,6 +1,8 @@
 # Copy this file to providers/<provider-slug>/Providerfile and replace the
 # example values. The parent directory becomes the provider slug.
 
+exchange_methods = ["exchanger"]
+
 [sell]
 source_url = "https://provider.example"
 name = "Example Provider Sell"

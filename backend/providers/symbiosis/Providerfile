@@ -2,6 +2,8 @@
 # implementation loads the supported token catalog and requests read-only
 # quotes from the official API.
 
+exchange_methods = ["exchanger"]
+
 [code]
 language = "rust"
 source = path["symbiosis.rs"]

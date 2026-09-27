@@ -2,6 +2,8 @@
 # loaded from the 1Click token catalog. Its Rust implementation is compiled
 # from this Providerfile into the backend binary.
 
+exchange_methods = ["exchanger"]
+
 [code]
 language = "rust"
 source = '''

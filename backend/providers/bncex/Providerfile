@@ -1,6 +1,8 @@
 # bncex exposes the quote used by its public AMD/stablecoin calculator. Quotes
 # include the selected transfer network and the amount-tiered exchange fee.
 
+exchange_methods = ["exchanger"]
+
 [buy]
 source_url = "https://www.bncex.com/en"
 name = "bncex Buy"

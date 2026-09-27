@@ -2,6 +2,8 @@
 # calculator. This declaration intentionally selects USDT on Solana (USDTSOL)
 # rather than treating every USDT network as interchangeable.
 
+exchange_methods = ["exchanger"]
+
 [buy]
 source_url = "https://www.bitcoincenter.am/en/?from=WIREAMD&to=USDTSOL"
 name = "Bitcoin Center Buy"

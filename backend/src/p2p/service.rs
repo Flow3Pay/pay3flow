@@ -272,6 +272,9 @@ pub struct P2pSearchResponse {
 #[async_trait]
 pub(crate) trait P2pSource: Send + Sync {
     fn name(&self) -> &str;
+    fn market(&self) -> P2pOfferMarket {
+        P2pOfferMarket::P2p
+    }
     fn timeout(&self, default: Duration) -> Duration {
         default
     }
@@ -512,23 +515,35 @@ impl P2pSearchService {
     }
 
     pub async fn search(&self, query: P2pSearchQuery) -> Result<P2pSearchResponse> {
-        self.run_search(query, None).await
+        self.run_search(query, None, None).await
     }
 
-    pub(crate) async fn stream_search(
+    pub(crate) async fn search_market(
+        &self,
+        query: P2pSearchQuery,
+        market: Option<P2pOfferMarket>,
+    ) -> Result<P2pSearchResponse> {
+        self.run_search(query, None, market).await
+    }
+
+    pub(crate) async fn stream_search_market(
         &self,
         query: P2pSearchQuery,
         updates: mpsc::Sender<P2pSearchResponse>,
+        market: Option<P2pOfferMarket>,
     ) -> Result<P2pSearchResponse> {
-        self.run_search(query, Some(updates)).await
+        self.run_search(query, Some(updates), market).await
     }
 
     async fn run_search(
         &self,
         query: P2pSearchQuery,
         updates: Option<mpsc::Sender<P2pSearchResponse>>,
+        market: Option<P2pOfferMarket>,
     ) -> Result<P2pSearchResponse> {
-        let response = self.run_search_once(query.clone(), updates.clone()).await?;
+        let response = self
+            .run_search_once(query.clone(), updates.clone(), market)
+            .await?;
         if !response.offers.is_empty() {
             return Ok(response);
         }
@@ -537,7 +552,7 @@ impl P2pSearchService {
         if fallback_query.payment_method.is_some() {
             fallback_query.payment_method = None;
             let response = self
-                .run_search_once(fallback_query.clone(), updates.clone())
+                .run_search_once(fallback_query.clone(), updates.clone(), market)
                 .await?;
             if !response.offers.is_empty() {
                 return Ok(response);
@@ -546,7 +561,7 @@ impl P2pSearchService {
         if fallback_query.min_orders.is_some() || fallback_query.min_completion_rate.is_some() {
             fallback_query.min_orders = None;
             fallback_query.min_completion_rate = None;
-            return self.run_search_once(fallback_query, updates).await;
+            return self.run_search_once(fallback_query, updates, market).await;
         }
         Ok(response)
     }
@@ -555,12 +570,16 @@ impl P2pSearchService {
         &self,
         query: P2pSearchQuery,
         updates: Option<mpsc::Sender<P2pSearchResponse>>,
+        market: Option<P2pOfferMarket>,
     ) -> Result<P2pSearchResponse> {
         if !self.enabled {
             bail!("P2P search is disabled");
         }
         let query = query.normalize()?;
-        let cache_key = serde_json::to_string(&query).context("failed to build P2P cache key")?;
+        let cache_key = format!(
+            "{market:?}:{}",
+            serde_json::to_string(&query).context("failed to build P2P cache key")?
+        );
         if let Some(mut response) = self.cached(&cache_key) {
             response.cached = true;
             if let Some(updates) = updates {
@@ -568,16 +587,17 @@ impl P2pSearchService {
             }
             return Ok(response);
         }
-        let selected_sources =
-            self.sources
-                .iter()
-                .filter(|source| {
-                    query.sources.as_deref().is_none_or(|requested| {
+        let selected_sources = self
+            .sources
+            .iter()
+            .filter(|source| {
+                market.is_none_or(|market| source.market() == market)
+                    && query.sources.as_deref().is_none_or(|requested| {
                         requested.split(',').any(|name| name == source.name())
                     })
-                })
-                .cloned()
-                .collect::<Vec<_>>();
+            })
+            .cloned()
+            .collect::<Vec<_>>();
         let mut searches = selected_sources
             .into_iter()
             .map(|source| {
@@ -836,6 +856,8 @@ mod tests {
         delay: Duration,
     }
 
+    struct DirectStubSource(StubSource);
+
     struct StubRouteProvider;
 
     #[async_trait]
@@ -863,6 +885,21 @@ mod tests {
         async fn search(&self, _query: &P2pSearchQuery) -> Result<Vec<P2pOffer>> {
             tokio::time::sleep(self.delay).await;
             Ok(self.offers.clone())
+        }
+    }
+
+    #[async_trait]
+    impl P2pSource for DirectStubSource {
+        fn name(&self) -> &str {
+            self.0.name
+        }
+
+        fn market(&self) -> P2pOfferMarket {
+            P2pOfferMarket::DirectExchange
+        }
+
+        async fn search(&self, _query: &P2pSearchQuery) -> Result<Vec<P2pOffer>> {
+            Ok(self.0.offers.clone())
         }
     }
 
@@ -974,6 +1011,53 @@ mod tests {
             .offers
             .iter()
             .any(|offer| offer.source == "whitebird"));
+    }
+
+    #[tokio::test]
+    async fn market_filter_only_queries_matching_sources() {
+        let mut direct_offer = offer("direct", "361", "1", "100000", 0);
+        direct_offer.market = P2pOfferMarket::DirectExchange;
+        let service = P2pSearchService::with_sources(
+            vec![
+                Arc::new(StubSource {
+                    name: "p2p",
+                    offers: vec![offer("p2p", "360", "1", "100000", 0)],
+                    delay: Duration::ZERO,
+                }),
+                Arc::new(DirectStubSource(StubSource {
+                    name: "direct",
+                    offers: vec![direct_offer],
+                    delay: Duration::ZERO,
+                })),
+            ],
+            Duration::from_secs(1),
+        );
+        let query = P2pSearchQuery {
+            fiat: "AMD".into(),
+            asset: "USDT".into(),
+            side: P2pSide::BuyCrypto,
+            amount: None,
+            payment_method: None,
+            merchant_only: None,
+            min_orders: None,
+            min_completion_rate: None,
+            limit: Some(10),
+            sources: None,
+        };
+
+        let p2p = service
+            .search_market(query.clone(), Some(P2pOfferMarket::P2p))
+            .await
+            .unwrap();
+        let direct = service
+            .search_market(query, Some(P2pOfferMarket::DirectExchange))
+            .await
+            .unwrap();
+
+        assert_eq!(p2p.sources.len(), 1);
+        assert_eq!(p2p.sources[0].source, "p2p");
+        assert_eq!(direct.sources.len(), 1);
+        assert_eq!(direct.sources[0].source, "direct");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

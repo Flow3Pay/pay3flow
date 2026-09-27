@@ -1,3 +1,5 @@
+exchange_methods = ["p2p"]
+
 [sell]
 source_url = "https://rapira.net"
 name = "Rapira Sell"

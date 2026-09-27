@@ -169,6 +169,7 @@ CREATE TABLE IF NOT EXISTS providers (
     name TEXT NOT NULL,
     currencies TEXT[] NOT NULL DEFAULT '{}',
     banks TEXT[] NOT NULL DEFAULT '{}',
+    exchange_methods TEXT[] NOT NULL DEFAULT ARRAY['p2p', 'exchanger']::TEXT[],
     adapter JSONB NOT NULL DEFAULT '{}'::JSONB,
     workflow JSONB NOT NULL DEFAULT '{}'::JSONB,
     fee_model JSONB NOT NULL DEFAULT '{}'::JSONB,
@@ -186,6 +187,8 @@ ALTER TABLE providers
     ADD COLUMN IF NOT EXISTS workflow JSONB NOT NULL DEFAULT '{}'::JSONB;
 ALTER TABLE providers
     ADD COLUMN IF NOT EXISTS fee_model JSONB NOT NULL DEFAULT '{}'::JSONB;
+ALTER TABLE providers
+    ADD COLUMN IF NOT EXISTS exchange_methods TEXT[] NOT NULL DEFAULT ARRAY['p2p', 'exchanger']::TEXT[];
 
 CREATE INDEX IF NOT EXISTS providers_status_operation_idx
     ON providers (status, operation);

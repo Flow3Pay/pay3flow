@@ -1,3 +1,5 @@
+exchange_methods = ["exchanger"]
+
 [code]
 language = "rust"
 source = { path = "skylabs.rs" }

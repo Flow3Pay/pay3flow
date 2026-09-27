@@ -63,8 +63,16 @@ not an ignored setting.
 
 ## Supported combinations
 
-Every Providerfile must have `[buy]`, `[sell]`, or both. The remaining sections
-are optional and can be combined as follows:
+Every Providerfile must declare one or both supported exchange methods and have
+`[buy]`, `[sell]`, or both:
+
+```toml
+exchange_methods = ["p2p", "exchanger"]
+```
+
+Use `p2p` for counterparty advertisements and `exchanger` for ordinary service,
+calculator, spot-market, or route-provider quotes. The remaining sections are
+optional and can be combined as follows:
 
 | Section | Purpose | Combination rules |
 | --- | --- | --- |
@@ -86,6 +94,8 @@ only catalog sections is valid but is not a live quote source.
 This is the smallest complete Providerfile:
 
 ```toml
+exchange_methods = ["p2p"]
+
 [sell]
 source_url = "https://provider.example/sell"
 name = "Example Sell"

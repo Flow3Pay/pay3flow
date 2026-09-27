@@ -1,3 +1,5 @@
+exchange_methods = ["exchanger"]
+
 [sell]
 source_url = "https://whitebird.io/"
 name = "Whitebird Sell"
