@@ -162,12 +162,13 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
       if (url.searchParams.get("source_fiat") === "USD" && url.searchParams.get("target_fiat") === "USD") {
         const sourcePaymentMethod = url.searchParams.get("source_payment_method");
         const isReverseBankRoute = sourcePaymentMethod === "Ameriabank";
-        expect(sourcePaymentMethod).toBe(isReverseBankRoute ? "Ameriabank" : "Bank Transfer");
-        expect(url.searchParams.get("target_payment_method")).toBe("Bank Transfer");
+        const targetPaymentMethod = url.searchParams.get("target_payment_method");
+        expect(sourcePaymentMethod).toBe(isReverseBankRoute ? "Ameriabank" : "T-Bank");
+        expect(targetPaymentMethod).toBe(isReverseBankRoute ? "T-Bank" : "Ameriabank");
         const entry = offer(isReverseBankRoute ? "okx" : "skylabs", "usd-bank-entry", "USD", "USDT");
-        entry.payment_methods = [isReverseBankRoute ? "Ameriabank" : "Bank Transfer"];
-        const exit = offer("skylabs", "usd-bank-exit", "USD", "USDT");
-        exit.payment_methods = ["Bank Transfer"];
+        entry.payment_methods = [sourcePaymentMethod ?? "Bank Transfer"];
+        const exit = offer(isReverseBankRoute ? "skylabs" : "okx", "usd-bank-exit", "USD", "USDT");
+        exit.payment_methods = [targetPaymentMethod ?? "Bank Transfer"];
         return json({
           search_id: "00000000-0000-4000-8000-000000000109",
           routes_found: 1,
@@ -190,8 +191,8 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
             target_fiat: "USD",
             target_amount: "11643.56",
             effective_rate: "0.97029667",
-            same_venue: !isReverseBankRoute,
-            requires_asset_transfer: isReverseBankRoute,
+            same_venue: false,
+            requires_asset_transfer: true,
             transfer_fee_included: true,
             route_kind: "fiat_to_fiat",
             payment_methods_verified: true,
@@ -1149,15 +1150,25 @@ test("currency control only lists currencies supported by the selected payment m
   await expect(currencyPicker.getByRole("option", { name: /^USDT\b/ })).toHaveCount(0);
   await currencyPicker.getByRole("option", { name: /^USD\b/ }).click();
   await expect(page.getByRole("button", { name: "Select sending currency: USD" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Select sending bank: Ameriabank USD account" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Select sending bank: Ameriabank" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Select sending bank: Ameriabank USD account" }).click();
+  await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
   const methodPicker = page.getByRole("dialog", { name: "Choose where you pay from" });
-  await methodPicker.getByLabel("Search banks and payment methods").fill("Sberbank");
-  await expect(methodPicker.getByRole("option", { name: /Sberbank/ })).toBeVisible();
-  await methodPicker.getByLabel("Search banks and payment methods").fill("USDT ERC20");
-  await expect(methodPicker.getByRole("option", { name: /Ethereum \(ERC-20\).*USDT/ })).toHaveCount(1);
-  await methodPicker.getByRole("option", { name: /Ethereum \(ERC-20\).*USDT/ }).click();
+  await methodPicker.getByLabel("Search banks and payment methods").fill("Ameriabank");
+  await expect(methodPicker.getByRole("option", { name: /Ameriabank/ })).toHaveCount(1);
+  await methodPicker.getByLabel("Search banks and payment methods").fill("IDBank");
+  await expect(methodPicker.getByRole("option", { name: /^IDBank Bank transfer · USD/ })).toHaveCount(1);
+  await methodPicker.getByRole("option", { name: /^IDBank Bank transfer · USD/ }).click();
+  await expect(page.getByRole("button", { name: "Select sending bank: IDBank" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Select sending currency: USD" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Select sending bank: IDBank" }).click();
+  const reopenedMethodPicker = page.getByRole("dialog", { name: "Choose where you pay from" });
+  await reopenedMethodPicker.getByLabel("Search banks and payment methods").fill("Sberbank");
+  await expect(reopenedMethodPicker.getByRole("option", { name: /Sberbank/ })).toBeVisible();
+  await reopenedMethodPicker.getByLabel("Search banks and payment methods").fill("USDT ERC20");
+  await expect(reopenedMethodPicker.getByRole("option", { name: /Ethereum \(ERC-20\).*USDT/ })).toHaveCount(1);
+  await reopenedMethodPicker.getByRole("option", { name: /Ethereum \(ERC-20\).*USDT/ }).click();
   await expect(page.getByRole("button", { name: "Select sending asset: Tether" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Select sending network: Ethereum (ERC-20)" })).toBeVisible();
 
@@ -1166,9 +1177,20 @@ test("currency control only lists currencies supported by the selected payment m
   await expect(recipientCurrencies.getByRole("option")).toHaveCount(1);
   await expect(recipientCurrencies.getByRole("option", { name: /^RUB\b/ })).toBeVisible();
   await expect(recipientCurrencies.getByRole("option", { name: /^(AMD|USD)\b/ })).toHaveCount(0);
+  await recipientCurrencies.getByRole("option", { name: /^RUB\b/ }).click();
+
+  await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
+  const recipientMethods = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
+  await recipientMethods.getByLabel("Search banks and payment methods").fill("Ameriabank");
+  await recipientMethods.getByRole("option", { name: /^Ameriabank Bank transfer · AMD/ }).click();
+  await page.getByRole("button", { name: "Select recipient currency: AMD" }).click();
+  const ameriaCurrencies = page.getByRole("dialog", { name: "Choose currency" });
+  await expect(ameriaCurrencies.getByRole("option", { name: /^AMD\b/ })).toBeVisible();
+  await expect(ameriaCurrencies.getByRole("option", { name: /^USD\b/ })).toBeVisible();
+  await expect(ameriaCurrencies.getByRole("option", { name: /^RUB\b/ })).toHaveCount(0);
 });
 
-test("USD supports cash and Armenian dollar bank accounts", async ({ page }) => {
+test("USD supports cash and Armenian bank currencies", async ({ page }) => {
   await mockBackend(page);
   await openApp(page);
 
@@ -1177,19 +1199,21 @@ test("USD supports cash and Armenian dollar bank accounts", async ({ page }) => 
   await expect(sourceCurrencyPicker.getByRole("option", { name: /^USD\b/ })).toBeVisible();
   await sourceCurrencyPicker.getByRole("option", { name: /^USD\b/ }).click();
 
-  const usdAccount = page.getByRole("button", { name: "Select sending bank: Ameriabank USD account" });
-  await expect(usdAccount).toBeVisible();
-  await usdAccount.click();
+  const ameria = page.getByRole("button", { name: "Select sending bank: Ameriabank" });
+  await expect(ameria).toBeVisible();
+  await ameria.click();
   const methodPicker = page.getByRole("dialog", { name: "Choose where you pay from" });
   await expect(methodPicker.getByRole("option", { name: /Cash USD/ })).toBeVisible();
-  await expect(methodPicker.getByRole("option", { name: /Armenian USD bank account/ })).toBeVisible();
+  await methodPicker.getByLabel("Search banks and payment methods").fill("Ameriabank");
+  await expect(methodPicker.getByRole("option", { name: /^Ameriabank Bank transfer · USD/ })).toHaveCount(1);
+  await methodPicker.getByLabel("Search banks and payment methods").fill("");
   await methodPicker.getByRole("option", { name: /Cash USD/ }).click();
   await expect(page.getByText("USD available via cash")).toBeVisible();
 
   await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
   const targetMethodPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
   await targetMethodPicker.getByLabel("Search banks and payment methods").fill("Ameriabank");
-  await targetMethodPicker.getByRole("option", { name: /^Ameriabank\b/ }).click();
+  await targetMethodPicker.getByRole("option", { name: /^Ameriabank Bank transfer · AMD/ }).click();
   await expect(page.getByRole("button", { name: "Select recipient bank: Ameriabank" })).toBeVisible();
 
   await page.getByLabel("Amount to send").fill("12000");
@@ -1199,20 +1223,27 @@ test("USD supports cash and Armenian dollar bank accounts", async ({ page }) => 
   await expect(page).toHaveURL(/#\/swap\/USD\/AMD\?amount=12000$/);
 });
 
-test("USD bank account routes through crypto to an Armenian USD account", async ({ page }) => {
+test("T-Bank USD routes through crypto to Ameriabank USD", async ({ page }) => {
   await mockBackend(page);
   await openApp(page);
 
   await page.getByRole("button", { name: "Select sending currency: AMD" }).click();
   await page.getByRole("dialog", { name: "Choose currency" }).getByRole("option", { name: /^USD\b/ }).click();
 
-  await page.getByRole("button", { name: "Select sending bank: Ameriabank USD account" }).click();
+  await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
   const sourceMethodPicker = page.getByRole("dialog", { name: "Choose where you pay from" });
-  await sourceMethodPicker.getByRole("option", { name: /^USD bank account\b/ }).click();
+  await sourceMethodPicker.getByLabel("Search banks and payment methods").fill("T-Bank");
+  await sourceMethodPicker.getByRole("option", { name: /^T-Bank Bank transfer · USD/ }).click();
+  await expect(page.getByRole("button", { name: "Select sending bank: T-Bank" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Select sending currency: USD" })).toBeVisible();
 
   await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
   const targetMethodPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
-  await targetMethodPicker.getByRole("option", { name: /Armenian USD bank account/ }).click();
+  await targetMethodPicker.getByLabel("Search banks and payment methods").fill("Ameriabank");
+  await targetMethodPicker.getByRole("option", { name: /^Ameriabank Bank transfer · AMD/ }).click();
+  await page.getByRole("button", { name: "Select recipient currency: AMD" }).click();
+  await page.getByRole("dialog", { name: "Choose currency" }).getByRole("option", { name: /^USD\b/ }).click();
+  await expect(page.getByRole("button", { name: "Select recipient bank: Ameriabank" })).toBeVisible();
 
   await page.getByLabel("Amount to send").fill("12000");
   await page.getByTestId("start-search").click();
@@ -1224,18 +1255,23 @@ test("USD bank account routes through crypto to an Armenian USD account", async 
   await expect(page).toHaveURL(/#\/swap\/USD\/USD\?amount=12000$/);
 });
 
-test("Armenian USD account routes through crypto to a USD bank account", async ({ page }) => {
+test("Ameriabank USD routes through crypto to T-Bank USD", async ({ page }) => {
   await mockBackend(page);
   await openApp(page);
 
   await page.getByRole("button", { name: "Select sending currency: AMD" }).click();
   await page.getByRole("dialog", { name: "Choose currency" }).getByRole("option", { name: /^USD\b/ }).click();
 
-  await expect(page.getByRole("button", { name: "Select sending bank: Ameriabank USD account" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Select sending bank: Ameriabank" })).toBeVisible();
 
   await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
   const targetMethodPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
-  await targetMethodPicker.getByRole("option", { name: /^USD bank account\b/ }).click();
+  await targetMethodPicker.getByLabel("Search banks and payment methods").fill("T-Bank");
+  await targetMethodPicker.getByRole("option", { name: /^T-Bank Bank transfer · RUB/ }).click();
+  await page.getByRole("button", { name: "Select recipient currency: RUB" }).click();
+  await page.getByRole("dialog", { name: "Choose currency" }).getByRole("option", { name: /^USD\b/ }).click();
+  await expect(page.getByRole("button", { name: "Select recipient bank: T-Bank" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Select recipient currency: USD" })).toBeVisible();
 
   await page.getByLabel("Amount to send").fill("12000");
   await page.getByTestId("start-search").click();

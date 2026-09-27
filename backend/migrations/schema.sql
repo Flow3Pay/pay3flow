@@ -326,8 +326,8 @@ INSERT INTO exchange_corridors
 VALUES
     ('AM', 'AMD', 'RU', 'RUB', 'enabled', 1000, NULL, 5000000000, '{"mvp": true, "label": "Armenia AMD to Russia RUB"}'),
     ('GLOBAL', 'USD', 'AM', 'AMD', 'enabled', 100, NULL, NULL, '{"label": "Cash or bank USD to Armenia AMD"}'),
-    ('GLOBAL', 'USD', 'AM', 'USD', 'enabled', 100, NULL, NULL, '{"label": "USD bank account to Armenian USD bank account through crypto"}'),
-    ('AM', 'USD', 'GLOBAL', 'USD', 'enabled', 100, NULL, NULL, '{"label": "Armenian USD bank account to USD bank account through crypto"}')
+    ('GLOBAL', 'USD', 'AM', 'USD', 'enabled', 100, NULL, NULL, '{"label": "USD bank to Armenian bank in USD through crypto"}'),
+    ('AM', 'USD', 'GLOBAL', 'USD', 'enabled', 100, NULL, NULL, '{"label": "Armenian bank in USD to USD bank through crypto"}')
 ON CONFLICT (source_country, source_currency, target_country, target_currency)
 DO UPDATE SET
     min_amount_minor = EXCLUDED.min_amount_minor,

@@ -106,10 +106,28 @@
     if (fallback) fallback.style.display = "inline";
   }
 
+  function groupFiatMethods(methods: PaymentMethod[], current: PaymentMethod | null) {
+    const groups = new Map<string, PaymentMethod[]>();
+    for (const method of methods) {
+      const key = method.currencyGroup ?? method.id;
+      groups.set(key, [...(groups.get(key) ?? []), method]);
+    }
+
+    return [...groups.values()].map((variants) =>
+      variants.find((method) => method.id === current?.id)
+      ?? variants.find((method) => method.currency === current?.currency)
+      ?? variants.find((method) => method.currency === "AMD")
+      ?? variants[0],
+    );
+  }
+
   // Payment-method search is intentionally independent from the compact fiat
-  // currency selector. A crypto row owns both asset and network selection.
-  $: fiatMethods = FIAT_METHODS.filter((method) =>
-    method.role === role || method.role === "both",
+  // currency selector. Multi-currency banks appear once, while the selected
+  // variant keeps the current currency whenever the new bank supports it.
+  // A crypto row owns both asset and network selection.
+  $: fiatMethods = groupFiatMethods(
+    FIAT_METHODS.filter((method) => method.role === role || method.role === "both"),
+    selected,
   );
   $: assetsForRole = DIGITAL_ASSETS.filter((method) => method.role === role || method.role === "both");
   $: options = [
