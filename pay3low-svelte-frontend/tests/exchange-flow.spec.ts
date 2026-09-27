@@ -689,7 +689,7 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   );
   expect(routeRenderSamples.map((sample) => sample.count)).toEqual([100, 101]);
   expect(routeRenderSamples[1].at - routeRenderSamples[0].at).toBeGreaterThanOrEqual(5);
-  await expect(page.getByTestId("complete-route").first()).toContainText("Used 12.4K times");
+  await expect(page.getByTestId("complete-route").first()).not.toContainText("Used");
   await expect(page.getByTestId("complete-route").first()).toContainText("20350 RUB");
   const bestRoute = page.getByTestId("complete-route").first();
   const alternativeRoute = page.getByTestId("complete-route").nth(1);

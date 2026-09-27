@@ -635,7 +635,7 @@
               <div class="settingsBackdrop" on:mousedown={closeSettings} role="presentation">
                 <div class:settingsDragging class="settingsMenu exchangesMenu" bind:this={settingsDialog} role="dialog" aria-modal="true" aria-label="Exchange settings" tabindex="-1" on:mousedown|stopPropagation>
                   <div class="settingsModalHeader"><span class="settingsSheetHandle" aria-hidden="true" on:pointerdown={startSettingsDrag} on:pointermove={moveSettingsDrag} on:pointerup={endSettingsDrag} on:pointercancel={endSettingsDrag}></span><button type="button" class="settingsClose" on:click={closeSettings} aria-label="Close exchange settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button></div>
-                  <div class="settingsHead"><div><strong>Search exchanges</strong><span>{selectedSources.length} selected</span></div></div>
+                  <div class="settingsHead"><div><strong>Search exchanges</strong></div></div>
                   <div class="sourceOptions exchangeOptions exchangeModalOptions" aria-label="Exchanges to search">{#each exchangeChoices as source}{@const enabled = selectedSources.includes(source.id)}<button type="button" class:sourceOptionActive={enabled} class="sourceOption" aria-pressed={enabled} title={sourceTitle(source)} on:click={() => toggleSource(source.id)}><span class="sourceOptionIcon" aria-hidden="true"><img src={source.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackSourceIcon(event, source.id)} /></span>{source.label}</button>{/each}</div>
                   {#if alwaysOnProviders.length}
                     <div class="alwaysOnProviders" aria-label="Direct quote providers">
@@ -662,7 +662,6 @@
                   <button type="button" class:sourceOptionActive={selectedIntermediaryAssets.length === 0} class="sourceOption" aria-pressed={selectedIntermediaryAssets.length === 0} on:click={() => { selectedIntermediaryAssets = []; resetResults(); }}>All available</button>
                   {#each INTERMEDIARY_ASSETS as asset}{@const enabled = selectedIntermediaryAssets.includes(asset)}<button type="button" class:sourceOptionActive={enabled} class="sourceOption" aria-pressed={enabled} on:click={() => toggleAsset(asset)}><span class="intermediaryAssetIcon" aria-hidden="true"><img src={intermediaryIcon(asset)} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={fallbackAssetIcon} /></span>{asset}</button>{/each}
                 </div></div>
-                <p>Search also runs automatically 650ms after you change the amount, bank or intermediary.</p>
                 </div>
               </div>
             {/if}
@@ -944,8 +943,7 @@
   font-weight: 800;
 }
 
-.settingsHead span,
-.settingsMenu p {
+.settingsHead span {
   color: var(--color-text-faint);
   font-size: 10px;
   line-height: 1.5;
