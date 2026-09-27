@@ -780,6 +780,7 @@ requirements described earlier.
 | `source_url_template` | Offer/trading URL template. |
 | `source_url_is_exact` | Whether the URL addresses this exact offer (`false`). |
 | `advertiser_profile_url_template` | Advertiser profile URL template. |
+| `merchant_profile_url_template` | Merchant profile URL template; falls back to `advertiser_profile_url_template`. |
 
 ### `adapter.p2p.rate_table`
 

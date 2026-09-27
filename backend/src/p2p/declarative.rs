@@ -145,9 +145,13 @@ impl DeclarativeP2pSource {
             asset: &asset,
             side: query.side,
         };
-        let advertiser_profile_url = mapping
-            .advertiser_profile_url_template
-            .as_deref()
+        let advertiser_profile_template = if is_merchant {
+            mapping.merchant_profile_url_template.as_deref()
+        } else {
+            None
+        }
+        .or(mapping.advertiser_profile_url_template.as_deref());
+        let advertiser_profile_url = advertiser_profile_template
             .map(|template| render_link(template, item, &variables))
             .transpose()?;
         let source_url = mapping
@@ -1049,9 +1053,9 @@ mod tests {
     }
 
     #[test]
-    fn splits_mexc_numeric_payment_method_lists() {
+    fn maps_mexc_payment_methods_and_profile_links() {
         let source = mexc_source();
-        let response: Value = serde_json::from_str(
+        let mut response: Value = serde_json::from_str(
             r#"{
                 "id":"ad-1",
                 "price":250000,
@@ -1085,8 +1089,45 @@ mod tests {
             .unwrap();
         assert_eq!(offer.payment_methods, ["1", "12", "14"]);
         assert_eq!(
+            offer.advertiser_profile_url.as_deref(),
+            Some("https://www.mexc.com/buy-crypto/merchant/merchant-1")
+        );
+        assert_eq!(
             offer.payment_method_match("Sberbank"),
             PaymentMethodMatch::Unknown
+        );
+
+        response["merchant"]["merchantType"] = "normal".into();
+        let offer = source
+            .into_offer(&response, &query, source.config.offer.as_ref().unwrap())
+            .unwrap();
+        assert_eq!(
+            offer.advertiser_profile_url.as_deref(),
+            Some("https://www.mexc.com/buy-crypto/user-info/merchant-1")
+        );
+    }
+
+    #[test]
+    fn maps_mexc_taker_sides_to_maker_advertisements() {
+        let source = mexc_source();
+
+        assert_eq!(
+            source
+                .operation(P2pSide::BuyCrypto)
+                .unwrap()
+                .query
+                .get("tradeType")
+                .map(String::as_str),
+            Some("SELL")
+        );
+        assert_eq!(
+            source
+                .operation(P2pSide::SellCrypto)
+                .unwrap()
+                .query
+                .get("tradeType")
+                .map(String::as_str),
+            Some("BUY")
         );
     }
 

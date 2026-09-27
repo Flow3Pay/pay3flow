@@ -280,6 +280,8 @@ pub struct OfferMapping {
     #[serde(default)]
     pub source_url_is_exact: bool,
     pub advertiser_profile_url_template: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merchant_profile_url_template: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

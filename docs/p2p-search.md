@@ -48,10 +48,9 @@ exact advertisement returned by the source. The frontend instructions focus on
 the advertiser profile and nickname; when no stable profile URL is available,
 they open the venue's P2P market and tell the user to find the advertiser by
 nickname and verify the ad ID. Routes keep valuable offers even when a venue
-only provides a generic market URL. Binance, Bybit, OKX, Bitget, and Rapira
-expose public advertiser profile URLs; MEXC currently uses its generic P2P
-market URL. Rapira currently contributes only to
-the USDT/RUB market.
+only provides a generic market URL. Binance, Bybit, OKX, Bitget, MEXC, and
+Rapira expose public advertiser profile URLs. Rapira currently contributes only
+to the USDT/RUB market.
 
 `payment_method` accepts the bank selected in the frontend. Named payment
 methods are matched after punctuation/case normalization. Some venues return
