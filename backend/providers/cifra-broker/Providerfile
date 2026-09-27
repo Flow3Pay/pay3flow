@@ -46,6 +46,11 @@ asset_rates_pointer = "/data/currenciesNotRealRate"
 fiat_codes = { RUB = "RUR" }
 source_url = "https://tradernet.by/authentication/signup"
 
+[fees]
+kind = "indicative_rate"
+description = "Cifra's public calculator exposes an indicative conversion rate but no transaction, deposit, or withdrawal fee fields; confirm all execution costs before trading."
+docs_url = "https://cifra.by/"
+
 # The public catalog contains the complete IMEX spot list. It has no public
 # order-book spread, so the last traded price is used as both sides of the
 # indicative market quote.

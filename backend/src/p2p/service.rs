@@ -15,6 +15,7 @@ use tokio::sync::{mpsc, Semaphore};
 
 use crate::compiled_provider_code::bestchange::BestChangeSource;
 use crate::compiled_provider_code::papa_change::PapaChangeSource;
+use crate::compiled_provider_code::skylabs::SkyLabsSource;
 use crate::config::Config;
 use crate::db::DbPool;
 use crate::networks::NetworkCatalog;
@@ -378,7 +379,9 @@ impl P2pSearchService {
             if let Some(source) = PapaChangeSource::from_record(client.clone(), record) {
                 sources.push(Arc::new(source));
             }
-            if let Some(source) = DeclarativeP2pSource::from_record(client.clone(), record) {
+            if let Some(source) = SkyLabsSource::from_record(client.clone(), record) {
+                sources.push(Arc::new(source));
+            } else if let Some(source) = DeclarativeP2pSource::from_record(client.clone(), record) {
                 sources.push(Arc::new(source));
             }
             if let Some(source) = DeclarativeMarketSource::from_record(client.clone(), record) {

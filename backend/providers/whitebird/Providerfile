@@ -50,3 +50,8 @@ asset_amount_pointer = "/input/amount"
 merchant_default = true
 verified_default = true
 source_url_template = "https://whitebird.io/exchanger"
+
+[fees]
+kind = "included_in_quote"
+description = "The effective Pay3Flow rate uses Whitebird's final quoted input and output amounts, which already reflect the input and output fee amounts returned by the live quote API."
+docs_url = "https://whitebird.io/exchanger"

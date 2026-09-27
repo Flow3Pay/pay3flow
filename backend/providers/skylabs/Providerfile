@@ -1,14 +1,18 @@
+[code]
+language = "rust"
+source = { path = "skylabs.rs" }
+
 [sell]
 source_url = "https://skylabs.world/"
 name = "SkyLabs Sell"
 currency = ["amd", "usd"]
-banks = []
+banks = ["SkyLabs ATM", "EasyPay", "Telcell", "Bank Transfer"]
 
 [buy]
 source_url = "https://skylabs.world/"
 name = "SkyLabs Buy"
 currency = ["amd", "usd"]
-banks = []
+banks = ["SkyLabs ATM", "EasyPay", "Telcell", "Bank Transfer"]
 
 # The homepage rate table requests one public rate per asset, fiat currency,
 # and direction. SkyLabs names the direction from its own perspective, so a
@@ -46,5 +50,5 @@ SOL = "solana"
 
 [fees]
 kind = "quote_dependent"
-description = "The public homepage buy/sell rate is used. Terminal, bank, wallet, conversion, and network fees are separate and may vary by payment method."
+description = "The effective Pay3Flow rate includes SkyLabs' live cash-in/cash-out or bank commission, conversion adjustment, and the selected network's published crypto withdrawal fee."
 docs_url = "https://skylabs.world/#calc"

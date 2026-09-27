@@ -6,6 +6,7 @@ mod workflow;
 
 pub use crate::compiled_provider_code::id_pay::IdPayRouteProvider;
 
+pub(crate) use declarative::DeclarativeP2pSource;
 pub use routes::{
     CryptoMarketPath, P2pRoute, P2pRouteSearchQuery, P2pRouteSearchResponse, RouteAssetStatus,
     RouteFee,
