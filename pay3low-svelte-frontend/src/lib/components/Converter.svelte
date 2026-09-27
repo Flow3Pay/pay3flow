@@ -2,11 +2,12 @@
   import { afterUpdate, onMount, onDestroy } from "svelte";
   import { fetchCorridors, fetchP2pRoutes, fetchProviders, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderDefinition, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote } from "$lib/exchange";
   import { FALLBACK_NETWORK, fetchNetworks, type CryptoNetwork } from "$lib/networks";
-  import { assetIcon, swapIcon, venueIcon } from "$lib/icons";
+  import { assetIcon, networkIcon, swapIcon, venueIcon } from "$lib/icons";
   import { CRYPTO_ASSETS, DIGITAL_ASSETS, PAYMENT_METHODS, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
   import { locale, t } from "$lib/i18n";
   import SidePanel from "./SidePanel.svelte";
   import CurrencyPicker from "./CurrencyPicker.svelte";
+  import NetworkPicker from "./NetworkPicker.svelte";
 
   type RefreshSeconds = 0 | 5 | 15 | 30 | 60 | 300;
   type PickerSide = "source" | "target" | null;
@@ -34,11 +35,10 @@
   let directionReversed = false;
   let methodPicker: PickerSide = null;
   let currencyPicker: PickerSide = null;
+  let networkPicker: PickerSide = null;
   let networks: CryptoNetwork[] = [FALLBACK_NETWORK];
   let sourceNetworkId = FALLBACK_NETWORK.id;
   let targetNetworkId = FALLBACK_NETWORK.id;
-  let sourceWalletAddress = "";
-  let targetWalletAddress = "";
   let settingsOpen = false;
   let exchangesOpen = false;
   let refreshSeconds: RefreshSeconds = 15;
@@ -111,10 +111,11 @@
   const intermediaryIcon = (asset: string) => assetIcon(asset);
   const networkName = (id: string | null | undefined) => !id ? "internal" : networks.find((network) => network.id === id)?.name ?? id;
   const locationLabel = (country: string, currency: string) => { try { return `${new Intl.DisplayNames([activeLocale], { type: "region" }).of(country) ?? country} · ${currency}`; } catch { return `${country} · ${currency}`; } };
-  const methodNoun = (method: PaymentMethod | null | undefined) => method?.kind === "wallet" ? "network" : method?.kind === "cash" ? "payment method" : "bank";
+  const methodNoun = (method: PaymentMethod | null | undefined) => method?.kind === "wallet" ? "asset" : method?.kind === "cash" ? "payment method" : "bank";
   const methodAvailability = (method: PaymentMethod | null | undefined) => method?.kind === "wallet" ? "digital wallet" : method?.kind === "cash" ? "cash" : "bank transfer";
-  const methodTitle = (method: PaymentMethod | null | undefined, network?: CryptoNetwork) => method?.kind === "wallet" ? network?.name ?? "Select network" : method?.name ?? "Select payment method";
-  const methodDetail = (method: PaymentMethod | null | undefined) => method?.kind === "wallet" ? `${method.currency} · Crypto network` : method?.kind === "cash" ? `${method.currency} · Cash settlement` : method ? locationLabel(method.country, method.currency) : "Unavailable";
+  const methodTitle = (method: PaymentMethod | null | undefined) => method?.name ?? "Select payment method";
+  const methodDetail = (method: PaymentMethod | null | undefined) => method?.kind === "wallet" ? `${method.currency} · Digital asset` : method?.kind === "cash" ? `${method.currency} · Cash settlement` : method ? locationLabel(method.country, method.currency) : "Unavailable";
+  const currencyMark = (currency: string) => currency === "USD" ? "$" : currency === "RUB" ? "₽" : currency === "AMD" ? "֏" : currency.slice(0, 1);
 
   function providerLabel(provider: ProviderDefinition) {
     const label = provider.name.replace(/\s+(buy|sell)$/i, "").trim();
@@ -365,47 +366,36 @@
     if (!corridor) return;
     initialSearchReady = true;
     const nextSource = targetMethod?.id ?? "", nextTarget = sourceMethod?.id ?? "";
-    const nextSourceAddress = targetWalletAddress;
-    const nextTargetAddress = sourceWalletAddress;
     if (previewRoute?.target_amount_minor != null) amount = amountFromRoute(previewRoute);
     directionReversed = !directionReversed; sourceMethodId = nextSource; targetMethodId = nextTarget;
     sourceNetworkId = targetNetwork?.id ?? FALLBACK_NETWORK.id; targetNetworkId = sourceNetwork?.id ?? FALLBACK_NETWORK.id; resetResults();
-    sourceWalletAddress = nextSourceAddress;
-    targetWalletAddress = nextTargetAddress;
   }
   function defaultFiatMethod(currency: string, role: "sender" | "recipient") {
     return FIAT_METHODS.find((method) => method.currency === currency && (method.role === role || method.role === "both"));
   }
-  function defaultAsset(currency: string) {
-    return DIGITAL_ASSETS.find((method) => method.currency === currency) ?? DIGITAL_ASSETS[0];
-  }
   function chooseCurrency(side: Exclude<PickerSide, null>, choice: string) {
     const role = side === "source" ? "sender" : "recipient";
-    const next = CRYPTO_CURRENCIES.has(choice) ? defaultAsset(choice) : defaultFiatMethod(choice, role);
+    const next = defaultFiatMethod(choice, role);
     if (!next) return;
     initialSearchReady = true;
     if (side === "source") {
       sourceMethodId = next.id;
-      if (next.kind === "wallet") {
-        const compatible = networks.filter((network) => network.currencies.includes(next.currency));
-        if (!compatible.some((network) => network.id === sourceNetworkId)) sourceNetworkId = compatible[0]?.id ?? FALLBACK_NETWORK.id;
-      }
     } else {
       targetMethodId = next.id;
-      if (next.kind === "wallet") {
-        const compatible = networks.filter((network) => network.currencies.includes(next.currency));
-        if (!compatible.some((network) => network.id === targetNetworkId)) targetNetworkId = compatible[0]?.id ?? FALLBACK_NETWORK.id;
-      }
     }
     currencyPicker = null;
     resetResults();
   }
-  function chooseSource(method: PaymentMethod, network?: CryptoNetwork) { initialSearchReady = true; sourceMethodId = method.id; if (network) sourceNetworkId = network.id; methodPicker = null; resetResults(); }
-  function chooseTarget(method: PaymentMethod, network?: CryptoNetwork) { initialSearchReady = true; targetMethodId = method.id; if (network) targetNetworkId = network.id; methodPicker = null; resetResults(); }
+  function chooseSource(method: PaymentMethod) { initialSearchReady = true; sourceMethodId = method.id; if (method.kind === "wallet") sourceNetworkId = networks.find((network) => network.currencies.includes(method.currency))?.id ?? FALLBACK_NETWORK.id; methodPicker = null; resetResults(); }
+  function chooseTarget(method: PaymentMethod) { initialSearchReady = true; targetMethodId = method.id; if (method.kind === "wallet") targetNetworkId = networks.find((network) => network.currencies.includes(method.currency))?.id ?? FALLBACK_NETWORK.id; methodPicker = null; resetResults(); }
+  function selectNetwork(network: CryptoNetwork) { initialSearchReady = true; if (networkPicker === "source") sourceNetworkId = network.id; else targetNetworkId = network.id; networkPicker = null; resetResults(); }
   function openCurrencyPicker(side: Exclude<PickerSide, null>) { currencyPicker = side; }
   async function openMethodPicker(side: Exclude<PickerSide, null>) {
     methodPicker = side;
     paymentPickerComponent ??= (await import("./PaymentMethodPicker.svelte")).default;
+  }
+  function openNetworkPicker(side: Exclude<PickerSide, null>) {
+    networkPicker = side;
   }
   async function openInstructions(route: RouteCandidate) {
     instructionsRoute = route;
@@ -653,27 +643,25 @@
       <div class="moneyPanel moneyPanelSource">
         <div class="panelCopy"><label for="exchange-amount">You send</label><input id="exchange-amount" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={amount} on:focus={(event) => event.currentTarget.select()} on:input={(event) => updateAmount(event.currentTarget.value)} aria-label="Amount to send" /><span class="currencyHint">{selectedSourceCurrency || "AMD"} available via {methodAvailability(sourceMethod)}</span></div>
         <div class="methodControls">
-          <button type="button" class="currencyTrigger" on:click={() => openCurrencyPicker("source")} aria-label={`Select sending currency: ${sourceCurrencyChoice}`}><strong>{sourceCurrencyChoice}</strong><span aria-hidden="true">⌄</span></button>
-          <button type="button" class="methodTrigger" on:click={() => void openMethodPicker("source")} aria-label={`Select sending ${methodNoun(sourceMethod)}: ${sourceMethod?.kind === "wallet" ? sourceNetwork?.name ?? "none" : sourceMethod?.name ?? "none"}`}>
+          <button type="button" class="methodTrigger" on:click={() => void openMethodPicker("source")} aria-label={`Select sending ${methodNoun(sourceMethod)}: ${sourceMethod?.name ?? "none"}`}>
             <span class="methodAvatar" style:background-color={paymentMethodFavicon(sourceMethod) ? "transparent" : sourceMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(sourceMethod)}<img src={paymentMethodFavicon(sourceMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{:else}<span>{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{/if}</span>
-            <span class="methodText"><strong>{methodTitle(sourceMethod, sourceNetwork)}</strong><small>{sourceMethod ? methodDetail(sourceMethod) : corridor ? locationLabel(sourceCountry, sourceCurrency) : "Unavailable"}</small></span><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+            <span class="methodText"><strong>{methodTitle(sourceMethod)}</strong><small>{sourceMethod ? methodDetail(sourceMethod) : corridor ? locationLabel(sourceCountry, sourceCurrency) : "Unavailable"}</small></span><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
           </button>
+          <div class="networkControl"><button type="button" class="networkButton" on:click={() => sourceMethod?.kind === "wallet" ? openNetworkPicker("source") : openCurrencyPicker("source")} aria-haspopup="dialog" aria-label={sourceMethod?.kind === "wallet" ? `Select sending network: ${sourceNetwork?.name ?? "none"}` : `Select sending currency: ${sourceCurrencyChoice}`}><span class:currencyDot={sourceMethod?.kind !== "wallet"} class="networkDot" aria-hidden="true">{#if sourceMethod?.kind === "wallet" && sourceNetwork}<img src={networkIcon(sourceNetwork.name)} alt="" width="18" height="18" loading="lazy" decoding="async" />{:else}{currencyMark(sourceCurrencyChoice)}{/if}</span><span class="networkCopy"><small>{sourceMethod?.kind === "wallet" ? "Network" : "Currency"}</small><strong>{sourceMethod?.kind === "wallet" ? sourceNetwork?.name ?? "Select" : sourceCurrencyChoice}</strong></span><span class="networkChevron" aria-hidden="true">⌄</span></button></div>
         </div>
       </div>
-      {#if sourceMethod?.kind === "wallet"}<label class="walletAddressField" for="sender-wallet-address"><span>Sender wallet address <small>Optional</small></span><input id="sender-wallet-address" type="text" value={sourceWalletAddress} on:input={(event) => sourceWalletAddress = event.currentTarget.value} placeholder="Paste a crypto address" autocomplete="off" spellcheck="false" /></label>{/if}
       <div class="flowBridge"><span class="bridgeLine" aria-hidden="true"></span><button type="button" class:bridgeIconReversed={directionReversed} class="bridgeIcon" on:click={swapDirection} aria-label="Swap sender and recipient" title="Swap sender and recipient"><img src={swapIcon} alt="" width="18" height="18" aria-hidden="true" /></button></div>
       <div class="intentLabel intentLabelBuy"><span>Buy</span></div>
       <div class="moneyPanel moneyPanelTarget">
         <div class="panelCopy"><label for="exchange-output">Recipient gets</label><output id="exchange-output" class={previewRoute ? "amountOutput" : "amountOutputEmpty"}>{amountFromRoute(previewRoute)}</output><span class="currencyHint">{targetMethod?.kind === "wallet" ? `${targetMethod.currency} available via digital wallet` : previewRoute ? `Estimated ${previewRoute.target_currency}` : "Live estimate appears here"}</span></div>
         <div class="methodControls">
-          <button type="button" class="currencyTrigger" on:click={() => openCurrencyPicker("target")} aria-label={`Select recipient currency: ${targetCurrencyChoice}`}><strong>{targetCurrencyChoice}</strong><span aria-hidden="true">⌄</span></button>
-          <button type="button" class="methodTrigger" on:click={() => void openMethodPicker("target")} aria-label={`Select recipient ${methodNoun(targetMethod)}: ${targetMethod?.kind === "wallet" ? targetNetwork?.name ?? "none" : targetMethod?.name ?? "none"}`}>
+          <button type="button" class="methodTrigger" on:click={() => void openMethodPicker("target")} aria-label={`Select recipient ${methodNoun(targetMethod)}: ${targetMethod?.name ?? "none"}`}>
             <span class="methodAvatar" style:background-color={paymentMethodFavicon(targetMethod) ? "transparent" : targetMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(targetMethod)}<img src={paymentMethodFavicon(targetMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{:else}<span>{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{/if}</span>
-            <span class="methodText"><strong>{methodTitle(targetMethod, targetNetwork)}</strong><small>{targetMethod ? methodDetail(targetMethod) : corridor ? locationLabel(targetCountry, targetCurrency) : "Unavailable"}</small></span><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+            <span class="methodText"><strong>{methodTitle(targetMethod)}</strong><small>{targetMethod ? methodDetail(targetMethod) : corridor ? locationLabel(targetCountry, targetCurrency) : "Unavailable"}</small></span><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
           </button>
+          <div class="networkControl"><button type="button" class="networkButton" on:click={() => targetMethod?.kind === "wallet" ? openNetworkPicker("target") : openCurrencyPicker("target")} aria-haspopup="dialog" aria-label={targetMethod?.kind === "wallet" ? `Select recipient network: ${targetNetwork?.name ?? "none"}` : `Select recipient currency: ${targetCurrencyChoice}`}><span class:currencyDot={targetMethod?.kind !== "wallet"} class="networkDot" aria-hidden="true">{#if targetMethod?.kind === "wallet" && targetNetwork}<img src={networkIcon(targetNetwork.name)} alt="" width="18" height="18" loading="lazy" decoding="async" />{:else}{currencyMark(targetCurrencyChoice)}{/if}</span><span class="networkCopy"><small>{targetMethod?.kind === "wallet" ? "Network" : "Currency"}</small><strong>{targetMethod?.kind === "wallet" ? targetNetwork?.name ?? "Select" : targetCurrencyChoice}</strong></span><span class="networkChevron" aria-hidden="true">⌄</span></button></div>
         </div>
       </div>
-      {#if targetMethod?.kind === "wallet"}<label class="walletAddressField" for="recipient-wallet-address"><span>Recipient wallet address <small>Optional</small></span><input id="recipient-wallet-address" type="text" value={targetWalletAddress} on:input={(event) => targetWalletAddress = event.currentTarget.value} placeholder="Paste a crypto address" autocomplete="off" spellcheck="false" /></label>{/if}
       {#if refreshSeconds > 0}<div class="marketBar"><div class="marketState"><span class="refreshProgress" role="img" aria-label={secondsUntilRefresh === null ? "Auto-refresh is off" : `Refresh in ${secondsUntilRefresh} seconds`}><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle class="refreshTrack" cx="9" cy="9" r="7" pathLength="100" /><circle class="refreshFill" cx="9" cy="9" r="7" pathLength="100" style:stroke-dashoffset={`${100 - refreshProgress}`} /></svg></span><div><span>{lastUpdatedAt ? `Updated ${Math.max(0, Math.floor((clock - lastUpdatedAt) / 1000))}s ago` : "Public P2P sources only · no order placement"}</span></div></div>{#if secondsUntilRefresh !== null}<span class="nextRefresh">{secondsUntilRefresh}s</span>{/if}</div>{/if}
       <button type="button" class="cta" disabled={!hasAmount || (!previewRoute && (searching || !corridor))} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? "Open swap instructions" : "Find routes"}>{#if previewRoute}Swap <span>↗</span>{:else if searching}<span class="spinner"></span> Finding routes{:else if hasAmount}Find routes <span>↗</span>{:else}Enter an amount to begin{/if}</button>
       {#if error}<div class="errorBox" role="alert">{error}</div>{/if}
@@ -681,7 +669,8 @@
     <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {renderingRoutes} {searchingVenues} {foundVenues} {venueNames} searched={lastUpdatedAt !== null} {hasAmount} />
   </div>
   {#if currencyPicker === "source" || currencyPicker === "target"}<CurrencyPicker open={currencyPicker !== null} selected={currencyPicker === "source" ? sourceCurrencyChoice : targetCurrencyChoice} onClose={() => currencyPicker = null} onSelect={(choice) => chooseCurrency(currencyPicker ?? "source", choice)} />{/if}
-  {#if paymentPickerComponent}<svelte:component this={paymentPickerComponent} open={methodPicker === "source"} title={sourceMethod?.kind === "wallet" ? "Choose crypto network" : "Choose where you pay from"} role="sender" currencyKind={sourceMethod?.kind === "wallet" ? "crypto" : "fiat"} currency={selectedSourceCurrency} {networks} selected={sourceMethod} selectedNetwork={sourceNetwork} onClose={() => methodPicker = null} onSelect={chooseSource} /><svelte:component this={paymentPickerComponent} open={methodPicker === "target"} title={targetMethod?.kind === "wallet" ? "Choose crypto network" : "Choose where the recipient gets paid"} role="recipient" currencyKind={targetMethod?.kind === "wallet" ? "crypto" : "fiat"} currency={selectedTargetCurrency} {networks} selected={targetMethod} selectedNetwork={targetNetwork} onClose={() => methodPicker = null} onSelect={chooseTarget} />{/if}
+  {#if paymentPickerComponent}<svelte:component this={paymentPickerComponent} open={methodPicker === "source"} title="Choose where you pay from" role="sender" currency={selectedSourceCurrency} selected={sourceMethod} onClose={() => methodPicker = null} onSelect={chooseSource} /><svelte:component this={paymentPickerComponent} open={methodPicker === "target"} title="Choose where the recipient gets paid" role="recipient" currency={selectedTargetCurrency} selected={targetMethod} onClose={() => methodPicker = null} onSelect={chooseTarget} />{/if}
+  {#if networkPicker === "source" || networkPicker === "target"}<NetworkPicker open={networkPicker !== null} networks={networkPicker === "source" ? sourceNetworks : targetNetworks} selected={networkPicker === "source" ? sourceNetwork : targetNetwork} onClose={() => networkPicker = null} onSelect={selectNetwork} />{/if}
   {#if routeInstructionsComponent && instructionsRoute}<svelte:component this={routeInstructionsComponent} route={instructionsRoute} {venueNames} onOpenService={openService} onClose={() => instructionsRoute = null} />{/if}
 </section>
 
@@ -1274,76 +1263,6 @@
   border-color: rgba(19, 22, 19, 0.2);
   box-shadow: 0 8px 20px rgba(21, 24, 20, 0.08);
   transform: translateY(-1px);
-}
-
-.currencyTrigger {
-  position: relative;
-  z-index: 1;
-  display: inline-flex;
-  min-height: 44px;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 7px;
-  padding: 0 11px;
-  border: 1px solid rgba(19, 22, 19, 0.12);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.62);
-  color: var(--color-text);
-  font-size: 12px;
-  text-align: left;
-  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
-}
-
-.currencyTrigger:hover {
-  border-color: rgba(19, 22, 19, 0.24);
-  background: rgba(255, 255, 255, 0.9);
-  transform: translateY(-1px);
-}
-
-.currencyTrigger span {
-  color: var(--color-text-faint);
-  font-size: 14px;
-  line-height: 1;
-}
-
-.walletAddressField {
-  display: grid;
-  gap: 6px;
-  margin: -8px 5px 0;
-  padding: 0 17px 4px;
-  color: var(--color-text-soft);
-  font-size: 10px;
-  font-weight: 750;
-}
-
-.walletAddressField span {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.walletAddressField small {
-  color: var(--color-text-faint);
-  font-size: 9px;
-  font-weight: 650;
-}
-
-.walletAddressField input {
-  width: 100%;
-  min-height: 38px;
-  padding: 0 12px;
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  outline: 0;
-  background: var(--color-panel);
-  color: var(--color-text);
-  font: inherit;
-  font-weight: 600;
-}
-
-.walletAddressField input:focus {
-  border-color: var(--color-violet);
-  box-shadow: 0 0 0 3px var(--color-violet-soft);
 }
 
 .methodAvatar {
@@ -2230,6 +2149,13 @@
   object-fit: contain;
 }
 
+.networkDot.currencyDot {
+  background: #536253;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .networkCopy {
   display: flex;
   flex-direction: column;
@@ -2445,10 +2371,6 @@
     flex: 1 1 auto;
   }
 
-  .methodControls .currencyTrigger {
-    flex: 0 0 auto;
-  }
-
   .methodControls:not(:has(.networkControl)) .methodTrigger {
     width: auto;
     max-width: none;
@@ -2498,22 +2420,15 @@
 }
 
 :global(html[data-theme="dark"]) .methodTrigger,
-:global(html[data-theme="dark"]) .methodControls .networkButton,
-:global(html[data-theme="dark"]) .currencyTrigger {
+:global(html[data-theme="dark"]) .methodControls .networkButton {
   border-color: #3b3b3b;
   background: #2a2a2a;
 }
 
 :global(html[data-theme="dark"]) .methodTrigger:hover,
-:global(html[data-theme="dark"]) .methodControls .networkButton:hover,
-:global(html[data-theme="dark"]) .currencyTrigger:hover {
+:global(html[data-theme="dark"]) .methodControls .networkButton:hover {
   border-color: #626262;
   background: #323232;
-}
-
-:global(html[data-theme="dark"]) .walletAddressField input {
-  border-color: #3b3b3b;
-  background: #151515;
 }
 
 :global(html[data-theme="dark"]) .bridgeLine {

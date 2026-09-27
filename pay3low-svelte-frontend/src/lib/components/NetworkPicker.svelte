@@ -3,11 +3,22 @@
   import type { CryptoNetwork } from "$lib/networks";
   import { networkIcon } from "$lib/icons";
 
+  type CurrencyChoice = {
+    id: string;
+    name: string;
+    mark: string;
+    color: string;
+  };
+
   export let open: boolean;
-  export let networks: CryptoNetwork[];
-  export let selected: CryptoNetwork | undefined;
+  export let mode: "network" | "currency" = "network";
+  export let networks: CryptoNetwork[] = [];
+  export let selected: CryptoNetwork | undefined = undefined;
+  export let currencies: CurrencyChoice[] = [];
+  export let selectedCurrency = "";
   export let onClose: () => void;
-  export let onSelect: (network: CryptoNetwork) => void;
+  export let onSelect: (network: CryptoNetwork) => void = () => {};
+  export let onSelectCurrency: (currency: string) => void = () => {};
   let wasOpen = false;
   let previousOverflow = "";
   let previousOverscrollBehavior = "";
@@ -67,24 +78,35 @@
 
 {#if open}
   <div class="backdrop" on:mousedown={onClose} role="presentation">
-    <div class:dragging class="dialog" bind:this={dialog} role="dialog" aria-modal="true" aria-label="Choose network" tabindex="-1" on:mousedown|stopPropagation>
-      <button type="button" class="sheetHandle" aria-label="Close network picker by dragging down" on:pointerdown={startSheetDrag} on:pointermove={moveSheetDrag} on:pointerup={endSheetDrag} on:pointercancel={endSheetDrag}>
+    <div class:dragging class="dialog" bind:this={dialog} role="dialog" aria-modal="true" aria-label={mode === "currency" ? "Choose currency" : "Choose network"} tabindex="-1" on:mousedown|stopPropagation>
+      <button type="button" class="sheetHandle" aria-label={mode === "currency" ? "Close currency picker by dragging down" : "Close network picker by dragging down"} on:pointerdown={startSheetDrag} on:pointermove={moveSheetDrag} on:pointerup={endSheetDrag} on:pointercancel={endSheetDrag}>
         <span aria-hidden="true"></span>
       </button>
       <div class="titleBar"><div class="titleGroup">
-        <button type="button" class="backButton" on:click={onClose} aria-label="Close network picker"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button>
-        <h2 class="title">Choose network</h2>
+        <button type="button" class="backButton" on:click={onClose} aria-label={mode === "currency" ? "Close currency picker" : "Close network picker"}><svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button>
+        <h2 class="title">{mode === "currency" ? "Choose currency" : "Choose network"}</h2>
       </div></div>
-      <div class="body"><div class="methods" role="listbox" aria-label="Crypto networks"><section class="section">
-        <h3>Available networks</h3>
-        {#each networks as network (network.id)}
-          {@const isSelected = network.id === selected?.id}
-          <button type="button" role="option" aria-selected={isSelected} class="methodRow" data-selected={isSelected || undefined} on:click={() => onSelect(network)}>
-            <span class="methodLogo" style="background-color:#eef2ea" aria-hidden="true"><img src={networkIcon(network.name)} alt="" width="46" height="46" loading="lazy" decoding="async" /></span>
-            <span class="methodCopy"><span class="methodName">{network.name}</span><span class="methodMeta">{network.currencies.join(" · ")}</span></span>
-            {#if isSelected}<svg class="check" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="currentColor" /><path d="m6 10.2 2.7 2.5 5.3-5.6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>{/if}
-          </button>
-        {/each}
+      <div class="body"><div class="methods" role="listbox" aria-label={mode === "currency" ? "Currencies" : "Crypto networks"}><section class="section">
+        <h3>{mode === "currency" ? "Available currencies" : "Available networks"}</h3>
+        {#if mode === "currency"}
+          {#each currencies as currency (currency.id)}
+            {@const isSelected = currency.id === selectedCurrency}
+            <button type="button" role="option" aria-selected={isSelected} class="methodRow" data-selected={isSelected || undefined} on:click={() => onSelectCurrency(currency.id)}>
+              <span class="methodLogo currencyLogo" style:background-color={currency.color} aria-hidden="true">{currency.mark}</span>
+              <span class="methodCopy"><span class="methodName">{currency.id}</span><span class="methodMeta">{currency.name}</span></span>
+              {#if isSelected}<svg class="check" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="currentColor" /><path d="m6 10.2 2.7 2.5 5.3-5.6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>{/if}
+            </button>
+          {/each}
+        {:else}
+          {#each networks as network (network.id)}
+            {@const isSelected = network.id === selected?.id}
+            <button type="button" role="option" aria-selected={isSelected} class="methodRow" data-selected={isSelected || undefined} on:click={() => onSelect(network)}>
+              <span class="methodLogo" style="background-color:#eef2ea" aria-hidden="true"><img src={networkIcon(network.name)} alt="" width="46" height="46" loading="lazy" decoding="async" /></span>
+              <span class="methodCopy"><span class="methodName">{network.name}</span><span class="methodMeta">{network.currencies.join(" · ")}</span></span>
+              {#if isSelected}<svg class="check" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="currentColor" /><path d="m6 10.2 2.7 2.5 5.3-5.6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>{/if}
+            </button>
+          {/each}
+        {/if}
       </section></div></div>
     </div>
   </div>
@@ -288,6 +310,12 @@
   height: calc(100% - 10px);
   border-radius: 10px;
   object-fit: contain;
+}
+
+.currencyLogo {
+  color: #fff;
+  font-size: 22px;
+  font-weight: 800;
 }
 
 .methodCopy,
