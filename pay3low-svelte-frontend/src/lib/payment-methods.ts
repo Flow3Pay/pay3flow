@@ -24,6 +24,8 @@ export interface PaymentMethod {
   bankFeePercent?: number;
   /** Name fragment understood by the public P2P venue filters. */
   p2pQuery: string;
+  /** Stable institution/account family shared by the same method in multiple currencies. */
+  currencyGroup?: string;
 }
 
 /**
@@ -77,6 +79,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     iconUrl: "/icons/assets/ameriabank.png",
     bankFeePercent: 0,
     p2pQuery: "Ameriabank",
+    currencyGroup: "ameriabank",
   },
   {
     id: "am-usd-bank-account",
@@ -103,6 +106,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     iconUrl: "/icons/assets/ameriabank.png",
     bankFeePercent: 0,
     p2pQuery: "Ameriabank",
+    currencyGroup: "ameriabank",
   },
   {
     id: "am-idbank",

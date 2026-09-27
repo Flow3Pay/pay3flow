@@ -1,16 +1,18 @@
 <script lang="ts">
   import { afterUpdate, onDestroy } from "svelte";
   import { DIGITAL_ASSETS, PAYMENT_METHODS, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
+  import type { CryptoNetwork } from "$lib/networks";
 
   export let open: boolean;
   export let title: string;
   export let role: "sender" | "recipient";
+  export let networks: CryptoNetwork[];
   export let selected: PaymentMethod | null;
-  export let currency = "";
+  export let selectedNetwork: CryptoNetwork | undefined;
   export let onClose: () => void;
-  export let onSelect: (method: PaymentMethod) => void;
+  export let onSelect: (method: PaymentMethod, network?: CryptoNetwork) => void;
 
-  type Option = { method: PaymentMethod };
+  type Option = { method: PaymentMethod; network?: CryptoNetwork };
   let query = "";
   let input: HTMLInputElement;
   let wasOpen = false;
@@ -88,8 +90,8 @@
   }
 
   function matchesSearch(option: Option, value: string) {
-    const { method } = option;
-    const searchText = normalizeSearch([method.name, method.currency, method.kind, method.p2pQuery].filter(Boolean).join(" "));
+    const { method, network } = option;
+    const searchText = normalizeSearch([method.name, method.currency, method.kind, method.p2pQuery, network?.name, network?.id].filter(Boolean).join(" "));
     const compact = searchText.replaceAll(" ", "");
     return normalizeSearch(value).split(" ").filter(Boolean).every((term) => searchText.includes(term) || compact.includes(term));
   }
@@ -104,16 +106,18 @@
     if (fallback) fallback.style.display = "inline";
   }
 
-  // Fiat methods follow the selected fiat currency. Digital assets stay in
-  // their own section and are shown once; networks are selected separately.
+  // Payment-method search is intentionally independent from the compact fiat
+  // currency selector. A crypto row owns both asset and network selection.
   $: fiatMethods = FIAT_METHODS.filter((method) =>
-    (method.role === role || method.role === "both")
-      && (selected?.kind === "wallet" || method.currency === currency),
+    method.role === role || method.role === "both",
   );
   $: assetsForRole = DIGITAL_ASSETS.filter((method) => method.role === role || method.role === "both");
   $: options = [
     ...fiatMethods.map((method): Option => ({ method })),
-    ...assetsForRole.map((method): Option => ({ method })),
+    ...assetsForRole.flatMap((method): Option[] => {
+      const compatible = networks.filter((network) => network.currencies.includes(method.currency));
+      return compatible.length ? compatible.map((network) => ({ method, network })) : [{ method }];
+    }),
   ];
   $: filtered = query.trim() ? options.filter((option) => matchesSearch(option, query)) : options;
   $: popular = filtered.filter(({ method }) => method.kind !== "wallet" && method.popular);
@@ -152,16 +156,17 @@
             {#if rows.length > 0}
               <section class="section">
                 <h3>{label}</h3>
-                {#each rows as option (option.method.id)}
+                {#each rows as option (`${option.method.id}:${option.network?.id ?? "default"}`)}
                   {@const method = option.method}
-                  {@const isSelected = selected?.id === method.id}
-                  <button type="button" role="option" aria-selected={isSelected} class="methodRow" data-selected={isSelected || undefined} on:click={() => onSelect(method)}>
+                  {@const network = option.network}
+                  {@const isSelected = selected?.id === method.id && (method.kind !== "wallet" || network?.id === selectedNetwork?.id)}
+                  <button type="button" role="option" aria-selected={isSelected} class="methodRow" data-selected={isSelected || undefined} on:click={() => onSelect(method, network)}>
                     <span class="methodLogo" style:background-color={logo(method) ? "transparent" : method.color} aria-hidden="true">
                       {#if logo(method)}<img src={logo(method) ?? ""} alt="" width="42" height="42" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{method.initials}</span>{:else}<span>{method.initials}</span>{/if}
                     </span>
                     <span class="methodCopy">
-                      <span class="methodName">{method.kind === "wallet" ? method.currency : method.name}</span>
-                      <span class="methodMeta">{method.kind === "cash" ? `Cash settlement · ${method.currency}` : method.kind === "bank" ? `Bank transfer · ${method.currency}` : method.name}</span>
+                      <span class="methodName">{method.kind === "wallet" ? network?.name ?? method.name : method.name}</span>
+                      <span class="methodMeta">{method.kind === "cash" ? `Cash settlement · ${method.currency}` : method.kind === "bank" ? `Bank transfer · ${method.currency}` : `${method.currency} · ${method.name}`}</span>
                     </span>
                     {#if isSelected}
                       <svg class="check" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="currentColor" /><path d="m6 10.2 2.7 2.5 5.3-5.6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>

@@ -20,6 +20,11 @@
   const ROUTE_BATCH_DELAY_MS = 10;
   const INTERMEDIARY_ASSETS = CRYPTO_ASSETS.map(([currency]) => currency);
   const FIAT_METHODS = PAYMENT_METHODS.filter((method) => method.kind !== "wallet");
+  const FIAT_CURRENCIES = [
+    { id: "AMD", name: "Armenian dram", mark: "֏", color: "#6d2c91" },
+    { id: "RUB", name: "Russian ruble", mark: "₽", color: "#21a038" },
+    { id: "USD", name: "US dollar", mark: "$", color: "#168451" },
+  ];
   const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", sources: "pay3flow.exchange.p2p-sources", knownSources: "pay3flow.exchange.known-p2p-sources", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", sourceNetwork: "pay3flow.exchange.source-network", targetNetwork: "pay3flow.exchange.target-network", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets", anonymousId: "pay3flow.reputation.anonymous-id" };
 
   let corridors: ExchangeCorridor[] = [];
@@ -325,6 +330,8 @@
   $: targetNetworks = targetMethod?.kind === "wallet" ? networks.filter((network) => network.currencies.includes(targetMethod!.currency)) : [];
   $: sourceNetwork = sourceNetworks.find((network) => network.id === sourceNetworkId) ?? sourceNetworks[0];
   $: targetNetwork = targetNetworks.find((network) => network.id === targetNetworkId) ?? targetNetworks[0];
+  $: sourceCurrencyChoices = currencyChoicesFor(sourceMethod, "sender");
+  $: targetCurrencyChoices = currencyChoicesFor(targetMethod, "recipient");
   $: hasAmount = Number.isFinite(amountNumber(amount)) && amountNumber(amount) > 0;
   $: previewRoute = selected ?? routes.find((route) => route.status === "complete" && route.is_current_best) ?? routes.find((route) => route.status === "complete") ?? null;
   $: secondsUntilRefresh = refreshSeconds && lastUpdatedAt ? Math.max(0, refreshSeconds - Math.floor((clock - lastUpdatedAt) / 1000)) : null;
@@ -370,12 +377,26 @@
     directionReversed = !directionReversed; sourceMethodId = nextSource; targetMethodId = nextTarget;
     sourceNetworkId = targetNetwork?.id ?? FALLBACK_NETWORK.id; targetNetworkId = sourceNetwork?.id ?? FALLBACK_NETWORK.id; resetResults();
   }
-  function defaultFiatMethod(currency: string, role: "sender" | "recipient") {
-    return FIAT_METHODS.find((method) => method.currency === currency && (method.role === role || method.role === "both"));
+  function sameCurrencyGroup(left: PaymentMethod, right: PaymentMethod) {
+    return (left.currencyGroup ?? left.id) === (right.currencyGroup ?? right.id);
+  }
+  function currencyChoicesFor(method: PaymentMethod | null, role: "sender" | "recipient") {
+    if (!method || method.kind === "wallet") return [];
+    const supported = new Set(
+      FIAT_METHODS
+        .filter((candidate) => sameCurrencyGroup(candidate, method) && (candidate.role === role || candidate.role === "both"))
+        .map((candidate) => candidate.currency),
+    );
+    return FIAT_CURRENCIES
+      .filter((choice) => supported.has(choice.id))
+      .sort((left, right) => Number(right.id === method.currency) - Number(left.id === method.currency));
   }
   function chooseCurrency(side: Exclude<PickerSide, null>, choice: string) {
     const role = side === "source" ? "sender" : "recipient";
-    const next = defaultFiatMethod(choice, role);
+    const current = side === "source" ? sourceMethod : targetMethod;
+    const next = current && current.kind !== "wallet"
+      ? FIAT_METHODS.find((method) => sameCurrencyGroup(method, current) && method.currency === choice && (method.role === role || method.role === "both"))
+      : undefined;
     if (!next) return;
     initialSearchReady = true;
     if (side === "source") {
@@ -386,8 +407,8 @@
     currencyPicker = null;
     resetResults();
   }
-  function chooseSource(method: PaymentMethod) { initialSearchReady = true; sourceMethodId = method.id; if (method.kind === "wallet") sourceNetworkId = networks.find((network) => network.currencies.includes(method.currency))?.id ?? FALLBACK_NETWORK.id; methodPicker = null; resetResults(); }
-  function chooseTarget(method: PaymentMethod) { initialSearchReady = true; targetMethodId = method.id; if (method.kind === "wallet") targetNetworkId = networks.find((network) => network.currencies.includes(method.currency))?.id ?? FALLBACK_NETWORK.id; methodPicker = null; resetResults(); }
+  function chooseSource(method: PaymentMethod, network?: CryptoNetwork) { initialSearchReady = true; sourceMethodId = method.id; if (method.kind === "wallet") sourceNetworkId = network?.id ?? networks.find((item) => item.currencies.includes(method.currency))?.id ?? FALLBACK_NETWORK.id; methodPicker = null; resetResults(); }
+  function chooseTarget(method: PaymentMethod, network?: CryptoNetwork) { initialSearchReady = true; targetMethodId = method.id; if (method.kind === "wallet") targetNetworkId = network?.id ?? networks.find((item) => item.currencies.includes(method.currency))?.id ?? FALLBACK_NETWORK.id; methodPicker = null; resetResults(); }
   function selectNetwork(network: CryptoNetwork) { initialSearchReady = true; if (networkPicker === "source") sourceNetworkId = network.id; else targetNetworkId = network.id; networkPicker = null; resetResults(); }
   function openCurrencyPicker(side: Exclude<PickerSide, null>) { currencyPicker = side; }
   async function openMethodPicker(side: Exclude<PickerSide, null>) {
@@ -668,8 +689,8 @@
     </div>
     <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {renderingRoutes} {searchingVenues} {foundVenues} {venueNames} searched={lastUpdatedAt !== null} {hasAmount} />
   </div>
-  {#if currencyPicker === "source" || currencyPicker === "target"}<CurrencyPicker open={currencyPicker !== null} selected={currencyPicker === "source" ? sourceCurrencyChoice : targetCurrencyChoice} onClose={() => currencyPicker = null} onSelect={(choice) => chooseCurrency(currencyPicker ?? "source", choice)} />{/if}
-  {#if paymentPickerComponent}<svelte:component this={paymentPickerComponent} open={methodPicker === "source"} title="Choose where you pay from" role="sender" currency={selectedSourceCurrency} selected={sourceMethod} onClose={() => methodPicker = null} onSelect={chooseSource} /><svelte:component this={paymentPickerComponent} open={methodPicker === "target"} title="Choose where the recipient gets paid" role="recipient" currency={selectedTargetCurrency} selected={targetMethod} onClose={() => methodPicker = null} onSelect={chooseTarget} />{/if}
+  {#if currencyPicker === "source" || currencyPicker === "target"}<CurrencyPicker open={currencyPicker !== null} selected={currencyPicker === "source" ? sourceCurrencyChoice : targetCurrencyChoice} choices={currencyPicker === "source" ? sourceCurrencyChoices : targetCurrencyChoices} onClose={() => currencyPicker = null} onSelect={(choice) => chooseCurrency(currencyPicker ?? "source", choice)} />{/if}
+  {#if paymentPickerComponent}<svelte:component this={paymentPickerComponent} open={methodPicker === "source"} title="Choose where you pay from" role="sender" {networks} selected={sourceMethod} selectedNetwork={sourceNetwork} onClose={() => methodPicker = null} onSelect={chooseSource} /><svelte:component this={paymentPickerComponent} open={methodPicker === "target"} title="Choose where the recipient gets paid" role="recipient" {networks} selected={targetMethod} selectedNetwork={targetNetwork} onClose={() => methodPicker = null} onSelect={chooseTarget} />{/if}
   {#if networkPicker === "source" || networkPicker === "target"}<NetworkPicker open={networkPicker !== null} networks={networkPicker === "source" ? sourceNetworks : targetNetworks} selected={networkPicker === "source" ? sourceNetwork : targetNetwork} onClose={() => networkPicker = null} onSelect={selectNetwork} />{/if}
   {#if routeInstructionsComponent && instructionsRoute}<svelte:component this={routeInstructionsComponent} route={instructionsRoute} {venueNames} onOpenService={openService} onClose={() => instructionsRoute = null} />{/if}
 </section>
