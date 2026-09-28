@@ -307,6 +307,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     popular: true,
     iconUrl: "/icons/assets/sberbank.webp",
     p2pQuery: "Sberbank",
+    currencyGroup: "sberbank",
   },
   {
     id: "ru-tbank",
@@ -348,6 +349,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     popular: true,
     iconUrl: "/icons/assets/alfabank.webp",
     p2pQuery: "Alfa-Bank",
+    currencyGroup: "alfabank",
   },
   {
     id: "ru-vtb",
@@ -360,6 +362,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     initials: "VT",
     iconUrl: "/icons/assets/vtb.webp",
     p2pQuery: "VTB",
+    currencyGroup: "vtb",
   },
   {
     id: "ru-gazprombank",
@@ -450,7 +453,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
   },
   {
     id: "by-alfabank",
-    name: "Alfa-Bank Belarus",
+    name: "Alfa-Bank",
     country: "BY",
     currency: "BYN",
     role: "both",
@@ -459,7 +462,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     initials: "AB",
     popular: true,
     p2pQuery: "Alfa-Bank Belarus",
-    currencyGroup: "alfabank-belarus",
+    currencyGroup: "alfabank",
   },
   {
     id: "by-belgazprombank",
@@ -476,7 +479,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
   },
   {
     id: "by-sberbank",
-    name: "Sber Bank Belarus",
+    name: "Sberbank",
     country: "BY",
     currency: "BYN",
     role: "both",
@@ -485,7 +488,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     initials: "SB",
     popular: true,
     p2pQuery: "Sber Bank Belarus",
-    currencyGroup: "sber-belarus",
+    currencyGroup: "sberbank",
   },
   {
     id: "by-belveb",
@@ -514,7 +517,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
   },
   {
     id: "by-vtb",
-    name: "VTB Belarus",
+    name: "VTB",
     country: "BY",
     currency: "BYN",
     role: "both",
@@ -523,7 +526,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     initials: "VT",
     popular: true,
     p2pQuery: "VTB Belarus",
-    currencyGroup: "vtb-belarus",
+    currencyGroup: "vtb",
   },
   {
     id: "by-dabrabyt",

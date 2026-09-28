@@ -6,9 +6,10 @@
   import { CRYPTO_ASSETS, DIGITAL_ASSETS, PAYMENT_METHODS, fetchPaymentMethods, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
   import { locale, t } from "$lib/i18n";
   import SidePanel from "./SidePanel.svelte";
-  import BelarusP2pWarning from "./BelarusP2pWarning.svelte";
   import CurrencyPicker from "./CurrencyPicker.svelte";
   import NetworkPicker from "./NetworkPicker.svelte";
+
+  export let onBelarusP2pWarningChange: (show: boolean) => void = () => {};
 
   type RefreshSeconds = 0 | 5 | 15 | 30 | 60 | 300;
   type PickerSide = "source" | "target" | null;
@@ -50,7 +51,6 @@
   let targetNetworkId = FALLBACK_NETWORK.id;
   let settingsOpen = false;
   let exchangesOpen = false;
-  let belarusP2pWarningOpen = false;
   let showBelarusP2pWarning = false;
   let refreshSeconds: RefreshSeconds = 15;
   let p2pSources: P2pSourceOption[] = [];
@@ -340,7 +340,7 @@
   $: sourceCurrencyChoices = currencyChoicesFor(sourceMethod, "sender");
   $: targetCurrencyChoices = currencyChoicesFor(targetMethod, "recipient");
   $: showBelarusP2pWarning = selectedExchangeMethods.includes("p2p") && [sourceMethod, targetMethod].some((method) => method?.kind === "bank" && method.country === "BY" && method.currency === "BYN");
-  $: if (!showBelarusP2pWarning) belarusP2pWarningOpen = false;
+  $: onBelarusP2pWarningChange(showBelarusP2pWarning);
   $: hasAmount = Number.isFinite(amountNumber(amount)) && amountNumber(amount) > 0;
   $: previewRoute = selected ?? routes.find((route) => route.status === "complete" && route.is_current_best) ?? routes.find((route) => route.status === "complete") ?? null;
   $: secondsUntilRefresh = refreshSeconds && lastUpdatedAt ? Math.max(0, refreshSeconds - Math.floor((clock - lastUpdatedAt) / 1000)) : null;
@@ -714,13 +714,12 @@
       <button type="button" class="cta" disabled={!hasAmount || (!previewRoute && (searching || !corridor))} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? "Open swap instructions" : "Find routes"}>{#if previewRoute}Swap <span>↗</span>{:else if searching}<span class="spinner"></span> Finding routes{:else if hasAmount}Find routes <span>↗</span>{:else}Enter an amount to begin{/if}</button>
       {#if error}<div class="errorBox" role="alert">{error}</div>{/if}
     </div>
-    <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {renderingRoutes} {searchingVenues} {foundVenues} {venueNames} searched={lastUpdatedAt !== null} {hasAmount} {showBelarusP2pWarning} onOpenBelarusP2pWarning={() => belarusP2pWarningOpen = true} />
+    <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {renderingRoutes} {searchingVenues} {foundVenues} {venueNames} searched={lastUpdatedAt !== null} {hasAmount} />
   </div>
   {#if currencyPicker === "source" || currencyPicker === "target"}<CurrencyPicker open={currencyPicker !== null} selected={currencyPicker === "source" ? sourceCurrencyChoice : targetCurrencyChoice} choices={currencyPicker === "source" ? sourceCurrencyChoices : targetCurrencyChoices} onClose={() => currencyPicker = null} onSelect={(choice) => chooseCurrency(currencyPicker ?? "source", choice)} />{/if}
   {#if paymentPickerComponent}<svelte:component this={paymentPickerComponent} open={methodPicker === "source"} title="Choose where you pay from" role="sender" {networks} paymentMethods={fiatMethods} selected={sourceMethod} selectedNetwork={sourceNetwork} onClose={() => methodPicker = null} onSelect={chooseSource} /><svelte:component this={paymentPickerComponent} open={methodPicker === "target"} title="Choose where the recipient gets paid" role="recipient" {networks} paymentMethods={fiatMethods} selected={targetMethod} selectedNetwork={targetNetwork} onClose={() => methodPicker = null} onSelect={chooseTarget} />{/if}
   {#if networkPicker === "source" || networkPicker === "target"}<NetworkPicker open={networkPicker !== null} networks={networkPicker === "source" ? sourceNetworks : targetNetworks} selected={networkPicker === "source" ? sourceNetwork : targetNetwork} onClose={() => networkPicker = null} onSelect={selectNetwork} />{/if}
   {#if routeInstructionsComponent && instructionsRoute}<svelte:component this={routeInstructionsComponent} route={instructionsRoute} {venueNames} onOpenService={openService} onClose={() => instructionsRoute = null} />{/if}
-  <BelarusP2pWarning open={belarusP2pWarningOpen} onClose={() => belarusP2pWarningOpen = false} />
 </section>
 
 <style>

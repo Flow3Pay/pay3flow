@@ -2,9 +2,12 @@
   import { onMount } from "svelte";
   import Header from "$lib/components/Header.svelte";
   import Converter from "$lib/components/Converter.svelte";
+  import BelarusP2pWarning from "$lib/components/BelarusP2pWarning.svelte";
   import { generatePuzzleBackground } from "$lib/puzzle-background";
   import { localize, locale, t } from "$lib/i18n";
   let shell: HTMLDivElement;
+  let showBelarusP2pWarning = false;
+  let belarusP2pWarningOpen = false;
   onMount(() => shell.style.setProperty("--puzzle-pattern", generatePuzzleBackground()));
   onMount(() => {
     let zoomTimer: number | undefined;
@@ -31,7 +34,8 @@
 <svelte:head><title>Pay3Flow</title></svelte:head>
 
 <div class="appShell" bind:this={shell} use:localize>
-  <Header />
-  <main><Converter /></main>
+  <Header {showBelarusP2pWarning} onOpenBelarusP2pWarning={() => belarusP2pWarningOpen = true} />
+  <main><Converter onBelarusP2pWarningChange={(show) => showBelarusP2pWarning = show} /></main>
   <footer class="siteFooter"><span>Pay3Flow</span><span>{t("Live routing infrastructure · Public market estimates", {}, $locale)}</span></footer>
 </div>
+<BelarusP2pWarning open={belarusP2pWarningOpen} onClose={() => belarusP2pWarningOpen = false} />

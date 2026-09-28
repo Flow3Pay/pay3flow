@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, tick } from "svelte";
   import { warningIcon } from "$lib/icons";
+  import { locale, t } from "$lib/i18n";
 
   export let open = false;
   export let onClose: () => void;
@@ -9,6 +10,7 @@
   let dialog: HTMLDivElement;
   let active = false;
   let previousOverflow = "";
+  $: activeLocale = $locale;
 
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === "Escape") onClose();
@@ -43,16 +45,16 @@
 {#if open}
   <div class="warningBackdrop" role="presentation" on:mousedown={closeFromBackdrop}>
     <div class="warningDialog" bind:this={dialog} role="dialog" aria-modal="true" aria-labelledby="belarus-p2p-warning-title" tabindex="-1">
-      <button type="button" class="closeButton" on:click={onClose} aria-label="Закрыть предупреждение">
+      <button type="button" class="closeButton" on:click={onClose} aria-label={t("Close warning", {}, activeLocale)}>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
       </button>
       <span class="warningMark" aria-hidden="true"><img src={warningIcon} alt="" width="28" height="28" /></span>
-      <p class="eyebrow">Важно для пользователей из Беларуси</p>
-      <h2 id="belarus-p2p-warning-title">Ограничение на P2P-сделки с криптовалютой</h2>
-      <p>Указ Президента Республики Беларусь № 367 предусматривает запрет для физических лиц, включая индивидуальных предпринимателей — резидентов ПВТ, на покупку и продажу криптовалюты вне белорусских криптобирж и криптообменников.</p>
-      <p class="scope">Pay3Flow показывает найденные маршруты и не определяет правовой статус площадки или её резидентство. Перед совершением сделки проверьте, соответствует ли выбранный сервис требованиям законодательства.</p>
+      <p class="eyebrow">{t("Important for users in Belarus", {}, activeLocale)}</p>
+      <h2 id="belarus-p2p-warning-title">{t("Restriction on P2P crypto transactions", {}, activeLocale)}</h2>
+      <p>{t("Decree 367 Belarus crypto restriction", {}, activeLocale)}</p>
+      <p class="scope">{t("Pay3Flow legal status warning", {}, activeLocale)}</p>
       <a class="decreeLink" href={DECREE_URL} target="_blank" rel="noopener noreferrer">
-        <span>Прочитать Указ № 367 на официальном портале</span>
+        <span>{t("Read Decree 367 on the official portal", {}, activeLocale)}</span>
         <span aria-hidden="true">↗</span>
       </a>
     </div>

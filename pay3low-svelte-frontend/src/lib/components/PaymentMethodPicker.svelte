@@ -13,7 +13,8 @@
   export let onClose: () => void;
   export let onSelect: (method: PaymentMethod, network?: CryptoNetwork) => void;
 
-  type Option = { method: PaymentMethod; network?: CryptoNetwork };
+  type FiatGroup = { method: PaymentMethod; variants: PaymentMethod[] };
+  type Option = { method: PaymentMethod; network?: CryptoNetwork; variants?: PaymentMethod[] };
   let query = "";
   let input: HTMLInputElement;
   let wasOpen = false;
@@ -91,7 +92,13 @@
 
   function matchesSearch(option: Option, value: string) {
     const { method, network } = option;
-    const searchText = normalizeSearch([method.name, method.currency, method.kind, method.p2pQuery, network?.name, network?.id].filter(Boolean).join(" "));
+    const variants = option.variants ?? [method];
+    const searchText = normalizeSearch([
+      ...variants.flatMap((variant) => [variant.name, variant.currency, variant.p2pQuery, variant.currencyGroup]),
+      method.kind,
+      network?.name,
+      network?.id,
+    ].filter(Boolean).join(" "));
     const compact = searchText.replaceAll(" ", "");
     return normalizeSearch(value).split(" ").filter(Boolean).every((term) => searchText.includes(term) || compact.includes(term));
   }
@@ -106,19 +113,20 @@
     if (fallback) fallback.style.display = "inline";
   }
 
-  function groupFiatMethods(methods: PaymentMethod[], current: PaymentMethod | null) {
+  function groupFiatMethods(methods: PaymentMethod[], current: PaymentMethod | null): FiatGroup[] {
     const groups = new Map<string, PaymentMethod[]>();
     for (const method of methods) {
       const key = method.currencyGroup ?? method.id;
       groups.set(key, [...(groups.get(key) ?? []), method]);
     }
 
-    return [...groups.values()].map((variants) =>
-      variants.find((method) => method.id === current?.id)
-      ?? variants.find((method) => method.currency === current?.currency)
-      ?? variants.find((method) => method.currency === "AMD")
-      ?? variants[0],
-    );
+    return [...groups.values()].map((variants) => ({
+      method: variants.find((method) => method.id === current?.id)
+        ?? variants.find((method) => method.currency === current?.currency)
+        ?? variants.find((method) => method.currency === "AMD")
+        ?? variants[0],
+      variants,
+    }));
   }
 
   // Payment-method search is intentionally independent from the compact fiat
@@ -131,7 +139,7 @@
   );
   $: assetsForRole = DIGITAL_ASSETS.filter((method) => method.role === role || method.role === "both");
   $: options = [
-    ...fiatMethods.map((method): Option => ({ method })),
+    ...fiatMethods.map(({ method, variants }): Option => ({ method, variants })),
     ...assetsForRole.flatMap((method): Option[] => {
       const compatible = networks.filter((network) => network.currencies.includes(method.currency));
       return compatible.length ? compatible.map((network) => ({ method, network })) : [{ method }];

@@ -846,7 +846,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('ru-sberbank', 'ru-sberbank', 'Sberbank', 'both', 'RU', 'RUB', '', '/icons/assets/sberbank.webp', '', 'enabled', 'bank', '#21a038', 'SB', true, NULL, 'Sberbank', NULL, TRUE, 'payment-methods/Providerfile')
+VALUES ('ru-sberbank', 'ru-sberbank', 'Sberbank', 'both', 'RU', 'RUB', '', '/icons/assets/sberbank.webp', '', 'enabled', 'bank', '#21a038', 'SB', true, NULL, 'Sberbank', 'sberbank', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
@@ -912,7 +912,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('ru-alfabank', 'ru-alfabank', 'Alfa-Bank', 'both', 'RU', 'RUB', '', '/icons/assets/alfabank.webp', '', 'enabled', 'bank', '#ef3124', 'AB', true, NULL, 'Alfa-Bank', NULL, TRUE, 'payment-methods/Providerfile')
+VALUES ('ru-alfabank', 'ru-alfabank', 'Alfa-Bank', 'both', 'RU', 'RUB', '', '/icons/assets/alfabank.webp', '', 'enabled', 'bank', '#ef3124', 'AB', true, NULL, 'Alfa-Bank', 'alfabank', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
@@ -934,7 +934,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('ru-vtb', 'ru-vtb', 'VTB', 'both', 'RU', 'RUB', '', '/icons/assets/vtb.webp', '', 'enabled', 'bank', '#0a52bd', 'VT', false, NULL, 'VTB', NULL, TRUE, 'payment-methods/Providerfile')
+VALUES ('ru-vtb', 'ru-vtb', 'VTB', 'both', 'RU', 'RUB', '', '/icons/assets/vtb.webp', '', 'enabled', 'bank', '#0a52bd', 'VT', false, NULL, 'VTB', 'vtb', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
@@ -1110,7 +1110,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('by-alfabank', 'by-alfabank', 'Alfa-Bank Belarus', 'both', 'BY', 'BYN', 'alfabank.by', '', '', 'enabled', 'bank', '#ef3124', 'AB', true, NULL, 'Alfa-Bank Belarus', 'alfabank-belarus', TRUE, 'payment-methods/Providerfile')
+VALUES ('by-alfabank', 'by-alfabank', 'Alfa-Bank', 'both', 'BY', 'BYN', 'alfabank.by', '', '', 'enabled', 'bank', '#ef3124', 'AB', true, NULL, 'Alfa-Bank Belarus', 'alfabank', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
@@ -1154,7 +1154,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('by-sberbank', 'by-sberbank', 'Sber Bank Belarus', 'both', 'BY', 'BYN', 'sber-bank.by', '', '', 'enabled', 'bank', '#21a038', 'SB', true, NULL, 'Sber Bank Belarus', 'sber-belarus', TRUE, 'payment-methods/Providerfile')
+VALUES ('by-sberbank', 'by-sberbank', 'Sberbank', 'both', 'BY', 'BYN', 'sber-bank.by', '', '', 'enabled', 'bank', '#21a038', 'SB', true, NULL, 'Sber Bank Belarus', 'sberbank', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
@@ -1220,7 +1220,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('by-vtb', 'by-vtb', 'VTB Belarus', 'both', 'BY', 'BYN', 'vtb-bank.by', '', '', 'enabled', 'bank', '#0a52bd', 'VT', true, NULL, 'VTB Belarus', 'vtb-belarus', TRUE, 'payment-methods/Providerfile')
+VALUES ('by-vtb', 'by-vtb', 'VTB', 'both', 'BY', 'BYN', 'vtb-bank.by', '', '', 'enabled', 'bank', '#0a52bd', 'VT', true, NULL, 'VTB Belarus', 'vtb', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
