@@ -1440,7 +1440,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('by-zepterbank', 'by-zepterbank', 'Zepter Bank', 'both', 'BY', 'BYN', 'zepterbank.by', '', '', 'enabled', 'bank', '#8b1e3f', 'ZE', false, NULL, 'Zepter Bank', 'zepterbank', TRUE, 'payment-methods/Providerfile')
+VALUES ('by-zepterbank', 'by-zepterbank', 'Zepter Bank', 'both', 'BY', 'BYN', 'zepterbank.by', '/icons/assets/zepterbank.png', '', 'enabled', 'bank', '#8b1e3f', 'ZE', false, NULL, 'Zepter Bank', 'zepterbank', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,

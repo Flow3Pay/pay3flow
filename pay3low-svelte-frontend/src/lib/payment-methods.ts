@@ -669,6 +669,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     kind: "bank",
     color: "#8b1e3f",
     initials: "ZE",
+    iconUrl: "/icons/assets/zepterbank.png",
     p2pQuery: "Zepter Bank",
     currencyGroup: "zepterbank",
   },
