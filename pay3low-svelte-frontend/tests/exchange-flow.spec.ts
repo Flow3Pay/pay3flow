@@ -75,6 +75,41 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
         }],
       });
     }
+    if (url.pathname === "/api/banks") {
+      const method = (method_id: string, display_name: string, country: string, currency: string, icon_url: string, currency_group: string, popular = false) => ({
+        method_id, name: method_id, display_name, role: "both", country, currency, kind: "bank", color: "#171a17", initials: display_name.slice(0, 2).toUpperCase(), popular, icon_url, p2p_query: display_name, currency_group,
+      });
+      const wallet = (currency: string, display_name: string) => ({
+        ...method(`global-${currency.toLowerCase()}`, display_name, "GLOBAL", currency, `/icons/assets/${currency.toLowerCase()}.webp`, ""),
+        kind: "wallet",
+        initials: currency,
+        p2p_query: currency,
+        currency_group: null,
+      });
+      const currency = (id: string, display_name: string, initials: string, color: string) => ({
+        ...method(`currency-${id.toLowerCase()}`, display_name, "GLOBAL", id, "", ""),
+        kind: "currency", initials, color, p2p_query: id, currency_group: null,
+      });
+      const items = [
+        currency("AMD", "Armenian dram", "֏", "#6d2c91"), currency("RUB", "Russian ruble", "₽", "#21a038"),
+        currency("USD", "US dollar", "$", "#168451"), currency("BYN", "Belarusian ruble", "Br", "#006b3f"),
+        { ...method("global-usd-cash", "Cash USD", "GLOBAL", "USD", "", "cash", true), kind: "cash", initials: "$", p2p_query: "Cash" },
+        method("am-ameriabank", "Ameriabank", "AM", "AMD", "/icons/assets/ameriabank-green.png", "ameriabank", true),
+        method("am-ameriabank-usd-account", "Ameriabank", "AM", "USD", "/icons/assets/ameriabank-green.png", "ameriabank", true),
+        method("am-idbank", "IDBank", "AM", "AMD", "/icons/assets/idbank.png", "idbank", true),
+        method("am-idbank-usd-account", "IDBank", "AM", "USD", "/icons/assets/idbank.png", "idbank", true),
+        method("am-acba", "ACBA Bank", "AM", "AMD", "/icons/assets/acba.png", "acba", true),
+        method("am-ardshinbank", "Ardshinbank", "AM", "AMD", "/icons/assets/ardshinbank.png", "ardshinbank"),
+        method("am-inecobank", "Inecobank", "AM", "AMD", "/icons/assets/inecobank.png", "inecobank"),
+        method("am-evocabank", "Evocabank", "AM", "AMD", "/icons/assets/evocabank.png", "evocabank"),
+        method("ru-sberbank", "Sberbank", "RU", "RUB", "/icons/assets/sberbank.webp", "sberbank", true),
+        method("ru-tbank", "T-Bank", "RU", "RUB", "/icons/assets/tbank.webp", "tbank", true),
+        method("ru-tbank-usd-account", "T-Bank", "RU", "USD", "/icons/assets/tbank.webp", "tbank", true),
+        method("ru-alfabank", "Alfa-Bank", "RU", "RUB", "/icons/assets/alfabank.webp", "alfabank", true),
+        wallet("USDT", "Tether"), wallet("USDC", "USD Coin"), wallet("BTC", "Bitcoin"), wallet("ETH", "Ethereum"),
+      ];
+      return json({ items, total: items.length, limit: 100, offset: 0 });
+    }
     if (url.pathname === "/api/networks") {
       return json([
         { id: "ethereum", name: "Ethereum (ERC-20)", currencies: ["ETH", "USDT", "USDC"] },

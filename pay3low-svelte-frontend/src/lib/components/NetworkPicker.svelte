@@ -3,6 +3,7 @@
   import type { CryptoNetwork } from "$lib/networks";
   import { networkIcon } from "$lib/icons";
   import { locale, t } from "$lib/i18n";
+  import PickerOptionCard from "./PickerOptionCard.svelte";
 
   type CurrencyChoice = {
     id: string;
@@ -91,20 +92,12 @@
         {#if mode === "currency"}
           {#each currencies as currency (currency.id)}
             {@const isSelected = currency.id === selectedCurrency}
-            <button type="button" role="option" aria-selected={isSelected} class="methodRow" data-selected={isSelected || undefined} on:click={() => onSelectCurrency(currency.id)}>
-              <span class="methodLogo currencyLogo" style:background-color={currency.color} aria-hidden="true">{currency.mark}</span>
-              <span class="methodCopy"><span class="methodName">{currency.id}</span><span class="methodMeta">{currency.name}</span></span>
-              {#if isSelected}<svg class="check" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="currentColor" /><path d="m6 10.2 2.7 2.5 5.3-5.6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>{/if}
-            </button>
+            <PickerOptionCard name={currency.id} meta={currency.name} initials={currency.mark} color={currency.color} selected={isSelected} onSelect={() => onSelectCurrency(currency.id)} />
           {/each}
         {:else}
           {#each networks as network (network.id)}
             {@const isSelected = network.id === selected?.id}
-            <button type="button" role="option" aria-selected={isSelected} class="methodRow" data-selected={isSelected || undefined} on:click={() => onSelect(network)}>
-              <span class="methodLogo" style="background-color:#eef2ea" aria-hidden="true"><img src={networkIcon(network.name)} alt="" width="46" height="46" loading="lazy" decoding="async" /></span>
-              <span class="methodCopy"><span class="methodName">{network.name}</span><span class="methodMeta">{network.currencies.join(" · ")}</span></span>
-              {#if isSelected}<svg class="check" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="currentColor" /><path d="m6 10.2 2.7 2.5 5.3-5.6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>{/if}
-            </button>
+            <PickerOptionCard name={network.name} meta={network.currencies.join(" · ")} iconUrl={networkIcon(network.name)} initials={network.name.slice(0, 2).toUpperCase()} color="#eef2ea" selected={isSelected} onSelect={() => onSelect(network)} />
           {/each}
         {/if}
       </section></div></div>

@@ -3,7 +3,7 @@
   import { fetchCorridors, fetchP2pRoutes, fetchProviders, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderDefinition, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote } from "$lib/exchange";
   import { FALLBACK_NETWORK, fetchNetworks, type CryptoNetwork } from "$lib/networks";
   import { assetIcon, networkIcon, swapIcon, venueIcon } from "$lib/icons";
-  import { CRYPTO_ASSETS, DIGITAL_ASSETS, PAYMENT_METHODS, fetchPaymentMethods, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
+  import { fetchPaymentMethods, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
   import { locale, t } from "$lib/i18n";
   import SidePanel from "./SidePanel.svelte";
   import CurrencyPicker from "./CurrencyPicker.svelte";
@@ -22,15 +22,9 @@
   const INITIAL_ROUTE_BATCH_SIZE = 100;
   const ROUTE_BATCH_SIZE = 100;
   const ROUTE_BATCH_DELAY_MS = 10;
-  const INTERMEDIARY_ASSETS = CRYPTO_ASSETS.map(([currency]) => currency);
+  let INTERMEDIARY_ASSETS: string[] = [];
   const EXCHANGE_METHODS: ExchangeMethod[] = ["p2p", "exchanger"];
-  let fiatMethods = PAYMENT_METHODS.filter((method) => method.kind !== "wallet");
-  const FIAT_CURRENCIES = [
-    { id: "AMD", name: "Armenian dram", mark: "֏", color: "#6d2c91" },
-    { id: "RUB", name: "Russian ruble", mark: "₽", color: "#21a038" },
-    { id: "USD", name: "US dollar", mark: "$", color: "#168451" },
-    { id: "BYN", name: "Belarusian ruble", mark: "Br", color: "#006b3f" },
-  ];
+  let paymentMethods: PaymentMethod[] = [];
   const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", sources: "pay3flow.exchange.p2p-sources", knownSources: "pay3flow.exchange.known-p2p-sources", methods: "pay3flow.exchange.methods", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", sourceNetwork: "pay3flow.exchange.source-network", targetNetwork: "pay3flow.exchange.target-network", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets", anonymousId: "pay3flow.reputation.anonymous-id" };
 
   let corridors: ExchangeCorridor[] = [];
@@ -111,7 +105,7 @@
     return `${integer}${sanitized[separator]}${sanitized.slice(separator + 1).replace(/[.,]/g, "")}`;
   }
   const amountNumber = (value: string) => Number(normalizeAmount(value).replace(",", "."));
-  const CRYPTO_CURRENCIES: Set<string> = new Set(CRYPTO_ASSETS.map(([currency]) => currency));
+  let CRYPTO_CURRENCIES = new Set<string>();
   const amountFromMinor = (minor?: number) => minor == null ? "0" : (minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2, useGrouping: false });
   const refreshOptionLabel = (seconds: RefreshSeconds) => seconds === 0 ? "Off" : seconds < 60 ? `${seconds}s` : `${seconds / 60}m`;
   const amountFromRoute = (route?: RouteCandidate | null) => {
@@ -121,7 +115,7 @@
     }
     return amountFromMinor(route.target_amount_minor);
   };
-  const intermediaryIcon = (asset: string) => assetIcon(asset);
+  const intermediaryIcon = (asset: string) => paymentMethods.find((method) => method.kind === "wallet" && method.currency === asset)?.iconUrl ?? assetIcon(asset);
   const networkName = (id: string | null | undefined) => !id ? "internal" : networks.find((network) => network.id === id)?.name ?? id;
   const locationLabel = (country: string, currency: string) => { try { return `${new Intl.DisplayNames([activeLocale], { type: "region" }).of(country) ?? country} · ${currency}`; } catch { return `${country} · ${currency}`; } };
   const methodNoun = (method: PaymentMethod | null | undefined) => method?.kind === "wallet" ? "asset" : method?.kind === "cash" ? "payment method" : "bank";
@@ -326,8 +320,11 @@
   $: sourceCurrency = corridor ? (directionReversed ? corridor.target_currency : corridor.source_currency) : "";
   $: targetCountry = corridor ? (directionReversed ? corridor.source_country : corridor.target_country) : "";
   $: targetCurrency = corridor ? (directionReversed ? corridor.source_currency : corridor.target_currency) : "";
-  $: sourceMethods = [...fiatMethods.filter((method) => method.role === "sender" || method.role === "both"), ...DIGITAL_ASSETS];
-  $: targetMethods = [...fiatMethods.filter((method) => method.role === "recipient" || method.role === "both"), ...DIGITAL_ASSETS];
+  $: INTERMEDIARY_ASSETS = [...new Set(paymentMethods.filter((method) => method.kind === "wallet").map((method) => method.currency))];
+  $: CRYPTO_CURRENCIES = new Set(INTERMEDIARY_ASSETS);
+  $: currencyCards = paymentMethods.filter((method) => method.kind === "currency");
+  $: sourceMethods = paymentMethods.filter((method) => method.kind !== "currency" && (method.role === "sender" || method.role === "both"));
+  $: targetMethods = paymentMethods.filter((method) => method.kind !== "currency" && (method.role === "recipient" || method.role === "both"));
   $: sourceMethod = resolveMethod(sourceMethods, sourceMethodId, sourceCountry, sourceCurrency);
   $: targetMethod = resolveMethod(targetMethods, targetMethodId, targetCountry, targetCurrency);
   $: sourceCurrencyChoice = sourceMethod?.currency || sourceCurrency;
@@ -405,19 +402,21 @@
   function currencyChoicesFor(method: PaymentMethod | null, role: "sender" | "recipient") {
     if (!method || method.kind === "wallet") return [];
     const supported = new Set(
-      fiatMethods
+      paymentMethods
+        .filter((candidate) => candidate.kind === "bank" || candidate.kind === "cash")
         .filter((candidate) => sameCurrencyGroup(candidate, method) && (candidate.role === role || candidate.role === "both"))
         .map((candidate) => candidate.currency),
     );
-    return FIAT_CURRENCIES
-      .filter((choice) => supported.has(choice.id))
+    return currencyCards
+      .filter((choice) => supported.has(choice.currency))
+      .map((choice) => ({ id: choice.currency, name: choice.name, mark: choice.initials, color: choice.color }))
       .sort((left, right) => Number(right.id === method.currency) - Number(left.id === method.currency));
   }
   function chooseCurrency(side: Exclude<PickerSide, null>, choice: string) {
     const role = side === "source" ? "sender" : "recipient";
     const current = side === "source" ? sourceMethod : targetMethod;
     const next = current && current.kind !== "wallet"
-      ? fiatMethods.find((method) => sameCurrencyGroup(method, current) && method.currency === choice && (method.role === role || method.role === "both"))
+      ? paymentMethods.find((method) => (method.kind === "bank" || method.kind === "cash") && sameCurrencyGroup(method, current) && method.currency === choice && (method.role === role || method.role === "both"))
       : undefined;
     if (!next) return;
     initialSearchReady = true;
@@ -572,7 +571,7 @@
       savedKnownSourceIds = localStorage.getItem(STORAGE.knownSources)?.split(",").map((value) => value.trim()).filter(Boolean) ?? [];
       const savedMethods = localStorage.getItem(STORAGE.methods)?.split(",").filter((method): method is ExchangeMethod => EXCHANGE_METHODS.includes(method as ExchangeMethod)) ?? [];
       if (savedMethods.length) selectedExchangeMethods = EXCHANGE_METHODS.filter((method) => savedMethods.includes(method));
-      const savedAssets = localStorage.getItem(STORAGE.assets); if (savedAssets != null) selectedIntermediaryAssets = [...new Set(savedAssets.split(",").filter((asset) => INTERMEDIARY_ASSETS.includes(asset as (typeof INTERMEDIARY_ASSETS)[number])))];
+      const savedAssets = localStorage.getItem(STORAGE.assets); if (savedAssets != null) selectedIntermediaryAssets = [...new Set(savedAssets.split(",").map((asset) => asset.trim().toUpperCase()).filter(Boolean))];
       const savedRefresh = Number(localStorage.getItem(STORAGE.refresh)); if (REFRESH_OPTIONS.includes(savedRefresh as RefreshSeconds)) refreshSeconds = savedRefresh as RefreshSeconds;
     } catch {}
     preferencesLoaded = true;
@@ -580,7 +579,7 @@
     // still enable the normal debounced search immediately.
     initialSearchTimer = window.setTimeout(() => initialSearchReady = true, 1500);
     fetchNetworks().then((items) => { if (items.length) networks = items; }).catch(() => {});
-    fetchPaymentMethods().then((items) => { if (items.length) fiatMethods = items; }).catch(() => {});
+    fetchPaymentMethods().then((items) => { paymentMethods = items; }).catch((cause: Error) => error ??= cause.message);
     fetchProviders().then((providers) => {
       p2pSources = providerSources(providers);
       foundVenues = foundVenueOptions();
@@ -718,7 +717,7 @@
     <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {renderingRoutes} {searchingVenues} {foundVenues} {venueNames} searched={lastUpdatedAt !== null} {hasAmount} {showBelarusP2pWarning} {onOpenBelarusP2pWarning} />
   </div>
   {#if currencyPicker === "source" || currencyPicker === "target"}<CurrencyPicker open={currencyPicker !== null} selected={currencyPicker === "source" ? sourceCurrencyChoice : targetCurrencyChoice} choices={currencyPicker === "source" ? sourceCurrencyChoices : targetCurrencyChoices} onClose={() => currencyPicker = null} onSelect={(choice) => chooseCurrency(currencyPicker ?? "source", choice)} />{/if}
-  {#if paymentPickerComponent}<svelte:component this={paymentPickerComponent} open={methodPicker === "source"} title="Choose where you pay from" role="sender" {networks} paymentMethods={fiatMethods} selected={sourceMethod} selectedNetwork={sourceNetwork} onClose={() => methodPicker = null} onSelect={chooseSource} /><svelte:component this={paymentPickerComponent} open={methodPicker === "target"} title="Choose where the recipient gets paid" role="recipient" {networks} paymentMethods={fiatMethods} selected={targetMethod} selectedNetwork={targetNetwork} onClose={() => methodPicker = null} onSelect={chooseTarget} />{/if}
+  {#if paymentPickerComponent}<svelte:component this={paymentPickerComponent} open={methodPicker === "source"} title="Choose where you pay from" role="sender" {networks} {paymentMethods} selected={sourceMethod} selectedNetwork={sourceNetwork} onClose={() => methodPicker = null} onSelect={chooseSource} /><svelte:component this={paymentPickerComponent} open={methodPicker === "target"} title="Choose where the recipient gets paid" role="recipient" {networks} {paymentMethods} selected={targetMethod} selectedNetwork={targetNetwork} onClose={() => methodPicker = null} onSelect={chooseTarget} />{/if}
   {#if networkPicker === "source" || networkPicker === "target"}<NetworkPicker open={networkPicker !== null} networks={networkPicker === "source" ? sourceNetworks : targetNetworks} selected={networkPicker === "source" ? sourceNetwork : targetNetwork} onClose={() => networkPicker = null} onSelect={selectNetwork} />{/if}
   {#if routeInstructionsComponent && instructionsRoute}<svelte:component this={routeInstructionsComponent} route={instructionsRoute} {venueNames} onOpenService={openService} onClose={() => instructionsRoute = null} />{/if}
 </section>

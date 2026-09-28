@@ -586,9 +586,9 @@ fn normalize_payment_method(
         )));
     }
     let kind = raw.kind.trim().to_ascii_lowercase();
-    if !matches!(kind.as_str(), "bank" | "cash") {
+    if !matches!(kind.as_str(), "bank" | "cash" | "currency" | "wallet") {
         return Err(ProviderFileError(format!(
-            "{source_file}: payment method `{id}` kind must be bank or cash"
+            "{source_file}: payment method `{id}` kind must be bank, cash, currency, or wallet"
         )));
     }
     let country = raw.country.trim().to_ascii_uppercase();
@@ -629,9 +629,9 @@ fn normalize_payment_method(
         )));
     }
     let initials = raw.initials.trim().to_string();
-    if initials.is_empty() || initials.chars().count() > 4 {
+    if initials.is_empty() || initials.chars().count() > 12 {
         return Err(ProviderFileError(format!(
-            "{source_file}: payment method `{id}` initials must contain 1-4 characters"
+            "{source_file}: payment method `{id}` initials must contain 1-12 characters"
         )));
     }
     if raw
@@ -891,6 +891,27 @@ payment_methods = [
         assert!(sql.contains("'by-example-bank'"));
         assert!(sql.contains("'Example Bank'"));
         assert!(sql.contains("picker_visible"));
+    }
+
+    #[test]
+    fn accepts_backend_owned_currency_and_wallet_cards() {
+        let document = r##"
+payment_methods = [
+  { id = "currency-usd", name = "US dollar", country = "GLOBAL", currency = "USD", kind = "currency", color = "#168451", initials = "$", p2p_query = "USD" },
+  { id = "global-matic", name = "Polygon", country = "GLOBAL", currency = "MATIC", kind = "wallet", color = "#8247e5", initials = "MATIC", icon_url = "/icons/assets/matic.webp", p2p_query = "MATIC" }
+]
+"##;
+        let parsed = parse_document_with_path(
+            document,
+            "payment-methods",
+            "payment-methods/Providerfile",
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(parsed.payment_methods[0].kind, "currency");
+        assert_eq!(parsed.payment_methods[1].kind, "wallet");
+        assert_eq!(parsed.payment_methods[1].icon_url, "/icons/assets/matic.webp");
     }
 
     #[test]

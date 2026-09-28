@@ -513,10 +513,98 @@ updated_at = now();
 DELETE FROM banks
  WHERE picker_visible
    AND source_file LIKE '%/Providerfile'
-   AND method_id NOT IN ('global-usd-cash', 'am-ameriabank-usd-account', 'am-ameriabank', 'am-idbank-usd-account', 'am-idbank', 'am-acba-usd-account', 'am-acba', 'am-ardshinbank-usd-account', 'am-ardshinbank', 'am-inecobank-usd-account', 'am-inecobank', 'am-evocabank-usd-account', 'am-evocabank', 'am-vtb-usd-account', 'am-vtb', 'ru-sberbank', 'ru-tbank', 'ru-tbank-usd-account', 'ru-alfabank', 'ru-vtb', 'ru-gazprombank', 'ru-raiffeisen', 'ru-ozon', 'by-belarusbank', 'by-belagroprombank', 'by-priorbank', 'by-belinvestbank', 'by-alfabank', 'by-belgazprombank', 'by-sberbank', 'by-belveb', 'by-mtbank', 'by-vtb', 'by-dabrabyt', 'by-technobank', 'by-btk', 'by-bnb', 'by-bsb', 'by-paritetbank', 'by-bank-reshenie', 'by-statusbank', 'by-neobank', 'by-zepterbank', 'by-brrb');
+   AND method_id NOT IN ('global-usd-cash', 'currency-amd', 'currency-rub', 'currency-usd', 'currency-byn', 'am-ameriabank-usd-account', 'am-ameriabank', 'am-idbank-usd-account', 'am-idbank', 'am-acba-usd-account', 'am-acba', 'am-ardshinbank-usd-account', 'am-ardshinbank', 'am-inecobank-usd-account', 'am-inecobank', 'am-evocabank-usd-account', 'am-evocabank', 'am-vtb-usd-account', 'am-vtb', 'ru-sberbank', 'ru-tbank', 'ru-tbank-usd-account', 'ru-alfabank', 'ru-vtb', 'ru-gazprombank', 'ru-raiffeisen', 'ru-ozon', 'by-belarusbank', 'by-belagroprombank', 'by-priorbank', 'by-belinvestbank', 'by-alfabank', 'by-belgazprombank', 'by-sberbank', 'by-belveb', 'by-mtbank', 'by-vtb', 'by-dabrabyt', 'by-technobank', 'by-btk', 'by-bnb', 'by-bsb', 'by-paritetbank', 'by-bank-reshenie', 'by-statusbank', 'by-neobank', 'by-zepterbank', 'by-brrb', 'global-usdt', 'global-usdc', 'global-btc', 'global-eth', 'global-bnb', 'global-sol', 'global-trx', 'global-ton', 'global-doge', 'global-ltc', 'global-dai', 'global-fdusd', 'global-xrp', 'global-ada', 'global-dot', 'global-link', 'global-avax', 'global-matic', 'global-bch', 'global-near', 'global-apt', 'global-atom', 'global-uni', 'global-sui');
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
 VALUES ('global-usd-cash', 'global-usd-cash', 'Cash USD', 'both', 'GLOBAL', 'USD', '', '', '', 'enabled', 'cash', '#168451', '$', true, NULL, 'Cash', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('currency-amd', 'currency-amd', 'Armenian dram', 'both', 'AM', 'AMD', '', '', '', 'enabled', 'currency', '#6d2c91', '֏', false, NULL, 'AMD', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('currency-rub', 'currency-rub', 'Russian ruble', 'both', 'RU', 'RUB', '', '', '', 'enabled', 'currency', '#21a038', '₽', false, NULL, 'RUB', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('currency-usd', 'currency-usd', 'US dollar', 'both', 'GLOBAL', 'USD', '', '', '', 'enabled', 'currency', '#168451', '$', false, NULL, 'USD', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('currency-byn', 'currency-byn', 'Belarusian ruble', 'both', 'BY', 'BYN', '', '', '', 'enabled', 'currency', '#006b3f', 'Br', false, NULL, 'BYN', NULL, TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
@@ -1463,6 +1551,534 @@ updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
 VALUES ('by-brrb', 'by-brrb', 'Bank of Growth and Business Development', 'both', 'BY', 'BYN', 'brrb.by', '/icons/assets/brrb.png', '', 'enabled', 'bank', '#005ca9', 'BR', false, NULL, 'BRRB Bank', 'brrb', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('global-usdt', 'global-usdt', 'Tether', 'both', 'GLOBAL', 'USDT', '', '/icons/assets/usdt.webp', '', 'enabled', 'wallet', '#26a17b', 'USDT', false, NULL, 'USDT', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('global-usdc', 'global-usdc', 'USD Coin', 'both', 'GLOBAL', 'USDC', '', '/icons/assets/usdc.webp', '', 'enabled', 'wallet', '#2775ca', 'USDC', false, NULL, 'USDC', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('global-btc', 'global-btc', 'Bitcoin', 'both', 'GLOBAL', 'BTC', '', '/icons/assets/btc.webp', '', 'enabled', 'wallet', '#f7931a', 'BTC', false, NULL, 'BTC', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('global-eth', 'global-eth', 'Ethereum', 'both', 'GLOBAL', 'ETH', '', '/icons/assets/eth.webp', '', 'enabled', 'wallet', '#627eea', 'ETH', false, NULL, 'ETH', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('global-bnb', 'global-bnb', 'BNB', 'both', 'GLOBAL', 'BNB', '', '/icons/assets/bnb.webp', '', 'enabled', 'wallet', '#f3ba2f', 'BNB', false, NULL, 'BNB', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('global-sol', 'global-sol', 'Solana', 'both', 'GLOBAL', 'SOL', '', '/icons/assets/sol.webp', '', 'enabled', 'wallet', '#14f195', 'SOL', false, NULL, 'SOL', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('global-trx', 'global-trx', 'TRON', 'both', 'GLOBAL', 'TRX', '', '/icons/assets/trx.webp', '', 'enabled', 'wallet', '#ef0027', 'TRX', false, NULL, 'TRX', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('global-ton', 'global-ton', 'Toncoin', 'both', 'GLOBAL', 'TON', '', '/icons/assets/ton.webp', '', 'enabled', 'wallet', '#0098ea', 'TON', false, NULL, 'TON', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('global-doge', 'global-doge', 'Dogecoin', 'both', 'GLOBAL', 'DOGE', '', '/icons/assets/doge.webp', '', 'enabled', 'wallet', '#c2a633', 'DOGE', false, NULL, 'DOGE', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('global-ltc', 'global-ltc', 'Litecoin', 'both', 'GLOBAL', 'LTC', '', '/icons/assets/ltc.webp', '', 'enabled', 'wallet', '#345d9d', 'LTC', false, NULL, 'LTC', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('global-dai', 'global-dai', 'Dai', 'both', 'GLOBAL', 'DAI', '', '/icons/assets/dai.webp', '', 'enabled', 'wallet', '#f5ac37', 'DAI', false, NULL, 'DAI', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('global-fdusd', 'global-fdusd', 'First Digital USD', 'both', 'GLOBAL', 'FDUSD', '', '/icons/assets/fdusd.webp', '', 'enabled', 'wallet', '#1d1d1d', 'FD', false, NULL, 'FDUSD', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('global-xrp', 'global-xrp', 'XRP', 'both', 'GLOBAL', 'XRP', '', '/icons/assets/xrp.webp', '', 'enabled', 'wallet', '#23292f', 'XRP', false, NULL, 'XRP', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('global-ada', 'global-ada', 'Cardano', 'both', 'GLOBAL', 'ADA', '', '/icons/assets/ada.webp', '', 'enabled', 'wallet', '#0033ad', 'ADA', false, NULL, 'ADA', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('global-dot', 'global-dot', 'Polkadot', 'both', 'GLOBAL', 'DOT', '', '/icons/assets/dot.webp', '', 'enabled', 'wallet', '#e6007a', 'DOT', false, NULL, 'DOT', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('global-link', 'global-link', 'Chainlink', 'both', 'GLOBAL', 'LINK', '', '/icons/assets/link.webp', '', 'enabled', 'wallet', '#2a5ada', 'LINK', false, NULL, 'LINK', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('global-avax', 'global-avax', 'Avalanche', 'both', 'GLOBAL', 'AVAX', '', '/icons/assets/avax.webp', '', 'enabled', 'wallet', '#e84142', 'AVAX', false, NULL, 'AVAX', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('global-matic', 'global-matic', 'Polygon', 'both', 'GLOBAL', 'MATIC', '', '/icons/assets/matic.webp', '', 'enabled', 'wallet', '#8247e5', 'MATIC', false, NULL, 'MATIC', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('global-bch', 'global-bch', 'Bitcoin Cash', 'both', 'GLOBAL', 'BCH', '', '/icons/assets/bch.webp', '', 'enabled', 'wallet', '#8dc351', 'BCH', false, NULL, 'BCH', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('global-near', 'global-near', 'NEAR Protocol', 'both', 'GLOBAL', 'NEAR', '', '/icons/assets/near.webp', '', 'enabled', 'wallet', '#111827', 'NEAR', false, NULL, 'NEAR', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('global-apt', 'global-apt', 'Aptos', 'both', 'GLOBAL', 'APT', '', '/icons/assets/apt.webp', '', 'enabled', 'wallet', '#111827', 'APT', false, NULL, 'APT', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('global-atom', 'global-atom', 'Cosmos', 'both', 'GLOBAL', 'ATOM', '', '/icons/assets/atom.webp', '', 'enabled', 'wallet', '#2e3148', 'ATOM', false, NULL, 'ATOM', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('global-uni', 'global-uni', 'Uniswap', 'both', 'GLOBAL', 'UNI', '', '/icons/assets/uni.webp', '', 'enabled', 'wallet', '#ff007a', 'UNI', false, NULL, 'UNI', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('global-sui', 'global-sui', 'Sui', 'both', 'GLOBAL', 'SUI', '', '/icons/assets/sui.webp', '', 'enabled', 'wallet', '#6fbcf0', 'SUI', false, NULL, 'SUI', NULL, TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,

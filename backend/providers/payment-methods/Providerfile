@@ -4,6 +4,12 @@
 payment_methods = [
   { id = "global-usd-cash", name = "Cash USD", country = "GLOBAL", currency = "USD", kind = "cash", color = "#168451", initials = "$", popular = true, p2p_query = "Cash" },
 
+  # Currency cards used by each institution's compact account-currency picker.
+  { id = "currency-amd", name = "Armenian dram", country = "AM", currency = "AMD", kind = "currency", color = "#6d2c91", initials = "֏", p2p_query = "AMD" },
+  { id = "currency-rub", name = "Russian ruble", country = "RU", currency = "RUB", kind = "currency", color = "#21a038", initials = "₽", p2p_query = "RUB" },
+  { id = "currency-usd", name = "US dollar", country = "GLOBAL", currency = "USD", kind = "currency", color = "#168451", initials = "$", p2p_query = "USD" },
+  { id = "currency-byn", name = "Belarusian ruble", country = "BY", currency = "BYN", kind = "currency", color = "#006b3f", initials = "Br", p2p_query = "BYN" },
+
   { id = "am-ameriabank-usd-account", name = "Ameriabank", country = "AM", currency = "USD", color = "#6d2c91", initials = "AM", popular = true, icon_url = "/icons/assets/ameriabank-green.png", bank_fee_percent = 0, p2p_query = "Ameriabank", currency_group = "ameriabank" },
   { id = "am-ameriabank", name = "Ameriabank", country = "AM", currency = "AMD", color = "#6d2c91", initials = "AM", popular = true, icon_url = "/icons/assets/ameriabank-green.png", bank_fee_percent = 0, p2p_query = "Ameriabank", currency_group = "ameriabank" },
   { id = "am-idbank-usd-account", name = "IDBank", country = "AM", currency = "USD", color = "#21a366", initials = "ID", popular = true, icon_url = "/icons/assets/idbank.png", bank_fee_percent = 0.75, p2p_query = "IDBank", currency_group = "idbank" },
@@ -49,4 +55,31 @@ payment_methods = [
   { id = "by-neobank", name = "Neo Bank Asia", country = "BY", currency = "BYN", color = "#ff5a1f", initials = "NE", icon_url = "/icons/assets/neobank.png", p2p_query = "Neo Bank Asia", currency_group = "neo-bank", domain = "neobank.by" },
   { id = "by-zepterbank", name = "Zepter Bank", country = "BY", currency = "BYN", color = "#8b1e3f", initials = "ZE", icon_url = "/icons/assets/zepterbank.png", p2p_query = "Zepter Bank", currency_group = "zepterbank", domain = "zepterbank.by" },
   { id = "by-brrb", name = "Bank of Growth and Business Development", country = "BY", currency = "BYN", color = "#005ca9", initials = "BR", icon_url = "/icons/assets/brrb.png", p2p_query = "BRRB Bank", currency_group = "brrb", domain = "brrb.by" },
+
+  # Digital assets use the same backend-owned card contract as banks and cash.
+  # Their local icon paths are returned verbatim by GET /api/banks.
+  { id = "global-usdt", name = "Tether", country = "GLOBAL", currency = "USDT", kind = "wallet", color = "#26a17b", initials = "USDT", icon_url = "/icons/assets/usdt.webp", p2p_query = "USDT" },
+  { id = "global-usdc", name = "USD Coin", country = "GLOBAL", currency = "USDC", kind = "wallet", color = "#2775ca", initials = "USDC", icon_url = "/icons/assets/usdc.webp", p2p_query = "USDC" },
+  { id = "global-btc", name = "Bitcoin", country = "GLOBAL", currency = "BTC", kind = "wallet", color = "#f7931a", initials = "BTC", icon_url = "/icons/assets/btc.webp", p2p_query = "BTC" },
+  { id = "global-eth", name = "Ethereum", country = "GLOBAL", currency = "ETH", kind = "wallet", color = "#627eea", initials = "ETH", icon_url = "/icons/assets/eth.webp", p2p_query = "ETH" },
+  { id = "global-bnb", name = "BNB", country = "GLOBAL", currency = "BNB", kind = "wallet", color = "#f3ba2f", initials = "BNB", icon_url = "/icons/assets/bnb.webp", p2p_query = "BNB" },
+  { id = "global-sol", name = "Solana", country = "GLOBAL", currency = "SOL", kind = "wallet", color = "#14f195", initials = "SOL", icon_url = "/icons/assets/sol.webp", p2p_query = "SOL" },
+  { id = "global-trx", name = "TRON", country = "GLOBAL", currency = "TRX", kind = "wallet", color = "#ef0027", initials = "TRX", icon_url = "/icons/assets/trx.webp", p2p_query = "TRX" },
+  { id = "global-ton", name = "Toncoin", country = "GLOBAL", currency = "TON", kind = "wallet", color = "#0098ea", initials = "TON", icon_url = "/icons/assets/ton.webp", p2p_query = "TON" },
+  { id = "global-doge", name = "Dogecoin", country = "GLOBAL", currency = "DOGE", kind = "wallet", color = "#c2a633", initials = "DOGE", icon_url = "/icons/assets/doge.webp", p2p_query = "DOGE" },
+  { id = "global-ltc", name = "Litecoin", country = "GLOBAL", currency = "LTC", kind = "wallet", color = "#345d9d", initials = "LTC", icon_url = "/icons/assets/ltc.webp", p2p_query = "LTC" },
+  { id = "global-dai", name = "Dai", country = "GLOBAL", currency = "DAI", kind = "wallet", color = "#f5ac37", initials = "DAI", icon_url = "/icons/assets/dai.webp", p2p_query = "DAI" },
+  { id = "global-fdusd", name = "First Digital USD", country = "GLOBAL", currency = "FDUSD", kind = "wallet", color = "#1d1d1d", initials = "FD", icon_url = "/icons/assets/fdusd.webp", p2p_query = "FDUSD" },
+  { id = "global-xrp", name = "XRP", country = "GLOBAL", currency = "XRP", kind = "wallet", color = "#23292f", initials = "XRP", icon_url = "/icons/assets/xrp.webp", p2p_query = "XRP" },
+  { id = "global-ada", name = "Cardano", country = "GLOBAL", currency = "ADA", kind = "wallet", color = "#0033ad", initials = "ADA", icon_url = "/icons/assets/ada.webp", p2p_query = "ADA" },
+  { id = "global-dot", name = "Polkadot", country = "GLOBAL", currency = "DOT", kind = "wallet", color = "#e6007a", initials = "DOT", icon_url = "/icons/assets/dot.webp", p2p_query = "DOT" },
+  { id = "global-link", name = "Chainlink", country = "GLOBAL", currency = "LINK", kind = "wallet", color = "#2a5ada", initials = "LINK", icon_url = "/icons/assets/link.webp", p2p_query = "LINK" },
+  { id = "global-avax", name = "Avalanche", country = "GLOBAL", currency = "AVAX", kind = "wallet", color = "#e84142", initials = "AVAX", icon_url = "/icons/assets/avax.webp", p2p_query = "AVAX" },
+  { id = "global-matic", name = "Polygon", country = "GLOBAL", currency = "MATIC", kind = "wallet", color = "#8247e5", initials = "MATIC", icon_url = "/icons/assets/matic.webp", p2p_query = "MATIC" },
+  { id = "global-bch", name = "Bitcoin Cash", country = "GLOBAL", currency = "BCH", kind = "wallet", color = "#8dc351", initials = "BCH", icon_url = "/icons/assets/bch.webp", p2p_query = "BCH" },
+  { id = "global-near", name = "NEAR Protocol", country = "GLOBAL", currency = "NEAR", kind = "wallet", color = "#111827", initials = "NEAR", icon_url = "/icons/assets/near.webp", p2p_query = "NEAR" },
+  { id = "global-apt", name = "Aptos", country = "GLOBAL", currency = "APT", kind = "wallet", color = "#111827", initials = "APT", icon_url = "/icons/assets/apt.webp", p2p_query = "APT" },
+  { id = "global-atom", name = "Cosmos", country = "GLOBAL", currency = "ATOM", kind = "wallet", color = "#2e3148", initials = "ATOM", icon_url = "/icons/assets/atom.webp", p2p_query = "ATOM" },
+  { id = "global-uni", name = "Uniswap", country = "GLOBAL", currency = "UNI", kind = "wallet", color = "#ff007a", initials = "UNI", icon_url = "/icons/assets/uni.webp", p2p_query = "UNI" },
+  { id = "global-sui", name = "Sui", country = "GLOBAL", currency = "SUI", kind = "wallet", color = "#6fbcf0", initials = "SUI", icon_url = "/icons/assets/sui.webp", p2p_query = "SUI" },
 ]

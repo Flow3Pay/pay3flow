@@ -1,7 +1,9 @@
 <script lang="ts">
   import { afterUpdate, onDestroy } from "svelte";
-  import { DIGITAL_ASSETS, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
+  import { paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
   import type { CryptoNetwork } from "$lib/networks";
+  import { locale, t } from "$lib/i18n";
+  import PickerOptionCard from "./PickerOptionCard.svelte";
 
   export let open: boolean;
   export let title: string;
@@ -112,13 +114,6 @@
     const currencies = [...new Set(variants.map((variant) => variant.currency))].join(" / ");
     return `Bank transfer · ${currencies}`;
   }
-  function hideBrokenImage(event: Event) {
-    const image = event.currentTarget as HTMLImageElement;
-    image.style.display = "none";
-    const fallback = image.parentElement?.querySelector<HTMLElement>("[data-icon-fallback]");
-    if (fallback) fallback.style.display = "inline";
-  }
-
   function groupFiatMethods(methods: PaymentMethod[], current: PaymentMethod | null): FiatGroup[] {
     const groups = new Map<string, PaymentMethod[]>();
     for (const method of methods) {
@@ -140,10 +135,10 @@
   // variant keeps the current currency whenever the new bank supports it.
   // A crypto row owns both asset and network selection.
   $: fiatMethods = groupFiatMethods(
-    paymentMethods.filter((method) => method.kind !== "wallet" && (method.role === role || method.role === "both")),
+    paymentMethods.filter((method) => (method.kind === "bank" || method.kind === "cash") && (method.role === role || method.role === "both")),
     selected,
   );
-  $: assetsForRole = DIGITAL_ASSETS.filter((method) => method.role === role || method.role === "both");
+  $: assetsForRole = paymentMethods.filter((method) => method.kind === "wallet" && (method.role === role || method.role === "both"));
   $: options = [
     ...fiatMethods.map(({ method, variants }): Option => ({ method, variants })),
     ...assetsForRole.flatMap((method): Option[] => {
@@ -155,6 +150,7 @@
   $: popular = filtered.filter(({ method }) => method.kind !== "wallet" && method.popular);
   $: assets = filtered.filter(({ method }) => method.kind === "wallet");
   $: all = filtered.filter(({ method }) => !method.popular && method.kind !== "wallet");
+  $: popularLabel = role === "sender" ? "Popular selling methods" : "Popular buying methods";
 </script>
 
 {#if open}
@@ -182,28 +178,25 @@
           {#if filtered.length === 0}
             <div class="empty"><strong>No payment methods found</strong><span>Try a different search.</span></div>
           {/if}
-          {#each [["Popular methods", popular], ["Digital assets", assets], ["All payment methods", all]] as group}
+          {#each [[popularLabel, popular], ["Digital assets", assets], ["All payment methods", all]] as group}
             {@const label = group[0] as string}
             {@const rows = group[1] as Option[]}
             {#if rows.length > 0}
               <section class="section">
-                <h3>{label}</h3>
+                <h3>{t(label, {}, $locale)}</h3>
                 {#each rows as option (`${option.method.id}:${option.network?.id ?? "default"}`)}
                   {@const method = option.method}
                   {@const network = option.network}
                   {@const isSelected = selected?.id === method.id && (method.kind !== "wallet" || network?.id === selectedNetwork?.id)}
-                  <button type="button" role="option" aria-selected={isSelected} class="methodRow" data-selected={isSelected || undefined} on:click={() => onSelect(method, network)}>
-                    <span class="methodLogo" style:background-color={logo(method, option.variants) ? "transparent" : method.color} aria-hidden="true">
-                      {#if logo(method, option.variants)}<img src={logo(method, option.variants) ?? ""} alt="" width="42" height="42" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{method.initials}</span>{:else}<span>{method.initials}</span>{/if}
-                    </span>
-                    <span class="methodCopy">
-                      <span class="methodName">{method.kind === "wallet" ? network?.name ?? method.name : method.name}</span>
-                      <span class="methodMeta">{methodMeta(method, option.variants)}</span>
-                    </span>
-                    {#if isSelected}
-                      <svg class="check" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="currentColor" /><path d="m6 10.2 2.7 2.5 5.3-5.6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
-                    {/if}
-                  </button>
+                  <PickerOptionCard
+                    name={method.kind === "wallet" ? network?.name ?? method.name : method.name}
+                    meta={methodMeta(method, option.variants)}
+                    iconUrl={logo(method, option.variants)}
+                    initials={method.initials}
+                    color={method.color}
+                    selected={isSelected}
+                    onSelect={() => onSelect(method, network)}
+                  />
                 {/each}
               </section>
             {/if}
