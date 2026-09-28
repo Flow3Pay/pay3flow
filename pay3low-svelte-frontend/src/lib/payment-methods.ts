@@ -682,6 +682,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     kind: "bank",
     color: "#005ca9",
     initials: "BR",
+    iconUrl: "/icons/assets/brrb.png",
     p2pQuery: "BRRB Bank",
     currencyGroup: "brrb",
   },

@@ -48,5 +48,5 @@ payment_methods = [
   { id = "by-statusbank", name = "StatusBank", country = "BY", currency = "BYN", color = "#003b71", initials = "ST", icon_url = "/icons/assets/statusbank.png", p2p_query = "StatusBank", currency_group = "statusbank", domain = "statusbank.by" },
   { id = "by-neobank", name = "Neo Bank Asia", country = "BY", currency = "BYN", color = "#ff5a1f", initials = "NE", icon_url = "/icons/assets/neobank.png", p2p_query = "Neo Bank Asia", currency_group = "neo-bank", domain = "neobank.by" },
   { id = "by-zepterbank", name = "Zepter Bank", country = "BY", currency = "BYN", color = "#8b1e3f", initials = "ZE", icon_url = "/icons/assets/zepterbank.png", p2p_query = "Zepter Bank", currency_group = "zepterbank", domain = "zepterbank.by" },
-  { id = "by-brrb", name = "Bank of Growth and Business Development", country = "BY", currency = "BYN", color = "#005ca9", initials = "BR", p2p_query = "BRRB Bank", currency_group = "brrb", domain = "brrb.by" },
+  { id = "by-brrb", name = "Bank of Growth and Business Development", country = "BY", currency = "BYN", color = "#005ca9", initials = "BR", icon_url = "/icons/assets/brrb.png", p2p_query = "BRRB Bank", currency_group = "brrb", domain = "brrb.by" },
 ]
