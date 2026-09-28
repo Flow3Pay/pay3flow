@@ -18,13 +18,13 @@
 
   const leafColors = ["#b5f500", "#a3df25", "#8fbd28", "#c4f35a"];
   const emitters = [
-    { x: 0.64, y: 0.23 },
-    { x: 0.74, y: 0.29 },
-    { x: 0.58, y: 0.36 },
-    { x: 0.82, y: 0.39 },
-    { x: 0.69, y: 0.48 },
-    { x: 0.9, y: 0.52 },
-    { x: 0.52, y: 0.55 },
+    { x: 0.63, y: 0.25 },
+    { x: 0.74, y: 0.3 },
+    { x: 0.57, y: 0.38 },
+    { x: 0.82, y: 0.4 },
+    { x: 0.69, y: 0.49 },
+    { x: 0.9, y: 0.53 },
+    { x: 0.52, y: 0.56 },
   ];
 
   let leaves: Leaf[] = [];
@@ -42,7 +42,7 @@
     const emitter = emitters[Math.floor(Math.random() * emitters.length)];
     leaf.x = (emitter.x + randomBetween(-0.035, 0.035)) * width;
     leaf.y = (emitter.y + randomBetween(-0.025, 0.025)) * height;
-    if (initial) leaf.y = randomBetween(0.12, 0.78) * height;
+    if (initial) leaf.y = randomBetween(0.14, 0.78) * height;
     leaf.vx = randomBetween(-0.18, 0.18);
     leaf.vy = randomBetween(0.18, 0.48);
     leaf.size = randomBetween(4.5, 10.5);
@@ -83,9 +83,9 @@
     context.bezierCurveTo(6.4, 2.8, 2.3, 5.8, 0, 7);
     context.bezierCurveTo(-0.6, 3.2, -0.5, 1.1, 0, -1);
     context.fillStyle = leaf.color;
-    context.globalAlpha = 0.78;
-    context.shadowColor = "rgba(90, 120, 20, 0.18)";
-    context.shadowBlur = 5;
+    context.globalAlpha = 1;
+    context.shadowColor = "rgba(38, 55, 20, 0.2)";
+    context.shadowBlur = 3;
     context.fill();
     context.restore();
   }
@@ -135,53 +135,46 @@
 </script>
 
 <div class="treeBackdrop" aria-hidden="true">
-  <div class="treeAtmosphere"></div>
-  <svg class="treeArtwork" viewBox="0 0 760 920" preserveAspectRatio="xMidYMid meet">
+  <svg class="treeArtwork" viewBox="0 0 760 900" preserveAspectRatio="xMidYMid meet">
     <defs>
-      <filter id="tree-shadow" x="-30%" y="-30%" width="160%" height="160%">
-        <feDropShadow dx="10" dy="18" stdDeviation="16" flood-color="#192317" flood-opacity="0.16" />
+      <!-- The logo's dark background is removed by green-channel alpha; the tree itself stays opaque. -->
+      <filter id="logo-tree-cutout" color-interpolation-filters="sRGB">
+        <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  -8 8 0 0 0" />
+        <feComponentTransfer>
+          <feFuncA type="table" tableValues="0 0 0 1 1" />
+        </feComponentTransfer>
       </filter>
-      <linearGradient id="trunk-gradient" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stop-color="#253221" />
-        <stop offset="0.52" stop-color="#1b241a" />
-        <stop offset="1" stop-color="#3c5224" />
-      </linearGradient>
-      <path id="leaf-shape" d="M0 0C8-13 21-16 27-11C24 2 14 11 0 14C2 8 2 4 0 0Z" />
+      <path id="extra-leaf" d="M0 0C8-13 21-16 27-11C24 2 14 11 0 14C2 8 2 4 0 0Z" />
+      <g id="flower-center" fill="#262D1F" stroke="#262D1F" stroke-width="1.35" stroke-linecap="round">
+        <circle r="2.15" stroke="none" />
+        <path d="M0-1V-5M0 1V5M-1 0H-5M1 0H5M-.8-.8-3.8-3.8M.8.8 3.8 3.8M.8-.8 3.8-3.8M-.8.8-3.8 3.8" />
+      </g>
     </defs>
 
-    <g class="treeStructure" filter="url(#tree-shadow)">
-      <path class="trunk" d="M448 933C404 844 390 755 416 664C433 605 461 546 464 481C468 403 449 319 472 236" />
-      <path class="branch" d="M451 594C393 539 318 493 218 467C161 452 107 418 75 365" />
-      <path class="branch" d="M459 530C530 480 585 414 631 333C658 286 694 255 747 233" />
-      <path class="branch" d="M464 458C398 416 351 364 320 294C298 245 266 208 219 176" />
-      <path class="branch" d="M433 679C363 637 297 615 220 622C167 627 126 610 92 581" />
-      <path class="twig" d="M215 466C180 434 150 407 122 367M161 449C136 431 111 419 80 413M318 494C287 463 269 431 253 391M584 414C610 383 629 346 641 302M632 333C663 323 690 301 713 273M348 378C330 344 317 314 313 278M298 616C274 585 258 551 251 515M220 622C187 604 160 583 138 548" />
-      <path class="twig" d="M461 371C499 337 528 309 544 271M471 240C497 213 518 183 526 147M388 442C355 427 328 406 307 379M413 664C381 651 350 643 315 644" />
+    <image
+      href="/icons/assets/pay3flow_logo.svg"
+      x="0"
+      y="90"
+      width="760"
+      height="760"
+      preserveAspectRatio="xMidYMid meet"
+      filter="url(#logo-tree-cutout)"
+    />
 
-      <g class="treeLeaves" fill="var(--tree-leaf)">
-        <use href="#leaf-shape" transform="translate(70 349) rotate(-37) scale(1.35)" />
-        <use href="#leaf-shape" transform="translate(119 366) rotate(-23) scale(0.92)" />
-        <use href="#leaf-shape" transform="translate(145 422) rotate(-54) scale(0.82)" />
-        <use href="#leaf-shape" transform="translate(186 454) rotate(-28) scale(1.05)" />
-        <use href="#leaf-shape" transform="translate(215 174) rotate(-58) scale(1.1)" />
-        <use href="#leaf-shape" transform="translate(260 208) rotate(-35) scale(0.84)" />
-        <use href="#leaf-shape" transform="translate(306 286) rotate(-68) scale(1.18)" />
-        <use href="#leaf-shape" transform="translate(319 377) rotate(-23) scale(0.86)" />
-        <use href="#leaf-shape" transform="translate(505 150) rotate(-57) scale(1.15)" />
-        <use href="#leaf-shape" transform="translate(541 272) rotate(-25) scale(0.88)" />
-        <use href="#leaf-shape" transform="translate(641 301) rotate(-39) scale(1.26)" />
-        <use href="#leaf-shape" transform="translate(708 274) rotate(-58) scale(0.86)" />
-        <use href="#leaf-shape" transform="translate(713 232) rotate(-20) scale(1.06)" />
-        <use href="#leaf-shape" transform="translate(248 515) rotate(-39) scale(0.9)" />
-        <use href="#leaf-shape" transform="translate(314 642) rotate(-53) scale(1.08)" />
-        <use href="#leaf-shape" transform="translate(138 548) rotate(-28) scale(0.98)" />
-      </g>
+    <g class="additionalLeaves" fill="#b5f500">
+      <use href="#extra-leaf" transform="translate(95 380) rotate(-38) scale(1.1)" />
+      <use href="#extra-leaf" transform="translate(165 292) rotate(-62) scale(0.78)" />
+      <use href="#extra-leaf" transform="translate(381 256) rotate(-28) scale(0.86)" />
+      <use href="#extra-leaf" transform="translate(584 304) rotate(-44) scale(0.92)" />
+      <use href="#extra-leaf" transform="translate(690 420) rotate(-60) scale(0.72)" />
+      <use href="#extra-leaf" transform="translate(310 604) rotate(-48) scale(0.82)" />
     </g>
 
-    <g class="treeHighlights" fill="none" stroke="var(--tree-highlight)" stroke-linecap="round">
-      <path d="M438 886C408 786 422 697 450 625" stroke-width="8" stroke-opacity="0.32" />
-      <path d="M445 552C386 506 313 472 230 451" stroke-width="5" stroke-opacity="0.24" />
-      <path d="M481 497C548 449 590 393 623 334" stroke-width="4" stroke-opacity="0.23" />
+    <g class="flowerCenters">
+      <use href="#flower-center" transform="translate(266 300) scale(1.05)" />
+      <use href="#flower-center" transform="translate(559 328) scale(0.52)" />
+      <use href="#flower-center" transform="translate(453 426) scale(1.15)" />
+      <use href="#flower-center" transform="translate(459 573) scale(0.5)" />
     </g>
   </svg>
   <canvas bind:this={canvas}></canvas>
@@ -189,69 +182,26 @@
 
 <style>
   .treeBackdrop {
-    --tree-leaf: rgba(181, 245, 0, 0.82);
-    --tree-highlight: #b5f500;
     position: fixed;
     inset: 0;
     z-index: 0;
     overflow: hidden;
     pointer-events: none;
-    opacity: 0.68;
-  }
-
-  .treeAtmosphere {
-    position: absolute;
-    top: 4%;
-    right: 0;
-    width: min(920px, 82vw);
-    height: 86%;
-    border-radius: 50%;
-    background: radial-gradient(ellipse at 62% 52%, rgba(181, 245, 0, 0.065), transparent 68%);
-    filter: blur(10px);
   }
 
   .treeArtwork {
     position: absolute;
-    top: 76px;
-    right: -100px;
+    top: 74px;
+    right: -82px;
     width: min(850px, 77vw);
-    height: calc(100vh - 90px);
+    height: calc(100vh - 86px);
     min-height: 680px;
-    color: rgba(27, 38, 26, 0.22);
+    overflow: visible;
   }
 
-  .treeStructure .trunk {
-    fill: none;
-    stroke: url(#trunk-gradient);
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    stroke-width: 74;
+  .additionalLeaves {
+    filter: drop-shadow(1px 2px 2px rgba(38, 55, 20, 0.16));
   }
-
-  .treeStructure .branch {
-    fill: none;
-    stroke: url(#trunk-gradient);
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    stroke-width: 28;
-  }
-
-  .treeStructure .twig {
-    fill: none;
-    stroke: #344723;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    stroke-width: 10;
-  }
-
-  .treeLeaves {
-    opacity: 0.74;
-  }
-
-  .treeLeaves use:nth-child(3n) { opacity: 0.72; }
-  .treeLeaves use:nth-child(4n) { opacity: 0.48; }
-
-  .treeHighlights { display: block; }
 
   canvas {
     position: absolute;
@@ -260,21 +210,9 @@
     height: 100%;
   }
 
-  :global(html[data-theme="dark"]) .treeBackdrop {
-    --tree-leaf: rgba(181, 245, 0, 0.7);
-    opacity: 0.8;
-  }
-
-  :global(html[data-theme="dark"]) .treeAtmosphere {
-    background: radial-gradient(ellipse at 62% 52%, rgba(181, 245, 0, 0.09), transparent 68%);
-  }
-
-  :global(html[data-theme="dark"]) .treeArtwork { color: rgba(181, 245, 0, 0.14); }
-
   @media (max-width: 700px) {
-    .treeBackdrop { opacity: 0.42; }
     .treeArtwork {
-      top: 170px;
+      top: 168px;
       right: -290px;
       width: 690px;
       height: 740px;
