@@ -392,11 +392,11 @@
   }
   function resolveMethod(methods: PaymentMethod[], selectedId: string, country: string, currency: string) {
     const selected = methods.find((method) => method.id === selectedId);
+    if (selected) return selected;
     const matchesCorridor = (method: PaymentMethod) => method.kind === "wallet"
       ? method.currency === currency
       : method.country === country && method.currency === currency;
-    return (selected && matchesCorridor(selected) ? selected : undefined)
-      ?? methods.find(matchesCorridor)
+    return methods.find(matchesCorridor)
       ?? (country ? methods.find((method) => method.country === country) : undefined)
       ?? methods[0]
       ?? null;
