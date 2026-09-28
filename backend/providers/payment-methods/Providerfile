@@ -4,8 +4,8 @@
 payment_methods = [
   { id = "global-usd-cash", name = "Cash USD", country = "GLOBAL", currency = "USD", kind = "cash", color = "#168451", initials = "$", popular = true, p2p_query = "Cash" },
 
-  { id = "am-ameriabank-usd-account", name = "Ameriabank", country = "AM", currency = "USD", color = "#6d2c91", initials = "AM", popular = true, icon_url = "/icons/assets/ameriabank.png", bank_fee_percent = 0, p2p_query = "Ameriabank", currency_group = "ameriabank" },
-  { id = "am-ameriabank", name = "Ameriabank", country = "AM", currency = "AMD", color = "#6d2c91", initials = "AM", popular = true, icon_url = "/icons/assets/ameriabank.png", bank_fee_percent = 0, p2p_query = "Ameriabank", currency_group = "ameriabank" },
+  { id = "am-ameriabank-usd-account", name = "Ameriabank", country = "AM", currency = "USD", color = "#6d2c91", initials = "AM", popular = true, icon_url = "/icons/assets/ameriabank-green.png", bank_fee_percent = 0, p2p_query = "Ameriabank", currency_group = "ameriabank" },
+  { id = "am-ameriabank", name = "Ameriabank", country = "AM", currency = "AMD", color = "#6d2c91", initials = "AM", popular = true, icon_url = "/icons/assets/ameriabank-green.png", bank_fee_percent = 0, p2p_query = "Ameriabank", currency_group = "ameriabank" },
   { id = "am-idbank-usd-account", name = "IDBank", country = "AM", currency = "USD", color = "#21a366", initials = "ID", popular = true, icon_url = "/icons/assets/idbank.png", bank_fee_percent = 0.75, p2p_query = "IDBank", currency_group = "idbank" },
   { id = "am-idbank", name = "IDBank", country = "AM", currency = "AMD", color = "#21a366", initials = "ID", popular = true, icon_url = "/icons/assets/idbank.png", bank_fee_percent = 0.75, p2p_query = "IDBank", currency_group = "idbank" },
   { id = "am-acba-usd-account", name = "ACBA Bank", country = "AM", currency = "USD", color = "#ef7f1a", initials = "AC", popular = true, icon_url = "/icons/assets/acba.png", bank_fee_percent = 0, p2p_query = "ACBA", currency_group = "acba" },

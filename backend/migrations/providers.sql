@@ -538,7 +538,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('am-ameriabank-usd-account', 'am-ameriabank-usd-account', 'Ameriabank', 'both', 'AM', 'USD', '', '/icons/assets/ameriabank.png', '', 'enabled', 'bank', '#6d2c91', 'AM', true, 0, 'Ameriabank', 'ameriabank', TRUE, 'payment-methods/Providerfile')
+VALUES ('am-ameriabank-usd-account', 'am-ameriabank-usd-account', 'Ameriabank', 'both', 'AM', 'USD', '', '/icons/assets/ameriabank-green.png', '', 'enabled', 'bank', '#6d2c91', 'AM', true, 0, 'Ameriabank', 'ameriabank', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
@@ -560,7 +560,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('am-ameriabank', 'am-ameriabank', 'Ameriabank', 'both', 'AM', 'AMD', '', '/icons/assets/ameriabank.png', '', 'enabled', 'bank', '#6d2c91', 'AM', true, 0, 'Ameriabank', 'ameriabank', TRUE, 'payment-methods/Providerfile')
+VALUES ('am-ameriabank', 'am-ameriabank', 'Ameriabank', 'both', 'AM', 'AMD', '', '/icons/assets/ameriabank-green.png', '', 'enabled', 'bank', '#6d2c91', 'AM', true, 0, 'Ameriabank', 'ameriabank', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,

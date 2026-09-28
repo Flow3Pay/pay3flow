@@ -1493,7 +1493,7 @@ test("Armenian bank picker uses the downloaded local icons", async ({ page }) =>
   await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
   const picker = page.getByRole("dialog", { name: "Choose where you pay from" });
   const icons = [
-    ["Ameriabank", "/icons/assets/ameriabank.png"],
+    ["Ameriabank", "/icons/assets/ameriabank-green.png"],
     ["IDBank", "/icons/assets/idbank.png"],
     ["ACBA Bank", "/icons/assets/acba.png"],
     ["Ardshinbank", "/icons/assets/ardshinbank.png"],
