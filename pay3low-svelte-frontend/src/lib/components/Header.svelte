@@ -21,15 +21,12 @@
 
 <header class="header">
   <div class="inner">
-    <a href="/" class="brand" aria-label={t("Pay3Flow home", {}, activeLocale)}>
+    <div class="brand">
       <span class="logo" aria-hidden="true">
-        <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
-          <path d="M4 7.25 13 2l9 5.25v11.5L13 24l-9-5.25V7.25Z" fill="currentColor" />
-          <path d="m8.2 10.2 4.8-2.8 4.8 2.8-4.8 2.8-4.8-2.8Zm0 5.3 4.8 2.8 4.8-2.8" stroke="#171a17" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
+        <img src="/icons/assets/pay3flow_logo.svg" alt="" width="34" height="34" decoding="async" />
       </span>
       <span class="wordmark">Pay3Flow</span>
-    </a>
+    </div>
     <div class="actions">
       <a class="apiDocsLink" href={apiDocsHref} target="_blank" rel="noreferrer noopener" aria-label="Open API documentation">API DOCS</a>
       <button class="languageToggle" type="button" on:click={toggleLocale} aria-label={t("Switch language", {}, activeLocale)} title={t("Switch language", {}, activeLocale)}>{localeLabel(activeLocale)}</button>
@@ -85,11 +82,18 @@
   display: grid;
   width: 34px;
   height: 34px;
+  overflow: hidden;
   place-items: center;
   border-radius: 11px;
-  background: var(--color-accent);
-  color: var(--color-accent);
-  box-shadow: 0 8px 18px rgba(145, 190, 20, 0.2);
+  background: transparent;
+  box-shadow: none;
+}
+
+.logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .wordmark {
@@ -187,10 +191,6 @@
   border-color: var(--color-border-strong);
   background: rgba(25, 25, 25, 0.92);
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.25);
-}
-
-:global(html[data-theme="dark"]) .logo {
-  background: #080808;
 }
 
 :global(html[data-theme="dark"]) .githubLink,
@@ -364,8 +364,6 @@
   width: 34px;
   height: 34px;
   border-radius: 9px;
-  background: var(--color-primary);
-  color: var(--color-accent);
   box-shadow: none;
 }
 
