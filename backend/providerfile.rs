@@ -15,6 +15,7 @@ use providerfile_code::{normalize_path_source, CodeSource};
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawProviderFile {
+    #[serde(default)]
     exchange_methods: Vec<ProviderExchangeMethod>,
     buy: Option<RawProvider>,
     sell: Option<RawProvider>,
@@ -22,6 +23,8 @@ struct RawProviderFile {
     workflow: Option<WorkflowConfig>,
     fees: Option<ProviderFeeModel>,
     code: Option<RawCodeBlock>,
+    #[serde(default)]
+    payment_methods: Vec<RawPaymentMethod>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -40,6 +43,38 @@ struct RawProvider {
     currencies: Vec<String>,
     #[serde(default)]
     banks: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawPaymentMethod {
+    id: String,
+    name: String,
+    #[serde(default = "default_payment_method_role")]
+    role: String,
+    country: String,
+    currency: String,
+    #[serde(default = "default_payment_method_kind")]
+    kind: String,
+    #[serde(default)]
+    domain: String,
+    #[serde(default)]
+    icon_url: String,
+    color: String,
+    initials: String,
+    #[serde(default)]
+    popular: bool,
+    bank_fee_percent: Option<f64>,
+    p2p_query: String,
+    currency_group: Option<String>,
+}
+
+fn default_payment_method_role() -> String {
+    "both".into()
+}
+
+fn default_payment_method_kind() -> String {
+    "bank".into()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -72,6 +107,30 @@ pub struct ProviderDefinition {
     pub source_file: String,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct PaymentMethodDefinition {
+    pub id: String,
+    pub name: String,
+    pub role: String,
+    pub country: String,
+    pub currency: String,
+    pub kind: String,
+    pub domain: String,
+    pub icon_url: String,
+    pub color: String,
+    pub initials: String,
+    pub popular: bool,
+    pub bank_fee_percent: Option<f64>,
+    pub p2p_query: String,
+    pub currency_group: Option<String>,
+    pub source_file: String,
+}
+
+struct ParsedProviderFile {
+    providers: Vec<ProviderDefinition>,
+    payment_methods: Vec<PaymentMethodDefinition>,
+}
+
 #[derive(Debug)]
 pub struct ProviderFileError(String);
 
@@ -88,25 +147,25 @@ pub fn parse(
     slug: &str,
     source_file: &str,
 ) -> Result<Vec<ProviderDefinition>, ProviderFileError> {
-    parse_with_path(contents, slug, source_file, None)
+    Ok(parse_document_with_path(contents, slug, source_file, None)?.providers)
 }
 
-fn parse_with_path(
+fn parse_document_with_path(
     contents: &str,
     slug: &str,
     source_file: &str,
     providerfile_path: Option<&Path>,
-) -> Result<Vec<ProviderDefinition>, ProviderFileError> {
+) -> Result<ParsedProviderFile, ProviderFileError> {
     let normalized = normalize_path_source(contents)
         .map_err(|error| ProviderFileError(format!("{source_file}: {error}")))?;
     let raw: RawProviderFile = toml::from_str(&normalized)
         .map_err(|error| ProviderFileError(format!("{source_file}: {error}")))?;
-    if raw.buy.is_none() && raw.sell.is_none() {
+    if raw.buy.is_none() && raw.sell.is_none() && raw.payment_methods.is_empty() {
         return Err(ProviderFileError(format!(
-            "{source_file}: at least one [buy] or [sell] section is required"
+            "{source_file}: at least one [buy], [sell], or [[payment_methods]] section is required"
         )));
     }
-    if raw.exchange_methods.is_empty() {
+    if (raw.buy.is_some() || raw.sell.is_some()) && raw.exchange_methods.is_empty() {
         return Err(ProviderFileError(format!(
             "{source_file}: exchange_methods must contain p2p, exchanger, or both"
         )));
@@ -170,6 +229,11 @@ fn parse_with_path(
         )));
     }
 
+    let payment_methods = raw
+        .payment_methods
+        .into_iter()
+        .map(|method| normalize_payment_method(method, source_file))
+        .collect::<Result<Vec<_>, _>>()?;
     let adapter = raw.adapter;
     let workflow = raw.workflow;
     let fee_model = raw.fees.map(normalize_fee_model).transpose()?;
@@ -179,7 +243,7 @@ fn parse_with_path(
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect::<Vec<_>>();
-    [(Operation::Buy, raw.buy), (Operation::Sell, raw.sell)]
+    let providers = [(Operation::Buy, raw.buy), (Operation::Sell, raw.sell)]
         .into_iter()
         .filter_map(|(operation, provider)| provider.map(|provider| (operation, provider)))
         .map(|(operation, provider)| {
@@ -194,7 +258,11 @@ fn parse_with_path(
                 fee_model.clone(),
             )
         })
-        .collect()
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(ParsedProviderFile {
+        providers,
+        payment_methods,
+    })
 }
 
 fn require_exchange_method(
@@ -219,7 +287,9 @@ pub fn compile_dir(root: &Path) -> Result<String, ProviderFileError> {
     files.sort();
 
     let mut definitions = Vec::new();
+    let mut payment_methods = Vec::new();
     let mut identities = HashSet::new();
+    let mut payment_method_ids = HashSet::new();
     for path in files {
         let relative = path.strip_prefix(root).unwrap_or(&path);
         let slug = slug_for(relative)?;
@@ -227,7 +297,8 @@ pub fn compile_dir(root: &Path) -> Result<String, ProviderFileError> {
         let contents = fs::read_to_string(&path).map_err(|error| {
             ProviderFileError(format!("cannot read {}: {error}", path.display()))
         })?;
-        for definition in parse_with_path(&contents, &slug, &source_file, Some(&path))? {
+        let parsed = parse_document_with_path(&contents, &slug, &source_file, Some(&path))?;
+        for definition in parsed.providers {
             let identity = (definition.slug.clone(), definition.operation);
             if !identities.insert(identity) {
                 return Err(ProviderFileError(format!(
@@ -238,11 +309,30 @@ pub fn compile_dir(root: &Path) -> Result<String, ProviderFileError> {
             }
             definitions.push(definition);
         }
+        for method in parsed.payment_methods {
+            if !payment_method_ids.insert(method.id.clone()) {
+                return Err(ProviderFileError(format!(
+                    "duplicate payment method id: {}",
+                    method.id
+                )));
+            }
+            payment_methods.push(method);
+        }
     }
-    Ok(render_sql(&definitions))
+    Ok(render_sql_with_payment_methods(
+        &definitions,
+        &payment_methods,
+    ))
 }
 
 pub fn render_sql(definitions: &[ProviderDefinition]) -> String {
+    render_sql_with_payment_methods(definitions, &[])
+}
+
+fn render_sql_with_payment_methods(
+    definitions: &[ProviderDefinition],
+    payment_methods: &[PaymentMethodDefinition],
+) -> String {
     let mut sql = String::from(
         "-- Generated from providers/**/Providerfile. Do not edit by hand.\n\
          -- Regenerate with: cargo run --bin providerfile\n\
@@ -317,7 +407,72 @@ pub fn render_sql(definitions: &[ProviderDefinition]) -> String {
             sql_string(&definition.source_file),
         ));
     }
-    if !definitions.is_empty() {
+    if !payment_methods.is_empty() {
+        sql.push('\n');
+    }
+    if payment_methods.is_empty() {
+        sql.push_str(
+            "DELETE FROM banks WHERE picker_visible AND source_file LIKE '%/Providerfile';\n",
+        );
+    } else {
+        let ids = payment_methods
+            .iter()
+            .map(|method| sql_string(&method.id))
+            .collect::<Vec<_>>()
+            .join(", ");
+        sql.push_str(&format!(
+            "DELETE FROM banks\n WHERE picker_visible\n   AND source_file LIKE '%/Providerfile'\n   AND method_id NOT IN ({ids});\n\n"
+        ));
+    }
+    for method in payment_methods {
+        let bank_fee_percent = method
+            .bank_fee_percent
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "NULL".into());
+        let currency_group = method
+            .currency_group
+            .as_deref()
+            .map(sql_string)
+            .unwrap_or_else(|| "NULL".into());
+        sql.push_str(&format!(
+            "INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)\n\
+             VALUES ({}, {}, {}, {}, {}, {}, {}, {}, '', 'enabled', {}, {}, {}, {}, {bank_fee_percent}, {}, {currency_group}, TRUE, {})\n\
+             ON CONFLICT (name) DO UPDATE SET\n\
+                 method_id = EXCLUDED.method_id,\n\
+                 display_name = EXCLUDED.display_name,\n\
+                 role = EXCLUDED.role,\n\
+                 country = EXCLUDED.country,\n\
+                 currency = EXCLUDED.currency,\n\
+                 domain = EXCLUDED.domain,\n\
+                 icon_url = EXCLUDED.icon_url,\n\
+                 status = EXCLUDED.status,\n\
+                 kind = EXCLUDED.kind,\n\
+                 color = EXCLUDED.color,\n\
+                 initials = EXCLUDED.initials,\n\
+                 popular = EXCLUDED.popular,\n\
+                 bank_fee_percent = EXCLUDED.bank_fee_percent,\n\
+                 p2p_query = EXCLUDED.p2p_query,\n\
+                 currency_group = EXCLUDED.currency_group,\n\
+                 picker_visible = TRUE,\n\
+                 source_file = EXCLUDED.source_file,\n\
+                 updated_at = now();\n\n",
+            sql_string(&method.id),
+            sql_string(&method.id),
+            sql_string(&method.name),
+            sql_string(&method.role),
+            sql_string(&method.country),
+            sql_string(&method.currency),
+            sql_string(&method.domain),
+            sql_string(&method.icon_url),
+            sql_string(&method.kind),
+            sql_string(&method.color),
+            sql_string(&method.initials),
+            method.popular,
+            sql_string(&method.p2p_query),
+            sql_string(&method.source_file),
+        ));
+    }
+    while sql.ends_with('\n') {
         sql.pop();
     }
     sql
@@ -400,6 +555,120 @@ fn normalize_fee_model(fee_model: ProviderFeeModel) -> Result<ProviderFeeModel, 
         kind,
         description,
         docs_url,
+    })
+}
+
+fn normalize_payment_method(
+    raw: RawPaymentMethod,
+    source_file: &str,
+) -> Result<PaymentMethodDefinition, ProviderFileError> {
+    let id = raw.id.trim().to_ascii_lowercase();
+    if id.is_empty()
+        || id.len() > 64
+        || !id
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+    {
+        return Err(ProviderFileError(format!(
+            "{source_file}: payment method id must contain 1-64 lowercase ASCII letters, digits, or dashes"
+        )));
+    }
+    let name = raw.name.trim().to_string();
+    if name.is_empty() {
+        return Err(ProviderFileError(format!(
+            "{source_file}: payment method `{id}` name must not be empty"
+        )));
+    }
+    let role = raw.role.trim().to_ascii_lowercase();
+    if !matches!(role.as_str(), "sender" | "recipient" | "both") {
+        return Err(ProviderFileError(format!(
+            "{source_file}: payment method `{id}` role must be sender, recipient, or both"
+        )));
+    }
+    let kind = raw.kind.trim().to_ascii_lowercase();
+    if !matches!(kind.as_str(), "bank" | "cash") {
+        return Err(ProviderFileError(format!(
+            "{source_file}: payment method `{id}` kind must be bank or cash"
+        )));
+    }
+    let country = raw.country.trim().to_ascii_uppercase();
+    if (country.len() != 2 && country != "GLOBAL")
+        || !country.bytes().all(|byte| byte.is_ascii_uppercase())
+    {
+        return Err(ProviderFileError(format!(
+            "{source_file}: payment method `{id}` country must be a two-letter code or GLOBAL"
+        )));
+    }
+    let currency = raw.currency.trim().to_ascii_uppercase();
+    if !(2..=12).contains(&currency.len())
+        || !currency.bytes().all(|byte| byte.is_ascii_alphanumeric())
+    {
+        return Err(ProviderFileError(format!(
+            "{source_file}: payment method `{id}` currency must be a 2-12 character alphanumeric code"
+        )));
+    }
+    let domain = raw.domain.trim().to_ascii_lowercase();
+    if domain.contains("//") || domain.contains('/') || domain.chars().any(char::is_whitespace) {
+        return Err(ProviderFileError(format!(
+            "{source_file}: payment method `{id}` domain must be a bare host name"
+        )));
+    }
+    let icon_url = raw.icon_url.trim().to_string();
+    if !icon_url.is_empty() && !icon_url.starts_with('/') && !icon_url.starts_with("data:") {
+        return Err(ProviderFileError(format!(
+            "{source_file}: payment method `{id}` icon_url must be a local path or data URL"
+        )));
+    }
+    let color = raw.color.trim().to_ascii_lowercase();
+    if color.len() != 7
+        || !color.starts_with('#')
+        || !color[1..].bytes().all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err(ProviderFileError(format!(
+            "{source_file}: payment method `{id}` color must be a six-digit hex color"
+        )));
+    }
+    let initials = raw.initials.trim().to_string();
+    if initials.is_empty() || initials.chars().count() > 4 {
+        return Err(ProviderFileError(format!(
+            "{source_file}: payment method `{id}` initials must contain 1-4 characters"
+        )));
+    }
+    if raw
+        .bank_fee_percent
+        .is_some_and(|fee| !fee.is_finite() || fee < 0.0)
+    {
+        return Err(ProviderFileError(format!(
+            "{source_file}: payment method `{id}` bank_fee_percent must be a non-negative finite number"
+        )));
+    }
+    let p2p_query = raw.p2p_query.trim().to_string();
+    if p2p_query.is_empty() {
+        return Err(ProviderFileError(format!(
+            "{source_file}: payment method `{id}` p2p_query must not be empty"
+        )));
+    }
+    let currency_group = raw
+        .currency_group
+        .map(|group| group.trim().to_ascii_lowercase())
+        .filter(|group| !group.is_empty());
+
+    Ok(PaymentMethodDefinition {
+        id,
+        name,
+        role,
+        country,
+        currency,
+        kind,
+        domain,
+        icon_url,
+        color,
+        initials,
+        popular: raw.popular,
+        bank_fee_percent: raw.bank_fee_percent,
+        p2p_query,
+        currency_group,
+        source_file: source_file.to_string(),
     })
 }
 
@@ -568,6 +837,12 @@ name = "Example Sell"
 currency = ["eth"]
 "#;
 
+    const PAYMENT_METHOD_EXAMPLE: &str = r##"
+payment_methods = [
+  { id = "by-example-bank", name = "Example Bank", country = "by", currency = "byn", color = "#ffc700", initials = "EB", popular = true, p2p_query = "Example Bank", domain = "bank.example", bank_fee_percent = 0.5 }
+]
+"##;
+
     #[test]
     fn parses_and_normalizes_the_documented_shape() {
         let definitions = parse(EXAMPLE, "example", "example/Providerfile").unwrap();
@@ -595,6 +870,27 @@ currency = ["eth"]
     #[test]
     fn accepts_a_declarative_http_json_adapter() {
         assert!(parse(HTTP_JSON_EXAMPLE, "example", "example/Providerfile").is_ok());
+    }
+
+    #[test]
+    fn accepts_a_catalog_only_payment_method_providerfile() {
+        let parsed = parse_document_with_path(
+            PAYMENT_METHOD_EXAMPLE,
+            "payment-methods",
+            "payment-methods/Providerfile",
+            None,
+        )
+        .unwrap();
+
+        assert!(parsed.providers.is_empty());
+        assert_eq!(parsed.payment_methods.len(), 1);
+        assert_eq!(parsed.payment_methods[0].country, "BY");
+        assert_eq!(parsed.payment_methods[0].currency, "BYN");
+
+        let sql = render_sql_with_payment_methods(&[], &parsed.payment_methods);
+        assert!(sql.contains("'by-example-bank'"));
+        assert!(sql.contains("'Example Bank'"));
+        assert!(sql.contains("picker_visible"));
     }
 
     #[test]
@@ -718,6 +1014,8 @@ currency = ["eth"]
         assert!(sql.contains("'id-pay'"));
         assert!(sql.contains("'skylabs'"));
         assert!(sql.contains("'papa-change'"));
+        assert!(sql.contains("'by-belarusbank'"));
+        assert!(sql.contains("'BYN'"));
         assert!(sql.contains("workflow"));
     }
 }

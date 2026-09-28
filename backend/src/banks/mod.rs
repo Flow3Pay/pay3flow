@@ -16,6 +16,8 @@ use crate::db::DbPool;
 pub struct Bank {
     pub id: Uuid,
     pub name: String,
+    pub method_id: Option<String>,
+    pub display_name: String,
     /// `sender`, `receiver` or `both`.
     pub role: String,
     pub country: String,
@@ -24,6 +26,14 @@ pub struct Bank {
     pub icon_url: String,
     /// Card schemes this bank issues, e.g. `["Visa", "MasterCard"]`.
     pub schemes: Vec<String>,
+    pub kind: String,
+    pub color: String,
+    pub initials: String,
+    pub popular: bool,
+    pub bank_fee_percent: Option<f64>,
+    pub p2p_query: String,
+    pub currency_group: Option<String>,
+    pub picker_visible: bool,
     pub status: String,
     pub updated_at: DateTime<Utc>,
 }
@@ -52,17 +62,25 @@ pub struct BankFilters {
     /// Free-text bank-name search.
     #[serde(default)]
     pub q: Option<String>,
+    /// Restrict results to payment methods declared in Providerfiles.
+    #[serde(default)]
+    pub picker_visible: Option<bool>,
 }
 
 impl BankFilters {
     fn cache_key(&self) -> String {
         format!(
-            "r={}|c={}|cur={}|s={}|q={}",
+            "r={}|c={}|cur={}|s={}|q={}|picker={}",
             self.role.as_deref().unwrap_or(""),
             self.country.as_deref().unwrap_or(""),
             self.currency.as_deref().unwrap_or(""),
             self.scheme.as_deref().unwrap_or(""),
             self.q.as_deref().unwrap_or(""),
+            match self.picker_visible {
+                Some(true) => "true",
+                Some(false) => "false",
+                None => "",
+            },
         )
     }
 }
@@ -87,8 +105,7 @@ pub struct NewBank {
     pub status: Option<String>,
 }
 
-const BANK_COLS: &str =
-    "id, name, role, country, currency, domain, icon_url, schemes, status, updated_at";
+const BANK_COLS: &str = "id, name, method_id, display_name, role, country, currency, domain, icon_url, schemes, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, status, updated_at";
 
 const BANK_UPSERT: &str = r#"
 INSERT INTO banks (name, role, country, currency, domain, icon_url, schemes, status)
@@ -126,14 +143,24 @@ fn row_to_bank(row: &tokio_postgres::Row) -> Bank {
     Bank {
         id: row.get(0),
         name: row.get(1),
-        role: row.get(2),
-        country: row.get(3),
-        currency: row.get(4),
-        domain: row.get(5),
-        icon_url: row.get(6),
-        schemes: split_csv(&row.get::<_, String>(7)),
-        status: row.get(8),
-        updated_at: row.get(9),
+        method_id: row.get(2),
+        display_name: row.get(3),
+        role: row.get(4),
+        country: row.get(5),
+        currency: row.get(6),
+        domain: row.get(7),
+        icon_url: row.get(8),
+        schemes: split_csv(&row.get::<_, String>(9)),
+        kind: row.get(10),
+        color: row.get(11),
+        initials: row.get(12),
+        popular: row.get(13),
+        bank_fee_percent: row.get(14),
+        p2p_query: row.get(15),
+        currency_group: row.get(16),
+        picker_visible: row.get(17),
+        status: row.get(18),
+        updated_at: row.get(19),
     }
 }
 
@@ -220,6 +247,10 @@ fn build_where(
     if let Some(q) = clean(filters.q.clone()) {
         values.push(Box::new(format!("%{q}%")));
         sql.push_str(&format!(" AND name ILIKE ${}", values.len()));
+    }
+    if let Some(picker_visible) = filters.picker_visible {
+        values.push(Box::new(picker_visible));
+        sql.push_str(&format!(" AND picker_visible = ${}", values.len()));
     }
     (sql, values)
 }

@@ -153,6 +153,13 @@ pub struct P2pAdapterConfig {
     pub supported_assets: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub supported_fiats: Vec<String>,
+    /// Provider-specific names (or opaque IDs) for canonical payment methods.
+    ///
+    /// The map key is the canonical name used by Pay3Flow. Every value is a
+    /// spelling returned by this provider. Matching is normalized for case and
+    /// punctuation, so aliases only need to capture actual naming differences.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub payment_method_aliases: BTreeMap<String, Vec<String>>,
     #[serde(default = "default_timeout_ms")]
     pub timeout_ms: u64,
     pub max_results: Option<usize>,
@@ -615,6 +622,16 @@ impl P2pAdapterConfig {
             if !valid_asset_code(asset) {
                 return Err(format!(
                     "{context}: adapter/p2p/supported_assets contains invalid code `{asset}`"
+                ));
+            }
+        }
+        for (canonical, aliases) in &self.payment_method_aliases {
+            if canonical.trim().is_empty()
+                || aliases.is_empty()
+                || aliases.iter().any(|alias| alias.trim().is_empty())
+            {
+                return Err(format!(
+                    "{context}: adapter/p2p/payment_method_aliases must map a non-empty canonical name to non-empty aliases"
                 ));
             }
         }

@@ -1,12 +1,13 @@
 <script lang="ts">
   import { afterUpdate, onDestroy } from "svelte";
-  import { DIGITAL_ASSETS, PAYMENT_METHODS, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
+  import { DIGITAL_ASSETS, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
   import type { CryptoNetwork } from "$lib/networks";
 
   export let open: boolean;
   export let title: string;
   export let role: "sender" | "recipient";
   export let networks: CryptoNetwork[];
+  export let paymentMethods: PaymentMethod[];
   export let selected: PaymentMethod | null;
   export let selectedNetwork: CryptoNetwork | undefined;
   export let onClose: () => void;
@@ -23,7 +24,6 @@
   let dragging = false;
   let dragStartY = 0;
   let dragDistance = 0;
-  const FIAT_METHODS = PAYMENT_METHODS.filter((method) => method.kind !== "wallet");
 
   function close() {
     query = "";
@@ -126,7 +126,7 @@
   // variant keeps the current currency whenever the new bank supports it.
   // A crypto row owns both asset and network selection.
   $: fiatMethods = groupFiatMethods(
-    FIAT_METHODS.filter((method) => method.role === role || method.role === "both"),
+    paymentMethods.filter((method) => method.kind !== "wallet" && (method.role === role || method.role === "both")),
     selected,
   );
   $: assetsForRole = DIGITAL_ASSETS.filter((method) => method.role === role || method.role === "both");

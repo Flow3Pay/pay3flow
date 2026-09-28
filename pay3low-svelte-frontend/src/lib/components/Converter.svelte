@@ -3,9 +3,10 @@
   import { fetchCorridors, fetchP2pRoutes, fetchProviders, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderDefinition, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote } from "$lib/exchange";
   import { FALLBACK_NETWORK, fetchNetworks, type CryptoNetwork } from "$lib/networks";
   import { assetIcon, networkIcon, swapIcon, venueIcon } from "$lib/icons";
-  import { CRYPTO_ASSETS, DIGITAL_ASSETS, PAYMENT_METHODS, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
+  import { CRYPTO_ASSETS, DIGITAL_ASSETS, PAYMENT_METHODS, fetchPaymentMethods, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
   import { locale, t } from "$lib/i18n";
   import SidePanel from "./SidePanel.svelte";
+  import BelarusP2pWarning from "./BelarusP2pWarning.svelte";
   import CurrencyPicker from "./CurrencyPicker.svelte";
   import NetworkPicker from "./NetworkPicker.svelte";
 
@@ -21,11 +22,12 @@
   const ROUTE_BATCH_DELAY_MS = 10;
   const INTERMEDIARY_ASSETS = CRYPTO_ASSETS.map(([currency]) => currency);
   const EXCHANGE_METHODS: ExchangeMethod[] = ["p2p", "exchanger"];
-  const FIAT_METHODS = PAYMENT_METHODS.filter((method) => method.kind !== "wallet");
+  let fiatMethods = PAYMENT_METHODS.filter((method) => method.kind !== "wallet");
   const FIAT_CURRENCIES = [
     { id: "AMD", name: "Armenian dram", mark: "֏", color: "#6d2c91" },
     { id: "RUB", name: "Russian ruble", mark: "₽", color: "#21a038" },
     { id: "USD", name: "US dollar", mark: "$", color: "#168451" },
+    { id: "BYN", name: "Belarusian ruble", mark: "Br", color: "#006b3f" },
   ];
   const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", sources: "pay3flow.exchange.p2p-sources", knownSources: "pay3flow.exchange.known-p2p-sources", methods: "pay3flow.exchange.methods", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", sourceNetwork: "pay3flow.exchange.source-network", targetNetwork: "pay3flow.exchange.target-network", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets", anonymousId: "pay3flow.reputation.anonymous-id" };
 
@@ -48,6 +50,8 @@
   let targetNetworkId = FALLBACK_NETWORK.id;
   let settingsOpen = false;
   let exchangesOpen = false;
+  let belarusP2pWarningOpen = false;
+  let showBelarusP2pWarning = false;
   let refreshSeconds: RefreshSeconds = 15;
   let p2pSources: P2pSourceOption[] = [];
   let venueNames: Record<string, string> = {};
@@ -123,7 +127,7 @@
   const methodAvailability = (method: PaymentMethod | null | undefined) => method?.kind === "wallet" ? "digital wallet" : method?.kind === "cash" ? "cash" : "bank transfer";
   const methodTitle = (method: PaymentMethod | null | undefined) => method?.name ?? "Select payment method";
   const methodDetail = (method: PaymentMethod | null | undefined) => method?.kind === "wallet" ? `${method.currency} · Digital asset` : method?.kind === "cash" ? `${method.currency} · Cash settlement` : method ? locationLabel(method.country, method.currency) : "Unavailable";
-  const currencyMark = (currency: string) => currency === "USD" ? "$" : currency === "RUB" ? "₽" : currency === "AMD" ? "֏" : currency.slice(0, 1);
+  const currencyMark = (currency: string) => currency === "USD" ? "$" : currency === "RUB" ? "₽" : currency === "AMD" ? "֏" : currency === "BYN" ? "Br" : currency.slice(0, 1);
 
   function providerLabel(provider: ProviderDefinition) {
     const label = provider.name.replace(/\s+(buy|sell)$/i, "").trim();
@@ -321,10 +325,10 @@
   $: sourceCurrency = corridor ? (directionReversed ? corridor.target_currency : corridor.source_currency) : "";
   $: targetCountry = corridor ? (directionReversed ? corridor.source_country : corridor.target_country) : "";
   $: targetCurrency = corridor ? (directionReversed ? corridor.source_currency : corridor.target_currency) : "";
-  $: sourceMethods = [...FIAT_METHODS.filter((method) => method.role === "sender" || method.role === "both"), ...DIGITAL_ASSETS];
-  $: targetMethods = [...FIAT_METHODS.filter((method) => method.role === "recipient" || method.role === "both"), ...DIGITAL_ASSETS];
-  $: sourceMethod = sourceMethods.find((method) => method.id === sourceMethodId) ?? (sourceCountry ? sourceMethods[0] : null);
-  $: targetMethod = targetMethods.find((method) => method.id === targetMethodId) ?? (targetCountry ? targetMethods[0] : null);
+  $: sourceMethods = [...fiatMethods.filter((method) => method.role === "sender" || method.role === "both"), ...DIGITAL_ASSETS];
+  $: targetMethods = [...fiatMethods.filter((method) => method.role === "recipient" || method.role === "both"), ...DIGITAL_ASSETS];
+  $: sourceMethod = resolveMethod(sourceMethods, sourceMethodId, sourceCountry, sourceCurrency);
+  $: targetMethod = resolveMethod(targetMethods, targetMethodId, targetCountry, targetCurrency);
   $: sourceCurrencyChoice = sourceMethod?.currency || sourceCurrency;
   $: targetCurrencyChoice = targetMethod?.currency || targetCurrency;
   $: selectedSourceCurrency = sourceMethod?.currency || sourceCurrency;
@@ -335,6 +339,8 @@
   $: targetNetwork = targetNetworks.find((network) => network.id === targetNetworkId) ?? targetNetworks[0];
   $: sourceCurrencyChoices = currencyChoicesFor(sourceMethod, "sender");
   $: targetCurrencyChoices = currencyChoicesFor(targetMethod, "recipient");
+  $: showBelarusP2pWarning = selectedExchangeMethods.includes("p2p") && [sourceMethod, targetMethod].some((method) => method?.kind === "bank" && method.country === "BY" && method.currency === "BYN");
+  $: if (!showBelarusP2pWarning) belarusP2pWarningOpen = false;
   $: hasAmount = Number.isFinite(amountNumber(amount)) && amountNumber(amount) > 0;
   $: previewRoute = selected ?? routes.find((route) => route.status === "complete" && route.is_current_best) ?? routes.find((route) => route.status === "complete") ?? null;
   $: secondsUntilRefresh = refreshSeconds && lastUpdatedAt ? Math.max(0, refreshSeconds - Math.floor((clock - lastUpdatedAt) / 1000)) : null;
@@ -384,10 +390,21 @@
   function sameCurrencyGroup(left: PaymentMethod, right: PaymentMethod) {
     return (left.currencyGroup ?? left.id) === (right.currencyGroup ?? right.id);
   }
+  function resolveMethod(methods: PaymentMethod[], selectedId: string, country: string, currency: string) {
+    const selected = methods.find((method) => method.id === selectedId);
+    const matchesCorridor = (method: PaymentMethod) => method.kind === "wallet"
+      ? method.currency === currency
+      : method.country === country && method.currency === currency;
+    return (selected && matchesCorridor(selected) ? selected : undefined)
+      ?? methods.find(matchesCorridor)
+      ?? (country ? methods.find((method) => method.country === country) : undefined)
+      ?? methods[0]
+      ?? null;
+  }
   function currencyChoicesFor(method: PaymentMethod | null, role: "sender" | "recipient") {
     if (!method || method.kind === "wallet") return [];
     const supported = new Set(
-      FIAT_METHODS
+      fiatMethods
         .filter((candidate) => sameCurrencyGroup(candidate, method) && (candidate.role === role || candidate.role === "both"))
         .map((candidate) => candidate.currency),
     );
@@ -399,7 +416,7 @@
     const role = side === "source" ? "sender" : "recipient";
     const current = side === "source" ? sourceMethod : targetMethod;
     const next = current && current.kind !== "wallet"
-      ? FIAT_METHODS.find((method) => sameCurrencyGroup(method, current) && method.currency === choice && (method.role === role || method.role === "both"))
+      ? fiatMethods.find((method) => sameCurrencyGroup(method, current) && method.currency === choice && (method.role === role || method.role === "both"))
       : undefined;
     if (!next) return;
     initialSearchReady = true;
@@ -562,6 +579,7 @@
     // still enable the normal debounced search immediately.
     initialSearchTimer = window.setTimeout(() => initialSearchReady = true, 1500);
     fetchNetworks().then((items) => { if (items.length) networks = items; }).catch(() => {});
+    fetchPaymentMethods().then((items) => { if (items.length) fiatMethods = items; }).catch(() => {});
     fetchProviders().then((providers) => {
       p2pSources = providerSources(providers);
       foundVenues = foundVenueOptions();
@@ -696,12 +714,13 @@
       <button type="button" class="cta" disabled={!hasAmount || (!previewRoute && (searching || !corridor))} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? "Open swap instructions" : "Find routes"}>{#if previewRoute}Swap <span>↗</span>{:else if searching}<span class="spinner"></span> Finding routes{:else if hasAmount}Find routes <span>↗</span>{:else}Enter an amount to begin{/if}</button>
       {#if error}<div class="errorBox" role="alert">{error}</div>{/if}
     </div>
-    <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {renderingRoutes} {searchingVenues} {foundVenues} {venueNames} searched={lastUpdatedAt !== null} {hasAmount} />
+    <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {renderingRoutes} {searchingVenues} {foundVenues} {venueNames} searched={lastUpdatedAt !== null} {hasAmount} {showBelarusP2pWarning} onOpenBelarusP2pWarning={() => belarusP2pWarningOpen = true} />
   </div>
   {#if currencyPicker === "source" || currencyPicker === "target"}<CurrencyPicker open={currencyPicker !== null} selected={currencyPicker === "source" ? sourceCurrencyChoice : targetCurrencyChoice} choices={currencyPicker === "source" ? sourceCurrencyChoices : targetCurrencyChoices} onClose={() => currencyPicker = null} onSelect={(choice) => chooseCurrency(currencyPicker ?? "source", choice)} />{/if}
-  {#if paymentPickerComponent}<svelte:component this={paymentPickerComponent} open={methodPicker === "source"} title="Choose where you pay from" role="sender" {networks} selected={sourceMethod} selectedNetwork={sourceNetwork} onClose={() => methodPicker = null} onSelect={chooseSource} /><svelte:component this={paymentPickerComponent} open={methodPicker === "target"} title="Choose where the recipient gets paid" role="recipient" {networks} selected={targetMethod} selectedNetwork={targetNetwork} onClose={() => methodPicker = null} onSelect={chooseTarget} />{/if}
+  {#if paymentPickerComponent}<svelte:component this={paymentPickerComponent} open={methodPicker === "source"} title="Choose where you pay from" role="sender" {networks} paymentMethods={fiatMethods} selected={sourceMethod} selectedNetwork={sourceNetwork} onClose={() => methodPicker = null} onSelect={chooseSource} /><svelte:component this={paymentPickerComponent} open={methodPicker === "target"} title="Choose where the recipient gets paid" role="recipient" {networks} paymentMethods={fiatMethods} selected={targetMethod} selectedNetwork={targetNetwork} onClose={() => methodPicker = null} onSelect={chooseTarget} />{/if}
   {#if networkPicker === "source" || networkPicker === "target"}<NetworkPicker open={networkPicker !== null} networks={networkPicker === "source" ? sourceNetworks : targetNetworks} selected={networkPicker === "source" ? sourceNetwork : targetNetwork} onClose={() => networkPicker = null} onSelect={selectNetwork} />{/if}
   {#if routeInstructionsComponent && instructionsRoute}<svelte:component this={routeInstructionsComponent} route={instructionsRoute} {venueNames} onOpenService={openService} onClose={() => instructionsRoute = null} />{/if}
+  <BelarusP2pWarning open={belarusP2pWarningOpen} onClose={() => belarusP2pWarningOpen = false} />
 </section>
 
 <style>

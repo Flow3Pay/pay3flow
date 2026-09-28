@@ -4,7 +4,7 @@
   import { fly } from "svelte/transition";
   import type { RouteCandidate, ServiceVote } from "$lib/exchange";
   import { formatRouteCount, locale, t, type Locale } from "$lib/i18n";
-  import { assetIcon, dislikeIcon, likeIcon, networkIcon, venueIcon } from "$lib/icons";
+  import { assetIcon, dislikeIcon, likeIcon, networkIcon, venueIcon, warningIcon } from "$lib/icons";
 
   export let routes: RouteCandidate[];
   export let routesFound = 0;
@@ -21,6 +21,8 @@
   export let venueNames: Record<string, string> = {};
   export let searched = false;
   export let hasAmount = false;
+  export let showBelarusP2pWarning = false;
+  export let onOpenBelarusP2pWarning: () => void = () => {};
 
   const ASSET_NAMES: Record<string, string> = { BTC: "Bitcoin", ETH: "Ether", USDC: "USD Coin", USDT: "Tether" };
   const FIAT_MARKS: Record<string, string> = { AMD: "🇦🇲", RUB: "🇷🇺", BYN: "🇧🇾" };
@@ -101,9 +103,19 @@
       <div class="panelHeading">
         {#if hasAmount}
           <strong>Send {sourceCurrency} → {targetCurrency}</strong>
+        {:else}
+          <strong>Awaiting your intent</strong>
+        {/if}
+        {#if hasAmount || showBelarusP2pWarning}
           <span class="resultSummary">
-            <small aria-live="polite">{routeCountLabel(routesFound, $locale)}{searching ? " · searching…" : ""}</small>
-            {#if foundVenues.length}
+            {#if hasAmount}<small aria-live="polite">{routeCountLabel(routesFound, $locale)}{searching ? " · searching…" : ""}</small>{/if}
+            {#if showBelarusP2pWarning}
+              <button type="button" class="legalWarning" aria-label="Важное предупреждение о P2P-сделках в Беларуси" aria-describedby="belarus-p2p-tooltip" on:click={onOpenBelarusP2pWarning}>
+                <img src={warningIcon} alt="" width="18" height="18" aria-hidden="true" />
+                <span id="belarus-p2p-tooltip" class="legalWarningTooltip" role="tooltip">В Беларуси покупка и продажа криптовалюты физлицами вне белорусских криптоплатформ запрещена. Нажмите, чтобы узнать подробнее.</span>
+              </button>
+            {/if}
+            {#if hasAmount && foundVenues.length}
               <span class="foundVenues" aria-label={`Routes found on ${foundVenues.map((venue) => venue.label).join(", ")}`}>
                 {#each foundVenues as venue, index (venue.id)}
                   <span class="foundVenue" data-testid="found-venue" title={`Found on ${venue.label}`} style:animation-delay={`${index * 70}ms`}>
@@ -113,8 +125,8 @@
               </span>
             {/if}
           </span>
-          {#if renderingRoutes}<small class="resultLimit" data-testid="route-render-progress">Showing {routes.length} now · loading more…</small>{/if}
-        {:else}<strong>Awaiting your intent</strong>{/if}
+        {/if}
+        {#if hasAmount && renderingRoutes}<small class="resultLimit" data-testid="route-render-progress">Showing {routes.length} now · loading more…</small>{/if}
       </div>
       {#if searching && pendingVenues.length}
         <div class="searchingVenues" aria-label={`Searching ${pendingVenues.map((venue) => venue.label).join(", ")}`}>
@@ -265,6 +277,57 @@
   min-height: 24px;
   flex-wrap: wrap;
   gap: 7px;
+}
+
+.legalWarning {
+  position: relative;
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255, 199, 0, 0.42);
+  border-radius: 8px;
+  background: rgba(255, 199, 0, 0.12);
+  cursor: pointer;
+}
+
+.legalWarning img {
+  filter: brightness(0) saturate(100%) invert(76%) sepia(91%) saturate(1160%) hue-rotate(355deg) brightness(101%) contrast(99%);
+}
+
+.legalWarningTooltip {
+  position: absolute;
+  top: calc(100% + 9px);
+  left: 0;
+  z-index: 30;
+  width: min(285px, calc(100vw - 72px));
+  padding: 11px 13px;
+  border: 1px solid rgba(255, 199, 0, 0.28);
+  border-radius: 12px;
+  background: #2a2d27;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.3);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.5;
+  opacity: 0;
+  pointer-events: none;
+  text-align: left;
+  transform: translateY(-4px);
+  transition: opacity 0.14s ease, transform 0.14s ease;
+}
+
+.legalWarning:hover .legalWarningTooltip,
+.legalWarning:focus-visible .legalWarningTooltip {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.legalWarning:focus-visible {
+  outline: 2px solid #ffc700;
+  outline-offset: 2px;
 }
 
 .foundVenues {

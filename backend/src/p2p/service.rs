@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::RwLock;
@@ -238,17 +238,31 @@ impl P2pOffer {
 }
 
 fn canonical_payment_method(value: &str) -> String {
-    let normalized = value
+    value
         .chars()
         .filter(|character| character.is_alphanumeric())
         .flat_map(char::to_lowercase)
-        .collect::<String>();
-    match normalized.as_str() {
-        "tbank" | "tinkoffbank" => "tinkoff".into(),
-        "sber" => "sberbank".into(),
-        "cashusd" | "cashdollar" | "skylabsatm" => "cash".into(),
-        other => other.into(),
+        .collect()
+}
+
+fn canonicalize_offer_payment_methods(
+    offer: &mut P2pOffer,
+    aliases: &BTreeMap<String, Vec<String>>,
+) {
+    for method in &mut offer.payment_methods {
+        let normalized = canonical_payment_method(method);
+        if let Some(canonical) = aliases.iter().find_map(|(canonical, variants)| {
+            let matches_canonical = canonical_payment_method(canonical) == normalized;
+            let matches_alias = variants
+                .iter()
+                .any(|alias| canonical_payment_method(alias) == normalized);
+            (matches_canonical || matches_alias).then_some(canonical)
+        }) {
+            method.clone_from(canonical);
+        }
     }
+    offer.payment_methods.sort();
+    offer.payment_methods.dedup();
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -310,6 +324,7 @@ pub struct P2pSearchService {
     cache_ttl: Duration,
     cache: Arc<RwLock<HashMap<String, CachedSearch>>>,
     sources: Arc<[Arc<dyn P2pSource>]>,
+    payment_method_aliases: Arc<HashMap<String, BTreeMap<String, Vec<String>>>>,
     market_sources: Arc<[Arc<dyn CryptoMarketSource>]>,
     pub(crate) default_assets: Arc<[String]>,
     pub(crate) networks: NetworkCatalog,
@@ -374,6 +389,13 @@ impl P2pSearchService {
             .context("failed to build P2P HTTP client")?;
         let mut sources: Vec<Arc<dyn P2pSource>> = Vec::new();
         let mut market_sources: Vec<Arc<dyn CryptoMarketSource>> = Vec::new();
+        let payment_method_aliases = records
+            .iter()
+            .filter_map(|record| {
+                let aliases = &record.config.as_ref()?.p2p.as_ref()?.payment_method_aliases;
+                (!aliases.is_empty()).then(|| (record.slug.clone(), aliases.clone()))
+            })
+            .collect::<HashMap<_, _>>();
         for record in &records {
             if let Some(source) = BestChangeSource::from_record(client.clone(), record) {
                 let source = Arc::new(source);
@@ -410,6 +432,7 @@ impl P2pSearchService {
             cache_ttl: Duration::from_millis(config.p2p_search_cache_ttl_ms.min(60_000)),
             cache: Arc::new(RwLock::new(HashMap::new())),
             sources: sources.into(),
+            payment_method_aliases: Arc::new(payment_method_aliases),
             market_sources: market_sources.into(),
             default_assets: default_assets.into(),
             networks,
@@ -427,6 +450,7 @@ impl P2pSearchService {
             cache_ttl: Duration::ZERO,
             cache: Arc::new(RwLock::new(HashMap::new())),
             sources: sources.into(),
+            payment_method_aliases: Arc::new(HashMap::new()),
             market_sources: Vec::new().into(),
             default_assets: vec![
                 "USDT".into(),
@@ -602,13 +626,19 @@ impl P2pSearchService {
             .into_iter()
             .map(|source| {
                 let query = query.clone();
+                let aliases = self.payment_method_aliases.get(source.name()).cloned();
                 async move {
                     let started = Instant::now();
                     let timeout = source.timeout(self.timeout);
                     let result = tokio::time::timeout(timeout, source.search(&query)).await;
                     let elapsed = started.elapsed().as_millis();
                     match result {
-                        Ok(Ok(offers)) => {
+                        Ok(Ok(mut offers)) => {
+                            if let Some(aliases) = &aliases {
+                                for offer in &mut offers {
+                                    canonicalize_offer_payment_methods(offer, aliases);
+                                }
+                            }
                             let count = offers.len();
                             (
                                 offers,
@@ -1310,6 +1340,11 @@ mod tests {
 
         let mut cash = offer("skylabs", "360", "1", "100000", 20);
         cash.payment_methods = vec!["SkyLabs ATM".into()];
+        assert_eq!(cash.payment_method_match("Cash"), PaymentMethodMatch::No);
+        canonicalize_offer_payment_methods(
+            &mut cash,
+            &BTreeMap::from([("Cash".into(), vec!["SkyLabs ATM".into()])]),
+        );
         assert_eq!(cash.payment_method_match("Cash"), PaymentMethodMatch::Exact);
     }
 }

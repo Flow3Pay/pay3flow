@@ -132,6 +132,34 @@ deploying the manifests. The backend and frontend Services are NodePorts
 `30081` and `30080`, respectively, so Caddy can route the public hostname to
 the correct service.
 
+## Pay3Flow monitoring
+
+The backend exposes Prometheus metrics at `/metrics`. The optional monitoring
+stack in [`monitoring.yaml`](monitoring.yaml) adds Prometheus, Grafana,
+PostgreSQL and Redis exporters, plus a provisioned Pay3Flow dashboard. Create
+the Grafana admin Secret once, then apply the manifest:
+
+```sh
+kubectl create namespace pay3flow-monitoring --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n pay3flow-monitoring create secret generic pay3flow-grafana-admin \
+  --from-literal=admin-user=admin \
+  --from-literal=admin-password='choose-a-strong-password'
+database_url=$(kubectl -n pay3flow get secret pay3flow-secrets -o jsonpath='{.data.DATABASE_URL}' | base64 -d)
+database_url=${database_url/@pay3flow-postgres:/@pay3flow-postgres.pay3flow.svc.cluster.local:}
+if [[ "$database_url" == *pay3flow-postgres* && "$database_url" != *sslmode=* ]]; then
+  database_url="${database_url}?sslmode=disable"
+fi
+kubectl -n pay3flow-monitoring create secret generic pay3flow-postgres-exporter \
+  --from-literal=DATA_SOURCE_NAME="$database_url" \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply -f deploy/monitoring.yaml
+```
+
+The PostgreSQL exporter Secret must use the same database URL as the
+`pay3flow-secrets` Secret. Grafana is served at `/grafana/` after applying the
+matching `Caddyfile`; the dashboard is provisioned automatically as
+`Pay3Flow overview`.
+
 The backend creates its schema on startup. Back up external or persistent data
 before changing image revisions, and do not use the development secret values
 for real users or funds.

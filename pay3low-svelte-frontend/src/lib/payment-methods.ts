@@ -1,4 +1,5 @@
 import { assetIcon } from "$lib/icons";
+import { apiUrl } from "$lib/api";
 
 export type PaymentMethodRole = "sender" | "recipient" | "both";
 
@@ -28,19 +29,65 @@ export interface PaymentMethod {
   currencyGroup?: string;
 }
 
-/**
- * Frontend-owned payment-method directory.
- *
- * Add a country once, then append its banks below. The picker and search UI
- * derive their sections from this data, so adding another method does not
- * require changing the component.
- */
+interface BankDirectoryPage {
+  items: Array<{
+    method_id?: string;
+    name: string;
+    display_name: string;
+    role: PaymentMethodRole;
+    country: string;
+    currency: string;
+    kind: "bank" | "cash";
+    color: string;
+    initials: string;
+    popular: boolean;
+    icon_url: string;
+    bank_fee_percent?: number;
+    p2p_query: string;
+    currency_group?: string;
+  }>;
+}
+
+/** Load the picker catalog generated from the backend Providerfiles. */
+export async function fetchPaymentMethods(): Promise<PaymentMethod[]> {
+  const response = await fetch(apiUrl("/api/banks?picker_visible=true&limit=100"));
+  if (!response.ok) throw new Error(`payment-method catalog failed (${response.status})`);
+  const page = await response.json() as BankDirectoryPage;
+  const methods = page.items.flatMap((item) => item.method_id ? [{
+    id: item.method_id,
+    name: item.display_name || item.name,
+    country: item.country,
+    currency: item.currency,
+    role: item.role,
+    kind: item.kind,
+    color: item.color,
+    initials: item.initials,
+    popular: item.popular || undefined,
+    iconUrl: item.icon_url || undefined,
+    bankFeePercent: item.bank_fee_percent,
+    p2pQuery: item.p2p_query || item.display_name || item.name,
+    currencyGroup: item.currency_group,
+  }] : []);
+
+  // Keep the UI usable during a rolling deployment where the frontend may be
+  // newer than the backend catalog. Once the backend publishes any BY methods,
+  // its enabled/disabled state remains authoritative.
+  if (methods.some((method) => method.country === "BY")) return methods;
+  return [...methods, ...PAYMENT_METHODS.filter((method) => method.country === "BY")];
+}
+
+/** Country labels used by the bootstrap fallback and compact fiat UI. */
 export const PAYMENT_COUNTRIES: PaymentCountry[] = [
   { code: "GLOBAL", name: "International", currency: "USD", mark: "$" },
   { code: "AM", name: "Armenia", currency: "AMD", mark: "AM" },
   { code: "RU", name: "Russia", currency: "RUB", mark: "RU" },
+  { code: "BY", name: "Belarus", currency: "BYN", mark: "BY" },
 ];
 
+/**
+ * Bootstrap fallback used before the Providerfile-generated API catalog loads.
+ * The backend catalog is authoritative for picker-visible fiat methods.
+ */
 export const PAYMENT_METHODS: PaymentMethod[] = [
   {
     id: "global-usd-cash",
@@ -349,6 +396,270 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     initials: "OZ",
     iconUrl: "/icons/assets/ozonbank.webp",
     p2pQuery: "Ozon Bank",
+  },
+  {
+    id: "by-belarusbank",
+    name: "Belarusbank",
+    country: "BY",
+    currency: "BYN",
+    role: "both",
+    kind: "bank",
+    color: "#006b3f",
+    initials: "BB",
+    popular: true,
+    p2pQuery: "Belarusbank",
+    currencyGroup: "belarusbank",
+  },
+  {
+    id: "by-belagroprombank",
+    name: "Belagroprombank",
+    country: "BY",
+    currency: "BYN",
+    role: "both",
+    kind: "bank",
+    color: "#f58220",
+    initials: "BA",
+    popular: true,
+    p2pQuery: "Belagroprombank",
+    currencyGroup: "belagroprombank",
+  },
+  {
+    id: "by-priorbank",
+    name: "Priorbank",
+    country: "BY",
+    currency: "BYN",
+    role: "both",
+    kind: "bank",
+    color: "#ffed00",
+    initials: "PB",
+    popular: true,
+    p2pQuery: "Priorbank",
+    currencyGroup: "priorbank",
+  },
+  {
+    id: "by-belinvestbank",
+    name: "Belinvestbank",
+    country: "BY",
+    currency: "BYN",
+    role: "both",
+    kind: "bank",
+    color: "#009b77",
+    initials: "BI",
+    p2pQuery: "Belinvestbank",
+    currencyGroup: "belinvestbank",
+  },
+  {
+    id: "by-alfabank",
+    name: "Alfa-Bank Belarus",
+    country: "BY",
+    currency: "BYN",
+    role: "both",
+    kind: "bank",
+    color: "#ef3124",
+    initials: "AB",
+    popular: true,
+    p2pQuery: "Alfa-Bank Belarus",
+    currencyGroup: "alfabank-belarus",
+  },
+  {
+    id: "by-belgazprombank",
+    name: "Belgazprombank",
+    country: "BY",
+    currency: "BYN",
+    role: "both",
+    kind: "bank",
+    color: "#0079c2",
+    initials: "BG",
+    popular: true,
+    p2pQuery: "Belgazprombank",
+    currencyGroup: "belgazprombank",
+  },
+  {
+    id: "by-sberbank",
+    name: "Sber Bank Belarus",
+    country: "BY",
+    currency: "BYN",
+    role: "both",
+    kind: "bank",
+    color: "#21a038",
+    initials: "SB",
+    popular: true,
+    p2pQuery: "Sber Bank Belarus",
+    currencyGroup: "sber-belarus",
+  },
+  {
+    id: "by-belveb",
+    name: "Bank BelVEB",
+    country: "BY",
+    currency: "BYN",
+    role: "both",
+    kind: "bank",
+    color: "#006fb9",
+    initials: "BV",
+    p2pQuery: "Bank BelVEB",
+    currencyGroup: "belveb",
+  },
+  {
+    id: "by-mtbank",
+    name: "MTBank",
+    country: "BY",
+    currency: "BYN",
+    role: "both",
+    kind: "bank",
+    color: "#004ea3",
+    initials: "MT",
+    popular: true,
+    p2pQuery: "MTBank",
+    currencyGroup: "mtbank",
+  },
+  {
+    id: "by-vtb",
+    name: "VTB Belarus",
+    country: "BY",
+    currency: "BYN",
+    role: "both",
+    kind: "bank",
+    color: "#0a52bd",
+    initials: "VT",
+    popular: true,
+    p2pQuery: "VTB Belarus",
+    currencyGroup: "vtb-belarus",
+  },
+  {
+    id: "by-dabrabyt",
+    name: "Bank Dabrabyt",
+    country: "BY",
+    currency: "BYN",
+    role: "both",
+    kind: "bank",
+    color: "#00a651",
+    initials: "DB",
+    popular: true,
+    p2pQuery: "Bank Dabrabyt",
+    currencyGroup: "dabrabyt",
+  },
+  {
+    id: "by-technobank",
+    name: "Technobank",
+    country: "BY",
+    currency: "BYN",
+    role: "both",
+    kind: "bank",
+    color: "#ed1c24",
+    initials: "TB",
+    popular: true,
+    p2pQuery: "Technobank",
+    currencyGroup: "technobank",
+  },
+  {
+    id: "by-btk",
+    name: "BTK Bank",
+    country: "BY",
+    currency: "BYN",
+    role: "both",
+    kind: "bank",
+    color: "#263f91",
+    initials: "BT",
+    p2pQuery: "BTK Bank",
+    currencyGroup: "btk",
+  },
+  {
+    id: "by-bnb",
+    name: "BNB Bank",
+    country: "BY",
+    currency: "BYN",
+    role: "both",
+    kind: "bank",
+    color: "#e31e24",
+    initials: "BN",
+    p2pQuery: "BNB Bank",
+    currencyGroup: "bnb-bank",
+  },
+  {
+    id: "by-bsb",
+    name: "BSB Bank",
+    country: "BY",
+    currency: "BYN",
+    role: "both",
+    kind: "bank",
+    color: "#e30613",
+    initials: "BS",
+    p2pQuery: "BSB Bank",
+    currencyGroup: "bsb-bank",
+  },
+  {
+    id: "by-paritetbank",
+    name: "Paritetbank",
+    country: "BY",
+    currency: "BYN",
+    role: "both",
+    kind: "bank",
+    color: "#0083ca",
+    initials: "PA",
+    popular: true,
+    p2pQuery: "Paritetbank",
+    currencyGroup: "paritetbank",
+  },
+  {
+    id: "by-bank-reshenie",
+    name: "Bank Reshenie",
+    country: "BY",
+    currency: "BYN",
+    role: "both",
+    kind: "bank",
+    color: "#6b2d90",
+    initials: "BR",
+    popular: true,
+    p2pQuery: "Bank Reshenie",
+    currencyGroup: "bank-reshenie",
+  },
+  {
+    id: "by-statusbank",
+    name: "StatusBank",
+    country: "BY",
+    currency: "BYN",
+    role: "both",
+    kind: "bank",
+    color: "#003b71",
+    initials: "ST",
+    p2pQuery: "StatusBank",
+    currencyGroup: "statusbank",
+  },
+  {
+    id: "by-neobank",
+    name: "Neo Bank Asia",
+    country: "BY",
+    currency: "BYN",
+    role: "both",
+    kind: "bank",
+    color: "#ff5a1f",
+    initials: "NE",
+    p2pQuery: "Neo Bank Asia",
+    currencyGroup: "neo-bank",
+  },
+  {
+    id: "by-zepterbank",
+    name: "Zepter Bank",
+    country: "BY",
+    currency: "BYN",
+    role: "both",
+    kind: "bank",
+    color: "#8b1e3f",
+    initials: "ZE",
+    p2pQuery: "Zepter Bank",
+    currencyGroup: "zepterbank",
+  },
+  {
+    id: "by-brrb",
+    name: "Bank of Growth and Business Development",
+    country: "BY",
+    currency: "BYN",
+    role: "both",
+    kind: "bank",
+    color: "#005ca9",
+    initials: "BR",
+    p2pQuery: "BRRB Bank",
+    currencyGroup: "brrb",
   },
 ];
 

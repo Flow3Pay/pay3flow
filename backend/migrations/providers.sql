@@ -34,7 +34,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, source_file)
-VALUES ('binance', 'buy', 'https://www.binance.com', 'Binance Buy', ARRAY['AMD', 'EUR', 'RUB', 'USD']::TEXT[], ARRAY[]::TEXT[], ARRAY['p2p', 'exchanger']::TEXT[], '{"p2p":{"kind":"http_json","endpoint":"https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search","method":"POST","headers":{"Origin":"https://www.binance.com","Referer":"https://www.binance.com/"},"asset_codes":{},"supported_assets":["USDT","USDC","BTC","ETH","BNB"],"timeout_ms":4000,"max_results":20,"fiat_probe_amount":null,"asset_probe_amount":null,"default_min_fiat":null,"default_max_fiat":null,"default_available_asset":null,"auth":null,"buy":{"query":{},"request_json":"{\"fiat\":\"{{fiat}}\",\"page\":1,\"rows\":\"{{limit_number}}\",\"tradeType\":\"BUY\",\"asset\":\"{{asset}}\",\"countries\":[],\"proMerchantAds\":false,\"shieldMerchantAds\":false,\"publisherType\":null,\"payTypes\":[],\"additionalKycVerifyFilter\":0}","amount_mode":"query_or_empty","items_pointer":"/data","success_pointer":"/code","success_value":"000000","success_missing_allowed":false,"error_pointer":"/message","offer":null},"sell":{"query":{},"request_json":"{\"fiat\":\"{{fiat}}\",\"page\":1,\"rows\":\"{{limit_number}}\",\"tradeType\":\"SELL\",\"asset\":\"{{asset}}\",\"countries\":[],\"proMerchantAds\":false,\"shieldMerchantAds\":false,\"publisherType\":null,\"payTypes\":[],\"additionalKycVerifyFilter\":0}","amount_mode":"query_or_empty","items_pointer":"/data","success_pointer":"/code","success_value":"000000","success_missing_allowed":false,"error_pointer":"/message","offer":null},"offer":{"ad_id_pointer":"/adv/advNo","fiat_pointer":"/adv/fiatUnit","asset_pointer":"/adv/asset","price_pointer":"/adv/price","fiat_amount_pointer":null,"asset_amount_pointer":null,"price_inverted":false,"available_asset_pointer":"/adv/tradableQuantity","min_fiat_pointer":"/adv/minSingleTransAmount","max_fiat_pointer":"/adv/maxSingleTransAmount","payment_methods_pointer":"/adv/tradeMethods","payment_method_value_pointer":"/tradeMethodName","payment_method_fallback_pointer":"/identifier","pay_time_limit_pointer":"/adv/payTimeLimit","advertiser_id_pointer":"/advertiser/userNo","advertiser_nickname_pointer":"/advertiser/nickName","advertiser_user_type_pointer":"/advertiser/userType","merchant_conditions":[{"pointer":"/advertiser/merchantGroupMember","operator":"truthy","value":null},{"pointer":"/advertiser/userType","operator":"equals_ci","value":"merchant"}],"verified_conditions":[],"merchant_default":false,"verified_default":false,"verified_from_merchant":true,"completed_orders_pointer":"/advertiser/monthOrderCount","completion_rate_pointer":"/advertiser/monthFinishRate","positive_rate_pointer":"/advertiser/positiveRate","source_url_template":"https://c2c.binance.com/en/adv?code={{item:/adv/advNo}}","source_url_is_exact":true,"advertiser_profile_url_template":"https://c2c.binance.com/en/advertiserDetail?advertiserNo={{item:/advertiser/userNo}}"},"rate_table":null},"market":{"kind":"http_json","endpoint":"https://api.binance.com/api/v3/ticker/bookTicker","method":"GET","headers":{},"query":{},"request_json":null,"timeout_ms":4000,"items_pointer":null,"symbol_pointer":"/symbol","bid_pointer":"/bidPrice","ask_pointer":"/askPrice","symbol_remove":null,"success_pointer":null,"success_value":null,"success_missing_allowed":false,"error_pointer":null},"bestchange":null}'::JSONB, '{}'::JSONB, '{}'::JSONB, 'binance/Providerfile')
+VALUES ('binance', 'buy', 'https://www.binance.com', 'Binance Buy', ARRAY['AMD', 'BYN', 'EUR', 'RUB', 'USD']::TEXT[], ARRAY[]::TEXT[], ARRAY['p2p', 'exchanger']::TEXT[], '{"p2p":{"kind":"http_json","endpoint":"https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search","method":"POST","headers":{"Origin":"https://www.binance.com","Referer":"https://www.binance.com/"},"asset_codes":{},"supported_assets":["USDT","USDC","BTC","ETH","BNB"],"supported_fiats":["USD","RUB","EUR","AMD","BYN"],"payment_method_aliases":{"Alfa-Bank Belarus":["Alfa Bank Belarus","A-Bank"],"Bank Dabrabyt":["Dabrabyt"],"Bank Reshenie":["Bank Reshenie","Reshenie Bank"],"Belagroprombank":["Agrobank","Belagroprom Bank"],"Paritetbank":["Paritet Bank"],"Priorbank":["PriorBank"],"Sber Bank Belarus":["BPS-Sberbank","Sber Bank"],"Sberbank":["Sber"],"T-Bank":["Tinkoff","Tinkoff Bank"],"VTB Belarus":["VTB Bank Belarus","Bank VTB Belarus"]},"timeout_ms":4000,"max_results":20,"fiat_probe_amount":null,"asset_probe_amount":null,"default_min_fiat":null,"default_max_fiat":null,"default_available_asset":null,"auth":null,"buy":{"query":{},"request_json":"{\"fiat\":\"{{fiat}}\",\"page\":1,\"rows\":\"{{limit_number}}\",\"tradeType\":\"BUY\",\"asset\":\"{{asset}}\",\"countries\":[],\"proMerchantAds\":false,\"shieldMerchantAds\":false,\"publisherType\":null,\"payTypes\":[],\"additionalKycVerifyFilter\":0}","amount_mode":"query_or_empty","items_pointer":"/data","success_pointer":"/code","success_value":"000000","success_missing_allowed":false,"error_pointer":"/message","offer":null},"sell":{"query":{},"request_json":"{\"fiat\":\"{{fiat}}\",\"page\":1,\"rows\":\"{{limit_number}}\",\"tradeType\":\"SELL\",\"asset\":\"{{asset}}\",\"countries\":[],\"proMerchantAds\":false,\"shieldMerchantAds\":false,\"publisherType\":null,\"payTypes\":[],\"additionalKycVerifyFilter\":0}","amount_mode":"query_or_empty","items_pointer":"/data","success_pointer":"/code","success_value":"000000","success_missing_allowed":false,"error_pointer":"/message","offer":null},"offer":{"ad_id_pointer":"/adv/advNo","fiat_pointer":"/adv/fiatUnit","asset_pointer":"/adv/asset","price_pointer":"/adv/price","fiat_amount_pointer":null,"asset_amount_pointer":null,"price_inverted":false,"available_asset_pointer":"/adv/tradableQuantity","min_fiat_pointer":"/adv/minSingleTransAmount","max_fiat_pointer":"/adv/maxSingleTransAmount","payment_methods_pointer":"/adv/tradeMethods","payment_method_value_pointer":"/tradeMethodName","payment_method_fallback_pointer":"/identifier","pay_time_limit_pointer":"/adv/payTimeLimit","advertiser_id_pointer":"/advertiser/userNo","advertiser_nickname_pointer":"/advertiser/nickName","advertiser_user_type_pointer":"/advertiser/userType","merchant_conditions":[{"pointer":"/advertiser/merchantGroupMember","operator":"truthy","value":null},{"pointer":"/advertiser/userType","operator":"equals_ci","value":"merchant"}],"verified_conditions":[],"merchant_default":false,"verified_default":false,"verified_from_merchant":true,"completed_orders_pointer":"/advertiser/monthOrderCount","completion_rate_pointer":"/advertiser/monthFinishRate","positive_rate_pointer":"/advertiser/positiveRate","source_url_template":"https://c2c.binance.com/en/adv?code={{item:/adv/advNo}}","source_url_is_exact":true,"advertiser_profile_url_template":"https://c2c.binance.com/en/advertiserDetail?advertiserNo={{item:/advertiser/userNo}}"},"rate_table":null},"market":{"kind":"http_json","endpoint":"https://api.binance.com/api/v3/ticker/bookTicker","method":"GET","headers":{},"query":{},"request_json":null,"timeout_ms":4000,"items_pointer":null,"symbol_pointer":"/symbol","bid_pointer":"/bidPrice","ask_pointer":"/askPrice","symbol_remove":null,"success_pointer":null,"success_value":null,"success_missing_allowed":false,"error_pointer":null},"bestchange":null}'::JSONB, '{}'::JSONB, '{}'::JSONB, 'binance/Providerfile')
 ON CONFLICT (slug, operation) DO UPDATE SET
 source_url = EXCLUDED.source_url,
 name = EXCLUDED.name,
@@ -48,7 +48,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, source_file)
-VALUES ('binance', 'sell', 'https://www.binance.com', 'Binance Sell', ARRAY['AMD', 'EUR', 'RUB', 'USD']::TEXT[], ARRAY[]::TEXT[], ARRAY['p2p', 'exchanger']::TEXT[], '{"p2p":{"kind":"http_json","endpoint":"https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search","method":"POST","headers":{"Origin":"https://www.binance.com","Referer":"https://www.binance.com/"},"asset_codes":{},"supported_assets":["USDT","USDC","BTC","ETH","BNB"],"timeout_ms":4000,"max_results":20,"fiat_probe_amount":null,"asset_probe_amount":null,"default_min_fiat":null,"default_max_fiat":null,"default_available_asset":null,"auth":null,"buy":{"query":{},"request_json":"{\"fiat\":\"{{fiat}}\",\"page\":1,\"rows\":\"{{limit_number}}\",\"tradeType\":\"BUY\",\"asset\":\"{{asset}}\",\"countries\":[],\"proMerchantAds\":false,\"shieldMerchantAds\":false,\"publisherType\":null,\"payTypes\":[],\"additionalKycVerifyFilter\":0}","amount_mode":"query_or_empty","items_pointer":"/data","success_pointer":"/code","success_value":"000000","success_missing_allowed":false,"error_pointer":"/message","offer":null},"sell":{"query":{},"request_json":"{\"fiat\":\"{{fiat}}\",\"page\":1,\"rows\":\"{{limit_number}}\",\"tradeType\":\"SELL\",\"asset\":\"{{asset}}\",\"countries\":[],\"proMerchantAds\":false,\"shieldMerchantAds\":false,\"publisherType\":null,\"payTypes\":[],\"additionalKycVerifyFilter\":0}","amount_mode":"query_or_empty","items_pointer":"/data","success_pointer":"/code","success_value":"000000","success_missing_allowed":false,"error_pointer":"/message","offer":null},"offer":{"ad_id_pointer":"/adv/advNo","fiat_pointer":"/adv/fiatUnit","asset_pointer":"/adv/asset","price_pointer":"/adv/price","fiat_amount_pointer":null,"asset_amount_pointer":null,"price_inverted":false,"available_asset_pointer":"/adv/tradableQuantity","min_fiat_pointer":"/adv/minSingleTransAmount","max_fiat_pointer":"/adv/maxSingleTransAmount","payment_methods_pointer":"/adv/tradeMethods","payment_method_value_pointer":"/tradeMethodName","payment_method_fallback_pointer":"/identifier","pay_time_limit_pointer":"/adv/payTimeLimit","advertiser_id_pointer":"/advertiser/userNo","advertiser_nickname_pointer":"/advertiser/nickName","advertiser_user_type_pointer":"/advertiser/userType","merchant_conditions":[{"pointer":"/advertiser/merchantGroupMember","operator":"truthy","value":null},{"pointer":"/advertiser/userType","operator":"equals_ci","value":"merchant"}],"verified_conditions":[],"merchant_default":false,"verified_default":false,"verified_from_merchant":true,"completed_orders_pointer":"/advertiser/monthOrderCount","completion_rate_pointer":"/advertiser/monthFinishRate","positive_rate_pointer":"/advertiser/positiveRate","source_url_template":"https://c2c.binance.com/en/adv?code={{item:/adv/advNo}}","source_url_is_exact":true,"advertiser_profile_url_template":"https://c2c.binance.com/en/advertiserDetail?advertiserNo={{item:/advertiser/userNo}}"},"rate_table":null},"market":{"kind":"http_json","endpoint":"https://api.binance.com/api/v3/ticker/bookTicker","method":"GET","headers":{},"query":{},"request_json":null,"timeout_ms":4000,"items_pointer":null,"symbol_pointer":"/symbol","bid_pointer":"/bidPrice","ask_pointer":"/askPrice","symbol_remove":null,"success_pointer":null,"success_value":null,"success_missing_allowed":false,"error_pointer":null},"bestchange":null}'::JSONB, '{}'::JSONB, '{}'::JSONB, 'binance/Providerfile')
+VALUES ('binance', 'sell', 'https://www.binance.com', 'Binance Sell', ARRAY['AMD', 'BYN', 'EUR', 'RUB', 'USD']::TEXT[], ARRAY[]::TEXT[], ARRAY['p2p', 'exchanger']::TEXT[], '{"p2p":{"kind":"http_json","endpoint":"https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search","method":"POST","headers":{"Origin":"https://www.binance.com","Referer":"https://www.binance.com/"},"asset_codes":{},"supported_assets":["USDT","USDC","BTC","ETH","BNB"],"supported_fiats":["USD","RUB","EUR","AMD","BYN"],"payment_method_aliases":{"Alfa-Bank Belarus":["Alfa Bank Belarus","A-Bank"],"Bank Dabrabyt":["Dabrabyt"],"Bank Reshenie":["Bank Reshenie","Reshenie Bank"],"Belagroprombank":["Agrobank","Belagroprom Bank"],"Paritetbank":["Paritet Bank"],"Priorbank":["PriorBank"],"Sber Bank Belarus":["BPS-Sberbank","Sber Bank"],"Sberbank":["Sber"],"T-Bank":["Tinkoff","Tinkoff Bank"],"VTB Belarus":["VTB Bank Belarus","Bank VTB Belarus"]},"timeout_ms":4000,"max_results":20,"fiat_probe_amount":null,"asset_probe_amount":null,"default_min_fiat":null,"default_max_fiat":null,"default_available_asset":null,"auth":null,"buy":{"query":{},"request_json":"{\"fiat\":\"{{fiat}}\",\"page\":1,\"rows\":\"{{limit_number}}\",\"tradeType\":\"BUY\",\"asset\":\"{{asset}}\",\"countries\":[],\"proMerchantAds\":false,\"shieldMerchantAds\":false,\"publisherType\":null,\"payTypes\":[],\"additionalKycVerifyFilter\":0}","amount_mode":"query_or_empty","items_pointer":"/data","success_pointer":"/code","success_value":"000000","success_missing_allowed":false,"error_pointer":"/message","offer":null},"sell":{"query":{},"request_json":"{\"fiat\":\"{{fiat}}\",\"page\":1,\"rows\":\"{{limit_number}}\",\"tradeType\":\"SELL\",\"asset\":\"{{asset}}\",\"countries\":[],\"proMerchantAds\":false,\"shieldMerchantAds\":false,\"publisherType\":null,\"payTypes\":[],\"additionalKycVerifyFilter\":0}","amount_mode":"query_or_empty","items_pointer":"/data","success_pointer":"/code","success_value":"000000","success_missing_allowed":false,"error_pointer":"/message","offer":null},"offer":{"ad_id_pointer":"/adv/advNo","fiat_pointer":"/adv/fiatUnit","asset_pointer":"/adv/asset","price_pointer":"/adv/price","fiat_amount_pointer":null,"asset_amount_pointer":null,"price_inverted":false,"available_asset_pointer":"/adv/tradableQuantity","min_fiat_pointer":"/adv/minSingleTransAmount","max_fiat_pointer":"/adv/maxSingleTransAmount","payment_methods_pointer":"/adv/tradeMethods","payment_method_value_pointer":"/tradeMethodName","payment_method_fallback_pointer":"/identifier","pay_time_limit_pointer":"/adv/payTimeLimit","advertiser_id_pointer":"/advertiser/userNo","advertiser_nickname_pointer":"/advertiser/nickName","advertiser_user_type_pointer":"/advertiser/userType","merchant_conditions":[{"pointer":"/advertiser/merchantGroupMember","operator":"truthy","value":null},{"pointer":"/advertiser/userType","operator":"equals_ci","value":"merchant"}],"verified_conditions":[],"merchant_default":false,"verified_default":false,"verified_from_merchant":true,"completed_orders_pointer":"/advertiser/monthOrderCount","completion_rate_pointer":"/advertiser/monthFinishRate","positive_rate_pointer":"/advertiser/positiveRate","source_url_template":"https://c2c.binance.com/en/adv?code={{item:/adv/advNo}}","source_url_is_exact":true,"advertiser_profile_url_template":"https://c2c.binance.com/en/advertiserDetail?advertiserNo={{item:/advertiser/userNo}}"},"rate_table":null},"market":{"kind":"http_json","endpoint":"https://api.binance.com/api/v3/ticker/bookTicker","method":"GET","headers":{},"query":{},"request_json":null,"timeout_ms":4000,"items_pointer":null,"symbol_pointer":"/symbol","bid_pointer":"/bidPrice","ask_pointer":"/askPrice","symbol_remove":null,"success_pointer":null,"success_value":null,"success_missing_allowed":false,"error_pointer":null},"bestchange":null}'::JSONB, '{}'::JSONB, '{}'::JSONB, 'binance/Providerfile')
 ON CONFLICT (slug, operation) DO UPDATE SET
 source_url = EXCLUDED.source_url,
 name = EXCLUDED.name,
@@ -146,7 +146,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, source_file)
-VALUES ('bybit', 'buy', 'https://www.bybit.com', 'Bybit Buy', ARRAY['AMD', 'EUR', 'RUB', 'USD']::TEXT[], ARRAY[]::TEXT[], ARRAY['p2p', 'exchanger']::TEXT[], '{"p2p":{"kind":"http_json","endpoint":"https://api2.bybit.com/fiat/otc/item/online","method":"POST","headers":{"Origin":"https://www.bybit.com","Referer":"https://www.bybit.com/"},"asset_codes":{},"supported_assets":["USDT","USDC","BTC","ETH"],"timeout_ms":4000,"max_results":null,"fiat_probe_amount":null,"asset_probe_amount":null,"default_min_fiat":null,"default_max_fiat":null,"default_available_asset":null,"auth":null,"buy":{"query":{},"request_json":"{\"userId\":\"\",\"tokenId\":\"{{asset}}\",\"currencyId\":\"{{fiat}}\",\"payment\":[],\"side\":\"1\",\"size\":\"{{limit}}\",\"page\":\"1\",\"amount\":\"{{amount}}\",\"authMaker\":false,\"canTrade\":false}","amount_mode":"query_or_empty","items_pointer":"/result/items","success_pointer":"/ret_code","success_value":"0","success_missing_allowed":false,"error_pointer":"/ret_msg","offer":null},"sell":{"query":{},"request_json":"{\"userId\":\"\",\"tokenId\":\"{{asset}}\",\"currencyId\":\"{{fiat}}\",\"payment\":[],\"side\":\"0\",\"size\":\"{{limit}}\",\"page\":\"1\",\"amount\":\"{{amount}}\",\"authMaker\":false,\"canTrade\":false}","amount_mode":"query_or_empty","items_pointer":"/result/items","success_pointer":"/ret_code","success_value":"0","success_missing_allowed":false,"error_pointer":"/ret_msg","offer":null},"offer":{"ad_id_pointer":"/id","fiat_pointer":"/currencyId","asset_pointer":"/tokenId","price_pointer":"/price","fiat_amount_pointer":null,"asset_amount_pointer":null,"price_inverted":false,"available_asset_pointer":"/quantity","min_fiat_pointer":"/minAmount","max_fiat_pointer":"/maxAmount","payment_methods_pointer":"/payments","payment_method_value_pointer":null,"payment_method_fallback_pointer":null,"pay_time_limit_pointer":"/paymentPeriod","advertiser_id_pointer":"/userMaskId","advertiser_nickname_pointer":"/nickName","advertiser_user_type_pointer":"/userType","merchant_conditions":[{"pointer":"/authTag","operator":"non_empty","value":null},{"pointer":"/userType","operator":"not_equals_ci","value":"personal"}],"verified_conditions":[{"pointer":"/authStatus","operator":"equals","value":"1"}],"merchant_default":false,"verified_default":false,"verified_from_merchant":false,"completed_orders_pointer":"/recentOrderNum","completion_rate_pointer":"/recentExecuteRate","positive_rate_pointer":null,"source_url_template":"https://www.bybit.com/fiat/trade/otc/?token={{asset}}&fiat={{fiat}}","source_url_is_exact":false,"advertiser_profile_url_template":"https://www.bybit.com/en/p2p/profile/{{item:/userMaskId}}/{{asset}}/{{fiat}}/item"},"rate_table":null},"market":{"kind":"http_json","endpoint":"https://api.bybit.com/v5/market/tickers","method":"GET","headers":{},"query":{"category":"spot"},"request_json":null,"timeout_ms":4000,"items_pointer":"/result/list","symbol_pointer":"/symbol","bid_pointer":"/bid1Price","ask_pointer":"/ask1Price","symbol_remove":null,"success_pointer":"/retCode","success_value":"0","success_missing_allowed":false,"error_pointer":"/retMsg"},"bestchange":null}'::JSONB, '{}'::JSONB, '{}'::JSONB, 'bybit/Providerfile')
+VALUES ('bybit', 'buy', 'https://www.bybit.com', 'Bybit Buy', ARRAY['AMD', 'BYN', 'EUR', 'RUB', 'USD']::TEXT[], ARRAY[]::TEXT[], ARRAY['p2p', 'exchanger']::TEXT[], '{"p2p":{"kind":"http_json","endpoint":"https://api2.bybit.com/fiat/otc/item/online","method":"POST","headers":{"Origin":"https://www.bybit.com","Referer":"https://www.bybit.com/"},"asset_codes":{},"supported_assets":["USDT","USDC","BTC","ETH"],"supported_fiats":["USD","RUB","EUR","AMD","BYN"],"payment_method_aliases":{"Alfa-Bank Belarus":["Alfa Bank Belarus","A-Bank"],"Bank Dabrabyt":["Dabrabyt"],"Bank Reshenie":["Reshenie Bank"],"Belagroprombank":["Agrobank","Belagroprom Bank"],"Paritetbank":["Paritet Bank"],"Priorbank":["PriorBank"],"Sber Bank Belarus":["BPS-Sberbank","Sber Bank"],"Sberbank":["Sber"],"T-Bank":["Tinkoff","Tinkoff Bank"],"VTB Belarus":["VTB Bank Belarus","Bank VTB Belarus"]},"timeout_ms":4000,"max_results":null,"fiat_probe_amount":null,"asset_probe_amount":null,"default_min_fiat":null,"default_max_fiat":null,"default_available_asset":null,"auth":null,"buy":{"query":{},"request_json":"{\"userId\":\"\",\"tokenId\":\"{{asset}}\",\"currencyId\":\"{{fiat}}\",\"payment\":[],\"side\":\"1\",\"size\":\"{{limit}}\",\"page\":\"1\",\"amount\":\"{{amount}}\",\"authMaker\":false,\"canTrade\":false}","amount_mode":"query_or_empty","items_pointer":"/result/items","success_pointer":"/ret_code","success_value":"0","success_missing_allowed":false,"error_pointer":"/ret_msg","offer":null},"sell":{"query":{},"request_json":"{\"userId\":\"\",\"tokenId\":\"{{asset}}\",\"currencyId\":\"{{fiat}}\",\"payment\":[],\"side\":\"0\",\"size\":\"{{limit}}\",\"page\":\"1\",\"amount\":\"{{amount}}\",\"authMaker\":false,\"canTrade\":false}","amount_mode":"query_or_empty","items_pointer":"/result/items","success_pointer":"/ret_code","success_value":"0","success_missing_allowed":false,"error_pointer":"/ret_msg","offer":null},"offer":{"ad_id_pointer":"/id","fiat_pointer":"/currencyId","asset_pointer":"/tokenId","price_pointer":"/price","fiat_amount_pointer":null,"asset_amount_pointer":null,"price_inverted":false,"available_asset_pointer":"/quantity","min_fiat_pointer":"/minAmount","max_fiat_pointer":"/maxAmount","payment_methods_pointer":"/payments","payment_method_value_pointer":null,"payment_method_fallback_pointer":null,"pay_time_limit_pointer":"/paymentPeriod","advertiser_id_pointer":"/userMaskId","advertiser_nickname_pointer":"/nickName","advertiser_user_type_pointer":"/userType","merchant_conditions":[{"pointer":"/authTag","operator":"non_empty","value":null},{"pointer":"/userType","operator":"not_equals_ci","value":"personal"}],"verified_conditions":[{"pointer":"/authStatus","operator":"equals","value":"1"}],"merchant_default":false,"verified_default":false,"verified_from_merchant":false,"completed_orders_pointer":"/recentOrderNum","completion_rate_pointer":"/recentExecuteRate","positive_rate_pointer":null,"source_url_template":"https://www.bybit.com/fiat/trade/otc/?token={{asset}}&fiat={{fiat}}","source_url_is_exact":false,"advertiser_profile_url_template":"https://www.bybit.com/en/p2p/profile/{{item:/userMaskId}}/{{asset}}/{{fiat}}/item"},"rate_table":null},"market":{"kind":"http_json","endpoint":"https://api.bybit.com/v5/market/tickers","method":"GET","headers":{},"query":{"category":"spot"},"request_json":null,"timeout_ms":4000,"items_pointer":"/result/list","symbol_pointer":"/symbol","bid_pointer":"/bid1Price","ask_pointer":"/ask1Price","symbol_remove":null,"success_pointer":"/retCode","success_value":"0","success_missing_allowed":false,"error_pointer":"/retMsg"},"bestchange":null}'::JSONB, '{}'::JSONB, '{}'::JSONB, 'bybit/Providerfile')
 ON CONFLICT (slug, operation) DO UPDATE SET
 source_url = EXCLUDED.source_url,
 name = EXCLUDED.name,
@@ -160,7 +160,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, source_file)
-VALUES ('bybit', 'sell', 'https://www.bybit.com', 'Bybit Sell', ARRAY['AMD', 'EUR', 'RUB', 'USD']::TEXT[], ARRAY[]::TEXT[], ARRAY['p2p', 'exchanger']::TEXT[], '{"p2p":{"kind":"http_json","endpoint":"https://api2.bybit.com/fiat/otc/item/online","method":"POST","headers":{"Origin":"https://www.bybit.com","Referer":"https://www.bybit.com/"},"asset_codes":{},"supported_assets":["USDT","USDC","BTC","ETH"],"timeout_ms":4000,"max_results":null,"fiat_probe_amount":null,"asset_probe_amount":null,"default_min_fiat":null,"default_max_fiat":null,"default_available_asset":null,"auth":null,"buy":{"query":{},"request_json":"{\"userId\":\"\",\"tokenId\":\"{{asset}}\",\"currencyId\":\"{{fiat}}\",\"payment\":[],\"side\":\"1\",\"size\":\"{{limit}}\",\"page\":\"1\",\"amount\":\"{{amount}}\",\"authMaker\":false,\"canTrade\":false}","amount_mode":"query_or_empty","items_pointer":"/result/items","success_pointer":"/ret_code","success_value":"0","success_missing_allowed":false,"error_pointer":"/ret_msg","offer":null},"sell":{"query":{},"request_json":"{\"userId\":\"\",\"tokenId\":\"{{asset}}\",\"currencyId\":\"{{fiat}}\",\"payment\":[],\"side\":\"0\",\"size\":\"{{limit}}\",\"page\":\"1\",\"amount\":\"{{amount}}\",\"authMaker\":false,\"canTrade\":false}","amount_mode":"query_or_empty","items_pointer":"/result/items","success_pointer":"/ret_code","success_value":"0","success_missing_allowed":false,"error_pointer":"/ret_msg","offer":null},"offer":{"ad_id_pointer":"/id","fiat_pointer":"/currencyId","asset_pointer":"/tokenId","price_pointer":"/price","fiat_amount_pointer":null,"asset_amount_pointer":null,"price_inverted":false,"available_asset_pointer":"/quantity","min_fiat_pointer":"/minAmount","max_fiat_pointer":"/maxAmount","payment_methods_pointer":"/payments","payment_method_value_pointer":null,"payment_method_fallback_pointer":null,"pay_time_limit_pointer":"/paymentPeriod","advertiser_id_pointer":"/userMaskId","advertiser_nickname_pointer":"/nickName","advertiser_user_type_pointer":"/userType","merchant_conditions":[{"pointer":"/authTag","operator":"non_empty","value":null},{"pointer":"/userType","operator":"not_equals_ci","value":"personal"}],"verified_conditions":[{"pointer":"/authStatus","operator":"equals","value":"1"}],"merchant_default":false,"verified_default":false,"verified_from_merchant":false,"completed_orders_pointer":"/recentOrderNum","completion_rate_pointer":"/recentExecuteRate","positive_rate_pointer":null,"source_url_template":"https://www.bybit.com/fiat/trade/otc/?token={{asset}}&fiat={{fiat}}","source_url_is_exact":false,"advertiser_profile_url_template":"https://www.bybit.com/en/p2p/profile/{{item:/userMaskId}}/{{asset}}/{{fiat}}/item"},"rate_table":null},"market":{"kind":"http_json","endpoint":"https://api.bybit.com/v5/market/tickers","method":"GET","headers":{},"query":{"category":"spot"},"request_json":null,"timeout_ms":4000,"items_pointer":"/result/list","symbol_pointer":"/symbol","bid_pointer":"/bid1Price","ask_pointer":"/ask1Price","symbol_remove":null,"success_pointer":"/retCode","success_value":"0","success_missing_allowed":false,"error_pointer":"/retMsg"},"bestchange":null}'::JSONB, '{}'::JSONB, '{}'::JSONB, 'bybit/Providerfile')
+VALUES ('bybit', 'sell', 'https://www.bybit.com', 'Bybit Sell', ARRAY['AMD', 'BYN', 'EUR', 'RUB', 'USD']::TEXT[], ARRAY[]::TEXT[], ARRAY['p2p', 'exchanger']::TEXT[], '{"p2p":{"kind":"http_json","endpoint":"https://api2.bybit.com/fiat/otc/item/online","method":"POST","headers":{"Origin":"https://www.bybit.com","Referer":"https://www.bybit.com/"},"asset_codes":{},"supported_assets":["USDT","USDC","BTC","ETH"],"supported_fiats":["USD","RUB","EUR","AMD","BYN"],"payment_method_aliases":{"Alfa-Bank Belarus":["Alfa Bank Belarus","A-Bank"],"Bank Dabrabyt":["Dabrabyt"],"Bank Reshenie":["Reshenie Bank"],"Belagroprombank":["Agrobank","Belagroprom Bank"],"Paritetbank":["Paritet Bank"],"Priorbank":["PriorBank"],"Sber Bank Belarus":["BPS-Sberbank","Sber Bank"],"Sberbank":["Sber"],"T-Bank":["Tinkoff","Tinkoff Bank"],"VTB Belarus":["VTB Bank Belarus","Bank VTB Belarus"]},"timeout_ms":4000,"max_results":null,"fiat_probe_amount":null,"asset_probe_amount":null,"default_min_fiat":null,"default_max_fiat":null,"default_available_asset":null,"auth":null,"buy":{"query":{},"request_json":"{\"userId\":\"\",\"tokenId\":\"{{asset}}\",\"currencyId\":\"{{fiat}}\",\"payment\":[],\"side\":\"1\",\"size\":\"{{limit}}\",\"page\":\"1\",\"amount\":\"{{amount}}\",\"authMaker\":false,\"canTrade\":false}","amount_mode":"query_or_empty","items_pointer":"/result/items","success_pointer":"/ret_code","success_value":"0","success_missing_allowed":false,"error_pointer":"/ret_msg","offer":null},"sell":{"query":{},"request_json":"{\"userId\":\"\",\"tokenId\":\"{{asset}}\",\"currencyId\":\"{{fiat}}\",\"payment\":[],\"side\":\"0\",\"size\":\"{{limit}}\",\"page\":\"1\",\"amount\":\"{{amount}}\",\"authMaker\":false,\"canTrade\":false}","amount_mode":"query_or_empty","items_pointer":"/result/items","success_pointer":"/ret_code","success_value":"0","success_missing_allowed":false,"error_pointer":"/ret_msg","offer":null},"offer":{"ad_id_pointer":"/id","fiat_pointer":"/currencyId","asset_pointer":"/tokenId","price_pointer":"/price","fiat_amount_pointer":null,"asset_amount_pointer":null,"price_inverted":false,"available_asset_pointer":"/quantity","min_fiat_pointer":"/minAmount","max_fiat_pointer":"/maxAmount","payment_methods_pointer":"/payments","payment_method_value_pointer":null,"payment_method_fallback_pointer":null,"pay_time_limit_pointer":"/paymentPeriod","advertiser_id_pointer":"/userMaskId","advertiser_nickname_pointer":"/nickName","advertiser_user_type_pointer":"/userType","merchant_conditions":[{"pointer":"/authTag","operator":"non_empty","value":null},{"pointer":"/userType","operator":"not_equals_ci","value":"personal"}],"verified_conditions":[{"pointer":"/authStatus","operator":"equals","value":"1"}],"merchant_default":false,"verified_default":false,"verified_from_merchant":false,"completed_orders_pointer":"/recentOrderNum","completion_rate_pointer":"/recentExecuteRate","positive_rate_pointer":null,"source_url_template":"https://www.bybit.com/fiat/trade/otc/?token={{asset}}&fiat={{fiat}}","source_url_is_exact":false,"advertiser_profile_url_template":"https://www.bybit.com/en/p2p/profile/{{item:/userMaskId}}/{{asset}}/{{fiat}}/item"},"rate_table":null},"market":{"kind":"http_json","endpoint":"https://api.bybit.com/v5/market/tickers","method":"GET","headers":{},"query":{"category":"spot"},"request_json":null,"timeout_ms":4000,"items_pointer":"/result/list","symbol_pointer":"/symbol","bid_pointer":"/bid1Price","ask_pointer":"/ask1Price","symbol_remove":null,"success_pointer":"/retCode","success_value":"0","success_missing_allowed":false,"error_pointer":"/retMsg"},"bestchange":null}'::JSONB, '{}'::JSONB, '{}'::JSONB, 'bybit/Providerfile')
 ON CONFLICT (slug, operation) DO UPDATE SET
 source_url = EXCLUDED.source_url,
 name = EXCLUDED.name,
@@ -286,7 +286,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, source_file)
-VALUES ('mexc', 'buy', 'https://www.mexc.com/buy-crypto/p2p', 'MEXC Buy', ARRAY['AMD', 'EUR', 'RUB', 'USD']::TEXT[], ARRAY[]::TEXT[], ARRAY['p2p', 'exchanger']::TEXT[], '{"p2p":{"kind":"http_json","endpoint":"https://www.mexc.co/api/platform/p2p/api/market","method":"GET","headers":{"Accept":"application/json","Origin":"https://www.mexc.co","Referer":"https://www.mexc.co/en-NG/buy-crypto/p2p","X-Client":"WEB","X-Device-Id":"unknowndeviceid"},"asset_codes":{"BTC":"febc9973be4d4d53bb374476239eb219","ETH":"93c38b0169214f8689763ce9a63a73ff","USDC":"34309140878b4ae99f195ac091d49bab","USDT":"128f589271cb4951b03e71e6323eb7be"},"supported_assets":["USDT","USDC","BTC","ETH"],"timeout_ms":10000,"max_results":20,"fiat_probe_amount":null,"asset_probe_amount":null,"default_min_fiat":null,"default_max_fiat":null,"default_available_asset":null,"auth":null,"buy":{"query":{"adOrderSort":"","adOrderSortField":"","adsType":"1","allowTrade":"false","amount":"{{amount}}","blockTrade":"false","certifiedMerchant":"false","coinId":"{{asset}}","countryCode":"","currency":"{{fiat}}","follow":"false","haveTrade":"false","page":"1","pageSize":"{{limit_number}}","payMethod":"","tradeType":"SELL"},"request_json":null,"amount_mode":"query_or_empty","items_pointer":"/data","success_pointer":"/code","success_value":"0","success_missing_allowed":false,"error_pointer":"/msg","offer":null},"sell":{"query":{"adOrderSort":"","adOrderSortField":"","adsType":"1","allowTrade":"false","amount":"{{amount}}","blockTrade":"false","certifiedMerchant":"false","coinId":"{{asset}}","countryCode":"","currency":"{{fiat}}","follow":"false","haveTrade":"false","page":"1","pageSize":"{{limit_number}}","payMethod":"","tradeType":"BUY"},"request_json":null,"amount_mode":"query_or_empty","items_pointer":"/data","success_pointer":"/code","success_value":"0","success_missing_allowed":false,"error_pointer":"/msg","offer":null},"offer":{"ad_id_pointer":"/id","fiat_pointer":"/currency","asset_pointer":"/coinName","price_pointer":"/price","fiat_amount_pointer":null,"asset_amount_pointer":null,"price_inverted":false,"available_asset_pointer":"/availableQuantity","min_fiat_pointer":"/minTradeLimit","max_fiat_pointer":"/maxTradeLimit","payment_methods_pointer":"/payMethod","payment_method_value_pointer":null,"payment_method_fallback_pointer":null,"pay_time_limit_pointer":"/expirationTime","advertiser_id_pointer":"/merchant/memberId","advertiser_nickname_pointer":"/merchant/nickName","advertiser_user_type_pointer":"/merchant/merchantType","merchant_conditions":[{"pointer":"/merchant/merchantType","operator":"equals_ci","value":"merchant"},{"pointer":"/merchant/merchantType","operator":"equals_ci","value":"prime"},{"pointer":"/merchant/merchantType","operator":"equals_ci","value":"legacy"},{"pointer":"/merchant/merchantType","operator":"equals_ci","value":"biz"}],"verified_conditions":[],"merchant_default":false,"verified_default":false,"verified_from_merchant":true,"completed_orders_pointer":"/merchantStatistics/doneLastMonthCount","completion_rate_pointer":"/merchantStatistics/thirtyDayCompletionRate","positive_rate_pointer":"/merchantStatistics/goodRate","source_url_template":"https://www.mexc.com/buy-crypto/p2p","source_url_is_exact":false,"advertiser_profile_url_template":"https://www.mexc.com/buy-crypto/user-info/{{item:/merchant/memberId}}","merchant_profile_url_template":"https://www.mexc.com/buy-crypto/merchant/{{item:/merchant/memberId}}"},"rate_table":null},"market":{"kind":"http_json","endpoint":"https://api.mexc.com/api/v3/ticker/bookTicker","method":"GET","headers":{},"query":{},"request_json":null,"timeout_ms":4000,"items_pointer":null,"symbol_pointer":"/symbol","bid_pointer":"/bidPrice","ask_pointer":"/askPrice","symbol_remove":null,"success_pointer":null,"success_value":null,"success_missing_allowed":false,"error_pointer":null},"bestchange":null}'::JSONB, '{}'::JSONB, '{}'::JSONB, 'mexc/Providerfile')
+VALUES ('mexc', 'buy', 'https://www.mexc.com/buy-crypto/p2p', 'MEXC Buy', ARRAY['AMD', 'BYN', 'EUR', 'RUB', 'USD']::TEXT[], ARRAY[]::TEXT[], ARRAY['p2p', 'exchanger']::TEXT[], '{"p2p":{"kind":"http_json","endpoint":"https://www.mexc.co/api/platform/p2p/api/market","method":"GET","headers":{"Accept":"application/json","Origin":"https://www.mexc.co","Referer":"https://www.mexc.co/en-NG/buy-crypto/p2p","X-Client":"WEB","X-Device-Id":"unknowndeviceid"},"asset_codes":{"BTC":"febc9973be4d4d53bb374476239eb219","ETH":"93c38b0169214f8689763ce9a63a73ff","USDC":"34309140878b4ae99f195ac091d49bab","USDT":"128f589271cb4951b03e71e6323eb7be"},"supported_assets":["USDT","USDC","BTC","ETH"],"supported_fiats":["USD","RUB","EUR","AMD","BYN"],"payment_method_aliases":{"Alfa-Bank Belarus":["Alfa Bank Belarus","A-Bank"],"Bank Dabrabyt":["Dabrabyt"],"Bank Reshenie":["Reshenie Bank"],"Belagroprombank":["Agrobank","Belagroprom Bank"],"Paritetbank":["Paritet Bank"],"Priorbank":["PriorBank"],"Sber Bank Belarus":["BPS-Sberbank","Sber Bank"],"Sberbank":["Sber"],"T-Bank":["Tinkoff","Tinkoff Bank"],"VTB Belarus":["VTB Bank Belarus","Bank VTB Belarus"]},"timeout_ms":10000,"max_results":20,"fiat_probe_amount":null,"asset_probe_amount":null,"default_min_fiat":null,"default_max_fiat":null,"default_available_asset":null,"auth":null,"buy":{"query":{"adOrderSort":"","adOrderSortField":"","adsType":"1","allowTrade":"false","amount":"{{amount}}","blockTrade":"false","certifiedMerchant":"false","coinId":"{{asset}}","countryCode":"","currency":"{{fiat}}","follow":"false","haveTrade":"false","page":"1","pageSize":"{{limit_number}}","payMethod":"","tradeType":"SELL"},"request_json":null,"amount_mode":"query_or_empty","items_pointer":"/data","success_pointer":"/code","success_value":"0","success_missing_allowed":false,"error_pointer":"/msg","offer":null},"sell":{"query":{"adOrderSort":"","adOrderSortField":"","adsType":"1","allowTrade":"false","amount":"{{amount}}","blockTrade":"false","certifiedMerchant":"false","coinId":"{{asset}}","countryCode":"","currency":"{{fiat}}","follow":"false","haveTrade":"false","page":"1","pageSize":"{{limit_number}}","payMethod":"","tradeType":"BUY"},"request_json":null,"amount_mode":"query_or_empty","items_pointer":"/data","success_pointer":"/code","success_value":"0","success_missing_allowed":false,"error_pointer":"/msg","offer":null},"offer":{"ad_id_pointer":"/id","fiat_pointer":"/currency","asset_pointer":"/coinName","price_pointer":"/price","fiat_amount_pointer":null,"asset_amount_pointer":null,"price_inverted":false,"available_asset_pointer":"/availableQuantity","min_fiat_pointer":"/minTradeLimit","max_fiat_pointer":"/maxTradeLimit","payment_methods_pointer":"/payMethod","payment_method_value_pointer":null,"payment_method_fallback_pointer":null,"pay_time_limit_pointer":"/expirationTime","advertiser_id_pointer":"/merchant/memberId","advertiser_nickname_pointer":"/merchant/nickName","advertiser_user_type_pointer":"/merchant/merchantType","merchant_conditions":[{"pointer":"/merchant/merchantType","operator":"equals_ci","value":"merchant"},{"pointer":"/merchant/merchantType","operator":"equals_ci","value":"prime"},{"pointer":"/merchant/merchantType","operator":"equals_ci","value":"legacy"},{"pointer":"/merchant/merchantType","operator":"equals_ci","value":"biz"}],"verified_conditions":[],"merchant_default":false,"verified_default":false,"verified_from_merchant":true,"completed_orders_pointer":"/merchantStatistics/doneLastMonthCount","completion_rate_pointer":"/merchantStatistics/thirtyDayCompletionRate","positive_rate_pointer":"/merchantStatistics/goodRate","source_url_template":"https://www.mexc.com/buy-crypto/p2p","source_url_is_exact":false,"advertiser_profile_url_template":"https://www.mexc.com/buy-crypto/user-info/{{item:/merchant/memberId}}","merchant_profile_url_template":"https://www.mexc.com/buy-crypto/merchant/{{item:/merchant/memberId}}"},"rate_table":null},"market":{"kind":"http_json","endpoint":"https://api.mexc.com/api/v3/ticker/bookTicker","method":"GET","headers":{},"query":{},"request_json":null,"timeout_ms":4000,"items_pointer":null,"symbol_pointer":"/symbol","bid_pointer":"/bidPrice","ask_pointer":"/askPrice","symbol_remove":null,"success_pointer":null,"success_value":null,"success_missing_allowed":false,"error_pointer":null},"bestchange":null}'::JSONB, '{}'::JSONB, '{}'::JSONB, 'mexc/Providerfile')
 ON CONFLICT (slug, operation) DO UPDATE SET
 source_url = EXCLUDED.source_url,
 name = EXCLUDED.name,
@@ -300,7 +300,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, source_file)
-VALUES ('mexc', 'sell', 'https://www.mexc.com/buy-crypto/p2p', 'MEXC Sell', ARRAY['AMD', 'EUR', 'RUB', 'USD']::TEXT[], ARRAY[]::TEXT[], ARRAY['p2p', 'exchanger']::TEXT[], '{"p2p":{"kind":"http_json","endpoint":"https://www.mexc.co/api/platform/p2p/api/market","method":"GET","headers":{"Accept":"application/json","Origin":"https://www.mexc.co","Referer":"https://www.mexc.co/en-NG/buy-crypto/p2p","X-Client":"WEB","X-Device-Id":"unknowndeviceid"},"asset_codes":{"BTC":"febc9973be4d4d53bb374476239eb219","ETH":"93c38b0169214f8689763ce9a63a73ff","USDC":"34309140878b4ae99f195ac091d49bab","USDT":"128f589271cb4951b03e71e6323eb7be"},"supported_assets":["USDT","USDC","BTC","ETH"],"timeout_ms":10000,"max_results":20,"fiat_probe_amount":null,"asset_probe_amount":null,"default_min_fiat":null,"default_max_fiat":null,"default_available_asset":null,"auth":null,"buy":{"query":{"adOrderSort":"","adOrderSortField":"","adsType":"1","allowTrade":"false","amount":"{{amount}}","blockTrade":"false","certifiedMerchant":"false","coinId":"{{asset}}","countryCode":"","currency":"{{fiat}}","follow":"false","haveTrade":"false","page":"1","pageSize":"{{limit_number}}","payMethod":"","tradeType":"SELL"},"request_json":null,"amount_mode":"query_or_empty","items_pointer":"/data","success_pointer":"/code","success_value":"0","success_missing_allowed":false,"error_pointer":"/msg","offer":null},"sell":{"query":{"adOrderSort":"","adOrderSortField":"","adsType":"1","allowTrade":"false","amount":"{{amount}}","blockTrade":"false","certifiedMerchant":"false","coinId":"{{asset}}","countryCode":"","currency":"{{fiat}}","follow":"false","haveTrade":"false","page":"1","pageSize":"{{limit_number}}","payMethod":"","tradeType":"BUY"},"request_json":null,"amount_mode":"query_or_empty","items_pointer":"/data","success_pointer":"/code","success_value":"0","success_missing_allowed":false,"error_pointer":"/msg","offer":null},"offer":{"ad_id_pointer":"/id","fiat_pointer":"/currency","asset_pointer":"/coinName","price_pointer":"/price","fiat_amount_pointer":null,"asset_amount_pointer":null,"price_inverted":false,"available_asset_pointer":"/availableQuantity","min_fiat_pointer":"/minTradeLimit","max_fiat_pointer":"/maxTradeLimit","payment_methods_pointer":"/payMethod","payment_method_value_pointer":null,"payment_method_fallback_pointer":null,"pay_time_limit_pointer":"/expirationTime","advertiser_id_pointer":"/merchant/memberId","advertiser_nickname_pointer":"/merchant/nickName","advertiser_user_type_pointer":"/merchant/merchantType","merchant_conditions":[{"pointer":"/merchant/merchantType","operator":"equals_ci","value":"merchant"},{"pointer":"/merchant/merchantType","operator":"equals_ci","value":"prime"},{"pointer":"/merchant/merchantType","operator":"equals_ci","value":"legacy"},{"pointer":"/merchant/merchantType","operator":"equals_ci","value":"biz"}],"verified_conditions":[],"merchant_default":false,"verified_default":false,"verified_from_merchant":true,"completed_orders_pointer":"/merchantStatistics/doneLastMonthCount","completion_rate_pointer":"/merchantStatistics/thirtyDayCompletionRate","positive_rate_pointer":"/merchantStatistics/goodRate","source_url_template":"https://www.mexc.com/buy-crypto/p2p","source_url_is_exact":false,"advertiser_profile_url_template":"https://www.mexc.com/buy-crypto/user-info/{{item:/merchant/memberId}}","merchant_profile_url_template":"https://www.mexc.com/buy-crypto/merchant/{{item:/merchant/memberId}}"},"rate_table":null},"market":{"kind":"http_json","endpoint":"https://api.mexc.com/api/v3/ticker/bookTicker","method":"GET","headers":{},"query":{},"request_json":null,"timeout_ms":4000,"items_pointer":null,"symbol_pointer":"/symbol","bid_pointer":"/bidPrice","ask_pointer":"/askPrice","symbol_remove":null,"success_pointer":null,"success_value":null,"success_missing_allowed":false,"error_pointer":null},"bestchange":null}'::JSONB, '{}'::JSONB, '{}'::JSONB, 'mexc/Providerfile')
+VALUES ('mexc', 'sell', 'https://www.mexc.com/buy-crypto/p2p', 'MEXC Sell', ARRAY['AMD', 'BYN', 'EUR', 'RUB', 'USD']::TEXT[], ARRAY[]::TEXT[], ARRAY['p2p', 'exchanger']::TEXT[], '{"p2p":{"kind":"http_json","endpoint":"https://www.mexc.co/api/platform/p2p/api/market","method":"GET","headers":{"Accept":"application/json","Origin":"https://www.mexc.co","Referer":"https://www.mexc.co/en-NG/buy-crypto/p2p","X-Client":"WEB","X-Device-Id":"unknowndeviceid"},"asset_codes":{"BTC":"febc9973be4d4d53bb374476239eb219","ETH":"93c38b0169214f8689763ce9a63a73ff","USDC":"34309140878b4ae99f195ac091d49bab","USDT":"128f589271cb4951b03e71e6323eb7be"},"supported_assets":["USDT","USDC","BTC","ETH"],"supported_fiats":["USD","RUB","EUR","AMD","BYN"],"payment_method_aliases":{"Alfa-Bank Belarus":["Alfa Bank Belarus","A-Bank"],"Bank Dabrabyt":["Dabrabyt"],"Bank Reshenie":["Reshenie Bank"],"Belagroprombank":["Agrobank","Belagroprom Bank"],"Paritetbank":["Paritet Bank"],"Priorbank":["PriorBank"],"Sber Bank Belarus":["BPS-Sberbank","Sber Bank"],"Sberbank":["Sber"],"T-Bank":["Tinkoff","Tinkoff Bank"],"VTB Belarus":["VTB Bank Belarus","Bank VTB Belarus"]},"timeout_ms":10000,"max_results":20,"fiat_probe_amount":null,"asset_probe_amount":null,"default_min_fiat":null,"default_max_fiat":null,"default_available_asset":null,"auth":null,"buy":{"query":{"adOrderSort":"","adOrderSortField":"","adsType":"1","allowTrade":"false","amount":"{{amount}}","blockTrade":"false","certifiedMerchant":"false","coinId":"{{asset}}","countryCode":"","currency":"{{fiat}}","follow":"false","haveTrade":"false","page":"1","pageSize":"{{limit_number}}","payMethod":"","tradeType":"SELL"},"request_json":null,"amount_mode":"query_or_empty","items_pointer":"/data","success_pointer":"/code","success_value":"0","success_missing_allowed":false,"error_pointer":"/msg","offer":null},"sell":{"query":{"adOrderSort":"","adOrderSortField":"","adsType":"1","allowTrade":"false","amount":"{{amount}}","blockTrade":"false","certifiedMerchant":"false","coinId":"{{asset}}","countryCode":"","currency":"{{fiat}}","follow":"false","haveTrade":"false","page":"1","pageSize":"{{limit_number}}","payMethod":"","tradeType":"BUY"},"request_json":null,"amount_mode":"query_or_empty","items_pointer":"/data","success_pointer":"/code","success_value":"0","success_missing_allowed":false,"error_pointer":"/msg","offer":null},"offer":{"ad_id_pointer":"/id","fiat_pointer":"/currency","asset_pointer":"/coinName","price_pointer":"/price","fiat_amount_pointer":null,"asset_amount_pointer":null,"price_inverted":false,"available_asset_pointer":"/availableQuantity","min_fiat_pointer":"/minTradeLimit","max_fiat_pointer":"/maxTradeLimit","payment_methods_pointer":"/payMethod","payment_method_value_pointer":null,"payment_method_fallback_pointer":null,"pay_time_limit_pointer":"/expirationTime","advertiser_id_pointer":"/merchant/memberId","advertiser_nickname_pointer":"/merchant/nickName","advertiser_user_type_pointer":"/merchant/merchantType","merchant_conditions":[{"pointer":"/merchant/merchantType","operator":"equals_ci","value":"merchant"},{"pointer":"/merchant/merchantType","operator":"equals_ci","value":"prime"},{"pointer":"/merchant/merchantType","operator":"equals_ci","value":"legacy"},{"pointer":"/merchant/merchantType","operator":"equals_ci","value":"biz"}],"verified_conditions":[],"merchant_default":false,"verified_default":false,"verified_from_merchant":true,"completed_orders_pointer":"/merchantStatistics/doneLastMonthCount","completion_rate_pointer":"/merchantStatistics/thirtyDayCompletionRate","positive_rate_pointer":"/merchantStatistics/goodRate","source_url_template":"https://www.mexc.com/buy-crypto/p2p","source_url_is_exact":false,"advertiser_profile_url_template":"https://www.mexc.com/buy-crypto/user-info/{{item:/merchant/memberId}}","merchant_profile_url_template":"https://www.mexc.com/buy-crypto/merchant/{{item:/merchant/memberId}}"},"rate_table":null},"market":{"kind":"http_json","endpoint":"https://api.mexc.com/api/v3/ticker/bookTicker","method":"GET","headers":{},"query":{},"request_json":null,"timeout_ms":4000,"items_pointer":null,"symbol_pointer":"/symbol","bid_pointer":"/bidPrice","ask_pointer":"/askPrice","symbol_remove":null,"success_pointer":null,"success_value":null,"success_missing_allowed":false,"error_pointer":null},"bestchange":null}'::JSONB, '{}'::JSONB, '{}'::JSONB, 'mexc/Providerfile')
 ON CONFLICT (slug, operation) DO UPDATE SET
 source_url = EXCLUDED.source_url,
 name = EXCLUDED.name,
@@ -342,7 +342,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, source_file)
-VALUES ('okx', 'buy', 'https://www.okx.com', 'OKX Buy', ARRAY['AMD', 'EUR', 'RUB', 'USD']::TEXT[], ARRAY[]::TEXT[], ARRAY['p2p', 'exchanger']::TEXT[], '{"p2p":{"kind":"http_json","endpoint":"https://www.okx.com/v3/c2c/tradingOrders/books","method":"GET","headers":{"Origin":"https://www.okx.com","Referer":"https://www.okx.com/p2p-markets/"},"asset_codes":{},"supported_assets":["USDT","USDC","BTC","ETH"],"timeout_ms":10000,"max_results":null,"fiat_probe_amount":null,"asset_probe_amount":null,"default_min_fiat":null,"default_max_fiat":null,"default_available_asset":null,"auth":null,"buy":{"query":{"baseCurrency":"{{asset}}","isAbleFilter":"false","paymentMethod":"all","quoteCurrency":"{{fiat}}","showAlreadyTraded":"false","showFollow":"false","showTrade":"false","side":"sell","urlId":"0","userType":"all"},"request_json":null,"amount_mode":"query_or_empty","items_pointer":"/data/sell","success_pointer":"/code","success_value":"0","success_missing_allowed":false,"error_pointer":"/detailMsg","offer":null},"sell":{"query":{"baseCurrency":"{{asset}}","isAbleFilter":"false","paymentMethod":"all","quoteCurrency":"{{fiat}}","showAlreadyTraded":"false","showFollow":"false","showTrade":"false","side":"buy","urlId":"0","userType":"all"},"request_json":null,"amount_mode":"query_or_empty","items_pointer":"/data/buy","success_pointer":"/code","success_value":"0","success_missing_allowed":false,"error_pointer":"/detailMsg","offer":null},"offer":{"ad_id_pointer":"/id","fiat_pointer":"/quoteCurrency","asset_pointer":"/baseCurrency","price_pointer":"/price","fiat_amount_pointer":null,"asset_amount_pointer":null,"price_inverted":false,"available_asset_pointer":"/availableAmount","min_fiat_pointer":"/quoteMinAmountPerOrder","max_fiat_pointer":"/quoteMaxAmountPerOrder","payment_methods_pointer":"/paymentMethods","payment_method_value_pointer":null,"payment_method_fallback_pointer":null,"pay_time_limit_pointer":"/paymentTimeoutMinutes","advertiser_id_pointer":"/publicUserId","advertiser_nickname_pointer":"/nickName","advertiser_user_type_pointer":"/userType","merchant_conditions":[{"pointer":"/isInstitution","operator":"truthy","value":null},{"pointer":"/merchantId","operator":"non_empty","value":null},{"pointer":"/userType","operator":"equals_ci","value":"merchant"}],"verified_conditions":[],"merchant_default":false,"verified_default":false,"verified_from_merchant":true,"completed_orders_pointer":"/completedOrderQuantity","completion_rate_pointer":"/completedRate","positive_rate_pointer":"/posReviewPercentage","source_url_template":"https://www.okx.com/p2p-markets/{{fiat_lower}}/{{side}}-{{asset_lower}}","source_url_is_exact":false,"advertiser_profile_url_template":"https://www.okx.com/p2p/ads-merchant?publicUserId={{item:/publicUserId}}"},"rate_table":null},"market":{"kind":"http_json","endpoint":"https://www.okx.com/api/v5/market/tickers","method":"GET","headers":{},"query":{"instType":"SPOT"},"request_json":null,"timeout_ms":10000,"items_pointer":"/data","symbol_pointer":"/instId","bid_pointer":"/bidPx","ask_pointer":"/askPx","symbol_remove":"-","success_pointer":"/code","success_value":"0","success_missing_allowed":false,"error_pointer":"/msg"},"bestchange":null}'::JSONB, '{}'::JSONB, '{}'::JSONB, 'okx/Providerfile')
+VALUES ('okx', 'buy', 'https://www.okx.com', 'OKX Buy', ARRAY['AMD', 'BYN', 'EUR', 'RUB', 'USD']::TEXT[], ARRAY[]::TEXT[], ARRAY['p2p', 'exchanger']::TEXT[], '{"p2p":{"kind":"http_json","endpoint":"https://www.okx.com/v3/c2c/tradingOrders/books","method":"GET","headers":{"Origin":"https://www.okx.com","Referer":"https://www.okx.com/p2p-markets/"},"asset_codes":{},"supported_assets":["USDT","USDC","BTC","ETH"],"supported_fiats":["USD","RUB","EUR","AMD","BYN"],"payment_method_aliases":{"Alfa-Bank Belarus":["Alfa Bank Belarus","A-Bank"],"Bank Dabrabyt":["Dabrabyt"],"Bank Reshenie":["Reshenie Bank"],"Belagroprombank":["Agrobank","Belagroprom Bank"],"Paritetbank":["Paritet Bank"],"Priorbank":["PriorBank"],"Sber Bank Belarus":["BPS-Sberbank","Sber Bank"],"Sberbank":["Sber"],"T-Bank":["Tinkoff","Tinkoff Bank"],"VTB Belarus":["VTB Bank Belarus","Bank VTB Belarus"]},"timeout_ms":10000,"max_results":null,"fiat_probe_amount":null,"asset_probe_amount":null,"default_min_fiat":null,"default_max_fiat":null,"default_available_asset":null,"auth":null,"buy":{"query":{"baseCurrency":"{{asset}}","isAbleFilter":"false","paymentMethod":"all","quoteCurrency":"{{fiat}}","showAlreadyTraded":"false","showFollow":"false","showTrade":"false","side":"sell","urlId":"0","userType":"all"},"request_json":null,"amount_mode":"query_or_empty","items_pointer":"/data/sell","success_pointer":"/code","success_value":"0","success_missing_allowed":false,"error_pointer":"/detailMsg","offer":null},"sell":{"query":{"baseCurrency":"{{asset}}","isAbleFilter":"false","paymentMethod":"all","quoteCurrency":"{{fiat}}","showAlreadyTraded":"false","showFollow":"false","showTrade":"false","side":"buy","urlId":"0","userType":"all"},"request_json":null,"amount_mode":"query_or_empty","items_pointer":"/data/buy","success_pointer":"/code","success_value":"0","success_missing_allowed":false,"error_pointer":"/detailMsg","offer":null},"offer":{"ad_id_pointer":"/id","fiat_pointer":"/quoteCurrency","asset_pointer":"/baseCurrency","price_pointer":"/price","fiat_amount_pointer":null,"asset_amount_pointer":null,"price_inverted":false,"available_asset_pointer":"/availableAmount","min_fiat_pointer":"/quoteMinAmountPerOrder","max_fiat_pointer":"/quoteMaxAmountPerOrder","payment_methods_pointer":"/paymentMethods","payment_method_value_pointer":null,"payment_method_fallback_pointer":null,"pay_time_limit_pointer":"/paymentTimeoutMinutes","advertiser_id_pointer":"/publicUserId","advertiser_nickname_pointer":"/nickName","advertiser_user_type_pointer":"/userType","merchant_conditions":[{"pointer":"/isInstitution","operator":"truthy","value":null},{"pointer":"/merchantId","operator":"non_empty","value":null},{"pointer":"/userType","operator":"equals_ci","value":"merchant"}],"verified_conditions":[],"merchant_default":false,"verified_default":false,"verified_from_merchant":true,"completed_orders_pointer":"/completedOrderQuantity","completion_rate_pointer":"/completedRate","positive_rate_pointer":"/posReviewPercentage","source_url_template":"https://www.okx.com/p2p-markets/{{fiat_lower}}/{{side}}-{{asset_lower}}","source_url_is_exact":false,"advertiser_profile_url_template":"https://www.okx.com/p2p/ads-merchant?publicUserId={{item:/publicUserId}}"},"rate_table":null},"market":{"kind":"http_json","endpoint":"https://www.okx.com/api/v5/market/tickers","method":"GET","headers":{},"query":{"instType":"SPOT"},"request_json":null,"timeout_ms":10000,"items_pointer":"/data","symbol_pointer":"/instId","bid_pointer":"/bidPx","ask_pointer":"/askPx","symbol_remove":"-","success_pointer":"/code","success_value":"0","success_missing_allowed":false,"error_pointer":"/msg"},"bestchange":null}'::JSONB, '{}'::JSONB, '{}'::JSONB, 'okx/Providerfile')
 ON CONFLICT (slug, operation) DO UPDATE SET
 source_url = EXCLUDED.source_url,
 name = EXCLUDED.name,
@@ -356,7 +356,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, source_file)
-VALUES ('okx', 'sell', 'https://www.okx.com', 'OKX Sell', ARRAY['AMD', 'EUR', 'RUB', 'USD']::TEXT[], ARRAY[]::TEXT[], ARRAY['p2p', 'exchanger']::TEXT[], '{"p2p":{"kind":"http_json","endpoint":"https://www.okx.com/v3/c2c/tradingOrders/books","method":"GET","headers":{"Origin":"https://www.okx.com","Referer":"https://www.okx.com/p2p-markets/"},"asset_codes":{},"supported_assets":["USDT","USDC","BTC","ETH"],"timeout_ms":10000,"max_results":null,"fiat_probe_amount":null,"asset_probe_amount":null,"default_min_fiat":null,"default_max_fiat":null,"default_available_asset":null,"auth":null,"buy":{"query":{"baseCurrency":"{{asset}}","isAbleFilter":"false","paymentMethod":"all","quoteCurrency":"{{fiat}}","showAlreadyTraded":"false","showFollow":"false","showTrade":"false","side":"sell","urlId":"0","userType":"all"},"request_json":null,"amount_mode":"query_or_empty","items_pointer":"/data/sell","success_pointer":"/code","success_value":"0","success_missing_allowed":false,"error_pointer":"/detailMsg","offer":null},"sell":{"query":{"baseCurrency":"{{asset}}","isAbleFilter":"false","paymentMethod":"all","quoteCurrency":"{{fiat}}","showAlreadyTraded":"false","showFollow":"false","showTrade":"false","side":"buy","urlId":"0","userType":"all"},"request_json":null,"amount_mode":"query_or_empty","items_pointer":"/data/buy","success_pointer":"/code","success_value":"0","success_missing_allowed":false,"error_pointer":"/detailMsg","offer":null},"offer":{"ad_id_pointer":"/id","fiat_pointer":"/quoteCurrency","asset_pointer":"/baseCurrency","price_pointer":"/price","fiat_amount_pointer":null,"asset_amount_pointer":null,"price_inverted":false,"available_asset_pointer":"/availableAmount","min_fiat_pointer":"/quoteMinAmountPerOrder","max_fiat_pointer":"/quoteMaxAmountPerOrder","payment_methods_pointer":"/paymentMethods","payment_method_value_pointer":null,"payment_method_fallback_pointer":null,"pay_time_limit_pointer":"/paymentTimeoutMinutes","advertiser_id_pointer":"/publicUserId","advertiser_nickname_pointer":"/nickName","advertiser_user_type_pointer":"/userType","merchant_conditions":[{"pointer":"/isInstitution","operator":"truthy","value":null},{"pointer":"/merchantId","operator":"non_empty","value":null},{"pointer":"/userType","operator":"equals_ci","value":"merchant"}],"verified_conditions":[],"merchant_default":false,"verified_default":false,"verified_from_merchant":true,"completed_orders_pointer":"/completedOrderQuantity","completion_rate_pointer":"/completedRate","positive_rate_pointer":"/posReviewPercentage","source_url_template":"https://www.okx.com/p2p-markets/{{fiat_lower}}/{{side}}-{{asset_lower}}","source_url_is_exact":false,"advertiser_profile_url_template":"https://www.okx.com/p2p/ads-merchant?publicUserId={{item:/publicUserId}}"},"rate_table":null},"market":{"kind":"http_json","endpoint":"https://www.okx.com/api/v5/market/tickers","method":"GET","headers":{},"query":{"instType":"SPOT"},"request_json":null,"timeout_ms":10000,"items_pointer":"/data","symbol_pointer":"/instId","bid_pointer":"/bidPx","ask_pointer":"/askPx","symbol_remove":"-","success_pointer":"/code","success_value":"0","success_missing_allowed":false,"error_pointer":"/msg"},"bestchange":null}'::JSONB, '{}'::JSONB, '{}'::JSONB, 'okx/Providerfile')
+VALUES ('okx', 'sell', 'https://www.okx.com', 'OKX Sell', ARRAY['AMD', 'BYN', 'EUR', 'RUB', 'USD']::TEXT[], ARRAY[]::TEXT[], ARRAY['p2p', 'exchanger']::TEXT[], '{"p2p":{"kind":"http_json","endpoint":"https://www.okx.com/v3/c2c/tradingOrders/books","method":"GET","headers":{"Origin":"https://www.okx.com","Referer":"https://www.okx.com/p2p-markets/"},"asset_codes":{},"supported_assets":["USDT","USDC","BTC","ETH"],"supported_fiats":["USD","RUB","EUR","AMD","BYN"],"payment_method_aliases":{"Alfa-Bank Belarus":["Alfa Bank Belarus","A-Bank"],"Bank Dabrabyt":["Dabrabyt"],"Bank Reshenie":["Reshenie Bank"],"Belagroprombank":["Agrobank","Belagroprom Bank"],"Paritetbank":["Paritet Bank"],"Priorbank":["PriorBank"],"Sber Bank Belarus":["BPS-Sberbank","Sber Bank"],"Sberbank":["Sber"],"T-Bank":["Tinkoff","Tinkoff Bank"],"VTB Belarus":["VTB Bank Belarus","Bank VTB Belarus"]},"timeout_ms":10000,"max_results":null,"fiat_probe_amount":null,"asset_probe_amount":null,"default_min_fiat":null,"default_max_fiat":null,"default_available_asset":null,"auth":null,"buy":{"query":{"baseCurrency":"{{asset}}","isAbleFilter":"false","paymentMethod":"all","quoteCurrency":"{{fiat}}","showAlreadyTraded":"false","showFollow":"false","showTrade":"false","side":"sell","urlId":"0","userType":"all"},"request_json":null,"amount_mode":"query_or_empty","items_pointer":"/data/sell","success_pointer":"/code","success_value":"0","success_missing_allowed":false,"error_pointer":"/detailMsg","offer":null},"sell":{"query":{"baseCurrency":"{{asset}}","isAbleFilter":"false","paymentMethod":"all","quoteCurrency":"{{fiat}}","showAlreadyTraded":"false","showFollow":"false","showTrade":"false","side":"buy","urlId":"0","userType":"all"},"request_json":null,"amount_mode":"query_or_empty","items_pointer":"/data/buy","success_pointer":"/code","success_value":"0","success_missing_allowed":false,"error_pointer":"/detailMsg","offer":null},"offer":{"ad_id_pointer":"/id","fiat_pointer":"/quoteCurrency","asset_pointer":"/baseCurrency","price_pointer":"/price","fiat_amount_pointer":null,"asset_amount_pointer":null,"price_inverted":false,"available_asset_pointer":"/availableAmount","min_fiat_pointer":"/quoteMinAmountPerOrder","max_fiat_pointer":"/quoteMaxAmountPerOrder","payment_methods_pointer":"/paymentMethods","payment_method_value_pointer":null,"payment_method_fallback_pointer":null,"pay_time_limit_pointer":"/paymentTimeoutMinutes","advertiser_id_pointer":"/publicUserId","advertiser_nickname_pointer":"/nickName","advertiser_user_type_pointer":"/userType","merchant_conditions":[{"pointer":"/isInstitution","operator":"truthy","value":null},{"pointer":"/merchantId","operator":"non_empty","value":null},{"pointer":"/userType","operator":"equals_ci","value":"merchant"}],"verified_conditions":[],"merchant_default":false,"verified_default":false,"verified_from_merchant":true,"completed_orders_pointer":"/completedOrderQuantity","completion_rate_pointer":"/completedRate","positive_rate_pointer":"/posReviewPercentage","source_url_template":"https://www.okx.com/p2p-markets/{{fiat_lower}}/{{side}}-{{asset_lower}}","source_url_is_exact":false,"advertiser_profile_url_template":"https://www.okx.com/p2p/ads-merchant?publicUserId={{item:/publicUserId}}"},"rate_table":null},"market":{"kind":"http_json","endpoint":"https://www.okx.com/api/v5/market/tickers","method":"GET","headers":{},"query":{"instType":"SPOT"},"request_json":null,"timeout_ms":10000,"items_pointer":"/data","symbol_pointer":"/instId","bid_pointer":"/bidPx","ask_pointer":"/askPx","symbol_remove":"-","success_pointer":"/code","success_value":"0","success_missing_allowed":false,"error_pointer":"/msg"},"bestchange":null}'::JSONB, '{}'::JSONB, '{}'::JSONB, 'okx/Providerfile')
 ON CONFLICT (slug, operation) DO UPDATE SET
 source_url = EXCLUDED.source_url,
 name = EXCLUDED.name,
@@ -426,7 +426,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, source_file)
-VALUES ('skylabs', 'buy', 'https://skylabs.world/', 'SkyLabs Buy', ARRAY['AMD', 'USD']::TEXT[], ARRAY['Bank Transfer', 'EasyPay', 'SkyLabs ATM', 'Telcell']::TEXT[], ARRAY['exchanger']::TEXT[], '{"p2p":{"kind":"http_json","market":"direct_exchange","endpoint":"https://api.skylabs.world/api/rate/all","method":"GET","headers":{"Origin":"https://skylabs.world","Referer":"https://skylabs.world/"},"asset_codes":{},"supported_assets":["BTC","ETH","USDT","BNB","TRX","USDC","TON","LTC","MATIC","SOL"],"timeout_ms":5000,"max_results":null,"fiat_probe_amount":null,"asset_probe_amount":null,"default_min_fiat":1.0,"default_max_fiat":1000000000.0,"default_available_asset":1000000000.0,"auth":null,"buy":{"endpoint":"https://api.skylabs.world/api/rate/{{asset}}/{{fiat}}/sell","query":{},"request_json":null,"amount_mode":"query_or_empty","items_pointer":null,"success_pointer":"/status","success_value":"true","success_missing_allowed":false,"error_pointer":null,"offer":null},"sell":{"endpoint":"https://api.skylabs.world/api/rate/{{asset}}/{{fiat}}/buy","query":{},"request_json":null,"amount_mode":"query_or_empty","items_pointer":null,"success_pointer":"/status","success_value":"true","success_missing_allowed":false,"error_pointer":null,"offer":null},"offer":{"ad_id_pointer":null,"fiat_pointer":null,"asset_pointer":null,"network_by_asset":{"SOL":"solana"},"price_pointer":"/result","fiat_amount_pointer":null,"asset_amount_pointer":null,"price_inverted":false,"available_asset_pointer":null,"min_fiat_pointer":null,"max_fiat_pointer":null,"payment_methods_pointer":null,"payment_method_value_pointer":null,"payment_method_fallback_pointer":null,"pay_time_limit_pointer":null,"advertiser_id_pointer":null,"advertiser_nickname_pointer":null,"advertiser_user_type_pointer":null,"merchant_conditions":[],"verified_conditions":[],"merchant_default":true,"verified_default":true,"verified_from_merchant":false,"completed_orders_pointer":null,"completion_rate_pointer":null,"positive_rate_pointer":null,"source_url_template":"https://skylabs.world/#rates","source_url_is_exact":false,"advertiser_profile_url_template":null},"rate_table":null},"market":null,"bestchange":null}'::JSONB, '{}'::JSONB, '{"kind":"quote_dependent","description":"The effective Pay3Flow rate includes SkyLabs'' live cash-in/cash-out or bank commission, conversion adjustment, and the selected network''s published crypto withdrawal fee.","docs_url":"https://skylabs.world/#calc"}'::JSONB, 'skylabs/Providerfile')
+VALUES ('skylabs', 'buy', 'https://skylabs.world/', 'SkyLabs Buy', ARRAY['AMD', 'USD']::TEXT[], ARRAY['Bank Transfer', 'EasyPay', 'SkyLabs ATM', 'Telcell']::TEXT[], ARRAY['exchanger']::TEXT[], '{"p2p":{"kind":"http_json","market":"direct_exchange","endpoint":"https://api.skylabs.world/api/rate/all","method":"GET","headers":{"Origin":"https://skylabs.world","Referer":"https://skylabs.world/"},"asset_codes":{},"supported_assets":["BTC","ETH","USDT","BNB","TRX","USDC","TON","LTC","MATIC","SOL"],"payment_method_aliases":{"Cash":["Cash USD","Cash Dollar","SkyLabs ATM"]},"timeout_ms":5000,"max_results":null,"fiat_probe_amount":null,"asset_probe_amount":null,"default_min_fiat":1.0,"default_max_fiat":1000000000.0,"default_available_asset":1000000000.0,"auth":null,"buy":{"endpoint":"https://api.skylabs.world/api/rate/{{asset}}/{{fiat}}/sell","query":{},"request_json":null,"amount_mode":"query_or_empty","items_pointer":null,"success_pointer":"/status","success_value":"true","success_missing_allowed":false,"error_pointer":null,"offer":null},"sell":{"endpoint":"https://api.skylabs.world/api/rate/{{asset}}/{{fiat}}/buy","query":{},"request_json":null,"amount_mode":"query_or_empty","items_pointer":null,"success_pointer":"/status","success_value":"true","success_missing_allowed":false,"error_pointer":null,"offer":null},"offer":{"ad_id_pointer":null,"fiat_pointer":null,"asset_pointer":null,"network_by_asset":{"SOL":"solana"},"price_pointer":"/result","fiat_amount_pointer":null,"asset_amount_pointer":null,"price_inverted":false,"available_asset_pointer":null,"min_fiat_pointer":null,"max_fiat_pointer":null,"payment_methods_pointer":null,"payment_method_value_pointer":null,"payment_method_fallback_pointer":null,"pay_time_limit_pointer":null,"advertiser_id_pointer":null,"advertiser_nickname_pointer":null,"advertiser_user_type_pointer":null,"merchant_conditions":[],"verified_conditions":[],"merchant_default":true,"verified_default":true,"verified_from_merchant":false,"completed_orders_pointer":null,"completion_rate_pointer":null,"positive_rate_pointer":null,"source_url_template":"https://skylabs.world/#rates","source_url_is_exact":false,"advertiser_profile_url_template":null},"rate_table":null},"market":null,"bestchange":null}'::JSONB, '{}'::JSONB, '{"kind":"quote_dependent","description":"The effective Pay3Flow rate includes SkyLabs'' live cash-in/cash-out or bank commission, conversion adjustment, and the selected network''s published crypto withdrawal fee.","docs_url":"https://skylabs.world/#calc"}'::JSONB, 'skylabs/Providerfile')
 ON CONFLICT (slug, operation) DO UPDATE SET
 source_url = EXCLUDED.source_url,
 name = EXCLUDED.name,
@@ -440,7 +440,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, source_file)
-VALUES ('skylabs', 'sell', 'https://skylabs.world/', 'SkyLabs Sell', ARRAY['AMD', 'USD']::TEXT[], ARRAY['Bank Transfer', 'EasyPay', 'SkyLabs ATM', 'Telcell']::TEXT[], ARRAY['exchanger']::TEXT[], '{"p2p":{"kind":"http_json","market":"direct_exchange","endpoint":"https://api.skylabs.world/api/rate/all","method":"GET","headers":{"Origin":"https://skylabs.world","Referer":"https://skylabs.world/"},"asset_codes":{},"supported_assets":["BTC","ETH","USDT","BNB","TRX","USDC","TON","LTC","MATIC","SOL"],"timeout_ms":5000,"max_results":null,"fiat_probe_amount":null,"asset_probe_amount":null,"default_min_fiat":1.0,"default_max_fiat":1000000000.0,"default_available_asset":1000000000.0,"auth":null,"buy":{"endpoint":"https://api.skylabs.world/api/rate/{{asset}}/{{fiat}}/sell","query":{},"request_json":null,"amount_mode":"query_or_empty","items_pointer":null,"success_pointer":"/status","success_value":"true","success_missing_allowed":false,"error_pointer":null,"offer":null},"sell":{"endpoint":"https://api.skylabs.world/api/rate/{{asset}}/{{fiat}}/buy","query":{},"request_json":null,"amount_mode":"query_or_empty","items_pointer":null,"success_pointer":"/status","success_value":"true","success_missing_allowed":false,"error_pointer":null,"offer":null},"offer":{"ad_id_pointer":null,"fiat_pointer":null,"asset_pointer":null,"network_by_asset":{"SOL":"solana"},"price_pointer":"/result","fiat_amount_pointer":null,"asset_amount_pointer":null,"price_inverted":false,"available_asset_pointer":null,"min_fiat_pointer":null,"max_fiat_pointer":null,"payment_methods_pointer":null,"payment_method_value_pointer":null,"payment_method_fallback_pointer":null,"pay_time_limit_pointer":null,"advertiser_id_pointer":null,"advertiser_nickname_pointer":null,"advertiser_user_type_pointer":null,"merchant_conditions":[],"verified_conditions":[],"merchant_default":true,"verified_default":true,"verified_from_merchant":false,"completed_orders_pointer":null,"completion_rate_pointer":null,"positive_rate_pointer":null,"source_url_template":"https://skylabs.world/#rates","source_url_is_exact":false,"advertiser_profile_url_template":null},"rate_table":null},"market":null,"bestchange":null}'::JSONB, '{}'::JSONB, '{"kind":"quote_dependent","description":"The effective Pay3Flow rate includes SkyLabs'' live cash-in/cash-out or bank commission, conversion adjustment, and the selected network''s published crypto withdrawal fee.","docs_url":"https://skylabs.world/#calc"}'::JSONB, 'skylabs/Providerfile')
+VALUES ('skylabs', 'sell', 'https://skylabs.world/', 'SkyLabs Sell', ARRAY['AMD', 'USD']::TEXT[], ARRAY['Bank Transfer', 'EasyPay', 'SkyLabs ATM', 'Telcell']::TEXT[], ARRAY['exchanger']::TEXT[], '{"p2p":{"kind":"http_json","market":"direct_exchange","endpoint":"https://api.skylabs.world/api/rate/all","method":"GET","headers":{"Origin":"https://skylabs.world","Referer":"https://skylabs.world/"},"asset_codes":{},"supported_assets":["BTC","ETH","USDT","BNB","TRX","USDC","TON","LTC","MATIC","SOL"],"payment_method_aliases":{"Cash":["Cash USD","Cash Dollar","SkyLabs ATM"]},"timeout_ms":5000,"max_results":null,"fiat_probe_amount":null,"asset_probe_amount":null,"default_min_fiat":1.0,"default_max_fiat":1000000000.0,"default_available_asset":1000000000.0,"auth":null,"buy":{"endpoint":"https://api.skylabs.world/api/rate/{{asset}}/{{fiat}}/sell","query":{},"request_json":null,"amount_mode":"query_or_empty","items_pointer":null,"success_pointer":"/status","success_value":"true","success_missing_allowed":false,"error_pointer":null,"offer":null},"sell":{"endpoint":"https://api.skylabs.world/api/rate/{{asset}}/{{fiat}}/buy","query":{},"request_json":null,"amount_mode":"query_or_empty","items_pointer":null,"success_pointer":"/status","success_value":"true","success_missing_allowed":false,"error_pointer":null,"offer":null},"offer":{"ad_id_pointer":null,"fiat_pointer":null,"asset_pointer":null,"network_by_asset":{"SOL":"solana"},"price_pointer":"/result","fiat_amount_pointer":null,"asset_amount_pointer":null,"price_inverted":false,"available_asset_pointer":null,"min_fiat_pointer":null,"max_fiat_pointer":null,"payment_methods_pointer":null,"payment_method_value_pointer":null,"payment_method_fallback_pointer":null,"pay_time_limit_pointer":null,"advertiser_id_pointer":null,"advertiser_nickname_pointer":null,"advertiser_user_type_pointer":null,"merchant_conditions":[],"verified_conditions":[],"merchant_default":true,"verified_default":true,"verified_from_merchant":false,"completed_orders_pointer":null,"completion_rate_pointer":null,"positive_rate_pointer":null,"source_url_template":"https://skylabs.world/#rates","source_url_is_exact":false,"advertiser_profile_url_template":null},"rate_table":null},"market":null,"bestchange":null}'::JSONB, '{}'::JSONB, '{"kind":"quote_dependent","description":"The effective Pay3Flow rate includes SkyLabs'' live cash-in/cash-out or bank commission, conversion adjustment, and the selected network''s published crypto withdrawal fee.","docs_url":"https://skylabs.world/#calc"}'::JSONB, 'skylabs/Providerfile')
 ON CONFLICT (slug, operation) DO UPDATE SET
 source_url = EXCLUDED.source_url,
 name = EXCLUDED.name,
@@ -506,5 +506,979 @@ exchange_methods = EXCLUDED.exchange_methods,
 adapter = EXCLUDED.adapter,
 workflow = EXCLUDED.workflow,
 fee_model = EXCLUDED.fee_model,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+
+DELETE FROM banks
+ WHERE picker_visible
+   AND source_file LIKE '%/Providerfile'
+   AND method_id NOT IN ('global-usd-cash', 'am-ameriabank-usd-account', 'am-ameriabank', 'am-idbank-usd-account', 'am-idbank', 'am-acba-usd-account', 'am-acba', 'am-ardshinbank-usd-account', 'am-ardshinbank', 'am-inecobank-usd-account', 'am-inecobank', 'am-evocabank-usd-account', 'am-evocabank', 'am-vtb-usd-account', 'am-vtb', 'ru-sberbank', 'ru-tbank', 'ru-tbank-usd-account', 'ru-alfabank', 'ru-vtb', 'ru-gazprombank', 'ru-raiffeisen', 'ru-ozon', 'by-belarusbank', 'by-belagroprombank', 'by-priorbank', 'by-belinvestbank', 'by-alfabank', 'by-belgazprombank', 'by-sberbank', 'by-belveb', 'by-mtbank', 'by-vtb', 'by-dabrabyt', 'by-technobank', 'by-btk', 'by-bnb', 'by-bsb', 'by-paritetbank', 'by-bank-reshenie', 'by-statusbank', 'by-neobank', 'by-zepterbank', 'by-brrb');
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('global-usd-cash', 'global-usd-cash', 'Cash USD', 'both', 'GLOBAL', 'USD', '', '', '', 'enabled', 'cash', '#168451', '$', true, NULL, 'Cash', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('am-ameriabank-usd-account', 'am-ameriabank-usd-account', 'Ameriabank', 'both', 'AM', 'USD', '', '/icons/assets/ameriabank.png', '', 'enabled', 'bank', '#6d2c91', 'AM', true, 0, 'Ameriabank', 'ameriabank', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('am-ameriabank', 'am-ameriabank', 'Ameriabank', 'both', 'AM', 'AMD', '', '/icons/assets/ameriabank.png', '', 'enabled', 'bank', '#6d2c91', 'AM', true, 0, 'Ameriabank', 'ameriabank', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('am-idbank-usd-account', 'am-idbank-usd-account', 'IDBank', 'both', 'AM', 'USD', '', '/icons/assets/idbank.png', '', 'enabled', 'bank', '#21a366', 'ID', true, 0.75, 'IDBank', 'idbank', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('am-idbank', 'am-idbank', 'IDBank', 'both', 'AM', 'AMD', '', '/icons/assets/idbank.png', '', 'enabled', 'bank', '#21a366', 'ID', true, 0.75, 'IDBank', 'idbank', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('am-acba-usd-account', 'am-acba-usd-account', 'ACBA Bank', 'both', 'AM', 'USD', '', '', '', 'enabled', 'bank', '#ef7f1a', 'AC', true, 0, 'ACBA', 'acba', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('am-acba', 'am-acba', 'ACBA Bank', 'both', 'AM', 'AMD', '', '', '', 'enabled', 'bank', '#ef7f1a', 'AC', true, 0, 'ACBA', 'acba', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('am-ardshinbank-usd-account', 'am-ardshinbank-usd-account', 'Ardshinbank', 'both', 'AM', 'USD', '', '/icons/assets/ardshinbank.png', '', 'enabled', 'bank', '#0877bd', 'AR', false, NULL, 'Ardshinbank', 'ardshinbank', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('am-ardshinbank', 'am-ardshinbank', 'Ardshinbank', 'both', 'AM', 'AMD', '', '/icons/assets/ardshinbank.png', '', 'enabled', 'bank', '#0877bd', 'AR', false, NULL, 'Ardshinbank', 'ardshinbank', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('am-inecobank-usd-account', 'am-inecobank-usd-account', 'Inecobank', 'both', 'AM', 'USD', '', '/icons/assets/inecobank.png', '', 'enabled', 'bank', '#263f91', 'IN', false, 0.75, 'Inecobank', 'inecobank', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('am-inecobank', 'am-inecobank', 'Inecobank', 'both', 'AM', 'AMD', '', '/icons/assets/inecobank.png', '', 'enabled', 'bank', '#263f91', 'IN', false, 0.75, 'Inecobank', 'inecobank', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('am-evocabank-usd-account', 'am-evocabank-usd-account', 'Evocabank', 'both', 'AM', 'USD', '', '/icons/assets/evocabank.png', '', 'enabled', 'bank', '#111827', 'EV', false, NULL, 'Evocabank', 'evocabank', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('am-evocabank', 'am-evocabank', 'Evocabank', 'both', 'AM', 'AMD', '', '/icons/assets/evocabank.png', '', 'enabled', 'bank', '#111827', 'EV', false, NULL, 'Evocabank', 'evocabank', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('am-vtb-usd-account', 'am-vtb-usd-account', 'VTB Armenia', 'both', 'AM', 'USD', '', '/icons/assets/vtb.webp', '', 'enabled', 'bank', '#0a52bd', 'VT', false, NULL, 'VTB', 'vtb-armenia', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('am-vtb', 'am-vtb', 'VTB Armenia', 'both', 'AM', 'AMD', '', '/icons/assets/vtb.webp', '', 'enabled', 'bank', '#0a52bd', 'VT', false, NULL, 'VTB', 'vtb-armenia', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('ru-sberbank', 'ru-sberbank', 'Sberbank', 'both', 'RU', 'RUB', '', '/icons/assets/sberbank.webp', '', 'enabled', 'bank', '#21a038', 'SB', true, NULL, 'Sberbank', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('ru-tbank', 'ru-tbank', 'T-Bank', 'both', 'RU', 'RUB', '', '/icons/assets/tbank.webp', '', 'enabled', 'bank', '#ffdd2d', 'TB', true, NULL, 'T-Bank', 'tbank', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('ru-tbank-usd-account', 'ru-tbank-usd-account', 'T-Bank', 'both', 'RU', 'USD', '', '/icons/assets/tbank.webp', '', 'enabled', 'bank', '#ffdd2d', 'TB', true, NULL, 'T-Bank', 'tbank', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('ru-alfabank', 'ru-alfabank', 'Alfa-Bank', 'both', 'RU', 'RUB', '', '/icons/assets/alfabank.webp', '', 'enabled', 'bank', '#ef3124', 'AB', true, NULL, 'Alfa-Bank', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('ru-vtb', 'ru-vtb', 'VTB', 'both', 'RU', 'RUB', '', '/icons/assets/vtb.webp', '', 'enabled', 'bank', '#0a52bd', 'VT', false, NULL, 'VTB', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('ru-gazprombank', 'ru-gazprombank', 'Gazprombank', 'both', 'RU', 'RUB', '', '/icons/assets/gazprombank.webp', '', 'enabled', 'bank', '#006db7', 'GP', false, NULL, 'Gazprombank', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('ru-raiffeisen', 'ru-raiffeisen', 'Raiffeisenbank', 'both', 'RU', 'RUB', '', '/icons/assets/raiffeisenbank.webp', '', 'enabled', 'bank', '#ffe500', 'RB', false, NULL, 'Raiffeisenbank', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('ru-ozon', 'ru-ozon', 'Ozon Bank', 'both', 'RU', 'RUB', '', '/icons/assets/ozonbank.webp', '', 'enabled', 'bank', '#005bff', 'OZ', false, NULL, 'Ozon Bank', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('by-belarusbank', 'by-belarusbank', 'Belarusbank', 'both', 'BY', 'BYN', 'belarusbank.by', '', '', 'enabled', 'bank', '#006b3f', 'BB', true, NULL, 'Belarusbank', 'belarusbank', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('by-belagroprombank', 'by-belagroprombank', 'Belagroprombank', 'both', 'BY', 'BYN', 'belapb.by', '', '', 'enabled', 'bank', '#f58220', 'BA', true, NULL, 'Belagroprombank', 'belagroprombank', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('by-priorbank', 'by-priorbank', 'Priorbank', 'both', 'BY', 'BYN', 'priorbank.by', '', '', 'enabled', 'bank', '#ffed00', 'PB', true, NULL, 'Priorbank', 'priorbank', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('by-belinvestbank', 'by-belinvestbank', 'Belinvestbank', 'both', 'BY', 'BYN', 'belinvestbank.by', '', '', 'enabled', 'bank', '#009b77', 'BI', false, NULL, 'Belinvestbank', 'belinvestbank', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('by-alfabank', 'by-alfabank', 'Alfa-Bank Belarus', 'both', 'BY', 'BYN', 'alfabank.by', '', '', 'enabled', 'bank', '#ef3124', 'AB', true, NULL, 'Alfa-Bank Belarus', 'alfabank-belarus', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('by-belgazprombank', 'by-belgazprombank', 'Belgazprombank', 'both', 'BY', 'BYN', 'belgazprombank.by', '', '', 'enabled', 'bank', '#0079c2', 'BG', true, NULL, 'Belgazprombank', 'belgazprombank', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('by-sberbank', 'by-sberbank', 'Sber Bank Belarus', 'both', 'BY', 'BYN', 'sber-bank.by', '', '', 'enabled', 'bank', '#21a038', 'SB', true, NULL, 'Sber Bank Belarus', 'sber-belarus', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('by-belveb', 'by-belveb', 'Bank BelVEB', 'both', 'BY', 'BYN', 'belveb.by', '', '', 'enabled', 'bank', '#006fb9', 'BV', false, NULL, 'Bank BelVEB', 'belveb', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('by-mtbank', 'by-mtbank', 'MTBank', 'both', 'BY', 'BYN', 'mtbank.by', '', '', 'enabled', 'bank', '#004ea3', 'MT', true, NULL, 'MTBank', 'mtbank', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('by-vtb', 'by-vtb', 'VTB Belarus', 'both', 'BY', 'BYN', 'vtb-bank.by', '', '', 'enabled', 'bank', '#0a52bd', 'VT', true, NULL, 'VTB Belarus', 'vtb-belarus', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('by-dabrabyt', 'by-dabrabyt', 'Bank Dabrabyt', 'both', 'BY', 'BYN', 'bankdabrabyt.by', '', '', 'enabled', 'bank', '#00a651', 'DB', true, NULL, 'Bank Dabrabyt', 'dabrabyt', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('by-technobank', 'by-technobank', 'Technobank', 'both', 'BY', 'BYN', 'tb.by', '', '', 'enabled', 'bank', '#ed1c24', 'TB', true, NULL, 'Technobank', 'technobank', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('by-btk', 'by-btk', 'BTK Bank', 'both', 'BY', 'BYN', 'btk.by', '', '', 'enabled', 'bank', '#263f91', 'BT', false, NULL, 'BTK Bank', 'btk', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('by-bnb', 'by-bnb', 'BNB Bank', 'both', 'BY', 'BYN', 'bnb.by', '', '', 'enabled', 'bank', '#e31e24', 'BN', false, NULL, 'BNB Bank', 'bnb-bank', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('by-bsb', 'by-bsb', 'BSB Bank', 'both', 'BY', 'BYN', 'bsb.by', '', '', 'enabled', 'bank', '#e30613', 'BS', false, NULL, 'BSB Bank', 'bsb-bank', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('by-paritetbank', 'by-paritetbank', 'Paritetbank', 'both', 'BY', 'BYN', 'paritetbank.by', '', '', 'enabled', 'bank', '#0083ca', 'PA', true, NULL, 'Paritetbank', 'paritetbank', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('by-bank-reshenie', 'by-bank-reshenie', 'Bank Reshenie', 'both', 'BY', 'BYN', 'rbank.by', '', '', 'enabled', 'bank', '#6b2d90', 'BR', true, NULL, 'Bank Reshenie', 'bank-reshenie', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('by-statusbank', 'by-statusbank', 'StatusBank', 'both', 'BY', 'BYN', 'statusbank.by', '', '', 'enabled', 'bank', '#003b71', 'ST', false, NULL, 'StatusBank', 'statusbank', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('by-neobank', 'by-neobank', 'Neo Bank Asia', 'both', 'BY', 'BYN', 'neobank.by', '', '', 'enabled', 'bank', '#ff5a1f', 'NE', false, NULL, 'Neo Bank Asia', 'neo-bank', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('by-zepterbank', 'by-zepterbank', 'Zepter Bank', 'both', 'BY', 'BYN', 'zepterbank.by', '', '', 'enabled', 'bank', '#8b1e3f', 'ZE', false, NULL, 'Zepter Bank', 'zepterbank', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('by-brrb', 'by-brrb', 'Bank of Growth and Business Development', 'both', 'BY', 'BYN', 'brrb.by', '', '', 'enabled', 'bank', '#005ca9', 'BR', false, NULL, 'BRRB Bank', 'brrb', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
 source_file = EXCLUDED.source_file,
 updated_at = now();

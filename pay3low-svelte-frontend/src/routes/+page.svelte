@@ -6,6 +6,26 @@
   import { localize, locale, t } from "$lib/i18n";
   let shell: HTMLDivElement;
   onMount(() => shell.style.setProperty("--puzzle-pattern", generatePuzzleBackground()));
+  onMount(() => {
+    let zoomTimer: number | undefined;
+    const viewport = window.visualViewport;
+    const markViewportChange = () => {
+      document.documentElement.dataset.zooming = "true";
+      if (zoomTimer) window.clearTimeout(zoomTimer);
+      zoomTimer = window.setTimeout(() => {
+        delete document.documentElement.dataset.zooming;
+      }, 180);
+    };
+
+    window.addEventListener("resize", markViewportChange, { passive: true });
+    viewport?.addEventListener("resize", markViewportChange, { passive: true });
+    return () => {
+      window.removeEventListener("resize", markViewportChange);
+      viewport?.removeEventListener("resize", markViewportChange);
+      if (zoomTimer) window.clearTimeout(zoomTimer);
+      delete document.documentElement.dataset.zooming;
+    };
+  });
 </script>
 
 <svelte:head><title>Pay3Flow</title></svelte:head>

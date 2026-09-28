@@ -3,13 +3,13 @@ exchange_methods = ["p2p", "exchanger"]
 [sell]
 source_url = "https://www.mexc.com/buy-crypto/p2p"
 name = "MEXC Sell"
-currency = ["usd", "rub", "eur", "amd"]
+currency = ["usd", "rub", "eur", "amd", "byn"]
 banks = []
 
 [buy]
 source_url = "https://www.mexc.com/buy-crypto/p2p"
 name = "MEXC Buy"
-currency = ["usd", "rub", "eur", "amd"]
+currency = ["usd", "rub", "eur", "amd", "byn"]
 banks = []
 
 [adapter.p2p]
@@ -21,6 +21,19 @@ timeout_ms = 10000
 max_results = 20
 asset_codes = { USDT = "128f589271cb4951b03e71e6323eb7be", USDC = "34309140878b4ae99f195ac091d49bab", BTC = "febc9973be4d4d53bb374476239eb219", ETH = "93c38b0169214f8689763ce9a63a73ff" }
 supported_assets = ["USDT", "USDC", "BTC", "ETH"]
+supported_fiats = ["USD", "RUB", "EUR", "AMD", "BYN"]
+
+[adapter.p2p.payment_method_aliases]
+"T-Bank" = ["Tinkoff", "Tinkoff Bank"]
+"Sberbank" = ["Sber"]
+"Alfa-Bank Belarus" = ["Alfa Bank Belarus", "A-Bank"]
+"Sber Bank Belarus" = ["BPS-Sberbank", "Sber Bank"]
+"VTB Belarus" = ["VTB Bank Belarus", "Bank VTB Belarus"]
+"Belagroprombank" = ["Agrobank", "Belagroprom Bank"]
+"Bank Dabrabyt" = ["Dabrabyt"]
+"Bank Reshenie" = ["Reshenie Bank"]
+"Paritetbank" = ["Paritet Bank"]
+"Priorbank" = ["PriorBank"]
 
 [adapter.p2p.buy]
 query = { blockTrade = "false", countryCode = "", tradeType = "SELL", currency = "{{fiat}}", payMethod = "", amount = "{{amount}}", coinId = "{{asset}}", page = "1", pageSize = "{{limit_number}}", certifiedMerchant = "false", allowTrade = "false", haveTrade = "false", follow = "false", adsType = "1", adOrderSortField = "", adOrderSort = "" }

@@ -281,9 +281,26 @@ CREATE TABLE IF NOT EXISTS banks (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Picker-facing payment methods are generated from Providerfiles. Legacy
+-- scheme-specific directory rows keep the defaults below and remain available
+-- through the existing API unless `picker_visible=true` is requested.
+ALTER TABLE banks ADD COLUMN IF NOT EXISTS method_id TEXT;
+ALTER TABLE banks ADD COLUMN IF NOT EXISTS display_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE banks ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'bank';
+ALTER TABLE banks ADD COLUMN IF NOT EXISTS color TEXT NOT NULL DEFAULT '#171a17';
+ALTER TABLE banks ADD COLUMN IF NOT EXISTS initials TEXT NOT NULL DEFAULT '';
+ALTER TABLE banks ADD COLUMN IF NOT EXISTS popular BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE banks ADD COLUMN IF NOT EXISTS bank_fee_percent DOUBLE PRECISION;
+ALTER TABLE banks ADD COLUMN IF NOT EXISTS p2p_query TEXT NOT NULL DEFAULT '';
+ALTER TABLE banks ADD COLUMN IF NOT EXISTS currency_group TEXT;
+ALTER TABLE banks ADD COLUMN IF NOT EXISTS picker_visible BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE banks ADD COLUMN IF NOT EXISTS source_file TEXT NOT NULL DEFAULT '';
+
 CREATE UNIQUE INDEX IF NOT EXISTS banks_name_idx ON banks (name);
+CREATE UNIQUE INDEX IF NOT EXISTS banks_method_id_idx ON banks (method_id) WHERE method_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS banks_status_idx ON banks (status);
 CREATE INDEX IF NOT EXISTS banks_role_idx ON banks (role);
+CREATE INDEX IF NOT EXISTS banks_picker_visible_idx ON banks (picker_visible, status);
 
 -- Crypto networks exposed by GET /api/networks and used to validate route
 -- requests. The rows themselves live in the catalog data migration.

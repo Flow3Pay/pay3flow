@@ -31,6 +31,9 @@ default_max_fiat = 1000000000
 default_available_asset = 1000000000
 market = "direct_exchange"
 
+[adapter.p2p.payment_method_aliases]
+"Cash" = ["Cash USD", "Cash Dollar", "SkyLabs ATM"]
+
 [adapter.p2p.buy]
 endpoint = "https://api.skylabs.world/api/rate/{{asset}}/{{fiat}}/sell"
 success_pointer = "/status"

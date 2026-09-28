@@ -3,7 +3,8 @@
 `Providerfile` is the complete provider declaration format used by Pay3Flow.
 It can describe a catalog entry, a public P2P or direct-exchange JSON API, a
 spot-market ticker API, a BestChange source, a browser calculator, fee
-metadata, and trusted Rust code compiled into the backend.
+metadata, a frontend payment-method catalog, and trusted Rust code compiled
+into the backend.
 
 Providerfiles are build inputs, not runtime configuration. The generator
 validates their declarative sections and writes
@@ -15,6 +16,7 @@ generated database rows and compiled modules, never the Providerfiles.
 
 - [Location, slug, and lifecycle](#location-slug-and-lifecycle)
 - [Supported combinations](#supported-combinations)
+- [Payment-method catalog](#payment-method-catalog)
 - [Catalog-only provider](#catalog-only-provider)
 - [Fee metadata](#fee-metadata)
 - [BestChange adapter](#bestchange-adapter)
@@ -63,8 +65,8 @@ not an ignored setting.
 
 ## Supported combinations
 
-Every Providerfile must declare one or both supported exchange methods and have
-`[buy]`, `[sell]`, or both:
+An exchange-provider Providerfile declares one or both supported exchange
+methods and has `[buy]`, `[sell]`, or both:
 
 ```toml
 exchange_methods = ["p2p", "exchanger"]
@@ -76,6 +78,7 @@ optional and can be combined as follows:
 
 | Section | Purpose | Combination rules |
 | --- | --- | --- |
+| `[[payment_methods]]` | Bank/cash picker catalog | Can stand alone without exchange methods or operations. |
 | `[buy]`, `[sell]` | Catalog operations | At least one is required. |
 | `[fees]` | Descriptive fee metadata | Can accompany any provider type. |
 | `[adapter.p2p]` | P2P ads or direct quotes over JSON | Cannot coexist with `[workflow]`. |
@@ -87,7 +90,25 @@ optional and can be combined as follows:
 
 If `[buy]` exists, `[adapter.p2p.buy]` or `[workflow.buy]` must exist for the
 selected live mechanism. The same rule applies to `sell`. A file containing
-only catalog sections is valid but is not a live quote source.
+only `payment_methods` is valid and is not a live quote source.
+
+## Payment-method catalog
+
+Payment methods shown in the bank picker are configured in Providerfiles and
+compiled into the `banks` directory. A catalog-only file needs no
+`exchange_methods`, `[buy]`, or `[sell]` sections:
+
+```toml
+payment_methods = [
+  { id = "by-belarusbank", name = "Belarusbank", country = "BY", currency = "BYN", color = "#006b3f", initials = "BB", popular = true, p2p_query = "Belarusbank", currency_group = "belarusbank", domain = "belarusbank.by" },
+  { id = "by-dabrabyt", name = "Bank Dabrabyt", country = "BY", currency = "BYN", color = "#7a2c8e", initials = "DB", p2p_query = "Dabrabyt", currency_group = "dabrabyt", domain = "bankdabrabyt.by" },
+]
+```
+
+`id` is the stable picker identity. `p2p_query` is the canonical payment label
+sent to P2P search. Provider-specific spellings belong in
+`adapter.p2p.payment_method_aliases`, not in application code. The checked-in
+catalog is `backend/providers/payment-methods/Providerfile`.
 
 ## Catalog-only provider
 
@@ -203,6 +224,10 @@ supported_assets = ["USDT", "BTC", "ETH"]
 supported_fiats = ["USD", "EUR"]
 timeout_ms = 5000
 max_results = 50
+
+[adapter.p2p.payment_method_aliases]
+"Sber Bank Belarus" = ["BPS-Sberbank", "Sberbank Belarus"]
+"Bank Dabrabyt" = ["Dabrabyt", "Bank Dabrabyt"]
 
 [adapter.p2p.buy]
 amount_mode = "query_or_empty"
@@ -347,6 +372,10 @@ Condition operators are:
 `verified_from_merchant` marks every detected merchant as verified. Rates from
 `completion_rate_pointer` and `positive_rate_pointer` accept `0..1` or a
 percentage up to `100`; values above `1` are divided by 100.
+
+`payment_method_aliases` maps each canonical picker/query label to the labels
+returned by that provider. Matching is case-insensitive and ignores
+punctuation. Opaque numeric method IDs remain unknown rather than being guessed.
 
 ## Direct-exchange API
 
@@ -694,6 +723,25 @@ Checked-in Rust examples: CoW Swap, NEAR Intents, and ID Pay.
 | `fees.description` | In `[fees]` | — | Human-readable disclosure. |
 | `fees.docs_url` | In `[fees]` | — | HTTP/HTTPS documentation URL. |
 
+### `payment_methods`
+
+| Field | Required | Default | Meaning |
+| --- | --- | --- | --- |
+| `id` | Yes | — | Stable 1–64 character lowercase identifier (`a-z`, digits, `-`). |
+| `name` | Yes | — | Picker display name. |
+| `role` | No | `both` | `sender`, `recipient`, or `both`. |
+| `country` | Yes | — | Two-letter country code or `GLOBAL`. |
+| `currency` | Yes | — | 2–12 character fiat code, normalized to uppercase. |
+| `kind` | No | `bank` | `bank` or `cash`. |
+| `domain` | No | empty | Bare host used to resolve a favicon. |
+| `icon_url` | No | empty | Local path or data URL override. |
+| `color` | Yes | — | Six-digit hex fallback color. |
+| `initials` | Yes | — | 1–4 character fallback mark. |
+| `popular` | No | `false` | Show in the popular picker group. |
+| `bank_fee_percent` | No | — | Non-negative estimated transfer fee. |
+| `p2p_query` | Yes | — | Canonical payment-method label used in searches. |
+| `currency_group` | No | — | Stable institution/account family for currency variants. |
+
 ### `adapter.bestchange`
 
 | Field | Required | Default | Meaning |
@@ -729,6 +777,7 @@ Checked-in Rust examples: CoW Swap, NEAR Intents, and ID Pay.
 | `asset_codes` | No | `{}` | Canonical-to-provider asset codes. |
 | `supported_assets` | No | `[]` | Empty means no adapter-level asset filter. |
 | `supported_fiats` | No | `[]` | Empty means no adapter-level fiat filter. Use this when an endpoint is fixed to specific fiat currencies. |
+| `payment_method_aliases` | No | `{}` | Canonical method label to provider-returned aliases. |
 | `timeout_ms` | No | `10000` | 250–30000 ms. |
 | `max_results` | No | request limit | 1–100. |
 | `fiat_probe_amount` | By mode | — | Positive finite fallback fiat amount. |
@@ -889,6 +938,7 @@ cargo check --manifest-path backend/Cargo.toml
 
 | Capability | Providerfile |
 | --- | --- |
+| Payment-method picker catalog | `backend/providers/payment-methods/Providerfile` |
 | Catalog only | `backend/providers/Providerfile.example` after removing `[workflow]` |
 | BestChange | `backend/providers/bestchange/Providerfile` |
 | Papa Change joined public APIs | `backend/providers/papa-change/Providerfile` |

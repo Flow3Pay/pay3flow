@@ -3,13 +3,13 @@ exchange_methods = ["p2p", "exchanger"]
 [sell]
 source_url = "https://www.bybit.com"
 name = "Bybit Sell"
-currency = ["usd", "rub", "eur", "amd"]
+currency = ["usd", "rub", "eur", "amd", "byn"]
 banks = []
 
 [buy]
 source_url = "https://www.bybit.com"
 name = "Bybit Buy"
-currency = ["usd", "rub", "eur", "amd"]
+currency = ["usd", "rub", "eur", "amd", "byn"]
 banks = []
 
 [adapter.p2p]
@@ -19,6 +19,19 @@ method = "POST"
 headers = { Origin = "https://www.bybit.com", Referer = "https://www.bybit.com/" }
 timeout_ms = 4000
 supported_assets = ["USDT", "USDC", "BTC", "ETH"]
+supported_fiats = ["USD", "RUB", "EUR", "AMD", "BYN"]
+
+[adapter.p2p.payment_method_aliases]
+"T-Bank" = ["Tinkoff", "Tinkoff Bank"]
+"Sberbank" = ["Sber"]
+"Alfa-Bank Belarus" = ["Alfa Bank Belarus", "A-Bank"]
+"Sber Bank Belarus" = ["BPS-Sberbank", "Sber Bank"]
+"VTB Belarus" = ["VTB Bank Belarus", "Bank VTB Belarus"]
+"Belagroprombank" = ["Agrobank", "Belagroprom Bank"]
+"Bank Dabrabyt" = ["Dabrabyt"]
+"Bank Reshenie" = ["Reshenie Bank"]
+"Paritetbank" = ["Paritet Bank"]
+"Priorbank" = ["PriorBank"]
 
 [adapter.p2p.buy]
 request_json = '''{"userId":"","tokenId":"{{asset}}","currencyId":"{{fiat}}","payment":[],"side":"1","size":"{{limit}}","page":"1","amount":"{{amount}}","authMaker":false,"canTrade":false}'''
