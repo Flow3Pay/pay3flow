@@ -21,6 +21,9 @@ export interface PaymentMethod {
 }
 
 interface PaymentMethodDirectoryPage {
+  total: number;
+  limit: number;
+  offset: number;
   items: Array<{
     method_id?: string;
     name: string;
@@ -41,10 +44,29 @@ interface PaymentMethodDirectoryPage {
 
 /** Load the complete card catalog generated from backend Providerfiles. */
 export async function fetchPaymentMethods(): Promise<PaymentMethod[]> {
-  const response = await fetch(apiUrl("/api/banks?picker_visible=true&limit=100"));
-  if (!response.ok) throw new Error(`payment-method catalog failed (${response.status})`);
-  const page = await response.json() as PaymentMethodDirectoryPage;
-  return page.items.flatMap((item) => item.method_id ? [{
+  let response = await fetch(apiUrl("/api/banks?picker_visible=true&limit=100"));
+  let unfilteredFallback = false;
+  if (response.status === 400) {
+    // Rolling deployments can briefly serve a backend from before the
+    // picker_visible filter existed. Its rows still carry method_id, so page
+    // through that directory and filter the catalog client-side.
+    unfilteredFallback = true;
+    response = await fetch(apiUrl("/api/banks?limit=100&offset=0"));
+  }
+  if (!response.ok) throw new Error(await catalogError(response));
+
+  const firstPage = await response.json() as PaymentMethodDirectoryPage;
+  const items = [...firstPage.items];
+  if (unfilteredFallback) {
+    const pageSize = Math.max(1, firstPage.limit || 100);
+    for (let offset = firstPage.offset + pageSize; offset < firstPage.total; offset += pageSize) {
+      const nextResponse = await fetch(apiUrl(`/api/banks?limit=100&offset=${offset}`));
+      if (!nextResponse.ok) throw new Error(await catalogError(nextResponse));
+      items.push(...((await nextResponse.json()) as PaymentMethodDirectoryPage).items);
+    }
+  }
+
+  return items.flatMap((item) => item.method_id ? [{
     id: item.method_id,
     name: item.display_name || item.name,
     country: item.country,
@@ -59,6 +81,11 @@ export async function fetchPaymentMethods(): Promise<PaymentMethod[]> {
     p2pQuery: item.p2p_query || item.display_name || item.name,
     currencyGroup: item.currency_group,
   }] : []);
+}
+
+async function catalogError(response: Response): Promise<string> {
+  const detail = (await response.text()).trim();
+  return `payment-method catalog failed (${response.status})${detail ? `: ${detail}` : ""}`;
 }
 
 function localIconUrl(value: string): string | undefined {
