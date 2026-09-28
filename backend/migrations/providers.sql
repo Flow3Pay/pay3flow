@@ -1088,7 +1088,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('by-belinvestbank', 'by-belinvestbank', 'Belinvestbank', 'both', 'BY', 'BYN', 'belinvestbank.by', '', '', 'enabled', 'bank', '#009b77', 'BI', false, NULL, 'Belinvestbank', 'belinvestbank', TRUE, 'payment-methods/Providerfile')
+VALUES ('by-belinvestbank', 'by-belinvestbank', 'Belinvestbank', 'both', 'BY', 'BYN', 'belinvestbank.by', '/icons/assets/belinvestbank.jpg', '', 'enabled', 'bank', '#009b77', 'BI', false, NULL, 'Belinvestbank', 'belinvestbank', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
@@ -1176,7 +1176,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('by-belveb', 'by-belveb', 'Bank BelVEB', 'both', 'BY', 'BYN', 'belveb.by', '', '', 'enabled', 'bank', '#006fb9', 'BV', false, NULL, 'Bank BelVEB', 'belveb', TRUE, 'payment-methods/Providerfile')
+VALUES ('by-belveb', 'by-belveb', 'Bank BelVEB', 'both', 'BY', 'BYN', 'belveb.by', '/icons/assets/belveb.jpg', '', 'enabled', 'bank', '#006fb9', 'BV', false, NULL, 'Bank BelVEB', 'belveb', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
@@ -1286,7 +1286,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('by-btk', 'by-btk', 'BTK Bank', 'both', 'BY', 'BYN', 'btk.by', '', '', 'enabled', 'bank', '#263f91', 'BT', false, NULL, 'BTK Bank', 'btk', TRUE, 'payment-methods/Providerfile')
+VALUES ('by-btk', 'by-btk', 'BTK Bank', 'both', 'BY', 'BYN', 'btk.by', '/icons/assets/btk.png', '', 'enabled', 'bank', '#263f91', 'BT', false, NULL, 'BTK Bank', 'btk', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
@@ -1330,7 +1330,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('by-bsb', 'by-bsb', 'BSB Bank', 'both', 'BY', 'BYN', 'bsb.by', '', '', 'enabled', 'bank', '#e30613', 'BS', false, NULL, 'BSB Bank', 'bsb-bank', TRUE, 'payment-methods/Providerfile')
+VALUES ('by-bsb', 'by-bsb', 'BSB Bank', 'both', 'BY', 'BYN', 'bsb.by', '/icons/assets/bsb.webp', '', 'enabled', 'bank', '#e30613', 'BS', false, NULL, 'BSB Bank', 'bsb-bank', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
