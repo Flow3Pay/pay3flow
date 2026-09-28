@@ -19,6 +19,28 @@ async function openApp(page: Page) {
     .not.toBe("none");
 }
 
+test("viewport resize does not restart completed entrance animations", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page);
+  const hero = page.locator(".hero");
+  await expect(hero).toBeVisible();
+  await page.waitForTimeout(900);
+
+  const animationTime = () => hero.evaluate((element) => {
+    const animation = element.getAnimations()[0];
+    return Number(animation?.currentTime ?? 0);
+  });
+  const completedAt = await animationTime();
+  expect(completedAt).toBeGreaterThanOrEqual(600);
+
+  const viewport = page.viewportSize();
+  expect(viewport).not.toBeNull();
+  await page.setViewportSize({ width: viewport!.width - 40, height: viewport!.height });
+  await page.waitForTimeout(250);
+
+  expect(await animationTime()).toBeGreaterThanOrEqual(600);
+});
+
 async function openCryptoPicker(page: Page, side: "sending" | "recipient") {
   await page.getByRole("button", { name: new RegExp(`^Select ${side} (?:bank|payment method|asset):`) }).click();
   return page.getByRole("dialog", { name: side === "sending" ? "Choose where you pay from" : "Choose where the recipient gets paid" });
@@ -1473,6 +1495,7 @@ test("Armenian bank picker uses the downloaded local icons", async ({ page }) =>
   const icons = [
     ["Ameriabank", "/icons/assets/ameriabank.png"],
     ["IDBank", "/icons/assets/idbank.png"],
+    ["ACBA Bank", "/icons/assets/acba.png"],
     ["Ardshinbank", "/icons/assets/ardshinbank.png"],
     ["Inecobank", "/icons/assets/inecobank.png"],
     ["Evocabank", "/icons/assets/evocabank.png"],

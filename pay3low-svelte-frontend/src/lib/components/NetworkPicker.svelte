@@ -2,6 +2,7 @@
   import { afterUpdate, onDestroy } from "svelte";
   import type { CryptoNetwork } from "$lib/networks";
   import { networkIcon } from "$lib/icons";
+  import { locale, t } from "$lib/i18n";
 
   type CurrencyChoice = {
     id: string;
@@ -78,15 +79,15 @@
 
 {#if open}
   <div class="backdrop" on:mousedown={onClose} role="presentation">
-    <div class:dragging class="dialog" bind:this={dialog} role="dialog" aria-modal="true" aria-label={mode === "currency" ? "Choose currency" : "Choose network"} tabindex="-1" on:mousedown|stopPropagation>
-      <button type="button" class="sheetHandle" aria-label={mode === "currency" ? "Close currency picker by dragging down" : "Close network picker by dragging down"} on:pointerdown={startSheetDrag} on:pointermove={moveSheetDrag} on:pointerup={endSheetDrag} on:pointercancel={endSheetDrag}>
+    <div class:dragging class="dialog" bind:this={dialog} role="dialog" aria-modal="true" aria-label={t(mode === "currency" ? "Choose currency" : "Choose network", {}, $locale)} tabindex="-1" on:mousedown|stopPropagation>
+      <button type="button" class="sheetHandle" aria-label={t(mode === "currency" ? "Close currency picker by dragging down" : "Close network picker by dragging down", {}, $locale)} on:pointerdown={startSheetDrag} on:pointermove={moveSheetDrag} on:pointerup={endSheetDrag} on:pointercancel={endSheetDrag}>
         <span aria-hidden="true"></span>
       </button>
       <div class="titleBar"><div class="titleGroup">
-        <h2 class="title">{mode === "currency" ? "Choose currency" : "Choose network"}</h2>
-      </div><button type="button" class="backButton" on:click={onClose} aria-label={mode === "currency" ? "Close currency picker" : "Close network picker"}><svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button></div>
-      <div class="body"><div class="methods" role="listbox" aria-label={mode === "currency" ? "Currencies" : "Crypto networks"}><section class="section">
-        <h3>{mode === "currency" ? "Available currencies" : "Available networks"}</h3>
+        <h2 class="title">{t(mode === "currency" ? "Choose currency" : "Choose network", {}, $locale)}</h2>
+      </div><button type="button" class="backButton" on:click={onClose} aria-label={t(mode === "currency" ? "Close currency picker" : "Close network picker", {}, $locale)}><svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button></div>
+      <div class="body"><div class="methods" role="listbox" aria-label={t(mode === "currency" ? "Currencies" : "Crypto networks", {}, $locale)}><section class="section">
+        <h3>{t(mode === "currency" ? "Available currencies" : "Available networks", {}, $locale)}</h3>
         {#if mode === "currency"}
           {#each currencies as currency (currency.id)}
             {@const isSelected = currency.id === selectedCurrency}

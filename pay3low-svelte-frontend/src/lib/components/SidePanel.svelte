@@ -166,7 +166,7 @@
                         {/if}
                         <span>{assetLabel(step.currency)}</span>
                         {#if step.network}
-                          <span class="workflowNetwork" aria-label={`Network: ${step.network}`}>
+                          <span class="workflowNetwork" aria-label={t("Network: {network}", { network: step.network }, $locale)}>
                             <span aria-hidden="true">·</span>
                             <span class="workflowNetworkIcon" aria-hidden="true"><img src={networkIcon(step.network)} alt="" width="14" height="14" loading="lazy" decoding="async" /></span>
                             <span>{step.network}</span>

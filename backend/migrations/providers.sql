@@ -626,7 +626,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('am-acba-usd-account', 'am-acba-usd-account', 'ACBA Bank', 'both', 'AM', 'USD', '', '', '', 'enabled', 'bank', '#ef7f1a', 'AC', true, 0, 'ACBA', 'acba', TRUE, 'payment-methods/Providerfile')
+VALUES ('am-acba-usd-account', 'am-acba-usd-account', 'ACBA Bank', 'both', 'AM', 'USD', '', '/icons/assets/acba.png', '', 'enabled', 'bank', '#ef7f1a', 'AC', true, 0, 'ACBA', 'acba', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
@@ -648,7 +648,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('am-acba', 'am-acba', 'ACBA Bank', 'both', 'AM', 'AMD', '', '', '', 'enabled', 'bank', '#ef7f1a', 'AC', true, 0, 'ACBA', 'acba', TRUE, 'payment-methods/Providerfile')
+VALUES ('am-acba', 'am-acba', 'ACBA Bank', 'both', 'AM', 'AMD', '', '/icons/assets/acba.png', '', 'enabled', 'bank', '#ef7f1a', 'AC', true, 0, 'ACBA', 'acba', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
