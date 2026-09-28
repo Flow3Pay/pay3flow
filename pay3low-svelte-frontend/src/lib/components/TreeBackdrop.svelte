@@ -18,13 +18,14 @@
 
   const leafColors = ["#b5f500", "#a3df25", "#8fbd28", "#c4f35a"];
   const emitters = [
-    { x: 0.63, y: 0.25 },
-    { x: 0.74, y: 0.3 },
-    { x: 0.57, y: 0.38 },
-    { x: 0.82, y: 0.4 },
-    { x: 0.69, y: 0.49 },
-    { x: 0.9, y: 0.53 },
-    { x: 0.52, y: 0.56 },
+    { x: 0.12, y: 0.23 },
+    { x: 0.25, y: 0.29 },
+    { x: 0.36, y: 0.34 },
+    { x: 0.48, y: 0.39 },
+    { x: 0.21, y: 0.47 },
+    { x: 0.41, y: 0.5 },
+    { x: 0.56, y: 0.56 },
+    { x: 0.3, y: 0.6 },
   ];
 
   let leaves: Leaf[] = [];
@@ -45,7 +46,7 @@
     if (initial) leaf.y = randomBetween(0.14, 0.78) * height;
     leaf.vx = randomBetween(-0.18, 0.18);
     leaf.vy = randomBetween(0.18, 0.48);
-    leaf.size = randomBetween(4.5, 10.5);
+    leaf.size = randomBetween(10, 22);
     leaf.rotation = randomBetween(-Math.PI, Math.PI);
     leaf.spin = randomBetween(-0.035, 0.035);
     leaf.phase = randomBetween(0, Math.PI * 2);
@@ -63,7 +64,7 @@
     canvas.height = Math.round(height * dpr);
 
     if (!leaves.length) {
-      const count = width < 700 ? 26 : 58;
+      const count = width < 700 ? 34 : 72;
       leaves = Array.from({ length: count }, () => {
         const leaf = {} as Leaf;
         resetLeaf(leaf, true);
@@ -161,6 +162,26 @@
       filter="url(#logo-tree-cutout)"
     />
 
+    <g class="additionalBranches" fill="none" stroke="#a4f92d" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M135 735C157 655 212 607 287 588C354 571 403 530 439 475" stroke-width="19" />
+      <path d="M196 555C253 515 315 483 358 427C391 384 425 359 480 342" stroke-width="15" />
+      <path d="M205 435C257 382 299 322 350 280C382 254 414 239 458 225" stroke-width="12" />
+      <path d="M395 526C459 495 511 452 550 398C577 360 609 345 660 334" stroke-width="15" />
+      <path d="M488 414C535 381 573 342 604 291" stroke-width="10" />
+      <path d="M280 585C328 606 369 628 402 667" stroke-width="9" />
+      <path d="M344 431C312 402 292 369 283 332M438 475C472 445 494 411 503 374M550 398C594 391 625 372 651 346M358 427C377 399 386 371 386 340" stroke="#79a82b" stroke-width="5" />
+    </g>
+
+    <g class="additionalBranchLeaves" fill="#b5f500">
+      <use href="#extra-leaf" transform="translate(458 225) rotate(-48) scale(1.15)" />
+      <use href="#extra-leaf" transform="translate(480 342) rotate(-24) scale(0.95)" />
+      <use href="#extra-leaf" transform="translate(660 334) rotate(-42) scale(1.05)" />
+      <use href="#extra-leaf" transform="translate(604 291) rotate(-58) scale(0.8)" />
+      <use href="#extra-leaf" transform="translate(402 667) rotate(-52) scale(0.82)" />
+      <use href="#extra-leaf" transform="translate(283 332) rotate(-66) scale(0.72)" />
+      <use href="#extra-leaf" transform="translate(386 340) rotate(-34) scale(0.68)" />
+    </g>
+
     <g class="additionalLeaves" fill="#b5f500">
       <use href="#extra-leaf" transform="translate(95 380) rotate(-38) scale(1.1)" />
       <use href="#extra-leaf" transform="translate(165 292) rotate(-62) scale(0.78)" />
@@ -191,15 +212,16 @@
 
   .treeArtwork {
     position: absolute;
-    top: 74px;
-    right: -82px;
-    width: min(850px, 77vw);
-    height: calc(100vh - 86px);
-    min-height: 680px;
+    top: 34px;
+    left: -130px;
+    width: min(1250px, 94vw);
+    height: calc(100vh - 42px);
+    min-height: 0;
     overflow: visible;
   }
 
-  .additionalLeaves {
+  .additionalLeaves,
+  .additionalBranchLeaves {
     filter: drop-shadow(1px 2px 2px rgba(38, 55, 20, 0.16));
   }
 
@@ -212,9 +234,9 @@
 
   @media (max-width: 700px) {
     .treeArtwork {
-      top: 168px;
-      right: -290px;
-      width: 690px;
+      top: 132px;
+      left: -230px;
+      width: 760px;
       height: 740px;
       min-height: 0;
     }
