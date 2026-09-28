@@ -4,7 +4,7 @@
   import { fly } from "svelte/transition";
   import type { RouteCandidate, ServiceVote } from "$lib/exchange";
   import { formatRouteCount, locale, t, type Locale } from "$lib/i18n";
-  import { assetIcon, dislikeIcon, likeIcon, networkIcon, venueIcon } from "$lib/icons";
+  import { assetIcon, dislikeIcon, likeIcon, networkIcon, venueIcon, warningIcon } from "$lib/icons";
 
   export let routes: RouteCandidate[];
   export let routesFound = 0;
@@ -21,6 +21,8 @@
   export let venueNames: Record<string, string> = {};
   export let searched = false;
   export let hasAmount = false;
+  export let showBelarusP2pWarning = false;
+  export let onOpenBelarusP2pWarning: () => void = () => {};
 
   const ASSET_NAMES: Record<string, string> = { BTC: "Bitcoin", ETH: "Ether", USDC: "USD Coin", USDT: "Tether" };
   const FIAT_MARKS: Record<string, string> = { AMD: "🇦🇲", RUB: "🇷🇺", BYN: "🇧🇾" };
@@ -120,16 +122,23 @@
         {/if}
         {#if hasAmount && renderingRoutes}<small class="resultLimit" data-testid="route-render-progress">Showing {routes.length} now · loading more…</small>{/if}
       </div>
-      {#if searching && pendingVenues.length}
-        <div class="searchingVenues" aria-label={`Searching ${pendingVenues.map((venue) => venue.label).join(", ")}`}>
-          {#each visiblePendingVenues as venue, index (venue.id)}
-            <span class="searchingVenue" data-testid="searching-venue" title={`Searching ${venue.label}`} style:animation-delay={`${index * 130}ms`}>
-              <img src={venue.iconUrl} alt="" width="20" height="20" decoding="async" on:error={(event) => fallbackVenueIcon(event, venue.id)} />
-            </span>
-          {/each}
-          {#if hasHiddenPendingVenues}<span class="searchingVenuesOverflow" data-testid="searching-venues-overflow" aria-hidden="true">...</span>{/if}
-        </div>
-      {/if}
+      <div class="panelActions">
+        {#if searching && pendingVenues.length}
+          <div class="searchingVenues" aria-label={`Searching ${pendingVenues.map((venue) => venue.label).join(", ")}`}>
+            {#each visiblePendingVenues as venue, index (venue.id)}
+              <span class="searchingVenue" data-testid="searching-venue" title={`Searching ${venue.label}`} style:animation-delay={`${index * 130}ms`}>
+                <img src={venue.iconUrl} alt="" width="20" height="20" decoding="async" on:error={(event) => fallbackVenueIcon(event, venue.id)} />
+              </span>
+            {/each}
+            {#if hasHiddenPendingVenues}<span class="searchingVenuesOverflow" data-testid="searching-venues-overflow" aria-hidden="true">...</span>{/if}
+          </div>
+        {/if}
+        {#if showBelarusP2pWarning}
+          <button type="button" class="legalWarning" on:click={onOpenBelarusP2pWarning} aria-label={t("Belarus P2P legal warning", {}, $locale)}>
+            <img src={warningIcon} alt="" width="18" height="18" aria-hidden="true" />
+          </button>
+        {/if}
+      </div>
     </div>
     {#if routes.length > 0}
       <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -258,6 +267,14 @@
   gap: 3px;
 }
 
+.panelActions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
 .resultSummary,
 .foundVenues,
 .searchingVenues {
@@ -269,6 +286,35 @@
   min-height: 24px;
   flex-wrap: wrap;
   gap: 7px;
+}
+
+.legalWarning {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255, 199, 0, 0.42);
+  border-radius: 9px;
+  background: rgba(255, 199, 0, 0.12);
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+}
+
+.legalWarning:hover {
+  border-color: #ffc700;
+  background: rgba(255, 199, 0, 0.2);
+  transform: translateY(-1px);
+}
+
+.legalWarning img {
+  filter: brightness(0) saturate(100%) invert(76%) sepia(91%) saturate(1160%) hue-rotate(355deg) brightness(101%) contrast(99%);
+}
+
+.legalWarning:focus-visible {
+  outline: 2px solid #ffc700;
+  outline-offset: 2px;
 }
 
 .foundVenues {

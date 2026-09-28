@@ -1,14 +1,10 @@
 <script lang="ts">
   import { API_BASE_URL, apiUrl } from "$lib/api";
   import { cycleLocale, locale, localeLabel, setLocale, t } from "$lib/i18n";
-  import { warningIcon } from "$lib/icons";
   const moonIcon = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAACWklEQVR4AbTVTYhNYRzH8TPCRs0kLxsWIvIywkrykvISTZRkbGiSQsqCIkuWyobkpZkiL5PQ2Eyk2BBGErOaZCMz0giRrEyNz/90z3XvzL23e6Zm+n3v/zz/5/n/f8957plzJyTj/FfTYHh4eDM60Il5Y9lLRQPN5uOyho+wH7GuQ8ytKCwr0ni7xHMcxGOsxW68QW6VGWi+TofrmIGzDQ0Nm8QpCL2Oj7wUDTRvVnwVTRqHjrsOLYoPvEJuFQ1U7sFc7ESplhoMcvwo5lZqYPcTVR5Ap0ZdYqmmG/RjTEoNVLZhKi5hpOILXzAyWe84M8jO+VOFwndyje4yW2NYvzKD2P0fx1PJoLfQLp6owmX9odRgoFIZ00H5CzjnLhaKuVRq8LdaJZMj5n7hIXIpM4jCZjuMx7Rag30m5lgzgOWu61Jm8KywuqUQRwV3cV9yI2bhLZMTmO26plIDxS+t+ow1qCrrnpichms4g34mvWjHqRLWm0uVGqRXSXJHbLWo6l2YT5j8QBzXLuMw+SbGy/CwuA0Rb4upigaKjsnE+6aLSfxnG1aX9fdwEhvQiJlW78VX9CFV0SAdJckWcTKeIpdsarGCOIUl4kWkKjOwi5+yq7FKwW/EC9CwtqzbakXWvFWfu8apygwiY/KFOAm3cENxfHktYhyB1H/JrcRNmQdoQllz42SUQSSZDOGQ66BV7MagZu/Rgw/4LteDZYjfjhVqijuXS1XRIJ3xoeAK4myDeJ1Hwy+mwvC0GE9NNI5fv3iapMpV0yBbyqQP7WjDDhzFeXRjKFtXKf4DAAD///Lx6McAAAAGSURBVAMASQPNMX2ya7kAAAAASUVORK5CYII=";
   const sunIcon = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAACD0lEQVR4AbSTPS8FQRSG92o0+Ae0EkKDhk58NJQUoiASlUoQKolCoySESCQaCdEp0BGREBQK4W+goJDreSdnstmdXXe3cHOenDNn3nfO7t7duuiff6UGVKvVWVHmmkoNKHOw15YaUKlU9oQ3F8nBAB7BBSxlmem3ipy9ZfbO03vBAARX8AkuMOm535DfabwK1aDeLGsf8lz7hc/BAB7BOmxLwCEP5F1ogn2YMFSrt2uaCM8WrLOfiGCA38V4TN0Fl9CLeR6OjHn1QHtdpmUZRuYADCNIx0BXNcyhun2WcagHw3S2YMw8lMnIHIBkBZ5gAWqFNNLKE2jzBnSivOcKv8l/hmnuEclDSoYbwO3pTVnUFnUbuQHuoGhI22DeiLwI7g1zA1Kn/Ni65tWbTslrvVc9hxvAbeoL3VCH+o38AT1QNKT9MK9e2Q3qPZndABUpnlkPcJt6VJT5YZoBFPKQkpE34BBZB5xCrZBGWnkCbeYAu71H1ENc4SbUUydCPdikOQSP5qFMRuYASTB0k09gDm45bAemjB31QHsnpmUZRjCAA1ZgWlKM4+RR+IJJODBUqzdqGr2aM/iW2U9EMIDdfmgGFxxwBn3QSKNdqAb1zlj7aKGQlxRHMADjIKzFkrii/yLiTlzRXwX9H3GTKhhALzd4BPri3ReaK0ptlBqQ8hZalhrAI9AX777QQqdHUfQLAAD//91ClIsAAAAGSURBVAMAR3zSMQ+aPXkAAAAASUVORK5CYII=";
 
   const apiDocsHref = API_BASE_URL ? apiUrl("/scalar").toString() : "/scalar";
-
-  export let showBelarusP2pWarning = false;
-  export let onOpenBelarusP2pWarning: () => void = () => {};
 
   function toggleTheme() {
     const root = document.documentElement;
@@ -41,11 +37,6 @@
       <a class="githubLink" href="https://github.com/Flow3Pay/pay3flow" target="_blank" rel="noreferrer noopener" aria-label="Open Pay3Flow on GitHub">
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 .7a11.3 11.3 0 0 0-3.58 22.02c.57.1.78-.25.78-.55v-2.16c-3.18.7-3.85-1.34-3.85-1.34-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.68 1.24 3.34.95.1-.74.4-1.24.73-1.53-2.54-.29-5.2-1.27-5.2-5.65 0-1.25.45-2.26 1.18-3.06-.12-.29-.51-1.45.11-3.02 0 0 .96-.31 3.12 1.17a10.8 10.8 0 0 1 5.68 0c2.16-1.48 3.12-1.17 3.12-1.17.62 1.57.23 2.73.11 3.02.73.8 1.18 1.81 1.18 3.06 0 4.39-2.67 5.35-5.21 5.64.41.36.78 1.08.78 2.18v3.23c0 .3.2.65.79.54A11.3 11.3 0 0 0 12 .7Z" /></svg>
       </a>
-      {#if showBelarusP2pWarning}
-        <button class="legalWarning" type="button" on:click={onOpenBelarusP2pWarning} aria-label={t("Belarus P2P legal warning", {}, activeLocale)}>
-          <img src={warningIcon} alt="" width="18" height="18" aria-hidden="true" />
-        </button>
-      {/if}
     </div>
   </div>
 </header>
@@ -119,8 +110,7 @@
 .githubLink,
 .themeToggle,
 .languageToggle,
-.apiDocsLink,
-.legalWarning {
+.apiDocsLink {
   display: grid;
   width: 36px;
   height: 36px;
@@ -143,8 +133,7 @@
 .githubLink:hover,
 .themeToggle:hover,
 .languageToggle:hover,
-.apiDocsLink:hover,
-.legalWarning:hover {
+.apiDocsLink:hover {
   border-color: var(--color-accent-strong);
   background: var(--color-accent-soft);
   transform: translateY(-1px);
@@ -171,22 +160,6 @@
   font-weight: 850;
   letter-spacing: 0.04em;
   white-space: nowrap;
-}
-
-.legalWarning {
-  padding: 0;
-  border-color: rgba(255, 199, 0, 0.42);
-  background: rgba(255, 199, 0, 0.12);
-  cursor: pointer;
-}
-
-.legalWarning img {
-  filter: brightness(0) saturate(100%) invert(76%) sepia(91%) saturate(1160%) hue-rotate(355deg) brightness(101%) contrast(99%);
-}
-
-.legalWarning:focus-visible {
-  outline: 2px solid #ffc700;
-  outline-offset: 2px;
 }
 
 .themeToggle img {
@@ -224,7 +197,6 @@
 :global(html[data-theme="dark"]) .themeToggle,
 :global(html[data-theme="dark"]) .languageToggle,
 :global(html[data-theme="dark"]) .apiDocsLink,
-:global(html[data-theme="dark"]) .legalWarning,
 :global(html[data-theme="dark"]) .profile {
   border-color: var(--color-border-strong);
   background: #262626;

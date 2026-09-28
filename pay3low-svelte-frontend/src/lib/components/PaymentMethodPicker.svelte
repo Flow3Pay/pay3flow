@@ -103,8 +103,14 @@
     return normalizeSearch(value).split(" ").filter(Boolean).every((term) => searchText.includes(term) || compact.includes(term));
   }
 
-  function logo(method: PaymentMethod) {
-    return paymentMethodFavicon(method);
+  function logo(method: PaymentMethod, variants: PaymentMethod[] = [method]) {
+    return paymentMethodFavicon(method) ?? variants.map((variant) => paymentMethodFavicon(variant)).find(Boolean) ?? null;
+  }
+  function methodMeta(method: PaymentMethod, variants: PaymentMethod[] = [method]) {
+    if (method.kind === "cash") return `Cash settlement · ${method.currency}`;
+    if (method.kind !== "bank") return `${method.currency} · ${method.name}`;
+    const currencies = [...new Set(variants.map((variant) => variant.currency))].join(" / ");
+    return `Bank transfer · ${currencies}`;
   }
   function hideBrokenImage(event: Event) {
     const image = event.currentTarget as HTMLImageElement;
@@ -187,12 +193,12 @@
                   {@const network = option.network}
                   {@const isSelected = selected?.id === method.id && (method.kind !== "wallet" || network?.id === selectedNetwork?.id)}
                   <button type="button" role="option" aria-selected={isSelected} class="methodRow" data-selected={isSelected || undefined} on:click={() => onSelect(method, network)}>
-                    <span class="methodLogo" style:background-color={logo(method) ? "transparent" : method.color} aria-hidden="true">
-                      {#if logo(method)}<img src={logo(method) ?? ""} alt="" width="42" height="42" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{method.initials}</span>{:else}<span>{method.initials}</span>{/if}
+                    <span class="methodLogo" style:background-color={logo(method, option.variants) ? "transparent" : method.color} aria-hidden="true">
+                      {#if logo(method, option.variants)}<img src={logo(method, option.variants) ?? ""} alt="" width="42" height="42" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{method.initials}</span>{:else}<span>{method.initials}</span>{/if}
                     </span>
                     <span class="methodCopy">
                       <span class="methodName">{method.kind === "wallet" ? network?.name ?? method.name : method.name}</span>
-                      <span class="methodMeta">{method.kind === "cash" ? `Cash settlement · ${method.currency}` : method.kind === "bank" ? `Bank transfer · ${method.currency}` : `${method.currency} · ${method.name}`}</span>
+                      <span class="methodMeta">{methodMeta(method, option.variants)}</span>
                     </span>
                     {#if isSelected}
                       <svg class="check" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="currentColor" /><path d="m6 10.2 2.7 2.5 5.3-5.6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>

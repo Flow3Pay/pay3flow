@@ -34,8 +34,8 @@
 <svelte:head><title>Pay3Flow</title></svelte:head>
 
 <div class="appShell" bind:this={shell} use:localize>
-  <Header {showBelarusP2pWarning} onOpenBelarusP2pWarning={() => belarusP2pWarningOpen = true} />
-  <main><Converter onBelarusP2pWarningChange={(show) => showBelarusP2pWarning = show} /></main>
+  <Header />
+  <main><Converter onBelarusP2pWarningChange={(show) => showBelarusP2pWarning = show} onOpenBelarusP2pWarning={() => belarusP2pWarningOpen = true} /></main>
   <footer class="siteFooter"><span>Pay3Flow</span><span>{t("Live routing infrastructure · Public market estimates", {}, $locale)}</span></footer>
 </div>
 <BelarusP2pWarning open={belarusP2pWarningOpen} onClose={() => belarusP2pWarningOpen = false} />
