@@ -51,7 +51,7 @@
 
 .inner {
   display: grid;
-  width: min(1220px, 100%);
+  width: 100%;
   min-height: 66px;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -353,31 +353,12 @@
   min-height: 58px;
   padding: 6px 8px 6px 14px;
   border-color: var(--color-border-strong);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.78);
-  box-shadow: 0 10px 32px rgba(55, 77, 52, 0.07);
-  backdrop-filter: blur(18px) saturate(130%);
-  -webkit-backdrop-filter: blur(18px) saturate(130%);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 10px 26px rgba(55, 77, 52, 0.06);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
-
-.wordmark::after {
-  display: inline-block;
-  margin-left: 8px;
-  padding: 3px 5px;
-  border-radius: 5px;
-  background: var(--color-accent-soft);
-  color: #678d00;
-  content: "ROUTER";
-  font-family: var(--font-mono);
-  font-size: 7px;
-  font-weight: 500;
-  letter-spacing: .08em;
-  vertical-align: 3px;
-}
-
-:global(html[data-theme="dark"]) .wordmark::after { color: var(--color-accent); }
 
 .logo {
   width: 34px;

@@ -1140,38 +1140,6 @@
   box-shadow: var(--shadow-card);
 }
 
-/* Match the search form's compact exchange-terminal surface. */
-.panel {
-  height: 674px;
-  padding: 20px;
-  border-color: var(--color-border);
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--color-paper) 97%, transparent);
-  box-shadow: 0 24px 70px rgba(38, 54, 37, .10), 0 2px 8px rgba(38, 54, 37, .04);
-}
-
-.panelTop { min-height: 44px; transform: none; }
-
-.routeCard {
-  border-radius: 12px;
-  background: var(--color-panel);
-}
-
-.routeBest {
-  border-color: color-mix(in srgb, var(--color-accent-strong) 55%, var(--color-border));
-  background: color-mix(in srgb, var(--color-accent-soft) 48%, var(--color-paper));
-}
-
-.emptyNode { border-radius: 15px; }
-
-@media (max-width: 980px) {
-  .panel { height: 610px; }
-}
-
-@media (max-width: 640px) {
-  .panel { height: 520px; padding: 15px; border-radius: 16px; }
-}
-
 :global(html[data-theme="dark"]) .routeCard,
 :global(html[data-theme="dark"]) .skeletonCard,
 :global(html[data-theme="dark"]) .emptyNode {
