@@ -640,7 +640,14 @@
 </script>
 
 <section class="shell" class:localeLong={activeLocale !== "en"} id="transfer">
-  <div class="hero"><h1>{t("Move money.", {}, activeLocale)} <span>{t("Keep more.", {}, activeLocale)}</span></h1><p>{t("Stop spending hours searching for an exchange.", {}, activeLocale)}</p></div>
+  <div class="hero">
+    <div class="heroEyebrow"><i></i><span>SMART ROUTE SEARCH</span><b>LIVE</b></div>
+    <h1>{t("Move money.", {}, activeLocale)} <span>{t("Keep more.", {}, activeLocale)}</span></h1>
+    <p>{t("Stop spending hours searching for an exchange.", {}, activeLocale)}</p>
+    <div class="heroMeta" aria-label="Search coverage">
+      <span><i>01</i>P2P offers</span><span><i>02</i>Exchangers</span><span><i>03</i>Cross-chain routes</span>
+    </div>
+  </div>
   <div class="workspace">
     <div class="card">
       <div class="cardTop">
@@ -2498,6 +2505,258 @@
 :global(html[data-theme="dark"]) .textInput {
   border-color: var(--color-border-strong);
   background: #151515;
+}
+
+/* 2026 exchange workspace: one confident surface, clear hierarchy, fewer decorations. */
+.shell {
+  padding: 54px 24px 0;
+}
+
+.hero {
+  width: min(820px, 100%);
+  margin-bottom: 36px;
+}
+
+.heroEyebrow {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 19px;
+  padding: 0 11px 0 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--color-paper) 78%, transparent);
+  color: var(--color-text-soft);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: .11em;
+  box-shadow: 0 8px 24px rgba(45, 58, 42, .05);
+}
+
+.heroEyebrow > i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-accent-strong);
+  box-shadow: 0 0 0 4px var(--color-accent-soft);
+  animation: scanPulse 2.2s ease-in-out infinite;
+}
+
+.heroEyebrow b {
+  padding-left: 9px;
+  border-left: 1px solid var(--color-border);
+  color: var(--color-good);
+  font-size: 8px;
+  letter-spacing: .12em;
+}
+
+.hero h1 {
+  max-width: 780px;
+  font-size: clamp(48px, 5.1vw, 72px);
+  font-weight: 720;
+  letter-spacing: -.073em;
+  line-height: .98;
+}
+
+.hero h1 span::after {
+  right: -.02em;
+  bottom: -.02em;
+  left: -.02em;
+  height: .16em;
+  border-radius: 999px;
+  opacity: .95;
+  transform: rotate(-.5deg);
+}
+
+.hero > p {
+  margin-top: 15px;
+  font-size: 14px;
+}
+
+.heroMeta {
+  display: flex;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 21px;
+}
+
+.heroMeta > span {
+  display: inline-flex;
+  min-height: 31px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 11px 0 7px;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--color-paper) 62%, transparent);
+  color: var(--color-text-soft);
+  font-size: 9px;
+  font-weight: 720;
+}
+
+.heroMeta i {
+  display: grid;
+  width: 19px;
+  height: 19px;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--color-panel);
+  color: var(--color-text-faint);
+  font-family: var(--font-mono);
+  font-size: 7px;
+  font-style: normal;
+}
+
+.workspace {
+  width: min(1180px, 100%);
+  grid-template-columns: minmax(0, .94fr) minmax(0, 1.06fr);
+  gap: 14px;
+}
+
+.card {
+  gap: 8px;
+  padding: 16px;
+  border-color: var(--color-border);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--color-paper) 97%, transparent);
+  box-shadow: 0 24px 70px rgba(38, 54, 37, .10), 0 2px 8px rgba(38, 54, 37, .04);
+}
+
+.cardTop {
+  min-height: 38px;
+  padding: 1px 3px 7px;
+}
+
+.modeTabs button {
+  font-size: 15px;
+  font-weight: 720;
+}
+
+.moneyPanel {
+  min-height: 126px;
+  padding: 17px;
+  border-color: var(--color-border);
+  border-radius: 14px;
+  background: var(--color-panel);
+}
+
+.moneyPanelSource,
+.moneyPanelTarget {
+  background: linear-gradient(145deg, color-mix(in srgb, var(--color-panel) 92%, white), var(--color-panel));
+}
+
+.moneyPanel:hover,
+.moneyPanel:focus-within {
+  border-color: var(--color-accent-strong);
+  box-shadow: 0 0 0 3px var(--color-accent-soft);
+}
+
+.intentLabel {
+  margin: 3px 4px 4px;
+}
+
+.amountInput,
+.amountOutput,
+.amountOutputEmpty {
+  font-size: clamp(31px, 3vw, 40px);
+}
+
+.methodControls .methodTrigger,
+.methodControls .networkButton {
+  min-height: 48px;
+  border-color: var(--color-border-strong);
+  border-radius: 10px;
+  background: var(--color-paper);
+}
+
+.methodTrigger {
+  padding: 7px 10px 7px 7px;
+}
+
+.methodAvatar {
+  width: 32px;
+  height: 32px;
+}
+
+.flowBridge {
+  height: 24px;
+  margin: -2px 0;
+}
+
+.bridgeLine { display: none; }
+
+.bridgeIcon {
+  width: 34px;
+  height: 34px;
+  border: 4px solid var(--color-paper);
+  border-radius: 11px;
+  background: var(--color-primary);
+  box-shadow: 0 7px 18px rgba(21, 31, 22, .17);
+}
+
+.cta {
+  height: 56px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--color-accent);
+  color: #172011;
+  box-shadow: 0 10px 24px rgba(117, 161, 0, .18);
+  font-size: 13px;
+}
+
+.cta:hover:not(:disabled) {
+  background: var(--color-accent-strong);
+  box-shadow: 0 14px 30px rgba(117, 161, 0, .24);
+}
+
+.cta:disabled {
+  border: 1px solid var(--color-border);
+  background: var(--color-panel);
+}
+
+:global(html[data-theme="dark"]) .heroEyebrow,
+:global(html[data-theme="dark"]) .heroMeta > span {
+  background: rgba(25, 25, 25, .72);
+}
+
+:global(html[data-theme="dark"]) .card {
+  border-color: var(--color-border-strong);
+  background: rgba(25, 25, 25, .98);
+}
+
+:global(html[data-theme="dark"]) .moneyPanelSource,
+:global(html[data-theme="dark"]) .moneyPanelTarget {
+  border-color: #393939;
+  background: #222;
+}
+
+:global(html[data-theme="dark"]) .cta:not(:disabled) {
+  background: var(--color-accent);
+  color: #111;
+}
+
+@media (max-width: 980px) {
+  .shell { padding-top: 38px; }
+  .workspace {
+    width: min(640px, 100%);
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .shell { padding: 27px 12px 0; }
+  .hero { margin-bottom: 25px; }
+  .heroEyebrow { margin-bottom: 15px; }
+  .hero h1 { font-size: clamp(40px, 12.5vw, 54px); }
+  .heroMeta { gap: 5px; }
+  .heroMeta > span { padding-right: 8px; font-size: 8px; }
+  .heroMeta > span:last-child { display: none; }
+  .card { padding: 12px; border-radius: 16px; }
+  .moneyPanel { min-height: 172px; padding: 15px; }
+  .methodControls .methodTrigger,
+  .methodControls .networkButton { min-height: 46px; }
 }
 
 </style>
