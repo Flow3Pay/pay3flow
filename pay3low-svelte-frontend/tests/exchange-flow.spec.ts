@@ -807,6 +807,11 @@ test("editing the receive amount updates the send amount", async ({ page }) => {
   await expect(sendAmount).toHaveValue("42269");
   await expect(receiveAmount).toHaveValue("10000");
   await expect(page.getByTestId("complete-route")).toHaveCount(1);
+
+  const quotedSendAmount = await sendAmount.inputValue();
+  await sendAmount.fill(quotedSendAmount);
+  await page.getByTestId("start-search").click();
+  await expect(receiveAmount).toHaveValue("10000");
 });
 
 test("RUB to RUB bank routes explain SBP payment", async ({ page }) => {

@@ -36,6 +36,7 @@
   let targetAmountNeedsRate = false;
   let targetProbeAmount: number | null = null;
   let targetRefinementAttempts = 0;
+  let targetQuoteRouteKey: string | null = null;
   let routes: RouteCandidate[] = [];
   let routesFound = 0;
   let selected: RouteCandidate | null = null;
@@ -144,6 +145,26 @@
     return label || provider.slug;
   }
 
+  function routeFamilyKey(route: RouteCandidate) {
+    const entry = route.entry_offer_snapshot;
+    const exit = route.exit_offer_snapshot;
+    return [
+      route.route_kind,
+      route.source_currency,
+      route.target_currency,
+      route.source_network,
+      route.target_network,
+      route.entry_asset,
+      route.entry_network,
+      route.bridge_currency,
+      route.route_provider,
+      route.route_path?.join(","),
+      entry ? `${entry.source}:${entry.ad_id}:${entry.payment_methods.join(",")}` : "",
+      exit ? `${exit.source}:${exit.ad_id}:${exit.payment_methods.join(",")}` : "",
+      route.market_path ? `${route.market_path.venue}:${route.market_path.source_pair}:${route.market_path.target_pair}` : "",
+    ].join("|");
+  }
+
   function providerSources(providers: ProviderDefinition[]): P2pSourceOption[] {
     const sources = new Map<string, P2pSourceOption>();
     for (const provider of providers) {
@@ -195,7 +216,7 @@
         : `live:${entryOffer?.source ?? "direct"}:${entryOffer?.ad_id ?? "none"}:${exitOffer?.source ?? "direct"}:${exitOffer?.ad_id ?? "none"}:${route.route_path?.join(",") ?? ""}`;
       return {
         route_id: route.route_id?.trim() || fallbackRouteId,
-        status: "complete", source_amount_minor: Math.round(Number(route.source_amount) * 100), source_currency: route.source_fiat,
+        status: "complete", source_amount_minor: Math.round(Number(route.source_amount) * 100), source_amount: route.source_amount, source_currency: route.source_fiat,
         source_payment_method: sourceMethod?.kind !== "wallet" ? sourceMethod?.name : undefined,
         target_payment_method: targetMethod?.kind !== "wallet" ? targetMethod?.name : undefined,
         source_bank_fee_percent: sourceMethod?.kind === "bank" ? sourceMethod.bankFeePercent : undefined,
@@ -324,7 +345,12 @@
     routesFound = Math.max(routesFound, response.routes_found ?? nextRoutes.length);
     renderRoutesProgressively(nextRoutes);
     const bestRoute = nextRoutes.find((route) => route.is_current_best) ?? nextRoutes[0] ?? null;
-    if (selectionPinnedByUser) {
+    const targetQuoteRoute = amountSide === "target" && targetQuoteRouteKey
+      ? nextRoutes.find((route) => routeFamilyKey(route) === targetQuoteRouteKey) ?? null
+      : null;
+    if (targetQuoteRoute) {
+      selected = targetQuoteRoute;
+    } else if (selectionPinnedByUser) {
       const pinnedRoute = nextRoutes.find((route) => route.route_id === selected?.route_id);
       if (pinnedRoute) selected = pinnedRoute;
       else { selectionPinnedByUser = false; selected = bestRoute; }
@@ -335,6 +361,17 @@
   function selectRoute(route: RouteCandidate) {
     selected = route;
     selectionPinnedByUser = true;
+    if (amountSide === "target") {
+      const desiredTarget = amountNumber(targetAmount);
+      const quotedSource = Number(route.source_amount);
+      const quotedTarget = Number(route.target_amount);
+      if (desiredTarget > 0 && quotedSource > 0 && quotedTarget > 0) {
+        amount = formatEditableAmount(desiredTarget * quotedSource / quotedTarget, selectedSourceCurrency);
+        targetQuoteRouteKey = routeFamilyKey(route);
+        targetRefinementAttempts = 0;
+        resetResults();
+      }
+    }
   }
 
   function replaceServiceStats(service: ServiceStats) {
@@ -391,7 +428,7 @@
     : Number.isFinite(amountNumber(amount)) && amountNumber(amount) > 0;
   $: previewRoute = selected ?? routes.find((route) => route.status === "complete" && route.is_current_best) ?? routes.find((route) => route.status === "complete") ?? null;
   $: displayedSourceAmount = amountSide === "target" && targetAmountNeedsRate && amountNumber(amount) <= 0 ? "" : amount;
-  $: displayedTargetAmount = amountSide === "target" ? targetAmount : amountFromRoute(previewRoute);
+  $: displayedTargetAmount = amountSide === "target" && !previewRoute ? targetAmount : amountFromRoute(previewRoute);
   $: secondsUntilRefresh = refreshSeconds && lastUpdatedAt ? Math.max(0, refreshSeconds - Math.floor((clock - lastUpdatedAt) / 1000)) : null;
   $: refreshProgress = secondsUntilRefresh !== null && refreshSeconds ? ((refreshSeconds - secondsUntilRefresh) / refreshSeconds) * 100 : 0;
   $: exchangeChoices = p2pSources.filter((source) => source.searchMode !== "always_on");
@@ -434,6 +471,7 @@
     targetAmountNeedsRate = false;
     targetProbeAmount = null;
     targetRefinementAttempts = 0;
+    targetQuoteRouteKey = null;
     amount = normalizeAmount(value);
     resetResults();
   }
@@ -447,6 +485,7 @@
     targetAmount = nextTargetAmount;
     amountSide = "target";
     targetRefinementAttempts = 0;
+    targetQuoteRouteKey = previewRoute ? routeFamilyKey(previewRoute) : null;
     if (Number.isFinite(desiredTarget) && desiredTarget > 0 && Number.isFinite(quotedTarget) && quotedTarget > 0 && Number.isFinite(quotedSource) && quotedSource > 0) {
       amount = formatEditableAmount(desiredTarget * quotedSource / quotedTarget, selectedSourceCurrency);
       targetAmountNeedsRate = false;
@@ -468,7 +507,7 @@
     const nextSource = targetMethod?.id ?? "", nextTarget = sourceMethod?.id ?? "";
     const nextAmount = amountSide === "target" ? targetAmount : amountFromRoute(previewRoute);
     if (amountNumber(nextAmount) > 0) amount = nextAmount;
-    amountSide = "source"; targetAmount = "0"; targetAmountNeedsRate = false; targetProbeAmount = null; targetRefinementAttempts = 0;
+    amountSide = "source"; targetAmount = "0"; targetAmountNeedsRate = false; targetProbeAmount = null; targetRefinementAttempts = 0; targetQuoteRouteKey = null;
     directionReversed = !directionReversed; sourceMethodId = nextSource; targetMethodId = nextTarget;
     sourceNetworkId = targetNetwork?.id ?? FALLBACK_NETWORK.id; targetNetworkId = sourceNetwork?.id ?? FALLBACK_NETWORK.id; resetResults();
   }
@@ -599,14 +638,18 @@
       }
       if (currentRequest !== requestId) return;
       if (targetDriven) {
-        const quotedSource = Number(response.routes[0]?.source_amount);
-        const quotedTarget = Number(response.routes[0]?.target_amount);
+        const responseRoutes = mapRoutes(response);
+        const quotedRoute = responseRoutes.find((route) => routeFamilyKey(route) === targetQuoteRouteKey) ?? responseRoutes[0];
+        const quotedSource = Number(quotedRoute?.source_amount);
+        const quotedTarget = Number(quotedRoute?.target_amount);
         if (desiredTarget > 0 && quotedSource > 0 && quotedTarget > 0) {
+          targetQuoteRouteKey = routeFamilyKey(quotedRoute);
           const calculatedSource = formatEditableAmount(desiredTarget * quotedSource / quotedTarget, selectedSourceCurrency);
-          const relativeDifference = Math.abs(quotedTarget - desiredTarget) / desiredTarget;
+          const targetPrecision = CRYPTO_CURRENCIES.has(selectedTargetCurrency.toUpperCase()) ? 8 : 2;
+          const closeEnough = Math.abs(quotedTarget - desiredTarget) < 0.5 * 10 ** -targetPrecision;
           targetAmountNeedsRate = false;
           targetProbeAmount = null;
-          if ((calculatedSource !== amount || relativeDifference > 0.000001) && targetRefinementAttempts < 3) {
+          if (!closeEnough && calculatedSource !== amount && targetRefinementAttempts < 6) {
             amount = calculatedSource;
             targetRefinementAttempts += 1;
             rerunForTargetAmount = true;

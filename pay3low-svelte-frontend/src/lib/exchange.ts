@@ -87,6 +87,7 @@ export interface RouteCandidate {
   quote_id?: string;
   status: "partial" | "complete";
   source_amount_minor: number;
+  source_amount?: string;
   source_currency: string;
   source_payment_method?: string;
   target_payment_method?: string;
