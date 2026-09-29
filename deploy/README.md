@@ -61,7 +61,7 @@ Kubernetes Secret environment variables.
 
 ## One-command production deploy
 
-The Flake's production Ruby app builds immutable images on the host and imports
+The Flake's production Fish app builds immutable images on the host and imports
 them into k3s, so deploying the current committed revision is one command:
 
 ```sh
@@ -76,9 +76,9 @@ home, health, and provider endpoints. See `nix run .#deploy -- --help` for
 host, identity, namespace, URL, and image-tag overrides.
 
 The cluster and `pay3flow-secrets` must already be bootstrapped. In particular,
-the Secret must contain `BESTCHANGE_API_KEY` and `SYMBIOSIS_PARTNER_ID` (the
-latter may be an empty value for the public API tier). `backend/.env` is never
-copied to the host.
+the Secret must contain `BESTCHANGE_API_KEY`; `SYMBIOSIS_PARTNER_ID` may be
+omitted or empty for the public API tier. `backend/.env` is never copied to the
+host.
 
 ## Deploy with in-cluster PostgreSQL and Redis via a registry
 

@@ -29,10 +29,9 @@
             Pay3flow::Deploy.main(ARGV)
           '';
           deployLiveScript = pkgs.writeScriptBin "deploy-pay3flow-live" ''
-            #!${pkgs.ruby}/bin/ruby
-            ENV["PATH"] = "${pkgs.lib.makeBinPath (with pkgs; [ curl git openssh rsync ])}:#{ENV.fetch("PATH", "")}"
-            load "${./deploy/live_deploy.rb}"
-            Pay3flow::LiveDeploy.main(ARGV)
+            #!${pkgs.fish}/bin/fish
+            set -gx PATH "${pkgs.lib.makeBinPath (with pkgs; [ curl fish git openssh rsync ])}:$PATH"
+            exec ${./deploy/live_deploy.fish} $argv
           '';
           manifests = pkgs.runCommand "pay3flow-kubernetes.yaml" {
             nativeBuildInputs = [ pkgs.ruby ];
