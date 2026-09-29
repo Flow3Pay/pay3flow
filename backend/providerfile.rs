@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use pay3flow_backend::provider_adapter::{P2pAdapterMarket, ProviderAdapters, WorkflowConfig};
-use pay3flow_backend::providers::{ProviderExchangeMethod, ProviderFeeModel};
+use pay3flow_backend::providers::{ProviderExchangeMethod, ProviderFeeModel, ProviderGuidance};
 use serde::Deserialize;
 
 #[path = "providerfile_code.rs"]
@@ -22,6 +22,7 @@ struct RawProviderFile {
     adapter: Option<ProviderAdapters>,
     workflow: Option<WorkflowConfig>,
     fees: Option<ProviderFeeModel>,
+    guidance: Option<ProviderGuidance>,
     code: Option<RawCodeBlock>,
     #[serde(default)]
     payment_methods: Vec<RawPaymentMethod>,
@@ -104,6 +105,7 @@ pub struct ProviderDefinition {
     pub adapter: Option<ProviderAdapters>,
     pub workflow: Option<WorkflowConfig>,
     pub fee_model: Option<ProviderFeeModel>,
+    pub guidance: Option<ProviderGuidance>,
     pub source_file: String,
 }
 
@@ -237,6 +239,7 @@ fn parse_document_with_path(
     let adapter = raw.adapter;
     let workflow = raw.workflow;
     let fee_model = raw.fees.map(normalize_fee_model).transpose()?;
+    let guidance = raw.guidance.map(normalize_guidance).transpose()?;
     let exchange_methods = raw
         .exchange_methods
         .into_iter()
@@ -256,6 +259,7 @@ fn parse_document_with_path(
                 adapter.clone(),
                 workflow.clone(),
                 fee_model.clone(),
+                guidance.clone(),
             )
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -383,9 +387,16 @@ fn render_sql_with_payment_methods(
             .as_ref()
             .map(|fee_model| serde_json::to_string(fee_model).expect("fee model is serializable"))
             .unwrap_or_else(|| "{}".into());
+        let guidance = definition
+            .guidance
+            .as_ref()
+            .map(|guidance| {
+                serde_json::to_string(guidance).expect("provider guidance is serializable")
+            })
+            .unwrap_or_else(|| "{}".into());
         sql.push_str(&format!(
-            "INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, source_file)\n\
-             VALUES ({}, {}, {}, {}, {currencies}, {banks}, {exchange_methods}, {}::JSONB, {}::JSONB, {}::JSONB, {})\n\
+            "INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)\n\
+             VALUES ({}, {}, {}, {}, {currencies}, {banks}, {exchange_methods}, {}::JSONB, {}::JSONB, {}::JSONB, {}::JSONB, {})\n\
              ON CONFLICT (slug, operation) DO UPDATE SET\n\
                  source_url = EXCLUDED.source_url,\n\
                  name = EXCLUDED.name,\n\
@@ -395,6 +406,7 @@ fn render_sql_with_payment_methods(
                  adapter = EXCLUDED.adapter,\n\
                  workflow = EXCLUDED.workflow,\n\
                  fee_model = EXCLUDED.fee_model,\n\
+                 guidance = EXCLUDED.guidance,\n\
                  source_file = EXCLUDED.source_file,\n\
                  updated_at = now();\n\n",
             sql_string(&definition.slug),
@@ -404,6 +416,7 @@ fn render_sql_with_payment_methods(
             sql_string(&adapter),
             sql_string(&workflow),
             sql_string(&fee_model),
+            sql_string(&guidance),
             sql_string(&definition.source_file),
         ));
     }
@@ -487,6 +500,7 @@ fn normalize(
     adapter: Option<ProviderAdapters>,
     workflow: Option<WorkflowConfig>,
     fee_model: Option<ProviderFeeModel>,
+    guidance: Option<ProviderGuidance>,
 ) -> Result<ProviderDefinition, ProviderFileError> {
     let source_url = raw.source_url.trim().to_string();
     if !source_url.starts_with("https://") && !source_url.starts_with("http://") {
@@ -530,6 +544,7 @@ fn normalize(
         adapter,
         workflow,
         fee_model,
+        guidance,
         source_file: source_file.to_string(),
     })
 }
@@ -556,6 +571,38 @@ fn normalize_fee_model(fee_model: ProviderFeeModel) -> Result<ProviderFeeModel, 
         description,
         docs_url,
     })
+}
+
+fn normalize_guidance(
+    mut guidance: ProviderGuidance,
+) -> Result<ProviderGuidance, ProviderFileError> {
+    guidance.description = guidance.description.trim().to_string();
+    if guidance.description.is_empty() {
+        return Err(ProviderFileError(
+            "guidance/description must not be empty".into(),
+        ));
+    }
+    guidance.steps = guidance
+        .steps
+        .into_iter()
+        .map(|step| step.trim().to_string())
+        .filter(|step| !step.is_empty())
+        .collect();
+    for (index, link) in guidance.links.iter_mut().enumerate() {
+        link.label = link.label.trim().to_string();
+        link.url = link.url.trim().to_string();
+        if link.label.is_empty() {
+            return Err(ProviderFileError(format!(
+                "guidance/links/{index}/label must not be empty"
+            )));
+        }
+        if !link.url.starts_with("https://") && !link.url.starts_with("http://") {
+            return Err(ProviderFileError(format!(
+                "guidance/links/{index}/url must use http or https"
+            )));
+        }
+    }
+    Ok(guidance)
 }
 
 fn normalize_payment_method(

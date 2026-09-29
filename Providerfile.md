@@ -19,6 +19,7 @@ generated database rows and compiled modules, never the Providerfiles.
 - [Payment-method catalog](#payment-method-catalog)
 - [Catalog-only provider](#catalog-only-provider)
 - [Fee metadata](#fee-metadata)
+- [Provider guidance](#provider-guidance)
 - [BestChange adapter](#bestchange-adapter)
 - [HTTP/JSON P2P adapter](#httpjson-p2p-adapter)
 - [Direct-exchange API](#direct-exchange-api)
@@ -154,6 +155,35 @@ All three fields are required. `kind` is a non-empty free-form identifier and
 is normalized to lowercase. `description` cannot be empty, and `docs_url` must
 use HTTP or HTTPS. This metadata is returned by `GET /api/providers`; it does
 not calculate or modify a quote.
+
+## Provider guidance
+
+Use `[guidance]` for user-facing provider information shown in route and order
+instructions. It is returned by `GET /api/providers`, so the frontend can
+render provider-specific explanations and links without a provider-specific
+switch in code:
+
+```toml
+[guidance]
+description = "Cross-chain swap estimate. Verify the route in the provider app before signing."
+steps = [
+  "Open the provider app and connect the wallet with the source asset.",
+  "Select the exact source and destination assets and networks shown in the route.",
+  "Check fees, slippage, expiry, and the destination address before signing.",
+]
+
+[[guidance.links]]
+label = "Open provider"
+url = "https://provider.example/app"
+
+[[guidance.links]]
+label = "Read the provider guide"
+url = "https://provider.example/docs"
+```
+
+`description` is required. `steps` and `links` may be empty, but every link
+must use HTTP or HTTPS. Keep these steps provider-specific; generic safety
+checks remain part of the route UI.
 
 ## BestChange adapter
 
@@ -722,6 +752,9 @@ Checked-in Rust examples: CoW Swap, NEAR Intents, and ID Pay.
 | `fees.kind` | In `[fees]` | — | Non-empty normalized identifier. |
 | `fees.description` | In `[fees]` | — | Human-readable disclosure. |
 | `fees.docs_url` | In `[fees]` | — | HTTP/HTTPS documentation URL. |
+| `guidance.description` | In `[guidance]` | — | User-facing provider explanation shown in route instructions. |
+| `guidance.steps` | No | `[]` | Provider-specific steps shown in order instructions. |
+| `guidance.links` | No | `[]` | Links with `label` and HTTP/HTTPS `url` shown with the steps. |
 
 ### `payment_methods`
 

@@ -27,8 +27,15 @@ export interface ProviderDefinition {
   banks: string[];
   exchange_methods: Array<"p2p" | "exchanger">;
   fee_model?: ProviderFeeModel | null;
+  guidance?: ProviderGuidance | null;
   searchable: boolean;
   search_mode?: "selectable" | "always_on" | "catalog_only";
+}
+
+export interface ProviderGuidance {
+  description: string;
+  steps: string[];
+  links: Array<{ label: string; url: string }>;
 }
 
 export interface ProviderFeeModel {
@@ -274,6 +281,10 @@ export interface SourceStatus {
   latency_ms: number;
   offers_found: number;
   error?: string | null;
+}
+
+export interface VenueSearchStatus extends SourceStatus {
+  routes_found: number;
 }
 
 export interface RouteAssetStatus {

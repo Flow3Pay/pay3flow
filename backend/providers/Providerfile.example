@@ -15,6 +15,17 @@ name = "Example Provider Buy"
 currency = ["usd", "rub", "eur", "amd"]
 banks = []
 
+[guidance]
+description = "Explain what the customer must verify and where the exchange is completed."
+steps = [
+  "Open the provider page and verify the currencies, amount, rate, fees, and limits.",
+  "Follow the provider's payment or wallet instructions and verify the network before sending.",
+]
+
+[[guidance.links]]
+label = "Open provider"
+url = "https://provider.example"
+
 # Delete this section if the provider is catalog-only. For a JSON API use
 # [adapter.p2p] instead; complete examples are in binance/, bybit/, okx/,
 # bitget/, and rapira/. Full format reference: Providerfile.md.

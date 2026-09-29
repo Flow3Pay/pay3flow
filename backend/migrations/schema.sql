@@ -192,6 +192,7 @@ CREATE TABLE IF NOT EXISTS providers (
     adapter JSONB NOT NULL DEFAULT '{}'::JSONB,
     workflow JSONB NOT NULL DEFAULT '{}'::JSONB,
     fee_model JSONB NOT NULL DEFAULT '{}'::JSONB,
+    guidance JSONB NOT NULL DEFAULT '{}'::JSONB,
     status TEXT NOT NULL DEFAULT 'enabled'
         CHECK (status IN ('enabled', 'disabled')),
     source_file TEXT NOT NULL,
@@ -206,6 +207,8 @@ ALTER TABLE providers
     ADD COLUMN IF NOT EXISTS workflow JSONB NOT NULL DEFAULT '{}'::JSONB;
 ALTER TABLE providers
     ADD COLUMN IF NOT EXISTS fee_model JSONB NOT NULL DEFAULT '{}'::JSONB;
+ALTER TABLE providers
+    ADD COLUMN IF NOT EXISTS guidance JSONB NOT NULL DEFAULT '{}'::JSONB;
 ALTER TABLE providers
     ADD COLUMN IF NOT EXISTS exchange_methods TEXT[] NOT NULL DEFAULT ARRAY['p2p', 'exchanger']::TEXT[];
 

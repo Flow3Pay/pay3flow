@@ -37,6 +37,24 @@ pub struct ProviderFeeModel {
     pub docs_url: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderLink {
+    pub label: String,
+    pub url: String,
+}
+
+/// User-facing provider information sourced from Providerfiles.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderGuidance {
+    pub description: String,
+    #[serde(default)]
+    pub steps: Vec<String>,
+    #[serde(default)]
+    pub links: Vec<ProviderLink>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct Provider {
     pub id: Uuid,
@@ -48,6 +66,7 @@ pub struct Provider {
     pub banks: Vec<String>,
     pub exchange_methods: Vec<ProviderExchangeMethod>,
     pub fee_model: Option<ProviderFeeModel>,
+    pub guidance: Option<ProviderGuidance>,
     pub searchable: bool,
     pub search_mode: ProviderSearchMode,
 }
@@ -84,7 +103,7 @@ pub async fn list(pool: &DbPool, filters: ProviderFilters) -> Result<Vec<Provide
     let statement = client
         .prepare_cached(
             r#"
-SELECT id, slug, operation, source_url, name, currencies, banks, exchange_methods, fee_model
+SELECT id, slug, operation, source_url, name, currencies, banks, exchange_methods, fee_model, guidance
 FROM providers
 WHERE status = 'enabled'
   AND ($1::TEXT IS NULL OR operation = $1)
@@ -104,6 +123,13 @@ ORDER BY name, operation, slug
                 .then(|| serde_json::from_value(fee_value))
                 .transpose()
                 .with_context(|| "invalid Providerfile fee model stored in providers")?;
+            let guidance_value: serde_json::Value = row.get("guidance");
+            let guidance = (!guidance_value
+                .as_object()
+                .is_some_and(serde_json::Map::is_empty))
+            .then(|| serde_json::from_value(guidance_value))
+            .transpose()
+            .with_context(|| "invalid Providerfile guidance stored in providers")?;
             let exchange_methods = row
                 .get::<_, Vec<String>>("exchange_methods")
                 .into_iter()
@@ -120,6 +146,7 @@ ORDER BY name, operation, slug
                 banks: row.get("banks"),
                 exchange_methods,
                 fee_model,
+                guidance,
                 searchable: false,
                 search_mode: ProviderSearchMode::CatalogOnly,
             })

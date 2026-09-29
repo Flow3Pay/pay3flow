@@ -1,11 +1,13 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import type { RouteCandidate, ServiceLink } from "$lib/exchange";
+  import type { ProviderGuidance, RouteCandidate, ServiceLink } from "$lib/exchange";
   import { locale, t } from "$lib/i18n";
   import AdvertiserCard from "./AdvertiserCard.svelte";
 
   export let route: RouteCandidate;
   export let venueNames: Record<string, string> = {};
+  export let providerGuidance: Record<string, ProviderGuidance> = {};
+  export let networkNames: Record<string, string> = {};
   export let onClose: () => void;
   export let onOpenService: (link: ServiceLink) => void = () => {};
   let modal: HTMLDivElement;
@@ -13,6 +15,12 @@
   let dragStartY = 0;
   let dragDistance = 0;
   const venueName = (value?: string | null) => value ? venueNames[value.toLowerCase()] ?? value : "P2P market";
+  const providerGuide = (value?: string | null) => value ? providerGuidance[value.toLowerCase()] : undefined;
+  const readableNetwork = (value: string) => networkNames[value.toLowerCase()] ?? value.replace(/-/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const readablePath = (path: string[]) => path.map((part) => {
+    const [asset, network] = part.split("@", 2);
+    return network ? `${asset} in ${readableNetwork(network)}` : asset;
+  }).join(" → ");
   $: language = $locale;
   const copy = (key: string, params: Record<string, string | number> = {}) => t(key, params, language);
   const isDirectOffer = (offer?: RouteCandidate["entry_offer_snapshot"]) => offer?.advertiser.user_type === "service" || offer?.source.toLowerCase() === "whitebird";
@@ -115,6 +123,9 @@
   $: firstMarketUrl = route.market_path ? spotUrl(route.market_path.venue, route.market_path.source_pair, route.source_currency, route.bridge_currency ?? route.target_currency ?? route.entry_asset) : null;
   $: secondMarketUrl = route.market_path && route.bridge_currency ? spotUrl(route.market_path.venue, route.market_path.target_pair, route.bridge_currency, route.target_currency ?? route.entry_asset) : null;
   $: standaloneProvider = Boolean(route.route_provider && !providerSwap);
+  $: routeGuide = providerGuide(route.route_provider);
+  $: entryGuide = providerGuide(entry?.provider ?? route.entry_offer_snapshot?.source);
+  $: exitGuide = providerGuide(exit?.provider ?? route.exit_offer_snapshot?.source);
   $: marketStepCount = cryptoToCrypto && route.market_path ? (route.bridge_currency ? 2 : 1) : 0;
   $: entryStepNumber = (standaloneProvider ? 1 : 0) + marketStepCount + 1;
   $: providerStepNumber = entryStepNumber + (route.entry_offer_snapshot ? 1 : 0);
@@ -138,7 +149,14 @@
         <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">1</span><div class="stepBody">
           <h3>{copy("Route through {venue}", { venue: venueName(route.route_provider) })}</h3>
           <p class="stepSummary">{copy("This is a current estimate only. Pay3Flow does not send money or make the exchange for you.")}</p>
-          {#if route.route_path?.length}<p class="routePath">{route.route_path.join(" → ")}</p>{/if}
+          {#if route.route_path?.length}<p class="routePath">{readablePath(route.route_path)}</p>{/if}
+          {#if routeGuide}
+            <div class="providerGuide">
+              <p>{routeGuide.description}</p>
+              {#if routeGuide.steps.length}<ul class="checklist">{#each routeGuide.steps as step}<li>{step}</li>{/each}</ul>{/if}
+              {#if routeGuide.links.length}<div class="guideLinks">{#each routeGuide.links as link}<a href={link.url} target="_blank" rel="noreferrer noopener" class="profileLink">{link.label} <span>↗</span></a>{/each}</div>{/if}
+            </div>
+          {/if}
           <ul class="checklist">
             <li>{copy("Check which asset and network you send, and which asset and network you receive.")}</li>
             <li>{copy("Check the amount you will receive, the provider fee, how long the quote is valid, and whether a memo or tag is required.")}</li>
@@ -196,6 +214,13 @@
               <li>{cryptoToCrypto ? copy("Release the asset only after you personally see that the payment has arrived.") : copy("Use only the payment details shown inside the order. After sending, mark the order as paid.")}</li>
             </ul>
           {/if}
+          {#if entryGuide}
+            <div class="providerGuide">
+              <p>{entryGuide.description}</p>
+              {#if entryGuide.steps.length}<ul class="checklist">{#each entryGuide.steps as step}<li>{step}</li>{/each}</ul>{/if}
+              {#if entryGuide.links.length}<div class="guideLinks">{#each entryGuide.links as link}<a href={link.url} target="_blank" rel="noreferrer noopener" class="profileLink">{link.label} <span>↗</span></a>{/each}</div>{/if}
+            </div>
+          {/if}
           <AdvertiserCard offer={route.entry_offer_snapshot} label={entryDirect ? copy("Direct exchange on {venue}", { venue: entryVenue }) : `${cryptoToCrypto ? copy("Buyer") : copy("Seller")} ${copy("on {venue}", { venue: entryVenue })}`} serviceLink={linkFor("entry")} {venueNames} {onOpenService} />
         </div></li>
       {/if}
@@ -203,7 +228,14 @@
         <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">{providerStepNumber}</span><div class="stepBody">
           <h3>{copy("Swap {from} for {to} via {venue}", { from: providerSwapFrom ?? "", to: providerSwapTo ?? "", venue: venueName(route.route_provider) })}</h3>
           <p class="stepSummary">{route.entry_offer_snapshot ? copy("After you get {from}, send it to {venue} and exchange it for {to}.", { from: providerSwapFrom ?? "", venue: venueName(route.route_provider), to: providerSwapTo ?? "" }) : copy("Send {from} to {venue} first, then exchange it for {to}.", { from: providerSwapFrom ?? "", venue: venueName(route.route_provider), to: providerSwapTo ?? "" })}</p>
-          {#if route.route_path?.length}<p class="routePath">{route.route_path.join(" → ")}</p>{/if}
+          {#if route.route_path?.length}<p class="routePath">{readablePath(route.route_path)}</p>{/if}
+          {#if routeGuide}
+            <div class="providerGuide">
+              <p>{routeGuide.description}</p>
+              {#if routeGuide.steps.length}<ul class="checklist">{#each routeGuide.steps as step}<li>{step}</li>{/each}</ul>{/if}
+              {#if routeGuide.links.length}<div class="guideLinks">{#each routeGuide.links as link}<a href={link.url} target="_blank" rel="noreferrer noopener" class="profileLink">{link.label} <span>↗</span></a>{/each}</div>{/if}
+            </div>
+          {/if}
           <ul class="checklist">
             <li>{copy("Before sending, check the asset, the receiving asset, and the exact network.")}</li>
             <li>{copy("Check the current rate, provider fee, quote expiry, and any address, memo, or tag requirement.")}</li>
@@ -242,6 +274,13 @@
               {#if targetRubInstruction}<li>{targetRubInstruction}</li>{/if}
               <li>{cryptoToCrypto ? copy("Confirm the {asset} balance and network before withdrawing.", { asset: route.target_currency ?? "" }) : copy("Release the asset only after you personally see the payment in your bank or payment account.")}</li>
             </ul>
+          {/if}
+          {#if exitGuide}
+            <div class="providerGuide">
+              <p>{exitGuide.description}</p>
+              {#if exitGuide.steps.length}<ul class="checklist">{#each exitGuide.steps as step}<li>{step}</li>{/each}</ul>{/if}
+              {#if exitGuide.links.length}<div class="guideLinks">{#each exitGuide.links as link}<a href={link.url} target="_blank" rel="noreferrer noopener" class="profileLink">{link.label} <span>↗</span></a>{/each}</div>{/if}
+            </div>
           {/if}
           <AdvertiserCard offer={route.exit_offer_snapshot} label={exitDirect ? copy("Direct exchange on {venue}", { venue: exitVenue }) : `${cryptoToCrypto ? copy("Seller") : copy("Buyer")} ${copy("on {venue}", { venue: exitVenue })}`} serviceLink={linkFor("exit")} {venueNames} {onOpenService} />
         </div></li>
@@ -417,6 +456,31 @@
   color: var(--color-text-soft);
   font-size: 12px;
   line-height: 1.55;
+}
+
+.providerGuide {
+  margin-top: 14px;
+  padding: 12px 13px;
+  border: 1px solid rgba(109, 152, 0, 0.2);
+  border-radius: 14px;
+  background: rgba(181, 224, 58, 0.08);
+}
+
+.providerGuide > p {
+  margin: 0;
+  color: var(--color-text-soft);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.providerGuide .checklist {
+  margin-top: 10px;
+}
+
+.guideLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 14px;
 }
 
 .checklist {

@@ -2,7 +2,7 @@
   import { flip } from "svelte/animate";
   import { quintOut } from "svelte/easing";
   import { fly } from "svelte/transition";
-  import type { RouteCandidate, ServiceVote } from "$lib/exchange";
+  import type { RouteCandidate, ServiceVote, VenueSearchStatus } from "$lib/exchange";
   import { formatRouteCount, locale, t, type Locale } from "$lib/i18n";
   import { assetIcon, dislikeIcon, likeIcon, networkIcon, venueIcon, warningIcon } from "$lib/icons";
 
@@ -18,7 +18,9 @@
   export let renderingRoutes = false;
   export let searchingVenues: { id: string; label: string; iconUrl: string }[] = [];
   export let foundVenues: { id: string; label: string; iconUrl: string }[] = [];
+  export let venueStats: Record<string, VenueSearchStatus> = {};
   export let venueNames: Record<string, string> = {};
+  export let networkNames: Record<string, string> = {};
   export let searched = false;
   export let hasAmount = false;
   export let showBelarusP2pWarning = false;
@@ -26,9 +28,22 @@
 
   const ASSET_NAMES: Record<string, string> = { BTC: "Bitcoin", ETH: "Ether", USDC: "USD Coin", USDT: "Tether" };
   const FIAT_MARKS: Record<string, string> = { AMD: "🇦🇲", RUB: "🇷🇺", BYN: "🇧🇾" };
-  type Step = { currency: string; network?: string; provider?: string; iconUrl?: string };
+  type Step = { currency: string; network?: string; networkLabel?: string; provider?: string; iconUrl?: string };
 
   const venueName = (value?: string) => value ? venueNames[value.toLowerCase()] ?? value : "Searching";
+  const readableNetwork = (value?: string) => value ? networkNames[value.toLowerCase()] ?? value.replace(/-/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) : "";
+  const compactNetwork = (value?: string) => {
+    if (!value) return "";
+    const label = readableNetwork(value);
+    const standard = label.match(/\(([^)]+)\)/)?.[1];
+    if (standard) return standard;
+    if (/c-chain/i.test(label)) return "C-Chain";
+    if (/polygon/i.test(label)) return "Polygon";
+    if (/arbitrum/i.test(label)) return "Arbitrum";
+    if (/optimism/i.test(label)) return "Optimism";
+    if (/cosmos/i.test(label)) return "Cosmos";
+    return label;
+  };
   const assetLabel = (currency?: string) => !currency ? "—" : ASSET_NAMES[currency.toUpperCase()] ? `${currency} ${ASSET_NAMES[currency.toUpperCase()]}` : currency;
   const money = (minor?: number, currency?: string, exact?: string) => {
     if (exact && ["BTC", "ETH", "USDC", "USDT", "SOL", "TRX", "TON", "XRP", "ADA", "AVAX", "DOT", "LINK", "LTC", "BCH", "BNB", "DOGE", "MATIC", "NEAR", "SUI", "APT", "ATOM", "UNI", "DAI", "FDUSD"].includes(currency?.toUpperCase() ?? "")) {
@@ -74,7 +89,7 @@
     if (route.route_path?.length) {
       return route.route_path.map((qualified, index) => {
         const [currency, network] = qualified.split("@", 2);
-        return { currency, network, provider: pathStepProvider(route, index, route.route_path!.length - 1) };
+        return { currency, network, networkLabel: compactNetwork(network), provider: pathStepProvider(route, index, route.route_path!.length - 1) };
       });
     }
     if (!entry && exit) return [{ currency: source, network: route.source_network, provider: exit.provider, iconUrl: route.source_method_icon_url }, { currency: target, iconUrl: route.target_method_icon_url }];
@@ -83,7 +98,7 @@
     return [{ currency: source, iconUrl: route.source_method_icon_url }, { currency: route.entry_asset ?? "—", network: route.entry_network !== "internal" ? route.entry_network : undefined, provider: entry?.provider }, { currency: target, provider: exit?.provider, iconUrl: route.target_method_icon_url }];
   }
 
-  const workflowLabel = (route: RouteCandidate) => workflowSteps(route).map((step) => `${assetLabel(step.currency)}${step.network ? ` · ${step.network}` : ""}${step.provider ? ` (${venueName(step.provider)})` : ""}`).join(" → ");
+  const workflowLabel = (route: RouteCandidate) => workflowSteps(route).map((step) => `${assetLabel(step.currency)}${step.network ? ` · ${step.networkLabel ?? compactNetwork(step.network)}` : ""}${step.provider ? ` (${venueName(step.provider)})` : ""}`).join(" → ");
 
   function cardClick(event: MouseEvent, route: RouteCandidate) {
     onSelect(route);
@@ -112,9 +127,22 @@
             {#if hasAmount && foundVenues.length}
               <span class="foundVenues" aria-label={`Routes found on ${foundVenues.map((venue) => venue.label).join(", ")}`}>
                 {#each foundVenues as venue, index (venue.id)}
-                  <span class="foundVenue" data-testid="found-venue" title={`Found on ${venue.label}`} style:animation-delay={`${index * 70}ms`}>
-                    <img src={venue.iconUrl} alt="" width="18" height="18" decoding="async" on:error={(event) => fallbackVenueIcon(event, venue.id)} />
-                  </span>
+                  {@const status = venueStats[venue.id.toLowerCase()]}
+                  <div class="foundVenue" data-testid="found-venue" style:animation-delay={`${index * 70}ms`}>
+                    <button type="button" class="foundVenueButton" aria-label={`Show ${venue.label} response`}>
+                      <img src={venue.iconUrl} alt="" width="18" height="18" decoding="async" on:error={(event) => fallbackVenueIcon(event, venue.id)} />
+                    </button>
+                    <div class="foundVenuePopover" role="tooltip">
+                      <strong>{venue.label}</strong>
+                      <span class:venueOk={status?.ok} class:venueError={status && !status.ok}>{status?.ok === false ? "Response error" : "Response received"}</span>
+                      <dl>
+                        <div><dt>Routes found</dt><dd>{status?.routes_found ?? 0}</dd></div>
+                        <div><dt>Offers found</dt><dd>{status?.offers_found ?? 0}</dd></div>
+                        {#if status}<div><dt>Response time</dt><dd>{status.latency_ms} ms</dd></div>{/if}
+                      </dl>
+                      {#if status?.error}<small>{status.error}</small>{/if}
+                    </div>
+                  </div>
                 {/each}
               </span>
             {/if}
@@ -166,10 +194,10 @@
                         {/if}
                         <span>{assetLabel(step.currency)}</span>
                         {#if step.network}
-                          <span class="workflowNetwork" aria-label={t("Network: {network}", { network: step.network }, $locale)}>
+                          <span class="workflowNetwork" aria-label={t("Network: {network}", { network: step.networkLabel ?? compactNetwork(step.network) }, $locale)}>
                             <span aria-hidden="true">·</span>
                             <span class="workflowNetworkIcon" aria-hidden="true"><img src={networkIcon(step.network)} alt="" width="14" height="14" loading="lazy" decoding="async" /></span>
-                            <span>{step.network}</span>
+                            <span>{step.networkLabel ?? compactNetwork(step.network)}</span>
                           </span>
                         {/if}
                       </span>
@@ -322,6 +350,7 @@
 }
 
 .foundVenue {
+  position: relative;
   display: grid;
   width: 24px;
   height: 24px;
@@ -332,6 +361,69 @@
   animation: foundVenueIn 0.52s cubic-bezier(0.22, 1.42, 0.36, 1) both;
   will-change: transform, opacity;
 }
+
+.foundVenueButton {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: help;
+}
+
+.foundVenuePopover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  width: 220px;
+  gap: 7px;
+  padding: 13px 14px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 14px;
+  background: var(--color-surface, #fff);
+  box-shadow: 0 14px 32px rgba(20, 24, 18, 0.2);
+  color: var(--color-text);
+  font-size: 11px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.foundVenue:hover .foundVenuePopover,
+.foundVenue:focus-within .foundVenuePopover {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.foundVenuePopover > span {
+  color: var(--color-text-soft);
+  font-size: 10px;
+}
+
+.foundVenuePopover .venueOk { color: #5f8308; }
+.foundVenuePopover .venueError { color: #b0443d; }
+
+.foundVenuePopover dl {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+}
+
+.foundVenuePopover dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.foundVenuePopover dt { color: var(--color-text-soft); }
+.foundVenuePopover dd { margin: 0; font-weight: 800; }
+.foundVenuePopover small { color: #b0443d; line-height: 1.35; }
 
 .foundVenue img {
   width: 18px;

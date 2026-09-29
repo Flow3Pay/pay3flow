@@ -24,3 +24,24 @@ banks = []
 kind = "quote_dependent"
 description = "Symbiosis returns route and network fees with each live cross-chain quote; final execution costs depend on the selected route and network."
 docs_url = "https://api.symbiosis.finance/crosschain/docs/"
+
+[guidance]
+description = "Cross-chain swap estimate. Pay3Flow does not connect your wallet or submit the transaction: open Symbiosis, verify the route, and approve the swap in your wallet."
+steps = [
+  "Open Symbiosis and connect the wallet that holds the source asset.",
+  "Select the exact source and destination assets and networks shown in this route.",
+  "Check the amount received, slippage, provider fee, network fee, quote expiry, and the destination wallet address.",
+  "Submit the swap only after checking the network one more time, then wait for the destination transaction to complete.",
+]
+
+[[guidance.links]]
+label = "Open Symbiosis WebApp"
+url = "https://app.symbiosis.finance/"
+
+[[guidance.links]]
+label = "Symbiosis swap guide"
+url = "https://docs.symbiosis.finance/main-concepts/symbiosis-cross-chain-swaps"
+
+[[guidance.links]]
+label = "Symbiosis fees and troubleshooting"
+url = "https://docs.symbiosis.finance/user-guide-webapp/where-are-my-tokens-troubleshooting-guide"

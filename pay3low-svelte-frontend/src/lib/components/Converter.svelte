@@ -1,6 +1,6 @@
 <script lang="ts">
   import { afterUpdate, onMount, onDestroy } from "svelte";
-  import { fetchCorridors, fetchP2pRoutes, fetchProviders, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderDefinition, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote } from "$lib/exchange";
+  import { fetchCorridors, fetchP2pRoutes, fetchProviders, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderDefinition, type ProviderGuidance, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote, type VenueSearchStatus } from "$lib/exchange";
   import { FALLBACK_NETWORK, fetchNetworks, type CryptoNetwork } from "$lib/networks";
   import { assetIcon, networkIcon, swapIcon, venueIcon } from "$lib/icons";
   import { fetchPaymentMethods, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
@@ -50,6 +50,7 @@
   let refreshSeconds: RefreshSeconds = 15;
   let p2pSources: P2pSourceOption[] = [];
   let venueNames: Record<string, string> = {};
+  let providerGuidance: Record<string, ProviderGuidance> = {};
   let selectedSources: P2pSource[] = [];
   let selectedExchangeMethods: ExchangeMethod[] = [...EXCHANGE_METHODS];
   let selectedIntermediaryAssets: string[] = [];
@@ -86,6 +87,7 @@
   let routeInstructionsComponent: typeof import("./RouteInstructions.svelte").default | null = null;
   let searchingVenues: P2pSourceOption[] = [];
   let foundVenues: P2pSourceOption[] = [];
+  let venueStats: Record<string, VenueSearchStatus> = {};
   let foundVenueIds: string[] = [];
   $: activeLocale = $locale;
   $: modalOpen = settingsOpen || exchangesOpen;
@@ -260,6 +262,27 @@
 
   function applySearchResponse(response: P2pRouteSearchResponse) {
     const nextRoutes = mapRoutes(response);
+    const routeCounts = new Map<string, number>();
+    for (const route of nextRoutes) {
+      const providers = new Set([...route.legs.map((leg) => leg.provider), ...(route.route_provider ? [route.route_provider] : [])].map((provider) => provider.toLowerCase()));
+      for (const provider of providers) routeCounts.set(provider, (routeCounts.get(provider) ?? 0) + 1);
+    }
+    const observedVenueStats = new Map<string, VenueSearchStatus>();
+    for (const status of (response.asset_statuses ?? []).flatMap((asset) => [...asset.entry_sources, ...asset.exit_sources])) {
+      const id = status.source.toLowerCase();
+      const previous = observedVenueStats.get(id);
+      observedVenueStats.set(id, { ...status, ok: (previous?.ok ?? true) && status.ok, latency_ms: Math.max(previous?.latency_ms ?? 0, status.latency_ms), offers_found: (previous?.offers_found ?? 0) + status.offers_found, routes_found: routeCounts.get(id) ?? 0 });
+    }
+    const nextVenueStats = { ...venueStats };
+    for (const [id, status] of observedVenueStats) {
+      const previous = nextVenueStats[id];
+      nextVenueStats[id] = { ...status, routes_found: Math.max(previous?.routes_found ?? 0, status.routes_found) };
+    }
+    for (const [id, count] of routeCounts) {
+      const previous = nextVenueStats[id];
+      nextVenueStats[id] = previous ? { ...previous, routes_found: Math.max(previous.routes_found, count) } : { source: id, ok: true, latency_ms: 0, offers_found: 0, routes_found: count };
+    }
+    venueStats = nextVenueStats;
     const newlyFoundVenueIds = [
       ...nextRoutes.flatMap((route) => [
         ...route.legs.map((leg) => leg.provider),
@@ -373,7 +396,7 @@
     if (seconds && updatedAt && validAmount) refreshTimer = window.setInterval(startSearch, seconds * 1000);
   }
   function resetResults() {
-    controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; displayRoutes([]); routesFound = 0; selected = null; selectionPinnedByUser = false; instructionsRoute = null; lastUpdatedAt = null; searching = false; awaitingFirstRoute = false; foundVenueIds = []; foundVenues = []; error = null;
+    controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; displayRoutes([]); routesFound = 0; selected = null; selectionPinnedByUser = false; instructionsRoute = null; lastUpdatedAt = null; searching = false; awaitingFirstRoute = false; foundVenueIds = []; foundVenues = []; venueStats = {}; error = null;
     if (refreshTimer) window.clearInterval(refreshTimer);
   }
   function updateAmount(value: string) { initialSearchReady = true; amount = normalizeAmount(value); resetResults(); }
@@ -489,7 +512,7 @@
       error = `Choose different networks for ${selectedSourceCurrency}; the same asset on the same network is not a swap route.`;
       return;
     }
-    controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; controller = new AbortController(); const signal = controller.signal; const currentRequest = ++requestId; searching = true; awaitingFirstRoute = true; routesFound = 0; foundVenueIds = []; foundVenues = []; error = null;
+    controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; controller = new AbortController(); const signal = controller.signal; const currentRequest = ++requestId; searching = true; awaitingFirstRoute = true; routesFound = 0; foundVenueIds = []; foundVenues = []; venueStats = {}; error = null;
     try {
       const liveQuery = { sourceFiat: selectedSourceCurrency, targetFiat: selectedTargetCurrency, sourceAmount: value, intermediaryAssets: !sourceWallet && !targetWallet && selectedIntermediaryAssets.length ? selectedIntermediaryAssets : undefined, sourceNetwork: sourceWallet ? sourceNetwork?.id : undefined, targetNetwork: targetWallet ? targetNetwork?.id : undefined, sourcePaymentMethod: sourceWallet ? undefined : sourceMethod.p2pQuery, targetPaymentMethod: targetWallet ? undefined : targetMethod.p2pQuery, sources: selectedSources, exchangeMode, allowCrossVenue: true, limit: 40 };
       let response: P2pRouteSearchResponse;
@@ -584,6 +607,11 @@
       p2pSources = providerSources(providers);
       foundVenues = foundVenueOptions();
       venueNames = Object.fromEntries(p2pSources.map((provider) => [provider.id.toLowerCase(), provider.label]));
+      providerGuidance = Object.fromEntries(
+        providers
+          .filter((provider) => provider.guidance)
+          .map((provider) => [provider.slug.toLowerCase(), provider.guidance as ProviderGuidance]),
+      );
       const catalog = new Set(p2pSources.map((source) => source.id));
       const live = p2pSources.filter((source) => source.searchMode === "selectable").map((source) => source.id);
       const restored = [...new Set(savedSourceIds.filter((source) => catalog.has(source) && p2pSources.find((item) => item.id === source)?.searchMode === "selectable"))];
@@ -714,12 +742,12 @@
       <button type="button" class="cta" disabled={!hasAmount || (!previewRoute && (searching || !corridor))} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? "Open swap instructions" : "Find routes"}>{#if previewRoute}Swap <span>↗</span>{:else if searching}<span class="spinner"></span> Finding routes{:else if hasAmount}Find routes <span>↗</span>{:else}Enter an amount to begin{/if}</button>
       {#if error}<div class="errorBox" role="alert">{error}</div>{/if}
     </div>
-    <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {renderingRoutes} {searchingVenues} {foundVenues} {venueNames} searched={lastUpdatedAt !== null} {hasAmount} {showBelarusP2pWarning} {onOpenBelarusP2pWarning} />
+    <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {renderingRoutes} {searchingVenues} {foundVenues} {venueStats} {venueNames} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} searched={lastUpdatedAt !== null} {hasAmount} {showBelarusP2pWarning} {onOpenBelarusP2pWarning} />
   </div>
   {#if currencyPicker === "source" || currencyPicker === "target"}<CurrencyPicker open={currencyPicker !== null} selected={currencyPicker === "source" ? sourceCurrencyChoice : targetCurrencyChoice} choices={currencyPicker === "source" ? sourceCurrencyChoices : targetCurrencyChoices} onClose={() => currencyPicker = null} onSelect={(choice) => chooseCurrency(currencyPicker ?? "source", choice)} />{/if}
   {#if paymentPickerComponent}<svelte:component this={paymentPickerComponent} open={methodPicker === "source"} title="Choose where you pay from" role="sender" {networks} {paymentMethods} selected={sourceMethod} selectedNetwork={sourceNetwork} onClose={() => methodPicker = null} onSelect={chooseSource} /><svelte:component this={paymentPickerComponent} open={methodPicker === "target"} title="Choose where the recipient gets paid" role="recipient" {networks} {paymentMethods} selected={targetMethod} selectedNetwork={targetNetwork} onClose={() => methodPicker = null} onSelect={chooseTarget} />{/if}
   {#if networkPicker === "source" || networkPicker === "target"}<NetworkPicker open={networkPicker !== null} networks={networkPicker === "source" ? sourceNetworks : targetNetworks} selected={networkPicker === "source" ? sourceNetwork : targetNetwork} onClose={() => networkPicker = null} onSelect={selectNetwork} />{/if}
-  {#if routeInstructionsComponent && instructionsRoute}<svelte:component this={routeInstructionsComponent} route={instructionsRoute} {venueNames} onOpenService={openService} onClose={() => instructionsRoute = null} />{/if}
+  {#if routeInstructionsComponent && instructionsRoute}<svelte:component this={routeInstructionsComponent} route={instructionsRoute} {venueNames} {providerGuidance} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} onOpenService={openService} onClose={() => instructionsRoute = null} />{/if}
 </section>
 
 <style>
