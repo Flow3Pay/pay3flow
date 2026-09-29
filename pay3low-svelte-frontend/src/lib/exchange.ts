@@ -274,6 +274,8 @@ export interface P2pRouteSearchResponse {
   can_exchange_to_target: boolean;
   routes: P2pRoute[];
   asset_statuses?: RouteAssetStatus[];
+  source?: string;
+  stale?: boolean;
 }
 
 export interface SourceStatus {

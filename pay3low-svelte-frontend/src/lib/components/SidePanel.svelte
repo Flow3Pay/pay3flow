@@ -44,7 +44,7 @@
     if (/cosmos/i.test(label)) return "Cosmos";
     return label;
   };
-  const assetLabel = (currency?: string) => !currency ? "—" : ASSET_NAMES[currency.toUpperCase()] ? `${currency} ${ASSET_NAMES[currency.toUpperCase()]}` : currency;
+  const assetLabel = (currency?: string) => !currency ? "—" : currency.toUpperCase() === "USDT" ? currency : ASSET_NAMES[currency.toUpperCase()] ? `${currency} ${ASSET_NAMES[currency.toUpperCase()]}` : currency;
   const money = (minor?: number, currency?: string, exact?: string) => {
     if (exact && ["BTC", "ETH", "USDC", "USDT", "SOL", "TRX", "TON", "XRP", "ADA", "AVAX", "DOT", "LINK", "LTC", "BCH", "BNB", "DOGE", "MATIC", "NEAR", "SUI", "APT", "ATOM", "UNI", "DAI", "FDUSD"].includes(currency?.toUpperCase() ?? "")) {
       return `${Number(exact).toLocaleString("en-US", { maximumFractionDigits: 8, useGrouping: false })} ${currency ?? ""}`;
@@ -141,7 +141,10 @@
                       <span class="foundVenueFallback" aria-hidden="true" hidden>{venue.label.slice(0, 1).toUpperCase()}</span>
                     </button>
                     <div class="foundVenuePopover" role="tooltip">
-                      <strong>{venue.label}</strong>
+                      <div class="foundVenuePopoverTitle">
+                        <img src={venue.iconUrl || venueIcon(venue.id)} alt="" width="20" height="20" decoding="async" on:error={(event) => fallbackVenueIcon(event, venue.id)} />
+                        <strong>{venue.label}</strong>
+                      </div>
                       <span class:venueOk={status?.ok} class:venueError={status && !status.ok}>{status?.ok === false ? "Response error" : "Response received"}</span>
                       <dl>
                         <div><dt>Routes found</dt><dd>{status?.routes_found ?? 0}</dd></div>
@@ -368,9 +371,9 @@
   width: 24px;
   height: 24px;
   place-items: center;
-  border: 1px solid rgba(185, 242, 39, 0.34);
+  border: 1px solid #555b54;
   border-radius: 8px;
-  background: rgba(185, 242, 39, 0.1);
+  background: #343834;
   animation: foundVenueIn 0.52s cubic-bezier(0.22, 1.42, 0.36, 1) both;
   will-change: transform, opacity;
 }
@@ -447,6 +450,21 @@
 .foundVenuePopover strong {
   color: #1c2419;
   font-size: 12px;
+}
+
+.foundVenuePopoverTitle {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.foundVenuePopoverTitle img {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  object-fit: contain;
 }
 
 .foundVenuePopover dt { color: #687464; }
@@ -1205,12 +1223,13 @@
 }
 
 .foundVenue {
-  border-color: #cce29a;
-  background: #f1f8df;
+  border-color: #c6cac5;
+  background: #e7e9e6;
 }
 
 .foundVenuePopover {
-  border-color: #cbd8c1;
+  border-color: #cbd0ca;
+  background: #f1f2f1;
 }
 
 .skeletonShort,
@@ -1309,13 +1328,13 @@
 }
 
 :global(html[data-theme="dark"]) .foundVenue {
-  border-color: rgba(181, 245, 0, 0.34);
-  background: rgba(181, 245, 0, 0.09);
+  border-color: #575d56;
+  background: #343834;
 }
 
 :global(html[data-theme="dark"]) .foundVenuePopover {
-  border-color: #4a5940;
-  background: #242821;
+  border-color: #555b54;
+  background: #2d302d;
   box-shadow: 0 18px 42px rgba(0, 0, 0, 0.56);
   color: #f0f5ea;
 }

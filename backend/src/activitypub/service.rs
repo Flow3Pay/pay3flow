@@ -10,7 +10,9 @@ use crate::activitypub::error::ActivityPubError;
 use crate::activitypub::fep8fba;
 use crate::activitypub::model::{request_proposal, AcquirerCandidate};
 use crate::db::DbPool;
+use crate::p2p::P2pOffer;
 use crate::route_engine::RouteCapability;
+use sha2::{Digest, Sha256};
 
 /// Centralized state for the ActivityPub module.
 #[derive(Clone)]
@@ -75,17 +77,41 @@ impl Service {
         command: &str,
         content: &str,
     ) -> Result<(DeliveryOutcome, Option<Value>), ActivityPubError> {
+        self.submit_request_for_resource(command, content, &self.marketplace_resource)
+            .await
+    }
+
+    /// Submit a request against a specific marketplace resource contract.
+    pub async fn submit_request_for_resource(
+        &self,
+        command: &str,
+        content: &str,
+        resource: &str,
+    ) -> Result<(DeliveryOutcome, Option<Value>), ActivityPubError> {
         let id = format!("{}/requests/{}", self.origin, uuid::Uuid::new_v4());
         let activity = request_proposal(
             &id,
             &self.identity.actor_id,
-            &self.marketplace_resource,
+            resource,
             command,
             content,
             &format!("{}/inbox", self.origin),
         );
         self.delivery
             .deliver_with_response(&self.identity, &self.fmatch_inbox, &activity)
+            .await
+    }
+
+    pub async fn submit_p2p_request(
+        &self,
+        command: &str,
+        content: &str,
+    ) -> Result<(DeliveryOutcome, Option<Value>), ActivityPubError> {
+        let resource = format!(
+            "{}/marketplace/resources/p2p",
+            self.origin.trim_end_matches('/')
+        );
+        self.submit_request_for_resource(command, content, &resource)
             .await
     }
 
@@ -149,6 +175,67 @@ impl Service {
                 "type": "PropertyValue",
                 "name": "pay3flow:routeCapability",
                 "value": route,
+            })],
+        };
+        self.delivery
+            .deliver(&self.identity, &self.fmatch_inbox, &proposal.to_activity())
+            .await
+    }
+
+    /// Publish one normalized provider advertisement as a FEP-0837 offer.
+    /// The proposal id is stable for the venue advertisement so Fmatch can
+    /// treat repeated publication as the same marketplace offer.
+    pub async fn publish_p2p_offer(
+        &self,
+        offer: &P2pOffer,
+    ) -> Result<DeliveryOutcome, ActivityPubError> {
+        let identity = format!(
+            "{}:{}:{:?}:{}:{}:{:?}",
+            offer.source, offer.ad_id, offer.side, offer.fiat, offer.asset, offer.network
+        );
+        let digest = Sha256::digest(identity.as_bytes());
+        let offer_id = digest
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        let proposal_id = format!(
+            "{}/marketplace/p2p-offers/{}",
+            self.origin.trim_end_matches('/'),
+            offer_id
+        );
+        let content = format!(
+            "p2p_offer={}; market={:?}; source={}; ad_id={}; side={:?}; fiat={}; asset={}; network={:?}; price={}; available_asset={}; min_fiat={}; max_fiat={}; payment_methods={}; source_url={}",
+            offer_id,
+            offer.market,
+            offer.source,
+            offer.ad_id,
+            offer.side,
+            offer.fiat,
+            offer.asset,
+            offer.network,
+            offer.price,
+            offer.available_asset,
+            offer.min_fiat,
+            offer.max_fiat,
+            offer.payment_methods.join(","),
+            offer.source_url,
+        );
+        let proposal = crate::activitypub::model::Proposal {
+            id: proposal_id,
+            purpose: "offer".into(),
+            attributed_to: self.identity.actor_id.clone(),
+            name: format!("{} {:?} {} offer", offer.source, offer.side, offer.asset),
+            content,
+            resource_conforms_to: format!(
+                "{}/marketplace/resources/p2p",
+                self.origin.trim_end_matches('/')
+            ),
+            action: "deliverService".into(),
+            resource_unit: "advertisement".into(),
+            attachments: vec![serde_json::json!({
+                "type": "PropertyValue",
+                "name": "pay3flow:p2pOffer",
+                "value": offer,
             })],
         };
         self.delivery

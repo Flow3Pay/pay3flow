@@ -16,6 +16,7 @@ fmatch_actor_id = "https://lefine.pro/actors/actra"
 fx_source = "http"
 fx_url = "https://api.frankfurter.app/latest"
 p2p_search_enabled = true
+p2p_fmatch_stale_secs = 900
 route_source_fiats = ["RUB", "AMD"]
 route_intent_assets = ["USDT@tron", "USDT@avalanche-c", "USDT@solana", "USDC@solana"]
 
@@ -74,7 +75,7 @@ deployment that handles real users or funds.
 | `http_addr`, `log_filter` | Backend listener and structured log filter |
 | `ap_*`, `fmatch_*` | ActivityPub identity and fmatch endpoints |
 | `service_fee_percent`, `fx_*`, `pairs_cache_ttl_secs` | Fees, FX source, and pair cache |
-| `p2p_search_*`, `playwright_chromium_executable`, `p2p_workflow_debug_screenshot` | Read-only public P2P search and browser workflow behavior |
+| `p2p_search_*`, `p2p_fmatch_stale_secs`, `playwright_chromium_executable`, `p2p_workflow_debug_screenshot` | Read-only public P2P search, Fmatch cache, and browser workflow behavior |
 | `near_intents_*` | 1-Click API endpoint, public quote addresses, and refresh interval |
 | `route_*` | Fiat, asset, withdrawal, and route-depth capabilities |
 | `cow_*` | Optional CoW same-chain quote endpoints and token metadata |

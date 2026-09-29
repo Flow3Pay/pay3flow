@@ -45,6 +45,7 @@ export PAY3FLOW_BESTCHANGE_API_KEY='replace-with-the-BestChange-API-key'
 export PAY3FLOW_SYMBIOSIS_PARTNER_ID=''
 export PAY3FLOW_POSTGRES_PASSWORD='replace-with-a-random-database-password'
 export PAY3FLOW_AP_REQUIRE_SIGNATURES='true'
+export PAY3FLOW_P2P_FMATCH_STALE_SECS='900'
 
 # Lefine's production Fmatch actor. The dedicated Pay3Flow deployment does not
 # run a second Fmatch instance.

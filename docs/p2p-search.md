@@ -15,14 +15,18 @@ money.
   crypto-to-crypto paths.
 
 Providerfile-backed sources are discovered from the generated provider catalog;
-the list is not hardcoded in the route API. Other venues from the research list
-remain outside the live path until a legitimate read-only interface and adapter
-review exist.
+the list is not hardcoded in the route API. Their normalized advertisements are
+published as FEP-0837 offers to the configured Fmatch actor. The route endpoint
+queries Fmatch for matching offers and uses the existing local composer to build
+complete routes. Other venues from the research list remain outside the live
+path until a legitimate read-only interface and adapter review exist.
 
-All sources are queried concurrently. A timeout or parsing failure from one
-source is returned in `sources` without discarding successful results from the
-other source. Successful leg searches are cached in memory for five seconds by
-default; cached responses contain `cached: true`.
+Provider refreshes still query the public adapters concurrently so their latest
+offers can be published. Public route legs are then resolved through Fmatch.
+Successful Fmatch answers are stored in PostgreSQL. If Fmatch is unavailable,
+the newest answer within `p2p_fmatch_stale_secs` is used and the response has
+`source: "database_cache"` and `stale: true`. A live Fmatch answer has
+`source: "fmatch"`; provider-only local searches retain `source: "provider"`.
 
 The public website endpoints can change without notice. Keep the adapters
 enabled, monitor `sources[].ok`, and do not treat a search result as a firm
@@ -118,6 +122,7 @@ The backend search settings are TOML keys in [`config.toml`](../config.toml):
 p2p_search_enabled = true
 p2p_search_timeout_ms = 4000
 p2p_search_cache_ttl_ms = 5000
+p2p_fmatch_stale_secs = 900
 p2p_search_assets = ["USDT", "USDC", "BTC", "ETH", "BNB", "SOL", "TRX"]
 playwright_chromium_executable = "/usr/bin/chromium"
 ```
@@ -127,6 +132,11 @@ playwright_chromium_executable = "/usr/bin/chromium"
 Sources, endpoint URLs, response mappings, and browser workflows are declared
 in `backend/providers/*/Providerfile`. Regenerate the provider migration and
 rebuild after changing one; see [`../Providerfile.md`](../Providerfile.md).
+
+Fmatch offer publication is best-effort. A provider refresh is retained locally
+when Lefine is unavailable, but public route discovery uses only a live Fmatch
+answer or a bounded-stale PostgreSQL answer; it does not silently fan out to
+providers on the route request path.
 
 Run the opt-in live smoke test:
 

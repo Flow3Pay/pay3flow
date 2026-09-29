@@ -101,6 +101,10 @@ impl ActorIdentity {
         self.inbox.trim_end_matches("/inbox").to_string() + "/marketplace/resources/exchange"
     }
 
+    pub fn p2p_resource(&self) -> String {
+        self.inbox.trim_end_matches("/inbox").to_string() + "/marketplace/resources/p2p"
+    }
+
     pub fn sign_bytes(&self, message: &[u8]) -> Vec<u8> {
         self.private_key.sign(message).to_vec()
     }
@@ -135,6 +139,13 @@ impl ActorIdentity {
                 json!({
                     "type": "Service",
                     "resourceConformsTo": self.capability_resource(),
+                    "action": "deliverService",
+                    "purpose": "offer",
+                    "inbox": self.inbox,
+                }),
+                json!({
+                    "type": "Service",
+                    "resourceConformsTo": self.p2p_resource(),
                     "action": "deliverService",
                     "purpose": "offer",
                     "inbox": self.inbox,
@@ -234,6 +245,11 @@ mod tests {
         assert_eq!(
             legacy_cap["resourceConformsTo"],
             json!("https://pay3flow.local/marketplace/resources/acquiring")
+        );
+        let p2p_cap = &doc["attachment"][2];
+        assert_eq!(
+            p2p_cap["resourceConformsTo"],
+            json!("https://pay3flow.local/marketplace/resources/p2p")
         );
 
         let wf = id.webfinger("https://pay3flow.local/actor/pay3flow");

@@ -125,9 +125,9 @@ Open <http://localhost:3000>. The API is available at
 
 The backend image includes Chromium and the Playwright driver for providers
 that use browser workflows; Whitebird itself uses its anonymous quote API. The
-compose file also contains the older `fmatch` stack;
-that stack needs a separate `fmatch/` checkout and is not required for the
-read-only live route search.
+compose file also contains the older `fmatch` stack; that stack needs a
+separate `fmatch/` checkout. Production route discovery uses Lefine's Fmatch
+actor, while a local outage can use the PostgreSQL answer cache.
 
 To stop the stack:
 

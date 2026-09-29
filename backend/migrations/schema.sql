@@ -120,6 +120,20 @@ CREATE TABLE IF NOT EXISTS activitypub_inbox (
     received_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Durable answers for Fmatch-backed public P2P searches. The response is
+-- stored as JSON so the route composer can reuse the exact normalized offer
+-- snapshot when Fmatch is temporarily unavailable.
+CREATE TABLE IF NOT EXISTS p2p_fmatch_answers (
+    cache_key TEXT PRIMARY KEY,
+    response JSONB NOT NULL,
+    source TEXT NOT NULL DEFAULT 'fmatch',
+    observed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS p2p_fmatch_answers_observed_idx
+    ON p2p_fmatch_answers (observed_at DESC);
+
 -- === Phase 2: payments domain ===
 
 -- Acquirer passport: geo, currencies, fees, limits, endpoints, active flag.

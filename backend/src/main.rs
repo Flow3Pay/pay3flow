@@ -114,12 +114,13 @@ async fn main() -> anyhow::Result<()> {
     let public_fiat_route_providers: Vec<Arc<dyn PublicFiatRouteProvider>> =
         vec![Arc::new(IdPayRouteProvider::new()?)];
     let network_catalog = pay3flow_backend::networks::NetworkCatalog::load(&pool).await?;
-    let p2p = pay3flow_backend::p2p::P2pSearchService::from_database(
+    let p2p = pay3flow_backend::p2p::P2pSearchService::from_database_with_fmatch(
         &cfg,
         network_catalog,
         &pool,
         public_route_providers,
         public_fiat_route_providers,
+        ap.clone(),
     )
     .await?;
     let route_engine = RouteEngine::new(RouteGraphConfig {

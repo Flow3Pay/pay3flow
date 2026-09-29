@@ -159,6 +159,10 @@ pub struct P2pRouteSearchResponse {
     pub can_exchange_to_target: bool,
     pub routes: Vec<P2pRoute>,
     pub asset_statuses: Vec<RouteAssetStatus>,
+    /// Discovery source for the route snapshot: Fmatch, database cache, or
+    /// the legacy provider path used by local-only callers.
+    pub source: String,
+    pub stale: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -1836,6 +1840,20 @@ fn response_snapshot(
     for (index, route) in visible_routes.iter_mut().enumerate() {
         route.rank = index + 1;
     }
+    let has_fmatch = asset_statuses.iter().any(|status| {
+        status
+            .entry_sources
+            .iter()
+            .chain(status.exit_sources.iter())
+            .any(|source| source.source == "fmatch")
+    });
+    let stale = asset_statuses.iter().any(|status| {
+        status
+            .entry_sources
+            .iter()
+            .chain(status.exit_sources.iter())
+            .any(|source| source.source == "fmatch" && !source.ok)
+    });
     P2pRouteSearchResponse {
         search_id,
         routes_found,
@@ -1847,6 +1865,14 @@ fn response_snapshot(
         can_exchange_to_target: routes_found > 0,
         routes: visible_routes,
         asset_statuses: asset_statuses.to_vec(),
+        source: if stale {
+            "database_cache".into()
+        } else if has_fmatch {
+            "fmatch".into()
+        } else {
+            "provider".into()
+        },
+        stale,
     }
 }
 

@@ -11,8 +11,11 @@ use chrono::{DateTime, Utc};
 use futures::future::join_all;
 use futures::stream::{FuturesUnordered, StreamExt};
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use tokio::sync::{mpsc, Semaphore};
 
+use crate::activitypub::Service as ActivityPubService;
 use crate::compiled_provider_code::bestchange::BestChangeSource;
 use crate::compiled_provider_code::papa_change::PapaChangeSource;
 use crate::compiled_provider_code::skylabs::SkyLabsSource;
@@ -118,7 +121,7 @@ pub(crate) fn normalize_sources(value: Option<String>) -> Result<Option<String>>
     Ok(Some(sources.join(",")))
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Advertiser {
     pub id: Option<String>,
     pub nickname: String,
@@ -130,9 +133,9 @@ pub struct Advertiser {
     pub positive_rate: Option<f64>,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct P2pOffer {
-    #[serde(skip)]
+    #[serde(default = "default_p2p_offer_market")]
     pub(crate) market: P2pOfferMarket,
     pub source: String,
     pub ad_id: String,
@@ -156,10 +159,61 @@ pub struct P2pOffer {
     pub source_url_is_exact: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub(crate) enum P2pOfferMarket {
     P2p,
     DirectExchange,
+}
+
+fn default_p2p_offer_market() -> P2pOfferMarket {
+    P2pOfferMarket::P2p
+}
+
+impl P2pOffer {
+    pub(crate) fn with_market(mut self, market: P2pOfferMarket) -> Self {
+        self.market = market;
+        self
+    }
+
+    /// Extract normalized P2P offers from the candidate-list shapes returned
+    /// by Fmatch. Fmatch may return the offer directly or wrap it in an
+    /// `offer`, `p2pOffer`, or `value` property depending on its response mode.
+    pub(crate) fn from_fmatch_reply(reply: &Value, market: P2pOfferMarket) -> Vec<Self> {
+        let values = reply
+            .get("offers")
+            .or_else(|| reply.get("candidates"))
+            .or_else(|| reply.get("object").and_then(|object| object.get("offers")))
+            .or_else(|| {
+                reply
+                    .get("object")
+                    .and_then(|object| object.get("candidates"))
+            })
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+
+        values
+            .into_iter()
+            .filter_map(|raw| {
+                let offer = raw
+                    .get("p2pOffer")
+                    .or_else(|| raw.get("offer"))
+                    .or_else(|| raw.get("value"))
+                    .or_else(|| raw.get("raw"))
+                    .or_else(|| {
+                        raw.get("attachment")
+                            .and_then(Value::as_array)
+                            .and_then(|attachments| attachments.first())
+                            .and_then(|attachment| attachment.get("value"))
+                    })
+                    .unwrap_or(&raw);
+                serde_json::from_value::<P2pOffer>(offer.clone())
+                    .ok()
+                    .map(|offer| offer.with_market(market))
+            })
+            .collect()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -265,7 +319,7 @@ fn canonicalize_offer_payment_methods(
     offer.payment_methods.dedup();
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SourceStatus {
     pub source: String,
     pub ok: bool,
@@ -274,13 +328,16 @@ pub struct SourceStatus {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct P2pSearchResponse {
     pub query: P2pSearchQuery,
     pub searched_at: DateTime<Utc>,
     pub cached: bool,
     pub offers: Vec<P2pOffer>,
     pub sources: Vec<SourceStatus>,
+    pub source: String,
+    pub stale: bool,
+    pub observed_at: Option<DateTime<Utc>>,
 }
 
 #[async_trait]
@@ -331,6 +388,15 @@ pub struct P2pSearchService {
     pub(crate) route_providers: Arc<[Arc<dyn PublicRouteProvider>]>,
     pub(crate) fiat_route_providers: Arc<[Arc<dyn PublicFiatRouteProvider>]>,
     pub(crate) quote_semaphore: Arc<Semaphore>,
+    fmatch: Option<FmatchP2pBackend>,
+}
+
+#[derive(Clone)]
+struct FmatchP2pBackend {
+    pool: DbPool,
+    ap: ActivityPubService,
+    stale_window: Duration,
+    answer_ttl: Duration,
 }
 
 // Keep all route combinations, but avoid opening an unbounded number of
@@ -363,6 +429,31 @@ impl P2pSearchService {
             route_providers,
             fiat_route_providers,
         )
+    }
+
+    pub async fn from_database_with_fmatch(
+        config: &Config,
+        networks: NetworkCatalog,
+        pool: &DbPool,
+        route_providers: Vec<Arc<dyn PublicRouteProvider>>,
+        fiat_route_providers: Vec<Arc<dyn PublicFiatRouteProvider>>,
+        ap: ActivityPubService,
+    ) -> Result<Self> {
+        let mut service = Self::from_database(
+            config,
+            networks,
+            pool,
+            route_providers,
+            fiat_route_providers,
+        )
+        .await?;
+        service.fmatch = Some(FmatchP2pBackend {
+            pool: pool.clone(),
+            ap,
+            stale_window: Duration::from_secs(config.p2p_fmatch_stale_secs),
+            answer_ttl: Duration::from_millis(config.p2p_search_cache_ttl_ms.max(1)),
+        });
+        Ok(service)
     }
 
     fn from_provider_records(
@@ -439,6 +530,7 @@ impl P2pSearchService {
             route_providers: route_providers.into(),
             fiat_route_providers: fiat_route_providers.into(),
             quote_semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_PROVIDER_QUOTES)),
+            fmatch: None,
         })
     }
 
@@ -483,6 +575,7 @@ impl P2pSearchService {
             route_providers: Vec::new().into(),
             fiat_route_providers: Vec::new().into(),
             quote_semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_PROVIDER_QUOTES)),
+            fmatch: None,
         }
     }
 
@@ -547,6 +640,9 @@ impl P2pSearchService {
         query: P2pSearchQuery,
         market: Option<P2pOfferMarket>,
     ) -> Result<P2pSearchResponse> {
+        if self.fmatch.is_some() {
+            return self.search_fmatch_market(query, market).await;
+        }
         self.run_search(query, None, market).await
     }
 
@@ -556,7 +652,107 @@ impl P2pSearchService {
         updates: mpsc::Sender<P2pSearchResponse>,
         market: Option<P2pOfferMarket>,
     ) -> Result<P2pSearchResponse> {
+        if self.fmatch.is_some() {
+            let response = self.search_fmatch_market(query, market).await?;
+            let _ = updates.send(response.clone()).await;
+            return Ok(response);
+        }
         self.run_search(query, Some(updates), market).await
+    }
+
+    async fn search_fmatch_market(
+        &self,
+        query: P2pSearchQuery,
+        market: Option<P2pOfferMarket>,
+    ) -> Result<P2pSearchResponse> {
+        let backend = self
+            .fmatch
+            .as_ref()
+            .expect("Fmatch backend checked by caller")
+            .clone();
+        let query = query.normalize()?;
+        let market = market.unwrap_or(P2pOfferMarket::P2p);
+        let cache_key = fmatch_cache_key(&query, market)?;
+        let content = fmatch_p2p_content(&query, market);
+
+        match backend.ap.submit_p2p_request("candidates", &content).await {
+            Ok((_outcome, Some(reply))) => {
+                let offers = P2pOffer::from_fmatch_reply(&reply, market);
+                let response = build_search_response(
+                    query,
+                    &offers,
+                    vec![SourceStatus {
+                        source: "fmatch".into(),
+                        ok: true,
+                        latency_ms: 0,
+                        offers_found: offers.len(),
+                        error: None,
+                    }],
+                    false,
+                    "fmatch",
+                    false,
+                    Some(Utc::now()),
+                );
+                persist_fmatch_answer(
+                    &backend.pool,
+                    &cache_key,
+                    &response,
+                    "fmatch",
+                    backend.answer_ttl,
+                )
+                .await;
+                Ok(response)
+            }
+            Ok((_outcome, None)) => {
+                self.cached_fmatch_answer(
+                    &backend,
+                    &cache_key,
+                    query,
+                    market,
+                    "Fmatch returned no answer",
+                )
+                .await
+            }
+            Err(error) => {
+                tracing::warn!(%error, "Fmatch P2P search failed; trying PostgreSQL cache");
+                self.cached_fmatch_answer(&backend, &cache_key, query, market, &error.to_string())
+                    .await
+            }
+        }
+    }
+
+    async fn cached_fmatch_answer(
+        &self,
+        backend: &FmatchP2pBackend,
+        cache_key: &str,
+        query: P2pSearchQuery,
+        market: P2pOfferMarket,
+        reason: &str,
+    ) -> Result<P2pSearchResponse> {
+        let max_age = backend.stale_window.as_secs().min(i64::MAX as u64) as i64;
+        let Some(cached) =
+            crate::db::repo::p2p_fmatch::latest_answer(&backend.pool, cache_key, max_age).await?
+        else {
+            bail!("Fmatch unavailable and no cached P2P answer exists: {reason}");
+        };
+        let mut response: P2pSearchResponse =
+            serde_json::from_value(cached.response).context("invalid cached Fmatch P2P answer")?;
+        for offer in &mut response.offers {
+            offer.market = market;
+        }
+        response.query = query;
+        response.cached = true;
+        response.source = "database_cache".into();
+        response.stale = true;
+        response.observed_at = Some(cached.observed_at);
+        response.sources.push(SourceStatus {
+            source: "fmatch".into(),
+            ok: false,
+            latency_ms: 0,
+            offers_found: response.offers.len(),
+            error: Some(reason.to_string()),
+        });
+        Ok(response)
     }
 
     async fn run_search(
@@ -685,17 +881,48 @@ impl P2pSearchService {
             collected_offers.extend(offers);
             sources.push(status);
             if let Some(updates) = &updates {
-                let response =
-                    build_search_response(query.clone(), &collected_offers, sources.clone(), false);
+                let response = build_search_response(
+                    query.clone(),
+                    &collected_offers,
+                    sources.clone(),
+                    false,
+                    "provider",
+                    false,
+                    Some(Utc::now()),
+                );
                 let _ = updates.send(response).await;
             }
         }
 
-        let response = build_search_response(query.clone(), &collected_offers, sources, false);
+        let response = build_search_response(
+            query.clone(),
+            &collected_offers,
+            sources,
+            false,
+            "provider",
+            false,
+            Some(Utc::now()),
+        );
         if response.sources.iter().any(|source| source.ok) {
             self.cache_response(cache_key, response.clone());
+            self.publish_p2p_offers(&response.offers);
         }
         Ok(response)
+    }
+
+    fn publish_p2p_offers(&self, offers: &[P2pOffer]) {
+        let Some(backend) = self.fmatch.as_ref() else {
+            return;
+        };
+        let ap = backend.ap.clone();
+        let offers = offers.to_vec();
+        tokio::spawn(async move {
+            let results = join_all(offers.iter().map(|offer| ap.publish_p2p_offer(offer))).await;
+            let failures = results.iter().filter(|result| result.is_err()).count();
+            if failures > 0 {
+                tracing::warn!(failures, "some P2P offers failed to publish to Fmatch");
+            }
+        });
     }
 
     fn cached(&self, key: &str) -> Option<P2pSearchResponse> {
@@ -783,6 +1010,9 @@ fn build_search_response(
     collected_offers: &[P2pOffer],
     sources: Vec<SourceStatus>,
     cached: bool,
+    source: &str,
+    stale: bool,
+    observed_at: Option<DateTime<Utc>>,
 ) -> P2pSearchResponse {
     let mut offers = collected_offers
         .iter()
@@ -797,6 +1027,77 @@ fn build_search_response(
         cached,
         offers,
         sources,
+        source: source.into(),
+        stale,
+        observed_at,
+    }
+}
+
+fn fmatch_cache_key(query: &P2pSearchQuery, market: P2pOfferMarket) -> Result<String> {
+    let payload = serde_json::to_vec(&json!({
+        "market": match market {
+            P2pOfferMarket::P2p => "p2p",
+            P2pOfferMarket::DirectExchange => "direct_exchange",
+        },
+        "query": query,
+    }))?;
+    let digest = Sha256::digest(payload);
+    Ok(format!(
+        "p2p-fmatch:{}",
+        digest
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    ))
+}
+
+fn fmatch_p2p_content(query: &P2pSearchQuery, market: P2pOfferMarket) -> String {
+    let market = match market {
+        P2pOfferMarket::P2p => "p2p",
+        P2pOfferMarket::DirectExchange => "direct_exchange",
+    };
+    format!(
+        "p2p route candidates; market={market}; fiat={}; asset={}; side={:?}; amount={:?}; payment_method={:?}; merchant_only={:?}; min_orders={:?}; min_completion_rate={:?}; limit={:?}; sources={:?}",
+        query.fiat,
+        query.asset,
+        query.side,
+        query.amount,
+        query.payment_method,
+        query.merchant_only,
+        query.min_orders,
+        query.min_completion_rate,
+        query.limit,
+        query.sources,
+    )
+}
+
+async fn persist_fmatch_answer(
+    pool: &DbPool,
+    cache_key: &str,
+    response: &P2pSearchResponse,
+    source: &str,
+    ttl: Duration,
+) {
+    let Some(observed_at) = response.observed_at else {
+        return;
+    };
+    let Ok(value) = serde_json::to_value(response) else {
+        tracing::warn!(cache_key, "failed to serialize Fmatch P2P answer");
+        return;
+    };
+    let expires_at = observed_at
+        + chrono::Duration::from_std(ttl).unwrap_or_else(|_| chrono::Duration::seconds(5));
+    if let Err(error) = crate::db::repo::p2p_fmatch::save_answer(
+        pool,
+        cache_key,
+        &value,
+        source,
+        observed_at,
+        expires_at,
+    )
+    .await
+    {
+        tracing::warn!(%error, cache_key, "failed to persist Fmatch P2P answer");
     }
 }
 
@@ -965,6 +1266,52 @@ mod tests {
     }
 
     #[test]
+    fn parses_p2p_offer_candidates_from_fmatch() {
+        let expected = offer("binance", "390.5", "100", "100000", 42);
+        let reply = serde_json::json!({
+            "candidates": [{
+                "name": "binance-ad",
+                "p2pOffer": serde_json::to_value(&expected).unwrap()
+            }]
+        });
+
+        let parsed = P2pOffer::from_fmatch_reply(&reply, P2pOfferMarket::P2p);
+
+        assert_eq!(parsed, vec![expected]);
+    }
+
+    #[test]
+    fn cached_p2p_answer_round_trips_with_market_restored_by_query() {
+        let response = P2pSearchResponse {
+            query: P2pSearchQuery {
+                fiat: "AMD".into(),
+                asset: "USDT".into(),
+                side: P2pSide::BuyCrypto,
+                amount: Some(1000.0),
+                payment_method: None,
+                merchant_only: None,
+                min_orders: None,
+                min_completion_rate: None,
+                limit: Some(20),
+                sources: None,
+            },
+            searched_at: Utc::now(),
+            cached: false,
+            offers: vec![offer("binance", "390.5", "100", "100000", 42)],
+            sources: Vec::new(),
+            source: "fmatch".into(),
+            stale: false,
+            observed_at: Some(Utc::now()),
+        };
+        let value = serde_json::to_value(&response).unwrap();
+        let decoded: P2pSearchResponse = serde_json::from_value(value).unwrap();
+
+        assert_eq!(decoded.offers.len(), 1);
+        assert_eq!(decoded.offers[0].source, "binance");
+        assert_eq!(decoded.source, "fmatch");
+    }
+
+    #[test]
     fn reputation_filters_keep_offers_when_metrics_are_not_published() {
         let query = P2pSearchQuery {
             fiat: "RUB".into(),
@@ -1034,7 +1381,15 @@ mod tests {
         whitebird.advertiser.completion_rate_30d = None;
         offers.push(whitebird);
 
-        let response = build_search_response(query, &offers, Vec::new(), false);
+        let response = build_search_response(
+            query,
+            &offers,
+            Vec::new(),
+            false,
+            "provider",
+            false,
+            Some(Utc::now()),
+        );
 
         assert_eq!(response.offers.len(), 60);
         assert!(response

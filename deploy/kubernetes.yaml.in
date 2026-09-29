@@ -34,6 +34,7 @@ data:
     fmatch_actor_id = "$PAY3FLOW_FMATCH_ACTOR_ID"
     fx_source = "$PAY3FLOW_FX_SOURCE"
     p2p_search_enabled = $PAY3FLOW_P2P_SEARCH_ENABLED
+    p2p_fmatch_stale_secs = $PAY3FLOW_P2P_FMATCH_STALE_SECS
     near_intents_url = "https://1click.chaindefuser.com"
     near_intents_refresh_secs = 300
     symbiosis_url = "https://api.symbiosis.finance/crosschain"

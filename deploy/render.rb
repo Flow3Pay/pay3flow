@@ -31,6 +31,7 @@ module Pay3flow
       "PAY3FLOW_PUBLIC_API_URL" => "",
       "PAY3FLOW_FX_SOURCE" => "mock",
       "PAY3FLOW_P2P_SEARCH_ENABLED" => "true",
+      "PAY3FLOW_P2P_FMATCH_STALE_SECS" => "900",
       "PAY3FLOW_P2P_BINANCE_ENABLED" => "true",
       "PAY3FLOW_P2P_BYBIT_ENABLED" => "true",
       "PAY3FLOW_P2P_OKX_ENABLED" => "true",
