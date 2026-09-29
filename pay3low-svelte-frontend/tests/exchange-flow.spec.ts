@@ -563,7 +563,10 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
           }],
         });
       }
-      if (url.searchParams.get("source_fiat") === "AMD" && url.searchParams.get("target_fiat") === "RUB" && url.searchParams.get("source_amount") === "42269") {
+      if (url.searchParams.get("source_fiat") === "AMD" && url.searchParams.get("target_fiat") === "RUB" && ["10000", "42269"].includes(url.searchParams.get("source_amount") ?? "")) {
+        const isTargetAmountProbe = url.searchParams.get("source_amount") === "10000";
+        const sourceAmount = isTargetAmountProbe ? "10000.00" : "42269.00";
+        const targetAmount = isTargetAmountProbe ? "2365.80" : "10000.00";
         const idPay = offer("id-pay", "indicative-amd-rub", "AMD", "RUB");
         idPay.price = "4.2269";
         idPay.payment_methods = ["IDBank", "Alfa-Bank"];
@@ -582,7 +585,7 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
           searched_at: "2026-09-26T11:00:00Z",
           source_fiat: "AMD",
           target_fiat: "RUB",
-          source_amount: "42269.00",
+          source_amount: sourceAmount,
           assets_searched: [],
           can_exchange_to_target: true,
           routes: [{
@@ -590,10 +593,10 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
             rank: 1,
             asset: "RUB",
             source_fiat: "AMD",
-            source_amount: "42269.00",
-            acquired_asset_amount: "10000.00",
+            source_amount: sourceAmount,
+            acquired_asset_amount: targetAmount,
             target_fiat: "RUB",
-            target_amount: "10000.00",
+            target_amount: targetAmount,
             effective_rate: "0.23657900",
             same_venue: true,
             requires_asset_transfer: false,
@@ -789,6 +792,20 @@ test("public P2P route search → open step-by-step instructions", async ({ page
 
   await swapDirection.click();
   await expect(amountInput).toHaveValue("20350");
+});
+
+test("editing the receive amount updates the send amount", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page);
+
+  const sendAmount = page.getByLabel("Amount to send");
+  const receiveAmount = page.getByLabel("Amount to receive");
+  await receiveAmount.fill("10000");
+  await expect(sendAmount).toHaveValue("10000");
+  await page.getByTestId("start-search").click();
+  await expect(sendAmount).toHaveValue("42269");
+  await expect(receiveAmount).toHaveValue("10000");
+  await expect(page.getByTestId("complete-route")).toHaveCount(1);
 });
 
 test("RUB to RUB bank routes explain SBP payment", async ({ page }) => {

@@ -14,6 +14,7 @@
 
   type RefreshSeconds = 0 | 5 | 15 | 30 | 60 | 300;
   type PickerSide = "source" | "target" | null;
+  type AmountSide = "source" | "target";
   const REFRESH_OPTIONS: RefreshSeconds[] = [0, 5, 15, 30, 60, 300];
   type P2pSource = string;
   type ExchangeMethod = "p2p" | "exchanger";
@@ -30,6 +31,9 @@
   let corridors: ExchangeCorridor[] = [];
   let corridorId = "";
   let amount = "0";
+  let targetAmount = "0";
+  let amountSide: AmountSide = "source";
+  let targetAmountNeedsRate = false;
   let routes: RouteCandidate[] = [];
   let routesFound = 0;
   let selected: RouteCandidate | null = null;
@@ -116,6 +120,13 @@
       return Number(route.target_amount).toLocaleString("en-US", { maximumFractionDigits: 8, useGrouping: false });
     }
     return amountFromMinor(route.target_amount_minor);
+  };
+  const formatEditableAmount = (value: number, currency: string) => {
+    if (!Number.isFinite(value) || value <= 0) return "0";
+    return value.toLocaleString("en-US", {
+      maximumFractionDigits: CRYPTO_CURRENCIES.has(currency.toUpperCase()) ? 8 : 2,
+      useGrouping: false,
+    });
   };
   const intermediaryIcon = (asset: string) => paymentMethods.find((method) => method.kind === "wallet" && method.currency === asset)?.iconUrl ?? assetIcon(asset);
   const networkName = (id: string | null | undefined) => !id ? "internal" : networks.find((network) => network.id === id)?.name ?? id;
@@ -375,6 +386,7 @@
   $: onBelarusP2pWarningChange(showBelarusP2pWarning);
   $: hasAmount = Number.isFinite(amountNumber(amount)) && amountNumber(amount) > 0;
   $: previewRoute = selected ?? routes.find((route) => route.status === "complete" && route.is_current_best) ?? routes.find((route) => route.status === "complete") ?? null;
+  $: displayedTargetAmount = amountSide === "target" ? targetAmount : amountFromRoute(previewRoute);
   $: secondsUntilRefresh = refreshSeconds && lastUpdatedAt ? Math.max(0, refreshSeconds - Math.floor((clock - lastUpdatedAt) / 1000)) : null;
   $: refreshProgress = secondsUntilRefresh !== null && refreshSeconds ? ((refreshSeconds - secondsUntilRefresh) / refreshSeconds) * 100 : 0;
   $: exchangeChoices = p2pSources.filter((source) => source.searchMode !== "always_on");
@@ -410,12 +422,41 @@
     controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; displayRoutes([]); routesFound = 0; selected = null; selectionPinnedByUser = false; instructionsRoute = null; lastUpdatedAt = null; searching = false; awaitingFirstRoute = false; foundVenueIds = []; foundVenues = []; venueStats = {}; error = null;
     if (refreshTimer) window.clearInterval(refreshTimer);
   }
-  function updateAmount(value: string) { initialSearchReady = true; amount = normalizeAmount(value); resetResults(); }
+  function updateAmount(value: string) {
+    initialSearchReady = true;
+    amountSide = "source";
+    targetAmount = "0";
+    targetAmountNeedsRate = false;
+    amount = normalizeAmount(value);
+    resetResults();
+  }
+  function updateTargetAmount(value: string) {
+    initialSearchReady = true;
+    const nextTargetAmount = normalizeAmount(value);
+    const desiredTarget = amountNumber(nextTargetAmount);
+    const quotedTarget = previewRoute?.target_amount ? Number(previewRoute.target_amount) : NaN;
+    const quotedSource = amountNumber(amount);
+
+    targetAmount = nextTargetAmount;
+    amountSide = "target";
+    if (Number.isFinite(desiredTarget) && desiredTarget > 0 && Number.isFinite(quotedTarget) && quotedTarget > 0 && Number.isFinite(quotedSource) && quotedSource > 0) {
+      amount = formatEditableAmount(desiredTarget * quotedSource / quotedTarget, selectedSourceCurrency);
+      targetAmountNeedsRate = false;
+    } else {
+      // Use the requested output as a harmless first probe. Once a live quote
+      // arrives, startSearch derives and requests the actual source amount.
+      amount = nextTargetAmount;
+      targetAmountNeedsRate = Number.isFinite(desiredTarget) && desiredTarget > 0;
+    }
+    resetResults();
+  }
   function swapDirection() {
     if (!corridor) return;
     initialSearchReady = true;
     const nextSource = targetMethod?.id ?? "", nextTarget = sourceMethod?.id ?? "";
-    if (previewRoute?.target_amount_minor != null) amount = amountFromRoute(previewRoute);
+    const nextAmount = amountSide === "target" ? targetAmount : amountFromRoute(previewRoute);
+    if (amountNumber(nextAmount) > 0) amount = nextAmount;
+    amountSide = "source"; targetAmount = "0"; targetAmountNeedsRate = false;
     directionReversed = !directionReversed; sourceMethodId = nextSource; targetMethodId = nextTarget;
     sourceNetworkId = targetNetwork?.id ?? FALLBACK_NETWORK.id; targetNetworkId = sourceNetwork?.id ?? FALLBACK_NETWORK.id; resetResults();
   }
@@ -524,6 +565,7 @@
       return;
     }
     controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; controller = new AbortController(); const signal = controller.signal; const currentRequest = ++requestId; searching = true; awaitingFirstRoute = true; routesFound = 0; foundVenueIds = []; foundVenues = []; venueStats = {}; error = null;
+    let rerunForTargetAmount = false;
     try {
       const liveQuery = { sourceFiat: selectedSourceCurrency, targetFiat: selectedTargetCurrency, sourceAmount: value, intermediaryAssets: !sourceWallet && !targetWallet && selectedIntermediaryAssets.length ? selectedIntermediaryAssets : undefined, sourceNetwork: sourceWallet ? sourceNetwork?.id : undefined, targetNetwork: targetWallet ? targetNetwork?.id : undefined, sourcePaymentMethod: sourceWallet ? undefined : sourceMethod.p2pQuery, targetPaymentMethod: targetWallet ? undefined : targetMethod.p2pQuery, sources: selectedSources, exchangeMode, allowCrossVenue: true, limit: 40 };
       let response: P2pRouteSearchResponse;
@@ -531,7 +573,7 @@
         response = await streamP2pRoutes(liveQuery, anonymousId, signal, (event) => {
           if (currentRequest !== requestId) return;
           if (event.type === "search_started") routesFound = Math.max(routesFound, event.routes_found);
-          if (event.type === "routes_updated") {
+          if (event.type === "routes_updated" && !(amountSide === "target" && targetAmountNeedsRate)) {
             applySearchResponse(event);
             if (event.routes.length > 0) awaitingFirstRoute = false;
           }
@@ -541,11 +583,30 @@
         response = await fetchP2pRoutes({ ...liveQuery, signal, anonymousId });
       }
       if (currentRequest !== requestId) return;
-      applySearchResponse(response); awaitingFirstRoute = false; lastUpdatedAt = Date.now(); clock = Date.now();
+      if (amountSide === "target" && targetAmountNeedsRate) {
+        const desiredTarget = amountNumber(targetAmount);
+        const quotedSource = Number(response.routes[0]?.source_amount);
+        const quotedTarget = Number(response.routes[0]?.target_amount);
+        if (desiredTarget > 0 && quotedSource > 0 && quotedTarget > 0) {
+          const calculatedSource = formatEditableAmount(desiredTarget * quotedSource / quotedTarget, selectedSourceCurrency);
+          targetAmountNeedsRate = false;
+          if (calculatedSource !== amount) {
+            amount = calculatedSource;
+            rerunForTargetAmount = true;
+            resetResults();
+          }
+        }
+      }
+      if (!rerunForTargetAmount) {
+        applySearchResponse(response); awaitingFirstRoute = false; lastUpdatedAt = Date.now(); clock = Date.now();
+      }
     } catch (cause) {
       if (signal.aborted || currentRequest !== requestId) return;
       error = cause instanceof Error ? cause.message : "Could not search live P2P markets";
-    } finally { if (currentRequest === requestId) { searching = false; awaitingFirstRoute = false; } }
+    } finally {
+      if (currentRequest === requestId) { searching = false; awaitingFirstRoute = false; }
+      if (rerunForTargetAmount) window.setTimeout(() => void startSearch(), 0);
+    }
   }
   function toggleSource(source: P2pSource) { initialSearchReady = true; selectedSources = selectedSources.includes(source) ? (selectedSources.length === 1 ? selectedSources : selectedSources.filter((item) => item !== source)) : [...selectedSources, source]; resetResults(); }
   function toggleExchangeMethod(method: ExchangeMethod) { initialSearchReady = true; selectedExchangeMethods = selectedExchangeMethods.includes(method) ? (selectedExchangeMethods.length === 1 ? selectedExchangeMethods : selectedExchangeMethods.filter((item) => item !== method)) : EXCHANGE_METHODS.filter((item) => item === method || selectedExchangeMethods.includes(item)); resetResults(); }
@@ -740,7 +801,7 @@
       <div class="flowBridge"><span class="bridgeLine" aria-hidden="true"></span><button type="button" class:bridgeIconReversed={directionReversed} class="bridgeIcon" on:click={swapDirection} aria-label="Swap sender and recipient" title="Swap sender and recipient"><img src={swapIcon} alt="" width="18" height="18" aria-hidden="true" /></button></div>
       <div class="intentLabel intentLabelBuy"><span>Buy</span></div>
       <div class="moneyPanel moneyPanelTarget">
-        <div class="panelCopy"><label for="exchange-output">Recipient gets</label><output id="exchange-output" class={previewRoute ? "amountOutput" : "amountOutputEmpty"}>{amountFromRoute(previewRoute)}</output><span class="currencyHint">{targetMethod?.kind === "wallet" ? `${targetMethod.currency} available via digital wallet` : previewRoute ? `Estimated ${previewRoute.target_currency}` : "Live estimate appears here"}</span></div>
+        <div class="panelCopy"><label for="exchange-output">Recipient gets</label><input id="exchange-output" class:amountOutputEmpty={!previewRoute && amountSide !== "target"} class="amountInput amountOutput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedTargetAmount} on:focus={(event) => event.currentTarget.select()} on:input={(event) => updateTargetAmount(event.currentTarget.value)} aria-label="Amount to receive" /><span class="currencyHint">{targetMethod?.kind === "wallet" ? `${targetMethod.currency} available via digital wallet` : previewRoute ? `Estimated ${previewRoute.target_currency}` : amountSide === "target" ? `${t("Requested", {}, activeLocale)} ${selectedTargetCurrency}` : "Live estimate appears here"}</span></div>
         <div class="methodControls">
           <button type="button" class="methodTrigger" on:click={() => void openMethodPicker("target")} aria-label={`Select recipient ${methodNoun(targetMethod)}: ${targetMethod?.name ?? "none"}`}>
             <span class="methodAvatar" style:background-color={paymentMethodFavicon(targetMethod) ? "transparent" : targetMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(targetMethod)}<img src={paymentMethodFavicon(targetMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{:else}<span>{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{/if}</span>
