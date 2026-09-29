@@ -34,6 +34,8 @@
   let targetAmount = "0";
   let amountSide: AmountSide = "source";
   let targetAmountNeedsRate = false;
+  let targetProbeAmount: number | null = null;
+  let targetRefinementAttempts = 0;
   let routes: RouteCandidate[] = [];
   let routesFound = 0;
   let selected: RouteCandidate | null = null;
@@ -384,8 +386,11 @@
   $: targetCurrencyChoices = currencyChoicesFor(targetMethod, "recipient");
   $: showBelarusP2pWarning = selectedExchangeMethods.includes("p2p") && [sourceMethod, targetMethod].some((method) => method?.kind === "bank" && method.country === "BY" && method.currency === "BYN");
   $: onBelarusP2pWarningChange(showBelarusP2pWarning);
-  $: hasAmount = Number.isFinite(amountNumber(amount)) && amountNumber(amount) > 0;
+  $: hasAmount = amountSide === "target"
+    ? Number.isFinite(amountNumber(targetAmount)) && amountNumber(targetAmount) > 0
+    : Number.isFinite(amountNumber(amount)) && amountNumber(amount) > 0;
   $: previewRoute = selected ?? routes.find((route) => route.status === "complete" && route.is_current_best) ?? routes.find((route) => route.status === "complete") ?? null;
+  $: displayedSourceAmount = amountSide === "target" && targetAmountNeedsRate && amountNumber(amount) <= 0 ? "" : amount;
   $: displayedTargetAmount = amountSide === "target" ? targetAmount : amountFromRoute(previewRoute);
   $: secondsUntilRefresh = refreshSeconds && lastUpdatedAt ? Math.max(0, refreshSeconds - Math.floor((clock - lastUpdatedAt) / 1000)) : null;
   $: refreshProgress = secondsUntilRefresh !== null && refreshSeconds ? ((refreshSeconds - secondsUntilRefresh) / refreshSeconds) * 100 : 0;
@@ -393,7 +398,7 @@
   $: alwaysOnProviders = p2pSources.filter((source) => source.searchMode === "always_on");
   $: searchingVenues = [...new Set([...selectedSources, ...alwaysOnProviders.map((provider) => provider.id)])].map((source) => p2pSources.find((item) => item.id === source) ?? { id: source, label: source, iconUrl: venueIcon(source), searchable: true, searchMode: "selectable" as const });
   $: exchangeMode = selectedExchangeMethods.length === EXCHANGE_METHODS.length ? "all" as const : selectedExchangeMethods[0];
-  $: searchSignature = `${corridor?.id ?? ""}:${sourceMethod?.id ?? ""}:${sourceNetwork?.id ?? ""}:${targetMethod?.id ?? ""}:${targetNetwork?.id ?? ""}:${amount}:${selectedSources.join(",")}:${selectedExchangeMethods.join(",")}:${selectedIntermediaryAssets.join(",")}:${directionReversed}`;
+  $: searchSignature = `${corridor?.id ?? ""}:${sourceMethod?.id ?? ""}:${sourceNetwork?.id ?? ""}:${targetMethod?.id ?? ""}:${targetNetwork?.id ?? ""}:${amountSide}:${amount}:${targetAmount}:${selectedSources.join(",")}:${selectedExchangeMethods.join(",")}:${selectedIntermediaryAssets.join(",")}:${directionReversed}`;
   $: scheduleAutomaticSearch(searchSignature, preferencesLoaded, urlReady, hasAmount, initialSearchReady);
   $: manageRefresh(refreshSeconds, lastUpdatedAt, hasAmount);
   $: if (preferencesLoaded) persistPreferences(amount, refreshSeconds, selectedSources, selectedExchangeMethods, selectedIntermediaryAssets, corridorId, sourceMethodId, targetMethodId, sourceNetwork?.id ?? sourceNetworkId, targetNetwork?.id ?? targetNetworkId, directionReversed);
@@ -427,6 +432,8 @@
     amountSide = "source";
     targetAmount = "0";
     targetAmountNeedsRate = false;
+    targetProbeAmount = null;
+    targetRefinementAttempts = 0;
     amount = normalizeAmount(value);
     resetResults();
   }
@@ -439,13 +446,18 @@
 
     targetAmount = nextTargetAmount;
     amountSide = "target";
+    targetRefinementAttempts = 0;
     if (Number.isFinite(desiredTarget) && desiredTarget > 0 && Number.isFinite(quotedTarget) && quotedTarget > 0 && Number.isFinite(quotedSource) && quotedSource > 0) {
       amount = formatEditableAmount(desiredTarget * quotedSource / quotedTarget, selectedSourceCurrency);
       targetAmountNeedsRate = false;
+      targetProbeAmount = null;
     } else {
-      // Use the requested output as a harmless first probe. Once a live quote
-      // arrives, startSearch derives and requests the actual source amount.
-      amount = nextTargetAmount;
+      // The probe is sent to the live API without presenting it as the source
+      // amount. The actual source value is shown only after a quote arrives.
+      const currentSource = amountNumber(amount);
+      targetProbeAmount = currentSource > 0
+        ? currentSource
+        : CRYPTO_CURRENCIES.has(selectedSourceCurrency.toUpperCase()) ? 1 : desiredTarget;
       targetAmountNeedsRate = Number.isFinite(desiredTarget) && desiredTarget > 0;
     }
     resetResults();
@@ -456,7 +468,7 @@
     const nextSource = targetMethod?.id ?? "", nextTarget = sourceMethod?.id ?? "";
     const nextAmount = amountSide === "target" ? targetAmount : amountFromRoute(previewRoute);
     if (amountNumber(nextAmount) > 0) amount = nextAmount;
-    amountSide = "source"; targetAmount = "0"; targetAmountNeedsRate = false;
+    amountSide = "source"; targetAmount = "0"; targetAmountNeedsRate = false; targetProbeAmount = null; targetRefinementAttempts = 0;
     directionReversed = !directionReversed; sourceMethodId = nextSource; targetMethodId = nextTarget;
     sourceNetworkId = targetNetwork?.id ?? FALLBACK_NETWORK.id; targetNetworkId = sourceNetwork?.id ?? FALLBACK_NETWORK.id; resetResults();
   }
@@ -552,7 +564,10 @@
     if (debounceTimer) window.clearTimeout(debounceTimer);
     debounceTimer = undefined;
     if (!corridor || !sourceMethod || !targetMethod) return;
-    const value = amountNumber(amount); if (!Number.isFinite(value) || value <= 0) return resetResults();
+    const desiredTarget = amountNumber(targetAmount);
+    const targetDriven = amountSide === "target" && Number.isFinite(desiredTarget) && desiredTarget > 0;
+    const value = targetDriven && targetAmountNeedsRate && targetProbeAmount != null ? targetProbeAmount : amountNumber(amount);
+    if (!Number.isFinite(value) || value <= 0) return resetResults();
     const sourceWallet = sourceMethod.kind === "wallet", targetWallet = targetMethod.kind === "wallet";
     if ((sourceWallet && !sourceNetwork) || (targetWallet && !targetNetwork)) {
       resetResults();
@@ -583,15 +598,17 @@
         response = await fetchP2pRoutes({ ...liveQuery, signal, anonymousId });
       }
       if (currentRequest !== requestId) return;
-      if (amountSide === "target" && targetAmountNeedsRate) {
-        const desiredTarget = amountNumber(targetAmount);
+      if (targetDriven) {
         const quotedSource = Number(response.routes[0]?.source_amount);
         const quotedTarget = Number(response.routes[0]?.target_amount);
         if (desiredTarget > 0 && quotedSource > 0 && quotedTarget > 0) {
           const calculatedSource = formatEditableAmount(desiredTarget * quotedSource / quotedTarget, selectedSourceCurrency);
+          const relativeDifference = Math.abs(quotedTarget - desiredTarget) / desiredTarget;
           targetAmountNeedsRate = false;
-          if (calculatedSource !== amount) {
+          targetProbeAmount = null;
+          if ((calculatedSource !== amount || relativeDifference > 0.000001) && targetRefinementAttempts < 3) {
             amount = calculatedSource;
+            targetRefinementAttempts += 1;
             rerunForTargetAmount = true;
             resetResults();
           }
@@ -789,7 +806,7 @@
 
       <div class="intentLabel"><span>Sell</span></div>
       <div class="moneyPanel moneyPanelSource">
-        <div class="panelCopy"><label for="exchange-amount">You send</label><input id="exchange-amount" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={amount} on:focus={(event) => event.currentTarget.select()} on:input={(event) => updateAmount(event.currentTarget.value)} aria-label="Amount to send" /><span class="currencyHint">{selectedSourceCurrency || "AMD"} available via {methodAvailability(sourceMethod)}</span></div>
+        <div class="panelCopy"><label for="exchange-amount">You send</label><input id="exchange-amount" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedSourceAmount} on:focus={(event) => event.currentTarget.select()} on:input={(event) => updateAmount(event.currentTarget.value)} aria-label="Amount to send" /><span class="currencyHint">{amountSide === "target" && targetAmountNeedsRate ? t("Calculating from live quotes", {}, activeLocale) : `${selectedSourceCurrency || "AMD"} available via ${methodAvailability(sourceMethod)}`}</span></div>
         <div class="methodControls">
           <button type="button" class="methodTrigger" on:click={() => void openMethodPicker("source")} aria-label={`Select sending ${methodNoun(sourceMethod)}: ${sourceMethod?.name ?? "none"}`}>
             <span class="methodAvatar" style:background-color={paymentMethodFavicon(sourceMethod) ? "transparent" : sourceMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(sourceMethod)}<img src={paymentMethodFavicon(sourceMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{:else}<span>{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{/if}</span>

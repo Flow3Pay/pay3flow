@@ -383,7 +383,7 @@
   padding: 0;
   border: 0;
   background: transparent;
-  cursor: help;
+  cursor: pointer;
 }
 
 .foundVenue:hover,

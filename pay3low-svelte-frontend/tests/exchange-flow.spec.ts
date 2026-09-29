@@ -801,7 +801,8 @@ test("editing the receive amount updates the send amount", async ({ page }) => {
   const sendAmount = page.getByLabel("Amount to send");
   const receiveAmount = page.getByLabel("Amount to receive");
   await receiveAmount.fill("10000");
-  await expect(sendAmount).toHaveValue("10000");
+  await expect(sendAmount).toHaveValue("");
+  await expect(page.getByText("Calculating from live quotes")).toBeVisible();
   await page.getByTestId("start-search").click();
   await expect(sendAmount).toHaveValue("42269");
   await expect(receiveAmount).toHaveValue("10000");
