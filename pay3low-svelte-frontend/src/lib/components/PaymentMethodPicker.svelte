@@ -16,1114 +16,131 @@
   export let onClose: () => void;
   export let onSelect: (method: PaymentMethod, network?: CryptoNetwork) => void;
 
+  type PickerStage = "currency" | "detail";
+  type CurrencyChoice = { id: string; name: string; kind: "fiat" | "asset"; initials: string; color: string; iconUrl?: string };
   type FiatGroup = { method: PaymentMethod; variants: PaymentMethod[] };
   type Option = { method: PaymentMethod; network?: CryptoNetwork; variants?: PaymentMethod[] };
+
+  let stage: PickerStage = "currency";
+  let activeCurrency = "";
   let query = "";
-  let networkQuery = "";
-  let activeNetwork = "all";
   let input: HTMLInputElement;
+  let dialog: HTMLDivElement;
   let wasOpen = false;
   let previousOverflow = "";
   let previousOverscrollBehavior = "";
   let focusTimer: number | undefined;
-  let dialog: HTMLDivElement;
   let dragging = false;
   let dragStartY = 0;
   let dragDistance = 0;
+  let detailOptions: Option[] = [];
 
-  function close() {
-    query = "";
-    networkQuery = "";
-    activeNetwork = "all";
-    onClose();
-  }
+  const normalizeSearch = (value: string) => value.normalize("NFKC").toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  const searchMatches = (text: string, queryValue: string) => {
+    const normalized = normalizeSearch(text);
+    const compact = normalized.replaceAll(" ", "");
+    return normalizeSearch(queryValue).split(" ").filter(Boolean).every((term) => normalized.includes(term) || compact.includes(term));
+  };
+  const roleAllowed = (method: PaymentMethod) => method.role === role || method.role === "both";
+  const currencyMatches = (method: PaymentMethod, currency: string) => method.currency.toUpperCase() === currency.toUpperCase();
+  const methodLogo = (method: PaymentMethod, variants: PaymentMethod[] = [method]) => paymentMethodFavicon(method) ?? variants.map((item) => paymentMethodFavicon(item)).find(Boolean) ?? null;
+  const methodMeta = (method: PaymentMethod, variants: PaymentMethod[] = [method]) => method.kind === "cash" ? `Cash settlement · ${method.currency}` : `Bank transfer · ${[...new Set(variants.map((item) => item.currency))].join(" / ")}`;
 
-  function onKeyDown(event: KeyboardEvent) {
-    if (event.key === "Escape") close();
-  }
-
-  function startSheetDrag(event: PointerEvent) {
-    dragging = true;
-    dragStartY = event.clientY;
-    dragDistance = 0;
-    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-  }
-
-  function moveSheetDrag(event: PointerEvent) {
-    if (!dragging) return;
-    dragDistance = Math.max(0, event.clientY - dragStartY);
-    dialog?.style.setProperty("--sheet-drag", `${dragDistance}px`);
-  }
-
-  function endSheetDrag() {
-    if (!dragging) return;
-    const shouldClose = dragDistance > 96 || (dialog && dragDistance > dialog.clientHeight * 0.24);
-    dragging = false;
-    if (shouldClose) {
-      close();
-    } else {
-      dialog?.style.removeProperty("--sheet-drag");
-    }
-  }
-
-  afterUpdate(() => {
-    if (open === wasOpen) return;
-    wasOpen = open;
-    if (open) {
-      previousOverflow = document.body.style.overflow;
-      previousOverscrollBehavior = document.body.style.overscrollBehavior;
-      document.body.style.overflow = "hidden";
-      document.body.style.overscrollBehavior = "none";
-      window.addEventListener("keydown", onKeyDown);
-      focusTimer = window.setTimeout(() => input?.focus(), 80);
-    } else {
-      document.body.style.overflow = previousOverflow;
-      document.body.style.overscrollBehavior = previousOverscrollBehavior;
-      window.removeEventListener("keydown", onKeyDown);
-      if (focusTimer) window.clearTimeout(focusTimer);
-    }
-  });
-
-  onDestroy(() => {
-    if (typeof document !== "undefined" && wasOpen) {
-      document.body.style.overflow = previousOverflow;
-      document.body.style.overscrollBehavior = previousOverscrollBehavior;
-    }
-    if (typeof window !== "undefined") window.removeEventListener("keydown", onKeyDown);
-    if (typeof window !== "undefined" && focusTimer) window.clearTimeout(focusTimer);
-  });
-
-  function normalizeSearch(value: string) {
-    return value.normalize("NFKC").toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
-  }
-
-  function matchesSearch(option: Option, value: string) {
-    const { method, network } = option;
-    const variants = option.variants ?? [method];
-    const searchText = normalizeSearch([
-      ...variants.flatMap((variant) => [variant.name, variant.currency, variant.p2pQuery, variant.currencyGroup]),
-      method.kind,
-      network?.name,
-      network?.id,
-    ].filter(Boolean).join(" "));
-    const compact = searchText.replaceAll(" ", "");
-    return normalizeSearch(value).split(" ").filter(Boolean).every((term) => searchText.includes(term) || compact.includes(term));
-  }
-
-  function logo(method: PaymentMethod, variants: PaymentMethod[] = [method]) {
-    return paymentMethodFavicon(method) ?? variants.map((variant) => paymentMethodFavicon(variant)).find(Boolean) ?? null;
-  }
-  function methodMeta(method: PaymentMethod, variants: PaymentMethod[] = [method]) {
-    if (method.kind === "cash") return `Cash settlement · ${method.currency}`;
-    if (method.kind !== "bank") return `${method.currency} · ${method.name}`;
-    const currencies = [...new Set(variants.map((variant) => variant.currency))].join(" / ");
-    return `Bank transfer · ${currencies}`;
-  }
   function groupFiatMethods(methods: PaymentMethod[], current: PaymentMethod | null): FiatGroup[] {
     const groups = new Map<string, PaymentMethod[]>();
     for (const method of methods) {
       const key = method.currencyGroup ?? method.id;
       groups.set(key, [...(groups.get(key) ?? []), method]);
     }
-
-    return [...groups.values()].map((variants) => ({
-      method: variants.find((method) => method.id === current?.id)
-        ?? variants.find((method) => method.currency === current?.currency)
-        ?? variants.find((method) => method.currency === "AMD")
-        ?? variants[0],
-      variants,
-    }));
+    return [...groups.values()].map((variants) => ({ method: variants.find((item) => item.id === current?.id) ?? variants[0], variants }));
   }
 
-  // Payment-method search is intentionally independent from the compact fiat
-  // currency selector. Multi-currency banks appear once, while the selected
-  // variant keeps the current currency whenever the new bank supports it.
-  // A crypto row owns both asset and network selection.
-  $: fiatMethods = groupFiatMethods(
-    paymentMethods.filter((method) => (method.kind === "bank" || method.kind === "cash") && (method.role === role || method.role === "both")),
-    selected,
-  );
-  $: assetsForRole = paymentMethods.filter((method) => method.kind === "wallet" && (method.role === role || method.role === "both"));
-  $: options = [
-    ...fiatMethods.map(({ method, variants }): Option => ({ method, variants })),
-    ...assetsForRole.flatMap((method): Option[] => {
-      const compatible = networks.filter((network) => network.currencies.includes(method.currency));
-      return compatible.length ? compatible.map((network) => ({ method, network })) : [{ method }];
-    }),
-  ];
-  $: availableNetworks = networks.filter((network) => assetsForRole.some((method) => network.currencies.includes(method.currency)));
-  $: visibleNetworks = networkQuery.trim()
-    ? availableNetworks.filter((network) => normalizeSearch(`${network.name} ${network.id}`).includes(normalizeSearch(networkQuery)))
-    : availableNetworks;
-  $: networkFiltered = options.filter((option) => activeNetwork === "all" || (activeNetwork === "fiat" ? option.method.kind !== "wallet" : option.network?.id === activeNetwork));
-  $: filtered = query.trim() ? networkFiltered.filter((option) => matchesSearch(option, query)) : networkFiltered;
-  $: popular = filtered.filter(({ method }) => method.kind !== "wallet" && method.popular);
-  $: assets = filtered.filter(({ method }) => method.kind === "wallet");
-  $: all = filtered.filter(({ method }) => !method.popular && method.kind !== "wallet");
-  $: popularLabel = role === "sender" ? "Popular selling methods" : "Popular buying methods";
+  function close() { stage = "currency"; activeCurrency = ""; query = ""; onClose(); }
+  function goBack() { stage = "currency"; activeCurrency = ""; query = ""; window.setTimeout(() => input?.focus(), 0); }
+  function chooseCurrency(choice: CurrencyChoice) { stage = "detail"; activeCurrency = choice.id; query = ""; window.setTimeout(() => input?.focus(), 0); }
+  function startSheetDrag(event: PointerEvent) { dragging = true; dragStartY = event.clientY; dragDistance = 0; (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId); }
+  function moveSheetDrag(event: PointerEvent) { if (!dragging) return; dragDistance = Math.max(0, event.clientY - dragStartY); dialog?.style.setProperty("--sheet-drag", `${dragDistance}px`); }
+  function endSheetDrag() { if (!dragging) return; const shouldClose = dragDistance > 96 || (dialog && dragDistance > dialog.clientHeight * .24); dragging = false; if (shouldClose) close(); else dialog?.style.removeProperty("--sheet-drag"); }
+  function onKeyDown(event: KeyboardEvent) { if (event.key === "Escape") close(); }
+
+  afterUpdate(() => {
+    if (open === wasOpen) return;
+    wasOpen = open;
+    if (open) {
+      stage = "currency"; activeCurrency = ""; query = "";
+      previousOverflow = document.body.style.overflow; previousOverscrollBehavior = document.body.style.overscrollBehavior;
+      document.body.style.overflow = "hidden"; document.body.style.overscrollBehavior = "none"; window.addEventListener("keydown", onKeyDown);
+      focusTimer = window.setTimeout(() => input?.focus(), 80);
+    } else {
+      document.body.style.overflow = previousOverflow; document.body.style.overscrollBehavior = previousOverscrollBehavior; window.removeEventListener("keydown", onKeyDown); if (focusTimer) window.clearTimeout(focusTimer);
+    }
+  });
+  onDestroy(() => { if (typeof document !== "undefined" && wasOpen) { document.body.style.overflow = previousOverflow; document.body.style.overscrollBehavior = previousOverscrollBehavior; } if (typeof window !== "undefined") window.removeEventListener("keydown", onKeyDown); if (typeof window !== "undefined" && focusTimer) window.clearTimeout(focusTimer); });
+
+  $: fiatMethods = paymentMethods.filter((method) => (method.kind === "bank" || method.kind === "cash") && roleAllowed(method));
+  $: assetMethods = paymentMethods.filter((method) => method.kind === "wallet" && roleAllowed(method));
+  $: fiatChoices = [...new Set(fiatMethods.map((method) => method.currency.toUpperCase()))].map((currency): CurrencyChoice => { const catalog = paymentMethods.find((method) => method.kind === "currency" && currencyMatches(method, currency)); const source = fiatMethods.find((method) => currencyMatches(method, currency)); return { id: currency, name: catalog?.name ?? source?.name ?? currency, kind: "fiat", initials: catalog?.initials ?? currency.slice(0, 2), color: catalog?.color ?? source?.color ?? "#6d9800", iconUrl: catalog?.iconUrl }; }).sort((left, right) => left.id.localeCompare(right.id));
+  $: assetChoices = [...new Map(assetMethods.map((method) => [method.currency.toUpperCase(), method])).values()].map((method): CurrencyChoice => ({ id: method.currency.toUpperCase(), name: method.name, kind: "asset", initials: method.initials || method.currency.slice(0, 2), color: method.color, iconUrl: paymentMethodFavicon(method) ?? undefined })).sort((left, right) => left.id.localeCompare(right.id));
+  $: currencyChoices = [...fiatChoices, ...assetChoices];
+  $: normalizedQuery = normalizeSearch(query);
+  $: visibleCurrencies = normalizedQuery ? currencyChoices.filter((choice) => searchMatches(`${choice.id} ${choice.name}`, query)) : currencyChoices;
+  $: selectedCurrency = selected?.currency?.toUpperCase() ?? "";
+  $: activeChoice = currencyChoices.find((choice) => choice.id === activeCurrency);
+  $: fiatGroups = activeChoice?.kind === "fiat" ? groupFiatMethods(fiatMethods.filter((method) => currencyMatches(method, activeCurrency)), selected) : [];
+  $: assetMethod = activeChoice?.kind === "asset" ? assetMethods.find((method) => method.id === selected?.id && currencyMatches(method, activeCurrency)) ?? assetMethods.find((method) => currencyMatches(method, activeCurrency)) : undefined;
+  $: assetNetworks = assetMethod ? networks.filter((network) => network.currencies.some((currency) => currency.toUpperCase() === activeCurrency)) : [];
+  $: detailOptions = activeChoice?.kind === "fiat" ? fiatGroups.map(({ method, variants }) => ({ method, variants })) : assetMethod ? assetNetworks.map((network) => ({ method: assetMethod!, network })) : [];
+  $: filteredDetails = normalizedQuery ? detailOptions.filter((option) => searchMatches([option.method.name, option.method.currency, option.method.p2pQuery, option.method.currencyGroup, option.network?.name, option.network?.id].filter(Boolean).join(" "), query)) : detailOptions;
+  $: bankDetails = filteredDetails.filter(({ method }) => method.kind === "bank");
+  $: cashDetails = filteredDetails.filter(({ method }) => method.kind === "cash");
+  $: networkDetails = filteredDetails.filter(({ method }) => method.kind === "wallet");
 </script>
 
 {#if open}
   <div class="backdrop" on:mousedown={close} role="presentation">
     <div class:dragging class="dialog" bind:this={dialog} role="dialog" aria-modal="true" aria-label={title} tabindex="-1" on:mousedown|stopPropagation>
-      <button type="button" class="sheetHandle" aria-label="Close payment method picker by dragging down" on:pointerdown={startSheetDrag} on:pointermove={moveSheetDrag} on:pointerup={endSheetDrag} on:pointercancel={endSheetDrag}>
-        <span aria-hidden="true"></span>
-      </button>
-      <div class="titleBar">
-        <div class="titleGroup">
-          <h2 class="title">{title}</h2>
+      <button type="button" class="sheetHandle" aria-label="Close payment method picker by dragging down" on:pointerdown={startSheetDrag} on:pointermove={moveSheetDrag} on:pointerup={endSheetDrag} on:pointercancel={endSheetDrag}><span aria-hidden="true"></span></button>
+      <div class="titleBar"><div class="titleGroup">{#if stage === "detail"}<button type="button" class="stageBack" on:click={goBack} aria-label={t("Back to currencies", {}, $locale)}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m15 18-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg></button>{/if}<div><h2 class="title">{title}</h2>{#if stage === "detail" && activeChoice}<span class="stageHint">{activeChoice.id}</span>{/if}</div></div><button type="button" class="closeButton" on:click={close} aria-label={t("Close payment method picker", {}, $locale)}><svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button></div>
+      <section class="resultPanel"><div class="searchRow"><label class="searchBox"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.7" /><path d="m20 20-4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg><input bind:this={input} bind:value={query} placeholder={t(stage === "currency" ? "Currency or digital asset" : activeChoice?.kind === "asset" ? "Search blockchains" : "Search banks and payment methods", {}, $locale)} aria-label={t(stage === "currency" ? "Currencies and digital assets" : activeChoice?.kind === "asset" ? "Blockchains" : "Search banks and payment methods", {}, $locale)} /></label></div>
+        <div class="methods" role="listbox" aria-label={t(stage === "currency" ? "Currencies and digital assets" : activeChoice?.kind === "asset" ? "Blockchains" : "Payment methods", {}, $locale)}>
+          {#if stage === "currency"}
+            {#if visibleCurrencies.length === 0}<div class="empty"><strong>{t("No currencies or assets found", {}, $locale)}</strong><span>{t("Try a different search.", {}, $locale)}</span></div>{/if}
+            {#if visibleCurrencies.some((choice) => choice.kind === "fiat")}<section class="section"><h3>{t("Fiat currencies", {}, $locale)}</h3>{#each visibleCurrencies.filter((choice) => choice.kind === "fiat") as choice (choice.id)}<PickerOptionCard name={choice.id} meta={choice.name} iconUrl={choice.iconUrl ?? null} initials={choice.initials} color={choice.color} selected={selectedCurrency === choice.id} onSelect={() => chooseCurrency(choice)} />{/each}</section>{/if}
+            {#if visibleCurrencies.some((choice) => choice.kind === "asset")}<section class="section"><h3>{t("Digital assets", {}, $locale)}</h3>{#each visibleCurrencies.filter((choice) => choice.kind === "asset") as choice (choice.id)}<PickerOptionCard name={choice.id} meta={choice.name} iconUrl={choice.iconUrl ?? null} initials={choice.initials} color={choice.color} selected={selectedCurrency === choice.id} onSelect={() => chooseCurrency(choice)} />{/each}</section>{/if}
+          {:else if filteredDetails.length === 0}<div class="empty"><strong>{t(activeChoice?.kind === "asset" ? "No compatible blockchains found" : "No payment methods found", {}, $locale)}</strong><span>{t("Try a different search.", {}, $locale)}</span></div>
+          {:else if activeChoice?.kind === "asset"}<section class="section"><h3>{t("Available networks", {}, $locale)}</h3>{#each networkDetails as option (`${option.method.id}:${option.network?.id}`)}{@const network = option.network}<PickerOptionCard name={network?.name ?? "Network"} meta={`${option.method.currency} · ${option.method.name}`} iconUrl={network ? networkIcon(network.name) : null} initials={network?.name.slice(0, 2).toUpperCase() ?? "NW"} color="#eef2ea" selected={selected?.id === option.method.id && network?.id === selectedNetwork?.id} onSelect={() => onSelect(option.method, network)} />{/each}</section>
+          {:else}{#if bankDetails.length > 0}<section class="section"><h3>{t("Banks", {}, $locale)}</h3>{#each bankDetails as option (`${option.method.id}`)}<PickerOptionCard name={option.method.name} meta={methodMeta(option.method, option.variants)} iconUrl={methodLogo(option.method, option.variants)} initials={option.method.initials} color={option.method.color} selected={selected?.id === option.method.id} onSelect={() => onSelect(option.method)} />{/each}</section>{/if}{#if cashDetails.length > 0}<section class="section"><h3>{t("Cash", {}, $locale)}</h3>{#each cashDetails as option (`${option.method.id}`)}<PickerOptionCard name={option.method.name} meta={methodMeta(option.method, option.variants)} iconUrl={methodLogo(option.method, option.variants)} initials={option.method.initials} color={option.method.color} selected={selected?.id === option.method.id} onSelect={() => onSelect(option.method)} />{/each}</section>{/if}{/if}
         </div>
-        <button type="button" class="backButton" on:click={close} aria-label="Close payment method picker">
-          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
-        </button>
-      </div>
-      <div class="body">
-        <aside class="networkRail">
-          <label class="searchBox networkSearch">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.7" /><path d="m20 20-4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg>
-            <input bind:value={networkQuery} placeholder="Network" aria-label="Search networks" />
-          </label>
-          <div class="networkList">
-            <button type="button" class="networkChoice" aria-pressed={activeNetwork === "all"} on:click={() => activeNetwork = "all"}><span class="allMark">••••</span><strong>All methods</strong></button>
-            <button type="button" class="networkChoice" aria-pressed={activeNetwork === "fiat"} on:click={() => activeNetwork = "fiat"}><span class="allMark">$</span><strong>Banks &amp; cash</strong></button>
-            <div class="railLabel">Available networks</div>
-            {#each visibleNetworks as network (network.id)}
-              <button type="button" class="networkChoice" aria-pressed={activeNetwork === network.id} on:click={() => activeNetwork = network.id}>
-                <span class="networkMark"><img src={networkIcon(network.name)} alt="" width="25" height="25" /></span><strong>{network.name}</strong>
-              </button>
-            {/each}
-          </div>
-        </aside>
-        <section class="resultPanel">
-          <div class="searchRow">
-            <label class="searchBox">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.7" /><path d="m20 20-4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg>
-              <input bind:this={input} bind:value={query} placeholder="Token, bank or payment method" aria-label="Search banks and payment methods" />
-            </label>
-          </div>
-          <div class="methods" role="listbox" aria-label="Payment methods">
-          {#if filtered.length === 0}
-            <div class="empty"><strong>No payment methods found</strong><span>Try a different search.</span></div>
-          {/if}
-          {#each [[popularLabel, popular], ["Digital assets", assets], ["All payment methods", all]] as group}
-            {@const label = group[0] as string}
-            {@const rows = group[1] as Option[]}
-            {#if rows.length > 0}
-              <section class="section">
-                <h3>{t(label, {}, $locale)}</h3>
-                {#each rows as option (`${option.method.id}:${option.network?.id ?? "default"}`)}
-                  {@const method = option.method}
-                  {@const network = option.network}
-                  {@const isSelected = selected?.id === method.id && (method.kind !== "wallet" || network?.id === selectedNetwork?.id)}
-                  <PickerOptionCard
-                    name={method.kind === "wallet" ? method.currency : method.name}
-                    meta={method.kind === "wallet" ? `${method.name} · ${network?.name ?? "Network"}` : methodMeta(method, option.variants)}
-                    iconUrl={logo(method, option.variants)}
-                    initials={method.initials}
-                    color={method.color}
-                    selected={isSelected}
-                    onSelect={() => onSelect(method, network)}
-                  />
-                {/each}
-              </section>
-            {/if}
-          {/each}
-          </div>
-        </section>
-      </div>
+      </section>
     </div>
   </div>
 {/if}
 
 <style>
-.backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1100;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: rgba(15, 17, 14, 0.66);
-  backdrop-filter: blur(18px) saturate(120%);
-  -webkit-backdrop-filter: blur(18px) saturate(120%);
-  animation: backdropIn 0.2s ease-out;
-  touch-action: none;
-}
-
-.dialog {
-  width: min(100%, 860px);
-  max-height: min(720px, 92vh);
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.72);
-  border-radius: 30px;
-  background: rgba(250, 250, 246, 0.98);
-  box-shadow: 0 38px 120px rgba(0, 0, 0, 0.35);
-  animation: dialogIn 0.28s cubic-bezier(0.22, 1, 0.36, 1);
-  touch-action: auto;
-  overscroll-behavior: contain;
-}
-
-.titleBar,
-.titleGroup,
-.searchBox,
-.countryButton,
-.methodRow {
-  display: flex;
-  align-items: center;
-}
-
-.titleBar {
-  min-height: 78px;
-  justify-content: space-between;
-  padding: 15px 21px;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.titleGroup {
-  gap: 10px;
-}
-
-.title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 750;
-  letter-spacing: -0.035em;
-}
-
-.backButton {
-  display: grid;
-  width: 42px;
-  height: 42px;
-  place-items: center;
-  border-radius: 13px;
-  color: var(--color-text-soft);
-  transition: background 0.14s ease, transform 0.14s ease;
-}
-
-.backButton:hover {
-  background: var(--color-panel);
-  transform: translateX(-1px);
-}
-
-.sheetHandle {
-  display: none;
-}
-
-.searchRow {
-  padding: 15px 20px;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.searchBox {
-  height: 52px;
-  gap: 11px;
-  padding: 0 16px;
-  border: 1px solid transparent;
-  border-radius: 16px;
-  background: #efefe9;
-  color: var(--color-text-faint);
-  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
-}
-
-.searchBox:focus-within {
-  border-color: var(--color-violet);
-  background: #fff;
-  box-shadow: 0 0 0 4px var(--color-violet-soft);
-}
-
-.searchBox input {
-  width: 100%;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 650;
-}
-
-.searchBox input::placeholder {
-  color: var(--color-text-faint);
-}
-
-.body {
-  display: grid;
-  height: min(530px, calc(92vh - 160px));
-  min-height: 360px;
-  grid-template-columns: minmax(0, 1fr) 255px;
-}
-
-.methods,
-.countries {
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-color: var(--color-border-strong) transparent;
-  scrollbar-width: thin;
-}
-
-.methods {
-  padding: 13px 17px 26px;
-}
-
-.methods::-webkit-scrollbar,
-.countries::-webkit-scrollbar {
-  width: 6px;
-}
-
-.methods::-webkit-scrollbar-thumb,
-.countries::-webkit-scrollbar-thumb {
-  border-radius: 10px;
-  background: var(--color-border-strong);
-}
-
-.section + .section {
-  margin-top: 14px;
-}
-
-.section h3 {
-  margin: 0;
-  padding: 10px 11px 8px;
-  color: var(--color-text-faint);
-  font-size: 8px;
-  font-weight: 850;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-}
-
-.methodRow {
-  width: 100%;
-  gap: 13px;
-  padding: 10px;
-  border: 1px solid transparent;
-  border-radius: 17px;
-  text-align: left;
-  transition: background 0.14s ease, border-color 0.14s ease, transform 0.14s ease;
-}
-
-.methodRow:hover {
-  background: #fff;
-  border-color: var(--color-border);
-  transform: translateX(2px);
-}
-
-.methodRow[data-selected] {
-  border-color: rgba(117, 88, 246, 0.16);
-  background: var(--color-violet-soft);
-}
-
-.methodLogo {
-  position: relative;
-  display: grid;
-  width: 46px;
-  height: 46px;
-  flex: 0 0 auto;
-  place-items: center;
-  border: 2px solid rgba(255, 255, 255, 0.72);
-  border-radius: 15px;
-  color: #fff;
-  box-shadow: 0 6px 15px rgba(20, 23, 19, 0.14);
-  font-size: 11px;
-  font-weight: 850;
-  letter-spacing: 0.03em;
-}
-
-.methodLogo img {
-  position: absolute;
-  inset: 5px;
-  width: calc(100% - 10px);
-  height: calc(100% - 10px);
-  border-radius: 10px;
-  object-fit: contain;
-}
-
-.methodCopy,
-.countryCopy,
-.empty {
-  display: flex;
-  flex-direction: column;
-}
-
-.methodCopy {
-  min-width: 0;
-  flex: 1;
-  gap: 3px;
-}
-
-.methodName {
-  overflow: hidden;
-  font-size: 13px;
-  font-weight: 780;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.methodMeta {
-  color: var(--color-text-faint);
-  font-size: 10px;
-  font-weight: 600;
-}
-
-.check,
-.countryCheck {
-  flex: 0 0 auto;
-  color: var(--color-violet);
-}
-
-.countries {
-  padding: 19px 14px;
-  border-left: 1px solid var(--color-border);
-  background: #efefe9;
-}
-
-.countryHead {
-  padding: 0 9px 14px;
-}
-
-.countryHead h3 {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.countryHead span {
-  display: block;
-  margin-top: 4px;
-  color: var(--color-text-faint);
-  font-size: 9px;
-}
-
-.countryList {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.countryButton {
-  width: 100%;
-  gap: 10px;
-  padding: 10px;
-  border: 1px solid transparent;
-  border-radius: 15px;
-  text-align: left;
-  transition: background 0.14s ease, border-color 0.14s ease;
-}
-
-.countryButton:hover,
-.countryButton[aria-pressed="true"] {
-  border-color: var(--color-border);
-  background: #fff;
-}
-
-.countryMark {
-  display: grid;
-  width: 38px;
-  height: 38px;
-  flex: 0 0 auto;
-  place-items: center;
-  border-radius: 12px;
-  background: var(--color-primary);
-  color: var(--color-accent);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 800;
-}
-
-.countryCopy {
-  min-width: 0;
-  flex: 1;
-  gap: 2px;
-}
-
-.countryCopy strong {
-  overflow: hidden;
-  font-size: 11px;
-  font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.countryCopy span {
-  color: var(--color-text-faint);
-  font-size: 9px;
-}
-
-.empty {
-  min-height: 250px;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  color: var(--color-text-faint);
-  text-align: center;
-}
-
-.empty strong {
-  color: var(--color-text);
-  font-size: 14px;
-}
-
-.empty span {
-  font-size: 11px;
-}
-
-@media (max-width: 700px) {
-  .backdrop {
-    align-items: end;
-    padding: 0;
-  }
-
-  .dialog {
-    max-height: 94vh;
-    border-right: 0;
-    border-bottom: 0;
-    border-left: 0;
-    border-radius: 26px 26px 0 0;
-  }
-
-  .body {
-    display: flex;
-    height: min(650px, calc(94vh - 160px));
-    flex-direction: column-reverse;
-  }
-
-  .countries {
-    flex: 0 0 auto;
-    overflow-x: auto;
-    overflow-y: hidden;
-    border-bottom: 1px solid var(--color-border);
-    border-left: 0;
-    padding: 12px 14px;
-  }
-
-  .countryHead {
-    display: none;
-  }
-
-  .countryList {
-    flex-direction: row;
-  }
-
-  .countryButton {
-    width: auto;
-    min-width: 160px;
-  }
-
-  .methods {
-    flex: 1;
-  }
-
-}
-
-:global(html[data-theme="dark"]) .dialog {
-  border-color: var(--color-border-strong);
-  background: rgba(25, 25, 25, 0.99);
-  box-shadow: var(--shadow-pop);
-}
-
-:global(html[data-theme="dark"]) .titleBar {
-  background: #202020;
-}
-
-:global(html[data-theme="dark"]) .backButton,
-:global(html[data-theme="dark"]) .searchBox,
-:global(html[data-theme="dark"]) .countryHead,
-:global(html[data-theme="dark"]) .countryMark {
-  border-color: #3b3b3b;
-  background: #2a2a2a;
-}
-
-:global(html[data-theme="dark"]) .searchBox:focus-within {
-  border-color: var(--color-accent-strong);
-  background: #202020;
-}
-
-:global(html[data-theme="dark"]) .methodRow:hover,
-:global(html[data-theme="dark"]) .countryButton:hover,
-:global(html[data-theme="dark"]) .countryButton[aria-pressed="true"] {
-  border-color: #4b4b4b;
-  background: #2d2d2d;
-}
-
-:global(html[data-theme="dark"]) .methodRow[data-selected] {
-  border-color: rgba(181, 245, 0, 0.32);
-  background: rgba(181, 245, 0, 0.09);
-}
-
-:global(html[data-theme="dark"]) .methodLogo {
-  border-color: rgba(255, 255, 255, 0.12);
-}
-
-@keyframes backdropIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes dialogIn {
-  from { opacity: 0; transform: translateY(16px) scale(0.975); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-/* Paper dialog variant: same interaction model, lighter surfaces and lime state accents. */
-.backdrop {
-  background: rgba(38, 57, 37, 0.28);
-  backdrop-filter: blur(9px);
-  -webkit-backdrop-filter: blur(9px);
-}
-
-.dialog {
-  border-color: var(--color-border-strong);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 30px 80px rgba(44, 64, 42, 0.18);
-}
-
-.titleBar {
-  min-height: 68px;
-  padding: 12px 16px;
-  background: #fbfcfa;
-}
-
-.backButton {
-  width: 36px;
-  height: 36px;
-  border-radius: 9px;
-}
-
-.searchRow {
-  padding: 12px 16px;
-}
-
-.searchBox {
-  height: 44px;
-  border-color: var(--color-border);
-  border-radius: 9px;
-  background: #f4f8f1;
-}
-
-.searchBox:focus-within {
-  border-color: var(--color-accent-strong);
-  box-shadow: 0 0 0 3px rgba(181, 245, 0, 0.16);
-}
-
-.methods {
-  padding: 12px 16px 22px;
-}
-
-.methodRow {
-  border-radius: 10px;
-  transition: background 0.14s ease, border-color 0.14s ease, transform 0.14s ease, box-shadow 0.14s ease;
-}
-
-.methodRow:hover {
-  border-color: #b7cead;
-  background: #fbfcfa;
-  box-shadow: 0 5px 12px rgba(55, 77, 52, 0.06);
-}
-
-.methodRow[data-selected] {
-  border-color: #cce29a;
-  background: #f1f8df;
-}
-
-.check,
-.countryCheck {
-  color: #6d9800;
-}
-
-.countries {
-  padding: 16px 12px;
-  background: #f4f8f1;
-}
-
-.countryButton {
-  border-radius: 10px;
-}
-
-.countryButton:hover,
-.countryButton[aria-pressed="true"] {
-  border-color: #b7cead;
-  background: #fff;
-}
-
-.countryMark {
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
-}
-
-/* Compact asset-picker treatment, while retaining the bank and country lists. */
-.backdrop {
-  background: rgba(8, 11, 8, 0.52);
-  /* Keep the overlay cheap while the list scrolls underneath it. */
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-
-.dialog {
-  width: min(100%, 760px);
-  max-height: min(680px, 92vh);
-  border-radius: 14px;
-  background: #fff;
-  box-shadow: 0 48px 96px rgba(16, 36, 14, 0.22), 0 8px 24px rgba(16, 36, 14, 0.12);
-}
-
-.titleBar {
-  min-height: 62px;
-  padding: 12px 18px 11px;
-  background: #fff;
-}
-
-.title {
-  font-size: 14px;
-  letter-spacing: -0.02em;
-}
-
-.searchRow {
-  padding: 12px 18px;
-}
-
-.searchBox {
-  height: 44px;
-  border-color: #dae2d2;
-  border-radius: 8px;
-  background: #f3f7ec;
-}
-
-.searchBox:focus-within {
-  border-color: #c5e092;
-  background: #fff;
-  box-shadow: 0 0 0 3px rgba(185, 232, 52, 0.18);
-}
-
-.methods {
-  padding: 10px 12px 20px;
-}
-
-.methodRow {
-  gap: 11px;
-  padding: 9px 10px;
-  border-radius: 8px;
-  transition: background 0.13s ease, border-color 0.13s ease, transform 0.13s ease, box-shadow 0.13s ease;
-}
-
-.methodRow:hover {
-  border-color: #dae2d2;
-  background: #f3f7ec;
-  box-shadow: none;
-}
-
-.methodRow[data-selected] {
-  border-color: #c5e092;
-  background: #eef7dc;
-}
-
-.methodMeta {
-  font-family: var(--font-mono);
-  font-size: 9px;
-}
-
-.check,
-.countryCheck {
-  color: #5c8c13;
-}
-
-.countries {
-  padding: 16px 12px;
-  background: #f0f3eb;
-}
-
-.countryButton {
-  border-radius: 8px;
-  transition: background 0.13s ease, border-color 0.13s ease, transform 0.13s ease;
-}
-
-.countryButton:hover,
-.countryButton[aria-pressed="true"] {
-  border-color: #dae2d2;
-  background: #fff;
-}
-
-/* Asset-style modal: one compact list; the country rail is intentionally not rendered. */
-.dialog {
-  width: min(100%, 430px);
-  max-height: min(680px, 88vh);
-  border-radius: 14px;
-  background: #fff;
-  box-shadow: 0 48px 96px rgba(16, 36, 14, 0.22), 0 8px 24px rgba(16, 36, 14, 0.12);
-  contain: layout paint;
-  isolation: isolate;
-}
-
-.titleBar {
-  min-height: 58px;
-  padding: 16px 18px 15px;
-  background: #fff;
-}
-
-.backButton {
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
-}
-
-.title {
-  font-size: 14px;
-  letter-spacing: -0.02em;
-}
-
-.body {
-  display: flex;
-  height: min(560px, calc(88vh - 120px));
-  min-height: 300px;
-  flex-direction: column;
-}
-
-.methods {
-  order: 1;
-  min-height: 0;
-  padding: 4px 12px 20px;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-gutter: stable;
-}
-
-.section h3 {
-  padding: 14px 10px 5px;
-  color: #8a9689;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 400;
-  letter-spacing: 0.09em;
-}
-
-.methodRow {
-  gap: 11px;
-  padding: 9px 10px;
-  border-radius: 8px;
-  contain: layout paint;
-  transition: background 0.13s ease, border-color 0.13s ease, box-shadow 0.13s ease;
-}
-
-.methodRow:hover {
-  border-color: #dae2d2;
-  background: #f3f7ec;
-  box-shadow: none;
-  transform: none;
-}
-
-.methodRow[data-selected] {
-  border-color: #c5e092;
-  background: #eef7dc;
-}
-
-@media (max-width: 700px) {
-  .sheetHandle {
-    display: flex;
-    width: 100%;
-    height: 30px;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    color: var(--color-text-faint);
-    cursor: grab;
-    touch-action: none;
-    user-select: none;
-  }
-
-  .sheetHandle:active {
-    cursor: grabbing;
-  }
-
-  .sheetHandle span {
-    display: block;
-    width: 38px;
-    height: 5px;
-    border-radius: 999px;
-    background: currentColor;
-  }
-
-  .backButton {
-    display: none;
-  }
-
-  .dialog {
-    max-height: 94vh;
-    border-radius: 14px 14px 0 0;
-    transform: translateY(var(--sheet-drag, 0px));
-    transition: transform 0.24s ease;
-  }
-
-  .dialog.dragging {
-    transition: none;
-  }
-
-  .body {
-    height: min(650px, calc(94vh - 140px));
-  }
-}
-
-/* Symbiosis-inspired split picker, scoped to this modal only. */
-.dialog {
-  width: min(100%, 820px);
-  max-height: min(720px, 92vh);
-  border-radius: 18px;
-}
-
-.titleBar {
-  min-height: 72px;
-  padding: 14px 20px;
-}
-
-.title {
-  font-size: 18px;
-  letter-spacing: -0.035em;
-}
-
-.body {
-  display: grid;
-  height: min(570px, calc(92vh - 72px));
-  min-height: 410px;
-  grid-template-columns: 265px minmax(0, 1fr);
-}
-
-.networkRail {
-  min-width: 0;
-  padding: 15px 12px;
-  border-right: 1px solid var(--color-border);
-  background: #f3f5f0;
-}
-
-.networkSearch {
-  height: 43px;
-  margin: 0 4px 12px;
-  background: #fff;
-}
-
-.networkList {
-  height: calc(100% - 55px);
-  overflow-y: auto;
-  padding: 0 4px 16px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-border-strong) transparent;
-}
-
-.networkChoice {
-  display: flex;
-  width: 100%;
-  min-height: 47px;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 9px;
-  border: 1px solid transparent;
-  border-radius: 9px;
-  color: var(--color-text-soft);
-  text-align: left;
-  transition: background .13s ease, border-color .13s ease, color .13s ease;
-}
-
-.networkChoice:hover {
-  background: #fff;
-  color: var(--color-text);
-}
-
-.networkChoice[aria-pressed="true"] {
-  border-color: #c5e092;
-  background: #eef7dc;
-  color: var(--color-text);
-}
-
-.networkChoice strong {
-  overflow: hidden;
-  font-size: 11px;
-  font-weight: 750;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.networkMark,
-.allMark {
-  display: grid;
-  width: 31px;
-  height: 31px;
-  flex: 0 0 auto;
-  place-items: center;
-  border: 1px solid var(--color-border);
-  border-radius: 9px;
-  background: #fff;
-}
-
-.networkMark img { width: 23px; height: 23px; border-radius: 7px; object-fit: contain; }
-.allMark { font-family: var(--font-mono); font-size: 10px; letter-spacing: -2px; }
-
-.railLabel {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 15px 9px 6px;
-  color: var(--color-text-faint);
-  font-family: var(--font-mono);
-  font-size: 8px;
-  letter-spacing: .07em;
-  text-transform: uppercase;
-}
-
-.railLabel::after { height: 1px; flex: 1; background: var(--color-border); content: ""; }
-
-.resultPanel {
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex-direction: column;
-}
-
-.resultPanel .searchRow {
-  flex: 0 0 auto;
-  padding: 15px 18px 13px;
-}
-
-.resultPanel .searchBox {
-  height: 47px;
-  border-radius: 11px;
-}
-
-.resultPanel .methods {
-  flex: 1;
-  min-height: 0;
-  padding: 4px 12px 22px;
-}
-
-:global(html[data-theme="dark"]) .networkRail { background: #151515; }
-:global(html[data-theme="dark"]) .networkSearch,
-:global(html[data-theme="dark"]) .networkMark,
-:global(html[data-theme="dark"]) .allMark { background: #222; }
-:global(html[data-theme="dark"]) .networkChoice:hover { background: #202020; }
-:global(html[data-theme="dark"]) .networkChoice[aria-pressed="true"] { border-color: rgba(181,245,0,.3); background: rgba(181,245,0,.09); }
-
-@media (max-width: 700px) {
-  .body {
-    display: flex;
-    height: min(680px, calc(94vh - 113px));
-    min-height: 0;
-    flex-direction: column;
-  }
-
-  .networkRail {
-    flex: 0 0 auto;
-    padding: 10px 11px 8px;
-    border-right: 0;
-    border-bottom: 1px solid var(--color-border);
-  }
-
-  .networkSearch { height: 41px; margin-bottom: 8px; }
-  .networkList { display: flex; height: auto; gap: 6px; overflow-x: auto; overflow-y: hidden; padding: 0 3px 2px; scrollbar-width: none; }
-  .networkList::-webkit-scrollbar { display: none; }
-  .railLabel { display: none; }
-  .networkChoice { width: auto; min-width: max-content; min-height: 40px; gap: 7px; padding: 5px 9px 5px 6px; }
-  .networkMark, .allMark { width: 29px; height: 29px; }
-  .resultPanel { flex: 1; min-height: 0; }
-  .resultPanel .searchRow { padding: 10px 13px; }
-  .resultPanel .searchBox { height: 45px; }
-}
-
-@media (max-width: 420px) {
-  .networkSearch { display: none; }
-}
+  .backdrop { position: fixed; inset: 0; z-index: 1100; display: grid; place-items: center; padding: 24px; background: rgba(8, 11, 8, .52); touch-action: none; }
+  .dialog { width: min(100%, 620px); max-height: min(720px, 92vh); overflow: hidden; border: 1px solid var(--color-border-strong); border-radius: 18px; background: #fff; box-shadow: 0 48px 96px rgba(16, 36, 14, .22); touch-action: auto; }
+  .titleBar, .titleGroup, .searchBox { display: flex; align-items: center; }
+  .titleBar { min-height: 72px; justify-content: space-between; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--color-border); }
+  .titleGroup { min-width: 0; gap: 10px; }
+  .title { margin: 0; font-size: 18px; font-weight: 750; letter-spacing: -.035em; }
+  .stageHint { display: block; margin-top: 3px; color: var(--color-text-faint); font-family: var(--font-mono); font-size: 10px; }
+  .stageBack, .closeButton { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; border-radius: 9px; color: var(--color-text-soft); }
+  .stageBack:hover, .closeButton:hover { background: var(--color-panel); }
+  .closeButton { width: 36px; height: 36px; }
+  .sheetHandle { display: none; }
+  .resultPanel { display: flex; min-height: 0; flex-direction: column; }
+  .searchRow { flex: 0 0 auto; padding: 14px 18px 12px; border-bottom: 1px solid var(--color-border); }
+  .searchBox { height: 46px; gap: 10px; padding: 0 14px; border: 1px solid #dae2d2; border-radius: 10px; background: #f3f7ec; color: var(--color-text-faint); }
+  .searchBox:focus-within { border-color: #c5e092; background: #fff; box-shadow: 0 0 0 3px rgba(185, 232, 52, .18); }
+  .searchBox input { width: 100%; border: 0; outline: 0; background: transparent; font: inherit; font-size: 13px; font-weight: 650; }
+  .methods { height: min(540px, calc(92vh - 160px)); min-height: 330px; overflow-y: auto; padding: 5px 14px 22px; scrollbar-width: thin; scrollbar-color: var(--color-border-strong) transparent; }
+  .section + .section { margin-top: 12px; }
+  .section h3 { margin: 0; padding: 14px 10px 6px; color: #8a9689; font-family: var(--font-mono); font-size: 9px; font-weight: 400; letter-spacing: .09em; text-transform: uppercase; }
+  .empty { display: flex; min-height: 250px; align-items: center; justify-content: center; gap: 6px; color: var(--color-text-faint); text-align: center; flex-direction: column; }
+  .empty strong { color: var(--color-text); font-size: 14px; }
+  .empty span { font-size: 11px; }
+  @media (max-width: 700px) { .backdrop { align-items: end; padding: 0; } .dialog { max-height: 94vh; border-right: 0; border-bottom: 0; border-left: 0; border-radius: 18px 18px 0 0; transform: translateY(var(--sheet-drag, 0)); transition: transform .24s ease; } .dialog.dragging { transition: none; } .sheetHandle { display: flex; width: 100%; height: 30px; align-items: center; justify-content: center; padding: 0; color: var(--color-text-faint); } .sheetHandle span { display: block; width: 38px; height: 5px; border-radius: 999px; background: currentColor; } .closeButton { display: none; } .methods { height: min(650px, calc(94vh - 145px)); } }
+  :global(html[data-theme="dark"]) .dialog { border-color: var(--color-border-strong); background: #202020; }
+  :global(html[data-theme="dark"]) .titleBar { background: #202020; }
+  :global(html[data-theme="dark"]) .searchBox { border-color: #3b3b3b; background: #2a2a2a; }
 </style>
