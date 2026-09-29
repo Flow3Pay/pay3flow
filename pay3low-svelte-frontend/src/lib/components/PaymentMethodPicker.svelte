@@ -1,6 +1,7 @@
 <script lang="ts">
   import { afterUpdate, onDestroy } from "svelte";
   import { paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
+  import { networkIcon } from "$lib/icons";
   import type { CryptoNetwork } from "$lib/networks";
   import { locale, t } from "$lib/i18n";
   import PickerOptionCard from "./PickerOptionCard.svelte";
@@ -18,6 +19,8 @@
   type FiatGroup = { method: PaymentMethod; variants: PaymentMethod[] };
   type Option = { method: PaymentMethod; network?: CryptoNetwork; variants?: PaymentMethod[] };
   let query = "";
+  let networkQuery = "";
+  let activeNetwork = "all";
   let input: HTMLInputElement;
   let wasOpen = false;
   let previousOverflow = "";
@@ -30,6 +33,8 @@
 
   function close() {
     query = "";
+    networkQuery = "";
+    activeNetwork = "all";
     onClose();
   }
 
@@ -146,7 +151,12 @@
       return compatible.length ? compatible.map((network) => ({ method, network })) : [{ method }];
     }),
   ];
-  $: filtered = query.trim() ? options.filter((option) => matchesSearch(option, query)) : options;
+  $: availableNetworks = networks.filter((network) => assetsForRole.some((method) => network.currencies.includes(method.currency)));
+  $: visibleNetworks = networkQuery.trim()
+    ? availableNetworks.filter((network) => normalizeSearch(`${network.name} ${network.id}`).includes(normalizeSearch(networkQuery)))
+    : availableNetworks;
+  $: networkFiltered = options.filter((option) => activeNetwork === "all" || (activeNetwork === "fiat" ? option.method.kind !== "wallet" : option.network?.id === activeNetwork));
+  $: filtered = query.trim() ? networkFiltered.filter((option) => matchesSearch(option, query)) : networkFiltered;
   $: popular = filtered.filter(({ method }) => method.kind !== "wallet" && method.popular);
   $: assets = filtered.filter(({ method }) => method.kind === "wallet");
   $: all = filtered.filter(({ method }) => !method.popular && method.kind !== "wallet");
@@ -167,14 +177,31 @@
           <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
         </button>
       </div>
-      <div class="searchRow">
-        <label class="searchBox">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" /><path d="m20 20-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
-          <input bind:this={input} bind:value={query} placeholder="Search banks, assets or payment methods…" aria-label="Search banks and payment methods" />
-        </label>
-      </div>
       <div class="body">
-        <div class="methods" role="listbox" aria-label="Payment methods">
+        <aside class="networkRail">
+          <label class="searchBox networkSearch">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.7" /><path d="m20 20-4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg>
+            <input bind:value={networkQuery} placeholder="Network" aria-label="Search networks" />
+          </label>
+          <div class="networkList">
+            <button type="button" class="networkChoice" aria-pressed={activeNetwork === "all"} on:click={() => activeNetwork = "all"}><span class="allMark">••••</span><strong>All methods</strong></button>
+            <button type="button" class="networkChoice" aria-pressed={activeNetwork === "fiat"} on:click={() => activeNetwork = "fiat"}><span class="allMark">$</span><strong>Banks &amp; cash</strong></button>
+            <div class="railLabel">Available networks</div>
+            {#each visibleNetworks as network (network.id)}
+              <button type="button" class="networkChoice" aria-pressed={activeNetwork === network.id} on:click={() => activeNetwork = network.id}>
+                <span class="networkMark"><img src={networkIcon(network.name)} alt="" width="25" height="25" /></span><strong>{network.name}</strong>
+              </button>
+            {/each}
+          </div>
+        </aside>
+        <section class="resultPanel">
+          <div class="searchRow">
+            <label class="searchBox">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.7" /><path d="m20 20-4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg>
+              <input bind:this={input} bind:value={query} placeholder="Token, bank or payment method" aria-label="Search banks and payment methods" />
+            </label>
+          </div>
+          <div class="methods" role="listbox" aria-label="Payment methods">
           {#if filtered.length === 0}
             <div class="empty"><strong>No payment methods found</strong><span>Try a different search.</span></div>
           {/if}
@@ -189,8 +216,8 @@
                   {@const network = option.network}
                   {@const isSelected = selected?.id === method.id && (method.kind !== "wallet" || network?.id === selectedNetwork?.id)}
                   <PickerOptionCard
-                    name={method.kind === "wallet" ? network?.name ?? method.name : method.name}
-                    meta={methodMeta(method, option.variants)}
+                    name={method.kind === "wallet" ? method.currency : method.name}
+                    meta={method.kind === "wallet" ? `${method.name} · ${network?.name ?? "Network"}` : methodMeta(method, option.variants)}
                     iconUrl={logo(method, option.variants)}
                     initials={method.initials}
                     color={method.color}
@@ -201,7 +228,8 @@
               </section>
             {/if}
           {/each}
-        </div>
+          </div>
+        </section>
       </div>
     </div>
   </div>
@@ -932,4 +960,170 @@
   }
 }
 
+/* Symbiosis-inspired split picker, scoped to this modal only. */
+.dialog {
+  width: min(100%, 820px);
+  max-height: min(720px, 92vh);
+  border-radius: 18px;
+}
+
+.titleBar {
+  min-height: 72px;
+  padding: 14px 20px;
+}
+
+.title {
+  font-size: 18px;
+  letter-spacing: -0.035em;
+}
+
+.body {
+  display: grid;
+  height: min(570px, calc(92vh - 72px));
+  min-height: 410px;
+  grid-template-columns: 265px minmax(0, 1fr);
+}
+
+.networkRail {
+  min-width: 0;
+  padding: 15px 12px;
+  border-right: 1px solid var(--color-border);
+  background: #f3f5f0;
+}
+
+.networkSearch {
+  height: 43px;
+  margin: 0 4px 12px;
+  background: #fff;
+}
+
+.networkList {
+  height: calc(100% - 55px);
+  overflow-y: auto;
+  padding: 0 4px 16px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+
+.networkChoice {
+  display: flex;
+  width: 100%;
+  min-height: 47px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: var(--color-text-soft);
+  text-align: left;
+  transition: background .13s ease, border-color .13s ease, color .13s ease;
+}
+
+.networkChoice:hover {
+  background: #fff;
+  color: var(--color-text);
+}
+
+.networkChoice[aria-pressed="true"] {
+  border-color: #c5e092;
+  background: #eef7dc;
+  color: var(--color-text);
+}
+
+.networkChoice strong {
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.networkMark,
+.allMark {
+  display: grid;
+  width: 31px;
+  height: 31px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  background: #fff;
+}
+
+.networkMark img { width: 23px; height: 23px; border-radius: 7px; object-fit: contain; }
+.allMark { font-family: var(--font-mono); font-size: 10px; letter-spacing: -2px; }
+
+.railLabel {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 15px 9px 6px;
+  color: var(--color-text-faint);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.railLabel::after { height: 1px; flex: 1; background: var(--color-border); content: ""; }
+
+.resultPanel {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.resultPanel .searchRow {
+  flex: 0 0 auto;
+  padding: 15px 18px 13px;
+}
+
+.resultPanel .searchBox {
+  height: 47px;
+  border-radius: 11px;
+}
+
+.resultPanel .methods {
+  flex: 1;
+  min-height: 0;
+  padding: 4px 12px 22px;
+}
+
+:global(html[data-theme="dark"]) .networkRail { background: #151515; }
+:global(html[data-theme="dark"]) .networkSearch,
+:global(html[data-theme="dark"]) .networkMark,
+:global(html[data-theme="dark"]) .allMark { background: #222; }
+:global(html[data-theme="dark"]) .networkChoice:hover { background: #202020; }
+:global(html[data-theme="dark"]) .networkChoice[aria-pressed="true"] { border-color: rgba(181,245,0,.3); background: rgba(181,245,0,.09); }
+
+@media (max-width: 700px) {
+  .body {
+    display: flex;
+    height: min(680px, calc(94vh - 113px));
+    min-height: 0;
+    flex-direction: column;
+  }
+
+  .networkRail {
+    flex: 0 0 auto;
+    padding: 10px 11px 8px;
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .networkSearch { height: 41px; margin-bottom: 8px; }
+  .networkList { display: flex; height: auto; gap: 6px; overflow-x: auto; overflow-y: hidden; padding: 0 3px 2px; scrollbar-width: none; }
+  .networkList::-webkit-scrollbar { display: none; }
+  .railLabel { display: none; }
+  .networkChoice { width: auto; min-width: max-content; min-height: 40px; gap: 7px; padding: 5px 9px 5px 6px; }
+  .networkMark, .allMark { width: 29px; height: 29px; }
+  .resultPanel { flex: 1; min-height: 0; }
+  .resultPanel .searchRow { padding: 10px 13px; }
+  .resultPanel .searchBox { height: 45px; }
+}
+
+@media (max-width: 420px) {
+  .networkSearch { display: none; }
+}
 </style>
