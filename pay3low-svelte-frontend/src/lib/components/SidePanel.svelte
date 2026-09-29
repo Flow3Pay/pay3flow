@@ -110,6 +110,13 @@
     image.onerror = null;
     image.src = venueIcon(provider);
   }
+  function fallbackFoundVenueIcon(event: Event) {
+    const image = event.currentTarget as HTMLImageElement;
+    image.onerror = null;
+    image.hidden = true;
+    const fallback = image.nextElementSibling as HTMLElement | null;
+    if (fallback) fallback.hidden = false;
+  }
 </script>
 
 <aside class="side active" aria-label="Found routes" aria-busy={searching} id="routes">
@@ -130,7 +137,8 @@
                   {@const status = venueStats[venue.id.toLowerCase()]}
                   <div class="foundVenue" data-testid="found-venue" style:animation-delay={`${index * 70}ms`}>
                     <button type="button" class="foundVenueButton" aria-label={`Show ${venue.label} response`}>
-                      <img src={venue.iconUrl} alt="" width="18" height="18" decoding="async" on:error={(event) => fallbackVenueIcon(event, venue.id)} />
+                      <img src={venue.iconUrl || venueIcon(venue.id)} alt="" width="18" height="18" decoding="async" on:error={fallbackFoundVenueIcon} />
+                      <span class="foundVenueFallback" aria-hidden="true" hidden>{venue.label.slice(0, 1).toUpperCase()}</span>
                     </button>
                     <div class="foundVenuePopover" role="tooltip">
                       <strong>{venue.label}</strong>
@@ -239,10 +247,10 @@
 <style>
 .side {
   position: relative;
-  z-index: 1;
+  z-index: 20;
   display: flex;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   font-family: var(--font-sans);
   opacity: 0;
   transform: translateX(10px);
@@ -262,7 +270,7 @@
   min-width: 0;
   flex-direction: column;
   padding: 20px;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: var(--radius-card);
   background: #1b1e1a;
@@ -282,6 +290,8 @@
 }
 
 .panelTop {
+  position: relative;
+  z-index: 40;
   min-height: 48px;
   align-items: flex-start;
   justify-content: space-between;
@@ -346,11 +356,14 @@
 }
 
 .foundVenues {
+  position: relative;
+  z-index: 41;
   gap: 4px;
 }
 
 .foundVenue {
   position: relative;
+  z-index: 1;
   display: grid;
   width: 24px;
   height: 24px;
@@ -373,24 +386,30 @@
   cursor: help;
 }
 
+.foundVenue:hover,
+.foundVenue:focus-within {
+  z-index: 50;
+}
+
 .foundVenuePopover {
   position: absolute;
   top: calc(100% + 10px);
-  right: 0;
-  z-index: 30;
+  left: 50%;
+  z-index: 100;
   display: grid;
-  width: 220px;
+  width: min(240px, calc(100vw - 32px));
+  box-sizing: border-box;
   gap: 7px;
   padding: 13px 14px;
   border: 1px solid var(--color-border-strong);
   border-radius: 14px;
-  background: var(--color-surface, #fff);
-  box-shadow: 0 14px 32px rgba(20, 24, 18, 0.2);
+  background: #fff;
+  box-shadow: 0 18px 42px rgba(20, 24, 18, 0.28);
   color: var(--color-text);
   font-size: 11px;
   opacity: 0;
   pointer-events: none;
-  transform: translateY(-4px);
+  transform: translate(-50%, -4px);
   transition: opacity 0.16s ease, transform 0.16s ease;
 }
 
@@ -398,7 +417,7 @@
 .foundVenue:focus-within .foundVenuePopover {
   opacity: 1;
   pointer-events: auto;
-  transform: translateY(0);
+  transform: translate(-50%, 0);
 }
 
 .foundVenuePopover > span {
@@ -425,11 +444,27 @@
 .foundVenuePopover dd { margin: 0; font-weight: 800; }
 .foundVenuePopover small { color: #b0443d; line-height: 1.35; }
 
+.foundVenuePopover strong {
+  color: #1c2419;
+  font-size: 12px;
+}
+
+.foundVenuePopover dt { color: #687464; }
+
+.foundVenuePopover dd { color: #1c2419; }
+
 .foundVenue img {
   width: 18px;
   height: 18px;
   border-radius: 6px;
   object-fit: contain;
+}
+
+.foundVenueFallback {
+  color: #49630c;
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1;
 }
 
 .panelTop strong {
@@ -1174,6 +1209,10 @@
   background: #f1f8df;
 }
 
+.foundVenuePopover {
+  border-color: #cbd8c1;
+}
+
 .skeletonShort,
 .skeletonLong,
 .skeletonMedium {
@@ -1272,6 +1311,27 @@
 :global(html[data-theme="dark"]) .foundVenue {
   border-color: rgba(181, 245, 0, 0.34);
   background: rgba(181, 245, 0, 0.09);
+}
+
+:global(html[data-theme="dark"]) .foundVenuePopover {
+  border-color: #4a5940;
+  background: #242821;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.56);
+  color: #f0f5ea;
+}
+
+:global(html[data-theme="dark"]) .foundVenuePopover strong,
+:global(html[data-theme="dark"]) .foundVenuePopover dd {
+  color: #f0f5ea;
+}
+
+:global(html[data-theme="dark"]) .foundVenuePopover > span,
+:global(html[data-theme="dark"]) .foundVenuePopover dt {
+  color: #aeb9a7;
+}
+
+:global(html[data-theme="dark"]) .foundVenueFallback {
+  color: #d8f59a;
 }
 
 :global(html[data-theme="dark"]) .routeBest,
