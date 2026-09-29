@@ -268,10 +268,21 @@
       for (const provider of providers) routeCounts.set(provider, (routeCounts.get(provider) ?? 0) + 1);
     }
     const observedVenueStats = new Map<string, VenueSearchStatus>();
+    const latencyTotals = new Map<string, { total: number; count: number }>();
     for (const status of (response.asset_statuses ?? []).flatMap((asset) => [...asset.entry_sources, ...asset.exit_sources])) {
       const id = status.source.toLowerCase();
       const previous = observedVenueStats.get(id);
-      observedVenueStats.set(id, { ...status, ok: (previous?.ok ?? true) && status.ok, latency_ms: Math.max(previous?.latency_ms ?? 0, status.latency_ms), offers_found: (previous?.offers_found ?? 0) + status.offers_found, routes_found: routeCounts.get(id) ?? 0 });
+      const latency = latencyTotals.get(id) ?? { total: 0, count: 0 };
+      latency.total += status.latency_ms;
+      latency.count += 1;
+      latencyTotals.set(id, latency);
+      observedVenueStats.set(id, {
+        ...status,
+        ok: (previous?.ok ?? true) && status.ok,
+        latency_ms: Math.round(latency.total / latency.count),
+        offers_found: (previous?.offers_found ?? 0) + status.offers_found,
+        routes_found: routeCounts.get(id) ?? 0,
+      });
     }
     const nextVenueStats = { ...venueStats };
     for (const [id, status] of observedVenueStats) {
