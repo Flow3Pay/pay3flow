@@ -12,5 +12,6 @@ pub mod payments;
 pub mod payments_ws;
 pub mod providers;
 pub mod rates;
+pub mod referrals;
 pub mod solver;
 pub mod ws;

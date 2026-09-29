@@ -17,7 +17,8 @@ use crate::exchange::status::{
 
 const SELECT_ORDER: &str = r#"
 SELECT id, user_id, idempotency_key, source_country, source_currency, source_amount_minor,
-       source_method_type, source_method_ref, target_country, target_currency,
+       pay3flow_fee_minor, pay3flow_fee_currency, source_method_type, source_method_ref,
+       target_country, target_currency,
        target_amount_min_minor, target_method_type, target_method_ref,
        funding_instruction_id, funding_status, status, correlation_id, deadline_at, selected_quote_id,
        failure_code, failure_message, created_at, updated_at
@@ -125,6 +126,13 @@ pub async fn create_order_idempotent(
         return Ok(existing);
     }
 
+    if order.pay3flow_fee_minor < 0
+        || order.pay3flow_fee_minor >= order.source_amount_minor
+        || order.pay3flow_fee_currency != order.source_currency
+    {
+        bail!("invalid Pay3Flow service fee snapshot");
+    }
+
     ensure_corridor_accepts_order(pool, order).await?;
 
     let inserted = insert_order(pool, order).await?;
@@ -211,12 +219,14 @@ async fn insert_order(pool: &DbPool, order: &NewExchangeOrder) -> Result<Option<
             r#"
 INSERT INTO exchange_orders
     (user_id, idempotency_key, source_country, source_currency, source_amount_minor,
-     source_method_type, source_method_ref, target_country, target_currency,
-     target_amount_min_minor, target_method_type, target_method_ref, deadline_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+     pay3flow_fee_minor, pay3flow_fee_currency, source_method_type, source_method_ref,
+     target_country, target_currency, target_amount_min_minor, target_method_type,
+     target_method_ref, deadline_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 ON CONFLICT (user_id, idempotency_key) DO NOTHING
 RETURNING id, user_id, idempotency_key, source_country, source_currency, source_amount_minor,
-          source_method_type, source_method_ref, target_country, target_currency,
+          pay3flow_fee_minor, pay3flow_fee_currency, source_method_type, source_method_ref,
+          target_country, target_currency,
           target_amount_min_minor, target_method_type, target_method_ref,
           funding_instruction_id, funding_status, status, correlation_id, deadline_at, selected_quote_id,
           failure_code, failure_message, created_at, updated_at
@@ -232,6 +242,8 @@ RETURNING id, user_id, idempotency_key, source_country, source_currency, source_
                 &order.source_country,
                 &order.source_currency,
                 &order.source_amount_minor,
+                &order.pay3flow_fee_minor,
+                &order.pay3flow_fee_currency,
                 &order.source_method_type,
                 &order.source_method_ref,
                 &order.target_country,
@@ -552,7 +564,7 @@ SET selected_quote_id = $2,
     updated_at = now()
 WHERE id = $1 AND status = $4
 RETURNING id, user_id, idempotency_key, source_country, source_currency, source_amount_minor,
-          source_method_type, source_method_ref, target_country, target_currency,
+          pay3flow_fee_minor, pay3flow_fee_currency, source_method_type, source_method_ref, target_country, target_currency,
           target_amount_min_minor, target_method_type, target_method_ref,
           funding_instruction_id, funding_status, status, correlation_id, deadline_at, selected_quote_id,
           failure_code, failure_message, created_at, updated_at
@@ -739,7 +751,7 @@ SET funding_instruction_id = $2,
     updated_at = now()
 WHERE id = $1 AND status = $6
 RETURNING id, user_id, idempotency_key, source_country, source_currency, source_amount_minor,
-          source_method_type, source_method_ref, target_country, target_currency,
+          pay3flow_fee_minor, pay3flow_fee_currency, source_method_type, source_method_ref, target_country, target_currency,
           target_amount_min_minor, target_method_type, target_method_ref,
           funding_instruction_id, funding_status, status, correlation_id, deadline_at, selected_quote_id,
           failure_code, failure_message, created_at, updated_at
@@ -824,7 +836,7 @@ UPDATE exchange_orders
 SET funding_status = $2, updated_at = now()
 WHERE id = $1
 RETURNING id, user_id, idempotency_key, source_country, source_currency, source_amount_minor,
-          source_method_type, source_method_ref, target_country, target_currency,
+          pay3flow_fee_minor, pay3flow_fee_currency, source_method_type, source_method_ref, target_country, target_currency,
           target_amount_min_minor, target_method_type, target_method_ref,
           funding_instruction_id, funding_status, status, correlation_id, deadline_at, selected_quote_id,
           failure_code, failure_message, created_at, updated_at
@@ -1073,7 +1085,7 @@ SET status = $2,
     updated_at = now()
 WHERE id = $1
 RETURNING id, user_id, idempotency_key, source_country, source_currency, source_amount_minor,
-          source_method_type, source_method_ref, target_country, target_currency,
+          pay3flow_fee_minor, pay3flow_fee_currency, source_method_type, source_method_ref, target_country, target_currency,
           target_amount_min_minor, target_method_type, target_method_ref,
           funding_instruction_id, funding_status, status, correlation_id, deadline_at, selected_quote_id,
           failure_code, failure_message, created_at, updated_at
@@ -1236,7 +1248,7 @@ SET status = $2,
     updated_at = now()
 WHERE id = $1
 RETURNING id, user_id, idempotency_key, source_country, source_currency, source_amount_minor,
-          source_method_type, source_method_ref, target_country, target_currency,
+          pay3flow_fee_minor, pay3flow_fee_currency, source_method_type, source_method_ref, target_country, target_currency,
           target_amount_min_minor, target_method_type, target_method_ref,
           funding_instruction_id, funding_status, status, correlation_id, deadline_at, selected_quote_id,
           failure_code, failure_message, created_at, updated_at
@@ -1250,6 +1262,10 @@ RETURNING id, user_id, idempotency_key, source_country, source_currency, source_
         )
         .await?;
     let order = row_to_order(order_row);
+
+    if valid {
+        crate::referrals::credit_completed_exchange(&tx, &order).await?;
+    }
 
     tx.commit().await?;
     audit_order_event(
@@ -1416,7 +1432,7 @@ SET status = $2,
     updated_at = now()
 WHERE id = $1
 RETURNING id, user_id, idempotency_key, source_country, source_currency, source_amount_minor,
-          source_method_type, source_method_ref, target_country, target_currency,
+          pay3flow_fee_minor, pay3flow_fee_currency, source_method_type, source_method_ref, target_country, target_currency,
           target_amount_min_minor, target_method_type, target_method_ref,
           funding_instruction_id, funding_status, status, correlation_id, deadline_at, selected_quote_id,
           failure_code, failure_message, created_at, updated_at
@@ -1614,24 +1630,26 @@ fn row_to_order(row: tokio_postgres::Row) -> ExchangeOrder {
         source_country: row.get(3),
         source_currency: row.get(4),
         source_amount_minor: row.get::<_, Minor>(5),
-        source_method_type: row.get(6),
-        source_method_ref: row.try_get::<_, Option<String>>(7).ok().flatten(),
-        target_country: row.get(8),
-        target_currency: row.get(9),
-        target_amount_min_minor: row.try_get::<_, Option<Minor>>(10).ok().flatten(),
-        target_method_type: row.get(11),
-        target_method_ref: row.try_get::<_, Option<String>>(12).ok().flatten(),
-        funding_instruction_id: row.try_get::<_, Option<Uuid>>(13).ok().flatten(),
-        funding_status: FundingInstructionStatus::parse(&row.get::<_, String>(14))
+        pay3flow_fee_minor: row.get::<_, Minor>(6),
+        pay3flow_fee_currency: row.get(7),
+        source_method_type: row.get(8),
+        source_method_ref: row.try_get::<_, Option<String>>(9).ok().flatten(),
+        target_country: row.get(10),
+        target_currency: row.get(11),
+        target_amount_min_minor: row.try_get::<_, Option<Minor>>(12).ok().flatten(),
+        target_method_type: row.get(13),
+        target_method_ref: row.try_get::<_, Option<String>>(14).ok().flatten(),
+        funding_instruction_id: row.try_get::<_, Option<Uuid>>(15).ok().flatten(),
+        funding_status: FundingInstructionStatus::parse(&row.get::<_, String>(16))
             .unwrap_or(FundingInstructionStatus::NotStarted),
-        status: OrderStatus::parse(&row.get::<_, String>(15)).unwrap_or(OrderStatus::Created),
-        correlation_id: row.get(16),
-        deadline_at: row.try_get::<_, Option<DateTime<Utc>>>(17).ok().flatten(),
-        selected_quote_id: row.try_get::<_, Option<Uuid>>(18).ok().flatten(),
-        failure_code: row.try_get::<_, Option<String>>(19).ok().flatten(),
-        failure_message: row.try_get::<_, Option<String>>(20).ok().flatten(),
-        created_at: row.get::<_, DateTime<Utc>>(21),
-        updated_at: row.get::<_, DateTime<Utc>>(22),
+        status: OrderStatus::parse(&row.get::<_, String>(17)).unwrap_or(OrderStatus::Created),
+        correlation_id: row.get(18),
+        deadline_at: row.try_get::<_, Option<DateTime<Utc>>>(19).ok().flatten(),
+        selected_quote_id: row.try_get::<_, Option<Uuid>>(20).ok().flatten(),
+        failure_code: row.try_get::<_, Option<String>>(21).ok().flatten(),
+        failure_message: row.try_get::<_, Option<String>>(22).ok().flatten(),
+        created_at: row.get::<_, DateTime<Utc>>(23),
+        updated_at: row.get::<_, DateTime<Utc>>(24),
     }
 }
 

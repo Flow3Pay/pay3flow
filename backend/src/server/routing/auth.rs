@@ -12,6 +12,7 @@ use crate::service::user::{self, UserError};
 pub struct RegisterReq {
     pub email: String,
     pub code: String,
+    pub referral_code: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -29,15 +30,21 @@ pub struct AuthRes {
 pub struct UserRes {
     pub id: String,
     pub email: String,
+    pub referral_code: String,
 }
 
 pub async fn register(
     State(state): State<AppState>,
     Json(req): Json<RegisterReq>,
 ) -> Result<Json<AuthRes>, AppError> {
-    let id = user::register_user(&state.pool, &req.email, &req.code)
-        .await
-        .map_err(map_user_err)?;
+    let id = user::register_user(
+        &state.pool,
+        &req.email,
+        &req.code,
+        req.referral_code.as_deref(),
+    )
+    .await
+    .map_err(map_user_err)?;
     Ok(Json(AuthRes {
         token: state.jwt.sign(&id.to_string())?,
     }))
@@ -64,6 +71,7 @@ pub async fn me(
     Ok(Json(UserRes {
         id: user.id.to_string(),
         email: user.email,
+        referral_code: user.referral_code,
     }))
 }
 
@@ -85,6 +93,7 @@ fn map_user_err(err: UserError) -> AppError {
         UserError::InvalidEmail => AppError::BadRequest("invalid email".into()),
         UserError::NotFound => AppError::NotFound("user not found".into()),
         UserError::AlreadyExists => AppError::Conflict("email already registered".into()),
+        UserError::InvalidReferralCode => AppError::BadRequest("invalid referral code".into()),
         UserError::Other(inner) => AppError::Internal(inner),
     }
 }

@@ -10,10 +10,18 @@ GET  /health
 POST /api/auth/register
 POST /api/auth/login
 GET  /api/auth/me
+GET  /api/referrals/me
 ```
 
 The development auth flow uses an email and demo code. It is not a production
 identity or account-verification system.
+
+Registration accepts an optional `referral_code`. Attribution is permanent and
+must be set when the referred account is created. `GET /api/referrals/me`
+returns the caller's share code, direct and total network counts, balances by
+currency, and recent commissions. A direct referrer earns 10% of Pay3Flow's
+service fee after a referred exchange reaches `done`; retries cannot create a
+duplicate commission for the same order.
 
 ## Exchange order lifecycle
 

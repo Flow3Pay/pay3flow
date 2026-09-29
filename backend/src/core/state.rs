@@ -26,6 +26,8 @@ pub struct AppState {
     pub banks: BanksService,
     /// Bearer token guarding the admin endpoints (PLAN 46e).
     pub admin_token: String,
+    /// Pay3Flow's fee percentage, snapshotted onto each exchange order.
+    pub service_fee_percent: f64,
     /// Optional Redis pool for fmatch candidate caching (PLAN #37d).
     pub redis: Option<RedisPool>,
     /// Read-only fan-out search over public P2P advertisement boards.
@@ -51,6 +53,7 @@ impl AppState {
         pairs: ExchangePairsService,
         banks: BanksService,
         admin_token: String,
+        service_fee_percent: f64,
         redis: Option<RedisPool>,
         p2p: P2pSearchService,
         route_engine: RouteEngine,
@@ -67,6 +70,7 @@ impl AppState {
             pairs,
             banks,
             admin_token,
+            service_fee_percent,
             redis,
             p2p,
             route_engine,

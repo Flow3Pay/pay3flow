@@ -381,7 +381,7 @@ fn build_live_quote(
     profile: &MockRouteProfile,
 ) -> Result<NewExchangeQuote> {
     let target_amount_minor =
-        order.source_amount_minor * profile.rate_bps / 10_000 - profile.fee_minor;
+        order.net_source_amount_minor() * profile.rate_bps / 10_000 - profile.fee_minor;
     if target_amount_minor <= 0 {
         bail!("route target amount is not positive");
     }
@@ -609,6 +609,8 @@ mod tests {
             source_country: "AM".into(),
             source_currency: "AMD".into(),
             source_amount_minor: 100_000,
+            pay3flow_fee_minor: 0,
+            pay3flow_fee_currency: "AMD".into(),
             source_method_type: "card".into(),
             source_method_ref: None,
             target_country: "RU".into(),

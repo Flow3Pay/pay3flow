@@ -121,12 +121,23 @@ pub async fn create_order(
     let idempotency_key = idempotency_key(&headers)?;
     validate_create_order(&req)?;
 
+    let source_currency = normalized_code(req.source_currency);
+    let pay3flow_fee_minor =
+        crate::payments::fees::percent_ceil(req.source_amount_minor, state.service_fee_percent);
+    if pay3flow_fee_minor >= req.source_amount_minor {
+        return Err(AppError::BadRequest(
+            "Pay3Flow service fee must be lower than the source amount".into(),
+        ));
+    }
+
     let order = NewExchangeOrder {
         user_id,
         idempotency_key,
         source_country: normalized_code(req.source_country),
-        source_currency: normalized_code(req.source_currency),
+        source_currency: source_currency.clone(),
         source_amount_minor: req.source_amount_minor,
+        pay3flow_fee_minor,
+        pay3flow_fee_currency: source_currency,
         source_method_type: req.source_method_type.trim().to_string(),
         source_method_ref: clean_optional(req.source_method_ref),
         target_country: normalized_code(req.target_country),
@@ -859,6 +870,8 @@ mod tests {
             source_country: "AM".into(),
             source_currency: "AMD".into(),
             source_amount_minor: 1000,
+            pay3flow_fee_minor: 0,
+            pay3flow_fee_currency: "AMD".into(),
             source_method_type: "card".into(),
             source_method_ref: None,
             target_country: "RU".into(),

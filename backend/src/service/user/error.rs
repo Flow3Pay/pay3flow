@@ -8,6 +8,8 @@ pub enum UserError {
     NotFound,
     #[error("email already registered")]
     AlreadyExists,
+    #[error("invalid referral code")]
+    InvalidReferralCode,
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }

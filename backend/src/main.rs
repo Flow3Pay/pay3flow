@@ -153,6 +153,7 @@ async fn main() -> anyhow::Result<()> {
         pairs,
         banks,
         cfg.admin_token,
+        cfg.service_fee_percent,
         redis_pool,
         p2p,
         route_engine,

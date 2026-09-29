@@ -386,6 +386,9 @@ WHERE id = $1 AND status = 'disputed'
     if changed != 1 {
         bail!("disputed exchange order changed during manual resolution");
     }
+    if outcome == OrderStatus::Done {
+        crate::referrals::credit_completed_exchange(&tx, order).await?;
+    }
     tx.commit().await?;
     let updated = repo::order_by_id(pool, &order.id)
         .await?

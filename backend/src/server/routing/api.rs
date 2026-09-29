@@ -15,7 +15,7 @@ use crate::core::state::AppState;
 use crate::server::openapi;
 use crate::server::routing::{
     activitypub, auth, banks, exchange, matcher, networks, oauth, p2p, pairs, payments,
-    payments_ws, providers, rates, solver, ws,
+    payments_ws, providers, rates, referrals, solver, ws,
 };
 
 pub fn router(state: AppState) -> Router {
@@ -48,6 +48,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/auth/register", post(auth::register))
         .route("/api/auth/login", post(auth::login))
         .route("/api/auth/me", get(auth::me))
+        .route("/api/referrals/me", get(referrals::profile))
         .route("/api/auth/oauth/{provider}", post(oauth::oauth))
         .route("/ws", get(ws::ws_handler))
         .route("/ws/rates", get(rates::rates_ws))

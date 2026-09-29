@@ -142,6 +142,35 @@ export interface RouteFeedback {
   viewer_vote?: ServiceVote;
 }
 
+export interface ReferralBalance {
+  currency: string;
+  available_minor: number;
+  paid_minor: number;
+  total_earned_minor: number;
+}
+
+export interface ReferralCommission {
+  id: string;
+  referred_user_id: string;
+  order_id: string;
+  service_fee_minor: number;
+  commission_bps: number;
+  amount_minor: number;
+  currency: string;
+  status: "available" | "paid" | "reversed";
+  created_at: string;
+  paid_at?: string | null;
+}
+
+export interface ReferralProfile {
+  referral_code: string;
+  commission_bps: number;
+  direct_referrals: number;
+  network_size: number;
+  balances: ReferralBalance[];
+  recent_commissions: ReferralCommission[];
+}
+
 export interface CombinedReputation {
   executions_average: number;
   likes_average: number;
@@ -318,8 +347,8 @@ async function request<T>(
   return (await response.json()) as T;
 }
 
-export async function authenticate(email: string, code: string): Promise<string> {
-  const body = JSON.stringify({ email, code });
+export async function authenticate(email: string, code: string, referralCode?: string): Promise<string> {
+  const body = JSON.stringify({ email, code, referral_code: referralCode || undefined });
   const login = await fetch(apiUrl("/api/auth/login"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -332,6 +361,10 @@ export async function authenticate(email: string, code: string): Promise<string>
     body,
   });
   return registered.token;
+}
+
+export function fetchReferralProfile(token: string): Promise<ReferralProfile> {
+  return request("/api/referrals/me", {}, token);
 }
 
 export function fetchCorridors(): Promise<CorridorsResponse> {

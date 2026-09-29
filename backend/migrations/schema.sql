@@ -1,8 +1,27 @@
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email TEXT NOT NULL UNIQUE,
+    referral_code TEXT NOT NULL UNIQUE
+        DEFAULT upper(substr(replace(gen_random_uuid()::TEXT, '-', ''), 1, 16)),
+    referred_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    referred_at TIMESTAMPTZ,
+    CHECK (referred_by_user_id IS NULL OR referred_by_user_id <> id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Self-heal user tables created before referrals were introduced. Referral
+-- attribution is immutable in application code and may only be set when the
+-- user is created.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_at TIMESTAMPTZ;
+UPDATE users
+SET referral_code = upper(substr(replace(id::TEXT, '-', ''), 1, 16))
+WHERE referral_code IS NULL;
+ALTER TABLE users ALTER COLUMN referral_code SET DEFAULT upper(substr(replace(gen_random_uuid()::TEXT, '-', ''), 1, 16));
+ALTER TABLE users ALTER COLUMN referral_code SET NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS users_referral_code_idx ON users (referral_code);
+CREATE INDEX IF NOT EXISTS users_referred_by_idx ON users (referred_by_user_id, created_at);
 
 -- Public service adoption and reputation. Counters are materialized so route
 -- search responses can include them without aggregating the event tables.
@@ -362,6 +381,8 @@ CREATE TABLE IF NOT EXISTS exchange_orders (
     source_country TEXT NOT NULL,
     source_currency TEXT NOT NULL,
     source_amount_minor BIGINT NOT NULL,
+    pay3flow_fee_minor BIGINT NOT NULL DEFAULT 0 CHECK (pay3flow_fee_minor >= 0),
+    pay3flow_fee_currency TEXT NOT NULL DEFAULT '',
     source_method_type TEXT NOT NULL,
     source_method_ref TEXT,
     target_country TEXT NOT NULL,
@@ -388,8 +409,32 @@ CREATE INDEX IF NOT EXISTS exchange_orders_status_created_idx
     ON exchange_orders (status, created_at);
 
 ALTER TABLE exchange_orders ADD COLUMN IF NOT EXISTS correlation_id UUID NOT NULL DEFAULT gen_random_uuid();
+ALTER TABLE exchange_orders ADD COLUMN IF NOT EXISTS pay3flow_fee_minor BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE exchange_orders ADD COLUMN IF NOT EXISTS pay3flow_fee_currency TEXT NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS exchange_orders_correlation_idx
     ON exchange_orders (correlation_id);
+
+-- One immutable commission per completed referred exchange. Amounts use the
+-- same minor unit and currency as the snapshotted Pay3Flow fee on the order.
+CREATE TABLE IF NOT EXISTS referral_commissions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    referrer_user_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    referred_user_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    order_id UUID NOT NULL UNIQUE REFERENCES exchange_orders(id) ON DELETE RESTRICT,
+    service_fee_minor BIGINT NOT NULL CHECK (service_fee_minor > 0),
+    commission_bps INTEGER NOT NULL CHECK (commission_bps > 0 AND commission_bps <= 10000),
+    amount_minor BIGINT NOT NULL CHECK (amount_minor > 0 AND amount_minor <= service_fee_minor),
+    currency TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'available'
+        CHECK (status IN ('available', 'paid', 'reversed')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    paid_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS referral_commissions_referrer_idx
+    ON referral_commissions (referrer_user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS referral_commissions_referred_idx
+    ON referral_commissions (referred_user_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS exchange_solvers (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

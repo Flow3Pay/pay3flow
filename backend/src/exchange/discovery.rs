@@ -375,6 +375,8 @@ mod tests {
             source_country: "AM".into(),
             source_currency: "AMD".into(),
             source_amount_minor: 100_000,
+            pay3flow_fee_minor: 0,
+            pay3flow_fee_currency: "AMD".into(),
             source_method_type: "card".into(),
             source_method_ref: None,
             target_country: "RU".into(),

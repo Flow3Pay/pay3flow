@@ -211,7 +211,7 @@ fn build_quote(
         }
     }
 
-    let gross_target = order.source_amount_minor * profile.rate_bps / 10_000;
+    let gross_target = order.net_source_amount_minor() * profile.rate_bps / 10_000;
     let target_amount_minor = gross_target - profile.fee_minor;
     let quote = NewExchangeQuote {
         order_id: order.id,
@@ -282,6 +282,8 @@ mod tests {
             source_country: "AM".into(),
             source_currency: "AMD".into(),
             source_amount_minor: 100_000,
+            pay3flow_fee_minor: 0,
+            pay3flow_fee_currency: "AMD".into(),
             source_method_type: "card".into(),
             source_method_ref: None,
             target_country: "RU".into(),
@@ -348,6 +350,21 @@ mod tests {
         assert_eq!(quote.solver_id, solver.id);
         assert_eq!(quote.target_amount_minor, 19_700);
         assert_eq!(quote.status, QuoteStatus::Valid);
+    }
+
+    #[test]
+    fn quote_uses_source_amount_after_pay3flow_fee() {
+        let mut order = order(OrderStatus::Quoting);
+        order.pay3flow_fee_minor = 700;
+        let solver = solver(SolverStatus::Active, FAST_LOW_LIMIT_SLUG);
+        let profile = MockRouteQuoteSource::default()
+            .profile_for(&solver)
+            .expect("database fee model is valid");
+
+        let quote = build_quote(&order, &solver, &profile, Utc::now()).expect("valid quote");
+
+        assert_eq!(order.net_source_amount_minor(), 99_300);
+        assert_eq!(quote.target_amount_minor, 19_560);
     }
 
     #[tokio::test]

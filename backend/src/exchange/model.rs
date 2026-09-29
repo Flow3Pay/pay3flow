@@ -33,6 +33,8 @@ pub struct NewExchangeOrder {
     pub source_country: String,
     pub source_currency: String,
     pub source_amount_minor: Minor,
+    pub pay3flow_fee_minor: Minor,
+    pub pay3flow_fee_currency: String,
     pub source_method_type: String,
     pub source_method_ref: Option<String>,
     pub target_country: String,
@@ -51,6 +53,8 @@ pub struct ExchangeOrder {
     pub source_country: String,
     pub source_currency: String,
     pub source_amount_minor: Minor,
+    pub pay3flow_fee_minor: Minor,
+    pub pay3flow_fee_currency: String,
     pub source_method_type: String,
     pub source_method_ref: Option<String>,
     pub target_country: String,
@@ -68,6 +72,14 @@ pub struct ExchangeOrder {
     pub failure_message: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+impl ExchangeOrder {
+    /// Source amount available to the selected solver after Pay3Flow's fee.
+    pub fn net_source_amount_minor(&self) -> Minor {
+        self.source_amount_minor
+            .saturating_sub(self.pay3flow_fee_minor)
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

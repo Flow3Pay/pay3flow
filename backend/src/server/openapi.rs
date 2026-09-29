@@ -23,6 +23,7 @@ fn api_document() -> Value {
         "tags": [
             { "name": "System", "description": "Health and metrics endpoints." },
             { "name": "Authentication", "description": "Create a user session and inspect the current user. The returned JWT is used by protected endpoints." },
+            { "name": "Referrals", "description": "Direct referral attribution and commission balances." },
             { "name": "Payments", "description": "Create and monitor one-step payments." },
             { "name": "Exchange", "description": "Create an exchange order, discover solvers, select a quote and track settlement." },
             { "name": "Solver", "description": "Solver-facing order and quote endpoints." },
@@ -59,7 +60,8 @@ fn components() -> Value {
                 "required": ["email", "code"],
                 "properties": {
                     "email": { "type": "string", "format": "email", "example": "user@example.com" },
-                    "code": { "type": "string", "description": "One-time code delivered to the email address.", "example": "123456" }
+                    "code": { "type": "string", "description": "One-time code delivered to the email address.", "example": "123456" },
+                    "referral_code": { "type": "string", "description": "Optional inviter code, accepted only when a new account is registered.", "example": "A1B2C3D4E5F60718" }
                 }
             },
             "AuthToken": {
@@ -69,10 +71,11 @@ fn components() -> Value {
             },
             "User": {
                 "type": "object",
-                "required": ["id", "email"],
+                "required": ["id", "email", "referral_code"],
                 "properties": {
                     "id": { "type": "string", "format": "uuid" },
-                    "email": { "type": "string", "format": "email" }
+                    "email": { "type": "string", "format": "email" },
+                    "referral_code": { "type": "string" }
                 }
             },
             "NewPayment": {
@@ -167,6 +170,8 @@ fn components() -> Value {
                     "funding_status": { "type": "string" },
                     "source_currency": { "type": "string" },
                     "source_amount_minor": { "type": "integer", "format": "int64" },
+                    "pay3flow_fee_minor": { "type": "integer", "format": "int64", "description": "Pay3Flow service fee in the source currency." },
+                    "pay3flow_fee_currency": { "type": "string" },
                     "target_currency": { "type": "string" },
                     "target_amount_min_minor": { "type": "integer", "format": "int64", "nullable": true },
                     "selected_quote_id": { "type": "string", "format": "uuid", "nullable": true },
@@ -194,6 +199,18 @@ fn components() -> Value {
                 "properties": {
                     "proof_type": { "type": "string", "example": "bank_transfer_receipt" },
                     "proof_payload": { "type": "object", "additionalProperties": true }
+                }
+            },
+            "ReferralProfile": {
+                "type": "object",
+                "required": ["referral_code", "commission_bps", "direct_referrals", "network_size", "balances", "recent_commissions"],
+                "properties": {
+                    "referral_code": { "type": "string" },
+                    "commission_bps": { "type": "integer", "example": 1000, "description": "Direct-referral share of Pay3Flow's service fee in basis points." },
+                    "direct_referrals": { "type": "integer", "format": "int64" },
+                    "network_size": { "type": "integer", "format": "int64", "description": "All descendants in the referral tree; commission is paid only for direct referrals." },
+                    "balances": { "type": "array", "items": { "$ref": "#/components/schemas/JsonObject" } },
+                    "recent_commissions": { "type": "array", "items": { "$ref": "#/components/schemas/JsonObject" } }
                 }
             },
             "JsonObject": { "type": "object", "additionalProperties": true },
@@ -263,6 +280,15 @@ const OPERATIONS: &[Operation] = &[
         "Current user",
         "Return the authenticated user.",
         "Authentication",
+        false,
+        true,
+    ),
+    (
+        "/api/referrals/me",
+        "get",
+        "Referral network",
+        "Return the caller's invite code, network counts, per-currency balances, and recent direct-referral commissions.",
+        "Referrals",
         false,
         true,
     ),
@@ -910,6 +936,7 @@ fn response_schema(path: &str, method: &str) -> Value {
         | ("/api/auth/login", "post")
         | ("/api/auth/oauth/{provider}", "post") => schema_ref("AuthToken"),
         ("/api/auth/me", "get") => schema_ref("User"),
+        ("/api/referrals/me", "get") => schema_ref("ReferralProfile"),
         ("/api/payments", "post") | ("/api/payments/{id}", "get") => schema_ref("PaymentView"),
         ("/api/payments", "get") => array_schema("PaymentView"),
         ("/api/exchange/orders", "post")
@@ -1008,5 +1035,19 @@ mod tests {
         let document = api_document();
         let operation = &document["paths"]["/api/admin/exchange/controls"]["post"];
         assert!(operation["security"][0]["adminBearerAuth"].is_array());
+    }
+
+    #[test]
+    fn documents_referral_registration_and_profile() {
+        let document = api_document();
+        assert!(
+            document["components"]["schemas"]["AuthCodeRequest"]["properties"]["referral_code"]
+                .is_object()
+        );
+        assert_eq!(
+            document["paths"]["/api/referrals/me"]["get"]["responses"]["200"]["content"]
+                ["application/json"]["schema"]["$ref"],
+            "#/components/schemas/ReferralProfile"
+        );
     }
 }
