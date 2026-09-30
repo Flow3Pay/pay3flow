@@ -1840,20 +1840,7 @@ fn response_snapshot(
     for (index, route) in visible_routes.iter_mut().enumerate() {
         route.rank = index + 1;
     }
-    let has_fmatch = asset_statuses.iter().any(|status| {
-        status
-            .entry_sources
-            .iter()
-            .chain(status.exit_sources.iter())
-            .any(|source| source.source == "fmatch")
-    });
-    let stale = asset_statuses.iter().any(|status| {
-        status
-            .entry_sources
-            .iter()
-            .chain(status.exit_sources.iter())
-            .any(|source| source.source == "fmatch" && !source.ok)
-    });
+    let (source, stale) = route_discovery_source(asset_statuses);
     P2pRouteSearchResponse {
         search_id,
         routes_found,
@@ -1865,14 +1852,35 @@ fn response_snapshot(
         can_exchange_to_target: routes_found > 0,
         routes: visible_routes,
         asset_statuses: asset_statuses.to_vec(),
-        source: if stale {
-            "database_cache".into()
-        } else if has_fmatch {
-            "fmatch".into()
-        } else {
-            "provider".into()
-        },
+        source: source.into(),
         stale,
+    }
+}
+
+fn route_discovery_source(asset_statuses: &[RouteAssetStatus]) -> (&'static str, bool) {
+    let sources = asset_statuses.iter().flat_map(|status| {
+        status
+            .entry_sources
+            .iter()
+            .chain(status.exit_sources.iter())
+    });
+    let (mut has_fmatch, mut failed_fmatch, mut has_provider) = (false, false, false);
+    for source in sources {
+        if source.source == "fmatch" {
+            has_fmatch = true;
+            failed_fmatch |= !source.ok;
+        } else {
+            has_provider = true;
+        }
+    }
+    if failed_fmatch && has_provider {
+        ("provider_fallback", false)
+    } else if failed_fmatch {
+        ("database_cache", true)
+    } else if has_fmatch {
+        ("fmatch", false)
+    } else {
+        ("provider", false)
     }
 }
 
@@ -2694,6 +2702,42 @@ mod tests {
     struct FixedIntentProvider;
 
     struct FixedFiatRouteProvider;
+
+    #[test]
+    fn route_snapshot_distinguishes_live_fallback_from_stale_cache() {
+        let failed_fmatch = SourceStatus {
+            source: "fmatch".into(),
+            ok: false,
+            latency_ms: 0,
+            offers_found: 0,
+            error: Some("no offers".into()),
+        };
+        let live_provider = SourceStatus {
+            source: "bybit".into(),
+            ok: true,
+            latency_ms: 10,
+            offers_found: 20,
+            error: None,
+        };
+        let status = |entry_sources| RouteAssetStatus {
+            asset: "USDT".into(),
+            entry_offers: 20,
+            exit_offers: 0,
+            routes_built: 20,
+            can_exchange_to_target: true,
+            entry_sources,
+            exit_sources: Vec::new(),
+        };
+
+        assert_eq!(
+            route_discovery_source(&[status(vec![failed_fmatch.clone(), live_provider])]),
+            ("provider_fallback", false)
+        );
+        assert_eq!(
+            route_discovery_source(&[status(vec![failed_fmatch])]),
+            ("database_cache", true)
+        );
+    }
 
     #[async_trait]
     impl PublicFiatRouteProvider for FixedFiatRouteProvider {

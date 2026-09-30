@@ -31,6 +31,8 @@ considered usable. If neither Fmatch nor the bounded-stale database cache can
 provide offers, Pay3Flow queries its live providers and returns
 `source: "provider_fallback"` with the Fmatch rejection recorded in
 `sources`; provider-only local searches retain `source: "provider"`.
+Route-search snapshots use the same source labels and mark `stale: true` only
+when results actually came from the bounded-stale database cache.
 
 The public website endpoints can change without notice. Keep the adapters
 enabled, monitor `sources[].ok`, and do not treat a search result as a firm
