@@ -34,22 +34,22 @@
     width: 100%;
     align-items: center;
     gap: 11px;
-    padding: 9px 10px;
+    padding: 10px 11px;
     border: 1px solid transparent;
-    border-radius: 8px;
+    border-radius: var(--radius-panel);
     text-align: left;
     contain: layout paint;
     transition: background 0.13s ease, border-color 0.13s ease, box-shadow 0.13s ease;
   }
 
   .optionCard:hover {
-    border-color: #dae2d2;
-    background: #f3f7ec;
+    border-color: var(--color-border-strong);
+    background: var(--color-panel-soft);
   }
 
   .optionCard[data-selected] {
-    border-color: #c5e092;
-    background: #eef7dc;
+    border-color: var(--color-accent-strong);
+    background: var(--color-accent-soft);
   }
 
   .optionLogo {
@@ -102,17 +102,17 @@
 
   .check {
     flex: 0 0 auto;
-    color: #5c8c13;
+    color: var(--color-accent-strong);
   }
 
   :global(html[data-theme="dark"]) .optionCard:hover {
-    border-color: #4b4b4b;
-    background: #2d2d2d;
+    border-color: var(--color-border-strong);
+    background: var(--color-panel-soft);
   }
 
   :global(html[data-theme="dark"]) .optionCard[data-selected] {
-    border-color: rgba(181, 245, 0, 0.32);
-    background: rgba(181, 245, 0, 0.09);
+    border-color: var(--color-accent-strong);
+    background: var(--color-accent-soft);
   }
 
   :global(html[data-theme="dark"]) .optionLogo {
