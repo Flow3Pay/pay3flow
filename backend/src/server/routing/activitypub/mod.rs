@@ -19,7 +19,12 @@ pub async fn webfinger(
     } else {
         resource.clone()
     };
-    Json(state.ap.identity.webfinger(&resource_for_profile))
+    let identity = if resource_for_profile.contains(&state.ap.p2p_identity.handle) {
+        &state.ap.p2p_identity
+    } else {
+        &state.ap.identity
+    };
+    Json(identity.webfinger(&resource_for_profile))
 }
 
 #[derive(serde::Deserialize)]
@@ -29,12 +34,13 @@ pub struct WebfingerQuery {
 
 pub async fn actor_collection(State(state): State<AppState>) -> Json<Value> {
     let id = &state.ap.identity.actor_id;
+    let p2p_id = &state.ap.p2p_identity.actor_id;
     Json(json!({
         "@context": "https://www.w3.org/ns/activitystreams",
         "id": id,
         "type": "OrderedCollection",
-        "totalItems": 1,
-        "orderedItems": [id],
+        "totalItems": 2,
+        "orderedItems": [id, p2p_id],
     }))
 }
 
@@ -42,20 +48,23 @@ pub async fn actor_document(State(state): State<AppState>) -> Json<Value> {
     Json(state.ap.identity.to_document())
 }
 
-/// `/actor/:handle` — serve the actor document for any handle (we have one).
+/// `/actor/:handle` — serve one of Pay3Flow's marketplace actors.
 pub async fn actor_document_by_handle(
     State(state): State<AppState>,
     Path(handle): Path<String>,
 ) -> Response {
     tracing::debug!(%handle, "actor_document_by_handle");
-    if handle != state.ap.identity.handle {
-        return (
+    if handle == state.ap.identity.handle {
+        Json(state.ap.identity.to_document()).into_response()
+    } else if handle == state.ap.p2p_identity.handle {
+        Json(state.ap.p2p_identity.to_p2p_document()).into_response()
+    } else {
+        (
             StatusCode::NOT_FOUND,
             Json(json!({"error": "actor not found"})),
         )
-            .into_response();
+            .into_response()
     }
-    Json(state.ap.identity.to_document()).into_response()
 }
 
 pub async fn exchange_resource(State(state): State<AppState>) -> Json<Value> {

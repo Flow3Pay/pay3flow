@@ -204,6 +204,30 @@ async fn main() -> anyhow::Result<()> {
             }
             Err(e) => tracing::warn!(error = %e, "self-seed follow failed"),
         }
+        let p2p_follow = pay3flow_backend::activitypub::model::follow_activity(
+            &format!(
+                "{}/seed/{}",
+                self_seed.p2p_identity.actor_id,
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0)
+            ),
+            &self_seed.p2p_identity.actor_id,
+            &self_seed.fmatch_actor_id,
+        );
+        match self_seed
+            .delivery
+            .deliver(
+                &self_seed.p2p_identity,
+                &self_seed.fmatch_inbox,
+                &p2p_follow,
+            )
+            .await
+        {
+            Ok(outcome) => tracing::info!(?outcome, "P2P actor follow"),
+            Err(error) => tracing::warn!(%error, "P2P actor follow failed"),
+        }
         loop {
             match route_near.load_supported_tokens().await {
                 Ok(tokens) => tracing::info!(count = tokens.len(), "refreshed NEAR Intents tokens"),

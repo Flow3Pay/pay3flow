@@ -18,6 +18,7 @@ use sha2::{Digest, Sha256};
 #[derive(Clone)]
 pub struct Service {
     pub identity: ActorIdentity,
+    pub p2p_identity: ActorIdentity,
     pub delivery: DeliveryClient,
     pub require_signatures: bool,
     pub fmatch_inbox: String,
@@ -37,8 +38,10 @@ impl Service {
         marketplace_resource: String,
         origin: String,
     ) -> Self {
+        let p2p_identity = identity.derived_actor(&format!("{}-p2p", identity.handle));
         Self {
             identity,
+            p2p_identity,
             delivery: DeliveryClient::new(pool),
             require_signatures,
             fmatch_inbox,
@@ -223,7 +226,7 @@ impl Service {
         let proposal = crate::activitypub::model::Proposal {
             id: proposal_id,
             purpose: "offer".into(),
-            attributed_to: self.identity.actor_id.clone(),
+            attributed_to: self.p2p_identity.actor_id.clone(),
             name: format!("{} {:?} {} offer", offer.source, offer.side, offer.asset),
             content,
             resource_conforms_to: format!(
@@ -239,7 +242,11 @@ impl Service {
             })],
         };
         self.delivery
-            .deliver(&self.identity, &self.fmatch_inbox, &proposal.to_activity())
+            .deliver(
+                &self.p2p_identity,
+                &self.fmatch_inbox,
+                &proposal.to_activity(),
+            )
             .await
     }
 

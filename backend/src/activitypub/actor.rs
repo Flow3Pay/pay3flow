@@ -92,6 +92,22 @@ impl ActorIdentity {
         &self.public_key_pem
     }
 
+    /// Derive another actor at the same origin with the same signing key.
+    /// Marketplace profiles use separate actors because Fmatch subscribes one
+    /// resource/action profile per followed actor.
+    pub fn derived_actor(&self, handle: &str) -> Self {
+        let origin = self.inbox.trim_end_matches("/inbox");
+        Self {
+            actor_id: format!("{origin}/actor/{handle}"),
+            handle: handle.to_string(),
+            domain: self.domain.clone(),
+            inbox: self.inbox.clone(),
+            outbox: self.outbox.clone(),
+            private_key: self.private_key.clone(),
+            public_key_pem: self.public_key_pem.clone(),
+        }
+    }
+
     /// The marketplace resource this actor's capability advertises.
     pub fn capability_resource(&self) -> String {
         self.inbox.trim_end_matches("/inbox").to_string() + "/marketplace/resources/acquiring"
@@ -111,6 +127,42 @@ impl ActorIdentity {
 
     /// ActivityStreams actor document (fmatch fetches this during Follow).
     pub fn to_document(&self) -> Value {
+        self.document_with_attachments(vec![
+            json!({
+                "type": "Service",
+                "resourceConformsTo": self.exchange_resource(),
+                "action": "deliverService",
+                "purpose": "offer",
+                "interface": format!("{}/marketplace/interfaces/exchange", self.inbox.trim_end_matches("/inbox")),
+                "inbox": self.inbox,
+            }),
+            json!({
+                "type": "Service",
+                "resourceConformsTo": self.capability_resource(),
+                "action": "deliverService",
+                "purpose": "offer",
+                "inbox": self.inbox,
+            }),
+        ])
+    }
+
+    /// Actor document for the independently subscribed P2P offer profile.
+    pub fn to_p2p_document(&self) -> Value {
+        self.document_with_attachments(vec![json!({
+            "type": "Service",
+            "resourceConformsTo": self.p2p_resource(),
+            "action": "deliverService",
+            "purpose": "offer",
+            "inbox": self.inbox,
+        })])
+    }
+
+    fn document_with_attachments(&self, mut attachment: Vec<Value>) -> Value {
+        attachment.push(json!({
+            "type": "PropertyValue",
+            "name": "audience",
+            "value": AS_PUBLIC,
+        }));
         let doc = ActorDocument {
             context: json!(["https://www.w3.org/ns/activitystreams", SEC_CONTEXT]),
             id: self.actor_id.clone(),
@@ -127,31 +179,7 @@ impl ActorIdentity {
                 owner: self.actor_id.clone(),
                 public_key_pem: self.public_key_pem.clone(),
             }),
-            attachment: vec![
-                json!({
-                    "type": "Service",
-                    "resourceConformsTo": self.exchange_resource(),
-                    "action": "deliverService",
-                    "purpose": "offer",
-                    "interface": format!("{}/marketplace/interfaces/exchange", self.inbox.trim_end_matches("/inbox")),
-                    "inbox": self.inbox,
-                }),
-                json!({
-                    "type": "Service",
-                    "resourceConformsTo": self.capability_resource(),
-                    "action": "deliverService",
-                    "purpose": "offer",
-                    "inbox": self.inbox,
-                }),
-                json!({
-                    "type": "Service",
-                    "resourceConformsTo": self.p2p_resource(),
-                    "action": "deliverService",
-                    "purpose": "offer",
-                    "inbox": self.inbox,
-                }),
-                json!({ "type": "PropertyValue", "name": "audience", "value": AS_PUBLIC }),
-            ],
+            attachment,
         };
         serde_json::to_value(doc).unwrap_or_default()
     }
@@ -246,12 +274,6 @@ mod tests {
             legacy_cap["resourceConformsTo"],
             json!("https://pay3flow.local/marketplace/resources/acquiring")
         );
-        let p2p_cap = &doc["attachment"][2];
-        assert_eq!(
-            p2p_cap["resourceConformsTo"],
-            json!("https://pay3flow.local/marketplace/resources/p2p")
-        );
-
         let wf = id.webfinger("https://pay3flow.local/actor/pay3flow");
         assert_eq!(wf["subject"], json!("acct:pay3flow@pay3flow.local"));
         assert_eq!(wf["links"][0]["rel"], json!("self"));
@@ -266,6 +288,32 @@ mod tests {
         assert_eq!(a.public_key_pem, b.public_key_pem);
         let msg = b"hello";
         assert_eq!(a.sign_bytes(msg), b.sign_bytes(msg));
+        std::fs::remove_file(key_path).unwrap();
+    }
+
+    #[test]
+    fn derived_p2p_actor_advertises_only_the_p2p_profile() {
+        let key_path = temp_key("p2p-actor");
+        let primary =
+            ActorIdentity::load_or_create(&key_path, "https://pay3flow.local", "pay3flow").unwrap();
+        let p2p = primary.derived_actor("pay3flow-p2p");
+        let doc = p2p.to_p2p_document();
+
+        assert_eq!(
+            doc["id"],
+            json!("https://pay3flow.local/actor/pay3flow-p2p")
+        );
+        assert_eq!(
+            doc["publicKey"]["owner"],
+            json!("https://pay3flow.local/actor/pay3flow-p2p")
+        );
+        assert_eq!(doc["attachment"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            doc["attachment"][0]["resourceConformsTo"],
+            json!("https://pay3flow.local/marketplace/resources/p2p")
+        );
+        assert_eq!(p2p.public_key_pem(), primary.public_key_pem());
+
         std::fs::remove_file(key_path).unwrap();
     }
 }
