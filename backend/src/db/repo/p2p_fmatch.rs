@@ -50,7 +50,7 @@ pub async fn latest_answer(
             SELECT response, observed_at, expires_at
             FROM p2p_fmatch_answers
             WHERE cache_key = $1
-              AND observed_at >= now() - ($2::double precision * interval '1 second')
+              AND observed_at >= now() - ($2::bigint * interval '1 second')
             "#,
             &[&cache_key, &max_age_secs.max(0)],
         )
