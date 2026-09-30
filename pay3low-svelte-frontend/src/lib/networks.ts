@@ -1,4 +1,5 @@
 import { apiUrl } from "./api";
+import { anonymousHeaders } from "$lib/anonymous-user";
 
 export interface CryptoNetwork {
   id: string;
@@ -16,7 +17,7 @@ export async function fetchNetworks(currency?: string): Promise<CryptoNetwork[]>
   const url = apiUrl("/api/networks");
   if (currency) url.searchParams.set("currency", currency);
 
-  const response = await fetch(url);
+  const response = await fetch(url, { headers: anonymousHeaders({ Accept: "application/json" }) });
   if (!response.ok) {
     throw new Error(`Network catalog request failed (${response.status})`);
   }

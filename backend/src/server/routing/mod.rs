@@ -1,4 +1,5 @@
 pub mod activitypub;
+pub mod anonymous;
 pub mod api;
 pub mod auth;
 pub mod banks;

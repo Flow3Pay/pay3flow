@@ -1,4 +1,5 @@
 import { apiUrl } from "$lib/api";
+import { anonymousHeaders } from "$lib/anonymous-user";
 
 export type PaymentMethodRole = "sender" | "recipient" | "both";
 export type PaymentMethodKind = "bank" | "cash" | "currency" | "wallet";
@@ -44,14 +45,15 @@ interface PaymentMethodDirectoryPage {
 
 /** Load the complete card catalog generated from backend Providerfiles. */
 export async function fetchPaymentMethods(): Promise<PaymentMethod[]> {
-  let response = await fetch(apiUrl("/api/banks?picker_visible=true&limit=100"));
+  const requestInit = { headers: anonymousHeaders({ Accept: "application/json" }) };
+  let response = await fetch(apiUrl("/api/banks?picker_visible=true&limit=100"), requestInit);
   let unfilteredFallback = false;
   if (response.status === 400) {
     // Rolling deployments can briefly serve a backend from before the
     // picker_visible filter existed. Its rows still carry method_id, so page
     // through that directory and filter the catalog client-side.
     unfilteredFallback = true;
-    response = await fetch(apiUrl("/api/banks?limit=100&offset=0"));
+    response = await fetch(apiUrl("/api/banks?limit=100&offset=0"), requestInit);
   }
   if (!response.ok) throw new Error(await catalogError(response));
 
@@ -60,7 +62,7 @@ export async function fetchPaymentMethods(): Promise<PaymentMethod[]> {
   if (unfilteredFallback) {
     const pageSize = Math.max(1, firstPage.limit || 100);
     for (let offset = firstPage.offset + pageSize; offset < firstPage.total; offset += pageSize) {
-      const nextResponse = await fetch(apiUrl(`/api/banks?limit=100&offset=${offset}`));
+      const nextResponse = await fetch(apiUrl(`/api/banks?limit=100&offset=${offset}`), requestInit);
       if (!nextResponse.ok) throw new Error(await catalogError(nextResponse));
       items.push(...((await nextResponse.json()) as PaymentMethodDirectoryPage).items);
     }

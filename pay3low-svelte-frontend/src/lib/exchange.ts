@@ -1,4 +1,5 @@
 import { apiUrl, wsUrl } from "./api";
+import { anonymousHeaders, getAnonymousUserId } from "$lib/anonymous-user";
 
 export interface ExchangeCorridor {
   id: string;
@@ -348,10 +349,11 @@ async function request<T>(
   token?: string,
 ): Promise<T> {
   const headers = new Headers(init.headers);
-  headers.set("Accept", "application/json");
-  if (init.body) headers.set("Content-Type", "application/json");
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-  const response = await fetch(apiUrl(path), { ...init, headers });
+  const requestHeaders = anonymousHeaders(headers);
+  requestHeaders.set("Accept", "application/json");
+  if (init.body) requestHeaders.set("Content-Type", "application/json");
+  if (token) requestHeaders.set("Authorization", `Bearer ${token}`);
+  const response = await fetch(apiUrl(path), { ...init, headers: requestHeaders });
   if (!response.ok) {
     const payload = (await response.json().catch(() => null)) as
       | { error?: string; message?: string }
@@ -365,7 +367,7 @@ export async function authenticate(email: string, code: string, referralCode?: s
   const body = JSON.stringify({ email, code, referral_code: referralCode || undefined });
   const login = await fetch(apiUrl("/api/auth/login"), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: anonymousHeaders({ "Content-Type": "application/json" }),
     body,
   });
   if (login.ok) return ((await login.json()) as { token: string }).token;
@@ -479,7 +481,9 @@ export function streamP2pRoutes(
   onEvent: (event: P2pRouteStreamEvent) => void,
 ): Promise<P2pRouteSearchResponse> {
   return new Promise((resolve, reject) => {
-    const socket = new WebSocket(wsUrl("/ws/p2p/routes"));
+    const socketUrl = new URL(wsUrl("/ws/p2p/routes"));
+    socketUrl.searchParams.set("anonymous_id", anonymousId);
+    const socket = new WebSocket(socketUrl);
     let settled = false;
     const fail = (error: Error) => {
       if (settled) return;
@@ -638,6 +642,8 @@ export function openLiveRoutes(
 ): () => void {
   const url = new URL(`/api/exchange/orders/${orderId}/live`, wsUrl("/"));
   url.searchParams.set("access_token", token);
+  const anonymousId = getAnonymousUserId();
+  if (anonymousId) url.searchParams.set("anonymous_id", anonymousId);
   const socket = new WebSocket(url);
   socket.onmessage = (message) => {
     try {

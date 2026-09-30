@@ -69,6 +69,21 @@ fn components() -> Value {
                 "required": ["token"],
                 "properties": { "token": { "type": "string", "description": "JWT bearer token." } }
             },
+            "AnonymousRegisterRequest": {
+                "type": "object",
+                "required": ["anonymous_id"],
+                "additionalProperties": false,
+                "properties": {
+                    "anonymous_id": { "type": "string", "format": "uuid", "description": "Random browser-generated pseudonymous ID kept in localStorage." }
+                }
+            },
+            "AnonymousUser": {
+                "type": "object",
+                "required": ["anonymous_id"],
+                "properties": {
+                    "anonymous_id": { "type": "string", "format": "uuid" }
+                }
+            },
             "User": {
                 "type": "object",
                 "required": ["id", "email", "referral_code"],
@@ -262,6 +277,15 @@ const OPERATIONS: &[Operation] = &[
         "Register",
         "Create an account with an email and one-time code.",
         "Authentication",
+        true,
+        false,
+    ),
+    (
+        "/api/anonymous/register",
+        "post",
+        "Register anonymous browser",
+        "Store a random pseudonymous browser ID for usage metrics. No contact, device, or network identity is collected.",
+        "System",
         true,
         false,
     ),
@@ -920,6 +944,7 @@ fn array_schema(name: &str) -> Value {
 fn request_schema(path: &str, method: &str) -> Value {
     let name = match (path, method) {
         ("/api/auth/register", "post") | ("/api/auth/login", "post") => "AuthCodeRequest",
+        ("/api/anonymous/register", "post") => "AnonymousRegisterRequest",
         ("/api/payments", "post") => "NewPayment",
         ("/api/exchange/orders", "post") => "CreateExchangeOrder",
         ("/api/exchange/orders/{id}/confirm", "post") => "ConfirmOrderRequest",
@@ -936,6 +961,7 @@ fn response_schema(path: &str, method: &str) -> Value {
         | ("/api/auth/login", "post")
         | ("/api/auth/oauth/{provider}", "post") => schema_ref("AuthToken"),
         ("/api/auth/me", "get") => schema_ref("User"),
+        ("/api/anonymous/register", "post") => schema_ref("AnonymousUser"),
         ("/api/referrals/me", "get") => schema_ref("ReferralProfile"),
         ("/api/payments", "post") | ("/api/payments/{id}", "get") => schema_ref("PaymentView"),
         ("/api/payments", "get") => array_schema("PaymentView"),

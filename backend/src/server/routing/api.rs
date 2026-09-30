@@ -1,6 +1,8 @@
 use std::time::Duration;
 
+use axum::extract::State;
 use axum::http::{header::CONTENT_TYPE, HeaderValue, Request, Response};
+use axum::middleware;
 use axum::response::IntoResponse;
 use axum::routing::{get, post, put};
 use axum::Router;
@@ -14,7 +16,7 @@ use tracing::Level;
 use crate::core::state::AppState;
 use crate::server::openapi;
 use crate::server::routing::{
-    activitypub, auth, banks, exchange, matcher, networks, oauth, p2p, pairs, payments,
+    activitypub, anonymous, auth, banks, exchange, matcher, networks, oauth, p2p, pairs, payments,
     payments_ws, providers, rates, referrals, solver, ws,
 };
 
@@ -45,6 +47,7 @@ pub fn router(state: AppState) -> Router {
         .route("/openapi.json", get(openapi::document))
         .route("/health", get(health))
         .route("/metrics", get(metrics))
+        .route("/api/anonymous/register", post(anonymous::register))
         .route("/api/auth/register", post(auth::register))
         .route("/api/auth/login", post(auth::login))
         .route("/api/auth/me", get(auth::me))
@@ -195,6 +198,10 @@ pub fn router(state: AppState) -> Router {
                 ),
         )
         .layer(CorsLayer::permissive())
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            anonymous::track_request,
+        ))
         .with_state(state)
 }
 
@@ -206,12 +213,15 @@ fn observe_request<B>(_: &Request<B>, _: &tracing::Span) {
     crate::observability::request_started();
 }
 
-pub async fn metrics() -> impl IntoResponse {
+pub async fn metrics(State(state): axum::extract::State<AppState>) -> impl IntoResponse {
+    let anonymous_users = anonymous::count_users(&state.pool)
+        .await
+        .unwrap_or_default();
     (
         [(
             CONTENT_TYPE,
             HeaderValue::from_static("text/plain; version=0.0.4; charset=utf-8"),
         )],
-        crate::observability::render(),
+        crate::observability::render(anonymous_users),
     )
 }

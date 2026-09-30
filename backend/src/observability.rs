@@ -69,7 +69,7 @@ pub fn request_finished(status: u16, latency: Duration) {
         .fetch_add(1, Ordering::Relaxed);
 }
 
-pub fn render() -> String {
+pub fn render(anonymous_users: i64) -> String {
     let metrics = metrics();
     let requests_total = metrics.requests_total.load(Ordering::Relaxed);
     let requests_in_flight = metrics.requests_in_flight.load(Ordering::Relaxed);
@@ -125,6 +125,11 @@ pay3flow_build_info{service=\"backend\"} 1\n\
             counter.load(Ordering::Relaxed)
         );
     }
+    output.push_str(
+        "# HELP pay3flow_anonymous_users_total Number of pseudonymous browser IDs seen by the application.\n\
+# TYPE pay3flow_anonymous_users_total gauge\n",
+    );
+    let _ = writeln!(output, "pay3flow_anonymous_users_total {anonymous_users}");
 
     output
 }
