@@ -26,7 +26,10 @@ offers can be published. Public route legs are then resolved through Fmatch.
 Successful Fmatch answers are stored in PostgreSQL. If Fmatch is unavailable,
 the newest answer within `p2p_fmatch_stale_secs` is used and the response has
 `source: "database_cache"` and `stale: true`. A live Fmatch answer has
-`source: "fmatch"`; provider-only local searches retain `source: "provider"`.
+`source: "fmatch"`. If neither Fmatch nor the bounded-stale database cache can
+answer, Pay3Flow queries its live providers and returns
+`source: "provider_fallback"` with the Fmatch rejection recorded in
+`sources`; provider-only local searches retain `source: "provider"`.
 
 The public website endpoints can change without notice. Keep the adapters
 enabled, monitor `sources[].ok`, and do not treat a search result as a firm
@@ -134,9 +137,9 @@ in `backend/providers/*/Providerfile`. Regenerate the provider migration and
 rebuild after changing one; see [`../Providerfile.md`](../Providerfile.md).
 
 Fmatch offer publication is best-effort. A provider refresh is retained locally
-when Lefine is unavailable, but public route discovery uses only a live Fmatch
-answer or a bounded-stale PostgreSQL answer; it does not silently fan out to
-providers on the route request path.
+when Lefine is unavailable. Public route discovery prefers a live Fmatch answer,
+then a bounded-stale PostgreSQL answer, and finally fans out to the configured
+live providers so an empty Fmatch catalog does not make route search unavailable.
 
 Run the opt-in live smoke test:
 

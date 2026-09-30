@@ -8,7 +8,7 @@ pub enum ActivityPubError {
     Signature(String),
     #[error("activitypub: key error: {0}")]
     Key(String),
-    #[error("activitypub: delivery failed after retries: {0}")]
+    #[error("activitypub: delivery failed: {0}")]
     Delivery(String),
     #[error("activitypub: invalid activity {type_name}: {detail}")]
     InvalidActivity { type_name: String, detail: String },

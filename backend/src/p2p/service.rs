@@ -641,7 +641,7 @@ impl P2pSearchService {
         market: Option<P2pOfferMarket>,
     ) -> Result<P2pSearchResponse> {
         if self.fmatch.is_some() {
-            return self.search_fmatch_market(query, market).await;
+            return self.search_fmatch_market(query, market, None).await;
         }
         self.run_search(query, None, market).await
     }
@@ -653,9 +653,9 @@ impl P2pSearchService {
         market: Option<P2pOfferMarket>,
     ) -> Result<P2pSearchResponse> {
         if self.fmatch.is_some() {
-            let response = self.search_fmatch_market(query, market).await?;
-            let _ = updates.send(response.clone()).await;
-            return Ok(response);
+            return self
+                .search_fmatch_market(query, market, Some(&updates))
+                .await;
         }
         self.run_search(query, Some(updates), market).await
     }
@@ -664,6 +664,7 @@ impl P2pSearchService {
         &self,
         query: P2pSearchQuery,
         market: Option<P2pOfferMarket>,
+        updates: Option<&mpsc::Sender<P2pSearchResponse>>,
     ) -> Result<P2pSearchResponse> {
         let backend = self
             .fmatch
@@ -675,7 +676,7 @@ impl P2pSearchService {
         let cache_key = fmatch_cache_key(&query, market)?;
         let content = fmatch_p2p_content(&query, market);
 
-        match backend.ap.submit_p2p_request("candidates", &content).await {
+        let response = match backend.ap.submit_p2p_request("candidates", &content).await {
             Ok((_outcome, Some(reply))) => {
                 let offers = P2pOffer::from_fmatch_reply(&reply, market);
                 let response = build_search_response(
@@ -701,24 +702,53 @@ impl P2pSearchService {
                     backend.answer_ttl,
                 )
                 .await;
-                Ok(response)
+                response
             }
             Ok((_outcome, None)) => {
-                self.cached_fmatch_answer(
+                self.fmatch_cache_or_provider(
                     &backend,
                     &cache_key,
                     query,
                     market,
                     "Fmatch returned no answer",
                 )
-                .await
+                .await?
             }
             Err(error) => {
-                tracing::warn!(%error, "Fmatch P2P search failed; trying PostgreSQL cache");
-                self.cached_fmatch_answer(&backend, &cache_key, query, market, &error.to_string())
-                    .await
+                tracing::warn!(%error, "Fmatch P2P search failed; trying cache and providers");
+                self.fmatch_cache_or_provider(
+                    &backend,
+                    &cache_key,
+                    query,
+                    market,
+                    &error.to_string(),
+                )
+                .await?
             }
+        };
+        if let Some(updates) = updates {
+            let _ = updates.send(response.clone()).await;
         }
+        Ok(response)
+    }
+
+    async fn fmatch_cache_or_provider(
+        &self,
+        backend: &FmatchP2pBackend,
+        cache_key: &str,
+        query: P2pSearchQuery,
+        market: P2pOfferMarket,
+        reason: &str,
+    ) -> Result<P2pSearchResponse> {
+        if let Some(cached) = self
+            .cached_fmatch_answer(backend, cache_key, query.clone(), market, reason)
+            .await?
+        {
+            return Ok(cached);
+        }
+        tracing::warn!(reason, "Fmatch cache miss; using live P2P providers");
+        let response = self.run_search(query, None, Some(market)).await?;
+        Ok(mark_provider_fallback(response, reason))
     }
 
     async fn cached_fmatch_answer(
@@ -728,12 +758,12 @@ impl P2pSearchService {
         query: P2pSearchQuery,
         market: P2pOfferMarket,
         reason: &str,
-    ) -> Result<P2pSearchResponse> {
+    ) -> Result<Option<P2pSearchResponse>> {
         let max_age = backend.stale_window.as_secs().min(i64::MAX as u64) as i64;
         let Some(cached) =
             crate::db::repo::p2p_fmatch::latest_answer(&backend.pool, cache_key, max_age).await?
         else {
-            bail!("Fmatch unavailable and no cached P2P answer exists: {reason}");
+            return Ok(None);
         };
         let mut response: P2pSearchResponse =
             serde_json::from_value(cached.response).context("invalid cached Fmatch P2P answer")?;
@@ -749,10 +779,10 @@ impl P2pSearchService {
             source: "fmatch".into(),
             ok: false,
             latency_ms: 0,
-            offers_found: response.offers.len(),
+            offers_found: 0,
             error: Some(reason.to_string()),
         });
-        Ok(response)
+        Ok(Some(response))
     }
 
     async fn run_search(
@@ -919,8 +949,8 @@ impl P2pSearchService {
         tokio::spawn(async move {
             let results = join_all(offers.iter().map(|offer| ap.publish_p2p_offer(offer))).await;
             let failures = results.iter().filter(|result| result.is_err()).count();
-            if failures > 0 {
-                tracing::warn!(failures, "some P2P offers failed to publish to Fmatch");
+            if let Some(error) = results.iter().find_map(|result| result.as_ref().err()) {
+                tracing::warn!(failures, %error, "some P2P offers failed to publish to Fmatch");
             }
         });
     }
@@ -1031,6 +1061,21 @@ fn build_search_response(
         stale,
         observed_at,
     }
+}
+
+fn mark_provider_fallback(mut response: P2pSearchResponse, reason: &str) -> P2pSearchResponse {
+    response.source = "provider_fallback".into();
+    response.sources.insert(
+        0,
+        SourceStatus {
+            source: "fmatch".into(),
+            ok: false,
+            latency_ms: 0,
+            offers_found: 0,
+            error: Some(reason.to_string()),
+        },
+    );
+    response
 }
 
 fn fmatch_cache_key(query: &P2pSearchQuery, market: P2pOfferMarket) -> Result<String> {
@@ -1309,6 +1354,40 @@ mod tests {
         assert_eq!(decoded.offers.len(), 1);
         assert_eq!(decoded.offers[0].source, "binance");
         assert_eq!(decoded.source, "fmatch");
+    }
+
+    #[test]
+    fn provider_fallback_records_fmatch_failure() {
+        let response = build_search_response(
+            P2pSearchQuery {
+                fiat: "AMD".into(),
+                asset: "USDT".into(),
+                side: P2pSide::BuyCrypto,
+                amount: Some(1000.0),
+                payment_method: None,
+                merchant_only: None,
+                min_orders: None,
+                min_completion_rate: None,
+                limit: Some(20),
+                sources: None,
+            },
+            &[offer("binance", "390.5", "100", "100000", 42)],
+            Vec::new(),
+            false,
+            "provider",
+            false,
+            Some(Utc::now()),
+        );
+
+        let fallback = mark_provider_fallback(response, "no active P2P offers");
+
+        assert_eq!(fallback.source, "provider_fallback");
+        assert_eq!(fallback.sources[0].source, "fmatch");
+        assert!(!fallback.sources[0].ok);
+        assert_eq!(
+            fallback.sources[0].error.as_deref(),
+            Some("no active P2P offers")
+        );
     }
 
     #[test]

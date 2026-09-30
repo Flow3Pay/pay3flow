@@ -145,12 +145,16 @@ impl DeliveryClient {
                         self.record_delivery(activity_id, inbox).await?;
                         return Ok((DeliveryOutcome::Delivered, value));
                     }
-                    if !retryable(status.as_u16()) || attempt >= self.max_retries {
-                        return Err(ActivityPubError::Delivery(format!(
-                            "http {} for {}",
-                            status,
-                            activity["id"].as_str().unwrap_or("<unknown>")
-                        )));
+                    let response_body = res.text().await.unwrap_or_default();
+                    if is_no_candidates_rejection(status.as_u16(), &response_body)
+                        || !retryable(status.as_u16())
+                        || attempt >= self.max_retries
+                    {
+                        return Err(delivery_response_error(
+                            status.as_u16(),
+                            activity_id,
+                            &response_body,
+                        ));
                     }
                 }
                 Err(e) => {
@@ -237,6 +241,37 @@ fn retryable(status: u16) -> bool {
     status == 429 || status >= 500
 }
 
+fn is_no_candidates_rejection(status: u16, body: &str) -> bool {
+    status == 503
+        && serde_json::from_str::<Value>(body)
+            .ok()
+            .and_then(|value| {
+                value
+                    .get("status")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+            })
+            .is_some_and(|status| status == "no-candidates")
+}
+
+fn delivery_response_error(status: u16, activity_id: &str, body: &str) -> ActivityPubError {
+    let detail = serde_json::from_str::<Value>(body).ok().and_then(|value| {
+        let workflow_status = value.get("status").and_then(Value::as_str);
+        let summary = value.get("summary").and_then(Value::as_str);
+        match (workflow_status, summary) {
+            (Some(workflow_status), Some(summary)) => Some(format!("{workflow_status}: {summary}")),
+            (Some(workflow_status), None) => Some(workflow_status.to_string()),
+            (None, Some(summary)) => Some(summary.to_string()),
+            (None, None) => None,
+        }
+    });
+    let detail = detail
+        .map(|detail| detail.chars().take(512).collect::<String>())
+        .map(|detail| format!(": {detail}"))
+        .unwrap_or_default();
+    ActivityPubError::Delivery(format!("http {status} for {activity_id}{detail}"))
+}
+
 fn port_suffix(url: &reqwest::Url) -> String {
     match url.port() {
         Some(port) => format!(":{port}"),
@@ -256,6 +291,12 @@ mod port_tests {
 
 #[cfg(test)]
 mod fmatch_down_tests {
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+
+    use axum::{http::StatusCode, routing::post, Json, Router};
     use serde_json::json;
 
     use super::*;
@@ -298,5 +339,57 @@ mod fmatch_down_tests {
             matches!(err, ActivityPubError::Delivery(_)),
             "expected ActivityPubError::Delivery, got {err:?}"
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn no_candidates_rejection_is_not_retried() {
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let handler_attempts = attempts.clone();
+        let app = Router::new().route(
+            "/",
+            post(move || {
+                let handler_attempts = handler_attempts.clone();
+                async move {
+                    handler_attempts.fetch_add(1, Ordering::SeqCst);
+                    (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        Json(json!({
+                            "type": "Reject",
+                            "status": "no-candidates",
+                            "summary": "no active P2P offers"
+                        })),
+                    )
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind test server");
+        let address = listener.local_addr().expect("test server address");
+        let server =
+            tokio::spawn(async move { axum::serve(listener, app).await.expect("serve rejection") });
+        let key_path = std::env::temp_dir()
+            .join(format!("pay3flow-no-candidates-{}", uuid::Uuid::new_v4()))
+            .join("id.pem");
+        let identity = ActorIdentity::load_or_create(
+            key_path.to_str().expect("valid utf8 key path"),
+            "https://pay3flow.local",
+            "pay3flow",
+        )
+        .expect("actor identity");
+        let client = DeliveryClient::for_test(3, 5);
+        let activity = json!({
+            "id": "https://pay3flow.local/activities/no-candidates",
+            "type": "Proposal"
+        });
+
+        let error = client
+            .deliver(&identity, &format!("http://{address}/"), &activity)
+            .await
+            .expect_err("semantic rejection must surface");
+        server.abort();
+
+        assert_eq!(attempts.load(Ordering::SeqCst), 1);
+        assert!(error.to_string().contains("no active P2P offers"));
     }
 }
