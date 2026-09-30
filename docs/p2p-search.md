@@ -26,8 +26,9 @@ offers can be published. Public route legs are then resolved through Fmatch.
 Successful Fmatch answers are stored in PostgreSQL. If Fmatch is unavailable,
 the newest answer within `p2p_fmatch_stale_secs` is used and the response has
 `source: "database_cache"` and `stale: true`. A live Fmatch answer has
-`source: "fmatch"`. If neither Fmatch nor the bounded-stale database cache can
-answer, Pay3Flow queries its live providers and returns
+`source: "fmatch"`. Empty Fmatch replies and empty cached answers are not
+considered usable. If neither Fmatch nor the bounded-stale database cache can
+provide offers, Pay3Flow queries its live providers and returns
 `source: "provider_fallback"` with the Fmatch rejection recorded in
 `sources`; provider-only local searches retain `source: "provider"`.
 

@@ -680,7 +680,7 @@ impl P2pSearchService {
             Ok((_outcome, Some(reply))) => {
                 let offers = P2pOffer::from_fmatch_reply(&reply, market);
                 let response = build_search_response(
-                    query,
+                    query.clone(),
                     &offers,
                     vec![SourceStatus {
                         source: "fmatch".into(),
@@ -694,15 +694,26 @@ impl P2pSearchService {
                     false,
                     Some(Utc::now()),
                 );
-                persist_fmatch_answer(
-                    &backend.pool,
-                    &cache_key,
-                    &response,
-                    "fmatch",
-                    backend.answer_ttl,
-                )
-                .await;
-                response
+                if usable_fmatch_response(&response) {
+                    persist_fmatch_answer(
+                        &backend.pool,
+                        &cache_key,
+                        &response,
+                        "fmatch",
+                        backend.answer_ttl,
+                    )
+                    .await;
+                    response
+                } else {
+                    self.fmatch_cache_or_provider(
+                        &backend,
+                        &cache_key,
+                        query,
+                        market,
+                        "Fmatch returned no P2P offers",
+                    )
+                    .await?
+                }
             }
             Ok((_outcome, None)) => {
                 self.fmatch_cache_or_provider(
@@ -767,6 +778,9 @@ impl P2pSearchService {
         };
         let mut response: P2pSearchResponse =
             serde_json::from_value(cached.response).context("invalid cached Fmatch P2P answer")?;
+        if !usable_fmatch_response(&response) {
+            return Ok(None);
+        }
         for offer in &mut response.offers {
             offer.market = market;
         }
@@ -1076,6 +1090,10 @@ fn mark_provider_fallback(mut response: P2pSearchResponse, reason: &str) -> P2pS
         },
     );
     response
+}
+
+fn usable_fmatch_response(response: &P2pSearchResponse) -> bool {
+    !response.offers.is_empty()
 }
 
 fn fmatch_cache_key(query: &P2pSearchQuery, market: P2pOfferMarket) -> Result<String> {
@@ -1388,6 +1406,32 @@ mod tests {
             fallback.sources[0].error.as_deref(),
             Some("no active P2P offers")
         );
+    }
+
+    #[test]
+    fn empty_fmatch_response_is_not_usable() {
+        let response = build_search_response(
+            P2pSearchQuery {
+                fiat: "RUB".into(),
+                asset: "USDT".into(),
+                side: P2pSide::BuyCrypto,
+                amount: Some(10_000.0),
+                payment_method: None,
+                merchant_only: None,
+                min_orders: None,
+                min_completion_rate: None,
+                limit: Some(20),
+                sources: None,
+            },
+            &[],
+            Vec::new(),
+            false,
+            "fmatch",
+            false,
+            Some(Utc::now()),
+        );
+
+        assert!(!usable_fmatch_response(&response));
     }
 
     #[test]
