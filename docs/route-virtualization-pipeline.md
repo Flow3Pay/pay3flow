@@ -170,6 +170,53 @@ backend/src/p2p/routes/
 Критерий готовности: перенос выполнен без изменения API, циклических
 зависимостей и ухудшения функциональных тестов или latency benchmark.
 
+### 5. Оптимизировать pipeline для всех crypto-направлений
+
+Направления fiat → crypto, crypto → fiat и crypto → crypto уже поддерживаются,
+но наличие функциональной ветки ещё не означает, что она оптимизирована так же,
+как основной fiat → fiat pipeline. Все четыре класса маршрутов должны
+использовать одинаковые принципы конкурентного исполнения, ранней публикации,
+bounded candidate set и повторного использования snapshots.
+
+Текущие точки для оптимизации:
+
+- локальный leg и независимый provider search не должны ждать друг друга;
+- fiat → crypto должен публиковать отдельно готовый buy leg и каждый готовый
+  provider workflow;
+- crypto → fiat не должен последовательно получать exit leg для каждого
+  intermediary asset;
+- crypto → crypto должен конкурентно запускать direct/cross-network providers
+  и spot ticker paths, а не задерживать один класс маршрутов другим;
+- provider quote-задачи должны отдавать готовые batches по мере завершения, а не
+  сначала накапливать весь `Vec`;
+- capability, quote и market snapshots должны переиспользоваться внутри одного
+  поиска без повторных внешних запросов;
+- fan-out по сетям, intermediary assets, providers и market paths должен быть
+  ограничен общим budget, semaphore и lazy top-K, чтобы число комбинаций не
+  превращалось в число внешних вызовов;
+- diversity должна сохраняться между сетями, venues и route providers, а не
+  только между fiat/P2P-источниками.
+
+Целевая схема исполнения одинакова для каждого направления:
+
+```text
+classify fiat/crypto direction
+  -> start independent route producers concurrently
+  -> consume each completed candidate batch
+  -> validate and incrementally rank
+  -> publish immediately
+  -> stop when producers finish or useful search budget is exhausted
+```
+
+Оптимизация не должна возвращать crypto → crypto к искусственному fiat pivot:
+маршрут строится напрямую через совместимые сети, providers и market paths.
+
+Критерий готовности: отдельный benchmark-набор для fiat → crypto,
+crypto → fiat и crypto → crypto подтверждает раннюю выдачу первого batch и
+завершение здорового pipeline не более чем за одну секунду при целевой
+конкурентной нагрузке, без потери network/provider diversity и качества
+маршрутов.
+
 ## Общая схема
 
 ```mermaid
