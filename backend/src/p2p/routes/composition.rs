@@ -567,7 +567,7 @@ pub(super) fn compose_crypto_market_routes(
     }
 }
 
-struct ConversionQuote {
+pub(super) struct ConversionQuote {
     pair: String,
     rate: f64,
 }
