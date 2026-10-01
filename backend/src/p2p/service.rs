@@ -680,6 +680,9 @@ impl P2pSearchService {
         market: Option<P2pOfferMarket>,
     ) -> Result<P2pSearchResponse> {
         if self.fmatch.is_some() {
+            if market.is_none() {
+                return self.search_all_fmatch_markets(query, None).await;
+            }
             return self.search_fmatch_market(query, market, None).await;
         }
         self.run_search(query, None, market).await
@@ -692,11 +695,37 @@ impl P2pSearchService {
         market: Option<P2pOfferMarket>,
     ) -> Result<P2pSearchResponse> {
         if self.fmatch.is_some() {
+            if market.is_none() {
+                return self.search_all_fmatch_markets(query, Some(&updates)).await;
+            }
             return self
                 .search_fmatch_market(query, market, Some(&updates))
                 .await;
         }
         self.run_search(query, Some(updates), market).await
+    }
+
+    async fn search_all_fmatch_markets(
+        &self,
+        query: P2pSearchQuery,
+        updates: Option<&mpsc::Sender<P2pSearchResponse>>,
+    ) -> Result<P2pSearchResponse> {
+        let (p2p, direct) = tokio::join!(
+            self.search_fmatch_market(query.clone(), Some(P2pOfferMarket::P2p), None),
+            self.search_fmatch_market(query.clone(), Some(P2pOfferMarket::DirectExchange), None,)
+        );
+        let response = match (p2p, direct) {
+            (Ok(p2p), Ok(direct)) => merge_market_responses(query.normalize()?, p2p, direct),
+            (Ok(response), Err(error)) | (Err(error), Ok(response)) => {
+                tracing::warn!(%error, "one Fmatch market partition failed");
+                response
+            }
+            (Err(error), Err(_)) => return Err(error),
+        };
+        if let Some(updates) = updates {
+            let _ = updates.send(response.clone()).await;
+        }
+        Ok(response)
     }
 
     async fn search_fmatch_market(
@@ -1131,6 +1160,32 @@ fn build_search_response(
         stale,
         observed_at,
     }
+}
+
+fn merge_market_responses(
+    query: P2pSearchQuery,
+    p2p: P2pSearchResponse,
+    direct: P2pSearchResponse,
+) -> P2pSearchResponse {
+    let cached = p2p.cached || direct.cached;
+    let stale = p2p.stale || direct.stale;
+    let observed_at = p2p.observed_at.max(direct.observed_at);
+    let source = if p2p.source == "provider_fallback" || direct.source == "provider_fallback" {
+        "provider_fallback"
+    } else if p2p.source == "database_cache" || direct.source == "database_cache" {
+        "database_cache"
+    } else if p2p.source == "fmatch" || direct.source == "fmatch" {
+        "fmatch"
+    } else {
+        "provider"
+    };
+    let offers = p2p
+        .offers
+        .into_iter()
+        .chain(direct.offers)
+        .collect::<Vec<_>>();
+    let sources = source_statuses_from_offers(&offers);
+    build_search_response(query, &offers, sources, cached, source, stale, observed_at)
 }
 
 fn mark_provider_fallback(mut response: P2pSearchResponse, reason: &str) -> P2pSearchResponse {
@@ -1656,6 +1711,54 @@ mod tests {
             .offers
             .iter()
             .any(|offer| offer.source == "whitebird"));
+    }
+
+    #[test]
+    fn merging_market_partitions_keeps_a_lower_ranked_direct_source() {
+        let query = P2pSearchQuery {
+            fiat: "AMD".into(),
+            asset: "USDT".into(),
+            side: P2pSide::BuyCrypto,
+            amount: Some(10_000.0),
+            payment_method: None,
+            merchant_only: None,
+            min_orders: None,
+            min_completion_rate: None,
+            limit: Some(5),
+            sources: None,
+        };
+        let p2p_offers = (0..5)
+            .map(|index| offer("binance", &format!("{}", 390 + index), "100", "100000", 42))
+            .collect::<Vec<_>>();
+        let direct_offers = vec![offer("whitebird", "500", "100", "100000", 0)
+            .with_market(P2pOfferMarket::DirectExchange)];
+        let p2p = build_search_response(
+            query.clone(),
+            &p2p_offers,
+            source_statuses_from_offers(&p2p_offers),
+            false,
+            "fmatch",
+            false,
+            Some(Utc::now()),
+        );
+        let direct = build_search_response(
+            query.clone(),
+            &direct_offers,
+            source_statuses_from_offers(&direct_offers),
+            false,
+            "fmatch",
+            false,
+            Some(Utc::now()),
+        );
+
+        let response = merge_market_responses(query, p2p, direct);
+
+        assert_eq!(response.offers.len(), 5);
+        assert!(response
+            .offers
+            .iter()
+            .any(|offer| offer.source == "whitebird"
+                && offer.market == P2pOfferMarket::DirectExchange));
     }
 
     #[tokio::test]
