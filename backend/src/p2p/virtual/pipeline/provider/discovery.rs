@@ -1,9 +1,12 @@
+//! Crypto-to-crypto workflow route production.
+
 use super::*;
 
 impl P2pSearchService {
-    pub(super) async fn search_provider_routes(
+    pub(in crate::p2p) async fn search_provider_routes(
         &self,
         query: &NormalizedRouteQuery,
+        batches: Option<&mpsc::Sender<RouteBatch>>,
     ) -> Vec<P2pRoute> {
         let capabilities = self.provider_capabilities_for_query(query).await;
         let provider_assets = capabilities
@@ -61,6 +64,7 @@ impl P2pSearchService {
             let Some((provider_name, quotes)) = result else {
                 continue;
             };
+            let mut batch = Vec::new();
             for quote in quotes {
                 let Ok(input_value) = quote.input.value.parse::<f64>() else {
                     continue;
@@ -82,7 +86,7 @@ impl P2pSearchService {
                 if source_network != target_network {
                     warnings.push("Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending.".into());
                 }
-                routes.push(P2pRoute {
+                batch.push(P2pRoute {
                     route_id: String::new(),
                     rank: 0,
                     asset: quote.to.symbol.clone(),
@@ -128,6 +132,8 @@ impl P2pSearchService {
                     service_links: Vec::new(),
                 });
             }
+            emit_routes(batches, &batch).await;
+            routes.extend(batch);
         }
         routes
     }

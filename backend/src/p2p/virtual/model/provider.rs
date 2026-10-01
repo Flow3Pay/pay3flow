@@ -1,27 +1,33 @@
-use super::*;
+use std::collections::HashSet;
+use std::sync::Arc;
+
+use futures::stream::{FuturesUnordered, StreamExt};
+
+use crate::p2p::service::P2pOffer;
+use crate::route_engine::{Amount, Asset, PublicRouteProvider, PublicRouteQuote};
 
 #[derive(Clone)]
-pub(super) struct RouteProviderCapability {
-    pub(super) provider: Arc<dyn PublicRouteProvider>,
-    pub(super) assets: HashSet<Asset>,
+pub(in crate::p2p) struct RouteProviderCapability {
+    pub(in crate::p2p) provider: Arc<dyn PublicRouteProvider>,
+    pub(in crate::p2p) assets: HashSet<Asset>,
 }
 
 impl RouteProviderCapability {
-    pub(super) fn supports(&self, from: &Asset, to: &Asset) -> bool {
+    pub(in crate::p2p) fn supports(&self, from: &Asset, to: &Asset) -> bool {
         self.assets.contains(from) && self.assets.contains(to)
     }
 }
 
-pub(super) struct FiatProviderQuoteJob {
-    pub(super) provider: Arc<dyn PublicRouteProvider>,
-    pub(super) from: Asset,
-    pub(super) to: Asset,
-    pub(super) amount: Amount,
-    pub(super) entry_offer: P2pOffer,
-    pub(super) exit_offers: Arc<[P2pOffer]>,
+pub(in crate::p2p) struct FiatProviderQuoteJob {
+    pub(in crate::p2p) provider: Arc<dyn PublicRouteProvider>,
+    pub(in crate::p2p) from: Asset,
+    pub(in crate::p2p) to: Asset,
+    pub(in crate::p2p) amount: Amount,
+    pub(in crate::p2p) entry_offer: P2pOffer,
+    pub(in crate::p2p) exit_offers: Arc<[P2pOffer]>,
 }
 
-pub(super) fn provider_quote_key(
+pub(in crate::p2p) fn provider_quote_key(
     provider: &str,
     from: &Asset,
     to: &Asset,
@@ -30,11 +36,16 @@ pub(super) fn provider_quote_key(
     format!("route|{provider}|{from}|{to}|{}", amount.value)
 }
 
-pub(super) fn fiat_quote_key(provider: &str, source: &str, target: &str, amount: f64) -> String {
+pub(in crate::p2p) fn fiat_quote_key(
+    provider: &str,
+    source: &str,
+    target: &str,
+    amount: f64,
+) -> String {
     format!("fiat|{provider}|{source}|{target}|{amount:.2}")
 }
 
-pub(super) fn provider_priority(provider: &str) -> u8 {
+pub(in crate::p2p) fn provider_priority(provider: &str) -> u8 {
     match provider {
         "symbiosis" => 0,
         "bestchange" => 1,
@@ -44,7 +55,7 @@ pub(super) fn provider_priority(provider: &str) -> u8 {
     }
 }
 
-pub(super) fn network_priority(network: Option<&str>) -> u8 {
+pub(in crate::p2p) fn network_priority(network: Option<&str>) -> u8 {
     match network {
         Some("ethereum") => 0,
         Some("tron") => 1,
@@ -58,7 +69,7 @@ pub(super) fn network_priority(network: Option<&str>) -> u8 {
     }
 }
 
-pub(super) async fn quote_all_provider_refs(
+pub(in crate::p2p) async fn quote_all_provider_refs(
     providers: Arc<[RouteProviderCapability]>,
     from: Asset,
     to: Asset,
@@ -91,7 +102,7 @@ pub(super) async fn quote_all_provider_refs(
     quotes
 }
 
-pub(super) async fn quote_provider(
+pub(in crate::p2p) async fn quote_provider(
     provider: Arc<dyn PublicRouteProvider>,
     from: Asset,
     to: Asset,
@@ -147,7 +158,7 @@ pub(super) async fn quote_provider(
     }
 }
 
-pub(super) async fn quote_provider_many(
+pub(in crate::p2p) async fn quote_provider_many(
     provider: Arc<dyn PublicRouteProvider>,
     from: Asset,
     to: Asset,
@@ -200,10 +211,4 @@ pub(super) async fn quote_provider_many(
             None
         }
     }
-}
-
-pub(super) struct FiatAssetProgress {
-    pub(super) asset: String,
-    pub(super) entry: P2pSearchResponse,
-    pub(super) exit: P2pSearchResponse,
 }

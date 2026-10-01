@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) fn response_snapshot(
+pub(in crate::p2p) fn response_snapshot(
     search_id: Uuid,
     query: &NormalizedRouteQuery,
     routes: &HashMap<String, P2pRoute>,
@@ -31,7 +31,9 @@ pub(super) fn response_snapshot(
     }
 }
 
-pub(super) fn route_discovery_source(asset_statuses: &[RouteAssetStatus]) -> (&'static str, bool) {
+pub(in crate::p2p) fn route_discovery_source(
+    asset_statuses: &[RouteAssetStatus],
+) -> (&'static str, bool) {
     let sources = asset_statuses.iter().flat_map(|status| {
         status
             .entry_discovery_source
@@ -58,7 +60,10 @@ pub(super) fn route_discovery_source(asset_statuses: &[RouteAssetStatus]) -> (&'
     }
 }
 
-pub(super) fn truncate_routes_preserving_providers(routes: &mut Vec<P2pRoute>, limit: usize) {
+pub(in crate::p2p) fn truncate_routes_preserving_providers(
+    routes: &mut Vec<P2pRoute>,
+    limit: usize,
+) {
     if routes.len() <= limit {
         return;
     }
@@ -92,7 +97,7 @@ pub(super) fn truncate_routes_preserving_providers(routes: &mut Vec<P2pRoute>, l
     });
 }
 
-pub(super) fn route_provider_names(route: &P2pRoute) -> Vec<&str> {
+pub(in crate::p2p) fn route_provider_names(route: &P2pRoute) -> Vec<&str> {
     let mut providers = Vec::new();
     if let Some(provider) = route.route_provider.as_deref() {
         providers.push(provider);
@@ -113,7 +118,7 @@ pub(super) fn route_provider_names(route: &P2pRoute) -> Vec<&str> {
     providers
 }
 
-pub(super) fn sort_routes(routes: &mut [P2pRoute]) {
+pub(in crate::p2p) fn sort_routes(routes: &mut [P2pRoute]) {
     routes.sort_by(|left, right| {
         route_target(right)
             .partial_cmp(&route_target(left))
@@ -128,7 +133,7 @@ pub(super) fn sort_routes(routes: &mut [P2pRoute]) {
     });
 }
 
-pub(super) fn merge_routes(
+pub(in crate::p2p) fn merge_routes(
     routes: &mut HashMap<String, P2pRoute>,
     discovered: Vec<P2pRoute>,
 ) -> usize {
@@ -146,7 +151,7 @@ pub(super) fn merge_routes(
     routes.len() - before
 }
 
-pub(super) fn route_fingerprint(route: &P2pRoute) -> String {
+pub(in crate::p2p) fn route_fingerprint(route: &P2pRoute) -> String {
     let entry = route
         .entry_offer
         .as_ref()

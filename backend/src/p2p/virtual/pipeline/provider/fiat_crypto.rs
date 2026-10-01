@@ -1,9 +1,12 @@
+//! Fiat-to-crypto workflow route production.
+
 use super::*;
 
 impl P2pSearchService {
-    pub(super) async fn search_fiat_to_crypto_provider_routes(
+    pub(in crate::p2p) async fn search_fiat_to_crypto_provider_routes(
         &self,
         query: &NormalizedRouteQuery,
+        batches: Option<&mpsc::Sender<RouteBatch>>,
     ) -> Vec<P2pRoute> {
         let capabilities = self.provider_capabilities_for_query(query).await;
         let provider_assets = capabilities
@@ -164,6 +167,7 @@ impl P2pSearchService {
         }
         let mut routes = Vec::new();
         while let Some(batch) = searches.next().await {
+            emit_routes(batches, &batch).await;
             routes.extend(batch);
         }
         routes

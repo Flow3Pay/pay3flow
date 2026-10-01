@@ -4,11 +4,16 @@ use chrono::DateTime;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::mpsc;
 
 use crate::config::Config;
 use crate::p2p::service::P2pSource;
-use crate::p2p::{Advertiser, FiatRouteQuote, PublicFiatRouteProvider};
-use crate::route_engine::{PublicRouteProvider, PublicRouteQuote};
+use crate::p2p::spot::CryptoTicker;
+use crate::p2p::{
+    Advertiser, FiatRouteQuote, P2pOffer, P2pOfferMarket, P2pSearchService,
+    PublicFiatRouteProvider, SourceStatus,
+};
+use crate::route_engine::{Amount, PublicRouteProvider, PublicRouteQuote};
 use async_trait::async_trait;
 
 struct ProgressiveSource;
@@ -96,6 +101,7 @@ struct PricedRouteProvider {
     name: &'static str,
     multiplier: f64,
     fee: &'static str,
+    delay: Duration,
 }
 
 struct RecordingRouteProvider {
@@ -150,6 +156,7 @@ impl PublicRouteProvider for PricedRouteProvider {
     }
 
     async fn quote(&self, from: Asset, to: Asset, amount: Amount) -> Result<PublicRouteQuote> {
+        tokio::time::sleep(self.delay).await;
         let output = amount.value.parse::<f64>().unwrap() * self.multiplier;
         Ok(PublicRouteQuote {
             provider: self.name.into(),
@@ -792,11 +799,13 @@ async fn keeps_independent_quotes_from_multiple_route_providers() {
                 name: "near-intents",
                 multiplier: 0.99,
                 fee: "0.25",
+                delay: Duration::ZERO,
             }),
             Arc::new(PricedRouteProvider {
                 name: "cow-swap",
                 multiplier: 0.97,
                 fee: "2.5",
+                delay: Duration::ZERO,
             }),
         ]);
 
@@ -865,6 +874,71 @@ async fn keeps_independent_quotes_from_multiple_route_providers() {
         .await
         .unwrap();
     assert!(excluded.routes.is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn route_stream_publishes_each_provider_quote_batch_as_it_finishes() {
+    let service = P2pSearchService::with_sources(Vec::new(), Duration::from_secs(1))
+        .with_route_providers(vec![
+            Arc::new(PricedRouteProvider {
+                name: "fast-swap",
+                multiplier: 0.99,
+                fee: "0.25",
+                delay: Duration::from_millis(10),
+            }),
+            Arc::new(PricedRouteProvider {
+                name: "slow-swap",
+                multiplier: 0.97,
+                fee: "2.5",
+                delay: Duration::from_millis(250),
+            }),
+        ]);
+    let (updates, mut snapshots) = mpsc::channel(4);
+    let search_id = Uuid::new_v4();
+    let task = tokio::spawn(async move {
+        service
+            .stream_routes(
+                P2pRouteSearchQuery {
+                    source_fiat: "USDT".into(),
+                    target_fiat: "USDC".into(),
+                    source_amount: 100.0,
+                    source_network: Some("ethereum".into()),
+                    target_network: Some("ethereum".into()),
+                    bridge_fiat: None,
+                    assets: None,
+                    intermediary_assets: None,
+                    source_payment_method: None,
+                    target_payment_method: None,
+                    merchant_only: None,
+                    min_orders: None,
+                    min_completion_rate: None,
+                    allow_cross_venue: None,
+                    max_price_deviation_bps: None,
+                    limit: Some(20),
+                    sources: Some("fast-swap,slow-swap".into()),
+                    exchange_mode: ExchangeMode::All,
+                },
+                search_id,
+                updates,
+            )
+            .await
+    });
+
+    let first = tokio::time::timeout(Duration::from_millis(100), snapshots.recv())
+        .await
+        .expect("fast provider quote should be published independently")
+        .expect("first provider quote snapshot");
+    assert_eq!(first.routes_found, 1);
+    assert_eq!(first.routes[0].route_provider.as_deref(), Some("fast-swap"));
+    assert!(!task.is_finished());
+
+    let second = snapshots
+        .recv()
+        .await
+        .expect("second provider quote snapshot");
+    let final_response = task.await.unwrap().unwrap();
+    assert_eq!(second.routes_found, 2);
+    assert_eq!(final_response.routes_found, 2);
 }
 
 #[tokio::test]
@@ -1389,6 +1463,71 @@ async fn route_stream_publishes_a_fast_provider_before_slower_providers_finish()
     let final_response = task.await.unwrap().unwrap();
     assert_eq!(second.routes_found, 2);
     assert_eq!(final_response.routes_found, 2);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn route_stream_does_not_make_a_direct_provider_wait_for_local_legs() {
+    let service = P2pSearchService::with_sources(
+        vec![Arc::new(DelayedRouteSource {
+            name: "slow-p2p",
+            delay: Duration::from_millis(250),
+            price: "400",
+        })],
+        Duration::from_secs(1),
+    )
+    .with_fiat_route_providers(vec![Arc::new(FixedFiatRouteProvider)]);
+    let (updates, mut snapshots) = mpsc::channel(4);
+    let search_id = Uuid::new_v4();
+    let task = tokio::spawn(async move {
+        service
+            .stream_routes(
+                P2pRouteSearchQuery {
+                    source_fiat: "AMD".into(),
+                    target_fiat: "RUB".into(),
+                    source_amount: 100_000.0,
+                    source_network: None,
+                    target_network: None,
+                    bridge_fiat: None,
+                    assets: Some("USDT".into()),
+                    intermediary_assets: None,
+                    source_payment_method: None,
+                    target_payment_method: None,
+                    merchant_only: Some(false),
+                    min_orders: None,
+                    min_completion_rate: None,
+                    allow_cross_venue: Some(true),
+                    max_price_deviation_bps: Some(1_000),
+                    limit: Some(40),
+                    sources: None,
+                    exchange_mode: ExchangeMode::All,
+                },
+                search_id,
+                updates,
+            )
+            .await
+    });
+
+    let first = tokio::time::timeout(Duration::from_millis(100), snapshots.recv())
+        .await
+        .expect("direct provider should publish before slow local legs")
+        .expect("direct provider snapshot");
+    assert_eq!(first.routes_found, 1);
+    assert_eq!(
+        first.routes[0].entry_offer.as_ref().unwrap().source,
+        "id-pay"
+    );
+    assert!(first.routes[0].exit_offer.is_none());
+    assert!(!task.is_finished());
+
+    let final_response = task.await.unwrap().unwrap();
+    assert!(final_response.routes_found >= 2);
+    assert!(final_response.routes.iter().any(|route| {
+        route
+            .entry_offer
+            .as_ref()
+            .map(|offer| offer.source.as_str())
+            == Some("id-pay")
+    }));
 }
 
 #[test]

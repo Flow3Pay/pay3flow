@@ -1,6 +1,20 @@
-use super::*;
+use std::cmp::Ordering;
 
-pub(super) fn matching_offers(offers: &[P2pOffer], query: &NormalizedRouteQuery) -> Vec<P2pOffer> {
+mod diversity;
+mod top_k;
+
+pub(in crate::p2p) use top_k::compose_fiat_routes;
+
+use crate::p2p::routes::{CryptoMarketPath, NormalizedRouteQuery, P2pRoute, RouteAssetStatus};
+use crate::p2p::service::{P2pOffer, PaymentMethodMatch, SourceStatus};
+use crate::p2p::spot::CryptoTicker;
+use crate::p2p::P2pOfferMarket;
+use crate::route_engine::canonical_network_id;
+
+pub(in crate::p2p) fn matching_offers(
+    offers: &[P2pOffer],
+    query: &NormalizedRouteQuery,
+) -> Vec<P2pOffer> {
     offers
         .iter()
         .filter(|offer| query.accepts_offer(offer))
@@ -8,7 +22,7 @@ pub(super) fn matching_offers(offers: &[P2pOffer], query: &NormalizedRouteQuery)
         .collect()
 }
 
-pub(super) fn reject_price_outliers(
+pub(in crate::p2p) fn reject_price_outliers(
     offers: Vec<P2pOffer>,
     max_deviation_bps: u32,
 ) -> Vec<P2pOffer> {
@@ -39,189 +53,7 @@ pub(super) fn reject_price_outliers(
         .collect()
 }
 
-#[derive(Debug, Clone, Copy)]
-struct FiatRouteCandidate {
-    target_amount: f64,
-    entry_index: usize,
-    exit_index: usize,
-}
-
-impl PartialEq for FiatRouteCandidate {
-    fn eq(&self, other: &Self) -> bool {
-        self.target_amount.total_cmp(&other.target_amount) == Ordering::Equal
-            && self.entry_index == other.entry_index
-            && self.exit_index == other.exit_index
-    }
-}
-
-impl Eq for FiatRouteCandidate {}
-
-impl PartialOrd for FiatRouteCandidate {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for FiatRouteCandidate {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.target_amount
-            .total_cmp(&other.target_amount)
-            .then_with(|| other.entry_index.cmp(&self.entry_index))
-            .then_with(|| other.exit_index.cmp(&self.exit_index))
-    }
-}
-
-pub(super) fn compose_fiat_routes(
-    routes: &mut Vec<P2pRoute>,
-    query: &NormalizedRouteQuery,
-    asset: &str,
-    entry_offers: &[P2pOffer],
-    exit_offers: &[P2pOffer],
-) -> bool {
-    let mut entries = entry_offers
-        .iter()
-        .filter_map(|entry| {
-            let entry_price = positive_number(&entry.price)?;
-            let acquired_asset = query.source_amount / entry_price;
-            positive_number(&entry.available_asset)
-                .is_none_or(|available| available >= acquired_asset)
-                .then_some((entry, entry_price, acquired_asset))
-        })
-        .collect::<Vec<_>>();
-    entries.sort_by(|left, right| left.1.total_cmp(&right.1));
-    let mut exits = exit_offers
-        .iter()
-        .filter_map(|exit| positive_number(&exit.price).map(|price| (exit, price)))
-        .collect::<Vec<_>>();
-    exits.sort_by(|left, right| right.1.total_cmp(&left.1));
-    if entries.is_empty() || exits.is_empty() {
-        return true;
-    }
-
-    let candidate_limit = query.limit.saturating_mul(3).max(query.limit);
-    routes.reserve(candidate_limit.min(entries.len().saturating_mul(exits.len())));
-    let routes_start = routes.len();
-    let mut evaluated = HashSet::new();
-    let mut source_names = Vec::new();
-    let mut seen_sources = HashSet::new();
-    for index in 0..entries.len().max(exits.len()) {
-        if let Some((entry, _, _)) = entries.get(index) {
-            if seen_sources.insert(entry.source.as_str()) {
-                source_names.push(entry.source.as_str());
-            }
-        }
-        if let Some((exit, _)) = exits.get(index) {
-            if seen_sources.insert(exit.source.as_str()) {
-                source_names.push(exit.source.as_str());
-            }
-        }
-    }
-    for source in source_names {
-        let mut best = None;
-        for (entry_index, (entry, _, acquired_asset)) in entries.iter().enumerate() {
-            if entry.source != source {
-                continue;
-            }
-            for (exit_index, (exit, exit_price)) in exits.iter().enumerate() {
-                let target_amount = acquired_asset * exit_price;
-                if let Some(route) =
-                    compose_fiat_route(query, asset, entry, exit, *acquired_asset, target_amount)
-                {
-                    if best
-                        .as_ref()
-                        .is_none_or(|(current, _, _, _)| target_amount > *current)
-                    {
-                        best = Some((target_amount, entry_index, exit_index, route));
-                    }
-                    break;
-                }
-            }
-        }
-        for (exit_index, (exit, exit_price)) in exits.iter().enumerate() {
-            if exit.source != source {
-                continue;
-            }
-            for (entry_index, (entry, _, acquired_asset)) in entries.iter().enumerate() {
-                let target_amount = acquired_asset * exit_price;
-                if let Some(route) =
-                    compose_fiat_route(query, asset, entry, exit, *acquired_asset, target_amount)
-                {
-                    if best
-                        .as_ref()
-                        .is_none_or(|(current, _, _, _)| target_amount > *current)
-                    {
-                        best = Some((target_amount, entry_index, exit_index, route));
-                    }
-                    break;
-                }
-            }
-        }
-        if let Some((_, entry_index, exit_index, route)) = best {
-            if evaluated.insert((entry_index, exit_index)) {
-                routes.push(route);
-            }
-        }
-        if routes.len() - routes_start >= candidate_limit {
-            routes[routes_start..].sort_by(|left, right| {
-                route_target(right)
-                    .partial_cmp(&route_target(left))
-                    .unwrap_or(Ordering::Equal)
-            });
-            return false;
-        }
-    }
-
-    let mut frontier = BinaryHeap::with_capacity(entries.len());
-    for (entry_index, (_, _, acquired_asset)) in entries.iter().enumerate() {
-        frontier.push(FiatRouteCandidate {
-            target_amount: acquired_asset * exits[0].1,
-            entry_index,
-            exit_index: 0,
-        });
-    }
-
-    while let Some(candidate) = frontier.pop() {
-        let (entry, _, acquired_asset) = entries[candidate.entry_index];
-        let (exit, exit_price) = exits[candidate.exit_index];
-        let next_exit_index = candidate.exit_index + 1;
-        if next_exit_index < exits.len() {
-            frontier.push(FiatRouteCandidate {
-                target_amount: acquired_asset * exits[next_exit_index].1,
-                entry_index: candidate.entry_index,
-                exit_index: next_exit_index,
-            });
-        }
-
-        if evaluated.insert((candidate.entry_index, candidate.exit_index)) {
-            if let Some(route) = compose_fiat_route(
-                query,
-                asset,
-                entry,
-                exit,
-                acquired_asset,
-                acquired_asset * exit_price,
-            ) {
-                routes.push(route);
-                if routes.len() - routes_start >= candidate_limit {
-                    routes[routes_start..].sort_by(|left, right| {
-                        route_target(right)
-                            .partial_cmp(&route_target(left))
-                            .unwrap_or(Ordering::Equal)
-                    });
-                    return frontier.is_empty();
-                }
-            }
-        }
-    }
-    routes[routes_start..].sort_by(|left, right| {
-        route_target(right)
-            .partial_cmp(&route_target(left))
-            .unwrap_or(Ordering::Equal)
-    });
-    true
-}
-
-pub(super) fn compose_fiat_route(
+pub(in crate::p2p) fn compose_fiat_route(
     query: &NormalizedRouteQuery,
     asset: &str,
     entry: &P2pOffer,
@@ -316,7 +148,7 @@ pub(super) fn compose_fiat_route(
     })
 }
 
-pub(super) fn compose_fiat_to_crypto_routes(
+pub(in crate::p2p) fn compose_fiat_to_crypto_routes(
     routes: &mut Vec<P2pRoute>,
     query: &NormalizedRouteQuery,
     asset: &str,
@@ -383,7 +215,7 @@ pub(super) fn compose_fiat_to_crypto_routes(
     }
 }
 
-pub(super) fn compose_crypto_to_fiat_routes(
+pub(in crate::p2p) fn compose_crypto_to_fiat_routes(
     routes: &mut Vec<P2pRoute>,
     query: &NormalizedRouteQuery,
     asset: &str,
@@ -454,7 +286,7 @@ pub(super) fn compose_crypto_to_fiat_routes(
     }
 }
 
-pub(super) fn offer_matches_network(offer: &P2pOffer, requested: Option<&str>) -> bool {
+pub(in crate::p2p) fn offer_matches_network(offer: &P2pOffer, requested: Option<&str>) -> bool {
     offer
         .network
         .as_deref()
@@ -464,7 +296,7 @@ pub(super) fn offer_matches_network(offer: &P2pOffer, requested: Option<&str>) -
         })
 }
 
-pub(super) fn offer_networks_compatible(entry: &P2pOffer, exit: &P2pOffer) -> bool {
+pub(in crate::p2p) fn offer_networks_compatible(entry: &P2pOffer, exit: &P2pOffer) -> bool {
     entry
         .network
         .as_deref()
@@ -472,7 +304,7 @@ pub(super) fn offer_networks_compatible(entry: &P2pOffer, exit: &P2pOffer) -> bo
         .is_none_or(|(entry, exit)| canonical_network_id(entry) == canonical_network_id(exit))
 }
 
-pub(super) fn compose_crypto_market_routes(
+pub(in crate::p2p) fn compose_crypto_market_routes(
     routes: &mut Vec<P2pRoute>,
     query: &NormalizedRouteQuery,
     venue: &str,
@@ -567,12 +399,12 @@ pub(super) fn compose_crypto_market_routes(
     }
 }
 
-pub(super) struct ConversionQuote {
+pub(in crate::p2p) struct ConversionQuote {
     pair: String,
     rate: f64,
 }
 
-pub(super) fn conversion_quote(
+pub(in crate::p2p) fn conversion_quote(
     tickers: &[CryptoTicker],
     from: &str,
     to: &str,
@@ -598,7 +430,7 @@ pub(super) fn conversion_quote(
         })
 }
 
-pub(super) fn upsert_asset_status(
+pub(in crate::p2p) fn upsert_asset_status(
     statuses: &mut Vec<RouteAssetStatus>,
     asset: String,
     entry_sources: &[SourceStatus],
@@ -632,14 +464,14 @@ pub(super) fn upsert_asset_status(
     }
 }
 
-pub(super) fn positive_number(value: &str) -> Option<f64> {
+pub(in crate::p2p) fn positive_number(value: &str) -> Option<f64> {
     value
         .parse::<f64>()
         .ok()
         .filter(|value| value.is_finite() && *value > 0.0)
 }
 
-pub(super) fn covers_target(offer: &P2pOffer, target_amount: f64) -> bool {
+pub(in crate::p2p) fn covers_target(offer: &P2pOffer, target_amount: f64) -> bool {
     let Some(minimum) = positive_number(&offer.min_fiat) else {
         return false;
     };
@@ -649,10 +481,10 @@ pub(super) fn covers_target(offer: &P2pOffer, target_amount: f64) -> bool {
     minimum <= target_amount && target_amount <= maximum
 }
 
-pub(super) fn route_target(route: &P2pRoute) -> f64 {
+pub(in crate::p2p) fn route_target(route: &P2pRoute) -> f64 {
     route.target_amount.parse().unwrap_or_default()
 }
 
-pub(super) fn fixed(value: f64, scale: usize) -> String {
+pub(in crate::p2p) fn fixed(value: f64, scale: usize) -> String {
     format!("{value:.scale$}")
 }

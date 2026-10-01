@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) fn normalize_query(
+pub(in crate::p2p) fn normalize_query(
     query: P2pRouteSearchQuery,
     default_assets: &[String],
     networks: &crate::networks::NetworkCatalog,
@@ -87,14 +87,14 @@ pub(super) fn normalize_query(
     })
 }
 
-pub(super) fn source_selected(query: &NormalizedRouteQuery, provider: &str) -> bool {
+pub(in crate::p2p) fn source_selected(query: &NormalizedRouteQuery, provider: &str) -> bool {
     query
         .sources
         .as_deref()
         .is_none_or(|sources| sources.split(',').any(|source| source == provider))
 }
 
-pub(super) fn intermediary_asset_priority(symbol: &str, target_symbol: &str) -> u8 {
+pub(in crate::p2p) fn intermediary_asset_priority(symbol: &str, target_symbol: &str) -> u8 {
     if symbol.eq_ignore_ascii_case(target_symbol) {
         0
     } else {
@@ -108,7 +108,7 @@ pub(super) fn intermediary_asset_priority(symbol: &str, target_symbol: &str) -> 
     }
 }
 
-pub(super) fn validate_network(
+pub(in crate::p2p) fn validate_network(
     networks: &crate::networks::NetworkCatalog,
     network_id: &Option<String>,
     currency: &str,
@@ -136,7 +136,7 @@ pub(super) fn validate_network(
     }
 }
 
-pub(super) fn is_crypto_currency(
+pub(in crate::p2p) fn is_crypto_currency(
     currency: &str,
     networks: &crate::networks::NetworkCatalog,
     provider_assets: &[Asset],
@@ -147,13 +147,13 @@ pub(super) fn is_crypto_currency(
             .any(|asset| asset.symbol.eq_ignore_ascii_case(currency))
 }
 
-pub(super) fn trimmed(value: Option<String>) -> Option<String> {
+pub(in crate::p2p) fn trimmed(value: Option<String>) -> Option<String> {
     value
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
 }
 
-pub(super) fn leg_query(
+pub(in crate::p2p) fn leg_query(
     fiat: &str,
     asset: &str,
     side: P2pSide,

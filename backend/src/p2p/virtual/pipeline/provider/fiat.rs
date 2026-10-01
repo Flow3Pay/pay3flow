@@ -1,9 +1,12 @@
+//! Fiat workflow route production.
+
 use super::*;
 
 impl P2pSearchService {
-    pub(super) async fn search_crypto_to_fiat_provider_routes(
+    pub(in crate::p2p) async fn search_crypto_to_fiat_provider_routes(
         &self,
         query: &NormalizedRouteQuery,
+        batches: Option<&mpsc::Sender<RouteBatch>>,
     ) -> Vec<P2pRoute> {
         let capabilities = self.provider_capabilities_for_query(query).await;
         let provider_assets = capabilities
@@ -18,22 +21,30 @@ impl P2pSearchService {
         if source_assets.is_empty() {
             return Vec::new();
         }
-        let mut searches = FuturesUnordered::new();
+        let mut exit_searches = FuturesUnordered::new();
         for intermediary in self.intermediary_assets(query).await {
-            let Ok(exit) = self
-                .search_market(
-                    leg_query(
-                        &query.target_currency,
-                        &intermediary.symbol,
-                        P2pSide::SellCrypto,
-                        None,
-                        query.target_payment_method.clone(),
-                        query,
-                    ),
-                    query.offer_market(),
-                )
-                .await
-            else {
+            let service = self.clone();
+            let query = query.clone();
+            exit_searches.push(async move {
+                let exit = service
+                    .search_market(
+                        leg_query(
+                            &query.target_currency,
+                            &intermediary.symbol,
+                            P2pSide::SellCrypto,
+                            None,
+                            query.target_payment_method.clone(),
+                            &query,
+                        ),
+                        query.offer_market(),
+                    )
+                    .await;
+                (intermediary, exit)
+            });
+        }
+        let mut searches = FuturesUnordered::new();
+        while let Some((intermediary, exit)) = exit_searches.next().await {
+            let Ok(exit) = exit else {
                 continue;
             };
             let exit_offers = exit
@@ -150,14 +161,16 @@ impl P2pSearchService {
         }
         let mut routes = Vec::new();
         while let Some(batch) = searches.next().await {
+            emit_routes(batches, &batch).await;
             routes.extend(batch);
         }
         routes
     }
 
-    pub(super) async fn search_fiat_provider_routes(
+    pub(in crate::p2p) async fn search_fiat_provider_routes(
         &self,
         query: &NormalizedRouteQuery,
+        batches: Option<&mpsc::Sender<RouteBatch>>,
     ) -> (Vec<P2pRoute>, bool) {
         let mut quote_jobs = Vec::new();
         let capabilities = self.provider_capabilities_for_query(query).await;
@@ -355,6 +368,7 @@ impl P2pSearchService {
             if !output_asset.is_finite() || output_asset <= 0.0 {
                 continue;
             }
+            let mut batch = Vec::new();
             for exit in exit_offers.iter() {
                 let Some(exit_price) = positive_number(&exit.price) else {
                     continue;
@@ -367,7 +381,7 @@ impl P2pSearchService {
                     continue;
                 }
                 let route_quote = quote.clone();
-                routes.push(P2pRoute {
+                batch.push(P2pRoute {
                     route_id: String::new(),
                     rank: 0,
                     asset: exit.asset.clone(),
@@ -419,6 +433,8 @@ impl P2pSearchService {
                     service_links: Vec::new(),
                 });
             }
+            emit_routes(batches, &batch).await;
+            routes.extend(batch);
             if routes.len() >= provider_route_limit {
                 break;
             }

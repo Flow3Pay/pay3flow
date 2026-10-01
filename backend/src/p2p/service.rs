@@ -992,30 +992,6 @@ impl P2pSearchService {
         }
     }
 
-    pub(crate) async fn search_market_tickers(
-        &self,
-        requested_sources: Option<&str>,
-    ) -> Vec<(String, Result<Vec<CryptoTicker>>)> {
-        let selected_sources = self
-            .market_sources
-            .iter()
-            .filter(|source| {
-                requested_sources
-                    .is_none_or(|requested| requested.split(',').any(|name| name == source.name()))
-            })
-            .collect::<Vec<_>>();
-
-        join_all(selected_sources.into_iter().map(|source| async move {
-            let name = source.name().to_string();
-            let result = tokio::time::timeout(source.timeout(self.timeout), source.tickers())
-                .await
-                .map_err(|_| anyhow::anyhow!("{} spot ticker request timed out", name))
-                .and_then(|result| result);
-            (name, result)
-        }))
-        .await
-    }
-
     pub(crate) async fn stream_market_tickers(
         &self,
         requested_sources: Option<&str>,

@@ -3,6 +3,7 @@ mod models;
 mod routes;
 mod service;
 mod spot;
+mod r#virtual;
 mod workflow;
 
 pub use crate::compiled_provider_code::id_pay::IdPayRouteProvider;

@@ -128,9 +128,9 @@ pub struct RouteAssetStatus {
     /// Internal discovery transport. This is deliberately not serialized as
     /// a venue: Fmatch distributes venue offers but is not itself a venue.
     #[serde(skip)]
-    pub(super) entry_discovery_source: Option<String>,
+    pub(in crate::p2p) entry_discovery_source: Option<String>,
     #[serde(skip)]
-    pub(super) exit_discovery_source: Option<String>,
+    pub(in crate::p2p) exit_discovery_source: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

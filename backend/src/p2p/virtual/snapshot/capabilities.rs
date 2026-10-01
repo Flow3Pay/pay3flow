@@ -1,7 +1,16 @@
-use super::*;
+use futures::stream::{FuturesUnordered, StreamExt};
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
+
+use crate::p2p::routes::{
+    intermediary_asset_priority, provider_priority, source_selected, NormalizedRouteQuery,
+    RouteProviderCapability, MAX_PROVIDER_ASSETS,
+};
+use crate::p2p::P2pSearchService;
+use crate::route_engine::{canonical_network_id, Asset, PublicRouteProvider};
 
 impl P2pSearchService {
-    pub(super) async fn provider_assets(&self) -> Vec<Asset> {
+    pub(in crate::p2p) async fn provider_assets(&self) -> Vec<Asset> {
         if self.has_fmatch_backend() {
             self.warm_provider_capabilities();
             return self.cached_provider_assets();
@@ -9,15 +18,20 @@ impl P2pSearchService {
         Self::provider_assets_for(&self.route_providers).await
     }
 
-    pub(super) async fn provider_capabilities(
+    pub(in crate::p2p) async fn provider_capabilities(
         providers: &[Arc<dyn PublicRouteProvider>],
     ) -> Arc<[RouteProviderCapability]> {
+        let mut loads = providers
+            .iter()
+            .cloned()
+            .map(|provider| async move {
+                let assets = provider.supported_assets().await.into_iter().collect();
+                RouteProviderCapability { provider, assets }
+            })
+            .collect::<FuturesUnordered<_>>();
         let mut capabilities = Vec::with_capacity(providers.len());
-        for provider in providers {
-            capabilities.push(RouteProviderCapability {
-                provider: provider.clone(),
-                assets: provider.supported_assets().await.into_iter().collect(),
-            });
+        while let Some(capability) = loads.next().await {
+            capabilities.push(capability);
         }
         capabilities.sort_by_key(|capability| provider_priority(capability.provider.name()));
         capabilities.into()
@@ -66,7 +80,7 @@ impl P2pSearchService {
         });
     }
 
-    pub(super) fn cached_provider_assets(&self) -> Vec<Asset> {
+    pub(in crate::p2p) fn cached_provider_assets(&self) -> Vec<Asset> {
         let mut assets = self
             .provider_capabilities_cache
             .read()
@@ -80,7 +94,7 @@ impl P2pSearchService {
         assets
     }
 
-    pub(super) async fn provider_capabilities_for_query(
+    pub(in crate::p2p) async fn provider_capabilities_for_query(
         &self,
         query: &NormalizedRouteQuery,
     ) -> Arc<[RouteProviderCapability]> {
@@ -113,149 +127,24 @@ impl P2pSearchService {
         capabilities.into()
     }
 
-    pub(super) fn cached_provider_quote(&self, key: &str) -> Option<PublicRouteQuote> {
-        self.provider_quote_cache
-            .read()
-            .ok()?
-            .get(key)
-            .filter(|cached| {
-                cached.inserted_at.elapsed() < PROVIDER_QUOTE_CACHE_TTL
-                    && cached
-                        .quote
-                        .expires_at
-                        .is_none_or(|expires_at| expires_at > Utc::now())
-            })
-            .map(|cached| cached.quote.clone())
-    }
-
-    pub(super) fn refresh_provider_quote(&self, key: String, job: &FiatProviderQuoteJob) {
-        let refresh_key = key.clone();
-        let Ok(mut refreshes) = self.quote_refreshes.lock() else {
-            return;
-        };
-        if !refreshes.insert(refresh_key.clone()) {
-            return;
-        }
-        drop(refreshes);
-
-        let provider = job.provider.clone();
-        let from = job.from.clone();
-        let to = job.to.clone();
-        let amount = job.amount.clone();
-        let quote_semaphore = self.quote_semaphore.clone();
-        let cache = self.provider_quote_cache.clone();
-        let active_refreshes = self.quote_refreshes.clone();
-        let Ok(permit) = quote_semaphore.try_acquire_owned() else {
-            if let Ok(mut refreshes) = active_refreshes.lock() {
-                refreshes.remove(&refresh_key);
-            }
-            return;
-        };
-        tokio::spawn(async move {
-            let provider_name = provider.name().to_string();
-            let result =
-                tokio::time::timeout(Duration::from_secs(12), provider.quote(from, to, amount))
-                    .await;
-            drop(permit);
-            match result {
-                Ok(Ok(quote)) => {
-                    if let Ok(mut cache) = cache.write() {
-                        cache.insert(
-                            key,
-                            CachedProviderQuote {
-                                inserted_at: Instant::now(),
-                                quote,
-                            },
-                        );
-                    }
-                }
-                Ok(Err(error)) => {
-                    tracing::debug!(%error, provider = %provider_name, "background provider quote failed");
-                }
-                Err(_) => {
-                    tracing::debug!(provider = %provider_name, "background provider quote timed out");
-                }
-            }
-            if let Ok(mut refreshes) = active_refreshes.lock() {
-                refreshes.remove(&refresh_key);
-            }
-        });
-    }
-
-    pub(super) fn cached_fiat_quote(&self, key: &str) -> Option<crate::p2p::FiatRouteQuote> {
-        self.fiat_quote_cache
-            .read()
-            .ok()?
-            .get(key)
-            .filter(|cached| cached.inserted_at.elapsed() < PROVIDER_QUOTE_CACHE_TTL)
-            .map(|cached| cached.quote.clone())
-    }
-
-    pub(super) fn refresh_fiat_quote(
-        &self,
-        key: String,
-        provider: Arc<dyn crate::p2p::PublicFiatRouteProvider>,
-        source_currency: String,
-        target_currency: String,
-        source_amount: f64,
-    ) {
-        let refresh_key = key.clone();
-        let Ok(mut refreshes) = self.quote_refreshes.lock() else {
-            return;
-        };
-        if !refreshes.insert(refresh_key.clone()) {
-            return;
-        }
-        drop(refreshes);
-
-        let cache = self.fiat_quote_cache.clone();
-        let active_refreshes = self.quote_refreshes.clone();
-        let quote_semaphore = self.quote_semaphore.clone();
-        let Ok(permit) = quote_semaphore.try_acquire_owned() else {
-            if let Ok(mut refreshes) = active_refreshes.lock() {
-                refreshes.remove(&refresh_key);
-            }
-            return;
-        };
-        tokio::spawn(async move {
-            let quote = tokio::time::timeout(
-                Duration::from_secs(12),
-                provider.quote(&source_currency, &target_currency, source_amount),
-            )
-            .await
-            .ok()
-            .and_then(Result::ok);
-            drop(permit);
-            if let Some(quote) = quote {
-                if let Ok(mut cache) = cache.write() {
-                    cache.insert(
-                        key,
-                        CachedFiatQuote {
-                            inserted_at: Instant::now(),
-                            quote,
-                        },
-                    );
-                }
-            }
-            if let Ok(mut refreshes) = active_refreshes.lock() {
-                refreshes.remove(&refresh_key);
-            }
-        });
-    }
-
-    pub(super) async fn provider_assets_for(
+    pub(in crate::p2p) async fn provider_assets_for(
         providers: &[Arc<dyn PublicRouteProvider>],
     ) -> Vec<Asset> {
+        let mut loads = providers
+            .iter()
+            .cloned()
+            .map(|provider| async move { provider.supported_assets().await })
+            .collect::<FuturesUnordered<_>>();
         let mut assets = Vec::new();
-        for provider in providers {
-            assets.extend(provider.supported_assets().await);
+        while let Some(provider_assets) = loads.next().await {
+            assets.extend(provider_assets);
         }
         assets.sort_by_key(|asset| asset.to_string());
         assets.dedup();
         assets
     }
 
-    pub(super) fn route_providers_for_query(
+    pub(in crate::p2p) fn route_providers_for_query(
         &self,
         query: &NormalizedRouteQuery,
     ) -> Arc<[Arc<dyn PublicRouteProvider>]> {
@@ -267,7 +156,10 @@ impl P2pSearchService {
             .into()
     }
 
-    pub(super) async fn intermediary_assets(&self, query: &NormalizedRouteQuery) -> Vec<Asset> {
+    pub(in crate::p2p) async fn intermediary_assets(
+        &self,
+        query: &NormalizedRouteQuery,
+    ) -> Vec<Asset> {
         let providers = self.route_providers_for_query(query);
         let provider_assets = if self.has_fmatch_backend() {
             self.warm_provider_capabilities();
@@ -308,7 +200,7 @@ impl P2pSearchService {
         assets
     }
 
-    pub(super) fn assets_on_network(
+    pub(in crate::p2p) fn assets_on_network(
         &self,
         symbol: &str,
         network: Option<&str>,
