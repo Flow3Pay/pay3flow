@@ -26,6 +26,8 @@ explicitly say `planned`, `research`, or `legacy`.
 ## Product, research, and operations
 
 - [`p2p-search.md`](p2p-search.md) — read-only P2P route search.
+- [`route-virtualization-pipeline.md`](route-virtualization-pipeline.md) — подробный
+  runtime-пайплайн виртуализации, top-K, snapshots и background refresh.
 - [`../Providerfile.md`](../Providerfile.md) — complete Providerfile schema, examples, and generated catalog workflow.
 - [`public-p2p-sources.md`](public-p2p-sources.md) — source policy and privacy boundaries.
 - [`route-aggregation-research.md`](route-aggregation-research.md) — possible future quote sources.

@@ -40,11 +40,12 @@ Route-search snapshots use the same source labels and mark `stale: true` only
 when results actually came from the bounded-stale database cache.
 
 Pay3Flow requests up to 64 candidates per Fmatch page. `exchange_mode=all`
-publishes `market=all` as a wildcard, so P2P and direct-exchange offers compete
-in the same bounded result instead of silently reducing the search to P2P.
-Every published offer also carries the generic `provider` property used by
-Fmatch's provider-diversity pass; a high-volume venue therefore cannot consume
-the entire page before alternatives such as direct exchangers are considered.
+queries `market=p2p` and `market=direct_exchange` concurrently, merges the two
+partitions, and preserves source diversity. P2P volume therefore cannot evict a
+direct source such as Whitebird before local route composition. See
+[`route-virtualization-pipeline.md`](route-virtualization-pipeline.md) for the
+complete runtime pipeline, lazy top-K algorithm, provider snapshots, caches,
+and background quote refresh.
 
 The public website endpoints can change without notice. Keep the adapters
 enabled, monitor `sources[].ok`, and do not treat a search result as a firm
