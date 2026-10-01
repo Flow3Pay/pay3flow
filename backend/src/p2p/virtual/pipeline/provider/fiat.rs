@@ -43,7 +43,13 @@ impl P2pSearchService {
             });
         }
         let mut searches = FuturesUnordered::new();
-        while let Some((intermediary, exit)) = exit_searches.next().await {
+        let mut routes = Vec::new();
+        while !exit_searches.is_empty() || !searches.is_empty() {
+            tokio::select! {
+            exit = exit_searches.next(), if !exit_searches.is_empty() => {
+            let Some((intermediary, exit)) = exit else {
+                continue;
+            };
             let Ok(exit) = exit else {
                 continue;
             };
@@ -61,26 +67,31 @@ impl P2pSearchService {
                 let Ok(amount) = Amount::from_f64(query.source_amount, source.clone()) else {
                     continue;
                 };
-                let capabilities = capabilities.clone();
-                let source = source.clone();
-                let intermediary = intermediary.clone();
-                let exit_offers = exit_offers.clone();
-                let source_currency = query.source_currency.clone();
-                let target_currency = query.target_currency.clone();
-                let source_amount = query.source_amount;
-                let target_payment_method = query.target_payment_method.clone();
-                let quote_semaphore = self.quote_semaphore.clone();
-                searches.push(async move {
-                    quote_all_provider_refs(
-                        capabilities,
-                        source,
-                        intermediary,
-                        amount,
-                        quote_semaphore,
-                    )
-                    .await
-                    .into_iter()
-                    .flat_map(|(provider, quote)| {
+                for capability in capabilities
+                    .iter()
+                    .filter(|capability| capability.supports(source, &intermediary))
+                {
+                    let provider = capability.provider.clone();
+                    let source = source.clone();
+                    let intermediary = intermediary.clone();
+                    let amount = amount.clone();
+                    let exit_offers = exit_offers.clone();
+                    let source_currency = query.source_currency.clone();
+                    let target_currency = query.target_currency.clone();
+                    let source_amount = query.source_amount;
+                    let target_payment_method = query.target_payment_method.clone();
+                    let quote_semaphore = self.quote_semaphore.clone();
+                    searches.push(async move {
+                        quote_provider(
+                            provider,
+                            source,
+                            intermediary,
+                            amount,
+                            quote_semaphore,
+                        )
+                        .await
+                        .into_iter()
+                        .flat_map(|(provider, quote)| {
                         let source_currency = source_currency.clone();
                         let target_currency = target_currency.clone();
                         let target_payment_method = target_payment_method.clone();
@@ -154,15 +165,20 @@ impl P2pSearchService {
                                 service_links: Vec::new(),
                             })
                         })
-                    })
-                    .collect::<Vec<_>>()
-                });
+                        })
+                        .collect::<Vec<_>>()
+                    });
+                }
             }
-        }
-        let mut routes = Vec::new();
-        while let Some(batch) = searches.next().await {
+            }
+            batch = searches.next(), if !searches.is_empty() => {
+            let Some(batch) = batch else {
+                continue;
+            };
             emit_routes(batches, &batch).await;
             routes.extend(batch);
+            }
+            }
         }
         routes
     }

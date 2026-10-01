@@ -1,8 +1,6 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use futures::stream::{FuturesUnordered, StreamExt};
-
 use crate::p2p::service::P2pOffer;
 use crate::route_engine::{Amount, Asset, PublicRouteProvider, PublicRouteQuote};
 
@@ -67,39 +65,6 @@ pub(in crate::p2p) fn network_priority(network: Option<&str>) -> u8 {
         Some("solana") => 7,
         _ => 8,
     }
-}
-
-pub(in crate::p2p) async fn quote_all_provider_refs(
-    providers: Arc<[RouteProviderCapability]>,
-    from: Asset,
-    to: Asset,
-    amount: Amount,
-    quote_semaphore: Arc<tokio::sync::Semaphore>,
-) -> Vec<(String, PublicRouteQuote)> {
-    let mut searches = FuturesUnordered::new();
-    for capability in providers
-        .iter()
-        .filter(|capability| capability.supports(&from, &to))
-    {
-        let provider = capability.provider.clone();
-        let from = from.clone();
-        let to = to.clone();
-        let amount = amount.clone();
-        searches.push(quote_provider(
-            provider,
-            from,
-            to,
-            amount,
-            quote_semaphore.clone(),
-        ));
-    }
-    let mut quotes = Vec::new();
-    while let Some(quote) = searches.next().await {
-        if let Some(quote) = quote {
-            quotes.push(quote);
-        }
-    }
-    quotes
 }
 
 pub(in crate::p2p) async fn quote_provider(

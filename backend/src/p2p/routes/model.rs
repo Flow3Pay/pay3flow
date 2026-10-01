@@ -147,6 +147,9 @@ pub struct P2pRouteSearchResponse {
     pub can_exchange_to_target: bool,
     pub routes: Vec<P2pRoute>,
     pub asset_statuses: Vec<RouteAssetStatus>,
+    /// Completion states for route providers that do not produce P2P offers.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub provider_statuses: Vec<SourceStatus>,
     /// Discovery source for the route snapshot: Fmatch, database cache, or
     /// the legacy provider path used by local-only callers.
     pub source: String,

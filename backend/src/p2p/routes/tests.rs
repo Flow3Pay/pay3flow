@@ -941,6 +941,88 @@ async fn route_stream_publishes_each_provider_quote_batch_as_it_finishes() {
     assert_eq!(final_response.routes_found, 2);
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn fiat_to_crypto_stream_does_not_batch_fast_and_slow_providers() {
+    let service = P2pSearchService::with_sources(
+        vec![Arc::new(DelayedRouteSource {
+            name: "p2p-entry",
+            delay: Duration::ZERO,
+            price: "1",
+        })],
+        Duration::from_secs(1),
+    )
+    .with_route_providers(vec![
+        Arc::new(PricedRouteProvider {
+            name: "fast-swap",
+            multiplier: 0.99,
+            fee: "0.25",
+            delay: Duration::from_millis(10),
+        }),
+        Arc::new(PricedRouteProvider {
+            name: "slow-swap",
+            multiplier: 0.97,
+            fee: "2.5",
+            delay: Duration::from_millis(250),
+        }),
+    ]);
+    let (updates, mut snapshots) = mpsc::channel(8);
+    let search_id = Uuid::new_v4();
+    let task = tokio::spawn(async move {
+        service
+            .stream_routes(
+                P2pRouteSearchQuery {
+                    source_fiat: "AMD".into(),
+                    target_fiat: "USDC".into(),
+                    source_amount: 100.0,
+                    source_network: None,
+                    target_network: None,
+                    bridge_fiat: None,
+                    assets: Some("USDT".into()),
+                    intermediary_assets: None,
+                    source_payment_method: None,
+                    target_payment_method: None,
+                    merchant_only: None,
+                    min_orders: None,
+                    min_completion_rate: None,
+                    allow_cross_venue: None,
+                    max_price_deviation_bps: None,
+                    limit: Some(20),
+                    sources: Some("p2p-entry,fast-swap,slow-swap".into()),
+                    exchange_mode: ExchangeMode::All,
+                },
+                search_id,
+                updates,
+            )
+            .await
+    });
+
+    let fast_provider_snapshot = tokio::time::timeout(Duration::from_millis(100), async {
+        loop {
+            let snapshot = snapshots.recv().await.expect("route snapshot");
+            if snapshot
+                .routes
+                .iter()
+                .any(|route| route.route_provider.as_deref() == Some("fast-swap"))
+            {
+                return snapshot;
+            }
+        }
+    })
+    .await
+    .expect("fast fiat-to-crypto provider must not wait for a slow provider");
+    assert!(fast_provider_snapshot
+        .routes
+        .iter()
+        .all(|route| route.route_provider.as_deref() != Some("slow-swap")));
+    assert!(!task.is_finished());
+
+    let final_response = task.await.unwrap().unwrap();
+    assert!(final_response
+        .routes
+        .iter()
+        .any(|route| route.route_provider.as_deref() == Some("slow-swap")));
+}
+
 #[tokio::test]
 async fn dispatches_only_provider_supported_network_pairs() {
     let ethereum_unsupported = Arc::new(AtomicUsize::new(0));
@@ -1291,7 +1373,7 @@ fn route_limit_preserves_a_lower_ranked_provider_route() {
     id_pay.warnings.clear();
     all_routes.insert(id_pay.route_id.clone(), id_pay);
 
-    let snapshot = response_snapshot(Uuid::nil(), &normalized, &all_routes, &[]);
+    let snapshot = response_snapshot(Uuid::nil(), &normalized, &all_routes, &[], &HashMap::new());
     assert_eq!(snapshot.routes_found, 41);
     assert_eq!(snapshot.routes.len(), 40);
     assert!(snapshot
@@ -1528,6 +1610,61 @@ async fn route_stream_does_not_make_a_direct_provider_wait_for_local_legs() {
             .map(|offer| offer.source.as_str())
             == Some("id-pay")
     }));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn unsupported_direct_provider_stops_waiting_before_slow_local_legs() {
+    let service = P2pSearchService::with_sources(
+        vec![Arc::new(DelayedRouteSource {
+            name: "slow-p2p",
+            delay: Duration::from_millis(250),
+            price: "400",
+        })],
+        Duration::from_secs(1),
+    )
+    .with_fiat_route_providers(vec![Arc::new(FixedFiatRouteProvider)]);
+    let (updates, mut snapshots) = mpsc::channel(4);
+    let search_id = Uuid::new_v4();
+    let task = tokio::spawn(async move {
+        service
+            .stream_routes(
+                P2pRouteSearchQuery {
+                    source_fiat: "AMD".into(),
+                    target_fiat: "BYN".into(),
+                    source_amount: 100_000.0,
+                    source_network: None,
+                    target_network: None,
+                    bridge_fiat: None,
+                    assets: Some("USDT".into()),
+                    intermediary_assets: None,
+                    source_payment_method: None,
+                    target_payment_method: None,
+                    merchant_only: Some(false),
+                    min_orders: None,
+                    min_completion_rate: None,
+                    allow_cross_venue: Some(true),
+                    max_price_deviation_bps: Some(1_000),
+                    limit: Some(40),
+                    sources: Some("slow-p2p,id-pay".into()),
+                    exchange_mode: ExchangeMode::All,
+                },
+                search_id,
+                updates,
+            )
+            .await
+    });
+
+    let first = tokio::time::timeout(Duration::from_millis(100), snapshots.recv())
+        .await
+        .expect("unsupported provider status should be published immediately")
+        .expect("provider status snapshot");
+    assert_eq!(first.provider_statuses.len(), 1);
+    assert_eq!(first.provider_statuses[0].source, "id-pay");
+    assert!(first.provider_statuses[0].ok);
+    assert_eq!(first.provider_statuses[0].offers_found, 0);
+    assert!(!task.is_finished());
+
+    task.await.unwrap().unwrap();
 }
 
 #[test]

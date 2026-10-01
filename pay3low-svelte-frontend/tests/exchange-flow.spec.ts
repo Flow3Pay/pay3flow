@@ -1127,14 +1127,17 @@ test("search venues announce providers reported by route statuses", async ({ pag
   await expect(page.getByTestId("complete-route")).toHaveCount(1);
   await expect(page.getByTestId("complete-route").first()).toHaveClass(/selected/);
   const foundVenues = panelTop.locator(".resultSummary").getByTestId("found-venue");
-  await expect(foundVenues).toHaveCount(4);
+  await expect(foundVenues).toHaveCount(6);
   await expect(foundVenues.first()).toHaveAttribute("title", "Found on Bybit");
   await expect(foundVenues.nth(1)).toHaveAttribute("title", "Found on SkyLabs");
   await expect(foundVenues.nth(2)).toHaveAttribute("title", "Found on Bncex");
   await expect(foundVenues.nth(3)).toHaveAttribute("title", "Found on Bitcoin Center");
+  await expect(foundVenues.nth(4)).toHaveAttribute("title", "No route on Binance");
+  await expect(foundVenues.nth(5)).toHaveAttribute("title", "No route on OKX");
   await expect(searchingVenues).toHaveCount(5);
-  await expect(searchingVenues.nth(4)).toHaveAttribute("title", "Searching NEAR 1Click");
-  await expect(panelTop.getByTestId("searching-venues-overflow")).toHaveCount(1);
+  await expect(searchingVenues.nth(0)).toHaveAttribute("title", "Searching Cifra Markets");
+  await expect(searchingVenues.nth(4)).toHaveAttribute("title", "Searching Whitebird");
+  await expect(panelTop.getByTestId("searching-venues-overflow")).toHaveCount(0);
   await expect(refreshButton).toBeDisabled();
   await expect(refreshButton.locator("svg")).not.toHaveClass(/refreshSpin/);
 
@@ -1142,9 +1145,12 @@ test("search venues announce providers reported by route statuses", async ({ pag
   await expect(page.getByTestId("complete-route")).toHaveCount(2);
   await expect(page.getByTestId("complete-route").first()).toContainText("20420 RUB");
   await expect(page.getByTestId("complete-route").first()).toHaveClass(/selected/);
-  await expect(foundVenues).toHaveCount(5);
+  await expect(foundVenues).toHaveCount(7);
   for (const title of ["Whitebird", "Bybit", "SkyLabs", "Bncex", "Bitcoin Center"]) {
     await expect(panelTop.locator(`[data-testid="found-venue"][title="Found on ${title}"]`)).toHaveCount(1);
+  }
+  for (const title of ["Binance", "OKX"]) {
+    await expect(panelTop.locator(`[data-testid="found-venue"][title="No route on ${title}"]`)).toHaveCount(1);
   }
   await expect(searchingVenues).toHaveCount(4);
 

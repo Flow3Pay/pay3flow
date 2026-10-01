@@ -132,10 +132,11 @@
           <span class="resultSummary">
             {#if hasAmount}<small aria-live="polite">{routeCountLabel(routesFound, $locale)}{searching ? " · searching…" : ""}</small>{/if}
             {#if hasAmount && foundVenues.length}
-              <span class="foundVenues" aria-label={`Routes found on ${foundVenues.map((venue) => venue.label).join(", ")}`}>
+              <span class="foundVenues" aria-label={`Responses received from ${foundVenues.map((venue) => venue.label).join(", ")}`}>
                 {#each foundVenues as venue, index (venue.id)}
                   {@const status = venueStats[venue.id.toLowerCase()]}
-                  <div class="foundVenue" data-testid="found-venue" style:animation-delay={`${index * 70}ms`}>
+                  {@const hasMatch = (status?.routes_found ?? 0) > 0 || (status?.offers_found ?? 0) > 0}
+                  <div class="foundVenue" data-testid="found-venue" title={status?.ok === false ? `Error from ${venue.label}` : hasMatch ? `Found on ${venue.label}` : `No route on ${venue.label}`} style:animation-delay={`${index * 70}ms`}>
                     <button type="button" class="foundVenueButton" aria-label={`Show ${venue.label} response`}>
                       <img src={venue.iconUrl || venueIcon(venue.id)} alt="" width="18" height="18" decoding="async" on:error={fallbackFoundVenueIcon} />
                       <span class="foundVenueFallback" aria-hidden="true" hidden>{venue.label.slice(0, 1).toUpperCase()}</span>
@@ -145,7 +146,7 @@
                         <img src={venue.iconUrl || venueIcon(venue.id)} alt="" width="20" height="20" decoding="async" on:error={(event) => fallbackVenueIcon(event, venue.id)} />
                         <strong>{venue.label}</strong>
                       </div>
-                      <span class:venueOk={status?.ok} class:venueError={status && !status.ok}>{status?.ok === false ? "Response error" : "Response received"}</span>
+                      <span class:venueOk={status?.ok} class:venueError={status && !status.ok}>{status?.ok === false ? "Response error" : hasMatch ? "Response received" : "No matching route"}</span>
                       <dl>
                         <div><dt>Routes found</dt><dd>{status?.routes_found ?? 0}</dd></div>
                         <div><dt>Offers found</dt><dd>{status?.offers_found ?? 0}</dd></div>

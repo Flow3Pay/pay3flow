@@ -1,10 +1,12 @@
 use super::*;
+use crate::p2p::SourceStatus;
 
 pub(in crate::p2p) fn response_snapshot(
     search_id: Uuid,
     query: &NormalizedRouteQuery,
     routes: &HashMap<String, P2pRoute>,
     asset_statuses: &[RouteAssetStatus],
+    provider_statuses: &HashMap<String, SourceStatus>,
 ) -> P2pRouteSearchResponse {
     let routes_found = routes.len();
     let mut visible_routes = routes.values().cloned().collect::<Vec<_>>();
@@ -14,6 +16,8 @@ pub(in crate::p2p) fn response_snapshot(
         route.rank = index + 1;
     }
     let (source, stale) = route_discovery_source(asset_statuses);
+    let mut provider_statuses = provider_statuses.values().cloned().collect::<Vec<_>>();
+    provider_statuses.sort_by(|left, right| left.source.cmp(&right.source));
     P2pRouteSearchResponse {
         search_id,
         routes_found,
@@ -26,6 +30,7 @@ pub(in crate::p2p) fn response_snapshot(
         can_exchange_to_target: routes_found > 0,
         routes: visible_routes,
         asset_statuses: asset_statuses.to_vec(),
+        provider_statuses,
         source: source.into(),
         stale,
     }

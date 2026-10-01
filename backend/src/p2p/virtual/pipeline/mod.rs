@@ -109,6 +109,7 @@ impl P2pSearchService {
 
         let mut routes = HashMap::new();
         let mut asset_statuses = Vec::new();
+        let mut provider_statuses = HashMap::new();
         let mut routes_exhaustive = true;
         let mut channel_open = true;
         while channel_open || !producers.is_empty() {
@@ -154,11 +155,23 @@ impl P2pSearchService {
                             routes_exhaustive &= exhaustive;
                             merge_routes(&mut routes, discovered) > 0
                         }
+                        RouteBatch::ProviderResult { status, routes: discovered, exhaustive } => {
+                            provider_statuses.insert(status.source.clone(), status);
+                            routes_exhaustive &= exhaustive;
+                            merge_routes(&mut routes, discovered);
+                            true
+                        }
                     };
                     if changed {
                         publish_snapshot(
                             updates.as_ref(),
-                            response_snapshot(search_id, &query, &routes, &asset_statuses),
+                            response_snapshot(
+                                search_id,
+                                &query,
+                                &routes,
+                                &asset_statuses,
+                                &provider_statuses,
+                            ),
                         ).await;
                     }
                 }
@@ -170,7 +183,13 @@ impl P2pSearchService {
             }
         }
 
-        let mut response = response_snapshot(search_id, &query, &routes, &asset_statuses);
+        let mut response = response_snapshot(
+            search_id,
+            &query,
+            &routes,
+            &asset_statuses,
+            &provider_statuses,
+        );
         response.routes_exhaustive &= routes_exhaustive;
         tracing::info!(
             source_currency = %query.source_currency,

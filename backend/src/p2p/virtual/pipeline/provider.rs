@@ -14,6 +14,7 @@ use crate::p2p::routes::*;
 use crate::p2p::service::PaymentMethodMatch;
 use crate::p2p::{
     Advertiser, FiatRouteQuote, P2pOffer, P2pOfferMarket, P2pRoute, P2pSearchService, P2pSide,
+    SourceStatus,
 };
 use crate::route_engine::{Amount, Asset, PublicRouteQuote};
 
@@ -88,9 +89,23 @@ pub(super) async fn produce_direct_fiat_routes(
         .fiat_route_providers
         .iter()
         .filter(|provider| source_selected(query, provider.name()))
-        .filter(|provider| provider.supports_pair(&query.source_currency, &query.target_currency))
         .cloned()
         .map(|provider| async move {
+            let started = Instant::now();
+            let provider_name = provider.name().to_string();
+            if !provider.supports_pair(&query.source_currency, &query.target_currency) {
+                return (
+                    None,
+                    SourceStatus {
+                        source: provider_name,
+                        ok: true,
+                        cached: false,
+                        latency_ms: started.elapsed().as_millis(),
+                        offers_found: 0,
+                        error: None,
+                    },
+                );
+            }
             let key = fiat_quote_key(
                 provider.name(),
                 &query.source_currency,
@@ -98,7 +113,17 @@ pub(super) async fn produce_direct_fiat_routes(
                 query.source_amount,
             );
             if let Some(quote) = service.cached_fiat_quote(&key) {
-                return Some(quote);
+                return (
+                    Some(quote),
+                    SourceStatus {
+                        source: provider_name,
+                        ok: true,
+                        cached: true,
+                        latency_ms: 0,
+                        offers_found: 1,
+                        error: None,
+                    },
+                );
             }
             if service.has_fmatch_backend() {
                 service.refresh_fiat_quote(
@@ -108,27 +133,47 @@ pub(super) async fn produce_direct_fiat_routes(
                     query.target_currency.clone(),
                     query.source_amount,
                 );
-                return None;
+                return (
+                    None,
+                    SourceStatus {
+                        source: provider_name,
+                        ok: true,
+                        cached: false,
+                        latency_ms: started.elapsed().as_millis(),
+                        offers_found: 0,
+                        error: None,
+                    },
+                );
             }
-            provider
+            let result = provider
                 .quote(
                     &query.source_currency,
                     &query.target_currency,
                     query.source_amount,
                 )
-                .await
-                .ok()
+                .await;
+            let status = SourceStatus {
+                source: provider_name,
+                ok: result.is_ok(),
+                cached: false,
+                latency_ms: started.elapsed().as_millis(),
+                offers_found: usize::from(result.is_ok()),
+                error: result.as_ref().err().map(ToString::to_string),
+            };
+            (result.ok(), status)
         })
         .collect::<FuturesUnordered<_>>();
 
-    while let Some(quote) = searches.next().await {
-        let Some(route) = quote.and_then(|quote| direct_fiat_route(query, quote)) else {
-            continue;
-        };
+    while let Some((quote, status)) = searches.next().await {
+        let routes = quote
+            .and_then(|quote| direct_fiat_route(query, quote))
+            .into_iter()
+            .collect();
         if !send_batch(
             &batches,
-            RouteBatch::Routes {
-                routes: vec![route],
+            RouteBatch::ProviderResult {
+                status,
+                routes,
                 exhaustive: true,
             },
         )

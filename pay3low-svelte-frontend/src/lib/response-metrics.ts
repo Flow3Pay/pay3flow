@@ -24,13 +24,18 @@ export class SearchResponseMetrics {
       this.observeLeg(asset.asset, "entry", asset.entry_sources);
       this.observeLeg(asset.asset, "exit", asset.exit_sources);
     }
+    this.observeStatuses("provider", response.provider_statuses ?? []);
     return new Map(this.timings);
   }
 
   private observeLeg(asset: string, leg: "entry" | "exit", statuses: SourceStatus[]) {
+    this.observeStatuses(`${asset}:${leg}`, statuses);
+  }
+
+  private observeStatuses(scope: string, statuses: SourceStatus[]) {
     for (const status of statuses) {
       const source = status.source.toLowerCase();
-      const key = `${asset}:${leg}:${source}`;
+      const key = `${scope}:${source}`;
       if (this.seen.has(key)) continue;
       this.seen.add(key);
 

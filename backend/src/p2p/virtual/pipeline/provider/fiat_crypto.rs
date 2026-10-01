@@ -50,7 +50,13 @@ impl P2pSearchService {
             });
         }
         let mut searches = FuturesUnordered::new();
-        while let Some((intermediaries, entry)) = entry_searches.next().await {
+        let mut routes = Vec::new();
+        while !entry_searches.is_empty() || !searches.is_empty() {
+            tokio::select! {
+            entry = entry_searches.next(), if !entry_searches.is_empty() => {
+            let Some((intermediaries, entry)) = entry else {
+                continue;
+            };
             let Ok(entry) = entry else {
                 continue;
             };
@@ -80,21 +86,26 @@ impl P2pSearchService {
                         let Ok(amount) = Amount::from_f64(acquired, intermediary.clone()) else {
                             continue;
                         };
-                        let capabilities = capabilities.clone();
-                        let intermediary = intermediary.clone();
-                        let target = target.clone();
-                        let offer = offer.clone();
-                        let query = query.clone();
-                        let quote_semaphore = self.quote_semaphore.clone();
-                        searches.push(async move {
-                            quote_all_provider_refs(
-                                capabilities,
-                                intermediary,
-                                target,
-                                amount,
-                                quote_semaphore,
-                            )
-                            .await
+                        for capability in capabilities
+                            .iter()
+                            .filter(|capability| capability.supports(intermediary, target))
+                        {
+                            let provider = capability.provider.clone();
+                            let intermediary = intermediary.clone();
+                            let target = target.clone();
+                            let amount = amount.clone();
+                            let offer = offer.clone();
+                            let query = query.clone();
+                            let quote_semaphore = self.quote_semaphore.clone();
+                            searches.push(async move {
+                                quote_provider(
+                                    provider,
+                                    intermediary,
+                                    target,
+                                    amount,
+                                    quote_semaphore,
+                                )
+                                .await
                                 .into_iter()
                                 .filter_map(|(provider, quote)| {
                                     let output = quote.output.value.parse::<f64>().ok()?;
@@ -160,15 +171,20 @@ impl P2pSearchService {
                                     })
                                 })
                                 .collect::<Vec<_>>()
-                        });
+                            });
+                        }
                     }
                 }
             }
-        }
-        let mut routes = Vec::new();
-        while let Some(batch) = searches.next().await {
+            }
+            batch = searches.next(), if !searches.is_empty() => {
+            let Some(batch) = batch else {
+                continue;
+            };
             emit_routes(batches, &batch).await;
             routes.extend(batch);
+            }
+            }
         }
         routes
     }

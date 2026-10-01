@@ -1,7 +1,7 @@
 pub(in crate::p2p) mod provider;
 
 use crate::p2p::routes::ExchangeMode;
-use crate::p2p::{P2pOffer, P2pOfferMarket, P2pRoute, P2pSearchResponse};
+use crate::p2p::{P2pOffer, P2pOfferMarket, P2pRoute, P2pSearchResponse, SourceStatus};
 
 #[derive(Debug, Clone)]
 pub(in crate::p2p) struct NormalizedRouteQuery {
@@ -69,6 +69,11 @@ pub(in crate::p2p) enum RouteBatch {
         response: Box<P2pSearchResponse>,
     },
     Routes {
+        routes: Vec<P2pRoute>,
+        exhaustive: bool,
+    },
+    ProviderResult {
+        status: SourceStatus,
         routes: Vec<P2pRoute>,
         exhaustive: bool,
     },

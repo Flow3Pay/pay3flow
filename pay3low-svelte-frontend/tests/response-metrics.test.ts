@@ -56,3 +56,18 @@ test("cache observations are explicit and never lower the network average", () =
   assert.equal(timing?.sample_count, 1);
   assert.equal(timing?.cache_hits, 1);
 });
+
+test("provider completion is counted once across repeated route snapshots", () => {
+  const metrics = new SearchResponseMetrics();
+  const response = {
+    ...snapshot([], []),
+    provider_statuses: [status("id-pay", 18)],
+  };
+
+  metrics.observe(response);
+  const timing = metrics.observe(response).get("id-pay");
+
+  assert.equal(timing?.last_response_ms, 18);
+  assert.equal(timing?.average_response_ms, 18);
+  assert.equal(timing?.sample_count, 1);
+});

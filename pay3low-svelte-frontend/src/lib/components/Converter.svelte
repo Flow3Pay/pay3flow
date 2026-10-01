@@ -299,7 +299,7 @@
     }
     const timings = responseMetrics.observe(response);
     const observedVenueStats = new Map<string, VenueSearchStatus>();
-    for (const status of (response.asset_statuses ?? []).flatMap((asset) => [...asset.entry_sources, ...asset.exit_sources])) {
+    for (const status of [...(response.asset_statuses ?? []).flatMap((asset) => [...asset.entry_sources, ...asset.exit_sources]), ...(response.provider_statuses ?? [])]) {
       const id = status.source.toLowerCase();
       if (INTERNAL_DISCOVERY_SOURCES.has(id)) continue;
       const previous = observedVenueStats.get(id);
@@ -333,8 +333,9 @@
       ]),
       ...(response.asset_statuses ?? [])
         .flatMap((status) => [...status.entry_sources, ...status.exit_sources])
-        .filter((source) => source.offers_found > 0 && !INTERNAL_DISCOVERY_SOURCES.has(source.source.toLowerCase()))
+        .filter((source) => !INTERNAL_DISCOVERY_SOURCES.has(source.source.toLowerCase()))
         .map((source) => source.source),
+      ...(response.provider_statuses ?? []).map((source) => source.source),
     ]
       .map((source) => source.toLowerCase())
       .filter((source, index, sources) => source && sources.indexOf(source) === index);
