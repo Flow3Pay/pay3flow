@@ -283,6 +283,7 @@ export interface P2pRouteSearchResponse {
 export interface SourceStatus {
   source: string;
   ok: boolean;
+  cached: boolean;
   latency_ms: number;
   offers_found: number;
   error?: string | null;
@@ -290,6 +291,10 @@ export interface SourceStatus {
 
 export interface VenueSearchStatus extends SourceStatus {
   routes_found: number;
+  last_response_ms: number | null;
+  average_response_ms: number | null;
+  response_samples: number;
+  cache_hits: number;
 }
 
 export interface RouteAssetStatus {

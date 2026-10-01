@@ -326,6 +326,10 @@ fn canonicalize_offer_payment_methods(
 pub struct SourceStatus {
     pub source: String,
     pub ok: bool,
+    /// A cached observation is useful for availability, but is not a new
+    /// network-response sample and must not affect latency averages.
+    #[serde(default)]
+    pub cached: bool,
     pub latency_ms: u128,
     pub offers_found: usize,
     pub error: Option<String>,
@@ -744,6 +748,10 @@ impl P2pSearchService {
         let cache_key = fmatch_cache_key(&query, market)?;
         if let Some(mut response) = self.cached(&cache_key) {
             response.cached = true;
+            response
+                .sources
+                .iter_mut()
+                .for_each(|source| source.cached = true);
             if let Some(updates) = updates {
                 let _ = updates.send(response.clone()).await;
             }
@@ -973,6 +981,7 @@ impl P2pSearchService {
                                 SourceStatus {
                                     source: source.name().to_string(),
                                     ok: true,
+                                    cached: false,
                                     latency_ms: elapsed,
                                     offers_found: count,
                                     error: None,
@@ -984,6 +993,7 @@ impl P2pSearchService {
                             SourceStatus {
                                 source: source.name().to_string(),
                                 ok: false,
+                                cached: false,
                                 latency_ms: elapsed,
                                 offers_found: 0,
                                 error: Some(error.to_string()),
@@ -994,6 +1004,7 @@ impl P2pSearchService {
                             SourceStatus {
                                 source: source.name().to_string(),
                                 ok: false,
+                                cached: false,
                                 latency_ms: elapsed,
                                 offers_found: 0,
                                 error: Some(format!(
@@ -1212,6 +1223,7 @@ fn source_statuses_from_offers(offers: &[P2pOffer]) -> Vec<SourceStatus> {
         .map(|(source, offers_found)| SourceStatus {
             source: source.to_string(),
             ok: true,
+            cached: true,
             latency_ms: 0,
             offers_found,
             error: None,
@@ -1572,6 +1584,7 @@ mod tests {
             vec![SourceStatus {
                 source: "binance".into(),
                 ok: true,
+                cached: false,
                 latency_ms: 10,
                 offers_found: 1,
                 error: None,

@@ -469,22 +469,6 @@ impl P2pSearchService {
             is_crypto_currency(&query.source_currency, &self.networks, &provider_assets);
         let target_is_crypto =
             is_crypto_currency(&query.target_currency, &self.networks, &provider_assets);
-        if source_is_crypto && target_is_crypto && query.includes_exchangers() {
-            merge_routes(&mut routes, self.search_provider_routes(&query).await);
-            if query
-                .source_network
-                .as_ref()
-                .zip(query.target_network.as_ref())
-                .is_some_and(|(source, target)| source != target)
-            {
-                return Ok(response_snapshot(
-                    search_id,
-                    &query,
-                    &routes,
-                    &asset_statuses,
-                ));
-            }
-        }
         match (source_is_crypto, target_is_crypto) {
             (false, false) => {
                 if updates.is_some() {
@@ -740,7 +724,16 @@ impl P2pSearchService {
                     let search =
                         self.stream_market_tickers(query.sources.as_deref(), market_updates);
                     tokio::pin!(search);
+                    // Provider quotes and spot paths are independent. Neither
+                    // is allowed to hold back the other's first snapshot.
+                    let provider_search = self.search_provider_routes(&query);
+                    tokio::pin!(provider_search);
+                    let mut providers_finished = false;
+                    let mut market_finished = false;
                     loop {
+                        if providers_finished && market_finished {
+                            break;
+                        }
                         tokio::select! {
                             result = market_snapshots.recv() => {
                                 let Some(result) = result else { continue };
@@ -757,7 +750,7 @@ impl P2pSearchService {
                                     ).await;
                                 }
                             }
-                            () = &mut search => {
+                            () = &mut search, if !market_finished => {
                                 while let Ok(result) = market_snapshots.try_recv() {
                                     if apply_crypto_market_result(
                                         &mut routes,
@@ -772,12 +765,25 @@ impl P2pSearchService {
                                         ).await;
                                     }
                                 }
-                                break;
+                                market_finished = true;
+                            }
+                            provider_routes = &mut provider_search, if !providers_finished => {
+                                providers_finished = true;
+                                if merge_routes(&mut routes, provider_routes) > 0 {
+                                    publish_update(
+                                        updates.as_ref(),
+                                        response_snapshot(search_id, &query, &routes, &asset_statuses),
+                                    ).await;
+                                }
                             }
                         }
                     }
                 } else {
-                    for result in self.search_market_tickers(query.sources.as_deref()).await {
+                    let (market_results, provider_routes) = tokio::join!(
+                        self.search_market_tickers(query.sources.as_deref()),
+                        self.search_provider_routes(&query),
+                    );
+                    for result in market_results {
                         apply_crypto_market_result(
                             &mut routes,
                             &query,
@@ -786,6 +792,7 @@ impl P2pSearchService {
                             result,
                         );
                     }
+                    merge_routes(&mut routes, provider_routes);
                 }
             }
             (true, true) => {}
@@ -3303,6 +3310,7 @@ mod tests {
         let live_provider = SourceStatus {
             source: "bybit".into(),
             ok: true,
+            cached: false,
             latency_ms: 10,
             offers_found: 20,
             error: None,

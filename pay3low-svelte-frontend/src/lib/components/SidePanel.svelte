@@ -149,7 +149,9 @@
                       <dl>
                         <div><dt>Routes found</dt><dd>{status?.routes_found ?? 0}</dd></div>
                         <div><dt>Offers found</dt><dd>{status?.offers_found ?? 0}</dd></div>
-                        {#if status}<div><dt>Response time</dt><dd>{status.latency_ms} ms</dd></div>{/if}
+                        {#if status?.last_response_ms !== null}<div><dt>Last response</dt><dd>{status.last_response_ms} ms</dd></div>{/if}
+                        {#if status?.average_response_ms !== null}<div><dt>Average response</dt><dd>{status.average_response_ms} ms ({status.response_samples})</dd></div>{/if}
+                        {#if status?.cache_hits}<div><dt>Cache hits</dt><dd>{status.cache_hits}</dd></div>{/if}
                       </dl>
                       {#if status?.error}<small>{status.error}</small>{/if}
                     </div>

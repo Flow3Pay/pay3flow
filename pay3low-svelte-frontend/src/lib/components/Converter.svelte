@@ -6,6 +6,7 @@
   import { fetchPaymentMethods, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
   import { getAnonymousUserId, registerAnonymousUser } from "$lib/anonymous-user";
   import { locale, t } from "$lib/i18n";
+  import { SearchResponseMetrics } from "$lib/response-metrics";
   import SidePanel from "./SidePanel.svelte";
   import CurrencyPicker from "./CurrencyPicker.svelte";
   import NetworkPicker from "./NetworkPicker.svelte";
@@ -97,6 +98,7 @@
   let searchingVenues: P2pSourceOption[] = [];
   let foundVenues: P2pSourceOption[] = [];
   let venueStats: Record<string, VenueSearchStatus> = {};
+  let responseMetrics = new SearchResponseMetrics();
   let foundVenueIds: string[] = [];
   $: activeLocale = $locale;
   $: modalOpen = settingsOpen || exchangesOpen;
@@ -295,20 +297,21 @@
       const providers = new Set([...route.legs.map((leg) => leg.provider), ...(route.route_provider ? [route.route_provider] : [])].map((provider) => provider.toLowerCase()));
       for (const provider of providers) routeCounts.set(provider, (routeCounts.get(provider) ?? 0) + 1);
     }
+    const timings = responseMetrics.observe(response);
     const observedVenueStats = new Map<string, VenueSearchStatus>();
-    const latencyTotals = new Map<string, { total: number; count: number }>();
     for (const status of (response.asset_statuses ?? []).flatMap((asset) => [...asset.entry_sources, ...asset.exit_sources])) {
       const id = status.source.toLowerCase();
       if (INTERNAL_DISCOVERY_SOURCES.has(id)) continue;
       const previous = observedVenueStats.get(id);
-      const latency = latencyTotals.get(id) ?? { total: 0, count: 0 };
-      latency.total += status.latency_ms;
-      latency.count += 1;
-      latencyTotals.set(id, latency);
+      const timing = timings.get(id);
       observedVenueStats.set(id, {
         ...status,
         ok: (previous?.ok ?? true) && status.ok,
-        latency_ms: Math.round(latency.total / latency.count),
+        latency_ms: timing?.average_response_ms ?? 0,
+        last_response_ms: timing?.last_response_ms ?? null,
+        average_response_ms: timing?.average_response_ms ?? null,
+        response_samples: timing?.sample_count ?? 0,
+        cache_hits: timing?.cache_hits ?? 0,
         offers_found: (previous?.offers_found ?? 0) + status.offers_found,
         routes_found: routeCounts.get(id) ?? 0,
       });
@@ -320,7 +323,7 @@
     }
     for (const [id, count] of routeCounts) {
       const previous = nextVenueStats[id];
-      nextVenueStats[id] = previous ? { ...previous, routes_found: Math.max(previous.routes_found, count) } : { source: id, ok: true, latency_ms: 0, offers_found: 0, routes_found: count };
+      nextVenueStats[id] = previous ? { ...previous, routes_found: Math.max(previous.routes_found, count) } : { source: id, ok: true, cached: false, latency_ms: 0, last_response_ms: null, average_response_ms: null, response_samples: 0, cache_hits: 0, offers_found: 0, routes_found: count };
     }
     venueStats = nextVenueStats;
     const newlyFoundVenueIds = [
@@ -613,7 +616,7 @@
       error = `Choose different networks for ${selectedSourceCurrency}; the same asset on the same network is not a swap route.`;
       return;
     }
-    controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; controller = new AbortController(); const signal = controller.signal; const currentRequest = ++requestId; searching = true; awaitingFirstRoute = true; routesFound = 0; foundVenueIds = []; foundVenues = []; venueStats = {}; error = null;
+    controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; controller = new AbortController(); const signal = controller.signal; const currentRequest = ++requestId; searching = true; awaitingFirstRoute = true; routesFound = 0; foundVenueIds = []; foundVenues = []; venueStats = {}; responseMetrics = new SearchResponseMetrics(); error = null;
     let rerunForTargetAmount = false;
     try {
       const liveQuery = { sourceFiat: selectedSourceCurrency, targetFiat: selectedTargetCurrency, sourceAmount: value, intermediaryAssets: !sourceWallet && !targetWallet && selectedIntermediaryAssets.length ? selectedIntermediaryAssets : undefined, sourceNetwork: sourceWallet ? sourceNetwork?.id : undefined, targetNetwork: targetWallet ? targetNetwork?.id : undefined, sourcePaymentMethod: sourceWallet ? undefined : sourceMethod.p2pQuery, targetPaymentMethod: targetWallet ? undefined : targetMethod.p2pQuery, sources: selectedSources, exchangeMode, allowCrossVenue: true, limit: 40 };
