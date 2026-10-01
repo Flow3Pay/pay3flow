@@ -109,12 +109,24 @@ impl Service {
         &self,
         command: &str,
         content: &str,
+        candidate_page_size: usize,
     ) -> Result<(DeliveryOutcome, Option<Value>), ActivityPubError> {
         let resource = format!(
             "{}/marketplace/resources/p2p",
             self.origin.trim_end_matches('/')
         );
-        self.submit_request_for_resource(command, content, &resource)
+        let id = format!("{}/requests/{}", self.origin, uuid::Uuid::new_v4());
+        let mut activity = request_proposal(
+            &id,
+            &self.identity.actor_id,
+            &resource,
+            command,
+            content,
+            &format!("{}/inbox", self.origin),
+        );
+        activity["candidatePageSize"] = Value::from(candidate_page_size.clamp(1, 64));
+        self.delivery
+            .deliver_with_response(&self.identity, &self.fmatch_inbox, &activity)
             .await
     }
 
@@ -192,6 +204,52 @@ impl Service {
         &self,
         offer: &P2pOffer,
     ) -> Result<DeliveryOutcome, ActivityPubError> {
+        let proposal = self.p2p_offer_proposal(offer);
+        self.delivery
+            .deliver(
+                &self.p2p_identity,
+                &self.fmatch_inbox,
+                &proposal.to_activity(),
+            )
+            .await
+    }
+
+    /// Publish one provider response as an ActivityPub catalog so Fmatch can
+    /// persist every offer and refresh its read snapshot once per batch.
+    pub async fn publish_p2p_catalog(
+        &self,
+        offers: &[P2pOffer],
+    ) -> Result<DeliveryOutcome, ActivityPubError> {
+        let catalog_id = format!(
+            "{}/marketplace/p2p-catalogs/{}",
+            self.origin.trim_end_matches('/'),
+            uuid::Uuid::new_v4()
+        );
+        let activity = serde_json::json!({
+            "@context": [
+                crate::activitypub::context::AS_CONTEXT,
+                crate::activitypub::context::FEP0837_CONTEXT
+            ],
+            "id": format!("{catalog_id}#create"),
+            "type": "Create",
+            "actor": self.p2p_identity.actor_id,
+            "to": [crate::activitypub::model::AS_PUBLIC],
+            "object": {
+                "id": catalog_id,
+                "type": "OrderedCollection",
+                "totalItems": offers.len(),
+                "orderedItems": offers
+                    .iter()
+                    .map(|offer| self.p2p_offer_proposal(offer).to_activity())
+                    .collect::<Vec<_>>()
+            }
+        });
+        self.delivery
+            .deliver(&self.p2p_identity, &self.fmatch_inbox, &activity)
+            .await
+    }
+
+    fn p2p_offer_proposal(&self, offer: &P2pOffer) -> crate::activitypub::model::Proposal {
         let identity = format!(
             "{}:{}:{:?}:{}:{}:{:?}",
             offer.source, offer.ad_id, offer.side, offer.fiat, offer.asset, offer.network
@@ -223,7 +281,7 @@ impl Service {
             offer.payment_methods.join(","),
             offer.source_url,
         );
-        let proposal = crate::activitypub::model::Proposal {
+        crate::activitypub::model::Proposal {
             id: proposal_id,
             purpose: "offer".into(),
             attributed_to: self.p2p_identity.actor_id.clone(),
@@ -235,19 +293,19 @@ impl Service {
             ),
             action: "deliverService".into(),
             resource_unit: "advertisement".into(),
-            attachments: vec![serde_json::json!({
-                "type": "PropertyValue",
-                "name": "pay3flow:p2pOffer",
-                "value": offer,
-            })],
-        };
-        self.delivery
-            .deliver(
-                &self.p2p_identity,
-                &self.fmatch_inbox,
-                &proposal.to_activity(),
-            )
-            .await
+            attachments: vec![
+                serde_json::json!({
+                    "type": "PropertyValue",
+                    "name": "pay3flow:p2pOffer",
+                    "value": offer,
+                }),
+                serde_json::json!({
+                    "type": "PropertyValue",
+                    "name": "provider",
+                    "value": offer.source,
+                }),
+            ],
+        }
     }
 
     /// Reconcile and publish capabilities, including disabled tombstones for

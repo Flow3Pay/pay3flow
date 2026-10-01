@@ -22,7 +22,10 @@ complete routes. Other venues from the research list remain outside the live
 path until a legitimate read-only interface and adapter review exist.
 
 Provider refreshes still query the public adapters concurrently so their latest
-offers can be published. Public route legs are then resolved through Fmatch.
+offers can be published. One provider response is published as bounded
+ActivityPub `OrderedCollection` batches of up to 64 offers, allowing Fmatch to
+refresh its read snapshot once per batch instead of once per advertisement.
+Public route legs are then resolved through Fmatch.
 Successful Fmatch answers are stored in PostgreSQL. If Fmatch is unavailable,
 the newest answer within `p2p_fmatch_stale_secs` is used and the response has
 `source: "database_cache"` and `stale: true`. A live Fmatch answer has
@@ -30,9 +33,18 @@ the newest answer within `p2p_fmatch_stale_secs` is used and the response has
 considered usable. If neither Fmatch nor the bounded-stale database cache can
 provide offers, Pay3Flow queries its live providers and returns
 `source: "provider_fallback"` with the Fmatch rejection recorded in
-`sources`; provider-only local searches retain `source: "provider"`.
+`sources`; streaming searches forward each provider result as soon as it
+arrives instead of waiting for the complete fallback fan-out. Provider-only
+local searches retain `source: "provider"`.
 Route-search snapshots use the same source labels and mark `stale: true` only
 when results actually came from the bounded-stale database cache.
+
+Pay3Flow requests up to 64 candidates per Fmatch page. `exchange_mode=all`
+publishes `market=all` as a wildcard, so P2P and direct-exchange offers compete
+in the same bounded result instead of silently reducing the search to P2P.
+Every published offer also carries the generic `provider` property used by
+Fmatch's provider-diversity pass; a high-volume venue therefore cannot consume
+the entire page before alternatives such as direct exchangers are considered.
 
 The public website endpoints can change without notice. Keep the adapters
 enabled, monitor `sources[].ok`, and do not treat a search result as a firm

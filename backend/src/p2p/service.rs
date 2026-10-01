@@ -179,7 +179,8 @@ impl P2pOffer {
     /// Extract normalized P2P offers from the candidate-list shapes returned
     /// by Fmatch. Fmatch may return the offer directly or wrap it in an
     /// `offer`, `p2pOffer`, or `value` property depending on its response mode.
-    pub(crate) fn from_fmatch_reply(reply: &Value, market: P2pOfferMarket) -> Vec<Self> {
+    /// A missing market filter preserves the market advertised by each offer.
+    pub(crate) fn from_fmatch_reply(reply: &Value, market: Option<P2pOfferMarket>) -> Vec<Self> {
         let values = reply
             .get("offers")
             .or_else(|| reply.get("candidates"))
@@ -210,7 +211,10 @@ impl P2pOffer {
                     .unwrap_or(&raw);
                 serde_json::from_value::<P2pOffer>(offer.clone())
                     .ok()
-                    .map(|offer| offer.with_market(market))
+                    .map(|offer| match market {
+                        Some(market) => offer.with_market(market),
+                        None => offer,
+                    })
             })
             .collect()
     }
@@ -672,11 +676,15 @@ impl P2pSearchService {
             .expect("Fmatch backend checked by caller")
             .clone();
         let query = query.normalize()?;
-        let market = market.unwrap_or(P2pOfferMarket::P2p);
         let cache_key = fmatch_cache_key(&query, market)?;
         let content = fmatch_p2p_content(&query, market);
+        let candidate_page_size = query.fetch_limit().min(64);
 
-        let response = match backend.ap.submit_p2p_request("candidates", &content).await {
+        let response = match backend
+            .ap
+            .submit_p2p_request("candidates", &content, candidate_page_size)
+            .await
+        {
             Ok((_outcome, Some(reply))) => {
                 let offers = P2pOffer::from_fmatch_reply(&reply, market);
                 let response = build_search_response(
@@ -710,7 +718,8 @@ impl P2pSearchService {
                         &cache_key,
                         query,
                         market,
-                        "Fmatch returned no P2P offers",
+                        updates,
+                        "Fmatch returned no matching offers",
                     )
                     .await?
                 }
@@ -721,6 +730,7 @@ impl P2pSearchService {
                     &cache_key,
                     query,
                     market,
+                    updates,
                     "Fmatch returned no answer",
                 )
                 .await?
@@ -732,6 +742,7 @@ impl P2pSearchService {
                     &cache_key,
                     query,
                     market,
+                    updates,
                     &error.to_string(),
                 )
                 .await?
@@ -748,7 +759,8 @@ impl P2pSearchService {
         backend: &FmatchP2pBackend,
         cache_key: &str,
         query: P2pSearchQuery,
-        market: P2pOfferMarket,
+        market: Option<P2pOfferMarket>,
+        updates: Option<&mpsc::Sender<P2pSearchResponse>>,
         reason: &str,
     ) -> Result<P2pSearchResponse> {
         if let Some(cached) = self
@@ -758,7 +770,7 @@ impl P2pSearchService {
             return Ok(cached);
         }
         tracing::warn!(reason, "Fmatch cache miss; using live P2P providers");
-        let response = self.run_search(query, None, Some(market)).await?;
+        let response = self.run_search(query, updates.cloned(), market).await?;
         Ok(mark_provider_fallback(response, reason))
     }
 
@@ -767,7 +779,7 @@ impl P2pSearchService {
         backend: &FmatchP2pBackend,
         cache_key: &str,
         query: P2pSearchQuery,
-        market: P2pOfferMarket,
+        market: Option<P2pOfferMarket>,
         reason: &str,
     ) -> Result<Option<P2pSearchResponse>> {
         let max_age = backend.stale_window.as_secs().min(i64::MAX as u64) as i64;
@@ -781,8 +793,10 @@ impl P2pSearchService {
         if !usable_fmatch_response(&response) {
             return Ok(None);
         }
-        for offer in &mut response.offers {
-            offer.market = market;
+        if let Some(market) = market {
+            for offer in &mut response.offers {
+                offer.market = market;
+            }
         }
         response.query = query;
         response.cached = true;
@@ -961,10 +975,15 @@ impl P2pSearchService {
         let ap = backend.ap.clone();
         let offers = offers.to_vec();
         tokio::spawn(async move {
-            let results = join_all(offers.iter().map(|offer| ap.publish_p2p_offer(offer))).await;
+            let results = join_all(
+                offers
+                    .chunks(64)
+                    .map(|catalog| ap.publish_p2p_catalog(catalog)),
+            )
+            .await;
             let failures = results.iter().filter(|result| result.is_err()).count();
             if let Some(error) = results.iter().find_map(|result| result.as_ref().err()) {
-                tracing::warn!(failures, %error, "some P2P offers failed to publish to Fmatch");
+                tracing::warn!(failures, %error, "P2P offer catalogs failed to publish to Fmatch");
             }
         });
     }
@@ -1096,11 +1115,12 @@ fn usable_fmatch_response(response: &P2pSearchResponse) -> bool {
     !response.offers.is_empty()
 }
 
-fn fmatch_cache_key(query: &P2pSearchQuery, market: P2pOfferMarket) -> Result<String> {
+fn fmatch_cache_key(query: &P2pSearchQuery, market: Option<P2pOfferMarket>) -> Result<String> {
     let payload = serde_json::to_vec(&json!({
         "market": match market {
-            P2pOfferMarket::P2p => "p2p",
-            P2pOfferMarket::DirectExchange => "direct_exchange",
+            Some(P2pOfferMarket::P2p) => "p2p",
+            Some(P2pOfferMarket::DirectExchange) => "direct_exchange",
+            None => "all",
         },
         "query": query,
     }))?;
@@ -1114,10 +1134,11 @@ fn fmatch_cache_key(query: &P2pSearchQuery, market: P2pOfferMarket) -> Result<St
     ))
 }
 
-fn fmatch_p2p_content(query: &P2pSearchQuery, market: P2pOfferMarket) -> String {
+fn fmatch_p2p_content(query: &P2pSearchQuery, market: Option<P2pOfferMarket>) -> String {
     let market = match market {
-        P2pOfferMarket::P2p => "p2p",
-        P2pOfferMarket::DirectExchange => "direct_exchange",
+        Some(P2pOfferMarket::P2p) => "p2p",
+        Some(P2pOfferMarket::DirectExchange) => "direct_exchange",
+        None => "all",
     };
     format!(
         "p2p route candidates; market={market}; fiat={}; asset={}; side={:?}; amount={:?}; payment_method={:?}; merchant_only={:?}; min_orders={:?}; min_completion_rate={:?}; limit={:?}; sources={:?}",
@@ -1338,9 +1359,47 @@ mod tests {
             }]
         });
 
-        let parsed = P2pOffer::from_fmatch_reply(&reply, P2pOfferMarket::P2p);
+        let parsed = P2pOffer::from_fmatch_reply(&reply, Some(P2pOfferMarket::P2p));
 
         assert_eq!(parsed, vec![expected]);
+    }
+
+    #[test]
+    fn all_market_fmatch_reply_preserves_each_offer_market() {
+        let expected = offer("whitebird", "91.5", "10", "10000", 7)
+            .with_market(P2pOfferMarket::DirectExchange);
+        let reply = serde_json::json!({
+            "candidates": [{
+                "name": "whitebird-offer",
+                "attachment": [{
+                    "type": "PropertyValue",
+                    "name": "example:offer",
+                    "value": serde_json::to_value(&expected).unwrap()
+                }]
+            }]
+        });
+
+        let parsed = P2pOffer::from_fmatch_reply(&reply, None);
+
+        assert_eq!(parsed, vec![expected]);
+    }
+
+    #[test]
+    fn all_market_query_uses_a_generic_wildcard_fact() {
+        let query = P2pSearchQuery {
+            fiat: "RUB".into(),
+            asset: "USDT".into(),
+            side: P2pSide::SellCrypto,
+            amount: Some(100.0),
+            payment_method: None,
+            merchant_only: None,
+            min_orders: None,
+            min_completion_rate: None,
+            limit: Some(20),
+            sources: None,
+        };
+
+        assert!(fmatch_p2p_content(&query, None).contains("market=all"));
     }
 
     #[test]
