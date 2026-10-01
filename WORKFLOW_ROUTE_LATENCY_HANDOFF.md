@@ -22,15 +22,15 @@ Fmatch должен оставаться универсальным сервис
 
 - Pay3Flow: `/home/lion/workspaces/pay3flow`
   - рабочая ветка: `codex/workflow-route-latency`
-  - HEAD до создания этого файла: `b8d8d3b660c806ef15ffbdde0b93ef38b2811b9a`
-  - `master`, `origin/master` и `fuetcher/fmatch-migration` указывают на тот же коммит.
+  - база ветки: `b8d8d3b660c806ef15ffbdde0b93ef38b2811b9a`;
+  - первый этап ускорения: `2068a9e98da98c3ce4e3f0bf2068f4b0a5a72587`.
 - Fmatch, основной checkout: `/home/lion/workspaces/lefinepro/fmatch`
 - Fmatch, рабочий worktree: `/home/lion/workspaces/fmatch-pay3flow-routing`
   - ветка: `codex/pay3flow-routing-performance`
   - HEAD: `848e0c59b41d28a1e4654db5a1803c614de81a51`
   - worktree был чистым.
 
-В текущей ветке Pay3Flow пока нет изменений реализации новой секундной архитектуры. Были сделаны только исследования, замеры и создана ветка; этот документ — единственный новый файл.
+В текущей ветке Pay3Flow реализуется секундная архитектура. Код второго этапа находится поверх `2068a9e`: immutable capability snapshot, фоновые quote refresh и немедленная виртуализация workflow без live provider fan-out на критическом пути.
 
 ## Что уже исправлено и выложено
 
@@ -66,6 +66,22 @@ Health: `http://195.123.218.200:30727/health` возвращал `{"status":"ok"
 Production-проверка AMD → RUB: 3766 маршрутов, в venue были Whitebird, Bybit, BestChange и другие реальные источники, `has_fmatch_venue: false`.
 
 Проверки: backend — 202 passed, 14 ignored; Providerfile — 16 passed; frontend check/build успешны. В production работает образ `live-20261001-b8d8d3b`, pods здоровы, рестартов нет. Основные ветки Pay3Flow и Fmatch уже запушены.
+
+### Реализация секундного pipeline в Pay3Flow
+
+Коммит `2068a9e` и следующий этап в рабочей ветке:
+
+- fiat entry × exit строится lazy best-first и ограничивается требуемым top-K вместо полного декартова произведения;
+- API явно сообщает `routes_exhaustive`, поэтому ограниченный поиск не маскируется под полный подсчёт;
+- capability провайдеров загружаются один раз в immutable snapshot при старте;
+- live provider quotes и direct-fiat quotes обновляют 30-секундные кэши только фоновыми bounded-задачами;
+- cache miss немедленно даёт capability-based workflow estimate с явным требованием перепроверить quote перед исполнением;
+- фоновые обновления дедуплицируются, берут semaphore через `try_acquire` и не создают скрытую очередь ожидания;
+- повторные USDT-запросы для каждой сети сведены к одному запросу на символ;
+- Symbiosis корректно усекает вход до precision токена;
+- добавлены structured phase timings и тест 100 параллельных больших виртуализаций с пределом 1 секунда.
+
+Локальная проверка второго этапа: backend `206 passed, 14 ignored`, frontend `0 errors, 0 warnings`, `git diff --check` чистый. Production p95/p99 нужно вписать ниже после деплоя.
 
 ## Воспроизводимые production-замеры
 
@@ -180,4 +196,3 @@ Live quote-запросы внешним провайдерам должны о�
 - Fmatch production: host `195.123.218.200`, namespace `lefine`, health NodePort `30727`.
 
 Секреты, токены и пути к ключам в этом документе намеренно не сохранены.
-

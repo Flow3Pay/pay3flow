@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use anyhow::{bail, Result};
 use chrono::{DateTime, Utc};
@@ -12,8 +12,8 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use crate::p2p::service::{
-    normalize_sources, P2pOffer, P2pOfferMarket, P2pSearchQuery, P2pSearchResponse,
-    P2pSearchService, P2pSide, PaymentMethodMatch, SourceStatus,
+    normalize_sources, CachedFiatQuote, CachedProviderQuote, P2pOffer, P2pOfferMarket,
+    P2pSearchQuery, P2pSearchResponse, P2pSearchService, P2pSide, PaymentMethodMatch, SourceStatus,
 };
 use crate::p2p::spot::CryptoTicker;
 use crate::route_engine::{
@@ -30,7 +30,8 @@ const DEFAULT_MAX_PRICE_DEVIATION_BPS: u32 = 1_000;
 const MAX_PROVIDER_ASSETS: usize = 12;
 const MAX_PROVIDER_NETWORK_PAIRS: usize = 32;
 const MAX_PROVIDER_OFFERS_PER_LEG: usize = 8;
-const MAX_IN_FLIGHT_PROVIDER_QUOTES_PER_SEARCH: usize = 8;
+const PROVIDER_QUOTE_CACHE_TTL: Duration = Duration::from_secs(30);
+const MAX_BACKGROUND_PROVIDER_REFRESHES_PER_SEARCH: usize = 8;
 
 #[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -248,13 +249,36 @@ struct FiatProviderQuoteJob {
     exit_offers: Arc<[P2pOffer]>,
 }
 
-async fn run_fiat_provider_quote_job(
-    job: FiatProviderQuoteJob,
-    quote_semaphore: Arc<tokio::sync::Semaphore>,
-) -> Option<(String, PublicRouteQuote, P2pOffer, Arc<[P2pOffer]>)> {
-    let (provider_name, quote) =
-        quote_provider(job.provider, job.from, job.to, job.amount, quote_semaphore).await?;
-    Some((provider_name, quote, job.entry_offer, job.exit_offers))
+fn provider_quote_key(provider: &str, from: &Asset, to: &Asset, amount: &Amount) -> String {
+    format!("route|{provider}|{from}|{to}|{}", amount.value)
+}
+
+fn fiat_quote_key(provider: &str, source: &str, target: &str, amount: f64) -> String {
+    format!("fiat|{provider}|{source}|{target}|{amount:.2}")
+}
+
+fn provider_priority(provider: &str) -> u8 {
+    match provider {
+        "symbiosis" => 0,
+        "bestchange" => 1,
+        "cow-swap" => 2,
+        "near-intents" => 3,
+        _ => 4,
+    }
+}
+
+fn network_priority(network: Option<&str>) -> u8 {
+    match network {
+        Some("ethereum") => 0,
+        Some("tron") => 1,
+        Some("bnb-smart-chain") => 2,
+        Some("polygon-pos") => 3,
+        Some("arbitrum-one") => 4,
+        Some("optimism") => 5,
+        Some("avalanche-c") => 6,
+        Some("solana") => 7,
+        _ => 8,
+    }
 }
 
 async fn quote_all_provider_refs(
@@ -809,8 +833,7 @@ impl P2pSearchService {
     }
 
     async fn search_provider_routes(&self, query: &NormalizedRouteQuery) -> Vec<P2pRoute> {
-        let providers = self.route_providers_for_query(query);
-        let capabilities = Self::provider_capabilities(&providers).await;
+        let capabilities = self.provider_capabilities_for_query(query).await;
         let provider_assets = capabilities
             .iter()
             .flat_map(|capability| capability.assets.iter().cloned())
@@ -938,6 +961,10 @@ impl P2pSearchService {
     }
 
     async fn provider_assets(&self) -> Vec<Asset> {
+        if self.has_fmatch_backend() {
+            self.warm_provider_capabilities();
+            return self.cached_provider_assets();
+        }
         Self::provider_assets_for(&self.route_providers).await
     }
 
@@ -951,7 +978,228 @@ impl P2pSearchService {
                 assets: provider.supported_assets().await.into_iter().collect(),
             });
         }
+        capabilities.sort_by_key(|capability| provider_priority(capability.provider.name()));
         capabilities.into()
+    }
+
+    pub(crate) fn warm_provider_capabilities(&self) {
+        if self
+            .provider_capabilities_cache
+            .read()
+            .is_ok_and(|cache| cache.is_some())
+        {
+            return;
+        }
+        let refresh_key = "provider-capabilities".to_string();
+        let Ok(mut refreshes) = self.quote_refreshes.lock() else {
+            return;
+        };
+        if !refreshes.insert(refresh_key.clone()) {
+            return;
+        }
+        drop(refreshes);
+
+        let providers = self.route_providers.clone();
+        let cache = self.provider_capabilities_cache.clone();
+        let active_refreshes = self.quote_refreshes.clone();
+        tokio::spawn(async move {
+            let mut loads = providers
+                .iter()
+                .cloned()
+                .map(|provider| async move {
+                    let name = provider.name().to_string();
+                    let assets = provider.supported_assets().await.into_iter().collect();
+                    (name, assets)
+                })
+                .collect::<FuturesUnordered<_>>();
+            let mut snapshot = HashMap::new();
+            while let Some((name, assets)) = loads.next().await {
+                snapshot.insert(name, assets);
+            }
+            if let Ok(mut cache) = cache.write() {
+                *cache = Some(snapshot);
+            }
+            if let Ok(mut refreshes) = active_refreshes.lock() {
+                refreshes.remove(&refresh_key);
+            }
+        });
+    }
+
+    fn cached_provider_assets(&self) -> Vec<Asset> {
+        let mut assets = self
+            .provider_capabilities_cache
+            .read()
+            .ok()
+            .and_then(|cache| cache.clone())
+            .into_iter()
+            .flat_map(|snapshot| snapshot.into_values().flatten())
+            .collect::<Vec<_>>();
+        assets.sort_by_key(|asset| asset.to_string());
+        assets.dedup();
+        assets
+    }
+
+    async fn provider_capabilities_for_query(
+        &self,
+        query: &NormalizedRouteQuery,
+    ) -> Arc<[RouteProviderCapability]> {
+        let providers = self.route_providers_for_query(query);
+        if !self.has_fmatch_backend() {
+            return Self::provider_capabilities(&providers).await;
+        }
+        self.warm_provider_capabilities();
+        let snapshot = self
+            .provider_capabilities_cache
+            .read()
+            .ok()
+            .and_then(|cache| cache.clone());
+        let Some(snapshot) = snapshot else {
+            return Vec::new().into();
+        };
+        let mut capabilities = providers
+            .iter()
+            .filter_map(|provider| {
+                snapshot
+                    .get(provider.name())
+                    .cloned()
+                    .map(|assets| RouteProviderCapability {
+                        provider: provider.clone(),
+                        assets,
+                    })
+            })
+            .collect::<Vec<_>>();
+        capabilities.sort_by_key(|capability| provider_priority(capability.provider.name()));
+        capabilities.into()
+    }
+
+    fn cached_provider_quote(&self, key: &str) -> Option<PublicRouteQuote> {
+        self.provider_quote_cache
+            .read()
+            .ok()?
+            .get(key)
+            .filter(|cached| {
+                cached.inserted_at.elapsed() < PROVIDER_QUOTE_CACHE_TTL
+                    && cached
+                        .quote
+                        .expires_at
+                        .is_none_or(|expires_at| expires_at > Utc::now())
+            })
+            .map(|cached| cached.quote.clone())
+    }
+
+    fn refresh_provider_quote(&self, key: String, job: &FiatProviderQuoteJob) {
+        let refresh_key = key.clone();
+        let Ok(mut refreshes) = self.quote_refreshes.lock() else {
+            return;
+        };
+        if !refreshes.insert(refresh_key.clone()) {
+            return;
+        }
+        drop(refreshes);
+
+        let provider = job.provider.clone();
+        let from = job.from.clone();
+        let to = job.to.clone();
+        let amount = job.amount.clone();
+        let quote_semaphore = self.quote_semaphore.clone();
+        let cache = self.provider_quote_cache.clone();
+        let active_refreshes = self.quote_refreshes.clone();
+        let Ok(permit) = quote_semaphore.try_acquire_owned() else {
+            if let Ok(mut refreshes) = active_refreshes.lock() {
+                refreshes.remove(&refresh_key);
+            }
+            return;
+        };
+        tokio::spawn(async move {
+            let provider_name = provider.name().to_string();
+            let result =
+                tokio::time::timeout(Duration::from_secs(12), provider.quote(from, to, amount))
+                    .await;
+            drop(permit);
+            match result {
+                Ok(Ok(quote)) => {
+                    if let Ok(mut cache) = cache.write() {
+                        cache.insert(
+                            key,
+                            CachedProviderQuote {
+                                inserted_at: Instant::now(),
+                                quote,
+                            },
+                        );
+                    }
+                }
+                Ok(Err(error)) => {
+                    tracing::debug!(%error, provider = %provider_name, "background provider quote failed");
+                }
+                Err(_) => {
+                    tracing::debug!(provider = %provider_name, "background provider quote timed out");
+                }
+            }
+            if let Ok(mut refreshes) = active_refreshes.lock() {
+                refreshes.remove(&refresh_key);
+            }
+        });
+    }
+
+    fn cached_fiat_quote(&self, key: &str) -> Option<crate::p2p::FiatRouteQuote> {
+        self.fiat_quote_cache
+            .read()
+            .ok()?
+            .get(key)
+            .filter(|cached| cached.inserted_at.elapsed() < PROVIDER_QUOTE_CACHE_TTL)
+            .map(|cached| cached.quote.clone())
+    }
+
+    fn refresh_fiat_quote(
+        &self,
+        key: String,
+        provider: Arc<dyn crate::p2p::PublicFiatRouteProvider>,
+        source_currency: String,
+        target_currency: String,
+        source_amount: f64,
+    ) {
+        let refresh_key = key.clone();
+        let Ok(mut refreshes) = self.quote_refreshes.lock() else {
+            return;
+        };
+        if !refreshes.insert(refresh_key.clone()) {
+            return;
+        }
+        drop(refreshes);
+
+        let cache = self.fiat_quote_cache.clone();
+        let active_refreshes = self.quote_refreshes.clone();
+        let quote_semaphore = self.quote_semaphore.clone();
+        let Ok(permit) = quote_semaphore.try_acquire_owned() else {
+            if let Ok(mut refreshes) = active_refreshes.lock() {
+                refreshes.remove(&refresh_key);
+            }
+            return;
+        };
+        tokio::spawn(async move {
+            let quote = tokio::time::timeout(
+                Duration::from_secs(12),
+                provider.quote(&source_currency, &target_currency, source_amount),
+            )
+            .await
+            .ok()
+            .and_then(Result::ok);
+            drop(permit);
+            if let Some(quote) = quote {
+                if let Ok(mut cache) = cache.write() {
+                    cache.insert(
+                        key,
+                        CachedFiatQuote {
+                            inserted_at: Instant::now(),
+                            quote,
+                        },
+                    );
+                }
+            }
+            if let Ok(mut refreshes) = active_refreshes.lock() {
+                refreshes.remove(&refresh_key);
+            }
+        });
     }
 
     async fn provider_assets_for(providers: &[Arc<dyn PublicRouteProvider>]) -> Vec<Asset> {
@@ -978,7 +1226,12 @@ impl P2pSearchService {
 
     async fn intermediary_assets(&self, query: &NormalizedRouteQuery) -> Vec<Asset> {
         let providers = self.route_providers_for_query(query);
-        let provider_assets = Self::provider_assets_for(&providers).await;
+        let provider_assets = if self.has_fmatch_backend() {
+            self.warm_provider_capabilities();
+            self.cached_provider_assets()
+        } else {
+            Self::provider_assets_for(&providers).await
+        };
         let allowed_symbols = query.assets.iter().collect::<HashSet<_>>();
         let mut assets = if query.assets_explicit {
             provider_assets
@@ -1051,9 +1304,11 @@ impl P2pSearchService {
         &self,
         query: &NormalizedRouteQuery,
     ) -> Vec<P2pRoute> {
-        let providers = self.route_providers_for_query(query);
-        let capabilities = Self::provider_capabilities(&providers).await;
-        let provider_assets = Self::provider_assets_for(&providers).await;
+        let capabilities = self.provider_capabilities_for_query(query).await;
+        let provider_assets = capabilities
+            .iter()
+            .flat_map(|capability| capability.assets.iter().cloned())
+            .collect::<Vec<_>>();
         let target_assets = self.assets_on_network(
             &query.target_currency,
             query.target_network.as_deref(),
@@ -1217,9 +1472,11 @@ impl P2pSearchService {
         &self,
         query: &NormalizedRouteQuery,
     ) -> Vec<P2pRoute> {
-        let providers = self.route_providers_for_query(query);
-        let capabilities = Self::provider_capabilities(&providers).await;
-        let provider_assets = Self::provider_assets_for(&providers).await;
+        let capabilities = self.provider_capabilities_for_query(query).await;
+        let provider_assets = capabilities
+            .iter()
+            .flat_map(|capability| capability.assets.iter().cloned())
+            .collect::<Vec<_>>();
         let source_assets = self.assets_on_network(
             &query.source_currency,
             query.source_network.as_deref(),
@@ -1370,27 +1627,38 @@ impl P2pSearchService {
         query: &NormalizedRouteQuery,
     ) -> (Vec<P2pRoute>, bool) {
         let mut quote_jobs = Vec::new();
-        let providers = self.route_providers_for_query(query);
-        let capabilities = Self::provider_capabilities(&providers).await;
+        let capabilities = self.provider_capabilities_for_query(query).await;
         let provider_assets = capabilities
             .iter()
             .flat_map(|capability| capability.assets.iter().cloned())
             .collect::<Vec<_>>();
-        for asset in self.intermediary_assets(query).await {
+        let mut intermediary_symbols = if query.assets_explicit {
+            query.assets.clone()
+        } else {
+            provider_assets
+                .iter()
+                .map(|asset| asset.symbol.clone())
+                .collect::<Vec<_>>()
+        };
+        intermediary_symbols
+            .sort_by_key(|symbol| intermediary_asset_priority(symbol, &query.target_currency));
+        intermediary_symbols.dedup();
+        intermediary_symbols.truncate(MAX_PROVIDER_ASSETS);
+        for asset_symbol in intermediary_symbols {
             let source_networks = self.assets_on_network(
-                &asset.symbol,
+                &asset_symbol,
                 query.source_network.as_deref(),
                 &provider_assets,
             );
             let target_networks = self.assets_on_network(
-                &asset.symbol,
+                &asset_symbol,
                 query.target_network.as_deref(),
                 &provider_assets,
             );
             if source_networks.is_empty() || target_networks.is_empty() {
                 continue;
             }
-            let network_pairs = source_networks
+            let mut network_pairs = source_networks
                 .iter()
                 .flat_map(|source| {
                     target_networks
@@ -1399,6 +1667,14 @@ impl P2pSearchService {
                         .map(move |target| (source.clone(), target.clone()))
                 })
                 .collect::<Vec<_>>();
+            network_pairs.sort_by_key(|(from, to)| {
+                (
+                    network_priority(from.location.as_deref()),
+                    network_priority(to.location.as_deref()),
+                    from.to_string(),
+                    to.to_string(),
+                )
+            });
             if network_pairs.is_empty() {
                 continue;
             }
@@ -1406,7 +1682,7 @@ impl P2pSearchService {
                 .search_market(
                     leg_query(
                         &query.source_currency,
-                        &asset.symbol,
+                        &asset_symbol,
                         P2pSide::BuyCrypto,
                         Some(query.source_amount),
                         query.source_payment_method.clone(),
@@ -1422,7 +1698,7 @@ impl P2pSearchService {
                 .search_market(
                     leg_query(
                         &query.target_currency,
-                        &asset.symbol,
+                        &asset_symbol,
                         P2pSide::SellCrypto,
                         None,
                         query.target_payment_method.clone(),
@@ -1445,7 +1721,7 @@ impl P2pSearchService {
                 .offers
                 .into_iter()
                 .filter(|offer| query.accepts_offer(offer))
-                .take(MAX_PROVIDER_OFFERS_PER_LEG)
+                .take(2)
             {
                 let Some(entry_price) = positive_number(&entry_offer.price) else {
                     continue;
@@ -1463,7 +1739,7 @@ impl P2pSearchService {
                     {
                         let from = from.clone();
                         let to = to.clone();
-                        let Ok(amount) = Amount::from_f64(source_amount, from.clone()) else {
+                        let Ok(amount) = Amount::new(fixed(source_amount, 6), from.clone()) else {
                             continue;
                         };
                         let entry_offer = entry_offer.clone();
@@ -1482,18 +1758,64 @@ impl P2pSearchService {
             }
         }
 
-        let quote_semaphore = self.quote_semaphore.clone();
         let quote_jobs_total = quote_jobs.len();
         let quote_started = Instant::now();
-        let mut searches = futures::stream::iter(quote_jobs)
-            .map(move |job| run_fiat_provider_quote_job(job, quote_semaphore.clone()))
-            .buffer_unordered(MAX_IN_FLIGHT_PROVIDER_QUOTES_PER_SEARCH);
+        let mut quote_results = Vec::new();
+        let mut refreshes_started = 0;
+        for job in quote_jobs.into_iter().take(query.limit) {
+            let provider_name = job.provider.name().to_string();
+            let key = provider_quote_key(&provider_name, &job.from, &job.to, &job.amount);
+            if let Some(quote) = self.cached_provider_quote(&key) {
+                quote_results.push((provider_name, quote, job.entry_offer, job.exit_offers, true));
+            } else if !self.has_fmatch_backend() {
+                if let Some((provider_name, quote)) = quote_provider(
+                    job.provider,
+                    job.from,
+                    job.to,
+                    job.amount,
+                    self.quote_semaphore.clone(),
+                )
+                .await
+                {
+                    quote_results.push((
+                        provider_name,
+                        quote,
+                        job.entry_offer,
+                        job.exit_offers,
+                        true,
+                    ));
+                }
+            } else {
+                if refreshes_started < MAX_BACKGROUND_PROVIDER_REFRESHES_PER_SEARCH {
+                    self.refresh_provider_quote(key, &job);
+                    refreshes_started += 1;
+                }
+                let output = Amount::new(job.amount.value.clone(), job.to.clone())
+                    .expect("provider quote job contains a validated amount");
+                quote_results.push((
+                    provider_name.clone(),
+                    PublicRouteQuote {
+                        provider: provider_name,
+                        quote_id: None,
+                        description: Some("capability snapshot estimate".into()),
+                        source_url: None,
+                        from: job.from.clone(),
+                        to: job.to.clone(),
+                        input: job.amount.clone(),
+                        output,
+                        fees: Vec::new(),
+                        expires_at: None,
+                        path: vec![job.from, job.to],
+                    },
+                    job.entry_offer,
+                    job.exit_offers,
+                    false,
+                ));
+            }
+        }
         let mut routes = Vec::new();
-        let mut exhaustive = true;
-        while let Some(result) = searches.next().await {
-            let Some((provider_name, quote, entry, exit_offers)) = result else {
-                continue;
-            };
+        let provider_route_limit = query.limit.div_ceil(2).max(capabilities.len());
+        for (provider_name, quote, entry, exit_offers, quote_confirmed) in quote_results {
             let Ok(output_asset) = quote.output.value.parse::<f64>() else {
                 continue;
             };
@@ -1551,7 +1873,11 @@ impl P2pSearchService {
                     entry_offer: Some(entry.clone()),
                     exit_offer: Some(exit.clone()),
                     warnings: vec![
-                        "Live fiat entry/exit offers plus a live dry cross-network quote; platform limits and execution are not verified.".into(),
+                        if quote_confirmed {
+                            "Recent fiat entry/exit offers plus a cached dry cross-network quote; execution still requires a fresh quote.".into()
+                        } else {
+                            "Capability-based cross-network estimate; provider fees and live output are refreshed asynchronously and must be confirmed before execution.".into()
+                        },
                         "Confirm the source and destination networks, provider deposit address, memo/tag, network fee, and finality before sending.".into(),
                     ],
                     services: Vec::new(),
@@ -1560,22 +1886,22 @@ impl P2pSearchService {
                     service_links: Vec::new(),
                 });
             }
-            if routes.len() >= query.limit {
-                exhaustive = false;
+            if routes.len() >= provider_route_limit {
                 break;
             }
         }
         tracing::info!(
             quote_jobs_total,
+            refreshes_started,
             routes_found = routes.len(),
             elapsed_ms = quote_started.elapsed().as_millis(),
             "p2p.provider_route_search.completed"
         );
-        (routes, exhaustive)
+        (routes, false)
     }
 
     async fn search_direct_fiat_routes(&self, query: &NormalizedRouteQuery) -> Vec<P2pRoute> {
-        let mut searches = FuturesUnordered::new();
+        let mut quotes = Vec::new();
         for provider in self
             .fiat_route_providers
             .iter()
@@ -1588,16 +1914,34 @@ impl P2pSearchService {
             let source_currency = query.source_currency.clone();
             let target_currency = query.target_currency.clone();
             let source_amount = query.source_amount;
-            searches.push(async move {
-                provider
+            let key = fiat_quote_key(
+                provider.name(),
+                &source_currency,
+                &target_currency,
+                source_amount,
+            );
+            if let Some(quote) = self.cached_fiat_quote(&key) {
+                quotes.push(quote);
+            } else if !self.has_fmatch_backend() {
+                if let Ok(quote) = provider
                     .quote(&source_currency, &target_currency, source_amount)
                     .await
-                    .ok()
-            });
+                {
+                    quotes.push(quote);
+                }
+            } else {
+                self.refresh_fiat_quote(
+                    key,
+                    provider,
+                    source_currency,
+                    target_currency,
+                    source_amount,
+                );
+            }
         }
 
         let mut routes = Vec::new();
-        while let Some(Some(quote)) = searches.next().await {
+        for quote in quotes {
             if !quote.source_amount.is_finite()
                 || quote.source_amount <= 0.0
                 || !quote.target_amount.is_finite()

@@ -1,8 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
-use std::sync::Arc;
-use std::sync::RwLock;
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
@@ -25,7 +24,7 @@ use crate::networks::NetworkCatalog;
 use crate::p2p::declarative::{DeclarativeMarketSource, DeclarativeP2pSource};
 use crate::p2p::spot::{CryptoMarketSource, CryptoTicker};
 use crate::p2p::workflow::WorkflowP2pSource;
-use crate::route_engine::PublicRouteProvider;
+use crate::route_engine::{Asset, PublicRouteProvider, PublicRouteQuote};
 
 const DEFAULT_LIMIT: usize = 20;
 const MAX_LIMIT: usize = 100;
@@ -392,8 +391,26 @@ pub struct P2pSearchService {
     pub(crate) route_providers: Arc<[Arc<dyn PublicRouteProvider>]>,
     pub(crate) fiat_route_providers: Arc<[Arc<dyn PublicFiatRouteProvider>]>,
     pub(crate) quote_semaphore: Arc<Semaphore>,
+    pub(crate) provider_quote_cache: Arc<RwLock<HashMap<String, CachedProviderQuote>>>,
+    pub(crate) fiat_quote_cache: Arc<RwLock<HashMap<String, CachedFiatQuote>>>,
+    pub(crate) quote_refreshes: Arc<Mutex<HashSet<String>>>,
+    pub(crate) provider_capabilities_cache: Arc<RwLock<Option<ProviderCapabilitiesSnapshot>>>,
     fmatch: Option<FmatchP2pBackend>,
 }
+
+#[derive(Clone)]
+pub(crate) struct CachedProviderQuote {
+    pub(crate) inserted_at: Instant,
+    pub(crate) quote: PublicRouteQuote,
+}
+
+#[derive(Clone)]
+pub(crate) struct CachedFiatQuote {
+    pub(crate) inserted_at: Instant,
+    pub(crate) quote: FiatRouteQuote,
+}
+
+pub(crate) type ProviderCapabilitiesSnapshot = HashMap<String, HashSet<Asset>>;
 
 #[derive(Clone)]
 struct FmatchP2pBackend {
@@ -457,6 +474,7 @@ impl P2pSearchService {
             stale_window: Duration::from_secs(config.p2p_fmatch_stale_secs),
             answer_ttl: Duration::from_millis(config.p2p_search_cache_ttl_ms.max(1)),
         });
+        service.warm_provider_capabilities();
         Ok(service)
     }
 
@@ -534,6 +552,10 @@ impl P2pSearchService {
             route_providers: route_providers.into(),
             fiat_route_providers: fiat_route_providers.into(),
             quote_semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_PROVIDER_QUOTES)),
+            provider_quote_cache: Arc::new(RwLock::new(HashMap::new())),
+            fiat_quote_cache: Arc::new(RwLock::new(HashMap::new())),
+            quote_refreshes: Arc::new(Mutex::new(HashSet::new())),
+            provider_capabilities_cache: Arc::new(RwLock::new(None)),
             fmatch: None,
         })
     }
@@ -579,6 +601,10 @@ impl P2pSearchService {
             route_providers: Vec::new().into(),
             fiat_route_providers: Vec::new().into(),
             quote_semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_PROVIDER_QUOTES)),
+            provider_quote_cache: Arc::new(RwLock::new(HashMap::new())),
+            fiat_quote_cache: Arc::new(RwLock::new(HashMap::new())),
+            quote_refreshes: Arc::new(Mutex::new(HashSet::new())),
+            provider_capabilities_cache: Arc::new(RwLock::new(None)),
             fmatch: None,
         }
     }
@@ -595,6 +621,9 @@ impl P2pSearchService {
         providers: Vec<Arc<dyn PublicRouteProvider>>,
     ) -> Self {
         self.route_providers = providers.into();
+        self.provider_quote_cache = Arc::new(RwLock::new(HashMap::new()));
+        self.quote_refreshes = Arc::new(Mutex::new(HashSet::new()));
+        self.provider_capabilities_cache = Arc::new(RwLock::new(None));
         self
     }
 
@@ -604,6 +633,8 @@ impl P2pSearchService {
         providers: Vec<Arc<dyn PublicFiatRouteProvider>>,
     ) -> Self {
         self.fiat_route_providers = providers.into();
+        self.fiat_quote_cache = Arc::new(RwLock::new(HashMap::new()));
+        self.quote_refreshes = Arc::new(Mutex::new(HashSet::new()));
         self
     }
 
@@ -621,6 +652,10 @@ impl P2pSearchService {
                     .map(|source| source.name().to_string()),
             )
             .collect()
+    }
+
+    pub(crate) fn has_fmatch_backend(&self) -> bool {
+        self.fmatch.is_some()
     }
 
     pub fn route_provider_names(&self) -> HashSet<String> {
