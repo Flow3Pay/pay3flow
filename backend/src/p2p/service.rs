@@ -742,6 +742,13 @@ impl P2pSearchService {
             .clone();
         let query = query.normalize()?;
         let cache_key = fmatch_cache_key(&query, market)?;
+        if let Some(mut response) = self.cached(&cache_key) {
+            response.cached = true;
+            if let Some(updates) = updates {
+                let _ = updates.send(response.clone()).await;
+            }
+            return Ok(response);
+        }
         let content = fmatch_p2p_content(&query, market);
         let candidate_page_size = query.fetch_limit().min(64);
 
@@ -763,6 +770,7 @@ impl P2pSearchService {
                 );
                 response.sources = source_statuses_from_offers(&response.offers);
                 if usable_fmatch_response(&response) {
+                    self.cache_response(cache_key.clone(), response.clone());
                     spawn_fmatch_answer_persist(
                         backend.pool.clone(),
                         cache_key.clone(),
