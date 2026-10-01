@@ -24,6 +24,7 @@ Fmatch должен оставаться универсальным сервис
   - рабочая ветка: `codex/workflow-route-latency`
   - база ветки: `b8d8d3b660c806ef15ffbdde0b93ef38b2811b9a`;
   - первый этап ускорения: `2068a9e98da98c3ce4e3f0bf2068f4b0a5a72587`.
+  - production-реализация секундного pipeline: `12d493d2f3e8232cc122644555a0b25699dd3420`.
 - Fmatch, основной checkout: `/home/lion/workspaces/lefinepro/fmatch`
 - Fmatch, рабочий worktree: `/home/lion/workspaces/fmatch-pay3flow-routing`
   - ветка: `codex/pay3flow-routing-performance`
@@ -83,7 +84,19 @@ Production-проверка AMD → RUB: 3766 маршрутов, в venue бы�
 - Symbiosis корректно усекает вход до precision токена;
 - добавлены structured phase timings и тест 100 параллельных больших виртуализаций с пределом 1 секунда.
 
-Локальная проверка второго этапа: backend `206 passed, 14 ignored`, frontend `0 errors, 0 warnings`, `git diff --check` чистый. Production p95/p99 нужно вписать ниже после деплоя.
+Локальная финальная проверка: backend `208 passed, 14 ignored`, frontend `0 errors, 0 warnings`, Providerfile актуален, clippy успешен без новых предупреждений.
+
+Production-образ `live-20261001-12d493d`, pod здоров, рестартов нет. AMD → RUB, USDT, `exchange_mode=all`, `limit=40`:
+
+- одиночный HTTP-запрос: 326 мс, 144 bounded candidates, 40 результатов;
+- 24 workflow routes от BestChange и Symbiosis;
+- Whitebird присутствует в смешанной выдаче, всего представлены 10 реальных venue;
+- Fmatch как venue отсутствует;
+- после холодного истечения 5-секундного cache TTL: 100 запросов, concurrency 20, 100/100 HTTP 200;
+- HTTP: mean 273 мс, p95 652 мс, p99 685 мс, max 915 мс;
+- backend pipeline: mean 85 мс, p95 449 мс, p99 495 мс, max 674 мс.
+
+Таким образом, и backend pipeline, и полный HTTP end-to-end уложились ниже 1 секунды во всех 100 измеренных запросах.
 
 ## Воспроизводимые production-замеры
 
