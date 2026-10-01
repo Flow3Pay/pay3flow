@@ -71,7 +71,7 @@ impl DeliveryClient {
         inbox: &str,
         activity: &Value,
     ) -> Result<DeliveryOutcome, ActivityPubError> {
-        self.post(identity, inbox, activity, false)
+        self.post(identity, inbox, activity, false, true)
             .await
             .map(|(outcome, _)| outcome)
     }
@@ -85,7 +85,24 @@ impl DeliveryClient {
         inbox: &str,
         activity: &Value,
     ) -> Result<(DeliveryOutcome, Option<Value>), ActivityPubError> {
-        self.post(identity, inbox, activity, true).await
+        self.post(identity, inbox, activity, true, true).await
+    }
+
+    /// Deliver a one-shot request and return its inline response without
+    /// touching the delivery ledger.
+    ///
+    /// Request activities use a fresh id and are never replayed after the
+    /// response has been returned, so the ledger cannot deduplicate useful
+    /// work. Skipping it also keeps two database round trips out of latency-
+    /// sensitive discovery requests. Retries inside this call still reuse the
+    /// same activity id and remain idempotent at the receiver.
+    pub async fn deliver_ephemeral_with_response(
+        &self,
+        identity: &ActorIdentity,
+        inbox: &str,
+        activity: &Value,
+    ) -> Result<(DeliveryOutcome, Option<Value>), ActivityPubError> {
+        self.post(identity, inbox, activity, true, false).await
     }
 
     async fn post(
@@ -94,6 +111,7 @@ impl DeliveryClient {
         inbox: &str,
         activity: &Value,
         capture_body: bool,
+        track_delivery: bool,
     ) -> Result<(DeliveryOutcome, Option<Value>), ActivityPubError> {
         let activity_id = activity.get("id").and_then(Value::as_str).ok_or_else(|| {
             ActivityPubError::InvalidActivity {
@@ -106,7 +124,7 @@ impl DeliveryClient {
             }
         })?;
 
-        if self.was_delivered(activity_id, inbox).await? {
+        if track_delivery && self.was_delivered(activity_id, inbox).await? {
             return Ok((DeliveryOutcome::AlreadyDelivered, None));
         }
 
@@ -142,7 +160,9 @@ impl DeliveryClient {
                         } else {
                             None
                         };
-                        self.record_delivery(activity_id, inbox).await?;
+                        if track_delivery {
+                            self.record_delivery(activity_id, inbox).await?;
+                        }
                         return Ok((DeliveryOutcome::Delivered, value));
                     }
                     let response_body = res.text().await.unwrap_or_default();

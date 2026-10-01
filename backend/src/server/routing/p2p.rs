@@ -59,8 +59,9 @@ pub async fn search(
         .map_err(|error| AppError::BadRequest(error.to_string()))
 }
 
-/// Build and rank complete P2P routes. `routes_found` counts every valid
-/// unique route before the response's display limit is applied.
+/// Build and rank P2P routes. `routes_found` counts the bounded candidate set
+/// before the display limit; `routes_exhaustive` states whether that count is
+/// an exact enumeration of every valid combination.
 pub async fn routes(
     State(state): State<AppState>,
     Query(query): Query<P2pRouteSearchQuery>,
@@ -299,21 +300,19 @@ async fn enrich_routes(
         .collect::<HashSet<_>>()
         .into_iter()
         .collect::<Vec<_>>();
-    let stats = state
-        .reputation
-        .stats_for_slugs(&slugs, anonymous_id)
-        .await
-        .map_err(map_reputation_error)?;
     let route_ids = response
         .routes
         .iter()
         .map(|route| route.route_id.clone())
         .collect::<Vec<_>>();
-    let feedback = state
-        .reputation
-        .feedback_for_routes(&route_ids, anonymous_id)
-        .await
-        .map_err(map_reputation_error)?;
+    let (stats, feedback) = tokio::join!(
+        state.reputation.stats_for_slugs(&slugs, anonymous_id),
+        state
+            .reputation
+            .feedback_for_routes(&route_ids, anonymous_id),
+    );
+    let stats = stats.map_err(map_reputation_error)?;
+    let feedback = feedback.map_err(map_reputation_error)?;
 
     for route in &mut response.routes {
         let route_slugs = route_service_slugs(route);

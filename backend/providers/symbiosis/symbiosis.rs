@@ -11,11 +11,17 @@ use serde_json::{json, Map, Value};
 use tokio::sync::RwLock;
 
 use crate::route_engine::{
-    atomic_to_decimal, canonical_network_id, decimal_to_atomic, ensure_success, Amount, Asset,
-    PublicRouteProvider, PublicRouteQuote, DEFAULT_QUOTE_TTL,
+    atomic_to_decimal, canonical_network_id, decimal_to_atomic, ensure_success, truncate_decimal,
+    Amount, Asset, PublicRouteProvider, PublicRouteQuote, DEFAULT_QUOTE_TTL,
 };
 
 const DEFAULT_API_URL: &str = "https://api.symbiosis.finance/crosschain";
+
+fn normalized_atomic_input(value: &str, decimals: u8) -> Result<(String, String)> {
+    let normalized = truncate_decimal(value, Some(decimals))?;
+    let atomic = decimal_to_atomic(&normalized, Some(decimals))?;
+    Ok((normalized, atomic))
+}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -111,10 +117,7 @@ impl SymbiosisRouteProvider {
         format!("{}/{}", self.base_url.trim_end_matches('/'), path)
     }
 
-    fn token_for<'a>(
-        tokens: &'a [SymbiosisToken],
-        asset: &Asset,
-    ) -> Result<&'a SymbiosisToken> {
+    fn token_for<'a>(tokens: &'a [SymbiosisToken], asset: &Asset) -> Result<&'a SymbiosisToken> {
         let network = asset
             .location
             .as_deref()
@@ -145,10 +148,7 @@ impl SymbiosisRouteProvider {
         Value::Object(payload)
     }
 
-    fn parse_fee(
-        value: &Value,
-        tokens: &[SymbiosisToken],
-    ) -> Result<Option<Amount>> {
+    fn parse_fee(value: &Value, tokens: &[SymbiosisToken]) -> Result<Option<Amount>> {
         let Some(symbol) = value.get("symbol").and_then(Value::as_str) else {
             return Ok(None);
         };
@@ -165,14 +165,17 @@ impl SymbiosisRouteProvider {
             .or_else(|| {
                 tokens
                     .iter()
-                    .find(|token| token.chain_id == chain_id && token.symbol.eq_ignore_ascii_case(symbol))
+                    .find(|token| {
+                        token.chain_id == chain_id && token.symbol.eq_ignore_ascii_case(symbol)
+                    })
                     .map(|token| token.decimals)
             });
         let Some(network) = network_for_chain(chain_id) else {
             return Ok(None);
         };
         let asset = Asset::new(symbol, Some(network))?;
-        let amount = atomic_to_decimal(amount, decimals.context("Symbiosis fee decimals missing")?)?;
+        let amount =
+            atomic_to_decimal(amount, decimals.context("Symbiosis fee decimals missing")?)?;
         Ok(Some(Amount::new(amount, asset)?))
     }
 
@@ -216,7 +219,8 @@ impl PublicRouteProvider for SymbiosisRouteProvider {
         let tokens = self.load_tokens().await?;
         let from_token = Self::token_for(&tokens, &from)?.clone();
         let to_token = Self::token_for(&tokens, &to)?.clone();
-        let atomic_amount = decimal_to_atomic(&amount.value, Some(from_token.decimals))?;
+        let (input_value, atomic_amount) =
+            normalized_atomic_input(&amount.value, from_token.decimals)?;
         let body = json!({
             "tokenAmountIn": Self::token_payload(&from_token, Some(atomic_amount)),
             "tokenOut": Self::token_payload(&to_token, None),
@@ -260,7 +264,9 @@ impl PublicRouteProvider for SymbiosisRouteProvider {
         if let Some(values) = raw.get("fees").and_then(Value::as_array) {
             for value in values.iter().filter_map(|fee| fee.get("value")) {
                 if let Some(fee) = Self::parse_fee(value, &tokens)? {
-                    if !fees.iter().any(|existing: &Amount| existing.asset == fee.asset && existing.value == fee.value) {
+                    if !fees.iter().any(|existing: &Amount| {
+                        existing.asset == fee.asset && existing.value == fee.value
+                    }) {
                         fees.push(fee);
                     }
                 }
@@ -269,14 +275,11 @@ impl PublicRouteProvider for SymbiosisRouteProvider {
         Ok(PublicRouteQuote {
             provider: self.name().into(),
             quote_id: Some(format!("symbiosis:{}>{}", from, to)),
-            description: raw
-                .get("kind")
-                .and_then(Value::as_str)
-                .map(str::to_string),
+            description: raw.get("kind").and_then(Value::as_str).map(str::to_string),
             source_url: None,
             from: from.clone(),
             to: to.clone(),
-            input: amount,
+            input: Amount::new(input_value, amount.asset)?,
             output,
             fees,
             expires_at: Self::quote_expiry(&raw),
@@ -331,6 +334,14 @@ mod tests {
         assert_eq!(payload["address"], "");
         assert_eq!(payload["amount"], "100");
         assert_eq!(payload["chainId"], 1);
+    }
+
+    #[test]
+    fn truncates_quote_input_to_the_source_token_precision() {
+        let (normalized, atomic) = normalized_atomic_input("12.345678901", 6).unwrap();
+
+        assert_eq!(normalized, "12.345678");
+        assert_eq!(atomic, "12345678");
     }
 
     #[tokio::test]

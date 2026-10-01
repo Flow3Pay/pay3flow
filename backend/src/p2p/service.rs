@@ -670,6 +670,7 @@ impl P2pSearchService {
         market: Option<P2pOfferMarket>,
         updates: Option<&mpsc::Sender<P2pSearchResponse>>,
     ) -> Result<P2pSearchResponse> {
+        let started = Instant::now();
         let backend = self
             .fmatch
             .as_ref()
@@ -698,14 +699,13 @@ impl P2pSearchService {
                 );
                 response.sources = source_statuses_from_offers(&response.offers);
                 if usable_fmatch_response(&response) {
-                    persist_fmatch_answer(
-                        &backend.pool,
-                        &cache_key,
-                        &response,
+                    spawn_fmatch_answer_persist(
+                        backend.pool.clone(),
+                        cache_key.clone(),
+                        response.clone(),
                         "fmatch",
                         backend.answer_ttl,
-                    )
-                    .await;
+                    );
                     response
                 } else {
                     self.fmatch_cache_or_provider(
@@ -746,6 +746,15 @@ impl P2pSearchService {
         if let Some(updates) = updates {
             let _ = updates.send(response.clone()).await;
         }
+        tracing::info!(
+            fiat = %response.query.fiat,
+            asset = %response.query.asset,
+            side = ?response.query.side,
+            offers_found = response.offers.len(),
+            source = %response.source,
+            elapsed_ms = started.elapsed().as_millis(),
+            "p2p.fmatch_search.completed"
+        );
         Ok(response)
     }
 
@@ -1184,6 +1193,18 @@ async fn persist_fmatch_answer(
     {
         tracing::warn!(%error, cache_key, "failed to persist Fmatch P2P answer");
     }
+}
+
+fn spawn_fmatch_answer_persist(
+    pool: DbPool,
+    cache_key: String,
+    response: P2pSearchResponse,
+    source: &'static str,
+    ttl: Duration,
+) {
+    tokio::spawn(async move {
+        persist_fmatch_answer(&pool, &cache_key, &response, source, ttl).await;
+    });
 }
 
 fn truncate_offers_preserving_sources(offers: &mut Vec<P2pOffer>, limit: usize) {

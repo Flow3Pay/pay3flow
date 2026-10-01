@@ -126,7 +126,7 @@ impl Service {
         );
         activity["candidatePageSize"] = Value::from(candidate_page_size.clamp(1, 64));
         self.delivery
-            .deliver_with_response(&self.identity, &self.fmatch_inbox, &activity)
+            .deliver_ephemeral_with_response(&self.identity, &self.fmatch_inbox, &activity)
             .await
     }
 

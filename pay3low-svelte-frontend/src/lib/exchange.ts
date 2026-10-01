@@ -267,6 +267,7 @@ export interface P2pRoute {
 export interface P2pRouteSearchResponse {
   search_id?: string;
   routes_found?: number;
+  routes_exhaustive?: boolean;
   searched_at: string;
   source_fiat: string;
   target_fiat: string;
@@ -296,6 +297,7 @@ export interface RouteAssetStatus {
   entry_offers: number;
   exit_offers: number;
   routes_built: number;
+  routes_exhaustive?: boolean;
   can_exchange_to_target: boolean;
   entry_sources: SourceStatus[];
   exit_sources: SourceStatus[];
