@@ -2720,6 +2720,77 @@ fn compose_fiat_routes(
 
     let candidate_limit = query.limit.saturating_mul(3).max(query.limit);
     routes.reserve(candidate_limit.min(entries.len().saturating_mul(exits.len())));
+    let routes_start = routes.len();
+    let mut evaluated = HashSet::new();
+    let mut source_names = Vec::new();
+    let mut seen_sources = HashSet::new();
+    for index in 0..entries.len().max(exits.len()) {
+        if let Some((entry, _, _)) = entries.get(index) {
+            if seen_sources.insert(entry.source.as_str()) {
+                source_names.push(entry.source.as_str());
+            }
+        }
+        if let Some((exit, _)) = exits.get(index) {
+            if seen_sources.insert(exit.source.as_str()) {
+                source_names.push(exit.source.as_str());
+            }
+        }
+    }
+    for source in source_names {
+        let mut best = None;
+        for (entry_index, (entry, _, acquired_asset)) in entries.iter().enumerate() {
+            if entry.source != source {
+                continue;
+            }
+            for (exit_index, (exit, exit_price)) in exits.iter().enumerate() {
+                let target_amount = acquired_asset * exit_price;
+                if let Some(route) =
+                    compose_fiat_route(query, asset, entry, exit, *acquired_asset, target_amount)
+                {
+                    if best
+                        .as_ref()
+                        .is_none_or(|(current, _, _, _)| target_amount > *current)
+                    {
+                        best = Some((target_amount, entry_index, exit_index, route));
+                    }
+                    break;
+                }
+            }
+        }
+        for (exit_index, (exit, exit_price)) in exits.iter().enumerate() {
+            if exit.source != source {
+                continue;
+            }
+            for (entry_index, (entry, _, acquired_asset)) in entries.iter().enumerate() {
+                let target_amount = acquired_asset * exit_price;
+                if let Some(route) =
+                    compose_fiat_route(query, asset, entry, exit, *acquired_asset, target_amount)
+                {
+                    if best
+                        .as_ref()
+                        .is_none_or(|(current, _, _, _)| target_amount > *current)
+                    {
+                        best = Some((target_amount, entry_index, exit_index, route));
+                    }
+                    break;
+                }
+            }
+        }
+        if let Some((_, entry_index, exit_index, route)) = best {
+            if evaluated.insert((entry_index, exit_index)) {
+                routes.push(route);
+            }
+        }
+        if routes.len() - routes_start >= candidate_limit {
+            routes[routes_start..].sort_by(|left, right| {
+                route_target(right)
+                    .partial_cmp(&route_target(left))
+                    .unwrap_or(Ordering::Equal)
+            });
+            return false;
+        }
+    }
+
     let mut frontier = BinaryHeap::with_capacity(entries.len());
     for (entry_index, (_, _, acquired_asset)) in entries.iter().enumerate() {
         frontier.push(FiatRouteCandidate {
@@ -2741,20 +2812,32 @@ fn compose_fiat_routes(
             });
         }
 
-        if let Some(route) = compose_fiat_route(
-            query,
-            asset,
-            entry,
-            exit,
-            acquired_asset,
-            acquired_asset * exit_price,
-        ) {
-            routes.push(route);
-            if routes.len() >= candidate_limit {
-                return frontier.is_empty();
+        if evaluated.insert((candidate.entry_index, candidate.exit_index)) {
+            if let Some(route) = compose_fiat_route(
+                query,
+                asset,
+                entry,
+                exit,
+                acquired_asset,
+                acquired_asset * exit_price,
+            ) {
+                routes.push(route);
+                if routes.len() - routes_start >= candidate_limit {
+                    routes[routes_start..].sort_by(|left, right| {
+                        route_target(right)
+                            .partial_cmp(&route_target(left))
+                            .unwrap_or(Ordering::Equal)
+                    });
+                    return frontier.is_empty();
+                }
             }
         }
     }
+    routes[routes_start..].sort_by(|left, right| {
+        route_target(right)
+            .partial_cmp(&route_target(left))
+            .unwrap_or(Ordering::Equal)
+    });
     true
 }
 
@@ -3737,6 +3820,43 @@ mod tests {
         assert!(routes
             .windows(2)
             .all(|pair| { route_target(&pair[0]) >= route_target(&pair[1]) }));
+    }
+
+    #[test]
+    fn fiat_virtualization_seeds_a_lower_ranked_venue() {
+        let mut route_query = query(true);
+        route_query.limit = 20;
+        let entries = (0..60)
+            .map(|index| {
+                offer(
+                    "binance",
+                    P2pSide::BuyCrypto,
+                    &format!("{}", 400 + index),
+                    "1",
+                    "1000000",
+                )
+            })
+            .collect::<Vec<_>>();
+        let mut exits = (0..60)
+            .map(|index| {
+                offer(
+                    "binance",
+                    P2pSide::SellCrypto,
+                    &format!("{}", 100 - index),
+                    "1",
+                    "1000000",
+                )
+            })
+            .collect::<Vec<_>>();
+        exits.push(offer("whitebird", P2pSide::SellCrypto, "1", "1", "1000000"));
+        let mut routes = Vec::new();
+
+        compose_fiat_routes(&mut routes, &route_query, "USDT", &entries, &exits);
+
+        assert_eq!(routes.len(), 60);
+        assert!(routes.iter().any(|route| {
+            route.exit_offer.as_ref().map(|offer| offer.source.as_str()) == Some("whitebird")
+        }));
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

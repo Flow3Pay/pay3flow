@@ -71,7 +71,7 @@ Production-проверка AMD → RUB: 3766 маршрутов, в venue бы�
 
 Коммит `2068a9e` и следующий этап в рабочей ветке:
 
-- fiat entry × exit строится lazy best-first и ограничивается требуемым top-K вместо полного декартова произведения;
+- fiat entry × exit строится lazy best-first и ограничивается требуемым top-K вместо полного декартова произведения; bounded diversity seeds сохраняют лучший валидный маршрут каждого venue, даже если он ниже плотной P2P-выдачи;
 - API явно сообщает `routes_exhaustive`, поэтому ограниченный поиск не маскируется под полный подсчёт;
 - capability провайдеров загружаются один раз в immutable snapshot при старте;
 - live provider quotes и direct-fiat quotes обновляют 30-секундные кэши только фоновыми bounded-задачами;
