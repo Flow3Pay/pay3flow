@@ -24,6 +24,7 @@
   const INITIAL_ROUTE_BATCH_SIZE = 100;
   const ROUTE_BATCH_SIZE = 100;
   const ROUTE_BATCH_DELAY_MS = 10;
+  const INTERNAL_DISCOVERY_SOURCES = new Set(["fmatch", "database_cache", "provider_fallback", "provider"]);
   let INTERMEDIARY_ASSETS: string[] = [];
   const EXCHANGE_METHODS: ExchangeMethod[] = ["p2p", "exchanger"];
   let paymentMethods: PaymentMethod[] = [];
@@ -298,6 +299,7 @@
     const latencyTotals = new Map<string, { total: number; count: number }>();
     for (const status of (response.asset_statuses ?? []).flatMap((asset) => [...asset.entry_sources, ...asset.exit_sources])) {
       const id = status.source.toLowerCase();
+      if (INTERNAL_DISCOVERY_SOURCES.has(id)) continue;
       const previous = observedVenueStats.get(id);
       const latency = latencyTotals.get(id) ?? { total: 0, count: 0 };
       latency.total += status.latency_ms;
@@ -328,7 +330,7 @@
       ]),
       ...(response.asset_statuses ?? [])
         .flatMap((status) => [...status.entry_sources, ...status.exit_sources])
-        .filter((source) => source.offers_found > 0)
+        .filter((source) => source.offers_found > 0 && !INTERNAL_DISCOVERY_SOURCES.has(source.source.toLowerCase()))
         .map((source) => source.source),
     ]
       .map((source) => source.toLowerCase())

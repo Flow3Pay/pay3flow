@@ -687,21 +687,16 @@ impl P2pSearchService {
         {
             Ok((_outcome, Some(reply))) => {
                 let offers = P2pOffer::from_fmatch_reply(&reply, market);
-                let response = build_search_response(
+                let mut response = build_search_response(
                     query.clone(),
                     &offers,
-                    vec![SourceStatus {
-                        source: "fmatch".into(),
-                        ok: true,
-                        latency_ms: 0,
-                        offers_found: offers.len(),
-                        error: None,
-                    }],
+                    Vec::new(),
                     false,
                     "fmatch",
                     false,
                     Some(Utc::now()),
                 );
+                response.sources = source_statuses_from_offers(&response.offers);
                 if usable_fmatch_response(&response) {
                     persist_fmatch_answer(
                         &backend.pool,
@@ -803,13 +798,11 @@ impl P2pSearchService {
         response.source = "database_cache".into();
         response.stale = true;
         response.observed_at = Some(cached.observed_at);
-        response.sources.push(SourceStatus {
-            source: "fmatch".into(),
-            ok: false,
-            latency_ms: 0,
-            offers_found: 0,
-            error: Some(reason.to_string()),
-        });
+        response.sources = source_statuses_from_offers(&response.offers);
+        tracing::warn!(
+            reason,
+            "serving stale cached P2P offers after Fmatch failure"
+        );
         Ok(Some(response))
     }
 
@@ -1098,17 +1091,25 @@ fn build_search_response(
 
 fn mark_provider_fallback(mut response: P2pSearchResponse, reason: &str) -> P2pSearchResponse {
     response.source = "provider_fallback".into();
-    response.sources.insert(
-        0,
-        SourceStatus {
-            source: "fmatch".into(),
-            ok: false,
-            latency_ms: 0,
-            offers_found: 0,
-            error: Some(reason.to_string()),
-        },
-    );
+    tracing::warn!(reason, "using live providers after Fmatch failure");
     response
+}
+
+fn source_statuses_from_offers(offers: &[P2pOffer]) -> Vec<SourceStatus> {
+    let mut counts = BTreeMap::<&str, usize>::new();
+    for offer in offers {
+        *counts.entry(offer.source.as_str()).or_default() += 1;
+    }
+    counts
+        .into_iter()
+        .map(|(source, offers_found)| SourceStatus {
+            source: source.to_string(),
+            ok: true,
+            latency_ms: 0,
+            offers_found,
+            error: None,
+        })
+        .collect()
 }
 
 fn usable_fmatch_response(response: &P2pSearchResponse) -> bool {
@@ -1434,7 +1435,7 @@ mod tests {
     }
 
     #[test]
-    fn provider_fallback_records_fmatch_failure() {
+    fn provider_fallback_does_not_expose_fmatch_as_a_venue() {
         let response = build_search_response(
             P2pSearchQuery {
                 fiat: "AMD".into(),
@@ -1449,7 +1450,13 @@ mod tests {
                 sources: None,
             },
             &[offer("binance", "390.5", "100", "100000", 42)],
-            Vec::new(),
+            vec![SourceStatus {
+                source: "binance".into(),
+                ok: true,
+                latency_ms: 10,
+                offers_found: 1,
+                error: None,
+            }],
             false,
             "provider",
             false,
@@ -1459,12 +1466,27 @@ mod tests {
         let fallback = mark_provider_fallback(response, "no active P2P offers");
 
         assert_eq!(fallback.source, "provider_fallback");
-        assert_eq!(fallback.sources[0].source, "fmatch");
-        assert!(!fallback.sources[0].ok);
-        assert_eq!(
-            fallback.sources[0].error.as_deref(),
-            Some("no active P2P offers")
-        );
+        assert_eq!(fallback.sources.len(), 1);
+        assert_eq!(fallback.sources[0].source, "binance");
+        assert!(fallback.sources[0].ok);
+    }
+
+    #[test]
+    fn fmatch_offer_statuses_name_the_actual_venues() {
+        let offers = vec![
+            offer("bybit", "390.5", "100", "100000", 42),
+            offer("bybit", "391.0", "100", "100000", 43),
+            offer("whitebird", "392.0", "100", "100000", 44),
+        ];
+
+        let statuses = source_statuses_from_offers(&offers);
+
+        assert_eq!(statuses.len(), 2);
+        assert_eq!(statuses[0].source, "bybit");
+        assert_eq!(statuses[0].offers_found, 2);
+        assert_eq!(statuses[1].source, "whitebird");
+        assert_eq!(statuses[1].offers_found, 1);
+        assert!(statuses.iter().all(|status| status.source != "fmatch"));
     }
 
     #[test]

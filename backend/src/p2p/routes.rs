@@ -145,6 +145,12 @@ pub struct RouteAssetStatus {
     pub can_exchange_to_target: bool,
     pub entry_sources: Vec<SourceStatus>,
     pub exit_sources: Vec<SourceStatus>,
+    /// Internal discovery transport. This is deliberately not serialized as
+    /// a venue: Fmatch distributes venue offers but is not itself a venue.
+    #[serde(skip)]
+    entry_discovery_source: Option<String>,
+    #[serde(skip)]
+    exit_discovery_source: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1746,6 +1752,8 @@ fn apply_fiat_asset_response(
         &entry_offers,
         &exit_offers,
         routes_built,
+        Some(entry.source.as_str()),
+        Some(exit.source.as_str()),
     );
 }
 
@@ -1773,6 +1781,8 @@ fn apply_fiat_to_crypto_response(
         &offers,
         &[],
         routes_built,
+        Some(response.source.as_str()),
+        None,
     );
 }
 
@@ -1800,6 +1810,8 @@ fn apply_crypto_to_fiat_response(
         &[],
         &offers,
         routes_built,
+        None,
+        Some(response.source.as_str()),
     );
 }
 
@@ -1860,22 +1872,22 @@ fn response_snapshot(
 fn route_discovery_source(asset_statuses: &[RouteAssetStatus]) -> (&'static str, bool) {
     let sources = asset_statuses.iter().flat_map(|status| {
         status
-            .entry_sources
+            .entry_discovery_source
             .iter()
-            .chain(status.exit_sources.iter())
+            .chain(status.exit_discovery_source.iter())
+            .map(String::as_str)
     });
-    let (mut has_fmatch, mut failed_fmatch, mut has_provider) = (false, false, false);
+    let mut has_fmatch = false;
+    let mut has_cache = false;
+    let mut has_fallback = false;
     for source in sources {
-        if source.source == "fmatch" {
-            has_fmatch = true;
-            failed_fmatch |= !source.ok;
-        } else {
-            has_provider = true;
-        }
+        has_fmatch |= source == "fmatch";
+        has_cache |= source == "database_cache";
+        has_fallback |= source == "provider_fallback";
     }
-    if failed_fmatch && has_provider {
+    if has_fallback {
         ("provider_fallback", false)
-    } else if failed_fmatch {
+    } else if has_cache {
         ("database_cache", true)
     } else if has_fmatch {
         ("fmatch", false)
@@ -2633,6 +2645,8 @@ fn upsert_asset_status(
     entry_offers: &[P2pOffer],
     exit_offers: &[P2pOffer],
     routes_built: usize,
+    entry_discovery_source: Option<&str>,
+    exit_discovery_source: Option<&str>,
 ) {
     let status = RouteAssetStatus {
         asset,
@@ -2642,6 +2656,8 @@ fn upsert_asset_status(
         can_exchange_to_target: routes_built > 0,
         entry_sources: entry_sources.to_vec(),
         exit_sources: exit_sources.to_vec(),
+        entry_discovery_source: entry_discovery_source.map(str::to_owned),
+        exit_discovery_source: exit_discovery_source.map(str::to_owned),
     };
     if let Some(current) = statuses
         .iter_mut()
@@ -2705,13 +2721,6 @@ mod tests {
 
     #[test]
     fn route_snapshot_distinguishes_live_fallback_from_stale_cache() {
-        let failed_fmatch = SourceStatus {
-            source: "fmatch".into(),
-            ok: false,
-            latency_ms: 0,
-            offers_found: 0,
-            error: Some("no offers".into()),
-        };
         let live_provider = SourceStatus {
             source: "bybit".into(),
             ok: true,
@@ -2727,16 +2736,19 @@ mod tests {
             can_exchange_to_target: true,
             entry_sources,
             exit_sources: Vec::new(),
+            entry_discovery_source: None,
+            exit_discovery_source: None,
         };
 
+        let mut fallback = status(vec![live_provider.clone()]);
+        fallback.entry_discovery_source = Some("provider_fallback".into());
         assert_eq!(
-            route_discovery_source(&[status(vec![failed_fmatch.clone(), live_provider])]),
+            route_discovery_source(&[fallback]),
             ("provider_fallback", false)
         );
-        assert_eq!(
-            route_discovery_source(&[status(vec![failed_fmatch])]),
-            ("database_cache", true)
-        );
+        let mut cached = status(vec![live_provider]);
+        cached.entry_discovery_source = Some("database_cache".into());
+        assert_eq!(route_discovery_source(&[cached]), ("database_cache", true));
     }
 
     #[async_trait]
