@@ -1,6 +1,6 @@
 <script lang="ts">
   import { afterUpdate, onMount, onDestroy } from "svelte";
-  import { fetchCorridors, fetchP2pRoutes, fetchProviders, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderDefinition, type ProviderGuidance, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote, type VenueSearchStatus } from "$lib/exchange";
+  import { fetchCorridors, fetchP2pRoutes, fetchProviders, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderAffiliate, type ProviderDefinition, type ProviderGuidance, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote, type VenueSearchStatus } from "$lib/exchange";
   import { FALLBACK_NETWORK, fetchNetworks, type CryptoNetwork } from "$lib/networks";
   import { assetIcon, networkIcon, swapIcon, venueIcon } from "$lib/icons";
   import { fetchPaymentMethods, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
@@ -61,6 +61,7 @@
   let p2pSources: P2pSourceOption[] = [];
   let venueNames: Record<string, string> = {};
   let providerGuidance: Record<string, ProviderGuidance> = {};
+  let providerAffiliates: Record<string, ProviderAffiliate> = {};
   let selectedSources: P2pSource[] = [];
   let selectedExchangeMethods: ExchangeMethod[] = [...EXCHANGE_METHODS];
   let selectedIntermediaryAssets: string[] = [];
@@ -746,6 +747,11 @@
           .filter((provider) => provider.guidance)
           .map((provider) => [provider.slug.toLowerCase(), provider.guidance as ProviderGuidance]),
       );
+      providerAffiliates = Object.fromEntries(
+        providers
+          .filter((provider) => provider.affiliate?.url)
+          .map((provider) => [provider.slug.toLowerCase(), provider.affiliate as ProviderAffiliate]),
+      );
       const catalog = new Set(p2pSources.map((source) => source.id));
       const live = p2pSources.filter((source) => source.searchMode === "selectable").map((source) => source.id);
       const restored = [...new Set(savedSourceIds.filter((source) => catalog.has(source) && p2pSources.find((item) => item.id === source)?.searchMode === "selectable"))];
@@ -881,7 +887,7 @@
   {#if currencyPicker === "source" || currencyPicker === "target"}<CurrencyPicker open={currencyPicker !== null} selected={currencyPicker === "source" ? sourceCurrencyChoice : targetCurrencyChoice} choices={currencyPicker === "source" ? sourceCurrencyChoices : targetCurrencyChoices} onClose={() => currencyPicker = null} onSelect={(choice) => chooseCurrency(currencyPicker ?? "source", choice)} />{/if}
   {#if paymentPickerComponent}<svelte:component this={paymentPickerComponent} open={methodPicker === "source"} title="Choose where you pay from" role="sender" {networks} {paymentMethods} selected={sourceMethod} selectedNetwork={sourceNetwork} onClose={() => methodPicker = null} onSelect={chooseSource} /><svelte:component this={paymentPickerComponent} open={methodPicker === "target"} title="Choose where the recipient gets paid" role="recipient" {networks} {paymentMethods} selected={targetMethod} selectedNetwork={targetNetwork} onClose={() => methodPicker = null} onSelect={chooseTarget} />{/if}
   {#if networkPicker === "source" || networkPicker === "target"}<NetworkPicker open={networkPicker !== null} networks={networkPicker === "source" ? sourceNetworks : targetNetworks} selected={networkPicker === "source" ? sourceNetwork : targetNetwork} onClose={() => networkPicker = null} onSelect={selectNetwork} />{/if}
-  {#if routeInstructionsComponent && instructionsRoute}<svelte:component this={routeInstructionsComponent} route={instructionsRoute} {venueNames} {providerGuidance} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} onOpenService={openService} onClose={() => instructionsRoute = null} />{/if}
+  {#if routeInstructionsComponent && instructionsRoute}<svelte:component this={routeInstructionsComponent} route={instructionsRoute} {venueNames} {providerGuidance} {providerAffiliates} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} onOpenService={openService} onClose={() => instructionsRoute = null} />{/if}
 </section>
 
 <style>

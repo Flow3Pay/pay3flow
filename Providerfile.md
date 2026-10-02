@@ -20,6 +20,7 @@ generated database rows and compiled modules, never the Providerfiles.
 - [Catalog-only provider](#catalog-only-provider)
 - [Fee metadata](#fee-metadata)
 - [Provider guidance](#provider-guidance)
+- [Affiliate link](#affiliate-link)
 - [BestChange adapter](#bestchange-adapter)
 - [HTTP/JSON P2P adapter](#httpjson-p2p-adapter)
 - [Direct-exchange API](#direct-exchange-api)
@@ -82,6 +83,7 @@ optional and can be combined as follows:
 | `[[payment_methods]]` | Bank/cash picker catalog | Can stand alone without exchange methods or operations. |
 | `[buy]`, `[sell]` | Catalog operations | At least one is required. |
 | `[fees]` | Descriptive fee metadata | Can accompany any provider type. |
+| `[affiliate]` | Partner link that earns Pay3Flow a commission | Can accompany any provider type. |
 | `[adapter.p2p]` | P2P ads or direct quotes over JSON | Cannot coexist with `[workflow]`. |
 | `[adapter.market]` | Spot bid/ask tickers over JSON | Can coexist with another adapter or workflow. |
 | `[adapter.bestchange]` | BestChange direction pages | Can coexist with other adapter sections, though normally used alone. |
@@ -184,6 +186,33 @@ url = "https://provider.example/docs"
 `description` is required. `steps` and `links` may be empty, but every link
 must use HTTP or HTTPS. Keep these steps provider-specific; generic safety
 checks remain part of the route UI.
+
+## Affiliate link
+
+Use `[affiliate]` when Pay3Flow earns a commission for sending the customer to
+the provider. The section is optional: without it the provider behaves exactly
+as before, and every user-facing link keeps pointing at its declared
+`source_url`.
+
+```toml
+[affiliate]
+url = "<the provider's partner link>"
+label = "Open the exchange"
+```
+
+`url` is required and must use HTTP or HTTPS. It is the provider's referral or
+partner link, including any tracking query string. `label` is optional and
+customizes the button that opens it.
+
+The link is returned by `GET /api/providers` as the `affiliate` object, and the
+frontend uses it in place of the provider's plain URL for the "open provider"
+call to action in the route instructions. Nothing else changes: quote
+collection, offer parsing, and the offer-specific URLs returned by adapters are
+untouched, so a referral link never interferes with pricing or attribution of a
+specific advertisement.
+
+Never store secrets in `[affiliate]`. It is a public link that the customer
+follows.
 
 ## BestChange adapter
 
@@ -755,6 +784,8 @@ Checked-in Rust examples: CoW Swap, NEAR Intents, and ID Pay.
 | `guidance.description` | In `[guidance]` | — | User-facing provider explanation shown in route instructions. |
 | `guidance.steps` | No | `[]` | Provider-specific steps shown in order instructions. |
 | `guidance.links` | No | `[]` | Links with `label` and HTTP/HTTPS `url` shown with the steps. |
+| `affiliate.url` | In `[affiliate]` | — | HTTP/HTTPS partner link that earns Pay3Flow a commission. |
+| `affiliate.label` | No | — | Custom label for the link that opens the provider. |
 
 ### `payment_methods`
 

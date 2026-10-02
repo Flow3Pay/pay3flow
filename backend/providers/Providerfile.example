@@ -26,6 +26,10 @@ steps = [
 label = "Open provider"
 url = "https://provider.example"
 
+# Optional. Add [affiliate] with the provider's partner link to earn a
+# commission when the customer follows it from the route instructions.
+# See Providerfile.md for the field list.
+
 # Delete this section if the provider is catalog-only. For a JSON API use
 # [adapter.p2p] instead; complete examples are in binance/, bybit/, okx/,
 # bitget/, and rapira/. Full format reference: Providerfile.md.

@@ -29,6 +29,7 @@ export interface ProviderDefinition {
   exchange_methods: Array<"p2p" | "exchanger">;
   fee_model?: ProviderFeeModel | null;
   guidance?: ProviderGuidance | null;
+  affiliate?: ProviderAffiliate | null;
   searchable: boolean;
   search_mode?: "selectable" | "always_on" | "catalog_only";
 }
@@ -37,6 +38,12 @@ export interface ProviderGuidance {
   description: string;
   steps: string[];
   links: Array<{ label: string; url: string }>;
+}
+
+/** Partner link that pays Pay3Flow a commission when it is followed. */
+export interface ProviderAffiliate {
+  url: string;
+  label?: string | null;
 }
 
 export interface ProviderFeeModel {
