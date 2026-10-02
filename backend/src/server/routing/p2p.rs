@@ -15,8 +15,8 @@ use crate::p2p::{
     P2pRoute, P2pRouteSearchQuery, P2pRouteSearchResponse, P2pSearchQuery, P2pSearchResponse,
 };
 use crate::service_reputation::{
-    average_reputation, ReputationError, RouteServiceStats, ServiceLink, ServiceLinkKind,
-    ServiceStats, VoteChoice,
+    average_reputation, ReputationError, RouteFeedback, RouteServiceStats, ServiceLink,
+    ServiceLinkKind, ServiceStats, VoteChoice,
 };
 
 #[derive(Debug, Deserialize)]
@@ -144,12 +144,16 @@ async fn route_socket(state: AppState, mut socket: WebSocket) {
         return;
     }
 
-    let (updates_tx, mut updates_rx) = mpsc::channel(4);
+    // A generous buffer absorbs bursts of provider results so a slow
+    // reputation/DB round-trip never back-pressures the search pipeline.
+    let (updates_tx, mut updates_rx) = mpsc::channel(64);
     let p2p = state.p2p.clone();
     let query = request.query;
     let search_task =
         tokio::spawn(async move { p2p.stream_routes(query, search_id, updates_tx).await });
     let mut last_routes_found = 0;
+    let mut persisted_routes_found: Option<usize> = None;
+    let mut reputation_cache = ReputationCache::default();
 
     loop {
         tokio::select! {
@@ -163,7 +167,9 @@ async fn route_socket(state: AppState, mut socket: WebSocket) {
             }
             update = updates_rx.recv() => {
                 let Some(mut response) = update else { break };
-                if let Err(error) = enrich_routes(&state, &mut response, Some(request.anonymous_id)).await {
+                if let Err(error) =
+                    enrich_routes_cached(&state, &mut response, Some(request.anonymous_id), &mut reputation_cache).await
+                {
                     search_task.abort();
                     let _ = state.reputation.update_search(search_id, last_routes_found, "failed").await;
                     let _ = send_json(&mut socket, json!({
@@ -174,9 +180,15 @@ async fn route_socket(state: AppState, mut socket: WebSocket) {
                     return;
                 }
                 last_routes_found = response.routes_found;
-                if state.reputation.update_search(search_id, last_routes_found, "searching").await.is_err() {
-                    search_task.abort();
-                    return;
+                // Stream snapshots repeat the same routes, so only persist when the
+                // count actually moves. One UPDATE per unique count instead of one
+                // per provider result.
+                if persisted_routes_found != Some(last_routes_found) {
+                    persisted_routes_found = Some(last_routes_found);
+                    if state.reputation.update_search(search_id, last_routes_found, "searching").await.is_err() {
+                        search_task.abort();
+                        return;
+                    }
                 }
                 if send_search_response(&mut socket, "routes_updated", response).await.is_err() {
                     search_task.abort();
@@ -288,42 +300,70 @@ pub async fn set_route_vote(
     Ok(Json(feedback))
 }
 
+/// Reputation and vote feedback are stable for the lifetime of one search, while
+/// streamed snapshots repeat the same routes over and over. Caching them per
+/// socket keeps Postgres off the path that delivers provider results.
+#[derive(Default)]
+struct ReputationCache {
+    stats: HashMap<String, ServiceStats>,
+    feedback: HashMap<String, RouteFeedback>,
+}
+
 async fn enrich_routes(
     state: &AppState,
     response: &mut P2pRouteSearchResponse,
     anonymous_id: Option<Uuid>,
 ) -> Result<(), AppError> {
+    let mut cache = ReputationCache::default();
+    enrich_routes_cached(state, response, anonymous_id, &mut cache).await
+}
+
+async fn enrich_routes_cached(
+    state: &AppState,
+    response: &mut P2pRouteSearchResponse,
+    anonymous_id: Option<Uuid>,
+    cache: &mut ReputationCache,
+) -> Result<(), AppError> {
     let slugs = response
         .routes
         .iter()
         .flat_map(route_service_slugs)
-        .collect::<HashSet<_>>()
-        .into_iter()
+        .collect::<HashSet<_>>();
+    let missing_slugs = slugs
+        .iter()
+        .filter(|slug| !cache.stats.contains_key(*slug))
+        .cloned()
         .collect::<Vec<_>>();
-    let route_ids = response
+    let missing_route_ids = response
         .routes
         .iter()
         .map(|route| route.route_id.clone())
+        .filter(|route_id| !cache.feedback.contains_key(route_id))
         .collect::<Vec<_>>();
+
     let (stats, feedback) = tokio::join!(
-        state.reputation.stats_for_slugs(&slugs, anonymous_id),
         state
             .reputation
-            .feedback_for_routes(&route_ids, anonymous_id),
+            .stats_for_slugs(&missing_slugs, anonymous_id),
+        state
+            .reputation
+            .feedback_for_routes(&missing_route_ids, anonymous_id),
     );
-    let stats = stats.map_err(map_reputation_error)?;
-    let feedback = feedback.map_err(map_reputation_error)?;
+    cache.stats.extend(stats.map_err(map_reputation_error)?);
+    cache
+        .feedback
+        .extend(feedback.map_err(map_reputation_error)?);
 
     for route in &mut response.routes {
         let route_slugs = route_service_slugs(route);
         route.services = route_slugs
             .iter()
-            .filter_map(|slug| stats.get(slug).cloned())
+            .filter_map(|slug| cache.stats.get(slug).cloned())
             .map(|stats| RouteServiceStats { stats })
             .collect();
         route.reputation = Some(average_reputation(&route.services));
-        route.feedback = feedback.get(&route.route_id).cloned();
-        route.service_links = route_links(state, response.search_id, route, &stats)?;
+        route.feedback = cache.feedback.get(&route.route_id).cloned();
+        route.service_links = route_links(state, response.search_id, route, &cache.stats)?;
     }
     Ok(())
 }

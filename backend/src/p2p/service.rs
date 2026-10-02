@@ -294,7 +294,7 @@ pub struct P2pSearchService {
     pub(crate) fiat_quote_cache: Arc<RwLock<HashMap<String, CachedFiatQuote>>>,
     pub(crate) quote_refreshes: Arc<Mutex<HashSet<String>>>,
     pub(crate) provider_capabilities_cache: Arc<RwLock<Option<ProviderCapabilitiesSnapshot>>>,
-    latency_tracker: Arc<crate::p2p::latency::ProviderLatencyTracker>,
+    pub(crate) latency_tracker: Arc<crate::p2p::latency::ProviderLatencyTracker>,
     fmatch: Option<FmatchP2pBackend>,
 }
 
@@ -956,8 +956,7 @@ impl P2pSearchService {
                                 }
                             }
                             let count = offers.len();
-                            let avg_latency = self.latency_tracker
-                                .avg_latency_ms(source.name());
+                            let avg_latency = self.latency_tracker.avg_latency_ms(source.name());
                             let latency_ms = elapsed;
                             let source_name = source.name().to_string();
                             (
@@ -982,8 +981,7 @@ impl P2pSearchService {
                                 latency_ms: elapsed,
                                 offers_found: 0,
                                 error: Some(error.to_string()),
-                                avg_latency_ms: self.latency_tracker
-                                    .avg_latency_ms(source.name()),
+                                avg_latency_ms: self.latency_tracker.avg_latency_ms(source.name()),
                             },
                         ),
                         Err(_) => (
@@ -998,8 +996,7 @@ impl P2pSearchService {
                                     "source timed out after {} ms",
                                     timeout.as_millis()
                                 )),
-                                avg_latency_ms: self.latency_tracker
-                                    .avg_latency_ms(source.name()),
+                                avg_latency_ms: self.latency_tracker.avg_latency_ms(source.name()),
                             },
                         ),
                     }

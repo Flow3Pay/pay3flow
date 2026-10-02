@@ -152,7 +152,7 @@
                         <div><dt>Offers found</dt><dd>{status?.offers_found ?? 0}</dd></div>
                         {#if status?.last_response_ms !== null}<div><dt>Last response</dt><dd>{status.last_response_ms} ms</dd></div>{/if}
                         {#if status?.average_response_ms !== null}<div><dt>Average response</dt><dd>{status.average_response_ms} ms ({status.response_samples})</dd></div>{/if}
-                        {#if status?.cache_hits}<div><dt>Cache hits</dt><dd>{status.cache_hits}</dd></div>{/if}
+                        {#if status?.avg_latency_ms}<div><dt>Typical latency</dt><dd>{Math.round(status.avg_latency_ms)} ms</dd></div>{/if}
                       </dl>
                       {#if status?.error}<small>{status.error}</small>{/if}
                     </div>

@@ -9,6 +9,10 @@ use crate::p2p::service::{CachedFiatQuote, CachedProviderQuote};
 use crate::p2p::P2pSearchService;
 use crate::route_engine::PublicRouteQuote;
 
+/// Ceiling for a single external provider quote. Providers normally answer in
+/// seconds; this only bounds a provider that never responds.
+const QUOTE_TIMEOUT_SECS: u64 = 12;
+
 impl P2pSearchService {
     pub(in crate::p2p) fn cached_provider_quote(&self, key: &str) -> Option<PublicRouteQuote> {
         self.provider_quote_cache
@@ -50,9 +54,11 @@ impl P2pSearchService {
         };
         tokio::spawn(async move {
             let provider_name = provider.name().to_string();
-            let result =
-                tokio::time::timeout(Duration::from_secs(12), provider.quote(from, to, amount))
-                    .await;
+            let result = tokio::time::timeout(
+                Duration::from_secs(QUOTE_TIMEOUT_SECS),
+                provider.quote(from, to, amount),
+            )
+            .await;
             drop(permit);
             match result {
                 Ok(Ok(quote)) => {
@@ -91,55 +97,42 @@ impl P2pSearchService {
             .map(|cached| cached.quote.clone())
     }
 
-    pub(in crate::p2p) fn refresh_fiat_quote(
+    /// Fetches a fiat quote and waits for it, so the caller can stream this
+    /// provider's route as soon as it answers. `refresh_fiat_quote` only warms
+    /// the cache and returns nothing, which hides the result from the current
+    /// search and makes it surface later inside an unrelated batch.
+    pub(in crate::p2p) async fn fetch_fiat_quote(
         &self,
         key: String,
         provider: Arc<dyn crate::p2p::PublicFiatRouteProvider>,
         source_currency: String,
         target_currency: String,
         source_amount: f64,
-    ) {
-        let refresh_key = key.clone();
-        let Ok(mut refreshes) = self.quote_refreshes.lock() else {
-            return;
+    ) -> Option<crate::p2p::FiatRouteQuote> {
+        let Ok(permit) = self.quote_semaphore.clone().acquire_owned().await else {
+            return None;
         };
-        if !refreshes.insert(refresh_key.clone()) {
-            return;
+        // The permit is held across the timeout so a slow provider cannot keep
+        // consuming a request slot.
+        let quote = tokio::time::timeout(
+            Duration::from_secs(QUOTE_TIMEOUT_SECS),
+            provider.quote(&source_currency, &target_currency, source_amount),
+        )
+        .await
+        .ok()
+        .and_then(Result::ok);
+        drop(permit);
+        if let Some(quote) = &quote {
+            if let Ok(mut cache) = self.fiat_quote_cache.write() {
+                cache.insert(
+                    key,
+                    CachedFiatQuote {
+                        inserted_at: Instant::now(),
+                        quote: quote.clone(),
+                    },
+                );
+            }
         }
-        drop(refreshes);
-
-        let cache = self.fiat_quote_cache.clone();
-        let active_refreshes = self.quote_refreshes.clone();
-        let quote_semaphore = self.quote_semaphore.clone();
-        let Ok(permit) = quote_semaphore.try_acquire_owned() else {
-            if let Ok(mut refreshes) = active_refreshes.lock() {
-                refreshes.remove(&refresh_key);
-            }
-            return;
-        };
-        tokio::spawn(async move {
-            let quote = tokio::time::timeout(
-                Duration::from_secs(12),
-                provider.quote(&source_currency, &target_currency, source_amount),
-            )
-            .await
-            .ok()
-            .and_then(Result::ok);
-            drop(permit);
-            if let Some(quote) = quote {
-                if let Ok(mut cache) = cache.write() {
-                    cache.insert(
-                        key,
-                        CachedFiatQuote {
-                            inserted_at: Instant::now(),
-                            quote,
-                        },
-                    );
-                }
-            }
-            if let Ok(mut refreshes) = active_refreshes.lock() {
-                refreshes.remove(&refresh_key);
-            }
-        });
+        quote
     }
 }

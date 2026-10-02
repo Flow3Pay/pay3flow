@@ -312,6 +312,7 @@
         average_response_ms: timing?.average_response_ms ?? null,
         response_samples: timing?.sample_count ?? 0,
         cache_hits: timing?.cache_hits ?? 0,
+        avg_latency_ms: status.avg_latency_ms ?? previous?.avg_latency_ms ?? null,
         offers_found: (previous?.offers_found ?? 0) + status.offers_found,
         routes_found: routeCounts.get(id) ?? 0,
       });
@@ -323,7 +324,7 @@
     }
     for (const [id, count] of routeCounts) {
       const previous = nextVenueStats[id];
-      nextVenueStats[id] = previous ? { ...previous, routes_found: Math.max(previous.routes_found, count) } : { source: id, ok: true, cached: false, latency_ms: 0, last_response_ms: null, average_response_ms: null, response_samples: 0, cache_hits: 0, offers_found: 0, routes_found: count };
+      nextVenueStats[id] = previous ? { ...previous, routes_found: Math.max(previous.routes_found, count) } : { source: id, ok: true, cached: false, latency_ms: 0, last_response_ms: null, average_response_ms: null, response_samples: 0, cache_hits: 0, avg_latency_ms: null, offers_found: 0, routes_found: count };
     }
     venueStats = nextVenueStats;
     const newlyFoundVenueIds = [

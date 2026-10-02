@@ -286,6 +286,8 @@ export interface SourceStatus {
   ok: boolean;
   cached: boolean;
   latency_ms: number;
+  /** Provider-wide mean over the last 10 non-cached responses, not per user. */
+  avg_latency_ms?: number | null;
   offers_found: number;
   error?: string | null;
 }

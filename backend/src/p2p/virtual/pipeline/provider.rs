@@ -119,7 +119,7 @@ pub(super) async fn produce_direct_fiat_routes(
                     SourceStatus {
                         source: provider_name,
                         ok: true,
-cached: true,
+                        cached: true,
                         latency_ms: 0,
                         offers_found: 1,
                         error: None,
@@ -127,44 +127,29 @@ cached: true,
                     },
                 );
             }
-            if service.has_fmatch_backend() {
-                service.refresh_fiat_quote(
+            // Wait for this provider instead of only warming the cache in the
+            // background. Fire-and-forget made the route invisible to the current
+            // search, so it surfaced later as part of an unrelated batch.
+            let quote = service
+                .fetch_fiat_quote(
                     key,
                     provider,
                     query.source_currency.clone(),
                     query.target_currency.clone(),
                     query.source_amount,
-                );
-                return (
-                    None,
-                    SourceStatus {
-                        source: provider_name,
-                        ok: true,
-                        cached: false,
-                        latency_ms: started.elapsed().as_millis(),
-                        offers_found: 0,
-                        error: None,
-                        avg_latency_ms: None,
-                    },
-                );
-            }
-            let result = provider
-                .quote(
-                    &query.source_currency,
-                    &query.target_currency,
-                    query.source_amount,
                 )
                 .await;
             let status = SourceStatus {
                 source: provider_name,
-                ok: result.is_ok(),
+                ok: quote.is_some(),
                 cached: false,
                 latency_ms: started.elapsed().as_millis(),
-                offers_found: usize::from(result.is_ok()),
-                error: result.as_ref().err().map(ToString::to_string),
+                offers_found: usize::from(quote.is_some()),
+                error: (quote.is_none()).then(|| "no quote returned".to_string()),
                 avg_latency_ms: None,
             };
-            (result.ok(), status)
+            service.latency_tracker.record(&status);
+            return (quote, status);
         })
         .collect::<FuturesUnordered<_>>();
 
