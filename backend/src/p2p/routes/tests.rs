@@ -37,6 +37,7 @@ fn route_snapshot_distinguishes_live_fallback_from_stale_cache() {
         latency_ms: 10,
         offers_found: 20,
         error: None,
+        avg_latency_ms: None,
     };
     let status = |entry_sources| RouteAssetStatus {
         asset: "USDT".into(),

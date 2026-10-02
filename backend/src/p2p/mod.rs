@@ -1,4 +1,5 @@
 mod declarative;
+mod latency;
 mod models;
 mod routes;
 mod service;

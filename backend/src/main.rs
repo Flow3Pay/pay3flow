@@ -121,6 +121,7 @@ async fn main() -> anyhow::Result<()> {
         public_route_providers,
         public_fiat_route_providers,
         ap.clone(),
+        redis_pool.as_ref(),
     )
     .await?;
     let route_engine = RouteEngine::new(RouteGraphConfig {

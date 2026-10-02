@@ -18,6 +18,7 @@ use crate::compiled_provider_code::bestchange::BestChangeSource;
 use crate::compiled_provider_code::papa_change::PapaChangeSource;
 use crate::compiled_provider_code::skylabs::SkyLabsSource;
 use crate::config::Config;
+use crate::core::redis::RedisPool;
 use crate::db::DbPool;
 use crate::networks::NetworkCatalog;
 use crate::p2p::declarative::{DeclarativeMarketSource, DeclarativeP2pSource};
@@ -293,6 +294,7 @@ pub struct P2pSearchService {
     pub(crate) fiat_quote_cache: Arc<RwLock<HashMap<String, CachedFiatQuote>>>,
     pub(crate) quote_refreshes: Arc<Mutex<HashSet<String>>>,
     pub(crate) provider_capabilities_cache: Arc<RwLock<Option<ProviderCapabilitiesSnapshot>>>,
+    latency_tracker: Arc<crate::p2p::latency::ProviderLatencyTracker>,
     fmatch: Option<FmatchP2pBackend>,
 }
 
@@ -330,7 +332,15 @@ struct CachedSearch {
 
 impl P2pSearchService {
     pub fn from_config(config: &Config, networks: NetworkCatalog) -> Result<Self> {
-        Self::from_provider_records(config, networks, Vec::new(), Vec::new(), Vec::new())
+        Self::from_provider_records(
+            config,
+            networks,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            None,
+            None,
+        )
     }
 
     pub async fn from_database(
@@ -347,7 +357,52 @@ impl P2pSearchService {
             records,
             route_providers,
             fiat_route_providers,
+            Some(pool.clone()),
+            None,
         )
+    }
+
+    pub async fn from_database_with_redis(
+        config: &Config,
+        networks: NetworkCatalog,
+        pool: &DbPool,
+        route_providers: Vec<Arc<dyn PublicRouteProvider>>,
+        fiat_route_providers: Vec<Arc<dyn PublicFiatRouteProvider>>,
+        redis: &RedisPool,
+    ) -> Result<Self> {
+        let records = crate::providers::adapters(pool).await?;
+        Self::from_provider_records(
+            config,
+            networks,
+            records,
+            route_providers,
+            fiat_route_providers,
+            Some(pool.clone()),
+            Some(redis.clone()),
+        )
+    }
+
+    /// Redis holds the hot latency window; PostgreSQL is the durable backup.
+    /// Prefer Redis and only fall back to PostgreSQL when Redis has no window yet.
+    async fn hydrate_latency_tracker(
+        tracker: &crate::p2p::latency::ProviderLatencyTracker,
+        pool: Option<&DbPool>,
+        redis: Option<&RedisPool>,
+    ) {
+        if let Some(redis) = redis {
+            match tracker.load_from_redis(redis).await {
+                Ok(()) if !tracker.is_empty() => return,
+                Ok(()) => {}
+                Err(err) => {
+                    tracing::warn!(error = %err, "failed to load provider latencies from redis");
+                }
+            }
+        }
+        if let Some(pool) = pool {
+            if let Err(err) = tracker.load_from_postgres(pool).await {
+                tracing::warn!(error = %err, "failed to load provider latencies from postgres");
+            }
+        }
     }
 
     pub async fn from_database_with_fmatch(
@@ -357,15 +412,19 @@ impl P2pSearchService {
         route_providers: Vec<Arc<dyn PublicRouteProvider>>,
         fiat_route_providers: Vec<Arc<dyn PublicFiatRouteProvider>>,
         ap: ActivityPubService,
+        redis: Option<&RedisPool>,
     ) -> Result<Self> {
-        let mut service = Self::from_database(
+        let records = crate::providers::adapters(pool).await?;
+        let mut service = Self::from_provider_records(
             config,
             networks,
-            pool,
+            records,
             route_providers,
             fiat_route_providers,
-        )
-        .await?;
+            Some(pool.clone()),
+            redis.cloned(),
+        )?;
+        Self::hydrate_latency_tracker(&service.latency_tracker, Some(pool), redis).await;
         service.fmatch = Some(FmatchP2pBackend {
             pool: pool.clone(),
             ap,
@@ -382,6 +441,8 @@ impl P2pSearchService {
         records: Vec<crate::providers::ProviderAdapterRecord>,
         mut route_providers: Vec<Arc<dyn PublicRouteProvider>>,
         fiat_route_providers: Vec<Arc<dyn PublicFiatRouteProvider>>,
+        pool: Option<DbPool>,
+        redis: Option<RedisPool>,
     ) -> Result<Self> {
         if records.iter().any(|record| record.workflow.is_some()) {
             playwright_rs::server::driver::get_driver_executable()
@@ -392,6 +453,10 @@ impl P2pSearchService {
                 }
             }
         }
+
+        let latency_tracker = crate::p2p::latency::ProviderLatencyTracker::new();
+        let (latency_tracker, _latency_handle) =
+            latency_tracker.with_background_refresh(pool.clone(), redis.clone());
         let timeout = Duration::from_millis(config.p2p_search_timeout_ms.clamp(250, 30_000));
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
@@ -454,6 +519,7 @@ impl P2pSearchService {
             fiat_quote_cache: Arc::new(RwLock::new(HashMap::new())),
             quote_refreshes: Arc::new(Mutex::new(HashSet::new())),
             provider_capabilities_cache: Arc::new(RwLock::new(None)),
+            latency_tracker: Arc::new(latency_tracker),
             fmatch: None,
         })
     }
@@ -468,6 +534,7 @@ impl P2pSearchService {
             sources: sources.into(),
             payment_method_aliases: Arc::new(HashMap::new()),
             market_sources: Vec::new().into(),
+            latency_tracker: Arc::new(crate::p2p::latency::ProviderLatencyTracker::new()),
             default_assets: vec![
                 "USDT".into(),
                 "USDC".into(),
@@ -522,6 +589,7 @@ impl P2pSearchService {
         self.provider_quote_cache = Arc::new(RwLock::new(HashMap::new()));
         self.quote_refreshes = Arc::new(Mutex::new(HashSet::new()));
         self.provider_capabilities_cache = Arc::new(RwLock::new(None));
+        self.latency_tracker = Arc::new(crate::p2p::latency::ProviderLatencyTracker::new());
         self
     }
 
@@ -533,6 +601,7 @@ impl P2pSearchService {
         self.fiat_route_providers = providers.into();
         self.fiat_quote_cache = Arc::new(RwLock::new(HashMap::new()));
         self.quote_refreshes = Arc::new(Mutex::new(HashSet::new()));
+        self.latency_tracker = Arc::new(crate::p2p::latency::ProviderLatencyTracker::new());
         self
     }
 
@@ -852,7 +921,24 @@ impl P2pSearchService {
             })
             .cloned()
             .collect::<Vec<_>>();
-        let mut searches = selected_sources
+
+        // Prefer faster providers first. Providers without a measurement sort last
+        // (f64::MAX) and `sort_by` is stable, so their relative order is preserved.
+        let mut ordered_sources = selected_sources;
+        ordered_sources.sort_by(|a, b| {
+            let avg_a = self
+                .latency_tracker
+                .avg_latency_ms(a.name())
+                .unwrap_or(f64::MAX);
+            let avg_b = self
+                .latency_tracker
+                .avg_latency_ms(b.name())
+                .unwrap_or(f64::MAX);
+            // Faster providers first (ascending by average).
+            avg_a.partial_cmp(&avg_b).unwrap_or(Ordering::Equal)
+        });
+
+        let mut searches = ordered_sources
             .into_iter()
             .map(|source| {
                 let query = query.clone();
@@ -870,15 +956,20 @@ impl P2pSearchService {
                                 }
                             }
                             let count = offers.len();
+                            let avg_latency = self.latency_tracker
+                                .avg_latency_ms(source.name());
+                            let latency_ms = elapsed;
+                            let source_name = source.name().to_string();
                             (
                                 offers,
                                 SourceStatus {
-                                    source: source.name().to_string(),
+                                    source: source_name.clone(),
                                     ok: true,
                                     cached: false,
-                                    latency_ms: elapsed,
+                                    latency_ms,
                                     offers_found: count,
                                     error: None,
+                                    avg_latency_ms: avg_latency,
                                 },
                             )
                         }
@@ -891,6 +982,8 @@ impl P2pSearchService {
                                 latency_ms: elapsed,
                                 offers_found: 0,
                                 error: Some(error.to_string()),
+                                avg_latency_ms: self.latency_tracker
+                                    .avg_latency_ms(source.name()),
                             },
                         ),
                         Err(_) => (
@@ -905,6 +998,8 @@ impl P2pSearchService {
                                     "source timed out after {} ms",
                                     timeout.as_millis()
                                 )),
+                                avg_latency_ms: self.latency_tracker
+                                    .avg_latency_ms(source.name()),
                             },
                         ),
                     }
@@ -916,6 +1011,7 @@ impl P2pSearchService {
         let mut sources = Vec::new();
         while let Some((offers, status)) = searches.next().await {
             collected_offers.extend(offers);
+            self.latency_tracker.record(&status);
             sources.push(status);
             if let Some(updates) = &updates {
                 let response = build_search_response(
@@ -1097,6 +1193,7 @@ fn source_statuses_from_offers(offers: &[P2pOffer]) -> Vec<SourceStatus> {
             latency_ms: 0,
             offers_found,
             error: None,
+            avg_latency_ms: None,
         })
         .collect()
 }

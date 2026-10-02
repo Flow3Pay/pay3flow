@@ -1462,6 +1462,7 @@ dependencies = [
  "futures",
  "hmac 0.12.1",
  "jsonwebtoken",
+ "parking_lot",
  "playwright-rs",
  "prost",
  "rand 0.8.8",

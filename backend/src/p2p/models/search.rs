@@ -82,6 +82,10 @@ pub struct SourceStatus {
     #[serde(default)]
     pub cached: bool,
     pub latency_ms: u128,
+    /// Average response time over the last 10 non-cached measurements
+    /// (milliseconds), computed independently of the user.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub avg_latency_ms: Option<f64>,
     pub offers_found: usize,
     pub error: Option<String>,
 }

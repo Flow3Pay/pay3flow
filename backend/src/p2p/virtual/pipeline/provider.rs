@@ -103,6 +103,7 @@ pub(super) async fn produce_direct_fiat_routes(
                         latency_ms: started.elapsed().as_millis(),
                         offers_found: 0,
                         error: None,
+                        avg_latency_ms: None,
                     },
                 );
             }
@@ -118,10 +119,11 @@ pub(super) async fn produce_direct_fiat_routes(
                     SourceStatus {
                         source: provider_name,
                         ok: true,
-                        cached: true,
+cached: true,
                         latency_ms: 0,
                         offers_found: 1,
                         error: None,
+                        avg_latency_ms: None,
                     },
                 );
             }
@@ -142,6 +144,7 @@ pub(super) async fn produce_direct_fiat_routes(
                         latency_ms: started.elapsed().as_millis(),
                         offers_found: 0,
                         error: None,
+                        avg_latency_ms: None,
                     },
                 );
             }
@@ -159,6 +162,7 @@ pub(super) async fn produce_direct_fiat_routes(
                 latency_ms: started.elapsed().as_millis(),
                 offers_found: usize::from(result.is_ok()),
                 error: result.as_ref().err().map(ToString::to_string),
+                avg_latency_ms: None,
             };
             (result.ok(), status)
         })

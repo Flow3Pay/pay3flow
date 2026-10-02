@@ -201,6 +201,7 @@ fn provider_fallback_does_not_expose_fmatch_as_a_venue() {
             latency_ms: 10,
             offers_found: 1,
             error: None,
+            avg_latency_ms: None,
         }],
         false,
         "provider",
