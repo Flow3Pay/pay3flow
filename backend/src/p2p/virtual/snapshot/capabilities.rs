@@ -80,6 +80,29 @@ impl P2pSearchService {
         });
     }
 
+    /// Refresh providers whose runtime catalogs can change after startup.
+    pub async fn refresh_provider_capabilities(&self, provider_names: &[&str]) {
+        let selected = provider_names.iter().copied().collect::<HashSet<_>>();
+        let mut loads = self
+            .route_providers
+            .iter()
+            .filter(|provider| selected.contains(provider.name()))
+            .cloned()
+            .map(|provider| async move {
+                let name = provider.name().to_string();
+                let assets = provider.supported_assets().await.into_iter().collect();
+                (name, assets)
+            })
+            .collect::<FuturesUnordered<_>>();
+        let mut refreshed = Vec::new();
+        while let Some(capability) = loads.next().await {
+            refreshed.push(capability);
+        }
+        if let Ok(mut cache) = self.provider_capabilities_cache.write() {
+            cache.get_or_insert_with(HashMap::new).extend(refreshed);
+        }
+    }
+
     pub(in crate::p2p) fn cached_provider_assets(&self) -> Vec<Asset> {
         let mut assets = self
             .provider_capabilities_cache

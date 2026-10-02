@@ -965,6 +965,8 @@ mod tests {
                 intermediary_assets: None,
                 source_payment_method: None,
                 target_payment_method: None,
+                source_payment_fee_percent: None,
+                target_payment_fee_percent: None,
                 merchant_only: None,
                 min_orders: Some(20),
                 min_completion_rate: Some(0.9),

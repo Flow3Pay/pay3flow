@@ -958,7 +958,10 @@ payment_methods = [
 
         assert_eq!(parsed.payment_methods[0].kind, "currency");
         assert_eq!(parsed.payment_methods[1].kind, "wallet");
-        assert_eq!(parsed.payment_methods[1].icon_url, "/icons/assets/matic.webp");
+        assert_eq!(
+            parsed.payment_methods[1].icon_url,
+            "/icons/assets/matic.webp"
+        );
     }
 
     #[test]

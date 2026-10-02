@@ -185,6 +185,193 @@ pub(super) async fn produce_direct_fiat_routes(
     Ok(())
 }
 
+pub(super) async fn produce_fiat_cycle_routes(
+    service: &P2pSearchService,
+    query: &NormalizedRouteQuery,
+    batches: mpsc::Sender<RouteBatch>,
+) -> Result<()> {
+    if query.source_currency != query.target_currency || !query.includes_exchangers() {
+        return Ok(());
+    }
+    let providers = service
+        .fiat_route_providers
+        .iter()
+        .filter(|provider| source_selected(query, provider.name()))
+        .cloned()
+        .collect::<Vec<_>>();
+    let mut searches = FuturesUnordered::new();
+    for intermediary in service
+        .fiat_intermediaries
+        .iter()
+        .filter(|currency| !currency.eq_ignore_ascii_case(&query.source_currency))
+        .take(MAX_PROVIDER_ASSETS)
+    {
+        for entry_provider in providers
+            .iter()
+            .filter(|provider| provider.supports_pair(&query.source_currency, intermediary))
+        {
+            for exit_provider in providers
+                .iter()
+                .filter(|provider| provider.supports_pair(intermediary, &query.target_currency))
+            {
+                let service = service.clone();
+                let query = query.clone();
+                let intermediary = intermediary.clone();
+                let entry_provider = entry_provider.clone();
+                let exit_provider = exit_provider.clone();
+                searches.push(async move {
+                    let entry = service
+                        .fiat_quote(
+                            entry_provider,
+                            &query.source_currency,
+                            &intermediary,
+                            query.source_amount,
+                        )
+                        .await?;
+                    if !valid_fiat_quote(
+                        &entry,
+                        &query.source_currency,
+                        &intermediary,
+                        query.source_amount,
+                    ) {
+                        return None;
+                    }
+                    let exit = service
+                        .fiat_quote(
+                            exit_provider,
+                            &intermediary,
+                            &query.target_currency,
+                            entry.target_amount,
+                        )
+                        .await?;
+                    if !valid_fiat_quote(
+                        &exit,
+                        &intermediary,
+                        &query.target_currency,
+                        entry.target_amount,
+                    ) {
+                        return None;
+                    }
+                    Some(fiat_cycle_route(&query, intermediary, entry, exit))
+                });
+            }
+        }
+    }
+
+    let mut routes = Vec::new();
+    while let Some(route) = searches.next().await {
+        if let Some(route) = route {
+            routes.push(route);
+        }
+    }
+    emit_routes(Some(&batches), &routes).await;
+    Ok(())
+}
+
+fn valid_fiat_quote(
+    quote: &FiatRouteQuote,
+    source_currency: &str,
+    target_currency: &str,
+    source_amount: f64,
+) -> bool {
+    quote.source_amount.is_finite()
+        && quote.source_amount > 0.0
+        && quote.target_amount.is_finite()
+        && quote.target_amount > 0.0
+        && quote.source_currency.eq_ignore_ascii_case(source_currency)
+        && quote.target_currency.eq_ignore_ascii_case(target_currency)
+        && (quote.source_amount - source_amount).abs() <= source_amount.abs() * f64::EPSILON * 4.0
+}
+
+fn fiat_cycle_route(
+    query: &NormalizedRouteQuery,
+    intermediary: String,
+    entry: FiatRouteQuote,
+    exit: FiatRouteQuote,
+) -> P2pRoute {
+    let same_venue = entry.provider == exit.provider;
+    let entry_offer = fiat_quote_offer(&entry, P2pSide::BuyCrypto);
+    let exit_offer = fiat_quote_offer(&exit, P2pSide::SellCrypto);
+    P2pRoute {
+        route_id: String::new(),
+        rank: 0,
+        asset: intermediary.clone(),
+        entry_network: None,
+        source_network: None,
+        target_network: None,
+        source_fiat: query.source_currency.clone(),
+        source_amount: fixed(query.source_amount, 2),
+        acquired_asset_amount: fixed(entry.target_amount, 2),
+        provider_input_amount: None,
+        target_fiat: query.target_currency.clone(),
+        target_amount: fixed(exit.target_amount, 2),
+        effective_rate: fixed(exit.target_amount / query.source_amount, 12),
+        same_venue,
+        requires_asset_transfer: !same_venue,
+        transfer_fee_included: true,
+        route_kind: "fiat_cycle".into(),
+        profitability: None,
+        bridge_currency: Some(intermediary.clone()),
+        market_path: None,
+        route_provider: None,
+        route_provider_url: None,
+        provider_quote_id: None,
+        route_path: vec![
+            query.source_currency.clone(),
+            intermediary,
+            query.target_currency.clone(),
+        ],
+        route_fees: Vec::new(),
+        quote_expires_at: None,
+        execution: None,
+        payment_methods_verified: false,
+        entry_offer: Some(entry_offer),
+        exit_offer: Some(exit_offer),
+        warnings: vec![
+            "Two indicative fiat quotes form this cycle; provider and payment fees must be confirmed before execution.".into(),
+        ],
+        services: Vec::new(),
+        reputation: None,
+        feedback: None,
+        service_links: Vec::new(),
+    }
+}
+
+fn fiat_quote_offer(quote: &FiatRouteQuote, side: P2pSide) -> P2pOffer {
+    P2pOffer {
+        market: P2pOfferMarket::DirectExchange,
+        source: quote.provider.clone(),
+        ad_id: format!(
+            "indicative-{}-{}",
+            quote.source_currency.to_ascii_lowercase(),
+            quote.target_currency.to_ascii_lowercase()
+        ),
+        side,
+        fiat: quote.source_currency.clone(),
+        asset: quote.target_currency.clone(),
+        network: None,
+        price: fixed(quote.source_amount / quote.target_amount, 12),
+        available_asset: "1000000000".into(),
+        min_fiat: "1".into(),
+        max_fiat: "1000000000".into(),
+        payment_methods: Vec::new(),
+        pay_time_limit_minutes: None,
+        advertiser: Advertiser {
+            id: None,
+            nickname: quote.provider.clone(),
+            user_type: Some("service".into()),
+            is_merchant: true,
+            is_verified: true,
+            completed_orders_30d: None,
+            completion_rate_30d: None,
+            positive_rate: None,
+        },
+        advertiser_profile_url: None,
+        source_url: quote.source_url.clone(),
+        source_url_is_exact: false,
+    }
+}
+
 fn direct_fiat_route(query: &NormalizedRouteQuery, quote: FiatRouteQuote) -> Option<P2pRoute> {
     if !quote.source_amount.is_finite()
         || quote.source_amount <= 0.0
@@ -208,38 +395,8 @@ fn direct_fiat_route(query: &NormalizedRouteQuery, quote: FiatRouteQuote) -> Opt
     .collect::<Vec<_>>();
     payment_methods.sort();
     payment_methods.dedup();
-    let offer = P2pOffer {
-        market: P2pOfferMarket::DirectExchange,
-        source: quote.provider.clone(),
-        ad_id: format!(
-            "indicative-{}-{}",
-            quote.source_currency.to_ascii_lowercase(),
-            quote.target_currency.to_ascii_lowercase()
-        ),
-        side: P2pSide::BuyCrypto,
-        fiat: quote.source_currency.clone(),
-        asset: quote.target_currency.clone(),
-        network: None,
-        price: fixed(quote.source_amount / quote.target_amount, 12),
-        available_asset: "1000000000".into(),
-        min_fiat: "1".into(),
-        max_fiat: "1000000000".into(),
-        payment_methods,
-        pay_time_limit_minutes: None,
-        advertiser: Advertiser {
-            id: None,
-            nickname: quote.provider.clone(),
-            user_type: Some("service".into()),
-            is_merchant: true,
-            is_verified: true,
-            completed_orders_30d: None,
-            completion_rate_30d: None,
-            positive_rate: None,
-        },
-        advertiser_profile_url: None,
-        source_url: quote.source_url,
-        source_url_is_exact: false,
-    };
+    let mut offer = fiat_quote_offer(&quote, P2pSide::BuyCrypto);
+    offer.payment_methods = payment_methods;
     Some(P2pRoute {
         route_id: String::new(),
         rank: 0,
@@ -250,6 +407,7 @@ fn direct_fiat_route(query: &NormalizedRouteQuery, quote: FiatRouteQuote) -> Opt
         source_fiat: quote.source_currency,
         source_amount: fixed(quote.source_amount, 2),
         acquired_asset_amount: fixed(quote.target_amount, 2),
+        provider_input_amount: None,
         target_fiat: quote.target_currency,
         target_amount: fixed(quote.target_amount, 2),
         effective_rate: fixed(quote.target_amount / quote.source_amount, 12),
@@ -257,6 +415,7 @@ fn direct_fiat_route(query: &NormalizedRouteQuery, quote: FiatRouteQuote) -> Opt
         requires_asset_transfer: false,
         transfer_fee_included: true,
         route_kind: "fiat_to_fiat".into(),
+        profitability: None,
         bridge_currency: None,
         market_path: None,
         route_provider: None,
@@ -265,6 +424,7 @@ fn direct_fiat_route(query: &NormalizedRouteQuery, quote: FiatRouteQuote) -> Opt
         route_path: Vec::new(),
         route_fees: Vec::new(),
         quote_expires_at: None,
+        execution: None,
         payment_methods_verified: false,
         entry_offer: Some(offer),
         exit_offer: None,

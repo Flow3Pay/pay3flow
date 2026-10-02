@@ -1,8 +1,9 @@
 # Live P2P Search
 
 Pay3Flow has a read-only P2P search layer. It reads public advertisements and
-does not contact advertisers, create platform orders, reserve crypto, or move
-money.
+does not contact advertisers, create platform orders, or reserve crypto. An
+optional wallet-execution layer can prepare provider actions, but funds move
+only after the user confirms the transaction in their own wallet.
 
 ## Sources
 
@@ -106,7 +107,40 @@ It then:
 4. calculates the RUB output and checks the exit advertisement limits and
    liquidity;
 5. returns complete routes ranked by maximum estimated RUB output, then
-   verified payment methods and same-venue execution.
+   verified payment methods and same-venue execution. Circular searches use
+   the profitability ordering described below instead.
+
+## Search AMD cycles
+
+An `AMD -> AMD` request automatically searches both configured cycle families:
+
+```text
+AMD -> crypto asset -> AMD
+AMD -> entry crypto -> NEAR Intents / CoW Swap / Symbiosis -> exit crypto -> AMD
+AMD -> configured fiat intermediary -> AMD
+```
+
+Crypto intermediaries come from `intermediary_assets` (or the configured P2P
+asset catalog). Route-provider cycles may use two different assets: this enables
+same-chain swaps such as `USDT -> USDC` through CoW Swap as well as cross-chain
+paths through NEAR Intents or Symbiosis. Fiat intermediaries come from
+`route_source_fiats`, and each
+leg must be supported by a loaded fiat route provider; the route composer does
+not contain a hardcoded currency list.
+
+Circular routes have `route_kind` equal to `crypto_cycle` or `fiat_cycle` and
+include a tagged `profitability` object. `status=confirmed` is returned only
+when the payment-method fees and every route/provider or transfer fee needed by
+the route are known. It contains `net_profit_minor` and `profit_bps`.
+Otherwise `status=unconfirmed` contains the gross values and `missing_costs`,
+so a route is not presented as profitable before its costs are known. The
+optional `source_payment_fee_percent` and `target_payment_fee_percent` query
+parameters supply the backend-catalog payment fees; omitting either one keeps
+the result unconfirmed.
+
+Confirmed profitable cycles rank first, followed by unconfirmed candidates and
+then confirmed break-even or loss-making cycles. The best available cycles are
+still returned when none has confirmed positive profit.
 
 The optional `sources` parameter limits both legs to a comma-separated list of
 loaded source slugs, for example `binance,okx,whitebird,skylabs`. If omitted,
@@ -133,6 +167,41 @@ Important: `target_amount` is a search estimate. Platform fees, account/KYC
 eligibility, ad availability at execution time, sanctions/geographic rules,
 and payment confirmation are not verified by this read-only layer.
 
+## Execute provider routes with a wallet
+
+When `wallet_execution_enabled = true`, eligible NEAR Intents, CoW Swap, and
+Symbiosis routes include a short-lived signed `execution` descriptor. The route
+instructions then show an embedded **Execute with wallet** panel in the exact
+provider step.
+
+The browser connects an EVM wallet through Reown AppKit or a NEAR wallet through
+NEAR Wallet Selector. The user chooses the recipient on every execution, either
+from a connected destination wallet or by entering an address. Pay3Flow requests
+a fresh quote for those source and recipient addresses, checks the source
+balance automatically, and asks the wallet to confirm every approval and
+transfer. ERC-20 approvals use the exact input amount rather than an unlimited
+allowance.
+
+Execution state is stored in `route_executions`; only public addresses, quote
+data, transaction hashes, and provider status are persisted. Private keys and
+wallet signatures never reach the backend. Pending operations are restored in
+the browser and their NEAR Intents deposit, CoW order, or Symbiosis transaction
+status is polled until a terminal state.
+
+The frontend needs a WalletConnect Cloud project id at runtime:
+
+```text
+PUBLIC_REOWN_PROJECT_ID=your-project-id
+```
+
+Keep `wallet_execution_enabled = false` until the configured mainnet token
+addresses, provider credentials, and end-to-end wallet flows have been smoke
+tested. Manual provider links remain available while the flag is disabled.
+Symbiosis execution additionally requires audited
+`symbiosis_execution_contracts` entries in
+`chain_id=MetaRouter,MetaRouterGateway` form; returned calldata and approval
+spenders are rejected when they do not match.
+
 ## Configuration
 
 The backend search settings are TOML keys in [`config.toml`](../config.toml):
@@ -143,6 +212,7 @@ p2p_search_timeout_ms = 4000
 p2p_search_cache_ttl_ms = 5000
 p2p_fmatch_stale_secs = 900
 p2p_search_assets = ["USDT", "USDC", "BTC", "ETH", "BNB", "SOL", "TRX"]
+wallet_execution_enabled = false
 playwright_chromium_executable = "/usr/bin/chromium"
 ```
 

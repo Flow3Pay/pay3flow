@@ -53,10 +53,14 @@ impl P2pSearchService {
             let Ok(exit) = exit else {
                 continue;
             };
-            let exit_offers = exit
-                .offers
+            let exit_offers = reject_price_outliers(
+                exit.offers
+                    .into_iter()
+                    .filter(|offer| query.accepts_offer(offer))
+                    .collect(),
+                query.max_price_deviation_bps,
+            )
                 .into_iter()
-                .filter(|offer| query.accepts_offer(offer))
                 .filter(|offer| offer_matches_network(offer, intermediary.location.as_deref()))
                 .take(MAX_PROVIDER_OFFERS_PER_LEG)
                 .collect::<Vec<_>>();
@@ -128,6 +132,7 @@ impl P2pSearchService {
                                 source_fiat: source_currency.clone(),
                                 source_amount: fixed(source_amount, 8),
                                 acquired_asset_amount: route_quote.output.value.clone(),
+                                provider_input_amount: Some(route_quote.input.value.clone()),
                                 target_fiat: target_currency.clone(),
                                 target_amount: fixed(target_amount, 2),
                                 effective_rate: fixed(target_amount / source_amount, 12),
@@ -135,6 +140,7 @@ impl P2pSearchService {
                                 requires_asset_transfer: true,
                                 transfer_fee_included: !route_quote.fees.is_empty(),
                                 route_kind: "crypto_to_fiat".into(),
+                                profitability: None,
                                 bridge_currency: None,
                                 market_path: None,
                                 route_provider: Some(provider.clone()),
@@ -155,6 +161,7 @@ impl P2pSearchService {
                                     })
                                     .collect(),
                                 quote_expires_at: route_quote.expires_at,
+                                execution: None,
                                 payment_methods_verified,
                                 entry_offer: None,
                                 exit_offer: Some(offer.clone()),
@@ -206,14 +213,31 @@ impl P2pSearchService {
             .sort_by_key(|symbol| intermediary_asset_priority(symbol, &query.target_currency));
         intermediary_symbols.dedup();
         intermediary_symbols.truncate(MAX_PROVIDER_ASSETS);
-        for asset_symbol in intermediary_symbols {
+        let mut symbol_pairs = intermediary_symbols
+            .iter()
+            .flat_map(|entry| {
+                intermediary_symbols
+                    .iter()
+                    .map(move |exit| (entry.clone(), exit.clone()))
+            })
+            .collect::<Vec<_>>();
+        symbol_pairs.sort_by_key(|(entry, exit)| {
+            (
+                u8::from(entry == exit),
+                intermediary_asset_priority(entry, &query.target_currency),
+                intermediary_asset_priority(exit, &query.target_currency),
+                entry.clone(),
+                exit.clone(),
+            )
+        });
+        for (entry_symbol, exit_symbol) in symbol_pairs {
             let source_networks = self.assets_on_network(
-                &asset_symbol,
+                &entry_symbol,
                 query.source_network.as_deref(),
                 &provider_assets,
             );
             let target_networks = self.assets_on_network(
-                &asset_symbol,
+                &exit_symbol,
                 query.target_network.as_deref(),
                 &provider_assets,
             );
@@ -225,12 +249,13 @@ impl P2pSearchService {
                 .flat_map(|source| {
                     target_networks
                         .iter()
-                        .filter(move |target| source.location != target.location)
+                        .filter(move |target| source != *target)
                         .map(move |target| (source.clone(), target.clone()))
                 })
                 .collect::<Vec<_>>();
             network_pairs.sort_by_key(|(from, to)| {
                 (
+                    u8::from(from.location != to.location),
                     network_priority(from.location.as_deref()),
                     network_priority(to.location.as_deref()),
                     from.to_string(),
@@ -244,7 +269,7 @@ impl P2pSearchService {
                 .search_market(
                     leg_query(
                         &query.source_currency,
-                        &asset_symbol,
+                        &entry_symbol,
                         P2pSide::BuyCrypto,
                         Some(query.source_amount),
                         query.source_payment_method.clone(),
@@ -260,7 +285,7 @@ impl P2pSearchService {
                 .search_market(
                     leg_query(
                         &query.target_currency,
-                        &asset_symbol,
+                        &exit_symbol,
                         P2pSide::SellCrypto,
                         None,
                         query.target_payment_method.clone(),
@@ -273,17 +298,27 @@ impl P2pSearchService {
                 continue;
             };
             let exit_offers = Arc::<[P2pOffer]>::from(
-                exit.offers
+                reject_price_outliers(
+                    exit.offers
+                        .into_iter()
+                        .filter(|offer| query.accepts_offer(offer))
+                        .collect(),
+                    query.max_price_deviation_bps,
+                )
+                .into_iter()
+                .take(MAX_PROVIDER_OFFERS_PER_LEG)
+                .collect::<Vec<_>>(),
+            );
+            for entry_offer in reject_price_outliers(
+                entry
+                    .offers
                     .into_iter()
                     .filter(|offer| query.accepts_offer(offer))
-                    .take(MAX_PROVIDER_OFFERS_PER_LEG)
-                    .collect::<Vec<_>>(),
-            );
-            for entry_offer in entry
-                .offers
-                .into_iter()
-                .filter(|offer| query.accepts_offer(offer))
-                .take(2)
+                    .collect(),
+                query.max_price_deviation_bps,
+            )
+            .into_iter()
+            .take(2)
             {
                 let Some(entry_price) = positive_number(&entry_offer.price) else {
                     continue;
@@ -407,13 +442,19 @@ impl P2pSearchService {
                     source_fiat: query.source_currency.clone(),
                     source_amount: fixed(query.source_amount, 2),
                     acquired_asset_amount: fixed(output_asset, 8),
+                    provider_input_amount: Some(route_quote.input.value.clone()),
                     target_fiat: query.target_currency.clone(),
                     target_amount: fixed(target_amount, 2),
                     effective_rate: fixed(target_amount / query.source_amount, 8),
                     same_venue: false,
                     requires_asset_transfer: true,
-                    transfer_fee_included: !route_quote.fees.is_empty(),
-                    route_kind: "fiat_to_fiat".into(),
+                    transfer_fee_included: quote_confirmed,
+                    route_kind: if query.source_currency == query.target_currency {
+                        "crypto_cycle".into()
+                    } else {
+                        "fiat_to_fiat".into()
+                    },
+                    profitability: None,
                     bridge_currency: None,
                     market_path: None,
                     route_provider: Some(provider_name.clone()),
@@ -432,6 +473,7 @@ impl P2pSearchService {
                         })
                         .collect(),
                     quote_expires_at: route_quote.expires_at,
+                    execution: None,
                     payment_methods_verified: true,
                     entry_offer: Some(entry.clone()),
                     exit_offer: Some(exit.clone()),

@@ -12,6 +12,7 @@ use pay3flow_backend::route_engine::{
     Asset, CowRouteProvider, LiveEdgeQuoteSource, NearIntentsProvider, PublicRouteProvider,
     RouteEngine, RouteGraphConfig, RouteQuoteService, RouteRefreshConfig, SymbiosisRouteProvider,
 };
+use pay3flow_backend::route_execution::RouteExecutionService;
 use pay3flow_backend::server::routing;
 use std::sync::Arc;
 
@@ -98,19 +99,22 @@ async fn main() -> anyhow::Result<()> {
     };
     let mut public_route_providers: Vec<Arc<dyn PublicRouteProvider>> =
         vec![Arc::new(near_intents.clone())];
-    if let Some(cow) = CowRouteProvider::from_config(
+    let cow = CowRouteProvider::from_config(
         &cfg.cow_api_urls,
         &cfg.cow_tokens,
         cfg.cow_quote_address.as_deref(),
-    )? {
-        public_route_providers.push(Arc::new(cow));
+    )?;
+    if let Some(cow) = &cow {
+        public_route_providers.push(Arc::new(cow.clone()));
     }
-    public_route_providers.push(Arc::new(SymbiosisRouteProvider::new(
+    let symbiosis = SymbiosisRouteProvider::new(
         cfg.symbiosis_url.clone(),
         cfg.symbiosis_partner_id.clone(),
         cfg.symbiosis_quote_address.clone(),
         cfg.symbiosis_slippage_bps,
-    )?));
+    )?
+    .with_execution_contracts(&cfg.symbiosis_execution_contracts)?;
+    public_route_providers.push(Arc::new(symbiosis.clone()));
     let public_fiat_route_providers: Vec<Arc<dyn PublicFiatRouteProvider>> =
         vec![Arc::new(IdPayRouteProvider::new()?)];
     let network_catalog = pay3flow_backend::networks::NetworkCatalog::load(&pool).await?;
@@ -144,6 +148,14 @@ async fn main() -> anyhow::Result<()> {
     ));
     let reputation =
         pay3flow_backend::service_reputation::ServiceReputation::new(pool.clone(), &cfg.jwt_secret);
+    let route_executions = RouteExecutionService::new(
+        pool.clone(),
+        &cfg.jwt_secret,
+        cfg.wallet_execution_enabled,
+        near_intents.clone(),
+        cow,
+        symbiosis,
+    );
 
     let state = AppState::new(
         pool,
@@ -161,6 +173,7 @@ async fn main() -> anyhow::Result<()> {
         near_intents,
         route_quotes,
         reputation,
+        route_executions,
     );
 
     tracing::info!(
@@ -233,6 +246,9 @@ async fn main() -> anyhow::Result<()> {
                 Ok(tokens) => tracing::info!(count = tokens.len(), "refreshed NEAR Intents tokens"),
                 Err(error) => tracing::warn!(%error, "NEAR Intents token refresh failed"),
             }
+            route_p2p
+                .refresh_provider_capabilities(&["near-intents", "cow-swap", "symbiosis"])
+                .await;
             match route_engine
                 .refresh(&route_p2p, &route_near, &route_refresh)
                 .await

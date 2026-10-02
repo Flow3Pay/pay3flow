@@ -14,6 +14,8 @@ pub(in crate::p2p) struct NormalizedRouteQuery {
     pub(in crate::p2p) assets_explicit: bool,
     pub(in crate::p2p) source_payment_method: Option<String>,
     pub(in crate::p2p) target_payment_method: Option<String>,
+    pub(in crate::p2p) source_payment_fee_bps: Option<u32>,
+    pub(in crate::p2p) target_payment_fee_bps: Option<u32>,
     pub(in crate::p2p) merchant_only: bool,
     pub(in crate::p2p) min_orders: Option<u64>,
     pub(in crate::p2p) min_completion_rate: Option<f64>,
@@ -45,10 +47,16 @@ impl NormalizedRouteQuery {
     }
 
     pub(in crate::p2p) fn accepts_offer(&self, offer: &P2pOffer) -> bool {
-        match offer.market {
+        let market_matches = match offer.market {
             P2pOfferMarket::P2p => self.includes_p2p(),
             P2pOfferMarket::DirectExchange => self.includes_exchangers(),
-        }
+        };
+        market_matches
+            && self.sources.as_deref().is_none_or(|sources| {
+                sources
+                    .split(',')
+                    .any(|source| offer.source.eq_ignore_ascii_case(source))
+            })
     }
 }
 

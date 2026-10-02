@@ -3,6 +3,7 @@
   import type { ProviderGuidance, RouteCandidate, ServiceLink } from "$lib/exchange";
   import { locale, t } from "$lib/i18n";
   import AdvertiserCard from "./AdvertiserCard.svelte";
+  import RouteExecutionPanel from "./RouteExecutionPanel.svelte";
 
   export let route: RouteCandidate;
   export let venueNames: Record<string, string> = {};
@@ -163,6 +164,7 @@
             <li>{copy("Never send money after the quote expires. Get a new quote first.")}</li>
           </ul>
           {#if route.route_provider_url}<a href={route.route_provider_url} target="_blank" rel="noreferrer noopener" class="profileLink">{copy("Open {venue}", { venue: venueName(route.route_provider) })} <span>↗</span></a>{/if}
+          <RouteExecutionPanel {route} />
         </div></li>
       {/if}
       {#if cryptoToCrypto && route.market_path}
@@ -242,6 +244,7 @@
             <li>{copy("Wait until the new balance appears before considering this step finished.")}</li>
           </ul>
           {#if route.route_provider_url}<a href={route.route_provider_url} target="_blank" rel="noreferrer noopener" class="profileLink">{copy("Open {venue}", { venue: venueName(route.route_provider) })} <span>↗</span></a>{/if}
+          <RouteExecutionPanel {route} />
         </div></li>
       {/if}
       {#if crossVenue}

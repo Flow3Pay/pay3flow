@@ -136,6 +136,7 @@ impl P2pSearchService {
                                         source_fiat: query.source_currency.clone(),
                                         source_amount: fixed(query.source_amount, 2),
                                         acquired_asset_amount: quote.output.value.clone(),
+                                        provider_input_amount: Some(quote.input.value.clone()),
                                         target_fiat: query.target_currency.clone(),
                                         target_amount: quote.output.value.clone(),
                                         effective_rate: fixed(output / query.source_amount, 12),
@@ -143,6 +144,7 @@ impl P2pSearchService {
                                         requires_asset_transfer: true,
                                         transfer_fee_included: !quote.fees.is_empty(),
                                         route_kind: "fiat_to_crypto".into(),
+                                        profitability: None,
                                         bridge_currency: None,
                                         market_path: None,
                                         route_provider: Some(provider),
@@ -160,6 +162,7 @@ impl P2pSearchService {
                                             })
                                             .collect(),
                                         quote_expires_at: quote.expires_at,
+                                        execution: None,
                                         payment_methods_verified,
                                         entry_offer: Some(offer.clone()),
                                         exit_offer: None,

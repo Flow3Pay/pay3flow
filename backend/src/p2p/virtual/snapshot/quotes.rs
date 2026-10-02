@@ -4,12 +4,49 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 use chrono::Utc;
 
-use crate::p2p::routes::{FiatProviderQuoteJob, PROVIDER_QUOTE_CACHE_TTL};
+use crate::p2p::routes::{fiat_quote_key, FiatProviderQuoteJob, PROVIDER_QUOTE_CACHE_TTL};
 use crate::p2p::service::{CachedFiatQuote, CachedProviderQuote};
 use crate::p2p::P2pSearchService;
 use crate::route_engine::PublicRouteQuote;
 
 impl P2pSearchService {
+    pub(in crate::p2p) async fn fiat_quote(
+        &self,
+        provider: Arc<dyn crate::p2p::PublicFiatRouteProvider>,
+        source_currency: &str,
+        target_currency: &str,
+        source_amount: f64,
+    ) -> Option<crate::p2p::FiatRouteQuote> {
+        let key = fiat_quote_key(
+            provider.name(),
+            source_currency,
+            target_currency,
+            source_amount,
+        );
+        if let Some(quote) = self.cached_fiat_quote(&key) {
+            return Some(quote);
+        }
+        let permit = self.quote_semaphore.clone().acquire_owned().await.ok()?;
+        let quote = tokio::time::timeout(
+            Duration::from_secs(12),
+            provider.quote(source_currency, target_currency, source_amount),
+        )
+        .await
+        .ok()?
+        .ok()?;
+        drop(permit);
+        if let Ok(mut cache) = self.fiat_quote_cache.write() {
+            cache.insert(
+                key,
+                CachedFiatQuote {
+                    inserted_at: Instant::now(),
+                    quote: quote.clone(),
+                },
+            );
+        }
+        Some(quote)
+    }
+
     pub(in crate::p2p) fn cached_provider_quote(&self, key: &str) -> Option<PublicRouteQuote> {
         self.provider_quote_cache
             .read()

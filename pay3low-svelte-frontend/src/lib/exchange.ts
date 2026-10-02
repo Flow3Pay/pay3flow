@@ -103,7 +103,8 @@ export interface RouteCandidate {
   target_amount?: string;
   target_currency?: string;
   target_method_icon_url?: string;
-  route_kind?: "fiat_to_fiat" | "fiat_to_crypto" | "crypto_to_fiat" | "crypto_to_crypto";
+  route_kind?: "fiat_to_fiat" | "fiat_to_crypto" | "crypto_to_fiat" | "crypto_to_crypto" | "crypto_cycle" | "fiat_cycle";
+  profitability?: RouteProfitability;
   bridge_currency?: string | null;
   market_path?: CryptoMarketPath;
   route_provider?: string | null;
@@ -111,6 +112,7 @@ export interface RouteCandidate {
   route_path?: string[];
   route_fees?: { asset: string; amount: string }[];
   quote_expires_at?: string | null;
+  execution?: RouteExecutionDescriptor | null;
   spread_bps: number;
   fee_minor?: number;
   eta_minutes?: number;
@@ -131,6 +133,38 @@ export interface RouteCandidate {
   reputation?: CombinedReputation;
   feedback?: RouteFeedback;
   service_links?: ServiceLink[];
+}
+
+export interface RouteExecutionDescriptor {
+  provider: "near-intents" | "cow-swap" | "symbiosis";
+  from_asset: string;
+  to_asset: string;
+  input_amount: string;
+  expires_at: string;
+  token: string;
+}
+
+export type RouteExecutionAction =
+  | { kind: "near_deposit"; network: string; asset: string; amount: string; deposit_address: string; deposit_memo?: string; asset_id: string; decimals?: number; token_contract?: string }
+  | { kind: "cow_order"; chain: string; chain_id: number; api_url: string; sell_token: string; buy_token: string; sell_amount: string; quote: Record<string, unknown> }
+  | { kind: "symbiosis_transaction"; chain_id: number; source_token: string; input_amount: string; approval_spender?: string; transaction: Record<string, unknown> };
+
+export interface RouteExecution {
+  id: string;
+  route_id: string;
+  provider: string;
+  status: "awaiting_signature" | "submitted" | "completed" | "failed" | "cancelled" | "expired" | "refunded" | "stuck";
+  from_asset: string;
+  to_asset: string;
+  input_amount: string;
+  source_address: string;
+  recipient: string;
+  action: RouteExecutionAction;
+  provider_reference?: string;
+  submitted_reference?: string;
+  provider_status?: Record<string, unknown>;
+  quote_expires_at: string;
+  updated_at: string;
 }
 
 export type ServiceVote = "like" | "dislike";
@@ -246,7 +280,8 @@ export interface P2pRoute {
   same_venue: boolean;
   requires_asset_transfer: boolean;
   transfer_fee_included: boolean;
-  route_kind?: "fiat_to_fiat" | "fiat_to_crypto" | "crypto_to_fiat" | "crypto_to_crypto";
+  route_kind?: "fiat_to_fiat" | "fiat_to_crypto" | "crypto_to_fiat" | "crypto_to_crypto" | "crypto_cycle" | "fiat_cycle";
+  profitability?: RouteProfitability;
   bridge_currency?: string | null;
   market_path?: CryptoMarketPath;
   route_provider?: string | null;
@@ -254,6 +289,7 @@ export interface P2pRoute {
   route_path?: string[];
   route_fees?: { asset: string; amount: string }[];
   quote_expires_at?: string | null;
+  execution?: RouteExecutionDescriptor | null;
   payment_methods_verified: boolean;
   entry_offer?: P2pOffer;
   exit_offer?: P2pOffer;
@@ -263,6 +299,12 @@ export interface P2pRoute {
   feedback?: RouteFeedback;
   service_links?: ServiceLink[];
 }
+
+export type RouteCostKind = "source_payment_fee" | "target_payment_fee" | "network_fee" | "provider_fee" | "live_quote";
+
+export type RouteProfitability =
+  | { status: "confirmed"; net_profit_minor: number; profit_bps: number }
+  | { status: "unconfirmed"; gross_profit_minor: number; gross_profit_bps: number; missing_costs: RouteCostKind[] };
 
 export interface P2pRouteSearchResponse {
   search_id?: string;
@@ -399,6 +441,48 @@ export function fetchProviders(): Promise<ProviderDefinition[]> {
   return request("/api/providers");
 }
 
+export function createRouteExecution(input: {
+  anonymousId: string;
+  routeToken: string;
+  sourceAddress: string;
+  recipient: string;
+  refundTo?: string;
+  amount?: string;
+  slippageBps?: number;
+  idempotencyKey: string;
+}): Promise<RouteExecution> {
+  return request("/api/p2p/route-executions", {
+    method: "POST",
+    headers: { "Idempotency-Key": input.idempotencyKey },
+    body: JSON.stringify({
+      anonymous_id: input.anonymousId,
+      route_token: input.routeToken,
+      source_address: input.sourceAddress,
+      recipient: input.recipient,
+      refund_to: input.refundTo,
+      amount: input.amount,
+      slippage_bps: input.slippageBps,
+    }),
+  });
+}
+
+export function submitRouteExecution(
+  id: string,
+  anonymousId: string,
+  reference: string,
+  kind: "transaction_hash" | "order_uid",
+): Promise<RouteExecution> {
+  return request(`/api/p2p/route-executions/${encodeURIComponent(id)}/submissions`, {
+    method: "POST",
+    body: JSON.stringify({ anonymous_id: anonymousId, reference, kind }),
+  });
+}
+
+export function fetchRouteExecution(id: string, anonymousId: string): Promise<RouteExecution> {
+  const params = new URLSearchParams({ anonymous_id: anonymousId });
+  return request(`/api/p2p/route-executions/${encodeURIComponent(id)}?${params}`);
+}
+
 export function fetchP2pRoutes(query: {
   sourceFiat: string;
   targetFiat: string;
@@ -410,6 +494,8 @@ export function fetchP2pRoutes(query: {
   targetNetwork?: string;
   sourcePaymentMethod?: string;
   targetPaymentMethod?: string;
+  sourcePaymentFeePercent?: number;
+  targetPaymentFeePercent?: number;
   sources?: string[];
   exchangeMode?: "all" | "p2p" | "exchanger";
   allowCrossVenue?: boolean;
@@ -447,6 +533,12 @@ export function fetchP2pRoutes(query: {
   if (query.targetPaymentMethod) {
     params.set("target_payment_method", query.targetPaymentMethod);
   }
+  if (query.sourcePaymentFeePercent != null) {
+    params.set("source_payment_fee_percent", String(query.sourcePaymentFeePercent));
+  }
+  if (query.targetPaymentFeePercent != null) {
+    params.set("target_payment_fee_percent", String(query.targetPaymentFeePercent));
+  }
   if (query.sources?.length) {
     params.set("sources", query.sources.join(","));
   }
@@ -473,6 +565,8 @@ function routeQueryPayload(query: P2pLiveQuery): Record<string, unknown> {
     target_network: query.targetNetwork,
     source_payment_method: query.sourcePaymentMethod,
     target_payment_method: query.targetPaymentMethod,
+    source_payment_fee_percent: query.sourcePaymentFeePercent,
+    target_payment_fee_percent: query.targetPaymentFeePercent,
     sources: query.sources?.join(","),
     exchange_mode: query.exchangeMode ?? "all",
     allow_cross_venue: query.allowCrossVenue ?? true,

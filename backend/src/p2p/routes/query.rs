@@ -17,6 +17,14 @@ pub(in crate::p2p) fn normalize_query(
     {
         bail!("min_completion_rate must be between 0 and 1");
     }
+    let source_payment_fee_bps = payment_fee_bps(
+        query.source_payment_fee_percent,
+        "source_payment_fee_percent",
+    )?;
+    let target_payment_fee_bps = payment_fee_bps(
+        query.target_payment_fee_percent,
+        "target_payment_fee_percent",
+    )?;
     let assets_explicit = query.intermediary_assets.is_some() || query.assets.is_some();
     let assets = query
         .intermediary_assets
@@ -73,6 +81,8 @@ pub(in crate::p2p) fn normalize_query(
         assets_explicit,
         source_payment_method: trimmed(query.source_payment_method),
         target_payment_method: trimmed(query.target_payment_method),
+        source_payment_fee_bps,
+        target_payment_fee_bps,
         merchant_only: query.merchant_only.unwrap_or(false),
         min_orders: query.min_orders,
         min_completion_rate: query.min_completion_rate,
@@ -85,6 +95,16 @@ pub(in crate::p2p) fn normalize_query(
         sources: normalize_sources(query.sources)?,
         exchange_mode: query.exchange_mode,
     })
+}
+
+fn payment_fee_bps(value: Option<f64>, field: &str) -> Result<Option<u32>> {
+    let Some(percent) = value else {
+        return Ok(None);
+    };
+    if !percent.is_finite() || !(0.0..=100.0).contains(&percent) {
+        bail!("{field} must be between 0 and 100");
+    }
+    Ok(Some((percent * 100.0).round() as u32))
 }
 
 pub(in crate::p2p) fn source_selected(query: &NormalizedRouteQuery, provider: &str) -> bool {

@@ -324,6 +324,7 @@ async fn enrich_routes(
         route.reputation = Some(average_reputation(&route.services));
         route.feedback = feedback.get(&route.route_id).cloned();
         route.service_links = route_links(state, response.search_id, route, &stats)?;
+        state.route_executions.attach_descriptor(route);
     }
     Ok(())
 }
@@ -533,6 +534,7 @@ mod tests {
         let uri: Uri = concat!(
             "/api/p2p/routes?source_fiat=USDC&target_fiat=RUB&source_amount=100",
             "&target_payment_method=Sberbank&sources=whitebird&allow_cross_venue=true",
+            "&source_payment_fee_percent=0.75&target_payment_fee_percent=1.25",
             "&min_orders=20&min_completion_rate=0.9&limit=40",
             "&anonymous_id=aa1f91d5-410f-404d-85a5-de7438a29eb9"
         )
@@ -546,6 +548,8 @@ mod tests {
         assert_eq!(query.min_orders, Some(20));
         assert_eq!(query.min_completion_rate, Some(0.9));
         assert_eq!(query.allow_cross_venue, Some(true));
+        assert_eq!(query.source_payment_fee_percent, Some(0.75));
+        assert_eq!(query.target_payment_fee_percent, Some(1.25));
         assert_eq!(query.limit, Some(40));
         assert_eq!(query.sources.as_deref(), Some("whitebird"));
         assert_eq!(

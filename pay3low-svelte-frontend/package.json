@@ -24,6 +24,17 @@
     "vite": "^7.3.0"
   },
   "dependencies": {
-    "compression": "^1.8.2"
+    "@cowprotocol/cow-sdk": "^9.2.17",
+    "@cowprotocol/sdk-viem-adapter": "^0.3.33",
+    "@near-js/transactions": "^2.5.1",
+    "@near-wallet-selector/core": "^10.1.4",
+    "@near-wallet-selector/modal-ui": "^10.1.4",
+    "@near-wallet-selector/my-near-wallet": "^10.1.4",
+    "@reown/appkit": "^1.8.24",
+    "@reown/appkit-adapter-wagmi": "^1.8.24",
+    "@tanstack/query-core": "^5.104.1",
+    "compression": "^1.8.2",
+    "viem": "^2.57.2",
+    "wagmi": "^3.7.7"
   }
 }

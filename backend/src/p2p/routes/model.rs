@@ -32,6 +32,12 @@ pub struct P2pRouteSearchQuery {
     pub intermediary_assets: Option<String>,
     pub source_payment_method: Option<String>,
     pub target_payment_method: Option<String>,
+    /// Payment-method fee from the backend-owned payment-method catalog.
+    /// Missing values keep circular-route profitability unconfirmed.
+    pub source_payment_fee_percent: Option<f64>,
+    /// Payment-method fee from the backend-owned payment-method catalog.
+    /// Missing values keep circular-route profitability unconfirmed.
+    pub target_payment_fee_percent: Option<f64>,
     pub merchant_only: Option<bool>,
     pub min_orders: Option<u64>,
     pub min_completion_rate: Option<f64>,
@@ -59,6 +65,10 @@ pub struct P2pRoute {
     pub source_fiat: String,
     pub source_amount: String,
     pub acquired_asset_amount: String,
+    /// Amount entering the route-provider leg. It is kept out of the public
+    /// response except through a signed execution descriptor.
+    #[serde(skip)]
+    pub(crate) provider_input_amount: Option<String>,
     pub target_fiat: String,
     pub target_amount: String,
     /// Target-fiat units per one source-fiat unit.
@@ -67,6 +77,8 @@ pub struct P2pRoute {
     pub requires_asset_transfer: bool,
     pub transfer_fee_included: bool,
     pub route_kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profitability: Option<RouteProfitability>,
     pub bridge_currency: Option<String>,
     pub market_path: Option<CryptoMarketPath>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -81,6 +93,8 @@ pub struct P2pRoute {
     pub route_fees: Vec<RouteFee>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub quote_expires_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub execution: Option<RouteExecutionDescriptor>,
     /// True when both selected bank names were present in venue responses.
     /// False means at least one venue returned only opaque payment IDs.
     pub payment_methods_verified: bool,
@@ -95,6 +109,40 @@ pub struct P2pRoute {
     pub feedback: Option<RouteFeedback>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub service_links: Vec<ServiceLink>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RouteExecutionDescriptor {
+    pub provider: String,
+    pub from_asset: String,
+    pub to_asset: String,
+    pub input_amount: String,
+    pub expires_at: DateTime<Utc>,
+    pub token: String,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum RouteProfitability {
+    Confirmed {
+        net_profit_minor: i64,
+        profit_bps: i32,
+    },
+    Unconfirmed {
+        gross_profit_minor: i64,
+        gross_profit_bps: i32,
+        missing_costs: Vec<RouteCostKind>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum RouteCostKind {
+    SourcePaymentFee,
+    TargetPaymentFee,
+    NetworkFee,
+    ProviderFee,
+    LiveQuote,
 }
 
 #[derive(Debug, Clone, Serialize)]

@@ -103,6 +103,13 @@ impl P2pSearchService {
                     &query,
                     batch_sender.clone(),
                 )));
+                if query.source_currency == query.target_currency {
+                    producers.push(Box::pin(provider::produce_fiat_cycle_routes(
+                        self,
+                        &query,
+                        batch_sender.clone(),
+                    )));
+                }
             }
         }
         drop(batch_sender);

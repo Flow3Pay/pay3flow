@@ -12,10 +12,11 @@ use tokio::sync::RwLock;
 
 use crate::route_engine::{
     atomic_to_decimal, canonical_network_id, decimal_to_atomic, ensure_success, truncate_decimal,
-    Amount, Asset, PublicRouteProvider, PublicRouteQuote, DEFAULT_QUOTE_TTL,
+    Amount, Asset, PublicRouteProvider, PublicRouteQuote, SymbiosisExecutionQuote,
 };
 
 const DEFAULT_API_URL: &str = "https://api.symbiosis.finance/crosschain";
+const CALLDATA_TTL: chrono::Duration = chrono::Duration::seconds(30);
 
 fn normalized_atomic_input(value: &str, decimals: u8) -> Result<(String, String)> {
     let normalized = truncate_decimal(value, Some(decimals))?;
@@ -48,6 +49,7 @@ pub struct SymbiosisRouteProvider {
     quote_address: String,
     slippage_bps: u32,
     tokens: Arc<RwLock<Option<Vec<SymbiosisToken>>>>,
+    execution_contracts: Arc<HashMap<u64, (String, String)>>,
 }
 
 impl SymbiosisRouteProvider {
@@ -88,7 +90,33 @@ impl SymbiosisRouteProvider {
             quote_address,
             slippage_bps,
             tokens: Arc::new(RwLock::new(None)),
+            execution_contracts: Arc::new(HashMap::new()),
         })
+    }
+
+    /// Configure audited `chain_id=meta_router,meta_router_gateway` pairs.
+    /// Executable calldata is rejected unless both addresses match this list.
+    pub fn with_execution_contracts(mut self, entries: &[String]) -> Result<Self> {
+        let mut contracts = HashMap::new();
+        for entry in entries {
+            let (chain_id, addresses) = entry
+                .split_once('=')
+                .with_context(|| format!("invalid Symbiosis execution contract entry {entry}"))?;
+            let (router, gateway) = addresses
+                .split_once(',')
+                .with_context(|| format!("invalid Symbiosis execution contract entry {entry}"))?;
+            let chain_id = chain_id
+                .trim()
+                .parse::<u64>()
+                .with_context(|| format!("invalid Symbiosis chain id in {entry}"))?;
+            let router = checked_evm_address(router, "meta router")?;
+            let gateway = checked_evm_address(gateway, "meta router gateway")?;
+            if contracts.insert(chain_id, (router, gateway)).is_some() {
+                bail!("duplicate Symbiosis execution contracts for chain {chain_id}");
+            }
+        }
+        self.execution_contracts = Arc::new(contracts);
+        Ok(self)
     }
 
     async fn load_tokens(&self) -> Result<Vec<SymbiosisToken>> {
@@ -183,7 +211,103 @@ impl SymbiosisRouteProvider {
         raw.pointer("/tx/validUntil")
             .and_then(Value::as_i64)
             .and_then(|seconds| DateTime::from_timestamp(seconds, 0))
-            .or_else(|| Some(Utc::now() + DEFAULT_QUOTE_TTL))
+            .or_else(|| Some(Utc::now() + CALLDATA_TTL))
+    }
+
+    pub async fn execution_quote(
+        &self,
+        from: Asset,
+        to: Asset,
+        amount: Amount,
+        owner: &str,
+        recipient: &str,
+    ) -> Result<SymbiosisExecutionQuote> {
+        if from == to || amount.asset != from {
+            bail!("invalid Symbiosis execution pair or amount");
+        }
+        let tokens = self.load_tokens().await?;
+        let from_token = Self::token_for(&tokens, &from)?.clone();
+        let to_token = Self::token_for(&tokens, &to)?.clone();
+        let (_, atomic_amount) = normalized_atomic_input(&amount.value, from_token.decimals)?;
+        let body = json!({
+            "tokenAmountIn": Self::token_payload(&from_token, Some(atomic_amount.clone())),
+            "tokenOut": Self::token_payload(&to_token, None),
+            "from": owner,
+            "to": recipient,
+            "slippage": self.slippage_bps,
+        });
+        let mut request = self.client.post(self.endpoint("v1/swap")).json(&body);
+        if let Some(partner_id) = &self.partner_id {
+            request = request.header("X-Partner-Id", partner_id);
+        }
+        let response = request
+            .send()
+            .await
+            .context("request executable Symbiosis quote")?;
+        let status = response.status();
+        let raw = response
+            .json::<Value>()
+            .await
+            .context("decode executable Symbiosis quote")?;
+        if !status.is_success() {
+            bail!("executable Symbiosis quote returned HTTP {status}: {raw}");
+        }
+        let transaction = raw
+            .get("tx")
+            .cloned()
+            .context("Symbiosis executable quote has no transaction")?;
+        let approval_spender = raw
+            .get("approveTo")
+            .or_else(|| raw.get("approvalAddress"))
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        let (expected_router, expected_gateway) = self
+            .execution_contracts
+            .get(&from_token.chain_id)
+            .with_context(|| {
+                format!(
+                    "Symbiosis execution contracts are not configured for chain {}",
+                    from_token.chain_id
+                )
+            })?;
+        let transaction_to = transaction
+            .get("to")
+            .and_then(Value::as_str)
+            .context("Symbiosis executable transaction has no destination")?;
+        if !transaction_to.eq_ignore_ascii_case(expected_router) {
+            bail!("Symbiosis executable transaction destination is not the configured MetaRouter");
+        }
+        if !is_evm_native_token(&from_token.address) {
+            let spender = approval_spender
+                .as_deref()
+                .context("Symbiosis ERC-20 quote has no approval spender")?;
+            if !spender.eq_ignore_ascii_case(expected_gateway) {
+                bail!("Symbiosis approval spender is not the configured MetaRouterGateway");
+            }
+        }
+        Ok(SymbiosisExecutionQuote {
+            source_chain_id: from_token.chain_id,
+            source_token: from_token.address,
+            input_amount: atomic_amount,
+            approval_spender,
+            transaction,
+            expires_at: Self::quote_expiry(&raw).unwrap_or_else(|| Utc::now() + CALLDATA_TTL),
+            quote: raw,
+        })
+    }
+
+    pub async fn transaction_status(&self, chain_id: u64, tx_hash: &str) -> Result<Value> {
+        let response = self
+            .client
+            .get(self.endpoint(&format!("v1/tx/{chain_id}/{tx_hash}")))
+            .send()
+            .await
+            .context("request Symbiosis transaction status")?;
+        ensure_success(response.status(), "request Symbiosis transaction status")?;
+        response
+            .json()
+            .await
+            .context("decode Symbiosis transaction status")
     }
 }
 
@@ -288,6 +412,22 @@ impl PublicRouteProvider for SymbiosisRouteProvider {
     }
 }
 
+fn checked_evm_address(value: &str, label: &str) -> Result<String> {
+    let value = value.trim();
+    if value.len() != 42
+        || !value.starts_with("0x")
+        || !value[2..].bytes().all(|byte| byte.is_ascii_hexdigit())
+    {
+        bail!("invalid Symbiosis {label} address");
+    }
+    Ok(value.to_string())
+}
+
+fn is_evm_native_token(address: &str) -> bool {
+    address.eq_ignore_ascii_case("0x0000000000000000000000000000000000000000")
+        || address.eq_ignore_ascii_case("0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
+}
+
 fn network_for_chain(chain_id: u64) -> Option<&'static str> {
     Some(match chain_id {
         1 => "ethereum",
@@ -342,6 +482,30 @@ mod tests {
 
         assert_eq!(normalized, "12.345678");
         assert_eq!(atomic, "12345678");
+    }
+
+    #[test]
+    fn validates_and_indexes_execution_contract_allowlist() {
+        let provider = SymbiosisRouteProvider::new(
+            DEFAULT_API_URL,
+            None,
+            "0xf93d011544e89a28b5bdbdd833016cc5f26e82cd",
+            300,
+        )
+        .unwrap()
+        .with_execution_contracts(&[
+            "1=0xf621Fb08BBE51aF70e7E0F4EA63496894166Ff7F,0xfCEF2Fe72413b65d3F393d278A714caD87512bcd".into(),
+        ])
+        .unwrap();
+        assert_eq!(
+            provider.execution_contracts.get(&1).unwrap().0,
+            "0xf621Fb08BBE51aF70e7E0F4EA63496894166Ff7F"
+        );
+
+        assert!(SymbiosisRouteProvider::new(DEFAULT_API_URL, None, "preview", 300)
+            .unwrap()
+            .with_execution_contracts(&["1=not-an-address,also-invalid".into()])
+            .is_err());
     }
 
     #[tokio::test]

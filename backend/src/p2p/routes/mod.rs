@@ -19,7 +19,7 @@ mod model;
 pub(super) use super::r#virtual::composition::*;
 pub use model::{
     CryptoMarketPath, ExchangeMode, P2pRoute, P2pRouteSearchQuery, P2pRouteSearchResponse,
-    RouteAssetStatus, RouteFee,
+    RouteAssetStatus, RouteCostKind, RouteExecutionDescriptor, RouteFee, RouteProfitability,
 };
 
 pub(super) const DEFAULT_ROUTE_LIMIT: usize = 20;

@@ -293,6 +293,49 @@ fn reputation_filters_keep_offers_when_metrics_are_not_published() {
 }
 
 #[test]
+fn fmatch_boundary_rejects_wrong_pair_side_and_unrequested_source() {
+    let query = P2pSearchQuery {
+        fiat: "AMD".into(),
+        asset: "USDT".into(),
+        side: P2pSide::BuyCrypto,
+        amount: Some(100_000.0),
+        payment_method: None,
+        merchant_only: None,
+        min_orders: None,
+        min_completion_rate: None,
+        limit: Some(20),
+        sources: Some("binance".into()),
+    };
+    let valid = offer("binance", "360", "1000", "200000", 10);
+    let mut wrong_fiat = valid.clone();
+    wrong_fiat.fiat = "RUB".into();
+    let mut wrong_asset = valid.clone();
+    wrong_asset.asset = "USDC".into();
+    let mut wrong_side = valid.clone();
+    wrong_side.side = P2pSide::SellCrypto;
+    let mut wrong_source = valid.clone();
+    wrong_source.source = "mexc".into();
+
+    let response = build_search_response(
+        query,
+        &[
+            valid.clone(),
+            wrong_fiat,
+            wrong_asset,
+            wrong_side,
+            wrong_source,
+        ],
+        Vec::new(),
+        false,
+        "fmatch",
+        false,
+        Some(Utc::now()),
+    );
+
+    assert_eq!(response.offers, vec![valid]);
+}
+
+#[test]
 fn global_limit_keeps_the_best_offer_from_each_source() {
     let query = P2pSearchQuery {
         fiat: "RUB".into(),

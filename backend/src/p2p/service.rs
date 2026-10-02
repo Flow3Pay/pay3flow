@@ -21,6 +21,7 @@ use crate::config::Config;
 use crate::db::DbPool;
 use crate::networks::NetworkCatalog;
 use crate::p2p::declarative::{DeclarativeMarketSource, DeclarativeP2pSource};
+use crate::p2p::latency::ServiceLatencyTracker;
 pub(crate) use crate::p2p::models::P2pOfferMarket;
 pub(crate) use crate::p2p::models::{
     Advertiser, FiatRouteQuote, P2pOffer, P2pSearchQuery, P2pSearchResponse, P2pSide, SourceStatus,
@@ -191,6 +192,17 @@ impl P2pOffer {
     }
 
     fn matches(&self, query: &P2pSearchQuery) -> bool {
+        if !self.fiat.eq_ignore_ascii_case(&query.fiat)
+            || !self.asset.eq_ignore_ascii_case(&query.asset)
+            || self.side != query.side
+            || query.sources.as_deref().is_some_and(|requested| {
+                !requested
+                    .split(',')
+                    .any(|source| self.source.eq_ignore_ascii_case(source))
+            })
+        {
+            return false;
+        }
         if query
             .amount
             .is_some_and(|amount| !self.covers_amount(amount))
@@ -285,6 +297,7 @@ pub struct P2pSearchService {
     payment_method_aliases: Arc<HashMap<String, BTreeMap<String, Vec<String>>>>,
     market_sources: Arc<[Arc<dyn CryptoMarketSource>]>,
     pub(crate) default_assets: Arc<[String]>,
+    pub(crate) fiat_intermediaries: Arc<[String]>,
     pub(crate) networks: NetworkCatalog,
     pub(crate) route_providers: Arc<[Arc<dyn PublicRouteProvider>]>,
     pub(crate) fiat_route_providers: Arc<[Arc<dyn PublicFiatRouteProvider>]>,
@@ -293,6 +306,7 @@ pub struct P2pSearchService {
     pub(crate) fiat_quote_cache: Arc<RwLock<HashMap<String, CachedFiatQuote>>>,
     pub(crate) quote_refreshes: Arc<Mutex<HashSet<String>>>,
     pub(crate) provider_capabilities_cache: Arc<RwLock<Option<ProviderCapabilitiesSnapshot>>>,
+    pub(crate) service_latencies: ServiceLatencyTracker,
     fmatch: Option<FmatchP2pBackend>,
 }
 
@@ -446,6 +460,7 @@ impl P2pSearchService {
             payment_method_aliases: Arc::new(payment_method_aliases),
             market_sources: market_sources.into(),
             default_assets: default_assets.into(),
+            fiat_intermediaries: config.route_source_fiats.clone().into(),
             networks,
             route_providers: route_providers.into(),
             fiat_route_providers: fiat_route_providers.into(),
@@ -454,6 +469,7 @@ impl P2pSearchService {
             fiat_quote_cache: Arc::new(RwLock::new(HashMap::new())),
             quote_refreshes: Arc::new(Mutex::new(HashSet::new())),
             provider_capabilities_cache: Arc::new(RwLock::new(None)),
+            service_latencies: ServiceLatencyTracker::default(),
             fmatch: None,
         })
     }
@@ -495,6 +511,7 @@ impl P2pSearchService {
                 "SUI".into(),
             ]
             .into(),
+            fiat_intermediaries: vec!["AMD".into(), "RUB".into(), "USD".into()].into(),
             networks: NetworkCatalog::test_default(),
             route_providers: Vec::new().into(),
             fiat_route_providers: Vec::new().into(),
@@ -503,6 +520,7 @@ impl P2pSearchService {
             fiat_quote_cache: Arc::new(RwLock::new(HashMap::new())),
             quote_refreshes: Arc::new(Mutex::new(HashSet::new())),
             provider_capabilities_cache: Arc::new(RwLock::new(None)),
+            service_latencies: ServiceLatencyTracker::default(),
             fmatch: None,
         }
     }

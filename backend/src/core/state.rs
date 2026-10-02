@@ -9,6 +9,7 @@ use crate::payments::PaymentService;
 use crate::route_engine::{
     LiveEdgeQuoteSource, NearIntentsProvider, RouteEngine, RouteQuoteService,
 };
+use crate::route_execution::RouteExecutionService;
 use crate::routing::RoutePicker;
 use crate::service_reputation::ServiceReputation;
 use std::sync::Arc;
@@ -40,6 +41,8 @@ pub struct AppState {
     pub route_quotes: Arc<RouteQuoteService<LiveEdgeQuoteSource>>,
     /// Global usage and feedback for services shown in public route results.
     pub reputation: ServiceReputation,
+    /// Non-custodial execution sessions for executable provider routes.
+    pub route_executions: RouteExecutionService,
 }
 
 impl AppState {
@@ -60,6 +63,7 @@ impl AppState {
         near_intents: NearIntentsProvider,
         route_quotes: Arc<RouteQuoteService<LiveEdgeQuoteSource>>,
         reputation: ServiceReputation,
+        route_executions: RouteExecutionService,
     ) -> Self {
         Self {
             pool,
@@ -77,6 +81,7 @@ impl AppState {
             near_intents,
             route_quotes,
             reputation,
+            route_executions,
         }
     }
 }

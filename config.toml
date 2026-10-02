@@ -60,6 +60,21 @@ cow_quote_address = "0x0000000000000000000000000000000000000001"
 symbiosis_url = "https://api.symbiosis.finance/crosschain"
 symbiosis_quote_address = "0x0000000000000000000000000000000000000001"
 symbiosis_slippage_bps = 300
+# Audited `chain_id=MetaRouter,MetaRouterGateway` pairs from the official
+# Symbiosis mainnet SDK configuration. Update them together with that source.
+symbiosis_execution_contracts = [
+  "1=0xf621Fb08BBE51aF70e7E0F4EA63496894166Ff7F,0xfCEF2Fe72413b65d3F393d278A714caD87512bcd",
+  "56=0x44487a445a7595446309464A82244B4bD4e325D5,0x5c97D726bf5130AE15408cE32bc764e458320D2f",
+  "137=0xa260E3732593E4EcF9DdC144fD6C4c5fe7077978,0xAb83653fd41511D638b69229afBf998Eb9B0F30c",
+  "43114=0x6F0f6393e45fE0E7215906B6f9cfeFf53EA139cf,0x4cfA66497Fa84D739a0f785FBcEe9196f1C64e4a",
+  "10=0x0f91052dc5B4baE53d0FeA5DAe561A117268f5d2,0x200a0fe876421DC49A26508e3Efd0a1008fD12B5",
+  "42161=0xf7e96217347667064DEE8f20DB747B1C7df45DDe,0x80ddDDa846e779cceE463bDC0BCc2Ae296feDaF9",
+  "8453=0x691df9C4561d95a4a726313089c8536dd682b946,0x41Ae964d0F61Bb5F5e253141A462aD6F3b625B92",
+]
+
+# Non-custodial wallet execution remains opt-in until provider mainnet smoke
+# tests are complete. Route search and external provider links still work.
+wallet_execution_enabled = false
 
 # Read-only NEAR Intents quote addresses for the configured Avalanche -> Solana
 # preview. Replace with wallet addresses before enabling executable swaps.

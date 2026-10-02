@@ -94,6 +94,36 @@ CREATE INDEX IF NOT EXISTS service_executions_service_idx
 CREATE INDEX IF NOT EXISTS service_executions_anonymous_idx
     ON service_executions (anonymous_id, service_id);
 
+-- Non-custodial provider executions. Wallet signatures and private keys are
+-- deliberately never persisted; `action` contains only public quote/tx data.
+CREATE TABLE IF NOT EXISTS route_executions (
+    id UUID PRIMARY KEY,
+    anonymous_id UUID NOT NULL,
+    idempotency_key TEXT NOT NULL,
+    route_id TEXT NOT NULL,
+    provider TEXT NOT NULL CHECK (provider IN ('near-intents', 'cow-swap', 'symbiosis')),
+    status TEXT NOT NULL CHECK (status IN (
+        'awaiting_signature', 'submitted', 'completed', 'failed',
+        'cancelled', 'expired', 'refunded', 'stuck'
+    )),
+    from_asset TEXT NOT NULL,
+    to_asset TEXT NOT NULL,
+    input_amount TEXT NOT NULL,
+    source_address TEXT NOT NULL,
+    recipient TEXT NOT NULL,
+    action JSONB NOT NULL,
+    provider_reference TEXT,
+    submitted_reference TEXT,
+    provider_status JSONB,
+    quote_expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (anonymous_id, idempotency_key)
+);
+
+CREATE INDEX IF NOT EXISTS route_executions_owner_idx
+    ON route_executions (anonymous_id, updated_at DESC);
+
 CREATE TABLE IF NOT EXISTS service_votes (
     anonymous_id UUID NOT NULL,
     service_id UUID NOT NULL REFERENCES services(id) ON DELETE CASCADE,
