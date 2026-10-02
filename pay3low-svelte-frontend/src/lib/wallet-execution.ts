@@ -1,6 +1,7 @@
 import { env } from "$env/dynamic/public";
 import type { RouteExecution, RouteExecutionAction } from "$lib/exchange";
 import type { AppKitNetwork } from "@reown/appkit/networks";
+import type { EIP1193Provider } from "viem";
 
 type Hex = `0x${string}`;
 type Address = `0x${string}`;
@@ -26,6 +27,36 @@ interface NearConnection extends ConnectedWallet {
 let evmApp: Promise<{ modal: import("@reown/appkit").AppKit; config: unknown }> | null = null;
 let nearApp: Promise<NearConnection["selector"]> | null = null;
 let injectedEvmApp: Promise<{ config: unknown; connector: unknown }> | null = null;
+
+function injectedWalletTarget() {
+  const provider = window.ethereum as (EIP1193Provider & {
+    off?: EIP1193Provider["removeListener"];
+  }) | undefined;
+  if (!provider) throw new Error("No injected EVM wallet was found in this browser");
+
+  // Some wallet extensions expose an EIP-1193 proxy whose `removeListener`
+  // getter returns a newly-bound function. That violates the Proxy invariant
+  // for its non-configurable property and makes wagmi's injected connector
+  // throw while inspecting the provider. Give wagmi a plain adapter instead;
+  // keep request/event methods bound to the extension's original provider.
+  return {
+    id: "pay3flow-injected",
+    name: "Browser wallet",
+    provider: {
+      request: provider.request.bind(provider),
+      on: provider.on.bind(provider),
+      removeListener: (event, listener) => {
+        // Prefer the equivalent `off` API where available. Do not read the
+        // broken `removeListener` property from the proxied extension object.
+        try {
+          provider.off?.call(provider, event, listener);
+        } catch {
+          // Event subscriptions are scoped to the cached connector lifetime.
+        }
+      },
+    } satisfies EIP1193Provider,
+  };
+}
 
 export interface PreparedWalletAction {
   expectedOutput?: string;
@@ -127,7 +158,7 @@ export async function connectEvm(network: string): Promise<EvmConnection> {
           import("@reown/appkit/networks"),
         ]);
         const supported = [networks.mainnet, networks.gnosis, networks.arbitrum, networks.base, networks.polygon, networks.avalanche, networks.bsc, networks.optimism] as const;
-        const connector = injected();
+        const connector = injected({ target: injectedWalletTarget });
         const transports = Object.fromEntries(supported.map((chain) => [chain.id, http()])) as Record<(typeof supported)[number]["id"], ReturnType<typeof http>>;
         const config = createConfig({
           chains: supported,
