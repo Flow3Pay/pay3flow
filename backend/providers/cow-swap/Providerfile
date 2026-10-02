@@ -169,6 +169,18 @@ impl CowRouteProvider {
             .json::<Value>()
             .await
             .context("decode executable CoW quote")?;
+        let buy_amount = quote
+            .pointer("/quote/buyAmount")
+            .or_else(|| quote.get("buyAmount"))
+            .and_then(Value::as_str)
+            .context("executable CoW quote did not include buyAmount")?;
+        let expected_output = atomic_to_decimal(buy_amount, Self::decimals(&to.symbol))?;
+        let fee_amount = quote
+            .pointer("/quote/feeAmount")
+            .or_else(|| quote.get("feeAmount"))
+            .and_then(Value::as_str)
+            .map(|amount| atomic_to_decimal(amount, Self::decimals(&from.symbol)))
+            .transpose()?;
         Ok(CowExecutionQuote {
             chain: chain.clone(),
             chain_id: Self::chain_id(&chain)?,
@@ -176,6 +188,8 @@ impl CowRouteProvider {
             sell_token,
             buy_token,
             sell_amount,
+            expected_output,
+            expected_fee: fee_amount,
             quote,
             expires_at,
         })

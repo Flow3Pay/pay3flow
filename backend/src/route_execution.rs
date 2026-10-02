@@ -13,6 +13,12 @@ use crate::route_engine::{
 
 const DESCRIPTOR_TTL_MINUTES: i64 = 30;
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionFee {
+    pub asset: String,
+    pub amount: String,
+}
+
 #[derive(Debug, Error)]
 pub enum RouteExecutionError {
     #[error("wallet execution is disabled")]
@@ -101,6 +107,10 @@ pub enum ExecutionAction {
         decimals: Option<u8>,
         #[serde(skip_serializing_if = "Option::is_none")]
         token_contract: Option<String>,
+        #[serde(default)]
+        expected_output: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        expected_fee: Option<ExecutionFee>,
     },
     CowOrder {
         chain: String,
@@ -109,12 +119,20 @@ pub enum ExecutionAction {
         sell_token: String,
         buy_token: String,
         sell_amount: String,
+        #[serde(default)]
+        expected_output: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        expected_fee: Option<ExecutionFee>,
         quote: Value,
     },
     SymbiosisTransaction {
         chain_id: u64,
         source_token: String,
         input_amount: String,
+        #[serde(default)]
+        expected_output: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        expected_fee: Option<ExecutionFee>,
         #[serde(skip_serializing_if = "Option::is_none")]
         approval_spender: Option<String>,
         transaction: Value,
@@ -130,6 +148,9 @@ pub struct RouteExecutionView {
     pub from_asset: String,
     pub to_asset: String,
     pub input_amount: String,
+    pub expected_output: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expected_fee: Option<ExecutionFee>,
     pub source_address: String,
     pub recipient: String,
     pub action: ExecutionAction,
@@ -181,7 +202,10 @@ impl RouteExecutionService {
         let Some(provider) = route.route_provider.as_deref() else {
             return;
         };
-        if !matches!(provider, "near-intents" | "cow-swap" | "symbiosis") {
+        // Symbiosis remains discoverable as a quote provider, but production
+        // execution requires deployment-owned contract allowlists that are not
+        // currently configured.
+        if !matches!(provider, "near-intents") && !(provider == "cow-swap" && self.cow.is_some()) {
             return;
         }
         let assets = route
@@ -291,6 +315,11 @@ impl RouteExecutionService {
                         network: from.location.clone().unwrap_or_default(),
                         asset: from.to_string(),
                         amount: quote.input.value,
+                        expected_output: quote.output.value,
+                        expected_fee: quote.fee.map(|fee| ExecutionFee {
+                            asset: fee.asset.to_string(),
+                            amount: fee.value,
+                        }),
                         deposit_address: deposit_address.clone(),
                         deposit_memo,
                         asset_id: token.asset_id,
@@ -302,6 +331,7 @@ impl RouteExecutionService {
                 )
             }
             "cow-swap" => {
+                let fee_asset = from.to_string();
                 let quote = self
                     .cow
                     .as_ref()
@@ -323,6 +353,11 @@ impl RouteExecutionService {
                         sell_token: quote.sell_token,
                         buy_token: quote.buy_token,
                         sell_amount: quote.sell_amount,
+                        expected_output: quote.expected_output,
+                        expected_fee: quote.expected_fee.map(|amount| ExecutionFee {
+                            asset: fee_asset,
+                            amount,
+                        }),
                         quote: quote.quote,
                     },
                     None,
@@ -346,6 +381,8 @@ impl RouteExecutionService {
                         chain_id: quote.source_chain_id,
                         source_token: quote.source_token,
                         input_amount: quote.input_amount,
+                        expected_output: quote.expected_output,
+                        expected_fee: None,
                         approval_spender: quote.approval_spender,
                         transaction: quote.transaction,
                     },
@@ -547,7 +584,23 @@ WHERE id = $1 AND anonymous_id = $2
             )
             .await?
             .ok_or(RouteExecutionError::NotFound)?;
-        let action: Value = row.get(8);
+        let action: ExecutionAction = serde_json::from_value(row.get(8))?;
+        let expected_output = match &action {
+            ExecutionAction::NearDeposit {
+                expected_output, ..
+            }
+            | ExecutionAction::CowOrder {
+                expected_output, ..
+            }
+            | ExecutionAction::SymbiosisTransaction {
+                expected_output, ..
+            } => expected_output.clone(),
+        };
+        let expected_fee = match &action {
+            ExecutionAction::NearDeposit { expected_fee, .. }
+            | ExecutionAction::CowOrder { expected_fee, .. }
+            | ExecutionAction::SymbiosisTransaction { expected_fee, .. } => expected_fee.clone(),
+        };
         Ok(RouteExecutionView {
             id,
             route_id: row.get(0),
@@ -556,9 +609,11 @@ WHERE id = $1 AND anonymous_id = $2
             from_asset: row.get(3),
             to_asset: row.get(4),
             input_amount: row.get(5),
+            expected_output,
+            expected_fee,
             source_address: row.get(6),
             recipient: row.get(7),
-            action: serde_json::from_value(action)?,
+            action,
             provider_reference: row.get(9),
             submitted_reference: row.get(10),
             provider_status: row.get(11),

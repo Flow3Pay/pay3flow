@@ -474,6 +474,8 @@ pub struct CowExecutionQuote {
     pub sell_token: String,
     pub buy_token: String,
     pub sell_amount: String,
+    pub expected_output: String,
+    pub expected_fee: Option<String>,
     pub quote: Value,
     pub expires_at: DateTime<Utc>,
 }
@@ -483,6 +485,7 @@ pub struct SymbiosisExecutionQuote {
     pub source_chain_id: u64,
     pub source_token: String,
     pub input_amount: String,
+    pub expected_output: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub approval_spender: Option<String>,
     pub transaction: Value,

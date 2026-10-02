@@ -256,6 +256,19 @@ impl SymbiosisRouteProvider {
             .get("tx")
             .cloned()
             .context("Symbiosis executable quote has no transaction")?;
+        let output = raw
+            .get("tokenAmountOut")
+            .context("Symbiosis executable quote has no output amount")?;
+        let output_amount = output
+            .get("amount")
+            .and_then(Value::as_str)
+            .context("Symbiosis executable quote has no output amount")?;
+        let output_decimals = output
+            .get("decimals")
+            .and_then(Value::as_u64)
+            .and_then(|value| u8::try_from(value).ok())
+            .unwrap_or(to_token.decimals);
+        let expected_output = atomic_to_decimal(output_amount, output_decimals)?;
         let approval_spender = raw
             .get("approveTo")
             .or_else(|| raw.get("approvalAddress"))
@@ -289,6 +302,7 @@ impl SymbiosisRouteProvider {
             source_chain_id: from_token.chain_id,
             source_token: from_token.address,
             input_amount: atomic_amount,
+            expected_output,
             approval_spender,
             transaction,
             expires_at: Self::quote_expiry(&raw).unwrap_or_else(|| Utc::now() + CALLDATA_TTL),

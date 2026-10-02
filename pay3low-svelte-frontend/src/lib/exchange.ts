@@ -145,9 +145,9 @@ export interface RouteExecutionDescriptor {
 }
 
 export type RouteExecutionAction =
-  | { kind: "near_deposit"; network: string; asset: string; amount: string; deposit_address: string; deposit_memo?: string; asset_id: string; decimals?: number; token_contract?: string }
-  | { kind: "cow_order"; chain: string; chain_id: number; api_url: string; sell_token: string; buy_token: string; sell_amount: string; quote: Record<string, unknown> }
-  | { kind: "symbiosis_transaction"; chain_id: number; source_token: string; input_amount: string; approval_spender?: string; transaction: Record<string, unknown> };
+  | { kind: "near_deposit"; network: string; asset: string; amount: string; deposit_address: string; deposit_memo?: string; asset_id: string; decimals?: number; token_contract?: string; expected_output?: string }
+  | { kind: "cow_order"; chain: string; chain_id: number; api_url: string; sell_token: string; buy_token: string; sell_amount: string; expected_output?: string; quote: Record<string, unknown> }
+  | { kind: "symbiosis_transaction"; chain_id: number; source_token: string; input_amount: string; expected_output?: string; approval_spender?: string; transaction: Record<string, unknown> };
 
 export interface RouteExecution {
   id: string;
@@ -157,6 +157,8 @@ export interface RouteExecution {
   from_asset: string;
   to_asset: string;
   input_amount: string;
+  expected_output?: string;
+  expected_fee?: { asset: string; amount: string };
   source_address: string;
   recipient: string;
   action: RouteExecutionAction;

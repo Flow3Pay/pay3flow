@@ -25,6 +25,17 @@ interface NearConnection extends ConnectedWallet {
 
 let evmApp: Promise<{ modal: import("@reown/appkit").AppKit; config: unknown }> | null = null;
 let nearApp: Promise<NearConnection["selector"]> | null = null;
+let injectedEvmApp: Promise<{ config: unknown; connector: unknown }> | null = null;
+
+export interface PreparedWalletAction {
+  expectedOutput?: string;
+  expectedFee?: { asset: string; amount: string };
+  expiresAt?: string;
+  submit: () => Promise<
+    | { reference: string; kind: "transaction_hash" | "order_uid" }
+    | { kind: "approval_confirmed" }
+  >;
+}
 
 const CHAIN_NAMES: Record<string, number> = {
   ethereum: 1,
@@ -107,6 +118,32 @@ async function waitForEvmAddress(modal: import("@reown/appkit").AppKit): Promise
 export async function connectEvm(network: string): Promise<EvmConnection> {
   const chainId = chainIdForNetwork(network);
   if (!chainId) throw new Error(`Embedded EVM execution is unavailable for ${network}`);
+  if (!env.PUBLIC_REOWN_PROJECT_ID?.trim()) {
+    if (!injectedEvmApp) {
+      injectedEvmApp = (async () => {
+        const [{ createConfig, http }, { injected }, networks] = await Promise.all([
+          import("wagmi"),
+          import("wagmi/connectors"),
+          import("@reown/appkit/networks"),
+        ]);
+        const supported = [networks.mainnet, networks.gnosis, networks.arbitrum, networks.base, networks.polygon, networks.avalanche, networks.bsc, networks.optimism] as const;
+        const connector = injected();
+        const transports = Object.fromEntries(supported.map((chain) => [chain.id, http()])) as Record<(typeof supported)[number]["id"], ReturnType<typeof http>>;
+        const config = createConfig({
+          chains: supported,
+          connectors: [connector],
+          transports,
+        });
+        return { config, connector };
+      })();
+    }
+    const { config, connector } = await injectedEvmApp;
+    const { connect, switchChain } = await import("@wagmi/core");
+    const connected = await connect(config as Parameters<typeof connect>[0], { connector: connector as Parameters<typeof connect>[1]["connector"] });
+    if (!connected.accounts[0]) throw new Error("Injected wallet did not return an account");
+    if (connected.chainId !== chainId) await switchChain(config as Parameters<typeof switchChain>[0], { chainId });
+    return { family: "evm", address: connected.accounts[0] as Address, chainId, config };
+  }
   const { modal, config } = await appKit();
   const address = await waitForEvmAddress(modal);
   const { switchChain } = await import("@wagmi/core");
@@ -211,14 +248,71 @@ export async function executeWalletAction(execution: RouteExecution, wallet: Con
   | { reference: string; kind: "transaction_hash" | "order_uid" }
   | { kind: "approval_confirmed" }
 > {
+  return (await prepareWalletAction(execution, wallet)).submit();
+}
+
+export async function prepareWalletAction(execution: RouteExecution, wallet: ConnectedWallet): Promise<PreparedWalletAction> {
   const action = execution.action;
   if (wallet.family === "evm") await ensureEvmChain(asEvm(wallet));
+  if (action.kind === "cow_order") {
+    const evm = asEvm(wallet);
+    if (evm.chainId !== action.chain_id) throw new Error("Connected wallet is on the wrong CoW network");
+    const [{ getPublicClient, getWalletClient, waitForTransactionReceipt }, { TradingSdk, OrderKind }, { ViemAdapter }] = await Promise.all([
+      import("@wagmi/core"),
+      import("@cowprotocol/cow-sdk"),
+      import("@cowprotocol/sdk-viem-adapter"),
+    ]);
+    const publicClient = getPublicClient(evm.config as Parameters<typeof getPublicClient>[0], { chainId: evm.chainId });
+    const walletClient = await getWalletClient(evm.config as Parameters<typeof getWalletClient>[0], { chainId: evm.chainId });
+    if (!publicClient || !walletClient) throw new Error("Connected wallet client is unavailable");
+    const sdk = new TradingSdk({ chainId: action.chain_id, appCode: "Pay3Flow" }, {}, new ViemAdapter({ provider: publicClient, walletClient }));
+    const trade = {
+      kind: OrderKind.SELL,
+      sellToken: action.sell_token,
+      sellTokenDecimals: tokenDecimals(assetSymbol(execution.from_asset), 18),
+      buyToken: action.buy_token,
+      buyTokenDecimals: tokenDecimals(assetSymbol(execution.to_asset), 18),
+      amount: action.sell_amount,
+      receiver: execution.recipient,
+    };
+    const { quoteResults, postSwapOrderFromQuote } = await sdk.getQuote(trade);
+    const atomicOutput = findBuyAmount(quoteResults);
+    if (!atomicOutput) throw new Error("CoW quote did not include the expected output amount");
+    const expectedOutput = atomicToDecimal(atomicOutput, trade.buyTokenDecimals);
+    const atomicFee = findFeeAmount(quoteResults);
+    return {
+      expectedOutput,
+      expectedFee: atomicFee
+        ? { asset: execution.from_asset, amount: atomicToDecimal(atomicFee, trade.sellTokenDecimals) }
+        : undefined,
+      expiresAt: findQuoteExpiry(quoteResults),
+      submit: async () => {
+        const amount = BigInt(action.sell_amount);
+        const allowance = await sdk.getCowProtocolAllowance({ tokenAddress: action.sell_token, owner: evm.address, chainId: action.chain_id });
+        if (allowance < amount) {
+          const approvalHash = await sdk.approveCowProtocol({ tokenAddress: action.sell_token, amount, chainId: action.chain_id });
+          await waitForTransactionReceipt(evm.config as Parameters<typeof waitForTransactionReceipt>[0], { hash: approvalHash as Hex, chainId: evm.chainId });
+          return { kind: "approval_confirmed" };
+        }
+        const result = await postSwapOrderFromQuote();
+        return { reference: result.orderId, kind: "order_uid" };
+      },
+    };
+  }
+  return { submit: () => submitNonCowAction(execution, wallet) };
+}
+
+async function submitNonCowAction(execution: RouteExecution, wallet: ConnectedWallet): Promise<
+  | { reference: string; kind: "transaction_hash" | "order_uid" }
+  | { kind: "approval_confirmed" }
+> {
+  const action = execution.action;
   if (action.kind === "near_deposit") {
     if (action.network === "near") return executeNearDeposit(action, asNear(wallet));
     return executeEvmDeposit(action, asEvm(wallet));
   }
-  if (action.kind === "cow_order") return executeCow(action, execution, asEvm(wallet));
-  return executeSymbiosis(action, asEvm(wallet));
+  if (action.kind === "symbiosis_transaction") return executeSymbiosis(action, asEvm(wallet));
+  throw new Error("Unsupported wallet action");
 }
 
 async function executeEvmDeposit(action: Extract<RouteExecutionAction, { kind: "near_deposit" }>, wallet: EvmConnection) {
@@ -359,6 +453,42 @@ function assetSymbol(asset: string): string {
 
 function tokenDecimals(symbol: string, fallback: number): number {
   return ["USDC", "USDT", "FDUSD"].includes(symbol.toUpperCase()) ? 6 : fallback;
+}
+
+function findBuyAmount(value: unknown): string | undefined {
+  if (Array.isArray(value)) return value.map(findBuyAmount).find((amount) => amount !== undefined);
+  if (typeof value !== "object" || value === null) return undefined;
+  const record = value as Record<string, unknown>;
+  const amount = record.buyAmount ?? record.buy_amount;
+  if (typeof amount === "string" && /^\d+$/.test(amount)) return amount;
+  return Object.values(record).map(findBuyAmount).find((candidate) => candidate !== undefined);
+}
+
+function findFeeAmount(value: unknown): string | undefined {
+  if (Array.isArray(value)) return value.map(findFeeAmount).find((amount) => amount !== undefined);
+  if (typeof value !== "object" || value === null) return undefined;
+  const record = value as Record<string, unknown>;
+  const amount = record.feeAmount ?? record.fee_amount;
+  if (typeof amount === "string" && /^\d+$/.test(amount)) return amount;
+  return Object.values(record).map(findFeeAmount).find((candidate) => candidate !== undefined);
+}
+
+function findQuoteExpiry(value: unknown): string | undefined {
+  if (Array.isArray(value)) return value.map(findQuoteExpiry).find((expiry) => expiry !== undefined);
+  if (typeof value !== "object" || value === null) return undefined;
+  const record = value as Record<string, unknown>;
+  const validTo = record.validTo ?? record.valid_to;
+  if ((typeof validTo === "number" || (typeof validTo === "string" && /^\d+$/.test(validTo))) && Number(validTo) > 0) {
+    return new Date(Number(validTo) * 1000).toISOString();
+  }
+  return Object.values(record).map(findQuoteExpiry).find((expiry) => expiry !== undefined);
+}
+
+function atomicToDecimal(value: string, decimals: number): string {
+  const padded = value.padStart(decimals + 1, "0");
+  const split = padded.length - decimals;
+  const fraction = padded.slice(split).replace(/0+$/, "");
+  return fraction ? `${padded.slice(0, split)}.${fraction}` : padded.slice(0, split);
 }
 
 export function sourceNetwork(execution: { from_asset: string }): string {

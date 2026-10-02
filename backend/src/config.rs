@@ -163,7 +163,10 @@ impl Default for FileConfig {
             symbiosis_quote_address: "0x0000000000000000000000000000000000000001".into(),
             symbiosis_slippage_bps: 300,
             symbiosis_execution_contracts: Vec::new(),
-            wallet_execution_enabled: false,
+            // Production config maps created before wallet execution was
+            // exposed do not contain this key. Enable the capability by
+            // default there; local config.toml keeps it explicitly disabled.
+            wallet_execution_enabled: true,
         }
     }
 }

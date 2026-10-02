@@ -4,7 +4,7 @@
   import { getAnonymousUserId } from "$lib/anonymous-user";
   import { createRouteExecution, fetchRouteExecution, submitRouteExecution, type RouteCandidate, type RouteExecution } from "$lib/exchange";
   import { locale, t } from "$lib/i18n";
-  import { connectForNetwork, executeWalletAction, hasExecutionFunds, targetNetwork, walletFamily, type ConnectedWallet } from "$lib/wallet-execution";
+  import { connectForNetwork, hasExecutionFunds, prepareWalletAction, walletFamily, type ConnectedWallet, type PreparedWalletAction } from "$lib/wallet-execution";
 
   export let route: RouteCandidate;
 
@@ -13,7 +13,9 @@
   let recipientMode: "connected" | "manual" | null = null;
   let manualRecipient = "";
   let execution: RouteExecution | null = null;
+  let preparedAction: PreparedWalletAction | null = null;
   let fundsReady = false;
+  let autoPrompt = false;
   let busy = false;
   let error = "";
   let notice = "";
@@ -31,6 +33,10 @@
 
   function shortAddress(value: string) {
     return value.length > 18 ? `${value.slice(0, 8)}…${value.slice(-6)}` : value;
+  }
+
+  function quoteExpiry(value: string) {
+    return new Date(value).toLocaleTimeString($locale, { hour: "2-digit", minute: "2-digit" });
   }
 
   function executionOwner(): string {
@@ -74,10 +80,27 @@
       sourceWallet = connected;
       if (retained) {
         await updateFunds();
+        autoPrompt = true;
+        if (fundsReady) {
+          autoPrompt = false;
+          await signAndSubmit();
+        } else if (!fundTimer) {
+          fundTimer = setInterval(() => void updateFunds(), 5_000);
+        }
       } else {
         execution = null;
+        preparedAction = null;
         fundsReady = false;
         forgetExecution();
+        const recipientFamily = walletFamily(destinationNetwork);
+        if (recipientFamily === connected.family) {
+          recipientWallet = connected;
+          recipientMode = "connected";
+          await beginAutomaticSwap();
+        } else {
+          recipientWallet = null;
+          recipientMode = "manual";
+        }
       }
     } catch (cause) {
       error = cause instanceof Error ? cause.message : "Wallet connection failed";
@@ -98,7 +121,9 @@
         recipientWallet = await connectForNetwork(destinationNetwork);
       }
       execution = null;
+      preparedAction = null;
       forgetExecution();
+      await beginAutomaticSwap();
     } catch (cause) {
       recipientWallet = null;
       error = cause instanceof Error ? cause.message : "Recipient wallet connection failed";
@@ -110,10 +135,29 @@
   function chooseManualRecipient() {
     recipientMode = "manual";
     recipientWallet = null;
+    manualRecipient = "";
     execution = null;
+    preparedAction = null;
     forgetExecution();
     error = "";
     notice = "";
+  }
+
+  function recipientChanged() {
+    execution = null;
+    preparedAction = null;
+    forgetExecution();
+    if (sourceWallet && recipient) void beginAutomaticSwap();
+  }
+
+  async function beginAutomaticSwap() {
+    if (!descriptor || !sourceWallet || !recipient) return;
+    autoPrompt = true;
+    await prepare();
+    if (execution && fundsReady) {
+      autoPrompt = false;
+      await signAndSubmit();
+    }
   }
 
   async function prepare() {
@@ -134,6 +178,10 @@
         idempotencyKey: crypto.randomUUID(),
       });
       rememberExecution(execution);
+      preparedAction = await prepareWalletAction(execution, sourceWallet);
+      if (preparedAction.expectedOutput) execution.expected_output = preparedAction.expectedOutput;
+      execution.expected_fee = preparedAction.expectedFee;
+      if (preparedAction.expiresAt) execution.quote_expires_at = preparedAction.expiresAt;
       await updateFunds();
       if (!fundsReady) fundTimer = setInterval(() => void updateFunds(), 5_000);
     } catch (cause) {
@@ -151,6 +199,10 @@
         clearInterval(fundTimer);
         fundTimer = null;
       }
+      if (fundsReady && autoPrompt && !busy) {
+        autoPrompt = false;
+        void signAndSubmit();
+      }
     } catch (cause) {
       error = cause instanceof Error ? cause.message : "Balance check failed";
     }
@@ -167,13 +219,20 @@
         await prepare();
         if (!execution || !fundsReady) return;
       }
-      const submitted = await executeWalletAction(execution, sourceWallet);
+      if (!preparedAction) {
+        preparedAction = await prepareWalletAction(execution, sourceWallet);
+        if (preparedAction.expectedOutput) execution.expected_output = preparedAction.expectedOutput;
+        execution.expected_fee = preparedAction.expectedFee;
+        if (preparedAction.expiresAt) execution.quote_expires_at = preparedAction.expiresAt;
+      }
+      const submitted = await preparedAction.submit();
       if (submitted.kind === "approval_confirmed") {
         await prepare();
         notice = copy("Approval confirmed. Review and sign the refreshed swap transaction.");
         return;
       }
       execution = await submitRouteExecution(execution.id, executionOwner(), submitted.reference, submitted.kind);
+      preparedAction = null;
       rememberExecution(execution);
       startStatusPolling();
     } catch (cause) {
@@ -208,6 +267,7 @@
         .then((restored) => {
           if (restored.route_id !== route.route_id) return;
           execution = restored;
+          preparedAction = null;
           recipientMode = "manual";
           manualRecipient = restored.recipient;
           if (restored.status === "submitted") startStatusPolling();
@@ -247,7 +307,7 @@
             <button type="button" class:active={recipientMode === "manual"} disabled={busy} on:click={chooseManualRecipient}>{copy("Another address")}</button>
           </div>
           {#if recipientMode === "connected" && recipientWallet}<p class="address">{shortAddress(recipientWallet.address)} · {destinationNetwork}</p>{/if}
-          {#if recipientMode === "manual"}<input bind:value={manualRecipient} on:input={() => { execution = null; forgetExecution(); }} autocomplete="off" spellcheck="false" placeholder={copy("Recipient on {network}", { network: destinationNetwork })} aria-label={copy("Swap recipient address")} />{/if}
+          {#if recipientMode === "manual"}<input bind:value={manualRecipient} on:change={recipientChanged} autocomplete="off" spellcheck="false" placeholder={copy("Recipient on {network}", { network: destinationNetwork })} aria-label={copy("Swap recipient address")} />{/if}
         </fieldset>
       {/if}
       {#if sourceWallet && recipient && !execution}
@@ -256,6 +316,9 @@
       {#if execution}
         <div class="review">
           <span><small>{copy("Amount")}</small><strong>{execution.input_amount} {execution.from_asset}</strong></span>
+          {#if execution.expected_output}<span><small>{copy("Expected output")}</small><strong>{execution.expected_output} {execution.to_asset}</strong></span>{/if}
+          {#if execution.expected_fee}<span><small>{copy("Provider fee")}</small><strong>{execution.expected_fee.amount} {execution.expected_fee.asset}</strong></span>{/if}
+          <span><small>{copy("Quote expires")}</small><strong>{quoteExpiry(execution.quote_expires_at)}</strong></span>
           <span><small>{copy("Recipient")}</small><strong>{shortAddress(execution.recipient)}</strong></span>
           <span><small>{copy("Status")}</small><strong>{execution.status.replaceAll("_", " ")}</strong></span>
         </div>
