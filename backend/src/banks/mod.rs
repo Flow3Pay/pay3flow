@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use uuid::Uuid;
 
 use crate::db::DbPool;
@@ -63,8 +63,20 @@ pub struct BankFilters {
     #[serde(default)]
     pub q: Option<String>,
     /// Restrict results to payment methods declared in Providerfiles.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_optional_query_bool")]
     pub picker_visible: Option<bool>,
+}
+
+fn deserialize_optional_query_bool<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Option<bool>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<String>::deserialize(deserializer)?;
+    value
+        .map(|value| value.parse().map_err(serde::de::Error::custom))
+        .transpose()
 }
 
 impl BankFilters {

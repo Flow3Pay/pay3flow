@@ -719,6 +719,35 @@
     image.src = assetIcon("generic");
   }
 
+  const catalogRetryTimers = new Set<number>();
+  let componentDestroyed = false;
+
+  function loadCatalogWithRetry<T>(load: () => Promise<T>, apply: (value: T) => void) {
+    let failures = 0;
+    let reportedError: string | null = null;
+    const attempt = () => {
+      void load().then((value) => {
+        if (componentDestroyed) return;
+        apply(value);
+        if (reportedError && error === reportedError) error = null;
+      }).catch((cause) => {
+        if (componentDestroyed) return;
+        failures += 1;
+        if (failures >= 3) {
+          reportedError = cause instanceof Error ? cause.message : "Could not load exchange data";
+          error ??= reportedError;
+        }
+        const delay = Math.min(30_000, 2_000 * 2 ** Math.min(failures - 1, 4));
+        const timer = window.setTimeout(() => {
+          catalogRetryTimers.delete(timer);
+          attempt();
+        }, delay);
+        catalogRetryTimers.add(timer);
+      });
+    };
+    attempt();
+  }
+
   onMount(() => {
     const shared = readSharedExchange();
     let savedSourceIds: string[] = [];
@@ -740,8 +769,8 @@
     // Keep a saved route search off the initial critical path. User changes
     // still enable the normal debounced search immediately.
     initialSearchTimer = window.setTimeout(() => initialSearchReady = true, 1500);
-    fetchNetworks().then((items) => { if (items.length) networks = items; }).catch(() => {});
-    fetchPaymentMethods().then((items) => {
+    loadCatalogWithRetry(fetchNetworks, (items) => { if (items.length) networks = items; });
+    loadCatalogWithRetry(fetchPaymentMethods, (items) => {
       paymentMethods = items;
       try {
         if (!localStorage.getItem(STORAGE.nativeNetworkMigration)) {
@@ -751,8 +780,8 @@
           localStorage.setItem(STORAGE.nativeNetworkMigration, "1");
         }
       } catch {}
-    }).catch((cause: Error) => error ??= cause.message);
-    fetchProviders().then((providers) => {
+    });
+    loadCatalogWithRetry(fetchProviders, (providers) => {
       p2pSources = providerSources(providers);
       foundVenues = foundVenueOptions();
       venueNames = Object.fromEntries(p2pSources.map((provider) => [provider.id.toLowerCase(), provider.label]));
@@ -773,14 +802,14 @@
       const newlyAdded = live.filter((source) => !known.has(source));
       selectedSources = savedSourceIds.length ? [...new Set([...restored, ...newlyAdded])] : live;
       try { localStorage.setItem(STORAGE.knownSources, live.join(",")); } catch {}
-    }).catch((cause: Error) => error ??= cause.message);
-    fetchCorridors().then((response) => {
+    });
+    loadCatalogWithRetry(fetchCorridors, (response) => {
       const savedDirection = localStorage.getItem(STORAGE.direction);
       const sharedCorridor = shared ? response.items.find((item) => (item.source_currency === shared.sourceCurrency && item.target_currency === shared.targetCurrency) || (item.source_currency === shared.targetCurrency && item.target_currency === shared.sourceCurrency)) : null;
       corridors = response.items; corridorId = corridorId || sharedCorridor?.id || response.items[0]?.id || "";
       if (shared && sharedCorridor?.source_currency === shared.targetCurrency && sharedCorridor.target_currency === shared.sourceCurrency) directionReversed = true; else if (savedDirection != null) directionReversed = savedDirection === "true";
       urlReady = true;
-    }).catch((cause: Error) => error = cause.message);
+    });
     document.addEventListener("mousedown", onDocumentMouseDown);
     clockTimer = window.setInterval(() => clock = Date.now(), 1000);
   });
@@ -806,6 +835,9 @@
     }
   });
   onDestroy(() => {
+    componentDestroyed = true;
+    for (const timer of catalogRetryTimers) clearTimeout(timer);
+    catalogRetryTimers.clear();
     controller?.abort();
     cancelRouteRendering();
     if (debounceTimer) clearTimeout(debounceTimer);
