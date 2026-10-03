@@ -472,13 +472,17 @@ pub(in crate::p2p) fn positive_number(value: &str) -> Option<f64> {
 }
 
 pub(in crate::p2p) fn covers_target(offer: &P2pOffer, target_amount: f64) -> bool {
-    let Some(minimum) = positive_number(&offer.min_fiat) else {
+    let Ok(minimum) = offer.min_fiat.parse::<f64>() else {
         return false;
     };
     let Some(maximum) = positive_number(&offer.max_fiat) else {
         return false;
     };
-    minimum <= target_amount && target_amount <= maximum
+    minimum.is_finite()
+        && minimum >= 0.0
+        && target_amount.is_finite()
+        && minimum <= target_amount
+        && target_amount <= maximum
 }
 
 pub(in crate::p2p) fn route_target(route: &P2pRoute) -> f64 {

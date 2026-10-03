@@ -513,6 +513,27 @@ fn crypto_to_fiat_route_preserves_the_selected_source_network() {
 }
 
 #[test]
+fn cardano_to_amd_accepts_bestchange_offer_without_a_minimum() {
+    let mut route_query = query(false);
+    route_query.source_currency = "ADA".into();
+    route_query.target_currency = "AMD".into();
+    route_query.source_amount = 100.0;
+    route_query.source_network = Some("cardano".into());
+    let mut bestchange = offer("bestchange", P2pSide::SellCrypto, "300", "0", "100000");
+    bestchange.market = P2pOfferMarket::DirectExchange;
+    bestchange.asset = "ADA".into();
+    bestchange.fiat = "AMD".into();
+    bestchange.network = Some("cardano".into());
+    let mut routes = Vec::new();
+
+    compose_crypto_to_fiat_routes(&mut routes, &route_query, "ADA", &[bestchange]);
+
+    assert_eq!(routes.len(), 1);
+    assert_eq!(routes[0].target_amount, "30000.00");
+    assert_eq!(routes[0].exit_offer.as_ref().unwrap().source, "bestchange");
+}
+
+#[test]
 fn fixed_provider_network_rejects_incompatible_direct_and_composed_routes() {
     let mut direct_query = query(false);
     direct_query.target_currency = "USDT".into();
