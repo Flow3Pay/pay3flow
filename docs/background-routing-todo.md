@@ -25,5 +25,5 @@ This checklist tracks the Pay3Flow/Fmatch routing work in the isolated
 - [x] Complete API/frontend types and documentation for instruction opens and
   reputation. Verify backend and frontend checks plus Redis behavior.
 - [x] Validate the migration and write-behind flush SQL against PostgreSQL.
-- [ ] Commit the finished slices separately, then push the completed work to
+- [x] Commit the finished slices separately, then push the completed work to
   `master`. Change Fmatch only if its code needs a matching contract update.
