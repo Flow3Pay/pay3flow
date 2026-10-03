@@ -633,6 +633,16 @@ export function recordServiceOpen(
   });
 }
 
+export function recordInstructionOpen(
+  anonymousId: string,
+  trackingTokens: string[],
+): Promise<{ newly_recorded: number }> {
+  return request("/api/route-instructions/open", {
+    method: "POST",
+    body: JSON.stringify({ anonymous_id: anonymousId, tracking_tokens: trackingTokens }),
+  });
+}
+
 export function setServiceVote(
   serviceId: string,
   anonymousId: string,

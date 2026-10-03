@@ -146,8 +146,12 @@ async fn main() -> anyhow::Result<()> {
         route_engine.registry.clone(),
         Arc::new(LiveEdgeQuoteSource::new(p2p.clone(), near_intents.clone())),
     ));
-    let reputation =
-        pay3flow_backend::service_reputation::ServiceReputation::new(pool.clone(), &cfg.jwt_secret);
+    let reputation = pay3flow_backend::service_reputation::ServiceReputation::new(
+        pool.clone(),
+        redis_pool.clone(),
+        &cfg.jwt_secret,
+    );
+    reputation.start_daily_decay();
     let route_executions = RouteExecutionService::new(
         pool.clone(),
         &cfg.jwt_secret,

@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
+use crate::core::redis::{get_json, set_json, RedisPool};
 use crate::db::DbPool;
 
 const TRACKING_TOKEN_TTL_SECS: u64 = 30 * 60;
@@ -115,6 +116,11 @@ pub struct ExecutionOpen {
     pub service: ServiceStats,
 }
 
+#[derive(Debug, Serialize)]
+pub struct InstructionOpen {
+    pub newly_recorded: usize,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct TrackingClaims {
     service_id: Uuid,
@@ -127,17 +133,52 @@ struct TrackingClaims {
 #[derive(Clone)]
 pub struct ServiceReputation {
     pool: DbPool,
+    redis: Option<RedisPool>,
     encode_key: EncodingKey,
     decode_key: DecodingKey,
 }
 
 impl ServiceReputation {
-    pub fn new(pool: DbPool, secret: &str) -> Self {
+    pub fn new(pool: DbPool, redis: Option<RedisPool>, secret: &str) -> Self {
         Self {
             pool,
+            redis,
             encode_key: EncodingKey::from_secret(secret.as_bytes()),
             decode_key: DecodingKey::from_secret(secret.as_bytes()),
         }
+    }
+
+    pub fn start_daily_decay(&self) {
+        let pool = self.pool.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(24 * 60 * 60));
+            loop {
+                interval.tick().await;
+                match pool.get().await {
+                    Ok(client) => {
+                        if let Err(error) = client
+                            .execute(
+                                r#"
+UPDATE services
+SET reputation_score = GREATEST(0, reputation_score - 15),
+    reputation_last_decay_at = now()
+WHERE reputation_last_interaction_at <= now() - interval '1 day'
+  AND reputation_last_decay_at <= now() - interval '1 day'
+  AND reputation_score > 0
+"#,
+                                &[],
+                            )
+                            .await
+                        {
+                            tracing::warn!(%error, "service.reputation.daily_decay_failed");
+                        }
+                    }
+                    Err(error) => {
+                        tracing::warn!(%error, "service.reputation.daily_decay_db_unavailable")
+                    }
+                }
+            }
+        });
     }
 
     pub async fn start_search(&self, search_id: Uuid) -> Result<(), ReputationError> {
@@ -210,25 +251,77 @@ WHERE services.display_name IS DISTINCT FROM EXCLUDED.display_name
         if slugs.is_empty() {
             return Ok(HashMap::new());
         }
-        let client = self.pool.get().await?;
-        let rows = client
-            .query(
-                r#"
-SELECT s.id, s.slug, s.display_name, s.executions_total, s.likes_total,
-       s.dislikes_total, v.vote
-FROM services s
-LEFT JOIN service_votes v
-  ON v.service_id = s.id AND v.anonymous_id = $2
-WHERE s.slug = ANY($1)
-"#,
-                &[&slugs, &anonymous_id],
+        let mut canonical_slugs = slugs.to_vec();
+        canonical_slugs.sort();
+        canonical_slugs.dedup();
+        let cache_key = "pay3flow:reputation:services:v1";
+        let cached = match self.redis.as_ref() {
+            Some(redis) => tokio::time::timeout(
+                std::time::Duration::from_millis(50),
+                get_json::<HashMap<String, ServiceStats>>(redis, cache_key),
             )
-            .await?;
-        Ok(rows
-            .into_iter()
-            .map(row_to_stats)
-            .map(|stats| (stats.slug.clone(), stats))
-            .collect())
+            .await
+            .unwrap_or(Ok(None))
+            .unwrap_or(None),
+            None => None,
+        };
+        let mut stats = if let Some(cached) = cached {
+            cached
+        } else {
+            let client = self.pool.get().await?;
+            let rows = client
+                .query(
+                    r#"
+SELECT s.id, s.slug, s.display_name, s.executions_total, s.likes_total,
+       s.dislikes_total, NULL::TEXT
+FROM services s
+"#,
+                    &[],
+                )
+                .await?;
+            let stats = rows
+                .into_iter()
+                .map(row_to_stats)
+                .map(|stats| (stats.slug.clone(), stats))
+                .collect::<HashMap<_, _>>();
+            if let Some(redis) = self.redis.as_ref() {
+                match tokio::time::timeout(
+                    std::time::Duration::from_millis(50),
+                    set_json(redis, cache_key, &stats, 30),
+                )
+                .await
+                {
+                    Ok(Err(error)) => {
+                        tracing::debug!(%error, "service.reputation.cache_write_failed")
+                    }
+                    Err(_) => tracing::debug!("service.reputation.cache_write_timed_out"),
+                    Ok(Ok(())) => {}
+                }
+            }
+            stats
+        };
+        stats.retain(|slug, _| canonical_slugs.binary_search(slug).is_ok());
+        if let Some(anonymous_id) = anonymous_id {
+            let client = self.pool.get().await?;
+            let votes = client
+                .query(
+                    r#"
+SELECT s.slug, v.vote
+FROM services s
+JOIN service_votes v ON v.service_id = s.id
+WHERE s.slug = ANY($1) AND v.anonymous_id = $2
+"#,
+                    &[&canonical_slugs, &anonymous_id],
+                )
+                .await?;
+            for row in votes {
+                if let Some(service) = stats.get_mut(row.get::<_, String>(0).as_str()) {
+                    let vote = row.get::<_, String>(1);
+                    service.viewer_vote = VoteChoice::parse(&vote);
+                }
+            }
+        }
+        Ok(stats)
     }
 
     pub async fn feedback_for_routes(
@@ -321,7 +414,11 @@ RETURNING id
                     .execute(
                         r#"
 UPDATE services
-SET executions_total = executions_total + 1, updated_at = now()
+SET executions_total = executions_total + 1,
+    reputation_score = LEAST(100, reputation_score + 5),
+    reputation_last_interaction_at = now(),
+    reputation_last_decay_at = now(),
+    updated_at = now()
 WHERE id = $1
 "#,
                         &[&claims.service_id],
@@ -423,10 +520,19 @@ ON CONFLICT (anonymous_id, service_id) DO UPDATE SET
 UPDATE services
 SET likes_total = likes_total + $2,
     dislikes_total = dislikes_total + $3,
+    reputation_score = GREATEST(0, LEAST(100, reputation_score + $4)),
+    reputation_last_interaction_at = CASE WHEN $5 THEN now() ELSE reputation_last_interaction_at END,
+    reputation_last_decay_at = CASE WHEN $5 THEN now() ELSE reputation_last_decay_at END,
     updated_at = now()
 WHERE id = $1
 "#,
-                &[&service_id, &likes_delta, &dislikes_delta],
+                &[
+                    &service_id,
+                    &likes_delta,
+                    &dislikes_delta,
+                    &vote_score_delta(previous, vote),
+                    &(previous != Some(vote)),
+                ],
             )
             .await?;
         let row = transaction
@@ -441,6 +547,70 @@ FROM services WHERE id = $1
         let stats = row_to_stats(row);
         transaction.commit().await?;
         Ok(stats)
+    }
+
+    pub async fn record_instruction_open(
+        &self,
+        tokens: &[String],
+        anonymous_id: Uuid,
+    ) -> Result<InstructionOpen, ReputationError> {
+        let mut claims = Vec::with_capacity(tokens.len());
+        for token in tokens {
+            claims.push(
+                decode::<TrackingClaims>(
+                    token,
+                    &self.decode_key,
+                    &Validation::new(Algorithm::HS256),
+                )
+                .map_err(|_| ReputationError::InvalidTrackingToken)?
+                .claims,
+            );
+        }
+        let Some(first) = claims.first() else {
+            return Ok(InstructionOpen { newly_recorded: 0 });
+        };
+        if claims
+            .iter()
+            .any(|claim| claim.search_id != first.search_id || claim.route_id != first.route_id)
+        {
+            return Err(ReputationError::InvalidTrackingToken);
+        }
+
+        let mut client = self.pool.get().await?;
+        let transaction = client.transaction().await?;
+        let mut newly_recorded = 0;
+        let mut service_ids = claims
+            .iter()
+            .map(|claim| claim.service_id)
+            .collect::<Vec<_>>();
+        service_ids.sort_unstable();
+        service_ids.dedup();
+        for service_id in service_ids {
+            let inserted = transaction
+                .execute(
+                    r#"
+INSERT INTO service_instruction_opens (anonymous_id, service_id, search_id, route_id)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT DO NOTHING
+"#,
+                    &[
+                        &anonymous_id,
+                        &service_id,
+                        &first.search_id,
+                        &first.route_id,
+                    ],
+                )
+                .await?;
+            if inserted > 0 {
+                transaction.execute(
+                    "UPDATE services SET reputation_score = LEAST(100, reputation_score + 5), reputation_last_interaction_at = now(), reputation_last_decay_at = now(), updated_at = now() WHERE id = $1",
+                    &[&service_id],
+                ).await?;
+                newly_recorded += 1;
+            }
+        }
+        transaction.commit().await?;
+        Ok(InstructionOpen { newly_recorded })
     }
 
     pub async fn set_route_vote(
@@ -498,6 +668,23 @@ pub fn average_reputation(services: &[RouteServiceStats]) -> CombinedReputation 
     }
 }
 
+/// Conservative vote quality used only as a tie-breaker for economically
+/// similar routes. `None` keeps low-volume results in their economic order.
+pub fn vote_quality_score(likes: i64, dislikes: i64) -> Option<f64> {
+    let likes = likes.max(0) as f64;
+    let dislikes = dislikes.max(0) as f64;
+    let votes = likes + dislikes;
+    if votes < 10.0 {
+        return None;
+    }
+    let positive = likes / votes;
+    let z = 2.0;
+    let denominator = 1.0 + z * z / votes;
+    let center = positive + z * z / (2.0 * votes);
+    let margin = z * ((positive * (1.0 - positive) / votes + z * z / (4.0 * votes * votes)).sqrt());
+    Some((center - margin) / denominator)
+}
+
 fn valid_destination(destination_url: &str) -> bool {
     reqwest::Url::parse(destination_url)
         .is_ok_and(|url| matches!(url.scheme(), "http" | "https") && url.host_str().is_some())
@@ -512,6 +699,14 @@ fn vote_deltas(previous: Option<VoteChoice>, next: VoteChoice) -> (i64, i64) {
     let (old_like, old_dislike) = contribution(previous);
     let (new_like, new_dislike) = contribution(Some(next));
     (new_like - old_like, new_dislike - old_dislike)
+}
+
+fn vote_score_delta(previous: Option<VoteChoice>, next: VoteChoice) -> i16 {
+    let score = |vote| match vote {
+        VoteChoice::Like => 10_i16,
+        VoteChoice::Dislike => -15_i16,
+    };
+    score(next) - previous.map_or(0, score)
 }
 
 fn row_to_stats(row: tokio_postgres::Row) -> ServiceStats {
@@ -570,6 +765,24 @@ mod tests {
     }
 
     #[test]
+    fn vote_score_transitions_apply_only_the_change_in_choice() {
+        assert_eq!(vote_score_delta(None, VoteChoice::Like), 10);
+        assert_eq!(vote_score_delta(None, VoteChoice::Dislike), -15);
+        assert_eq!(
+            vote_score_delta(Some(VoteChoice::Like), VoteChoice::Dislike),
+            -25
+        );
+        assert_eq!(
+            vote_score_delta(Some(VoteChoice::Dislike), VoteChoice::Like),
+            25
+        );
+        assert_eq!(
+            vote_score_delta(Some(VoteChoice::Like), VoteChoice::Like),
+            0
+        );
+    }
+
+    #[test]
     fn combined_reputation_averages_distinct_services() {
         let service = |executions, likes, dislikes| RouteServiceStats {
             stats: ServiceStats {
@@ -602,5 +815,15 @@ mod tests {
                 "expected invalid destination: {invalid}"
             );
         }
+    }
+
+    #[test]
+    fn vote_quality_uses_both_volume_and_balance() {
+        let strong = vote_quality_score(100, 4).unwrap();
+        let smaller_clean = vote_quality_score(16, 0).unwrap();
+        let contested = vote_quality_score(100, 68).unwrap();
+        assert!(strong > smaller_clean);
+        assert!(smaller_clean > contested);
+        assert!(vote_quality_score(5, 0).is_none());
     }
 }

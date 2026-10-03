@@ -690,6 +690,15 @@ const OPERATIONS: &[Operation] = &[
         false,
     ),
     (
+        "/api/route-instructions/open",
+        "post",
+        "Open route instructions",
+        "Record an anonymous instruction open using signed service links from one route.",
+        "Routing",
+        true,
+        false,
+    ),
+    (
         "/api/services/{id}/vote",
         "put",
         "Vote on service",

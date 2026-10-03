@@ -45,6 +45,27 @@ viewer ID, so identical searches share the result. The cached route graph is
 enriched with the current viewer's votes and fresh service links after the
 cache read. Redis reads have a short timeout and cache writes run in the
 background.
+
+## Route reputation and feedback
+
+Route results expose service counters and anonymous route feedback. Votes are
+accepted at `PUT /api/services/{service_id}/vote` and
+`PUT /api/routes/{route_id}/vote`; each anonymous ID has one replaceable vote
+per service or route. Opening a route's instructions posts the signed service
+link tokens to `POST /api/route-instructions/open`. Opening a provider link
+continues to use `POST /api/service-executions/open`. Repeated instruction and
+link events from the same anonymous ID for the same search, route, and provider
+are counted once.
+
+Provider scores start at 50 and are clamped to 0–100. Likes add 10, dislikes
+subtract 15, and instruction or provider-link opens add 5. The API keeps raw
+vote and click counters separately from the score. Routes are first ordered by
+target amount; vote quality can reorder only routes within 1% of one another,
+and only when each route has at least 10 combined votes. The tie-break uses a
+Wilson lower bound so vote volume and the like/dislike balance both matter.
+The daily maintenance task subtracts 15 points from services with no interaction
+for 24 hours, stopping at zero. Shared service counters are cached in Redis for
+30 seconds; viewer-specific votes are loaded separately.
 Successful Fmatch answers are stored in PostgreSQL. If Fmatch is unavailable,
 the newest answer within `p2p_fmatch_stale_secs` is used and the response has
 `source: "database_cache"` and `stale: true`. A live Fmatch answer has

@@ -45,9 +45,20 @@ CREATE TABLE IF NOT EXISTS services (
     executions_total BIGINT NOT NULL DEFAULT 0 CHECK (executions_total >= 0),
     likes_total BIGINT NOT NULL DEFAULT 0 CHECK (likes_total >= 0),
     dislikes_total BIGINT NOT NULL DEFAULT 0 CHECK (dislikes_total >= 0),
+    reputation_score SMALLINT NOT NULL DEFAULT 50 CHECK (reputation_score BETWEEN 0 AND 100),
+    reputation_last_interaction_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    reputation_last_decay_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE services
+    ADD COLUMN IF NOT EXISTS reputation_score SMALLINT NOT NULL DEFAULT 50
+        CHECK (reputation_score BETWEEN 0 AND 100);
+ALTER TABLE services
+    ADD COLUMN IF NOT EXISTS reputation_last_interaction_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE services
+    ADD COLUMN IF NOT EXISTS reputation_last_decay_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 INSERT INTO services (slug, display_name)
 VALUES
@@ -93,6 +104,15 @@ CREATE INDEX IF NOT EXISTS service_executions_service_idx
     ON service_executions (service_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS service_executions_anonymous_idx
     ON service_executions (anonymous_id, service_id);
+
+CREATE TABLE IF NOT EXISTS service_instruction_opens (
+    anonymous_id UUID NOT NULL,
+    service_id UUID NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+    search_id UUID NOT NULL REFERENCES route_searches(id),
+    route_id TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (anonymous_id, service_id, search_id, route_id)
+);
 
 -- Non-custodial provider executions. Wallet signatures and private keys are
 -- deliberately never persisted; `action` contains only public quote/tx data.

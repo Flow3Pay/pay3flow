@@ -18,8 +18,8 @@ use crate::p2p::{
 };
 use crate::route_engine::canonical_network_id;
 use crate::service_reputation::{
-    average_reputation, ReputationError, RouteServiceStats, ServiceLink, ServiceLinkKind,
-    ServiceStats, VoteChoice,
+    average_reputation, vote_quality_score, ReputationError, RouteServiceStats, ServiceLink,
+    ServiceLinkKind, ServiceStats, VoteChoice,
 };
 
 #[derive(Debug, Deserialize)]
@@ -39,6 +39,13 @@ pub struct RouteSocketRequest {
 pub struct OpenExecutionRequest {
     anonymous_id: Uuid,
     tracking_token: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OpenInstructionRequest {
+    anonymous_id: Uuid,
+    tracking_tokens: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -307,6 +314,23 @@ pub async fn open_execution(
     Ok(Json(execution))
 }
 
+pub async fn open_instruction(
+    State(state): State<AppState>,
+    Json(request): Json<OpenInstructionRequest>,
+) -> Result<Json<crate::service_reputation::InstructionOpen>, AppError> {
+    if request.tracking_tokens.len() > 8 {
+        return Err(AppError::BadRequest(
+            "too many route tracking tokens".into(),
+        ));
+    }
+    let event = state
+        .reputation
+        .record_instruction_open(&request.tracking_tokens, request.anonymous_id)
+        .await
+        .map_err(map_reputation_error)?;
+    Ok(Json(event))
+}
+
 pub async fn set_vote(
     State(state): State<AppState>,
     Path(service_id): Path<Uuid>,
@@ -373,7 +397,75 @@ async fn enrich_routes(
         route.service_links = route_links(state, response.search_id, route, &stats)?;
         state.route_executions.attach_descriptor(route);
     }
+    rank_close_routes_by_votes(&mut response.routes);
     Ok(())
+}
+
+fn rank_close_routes_by_votes(routes: &mut [P2pRoute]) {
+    routes.sort_by(|left, right| {
+        let left_amount = left.target_amount.parse::<f64>().unwrap_or_default();
+        let right_amount = right.target_amount.parse::<f64>().unwrap_or_default();
+        right_amount.total_cmp(&left_amount)
+    });
+
+    let mut start = 0;
+    while start < routes.len() {
+        let best_amount = routes[start]
+            .target_amount
+            .parse::<f64>()
+            .unwrap_or_default();
+        let mut end = start + 1;
+        while end < routes.len() {
+            let amount = routes[end].target_amount.parse::<f64>().unwrap_or_default();
+            if best_amount <= 0.0 || (best_amount - amount) / best_amount > 0.01 {
+                break;
+            }
+            end += 1;
+        }
+
+        let scores = routes[start..end]
+            .iter()
+            .map(|route| {
+                let service_likes = route
+                    .services
+                    .iter()
+                    .map(|service| service.stats.likes_total)
+                    .sum::<i64>();
+                let service_dislikes = route
+                    .services
+                    .iter()
+                    .map(|service| service.stats.dislikes_total)
+                    .sum::<i64>();
+                let route_likes = route
+                    .feedback
+                    .as_ref()
+                    .map_or(0, |feedback| feedback.likes_total);
+                let route_dislikes = route
+                    .feedback
+                    .as_ref()
+                    .map_or(0, |feedback| feedback.dislikes_total);
+                vote_quality_score(
+                    service_likes.saturating_add(route_likes),
+                    service_dislikes.saturating_add(route_dislikes),
+                )
+            })
+            .collect::<Vec<_>>();
+        if scores.iter().all(Option::is_some) {
+            let mut indices = (0..end - start).collect::<Vec<_>>();
+            indices
+                .sort_by(|left, right| scores[*right].unwrap().total_cmp(&scores[*left].unwrap()));
+            let ordered = indices
+                .into_iter()
+                .map(|index| routes[start + index].clone())
+                .collect::<Vec<_>>();
+            routes[start..end].clone_from_slice(&ordered);
+        }
+        start = end;
+    }
+
+    for (rank, route) in routes.iter_mut().enumerate() {
+        route.rank = rank + 1;
+    }
 }
 
 fn route_service_slugs(route: &P2pRoute) -> Vec<String> {
