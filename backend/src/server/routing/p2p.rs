@@ -430,12 +430,12 @@ fn rank_close_routes_by_votes(routes: &mut [P2pRoute]) {
                     .services
                     .iter()
                     .map(|service| service.stats.likes_total)
-                    .sum::<i64>();
+                    .fold(0_i64, i64::saturating_add);
                 let service_dislikes = route
                     .services
                     .iter()
                     .map(|service| service.stats.dislikes_total)
-                    .sum::<i64>();
+                    .fold(0_i64, i64::saturating_add);
                 let route_likes = route
                     .feedback
                     .as_ref()
