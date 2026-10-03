@@ -5,6 +5,8 @@ This checklist tracks the Pay3Flow/Fmatch routing work in the isolated
 
 ## Expanded market coverage
 
+- [x] Bound startup polling to a three-worker priority queue, keep one worker
+  available for requested directions, and cap local offer snapshots at 128.
 - [x] Enumerate every supported exchanger currency and asset direction from
   the configured catalogs; refresh them continuously with bounded concurrency.
 - [x] Keep quote coefficients for every supported public route provider pair in

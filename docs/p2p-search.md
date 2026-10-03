@@ -50,14 +50,20 @@ and background quote refresh.
 
 At startup the first background pass starts immediately. Direct exchanger
 targets cover both sides of every fiat in the payment picker and every digital
-asset in the enabled network catalog. Each target refreshes five minutes after its previous poll, with
-bounded concurrency; a large catalog can take longer than five minutes to
-complete a whole pass. Common P2P directions refresh every 60 seconds when
-idle, 30 seconds when used, and 15 seconds at high demand. Other P2P directions
-are searched on demand and enter background refresh after repeated use. Spot
-tickers and fiat quotes refresh in the background. Public provider quotes cover
-all supported ordered asset pairs, with requested pairs prioritized. Offer and
-spot snapshots are shared through Redis. A cold direct exchanger corridor
+asset in the enabled network catalog. Targets stay in a priority queue; three
+workers poll them concurrently instead of creating one task per direction.
+Two paced workers cover the full catalog; the third serves recently requested
+cold directions immediately. Each target refreshes five minutes after its
+previous poll; a large catalog can take longer than five minutes to complete a
+whole pass. Redis holds the shared offer snapshots, while the local memory
+cache keeps at most 128 snapshots. Common P2P directions refresh every 60
+seconds when idle, 30 seconds when used, and 15 seconds at high demand. Other
+P2P directions are searched on demand and enter background refresh after
+repeated use. Spot tickers use at most four concurrent polls; fiat quotes use
+at most two concurrent polls. Public
+provider quotes cover all supported ordered asset pairs, with requested pairs
+prioritized and quote requests throttled between batches. Offer and spot
+snapshots are shared through Redis. A cold direct exchanger corridor
 waits for its first background snapshot for up to 65 seconds, including a
 worker timeout. Only if no snapshot arrives by then does the response report
 `background_pending`.
