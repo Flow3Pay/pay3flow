@@ -180,9 +180,11 @@ impl BackgroundOfferStore {
     }
 
     fn record_request(&self, key: &OfferKey) {
-        let mut requests = self.requests.lock();
-        let count = requests.entry(key.clone()).or_default();
-        *count = count.saturating_add(1);
+        {
+            let mut requests = self.requests.lock();
+            let count = requests.entry(key.clone()).or_default();
+            *count = count.saturating_add(1);
+        }
         self.last_demand.lock().insert(key.clone(), Instant::now());
     }
 
@@ -486,7 +488,10 @@ impl P2pSearchService {
                 .await;
                 drop(permit);
                 match result {
-                    Ok(Ok(response)) => store.publish(key.clone(), response),
+                    Ok(Ok(response)) if store.active.lock().get(&key) == Some(&generation) => {
+                        store.publish(key.clone(), response)
+                    }
+                    Ok(Ok(_)) => break,
                     Ok(Err(error)) => tracing::warn!(%error, ?key, "background offer poll failed"),
                     Err(_) => tracing::warn!(?key, "background offer poll timed out"),
                 }

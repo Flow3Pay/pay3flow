@@ -35,9 +35,11 @@ local count = redis.call('LLEN', KEYS[1])
 if count >= tonumber(ARGV[3]) then
   local prior = redis.call('LRANGE', KEYS[1], 1, -1)
   for _, raw in ipairs(prior) do
-    local event = cjson.decode(raw)
-    for _, field in ipairs(event.fields) do
-      redis.call('HINCRBY', event.bucket, field, -1)
+    local parts = {}
+    for part in string.gmatch(raw, '[^|]+') do table.insert(parts, part) end
+    for index = 2, #parts do
+      local field = parts[index]
+      redis.call('HINCRBY', parts[1], field, -1)
       redis.call('HINCRBY', KEYS[5], field, -1)
     end
   end
@@ -54,7 +56,7 @@ for index = 5, #ARGV do
   if separator then redis.call('HSET', KEYS[6], string.sub(field, separator + 1), ARGV[4]) end
   table.insert(fields, field)
 end
-redis.call('RPUSH', KEYS[1], cjson.encode({bucket = KEYS[2], fields = fields}))
+redis.call('RPUSH', KEYS[1], KEYS[2] .. '|' .. table.concat(fields, '|'))
 if count == 0 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
 redis.call('EXPIRE', KEYS[2], ARGV[2])
 redis.call('SADD', KEYS[3], KEYS[2])
@@ -64,7 +66,10 @@ return 1
 const CLEAR_SCRIPT: &str = r#"
 local values = redis.call('HGETALL', KEYS[1])
 for index = 1, #values, 2 do
-  redis.call('HINCRBY', KEYS[3], values[index], -tonumber(values[index + 1]))
+  local amount = tonumber(values[index + 1])
+  if amount and amount > 0 then
+    redis.call('HINCRBY', KEYS[3], values[index], -amount)
+  end
 end
 redis.call('DEL', KEYS[1])
 redis.call('SREM', KEYS[2], KEYS[1])
@@ -161,6 +166,13 @@ impl EngagementMetrics {
     ) -> Result<()> {
         slugs.sort();
         slugs.dedup();
+        slugs.retain(|slug| {
+            !slug.is_empty()
+                && slug.len() <= 64
+                && slug
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+        });
         if slugs.is_empty() {
             return Ok(());
         }
