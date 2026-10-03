@@ -1652,7 +1652,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('ua-privatbank', 'ua-privatbank', 'PrivatBank', 'both', 'UA', 'UAH', 'privatbank.ua', '', '', 'enabled', 'bank', '#4b9e40', 'PB', true, NULL, 'PrivatBank', 'privatbank', TRUE, 'payment-methods/Providerfile')
+VALUES ('ua-privatbank', 'ua-privatbank', 'PrivatBank', 'both', 'UA', 'UAH', 'privatbank.ua', '/icons/assets/ua-privatbank.png', '', 'enabled', 'bank', '#4b9e40', 'PB', true, NULL, 'PrivatBank', 'privatbank', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
@@ -1674,7 +1674,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('ua-monobank', 'ua-monobank', 'monobank', 'both', 'UA', 'UAH', 'monobank.ua', '', '', 'enabled', 'bank', '#1c1c1c', 'm', true, NULL, 'Monobank', 'monobank', TRUE, 'payment-methods/Providerfile')
+VALUES ('ua-monobank', 'ua-monobank', 'monobank', 'both', 'UA', 'UAH', 'monobank.ua', '/icons/assets/ua-monobank.png', '', 'enabled', 'bank', '#1c1c1c', 'm', true, NULL, 'Monobank', 'monobank', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
@@ -1696,7 +1696,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('ua-oschadbank', 'ua-oschadbank', 'Oschadbank', 'both', 'UA', 'UAH', 'oschadbank.ua', '', '', 'enabled', 'bank', '#008b43', 'O', true, NULL, 'Oschadbank', 'oschadbank', TRUE, 'payment-methods/Providerfile')
+VALUES ('ua-oschadbank', 'ua-oschadbank', 'Oschadbank', 'both', 'UA', 'UAH', 'oschadbank.ua', '/icons/assets/ua-oschadbank.png', '', 'enabled', 'bank', '#008b43', 'O', true, NULL, 'Oschadbank', 'oschadbank', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
@@ -1718,7 +1718,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('ua-pumb', 'ua-pumb', 'PUMB', 'both', 'UA', 'UAH', 'pumb.ua', '', '', 'enabled', 'bank', '#ed1c24', 'P', true, NULL, 'PUMB', 'pumb', TRUE, 'payment-methods/Providerfile')
+VALUES ('ua-pumb', 'ua-pumb', 'PUMB', 'both', 'UA', 'UAH', 'pumb.ua', '/icons/assets/ua-pumb.png', '', 'enabled', 'bank', '#ed1c24', 'P', true, NULL, 'PUMB', 'pumb', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
@@ -1740,7 +1740,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('ua-raiffeisen', 'ua-raiffeisen', 'Raiffeisen Bank', 'both', 'UA', 'UAH', 'raiffeisen.ua', '', '', 'enabled', 'bank', '#ffe500', 'R', false, NULL, 'Raiffeisen Bank Aval', 'raiffeisen-ua', TRUE, 'payment-methods/Providerfile')
+VALUES ('ua-raiffeisen', 'ua-raiffeisen', 'Raiffeisen Bank', 'both', 'UA', 'UAH', 'raiffeisen.ua', '/icons/assets/ua-raiffeisen.png', '', 'enabled', 'bank', '#ffe500', 'R', false, NULL, 'Raiffeisen Bank Aval', 'raiffeisen-ua', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
@@ -1762,7 +1762,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('ua-sense', 'ua-sense', 'Sense Bank', 'both', 'UA', 'UAH', 'sensebank.com.ua', '', '', 'enabled', 'bank', '#f04e37', 'S', false, NULL, 'Sense Bank', 'sense-bank', TRUE, 'payment-methods/Providerfile')
+VALUES ('ua-sense', 'ua-sense', 'Sense Bank', 'both', 'UA', 'UAH', 'sensebank.com.ua', '/icons/assets/ua-sense.png', '', 'enabled', 'bank', '#f04e37', 'S', false, NULL, 'Sense Bank', 'sense-bank', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
@@ -1784,7 +1784,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('ua-abank', 'ua-abank', 'A-Bank', 'both', 'UA', 'UAH', 'a-bank.com.ua', '', '', 'enabled', 'bank', '#ed1c24', 'A', false, NULL, 'A-Bank', 'a-bank-ua', TRUE, 'payment-methods/Providerfile')
+VALUES ('ua-abank', 'ua-abank', 'A-Bank', 'both', 'UA', 'UAH', 'a-bank.com.ua', '/icons/assets/ua-abank.png', '', 'enabled', 'bank', '#ed1c24', 'A', false, NULL, 'A-Bank', 'a-bank-ua', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
@@ -1806,7 +1806,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('ua-ukrsibbank', 'ua-ukrsibbank', 'UkrSibbank', 'both', 'UA', 'UAH', 'ukrsibbank.com', '', '', 'enabled', 'bank', '#0072bc', 'U', false, NULL, 'UkrSibbank', 'ukrsibbank', TRUE, 'payment-methods/Providerfile')
+VALUES ('ua-ukrsibbank', 'ua-ukrsibbank', 'UkrSibbank', 'both', 'UA', 'UAH', 'ukrsibbank.com', '/icons/assets/ua-ukrsibbank.ico', '', 'enabled', 'bank', '#0072bc', 'U', false, NULL, 'UkrSibbank', 'ukrsibbank', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
@@ -1828,7 +1828,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('kz-kaspi', 'kz-kaspi', 'Kaspi.kz', 'both', 'KZ', 'KZT', 'kaspi.kz', '', '', 'enabled', 'bank', '#f14635', 'K', true, NULL, 'Kaspi Bank', 'kaspi', TRUE, 'payment-methods/Providerfile')
+VALUES ('kz-kaspi', 'kz-kaspi', 'Kaspi.kz', 'both', 'KZ', 'KZT', 'kaspi.kz', '/icons/assets/kz-kaspi.png', '', 'enabled', 'bank', '#f14635', 'K', true, NULL, 'Kaspi Bank', 'kaspi', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
@@ -1850,7 +1850,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('kz-halyk', 'kz-halyk', 'Halyk Bank', 'both', 'KZ', 'KZT', 'halykbank.kz', '', '', 'enabled', 'bank', '#00883e', 'H', true, NULL, 'Halyk Bank', 'halyk', TRUE, 'payment-methods/Providerfile')
+VALUES ('kz-halyk', 'kz-halyk', 'Halyk Bank', 'both', 'KZ', 'KZT', 'halykbank.kz', '/icons/assets/kz-halyk.png', '', 'enabled', 'bank', '#00883e', 'H', true, NULL, 'Halyk Bank', 'halyk', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
@@ -1872,7 +1872,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('kz-forte', 'kz-forte', 'ForteBank', 'both', 'KZ', 'KZT', 'forte.bank', '', '', 'enabled', 'bank', '#ed1c24', 'F', true, NULL, 'ForteBank', 'forte', TRUE, 'payment-methods/Providerfile')
+VALUES ('kz-forte', 'kz-forte', 'ForteBank', 'both', 'KZ', 'KZT', 'forte.kz', '/icons/assets/kz-forte.png', '', 'enabled', 'bank', '#ed1c24', 'F', false, NULL, 'ForteBank', 'forte', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
@@ -1894,7 +1894,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('kz-bcc', 'kz-bcc', 'Bank CenterCredit', 'both', 'KZ', 'KZT', 'bcc.kz', '', '', 'enabled', 'bank', '#0072bc', 'BCC', false, NULL, 'Bank CenterCredit', 'centercredit', TRUE, 'payment-methods/Providerfile')
+VALUES ('kz-bcc', 'kz-bcc', 'Bank CenterCredit', 'both', 'KZ', 'KZT', 'bcc.kz', '/icons/assets/kz-bcc.png', '', 'enabled', 'bank', '#0072bc', 'BCC', false, NULL, 'Bank CenterCredit', 'centercredit', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
@@ -1916,7 +1916,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('kz-freedom', 'kz-freedom', 'Freedom Bank Kazakhstan', 'both', 'KZ', 'KZT', 'bankffin.kz', '', '', 'enabled', 'bank', '#00a651', 'FB', false, NULL, 'Freedom Bank', 'freedom-kz', TRUE, 'payment-methods/Providerfile')
+VALUES ('kz-freedom', 'kz-freedom', 'Freedom Bank Kazakhstan', 'both', 'KZ', 'KZT', 'bankffin.kz', '/icons/assets/kz-freedom.png', '', 'enabled', 'bank', '#00a651', 'FB', false, NULL, 'Freedom Bank', 'freedom-kz', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
@@ -1938,7 +1938,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('kz-bereke', 'kz-bereke', 'Bereke Bank', 'both', 'KZ', 'KZT', 'berekebank.kz', '', '', 'enabled', 'bank', '#00843d', 'B', false, NULL, 'Bereke Bank', 'bereke', TRUE, 'payment-methods/Providerfile')
+VALUES ('kz-bereke', 'kz-bereke', 'Bereke Bank', 'both', 'KZ', 'KZT', 'berekebank.kz', '/icons/assets/kz-bereke.png', '', 'enabled', 'bank', '#00843d', 'B', false, NULL, 'Bereke Bank', 'bereke', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
@@ -1960,7 +1960,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('kz-jusan', 'kz-jusan', 'Jusan Bank', 'both', 'KZ', 'KZT', 'jusan.kz', '', '', 'enabled', 'bank', '#542583', 'J', false, NULL, 'Jusan Bank', 'jusan', TRUE, 'payment-methods/Providerfile')
+VALUES ('kz-jusan', 'kz-jusan', 'Jusan Bank', 'both', 'KZ', 'KZT', 'jusan.kz', '/icons/assets/kz-jusan.png', '', 'enabled', 'bank', '#542583', 'J', false, NULL, 'Jusan Bank', 'jusan', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
@@ -1982,7 +1982,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('kz-eurasian', 'kz-eurasian', 'Eurasian Bank', 'both', 'KZ', 'KZT', 'eubank.kz', '', '', 'enabled', 'bank', '#004c97', 'E', false, NULL, 'Eurasian Bank', 'eurasian', TRUE, 'payment-methods/Providerfile')
+VALUES ('kz-eurasian', 'kz-eurasian', 'Eurasian Bank', 'both', 'KZ', 'KZT', 'eubank.kz', '/icons/assets/kz-eurasian.png', '', 'enabled', 'bank', '#004c97', 'E', false, NULL, 'Eurasian Bank', 'eurasian', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
