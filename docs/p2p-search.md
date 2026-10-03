@@ -39,11 +39,14 @@ assets are included alongside `p2p_search_assets`. The poller publishes offers
 as bounded ActivityPub `OrderedCollection` batches of up to 64, allowing Fmatch
 to refresh its read snapshot once per batch instead of once per advertisement.
 It also remembers up to 512 supported pairs from recent user searches in
-process memory. Every seventh scheduled poll refreshes one of the three hottest
-pairs, rotating among them; the remaining slots continue through the catalog.
+process memory. If a direct fiat quote provider supports configured currency
+pairs, six out of every seven scheduled starts refresh one pair at a reference
+amount and cache its normalized exchange coefficient for 35 minutes. The
+remaining start refreshes a hot P2P pair or advances the P2P catalog cursor.
+The same five-pipeline and 25-starts-per-minute limits cover both kinds of work.
 
-Provider-only searches keep generic snapshots in process memory for up to 35
-minutes, bounded to 1,024 pairs. The five-minute portion is considered fresh;
+Provider-only searches keep generic offer snapshots in process memory for up to
+35 minutes, bounded to 1,024 pairs. The five-minute portion is considered fresh;
 older snapshots are marked stale. Interactive searches apply amount,
 payment-method, merchant, order-count, and completion-rate filters to those
 offers. More specific searches that need a larger provider page than the
@@ -52,7 +55,13 @@ served before contacting Fmatch, and a stale snapshot can satisfy an Fmatch
 miss before another live provider fan-out. Each successful warmup and each
 snapshot hit is logged separately from an interactive route search. Public
 route legs are resolved through Fmatch when it is available; local provider
-results remain the fallback.
+results remain the fallback. Direct fiat route quotes reuse the cached pair
+coefficient at the requested amount, instead of keying the quote cache by that
+exact amount. Direct fiat and public route coefficients are also written to
+Redis for 35 minutes and loaded into process memory on demand. Background work
+refreshes coefficients and P2P offers; it does not compose final route results.
+Final routes are composed only for a user's search, which can combine fresh
+provider quotes with saved coefficients and a user-triggered P2P search.
 
 Completed route responses with at least one route are also cached in Redis for
 15 seconds. The key uses a normalized search query and excludes the anonymous

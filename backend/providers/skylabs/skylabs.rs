@@ -148,16 +148,32 @@ impl P2pSource for SkyLabsSource {
     }
 
     async fn search(&self, query: &P2pSearchQuery) -> Result<Vec<P2pOffer>> {
-        let (raw_offers, payment_methods, commissions, conversion_rate) = tokio::try_join!(
-            self.inner.search(query),
+        if !self.inner.supports_query(query) {
+            return Ok(Vec::new());
+        }
+
+        let raw_offers = match self.inner.search(query).await {
+            Ok(offers) => offers,
+            Err(error) if is_unsupported_quote_error(&error) => {
+                tracing::debug!(
+                    fiat = %query.fiat,
+                    asset = %query.asset,
+                    side = ?query.side,
+                    "SkyLabs does not support this quote"
+                );
+                return Ok(Vec::new());
+            }
+            Err(error) => return Err(error),
+        };
+        let Some(raw_offer) = raw_offers.into_iter().next() else {
+            return Ok(Vec::new());
+        };
+
+        let (payment_methods, commissions, conversion_rate) = tokio::try_join!(
             self.payment_methods(),
             self.withdrawal_fees(),
             self.conversion_rate(query),
         )?;
-        let raw_offer = raw_offers
-            .into_iter()
-            .next()
-            .context("SkyLabs returned no base quote")?;
         self.offers(
             query,
             raw_offer,
@@ -166,6 +182,12 @@ impl P2pSource for SkyLabsSource {
             conversion_rate,
         )
     }
+}
+
+fn is_unsupported_quote_error(error: &anyhow::Error) -> bool {
+    let message = format!("{error:#}");
+    message.contains("response condition failed (false != true)")
+        && message.contains("to type check failed")
 }
 
 #[derive(Debug, Deserialize)]

@@ -38,9 +38,13 @@ pub(in crate::p2p) fn fiat_quote_key(
     provider: &str,
     source: &str,
     target: &str,
-    amount: f64,
+    _amount: f64,
 ) -> String {
-    format!("fiat|{provider}|{source}|{target}|{amount:.2}")
+    format!("fiat|{provider}|{source}|{target}")
+}
+
+pub(in crate::p2p) fn provider_coefficient_key(provider: &str, from: &Asset, to: &Asset) -> String {
+    format!("coefficient|{provider}|{from}|{to}")
 }
 
 pub(in crate::p2p) fn provider_priority(provider: &str) -> u8 {

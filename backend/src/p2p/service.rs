@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use futures::future::join_all;
+use futures::future::{join_all, BoxFuture};
 use futures::stream::{FuturesUnordered, StreamExt};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -42,7 +42,7 @@ const MAX_REFRESHED_POPULAR_PAIRS: usize = 3;
 // Keep enough pair snapshots for a paced full catalog pass (25 observations
 // per minute) and a small delay before a pair is visited again.
 const PROVIDER_SNAPSHOT_TTL: Duration = Duration::from_secs(35 * 60);
-const PROVIDER_SNAPSHOT_STALE_AFTER: Duration = Duration::from_secs(5 * 60);
+const PROVIDER_SNAPSHOT_STALE_AFTER: Duration = Duration::from_secs(30 * 60);
 const MAX_PROVIDER_SNAPSHOTS: usize = 1_024;
 
 impl P2pSearchQuery {
@@ -320,12 +320,13 @@ pub struct P2pSearchService {
     pub(crate) fiat_route_providers: Arc<[Arc<dyn PublicFiatRouteProvider>]>,
     pub(crate) quote_semaphore: Arc<Semaphore>,
     pub(crate) provider_quote_cache: Arc<RwLock<HashMap<String, CachedProviderQuote>>>,
+    pub(crate) provider_coefficient_cache: Arc<RwLock<HashMap<String, CachedProviderCoefficient>>>,
     pub(crate) fiat_quote_cache: Arc<RwLock<HashMap<String, CachedFiatQuote>>>,
     pub(crate) quote_refreshes: Arc<Mutex<HashSet<String>>>,
     background_pipeline_semaphore: Arc<Semaphore>,
     background_last_started: Arc<Mutex<Option<Instant>>>,
     background_provider_semaphore: Arc<Semaphore>,
-    redis: Option<RedisPool>,
+    pub(crate) redis: Option<RedisPool>,
     pair_popularity: Arc<Mutex<HashMap<String, (u32, Instant)>>>,
     pub(crate) provider_capabilities_cache: Arc<RwLock<Option<ProviderCapabilitiesSnapshot>>>,
     pub(crate) service_latencies: ServiceLatencyTracker,
@@ -336,6 +337,12 @@ pub struct P2pSearchService {
 pub(crate) struct CachedProviderQuote {
     pub(crate) inserted_at: Instant,
     pub(crate) quote: PublicRouteQuote,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct CachedProviderCoefficient {
+    pub(crate) inserted_at: Instant,
+    pub(crate) output_per_input: Option<f64>,
 }
 
 #[derive(Clone)]
@@ -378,28 +385,60 @@ impl P2pSearchService {
 
     async fn run_background_warmup(&self) {
         let fiats = self.fiat_intermediaries.to_vec();
+        let capabilities = Self::provider_capabilities(&self.route_providers).await;
+        let mut route_provider_assets = capabilities
+            .iter()
+            .map(|capability| {
+                let mut assets = capability.assets.iter().cloned().collect::<Vec<_>>();
+                assets.sort_by_key(ToString::to_string);
+                (capability.provider.clone(), assets)
+            })
+            .collect::<Vec<_>>();
+        route_provider_assets.sort_by_key(|(provider, _)| provider.name().to_string());
+        let mut fiat_pairs = Vec::new();
+        for provider in self.fiat_route_providers.iter() {
+            for source in &fiats {
+                for target in fiats
+                    .iter()
+                    .filter(|target| !source.eq_ignore_ascii_case(target))
+                {
+                    if provider.supports_pair(source, target) {
+                        fiat_pairs.push((provider.clone(), source.clone(), target.clone()));
+                    }
+                }
+            }
+        }
         let mut assets = self.networks.assets();
         assets.extend(self.default_assets.iter().cloned());
         assets.sort();
         assets.dedup();
-        if !self.enabled || fiats.is_empty() || assets.is_empty() {
+        if !self.enabled
+            || (fiats.is_empty() && fiat_pairs.is_empty() && route_provider_assets.is_empty())
+            || (assets.is_empty() && fiat_pairs.is_empty() && route_provider_assets.is_empty())
+        {
             tracing::info!("background provider warmup is disabled or has no catalog");
             return;
         }
         tracing::info!(
             fiat_count = fiats.len(),
+            fiat_exchange_pairs = fiat_pairs.len(),
+            public_route_provider_count = route_provider_assets.len(),
             asset_count = assets.len(),
-            pair_observations = fiats.len().saturating_mul(assets.len()).saturating_mul(2),
+            p2p_pair_observations = fiats.len().saturating_mul(assets.len()).saturating_mul(2),
             max_active = MAX_BACKGROUND_SEARCHES,
             interval_ms = BACKGROUND_SEARCH_INTERVAL.as_millis(),
             "background provider warmup started"
         );
 
-        let mut active = FuturesUnordered::new();
+        let mut active: FuturesUnordered<BoxFuture<'static, ()>> = FuturesUnordered::new();
         let mut fiat_index = 0;
         let mut asset_index = 0;
         let mut side = P2pSide::BuyCrypto;
         let mut poll_ticks = 0;
+        let mut fiat_pair_index: usize = 0;
+        let mut route_provider_index = 0;
+        let mut route_from_index = 0;
+        let mut route_to_index = 1;
         let mut popular_pair_cursor = 0;
         let mut interval = tokio::time::interval(BACKGROUND_SEARCH_INTERVAL);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -409,13 +448,87 @@ impl P2pSearchService {
                     // Do not queue work while the five background slots are
                     // occupied. The current catalog cursor is retried next tick.
                     if active.len() < MAX_BACKGROUND_SEARCHES {
-                        let popular = if poll_ticks % BACKGROUND_POPULAR_PAIR_CADENCE == 0 {
+                        let refresh_p2p = !fiats.is_empty()
+                            && !assets.is_empty()
+                            && poll_ticks % BACKGROUND_POPULAR_PAIR_CADENCE
+                                == BACKGROUND_POPULAR_PAIR_CADENCE - 1;
+                        let popular = if refresh_p2p {
                             self.next_popular_pair(&mut popular_pair_cursor)
                         } else {
                             None
                         };
                         let used_popular_pair = popular.is_some();
                         poll_ticks = poll_ticks.saturating_add(1);
+                        let due_fiat_pair = (!refresh_p2p).then(|| {
+                            (0..fiat_pairs.len()).find_map(|offset| {
+                                let index = fiat_pair_index.wrapping_add(offset) % fiat_pairs.len();
+                                let (provider, source, target) = &fiat_pairs[index];
+                                self.background_fiat_quote_is_due(
+                                    provider.name(),
+                                    source,
+                                    target,
+                                )
+                                .then(|| {
+                                    fiat_pair_index = index.wrapping_add(1);
+                                    fiat_pairs[index].clone()
+                                })
+                            })
+                        }).flatten();
+                        if let Some((provider, source, target)) = due_fiat_pair {
+                            let Some(permit) = self.try_start_background_pipeline() else {
+                                continue;
+                            };
+                            let service = self.clone();
+                            active.push(Box::pin(async move {
+                                let _permit = permit;
+                                if let Err(error) = service
+                                    .refresh_background_fiat_quote(provider, source.clone(), target.clone())
+                                    .await
+                                {
+                                    tracing::debug!(%error, %source, %target, "background fiat exchange coefficient refresh failed");
+                                }
+                            }));
+                            continue;
+                        }
+                        let due_route_pair = if !refresh_p2p {
+                            self.next_due_route_provider_pair(
+                                &route_provider_assets,
+                                &mut route_provider_index,
+                                &mut route_from_index,
+                                &mut route_to_index,
+                            )
+                        } else {
+                            None
+                        };
+                        if let Some((provider, from, to)) = due_route_pair {
+                            let Some(permit) = self.try_start_background_pipeline() else {
+                                continue;
+                            };
+                            let service = self.clone();
+                            active.push(Box::pin(async move {
+                                let _permit = permit;
+                                let provider_name = provider.name().to_string();
+                                if let Err(error) = service
+                                    .refresh_background_provider_coefficient(
+                                        provider,
+                                        from.clone(),
+                                        to.clone(),
+                                    )
+                                    .await
+                                {
+                                    service.mark_background_provider_coefficient_failed(
+                                        &provider_name,
+                                        &from,
+                                        &to,
+                                    );
+                                    tracing::debug!(%error, %from, %to, "background route provider coefficient refresh failed");
+                                }
+                            }));
+                            continue;
+                        }
+                        if fiats.is_empty() || assets.is_empty() {
+                            continue;
+                        }
                         let (query, fiat, asset, scheduled_side) = if let Some(query) = popular {
                             let fiat = query.fiat.clone();
                             let asset = query.asset.clone();
@@ -433,7 +546,7 @@ impl P2pSearchService {
                                 merchant_only: None,
                                 min_orders: None,
                                 min_completion_rate: None,
-                                limit: Some(DEFAULT_LIMIT),
+                limit: Some(crate::p2p::routes::LEG_SEARCH_LIMIT),
                                 sources: None,
                             };
                             (query, fiat, asset, side)
@@ -442,12 +555,12 @@ impl P2pSearchService {
                             continue;
                         };
                         let service = self.clone();
-                        active.push(async move {
+                        active.push(Box::pin(async move {
                             let _permit = permit;
                             if let Err(error) = service.refresh_background_search(query).await {
                                 tracing::warn!(%error, %fiat, %asset, ?scheduled_side, "background provider observation failed");
                             }
-                        });
+                        }));
 
                         if !used_popular_pair {
                             if side == P2pSide::BuyCrypto {
@@ -483,6 +596,50 @@ impl P2pSearchService {
         }
         *last_started = Some(now);
         Some(permit)
+    }
+
+    fn next_due_route_provider_pair(
+        &self,
+        catalogs: &[(Arc<dyn PublicRouteProvider>, Vec<Asset>)],
+        provider_index: &mut usize,
+        from_index: &mut usize,
+        to_index: &mut usize,
+    ) -> Option<(Arc<dyn PublicRouteProvider>, Asset, Asset)> {
+        for _ in 0..catalogs.len() {
+            if *provider_index >= catalogs.len() {
+                *provider_index = 0;
+                *from_index = 0;
+                *to_index = 1;
+            }
+            let (provider, assets) = &catalogs[*provider_index];
+            if assets.len() < 2 {
+                *provider_index += 1;
+                continue;
+            }
+            if *from_index >= assets.len() {
+                *from_index = 0;
+                *to_index = 1;
+                *provider_index += 1;
+                continue;
+            }
+            if *to_index >= assets.len() {
+                *to_index = 0;
+                *from_index += 1;
+                continue;
+            }
+            if *from_index == *to_index {
+                *to_index += 1;
+                continue;
+            }
+            let from = assets[*from_index].clone();
+            let to = assets[*to_index].clone();
+            *to_index += 1;
+            if self.background_provider_coefficient_is_due(provider.name(), &from, &to) {
+                return Some((provider.clone(), from, to));
+            }
+            return None;
+        }
+        None
     }
 
     pub fn from_config(config: &Config, networks: NetworkCatalog) -> Result<Self> {
@@ -623,6 +780,7 @@ impl P2pSearchService {
             fiat_route_providers: fiat_route_providers.into(),
             quote_semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_PROVIDER_QUOTES)),
             provider_quote_cache: Arc::new(RwLock::new(HashMap::new())),
+            provider_coefficient_cache: Arc::new(RwLock::new(HashMap::new())),
             fiat_quote_cache: Arc::new(RwLock::new(HashMap::new())),
             quote_refreshes: Arc::new(Mutex::new(HashSet::new())),
             background_pipeline_semaphore: Arc::new(Semaphore::new(MAX_BACKGROUND_SEARCHES)),
@@ -682,6 +840,7 @@ impl P2pSearchService {
             fiat_route_providers: Vec::new().into(),
             quote_semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_PROVIDER_QUOTES)),
             provider_quote_cache: Arc::new(RwLock::new(HashMap::new())),
+            provider_coefficient_cache: Arc::new(RwLock::new(HashMap::new())),
             fiat_quote_cache: Arc::new(RwLock::new(HashMap::new())),
             quote_refreshes: Arc::new(Mutex::new(HashSet::new())),
             background_pipeline_semaphore: Arc::new(Semaphore::new(MAX_BACKGROUND_SEARCHES)),
@@ -710,6 +869,7 @@ impl P2pSearchService {
     ) -> Self {
         self.route_providers = providers.into();
         self.provider_quote_cache = Arc::new(RwLock::new(HashMap::new()));
+        self.provider_coefficient_cache = Arc::new(RwLock::new(HashMap::new()));
         self.quote_refreshes = Arc::new(Mutex::new(HashSet::new()));
         self.provider_capabilities_cache = Arc::new(RwLock::new(None));
         self
@@ -868,7 +1028,7 @@ impl P2pSearchService {
             merchant_only: None,
             min_orders: None,
             min_completion_rate: None,
-            limit: Some(DEFAULT_LIMIT),
+            limit: Some(crate::p2p::routes::LEG_SEARCH_LIMIT),
             sources: None,
         })
     }

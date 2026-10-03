@@ -471,8 +471,14 @@ path and do not wait for background capacity.
 diversity: `max(ceil(limit / 2), provider_count)`. Этот поиск всегда помечает
 общую выдачу как не exhaustive.
 
-Direct fiat providers используют тот же принцип: 30-секундный cache и
-дедуплицированный background refresh на miss.
+Direct fiat providers reuse a normalized coefficient keyed by provider and
+currency pair, so changing the requested amount does not trigger another live
+quote. The startup poller refreshes supported configured fiat pairs at a
+reference amount. Coefficients are kept in process memory and Redis for 35
+minutes, then scaled to the amount in the route query. Public route provider
+coefficients use the same persistence lifetime. Final route composition remains
+on the user search path; background work refreshes pair data and P2P offers
+without building complete routes.
 
 ## 9. Остальные направления
 

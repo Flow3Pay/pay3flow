@@ -30,6 +30,9 @@ pub(super) const MAX_PROVIDER_ASSETS: usize = 12;
 pub(super) const MAX_PROVIDER_NETWORK_PAIRS: usize = 32;
 pub(super) const MAX_PROVIDER_OFFERS_PER_LEG: usize = 8;
 pub(super) const PROVIDER_QUOTE_CACHE_TTL: Duration = Duration::from_secs(30);
+// A complete paced pass can take about 30 minutes; retain coefficients long
+// enough for the cursor to revisit the pair without forcing a live query.
+pub(super) const FIAT_COEFFICIENT_CACHE_TTL: Duration = Duration::from_secs(35 * 60);
 pub(super) const MAX_BACKGROUND_PROVIDER_REFRESHES_PER_SEARCH: usize = 1;
 
 #[cfg(test)]

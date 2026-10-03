@@ -60,6 +60,26 @@ impl DeclarativeP2pSource {
                 .any(|supported| supported.eq_ignore_ascii_case(fiat))
     }
 
+    pub(crate) fn supports_query(&self, query: &P2pSearchQuery) -> bool {
+        self.supports_fiat(&query.fiat)
+            && (self.config.supported_assets.is_empty()
+                || self
+                    .config
+                    .supported_assets
+                    .iter()
+                    .any(|asset| asset.eq_ignore_ascii_case(&query.asset)))
+            && !query.amount.is_some_and(|amount| {
+                self.config
+                    .default_min_fiat
+                    .is_some_and(|minimum| amount < minimum)
+                    || self
+                        .config
+                        .default_max_fiat
+                        .is_some_and(|maximum| amount > maximum)
+            })
+            && self.operation(query.side).is_ok()
+    }
+
     fn template_values<'a>(
         &'a self,
         query: &'a P2pSearchQuery,
@@ -319,27 +339,7 @@ impl P2pSource for DeclarativeP2pSource {
     }
 
     async fn search(&self, query: &P2pSearchQuery) -> Result<Vec<P2pOffer>> {
-        if !self.supports_fiat(&query.fiat) {
-            return Ok(Vec::new());
-        }
-        if !self.config.supported_assets.is_empty()
-            && !self
-                .config
-                .supported_assets
-                .iter()
-                .any(|asset| asset == &query.asset)
-        {
-            return Ok(Vec::new());
-        }
-        if query.amount.is_some_and(|amount| {
-            self.config
-                .default_min_fiat
-                .is_some_and(|minimum| amount < minimum)
-                || self
-                    .config
-                    .default_max_fiat
-                    .is_some_and(|maximum| amount > maximum)
-        }) {
+        if !self.supports_query(query) {
             return Ok(Vec::new());
         }
 
