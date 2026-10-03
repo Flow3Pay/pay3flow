@@ -1,7 +1,7 @@
 <script lang="ts">
   import { afterUpdate, onMount, onDestroy } from "svelte";
   import { fetchCorridors, fetchP2pRoutes, fetchProviders, recordInstructionOpen, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderAffiliate, type ProviderDefinition, type ProviderGuidance, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote, type VenueSearchStatus } from "$lib/exchange";
-  import { FALLBACK_NETWORK, fetchNetworks, type CryptoNetwork } from "$lib/networks";
+  import { FALLBACK_NETWORK, fetchNetworks, preferredNetwork, type CryptoNetwork } from "$lib/networks";
   import { assetIcon, networkIcon, swapIcon, venueIcon } from "$lib/icons";
   import { fetchPaymentMethods, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
   import { getAnonymousUserId, registerAnonymousUser } from "$lib/anonymous-user";
@@ -29,7 +29,7 @@
   let INTERMEDIARY_ASSETS: string[] = [];
   const EXCHANGE_METHODS: ExchangeMethod[] = ["p2p", "exchanger"];
   let paymentMethods: PaymentMethod[] = [];
-  const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", sources: "pay3flow.exchange.p2p-sources", knownSources: "pay3flow.exchange.known-p2p-sources", methods: "pay3flow.exchange.methods", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", sourceNetwork: "pay3flow.exchange.source-network", targetNetwork: "pay3flow.exchange.target-network", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets" };
+  const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", sources: "pay3flow.exchange.p2p-sources", knownSources: "pay3flow.exchange.known-p2p-sources", methods: "pay3flow.exchange.methods", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", sourceNetwork: "pay3flow.exchange.source-network", targetNetwork: "pay3flow.exchange.target-network", nativeNetworkMigration: "pay3flow.exchange.native-network-v1", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets" };
 
   let corridors: ExchangeCorridor[] = [];
   let corridorId = "";
@@ -419,8 +419,8 @@
   $: selectedTargetCurrency = targetMethod?.currency || targetCurrency;
   $: sourceNetworks = sourceMethod?.kind === "wallet" ? networks.filter((network) => network.currencies.includes(sourceMethod!.currency)) : [];
   $: targetNetworks = targetMethod?.kind === "wallet" ? networks.filter((network) => network.currencies.includes(targetMethod!.currency)) : [];
-  $: sourceNetwork = sourceNetworks.find((network) => network.id === sourceNetworkId) ?? sourceNetworks[0];
-  $: targetNetwork = targetNetworks.find((network) => network.id === targetNetworkId) ?? targetNetworks[0];
+  $: sourceNetwork = sourceNetworks.find((network) => network.id === sourceNetworkId) ?? preferredNetwork(sourceMethod?.currency ?? "", sourceNetworks);
+  $: targetNetwork = targetNetworks.find((network) => network.id === targetNetworkId) ?? preferredNetwork(targetMethod?.currency ?? "", targetNetworks);
   $: sourceCurrencyChoices = currencyChoicesFor(sourceMethod, "sender");
   $: targetCurrencyChoices = currencyChoicesFor(targetMethod, "recipient");
   $: showBelarusP2pWarning = selectedExchangeMethods.includes("p2p") && [sourceMethod, targetMethod].some((method) => method?.kind === "bank" && method.country === "BY" && method.currency === "BYN");
@@ -556,8 +556,8 @@
     currencyPicker = null;
     resetResults();
   }
-  function chooseSource(method: PaymentMethod, network?: CryptoNetwork) { initialSearchReady = true; sourceMethodId = method.id; if (method.kind === "wallet") sourceNetworkId = network?.id ?? networks.find((item) => item.currencies.includes(method.currency))?.id ?? FALLBACK_NETWORK.id; methodPicker = null; resetResults(); }
-  function chooseTarget(method: PaymentMethod, network?: CryptoNetwork) { initialSearchReady = true; targetMethodId = method.id; if (method.kind === "wallet") targetNetworkId = network?.id ?? networks.find((item) => item.currencies.includes(method.currency))?.id ?? FALLBACK_NETWORK.id; methodPicker = null; resetResults(); }
+  function chooseSource(method: PaymentMethod, network?: CryptoNetwork) { initialSearchReady = true; sourceMethodId = method.id; if (method.kind === "wallet") sourceNetworkId = network?.id ?? preferredNetwork(method.currency, networks)?.id ?? FALLBACK_NETWORK.id; methodPicker = null; resetResults(); }
+  function chooseTarget(method: PaymentMethod, network?: CryptoNetwork) { initialSearchReady = true; targetMethodId = method.id; if (method.kind === "wallet") targetNetworkId = network?.id ?? preferredNetwork(method.currency, networks)?.id ?? FALLBACK_NETWORK.id; methodPicker = null; resetResults(); }
   function selectNetwork(network: CryptoNetwork) { initialSearchReady = true; if (networkPicker === "source") sourceNetworkId = network.id; else targetNetworkId = network.id; networkPicker = null; resetResults(); }
   function openCurrencyPicker(side: Exclude<PickerSide, null>) { currencyPicker = side; }
   async function openMethodPicker(side: Exclude<PickerSide, null>) {
@@ -741,7 +741,17 @@
     // still enable the normal debounced search immediately.
     initialSearchTimer = window.setTimeout(() => initialSearchReady = true, 1500);
     fetchNetworks().then((items) => { if (items.length) networks = items; }).catch(() => {});
-    fetchPaymentMethods().then((items) => { paymentMethods = items; }).catch((cause: Error) => error ??= cause.message);
+    fetchPaymentMethods().then((items) => {
+      paymentMethods = items;
+      try {
+        if (!localStorage.getItem(STORAGE.nativeNetworkMigration)) {
+          // The old alphabetical default selected wrapped ADA on BSC.
+          if (items.find((item) => item.id === sourceMethodId)?.currency === "ADA" && sourceNetworkId === "bnb-smart-chain") sourceNetworkId = "cardano";
+          if (items.find((item) => item.id === targetMethodId)?.currency === "ADA" && targetNetworkId === "bnb-smart-chain") targetNetworkId = "cardano";
+          localStorage.setItem(STORAGE.nativeNetworkMigration, "1");
+        }
+      } catch {}
+    }).catch((cause: Error) => error ??= cause.message);
     fetchProviders().then((providers) => {
       p2pSources = providerSources(providers);
       foundVenues = foundVenueOptions();
