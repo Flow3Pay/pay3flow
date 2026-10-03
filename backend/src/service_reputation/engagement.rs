@@ -264,7 +264,7 @@ impl EngagementMetrics {
                 ).await?;
                 if links > 0 {
                     transaction.execute(
-                        "UPDATE services SET executions_total = executions_total + $2, updated_at = now() WHERE slug = $1",
+                        "UPDATE services SET executions_total = executions_total + $2, last_interaction_at = now(), updated_at = now() WHERE slug = $1",
                         &[&slug, &links],
                     ).await?;
                 }
@@ -300,7 +300,7 @@ impl EngagementMetrics {
         }
         let client = self.pool.get().await?;
         let rows = client.query(
-            "SELECT s.slug, s.likes_total, s.dislikes_total, s.executions_total, COALESCE(e.instruction_opens, 0), COALESCE(e.link_opens, 0), GREATEST(s.updated_at, COALESCE(e.updated_at, s.updated_at)) FROM services s LEFT JOIN provider_engagement e ON e.slug = s.slug",
+            "SELECT s.slug, s.likes_total, s.dislikes_total, COALESCE(e.instruction_opens, 0), COALESCE(e.link_opens, 0), GREATEST(COALESCE(s.last_interaction_at, s.created_at), COALESCE(e.updated_at, s.created_at)) FROM services s LEFT JOIN provider_engagement e ON e.slug = s.slug",
             &[],
         ).await?;
         let mut counts = rows
@@ -310,8 +310,8 @@ impl EngagementMetrics {
                 (
                     slug,
                     (
-                        [row.get(1), row.get(2), row.get(4), row.get(5)],
-                        row.get::<_, chrono::DateTime<chrono::Utc>>(6).timestamp(),
+                        [row.get(1), row.get(2), row.get(3), row.get(4)],
+                        row.get::<_, chrono::DateTime<chrono::Utc>>(5).timestamp(),
                     ),
                 )
             })

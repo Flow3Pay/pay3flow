@@ -45,9 +45,12 @@ CREATE TABLE IF NOT EXISTS services (
     executions_total BIGINT NOT NULL DEFAULT 0 CHECK (executions_total >= 0),
     likes_total BIGINT NOT NULL DEFAULT 0 CHECK (likes_total >= 0),
     dislikes_total BIGINT NOT NULL DEFAULT 0 CHECK (dislikes_total >= 0),
+    last_interaction_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE services ADD COLUMN IF NOT EXISTS last_interaction_at TIMESTAMPTZ;
 
 INSERT INTO services (slug, display_name)
 VALUES

@@ -492,6 +492,7 @@ ON CONFLICT (anonymous_id, service_id) DO UPDATE SET
 UPDATE services
 SET likes_total = likes_total + $2,
     dislikes_total = dislikes_total + $3,
+    last_interaction_at = now(),
     updated_at = now()
 WHERE id = $1
 "#,
@@ -573,7 +574,7 @@ ON CONFLICT (anonymous_id, route_id) DO UPDATE SET
                     let (likes_delta, dislikes_delta) = vote_deltas(Some(previous_vote), vote);
                     if likes_delta != 0 || dislikes_delta != 0 {
                         transaction.execute(
-                            "UPDATE services SET likes_total = GREATEST(0, likes_total + $2), dislikes_total = GREATEST(0, dislikes_total + $3), updated_at = now() WHERE slug = ANY($1)",
+                            "UPDATE services SET likes_total = GREATEST(0, likes_total + $2), dislikes_total = GREATEST(0, dislikes_total + $3), last_interaction_at = now(), updated_at = now() WHERE slug = ANY($1)",
                             &[&previous_services, &likes_delta, &dislikes_delta],
                         ).await?;
                     }
@@ -583,7 +584,7 @@ ON CONFLICT (anonymous_id, route_id) DO UPDATE SET
                         VoteChoice::Dislike => (0_i64, -1_i64),
                     };
                     transaction.execute(
-                        "UPDATE services SET likes_total = GREATEST(0, likes_total + $2), dislikes_total = GREATEST(0, dislikes_total + $3), updated_at = now() WHERE slug = ANY($1)",
+                        "UPDATE services SET likes_total = GREATEST(0, likes_total + $2), dislikes_total = GREATEST(0, dislikes_total + $3), last_interaction_at = now(), updated_at = now() WHERE slug = ANY($1)",
                         &[&previous_services, &old_like, &old_dislike],
                     ).await?;
                 }
@@ -596,7 +597,7 @@ ON CONFLICT (anonymous_id, route_id) DO UPDATE SET
                     VoteChoice::Dislike => (0_i64, 1_i64),
                 };
                 transaction.execute(
-                    "UPDATE services SET likes_total = likes_total + $2, dislikes_total = dislikes_total + $3, updated_at = now() WHERE slug = ANY($1)",
+                    "UPDATE services SET likes_total = likes_total + $2, dislikes_total = dislikes_total + $3, last_interaction_at = now(), updated_at = now() WHERE slug = ANY($1)",
                     &[&attributed_services, &new_like, &new_dislike],
                 ).await?;
             }
