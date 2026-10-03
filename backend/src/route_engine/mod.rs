@@ -21,12 +21,8 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 pub use crate::compiled_provider_code::cow_swap::CowRouteProvider;
-pub use crate::compiled_provider_code::kyberswap::KyberSwapRouteProvider;
-pub use crate::compiled_provider_code::lifi::LifiRouteProvider;
 pub use crate::compiled_provider_code::near_intents::NearIntentsProvider;
-pub use crate::compiled_provider_code::nordstern::NordsternRouteProvider;
 pub use crate::compiled_provider_code::symbiosis::SymbiosisRouteProvider;
-pub use crate::compiled_provider_code::velora::VeloraRouteProvider;
 
 pub(crate) const DEFAULT_INTENTS_URL: &str = "https://1click.chaindefuser.com";
 pub(crate) const DEFAULT_SLIPPAGE_BPS: u32 = 100;
