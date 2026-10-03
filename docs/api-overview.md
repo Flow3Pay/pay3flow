@@ -89,10 +89,20 @@ GET  /api/providers
 GET  /api/exchange-pairs
 GET  /api/p2p/search
 GET  /api/p2p/routes
+POST /api/routes/instruction-open
+POST /api/service-executions/open
 ```
 
 The payment and acquiring routes are retained for compatibility. New exchange
 clients should use the exchange order API.
+
+`/api/routes/instruction-open` accepts `{ "anonymous_id": "<browser UUID>",
+"instruction_token": "<signed token from instruction_tokens[route_id]>" }`.
+The click is queued for anonymous Redis deduplication and aggregate persistence;
+the response is `{ "accepted": true }`. `/api/service-executions/open` accepts
+the existing `anonymous_id` and `tracking_token` body and returns the redirect
+URL. New link opens are aggregated without writing browser IDs to the
+`service_executions` table.
 
 ## Admin and debugging routes
 

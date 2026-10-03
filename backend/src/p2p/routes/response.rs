@@ -7,10 +7,11 @@ pub(in crate::p2p) fn response_snapshot(
     routes: &HashMap<String, P2pRoute>,
     asset_statuses: &[RouteAssetStatus],
     provider_statuses: &HashMap<String, SourceStatus>,
+    engagement_scores: &HashMap<String, f64>,
 ) -> P2pRouteSearchResponse {
     let routes_found = routes.len();
     let mut visible_routes = routes.values().cloned().collect::<Vec<_>>();
-    sort_routes(&mut visible_routes);
+    sort_routes_with_scores(&mut visible_routes, engagement_scores);
     truncate_routes_preserving_providers(&mut visible_routes, query.limit);
     for (index, route) in visible_routes.iter_mut().enumerate() {
         route.rank = index + 1;
@@ -29,6 +30,7 @@ pub(in crate::p2p) fn response_snapshot(
         assets_searched: query.assets.clone(),
         can_exchange_to_target: routes_found > 0,
         routes: visible_routes,
+        instruction_tokens: HashMap::new(),
         asset_statuses: asset_statuses.to_vec(),
         provider_statuses,
         source: source.into(),
@@ -127,6 +129,46 @@ pub(in crate::p2p) fn sort_routes(routes: &mut [P2pRoute]) {
     routes.sort_by(|left, right| {
         route_target(right)
             .partial_cmp(&route_target(left))
+            .unwrap_or(Ordering::Equal)
+            .then_with(|| {
+                right
+                    .payment_methods_verified
+                    .cmp(&left.payment_methods_verified)
+            })
+            .then_with(|| right.same_venue.cmp(&left.same_venue))
+            .then_with(|| left.route_id.cmp(&right.route_id))
+    });
+}
+
+pub(in crate::p2p) fn sort_routes_with_scores(
+    routes: &mut [P2pRoute],
+    scores: &HashMap<String, f64>,
+) {
+    if scores.is_empty() {
+        sort_routes(routes);
+        return;
+    }
+    let adjusted = |route: &P2pRoute| {
+        let providers = route_provider_names(route);
+        let average = if providers.is_empty() {
+            0.0
+        } else {
+            providers
+                .iter()
+                .map(|provider| {
+                    scores
+                        .get(&provider.to_ascii_lowercase())
+                        .copied()
+                        .unwrap_or(0.0)
+                })
+                .sum::<f64>()
+                / providers.len() as f64
+        };
+        route_target(route) * (1.0 + average.clamp(0.0, 1.0) * 0.02)
+    };
+    routes.sort_by(|left, right| {
+        adjusted(right)
+            .partial_cmp(&adjusted(left))
             .unwrap_or(Ordering::Equal)
             .then_with(|| {
                 right

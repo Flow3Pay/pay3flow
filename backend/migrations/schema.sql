@@ -120,6 +120,21 @@ CREATE TABLE IF NOT EXISTS route_votes (
 CREATE INDEX IF NOT EXISTS route_votes_route_idx
     ON route_votes (route_id);
 
+-- Aggregate interaction signals. Browser identifiers live only in short-lived
+-- Redis deduplication keys and never enter these durable tables.
+CREATE TABLE IF NOT EXISTS provider_engagement (
+    slug TEXT PRIMARY KEY,
+    instruction_opens BIGINT NOT NULL DEFAULT 0 CHECK (instruction_opens >= 0),
+    link_opens BIGINT NOT NULL DEFAULT 0 CHECK (link_opens >= 0),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Makes retrying a Redis-to-Postgres flush safe after a worker crash.
+CREATE TABLE IF NOT EXISTS provider_engagement_flushes (
+    batch_key TEXT PRIMARY KEY,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS activitypub_deliveries (
     activity_id TEXT NOT NULL,
     target TEXT NOT NULL,

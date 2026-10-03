@@ -137,6 +137,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/p2p/search", get(p2p::search))
         .route("/api/p2p/routes", get(p2p::routes))
         .route("/api/service-executions/open", post(p2p::open_execution))
+        .route("/api/routes/instruction-open", post(p2p::open_instruction))
         .route("/api/services/:id/vote", put(p2p::set_vote))
         .route("/api/routes/:route_id/vote", put(p2p::set_route_vote))
         .route("/api/admin/banks", post(banks::admin_create))

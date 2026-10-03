@@ -81,15 +81,18 @@ impl P2pSearchService {
                     let source_amount = query.source_amount;
                     let target_payment_method = query.target_payment_method.clone();
                     let quote_semaphore = self.quote_semaphore.clone();
+                    let service = self.clone();
                     searches.push(async move {
-                        quote_provider(
-                            provider,
-                            source,
-                            intermediary,
-                            amount,
-                            quote_semaphore,
-                        )
-                        .await
+                        let quote = if service.background_offers.is_some() {
+                            service
+                                .indicative_provider_quotes(provider.name(), &source, &intermediary, &amount)
+                                .into_iter()
+                                .next()
+                                .map(|quote| (provider.name().to_string(), quote))
+                        } else {
+                            quote_provider(provider, source, intermediary, amount, quote_semaphore).await
+                        };
+                        quote
                         .into_iter()
                         .flat_map(|(provider, quote)| {
                         let source_currency = source_currency.clone();
@@ -362,6 +365,42 @@ impl P2pSearchService {
                         job.exit_offers,
                         true,
                     ));
+                } else if self.background_offers.is_some() {
+                    if let Some(quote) = self
+                        .indicative_provider_quotes(&provider_name, &job.from, &job.to, &job.amount)
+                        .into_iter()
+                        .next()
+                    {
+                        quote_results.push((
+                            provider_name,
+                            quote,
+                            job.entry_offer,
+                            job.exit_offers,
+                            true,
+                        ));
+                    } else {
+                        let output = Amount::new(job.amount.value.clone(), job.to.clone())
+                            .expect("provider quote job contains a validated amount");
+                        quote_results.push((
+                            provider_name.clone(),
+                            PublicRouteQuote {
+                                provider: provider_name,
+                                quote_id: None,
+                                description: Some("capability snapshot estimate".into()),
+                                source_url: None,
+                                from: job.from.clone(),
+                                to: job.to.clone(),
+                                input: job.amount.clone(),
+                                output,
+                                fees: Vec::new(),
+                                expires_at: None,
+                                path: vec![job.from, job.to],
+                            },
+                            job.entry_offer,
+                            job.exit_offers,
+                            false,
+                        ));
+                    }
                 } else if !self.has_fmatch_backend() {
                     if let Some((provider_name, quote)) = quote_provider(
                         job.provider,

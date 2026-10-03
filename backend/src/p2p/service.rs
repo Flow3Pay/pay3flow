@@ -21,6 +21,7 @@ use crate::config::Config;
 use crate::core::redis::RedisPool;
 use crate::db::DbPool;
 use crate::networks::NetworkCatalog;
+use crate::p2p::background::BackgroundOfferStore;
 use crate::p2p::declarative::{DeclarativeMarketSource, DeclarativeP2pSource};
 pub(crate) use crate::p2p::models::P2pOfferMarket;
 pub(crate) use crate::p2p::models::{
@@ -34,7 +35,7 @@ const DEFAULT_LIMIT: usize = 20;
 const MAX_LIMIT: usize = 100;
 
 impl P2pSearchQuery {
-    fn normalize(mut self) -> Result<Self> {
+    pub(in crate::p2p) fn normalize(mut self) -> Result<Self> {
         self.fiat = normalized_code(&self.fiat, "fiat")?;
         self.asset = normalized_code(&self.asset, "asset")?;
         if self
@@ -283,15 +284,20 @@ pub struct P2pSearchService {
     pub(in crate::p2p) cache_ttl: Duration,
     cache: Arc<RwLock<HashMap<String, CachedSearch>>>,
     pub(in crate::p2p) route_cache_redis: Option<RedisPool>,
+    pub(in crate::p2p) background_offers: Option<Arc<BackgroundOfferStore>>,
+    pub(in crate::p2p) engagement_scores: Arc<parking_lot::RwLock<HashMap<String, f64>>>,
     sources: Arc<[Arc<dyn P2pSource>]>,
     payment_method_aliases: Arc<HashMap<String, BTreeMap<String, Vec<String>>>>,
-    market_sources: Arc<[Arc<dyn CryptoMarketSource>]>,
+    pub(in crate::p2p) market_sources: Arc<[Arc<dyn CryptoMarketSource>]>,
+    pub(in crate::p2p) market_tickers_cache: Arc<RwLock<HashMap<String, Vec<CryptoTicker>>>>,
     pub(crate) default_assets: Arc<[String]>,
     pub(crate) networks: NetworkCatalog,
     pub(crate) route_providers: Arc<[Arc<dyn PublicRouteProvider>]>,
     pub(crate) fiat_route_providers: Arc<[Arc<dyn PublicFiatRouteProvider>]>,
     pub(crate) quote_semaphore: Arc<Semaphore>,
     pub(crate) provider_quote_cache: Arc<RwLock<HashMap<String, CachedProviderQuote>>>,
+    pub(in crate::p2p) provider_quote_snapshots:
+        Arc<RwLock<HashMap<String, (Instant, Vec<PublicRouteQuote>)>>>,
     pub(crate) fiat_quote_cache: Arc<RwLock<HashMap<String, CachedFiatQuote>>>,
     pub(crate) quote_refreshes: Arc<Mutex<HashSet<String>>>,
     pub(crate) provider_capabilities_cache: Arc<RwLock<Option<ProviderCapabilitiesSnapshot>>>,
@@ -416,6 +422,7 @@ impl P2pSearchService {
         redis: Option<&RedisPool>,
     ) -> Result<Self> {
         let records = crate::providers::adapters(pool).await?;
+        let background_targets = BackgroundOfferStore::targets(config, &records);
         let mut service = Self::from_provider_records(
             config,
             networks,
@@ -432,6 +439,7 @@ impl P2pSearchService {
             stale_window: Duration::from_secs(config.p2p_fmatch_stale_secs),
             answer_ttl: Duration::from_millis(config.p2p_search_cache_ttl_ms.max(1)),
         });
+        service.start_background_offer_refresh(background_targets, redis.cloned());
         service.warm_provider_capabilities();
         Ok(service)
     }
@@ -509,15 +517,19 @@ impl P2pSearchService {
             cache_ttl: Duration::from_millis(config.p2p_search_cache_ttl_ms.min(60_000)),
             cache: Arc::new(RwLock::new(HashMap::new())),
             route_cache_redis: redis,
+            background_offers: None,
+            engagement_scores: Arc::new(parking_lot::RwLock::new(HashMap::new())),
             sources: sources.into(),
             payment_method_aliases: Arc::new(payment_method_aliases),
             market_sources: market_sources.into(),
+            market_tickers_cache: Arc::new(RwLock::new(HashMap::new())),
             default_assets: default_assets.into(),
             networks,
             route_providers: route_providers.into(),
             fiat_route_providers: fiat_route_providers.into(),
             quote_semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_PROVIDER_QUOTES)),
             provider_quote_cache: Arc::new(RwLock::new(HashMap::new())),
+            provider_quote_snapshots: Arc::new(RwLock::new(HashMap::new())),
             fiat_quote_cache: Arc::new(RwLock::new(HashMap::new())),
             quote_refreshes: Arc::new(Mutex::new(HashSet::new())),
             provider_capabilities_cache: Arc::new(RwLock::new(None)),
@@ -534,9 +546,12 @@ impl P2pSearchService {
             cache_ttl: Duration::ZERO,
             cache: Arc::new(RwLock::new(HashMap::new())),
             route_cache_redis: None,
+            background_offers: None,
+            engagement_scores: Arc::new(parking_lot::RwLock::new(HashMap::new())),
             sources: sources.into(),
             payment_method_aliases: Arc::new(HashMap::new()),
             market_sources: Vec::new().into(),
+            market_tickers_cache: Arc::new(RwLock::new(HashMap::new())),
             latency_tracker: Arc::new(crate::p2p::latency::ProviderLatencyTracker::new()),
             default_assets: vec![
                 "USDT".into(),
@@ -570,11 +585,19 @@ impl P2pSearchService {
             fiat_route_providers: Vec::new().into(),
             quote_semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_PROVIDER_QUOTES)),
             provider_quote_cache: Arc::new(RwLock::new(HashMap::new())),
+            provider_quote_snapshots: Arc::new(RwLock::new(HashMap::new())),
             fiat_quote_cache: Arc::new(RwLock::new(HashMap::new())),
             quote_refreshes: Arc::new(Mutex::new(HashSet::new())),
             provider_capabilities_cache: Arc::new(RwLock::new(None)),
             fmatch: None,
         }
+    }
+
+    pub fn set_engagement_scores(
+        &mut self,
+        scores: Arc<parking_lot::RwLock<HashMap<String, f64>>>,
+    ) {
+        self.engagement_scores = scores;
     }
 
     #[cfg(test)]
@@ -641,6 +664,9 @@ impl P2pSearchService {
     }
 
     pub async fn search(&self, query: P2pSearchQuery) -> Result<P2pSearchResponse> {
+        if self.background_offers.is_some() {
+            return self.search_background_offers(query, None).await;
+        }
         self.run_search(query, None, None).await
     }
 
@@ -649,6 +675,9 @@ impl P2pSearchService {
         query: P2pSearchQuery,
         market: Option<P2pOfferMarket>,
     ) -> Result<P2pSearchResponse> {
+        if self.background_offers.is_some() {
+            return self.search_background_offers(query, market).await;
+        }
         if self.fmatch.is_some() {
             if market.is_none() {
                 return self.search_all_fmatch_markets(query, None).await;
@@ -664,6 +693,11 @@ impl P2pSearchService {
         updates: mpsc::Sender<P2pSearchResponse>,
         market: Option<P2pOfferMarket>,
     ) -> Result<P2pSearchResponse> {
+        if self.background_offers.is_some() {
+            let response = self.search_background_offers(query, market).await?;
+            let _ = updates.send(response.clone()).await;
+            return Ok(response);
+        }
         if self.fmatch.is_some() {
             if market.is_none() {
                 return self.search_all_fmatch_markets(query, Some(&updates)).await;
@@ -739,7 +773,7 @@ impl P2pSearchService {
             .ok_or_else(|| anyhow::anyhow!("Fmatch market search returned no response"))
     }
 
-    async fn search_fmatch_market(
+    pub(in crate::p2p) async fn search_fmatch_market(
         &self,
         query: P2pSearchQuery,
         market: Option<P2pOfferMarket>,
@@ -933,7 +967,7 @@ impl P2pSearchService {
         Ok(response)
     }
 
-    async fn run_search_once(
+    pub(in crate::p2p) async fn run_search_once(
         &self,
         query: P2pSearchQuery,
         updates: Option<mpsc::Sender<P2pSearchResponse>>,
@@ -1134,6 +1168,24 @@ impl P2pSearchService {
         requested_sources: Option<&str>,
         updates: mpsc::Sender<(String, Result<Vec<CryptoTicker>>)>,
     ) {
+        if self.background_offers.is_some() {
+            let snapshots = self
+                .market_tickers_cache
+                .read()
+                .ok()
+                .map(|cache| cache.clone())
+                .unwrap_or_default();
+            for (name, tickers) in snapshots {
+                if requested_sources
+                    .is_none_or(|requested| requested.split(',').any(|source| source == name))
+                {
+                    if updates.send((name, Ok(tickers))).await.is_err() {
+                        return;
+                    }
+                }
+            }
+            return;
+        }
         let mut searches = self
             .market_sources
             .iter()
@@ -1167,7 +1219,7 @@ fn no_source_returned_offers(response: &P2pSearchResponse) -> bool {
         .all(|source| source.offers_found == 0)
 }
 
-fn build_search_response(
+pub(in crate::p2p) fn build_search_response(
     query: P2pSearchQuery,
     collected_offers: &[P2pOffer],
     sources: Vec<SourceStatus>,
@@ -1195,7 +1247,7 @@ fn build_search_response(
     }
 }
 
-fn merge_market_responses(
+pub(in crate::p2p) fn merge_market_responses(
     query: P2pSearchQuery,
     p2p: P2pSearchResponse,
     direct: P2pSearchResponse,

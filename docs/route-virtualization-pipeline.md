@@ -9,7 +9,7 @@ Orchestration и алгоритмы находятся в
 обвязка — в
 [`backend/src/server/routing/p2p.rs`](../backend/src/server/routing/p2p.rs).
 
-Статус: реализовано в текущей ветке. Актуализировано 2026-10-01.
+Статус: реализовано в текущей ветке. Актуализировано 2026-10-03.
 
 ## Назначение и границы
 
@@ -310,17 +310,17 @@ entry: source fiat -> asset, side=buy
 exit:  asset -> target fiat, side=sell
 ```
 
-Entry и exit одного актива выполняются через `tokio::join!`, а разные assets —
-через `FuturesUnordered`. Поэтому время не складывается последовательно по
-числу активов.
+Запрос читает подготовленные фоновые snapshots entry и exit. Локальная
+композиция одного актива выполняется параллельно с другими assets через
+`FuturesUnordered`; внешний Fmatch не находится в обработке запроса.
 
 ### Режимы рынка
 
 - `exchange_mode=p2p` запрашивает только P2P-офферы;
 - `exchange_mode=exchanger` запрашивает только direct-exchange офферы и
   разрешает provider workflows;
-- `exchange_mode=all` конкурентно делает две независимые Fmatch-партиции:
-  `market=p2p` и `market=direct_exchange`, затем объединяет их.
+- `exchange_mode=all` объединяет подготовленные фоновые snapshots двух
+  Fmatch-партиций: `market=p2p` и `market=direct_exchange`.
 
 Разделение `all` принципиально: плотная выдача Binance/Bybit не может вытеснить
 редкий direct-оффер Whitebird ещё на странице Fmatch.
@@ -332,26 +332,28 @@ Entry и exit одного актива выполняются через `tokio
 
 ### Кэши и fallback
 
-Порядок получения leg snapshot:
+Фоновая задача запускает первый прогон при старте приложения. Далее каждый
+P2P-ключ обновляется через 60 секунд без спроса, через 30 секунд при обычном
+спросе и через 15 секунд при высоком спросе. Direct-exchange и spot snapshots
+обновляются через пять минут. Внутри фонового прогона применяется порядок:
 
-1. короткий in-memory cache; TTL задаётся `p2p_search_cache_ttl_ms`, production
-   default — 15 секунд;
-2. свежий запрос Fmatch;
+1. краткий Fmatch memory cache;
+2. новый ответ Fmatch;
 3. PostgreSQL-кэш Fmatch в пределах `p2p_fmatch_stale_secs`;
-4. live provider fallback, если Fmatch и допустимый stale snapshot недоступны.
+4. provider fallback, если Fmatch и допустимый stale snapshot недоступны.
 
 Успешный ответ Fmatch немедленно попадает в memory cache, а его запись в
-PostgreSQL выполняется best-effort в фоне. Поэтому provider-workflow фаза
-переиспользует те же entry/exit legs и не повторяет сетевой roundtrip.
+PostgreSQL выполняется best-effort в фоне. В пользовательском запросе leg
+берётся из памяти или общего Redis snapshot; для нового ключа ожидание первого
+snapshot ограничено двумя секундами.
 
 Завершённый результат поиска маршрутов также хранится до 15 секунд в Redis по
 нормализованным параметрам запроса. Ключ общий для всех пользователей: их
 оценки, голоса и ссылки добавляются отдельно после чтения из кэша. Если срок
 действия котировки меньше, запись живёт не дольше котировки.
 
-Нормальный production critical path использует пункты 1–2. Пункт 4 — режим
-деградации ради доступности; поскольку он обращается к внешним адаптерам, при
-аварии Fmatch секундный SLO для него не гарантируется. Ответ явно маркируется
+Даже при аварии Fmatch provider fallback выполняется фоновой задачей, а
+пользователь получает последний допустимый snapshot. Ответ явно маркируется
 `source: "provider_fallback"`.
 
 ## 5. Локальная виртуализация fiat → fiat
@@ -448,28 +450,26 @@ sort accepted candidates by target amount descending
 
 ### Quote cache hit
 
-Live quote хранится 30 секунд и дополнительно проверяется по `expires_at`.
-Свежая quote даёт provider path, фактический output, fees, quote id и expiry.
-Даже такая quote должна быть подтверждена перед исполнением.
+Если точная quote уже есть в кратком cache и ещё не истекла, она даёт provider
+path, output, fees, quote id и expiry. Фоновый опрос дополнительно поддерживает
+ориентировочную quote для пары активов. Её output масштабируется на сумму
+запроса, а quote id и expiry убираются: перед исполнением провайдер должен
+подтвердить текущие условия.
 
 ### Quote cache miss
 
-В production с Fmatch cache miss не блокирует поиск:
+В production miss конкретной котировки не блокирует поиск:
 
 - немедленно строится capability-based estimate;
 - input нормализуется до шести десятичных знаков;
 - estimate использует тот же asset amount на выходе и явно не заявляет
   неизвестные provider fees;
 - route получает предупреждение, что live output нужно подтвердить;
-- до восьми refresh-задач на поиск запускаются в фоне.
+- фоновый опрос providers обновляет ориентировочные quote snapshots раз в пять
+  минут; точный quote id не используется для пересчитанной суммы.
 
-Background refresh:
-
-- дедуплицируется по provider/from/to/amount;
-- использует общий semaphore на 16 внешних quotes;
-- permit берётся через `try_acquire_owned`, поэтому задача не ждёт в очереди;
-- внешний вызов имеет 12-секундный timeout, но он находится вне critical path;
-- успешный ответ обновляет 30-секундный quote cache.
+Фоновый опрос ограничен semaphore и 12-секундным timeout отдельной quote.
+Успешные ответы попадают в локальный snapshot, с которым работает composer.
 
 Число workflow-маршрутов ограничено минимумом, достаточным для provider
 diversity: `max(ceil(limit / 2), provider_count)`. Этот поиск всегда помечает
@@ -518,7 +518,7 @@ payment methods, market path и route provider. Если fingerprint совпа�
   `routes_found` нельзя трактовать как полную мощность пространства;
 - `source=fmatch` — legs получены из свежего Fmatch/memory snapshot;
 - `source=database_cache`, `stale=true` — использован допустимый stale snapshot;
-- `source=provider_fallback` — Fmatch path деградировал до live adapters;
+- `source=provider_fallback` — фоновый Fmatch path деградировал до adapters;
 - `route_provider` относится к BestChange/Symbiosis/etc., но никогда к Fmatch.
 
 ## 12. Почему время не зависит от полного числа комбинаций

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { afterUpdate, onMount, onDestroy } from "svelte";
-  import { fetchCorridors, fetchP2pRoutes, fetchProviders, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderAffiliate, type ProviderDefinition, type ProviderGuidance, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote, type VenueSearchStatus } from "$lib/exchange";
+  import { fetchCorridors, fetchP2pRoutes, fetchProviders, recordInstructionOpen, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderAffiliate, type ProviderDefinition, type ProviderGuidance, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote, type VenueSearchStatus } from "$lib/exchange";
   import { FALLBACK_NETWORK, fetchNetworks, type CryptoNetwork } from "$lib/networks";
   import { assetIcon, networkIcon, swapIcon, venueIcon } from "$lib/icons";
   import { fetchPaymentMethods, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
@@ -237,7 +237,7 @@
         entry_offer_url: entryOffer?.source_url, entry_offer_is_exact: entryOffer?.source_url_is_exact, entry_offer_ad_id: entryOffer?.ad_id,
         exit_offer_url: exitOffer?.source_url, exit_offer_is_exact: exitOffer?.source_url_is_exact, exit_offer_ad_id: exitOffer?.ad_id,
         entry_offer_snapshot: entryOffer, exit_offer_snapshot: exitOffer, warnings: route.warnings,
-        services: route.services, reputation: route.reputation, feedback: route.feedback ?? { likes_total: 0, dislikes_total: 0 }, service_links: route.service_links,
+        services: route.services, reputation: route.reputation, feedback: route.feedback ?? { likes_total: 0, dislikes_total: 0 }, service_links: route.service_links, instruction_token: route.route_id ? response.instruction_tokens?.[route.route_id] : undefined,
         legs,
       };
     });
@@ -568,6 +568,9 @@
   }
   async function openInstructions(route: RouteCandidate) {
     instructionsRoute = route;
+    if (anonymousId && route.instruction_token) {
+      void recordInstructionOpen(anonymousId, route.instruction_token).catch(() => {});
+    }
     routeInstructionsComponent ??= (await import("./RouteInstructions.svelte")).default;
   }
 

@@ -16,12 +16,12 @@ money.
 
 Providerfile-backed sources are discovered from the generated provider catalog;
 the list is not hardcoded in the route API. Their normalized advertisements are
-published as FEP-0837 offers to the configured Fmatch actor. The route endpoint
-queries Fmatch for matching offers and uses the existing local composer to build
+published as FEP-0837 offers to the configured Fmatch actor. A background worker
+queries Fmatch for matching offers; the route endpoint uses its last snapshot to build
 complete routes. Other venues from the research list remain outside the live
 path until a legitimate read-only interface and adapter review exist.
 
-Provider refreshes still query the public adapters concurrently so their latest
+Background refreshes query the public adapters concurrently so their latest
 offers can be published. One provider response is published as bounded
 ActivityPub `OrderedCollection` batches of up to 64 offers, allowing Fmatch to
 refresh its read snapshot once per batch instead of once per advertisement.
@@ -31,10 +31,9 @@ the newest answer within `p2p_fmatch_stale_secs` is used and the response has
 `source: "database_cache"` and `stale: true`. A live Fmatch answer has
 `source: "fmatch"`. Empty Fmatch replies and empty cached answers are not
 considered usable. If neither Fmatch nor the bounded-stale database cache can
-provide offers, Pay3Flow queries its live providers and returns
+provide offers, the background worker queries its live providers and stores
 `source: "provider_fallback"` with the Fmatch rejection recorded in
-`sources`; streaming searches forward each provider result as soon as it
-arrives instead of waiting for the complete fallback fan-out. Provider-only
+`sources`. Provider-only
 local searches retain `source: "provider"`.
 Route-search snapshots use the same source labels and mark `stale: true` only
 when results actually came from the bounded-stale database cache.
@@ -47,8 +46,14 @@ direct source such as Whitebird before local route composition. See
 complete runtime pipeline, lazy top-K algorithm, provider snapshots, caches,
 and background quote refresh.
 
-Streaming searches publish each market partition as it becomes available and
-merge later results into the same leg. Fiat workflow legs for different assets
+At startup the first background pass starts immediately. P2P partitions refresh
+every 60 seconds when idle, 30 seconds when used, and 15 seconds at high demand.
+Direct exchanger partitions, spot tickers, public provider rates, and direct
+fiat quotes refresh in the background on a five-minute cadence. Offer and spot
+snapshots are shared through Redis. A new corridor can wait up to two seconds
+for its first snapshot; until then its response reports `background_pending`.
+Streaming searches publish cached market partitions as they become available.
+Fiat workflow legs for different assets
 also run concurrently, so a slow or unsupported asset does not hold back routes
 from another asset. A provider scan that returns no raw offers is not repeated
 with looser local filters.
@@ -116,7 +121,8 @@ It then:
 3. calculates the acquired asset amount and checks entry liquidity;
 4. calculates the RUB output and checks the exit advertisement limits and
    liquidity;
-5. returns complete routes ranked by maximum estimated RUB output, then
+5. returns complete routes ranked by estimated RUB output with a capped
+   provider engagement bonus (up to 2%), then
    verified payment methods and same-venue execution.
 
 The optional `sources` parameter limits both legs to a comma-separated list of
@@ -164,9 +170,25 @@ in `backend/providers/*/Providerfile`. Regenerate the provider migration and
 rebuild after changing one; see [`../Providerfile.md`](../Providerfile.md).
 
 Fmatch offer publication is best-effort. A provider refresh is retained locally
-when Lefine is unavailable. Public route discovery prefers a live Fmatch answer,
+when Lefine is unavailable. Background discovery prefers a live Fmatch answer,
 then a bounded-stale PostgreSQL answer, and finally fans out to the configured
-live providers so an empty Fmatch catalog does not make route search unavailable.
+providers so an empty Fmatch catalog does not make route search unavailable.
+
+## Anonymous engagement
+
+Every route response contains `instruction_tokens[route_id]`. The frontend sends
+the token and browser-generated `anonymous_id` to
+`POST /api/routes/instruction-open` when instructions open. Provider links use
+the signed token at `POST /api/service-executions/open`. The ID is used for
+30-minute Redis deduplication and is not saved with new click aggregates in
+PostgreSQL. Redis groups accepted opens by provider and minute. Repeated opens
+of the same route action are ignored. If one browser ID produces more than 12
+distinct actions of one kind in a session, Redis removes that session's actions
+after its first one before any affected bucket reaches PostgreSQL. A background
+worker flushes completed buckets after the session window with retry-safe batch
+IDs. Likes, dislikes, instruction opens and link opens feed the provider score,
+recalculated every minute including accepted actions still pending in Redis.
+The score adjusts rankings only when estimated payouts are close.
 
 Run the opt-in live smoke test:
 

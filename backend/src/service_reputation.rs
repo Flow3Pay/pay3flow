@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
@@ -6,7 +7,11 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
+use crate::core::redis::RedisPool;
 use crate::db::DbPool;
+
+mod engagement;
+use engagement::{EngagementKind, EngagementMetrics};
 
 const TRACKING_TOKEN_TTL_SECS: u64 = 30 * 60;
 
@@ -118,9 +123,19 @@ pub struct ExecutionOpen {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct TrackingClaims {
     service_id: Uuid,
+    #[serde(default)]
+    service_slug: String,
     search_id: Uuid,
     route_id: String,
     destination_url: String,
+    exp: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct InstructionClaims {
+    search_id: Uuid,
+    route_id: String,
+    services: Vec<String>,
     exp: u64,
 }
 
@@ -129,6 +144,7 @@ pub struct ServiceReputation {
     pool: DbPool,
     encode_key: EncodingKey,
     decode_key: DecodingKey,
+    engagement: Option<Arc<EngagementMetrics>>,
 }
 
 impl ServiceReputation {
@@ -137,7 +153,18 @@ impl ServiceReputation {
             pool,
             encode_key: EncodingKey::from_secret(secret.as_bytes()),
             decode_key: DecodingKey::from_secret(secret.as_bytes()),
+            engagement: None,
         }
+    }
+
+    pub fn with_engagement(mut self, redis: Option<RedisPool>, secret: &str) -> Self {
+        self.engagement =
+            redis.map(|redis| EngagementMetrics::new(self.pool.clone(), redis, secret.as_bytes()));
+        self
+    }
+
+    pub fn engagement_scores(&self) -> Option<Arc<parking_lot::RwLock<HashMap<String, f64>>>> {
+        self.engagement.as_ref().map(|metrics| metrics.scores())
     }
 
     pub async fn start_search(&self, search_id: Uuid) -> Result<(), ReputationError> {
@@ -268,6 +295,7 @@ GROUP BY requested.route_id, viewer.vote
     pub fn tracking_token(
         &self,
         service_id: Uuid,
+        service_slug: &str,
         search_id: Uuid,
         route_id: &str,
         destination_url: &str,
@@ -277,6 +305,7 @@ GROUP BY requested.route_id, viewer.vote
         }
         let claims = TrackingClaims {
             service_id,
+            service_slug: service_slug.to_string(),
             search_id,
             route_id: route_id.to_string(),
             destination_url: destination_url.to_string(),
@@ -284,6 +313,48 @@ GROUP BY requested.route_id, viewer.vote
         };
         encode(&Header::new(Algorithm::HS256), &claims, &self.encode_key)
             .map_err(|_| ReputationError::InvalidTrackingToken)
+    }
+
+    pub fn instruction_token(
+        &self,
+        search_id: Uuid,
+        route_id: &str,
+        services: Vec<String>,
+    ) -> Result<String, ReputationError> {
+        encode(
+            &Header::new(Algorithm::HS256),
+            &InstructionClaims {
+                search_id,
+                route_id: route_id.to_string(),
+                services,
+                exp: now_secs().saturating_add(TRACKING_TOKEN_TTL_SECS),
+            },
+            &self.encode_key,
+        )
+        .map_err(|_| ReputationError::InvalidTrackingToken)
+    }
+
+    pub fn record_instruction_open(
+        &self,
+        token: &str,
+        anonymous_id: Uuid,
+    ) -> Result<(), ReputationError> {
+        let claims = decode::<InstructionClaims>(
+            token,
+            &self.decode_key,
+            &Validation::new(Algorithm::HS256),
+        )
+        .map_err(|_| ReputationError::InvalidTrackingToken)?
+        .claims;
+        if let Some(metrics) = &self.engagement {
+            metrics.record(
+                anonymous_id,
+                EngagementKind::Instruction,
+                format!("{}:{}", claims.search_id, claims.route_id),
+                claims.services,
+            );
+        }
+        Ok(())
     }
 
     pub async fn record_execution(
@@ -296,59 +367,8 @@ GROUP BY requested.route_id, viewer.vote
                 .map_err(|_| ReputationError::InvalidTrackingToken)?
                 .claims;
 
-        let mut client = self.pool.get().await?;
-        let transaction = client.transaction().await?;
-        let inserted = transaction
-            .query_opt(
-                r#"
-INSERT INTO service_executions
-    (service_id, search_id, route_id, anonymous_id, status)
-VALUES ($1, $2, $3, $4, 'started')
-ON CONFLICT (anonymous_id, service_id, search_id, route_id) DO NOTHING
-RETURNING id
-"#,
-                &[
-                    &claims.service_id,
-                    &claims.search_id,
-                    &claims.route_id,
-                    &anonymous_id,
-                ],
-            )
-            .await?;
-        let (execution_id, newly_recorded) = match inserted {
-            Some(row) => {
-                transaction
-                    .execute(
-                        r#"
-UPDATE services
-SET executions_total = executions_total + 1, updated_at = now()
-WHERE id = $1
-"#,
-                        &[&claims.service_id],
-                    )
-                    .await?;
-                (row.get(0), true)
-            }
-            None => {
-                let row = transaction
-                    .query_opt(
-                        r#"
-SELECT id FROM service_executions
-WHERE anonymous_id = $1 AND service_id = $2 AND search_id = $3 AND route_id = $4
-"#,
-                        &[
-                            &anonymous_id,
-                            &claims.service_id,
-                            &claims.search_id,
-                            &claims.route_id,
-                        ],
-                    )
-                    .await?
-                    .ok_or_else(|| anyhow::anyhow!("execution conflict winner was not found"))?;
-                (row.get(0), false)
-            }
-        };
-        let row = transaction
+        let client = self.pool.get().await?;
+        let row = client
             .query_opt(
                 r#"
 SELECT s.id, s.slug, s.display_name, s.executions_total, s.likes_total,
@@ -363,11 +383,24 @@ WHERE s.id = $1
             .await?
             .ok_or(ReputationError::ServiceNotFound)?;
         let service = row_to_stats(row);
-        transaction.commit().await?;
+
+        if let Some(metrics) = &self.engagement {
+            if !claims.service_slug.is_empty() {
+                metrics.record(
+                    anonymous_id,
+                    EngagementKind::Link,
+                    format!(
+                        "{}:{}:{}",
+                        claims.search_id, claims.route_id, claims.service_slug
+                    ),
+                    vec![claims.service_slug],
+                );
+            }
+        }
 
         Ok(ExecutionOpen {
-            execution_id,
-            newly_recorded,
+            execution_id: Uuid::new_v4(),
+            newly_recorded: true,
             redirect_url: claims.destination_url,
             service,
         })

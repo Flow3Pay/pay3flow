@@ -59,8 +59,16 @@ impl P2pSearchService {
             &provider_assets,
         )?;
         let route_cache_key = cache::route_cache_key(&query);
+        let engagement_scores = self.engagement_scores.read().clone();
         if let Some(key) = route_cache_key.as_deref() {
-            if let Some(response) = cache::cached_routes(self, key, search_id).await {
+            if let Some(mut response) = cache::cached_routes(self, key, search_id).await {
+                crate::p2p::routes::sort_routes_with_scores(
+                    &mut response.routes,
+                    &engagement_scores,
+                );
+                for (index, route) in response.routes.iter_mut().enumerate() {
+                    route.rank = index + 1;
+                }
                 publish_snapshot(updates.as_ref(), response.clone()).await;
                 return Ok(response);
             }
@@ -179,6 +187,7 @@ impl P2pSearchService {
                                 &routes,
                                 &asset_statuses,
                                 &provider_statuses,
+                                &engagement_scores,
                             ),
                         ).await;
                     }
@@ -197,6 +206,7 @@ impl P2pSearchService {
             &routes,
             &asset_statuses,
             &provider_statuses,
+            &engagement_scores,
         );
         response.routes_exhaustive &= routes_exhaustive;
         if let Some(key) = route_cache_key.as_deref() {

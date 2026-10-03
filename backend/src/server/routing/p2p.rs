@@ -40,6 +40,13 @@ pub struct OpenExecutionRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct InstructionOpenRequest {
+    anonymous_id: Uuid,
+    instruction_token: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct VoteRequest {
     anonymous_id: Uuid,
     vote: VoteChoice,
@@ -272,6 +279,17 @@ pub async fn open_execution(
     Ok(Json(execution))
 }
 
+pub async fn open_instruction(
+    State(state): State<AppState>,
+    Json(request): Json<InstructionOpenRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    state
+        .reputation
+        .record_instruction_open(&request.instruction_token, request.anonymous_id)
+        .map_err(map_reputation_error)?;
+    Ok(Json(json!({"accepted": true})))
+}
+
 pub async fn set_vote(
     State(state): State<AppState>,
     Path(service_id): Path<Uuid>,
@@ -356,6 +374,13 @@ async fn enrich_routes_cached(
 
     for route in &mut response.routes {
         let route_slugs = route_service_slugs(route);
+        let instruction_token = state
+            .reputation
+            .instruction_token(response.search_id, &route.route_id, route_slugs.clone())
+            .map_err(map_reputation_error)?;
+        response
+            .instruction_tokens
+            .insert(route.route_id.clone(), instruction_token);
         route.services = route_slugs
             .iter()
             .filter_map(|slug| cache.stats.get(slug).cloned())
@@ -370,6 +395,9 @@ async fn enrich_routes_cached(
 
 fn route_service_slugs(route: &P2pRoute) -> Vec<String> {
     let mut slugs = Vec::new();
+    if let Some(provider) = &route.route_provider {
+        slugs.push(provider.to_ascii_lowercase());
+    }
     if let Some(entry) = &route.entry_offer {
         slugs.push(entry.source.to_ascii_lowercase());
     }
@@ -487,7 +515,13 @@ fn push_link(
     };
     let tracking_token = state
         .reputation
-        .tracking_token(service.id, search_id, &route.route_id, destination_url)
+        .tracking_token(
+            service.id,
+            &slug,
+            search_id,
+            &route.route_id,
+            destination_url,
+        )
         .map_err(map_reputation_error)?;
     links.push(ServiceLink {
         service_id: service.id,

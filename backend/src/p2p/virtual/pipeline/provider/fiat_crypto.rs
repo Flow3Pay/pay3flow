@@ -97,15 +97,18 @@ impl P2pSearchService {
                             let offer = offer.clone();
                             let query = query.clone();
                             let quote_semaphore = self.quote_semaphore.clone();
+                            let service = self.clone();
                             searches.push(async move {
-                                quote_provider(
-                                    provider,
-                                    intermediary,
-                                    target,
-                                    amount,
-                                    quote_semaphore,
-                                )
-                                .await
+                                let quote = if service.background_offers.is_some() {
+                                    service
+                                        .indicative_provider_quotes(provider.name(), &intermediary, &target, &amount)
+                                        .into_iter()
+                                        .next()
+                                        .map(|quote| (provider.name().to_string(), quote))
+                                } else {
+                                    quote_provider(provider, intermediary, target, amount, quote_semaphore).await
+                                };
+                                quote
                                 .into_iter()
                                 .filter_map(|(provider, quote)| {
                                     let output = quote.output.value.parse::<f64>().ok()?;

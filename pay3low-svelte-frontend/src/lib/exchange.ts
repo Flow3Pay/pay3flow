@@ -138,6 +138,7 @@ export interface RouteCandidate {
   reputation?: CombinedReputation;
   feedback?: RouteFeedback;
   service_links?: ServiceLink[];
+  instruction_token?: string;
 }
 
 export type ServiceVote = "like" | "dislike";
@@ -282,6 +283,7 @@ export interface P2pRouteSearchResponse {
   assets_searched: string[];
   can_exchange_to_target: boolean;
   routes: P2pRoute[];
+  instruction_tokens?: Record<string, string>;
   asset_statuses?: RouteAssetStatus[];
   provider_statuses?: SourceStatus[];
   source?: string;
@@ -543,6 +545,16 @@ export function recordServiceOpen(
   return request("/api/service-executions/open", {
     method: "POST",
     body: JSON.stringify({ anonymous_id: anonymousId, tracking_token: trackingToken }),
+  });
+}
+
+export function recordInstructionOpen(
+  anonymousId: string,
+  instructionToken: string,
+): Promise<{ accepted: boolean }> {
+  return request("/api/routes/instruction-open", {
+    method: "POST",
+    body: JSON.stringify({ anonymous_id: anonymousId, instruction_token: instructionToken }),
   });
 }
 

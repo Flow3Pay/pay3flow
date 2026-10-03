@@ -127,6 +127,26 @@ pub(super) async fn produce_direct_fiat_routes(
                     },
                 );
             }
+            if service.background_offers.is_some() {
+                let quote = service.indicative_fiat_quote(
+                    provider.name(),
+                    &query.source_currency,
+                    &query.target_currency,
+                    query.source_amount,
+                );
+                return (
+                    quote.clone(),
+                    SourceStatus {
+                        source: provider_name,
+                        ok: quote.is_some(),
+                        cached: true,
+                        latency_ms: started.elapsed().as_millis(),
+                        offers_found: usize::from(quote.is_some()),
+                        error: None,
+                        avg_latency_ms: None,
+                    },
+                );
+            }
             // Wait for this provider instead of only warming the cache in the
             // background. Fire-and-forget made the route invisible to the current
             // search, so it surfaced later as part of an unrelated batch.

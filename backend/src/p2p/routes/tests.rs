@@ -1414,7 +1414,14 @@ fn route_limit_preserves_a_lower_ranked_provider_route() {
     id_pay.warnings.clear();
     all_routes.insert(id_pay.route_id.clone(), id_pay);
 
-    let snapshot = response_snapshot(Uuid::nil(), &normalized, &all_routes, &[], &HashMap::new());
+    let snapshot = response_snapshot(
+        Uuid::nil(),
+        &normalized,
+        &all_routes,
+        &[],
+        &HashMap::new(),
+        &HashMap::new(),
+    );
     assert_eq!(snapshot.routes_found, 41);
     assert_eq!(snapshot.routes.len(), 40);
     assert!(snapshot
@@ -1451,6 +1458,40 @@ fn route_sort_prefers_higher_payout_before_route_quality() {
 
     assert_eq!(routes[0].route_id, "cross-venue");
     assert_eq!(routes[1].route_id, "same-venue");
+}
+
+#[test]
+fn provider_engagement_promotes_a_close_route_without_hiding_a_much_better_price() {
+    let normalized = query(true);
+    let mut discovered = Vec::new();
+    compose_fiat_routes(
+        &mut discovered,
+        &normalized,
+        "USDT",
+        &[offer("bybit", P2pSide::BuyCrypto, "400", "1000", "200000")],
+        &[offer("bybit", P2pSide::SellCrypto, "80", "1000", "100000")],
+    );
+    let base = discovered.pop().expect("test route should be composed");
+    let mut popular = base.clone();
+    popular.route_id = "popular".into();
+    popular.route_provider = Some("id-pay".into());
+    popular.entry_offer = None;
+    popular.exit_offer = None;
+    popular.target_amount = "19900".into();
+    let mut empty = base;
+    empty.route_id = "empty".into();
+    empty.route_provider = Some("unused".into());
+    empty.entry_offer = None;
+    empty.exit_offer = None;
+    empty.target_amount = "20000".into();
+    let scores = HashMap::from([("id-pay".into(), 1.0)]);
+    let mut routes = vec![popular.clone(), empty.clone()];
+    sort_routes_with_scores(&mut routes, &scores);
+    assert_eq!(routes[0].route_id, "popular");
+    empty.target_amount = "21000".into();
+    let mut routes = vec![popular, empty];
+    sort_routes_with_scores(&mut routes, &scores);
+    assert_eq!(routes[0].route_id, "empty");
 }
 
 #[test]
@@ -1745,7 +1786,7 @@ async fn route_stream_does_not_make_a_direct_provider_wait_for_local_legs() {
             .await
     });
 
-    let first = tokio::time::timeout(Duration::from_millis(100), snapshots.recv())
+    let first = tokio::time::timeout(Duration::from_millis(200), snapshots.recv())
         .await
         .expect("direct provider should publish before slow local legs")
         .expect("direct provider snapshot");

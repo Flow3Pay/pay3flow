@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::p2p::service::{P2pOffer, SourceStatus};
@@ -146,6 +147,8 @@ pub struct P2pRouteSearchResponse {
     pub assets_searched: Vec<String>,
     pub can_exchange_to_target: bool,
     pub routes: Vec<P2pRoute>,
+    #[serde(default, skip_deserializing, skip_serializing_if = "HashMap::is_empty")]
+    pub instruction_tokens: HashMap<String, String>,
     pub asset_statuses: Vec<RouteAssetStatus>,
     /// Completion states for route providers that do not produce P2P offers.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
