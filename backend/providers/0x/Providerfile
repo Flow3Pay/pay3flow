@@ -1,0 +1,26 @@
+# Catalog entry for 0x-powered swaps through Matcha.
+exchange_methods = ["exchanger"]
+
+[sell]
+source_url = "https://matcha.xyz/"
+name = "0x Sell"
+currency = ["eth", "usdc", "usdt"]
+banks = []
+
+[buy]
+source_url = "https://matcha.xyz/"
+name = "0x Buy"
+currency = ["eth", "usdc", "usdt"]
+banks = []
+
+[guidance]
+description = "Catalog entry for 0x-powered token swaps through Matcha. Token and network availability depends on the selected route."
+steps = [
+  "Open Matcha and select the source and destination tokens and networks.",
+  "Review the quoted output, network fees, and slippage in Matcha.",
+  "Connect your wallet and confirm the transaction only after checking the network and token addresses.",
+]
+
+[[guidance.links]]
+label = "Open Matcha by 0x"
+url = "https://matcha.xyz/"

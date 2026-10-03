@@ -3,7 +3,97 @@
 -- The application embeds this migration; Providerfiles are not read at runtime.
 DELETE FROM providers
 WHERE source_file LIKE '%/Providerfile'
-AND (slug, operation) NOT IN (('bestchange', 'buy'), ('bestchange', 'sell'), ('binance', 'buy'), ('binance', 'sell'), ('bitcoin-center', 'buy'), ('bitcoin-center', 'sell'), ('bitget', 'buy'), ('bitget', 'sell'), ('bncex', 'buy'), ('bncex', 'sell'), ('bybit', 'buy'), ('bybit', 'sell'), ('cifra-broker', 'buy'), ('cifra-broker', 'sell'), ('cow-swap', 'buy'), ('cow-swap', 'sell'), ('dzengi', 'buy'), ('dzengi', 'sell'), ('id-pay', 'buy'), ('id-pay', 'sell'), ('mexc', 'buy'), ('mexc', 'sell'), ('near-intents', 'buy'), ('near-intents', 'sell'), ('okx', 'buy'), ('okx', 'sell'), ('papa-change', 'buy'), ('papa-change', 'sell'), ('rapira', 'buy'), ('rapira', 'sell'), ('skylabs', 'buy'), ('skylabs', 'sell'), ('symbiosis', 'buy'), ('symbiosis', 'sell'), ('whitebird', 'buy'), ('whitebird', 'sell'));
+AND (slug, operation) NOT IN (('0x', 'buy'), ('0x', 'sell'), ('1inch', 'buy'), ('1inch', 'sell'), ('bebop', 'buy'), ('bebop', 'sell'), ('bestchange', 'buy'), ('bestchange', 'sell'), ('binance', 'buy'), ('binance', 'sell'), ('bitcoin-center', 'buy'), ('bitcoin-center', 'sell'), ('bitget', 'buy'), ('bitget', 'sell'), ('bncex', 'buy'), ('bncex', 'sell'), ('bybit', 'buy'), ('bybit', 'sell'), ('cifra-broker', 'buy'), ('cifra-broker', 'sell'), ('cow-swap', 'buy'), ('cow-swap', 'sell'), ('dzengi', 'buy'), ('dzengi', 'sell'), ('enso', 'buy'), ('enso', 'sell'), ('id-pay', 'buy'), ('id-pay', 'sell'), ('kyberswap', 'buy'), ('kyberswap', 'sell'), ('lifi', 'buy'), ('lifi', 'sell'), ('mexc', 'buy'), ('mexc', 'sell'), ('near-intents', 'buy'), ('near-intents', 'sell'), ('nordstern', 'buy'), ('nordstern', 'sell'), ('okx', 'buy'), ('okx', 'sell'), ('papa-change', 'buy'), ('papa-change', 'sell'), ('rapira', 'buy'), ('rapira', 'sell'), ('skylabs', 'buy'), ('skylabs', 'sell'), ('symbiosis', 'buy'), ('symbiosis', 'sell'), ('velora', 'buy'), ('velora', 'sell'), ('whitebird', 'buy'), ('whitebird', 'sell'));
+
+INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
+VALUES ('0x', 'buy', 'https://matcha.xyz/', '0x Buy', ARRAY['ETH', 'USDC', 'USDT']::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{}'::JSONB, '{"description":"Catalog entry for 0x-powered token swaps through Matcha. Token and network availability depends on the selected route.","steps":["Open Matcha and select the source and destination tokens and networks.","Review the quoted output, network fees, and slippage in Matcha.","Connect your wallet and confirm the transaction only after checking the network and token addresses."],"links":[{"label":"Open Matcha by 0x","url":"https://matcha.xyz/"}]}'::JSONB, '0x/Providerfile')
+ON CONFLICT (slug, operation) DO UPDATE SET
+source_url = EXCLUDED.source_url,
+name = EXCLUDED.name,
+currencies = EXCLUDED.currencies,
+banks = EXCLUDED.banks,
+exchange_methods = EXCLUDED.exchange_methods,
+adapter = EXCLUDED.adapter,
+workflow = EXCLUDED.workflow,
+fee_model = EXCLUDED.fee_model,
+guidance = EXCLUDED.guidance,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
+VALUES ('0x', 'sell', 'https://matcha.xyz/', '0x Sell', ARRAY['ETH', 'USDC', 'USDT']::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{}'::JSONB, '{"description":"Catalog entry for 0x-powered token swaps through Matcha. Token and network availability depends on the selected route.","steps":["Open Matcha and select the source and destination tokens and networks.","Review the quoted output, network fees, and slippage in Matcha.","Connect your wallet and confirm the transaction only after checking the network and token addresses."],"links":[{"label":"Open Matcha by 0x","url":"https://matcha.xyz/"}]}'::JSONB, '0x/Providerfile')
+ON CONFLICT (slug, operation) DO UPDATE SET
+source_url = EXCLUDED.source_url,
+name = EXCLUDED.name,
+currencies = EXCLUDED.currencies,
+banks = EXCLUDED.banks,
+exchange_methods = EXCLUDED.exchange_methods,
+adapter = EXCLUDED.adapter,
+workflow = EXCLUDED.workflow,
+fee_model = EXCLUDED.fee_model,
+guidance = EXCLUDED.guidance,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
+VALUES ('1inch', 'buy', 'https://1inch.com/swap/', '1inch Buy', ARRAY['ETH', 'USDC', 'USDT']::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{}'::JSONB, '{"description":"Catalog entry for token swaps through 1inch. Token and network availability depends on the selected route.","steps":["Open 1inch and select the source and destination tokens and networks.","Review the quoted output, network fees, and slippage in 1inch.","Connect your wallet and confirm the transaction only after checking the network and token addresses."],"links":[{"label":"Open 1inch Swap","url":"https://1inch.com/swap/"}]}'::JSONB, '1inch/Providerfile')
+ON CONFLICT (slug, operation) DO UPDATE SET
+source_url = EXCLUDED.source_url,
+name = EXCLUDED.name,
+currencies = EXCLUDED.currencies,
+banks = EXCLUDED.banks,
+exchange_methods = EXCLUDED.exchange_methods,
+adapter = EXCLUDED.adapter,
+workflow = EXCLUDED.workflow,
+fee_model = EXCLUDED.fee_model,
+guidance = EXCLUDED.guidance,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
+VALUES ('1inch', 'sell', 'https://1inch.com/swap/', '1inch Sell', ARRAY['ETH', 'USDC', 'USDT']::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{}'::JSONB, '{"description":"Catalog entry for token swaps through 1inch. Token and network availability depends on the selected route.","steps":["Open 1inch and select the source and destination tokens and networks.","Review the quoted output, network fees, and slippage in 1inch.","Connect your wallet and confirm the transaction only after checking the network and token addresses."],"links":[{"label":"Open 1inch Swap","url":"https://1inch.com/swap/"}]}'::JSONB, '1inch/Providerfile')
+ON CONFLICT (slug, operation) DO UPDATE SET
+source_url = EXCLUDED.source_url,
+name = EXCLUDED.name,
+currencies = EXCLUDED.currencies,
+banks = EXCLUDED.banks,
+exchange_methods = EXCLUDED.exchange_methods,
+adapter = EXCLUDED.adapter,
+workflow = EXCLUDED.workflow,
+fee_model = EXCLUDED.fee_model,
+guidance = EXCLUDED.guidance,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
+VALUES ('bebop', 'buy', 'https://bebop.xyz/', 'Bebop Buy', ARRAY['ETH', 'USDC', 'USDT']::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{}'::JSONB, '{"description":"Catalog entry for token swaps through Bebop. Token and network availability depends on the selected route.","steps":["Open Bebop and select the source and destination tokens and networks.","Review the quoted output, fees, and execution details shown for the route.","Connect your wallet and confirm the transaction only after checking the network and token addresses."],"links":[{"label":"Open Bebop","url":"https://bebop.xyz/"}]}'::JSONB, 'bebop/Providerfile')
+ON CONFLICT (slug, operation) DO UPDATE SET
+source_url = EXCLUDED.source_url,
+name = EXCLUDED.name,
+currencies = EXCLUDED.currencies,
+banks = EXCLUDED.banks,
+exchange_methods = EXCLUDED.exchange_methods,
+adapter = EXCLUDED.adapter,
+workflow = EXCLUDED.workflow,
+fee_model = EXCLUDED.fee_model,
+guidance = EXCLUDED.guidance,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
+VALUES ('bebop', 'sell', 'https://bebop.xyz/', 'Bebop Sell', ARRAY['ETH', 'USDC', 'USDT']::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{}'::JSONB, '{"description":"Catalog entry for token swaps through Bebop. Token and network availability depends on the selected route.","steps":["Open Bebop and select the source and destination tokens and networks.","Review the quoted output, fees, and execution details shown for the route.","Connect your wallet and confirm the transaction only after checking the network and token addresses."],"links":[{"label":"Open Bebop","url":"https://bebop.xyz/"}]}'::JSONB, 'bebop/Providerfile')
+ON CONFLICT (slug, operation) DO UPDATE SET
+source_url = EXCLUDED.source_url,
+name = EXCLUDED.name,
+currencies = EXCLUDED.currencies,
+banks = EXCLUDED.banks,
+exchange_methods = EXCLUDED.exchange_methods,
+adapter = EXCLUDED.adapter,
+workflow = EXCLUDED.workflow,
+fee_model = EXCLUDED.fee_model,
+guidance = EXCLUDED.guidance,
+source_file = EXCLUDED.source_file,
+updated_at = now();
 
 INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
 VALUES ('bestchange', 'buy', 'https://www.bestchange.com/?p=1345467', 'BestChange Buy', ARRAY['BYN', 'EUR', 'RUB', 'USD']::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{"p2p":null,"market":null,"bestchange":{"endpoint":"https://bestchange.app","api_key_env":"BESTCHANGE_API_KEY","public_endpoint":"https://www.bestchange.com","affiliate_id":"1345467","language":"ru","timeout_ms":10000,"max_results":100}}'::JSONB, '{}'::JSONB, '{}'::JSONB, '{}'::JSONB, 'bestchange/Providerfile')
@@ -276,6 +366,36 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
+VALUES ('enso', 'buy', 'https://enso.finance/', 'Enso Buy', ARRAY['ETH', 'USDC', 'USDT']::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{}'::JSONB, '{"description":"Catalog entry for routes powered by Enso. Token and network availability depends on the selected integration.","steps":["Check the application using Enso for supported tokens and networks.","Review the route, output amount, network fees, and slippage before signing.","Confirm transactions only in a wallet or application you trust."],"links":[{"label":"Enso","url":"https://enso.finance/"}]}'::JSONB, 'enso/Providerfile')
+ON CONFLICT (slug, operation) DO UPDATE SET
+source_url = EXCLUDED.source_url,
+name = EXCLUDED.name,
+currencies = EXCLUDED.currencies,
+banks = EXCLUDED.banks,
+exchange_methods = EXCLUDED.exchange_methods,
+adapter = EXCLUDED.adapter,
+workflow = EXCLUDED.workflow,
+fee_model = EXCLUDED.fee_model,
+guidance = EXCLUDED.guidance,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
+VALUES ('enso', 'sell', 'https://enso.finance/', 'Enso Sell', ARRAY['ETH', 'USDC', 'USDT']::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{}'::JSONB, '{"description":"Catalog entry for routes powered by Enso. Token and network availability depends on the selected integration.","steps":["Check the application using Enso for supported tokens and networks.","Review the route, output amount, network fees, and slippage before signing.","Confirm transactions only in a wallet or application you trust."],"links":[{"label":"Enso","url":"https://enso.finance/"}]}'::JSONB, 'enso/Providerfile')
+ON CONFLICT (slug, operation) DO UPDATE SET
+source_url = EXCLUDED.source_url,
+name = EXCLUDED.name,
+currencies = EXCLUDED.currencies,
+banks = EXCLUDED.banks,
+exchange_methods = EXCLUDED.exchange_methods,
+adapter = EXCLUDED.adapter,
+workflow = EXCLUDED.workflow,
+fee_model = EXCLUDED.fee_model,
+guidance = EXCLUDED.guidance,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
 VALUES ('id-pay', 'buy', 'https://id-pay.ru/', 'ID Pay Buy', ARRAY['AMD', 'RUB']::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{"kind":"quote_dependent","description":"ID Pay advertises commission-free transfers for supported corridors; confirm the live rate and any card or bank charges before sending.","docs_url":"https://id-pay.ru/tariff/"}'::JSONB, '{}'::JSONB, 'id-pay/Providerfile')
 ON CONFLICT (slug, operation) DO UPDATE SET
 source_url = EXCLUDED.source_url,
@@ -292,6 +412,66 @@ updated_at = now();
 
 INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
 VALUES ('id-pay', 'sell', 'https://id-pay.ru/', 'ID Pay Sell', ARRAY['AMD', 'RUB']::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{"kind":"quote_dependent","description":"ID Pay advertises commission-free transfers for supported corridors; confirm the live rate and any card or bank charges before sending.","docs_url":"https://id-pay.ru/tariff/"}'::JSONB, '{}'::JSONB, 'id-pay/Providerfile')
+ON CONFLICT (slug, operation) DO UPDATE SET
+source_url = EXCLUDED.source_url,
+name = EXCLUDED.name,
+currencies = EXCLUDED.currencies,
+banks = EXCLUDED.banks,
+exchange_methods = EXCLUDED.exchange_methods,
+adapter = EXCLUDED.adapter,
+workflow = EXCLUDED.workflow,
+fee_model = EXCLUDED.fee_model,
+guidance = EXCLUDED.guidance,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
+VALUES ('kyberswap', 'buy', 'https://kyberswap.com/', 'KyberSwap Buy', ARRAY['ETH', 'USDC', 'USDT']::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{}'::JSONB, '{"description":"Catalog entry for token swaps through KyberSwap. Token and network availability depends on the selected route.","steps":["Open KyberSwap and select the source and destination tokens and networks.","Review the quoted output, network fees, and slippage in KyberSwap.","Connect your wallet and confirm the transaction only after checking the network and token addresses."],"links":[{"label":"Open KyberSwap","url":"https://kyberswap.com/"}]}'::JSONB, 'kyberswap/Providerfile')
+ON CONFLICT (slug, operation) DO UPDATE SET
+source_url = EXCLUDED.source_url,
+name = EXCLUDED.name,
+currencies = EXCLUDED.currencies,
+banks = EXCLUDED.banks,
+exchange_methods = EXCLUDED.exchange_methods,
+adapter = EXCLUDED.adapter,
+workflow = EXCLUDED.workflow,
+fee_model = EXCLUDED.fee_model,
+guidance = EXCLUDED.guidance,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
+VALUES ('kyberswap', 'sell', 'https://kyberswap.com/', 'KyberSwap Sell', ARRAY['ETH', 'USDC', 'USDT']::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{}'::JSONB, '{"description":"Catalog entry for token swaps through KyberSwap. Token and network availability depends on the selected route.","steps":["Open KyberSwap and select the source and destination tokens and networks.","Review the quoted output, network fees, and slippage in KyberSwap.","Connect your wallet and confirm the transaction only after checking the network and token addresses."],"links":[{"label":"Open KyberSwap","url":"https://kyberswap.com/"}]}'::JSONB, 'kyberswap/Providerfile')
+ON CONFLICT (slug, operation) DO UPDATE SET
+source_url = EXCLUDED.source_url,
+name = EXCLUDED.name,
+currencies = EXCLUDED.currencies,
+banks = EXCLUDED.banks,
+exchange_methods = EXCLUDED.exchange_methods,
+adapter = EXCLUDED.adapter,
+workflow = EXCLUDED.workflow,
+fee_model = EXCLUDED.fee_model,
+guidance = EXCLUDED.guidance,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
+VALUES ('lifi', 'buy', 'https://jumper.exchange/', 'LI.FI Buy', ARRAY['ETH', 'USDC', 'USDT']::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{}'::JSONB, '{"description":"Catalog entry for LI.FI-powered swaps and bridges through Jumper. Token and network availability depends on the selected route.","steps":["Open Jumper and select the source and destination tokens and networks.","Review the route, quoted output, fees, and estimated completion time.","Connect your wallet and confirm the transaction only after checking both networks and destination details."],"links":[{"label":"Open Jumper by LI.FI","url":"https://jumper.exchange/"}]}'::JSONB, 'lifi/Providerfile')
+ON CONFLICT (slug, operation) DO UPDATE SET
+source_url = EXCLUDED.source_url,
+name = EXCLUDED.name,
+currencies = EXCLUDED.currencies,
+banks = EXCLUDED.banks,
+exchange_methods = EXCLUDED.exchange_methods,
+adapter = EXCLUDED.adapter,
+workflow = EXCLUDED.workflow,
+fee_model = EXCLUDED.fee_model,
+guidance = EXCLUDED.guidance,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
+VALUES ('lifi', 'sell', 'https://jumper.exchange/', 'LI.FI Sell', ARRAY['ETH', 'USDC', 'USDT']::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{}'::JSONB, '{"description":"Catalog entry for LI.FI-powered swaps and bridges through Jumper. Token and network availability depends on the selected route.","steps":["Open Jumper and select the source and destination tokens and networks.","Review the route, quoted output, fees, and estimated completion time.","Connect your wallet and confirm the transaction only after checking both networks and destination details."],"links":[{"label":"Open Jumper by LI.FI","url":"https://jumper.exchange/"}]}'::JSONB, 'lifi/Providerfile')
 ON CONFLICT (slug, operation) DO UPDATE SET
 source_url = EXCLUDED.source_url,
 name = EXCLUDED.name,
@@ -352,6 +532,36 @@ updated_at = now();
 
 INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
 VALUES ('near-intents', 'sell', 'https://1click.chaindefuser.com', 'NEAR Intents Sell', ARRAY['BTC', 'DAI', 'ETH', 'NEAR', 'SOL', 'USDC', 'USDT', 'XRP']::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{"kind":"quote_dependent","description":"Fees and the guaranteed output are returned by each live NEAR Intents quote and may differ from other providers.","docs_url":"https://docs.near-intents.org/near-intents"}'::JSONB, '{}'::JSONB, 'near-intents/Providerfile')
+ON CONFLICT (slug, operation) DO UPDATE SET
+source_url = EXCLUDED.source_url,
+name = EXCLUDED.name,
+currencies = EXCLUDED.currencies,
+banks = EXCLUDED.banks,
+exchange_methods = EXCLUDED.exchange_methods,
+adapter = EXCLUDED.adapter,
+workflow = EXCLUDED.workflow,
+fee_model = EXCLUDED.fee_model,
+guidance = EXCLUDED.guidance,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
+VALUES ('nordstern', 'buy', 'https://docs.nordstern.finance/', 'Nordstern Buy', ARRAY['ETH', 'USDC', 'USDT']::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{}'::JSONB, '{"description":"Catalog entry for the Nordstern DEX aggregator API. Token and network availability depends on the selected route and integrator.","steps":["Check the integrator using Nordstern for supported tokens and networks.","Review the final route, output amount, gas estimate, and slippage before signing.","Confirm transactions only in a wallet or application you trust."],"links":[{"label":"Nordstern documentation","url":"https://docs.nordstern.finance/"}]}'::JSONB, 'nordstern/Providerfile')
+ON CONFLICT (slug, operation) DO UPDATE SET
+source_url = EXCLUDED.source_url,
+name = EXCLUDED.name,
+currencies = EXCLUDED.currencies,
+banks = EXCLUDED.banks,
+exchange_methods = EXCLUDED.exchange_methods,
+adapter = EXCLUDED.adapter,
+workflow = EXCLUDED.workflow,
+fee_model = EXCLUDED.fee_model,
+guidance = EXCLUDED.guidance,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
+VALUES ('nordstern', 'sell', 'https://docs.nordstern.finance/', 'Nordstern Sell', ARRAY['ETH', 'USDC', 'USDT']::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{}'::JSONB, '{"description":"Catalog entry for the Nordstern DEX aggregator API. Token and network availability depends on the selected route and integrator.","steps":["Check the integrator using Nordstern for supported tokens and networks.","Review the final route, output amount, gas estimate, and slippage before signing.","Confirm transactions only in a wallet or application you trust."],"links":[{"label":"Nordstern documentation","url":"https://docs.nordstern.finance/"}]}'::JSONB, 'nordstern/Providerfile')
 ON CONFLICT (slug, operation) DO UPDATE SET
 source_url = EXCLUDED.source_url,
 name = EXCLUDED.name,
@@ -502,6 +712,36 @@ updated_at = now();
 
 INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
 VALUES ('symbiosis', 'sell', 'https://api.symbiosis.finance/crosschain/docs/', 'Symbiosis Sell', ARRAY['AVAX', 'BNB', 'BTC', 'ETH', 'MATIC', 'SOL', 'TON', 'TRX', 'USDC', 'USDT', 'XRP']::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{"kind":"quote_dependent","description":"Symbiosis returns route and network fees with each live cross-chain quote; final execution costs depend on the selected route and network.","docs_url":"https://api.symbiosis.finance/crosschain/docs/"}'::JSONB, '{"description":"Cross-chain swap estimate. Pay3Flow does not connect your wallet or submit the transaction: open Symbiosis, verify the route, and approve the swap in your wallet.","steps":["Open Symbiosis and connect the wallet that holds the source asset.","Select the exact source and destination assets and networks shown in this route.","Check the amount received, slippage, provider fee, network fee, quote expiry, and the destination wallet address.","Submit the swap only after checking the network one more time, then wait for the destination transaction to complete."],"links":[{"label":"Open Symbiosis WebApp","url":"https://app.symbiosis.finance/"},{"label":"Symbiosis swap guide","url":"https://docs.symbiosis.finance/main-concepts/symbiosis-cross-chain-swaps"},{"label":"Symbiosis fees and troubleshooting","url":"https://docs.symbiosis.finance/user-guide-webapp/where-are-my-tokens-troubleshooting-guide"}]}'::JSONB, 'symbiosis/Providerfile')
+ON CONFLICT (slug, operation) DO UPDATE SET
+source_url = EXCLUDED.source_url,
+name = EXCLUDED.name,
+currencies = EXCLUDED.currencies,
+banks = EXCLUDED.banks,
+exchange_methods = EXCLUDED.exchange_methods,
+adapter = EXCLUDED.adapter,
+workflow = EXCLUDED.workflow,
+fee_model = EXCLUDED.fee_model,
+guidance = EXCLUDED.guidance,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
+VALUES ('velora', 'buy', 'https://app.velora.xyz/', 'Velora Buy', ARRAY['ETH', 'USDC', 'USDT']::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{}'::JSONB, '{"description":"Catalog entry for token swaps through Velora. Token and network availability depends on the selected route.","steps":["Open Velora and select the source and destination tokens and networks.","Review the quoted output, network fees, and slippage in Velora.","Connect your wallet and confirm the transaction only after checking the network and token addresses."],"links":[{"label":"Open Velora","url":"https://app.velora.xyz/"}]}'::JSONB, 'velora/Providerfile')
+ON CONFLICT (slug, operation) DO UPDATE SET
+source_url = EXCLUDED.source_url,
+name = EXCLUDED.name,
+currencies = EXCLUDED.currencies,
+banks = EXCLUDED.banks,
+exchange_methods = EXCLUDED.exchange_methods,
+adapter = EXCLUDED.adapter,
+workflow = EXCLUDED.workflow,
+fee_model = EXCLUDED.fee_model,
+guidance = EXCLUDED.guidance,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
+VALUES ('velora', 'sell', 'https://app.velora.xyz/', 'Velora Sell', ARRAY['ETH', 'USDC', 'USDT']::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{}'::JSONB, '{"description":"Catalog entry for token swaps through Velora. Token and network availability depends on the selected route.","steps":["Open Velora and select the source and destination tokens and networks.","Review the quoted output, network fees, and slippage in Velora.","Connect your wallet and confirm the transaction only after checking the network and token addresses."],"links":[{"label":"Open Velora","url":"https://app.velora.xyz/"}]}'::JSONB, 'velora/Providerfile')
 ON CONFLICT (slug, operation) DO UPDATE SET
 source_url = EXCLUDED.source_url,
 name = EXCLUDED.name,

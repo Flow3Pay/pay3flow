@@ -1,0 +1,26 @@
+# Catalog entry for LI.FI-powered swaps through Jumper.
+exchange_methods = ["exchanger"]
+
+[sell]
+source_url = "https://jumper.exchange/"
+name = "LI.FI Sell"
+currency = ["eth", "usdc", "usdt"]
+banks = []
+
+[buy]
+source_url = "https://jumper.exchange/"
+name = "LI.FI Buy"
+currency = ["eth", "usdc", "usdt"]
+banks = []
+
+[guidance]
+description = "Catalog entry for LI.FI-powered swaps and bridges through Jumper. Token and network availability depends on the selected route."
+steps = [
+  "Open Jumper and select the source and destination tokens and networks.",
+  "Review the route, quoted output, fees, and estimated completion time.",
+  "Connect your wallet and confirm the transaction only after checking both networks and destination details.",
+]
+
+[[guidance.links]]
+label = "Open Jumper by LI.FI"
+url = "https://jumper.exchange/"

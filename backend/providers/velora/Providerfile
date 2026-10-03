@@ -1,0 +1,26 @@
+# Catalog entry for the Velora trading protocol.
+exchange_methods = ["exchanger"]
+
+[sell]
+source_url = "https://app.velora.xyz/"
+name = "Velora Sell"
+currency = ["eth", "usdc", "usdt"]
+banks = []
+
+[buy]
+source_url = "https://app.velora.xyz/"
+name = "Velora Buy"
+currency = ["eth", "usdc", "usdt"]
+banks = []
+
+[guidance]
+description = "Catalog entry for token swaps through Velora. Token and network availability depends on the selected route."
+steps = [
+  "Open Velora and select the source and destination tokens and networks.",
+  "Review the quoted output, network fees, and slippage in Velora.",
+  "Connect your wallet and confirm the transaction only after checking the network and token addresses.",
+]
+
+[[guidance.links]]
+label = "Open Velora"
+url = "https://app.velora.xyz/"

@@ -1,0 +1,26 @@
+# Catalog entry for the 1inch DEX aggregator. Quotes are opened on 1inch.
+exchange_methods = ["exchanger"]
+
+[sell]
+source_url = "https://1inch.com/swap/"
+name = "1inch Sell"
+currency = ["eth", "usdc", "usdt"]
+banks = []
+
+[buy]
+source_url = "https://1inch.com/swap/"
+name = "1inch Buy"
+currency = ["eth", "usdc", "usdt"]
+banks = []
+
+[guidance]
+description = "Catalog entry for token swaps through 1inch. Token and network availability depends on the selected route."
+steps = [
+  "Open 1inch and select the source and destination tokens and networks.",
+  "Review the quoted output, network fees, and slippage in 1inch.",
+  "Connect your wallet and confirm the transaction only after checking the network and token addresses.",
+]
+
+[[guidance.links]]
+label = "Open 1inch Swap"
+url = "https://1inch.com/swap/"
