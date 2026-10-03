@@ -63,7 +63,8 @@ async fn inner(
         && activity.get("purpose").and_then(Value::as_str) == Some("request")
         && activity.get("command").and_then(Value::as_str) == Some("quote");
     if is_quote_request && verified_signer.is_none() {
-        verified_signer = Some(verify_inbound_signature(state, headers, raw_body.as_slice()).await?);
+        verified_signer =
+            Some(verify_inbound_signature(state, headers, raw_body.as_slice()).await?);
     }
 
     if let Some(key_id) = verified_signer {
