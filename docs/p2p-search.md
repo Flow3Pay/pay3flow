@@ -29,8 +29,11 @@ refreshes. Background provider fan-out also shares a semaphore capped at five
 active source requests, so one catalog query cannot multiply the network
 concurrency by the number of adapters. When all five pipeline slots are
 occupied, later catalog entries wait at the cursor instead of building an
-in-memory task queue. Background source requests use the cached provider vote
-quality as their acquisition order; ties retain catalog order. Fiat currencies declared
+in-memory task queue. Background source requests use the cached provider
+reputation score as their acquisition order; ties use vote quality, vote volume,
+execution volume, then catalog order. The score and counters come from the shared
+Redis reputation snapshot, so background polling does not read reputation rows
+from PostgreSQL per provider. Fiat currencies declared
 by provider adapters are included alongside `route_source_fiats`; network
 assets are included alongside `p2p_search_assets`. The poller publishes offers
 as bounded ActivityPub `OrderedCollection` batches of up to 64, allowing Fmatch
@@ -76,7 +79,11 @@ Redis timeout does not block the interaction; PostgreSQL remains the durable
 record.
 The daily maintenance task subtracts 15 points from services with no interaction
 for 24 hours, stopping at zero. Shared service counters are cached in Redis for
-30 seconds; viewer-specific votes are loaded separately.
+30 seconds; the cache includes the score and counters, while viewer-specific
+votes are loaded separately. Background polling reads
+that shared cache and checks reputation only to choose which provider to refresh
+first. It does not remove providers from user results or change their economic
+ranking.
 Successful Fmatch answers are stored in PostgreSQL. If Fmatch is unavailable,
 the newest answer within `p2p_fmatch_stale_secs` is used and the response has
 `source: "database_cache"` and `stale: true`. A live Fmatch answer has

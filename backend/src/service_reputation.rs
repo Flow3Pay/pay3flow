@@ -66,6 +66,8 @@ pub struct ServiceStats {
     pub executions_total: i64,
     pub likes_total: i64,
     pub dislikes_total: i64,
+    #[serde(default = "default_reputation_score")]
+    pub reputation_score: i16,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub viewer_vote: Option<VoteChoice>,
 }
@@ -300,7 +302,7 @@ WHERE services.display_name IS DISTINCT FROM EXCLUDED.display_name
         let mut canonical_slugs = slugs.to_vec();
         canonical_slugs.sort();
         canonical_slugs.dedup();
-        let cache_key = "pay3flow:reputation:services:v1";
+        let cache_key = "pay3flow:reputation:services:v2";
         let cached = match self.redis.as_ref() {
             Some(redis) => tokio::time::timeout(
                 std::time::Duration::from_millis(50),
@@ -319,7 +321,7 @@ WHERE services.display_name IS DISTINCT FROM EXCLUDED.display_name
                 .query(
                     r#"
 SELECT s.id, s.slug, s.display_name, s.executions_total, s.likes_total,
-       s.dislikes_total, NULL::TEXT
+       s.dislikes_total, s.reputation_score, NULL::TEXT
 FROM services s
 "#,
                     &[],
@@ -505,7 +507,7 @@ WHERE anonymous_id = $1 AND service_id = $2 AND search_id = $3 AND route_id = $4
             .query_opt(
                 r#"
 SELECT s.id, s.slug, s.display_name, s.executions_total, s.likes_total,
-       s.dislikes_total, v.vote
+       s.dislikes_total, s.reputation_score, v.vote
 FROM services s
 LEFT JOIN service_votes v
   ON v.service_id = s.id AND v.anonymous_id = $2
@@ -603,7 +605,8 @@ WHERE id = $1
         let row = transaction
             .query_one(
                 r#"
-SELECT id, slug, display_name, executions_total, likes_total, dislikes_total, $2::TEXT
+SELECT id, slug, display_name, executions_total, likes_total, dislikes_total,
+       reputation_score, $2::TEXT
 FROM services WHERE id = $1
 "#,
                 &[&service_id, &vote.as_str()],
@@ -803,11 +806,16 @@ fn row_to_stats(row: tokio_postgres::Row) -> ServiceStats {
         executions_total: row.get(3),
         likes_total: row.get(4),
         dislikes_total: row.get(5),
+        reputation_score: row.get(6),
         viewer_vote: row
-            .get::<_, Option<String>>(6)
+            .get::<_, Option<String>>(7)
             .as_deref()
             .and_then(VoteChoice::parse),
     }
+}
+
+fn default_reputation_score() -> i16 {
+    50
 }
 
 fn route_feedback_from_row(row: tokio_postgres::Row, offset: usize) -> RouteFeedback {
@@ -878,6 +886,7 @@ mod tests {
                 executions_total: executions,
                 likes_total: likes,
                 dislikes_total: dislikes,
+                reputation_score: 50,
                 viewer_vote: None,
             },
         };

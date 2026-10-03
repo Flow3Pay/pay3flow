@@ -1136,15 +1136,16 @@ impl P2pSearchService {
                     priorities
                         .get(&source.name().to_ascii_lowercase())
                         .copied()
-                        .unwrap_or((f64::NEG_INFINITY, 0, 0))
+                        .unwrap_or((i16::MIN, f64::NEG_INFINITY, 0, 0))
                 };
                 let left = priority(left);
                 let right = priority(right);
                 right
                     .0
-                    .total_cmp(&left.0)
-                    .then_with(|| right.1.cmp(&left.1))
+                    .cmp(&left.0)
+                    .then_with(|| right.1.total_cmp(&left.1))
                     .then_with(|| right.2.cmp(&left.2))
+                    .then_with(|| right.3.cmp(&left.3))
             });
         }
         let background_provider_semaphore = self.background_provider_semaphore.clone();
@@ -1335,13 +1336,13 @@ impl P2pSearchService {
             .map(|_| ())
     }
 
-    async fn background_provider_priorities(&self) -> HashMap<String, (f64, i64, i64)> {
+    async fn background_provider_priorities(&self) -> HashMap<String, (i16, f64, i64, i64)> {
         let Some(redis) = self.redis.as_ref() else {
             return HashMap::new();
         };
         let cached = tokio::time::timeout(
             Duration::from_millis(50),
-            get_json::<HashMap<String, ServiceStats>>(redis, "pay3flow:reputation:services:v1"),
+            get_json::<HashMap<String, ServiceStats>>(redis, "pay3flow:reputation:services:v2"),
         )
         .await
         .unwrap_or(Ok(None));
@@ -1354,6 +1355,7 @@ impl P2pSearchService {
                 (
                     slug,
                     (
+                        stats.reputation_score,
                         vote_quality_score(stats.likes_total, stats.dislikes_total)
                             .unwrap_or(f64::NEG_INFINITY),
                         stats.likes_total.saturating_add(stats.dislikes_total),
