@@ -1,6 +1,12 @@
 # Catalog entry for LI.FI-powered swaps through Jumper.
 exchange_methods = ["exchanger"]
 
+[code]
+language = "rust"
+source = '''
+pub use crate::providers::dex_aggregator::DexAggregatorRouteProvider as LifiRouteProvider;
+'''
+
 [sell]
 source_url = "https://jumper.exchange/"
 name = "LI.FI Sell"

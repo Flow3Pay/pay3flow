@@ -46,12 +46,17 @@ data:
     route_max_depth = 4
     route_source_fiats = ["AMD", "RUB"]
     route_p2p_assets = ["USDT", "USDC", "XRP"]
-    route_intent_assets = ["USDT@tron", "USDT@avalanche-c", "USDT@solana", "USDC@solana", "XRP@xrpl"]
+    route_intent_assets = ["USDT@tron", "USDT@avalanche-c", "USDT@solana", "USDC@solana", "XRP@xrpl", "WETH@base", "USDC@base", "USDT@base"]
     route_withdrawals = []
     cow_api_urls = ["ethereum=https://api.cow.fi/mainnet"]
+    # Token map shared by CoW Protocol, LI.FI, KyberSwap, Nordstern, and Velora.
     cow_tokens = [
       "ethereum:USDT=0xdAC17F958D2ee523a2206206994597C13D831ec7",
       "ethereum:USDC=0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "ethereum:ETH=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "base:WETH=0x4200000000000000000000000000000000000006",
+      "base:USDC=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "base:USDT=0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2",
     ]
     cow_quote_address = "0x0000000000000000000000000000000000000001"
     near_intents_quote_recipient = "So11111111111111111111111111111111111111112"

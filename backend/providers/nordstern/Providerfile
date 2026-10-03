@@ -1,6 +1,12 @@
 # Catalog entry for the Nordstern DEX aggregator API.
 exchange_methods = ["exchanger"]
 
+[code]
+language = "rust"
+source = '''
+pub use crate::providers::dex_aggregator::DexAggregatorRouteProvider as NordsternRouteProvider;
+'''
+
 [sell]
 source_url = "https://docs.nordstern.finance/"
 name = "Nordstern Sell"

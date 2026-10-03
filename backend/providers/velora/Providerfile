@@ -1,6 +1,12 @@
 # Catalog entry for the Velora trading protocol.
 exchange_methods = ["exchanger"]
 
+[code]
+language = "rust"
+source = '''
+pub use crate::providers::dex_aggregator::DexAggregatorRouteProvider as VeloraRouteProvider;
+'''
+
 [sell]
 source_url = "https://app.velora.xyz/"
 name = "Velora Sell"

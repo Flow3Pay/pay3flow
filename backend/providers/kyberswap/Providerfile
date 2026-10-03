@@ -1,6 +1,12 @@
 # Catalog entry for the KyberSwap DEX aggregator.
 exchange_methods = ["exchanger"]
 
+[code]
+language = "rust"
+source = '''
+pub use crate::providers::dex_aggregator::DexAggregatorRouteProvider as KyberSwapRouteProvider;
+'''
+
 [sell]
 source_url = "https://kyberswap.com/"
 name = "KyberSwap Sell"

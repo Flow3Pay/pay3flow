@@ -9,8 +9,10 @@ use pay3flow_backend::p2p::{IdPayRouteProvider, PublicFiatRouteProvider};
 use pay3flow_backend::payments::rates::Rates;
 use pay3flow_backend::payments::service::{PaymentConfig, PaymentService};
 use pay3flow_backend::route_engine::{
-    Asset, CowRouteProvider, LiveEdgeQuoteSource, NearIntentsProvider, PublicRouteProvider,
-    RouteEngine, RouteGraphConfig, RouteQuoteService, RouteRefreshConfig, SymbiosisRouteProvider,
+    Asset, CowRouteProvider, KyberSwapRouteProvider, LifiRouteProvider, LiveEdgeQuoteSource,
+    NearIntentsProvider, NordsternRouteProvider, PublicRouteProvider, RouteEngine,
+    RouteGraphConfig, RouteQuoteService, RouteRefreshConfig, SymbiosisRouteProvider,
+    VeloraRouteProvider,
 };
 use pay3flow_backend::route_execution::RouteExecutionService;
 use pay3flow_backend::server::routing;
@@ -99,6 +101,24 @@ async fn main() -> anyhow::Result<()> {
     };
     let mut public_route_providers: Vec<Arc<dyn PublicRouteProvider>> =
         vec![Arc::new(near_intents.clone())];
+    for provider in [
+        LifiRouteProvider::from_config("lifi", &cfg.cow_tokens, &cfg.symbiosis_quote_address)?,
+        KyberSwapRouteProvider::from_config(
+            "kyberswap",
+            &cfg.cow_tokens,
+            &cfg.symbiosis_quote_address,
+        )?,
+        NordsternRouteProvider::from_config(
+            "nordstern",
+            &cfg.cow_tokens,
+            &cfg.symbiosis_quote_address,
+        )?,
+        VeloraRouteProvider::from_config("velora", &cfg.cow_tokens, &cfg.symbiosis_quote_address)?,
+    ] {
+        if let Some(provider) = provider {
+            public_route_providers.push(Arc::new(provider));
+        }
+    }
     let cow = CowRouteProvider::from_config(
         &cfg.cow_api_urls,
         &cfg.cow_tokens,
