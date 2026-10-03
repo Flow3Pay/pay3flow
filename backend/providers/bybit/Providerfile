@@ -3,13 +3,13 @@ exchange_methods = ["p2p", "exchanger"]
 [sell]
 source_url = "https://www.bybit.com"
 name = "Bybit Sell"
-currency = ["usd", "rub", "eur", "amd", "byn"]
+currency = ["usd", "rub", "eur", "amd", "byn", "uah", "kzt"]
 banks = []
 
 [buy]
 source_url = "https://www.bybit.com"
 name = "Bybit Buy"
-currency = ["usd", "rub", "eur", "amd", "byn"]
+currency = ["usd", "rub", "eur", "amd", "byn", "uah", "kzt"]
 banks = []
 
 [adapter.p2p]
@@ -19,7 +19,7 @@ method = "POST"
 headers = { Origin = "https://www.bybit.com", Referer = "https://www.bybit.com/" }
 timeout_ms = 4000
 supported_assets = ["USDT", "USDC", "BTC", "ETH"]
-supported_fiats = ["USD", "RUB", "EUR", "AMD", "BYN"]
+supported_fiats = ["USD", "RUB", "EUR", "AMD", "BYN", "UAH", "KZT"]
 
 [adapter.p2p.payment_method_aliases]
 "T-Bank" = ["Tinkoff", "Tinkoff Bank"]
@@ -32,6 +32,22 @@ supported_fiats = ["USD", "RUB", "EUR", "AMD", "BYN"]
 "Bank Reshenie" = ["Reshenie Bank"]
 "Paritetbank" = ["Paritet Bank"]
 "Priorbank" = ["PriorBank"]
+"PrivatBank" = ["PrivatBank", "Privat Bank"]
+"Monobank" = ["Monobank", "Mono Bank"]
+"Oschadbank" = ["Oschadbank", "Oschad Bank"]
+"PUMB" = ["PUMB", "First Ukrainian International Bank"]
+"Raiffeisen Bank Aval" = ["Raiffeisen Bank", "Raiffeisenbank Aval"]
+"Sense Bank" = ["Sense Bank", "Alfa-Bank Ukraine"]
+"A-Bank" = ["A-Bank", "ABank"]
+"UkrSibbank" = ["UkrSibbank", "UkrSib Bank"]
+"Kaspi Bank" = ["Kaspi.kz", "Kaspi Gold", "Kaspi Bank Transfer"]
+"Halyk Bank" = ["Halyk Bank", "Halyk Bank Transfer"]
+"ForteBank" = ["ForteBank", "Forte Bank"]
+"Bank CenterCredit" = ["Bank CenterCredit", "BCC"]
+"Freedom Bank" = ["Freedom Bank", "Freedom Bank Kazakhstan"]
+"Bereke Bank" = ["Bereke Bank"]
+"Jusan Bank" = ["Jusan Bank", "Jusan"]
+"Eurasian Bank" = ["Eurasian Bank"]
 
 [adapter.p2p.buy]
 request_json = '''{"userId":"","tokenId":"{{asset}}","currencyId":"{{fiat}}","payment":[],"side":"1","size":"{{limit}}","page":"1","amount":"{{amount}}","authMaker":false,"canTrade":false}'''

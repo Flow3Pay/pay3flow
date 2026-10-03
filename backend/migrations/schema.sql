@@ -480,7 +480,13 @@ VALUES
     ('AM', 'AMD', 'RU', 'RUB', 'enabled', 1000, NULL, 5000000000, '{"mvp": true, "label": "Armenia AMD to Russia RUB"}'),
     ('GLOBAL', 'USD', 'AM', 'AMD', 'enabled', 100, NULL, NULL, '{"label": "Cash or bank USD to Armenia AMD"}'),
     ('GLOBAL', 'USD', 'AM', 'USD', 'enabled', 100, NULL, NULL, '{"label": "USD bank to Armenian bank in USD through crypto"}'),
-    ('AM', 'USD', 'GLOBAL', 'USD', 'enabled', 100, NULL, NULL, '{"label": "Armenian bank in USD to USD bank through crypto"}')
+    ('AM', 'USD', 'GLOBAL', 'USD', 'enabled', 100, NULL, NULL, '{"label": "Armenian bank in USD to USD bank through crypto"}'),
+    ('UA', 'UAH', 'KZ', 'KZT', 'enabled', 100, NULL, NULL, '{"label": "Ukraine UAH to Kazakhstan KZT"}'),
+    ('KZ', 'KZT', 'UA', 'UAH', 'enabled', 100, NULL, NULL, '{"label": "Kazakhstan KZT to Ukraine UAH"}'),
+    ('UA', 'UAH', 'GLOBAL', 'USD', 'enabled', 100, NULL, NULL, '{"label": "Ukraine UAH to USD"}'),
+    ('GLOBAL', 'USD', 'UA', 'UAH', 'enabled', 100, NULL, NULL, '{"label": "USD to Ukraine UAH"}'),
+    ('KZ', 'KZT', 'GLOBAL', 'USD', 'enabled', 100, NULL, NULL, '{"label": "Kazakhstan KZT to USD"}'),
+    ('GLOBAL', 'USD', 'KZ', 'KZT', 'enabled', 100, NULL, NULL, '{"label": "USD to Kazakhstan KZT"}')
 ON CONFLICT (source_country, source_currency, target_country, target_currency)
 DO UPDATE SET
     min_amount_minor = EXCLUDED.min_amount_minor,

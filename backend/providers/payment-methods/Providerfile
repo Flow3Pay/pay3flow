@@ -9,6 +9,8 @@ payment_methods = [
   { id = "currency-rub", name = "Russian ruble", country = "RU", currency = "RUB", kind = "currency", color = "#21a038", initials = "₽", p2p_query = "RUB" },
   { id = "currency-usd", name = "US dollar", country = "GLOBAL", currency = "USD", kind = "currency", color = "#168451", initials = "$", p2p_query = "USD" },
   { id = "currency-byn", name = "Belarusian ruble", country = "BY", currency = "BYN", kind = "currency", color = "#006b3f", initials = "Br", p2p_query = "BYN" },
+  { id = "currency-uah", name = "Ukrainian hryvnia", country = "UA", currency = "UAH", kind = "currency", color = "#0057b7", initials = "₴", p2p_query = "UAH" },
+  { id = "currency-kzt", name = "Kazakhstani tenge", country = "KZ", currency = "KZT", kind = "currency", color = "#00a3e0", initials = "₸", p2p_query = "KZT" },
 
   { id = "am-ameriabank-usd-account", name = "Ameriabank", country = "AM", currency = "USD", color = "#6d2c91", initials = "AM", popular = true, icon_url = "/icons/assets/ameriabank-green.png", bank_fee_percent = 0, p2p_query = "Ameriabank", currency_group = "ameriabank" },
   { id = "am-ameriabank", name = "Ameriabank", country = "AM", currency = "AMD", color = "#6d2c91", initials = "AM", popular = true, icon_url = "/icons/assets/ameriabank-green.png", bank_fee_percent = 0, p2p_query = "Ameriabank", currency_group = "ameriabank" },
@@ -55,6 +57,24 @@ payment_methods = [
   { id = "by-neobank", name = "Neo Bank Asia", country = "BY", currency = "BYN", color = "#ff5a1f", initials = "NE", icon_url = "/icons/assets/neobank.png", p2p_query = "Neo Bank Asia", currency_group = "neo-bank", domain = "neobank.by" },
   { id = "by-zepterbank", name = "Zepter Bank", country = "BY", currency = "BYN", color = "#8b1e3f", initials = "ZE", icon_url = "/icons/assets/zepterbank.png", p2p_query = "Zepter Bank", currency_group = "zepterbank", domain = "zepterbank.by" },
   { id = "by-brrb", name = "Bank of Growth and Business Development", country = "BY", currency = "BYN", color = "#005ca9", initials = "BR", icon_url = "/icons/assets/brrb.png", p2p_query = "BRRB Bank", currency_group = "brrb", domain = "brrb.by" },
+
+  { id = "ua-privatbank", name = "PrivatBank", country = "UA", currency = "UAH", color = "#4b9e40", initials = "PB", popular = true, p2p_query = "PrivatBank", currency_group = "privatbank", domain = "privatbank.ua" },
+  { id = "ua-monobank", name = "monobank", country = "UA", currency = "UAH", color = "#1c1c1c", initials = "m", popular = true, p2p_query = "Monobank", currency_group = "monobank", domain = "monobank.ua" },
+  { id = "ua-oschadbank", name = "Oschadbank", country = "UA", currency = "UAH", color = "#008b43", initials = "O", popular = true, p2p_query = "Oschadbank", currency_group = "oschadbank", domain = "oschadbank.ua" },
+  { id = "ua-pumb", name = "PUMB", country = "UA", currency = "UAH", color = "#ed1c24", initials = "P", popular = true, p2p_query = "PUMB", currency_group = "pumb", domain = "pumb.ua" },
+  { id = "ua-raiffeisen", name = "Raiffeisen Bank", country = "UA", currency = "UAH", color = "#ffe500", initials = "R", p2p_query = "Raiffeisen Bank Aval", currency_group = "raiffeisen-ua", domain = "raiffeisen.ua" },
+  { id = "ua-sense", name = "Sense Bank", country = "UA", currency = "UAH", color = "#f04e37", initials = "S", p2p_query = "Sense Bank", currency_group = "sense-bank", domain = "sensebank.com.ua" },
+  { id = "ua-abank", name = "A-Bank", country = "UA", currency = "UAH", color = "#ed1c24", initials = "A", p2p_query = "A-Bank", currency_group = "a-bank-ua", domain = "a-bank.com.ua" },
+  { id = "ua-ukrsibbank", name = "UkrSibbank", country = "UA", currency = "UAH", color = "#0072bc", initials = "U", p2p_query = "UkrSibbank", currency_group = "ukrsibbank", domain = "ukrsibbank.com" },
+
+  { id = "kz-kaspi", name = "Kaspi.kz", country = "KZ", currency = "KZT", color = "#f14635", initials = "K", popular = true, p2p_query = "Kaspi Bank", currency_group = "kaspi", domain = "kaspi.kz" },
+  { id = "kz-halyk", name = "Halyk Bank", country = "KZ", currency = "KZT", color = "#00883e", initials = "H", popular = true, p2p_query = "Halyk Bank", currency_group = "halyk", domain = "halykbank.kz" },
+  { id = "kz-forte", name = "ForteBank", country = "KZ", currency = "KZT", color = "#ed1c24", initials = "F", popular = true, p2p_query = "ForteBank", currency_group = "forte", domain = "forte.bank" },
+  { id = "kz-bcc", name = "Bank CenterCredit", country = "KZ", currency = "KZT", color = "#0072bc", initials = "BCC", p2p_query = "Bank CenterCredit", currency_group = "centercredit", domain = "bcc.kz" },
+  { id = "kz-freedom", name = "Freedom Bank Kazakhstan", country = "KZ", currency = "KZT", color = "#00a651", initials = "FB", p2p_query = "Freedom Bank", currency_group = "freedom-kz", domain = "bankffin.kz" },
+  { id = "kz-bereke", name = "Bereke Bank", country = "KZ", currency = "KZT", color = "#00843d", initials = "B", p2p_query = "Bereke Bank", currency_group = "bereke", domain = "berekebank.kz" },
+  { id = "kz-jusan", name = "Jusan Bank", country = "KZ", currency = "KZT", color = "#542583", initials = "J", p2p_query = "Jusan Bank", currency_group = "jusan", domain = "jusan.kz" },
+  { id = "kz-eurasian", name = "Eurasian Bank", country = "KZ", currency = "KZT", color = "#004c97", initials = "E", p2p_query = "Eurasian Bank", currency_group = "eurasian", domain = "eubank.kz" },
 
   # Digital assets use the same backend-owned card contract as banks and cash.
   # Their local icon paths are returned verbatim by GET /api/banks.

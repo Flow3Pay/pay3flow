@@ -27,7 +27,7 @@
   export let onOpenBelarusP2pWarning: () => void = () => {};
 
   const ASSET_NAMES: Record<string, string> = { BTC: "Bitcoin", ETH: "Ether", USDC: "USD Coin", USDT: "Tether" };
-  const FIAT_MARKS: Record<string, string> = { AMD: "🇦🇲", RUB: "🇷🇺", BYN: "🇧🇾" };
+  const FIAT_MARKS: Record<string, string> = { AMD: "🇦🇲", RUB: "🇷🇺", BYN: "🇧🇾", UAH: "🇺🇦", KZT: "🇰🇿" };
   type Step = { currency: string; network?: string; networkLabel?: string; provider?: string; iconUrl?: string };
 
   const venueName = (value?: string) => value ? venueNames[value.toLowerCase()] ?? value : "Searching";

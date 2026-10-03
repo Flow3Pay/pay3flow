@@ -3,13 +3,13 @@ exchange_methods = ["p2p", "exchanger"]
 [sell]
 source_url = "https://www.binance.com"
 name = "Binance Sell"
-currency = ["usd", "rub", "eur", "amd", "byn"]
+currency = ["usd", "rub", "eur", "amd", "byn", "uah", "kzt"]
 banks = []
 
 [buy]
 source_url = "https://www.binance.com"
 name = "Binance Buy"
-currency = ["usd", "rub", "eur", "amd", "byn"]
+currency = ["usd", "rub", "eur", "amd", "byn", "uah", "kzt"]
 banks = []
 
 [adapter.p2p]
@@ -20,7 +20,7 @@ headers = { Origin = "https://www.binance.com", Referer = "https://www.binance.c
 timeout_ms = 4000
 max_results = 20
 supported_assets = ["USDT", "USDC", "BTC", "ETH", "BNB"]
-supported_fiats = ["USD", "RUB", "EUR", "AMD", "BYN"]
+supported_fiats = ["USD", "RUB", "EUR", "AMD", "BYN", "UAH", "KZT"]
 
 [adapter.p2p.payment_method_aliases]
 "T-Bank" = ["Tinkoff", "Tinkoff Bank"]
@@ -33,6 +33,22 @@ supported_fiats = ["USD", "RUB", "EUR", "AMD", "BYN"]
 "Bank Reshenie" = ["Bank Reshenie", "Reshenie Bank"]
 "Paritetbank" = ["Paritet Bank"]
 "Priorbank" = ["PriorBank"]
+"PrivatBank" = ["PrivatBank", "Privat Bank"]
+"Monobank" = ["Monobank", "Mono Bank"]
+"Oschadbank" = ["Oschadbank", "Oschad Bank"]
+"PUMB" = ["PUMB", "First Ukrainian International Bank"]
+"Raiffeisen Bank Aval" = ["Raiffeisen Bank", "Raiffeisenbank Aval"]
+"Sense Bank" = ["Sense Bank", "Alfa-Bank Ukraine"]
+"A-Bank" = ["A-Bank", "ABank"]
+"UkrSibbank" = ["UkrSibbank", "UkrSib Bank"]
+"Kaspi Bank" = ["Kaspi.kz", "Kaspi Gold", "Kaspi Bank Transfer"]
+"Halyk Bank" = ["Halyk Bank", "Halyk Bank Transfer"]
+"ForteBank" = ["ForteBank", "Forte Bank"]
+"Bank CenterCredit" = ["Bank CenterCredit", "BCC"]
+"Freedom Bank" = ["Freedom Bank", "Freedom Bank Kazakhstan"]
+"Bereke Bank" = ["Bereke Bank"]
+"Jusan Bank" = ["Jusan Bank", "Jusan"]
+"Eurasian Bank" = ["Eurasian Bank"]
 
 [adapter.p2p.buy]
 request_json = '''{"fiat":"{{fiat}}","page":1,"rows":"{{limit_number}}","tradeType":"BUY","asset":"{{asset}}","countries":[],"proMerchantAds":false,"shieldMerchantAds":false,"publisherType":null,"payTypes":[],"additionalKycVerifyFilter":0}'''

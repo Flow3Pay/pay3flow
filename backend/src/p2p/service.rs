@@ -265,13 +265,19 @@ fn canonicalize_offer_payment_methods(
 ) {
     for method in &mut offer.payment_methods {
         let normalized = canonical_payment_method(method);
-        if let Some(canonical) = aliases.iter().find_map(|(canonical, variants)| {
-            let matches_canonical = canonical_payment_method(canonical) == normalized;
-            let matches_alias = variants
-                .iter()
-                .any(|alias| canonical_payment_method(alias) == normalized);
-            (matches_canonical || matches_alias).then_some(canonical)
-        }) {
+        let canonical = aliases
+            .iter()
+            .find(|(canonical, _)| canonical_payment_method(canonical) == normalized)
+            .map(|(canonical, _)| canonical)
+            .or_else(|| {
+                aliases.iter().find_map(|(canonical, variants)| {
+                    variants
+                        .iter()
+                        .any(|alias| canonical_payment_method(alias) == normalized)
+                        .then_some(canonical)
+                })
+            });
+        if let Some(canonical) = canonical {
             method.clone_from(canonical);
         }
     }
