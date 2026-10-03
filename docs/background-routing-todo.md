@@ -12,7 +12,7 @@ This checklist tracks the Pay3Flow/Fmatch routing work in the isolated
 - [x] Search P2P on demand, while refreshing popular P2P pairs in the background.
 - [x] Verify ADA to AMD accepts a BestChange offer without a minimum, and
   uncommon catalog assets remain in background polls.
-- [ ] Update docs, run checks, commit slices, then push the finished fix.
+- [x] Update docs, run checks, commit slices, then push the finished fix.
 
 - [x] Keep the shared route response cache in Redis for 15 seconds.
 - [x] Move direct exchanger offer discovery, including Fmatch calls, to startup
