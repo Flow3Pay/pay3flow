@@ -72,25 +72,25 @@ impl P2pSearchService {
         }
         drop(refreshes);
 
-        let provider = job.provider.clone();
-        let from = job.from.clone();
-        let to = job.to.clone();
-        let amount = job.amount.clone();
-        let quote_semaphore = self.quote_semaphore.clone();
-        let cache = self.provider_quote_cache.clone();
-        let active_refreshes = self.quote_refreshes.clone();
-        let Ok(permit) = quote_semaphore.try_acquire_owned() else {
-            if let Ok(mut refreshes) = active_refreshes.lock() {
+        let Some(background_permit) = self.try_start_background_pipeline() else {
+            if let Ok(mut refreshes) = self.quote_refreshes.lock() {
                 refreshes.remove(&refresh_key);
             }
             return;
         };
+
+        let provider = job.provider.clone();
+        let from = job.from.clone();
+        let to = job.to.clone();
+        let amount = job.amount.clone();
+        let cache = self.provider_quote_cache.clone();
+        let active_refreshes = self.quote_refreshes.clone();
         tokio::spawn(async move {
+            let _background_permit = background_permit;
             let provider_name = provider.name().to_string();
             let result =
                 tokio::time::timeout(Duration::from_secs(12), provider.quote(from, to, amount))
                     .await;
-            drop(permit);
             match result {
                 Ok(Ok(quote)) => {
                     if let Ok(mut cache) = cache.write() {
@@ -145,16 +145,17 @@ impl P2pSearchService {
         }
         drop(refreshes);
 
-        let cache = self.fiat_quote_cache.clone();
-        let active_refreshes = self.quote_refreshes.clone();
-        let quote_semaphore = self.quote_semaphore.clone();
-        let Ok(permit) = quote_semaphore.try_acquire_owned() else {
-            if let Ok(mut refreshes) = active_refreshes.lock() {
+        let Some(background_permit) = self.try_start_background_pipeline() else {
+            if let Ok(mut refreshes) = self.quote_refreshes.lock() {
                 refreshes.remove(&refresh_key);
             }
             return;
         };
+
+        let cache = self.fiat_quote_cache.clone();
+        let active_refreshes = self.quote_refreshes.clone();
         tokio::spawn(async move {
+            let _background_permit = background_permit;
             let quote = tokio::time::timeout(
                 Duration::from_secs(12),
                 provider.quote(&source_currency, &target_currency, source_amount),
@@ -162,7 +163,6 @@ impl P2pSearchService {
             .await
             .ok()
             .and_then(Result::ok);
-            drop(permit);
             if let Some(quote) = quote {
                 if let Ok(mut cache) = cache.write() {
                     cache.insert(

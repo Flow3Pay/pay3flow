@@ -319,6 +319,8 @@ pub struct P2pSearchService {
     pub(crate) provider_quote_cache: Arc<RwLock<HashMap<String, CachedProviderQuote>>>,
     pub(crate) fiat_quote_cache: Arc<RwLock<HashMap<String, CachedFiatQuote>>>,
     pub(crate) quote_refreshes: Arc<Mutex<HashSet<String>>>,
+    background_pipeline_semaphore: Arc<Semaphore>,
+    background_last_started: Arc<Mutex<Option<Instant>>>,
     pub(crate) provider_capabilities_cache: Arc<RwLock<Option<ProviderCapabilitiesSnapshot>>>,
     pub(crate) service_latencies: ServiceLatencyTracker,
     fmatch: Option<FmatchP2pBackend>,
@@ -404,8 +406,12 @@ impl P2pSearchService {
                             limit: Some(DEFAULT_LIMIT),
                             sources: None,
                         };
+                        let Some(permit) = self.try_start_background_pipeline() else {
+                            continue;
+                        };
                         let service = self.clone();
                         active.push(async move {
+                            let _permit = permit;
                             if let Err(error) = service.refresh_background_search(query).await {
                                 tracing::warn!(%error, %fiat, %asset, ?side, "background provider observation failed");
                             }
@@ -426,6 +432,23 @@ impl P2pSearchService {
                 _ = active.next(), if !active.is_empty() => {}
             }
         }
+    }
+
+    pub(crate) fn try_start_background_pipeline(
+        &self,
+    ) -> Option<tokio::sync::OwnedSemaphorePermit> {
+        let permit = self
+            .background_pipeline_semaphore
+            .clone()
+            .try_acquire_owned()
+            .ok()?;
+        let now = Instant::now();
+        let mut last_started = self.background_last_started.lock().ok()?;
+        if last_started.is_some_and(|last| now.duration_since(last) < BACKGROUND_SEARCH_INTERVAL) {
+            return None;
+        }
+        *last_started = Some(now);
+        Some(permit)
     }
 
     pub fn from_config(config: &Config, networks: NetworkCatalog) -> Result<Self> {
@@ -568,6 +591,8 @@ impl P2pSearchService {
             provider_quote_cache: Arc::new(RwLock::new(HashMap::new())),
             fiat_quote_cache: Arc::new(RwLock::new(HashMap::new())),
             quote_refreshes: Arc::new(Mutex::new(HashSet::new())),
+            background_pipeline_semaphore: Arc::new(Semaphore::new(MAX_BACKGROUND_SEARCHES)),
+            background_last_started: Arc::new(Mutex::new(None)),
             provider_capabilities_cache: Arc::new(RwLock::new(None)),
             service_latencies: ServiceLatencyTracker::default(),
             fmatch: None,
@@ -620,6 +645,8 @@ impl P2pSearchService {
             provider_quote_cache: Arc::new(RwLock::new(HashMap::new())),
             fiat_quote_cache: Arc::new(RwLock::new(HashMap::new())),
             quote_refreshes: Arc::new(Mutex::new(HashSet::new())),
+            background_pipeline_semaphore: Arc::new(Semaphore::new(MAX_BACKGROUND_SEARCHES)),
+            background_last_started: Arc::new(Mutex::new(None)),
             provider_capabilities_cache: Arc::new(RwLock::new(None)),
             service_latencies: ServiceLatencyTracker::default(),
             fmatch: None,

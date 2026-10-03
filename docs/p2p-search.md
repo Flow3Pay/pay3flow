@@ -23,9 +23,9 @@ complete routes. Other venues from the research list remain outside the live
 path until a legitimate read-only interface and adapter review exist.
 
 At startup, a background poller begins walking the configured fiat currencies
-and supported assets immediately. It starts at most 25 directional pair
-observations per minute and keeps no more than five provider-search pipelines
-active. When all five slots are occupied, later catalog entries wait at the
+and supported assets immediately. It starts at most 25 background pipelines
+per minute and keeps no more than five active across catalog polls and quote
+refreshes. When all five slots are occupied, later catalog entries wait at the
 cursor instead of building an in-memory task queue. Fiat currencies declared
 by provider adapters are included alongside `route_source_fiats`; network
 assets are included alongside `p2p_search_assets`. The poller publishes offers

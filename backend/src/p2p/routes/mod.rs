@@ -30,7 +30,7 @@ pub(super) const MAX_PROVIDER_ASSETS: usize = 12;
 pub(super) const MAX_PROVIDER_NETWORK_PAIRS: usize = 32;
 pub(super) const MAX_PROVIDER_OFFERS_PER_LEG: usize = 8;
 pub(super) const PROVIDER_QUOTE_CACHE_TTL: Duration = Duration::from_secs(30);
-pub(super) const MAX_BACKGROUND_PROVIDER_REFRESHES_PER_SEARCH: usize = 8;
+pub(super) const MAX_BACKGROUND_PROVIDER_REFRESHES_PER_SEARCH: usize = 1;
 
 #[cfg(test)]
 mod tests;
