@@ -126,7 +126,8 @@ async fn main() -> anyhow::Result<()> {
         public_fiat_route_providers,
         ap.clone(),
     )
-    .await?;
+    .await?
+    .with_redis(redis_pool.clone());
     let route_engine = RouteEngine::new(RouteGraphConfig {
         max_depth: cfg.route_max_depth,
     })?;

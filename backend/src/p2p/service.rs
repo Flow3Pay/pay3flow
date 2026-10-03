@@ -18,6 +18,7 @@ use crate::compiled_provider_code::bestchange::BestChangeSource;
 use crate::compiled_provider_code::papa_change::PapaChangeSource;
 use crate::compiled_provider_code::skylabs::SkyLabsSource;
 use crate::config::Config;
+use crate::core::redis::{get_json, RedisPool};
 use crate::db::DbPool;
 use crate::networks::NetworkCatalog;
 use crate::p2p::declarative::{DeclarativeMarketSource, DeclarativeP2pSource};
@@ -29,6 +30,7 @@ pub(crate) use crate::p2p::models::{
 use crate::p2p::spot::{CryptoMarketSource, CryptoTicker};
 use crate::p2p::workflow::WorkflowP2pSource;
 use crate::route_engine::{Asset, PublicRouteProvider, PublicRouteQuote};
+use crate::service_reputation::{vote_quality_score, ServiceStats};
 
 const DEFAULT_LIMIT: usize = 20;
 const MAX_LIMIT: usize = 100;
@@ -317,6 +319,7 @@ pub struct P2pSearchService {
     background_pipeline_semaphore: Arc<Semaphore>,
     background_last_started: Arc<Mutex<Option<Instant>>>,
     background_provider_semaphore: Arc<Semaphore>,
+    redis: Option<RedisPool>,
     pub(crate) provider_capabilities_cache: Arc<RwLock<Option<ProviderCapabilitiesSnapshot>>>,
     pub(crate) service_latencies: ServiceLatencyTracker,
     fmatch: Option<FmatchP2pBackend>,
@@ -593,6 +596,7 @@ impl P2pSearchService {
             background_provider_semaphore: Arc::new(Semaphore::new(
                 MAX_BACKGROUND_PROVIDER_REQUESTS,
             )),
+            redis: None,
             provider_capabilities_cache: Arc::new(RwLock::new(None)),
             service_latencies: ServiceLatencyTracker::default(),
             fmatch: None,
@@ -650,6 +654,7 @@ impl P2pSearchService {
             background_provider_semaphore: Arc::new(Semaphore::new(
                 MAX_BACKGROUND_PROVIDER_REQUESTS,
             )),
+            redis: None,
             provider_capabilities_cache: Arc::new(RwLock::new(None)),
             service_latencies: ServiceLatencyTracker::default(),
             fmatch: None,
@@ -671,6 +676,11 @@ impl P2pSearchService {
         self.provider_quote_cache = Arc::new(RwLock::new(HashMap::new()));
         self.quote_refreshes = Arc::new(Mutex::new(HashSet::new()));
         self.provider_capabilities_cache = Arc::new(RwLock::new(None));
+        self
+    }
+
+    pub fn with_redis(mut self, redis: Option<RedisPool>) -> Self {
+        self.redis = redis;
         self
     }
 
@@ -1008,7 +1018,7 @@ impl P2pSearchService {
             }
             return Ok(response);
         }
-        let selected_sources = self
+        let mut selected_sources = self
             .sources
             .iter()
             .filter(|source| {
@@ -1019,6 +1029,24 @@ impl P2pSearchService {
             })
             .cloned()
             .collect::<Vec<_>>();
+        if background {
+            let priorities = self.background_provider_priorities().await;
+            selected_sources.sort_by(|left, right| {
+                let priority = |source: &Arc<dyn P2pSource>| {
+                    priorities
+                        .get(&source.name().to_ascii_lowercase())
+                        .copied()
+                        .unwrap_or((f64::NEG_INFINITY, 0, 0))
+                };
+                let left = priority(left);
+                let right = priority(right);
+                right
+                    .0
+                    .total_cmp(&left.0)
+                    .then_with(|| right.1.cmp(&left.1))
+                    .then_with(|| right.2.cmp(&left.2))
+            });
+        }
         let background_provider_semaphore = self.background_provider_semaphore.clone();
         let mut searches = selected_sources
             .into_iter()
@@ -1205,6 +1233,35 @@ impl P2pSearchService {
         self.run_search_once_with_mode(query, None, None, true)
             .await
             .map(|_| ())
+    }
+
+    async fn background_provider_priorities(&self) -> HashMap<String, (f64, i64, i64)> {
+        let Some(redis) = self.redis.as_ref() else {
+            return HashMap::new();
+        };
+        let cached = tokio::time::timeout(
+            Duration::from_millis(50),
+            get_json::<HashMap<String, ServiceStats>>(redis, "pay3flow:reputation:services:v1"),
+        )
+        .await
+        .unwrap_or(Ok(None));
+        let Ok(Some(stats)) = cached else {
+            return HashMap::new();
+        };
+        stats
+            .into_iter()
+            .map(|(slug, stats)| {
+                (
+                    slug,
+                    (
+                        vote_quality_score(stats.likes_total, stats.dislikes_total)
+                            .unwrap_or(f64::NEG_INFINITY),
+                        stats.likes_total.saturating_add(stats.dislikes_total),
+                        stats.executions_total,
+                    ),
+                )
+            })
+            .collect()
     }
 
     fn provider_snapshot(

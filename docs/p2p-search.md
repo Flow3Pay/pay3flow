@@ -29,7 +29,8 @@ refreshes. Background provider fan-out also shares a semaphore capped at five
 active source requests, so one catalog query cannot multiply the network
 concurrency by the number of adapters. When all five pipeline slots are
 occupied, later catalog entries wait at the cursor instead of building an
-in-memory task queue. Fiat currencies declared
+in-memory task queue. Background source requests use the cached provider vote
+quality as their acquisition order; ties retain catalog order. Fiat currencies declared
 by provider adapters are included alongside `route_source_fiats`; network
 assets are included alongside `p2p_search_assets`. The poller publishes offers
 as bounded ActivityPub `OrderedCollection` batches of up to 64, allowing Fmatch
