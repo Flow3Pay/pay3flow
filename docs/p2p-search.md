@@ -50,8 +50,9 @@ At startup the first background pass starts immediately. P2P partitions refresh
 every 60 seconds when idle, 30 seconds when used, and 15 seconds at high demand.
 Direct exchanger partitions, spot tickers, public provider rates, and direct
 fiat quotes refresh in the background on a five-minute cadence. Offer and spot
-snapshots are shared through Redis. A new corridor can wait up to two seconds
-for its first snapshot; until then its response reports `background_pending`.
+snapshots are shared through Redis. A new corridor waits for its first background
+snapshot for up to 65 seconds, including a worker timeout. Only if no snapshot
+arrives by then does the response report `background_pending`.
 Streaming searches publish cached market partitions as they become available.
 Fiat workflow legs for different assets
 also run concurrently, so a slow or unsupported asset does not hold back routes

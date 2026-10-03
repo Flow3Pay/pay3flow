@@ -23,7 +23,7 @@ use crate::route_engine::Amount;
 const MAX_BACKGROUND_POLLS: usize = 8;
 const MAX_DYNAMIC_TARGETS: usize = 64;
 const REDIS_TIMEOUT: Duration = Duration::from_millis(150);
-const COLD_WAIT: Duration = Duration::from_secs(2);
+const COLD_WAIT: Duration = Duration::from_secs(65);
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub(crate) struct OfferKey {
@@ -541,20 +541,26 @@ impl P2pSearchService {
             || vec![P2pOfferMarket::P2p, P2pOfferMarket::DirectExchange],
             |market| vec![market],
         );
+        let cold_deadline = tokio::time::Instant::now() + COLD_WAIT;
         let mut snapshots = Vec::new();
         for market in markets {
             let key = OfferKey::from_query(&query, market);
             store.record_request(&key);
             self.register_background_target(key.clone());
-            let notified = store.notify.notified();
-            tokio::pin!(notified);
-            notified.as_mut().enable();
-            let mut snapshot = store.load(&key).await;
-            if snapshot.is_none() {
-                if tokio::time::timeout(COLD_WAIT, notified).await.is_ok() {
-                    snapshot = store.load(&key).await;
+            let snapshot = loop {
+                let notified = store.notify.notified();
+                tokio::pin!(notified);
+                notified.as_mut().enable();
+                if let Some(snapshot) = store.load(&key).await {
+                    break Some(snapshot);
                 }
-            }
+                if tokio::time::timeout_at(cold_deadline, notified)
+                    .await
+                    .is_err()
+                {
+                    break None;
+                }
+            };
             if let Some(snapshot) = snapshot {
                 let age = Utc::now()
                     .signed_duration_since(snapshot.searched_at)
@@ -621,6 +627,8 @@ mod tests {
 
     struct CountSource(Arc<AtomicUsize>);
 
+    struct SlowSource(Arc<AtomicUsize>);
+
     struct OrderedSource {
         name: &'static str,
         calls: Arc<Mutex<Vec<&'static str>>>,
@@ -648,6 +656,44 @@ mod tests {
             self.0.fetch_add(1, Ordering::Relaxed);
             Ok(Vec::new())
         }
+    }
+
+    #[async_trait]
+    impl P2pSource for SlowSource {
+        fn name(&self) -> &str {
+            "slow"
+        }
+
+        async fn search(&self, _query: &P2pSearchQuery) -> Result<Vec<P2pOffer>> {
+            self.0.fetch_add(1, Ordering::Relaxed);
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            Ok(Vec::new())
+        }
+    }
+
+    #[tokio::test]
+    async fn a_cold_search_waits_for_its_background_snapshot() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut service = P2pSearchService::with_sources(
+            vec![Arc::new(SlowSource(calls.clone()))],
+            Duration::from_secs(60),
+        );
+        let query = OfferKey {
+            fiat: "AMD".into(),
+            asset: "USDT".into(),
+            side: P2pSide::BuyCrypto,
+            market: P2pOfferMarket::P2p,
+        };
+        service.start_background_offer_refresh(vec![query.clone()], None);
+        let response = tokio::time::timeout(
+            Duration::from_secs(3),
+            service.search_market(query.baseline_query(), Some(P2pOfferMarket::P2p)),
+        )
+        .await
+        .expect("cold search must finish when its background poll does")
+        .unwrap();
+        assert_eq!(response.source, "provider");
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
     }
 
     #[tokio::test]
