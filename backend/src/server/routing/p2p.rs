@@ -6,6 +6,8 @@ use axum::response::Response;
 use axum::Json;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
+use std::time::Duration;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
@@ -14,6 +16,7 @@ use crate::core::state::AppState;
 use crate::p2p::{
     P2pRoute, P2pRouteSearchQuery, P2pRouteSearchResponse, P2pSearchQuery, P2pSearchResponse,
 };
+use crate::route_engine::canonical_network_id;
 use crate::service_reputation::{
     average_reputation, ReputationError, RouteServiceStats, ServiceLink, ServiceLinkKind,
     ServiceStats, VoteChoice,
@@ -73,20 +76,26 @@ pub async fn routes(
         .start_search(search_id)
         .await
         .map_err(map_reputation_error)?;
-    let response = state.p2p.search_routes(query).await;
-    let mut response = match response {
-        Ok(mut response) => {
+    let mut response = match cached_route_response(&state, &query).await {
+        Some(mut response) => {
             response.search_id = search_id;
             response
         }
-        Err(error) => {
-            state
-                .reputation
-                .update_search(search_id, 0, "failed")
-                .await
-                .map_err(map_reputation_error)?;
-            return Err(AppError::BadRequest(error.to_string()));
-        }
+        None => match state.p2p.search_routes(query.clone()).await {
+            Ok(mut response) => {
+                response.search_id = search_id;
+                cache_route_response(&state, &query, &response);
+                response
+            }
+            Err(error) => {
+                state
+                    .reputation
+                    .update_search(search_id, 0, "failed")
+                    .await
+                    .map_err(map_reputation_error)?;
+                return Err(AppError::BadRequest(error.to_string()));
+            }
+        },
     };
     if let Err(error) = enrich_routes(&state, &mut response, metadata.anonymous_id).await {
         let _ = state
@@ -144,8 +153,44 @@ async fn route_socket(state: AppState, mut socket: WebSocket) {
         return;
     }
 
+    if let Some(mut response) = cached_route_response(&state, &request.query).await {
+        response.search_id = search_id;
+        if let Err(error) = enrich_routes(&state, &mut response, Some(request.anonymous_id)).await {
+            let _ = state
+                .reputation
+                .update_search(search_id, response.routes_found, "failed")
+                .await;
+            let _ = send_json(
+                &mut socket,
+                json!({
+                    "type": "search_failed",
+                    "search_id": search_id,
+                    "error": error_message(error),
+                }),
+            )
+            .await;
+            return;
+        }
+        if state
+            .reputation
+            .update_search(search_id, response.routes_found, "finished")
+            .await
+            .is_err()
+        {
+            return;
+        }
+        if send_search_response(&mut socket, "routes_updated", response.clone())
+            .await
+            .is_ok()
+        {
+            let _ = send_search_response(&mut socket, "search_finished", response).await;
+        }
+        return;
+    }
+
     let (updates_tx, mut updates_rx) = mpsc::channel(4);
     let p2p = state.p2p.clone();
+    let cache_query = request.query.clone();
     let query = request.query;
     let search_task =
         tokio::spawn(async move { p2p.stream_routes(query, search_id, updates_tx).await });
@@ -189,6 +234,8 @@ async fn route_socket(state: AppState, mut socket: WebSocket) {
 
     match search_task.await {
         Ok(Ok(mut response)) => {
+            cache_route_response(&state, &cache_query, &response);
+            response.search_id = search_id;
             if let Err(error) =
                 enrich_routes(&state, &mut response, Some(request.anonymous_id)).await
             {
@@ -522,12 +569,121 @@ fn map_reputation_error(error: ReputationError) -> AppError {
     }
 }
 
+const ROUTE_RESULT_CACHE_TTL_SECS: u64 = 15;
+
+async fn cached_route_response(
+    state: &AppState,
+    query: &P2pRouteSearchQuery,
+) -> Option<P2pRouteSearchResponse> {
+    let redis = state.redis.as_ref()?;
+    let key = route_result_cache_key(query)?;
+    match tokio::time::timeout(
+        Duration::from_millis(100),
+        crate::core::redis::get_json(redis, &key),
+    )
+    .await
+    {
+        Ok(Ok(Some(response))) => Some(response),
+        Ok(Ok(None)) => None,
+        Ok(Err(error)) => {
+            tracing::warn!(%error, "failed to read route result cache");
+            None
+        }
+        Err(_) => {
+            tracing::warn!("route result cache read timed out");
+            None
+        }
+    }
+}
+
+fn cache_route_response(
+    state: &AppState,
+    query: &P2pRouteSearchQuery,
+    response: &P2pRouteSearchResponse,
+) {
+    if response.routes_found == 0 || response.routes.is_empty() {
+        return;
+    }
+    let (Some(redis), Some(key)) = (state.redis.clone(), route_result_cache_key(query)) else {
+        return;
+    };
+    let response = response.clone();
+    tokio::spawn(async move {
+        if let Err(error) =
+            crate::core::redis::set_json(&redis, &key, &response, ROUTE_RESULT_CACHE_TTL_SECS).await
+        {
+            tracing::warn!(%error, "failed to write route result cache");
+        }
+    });
+}
+
+fn route_result_cache_key(query: &P2pRouteSearchQuery) -> Option<String> {
+    let mut query = query.clone();
+    query.source_fiat = query.source_fiat.trim().to_ascii_uppercase();
+    query.target_fiat = query.target_fiat.trim().to_ascii_uppercase();
+    query.source_network = query
+        .source_network
+        .as_deref()
+        .map(str::trim)
+        .filter(|network| !network.is_empty())
+        .map(canonical_network_id);
+    query.target_network = query
+        .target_network
+        .as_deref()
+        .map(str::trim)
+        .filter(|network| !network.is_empty())
+        .map(canonical_network_id);
+    if query.intermediary_assets.is_none() {
+        query.intermediary_assets = query.assets.take();
+    } else {
+        query.assets = None;
+    }
+    for assets in [&mut query.intermediary_assets, &mut query.bridge_fiat] {
+        if let Some(value) = assets {
+            *value = value
+                .split(',')
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_ascii_uppercase)
+                .collect::<Vec<_>>()
+                .join(",");
+        }
+    }
+    query.source_payment_method = query
+        .source_payment_method
+        .take()
+        .map(|method| method.trim().to_string())
+        .filter(|method| !method.is_empty());
+    query.target_payment_method = query
+        .target_payment_method
+        .take()
+        .map(|method| method.trim().to_string())
+        .filter(|method| !method.is_empty());
+    query.sources = crate::p2p::normalize_sources(query.sources.take()).ok()?;
+    query.limit = Some(query.limit.unwrap_or(20).clamp(1, 100));
+    query.max_price_deviation_bps = Some(query.max_price_deviation_bps.unwrap_or(1_000));
+    query.merchant_only = Some(query.merchant_only.unwrap_or(false));
+    query.allow_cross_venue = Some(query.allow_cross_venue.unwrap_or(false));
+    query.min_orders = query.min_orders.filter(|orders| *orders > 0);
+    query.source_payment_fee_percent = query
+        .source_payment_fee_percent
+        .map(|fee| (fee * 100.0).round() / 100.0);
+    query.target_payment_fee_percent = query
+        .target_payment_fee_percent
+        .map(|fee| (fee * 100.0).round() / 100.0);
+    let encoded = serde_json::to_vec(&query).ok()?;
+    let digest = Sha256::digest(encoded);
+    Some(format!("pay3flow:routes:v1:{digest:x}"))
+}
+
 #[cfg(test)]
 mod tests {
     use axum::extract::Query;
     use axum::http::Uri;
 
-    use super::{P2pRouteSearchQuery, RouteHttpMetadata, VoteChoice, VoteRequest};
+    use super::{
+        route_result_cache_key, P2pRouteSearchQuery, RouteHttpMetadata, VoteChoice, VoteRequest,
+    };
 
     #[test]
     fn route_http_query_parses_numeric_and_boolean_url_values() {
@@ -583,5 +739,31 @@ mod tests {
 
             assert!(serde_json::from_value::<VoteRequest>(payload).is_err());
         }
+    }
+
+    #[test]
+    fn route_result_cache_key_uses_normalized_query_without_user_identity() {
+        let mut first: P2pRouteSearchQuery = serde_json::from_value(serde_json::json!({
+            "source_fiat": "AMD",
+            "target_fiat": "RUB",
+            "source_amount": 100000.0,
+            "assets": "USDT, USDC",
+            "sources": "binance,okx"
+        }))
+        .unwrap();
+        let mut second = first.clone();
+        first.source_fiat = " amd ".into();
+        first.target_fiat = " rub ".into();
+        first.assets = Some(" USDT , USDC ".into());
+        second.assets = None;
+        second.intermediary_assets = Some("USDT,USDC".into());
+        second.sources = Some("OKX,BINANCE".into());
+
+        assert_eq!(
+            route_result_cache_key(&first),
+            route_result_cache_key(&second)
+        );
+        second.sources = Some("not a valid source".into());
+        assert!(route_result_cache_key(&second).is_none());
     }
 }

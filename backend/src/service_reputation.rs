@@ -56,7 +56,7 @@ impl VoteChoice {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ServiceStats {
     pub id: Uuid,
     pub slug: String,
@@ -64,17 +64,17 @@ pub struct ServiceStats {
     pub executions_total: i64,
     pub likes_total: i64,
     pub dislikes_total: i64,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub viewer_vote: Option<VoteChoice>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RouteServiceStats {
     #[serde(flatten)]
     pub stats: ServiceStats,
 }
 
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ServiceLinkKind {
     Entry,
@@ -83,7 +83,7 @@ pub enum ServiceLinkKind {
     MarketTarget,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ServiceLink {
     pub service_id: Uuid,
     pub service_slug: String,
@@ -91,7 +91,7 @@ pub struct ServiceLink {
     pub tracking_token: String,
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct CombinedReputation {
     pub executions_average: i64,
     pub likes_average: i64,
@@ -99,11 +99,11 @@ pub struct CombinedReputation {
 }
 
 /// Anonymous feedback for one concrete route shown in a search result.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RouteFeedback {
     pub likes_total: i64,
     pub dislikes_total: i64,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub viewer_vote: Option<VoteChoice>,
 }
 

@@ -38,6 +38,13 @@ completion-rate filters to those offers. More specific searches that need a
 larger provider page than the snapshot contains continue to query the providers.
 Public route legs are resolved through Fmatch when it is available; local
 provider results remain the fallback.
+
+Completed route responses with at least one route are also cached in Redis for
+15 seconds. The key uses a normalized search query and excludes the anonymous
+viewer ID, so identical searches share the result. The cached route graph is
+enriched with the current viewer's votes and fresh service links after the
+cache read. Redis reads have a short timeout and cache writes run in the
+background.
 Successful Fmatch answers are stored in PostgreSQL. If Fmatch is unavailable,
 the newest answer within `p2p_fmatch_stale_secs` is used and the response has
 `source: "database_cache"` and `stale: true`. A live Fmatch answer has

@@ -863,6 +863,10 @@ async fn discovers_cardano_to_amd_from_the_p2p_catalog() {
                 .as_ref()
                 .is_some_and(|offer| offer.asset == "ADA")
     }));
+    let encoded = serde_json::to_value(&response).expect("route response should serialize");
+    let decoded: P2pRouteSearchResponse =
+        serde_json::from_value(encoded).expect("cached route response should deserialize");
+    assert_eq!(decoded.routes.len(), response.routes.len());
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
