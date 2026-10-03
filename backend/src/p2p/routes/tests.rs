@@ -1524,6 +1524,14 @@ async fn route_stream_reports_each_completed_asset_batch() {
     assert_eq!(second.routes_found, 2);
     assert_eq!(final_response.routes_found, 2);
     assert_eq!(final_response.search_id, search_id);
+    let mut payload = serde_json::to_value(&final_response).unwrap();
+    payload["routes"][0]["feedback"] = serde_json::json!({"viewer_vote": "like"});
+    payload["routes"][0]["service_links"] = serde_json::json!([{"tracking_token": "private"}]);
+    let cached: P2pRouteSearchResponse = serde_json::from_value(payload).unwrap();
+    assert_eq!(cached.routes_found, 2);
+    assert_eq!(cached.routes.len(), 2);
+    assert!(cached.routes[0].feedback.is_none());
+    assert!(cached.routes[0].service_links.is_empty());
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

@@ -1,3 +1,4 @@
+mod cache;
 mod crypto;
 mod fiat;
 mod provider;
@@ -57,6 +58,13 @@ impl P2pSearchService {
             &self.networks,
             &provider_assets,
         )?;
+        let route_cache_key = cache::route_cache_key(&query);
+        if let Some(key) = route_cache_key.as_deref() {
+            if let Some(response) = cache::cached_routes(self, key, search_id).await {
+                publish_snapshot(updates.as_ref(), response.clone()).await;
+                return Ok(response);
+            }
+        }
         let source_is_crypto =
             is_crypto_currency(&query.source_currency, &self.networks, &provider_assets);
         let target_is_crypto =
@@ -191,6 +199,9 @@ impl P2pSearchService {
             &provider_statuses,
         );
         response.routes_exhaustive &= routes_exhaustive;
+        if let Some(key) = route_cache_key.as_deref() {
+            cache::cache_routes(self, key, &response).await;
+        }
         tracing::info!(
             source_currency = %query.source_currency,
             target_currency = %query.target_currency,

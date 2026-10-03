@@ -2,8 +2,9 @@ pub(in crate::p2p) mod provider;
 
 use crate::p2p::routes::ExchangeMode;
 use crate::p2p::{P2pOffer, P2pOfferMarket, P2pRoute, P2pSearchResponse, SourceStatus};
+use serde::Serialize;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub(in crate::p2p) struct NormalizedRouteQuery {
     pub(in crate::p2p) source_currency: String,
     pub(in crate::p2p) target_currency: String,

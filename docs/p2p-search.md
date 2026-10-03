@@ -53,6 +53,11 @@ also run concurrently, so a slow or unsupported asset does not hold back routes
 from another asset. A provider scan that returns no raw offers is not repeated
 with looser local filters.
 
+Completed route searches are cached in Redis for up to 15 seconds using
+normalized search parameters (less when a provider quote expires sooner). The
+cache is shared across users; viewer votes, reputation and execution links are
+added after cached routes are read.
+
 The public website endpoints can change without notice. Keep the adapters
 enabled, monitor `sources[].ok`, and do not treat a search result as a firm
 quote until the platform confirms it.
@@ -146,7 +151,7 @@ The backend search settings are TOML keys in [`config.toml`](../config.toml):
 ```toml
 p2p_search_enabled = true
 p2p_search_timeout_ms = 4000
-p2p_search_cache_ttl_ms = 5000
+p2p_search_cache_ttl_ms = 15000
 p2p_fmatch_stale_secs = 900
 p2p_search_assets = ["USDT", "USDC", "BTC", "ETH", "BNB", "SOL", "TRX"]
 playwright_chromium_executable = "/usr/bin/chromium"

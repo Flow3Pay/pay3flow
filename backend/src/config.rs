@@ -135,7 +135,7 @@ impl Default for FileConfig {
             pairs_cache_ttl_secs: 300,
             p2p_search_enabled: true,
             p2p_search_timeout_ms: 4_000,
-            p2p_search_cache_ttl_ms: 5_000,
+            p2p_search_cache_ttl_ms: 15_000,
             p2p_fmatch_stale_secs: 15 * 60,
             p2p_search_assets: Vec::new(),
             playwright_chromium_executable: None,
