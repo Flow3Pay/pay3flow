@@ -1289,7 +1289,7 @@ mod tests {
             sources: Some("bncex".into()),
         };
         let buy: Value = serde_json::from_str(
-            r#"{"token":"USDT","type":"BUY_USDT","network":"TRC20","paymentMethod":"NON_CASH","amountAmd":100000,"amountUsdt":267.09143962316284,"rate":365.5,"networkFeeApplied":2.5,"exchangeFeePercentageApplied":1.5}"#,
+            r#"{"token":"USDT","type":"BUY_USDT","network":"TRC20","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","amountAmd":100000,"amountUsdt":267.09143962316284,"rate":365.5,"networkFeeApplied":2.5,"exchangeFeePercentageApplied":1.5}"#,
         )
         .unwrap();
         let buy_offer = source
@@ -1304,10 +1304,24 @@ mod tests {
         assert_eq!(buy_offer.fiat, "AMD");
         assert_eq!(buy_offer.asset, "USDT");
         assert_eq!(buy_offer.network.as_deref(), Some("tron"));
+        assert_eq!(buy_offer.payment_methods, ["NON_CASH"]);
         assert!((buy_offer.price.parse::<f64>().unwrap() - 374.403613).abs() < 0.000001);
 
+        let buy_cash: Value = serde_json::from_str(
+            r#"{"token":"USDT","type":"BUY_USDT","network":"TRC20","paymentMethod":"CASH","fiatDestination":null,"amountAmd":100000,"amountUsdt":269.637154981585,"rate":363.5,"networkFeeApplied":2.5,"exchangeFeePercentageApplied":1.1}"#,
+        )
+        .unwrap();
+        let buy_cash_offer = source
+            .into_offer(
+                &buy_cash,
+                &query,
+                source.config.buy.as_ref().unwrap().offer.as_ref().unwrap(),
+            )
+            .unwrap();
+        assert_eq!(buy_cash_offer.payment_methods, ["CASH"]);
+
         let sell: Value = serde_json::from_str(
-            r#"{"token":"USDT","type":"SELL_USDT","network":"TRC20","paymentMethod":"NON_CASH","amountAmd":35306,"amountUsdt":100,"rate":361,"networkFeeApplied":2.5,"exchangeFeePercentageApplied":2.2}"#,
+            r#"{"token":"USDT","type":"SELL_USDT","network":"TRC20","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","amountAmd":35306,"amountUsdt":100,"rate":361,"networkFeeApplied":2.5,"exchangeFeePercentageApplied":2.2}"#,
         )
         .unwrap();
         let mut sell_query = query;
@@ -1323,8 +1337,22 @@ mod tests {
         assert_eq!(sell_offer.market, P2pOfferMarket::DirectExchange);
         assert_eq!(sell_offer.network.as_deref(), Some("tron"));
         assert_eq!(sell_offer.price, "353.06");
+        assert_eq!(sell_offer.payment_methods, ["NON_CASH"]);
         assert_eq!(sell_offer.source_url, "https://www.bncex.com/en");
         assert!(sell_offer.advertiser.is_verified);
+
+        let sell_cash: Value = serde_json::from_str(
+            r#"{"token":"USDT","type":"SELL_USDT","network":"TRC20","paymentMethod":"CASH","fiatDestination":null,"amountAmd":35450,"amountUsdt":100,"rate":361,"networkFeeApplied":2.5,"exchangeFeePercentageApplied":1.8}"#,
+        )
+        .unwrap();
+        let sell_cash_offer = source
+            .into_offer(
+                &sell_cash,
+                &sell_query,
+                source.config.sell.as_ref().unwrap().offer.as_ref().unwrap(),
+            )
+            .unwrap();
+        assert_eq!(sell_cash_offer.payment_methods, ["CASH"]);
     }
 
     #[test]
@@ -1353,13 +1381,14 @@ mod tests {
         assert_eq!(body["token"], "USDC");
         assert_eq!(body["network"], "TRC20");
         assert_eq!(body["paymentMethod"], "NON_CASH");
+        assert_eq!(body["fiatDestination"], "ACCOUNT");
         assert_eq!(body["amountAmd"].as_f64(), Some(250_000.0));
 
-        assert_eq!(operation.request_json_variants.len(), 8);
+        assert_eq!(operation.request_json_variants.len(), 17);
         let solana_template = operation
             .request_json_variants
             .iter()
-            .find(|template| template.contains("SOLANA"))
+            .find(|template| template.contains("SOLANA") && template.contains("NON_CASH"))
             .unwrap();
         let mut solana_body: Value = serde_json::from_str(solana_template).unwrap();
         render_request_json(&mut solana_body, &values).unwrap();
@@ -1367,9 +1396,40 @@ mod tests {
         assert_eq!(solana_body["network"], "SOLANA");
         assert_eq!(solana_body["amountAmd"].as_f64(), Some(250_000.0));
 
+        let mut payment_methods_by_network =
+            BTreeMap::<String, std::collections::BTreeSet<String>>::new();
+        for template in operation
+            .request_json
+            .iter()
+            .chain(operation.request_json_variants.iter())
+        {
+            let mut body: Value = serde_json::from_str(template).unwrap();
+            render_request_json(&mut body, &values).unwrap();
+            let network = body["network"].as_str().unwrap().to_string();
+            let payment_method = body["paymentMethod"].as_str().unwrap().to_string();
+            if payment_method == "NON_CASH" {
+                assert_eq!(body["fiatDestination"], "ACCOUNT");
+            } else {
+                assert_eq!(payment_method, "CASH");
+                assert!(body.get("fiatDestination").is_none());
+            }
+            payment_methods_by_network
+                .entry(network)
+                .or_default()
+                .insert(payment_method);
+        }
+        let expected_methods = ["CASH".to_string(), "NON_CASH".to_string()]
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(payment_methods_by_network.len(), 9);
+        assert!(payment_methods_by_network
+            .values()
+            .all(|methods| methods == &expected_methods));
+
         let networks = operation
             .request_json_variants
             .iter()
+            .filter(|template| template.contains("NON_CASH"))
             .map(|template| {
                 let mut body: Value = serde_json::from_str(template).unwrap();
                 render_request_json(&mut body, &values).unwrap();

@@ -33,7 +33,7 @@ still be available when the venue is opened.
 | Whitebird | Anonymous quote API used by the public exchanger | Direct fiat/crypto quotes, including `USDC/RUB` |
 | Cifra Markets | Public calculator and IMEX market API | Direct RUB/BYN/USD crypto quotes and crypto market paths |
 | SkyLabs | Public homepage rate API | Direct AMD/USD fiat-to-crypto and crypto-to-fiat quotes |
-| bncex | Public calculator quote API | Direct AMD/USDT and AMD/USDC quotes; available as the AMD exit for RUB→AMD routes |
+| bncex | Public calculator quote API | Direct AMD/USDT and AMD/USDC quotes for cash and non-cash payments; available as the AMD exit for RUB→AMD routes |
 | Bitcoin Center | Public route API | AMD bank transfer ↔ USDT on Solana, including the reported output fee |
 | BestChange | Official authenticated rates API | Aggregated exchanger offers |
 | Dzengi | Public market-data API | Crypto spot-market paths |

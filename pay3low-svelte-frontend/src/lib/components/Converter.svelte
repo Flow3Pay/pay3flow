@@ -3,7 +3,7 @@
   import { fetchCorridors, fetchP2pRoutes, fetchProviders, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderDefinition, type ProviderGuidance, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote, type VenueSearchStatus } from "$lib/exchange";
   import { FALLBACK_NETWORK, fetchNetworks, type CryptoNetwork } from "$lib/networks";
   import { assetIcon, networkIcon, swapIcon, venueIcon } from "$lib/icons";
-  import { fetchPaymentMethods, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
+  import { anyPaymentMethod, fetchPaymentMethods, isAnyPaymentMethod, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
   import { getAnonymousUserId, registerAnonymousUser } from "$lib/anonymous-user";
   import { locale, t } from "$lib/i18n";
   import { SearchResponseMetrics } from "$lib/response-metrics";
@@ -140,7 +140,7 @@
   const locationLabel = (country: string, currency: string) => { try { return `${new Intl.DisplayNames([activeLocale], { type: "region" }).of(country) ?? country} · ${currency}`; } catch { return `${country} · ${currency}`; } };
   const methodNoun = (method: PaymentMethod | null | undefined) => method?.kind === "wallet" ? "asset" : method?.kind === "cash" ? "payment method" : "bank";
   const methodAvailability = (method: PaymentMethod | null | undefined) => method?.kind === "wallet" ? "digital wallet" : method?.kind === "cash" ? "cash" : "bank transfer";
-  const methodTitle = (method: PaymentMethod | null | undefined) => method?.name ?? "Select payment method";
+  const methodTitle = (method: PaymentMethod | null | undefined) => method ? (isAnyPaymentMethod(method) ? t("Any available method", {}, activeLocale) : method.name) : "Select payment method";
   const methodDetail = (method: PaymentMethod | null | undefined) => method?.kind === "wallet" ? `${method.currency} · Digital asset` : method?.kind === "cash" ? `${method.currency} · Cash settlement` : method ? locationLabel(method.country, method.currency) : "Unavailable";
   const currencyMark = (currency: string) => currency === "USD" ? "$" : currency === "RUB" ? "₽" : currency === "AMD" ? "֏" : currency === "BYN" ? "Br" : currency.slice(0, 1);
 
@@ -222,9 +222,13 @@
         route_id: route.route_id?.trim() || fallbackRouteId,
         status: "complete", source_amount_minor: Math.round(Number(route.source_amount) * 100), source_amount: route.source_amount, source_currency: route.source_fiat,
         source_payment_method: sourceMethod?.kind !== "wallet" ? sourceMethod?.name : undefined,
-        target_payment_method: targetMethod?.kind !== "wallet" ? targetMethod?.name : undefined,
+        target_payment_method: targetMethod?.kind !== "wallet"
+          ? isAnyPaymentMethod(targetMethod)
+            ? exitOffer?.payment_methods.join(", ") || targetMethod.name
+            : targetMethod.name
+          : undefined,
         source_bank_fee_percent: sourceMethod?.kind === "bank" ? sourceMethod.bankFeePercent : undefined,
-        target_bank_fee_percent: targetMethod?.kind === "bank" ? targetMethod.bankFeePercent : undefined,
+        target_bank_fee_percent: targetMethod?.kind === "bank" && !isAnyPaymentMethod(targetMethod) ? targetMethod.bankFeePercent : undefined,
         source_method_icon_url: sourceMethod?.kind !== "wallet" ? paymentMethodFavicon(sourceMethod) ?? undefined : undefined,
         entry_asset: route.asset, entry_network: networkName(route.entry_network), source_network: route.source_network ? networkName(route.source_network) : undefined, target_network: route.target_network ? networkName(route.target_network) : undefined,
         target_amount_minor: Math.round(targetAmount * 100), target_amount: route.target_amount, target_currency: route.target_fiat,
@@ -409,7 +413,7 @@
   $: sourceMethods = paymentMethods.filter((method) => method.kind !== "currency" && (method.role === "sender" || method.role === "both"));
   $: targetMethods = paymentMethods.filter((method) => method.kind !== "currency" && (method.role === "recipient" || method.role === "both"));
   $: sourceMethod = resolveMethod(sourceMethods, sourceMethodId, sourceCountry, sourceCurrency);
-  $: targetMethod = resolveMethod(targetMethods, targetMethodId, targetCountry, targetCurrency);
+  $: targetMethod = resolveTargetMethod(targetMethods, targetMethodId, targetCountry, targetCurrency);
   $: sourceCurrencyChoice = sourceMethod?.currency || sourceCurrency;
   $: targetCurrencyChoice = targetMethod?.currency || targetCurrency;
   $: selectedSourceCurrency = sourceMethod?.currency || sourceCurrency;
@@ -524,6 +528,14 @@
       ?? methods[0]
       ?? null;
   }
+  function resolveTargetMethod(methods: PaymentMethod[], selectedId: string, country: string, currency: string) {
+    const selected = methods.find((method) => method.id === selectedId);
+    if (selected) return selected;
+    if (methods.some((method) => (method.kind === "bank" || method.kind === "cash") && method.country === country && method.currency === currency)) {
+      return anyPaymentMethod(currency, country);
+    }
+    return resolveMethod(methods, selectedId, country, currency);
+  }
   function currencyChoicesFor(method: PaymentMethod | null, role: "sender" | "recipient") {
     if (!method || method.kind === "wallet") return [];
     const supported = new Set(
@@ -620,7 +632,7 @@
     controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; controller = new AbortController(); const signal = controller.signal; const currentRequest = ++requestId; searching = true; awaitingFirstRoute = true; routesFound = 0; foundVenueIds = []; foundVenues = []; venueStats = {}; responseMetrics = new SearchResponseMetrics(); error = null;
     let rerunForTargetAmount = false;
     try {
-      const liveQuery = { sourceFiat: selectedSourceCurrency, targetFiat: selectedTargetCurrency, sourceAmount: value, intermediaryAssets: !sourceWallet && !targetWallet && selectedIntermediaryAssets.length ? selectedIntermediaryAssets : undefined, sourceNetwork: sourceWallet ? sourceNetwork?.id : undefined, targetNetwork: targetWallet ? targetNetwork?.id : undefined, sourcePaymentMethod: sourceWallet ? undefined : sourceMethod.p2pQuery, targetPaymentMethod: targetWallet ? undefined : targetMethod.p2pQuery, sourcePaymentFeePercent: sourceWallet ? 0 : sourceMethod.bankFeePercent, targetPaymentFeePercent: targetWallet ? 0 : targetMethod.bankFeePercent, sources: selectedSources, exchangeMode, allowCrossVenue: true, limit: 40 };
+      const liveQuery = { sourceFiat: selectedSourceCurrency, targetFiat: selectedTargetCurrency, sourceAmount: value, intermediaryAssets: !sourceWallet && !targetWallet && selectedIntermediaryAssets.length ? selectedIntermediaryAssets : undefined, sourceNetwork: sourceWallet ? sourceNetwork?.id : undefined, targetNetwork: targetWallet ? targetNetwork?.id : undefined, sourcePaymentMethod: sourceWallet ? undefined : sourceMethod.p2pQuery, targetPaymentMethod: targetWallet || isAnyPaymentMethod(targetMethod) ? undefined : targetMethod.p2pQuery, sourcePaymentFeePercent: sourceWallet ? 0 : sourceMethod.bankFeePercent, targetPaymentFeePercent: targetWallet || isAnyPaymentMethod(targetMethod) ? 0 : targetMethod.bankFeePercent, sources: selectedSources, exchangeMode, allowCrossVenue: true, limit: 40 };
       let response: P2pRouteSearchResponse;
       try {
         if (!anonymousId) throw new Error("Anonymous ID unavailable");

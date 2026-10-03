@@ -4,6 +4,27 @@ import { anonymousHeaders } from "$lib/anonymous-user";
 export type PaymentMethodRole = "sender" | "recipient" | "both";
 export type PaymentMethodKind = "bank" | "cash" | "currency" | "wallet";
 
+export const ANY_PAYMENT_METHOD_PREFIX = "any:";
+
+export function anyPaymentMethod(currency: string, country: string): PaymentMethod {
+  const normalizedCurrency = currency.toUpperCase();
+  return {
+    id: `${ANY_PAYMENT_METHOD_PREFIX}${normalizedCurrency}`,
+    name: "Any available method",
+    country,
+    currency: normalizedCurrency,
+    role: "both",
+    kind: "bank",
+    color: "#6d9800",
+    initials: "ANY",
+    p2pQuery: "",
+  };
+}
+
+export function isAnyPaymentMethod(method: PaymentMethod | null | undefined): boolean {
+  return method?.id.startsWith(ANY_PAYMENT_METHOD_PREFIX) ?? false;
+}
+
 /** A backend-owned option rendered by the shared picker card. */
 export interface PaymentMethod {
   id: string;

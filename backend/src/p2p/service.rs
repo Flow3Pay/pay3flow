@@ -169,6 +169,24 @@ impl P2pOffer {
 
     pub(crate) fn payment_method_match(&self, requested: &str) -> PaymentMethodMatch {
         let requested = canonical_payment_method(requested);
+        let is_settlement_mode = matches!(requested.as_str(), "cash" | "noncash");
+        let has_settlement_mode = self
+            .payment_methods
+            .iter()
+            .any(|method| is_settlement_mode_label(method));
+
+        if is_settlement_mode && has_settlement_mode {
+            return if self
+                .payment_methods
+                .iter()
+                .any(|method| canonical_payment_method(method) == requested)
+            {
+                PaymentMethodMatch::Exact
+            } else {
+                PaymentMethodMatch::No
+            };
+        }
+
         if self.payment_methods.iter().any(|method| {
             let method = canonical_payment_method(method);
             !method.is_empty() && (method.contains(&requested) || requested.contains(&method))
@@ -180,10 +198,9 @@ impl P2pOffer {
         // numeric payment IDs. Keep these offers as unverified estimates rather
         // than incorrectly claiming that the requested bank is unavailable.
         if self.payment_methods.is_empty()
-            || self
-                .payment_methods
-                .iter()
-                .all(|method| method.bytes().all(|byte| byte.is_ascii_digit()))
+            || self.payment_methods.iter().all(|method| {
+                method.bytes().all(|byte| byte.is_ascii_digit()) || is_settlement_mode_label(method)
+            })
         {
             return PaymentMethodMatch::Unknown;
         }
@@ -233,6 +250,10 @@ impl P2pOffer {
         }
         true
     }
+}
+
+fn is_settlement_mode_label(value: &str) -> bool {
+    matches!(canonical_payment_method(value).as_str(), "cash" | "noncash")
 }
 
 fn canonical_payment_method(value: &str) -> String {

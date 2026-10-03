@@ -744,4 +744,30 @@ fn payment_filter_keeps_opaque_ids_but_rejects_known_mismatch() {
         &BTreeMap::from([("Cash".into(), vec!["SkyLabs ATM".into()])]),
     );
     assert_eq!(cash.payment_method_match("Cash"), PaymentMethodMatch::Exact);
+
+    let mut bncex = offer("bncex", "360", "1", "100000", 20);
+    bncex.payment_methods = vec!["CASH".into()];
+    assert_eq!(
+        bncex.payment_method_match("Cash"),
+        PaymentMethodMatch::Exact
+    );
+    assert_eq!(
+        bncex.payment_method_match("Non-cash"),
+        PaymentMethodMatch::No
+    );
+    assert_eq!(
+        bncex.payment_method_match("Ameriabank"),
+        PaymentMethodMatch::Unknown
+    );
+
+    bncex.payment_methods = vec!["NON_CASH".into()];
+    assert_eq!(
+        bncex.payment_method_match("Non-cash"),
+        PaymentMethodMatch::Exact
+    );
+    assert_eq!(bncex.payment_method_match("Cash"), PaymentMethodMatch::No);
+    assert_eq!(
+        bncex.payment_method_match("Ameriabank"),
+        PaymentMethodMatch::Unknown
+    );
 }

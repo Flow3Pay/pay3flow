@@ -121,6 +121,10 @@ pub fn verify(
     Ok(sig.key_id)
 }
 
+pub fn signature_key_id(headers: &[(&str, &str)]) -> Result<String, ActivityPubError> {
+    Ok(parse_signature_header(headers)?.key_id)
+}
+
 fn sha256_b64(body: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(body);

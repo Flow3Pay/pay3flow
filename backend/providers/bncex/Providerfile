@@ -1,5 +1,6 @@
 # bncex exposes the quote used by its public AMD/stablecoin calculator. Quotes
-# include the selected transfer network and the amount-tiered exchange fee.
+# include cash/non-cash settlement, the selected transfer network, and the
+# amount-tiered exchange fee. Non-cash quotes require fiatDestination=ACCOUNT.
 
 exchange_methods = ["exchanger"]
 
@@ -32,16 +33,25 @@ timeout_ms = 5000
 
 [adapter.p2p.buy]
 amount_mode = "fiat_probe"
-request_json = '''{"type":"BUY_{{asset}}","network":"TRC20","paymentMethod":"NON_CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}'''
+request_json = '''{"type":"BUY_{{asset}}","network":"TRC20","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountAmd":"{{amount_number}}"}'''
 request_json_variants = [
-    '''{"type":"BUY_{{asset}}","network":"ETH","paymentMethod":"NON_CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
-    '''{"type":"BUY_{{asset}}","network":"BSC","paymentMethod":"NON_CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
-    '''{"type":"BUY_{{asset}}","network":"POLYGON","paymentMethod":"NON_CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
-    '''{"type":"BUY_{{asset}}","network":"ARBITRUM","paymentMethod":"NON_CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
-    '''{"type":"BUY_{{asset}}","network":"OPTIMISM","paymentMethod":"NON_CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
-    '''{"type":"BUY_{{asset}}","network":"BASE","paymentMethod":"NON_CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
-    '''{"type":"BUY_{{asset}}","network":"AVALANCHE","paymentMethod":"NON_CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
-    '''{"type":"BUY_{{asset}}","network":"SOLANA","paymentMethod":"NON_CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}'''
+    '''{"type":"BUY_{{asset}}","network":"TRC20","paymentMethod":"CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
+    '''{"type":"BUY_{{asset}}","network":"ETH","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
+    '''{"type":"BUY_{{asset}}","network":"BSC","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
+    '''{"type":"BUY_{{asset}}","network":"POLYGON","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
+    '''{"type":"BUY_{{asset}}","network":"ARBITRUM","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
+    '''{"type":"BUY_{{asset}}","network":"OPTIMISM","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
+    '''{"type":"BUY_{{asset}}","network":"BASE","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
+    '''{"type":"BUY_{{asset}}","network":"AVALANCHE","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
+    '''{"type":"BUY_{{asset}}","network":"SOLANA","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
+    '''{"type":"BUY_{{asset}}","network":"ETH","paymentMethod":"CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
+    '''{"type":"BUY_{{asset}}","network":"BSC","paymentMethod":"CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
+    '''{"type":"BUY_{{asset}}","network":"POLYGON","paymentMethod":"CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
+    '''{"type":"BUY_{{asset}}","network":"ARBITRUM","paymentMethod":"CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
+    '''{"type":"BUY_{{asset}}","network":"OPTIMISM","paymentMethod":"CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
+    '''{"type":"BUY_{{asset}}","network":"BASE","paymentMethod":"CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
+    '''{"type":"BUY_{{asset}}","network":"AVALANCHE","paymentMethod":"CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
+    '''{"type":"BUY_{{asset}}","network":"SOLANA","paymentMethod":"CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}'''
 ]
 
 [adapter.p2p.buy.offer]
@@ -49,22 +59,32 @@ fiat_amount_pointer = "/amountAmd"
 asset_amount_pointer = "/amountUsdt"
 asset_pointer = "/token"
 network_pointer = "/network"
+payment_methods_pointer = "/paymentMethod"
 merchant_default = true
 verified_default = true
 source_url_template = "https://www.bncex.com/en"
 
 [adapter.p2p.sell]
 amount_mode = "asset_probe"
-request_json = '''{"type":"SELL_{{asset}}","network":"TRC20","paymentMethod":"NON_CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}'''
+request_json = '''{"type":"SELL_{{asset}}","network":"TRC20","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountUsdt":"{{amount_number}}"}'''
 request_json_variants = [
-    '''{"type":"SELL_{{asset}}","network":"ETH","paymentMethod":"NON_CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
-    '''{"type":"SELL_{{asset}}","network":"BSC","paymentMethod":"NON_CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
-    '''{"type":"SELL_{{asset}}","network":"POLYGON","paymentMethod":"NON_CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
-    '''{"type":"SELL_{{asset}}","network":"ARBITRUM","paymentMethod":"NON_CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
-    '''{"type":"SELL_{{asset}}","network":"OPTIMISM","paymentMethod":"NON_CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
-    '''{"type":"SELL_{{asset}}","network":"BASE","paymentMethod":"NON_CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
-    '''{"type":"SELL_{{asset}}","network":"AVALANCHE","paymentMethod":"NON_CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
-    '''{"type":"SELL_{{asset}}","network":"SOLANA","paymentMethod":"NON_CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}'''
+    '''{"type":"SELL_{{asset}}","network":"TRC20","paymentMethod":"CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
+    '''{"type":"SELL_{{asset}}","network":"ETH","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
+    '''{"type":"SELL_{{asset}}","network":"BSC","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
+    '''{"type":"SELL_{{asset}}","network":"POLYGON","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
+    '''{"type":"SELL_{{asset}}","network":"ARBITRUM","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
+    '''{"type":"SELL_{{asset}}","network":"OPTIMISM","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
+    '''{"type":"SELL_{{asset}}","network":"BASE","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
+    '''{"type":"SELL_{{asset}}","network":"AVALANCHE","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
+    '''{"type":"SELL_{{asset}}","network":"SOLANA","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
+    '''{"type":"SELL_{{asset}}","network":"ETH","paymentMethod":"CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
+    '''{"type":"SELL_{{asset}}","network":"BSC","paymentMethod":"CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
+    '''{"type":"SELL_{{asset}}","network":"POLYGON","paymentMethod":"CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
+    '''{"type":"SELL_{{asset}}","network":"ARBITRUM","paymentMethod":"CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
+    '''{"type":"SELL_{{asset}}","network":"OPTIMISM","paymentMethod":"CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
+    '''{"type":"SELL_{{asset}}","network":"BASE","paymentMethod":"CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
+    '''{"type":"SELL_{{asset}}","network":"AVALANCHE","paymentMethod":"CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
+    '''{"type":"SELL_{{asset}}","network":"SOLANA","paymentMethod":"CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}'''
 ]
 
 [adapter.p2p.sell.offer]
@@ -72,6 +92,7 @@ fiat_amount_pointer = "/amountAmd"
 asset_amount_pointer = "/amountUsdt"
 asset_pointer = "/token"
 network_pointer = "/network"
+payment_methods_pointer = "/paymentMethod"
 merchant_default = true
 verified_default = true
 source_url_template = "https://www.bncex.com/en"

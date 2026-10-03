@@ -48,14 +48,34 @@ async fn inner(
     headers: &HeaderMap,
     raw_body: Vec<u8>,
 ) -> Result<Response, StatusCode> {
-    if state.ap.require_signatures {
-        verify_inbound_signature(state, headers, raw_body.as_slice()).await?;
-    }
+    let mut verified_signer = if state.ap.require_signatures {
+        Some(verify_inbound_signature(state, headers, raw_body.as_slice()).await?)
+    } else {
+        None
+    };
 
     let activity: Value = serde_json::from_slice(&raw_body).map_err(|e| {
         tracing::warn!(error = %e, "inbox: body is not valid JSON");
         StatusCode::BAD_REQUEST
     })?;
+
+    let is_quote_request = activity.get("type").and_then(Value::as_str) == Some("Proposal")
+        && activity.get("purpose").and_then(Value::as_str) == Some("request")
+        && activity.get("command").and_then(Value::as_str) == Some("quote");
+    if is_quote_request && verified_signer.is_none() {
+        verified_signer = Some(verify_inbound_signature(state, headers, raw_body.as_slice()).await?);
+    }
+
+    if let Some(key_id) = verified_signer {
+        let actor = activity
+            .get("attributedTo")
+            .or_else(|| activity.get("actor"))
+            .and_then(Value::as_str)
+            .ok_or(StatusCode::BAD_REQUEST)?;
+        if key_id.split('#').next() != Some(actor) {
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+    }
 
     if let Some(id) = activity.get("id").and_then(Value::as_str) {
         match was_received(&state.pool, id).await {
@@ -141,11 +161,8 @@ async fn handle_quote_request(state: &AppState, activity: &Value) -> Result<Resp
         .get("attributedTo")
         .or_else(|| activity.get("actor"))
         .and_then(Value::as_str);
-    if requester != Some(state.ap.fmatch_actor_id.as_str()) {
-        tracing::warn!(
-            ?requester,
-            "rejected route quote request from a non-fmatch actor"
-        );
+    if requester.is_none() {
+        tracing::warn!("rejected route quote request without attributed actor");
         return Err(StatusCode::FORBIDDEN);
     }
     let fields = activity
@@ -216,7 +233,7 @@ async fn verify_inbound_signature(
     state: &AppState,
     headers: &HeaderMap,
     body: &[u8],
-) -> Result<(), StatusCode> {
+) -> Result<String, StatusCode> {
     let sig_header = headers
         .get("signature")
         .and_then(|v| v.to_str().ok())
@@ -225,27 +242,38 @@ async fn verify_inbound_signature(
         .get("date")
         .and_then(|v| v.to_str().ok())
         .ok_or(StatusCode::UNAUTHORIZED)?;
+    let host_header = headers
+        .get("host")
+        .and_then(|v| v.to_str().ok())
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+    let digest_header = headers
+        .get("digest")
+        .and_then(|v| v.to_str().ok())
+        .ok_or(StatusCode::UNAUTHORIZED)?;
 
-    let key_id = crate::activitypub::signature::verify(
-        &[("date", date_header), ("signature", sig_header)],
+    let signed_headers = [
+        ("host", host_header),
+        ("date", date_header),
+        ("digest", digest_header),
+        ("signature", sig_header),
+    ];
+    let key_id = crate::activitypub::signature::signature_key_id(&signed_headers)
+        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+    let public_key = state
+        .ap
+        .delivery
+        .fetch_public_key_for_verify(&state.ap.identity, &key_id)
+        .await
+        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+    crate::activitypub::signature::verify(
+        &signed_headers,
         "POST",
         "/inbox",
         body,
-        state.ap.identity.public_key_pem(),
+        &public_key,
         chrono::Utc::now(),
     )
-    .map_err(|_| StatusCode::UNAUTHORIZED)?;
-
-    if !state.ap.is_local_activitypub_actor(&key_id) {
-        let _pubkey = state
-            .ap
-            .delivery
-            .fetch_public_key_for_verify(&state.ap.identity, &key_id)
-            .await
-            .map_err(|_| StatusCode::UNAUTHORIZED)?;
-    }
-
-    Ok(())
+    .map_err(|_| StatusCode::UNAUTHORIZED)
 }
 
 async fn was_received(pool: &DbPool, id: &str) -> Result<bool, StatusCode> {
