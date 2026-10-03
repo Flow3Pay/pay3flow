@@ -47,6 +47,12 @@ direct source such as Whitebird before local route composition. See
 complete runtime pipeline, lazy top-K algorithm, provider snapshots, caches,
 and background quote refresh.
 
+Streaming searches publish each market partition as it becomes available and
+merge later results into the same leg. Fiat workflow legs for different assets
+also run concurrently, so a slow or unsupported asset does not hold back routes
+from another asset. A provider scan that returns no raw offers is not repeated
+with looser local filters.
+
 The public website endpoints can change without notice. Keep the adapters
 enabled, monitor `sources[].ok`, and do not treat a search result as a firm
 quote until the platform confirms it.

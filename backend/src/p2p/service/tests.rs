@@ -1,4 +1,5 @@
 use super::*;
+use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
 #[test]
 fn source_names_accept_providerfile_slug_characters() {
@@ -17,6 +18,46 @@ struct StubSource {
 }
 
 struct DirectStubSource(StubSource);
+
+struct CountingEmptySource(Arc<AtomicUsize>);
+
+#[async_trait]
+impl P2pSource for CountingEmptySource {
+    fn name(&self) -> &str {
+        "empty"
+    }
+
+    async fn search(&self, _query: &P2pSearchQuery) -> Result<Vec<P2pOffer>> {
+        self.0.fetch_add(1, AtomicOrdering::Relaxed);
+        Ok(Vec::new())
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn empty_market_does_not_repeat_provider_requests_for_relaxed_filters() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let service = P2pSearchService::with_sources(
+        vec![Arc::new(CountingEmptySource(calls.clone()))],
+        Duration::from_secs(1),
+    );
+    let response = service
+        .search(P2pSearchQuery {
+            fiat: "AMD".into(),
+            asset: "USDT".into(),
+            side: P2pSide::BuyCrypto,
+            amount: Some(100_000.0),
+            payment_method: Some("IDBank".into()),
+            merchant_only: None,
+            min_orders: Some(20),
+            min_completion_rate: Some(0.9),
+            limit: Some(20),
+            sources: None,
+        })
+        .await
+        .unwrap();
+    assert!(response.offers.is_empty());
+    assert_eq!(calls.load(AtomicOrdering::Relaxed), 1);
+}
 
 struct StubRouteProvider;
 

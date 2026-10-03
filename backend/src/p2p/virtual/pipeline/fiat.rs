@@ -93,6 +93,21 @@ async fn stream_asset(
             },
         }
 
+        if published.is_empty()
+            && ((entry_done
+                && entry
+                    .as_ref()
+                    .is_some_and(|response| response.offers.is_empty()))
+                || (exit_done
+                    && exit
+                        .as_ref()
+                        .is_some_and(|response| response.offers.is_empty())))
+        {
+            // A completed empty leg makes this asset impossible. Dropping the
+            // other search avoids waiting for unrelated slow providers.
+            return Ok(());
+        }
+
         if let (Some(entry), Some(exit)) = (&entry, &exit) {
             let signature = (entry.sources.len(), exit.sources.len());
             if published.insert(signature)

@@ -677,22 +677,63 @@ impl P2pSearchService {
         query: P2pSearchQuery,
         updates: Option<&mpsc::Sender<P2pSearchResponse>>,
     ) -> Result<P2pSearchResponse> {
-        let (p2p, direct) = tokio::join!(
-            self.search_fmatch_market(query.clone(), Some(P2pOfferMarket::P2p), None),
-            self.search_fmatch_market(query.clone(), Some(P2pOfferMarket::DirectExchange), None,)
+        let (p2p_tx, mut p2p_updates) = mpsc::channel(16);
+        let (direct_tx, mut direct_updates) = mpsc::channel(16);
+        let p2p_search =
+            self.search_fmatch_market(query.clone(), Some(P2pOfferMarket::P2p), Some(&p2p_tx));
+        let direct_search = self.search_fmatch_market(
+            query.clone(),
+            Some(P2pOfferMarket::DirectExchange),
+            Some(&direct_tx),
         );
-        let response = match (p2p, direct) {
-            (Ok(p2p), Ok(direct)) => merge_market_responses(query.normalize()?, p2p, direct),
-            (Ok(response), Err(error)) | (Err(error), Ok(response)) => {
-                tracing::warn!(%error, "one Fmatch market partition failed");
-                response
+        tokio::pin!(p2p_search, direct_search);
+        let mut p2p = None;
+        let mut direct = None;
+        let mut p2p_done = false;
+        let mut direct_done = false;
+        let mut p2p_updates_open = true;
+        let mut direct_updates_open = true;
+        let mut first_error = None;
+
+        while !p2p_done || !direct_done {
+            let changed = tokio::select! {
+                snapshot = p2p_updates.recv(), if p2p_updates_open && !p2p_done => {
+                    if let Some(snapshot) = snapshot { p2p = Some(snapshot); true } else { p2p_updates_open = false; false }
+                }
+                snapshot = direct_updates.recv(), if direct_updates_open && !direct_done => {
+                    if let Some(snapshot) = snapshot { direct = Some(snapshot); true } else { direct_updates_open = false; false }
+                }
+                result = &mut p2p_search, if !p2p_done => {
+                    p2p_done = true;
+                    match result {
+                        Ok(response) => { p2p = Some(response); true }
+                        Err(error) => { first_error = Some(error); false }
+                    }
+                }
+                result = &mut direct_search, if !direct_done => {
+                    direct_done = true;
+                    match result {
+                        Ok(response) => { direct = Some(response); true }
+                        Err(error) => { first_error = Some(error); false }
+                    }
+                }
+            };
+            if changed {
+                if let (Some(updates), Some(snapshot)) =
+                    (updates, merged_fmatch_markets(&query, &p2p, &direct)?)
+                {
+                    let _ = updates.send(snapshot).await;
+                }
             }
-            (Err(error), Err(_)) => return Err(error),
-        };
-        if let Some(updates) = updates {
-            let _ = updates.send(response.clone()).await;
         }
-        Ok(response)
+        if let Some(error) = first_error {
+            tracing::warn!(%error, "one Fmatch market partition failed");
+            if p2p.is_none() && direct.is_none() {
+                return Err(error);
+            }
+        }
+        merged_fmatch_markets(&query, &p2p, &direct)?
+            .ok_or_else(|| anyhow::anyhow!("Fmatch market search returned no response"))
     }
 
     async fn search_fmatch_market(
@@ -867,7 +908,7 @@ impl P2pSearchService {
         let response = self
             .run_search_once(query.clone(), updates.clone(), market)
             .await?;
-        if !response.offers.is_empty() {
+        if !response.offers.is_empty() || no_source_returned_offers(&response) {
             return Ok(response);
         }
 
@@ -877,7 +918,7 @@ impl P2pSearchService {
             let response = self
                 .run_search_once(fallback_query.clone(), updates.clone(), market)
                 .await?;
-            if !response.offers.is_empty() {
+            if !response.offers.is_empty() || no_source_returned_offers(&response) {
                 return Ok(response);
             }
         }
@@ -1116,6 +1157,13 @@ impl P2pSearchService {
     }
 }
 
+fn no_source_returned_offers(response: &P2pSearchResponse) -> bool {
+    response
+        .sources
+        .iter()
+        .all(|source| source.offers_found == 0)
+}
+
 fn build_search_response(
     query: P2pSearchQuery,
     collected_offers: &[P2pOffer],
@@ -1168,6 +1216,22 @@ fn merge_market_responses(
         .collect::<Vec<_>>();
     let sources = source_statuses_from_offers(&offers);
     build_search_response(query, &offers, sources, cached, source, stale, observed_at)
+}
+
+fn merged_fmatch_markets(
+    query: &P2pSearchQuery,
+    p2p: &Option<P2pSearchResponse>,
+    direct: &Option<P2pSearchResponse>,
+) -> Result<Option<P2pSearchResponse>> {
+    Ok(match (p2p, direct) {
+        (Some(p2p), Some(direct)) => Some(merge_market_responses(
+            query.clone().normalize()?,
+            p2p.clone(),
+            direct.clone(),
+        )),
+        (Some(response), None) | (None, Some(response)) => Some(response.clone()),
+        (None, None) => None,
+    })
 }
 
 fn mark_provider_fallback(mut response: P2pSearchResponse, reason: &str) -> P2pSearchResponse {

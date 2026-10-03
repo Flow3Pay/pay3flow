@@ -18,6 +18,14 @@ use async_trait::async_trait;
 
 struct ProgressiveSource;
 
+struct AssetLagSource {
+    release_usdt: Arc<tokio::sync::Semaphore>,
+}
+
+struct ImpossibleLegSource {
+    release_exit: Arc<tokio::sync::Semaphore>,
+}
+
 struct DelayedRouteSource {
     name: &'static str,
     delay: Duration,
@@ -245,6 +253,38 @@ impl P2pSource for ProgressiveSource {
             result.payment_methods = vec!["Other Bank".into()];
         }
         Ok(vec![result])
+    }
+}
+
+#[async_trait]
+impl P2pSource for AssetLagSource {
+    fn name(&self) -> &str {
+        "asset-lag"
+    }
+
+    async fn search(&self, query: &P2pSearchQuery) -> Result<Vec<P2pOffer>> {
+        if query.asset == "USDT" {
+            let _permit = self.release_usdt.acquire().await?;
+        }
+        let mut result = offer("asset-lag", query.side, "100", "1", "1000000");
+        result.fiat.clone_from(&query.fiat);
+        result.asset.clone_from(&query.asset);
+        result.ad_id = format!("{}-{:?}", query.asset, query.side);
+        Ok(vec![result])
+    }
+}
+
+#[async_trait]
+impl P2pSource for ImpossibleLegSource {
+    fn name(&self) -> &str {
+        "impossible-leg"
+    }
+
+    async fn search(&self, query: &P2pSearchQuery) -> Result<Vec<P2pOffer>> {
+        if query.side == P2pSide::SellCrypto {
+            let _permit = self.release_exit.acquire().await?;
+        }
+        Ok(Vec::new())
     }
 }
 
@@ -1484,6 +1524,113 @@ async fn route_stream_reports_each_completed_asset_batch() {
     assert_eq!(second.routes_found, 2);
     assert_eq!(final_response.routes_found, 2);
     assert_eq!(final_response.search_id, search_id);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn fiat_workflow_streams_a_ready_asset_while_another_asset_is_slow() {
+    let release_usdt = Arc::new(tokio::sync::Semaphore::new(0));
+    let service = P2pSearchService::with_sources(
+        vec![Arc::new(AssetLagSource {
+            release_usdt: release_usdt.clone(),
+        })],
+        Duration::from_secs(1),
+    )
+    .with_route_providers(vec![Arc::new(FixedIntentProvider)]);
+    let (updates, mut snapshots) = mpsc::channel(128);
+    let task = tokio::spawn(async move {
+        service
+            .stream_routes(
+                P2pRouteSearchQuery {
+                    source_fiat: "AMD".into(),
+                    target_fiat: "RUB".into(),
+                    source_amount: 100_000.0,
+                    source_network: None,
+                    target_network: None,
+                    bridge_fiat: None,
+                    assets: Some("USDT,BTC".into()),
+                    intermediary_assets: None,
+                    source_payment_method: None,
+                    target_payment_method: None,
+                    merchant_only: None,
+                    min_orders: None,
+                    min_completion_rate: None,
+                    allow_cross_venue: Some(true),
+                    max_price_deviation_bps: None,
+                    limit: Some(40),
+                    sources: None,
+                    exchange_mode: ExchangeMode::All,
+                },
+                Uuid::new_v4(),
+                updates,
+            )
+            .await
+    });
+
+    let early = tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            let snapshot = snapshots.recv().await.expect("route snapshot");
+            if snapshot
+                .routes
+                .iter()
+                .any(|route| route.route_provider.as_deref() == Some("test-intents"))
+            {
+                return snapshot;
+            }
+        }
+    })
+    .await
+    .expect("BTC workflow routes should arrive before USDT finishes");
+    assert!(early.routes.iter().any(|route| route.asset == "BTC"));
+    assert!(!task.is_finished());
+
+    release_usdt.add_permits(8);
+    let final_response = task.await.unwrap().unwrap();
+    assert!(final_response
+        .routes
+        .iter()
+        .any(|route| route.asset == "USDT"));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn fiat_route_finishes_when_one_leg_has_no_offers() {
+    let service = P2pSearchService::with_sources(
+        vec![Arc::new(ImpossibleLegSource {
+            release_exit: Arc::new(tokio::sync::Semaphore::new(0)),
+        })],
+        Duration::from_secs(10),
+    );
+    let (updates, _snapshots) = mpsc::channel(16);
+    let response = tokio::time::timeout(
+        Duration::from_secs(1),
+        service.stream_routes(
+            P2pRouteSearchQuery {
+                source_fiat: "AMD".into(),
+                target_fiat: "RUB".into(),
+                source_amount: 100_000.0,
+                source_network: None,
+                target_network: None,
+                bridge_fiat: None,
+                assets: Some("USDT".into()),
+                intermediary_assets: None,
+                source_payment_method: None,
+                target_payment_method: None,
+                merchant_only: None,
+                min_orders: None,
+                min_completion_rate: None,
+                allow_cross_venue: Some(false),
+                max_price_deviation_bps: None,
+                limit: Some(40),
+                sources: None,
+                exchange_mode: ExchangeMode::All,
+            },
+            Uuid::new_v4(),
+            updates,
+        ),
+    )
+    .await
+    .expect("an empty entry leg should cancel its slow exit leg")
+    .expect("route search");
+    assert!(response.routes.is_empty());
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
