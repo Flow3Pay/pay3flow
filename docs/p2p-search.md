@@ -42,12 +42,17 @@ It also remembers up to 512 supported pairs from recent user searches in
 process memory. Every seventh scheduled poll refreshes one of the three hottest
 pairs, rotating among them; the remaining slots continue through the catalog.
 
-Provider-only searches keep generic five-minute snapshots in process memory.
-Interactive searches apply amount, payment-method, merchant, order-count, and
-completion-rate filters to those offers. More specific searches that need a
-larger provider page than the snapshot contains continue to query the providers.
-Public route legs are resolved through Fmatch when it is available; local
-provider results remain the fallback.
+Provider-only searches keep generic snapshots in process memory for up to 35
+minutes, bounded to 1,024 pairs. The five-minute portion is considered fresh;
+older snapshots are marked stale. Interactive searches apply amount,
+payment-method, merchant, order-count, and completion-rate filters to those
+offers. More specific searches that need a larger provider page than the
+snapshot contains continue to query the providers. A fresh local snapshot is
+served before contacting Fmatch, and a stale snapshot can satisfy an Fmatch
+miss before another live provider fan-out. Each successful warmup and each
+snapshot hit is logged separately from an interactive route search. Public
+route legs are resolved through Fmatch when it is available; local provider
+results remain the fallback.
 
 Completed route responses with at least one route are also cached in Redis for
 15 seconds. The key uses a normalized search query and excludes the anonymous

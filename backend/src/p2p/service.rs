@@ -39,8 +39,11 @@ const BACKGROUND_SEARCH_INTERVAL: Duration = Duration::from_millis(2_400);
 const BACKGROUND_POPULAR_PAIR_CADENCE: usize = 7;
 const MAX_TRACKED_POPULAR_PAIRS: usize = 512;
 const MAX_REFRESHED_POPULAR_PAIRS: usize = 3;
-const PROVIDER_SNAPSHOT_TTL: Duration = Duration::from_secs(5 * 60);
-const MAX_PROVIDER_SNAPSHOTS: usize = 128;
+// Keep enough pair snapshots for a paced full catalog pass (25 observations
+// per minute) and a small delay before a pair is visited again.
+const PROVIDER_SNAPSHOT_TTL: Duration = Duration::from_secs(35 * 60);
+const PROVIDER_SNAPSHOT_STALE_AFTER: Duration = Duration::from_secs(5 * 60);
+const MAX_PROVIDER_SNAPSHOTS: usize = 1_024;
 
 impl P2pSearchQuery {
     fn normalize(mut self) -> Result<Self> {
@@ -383,6 +386,14 @@ impl P2pSearchService {
             tracing::info!("background provider warmup is disabled or has no catalog");
             return;
         }
+        tracing::info!(
+            fiat_count = fiats.len(),
+            asset_count = assets.len(),
+            pair_observations = fiats.len().saturating_mul(assets.len()).saturating_mul(2),
+            max_active = MAX_BACKGROUND_SEARCHES,
+            interval_ms = BACKGROUND_SEARCH_INTERVAL.as_millis(),
+            "background provider warmup started"
+        );
 
         let mut active = FuturesUnordered::new();
         let mut fiat_index = 0;
@@ -910,6 +921,22 @@ impl P2pSearchService {
             }
             return Ok(response);
         }
+        if let Some(response) = self
+            .provider_snapshot(&query, market)
+            .filter(|response| !response.stale)
+        {
+            tracing::info!(
+                fiat = %query.fiat,
+                asset = %query.asset,
+                side = ?query.side,
+                offers_found = response.offers.len(),
+                "p2p.background_snapshot.served"
+            );
+            if let Some(updates) = updates {
+                let _ = updates.send(response.clone()).await;
+            }
+            return Ok(response);
+        }
         let content = fmatch_p2p_content(&query, market);
         let candidate_page_size = query.fetch_limit().min(64);
 
@@ -1000,6 +1027,22 @@ impl P2pSearchService {
         updates: Option<&mpsc::Sender<P2pSearchResponse>>,
         reason: &str,
     ) -> Result<P2pSearchResponse> {
+        if let Some(mut response) = self.provider_snapshot(&query, market) {
+            for source in &mut response.sources {
+                source.cached = true;
+            }
+            tracing::info!(
+                fiat = %query.fiat,
+                asset = %query.asset,
+                side = ?query.side,
+                offers_found = response.offers.len(),
+                "p2p.background_snapshot.served_after_fmatch_miss"
+            );
+            if let Some(updates) = updates {
+                let _ = updates.send(response.clone()).await;
+            }
+            return Ok(response);
+        }
         if let Some(cached) = self
             .cached_fmatch_answer(backend, cache_key, query.clone(), market, reason)
             .await?
@@ -1331,9 +1374,20 @@ impl P2pSearchService {
         if let Ok(mut snapshots) = self.provider_snapshots.write() {
             snapshots.remove(&snapshot_key);
         }
-        self.run_search_once_with_mode(query, None, None, true)
-            .await
-            .map(|_| ())
+        let started = Instant::now();
+        let response = self
+            .run_search_once_with_mode(query.clone(), None, None, true)
+            .await?;
+        tracing::info!(
+            fiat = %query.fiat,
+            asset = %query.asset,
+            side = ?query.side,
+            offers_found = response.offers.len(),
+            sources = response.sources.len(),
+            elapsed_ms = started.elapsed().as_millis(),
+            "p2p.background_provider_pair.completed"
+        );
+        Ok(())
     }
 
     async fn background_provider_priorities(&self) -> HashMap<String, (i16, f64, i64, i64)> {
@@ -1387,7 +1441,7 @@ impl P2pSearchService {
                 })
                 .cloned()
                 .collect::<Vec<_>>();
-            let sources = snapshot
+            let mut sources: Vec<SourceStatus> = snapshot
                 .response
                 .sources
                 .iter()
@@ -1398,13 +1452,16 @@ impl P2pSearchService {
                 })
                 .cloned()
                 .collect();
+            for source in &mut sources {
+                source.cached = true;
+            }
             build_search_response(
                 query.clone(),
                 &offers,
                 sources,
                 true,
                 "provider_snapshot",
-                false,
+                snapshot.inserted_at.elapsed() > PROVIDER_SNAPSHOT_STALE_AFTER,
                 snapshot.response.observed_at.clone(),
             )
         })
