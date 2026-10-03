@@ -20,14 +20,15 @@ use super::service::{build_search_response, merge_market_responses};
 use super::{P2pOfferMarket, P2pSearchQuery, P2pSearchResponse, P2pSearchService, P2pSide};
 use crate::route_engine::{Amount, Asset};
 
-const MAX_BACKGROUND_POLLS: usize = 3;
-const MAX_REGULAR_BACKGROUND_POLLS: usize = 2;
-const MAX_ROUTE_QUOTE_POLLS_PER_PROVIDER: usize = 4;
-const MAX_SPOT_POLLS: usize = 4;
+const MAX_BACKGROUND_POLLS: usize = 2;
+const MAX_REGULAR_BACKGROUND_POLLS: usize = 1;
+const MAX_ROUTE_QUOTE_POLLS_PER_PROVIDER: usize = 2;
+const MAX_BACKGROUND_ROUTE_QUOTES: usize = 2;
+const MAX_SPOT_POLLS: usize = 2;
 const MAX_DYNAMIC_TARGETS: usize = 64;
 const MAX_MEMORY_SNAPSHOTS: usize = 128;
 const REDIS_TIMEOUT: Duration = Duration::from_millis(150);
-const COLD_WAIT: Duration = Duration::from_secs(65);
+const COLD_WAIT: Duration = Duration::from_secs(8);
 
 struct QuotePoll {
     from: Asset,
@@ -523,7 +524,7 @@ impl P2pSearchService {
                     }
                     store.finish_poll(key);
                     if !urgent_only {
-                        tokio::time::sleep(Duration::from_millis(500)).await;
+                        tokio::time::sleep(Duration::from_secs(5)).await;
                     }
                 }
             });
@@ -534,10 +535,12 @@ impl P2pSearchService {
     }
 
     fn start_background_route_quotes(&self) {
+        let background_slots = Arc::new(Semaphore::new(MAX_BACKGROUND_ROUTE_QUOTES));
         for provider in self.route_providers.iter().cloned() {
             let cache = self.provider_quote_snapshots.clone();
             let requests = self.provider_quote_requests.clone();
             let semaphore = self.quote_semaphore.clone();
+            let background_slots = background_slots.clone();
             tokio::spawn(async move {
                 loop {
                     let assets = match tokio::time::timeout(
@@ -551,30 +554,35 @@ impl P2pSearchService {
                     };
                     let mut jobs = quote_polls(provider.name(), assets);
                     let mut last_demand = HashMap::new();
+                    let mut last_reprioritized = Instant::now() - Duration::from_secs(10);
                     while !jobs.is_empty() {
-                        let demand = requests
-                            .lock()
-                            .map(|requests| requests.clone())
-                            .unwrap_or_default();
-                        if demand != last_demand {
-                            jobs.sort_by(|left, right| {
-                                let left_count = demand.get(&left.key).copied().unwrap_or_default();
-                                let right_count =
-                                    demand.get(&right.key).copied().unwrap_or_default();
-                                right_count.cmp(&left_count).then_with(|| {
-                                    (
-                                        quote_asset_priority(&left.from.symbol),
-                                        quote_asset_priority(&left.to.symbol),
-                                        &left.key,
-                                    )
-                                        .cmp(&(
-                                            quote_asset_priority(&right.from.symbol),
-                                            quote_asset_priority(&right.to.symbol),
-                                            &right.key,
-                                        ))
-                                })
-                            });
-                            last_demand = demand;
+                        if last_reprioritized.elapsed() >= Duration::from_secs(10) {
+                            let demand = requests
+                                .lock()
+                                .map(|requests| requests.clone())
+                                .unwrap_or_default();
+                            if demand != last_demand {
+                                jobs.sort_by(|left, right| {
+                                    let left_count =
+                                        demand.get(&left.key).copied().unwrap_or_default();
+                                    let right_count =
+                                        demand.get(&right.key).copied().unwrap_or_default();
+                                    right_count.cmp(&left_count).then_with(|| {
+                                        (
+                                            quote_asset_priority(&left.from.symbol),
+                                            quote_asset_priority(&left.to.symbol),
+                                            &left.key,
+                                        )
+                                            .cmp(&(
+                                                quote_asset_priority(&right.from.symbol),
+                                                quote_asset_priority(&right.to.symbol),
+                                                &right.key,
+                                            ))
+                                    })
+                                });
+                                last_demand = demand;
+                            }
+                            last_reprioritized = Instant::now();
                         }
                         let batch = jobs
                             .drain(..jobs.len().min(MAX_ROUTE_QUOTE_POLLS_PER_PROVIDER))
@@ -584,6 +592,7 @@ impl P2pSearchService {
                                 let provider = provider.clone();
                                 let cache = cache.clone();
                                 let semaphore = semaphore.clone();
+                                let background_slots = background_slots.clone();
                                 async move {
                                     let amount_value = match job.from.symbol.as_str() {
                                         "USDT" | "USDC" | "DAI" | "FDUSD" => 100.0,
@@ -596,6 +605,10 @@ impl P2pSearchService {
                                     else {
                                         return;
                                     };
+                                    let Ok(background_permit) = background_slots.acquire().await
+                                    else {
+                                        return;
+                                    };
                                     let Ok(permit) = semaphore.acquire().await else {
                                         return;
                                     };
@@ -605,6 +618,7 @@ impl P2pSearchService {
                                     )
                                     .await;
                                     drop(permit);
+                                    drop(background_permit);
                                     if let Ok(Ok(quotes)) = result {
                                         if !quotes.is_empty() {
                                             if let Ok(mut cache) = cache.write() {
@@ -618,7 +632,7 @@ impl P2pSearchService {
                                 }
                             })
                             .await;
-                        tokio::time::sleep(Duration::from_millis(250)).await;
+                        tokio::time::sleep(Duration::from_secs(2)).await;
                     }
                     tokio::time::sleep(Duration::from_secs(5 * 60)).await;
                 }
@@ -693,7 +707,7 @@ impl P2pSearchService {
         tokio::spawn(async move {
             loop {
                 stream::iter(jobs.iter().cloned())
-                    .for_each_concurrent(2, |(provider, source, target)| {
+                    .for_each_concurrent(1, |(provider, source, target)| {
                         let service = service.clone();
                         async move {
                             let baseline_amount = 100_000.0;
@@ -949,8 +963,8 @@ mod tests {
             .as_ref()
             .unwrap()
             .record_request(&requested);
-        tokio::time::timeout(Duration::from_secs(3), async {
-            while calls.lock().len() < MAX_BACKGROUND_POLLS + 3 {
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while !calls.lock().contains(&requested.asset) {
                 tokio::task::yield_now().await;
             }
         })
