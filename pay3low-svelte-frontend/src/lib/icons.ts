@@ -1,5 +1,7 @@
-const LOCAL_VENUE_ICONS = new Set(["binance", "bybit", "okx", "bitget", "mexc", "rapira", "whitebird", "cifra-broker", "cow-swap", "bestchange", "bitcoin-center", "bncex", "dzengi", "id-pay", "skylabs", "papa-change", "symbiosis"]);
-const PNG_VENUE_ICONS = new Set(["binance", "bybit", "bitget", "mexc", "rapira", "whitebird", "cifra-broker", "papa-change", "symbiosis"]);
+const LOCAL_VENUE_ICONS = new Set(["binance", "bybit", "okx", "bitget", "mexc", "rapira", "whitebird", "cifra-broker", "cow-swap", "bestchange", "bitcoin-center", "bncex", "dzengi", "id-pay", "skylabs", "papa-change", "symbiosis", "1inch", "0x", "lifi", "nordstern", "velora", "enso", "bebop", "kyberswap"]);
+const PNG_VENUE_ICONS = new Set(["binance", "bybit", "bitget", "mexc", "rapira", "whitebird", "cifra-broker", "papa-change", "symbiosis", "1inch", "0x", "lifi", "velora", "enso", "bebop", "kyberswap"]);
+const JPG_VENUE_ICONS = new Set(["nordstern"]);
+const VENUE_ICON_ALIASES: Record<string, string> = { "1ich": "1inch", lighing: "lifi", verola: "velora" };
 const LOCAL_ASSET_ICONS = new Set([
   "ada", "apt", "atom", "avax", "bch", "bnb", "btc", "dai", "doge", "dot", "eth", "fdusd",
   "link", "ltc", "matic", "near", "sol", "sui", "ton", "trx", "uni", "usdc", "usdt", "xrp",
@@ -35,9 +37,10 @@ const NETWORK_ASSETS: Array<[RegExp, string]> = [
 
 /** Returns a static asset served by this frontend. */
 export function venueIcon(venue: string): string {
-  const key = venue.toLowerCase();
+  const rawKey = venue.toLowerCase();
+  const key = VENUE_ICON_ALIASES[rawKey] ?? rawKey;
   if (key === "near-intents") return "/icons/assets/near.webp";
-  const extension = PNG_VENUE_ICONS.has(key) ? "png" : "svg";
+  const extension = PNG_VENUE_ICONS.has(key) ? "png" : JPG_VENUE_ICONS.has(key) ? "jpg" : "svg";
   const filename = key === "cow-swap" ? "cow-swap-favicon.svg" : `${key}.${extension}`;
   return LOCAL_VENUE_ICONS.has(key)
     ? `/icons/venues/${filename}`
