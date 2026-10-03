@@ -68,6 +68,9 @@ pub struct Config {
     pub symbiosis_partner_id: Option<String>,
     pub symbiosis_quote_address: String,
     pub symbiosis_slippage_bps: u32,
+    pub symbiosis_execution_contracts: Vec<String>,
+    /// Enables non-custodial wallet execution descriptors and API endpoints.
+    pub wallet_execution_enabled: bool,
 }
 
 /// The checked-in TOML surface deliberately contains no credentials. Unknown
@@ -114,6 +117,8 @@ struct FileConfig {
     symbiosis_url: String,
     symbiosis_quote_address: String,
     symbiosis_slippage_bps: u32,
+    symbiosis_execution_contracts: Vec<String>,
+    wallet_execution_enabled: bool,
 }
 
 impl Default for FileConfig {
@@ -135,7 +140,7 @@ impl Default for FileConfig {
             pairs_cache_ttl_secs: 300,
             p2p_search_enabled: true,
             p2p_search_timeout_ms: 4_000,
-            p2p_search_cache_ttl_ms: 15_000,
+            p2p_search_cache_ttl_ms: 5_000,
             p2p_fmatch_stale_secs: 15 * 60,
             p2p_search_assets: Vec::new(),
             playwright_chromium_executable: None,
@@ -157,6 +162,11 @@ impl Default for FileConfig {
             symbiosis_url: "https://api.symbiosis.finance/crosschain".into(),
             symbiosis_quote_address: "0x0000000000000000000000000000000000000001".into(),
             symbiosis_slippage_bps: 300,
+            symbiosis_execution_contracts: Vec::new(),
+            // Production config maps created before wallet execution was
+            // exposed do not contain this key. Enable the capability by
+            // default there; local config.toml keeps it explicitly disabled.
+            wallet_execution_enabled: true,
         }
     }
 }
@@ -217,6 +227,8 @@ impl Config {
             symbiosis_partner_id: optional_secret_env("SYMBIOSIS_PARTNER_ID"),
             symbiosis_quote_address: file.symbiosis_quote_address,
             symbiosis_slippage_bps: file.symbiosis_slippage_bps,
+            symbiosis_execution_contracts: file.symbiosis_execution_contracts,
+            wallet_execution_enabled: file.wallet_execution_enabled,
         })
     }
 

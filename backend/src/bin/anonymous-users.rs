@@ -40,7 +40,10 @@ FROM anonymous_users
     println!("  last seen:      {}", summary.get::<_, String>(3));
     println!();
     println!("Requests by anonymous user:");
-    println!("{:<38} {:>12}  {:<25}  last seen", "anonymous_id", "requests", "first seen");
+    println!(
+        "{:<38} {:>12}  {:<25}  last seen",
+        "anonymous_id", "requests", "first seen"
+    );
 
     for row in client
         .query(

@@ -45,12 +45,9 @@ CREATE TABLE IF NOT EXISTS services (
     executions_total BIGINT NOT NULL DEFAULT 0 CHECK (executions_total >= 0),
     likes_total BIGINT NOT NULL DEFAULT 0 CHECK (likes_total >= 0),
     dislikes_total BIGINT NOT NULL DEFAULT 0 CHECK (dislikes_total >= 0),
-    last_interaction_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
-ALTER TABLE services ADD COLUMN IF NOT EXISTS last_interaction_at TIMESTAMPTZ;
 
 INSERT INTO services (slug, display_name)
 VALUES
@@ -97,6 +94,36 @@ CREATE INDEX IF NOT EXISTS service_executions_service_idx
 CREATE INDEX IF NOT EXISTS service_executions_anonymous_idx
     ON service_executions (anonymous_id, service_id);
 
+-- Non-custodial provider executions. Wallet signatures and private keys are
+-- deliberately never persisted; `action` contains only public quote/tx data.
+CREATE TABLE IF NOT EXISTS route_executions (
+    id UUID PRIMARY KEY,
+    anonymous_id UUID NOT NULL,
+    idempotency_key TEXT NOT NULL,
+    route_id TEXT NOT NULL,
+    provider TEXT NOT NULL CHECK (provider IN ('near-intents', 'cow-swap', 'symbiosis')),
+    status TEXT NOT NULL CHECK (status IN (
+        'awaiting_signature', 'submitted', 'completed', 'failed',
+        'cancelled', 'expired', 'refunded', 'stuck'
+    )),
+    from_asset TEXT NOT NULL,
+    to_asset TEXT NOT NULL,
+    input_amount TEXT NOT NULL,
+    source_address TEXT NOT NULL,
+    recipient TEXT NOT NULL,
+    action JSONB NOT NULL,
+    provider_reference TEXT,
+    submitted_reference TEXT,
+    provider_status JSONB,
+    quote_expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (anonymous_id, idempotency_key)
+);
+
+CREATE INDEX IF NOT EXISTS route_executions_owner_idx
+    ON route_executions (anonymous_id, updated_at DESC);
+
 CREATE TABLE IF NOT EXISTS service_votes (
     anonymous_id UUID NOT NULL,
     service_id UUID NOT NULL REFERENCES services(id) ON DELETE CASCADE,
@@ -117,29 +144,11 @@ CREATE TABLE IF NOT EXISTS route_votes (
     vote TEXT NOT NULL CHECK (vote IN ('like', 'dislike')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    attributed_services TEXT[] NOT NULL DEFAULT '{}',
     PRIMARY KEY (anonymous_id, route_id)
 );
 
-ALTER TABLE route_votes ADD COLUMN IF NOT EXISTS attributed_services TEXT[] NOT NULL DEFAULT '{}';
-
 CREATE INDEX IF NOT EXISTS route_votes_route_idx
     ON route_votes (route_id);
-
--- Aggregate interaction signals. Browser identifiers live only in short-lived
--- Redis deduplication keys and never enter these durable tables.
-CREATE TABLE IF NOT EXISTS provider_engagement (
-    slug TEXT PRIMARY KEY,
-    instruction_opens BIGINT NOT NULL DEFAULT 0 CHECK (instruction_opens >= 0),
-    link_opens BIGINT NOT NULL DEFAULT 0 CHECK (link_opens >= 0),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Makes retrying a Redis-to-Postgres flush safe after a worker crash.
-CREATE TABLE IF NOT EXISTS provider_engagement_flushes (
-    batch_key TEXT PRIMARY KEY,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
 
 CREATE TABLE IF NOT EXISTS activitypub_deliveries (
     activity_id TEXT NOT NULL,
@@ -241,7 +250,6 @@ CREATE TABLE IF NOT EXISTS providers (
     workflow JSONB NOT NULL DEFAULT '{}'::JSONB,
     fee_model JSONB NOT NULL DEFAULT '{}'::JSONB,
     guidance JSONB NOT NULL DEFAULT '{}'::JSONB,
-    affiliate JSONB NOT NULL DEFAULT '{}'::JSONB,
     status TEXT NOT NULL DEFAULT 'enabled'
         CHECK (status IN ('enabled', 'disabled')),
     source_file TEXT NOT NULL,
@@ -258,8 +266,6 @@ ALTER TABLE providers
     ADD COLUMN IF NOT EXISTS fee_model JSONB NOT NULL DEFAULT '{}'::JSONB;
 ALTER TABLE providers
     ADD COLUMN IF NOT EXISTS guidance JSONB NOT NULL DEFAULT '{}'::JSONB;
-ALTER TABLE providers
-    ADD COLUMN IF NOT EXISTS affiliate JSONB NOT NULL DEFAULT '{}'::JSONB;
 ALTER TABLE providers
     ADD COLUMN IF NOT EXISTS exchange_methods TEXT[] NOT NULL DEFAULT ARRAY['p2p', 'exchanger']::TEXT[];
 

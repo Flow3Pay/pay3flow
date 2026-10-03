@@ -89,27 +89,10 @@ GET  /api/providers
 GET  /api/exchange-pairs
 GET  /api/p2p/search
 GET  /api/p2p/routes
-POST /api/routes/instruction-open
-POST /api/service-executions/open
 ```
 
 The payment and acquiring routes are retained for compatibility. New exchange
 clients should use the exchange order API.
-
-`/api/routes/instruction-open` accepts `{ "anonymous_id": "<browser UUID>",
-"instruction_token": "<signed token from instruction_tokens[route_id]>" }`.
-The click is queued for anonymous Redis deduplication and aggregate persistence;
-the response is `{ "accepted": true }`. `/api/service-executions/open` accepts
-the existing `anonymous_id` and `tracking_token` body and returns the redirect
-URL. New link opens are aggregated without writing browser IDs to the
-`service_executions` table.
-Service statistics also include `reputation_score` (0–100); the aggregate
-route reputation includes `score_average`. These scores prioritize background
-provider polling. Close-priced route ordering uses only likes and dislikes.
-`PUT /api/routes/{route_id}/vote` accepts the optional signed
-`instruction_token` returned for that route. The browser sends it so a route
-vote also updates its providers' service vote totals; older clients can still
-vote without that attribution.
 
 ## Admin and debugging routes
 

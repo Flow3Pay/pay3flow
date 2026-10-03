@@ -1,13 +1,13 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import type { ProviderAffiliate, ProviderGuidance, RouteCandidate, ServiceLink } from "$lib/exchange";
+  import type { ProviderGuidance, RouteCandidate, ServiceLink } from "$lib/exchange";
   import { locale, t } from "$lib/i18n";
   import AdvertiserCard from "./AdvertiserCard.svelte";
+  import RouteExecutionPanel from "./RouteExecutionPanel.svelte";
 
   export let route: RouteCandidate;
   export let venueNames: Record<string, string> = {};
   export let providerGuidance: Record<string, ProviderGuidance> = {};
-  export let providerAffiliates: Record<string, ProviderAffiliate> = {};
   export let networkNames: Record<string, string> = {};
   export let onClose: () => void;
   export let onOpenService: (link: ServiceLink) => void = () => {};
@@ -17,11 +17,6 @@
   let dragDistance = 0;
   const venueName = (value?: string | null) => value ? venueNames[value.toLowerCase()] ?? value : "P2P market";
   const providerGuide = (value?: string | null) => value ? providerGuidance[value.toLowerCase()] : undefined;
-  // A provider with an [affiliate] block pays Pay3Flow a commission, so opening
-  // it from the instructions must follow the partner link instead of the plain
-  // provider URL. Everything else keeps the provider's own URL.
-  const providerAffiliate = (value?: string | null) => value ? providerAffiliates[value.toLowerCase()] : undefined;
-  const providerOpenUrl = (slug?: string | null, fallback?: string | null) => providerAffiliate(slug)?.url ?? fallback ?? undefined;
   const readableNetwork = (value: string) => networkNames[value.toLowerCase()] ?? value.replace(/-/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
   const readablePath = (path: string[]) => path.map((part) => {
     const [asset, network] = part.split("@", 2);
@@ -168,7 +163,8 @@
             <li>{copy("Check the amount you will receive, the provider fee, how long the quote is valid, and whether a memo or tag is required.")}</li>
             <li>{copy("Never send money after the quote expires. Get a new quote first.")}</li>
           </ul>
-          {#if providerOpenUrl(route.route_provider, route.route_provider_url)}<a href={providerOpenUrl(route.route_provider, route.route_provider_url)} target="_blank" rel="noreferrer noopener" class="profileLink">{providerAffiliate(route.route_provider)?.label || copy("Open {venue}", { venue: venueName(route.route_provider) })} <span>↗</span></a>{/if}
+          {#if route.route_provider_url}<a href={route.route_provider_url} target="_blank" rel="noreferrer noopener" class="profileLink">{copy("Open {venue}", { venue: venueName(route.route_provider) })} <span>↗</span></a>{/if}
+          <RouteExecutionPanel {route} />
         </div></li>
       {/if}
       {#if cryptoToCrypto && route.market_path}
@@ -247,7 +243,8 @@
             <li>{copy("Check the current rate, provider fee, quote expiry, and any address, memo, or tag requirement.")}</li>
             <li>{copy("Wait until the new balance appears before considering this step finished.")}</li>
           </ul>
-          {#if providerOpenUrl(route.route_provider, route.route_provider_url)}<a href={providerOpenUrl(route.route_provider, route.route_provider_url)} target="_blank" rel="noreferrer noopener" class="profileLink">{providerAffiliate(route.route_provider)?.label || copy("Open {venue}", { venue: venueName(route.route_provider) })} <span>↗</span></a>{/if}
+          {#if route.route_provider_url}<a href={route.route_provider_url} target="_blank" rel="noreferrer noopener" class="profileLink">{copy("Open {venue}", { venue: venueName(route.route_provider) })} <span>↗</span></a>{/if}
+          <RouteExecutionPanel {route} />
         </div></li>
       {/if}
       {#if crossVenue}

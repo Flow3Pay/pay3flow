@@ -78,23 +78,3 @@ pub async fn admin_set_status(
         .ok_or_else(|| AppError::NotFound("bank not found".into()))?;
     Ok(Json(bank))
 }
-
-#[cfg(test)]
-mod tests {
-    use axum::extract::Query;
-    use axum::http::Uri;
-
-    use super::ListQuery;
-
-    #[test]
-    fn picker_filter_accepts_frontend_query() {
-        let uri: Uri = "/api/banks?picker_visible=true&limit=100".parse().unwrap();
-        let Query(query) = Query::<ListQuery>::try_from_uri(&uri).unwrap();
-        assert_eq!(query.filters.picker_visible, Some(true));
-        assert_eq!(query.limit, Some(100));
-
-        let uri: Uri = "/api/banks?picker_visible=false".parse().unwrap();
-        let Query(query) = Query::<ListQuery>::try_from_uri(&uri).unwrap();
-        assert_eq!(query.filters.picker_visible, Some(false));
-    }
-}

@@ -14,5 +14,6 @@ pub mod payments_ws;
 pub mod providers;
 pub mod rates;
 pub mod referrals;
+pub mod route_executions;
 pub mod solver;
 pub mod ws;

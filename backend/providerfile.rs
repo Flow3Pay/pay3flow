@@ -4,9 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use pay3flow_backend::provider_adapter::{P2pAdapterMarket, ProviderAdapters, WorkflowConfig};
-use pay3flow_backend::providers::{
-    ProviderAffiliate, ProviderExchangeMethod, ProviderFeeModel, ProviderGuidance,
-};
+use pay3flow_backend::providers::{ProviderExchangeMethod, ProviderFeeModel, ProviderGuidance};
 use serde::Deserialize;
 
 #[path = "providerfile_code.rs"]
@@ -25,7 +23,6 @@ struct RawProviderFile {
     workflow: Option<WorkflowConfig>,
     fees: Option<ProviderFeeModel>,
     guidance: Option<ProviderGuidance>,
-    affiliate: Option<ProviderAffiliate>,
     code: Option<RawCodeBlock>,
     #[serde(default)]
     payment_methods: Vec<RawPaymentMethod>,
@@ -109,7 +106,6 @@ pub struct ProviderDefinition {
     pub workflow: Option<WorkflowConfig>,
     pub fee_model: Option<ProviderFeeModel>,
     pub guidance: Option<ProviderGuidance>,
-    pub affiliate: Option<ProviderAffiliate>,
     pub source_file: String,
 }
 
@@ -244,7 +240,6 @@ fn parse_document_with_path(
     let workflow = raw.workflow;
     let fee_model = raw.fees.map(normalize_fee_model).transpose()?;
     let guidance = raw.guidance.map(normalize_guidance).transpose()?;
-    let affiliate = raw.affiliate.map(normalize_affiliate).transpose()?;
     let exchange_methods = raw
         .exchange_methods
         .into_iter()
@@ -265,7 +260,6 @@ fn parse_document_with_path(
                 workflow.clone(),
                 fee_model.clone(),
                 guidance.clone(),
-                affiliate.clone(),
             )
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -400,16 +394,9 @@ fn render_sql_with_payment_methods(
                 serde_json::to_string(guidance).expect("provider guidance is serializable")
             })
             .unwrap_or_else(|| "{}".into());
-        let affiliate = definition
-            .affiliate
-            .as_ref()
-            .map(|affiliate| {
-                serde_json::to_string(affiliate).expect("provider affiliate is serializable")
-            })
-            .unwrap_or_else(|| "{}".into());
         sql.push_str(&format!(
-            "INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, guidance, affiliate, source_file)\n\
-             VALUES ({}, {}, {}, {}, {currencies}, {banks}, {exchange_methods}, {}::JSONB, {}::JSONB, {}::JSONB, {}::JSONB, {}::JSONB, {})\n\
+            "INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)\n\
+             VALUES ({}, {}, {}, {}, {currencies}, {banks}, {exchange_methods}, {}::JSONB, {}::JSONB, {}::JSONB, {}::JSONB, {})\n\
              ON CONFLICT (slug, operation) DO UPDATE SET\n\
                  source_url = EXCLUDED.source_url,\n\
                  name = EXCLUDED.name,\n\
@@ -420,7 +407,6 @@ fn render_sql_with_payment_methods(
                  workflow = EXCLUDED.workflow,\n\
                  fee_model = EXCLUDED.fee_model,\n\
                  guidance = EXCLUDED.guidance,\n\
-                 affiliate = EXCLUDED.affiliate,\n\
                  source_file = EXCLUDED.source_file,\n\
                  updated_at = now();\n\n",
             sql_string(&definition.slug),
@@ -431,7 +417,6 @@ fn render_sql_with_payment_methods(
             sql_string(&workflow),
             sql_string(&fee_model),
             sql_string(&guidance),
-            sql_string(&affiliate),
             sql_string(&definition.source_file),
         ));
     }
@@ -516,7 +501,6 @@ fn normalize(
     workflow: Option<WorkflowConfig>,
     fee_model: Option<ProviderFeeModel>,
     guidance: Option<ProviderGuidance>,
-    affiliate: Option<ProviderAffiliate>,
 ) -> Result<ProviderDefinition, ProviderFileError> {
     let source_url = raw.source_url.trim().to_string();
     if !source_url.starts_with("https://") && !source_url.starts_with("http://") {
@@ -561,7 +545,6 @@ fn normalize(
         workflow,
         fee_model,
         guidance,
-        affiliate,
         source_file: source_file.to_string(),
     })
 }
@@ -620,22 +603,6 @@ fn normalize_guidance(
         }
     }
     Ok(guidance)
-}
-
-fn normalize_affiliate(
-    mut affiliate: ProviderAffiliate,
-) -> Result<ProviderAffiliate, ProviderFileError> {
-    affiliate.url = affiliate.url.trim().to_string();
-    if !affiliate.url.starts_with("https://") && !affiliate.url.starts_with("http://") {
-        return Err(ProviderFileError(
-            "affiliate/url must use http or https".into(),
-        ));
-    }
-    affiliate.label = affiliate
-        .label
-        .map(|label| label.trim().to_string())
-        .filter(|label| !label.is_empty());
-    Ok(affiliate)
 }
 
 fn normalize_payment_method(
@@ -917,19 +884,6 @@ name = "Example Sell"
 currency = ["eth"]
 "#;
 
-    const AFFILIATE_EXAMPLE: &str = r#"
-exchange_methods = ["exchanger"]
-
-[affiliate]
-url = "https://provider.example/?ref=pay3flow"
-label = "Open the exchange"
-
-[sell]
-source_url = "https://provider.example"
-name = "Example Sell"
-currency = ["eth"]
-"#;
-
     const PAYMENT_METHOD_EXAMPLE: &str = r##"
 payment_methods = [
   { id = "by-example-bank", name = "Example Bank", country = "by", currency = "byn", color = "#ffc700", initials = "EB", popular = true, p2p_query = "Example Bank", domain = "bank.example", bank_fee_percent = 0.5 }
@@ -1096,52 +1050,6 @@ payment_methods = [
         );
         assert!(render_sql(&definitions).contains("fee_model"));
         assert!(render_sql(&definitions).contains("quote_dependent"));
-    }
-
-    #[test]
-    fn parses_and_renders_an_optional_affiliate_link() {
-        let definitions = parse(AFFILIATE_EXAMPLE, "example", "example/Providerfile").unwrap();
-
-        let affiliate = definitions[0].affiliate.as_ref().unwrap();
-        assert_eq!(affiliate.url, "https://provider.example/?ref=pay3flow");
-        assert_eq!(affiliate.label.as_deref(), Some("Open the exchange"));
-
-        let sql = render_sql(&definitions);
-        assert!(sql.contains("affiliate = EXCLUDED.affiliate"));
-        assert!(sql.contains("https://provider.example/?ref=pay3flow"));
-    }
-
-    #[test]
-    fn an_absent_affiliate_section_stays_empty_in_generated_sql() {
-        let definitions = parse(EXAMPLE, "example", "example/Providerfile").unwrap();
-
-        assert!(definitions[0].affiliate.is_none());
-        assert!(render_sql(&definitions).contains("{}'::JSONB"));
-    }
-
-    #[test]
-    fn normalizes_and_rejects_invalid_affiliate_links() {
-        let padded = AFFILIATE_EXAMPLE.replace(
-            "url = \"https://provider.example/?ref=pay3flow\"",
-            "url = \"  https://provider.example/?ref=pay3flow  \"",
-        );
-        let definitions = parse(&padded, "example", "example/Providerfile").unwrap();
-        assert_eq!(
-            definitions[0].affiliate.as_ref().unwrap().url,
-            "https://provider.example/?ref=pay3flow"
-        );
-
-        let blank_label =
-            AFFILIATE_EXAMPLE.replace("label = \"Open the exchange\"", "label = \"  \"");
-        let definitions = parse(&blank_label, "example", "example/Providerfile").unwrap();
-        assert_eq!(definitions[0].affiliate.as_ref().unwrap().label, None);
-
-        let invalid =
-            AFFILIATE_EXAMPLE.replace("https://provider.example/?ref=pay3flow", "provider.example");
-        assert!(parse(&invalid, "example", "example/Providerfile").is_err());
-
-        let typo = AFFILIATE_EXAMPLE.replace("url = ", "link = ");
-        assert!(parse(&typo, "example", "example/Providerfile").is_err());
     }
 
     #[test]

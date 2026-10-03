@@ -40,6 +40,9 @@ data:
     symbiosis_url = "https://api.symbiosis.finance/crosschain"
     symbiosis_quote_address = "0x0000000000000000000000000000000000000001"
     symbiosis_slippage_bps = 300
+    # Execution requires verified MetaRouter and MetaRouterGateway addresses.
+    symbiosis_execution_contracts = []
+    wallet_execution_enabled = true
     route_max_depth = 4
     route_source_fiats = ["AMD", "RUB"]
     route_p2p_assets = ["USDT", "USDC", "XRP"]

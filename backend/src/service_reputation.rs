@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
@@ -7,12 +6,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::core::redis::RedisPool;
 use crate::db::DbPool;
-
-mod engagement;
-pub(crate) use engagement::vote_priority;
-use engagement::{EngagementKind, EngagementMetrics};
 
 const TRACKING_TOKEN_TTL_SECS: u64 = 30 * 60;
 
@@ -70,7 +64,6 @@ pub struct ServiceStats {
     pub executions_total: i64,
     pub likes_total: i64,
     pub dislikes_total: i64,
-    pub reputation_score: u8,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub viewer_vote: Option<VoteChoice>,
 }
@@ -103,7 +96,6 @@ pub struct CombinedReputation {
     pub executions_average: i64,
     pub likes_average: i64,
     pub dislikes_average: i64,
-    pub score_average: u8,
 }
 
 /// Anonymous feedback for one concrete route shown in a search result.
@@ -126,19 +118,9 @@ pub struct ExecutionOpen {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct TrackingClaims {
     service_id: Uuid,
-    #[serde(default)]
-    service_slug: String,
     search_id: Uuid,
     route_id: String,
     destination_url: String,
-    exp: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct InstructionClaims {
-    search_id: Uuid,
-    route_id: String,
-    services: Vec<String>,
     exp: u64,
 }
 
@@ -147,39 +129,15 @@ pub struct ServiceReputation {
     pool: DbPool,
     encode_key: EncodingKey,
     decode_key: DecodingKey,
-    engagement: Option<Arc<EngagementMetrics>>,
 }
 
 impl ServiceReputation {
-    fn current_reputation_score(&self, slug: &str) -> u8 {
-        self.engagement
-            .as_ref()
-            .and_then(|metrics| metrics.reputations().read().get(slug).copied())
-            .unwrap_or(50)
-    }
     pub fn new(pool: DbPool, secret: &str) -> Self {
         Self {
             pool,
             encode_key: EncodingKey::from_secret(secret.as_bytes()),
             decode_key: DecodingKey::from_secret(secret.as_bytes()),
-            engagement: None,
         }
-    }
-
-    pub fn with_engagement(mut self, redis: Option<RedisPool>, secret: &str) -> Self {
-        self.engagement =
-            redis.map(|redis| EngagementMetrics::new(self.pool.clone(), redis, secret.as_bytes()));
-        self
-    }
-
-    pub fn vote_ranking_scores(&self) -> Option<Arc<parking_lot::RwLock<HashMap<String, f64>>>> {
-        self.engagement.as_ref().map(|metrics| metrics.scores())
-    }
-
-    pub fn reputation_scores(&self) -> Option<Arc<parking_lot::RwLock<HashMap<String, u8>>>> {
-        self.engagement
-            .as_ref()
-            .map(|metrics| metrics.reputations())
     }
 
     pub async fn start_search(&self, search_id: Uuid) -> Result<(), ReputationError> {
@@ -268,11 +226,7 @@ WHERE s.slug = ANY($1)
             .await?;
         Ok(rows
             .into_iter()
-            .map(|row| {
-                let mut stats = row_to_stats(row);
-                stats.reputation_score = self.current_reputation_score(&stats.slug);
-                stats
-            })
+            .map(row_to_stats)
             .map(|stats| (stats.slug.clone(), stats))
             .collect())
     }
@@ -314,7 +268,6 @@ GROUP BY requested.route_id, viewer.vote
     pub fn tracking_token(
         &self,
         service_id: Uuid,
-        service_slug: &str,
         search_id: Uuid,
         route_id: &str,
         destination_url: &str,
@@ -324,7 +277,6 @@ GROUP BY requested.route_id, viewer.vote
         }
         let claims = TrackingClaims {
             service_id,
-            service_slug: service_slug.to_string(),
             search_id,
             route_id: route_id.to_string(),
             destination_url: destination_url.to_string(),
@@ -332,64 +284,6 @@ GROUP BY requested.route_id, viewer.vote
         };
         encode(&Header::new(Algorithm::HS256), &claims, &self.encode_key)
             .map_err(|_| ReputationError::InvalidTrackingToken)
-    }
-
-    pub fn instruction_token(
-        &self,
-        search_id: Uuid,
-        route_id: &str,
-        services: Vec<String>,
-    ) -> Result<String, ReputationError> {
-        encode(
-            &Header::new(Algorithm::HS256),
-            &InstructionClaims {
-                search_id,
-                route_id: route_id.to_string(),
-                services,
-                exp: now_secs().saturating_add(TRACKING_TOKEN_TTL_SECS),
-            },
-            &self.encode_key,
-        )
-        .map_err(|_| ReputationError::InvalidTrackingToken)
-    }
-
-    pub fn record_instruction_open(
-        &self,
-        token: &str,
-        anonymous_id: Uuid,
-    ) -> Result<(), ReputationError> {
-        let claims = decode::<InstructionClaims>(
-            token,
-            &self.decode_key,
-            &Validation::new(Algorithm::HS256),
-        )
-        .map_err(|_| ReputationError::InvalidTrackingToken)?
-        .claims;
-        if let Some(metrics) = &self.engagement {
-            metrics.record(
-                anonymous_id,
-                EngagementKind::Instruction,
-                format!("{}:{}", claims.search_id, claims.route_id),
-                claims.services,
-            );
-        }
-        Ok(())
-    }
-
-    pub fn route_services_for_vote(&self, route_id: &str, token: Option<&str>) -> Vec<String> {
-        token
-            .and_then(|token| {
-                decode::<InstructionClaims>(
-                    token,
-                    &self.decode_key,
-                    &Validation::new(Algorithm::HS256),
-                )
-                .ok()
-            })
-            .map(|decoded| decoded.claims)
-            .filter(|claims| claims.route_id == route_id)
-            .map(|claims| claims.services)
-            .unwrap_or_default()
     }
 
     pub async fn record_execution(
@@ -402,8 +296,59 @@ GROUP BY requested.route_id, viewer.vote
                 .map_err(|_| ReputationError::InvalidTrackingToken)?
                 .claims;
 
-        let client = self.pool.get().await?;
-        let row = client
+        let mut client = self.pool.get().await?;
+        let transaction = client.transaction().await?;
+        let inserted = transaction
+            .query_opt(
+                r#"
+INSERT INTO service_executions
+    (service_id, search_id, route_id, anonymous_id, status)
+VALUES ($1, $2, $3, $4, 'started')
+ON CONFLICT (anonymous_id, service_id, search_id, route_id) DO NOTHING
+RETURNING id
+"#,
+                &[
+                    &claims.service_id,
+                    &claims.search_id,
+                    &claims.route_id,
+                    &anonymous_id,
+                ],
+            )
+            .await?;
+        let (execution_id, newly_recorded) = match inserted {
+            Some(row) => {
+                transaction
+                    .execute(
+                        r#"
+UPDATE services
+SET executions_total = executions_total + 1, updated_at = now()
+WHERE id = $1
+"#,
+                        &[&claims.service_id],
+                    )
+                    .await?;
+                (row.get(0), true)
+            }
+            None => {
+                let row = transaction
+                    .query_opt(
+                        r#"
+SELECT id FROM service_executions
+WHERE anonymous_id = $1 AND service_id = $2 AND search_id = $3 AND route_id = $4
+"#,
+                        &[
+                            &anonymous_id,
+                            &claims.service_id,
+                            &claims.search_id,
+                            &claims.route_id,
+                        ],
+                    )
+                    .await?
+                    .ok_or_else(|| anyhow::anyhow!("execution conflict winner was not found"))?;
+                (row.get(0), false)
+            }
+        };
+        let row = transaction
             .query_opt(
                 r#"
 SELECT s.id, s.slug, s.display_name, s.executions_total, s.likes_total,
@@ -417,26 +362,12 @@ WHERE s.id = $1
             )
             .await?
             .ok_or(ReputationError::ServiceNotFound)?;
-        let mut service = row_to_stats(row);
-        service.reputation_score = self.current_reputation_score(&service.slug);
-
-        if let Some(metrics) = &self.engagement {
-            if !claims.service_slug.is_empty() {
-                metrics.record(
-                    anonymous_id,
-                    EngagementKind::Link,
-                    format!(
-                        "{}:{}:{}",
-                        claims.search_id, claims.route_id, claims.service_slug
-                    ),
-                    vec![claims.service_slug],
-                );
-            }
-        }
+        let service = row_to_stats(row);
+        transaction.commit().await?;
 
         Ok(ExecutionOpen {
-            execution_id: Uuid::new_v4(),
-            newly_recorded: true,
+            execution_id,
+            newly_recorded,
             redirect_url: claims.destination_url,
             service,
         })
@@ -492,7 +423,6 @@ ON CONFLICT (anonymous_id, service_id) DO UPDATE SET
 UPDATE services
 SET likes_total = likes_total + $2,
     dislikes_total = dislikes_total + $3,
-    last_interaction_at = now(),
     updated_at = now()
 WHERE id = $1
 "#,
@@ -508,8 +438,7 @@ FROM services WHERE id = $1
                 &[&service_id, &vote.as_str()],
             )
             .await?;
-        let mut stats = row_to_stats(row);
-        stats.reputation_score = self.current_reputation_score(&stats.slug);
+        let stats = row_to_stats(row);
         transaction.commit().await?;
         Ok(stats)
     }
@@ -519,89 +448,21 @@ FROM services WHERE id = $1
         route_id: &str,
         anonymous_id: Uuid,
         vote: VoteChoice,
-        services: &[String],
     ) -> Result<RouteFeedback, ReputationError> {
         let mut client = self.pool.get().await?;
         let transaction = client.transaction().await?;
-        let lock_key = format!("{route_id}:{anonymous_id}");
-        transaction
-            .query_one(
-                "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
-                &[&lock_key],
-            )
-            .await?;
-        let previous = transaction
-            .query_opt(
-                "SELECT vote, attributed_services FROM route_votes WHERE anonymous_id = $1 AND route_id = $2 FOR UPDATE",
-                &[&anonymous_id, &route_id],
-            )
-            .await?;
-        let previous_vote = previous
-            .as_ref()
-            .and_then(|row| VoteChoice::parse(row.get::<_, String>(0).as_str()));
-        let previous_services = previous
-            .as_ref()
-            .map(|row| row.get::<_, Vec<String>>(1))
-            .unwrap_or_default();
-        let mut attributed_services = if services.is_empty() {
-            previous_services.clone()
-        } else {
-            services.to_vec()
-        };
-        attributed_services.sort();
-        attributed_services.dedup();
         transaction
             .execute(
                 r#"
-INSERT INTO route_votes (anonymous_id, route_id, vote, attributed_services)
-VALUES ($1, $2, $3, $4)
+INSERT INTO route_votes (anonymous_id, route_id, vote)
+VALUES ($1, $2, $3)
 ON CONFLICT (anonymous_id, route_id) DO UPDATE SET
     vote = EXCLUDED.vote,
-    attributed_services = EXCLUDED.attributed_services,
     updated_at = now()
 "#,
-                &[
-                    &anonymous_id,
-                    &route_id,
-                    &vote.as_str(),
-                    &attributed_services,
-                ],
+                &[&anonymous_id, &route_id, &vote.as_str()],
             )
             .await?;
-        if let Some(previous_vote) = previous_vote {
-            if !previous_services.is_empty() {
-                if previous_services == attributed_services {
-                    let (likes_delta, dislikes_delta) = vote_deltas(Some(previous_vote), vote);
-                    if likes_delta != 0 || dislikes_delta != 0 {
-                        transaction.execute(
-                            "UPDATE services SET likes_total = GREATEST(0, likes_total + $2), dislikes_total = GREATEST(0, dislikes_total + $3), last_interaction_at = now(), updated_at = now() WHERE slug = ANY($1)",
-                            &[&previous_services, &likes_delta, &dislikes_delta],
-                        ).await?;
-                    }
-                } else {
-                    let (old_like, old_dislike) = match previous_vote {
-                        VoteChoice::Like => (-1_i64, 0_i64),
-                        VoteChoice::Dislike => (0_i64, -1_i64),
-                    };
-                    transaction.execute(
-                        "UPDATE services SET likes_total = GREATEST(0, likes_total + $2), dislikes_total = GREATEST(0, dislikes_total + $3), last_interaction_at = now(), updated_at = now() WHERE slug = ANY($1)",
-                        &[&previous_services, &old_like, &old_dislike],
-                    ).await?;
-                }
-            }
-        }
-        if previous_vote.is_none() || previous_services != attributed_services {
-            if !attributed_services.is_empty() {
-                let (new_like, new_dislike) = match vote {
-                    VoteChoice::Like => (1_i64, 0_i64),
-                    VoteChoice::Dislike => (0_i64, 1_i64),
-                };
-                transaction.execute(
-                    "UPDATE services SET likes_total = likes_total + $2, dislikes_total = dislikes_total + $3, last_interaction_at = now(), updated_at = now() WHERE slug = ANY($1)",
-                    &[&attributed_services, &new_like, &new_dislike],
-                ).await?;
-            }
-        }
         let row = transaction
             .query_one(
                 r#"
@@ -623,10 +484,7 @@ WHERE route_id = $1
 
 pub fn average_reputation(services: &[RouteServiceStats]) -> CombinedReputation {
     if services.is_empty() {
-        return CombinedReputation {
-            score_average: 50,
-            ..CombinedReputation::default()
-        };
+        return CombinedReputation::default();
     }
     let count = i64::try_from(services.len()).unwrap_or(i64::MAX);
     let rounded_average = |sum: i64| (sum.saturating_add(count / 2)) / count;
@@ -637,8 +495,6 @@ pub fn average_reputation(services: &[RouteServiceStats]) -> CombinedReputation 
         executions_average: rounded_average(total(|service| service.stats.executions_total)),
         likes_average: rounded_average(total(|service| service.stats.likes_total)),
         dislikes_average: rounded_average(total(|service| service.stats.dislikes_total)),
-        score_average: rounded_average(total(|service| service.stats.reputation_score as i64))
-            as u8,
     }
 }
 
@@ -666,7 +522,6 @@ fn row_to_stats(row: tokio_postgres::Row) -> ServiceStats {
         executions_total: row.get(3),
         likes_total: row.get(4),
         dislikes_total: row.get(5),
-        reputation_score: 50,
         viewer_vote: row
             .get::<_, Option<String>>(6)
             .as_deref()
@@ -724,7 +579,6 @@ mod tests {
                 executions_total: executions,
                 likes_total: likes,
                 dislikes_total: dislikes,
-                reputation_score: 50,
                 viewer_vote: None,
             },
         };

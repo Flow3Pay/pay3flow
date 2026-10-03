@@ -17,7 +17,7 @@ use crate::core::state::AppState;
 use crate::server::openapi;
 use crate::server::routing::{
     activitypub, anonymous, auth, banks, exchange, matcher, networks, oauth, p2p, pairs, payments,
-    payments_ws, providers, rates, referrals, solver, ws,
+    payments_ws, providers, rates, referrals, route_executions, solver, ws,
 };
 
 pub fn router(state: AppState) -> Router {
@@ -136,8 +136,13 @@ pub fn router(state: AppState) -> Router {
         .route("/api/networks", get(networks::list))
         .route("/api/p2p/search", get(p2p::search))
         .route("/api/p2p/routes", get(p2p::routes))
+        .route("/api/p2p/route-executions", post(route_executions::create))
+        .route("/api/p2p/route-executions/:id", get(route_executions::get))
+        .route(
+            "/api/p2p/route-executions/:id/submissions",
+            post(route_executions::submit),
+        )
         .route("/api/service-executions/open", post(p2p::open_execution))
-        .route("/api/routes/instruction-open", post(p2p::open_instruction))
         .route("/api/services/:id/vote", put(p2p::set_vote))
         .route("/api/routes/:route_id/vote", put(p2p::set_route_vote))
         .route("/api/admin/banks", post(banks::admin_create))

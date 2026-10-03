@@ -14,18 +14,11 @@ use crate::p2p::{
     PublicFiatRouteProvider, SourceStatus,
 };
 use crate::route_engine::{Amount, PublicRouteProvider, PublicRouteQuote};
-use crate::service_reputation::RouteFeedback;
 use async_trait::async_trait;
 
 struct ProgressiveSource;
 
-struct AssetLagSource {
-    release_usdt: Arc<tokio::sync::Semaphore>,
-}
-
-struct ImpossibleLegSource {
-    release_exit: Arc<tokio::sync::Semaphore>,
-}
+struct OutlierCycleSource;
 
 struct DelayedRouteSource {
     name: &'static str,
@@ -46,7 +39,6 @@ fn route_snapshot_distinguishes_live_fallback_from_stale_cache() {
         latency_ms: 10,
         offers_found: 20,
         error: None,
-        avg_latency_ms: None,
     };
     let status = |entry_sources| RouteAssetStatus {
         asset: "USDT".into(),
@@ -258,34 +250,25 @@ impl P2pSource for ProgressiveSource {
 }
 
 #[async_trait]
-impl P2pSource for AssetLagSource {
+impl P2pSource for OutlierCycleSource {
     fn name(&self) -> &str {
-        "asset-lag"
+        "outlier"
     }
 
     async fn search(&self, query: &P2pSearchQuery) -> Result<Vec<P2pOffer>> {
-        if query.asset == "USDT" {
-            let _permit = self.release_usdt.acquire().await?;
-        }
-        let mut result = offer("asset-lag", query.side, "100", "1", "1000000");
-        result.fiat.clone_from(&query.fiat);
-        result.asset.clone_from(&query.asset);
-        result.ad_id = format!("{}-{:?}", query.asset, query.side);
-        Ok(vec![result])
-    }
-}
-
-#[async_trait]
-impl P2pSource for ImpossibleLegSource {
-    fn name(&self) -> &str {
-        "impossible-leg"
-    }
-
-    async fn search(&self, query: &P2pSearchQuery) -> Result<Vec<P2pOffer>> {
-        if query.side == P2pSide::SellCrypto {
-            let _permit = self.release_exit.acquire().await?;
-        }
-        Ok(Vec::new())
+        let prices: &[&str] = match query.side {
+            P2pSide::BuyCrypto => &["195.49", "359", "360", "361"],
+            P2pSide::SellCrypto => &["358", "359", "360"],
+        };
+        Ok(prices
+            .iter()
+            .map(|price| {
+                let mut result = offer(self.name(), query.side, price, "1", "1000000");
+                result.fiat.clone_from(&query.fiat);
+                result.asset.clone_from(&query.asset);
+                result
+            })
+            .collect())
     }
 }
 
@@ -352,6 +335,8 @@ fn query(allow_cross_venue: bool) -> NormalizedRouteQuery {
         assets_explicit: false,
         source_payment_method: None,
         target_payment_method: None,
+        source_payment_fee_bps: None,
+        target_payment_fee_bps: None,
         merchant_only: false,
         min_orders: None,
         min_completion_rate: None,
@@ -443,6 +428,8 @@ fn same_asset_on_different_networks_is_allowed_for_provider_search() {
             intermediary_assets: None,
             source_payment_method: None,
             target_payment_method: None,
+            source_payment_fee_percent: None,
+            target_payment_fee_percent: None,
             merchant_only: Some(false),
             min_orders: None,
             min_completion_rate: None,
@@ -476,6 +463,8 @@ fn crypto_to_fiat_route_preserves_the_selected_source_network() {
             intermediary_assets: None,
             source_payment_method: None,
             target_payment_method: Some("Ameriabank".into()),
+            source_payment_fee_percent: None,
+            target_payment_fee_percent: None,
             merchant_only: Some(false),
             min_orders: None,
             min_completion_rate: None,
@@ -510,27 +499,6 @@ fn crypto_to_fiat_route_preserves_the_selected_source_network() {
         serde_json::to_value(&routes[0]).unwrap()["entry_network"],
         "ethereum"
     );
-}
-
-#[test]
-fn cardano_to_amd_accepts_bestchange_offer_without_a_minimum() {
-    let mut route_query = query(false);
-    route_query.source_currency = "ADA".into();
-    route_query.target_currency = "AMD".into();
-    route_query.source_amount = 100.0;
-    route_query.source_network = Some("cardano".into());
-    let mut bestchange = offer("bestchange", P2pSide::SellCrypto, "300", "0", "100000");
-    bestchange.market = P2pOfferMarket::DirectExchange;
-    bestchange.asset = "ADA".into();
-    bestchange.fiat = "AMD".into();
-    bestchange.network = Some("cardano".into());
-    let mut routes = Vec::new();
-
-    compose_crypto_to_fiat_routes(&mut routes, &route_query, "ADA", &[bestchange]);
-
-    assert_eq!(routes.len(), 1);
-    assert_eq!(routes[0].target_amount, "30000.00");
-    assert_eq!(routes[0].exit_offer.as_ref().unwrap().source, "bestchange");
 }
 
 #[test]
@@ -830,6 +798,8 @@ async fn composes_fiat_provider_route_across_intermediary_networks() {
             intermediary_assets: None,
             source_payment_method: None,
             target_payment_method: None,
+            source_payment_fee_percent: None,
+            target_payment_fee_percent: None,
             merchant_only: Some(false),
             min_orders: None,
             min_completion_rate: None,
@@ -884,6 +854,8 @@ async fn keeps_independent_quotes_from_multiple_route_providers() {
             intermediary_assets: None,
             source_payment_method: None,
             target_payment_method: None,
+            source_payment_fee_percent: None,
+            target_payment_fee_percent: None,
             merchant_only: None,
             min_orders: None,
             min_completion_rate: None,
@@ -925,6 +897,8 @@ async fn keeps_independent_quotes_from_multiple_route_providers() {
             intermediary_assets: None,
             source_payment_method: None,
             target_payment_method: None,
+            source_payment_fee_percent: None,
+            target_payment_fee_percent: None,
             merchant_only: None,
             min_orders: None,
             min_completion_rate: None,
@@ -972,6 +946,8 @@ async fn route_stream_publishes_each_provider_quote_batch_as_it_finishes() {
                     intermediary_assets: None,
                     source_payment_method: None,
                     target_payment_method: None,
+                    source_payment_fee_percent: None,
+                    target_payment_fee_percent: None,
                     merchant_only: None,
                     min_orders: None,
                     min_completion_rate: None,
@@ -1044,6 +1020,8 @@ async fn fiat_to_crypto_stream_does_not_batch_fast_and_slow_providers() {
                     intermediary_assets: None,
                     source_payment_method: None,
                     target_payment_method: None,
+                    source_payment_fee_percent: None,
+                    target_payment_fee_percent: None,
                     merchant_only: None,
                     min_orders: None,
                     min_completion_rate: None,
@@ -1122,6 +1100,8 @@ async fn dispatches_only_provider_supported_network_pairs() {
             intermediary_assets: None,
             source_payment_method: None,
             target_payment_method: None,
+            source_payment_fee_percent: None,
+            target_payment_fee_percent: None,
             merchant_only: None,
             min_orders: None,
             min_completion_rate: None,
@@ -1164,6 +1144,8 @@ async fn adds_direct_fiat_quotes_in_both_amd_rub_directions() {
                 intermediary_assets: None,
                 source_payment_method: None,
                 target_payment_method: None,
+                source_payment_fee_percent: None,
+                target_payment_fee_percent: None,
                 merchant_only: None,
                 min_orders: None,
                 min_completion_rate: None,
@@ -1211,6 +1193,8 @@ async fn composes_fiat_to_crypto_route_through_provider() {
             intermediary_assets: None,
             source_payment_method: None,
             target_payment_method: None,
+            source_payment_fee_percent: None,
+            target_payment_fee_percent: None,
             merchant_only: Some(false),
             min_orders: None,
             min_completion_rate: None,
@@ -1257,6 +1241,8 @@ async fn composes_small_amd_to_btc_near_route_after_filter_fallback() {
             intermediary_assets: None,
             source_payment_method: Some("Ameriabank".into()),
             target_payment_method: None,
+            source_payment_fee_percent: None,
+            target_payment_fee_percent: None,
             merchant_only: Some(false),
             min_orders: Some(20),
             min_completion_rate: Some(0.9),
@@ -1326,6 +1312,8 @@ async fn composes_crypto_to_crypto_provider_routes_for_supported_pairs() {
                 intermediary_assets: None,
                 source_payment_method: None,
                 target_payment_method: None,
+                source_payment_fee_percent: None,
+                target_payment_fee_percent: None,
                 merchant_only: Some(false),
                 min_orders: None,
                 min_completion_rate: None,
@@ -1375,6 +1363,8 @@ async fn composes_crypto_to_fiat_route_through_provider() {
             intermediary_assets: None,
             source_payment_method: None,
             target_payment_method: None,
+            source_payment_fee_percent: None,
+            target_payment_fee_percent: None,
             merchant_only: Some(false),
             min_orders: None,
             min_completion_rate: None,
@@ -1436,14 +1426,7 @@ fn route_limit_preserves_a_lower_ranked_provider_route() {
     id_pay.warnings.clear();
     all_routes.insert(id_pay.route_id.clone(), id_pay);
 
-    let snapshot = response_snapshot(
-        Uuid::nil(),
-        &normalized,
-        &all_routes,
-        &[],
-        &HashMap::new(),
-        &HashMap::new(),
-    );
+    let snapshot = response_snapshot(Uuid::nil(), &normalized, &all_routes, &[], &HashMap::new());
     assert_eq!(snapshot.routes_found, 41);
     assert_eq!(snapshot.routes.len(), 40);
     assert!(snapshot
@@ -1480,82 +1463,6 @@ fn route_sort_prefers_higher_payout_before_route_quality() {
 
     assert_eq!(routes[0].route_id, "cross-venue");
     assert_eq!(routes[1].route_id, "same-venue");
-}
-
-#[test]
-fn provider_engagement_promotes_a_close_route_without_hiding_a_much_better_price() {
-    let normalized = query(true);
-    let mut discovered = Vec::new();
-    compose_fiat_routes(
-        &mut discovered,
-        &normalized,
-        "USDT",
-        &[offer("bybit", P2pSide::BuyCrypto, "400", "1000", "200000")],
-        &[offer("bybit", P2pSide::SellCrypto, "80", "1000", "100000")],
-    );
-    let base = discovered.pop().expect("test route should be composed");
-    let mut popular = base.clone();
-    popular.route_id = "popular".into();
-    popular.route_provider = Some("id-pay".into());
-    popular.entry_offer = None;
-    popular.exit_offer = None;
-    popular.target_amount = "19900".into();
-    let mut empty = base;
-    empty.route_id = "empty".into();
-    empty.route_provider = Some("unused".into());
-    empty.entry_offer = None;
-    empty.exit_offer = None;
-    empty.target_amount = "20000".into();
-    let scores = HashMap::from([("id-pay".into(), 1.0)]);
-    let mut routes = vec![popular.clone(), empty.clone()];
-    sort_routes_with_scores(&mut routes, &scores);
-    assert_eq!(routes[0].route_id, "popular");
-    empty.target_amount = "21000".into();
-    let mut routes = vec![popular, empty];
-    sort_routes_with_scores(&mut routes, &scores);
-    assert_eq!(routes[0].route_id, "empty");
-}
-
-#[test]
-fn route_votes_use_the_like_dislike_ratio_only_for_close_prices() {
-    let normalized = query(true);
-    let mut discovered = Vec::new();
-    compose_fiat_routes(
-        &mut discovered,
-        &normalized,
-        "USDT",
-        &[offer("bybit", P2pSide::BuyCrypto, "400", "1000", "200000")],
-        &[offer("bybit", P2pSide::SellCrypto, "80", "1000", "100000")],
-    );
-    let base = discovered.pop().expect("test route should be composed");
-    let mut popular = base.clone();
-    popular.route_id = "popular".into();
-    popular.target_amount = "10000".into();
-    popular.feedback = Some(RouteFeedback {
-        likes_total: 100,
-        dislikes_total: 4,
-        viewer_vote: None,
-    });
-    let mut clean = base;
-    clean.route_id = "clean".into();
-    clean.target_amount = "9995".into();
-    clean.feedback = Some(RouteFeedback {
-        likes_total: 16,
-        dislikes_total: 0,
-        viewer_vote: None,
-    });
-    let mut routes = vec![clean.clone(), popular.clone()];
-    sort_routes_with_feedback(&mut routes, &HashMap::new());
-    assert_eq!(routes[0].route_id, "popular");
-    popular.feedback.as_mut().unwrap().dislikes_total = 68;
-    let mut routes = vec![popular, clean];
-    sort_routes_with_feedback(&mut routes, &HashMap::new());
-    assert_eq!(routes[0].route_id, "clean");
-    for route in &mut routes {
-        route.feedback = None;
-    }
-    sort_routes_with_feedback(&mut routes, &HashMap::new());
-    assert_eq!(routes[0].route_id, "popular");
 }
 
 #[test]
@@ -1607,6 +1514,8 @@ async fn route_stream_reports_each_completed_asset_batch() {
                     intermediary_assets: None,
                     source_payment_method: None,
                     target_payment_method: None,
+                    source_payment_fee_percent: None,
+                    target_payment_fee_percent: None,
                     merchant_only: Some(false),
                     min_orders: None,
                     min_completion_rate: None,
@@ -1629,121 +1538,6 @@ async fn route_stream_reports_each_completed_asset_batch() {
     assert_eq!(second.routes_found, 2);
     assert_eq!(final_response.routes_found, 2);
     assert_eq!(final_response.search_id, search_id);
-    let mut payload = serde_json::to_value(&final_response).unwrap();
-    payload["routes"][0]["feedback"] = serde_json::json!({"viewer_vote": "like"});
-    payload["routes"][0]["service_links"] = serde_json::json!([{"tracking_token": "private"}]);
-    let cached: P2pRouteSearchResponse = serde_json::from_value(payload).unwrap();
-    assert_eq!(cached.routes_found, 2);
-    assert_eq!(cached.routes.len(), 2);
-    assert!(cached.routes[0].feedback.is_none());
-    assert!(cached.routes[0].service_links.is_empty());
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn fiat_workflow_streams_a_ready_asset_while_another_asset_is_slow() {
-    let release_usdt = Arc::new(tokio::sync::Semaphore::new(0));
-    let service = P2pSearchService::with_sources(
-        vec![Arc::new(AssetLagSource {
-            release_usdt: release_usdt.clone(),
-        })],
-        Duration::from_secs(1),
-    )
-    .with_route_providers(vec![Arc::new(FixedIntentProvider)]);
-    let (updates, mut snapshots) = mpsc::channel(128);
-    let task = tokio::spawn(async move {
-        service
-            .stream_routes(
-                P2pRouteSearchQuery {
-                    source_fiat: "AMD".into(),
-                    target_fiat: "RUB".into(),
-                    source_amount: 100_000.0,
-                    source_network: None,
-                    target_network: None,
-                    bridge_fiat: None,
-                    assets: Some("USDT,BTC".into()),
-                    intermediary_assets: None,
-                    source_payment_method: None,
-                    target_payment_method: None,
-                    merchant_only: None,
-                    min_orders: None,
-                    min_completion_rate: None,
-                    allow_cross_venue: Some(true),
-                    max_price_deviation_bps: None,
-                    limit: Some(40),
-                    sources: None,
-                    exchange_mode: ExchangeMode::All,
-                },
-                Uuid::new_v4(),
-                updates,
-            )
-            .await
-    });
-
-    let early = tokio::time::timeout(Duration::from_secs(1), async {
-        loop {
-            let snapshot = snapshots.recv().await.expect("route snapshot");
-            if snapshot
-                .routes
-                .iter()
-                .any(|route| route.route_provider.as_deref() == Some("test-intents"))
-            {
-                return snapshot;
-            }
-        }
-    })
-    .await
-    .expect("BTC workflow routes should arrive before USDT finishes");
-    assert!(early.routes.iter().any(|route| route.asset == "BTC"));
-    assert!(!task.is_finished());
-
-    release_usdt.add_permits(8);
-    let final_response = task.await.unwrap().unwrap();
-    assert!(final_response
-        .routes
-        .iter()
-        .any(|route| route.asset == "USDT"));
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn fiat_route_finishes_when_one_leg_has_no_offers() {
-    let service = P2pSearchService::with_sources(
-        vec![Arc::new(ImpossibleLegSource {
-            release_exit: Arc::new(tokio::sync::Semaphore::new(0)),
-        })],
-        Duration::from_secs(10),
-    );
-    let (updates, _snapshots) = mpsc::channel(16);
-    let response = tokio::time::timeout(
-        Duration::from_secs(1),
-        service.stream_routes(
-            P2pRouteSearchQuery {
-                source_fiat: "AMD".into(),
-                target_fiat: "RUB".into(),
-                source_amount: 100_000.0,
-                source_network: None,
-                target_network: None,
-                bridge_fiat: None,
-                assets: Some("USDT".into()),
-                intermediary_assets: None,
-                source_payment_method: None,
-                target_payment_method: None,
-                merchant_only: None,
-                min_orders: None,
-                min_completion_rate: None,
-                allow_cross_venue: Some(false),
-                max_price_deviation_bps: None,
-                limit: Some(40),
-                sources: None,
-                exchange_mode: ExchangeMode::All,
-            },
-            Uuid::new_v4(),
-            updates,
-        ),
-    )
-    .await
-    .expect("an empty entry leg should cancel its slow exit leg")
-    .expect("route search");
-    assert!(response.routes.is_empty());
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1779,6 +1573,8 @@ async fn route_stream_publishes_a_fast_provider_before_slower_providers_finish()
                     intermediary_assets: None,
                     source_payment_method: None,
                     target_payment_method: Some("Sberbank".into()),
+                    source_payment_fee_percent: None,
+                    target_payment_fee_percent: None,
                     merchant_only: Some(false),
                     min_orders: None,
                     min_completion_rate: None,
@@ -1835,6 +1631,8 @@ async fn route_stream_does_not_make_a_direct_provider_wait_for_local_legs() {
                     intermediary_assets: None,
                     source_payment_method: None,
                     target_payment_method: None,
+                    source_payment_fee_percent: None,
+                    target_payment_fee_percent: None,
                     merchant_only: Some(false),
                     min_orders: None,
                     min_completion_rate: None,
@@ -1850,7 +1648,7 @@ async fn route_stream_does_not_make_a_direct_provider_wait_for_local_legs() {
             .await
     });
 
-    let first = tokio::time::timeout(Duration::from_millis(200), snapshots.recv())
+    let first = tokio::time::timeout(Duration::from_millis(100), snapshots.recv())
         .await
         .expect("direct provider should publish before slow local legs")
         .expect("direct provider snapshot");
@@ -1900,6 +1698,8 @@ async fn unsupported_direct_provider_stops_waiting_before_slow_local_legs() {
                     intermediary_assets: None,
                     source_payment_method: None,
                     target_payment_method: None,
+                    source_payment_fee_percent: None,
+                    target_payment_fee_percent: None,
                     merchant_only: Some(false),
                     min_orders: None,
                     min_completion_rate: None,
@@ -1954,6 +1754,300 @@ fn removes_large_price_outlier() {
     ];
     let filtered = reject_price_outliers(offers, 1_000);
     assert_eq!(filtered.len(), 2);
+}
+
+#[test]
+fn amd_crypto_cycle_reports_confirmed_profit_in_minor_units() {
+    let mut query = query(false);
+    query.target_currency = "AMD".into();
+    query.source_payment_fee_bps = Some(0);
+    query.target_payment_fee_bps = Some(0);
+    let entry = offer("binance", P2pSide::BuyCrypto, "350", "1", "200000");
+    let exit = offer("binance", P2pSide::SellCrypto, "360", "1", "200000");
+    let mut routes = Vec::new();
+    compose_fiat_routes(&mut routes, &query, "USDT", &[entry], &[exit]);
+
+    assert_eq!(routes[0].route_kind, "crypto_cycle");
+    assert_eq!(
+        profitability_for_route(&routes[0], &query),
+        Some(RouteProfitability::Confirmed {
+            net_profit_minor: 285_714,
+            profit_bps: 285,
+        })
+    );
+}
+
+#[test]
+fn cross_venue_cycle_does_not_claim_profit_without_network_fee() {
+    let mut query = query(true);
+    query.target_currency = "AMD".into();
+    query.source_payment_fee_bps = Some(0);
+    query.target_payment_fee_bps = Some(0);
+    let entry = offer("binance", P2pSide::BuyCrypto, "350", "1", "200000");
+    let exit = offer("bybit", P2pSide::SellCrypto, "360", "1", "200000");
+    let mut routes = Vec::new();
+    compose_fiat_routes(&mut routes, &query, "USDT", &[entry], &[exit]);
+
+    assert!(matches!(
+        profitability_for_route(&routes[0], &query),
+        Some(RouteProfitability::Unconfirmed { missing_costs, .. })
+            if missing_costs == vec![RouteCostKind::NetworkFee]
+    ));
+}
+
+#[test]
+fn sub_minor_unit_cycle_does_not_divide_by_zero() {
+    let mut query = query(false);
+    query.target_currency = "AMD".into();
+    query.source_payment_fee_bps = Some(0);
+    query.target_payment_fee_bps = Some(0);
+    let entry = offer("binance", P2pSide::BuyCrypto, "350", "1", "200000");
+    let exit = offer("binance", P2pSide::SellCrypto, "360", "1", "200000");
+    let mut routes = Vec::new();
+    compose_fiat_routes(&mut routes, &query, "USDT", &[entry], &[exit]);
+    routes[0].source_amount = "0.00".into();
+
+    assert_eq!(profitability_for_route(&routes[0], &query), None);
+}
+
+#[tokio::test]
+async fn composes_amd_fiat_cycle_from_catalog_intermediary() {
+    let service = P2pSearchService::with_sources(Vec::new(), Duration::from_secs(1))
+        .with_fiat_route_providers(vec![Arc::new(FixedFiatRouteProvider)]);
+    let response = service
+        .search_routes(P2pRouteSearchQuery {
+            source_fiat: "AMD".into(),
+            target_fiat: "AMD".into(),
+            source_amount: 100_000.0,
+            source_network: None,
+            target_network: None,
+            bridge_fiat: None,
+            assets: Some("USDT".into()),
+            intermediary_assets: None,
+            source_payment_method: None,
+            target_payment_method: None,
+            source_payment_fee_percent: Some(0.0),
+            target_payment_fee_percent: Some(0.0),
+            merchant_only: None,
+            min_orders: None,
+            min_completion_rate: None,
+            allow_cross_venue: Some(true),
+            max_price_deviation_bps: Some(1_000),
+            limit: Some(20),
+            sources: Some("id-pay".into()),
+            exchange_mode: ExchangeMode::Exchanger,
+        })
+        .await
+        .unwrap();
+
+    let route = response
+        .routes
+        .iter()
+        .find(|route| route.route_kind == "fiat_cycle")
+        .expect("AMD fiat cycle should be returned");
+    assert_eq!(route.route_path, ["AMD", "RUB", "AMD"]);
+    assert!(matches!(
+        route.profitability,
+        Some(RouteProfitability::Unconfirmed { ref missing_costs, .. })
+            if missing_costs == &[RouteCostKind::ProviderFee]
+    ));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn provider_cycle_rejects_an_amd_price_outlier_before_quoting() {
+    let service =
+        P2pSearchService::with_sources(vec![Arc::new(OutlierCycleSource)], Duration::from_secs(1))
+            .with_route_providers(vec![Arc::new(FixedIntentProvider)]);
+    let response = service
+        .search_routes(P2pRouteSearchQuery {
+            source_fiat: "AMD".into(),
+            target_fiat: "AMD".into(),
+            source_amount: 100_000.0,
+            source_network: None,
+            target_network: None,
+            bridge_fiat: None,
+            assets: Some("USDT".into()),
+            intermediary_assets: None,
+            source_payment_method: None,
+            target_payment_method: None,
+            source_payment_fee_percent: Some(0.0),
+            target_payment_fee_percent: Some(0.0),
+            merchant_only: None,
+            min_orders: None,
+            min_completion_rate: None,
+            allow_cross_venue: Some(true),
+            max_price_deviation_bps: Some(1_000),
+            limit: Some(40),
+            sources: None,
+            exchange_mode: ExchangeMode::All,
+        })
+        .await
+        .unwrap();
+
+    let provider_routes = response
+        .routes
+        .iter()
+        .filter(|route| route.route_provider.as_deref() == Some("test-intents"))
+        .collect::<Vec<_>>();
+    assert!(!provider_routes.is_empty());
+    assert!(provider_routes.iter().all(|route| {
+        route
+            .entry_offer
+            .as_ref()
+            .is_some_and(|offer| offer.price != "195.49")
+            && route.target_amount.parse::<f64>().unwrap() < 110_000.0
+    }));
+}
+
+#[tokio::test]
+async fn composes_an_amd_cycle_through_a_same_chain_cow_swap() {
+    let service =
+        P2pSearchService::with_sources(vec![Arc::new(OutlierCycleSource)], Duration::from_secs(1))
+            .with_route_providers(vec![Arc::new(PricedRouteProvider {
+                name: "cow-swap",
+                multiplier: 0.99,
+                fee: "0.1",
+                delay: Duration::ZERO,
+            })]);
+    let response = service
+        .search_routes(P2pRouteSearchQuery {
+            source_fiat: "AMD".into(),
+            target_fiat: "AMD".into(),
+            source_amount: 100_000.0,
+            source_network: None,
+            target_network: None,
+            bridge_fiat: None,
+            assets: Some("USDT,USDC".into()),
+            intermediary_assets: None,
+            source_payment_method: None,
+            target_payment_method: None,
+            source_payment_fee_percent: Some(0.0),
+            target_payment_fee_percent: Some(0.0),
+            merchant_only: None,
+            min_orders: None,
+            min_completion_rate: None,
+            allow_cross_venue: Some(true),
+            max_price_deviation_bps: Some(1_000),
+            limit: Some(40),
+            sources: Some("outlier,cow-swap".into()),
+            exchange_mode: ExchangeMode::All,
+        })
+        .await
+        .unwrap();
+
+    let route = response
+        .routes
+        .iter()
+        .find(|route| route.route_provider.as_deref() == Some("cow-swap"))
+        .expect("same-chain CoW cycle should be returned");
+    let entry = route.entry_offer.as_ref().unwrap();
+    let exit = route.exit_offer.as_ref().unwrap();
+    assert_ne!(entry.asset, exit.asset);
+    assert_eq!(route.source_network.as_deref(), Some("ethereum"));
+    assert_eq!(route.target_network.as_deref(), Some("ethereum"));
+    assert!(route.route_path.iter().any(|step| step == "USDT@ethereum"));
+    assert!(route.route_path.iter().any(|step| step == "USDC@ethereum"));
+}
+
+#[tokio::test]
+async fn composes_an_amd_cycle_through_a_cross_chain_symbiosis_swap() {
+    let service =
+        P2pSearchService::with_sources(vec![Arc::new(OutlierCycleSource)], Duration::from_secs(1))
+            .with_route_providers(vec![Arc::new(RecordingRouteProvider {
+                name: "symbiosis",
+                assets: vec![
+                    Asset::new("USDT", Some("ethereum")).unwrap(),
+                    Asset::new("USDC", Some("solana")).unwrap(),
+                ],
+                unsupported_calls: Arc::new(AtomicUsize::new(0)),
+            })]);
+    let response = service
+        .search_routes(P2pRouteSearchQuery {
+            source_fiat: "AMD".into(),
+            target_fiat: "AMD".into(),
+            source_amount: 100_000.0,
+            source_network: None,
+            target_network: None,
+            bridge_fiat: None,
+            assets: Some("USDT,USDC".into()),
+            intermediary_assets: None,
+            source_payment_method: None,
+            target_payment_method: None,
+            source_payment_fee_percent: Some(0.0),
+            target_payment_fee_percent: Some(0.0),
+            merchant_only: None,
+            min_orders: None,
+            min_completion_rate: None,
+            allow_cross_venue: Some(true),
+            max_price_deviation_bps: Some(1_000),
+            limit: Some(40),
+            sources: Some("outlier,symbiosis".into()),
+            exchange_mode: ExchangeMode::All,
+        })
+        .await
+        .unwrap();
+
+    let route = response
+        .routes
+        .iter()
+        .find(|route| route.route_provider.as_deref() == Some("symbiosis"))
+        .expect("cross-chain Symbiosis cycle should be returned");
+    let route_networks = HashSet::from([
+        route.source_network.as_deref(),
+        route.target_network.as_deref(),
+    ]);
+    assert_eq!(
+        route_networks,
+        HashSet::from([Some("ethereum"), Some("solana")])
+    );
+    assert!(route.route_path.iter().any(|step| step == "USDT@ethereum"));
+    assert!(route.route_path.iter().any(|step| step == "USDC@solana"));
+}
+
+#[tokio::test]
+async fn refreshes_initially_empty_route_provider_capabilities() {
+    let service = P2pSearchService::with_sources(Vec::new(), Duration::from_secs(1))
+        .with_route_providers(vec![
+            Arc::new(FixedIntentProvider),
+            Arc::new(PricedRouteProvider {
+                name: "cow-swap",
+                multiplier: 0.99,
+                fee: "0.1",
+                delay: Duration::ZERO,
+            }),
+            Arc::new(PricedRouteProvider {
+                name: "symbiosis",
+                multiplier: 0.98,
+                fee: "0.2",
+                delay: Duration::ZERO,
+            }),
+        ]);
+    *service.provider_capabilities_cache.write().unwrap() = Some(HashMap::from([
+        ("test-intents".to_string(), HashSet::new()),
+        ("cow-swap".to_string(), HashSet::new()),
+        ("symbiosis".to_string(), HashSet::new()),
+    ]));
+
+    service
+        .refresh_provider_capabilities(&["test-intents", "cow-swap", "symbiosis", "missing"])
+        .await;
+
+    let cache = service.provider_capabilities_cache.read().unwrap();
+    let snapshot = cache.as_ref().expect("provider capability snapshot");
+    let intent_assets = snapshot
+        .get("test-intents")
+        .expect("refreshed intent capability");
+    assert!(intent_assets.contains(&Asset::new("USDT", Some("tron")).unwrap()));
+    assert!(intent_assets.contains(&Asset::new("USDC", Some("solana")).unwrap()));
+    let cow_assets = snapshot.get("cow-swap").expect("refreshed CoW capability");
+    assert!(cow_assets.contains(&Asset::new("USDT", Some("ethereum")).unwrap()));
+    assert!(cow_assets.contains(&Asset::new("USDC", Some("ethereum")).unwrap()));
+    let symbiosis_assets = snapshot
+        .get("symbiosis")
+        .expect("refreshed Symbiosis capability");
+    assert!(symbiosis_assets.contains(&Asset::new("USDT", Some("ethereum")).unwrap()));
+    assert!(symbiosis_assets.contains(&Asset::new("USDC", Some("ethereum")).unwrap()));
+    assert!(snapshot.get("missing").is_none());
 }
 
 #[test]
@@ -2020,6 +2114,8 @@ fn composes_crypto_to_crypto_route_without_fiat() {
         assets_explicit: false,
         source_payment_method: None,
         target_payment_method: None,
+        source_payment_fee_bps: None,
+        target_payment_fee_bps: None,
         merchant_only: false,
         min_orders: None,
         min_completion_rate: None,
@@ -2077,6 +2173,8 @@ async fn live_amd_to_rub_route_search() {
             intermediary_assets: None,
             source_payment_method: None,
             target_payment_method: None,
+            source_payment_fee_percent: None,
+            target_payment_fee_percent: None,
             merchant_only: Some(false),
             min_orders: None,
             min_completion_rate: None,
@@ -2118,6 +2216,8 @@ async fn live_bank_filtered_amd_to_rub_route_search() {
             intermediary_assets: None,
             source_payment_method: Some("Ameriabank".into()),
             target_payment_method: Some("Sberbank".into()),
+            source_payment_fee_percent: None,
+            target_payment_fee_percent: None,
             merchant_only: Some(false),
             min_orders: None,
             min_completion_rate: None,

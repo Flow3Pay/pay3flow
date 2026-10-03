@@ -150,12 +150,38 @@ impl NearIntentsProvider {
             && tokens.iter().any(|token| token.matches(to))
     }
 
+    pub async fn token_for_asset(&self, asset: &Asset) -> Result<NearToken> {
+        self.tokens
+            .read()
+            .await
+            .iter()
+            .find(|token| token.matches(asset))
+            .cloned()
+            .with_context(|| format!("unsupported NEAR Intents asset {asset}"))
+    }
+
     pub async fn executable_quote(&self, request: NearQuoteRequest) -> Result<NearQuote> {
         self.request_quote(NearQuoteRequest {
             dry: false,
             ..request
         })
         .await
+    }
+
+    pub async fn submit_deposit_tx(&self, tx_hash: &str, deposit_address: &str) -> Result<()> {
+        let mut request = self.client.post(self.endpoint("deposit/submit")).json(&json!({
+            "txHash": tx_hash,
+            "depositAddress": deposit_address,
+        }));
+        if let Some(jwt) = &self.jwt {
+            request = request.bearer_auth(jwt);
+        }
+        let response = request
+            .send()
+            .await
+            .context("submit NEAR Intents deposit transaction")?;
+        ensure_success(response.status(), "submit NEAR Intents deposit transaction")?;
+        Ok(())
     }
 
     pub async fn status(&self, deposit_address: &str) -> Result<NearSwapStatus> {
@@ -314,7 +340,18 @@ impl PublicRouteProvider for NearIntentsProvider {
     }
 
     async fn supported_assets(&self) -> Vec<Asset> {
-        let tokens = self.tokens.read().await;
+        let cached = self.tokens.read().await.clone();
+        let tokens = if cached.is_empty() {
+            match self.load_supported_tokens().await {
+                Ok(tokens) => tokens,
+                Err(error) => {
+                    tracing::warn!(%error, "NEAR Intents token catalog is unavailable");
+                    Vec::new()
+                }
+            }
+        } else {
+            cached
+        };
         tokens
             .iter()
             .filter_map(|token| token.asset().ok())

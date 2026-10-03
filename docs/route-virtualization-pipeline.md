@@ -9,7 +9,7 @@ Orchestration и алгоритмы находятся в
 обвязка — в
 [`backend/src/server/routing/p2p.rs`](../backend/src/server/routing/p2p.rs).
 
-Статус: реализовано в текущей ветке. Актуализировано 2026-10-03.
+Статус: реализовано в текущей ветке. Актуализировано 2026-10-01.
 
 ## Назначение и границы
 
@@ -232,14 +232,14 @@ flowchart TD
     D -->|crypto -> fiat| G[Один sell leg]
     D -->|crypto -> crypto| H[Route providers и spot tickers]
 
-    E --> I[Чтение готовых p2p и direct_exchange snapshots]
+    E --> I[Fmatch p2p и direct_exchange параллельно]
     I --> J[Фильтры, outlier rejection, amount и network checks]
     J --> K[Diversity seeds]
     K --> L[Lazy best-first top-K]
 
-    C --> M[Workflow virtualization из фонового capability/quote snapshot]
+    C --> M[Workflow virtualization из capability/quote snapshot]
     M --> N[Cache hit: свежая quote]
-    M --> O[Cache miss: capability estimate]
+    M --> O[Cache miss: capability estimate + background refresh]
 
     L --> P[Deduplicate и merge]
     F --> P
@@ -251,10 +251,6 @@ flowchart TD
     P --> Q[Rank и provider-diverse truncate]
     Q --> R[Reputation/feedback enrichment]
     R --> S[HTTP response или WebSocket snapshot]
-
-    T[Фоновый опрос Fmatch и providers] --> U[Redis offer snapshots]
-    U --> I
-    V[Фоновый опрос котировок и spot] --> M
 ```
 
 ## 1. Вход в API
@@ -314,17 +310,17 @@ entry: source fiat -> asset, side=buy
 exit:  asset -> target fiat, side=sell
 ```
 
-Запрос читает подготовленные фоновые snapshots entry и exit. Локальная
-композиция одного актива выполняется параллельно с другими assets через
-`FuturesUnordered`; внешний Fmatch не находится в обработке запроса.
+Entry и exit одного актива выполняются через `tokio::join!`, а разные assets —
+через `FuturesUnordered`. Поэтому время не складывается последовательно по
+числу активов.
 
 ### Режимы рынка
 
 - `exchange_mode=p2p` запрашивает только P2P-офферы;
 - `exchange_mode=exchanger` запрашивает только direct-exchange офферы и
   разрешает provider workflows;
-- `exchange_mode=all` объединяет подготовленные фоновые snapshots двух
-  Fmatch-партиций: `market=p2p` и `market=direct_exchange`.
+- `exchange_mode=all` конкурентно делает две независимые Fmatch-партиции:
+  `market=p2p` и `market=direct_exchange`, затем объединяет их.
 
 Разделение `all` принципиально: плотная выдача Binance/Bybit не может вытеснить
 редкий direct-оффер Whitebird ещё на странице Fmatch.
@@ -336,28 +332,21 @@ exit:  asset -> target fiat, side=sell
 
 ### Кэши и fallback
 
-Фоновая задача запускает первый прогон при старте приложения. Далее каждый
-P2P-ключ обновляется через 60 секунд без спроса, через 30 секунд при обычном
-спросе и через 15 секунд при высоком спросе. Direct-exchange и spot snapshots
-обновляются через пять минут. Внутри фонового прогона применяется порядок:
+Порядок получения leg snapshot:
 
-1. краткий Fmatch memory cache;
-2. новый ответ Fmatch;
+1. короткий in-memory cache; TTL задаётся `p2p_search_cache_ttl_ms`, production
+   default — 5 секунд;
+2. свежий запрос Fmatch;
 3. PostgreSQL-кэш Fmatch в пределах `p2p_fmatch_stale_secs`;
-4. provider fallback, если Fmatch и допустимый stale snapshot недоступны.
+4. live provider fallback, если Fmatch и допустимый stale snapshot недоступны.
 
 Успешный ответ Fmatch немедленно попадает в memory cache, а его запись в
-PostgreSQL выполняется best-effort в фоне. В пользовательском запросе leg
-берётся из памяти или общего Redis snapshot; для нового ключа ожидание первого
-snapshot ограничено двумя секундами.
+PostgreSQL выполняется best-effort в фоне. Поэтому provider-workflow фаза
+переиспользует те же entry/exit legs и не повторяет сетевой roundtrip.
 
-Завершённый результат поиска маршрутов также хранится до 15 секунд в Redis по
-нормализованным параметрам запроса. Ключ общий для всех пользователей: их
-оценки, голоса и ссылки добавляются отдельно после чтения из кэша. Если срок
-действия котировки меньше, запись живёт не дольше котировки.
-
-Даже при аварии Fmatch provider fallback выполняется фоновой задачей, а
-пользователь получает последний допустимый snapshot. Ответ явно маркируется
+Нормальный production critical path использует пункты 1–2. Пункт 4 — режим
+деградации ради доступности; поскольку он обращается к внешним адаптерам, при
+аварии Fmatch секундный SLO для него не гарантируется. Ответ явно маркируется
 `source: "provider_fallback"`.
 
 ## 5. Локальная виртуализация fiat → fiat
@@ -454,49 +443,35 @@ sort accepted candidates by target amount descending
 
 ### Quote cache hit
 
-Если точная quote уже есть в кратком cache и ещё не истекла, она даёт provider
-path, output, fees, quote id и expiry. Фоновый опрос дополнительно поддерживает
-ориентировочную quote для пары активов. Её output масштабируется на сумму
-запроса, а quote id и expiry убираются: перед исполнением провайдер должен
-подтвердить текущие условия.
+Live quote хранится 30 секунд и дополнительно проверяется по `expires_at`.
+Свежая quote даёт provider path, фактический output, fees, quote id и expiry.
+Даже такая quote должна быть подтверждена перед исполнением.
 
 ### Quote cache miss
 
-В production miss конкретной котировки не блокирует поиск:
+В production с Fmatch cache miss не блокирует поиск:
 
 - немедленно строится capability-based estimate;
 - input нормализуется до шести десятичных знаков;
 - estimate использует тот же asset amount на выходе и явно не заявляет
   неизвестные provider fees;
 - route получает предупреждение, что live output нужно подтвердить;
-- фоновый опрос providers обновляет ориентировочные quote snapshots раз в пять
-  минут; точный quote id не используется для пересчитанной суммы.
+- до восьми refresh-задач на поиск запускаются в фоне.
 
-Фоновый опрос ограничен semaphore и 12-секундным timeout отдельной quote.
-Успешные ответы попадают в локальный snapshot, с которым работает composer.
+Background refresh:
+
+- дедуплицируется по provider/from/to/amount;
+- использует общий semaphore на 16 внешних quotes;
+- permit берётся через `try_acquire_owned`, поэтому задача не ждёт в очереди;
+- внешний вызов имеет 12-секундный timeout, но он находится вне critical path;
+- успешный ответ обновляет 30-секундный quote cache.
 
 Число workflow-маршрутов ограничено минимумом, достаточным для provider
 diversity: `max(ceil(limit / 2), provider_count)`. Этот поиск всегда помечает
 общую выдачу как не exhaustive.
 
-Direct fiat providers опрашиваются отдельно каждые пять минут. Для суммы
-запроса готовая ориентировочная котировка масштабируется локально; miss не
-запускает сетевой запрос в пользовательском обработчике.
-
-## Репутация и порядок маршрутов
-
-Глобальная репутация провайдера начинается с 50 баллов и ограничена диапазоном
-0–100: лайк добавляет 10, дизлайк вычитает 15, открытие инструкции и переход
-по ссылке добавляют по 5, полный день без взаимодействий вычитает 15. Счётчик
-кликов живёт в Redis с проверкой повторов и откатом спам-сессии до первого
-действия, затем агрегируется в PostgreSQL без браузерного идентификатора.
-Фоновый пересчёт кладёт баллы в общий Redis snapshot; поиск читает их из
-памяти, чтобы сначала опрашивать провайдеров с более высокой репутацией.
-
-Сам балл репутации не меняет порядок готовых маршрутов. Для близких по курсу
-вариантов используется только confidence-adjusted соотношение лайков и
-дизлайков; его максимальная поправка к оценке курса равна 2%. При отсутствии
-голосов сохраняется исходный порядок по курсу.
+Direct fiat providers используют тот же принцип: 30-секундный cache и
+дедуплицированный background refresh на miss.
 
 ## 9. Остальные направления
 
@@ -538,7 +513,7 @@ payment methods, market path и route provider. Если fingerprint совпа�
   `routes_found` нельзя трактовать как полную мощность пространства;
 - `source=fmatch` — legs получены из свежего Fmatch/memory snapshot;
 - `source=database_cache`, `stale=true` — использован допустимый stale snapshot;
-- `source=provider_fallback` — фоновый Fmatch path деградировал до adapters;
+- `source=provider_fallback` — Fmatch path деградировал до live adapters;
 - `route_provider` относится к BestChange/Symbiosis/etc., но никогда к Fmatch.
 
 ## 12. Почему время не зависит от полного числа комбинаций

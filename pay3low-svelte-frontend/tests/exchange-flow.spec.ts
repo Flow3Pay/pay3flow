@@ -176,6 +176,48 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
         },
         source_url: `https://example.com/${adId}`,
       });
+      if (url.searchParams.get("source_fiat") === "AMD" && url.searchParams.get("target_fiat") === "AMD") {
+        expect(url.searchParams.get("source_payment_method")).toBe("Ameriabank");
+        expect(url.searchParams.get("target_payment_method")).toBe("IDBank");
+        return json({
+          search_id: "00000000-0000-4000-8000-000000000110",
+          routes_found: 1,
+          searched_at: "2026-10-02T10:00:00Z",
+          source_fiat: "AMD",
+          target_fiat: "AMD",
+          source_amount: "10000.00",
+          assets_searched: ["USDT"],
+          can_exchange_to_target: true,
+          routes: [{
+            route_id: "route-amd-usdt-amd",
+            rank: 1,
+            asset: "USDT",
+            entry_network: "tron",
+            source_network: null,
+            target_network: null,
+            source_fiat: "AMD",
+            source_amount: "10000.00",
+            acquired_asset_amount: "27.70000000",
+            target_fiat: "AMD",
+            target_amount: "9900.00",
+            effective_rate: "0.99000000",
+            same_venue: false,
+            requires_asset_transfer: true,
+            transfer_fee_included: false,
+            route_kind: "crypto_cycle",
+            profitability: {
+              status: "unconfirmed",
+              gross_profit_minor: -10000,
+              gross_profit_bps: -100,
+              missing_costs: ["network_fee"],
+            },
+            payment_methods_verified: true,
+            entry_offer: offer("binance", "entry-amd-cycle", "AMD", "USDT"),
+            exit_offer: offer("bybit", "exit-amd-cycle", "AMD", "USDT"),
+            warnings: ["Network fee must be confirmed before execution."],
+          }],
+        });
+      }
       if (url.searchParams.get("source_fiat") === "USD" && url.searchParams.get("target_fiat") === "AMD") {
         expect(url.searchParams.get("source_payment_method")).toBe("Cash");
         expect(url.searchParams.get("target_payment_method")).toBe("Ameriabank");
@@ -370,6 +412,14 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
           route_path: ["USDT@ethereum", "USDC@ethereum"],
           route_fees: [{ asset: "USDT@ethereum", amount: provider === "cow-swap" ? "2.5" : "0.25" }],
           quote_expires_at: "2030-03-17T17:46:40Z",
+          execution: {
+            provider,
+            from_asset: "USDT@ethereum",
+            to_asset: "USDC@ethereum",
+            input_amount: "100",
+            expires_at: "2030-03-17T17:46:40Z",
+            token: `signed-${provider}-route-token`,
+          },
           payment_methods_verified: true,
           entry_offer: null,
           exit_offer: null,
@@ -556,6 +606,14 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
             route_kind: "fiat_to_crypto",
             route_provider: "near-intents",
             route_path: ["AMD", "USDT@optimism", "BTC@near"],
+            execution: {
+              provider: "near-intents",
+              from_asset: "USDT@optimism",
+              to_asset: "BTC@near",
+              input_amount: "2.77777778",
+              expires_at: "2030-03-17T17:46:40Z",
+              token: "signed-near-route-token",
+            },
             payment_methods_verified: true,
             entry_offer: offer("bybit", "entry-amd-usdt", "AMD", "USDT"),
             exit_offer: null,
@@ -839,6 +897,25 @@ test("RUB to RUB bank routes explain SBP payment", async ({ page }) => {
   await expect(instructions.getByText("Buy USDT for 10,000 RUB")).toBeVisible();
   await expect(instructions.getByText("For RUB, use SBP from Sberbank using the exact recipient details shown in the order.")).toBeVisible();
   await expect(instructions.getByText("For RUB payout to Alfa-Bank, confirm the SBP transfer has arrived before releasing the crypto.")).toBeVisible();
+});
+
+test("AMD cycle keeps the best route visible when profit is unconfirmed", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page);
+
+  await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
+  const targetPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
+  await targetPicker.getByLabel("Search banks and payment methods").fill("IDBank");
+  await targetPicker.getByRole("option", { name: /IDBank/ }).click();
+
+  await page.getByLabel("Amount to send").fill("10000");
+  await page.getByTestId("start-search").click();
+
+  await expect(page.getByTestId("complete-route")).toHaveCount(1);
+  await expect(page.getByTestId("complete-route").first()).toContainText("Est. -100 AMD (-1.00%)");
+  await expect(page.getByTestId("no-profitable-routes")).toHaveText(
+    "No confirmed profitable route right now; showing the best available cycles.",
+  );
 });
 
 test("cross-venue instructions include a numbered transfer step", async ({ page }) => {
@@ -1466,6 +1543,14 @@ test("direct provider quotes keep their API names and independent prices", async
     "aria-label",
     "USDT Tether · ethereum → USDC USD Coin · ethereum (CoW Protocol Live)",
   );
+  await cards.nth(0).locator(".routeAmount").click();
+  let instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
+  await expect(instructions.getByTestId("route-wallet-execution")).toBeVisible();
+  await expect(instructions.getByRole("button", { name: "Connect ethereum wallet" })).toBeVisible();
+  await instructions.getByRole("button", { name: "Close instructions", exact: true }).click();
+  await cards.nth(1).locator(".routeAmount").click();
+  instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
+  await expect(instructions.getByTestId("route-wallet-execution")).toBeVisible();
 });
 
 test("ID Pay provides a direct AMD to RUB route with its API name", async ({ page }) => {
@@ -1513,6 +1598,7 @@ test("small AMD to BTC@near routes keep crypto precision", async ({ page }) => {
   await expectNumberedTimeline(instructions, ["1", "2"]);
   await expect(instructions.getByText("Buy USDT for 10,000 AMD")).toBeVisible();
   await expect(instructions.getByRole("heading", { name: "Swap USDT for BTC via NEAR 1Click" })).toBeVisible();
+  await expect(instructions.getByRole("button", { name: "Connect optimism wallet" })).toBeVisible();
 });
 
 test("direct Whitebird exchange uses provider wording and local venue icons", async ({ page }) => {

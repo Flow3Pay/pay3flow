@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum P2pSide {
     #[serde(rename = "buy", alias = "buy_crypto")]
     BuyCrypto,
@@ -63,7 +63,7 @@ pub struct P2pOffer {
     pub source_url_is_exact: bool,
 }
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum P2pOfferMarket {
     P2p,
@@ -82,10 +82,6 @@ pub struct SourceStatus {
     #[serde(default)]
     pub cached: bool,
     pub latency_ms: u128,
-    /// Average response time over the last 10 non-cached measurements
-    /// (milliseconds), computed independently of the user.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub avg_latency_ms: Option<f64>,
     pub offers_found: usize,
     pub error: Option<String>,
 }

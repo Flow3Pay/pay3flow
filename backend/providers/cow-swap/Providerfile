@@ -18,7 +18,7 @@ use serde_json::{json, Value};
 
 use crate::route_engine::{
     atomic_to_decimal, decimal_to_atomic, ensure_success, first_string, Amount, Asset,
-    PublicRouteProvider, PublicRouteQuote, DEFAULT_QUOTE_TTL,
+    CowExecutionQuote, PublicRouteProvider, PublicRouteQuote, DEFAULT_QUOTE_TTL,
 };
 
 #[derive(Clone)]
@@ -97,6 +97,117 @@ impl CowRouteProvider {
         } else {
             format!("{base}/api/v1/quote")
         }
+    }
+
+    fn api_root(base: &str) -> String {
+        Self::quote_url(base)
+            .trim_end_matches("/quote")
+            .trim_end_matches('/')
+            .to_string()
+    }
+
+    fn chain_id(chain: &str) -> Result<u64> {
+        Ok(match chain {
+            "ethereum" => 1,
+            "gnosis" => 100,
+            "arbitrum-one" => 42_161,
+            "base" => 8_453,
+            "polygon-pos" => 137,
+            "avalanche-c" => 43_114,
+            "bnb-smart-chain" => 56,
+            other => bail!("CoW chain id is not configured for {other}"),
+        })
+    }
+
+    pub async fn execution_quote(
+        &self,
+        from: Asset,
+        to: Asset,
+        amount: Amount,
+        owner: &str,
+        receiver: &str,
+    ) -> Result<CowExecutionQuote> {
+        let chain = from.location.clone().context("CoW origin chain is required")?;
+        if to.location.as_deref() != Some(chain.as_str()) {
+            bail!("CoW execution must stay on one chain");
+        }
+        let endpoint = self
+            .endpoints
+            .get(&chain)
+            .with_context(|| format!("CoW endpoint is not configured for {chain}"))?;
+        let sell_token = self
+            .tokens
+            .get(&(chain.clone(), from.symbol.to_ascii_uppercase()))
+            .with_context(|| format!("CoW token address is not configured for {from}"))?
+            .clone();
+        let buy_token = self
+            .tokens
+            .get(&(chain.clone(), to.symbol.to_ascii_uppercase()))
+            .with_context(|| format!("CoW token address is not configured for {to}"))?
+            .clone();
+        let sell_amount = decimal_to_atomic(&amount.value, Some(Self::decimals(&from.symbol)))?;
+        let expires_at = Utc::now() + chrono::Duration::from_std(DEFAULT_QUOTE_TTL)?;
+        let body = json!({
+            "sellToken": sell_token,
+            "buyToken": buy_token,
+            "sellAmountBeforeFee": sell_amount,
+            "from": owner,
+            "receiver": receiver,
+            "kind": "sell",
+            "partiallyFillable": false,
+            "validTo": expires_at.timestamp(),
+        });
+        let response = self
+            .client
+            .post(Self::quote_url(endpoint))
+            .json(&body)
+            .send()
+            .await
+            .context("request executable CoW quote")?;
+        ensure_success(response.status(), "request executable CoW quote")?;
+        let quote = response
+            .json::<Value>()
+            .await
+            .context("decode executable CoW quote")?;
+        let buy_amount = quote
+            .pointer("/quote/buyAmount")
+            .or_else(|| quote.get("buyAmount"))
+            .and_then(Value::as_str)
+            .context("executable CoW quote did not include buyAmount")?;
+        let expected_output = atomic_to_decimal(buy_amount, Self::decimals(&to.symbol))?;
+        let fee_amount = quote
+            .pointer("/quote/feeAmount")
+            .or_else(|| quote.get("feeAmount"))
+            .and_then(Value::as_str)
+            .map(|amount| atomic_to_decimal(amount, Self::decimals(&from.symbol)))
+            .transpose()?;
+        Ok(CowExecutionQuote {
+            chain: chain.clone(),
+            chain_id: Self::chain_id(&chain)?,
+            api_url: Self::api_root(endpoint),
+            sell_token,
+            buy_token,
+            sell_amount,
+            expected_output,
+            expected_fee: fee_amount,
+            quote,
+            expires_at,
+        })
+    }
+
+    pub async fn order_status(&self, chain: &str, order_uid: &str) -> Result<Value> {
+        let endpoint = self
+            .endpoints
+            .get(chain)
+            .with_context(|| format!("CoW endpoint is not configured for {chain}"))?;
+        let response = self
+            .client
+            .get(format!("{}/orders/{order_uid}", Self::api_root(endpoint)))
+            .send()
+            .await
+            .context("request CoW order status")?;
+        ensure_success(response.status(), "request CoW order status")?;
+        response.json().await.context("decode CoW order status")
     }
 }
 

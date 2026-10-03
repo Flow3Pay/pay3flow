@@ -1,8 +1,9 @@
 # Live P2P Search
 
 Pay3Flow has a read-only P2P search layer. It reads public advertisements and
-does not contact advertisers, create platform orders, reserve crypto, or move
-money.
+does not contact advertisers, create platform orders, or reserve crypto. An
+optional wallet-execution layer can prepare provider actions, but funds move
+only after the user confirms the transaction in their own wallet.
 
 ## Sources
 
@@ -16,14 +17,12 @@ money.
 
 Providerfile-backed sources are discovered from the generated provider catalog;
 the list is not hardcoded in the route API. Their normalized advertisements are
-published as FEP-0837 offers to the configured Fmatch actor. Background workers
-query Fmatch for direct exchanger offers across every supported asset and fiat
-direction. User searches compose routes from those snapshots. P2P searches run
-on demand, while common P2P directions also have background snapshots. Other
-venues from the research list remain outside the live
+published as FEP-0837 offers to the configured Fmatch actor. The route endpoint
+queries Fmatch for matching offers and uses the existing local composer to build
+complete routes. Other venues from the research list remain outside the live
 path until a legitimate read-only interface and adapter review exist.
 
-Background refreshes query the public adapters concurrently so their latest
+Provider refreshes still query the public adapters concurrently so their latest
 offers can be published. One provider response is published as bounded
 ActivityPub `OrderedCollection` batches of up to 64 offers, allowing Fmatch to
 refresh its read snapshot once per batch instead of once per advertisement.
@@ -33,9 +32,10 @@ the newest answer within `p2p_fmatch_stale_secs` is used and the response has
 `source: "database_cache"` and `stale: true`. A live Fmatch answer has
 `source: "fmatch"`. Empty Fmatch replies and empty cached answers are not
 considered usable. If neither Fmatch nor the bounded-stale database cache can
-provide offers, the background worker queries its live providers and stores
+provide offers, Pay3Flow queries its live providers and returns
 `source: "provider_fallback"` with the Fmatch rejection recorded in
-`sources`. Provider-only
+`sources`; streaming searches forward each provider result as soon as it
+arrives instead of waiting for the complete fallback fan-out. Provider-only
 local searches retain `source: "provider"`.
 Route-search snapshots use the same source labels and mark `stale: true` only
 when results actually came from the bounded-stale database cache.
@@ -47,36 +47,6 @@ direct source such as Whitebird before local route composition. See
 [`route-virtualization-pipeline.md`](route-virtualization-pipeline.md) for the
 complete runtime pipeline, lazy top-K algorithm, provider snapshots, caches,
 and background quote refresh.
-
-At startup the first background pass starts immediately. Direct exchanger
-targets cover both sides of every fiat in the payment picker and every digital
-asset in the enabled network catalog. Targets stay in a priority queue; two
-workers poll them concurrently instead of creating one task per direction.
-One worker covers the full catalog with a five-second pause between polls; the
-second serves recently requested cold directions immediately. Each target
-refreshes five minutes after its previous poll; a large catalog can take longer
-than five minutes to complete a
-whole pass. Redis holds the shared offer snapshots, while the local memory
-cache keeps at most 128 snapshots. Common P2P directions refresh every 60
-seconds when idle, 30 seconds when used, and 15 seconds at high demand. Other
-P2P directions are searched on demand and enter background refresh after
-repeated use. Spot tickers and public provider quotes each use at most two
-concurrent background polls; fiat quotes use one. Public provider quotes cover
-all supported ordered asset pairs. Requested pairs take priority, and quote
-requests are throttled between batches. Offer and spot
-snapshots are shared through Redis. A cold direct exchanger corridor
-waits for its first background snapshot for up to 8 seconds. If no snapshot
-arrives by then, the response reports `background_pending`.
-Streaming searches publish cached market partitions as they become available.
-Fiat workflow legs for different assets
-also run concurrently, so a slow or unsupported asset does not hold back routes
-from another asset. A provider scan that returns no raw offers is not repeated
-with looser local filters.
-
-Completed route searches are cached in Redis for up to 15 seconds using
-normalized search parameters (less when a provider quote expires sooner). The
-cache is shared across users; viewer votes, reputation and execution links are
-added after cached routes are read.
 
 The public website endpoints can change without notice. Keep the adapters
 enabled, monitor `sources[].ok`, and do not treat a search result as a firm
@@ -136,9 +106,41 @@ It then:
 3. calculates the acquired asset amount and checks entry liquidity;
 4. calculates the RUB output and checks the exit advertisement limits and
    liquidity;
-5. returns complete routes ranked by estimated RUB output with a capped
-   likes/dislikes vote adjustment (up to 2%), then
-   verified payment methods and same-venue execution.
+5. returns complete routes ranked by maximum estimated RUB output, then
+   verified payment methods and same-venue execution. Circular searches use
+   the profitability ordering described below instead.
+
+## Search AMD cycles
+
+An `AMD -> AMD` request automatically searches both configured cycle families:
+
+```text
+AMD -> crypto asset -> AMD
+AMD -> entry crypto -> NEAR Intents / CoW Swap / Symbiosis -> exit crypto -> AMD
+AMD -> configured fiat intermediary -> AMD
+```
+
+Crypto intermediaries come from `intermediary_assets` (or the configured P2P
+asset catalog). Route-provider cycles may use two different assets: this enables
+same-chain swaps such as `USDT -> USDC` through CoW Swap as well as cross-chain
+paths through NEAR Intents or Symbiosis. Fiat intermediaries come from
+`route_source_fiats`, and each
+leg must be supported by a loaded fiat route provider; the route composer does
+not contain a hardcoded currency list.
+
+Circular routes have `route_kind` equal to `crypto_cycle` or `fiat_cycle` and
+include a tagged `profitability` object. `status=confirmed` is returned only
+when the payment-method fees and every route/provider or transfer fee needed by
+the route are known. It contains `net_profit_minor` and `profit_bps`.
+Otherwise `status=unconfirmed` contains the gross values and `missing_costs`,
+so a route is not presented as profitable before its costs are known. The
+optional `source_payment_fee_percent` and `target_payment_fee_percent` query
+parameters supply the backend-catalog payment fees; omitting either one keeps
+the result unconfirmed.
+
+Confirmed profitable cycles rank first, followed by unconfirmed candidates and
+then confirmed break-even or loss-making cycles. The best available cycles are
+still returned when none has confirmed positive profit.
 
 The optional `sources` parameter limits both legs to a comma-separated list of
 loaded source slugs, for example `binance,okx,whitebird,skylabs`. If omitted,
@@ -165,6 +167,41 @@ Important: `target_amount` is a search estimate. Platform fees, account/KYC
 eligibility, ad availability at execution time, sanctions/geographic rules,
 and payment confirmation are not verified by this read-only layer.
 
+## Execute provider routes with a wallet
+
+When `wallet_execution_enabled = true`, eligible NEAR Intents, CoW Swap, and
+Symbiosis routes include a short-lived signed `execution` descriptor. The route
+instructions then show an embedded **Execute with wallet** panel in the exact
+provider step.
+
+The browser connects an EVM wallet through Reown AppKit or a NEAR wallet through
+NEAR Wallet Selector. The user chooses the recipient on every execution, either
+from a connected destination wallet or by entering an address. Pay3Flow requests
+a fresh quote for those source and recipient addresses, checks the source
+balance automatically, and asks the wallet to confirm every approval and
+transfer. ERC-20 approvals use the exact input amount rather than an unlimited
+allowance.
+
+Execution state is stored in `route_executions`; only public addresses, quote
+data, transaction hashes, and provider status are persisted. Private keys and
+wallet signatures never reach the backend. Pending operations are restored in
+the browser and their NEAR Intents deposit, CoW order, or Symbiosis transaction
+status is polled until a terminal state.
+
+The frontend needs a WalletConnect Cloud project id at runtime:
+
+```text
+PUBLIC_REOWN_PROJECT_ID=your-project-id
+```
+
+Keep `wallet_execution_enabled = false` until the configured mainnet token
+addresses, provider credentials, and end-to-end wallet flows have been smoke
+tested. Manual provider links remain available while the flag is disabled.
+Symbiosis execution additionally requires audited
+`symbiosis_execution_contracts` entries in
+`chain_id=MetaRouter,MetaRouterGateway` form; returned calldata and approval
+spenders are rejected when they do not match.
+
 ## Configuration
 
 The backend search settings are TOML keys in [`config.toml`](../config.toml):
@@ -172,9 +209,10 @@ The backend search settings are TOML keys in [`config.toml`](../config.toml):
 ```toml
 p2p_search_enabled = true
 p2p_search_timeout_ms = 4000
-p2p_search_cache_ttl_ms = 15000
+p2p_search_cache_ttl_ms = 5000
 p2p_fmatch_stale_secs = 900
 p2p_search_assets = ["USDT", "USDC", "BTC", "ETH", "BNB", "SOL", "TRX"]
+wallet_execution_enabled = false
 playwright_chromium_executable = "/usr/bin/chromium"
 ```
 
@@ -185,34 +223,9 @@ in `backend/providers/*/Providerfile`. Regenerate the provider migration and
 rebuild after changing one; see [`../Providerfile.md`](../Providerfile.md).
 
 Fmatch offer publication is best-effort. A provider refresh is retained locally
-when Lefine is unavailable. Background discovery prefers a live Fmatch answer,
+when Lefine is unavailable. Public route discovery prefers a live Fmatch answer,
 then a bounded-stale PostgreSQL answer, and finally fans out to the configured
-providers so an empty Fmatch catalog does not make route search unavailable.
-
-## Anonymous engagement
-
-Every route response contains `instruction_tokens[route_id]`. The frontend sends
-the token and browser-generated `anonymous_id` to
-`POST /api/routes/instruction-open` when instructions open. Provider links use
-the signed token at `POST /api/service-executions/open`. The ID is used for
-30-minute Redis deduplication and is not saved with new click aggregates in
-PostgreSQL. Redis groups accepted opens by provider and minute. Repeated opens
-of the same route action are ignored. If one browser ID produces more than 12
-distinct actions of one kind in a session, Redis removes that session's actions
-after its first one before any affected bucket reaches PostgreSQL. A background
-worker flushes completed buckets after the session window with retry-safe batch
-IDs. Provider reputation starts at 50, gains 10 per like and 5 per instruction
-or link open, loses 15 per dislike and 15 per inactive day, and is bounded to
-0–100. It is recalculated in the background, cached in Redis for all backend
-instances, and used to prioritize background provider polling. Reputation does
-not change route order. Only likes and dislikes affect close-priced routes;
-when there are no votes, the previous price order applies. Vote ranking uses a
-confidence-adjusted like ratio, so 100 likes with 4 dislikes outranks 16 clean
-likes, while 100 likes with 68 dislikes does not.
-The frontend includes the signed route token with a route vote, allowing one
-vote to update the service totals of that route's actual providers. Repeated
-votes from the same browser change the previous vote instead of adding a new
-one.
+live providers so an empty Fmatch catalog does not make route search unavailable.
 
 Run the opt-in live smoke test:
 

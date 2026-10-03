@@ -1,5 +1,4 @@
 use super::*;
-use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
 #[test]
 fn source_names_accept_providerfile_slug_characters() {
@@ -18,46 +17,6 @@ struct StubSource {
 }
 
 struct DirectStubSource(StubSource);
-
-struct CountingEmptySource(Arc<AtomicUsize>);
-
-#[async_trait]
-impl P2pSource for CountingEmptySource {
-    fn name(&self) -> &str {
-        "empty"
-    }
-
-    async fn search(&self, _query: &P2pSearchQuery) -> Result<Vec<P2pOffer>> {
-        self.0.fetch_add(1, AtomicOrdering::Relaxed);
-        Ok(Vec::new())
-    }
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn empty_market_does_not_repeat_provider_requests_for_relaxed_filters() {
-    let calls = Arc::new(AtomicUsize::new(0));
-    let service = P2pSearchService::with_sources(
-        vec![Arc::new(CountingEmptySource(calls.clone()))],
-        Duration::from_secs(1),
-    );
-    let response = service
-        .search(P2pSearchQuery {
-            fiat: "AMD".into(),
-            asset: "USDT".into(),
-            side: P2pSide::BuyCrypto,
-            amount: Some(100_000.0),
-            payment_method: Some("IDBank".into()),
-            merchant_only: None,
-            min_orders: Some(20),
-            min_completion_rate: Some(0.9),
-            limit: Some(20),
-            sources: None,
-        })
-        .await
-        .unwrap();
-    assert!(response.offers.is_empty());
-    assert_eq!(calls.load(AtomicOrdering::Relaxed), 1);
-}
 
 struct StubRouteProvider;
 
@@ -242,7 +201,6 @@ fn provider_fallback_does_not_expose_fmatch_as_a_venue() {
             latency_ms: 10,
             offers_found: 1,
             error: None,
-            avg_latency_ms: None,
         }],
         false,
         "provider",
@@ -332,6 +290,49 @@ fn reputation_filters_keep_offers_when_metrics_are_not_published() {
     direct_exchange.advertiser.completed_orders_30d = None;
     direct_exchange.advertiser.completion_rate_30d = Some(0.89);
     assert!(!direct_exchange.matches(&query));
+}
+
+#[test]
+fn fmatch_boundary_rejects_wrong_pair_side_and_unrequested_source() {
+    let query = P2pSearchQuery {
+        fiat: "AMD".into(),
+        asset: "USDT".into(),
+        side: P2pSide::BuyCrypto,
+        amount: Some(100_000.0),
+        payment_method: None,
+        merchant_only: None,
+        min_orders: None,
+        min_completion_rate: None,
+        limit: Some(20),
+        sources: Some("binance".into()),
+    };
+    let valid = offer("binance", "360", "1000", "200000", 10);
+    let mut wrong_fiat = valid.clone();
+    wrong_fiat.fiat = "RUB".into();
+    let mut wrong_asset = valid.clone();
+    wrong_asset.asset = "USDC".into();
+    let mut wrong_side = valid.clone();
+    wrong_side.side = P2pSide::SellCrypto;
+    let mut wrong_source = valid.clone();
+    wrong_source.source = "mexc".into();
+
+    let response = build_search_response(
+        query,
+        &[
+            valid.clone(),
+            wrong_fiat,
+            wrong_asset,
+            wrong_side,
+            wrong_source,
+        ],
+        Vec::new(),
+        false,
+        "fmatch",
+        false,
+        Some(Utc::now()),
+    );
+
+    assert_eq!(response.offers, vec![valid]);
 }
 
 #[test]

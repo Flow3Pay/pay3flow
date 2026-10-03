@@ -18,11 +18,10 @@ use crate::compiled_provider_code::bestchange::BestChangeSource;
 use crate::compiled_provider_code::papa_change::PapaChangeSource;
 use crate::compiled_provider_code::skylabs::SkyLabsSource;
 use crate::config::Config;
-use crate::core::redis::RedisPool;
 use crate::db::DbPool;
 use crate::networks::NetworkCatalog;
-use crate::p2p::background::BackgroundOfferStore;
 use crate::p2p::declarative::{DeclarativeMarketSource, DeclarativeP2pSource};
+use crate::p2p::latency::ServiceLatencyTracker;
 pub(crate) use crate::p2p::models::P2pOfferMarket;
 pub(crate) use crate::p2p::models::{
     Advertiser, FiatRouteQuote, P2pOffer, P2pSearchQuery, P2pSearchResponse, P2pSide, SourceStatus,
@@ -35,7 +34,7 @@ const DEFAULT_LIMIT: usize = 20;
 const MAX_LIMIT: usize = 100;
 
 impl P2pSearchQuery {
-    pub(in crate::p2p) fn normalize(mut self) -> Result<Self> {
+    fn normalize(mut self) -> Result<Self> {
         self.fiat = normalized_code(&self.fiat, "fiat")?;
         self.asset = normalized_code(&self.asset, "asset")?;
         if self
@@ -193,6 +192,17 @@ impl P2pOffer {
     }
 
     fn matches(&self, query: &P2pSearchQuery) -> bool {
+        if !self.fiat.eq_ignore_ascii_case(&query.fiat)
+            || !self.asset.eq_ignore_ascii_case(&query.asset)
+            || self.side != query.side
+            || query.sources.as_deref().is_some_and(|requested| {
+                !requested
+                    .split(',')
+                    .any(|source| self.source.eq_ignore_ascii_case(source))
+            })
+        {
+            return false;
+        }
         if query
             .amount
             .is_some_and(|amount| !self.covers_amount(amount))
@@ -281,29 +291,22 @@ pub trait PublicFiatRouteProvider: Send + Sync {
 pub struct P2pSearchService {
     enabled: bool,
     timeout: Duration,
-    pub(in crate::p2p) cache_ttl: Duration,
+    cache_ttl: Duration,
     cache: Arc<RwLock<HashMap<String, CachedSearch>>>,
-    pub(in crate::p2p) route_cache_redis: Option<RedisPool>,
-    pub(in crate::p2p) background_offers: Option<Arc<BackgroundOfferStore>>,
-    pub(in crate::p2p) vote_scores: Arc<parking_lot::RwLock<HashMap<String, f64>>>,
-    pub(in crate::p2p) reputation_scores: Arc<parking_lot::RwLock<HashMap<String, u8>>>,
     sources: Arc<[Arc<dyn P2pSource>]>,
     payment_method_aliases: Arc<HashMap<String, BTreeMap<String, Vec<String>>>>,
-    pub(in crate::p2p) market_sources: Arc<[Arc<dyn CryptoMarketSource>]>,
-    pub(in crate::p2p) market_tickers_cache: Arc<RwLock<HashMap<String, Vec<CryptoTicker>>>>,
+    market_sources: Arc<[Arc<dyn CryptoMarketSource>]>,
     pub(crate) default_assets: Arc<[String]>,
+    pub(crate) fiat_intermediaries: Arc<[String]>,
     pub(crate) networks: NetworkCatalog,
     pub(crate) route_providers: Arc<[Arc<dyn PublicRouteProvider>]>,
     pub(crate) fiat_route_providers: Arc<[Arc<dyn PublicFiatRouteProvider>]>,
     pub(crate) quote_semaphore: Arc<Semaphore>,
     pub(crate) provider_quote_cache: Arc<RwLock<HashMap<String, CachedProviderQuote>>>,
-    pub(in crate::p2p) provider_quote_snapshots:
-        Arc<RwLock<HashMap<String, (Instant, Vec<PublicRouteQuote>)>>>,
-    pub(in crate::p2p) provider_quote_requests: Arc<Mutex<HashMap<String, u64>>>,
     pub(crate) fiat_quote_cache: Arc<RwLock<HashMap<String, CachedFiatQuote>>>,
     pub(crate) quote_refreshes: Arc<Mutex<HashSet<String>>>,
     pub(crate) provider_capabilities_cache: Arc<RwLock<Option<ProviderCapabilitiesSnapshot>>>,
-    pub(crate) latency_tracker: Arc<crate::p2p::latency::ProviderLatencyTracker>,
+    pub(crate) service_latencies: ServiceLatencyTracker,
     fmatch: Option<FmatchP2pBackend>,
 }
 
@@ -341,15 +344,7 @@ struct CachedSearch {
 
 impl P2pSearchService {
     pub fn from_config(config: &Config, networks: NetworkCatalog) -> Result<Self> {
-        Self::from_provider_records(
-            config,
-            networks,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            None,
-            None,
-        )
+        Self::from_provider_records(config, networks, Vec::new(), Vec::new(), Vec::new())
     }
 
     pub async fn from_database(
@@ -366,52 +361,7 @@ impl P2pSearchService {
             records,
             route_providers,
             fiat_route_providers,
-            Some(pool.clone()),
-            None,
         )
-    }
-
-    pub async fn from_database_with_redis(
-        config: &Config,
-        networks: NetworkCatalog,
-        pool: &DbPool,
-        route_providers: Vec<Arc<dyn PublicRouteProvider>>,
-        fiat_route_providers: Vec<Arc<dyn PublicFiatRouteProvider>>,
-        redis: &RedisPool,
-    ) -> Result<Self> {
-        let records = crate::providers::adapters(pool).await?;
-        Self::from_provider_records(
-            config,
-            networks,
-            records,
-            route_providers,
-            fiat_route_providers,
-            Some(pool.clone()),
-            Some(redis.clone()),
-        )
-    }
-
-    /// Redis holds the hot latency window; PostgreSQL is the durable backup.
-    /// Prefer Redis and only fall back to PostgreSQL when Redis has no window yet.
-    async fn hydrate_latency_tracker(
-        tracker: &crate::p2p::latency::ProviderLatencyTracker,
-        pool: Option<&DbPool>,
-        redis: Option<&RedisPool>,
-    ) {
-        if let Some(redis) = redis {
-            match tracker.load_from_redis(redis).await {
-                Ok(()) if !tracker.is_empty() => return,
-                Ok(()) => {}
-                Err(err) => {
-                    tracing::warn!(error = %err, "failed to load provider latencies from redis");
-                }
-            }
-        }
-        if let Some(pool) = pool {
-            if let Err(err) = tracker.load_from_postgres(pool).await {
-                tracing::warn!(error = %err, "failed to load provider latencies from postgres");
-            }
-        }
     }
 
     pub async fn from_database_with_fmatch(
@@ -421,47 +371,21 @@ impl P2pSearchService {
         route_providers: Vec<Arc<dyn PublicRouteProvider>>,
         fiat_route_providers: Vec<Arc<dyn PublicFiatRouteProvider>>,
         ap: ActivityPubService,
-        redis: Option<&RedisPool>,
-        vote_scores: Option<Arc<parking_lot::RwLock<HashMap<String, f64>>>>,
-        reputation_scores: Option<Arc<parking_lot::RwLock<HashMap<String, u8>>>>,
     ) -> Result<Self> {
-        let records = crate::providers::adapters(pool).await?;
-        let catalog_fiats = pool
-            .get()
-            .await?
-            .query(
-                "SELECT DISTINCT currency FROM banks WHERE status = 'enabled' AND picker_visible AND kind IN ('bank', 'cash', 'currency')",
-                &[],
-            )
-            .await?
-            .into_iter()
-            .map(|row| row.get::<_, String>(0))
-            .collect::<Vec<_>>();
-        let background_targets =
-            BackgroundOfferStore::targets(config, &records, &networks, &catalog_fiats);
-        let mut service = Self::from_provider_records(
+        let mut service = Self::from_database(
             config,
             networks,
-            records,
+            pool,
             route_providers,
             fiat_route_providers,
-            Some(pool.clone()),
-            redis.cloned(),
-        )?;
-        Self::hydrate_latency_tracker(&service.latency_tracker, Some(pool), redis).await;
+        )
+        .await?;
         service.fmatch = Some(FmatchP2pBackend {
             pool: pool.clone(),
             ap,
             stale_window: Duration::from_secs(config.p2p_fmatch_stale_secs),
             answer_ttl: Duration::from_millis(config.p2p_search_cache_ttl_ms.max(1)),
         });
-        if let Some(scores) = vote_scores {
-            service.vote_scores = scores;
-        }
-        if let Some(scores) = reputation_scores {
-            service.reputation_scores = scores;
-        }
-        service.start_background_offer_refresh(background_targets, redis.cloned());
         service.warm_provider_capabilities();
         Ok(service)
     }
@@ -472,8 +396,6 @@ impl P2pSearchService {
         records: Vec<crate::providers::ProviderAdapterRecord>,
         mut route_providers: Vec<Arc<dyn PublicRouteProvider>>,
         fiat_route_providers: Vec<Arc<dyn PublicFiatRouteProvider>>,
-        pool: Option<DbPool>,
-        redis: Option<RedisPool>,
     ) -> Result<Self> {
         if records.iter().any(|record| record.workflow.is_some()) {
             playwright_rs::server::driver::get_driver_executable()
@@ -484,10 +406,6 @@ impl P2pSearchService {
                 }
             }
         }
-
-        let latency_tracker = crate::p2p::latency::ProviderLatencyTracker::new();
-        let (latency_tracker, _latency_handle) =
-            latency_tracker.with_background_refresh(pool.clone(), redis.clone());
         let timeout = Duration::from_millis(config.p2p_search_timeout_ms.clamp(250, 30_000));
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
@@ -538,26 +456,20 @@ impl P2pSearchService {
             timeout,
             cache_ttl: Duration::from_millis(config.p2p_search_cache_ttl_ms.min(60_000)),
             cache: Arc::new(RwLock::new(HashMap::new())),
-            route_cache_redis: redis,
-            background_offers: None,
-            vote_scores: Arc::new(parking_lot::RwLock::new(HashMap::new())),
-            reputation_scores: Arc::new(parking_lot::RwLock::new(HashMap::new())),
             sources: sources.into(),
             payment_method_aliases: Arc::new(payment_method_aliases),
             market_sources: market_sources.into(),
-            market_tickers_cache: Arc::new(RwLock::new(HashMap::new())),
             default_assets: default_assets.into(),
+            fiat_intermediaries: config.route_source_fiats.clone().into(),
             networks,
             route_providers: route_providers.into(),
             fiat_route_providers: fiat_route_providers.into(),
             quote_semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_PROVIDER_QUOTES)),
             provider_quote_cache: Arc::new(RwLock::new(HashMap::new())),
-            provider_quote_snapshots: Arc::new(RwLock::new(HashMap::new())),
-            provider_quote_requests: Arc::new(Mutex::new(HashMap::new())),
             fiat_quote_cache: Arc::new(RwLock::new(HashMap::new())),
             quote_refreshes: Arc::new(Mutex::new(HashSet::new())),
             provider_capabilities_cache: Arc::new(RwLock::new(None)),
-            latency_tracker: Arc::new(latency_tracker),
+            service_latencies: ServiceLatencyTracker::default(),
             fmatch: None,
         })
     }
@@ -569,15 +481,9 @@ impl P2pSearchService {
             timeout,
             cache_ttl: Duration::ZERO,
             cache: Arc::new(RwLock::new(HashMap::new())),
-            route_cache_redis: None,
-            background_offers: None,
-            vote_scores: Arc::new(parking_lot::RwLock::new(HashMap::new())),
-            reputation_scores: Arc::new(parking_lot::RwLock::new(HashMap::new())),
             sources: sources.into(),
             payment_method_aliases: Arc::new(HashMap::new()),
             market_sources: Vec::new().into(),
-            market_tickers_cache: Arc::new(RwLock::new(HashMap::new())),
-            latency_tracker: Arc::new(crate::p2p::latency::ProviderLatencyTracker::new()),
             default_assets: vec![
                 "USDT".into(),
                 "USDC".into(),
@@ -605,27 +511,17 @@ impl P2pSearchService {
                 "SUI".into(),
             ]
             .into(),
+            fiat_intermediaries: vec!["AMD".into(), "RUB".into(), "USD".into()].into(),
             networks: NetworkCatalog::test_default(),
             route_providers: Vec::new().into(),
             fiat_route_providers: Vec::new().into(),
             quote_semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_PROVIDER_QUOTES)),
             provider_quote_cache: Arc::new(RwLock::new(HashMap::new())),
-            provider_quote_snapshots: Arc::new(RwLock::new(HashMap::new())),
-            provider_quote_requests: Arc::new(Mutex::new(HashMap::new())),
             fiat_quote_cache: Arc::new(RwLock::new(HashMap::new())),
             quote_refreshes: Arc::new(Mutex::new(HashSet::new())),
             provider_capabilities_cache: Arc::new(RwLock::new(None)),
+            service_latencies: ServiceLatencyTracker::default(),
             fmatch: None,
-        }
-    }
-
-    pub(crate) fn rank_enriched_routes(&self, response: &mut crate::p2p::P2pRouteSearchResponse) {
-        crate::p2p::routes::sort_routes_with_feedback(
-            &mut response.routes,
-            &self.vote_scores.read(),
-        );
-        for (index, route) in response.routes.iter_mut().enumerate() {
-            route.rank = index + 1;
         }
     }
 
@@ -644,7 +540,6 @@ impl P2pSearchService {
         self.provider_quote_cache = Arc::new(RwLock::new(HashMap::new()));
         self.quote_refreshes = Arc::new(Mutex::new(HashSet::new()));
         self.provider_capabilities_cache = Arc::new(RwLock::new(None));
-        self.latency_tracker = Arc::new(crate::p2p::latency::ProviderLatencyTracker::new());
         self
     }
 
@@ -656,7 +551,6 @@ impl P2pSearchService {
         self.fiat_route_providers = providers.into();
         self.fiat_quote_cache = Arc::new(RwLock::new(HashMap::new()));
         self.quote_refreshes = Arc::new(Mutex::new(HashSet::new()));
-        self.latency_tracker = Arc::new(crate::p2p::latency::ProviderLatencyTracker::new());
         self
     }
 
@@ -693,9 +587,6 @@ impl P2pSearchService {
     }
 
     pub async fn search(&self, query: P2pSearchQuery) -> Result<P2pSearchResponse> {
-        if self.background_offers.is_some() {
-            return self.search_market(query, None).await;
-        }
         self.run_search(query, None, None).await
     }
 
@@ -704,15 +595,6 @@ impl P2pSearchService {
         query: P2pSearchQuery,
         market: Option<P2pOfferMarket>,
     ) -> Result<P2pSearchResponse> {
-        if self.background_offers.is_some() {
-            return match market {
-                Some(P2pOfferMarket::P2p) => self.search_p2p_on_demand(query, None).await,
-                Some(P2pOfferMarket::DirectExchange) => {
-                    self.search_background_offers(query, market).await
-                }
-                None => self.search_all_fmatch_markets(query, None).await,
-            };
-        }
         if self.fmatch.is_some() {
             if market.is_none() {
                 return self.search_all_fmatch_markets(query, None).await;
@@ -728,17 +610,6 @@ impl P2pSearchService {
         updates: mpsc::Sender<P2pSearchResponse>,
         market: Option<P2pOfferMarket>,
     ) -> Result<P2pSearchResponse> {
-        if self.background_offers.is_some() {
-            return match market {
-                Some(P2pOfferMarket::P2p) => self.search_p2p_on_demand(query, Some(updates)).await,
-                Some(P2pOfferMarket::DirectExchange) => {
-                    let response = self.search_background_offers(query, market).await?;
-                    let _ = updates.send(response.clone()).await;
-                    Ok(response)
-                }
-                None => self.search_all_fmatch_markets(query, Some(&updates)).await,
-            };
-        }
         if self.fmatch.is_some() {
             if market.is_none() {
                 return self.search_all_fmatch_markets(query, Some(&updates)).await;
@@ -750,101 +621,30 @@ impl P2pSearchService {
         self.run_search(query, Some(updates), market).await
     }
 
-    async fn search_p2p_on_demand(
-        &self,
-        query: P2pSearchQuery,
-        updates: Option<mpsc::Sender<P2pSearchResponse>>,
-    ) -> Result<P2pSearchResponse> {
-        if let Some(response) = self.cached_p2p_offers(&query).await {
-            if let Some(updates) = updates {
-                let _ = updates.send(response.clone()).await;
-            }
-            return Ok(response);
-        }
-        if self.fmatch.is_some() {
-            self.search_fmatch_market(query, Some(P2pOfferMarket::P2p), updates.as_ref())
-                .await
-        } else {
-            self.run_search(query, updates, Some(P2pOfferMarket::P2p))
-                .await
-        }
-    }
-
     async fn search_all_fmatch_markets(
         &self,
         query: P2pSearchQuery,
         updates: Option<&mpsc::Sender<P2pSearchResponse>>,
     ) -> Result<P2pSearchResponse> {
-        let (p2p_tx, mut p2p_updates) = mpsc::channel(16);
-        let (direct_tx, mut direct_updates) = mpsc::channel(16);
-        let p2p_search = self.search_p2p_on_demand(query.clone(), Some(p2p_tx));
-        let direct_search = async {
-            if self.background_offers.is_some() {
-                let response = self
-                    .search_background_offers(query.clone(), Some(P2pOfferMarket::DirectExchange))
-                    .await?;
-                let _ = direct_tx.send(response.clone()).await;
-                Ok(response)
-            } else {
-                self.search_fmatch_market(
-                    query.clone(),
-                    Some(P2pOfferMarket::DirectExchange),
-                    Some(&direct_tx),
-                )
-                .await
+        let (p2p, direct) = tokio::join!(
+            self.search_fmatch_market(query.clone(), Some(P2pOfferMarket::P2p), None),
+            self.search_fmatch_market(query.clone(), Some(P2pOfferMarket::DirectExchange), None,)
+        );
+        let response = match (p2p, direct) {
+            (Ok(p2p), Ok(direct)) => merge_market_responses(query.normalize()?, p2p, direct),
+            (Ok(response), Err(error)) | (Err(error), Ok(response)) => {
+                tracing::warn!(%error, "one Fmatch market partition failed");
+                response
             }
+            (Err(error), Err(_)) => return Err(error),
         };
-        tokio::pin!(p2p_search, direct_search);
-        let mut p2p = None;
-        let mut direct = None;
-        let mut p2p_done = false;
-        let mut direct_done = false;
-        let mut p2p_updates_open = true;
-        let mut direct_updates_open = true;
-        let mut first_error = None;
-
-        while !p2p_done || !direct_done {
-            let changed = tokio::select! {
-                snapshot = p2p_updates.recv(), if p2p_updates_open && !p2p_done => {
-                    if let Some(snapshot) = snapshot { p2p = Some(snapshot); true } else { p2p_updates_open = false; false }
-                }
-                snapshot = direct_updates.recv(), if direct_updates_open && !direct_done => {
-                    if let Some(snapshot) = snapshot { direct = Some(snapshot); true } else { direct_updates_open = false; false }
-                }
-                result = &mut p2p_search, if !p2p_done => {
-                    p2p_done = true;
-                    match result {
-                        Ok(response) => { p2p = Some(response); true }
-                        Err(error) => { first_error = Some(error); false }
-                    }
-                }
-                result = &mut direct_search, if !direct_done => {
-                    direct_done = true;
-                    match result {
-                        Ok(response) => { direct = Some(response); true }
-                        Err(error) => { first_error = Some(error); false }
-                    }
-                }
-            };
-            if changed {
-                if let (Some(updates), Some(snapshot)) =
-                    (updates, merged_fmatch_markets(&query, &p2p, &direct)?)
-                {
-                    let _ = updates.send(snapshot).await;
-                }
-            }
+        if let Some(updates) = updates {
+            let _ = updates.send(response.clone()).await;
         }
-        if let Some(error) = first_error {
-            tracing::warn!(%error, "one Fmatch market partition failed");
-            if p2p.is_none() && direct.is_none() {
-                return Err(error);
-            }
-        }
-        merged_fmatch_markets(&query, &p2p, &direct)?
-            .ok_or_else(|| anyhow::anyhow!("Fmatch market search returned no response"))
+        Ok(response)
     }
 
-    pub(in crate::p2p) async fn search_fmatch_market(
+    async fn search_fmatch_market(
         &self,
         query: P2pSearchQuery,
         market: Option<P2pOfferMarket>,
@@ -1016,7 +816,7 @@ impl P2pSearchService {
         let response = self
             .run_search_once(query.clone(), updates.clone(), market)
             .await?;
-        if !response.offers.is_empty() || no_source_returned_offers(&response) {
+        if !response.offers.is_empty() {
             return Ok(response);
         }
 
@@ -1026,7 +826,7 @@ impl P2pSearchService {
             let response = self
                 .run_search_once(fallback_query.clone(), updates.clone(), market)
                 .await?;
-            if !response.offers.is_empty() || no_source_returned_offers(&response) {
+            if !response.offers.is_empty() {
                 return Ok(response);
             }
         }
@@ -1038,7 +838,7 @@ impl P2pSearchService {
         Ok(response)
     }
 
-    pub(in crate::p2p) async fn run_search_once(
+    async fn run_search_once(
         &self,
         query: P2pSearchQuery,
         updates: Option<mpsc::Sender<P2pSearchResponse>>,
@@ -1070,41 +870,12 @@ impl P2pSearchService {
             })
             .cloned()
             .collect::<Vec<_>>();
-
-        // Background provider work follows the cached global reputation first,
-        // then measured latency. Neither value changes the offer itself.
-        let mut ordered_sources = selected_sources;
-        let reputations = self.reputation_scores.read().clone();
-        ordered_sources.sort_by(|a, b| {
-            let reputation_order = reputations
-                .get(b.name())
-                .copied()
-                .unwrap_or(50)
-                .cmp(&reputations.get(a.name()).copied().unwrap_or(50));
-            if reputation_order != Ordering::Equal {
-                return reputation_order;
-            }
-            let avg_a = self
-                .latency_tracker
-                .avg_latency_ms(a.name())
-                .unwrap_or(f64::MAX);
-            let avg_b = self
-                .latency_tracker
-                .avg_latency_ms(b.name())
-                .unwrap_or(f64::MAX);
-            // Faster providers first (ascending by average).
-            avg_a.partial_cmp(&avg_b).unwrap_or(Ordering::Equal)
-        });
-
-        let poll_semaphore = Arc::new(Semaphore::new(8));
-        let mut searches = ordered_sources
+        let mut searches = selected_sources
             .into_iter()
             .map(|source| {
                 let query = query.clone();
                 let aliases = self.payment_method_aliases.get(source.name()).cloned();
-                let poll_semaphore = poll_semaphore.clone();
                 async move {
-                    let _permit = poll_semaphore.acquire_owned().await.ok();
                     let started = Instant::now();
                     let timeout = source.timeout(self.timeout);
                     let result = tokio::time::timeout(timeout, source.search(&query)).await;
@@ -1117,19 +888,15 @@ impl P2pSearchService {
                                 }
                             }
                             let count = offers.len();
-                            let avg_latency = self.latency_tracker.avg_latency_ms(source.name());
-                            let latency_ms = elapsed;
-                            let source_name = source.name().to_string();
                             (
                                 offers,
                                 SourceStatus {
-                                    source: source_name.clone(),
+                                    source: source.name().to_string(),
                                     ok: true,
                                     cached: false,
-                                    latency_ms,
+                                    latency_ms: elapsed,
                                     offers_found: count,
                                     error: None,
-                                    avg_latency_ms: avg_latency,
                                 },
                             )
                         }
@@ -1142,7 +909,6 @@ impl P2pSearchService {
                                 latency_ms: elapsed,
                                 offers_found: 0,
                                 error: Some(error.to_string()),
-                                avg_latency_ms: self.latency_tracker.avg_latency_ms(source.name()),
                             },
                         ),
                         Err(_) => (
@@ -1157,7 +923,6 @@ impl P2pSearchService {
                                     "source timed out after {} ms",
                                     timeout.as_millis()
                                 )),
-                                avg_latency_ms: self.latency_tracker.avg_latency_ms(source.name()),
                             },
                         ),
                     }
@@ -1169,7 +934,6 @@ impl P2pSearchService {
         let mut sources = Vec::new();
         while let Some((offers, status)) = searches.next().await {
             collected_offers.extend(offers);
-            self.latency_tracker.record(&status);
             sources.push(status);
             if let Some(updates) = &updates {
                 let response = build_search_response(
@@ -1251,24 +1015,6 @@ impl P2pSearchService {
         requested_sources: Option<&str>,
         updates: mpsc::Sender<(String, Result<Vec<CryptoTicker>>)>,
     ) {
-        if self.background_offers.is_some() {
-            let snapshots = self
-                .market_tickers_cache
-                .read()
-                .ok()
-                .map(|cache| cache.clone())
-                .unwrap_or_default();
-            for (name, tickers) in snapshots {
-                if requested_sources
-                    .is_none_or(|requested| requested.split(',').any(|source| source == name))
-                {
-                    if updates.send((name, Ok(tickers))).await.is_err() {
-                        return;
-                    }
-                }
-            }
-            return;
-        }
         let mut searches = self
             .market_sources
             .iter()
@@ -1295,14 +1041,7 @@ impl P2pSearchService {
     }
 }
 
-fn no_source_returned_offers(response: &P2pSearchResponse) -> bool {
-    response
-        .sources
-        .iter()
-        .all(|source| source.offers_found == 0)
-}
-
-pub(in crate::p2p) fn build_search_response(
+fn build_search_response(
     query: P2pSearchQuery,
     collected_offers: &[P2pOffer],
     sources: Vec<SourceStatus>,
@@ -1330,7 +1069,7 @@ pub(in crate::p2p) fn build_search_response(
     }
 }
 
-pub(in crate::p2p) fn merge_market_responses(
+fn merge_market_responses(
     query: P2pSearchQuery,
     p2p: P2pSearchResponse,
     direct: P2pSearchResponse,
@@ -1356,22 +1095,6 @@ pub(in crate::p2p) fn merge_market_responses(
     build_search_response(query, &offers, sources, cached, source, stale, observed_at)
 }
 
-fn merged_fmatch_markets(
-    query: &P2pSearchQuery,
-    p2p: &Option<P2pSearchResponse>,
-    direct: &Option<P2pSearchResponse>,
-) -> Result<Option<P2pSearchResponse>> {
-    Ok(match (p2p, direct) {
-        (Some(p2p), Some(direct)) => Some(merge_market_responses(
-            query.clone().normalize()?,
-            p2p.clone(),
-            direct.clone(),
-        )),
-        (Some(response), None) | (None, Some(response)) => Some(response.clone()),
-        (None, None) => None,
-    })
-}
-
 fn mark_provider_fallback(mut response: P2pSearchResponse, reason: &str) -> P2pSearchResponse {
     response.source = "provider_fallback".into();
     tracing::warn!(reason, "using live providers after Fmatch failure");
@@ -1392,7 +1115,6 @@ fn source_statuses_from_offers(offers: &[P2pOffer]) -> Vec<SourceStatus> {
             latency_ms: 0,
             offers_found,
             error: None,
-            avg_latency_ms: None,
         })
         .collect()
 }

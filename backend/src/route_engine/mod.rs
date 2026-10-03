@@ -466,6 +466,33 @@ pub struct PublicRouteQuote {
     pub path: Vec<Asset>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct CowExecutionQuote {
+    pub chain: String,
+    pub chain_id: u64,
+    pub api_url: String,
+    pub sell_token: String,
+    pub buy_token: String,
+    pub sell_amount: String,
+    pub expected_output: String,
+    pub expected_fee: Option<String>,
+    pub quote: Value,
+    pub expires_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SymbiosisExecutionQuote {
+    pub source_chain_id: u64,
+    pub source_token: String,
+    pub input_amount: String,
+    pub expected_output: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub approval_spender: Option<String>,
+    pub transaction: Value,
+    pub quote: Value,
+    pub expires_at: DateTime<Utc>,
+}
+
 #[async_trait]
 pub trait PublicRouteProvider: Send + Sync {
     fn name(&self) -> &str;
@@ -1296,6 +1323,31 @@ mod tests {
         );
         let provider = NearIntentsProvider::new("https://example.test/v0/", None).unwrap();
         assert_eq!(provider.endpoint("quote"), "https://example.test/v0/quote");
+    }
+
+    #[tokio::test]
+    async fn near_public_capabilities_load_the_token_catalog_on_first_use() {
+        let app = axum::Router::new().route(
+            "/v0/tokens",
+            axum::routing::get(|| async {
+                axum::Json(vec![serde_json::json!({
+                    "assetId": "nep141:usdt.tron",
+                    "blockchain": "tron",
+                    "symbol": "USDT",
+                    "decimals": 6
+                })])
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let provider = NearIntentsProvider::new(format!("http://{address}"), None).unwrap();
+
+        let assets = provider.supported_assets().await;
+        assert_eq!(assets, vec![asset("USDT@tron")]);
+
+        server.abort();
+        assert_eq!(provider.supported_assets().await, vec![asset("USDT@tron")]);
     }
 
     #[test]

@@ -49,28 +49,13 @@ impl P2pSearchService {
                 let Ok(amount) = Amount::from_f64(query.source_amount, from.clone()) else {
                     continue;
                 };
-                let provider = capability.provider.clone();
-                let service = self.clone();
-                searches.push(async move {
-                    if service.background_offers.is_some() {
-                        let quotes = service.indicative_provider_quotes(
-                            provider.name(),
-                            &from,
-                            &to,
-                            &amount,
-                        );
-                        (!quotes.is_empty()).then(|| (provider.name().to_string(), quotes))
-                    } else {
-                        quote_provider_many(
-                            provider,
-                            from,
-                            to,
-                            amount,
-                            service.quote_semaphore.clone(),
-                        )
-                        .await
-                    }
-                });
+                searches.push(quote_provider_many(
+                    capability.provider.clone(),
+                    from,
+                    to,
+                    amount,
+                    self.quote_semaphore.clone(),
+                ));
             }
         }
 
@@ -111,6 +96,7 @@ impl P2pSearchService {
                     source_fiat: quote.from.symbol.clone(),
                     source_amount: quote.input.value.clone(),
                     acquired_asset_amount: quote.output.value.clone(),
+                    provider_input_amount: Some(quote.input.value.clone()),
                     target_fiat: quote.to.symbol.clone(),
                     target_amount: quote.output.value,
                     effective_rate: fixed(output_value / input_value, 12),
@@ -118,6 +104,7 @@ impl P2pSearchService {
                     requires_asset_transfer: true,
                     transfer_fee_included: !quote.fees.is_empty(),
                     route_kind: "crypto_to_crypto".into(),
+                    profitability: None,
                     bridge_currency: None,
                     market_path: None,
                     route_provider: Some(provider_name.clone()),
@@ -137,6 +124,7 @@ impl P2pSearchService {
                         })
                         .collect(),
                     quote_expires_at: quote.expires_at,
+                    execution: None,
                     payment_methods_verified: true,
                     entry_offer: None,
                     exit_offer: None,

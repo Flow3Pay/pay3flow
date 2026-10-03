@@ -55,16 +55,6 @@ pub struct ProviderGuidance {
     pub links: Vec<ProviderLink>,
 }
 
-/// Optional partner/referral link that earns Pay3Flow a commission when the
-/// customer follows it to complete the exchange on the provider's site.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(deny_unknown_fields)]
-pub struct ProviderAffiliate {
-    pub url: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub label: Option<String>,
-}
-
 #[derive(Debug, Clone, Serialize)]
 pub struct Provider {
     pub id: Uuid,
@@ -77,7 +67,6 @@ pub struct Provider {
     pub exchange_methods: Vec<ProviderExchangeMethod>,
     pub fee_model: Option<ProviderFeeModel>,
     pub guidance: Option<ProviderGuidance>,
-    pub affiliate: Option<ProviderAffiliate>,
     pub searchable: bool,
     pub search_mode: ProviderSearchMode,
 }
@@ -114,7 +103,7 @@ pub async fn list(pool: &DbPool, filters: ProviderFilters) -> Result<Vec<Provide
     let statement = client
         .prepare_cached(
             r#"
-SELECT id, slug, operation, source_url, name, currencies, banks, exchange_methods, fee_model, guidance, affiliate
+SELECT id, slug, operation, source_url, name, currencies, banks, exchange_methods, fee_model, guidance
 FROM providers
 WHERE status = 'enabled'
   AND ($1::TEXT IS NULL OR operation = $1)
@@ -129,12 +118,18 @@ ORDER BY name, operation, slug
         .await?;
     rows.into_iter()
         .map(|row| {
-            let fee_model = optional_json::<ProviderFeeModel>(&row, "fee_model")
+            let fee_value: serde_json::Value = row.get("fee_model");
+            let fee_model = (!fee_value.as_object().is_some_and(serde_json::Map::is_empty))
+                .then(|| serde_json::from_value(fee_value))
+                .transpose()
                 .with_context(|| "invalid Providerfile fee model stored in providers")?;
-            let guidance = optional_json::<ProviderGuidance>(&row, "guidance")
-                .with_context(|| "invalid Providerfile guidance stored in providers")?;
-            let affiliate = optional_json::<ProviderAffiliate>(&row, "affiliate")
-                .with_context(|| "invalid Providerfile affiliate stored in providers")?;
+            let guidance_value: serde_json::Value = row.get("guidance");
+            let guidance = (!guidance_value
+                .as_object()
+                .is_some_and(serde_json::Map::is_empty))
+            .then(|| serde_json::from_value(guidance_value))
+            .transpose()
+            .with_context(|| "invalid Providerfile guidance stored in providers")?;
             let exchange_methods = row
                 .get::<_, Vec<String>>("exchange_methods")
                 .into_iter()
@@ -152,25 +147,11 @@ ORDER BY name, operation, slug
                 exchange_methods,
                 fee_model,
                 guidance,
-                affiliate,
                 searchable: false,
                 search_mode: ProviderSearchMode::CatalogOnly,
             })
         })
         .collect()
-}
-
-/// Providerfile sections are stored as JSONB and default to `{}`, which no
-/// section type accepts. Treat an empty object as "section not declared".
-fn optional_json<T: serde::de::DeserializeOwned>(
-    row: &tokio_postgres::Row,
-    column: &str,
-) -> Result<Option<T>> {
-    let value: serde_json::Value = row.get(column);
-    if value.as_object().is_some_and(serde_json::Map::is_empty) {
-        return Ok(None);
-    }
-    serde_json::from_value(value).map(Some).map_err(Into::into)
 }
 
 pub(crate) async fn adapters(pool: &DbPool) -> Result<Vec<ProviderAdapterRecord>> {

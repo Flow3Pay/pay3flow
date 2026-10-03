@@ -2,9 +2,8 @@ use std::time::Duration;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone)]
 pub(crate) struct CryptoTicker {
     pub symbol: String,
     pub bid: f64,

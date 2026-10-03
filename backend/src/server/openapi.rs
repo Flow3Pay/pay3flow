@@ -40,7 +40,7 @@ fn api_document() -> Value {
 }
 
 fn components() -> Value {
-    json!({
+    let mut components = json!({
         "securitySchemes": {
             "bearerAuth": {
                 "type": "http",
@@ -238,6 +238,73 @@ fn components() -> Value {
                 },
                 "additionalProperties": true
             }
+        }
+    });
+    let schemas = components["schemas"]
+        .as_object_mut()
+        .expect("OpenAPI schemas must be an object");
+    schemas.insert(
+        "CreateRouteExecution".into(),
+        create_route_execution_schema(),
+    );
+    schemas.insert(
+        "SubmitRouteExecution".into(),
+        submit_route_execution_schema(),
+    );
+    schemas.insert("RouteExecution".into(), route_execution_schema());
+    components
+}
+
+fn create_route_execution_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["anonymous_id", "route_token", "source_address", "recipient"],
+        "properties": {
+            "anonymous_id": { "type": "string", "format": "uuid" },
+            "route_token": { "type": "string", "description": "Short-lived signed token returned on an executable route." },
+            "source_address": { "type": "string" },
+            "recipient": { "type": "string" },
+            "refund_to": { "type": "string", "nullable": true },
+            "amount": { "type": "string", "description": "Must equal the amount in the signed route descriptor." },
+            "slippage_bps": { "type": "integer", "minimum": 0, "maximum": 10000, "default": 100 }
+        }
+    })
+}
+
+fn submit_route_execution_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["anonymous_id", "reference", "kind"],
+        "properties": {
+            "anonymous_id": { "type": "string", "format": "uuid" },
+            "reference": { "type": "string", "description": "Wallet transaction hash or CoW order UID." },
+            "kind": { "type": "string", "enum": ["transaction_hash", "order_uid"] }
+        }
+    })
+}
+
+fn route_execution_schema() -> Value {
+    json!({
+        "type": "object",
+        "required": ["id", "route_id", "provider", "status", "from_asset", "to_asset", "input_amount", "source_address", "recipient", "action", "quote_expires_at", "updated_at"],
+        "properties": {
+            "id": { "type": "string", "format": "uuid" },
+            "route_id": { "type": "string" },
+            "provider": { "type": "string", "enum": ["near-intents", "cow-swap", "symbiosis"] },
+            "status": { "type": "string", "enum": ["awaiting_signature", "submitted", "completed", "failed", "cancelled", "expired", "refunded", "stuck"] },
+            "from_asset": { "type": "string" },
+            "to_asset": { "type": "string" },
+            "input_amount": { "type": "string" },
+            "source_address": { "type": "string" },
+            "recipient": { "type": "string" },
+            "action": { "$ref": "#/components/schemas/JsonObject" },
+            "provider_reference": { "type": "string", "nullable": true },
+            "submitted_reference": { "type": "string", "nullable": true },
+            "provider_status": { "$ref": "#/components/schemas/JsonObject" },
+            "quote_expires_at": { "type": "string", "format": "date-time" },
+            "updated_at": { "type": "string", "format": "date-time" }
         }
     })
 }
@@ -587,12 +654,30 @@ const OPERATIONS: &[Operation] = &[
         false,
     ),
     (
-        "/api/routes/instruction-open",
+        "/api/p2p/route-executions",
         "post",
-        "Record instruction open",
-        "Record an anonymous instruction view using the signed token supplied with a route.",
+        "Prepare wallet execution",
+        "Validate a signed route descriptor and create a fresh provider action for the supplied source and recipient addresses. No private key or signature is sent to Pay3Flow.",
+        "Routing",
+        true,
+        false,
+    ),
+    (
+        "/api/p2p/route-executions/{id}",
+        "get",
+        "Get wallet execution",
+        "Return persisted state and poll the provider when the operation has been submitted.",
         "Routing",
         false,
+        false,
+    ),
+    (
+        "/api/p2p/route-executions/{id}/submissions",
+        "post",
+        "Record wallet submission",
+        "Record the public transaction hash or CoW order UID after the user confirms it in their wallet.",
+        "Routing",
+        true,
         false,
     ),
     (
@@ -959,6 +1044,8 @@ fn request_schema(path: &str, method: &str) -> Value {
         ("/api/exchange/orders/{id}/confirm", "post") => "ConfirmOrderRequest",
         ("/api/exchange/orders/{id}/funding/confirm", "post") => "FundingConfirmRequest",
         ("/api/exchange/orders/{id}/proof", "post") => "SubmitProofRequest",
+        ("/api/p2p/route-executions", "post") => "CreateRouteExecution",
+        ("/api/p2p/route-executions/{id}/submissions", "post") => "SubmitRouteExecution",
         _ => "JsonObject",
     };
     schema_ref(name)
@@ -980,6 +1067,9 @@ fn response_schema(path: &str, method: &str) -> Value {
         ("/api/exchange/orders", "get") => array_schema("ExchangeOrder"),
         ("/api/exchange/orders/{id}/confirm", "post")
         | ("/api/exchange/orders/{id}/funding/confirm", "post") => schema_ref("JsonResponse"),
+        ("/api/p2p/route-executions", "post")
+        | ("/api/p2p/route-executions/{id}", "get")
+        | ("/api/p2p/route-executions/{id}/submissions", "post") => schema_ref("RouteExecution"),
         _ => schema_ref("JsonResponse"),
     }
 }
@@ -1031,13 +1121,23 @@ fn extra_parameters(path: &str, method: &str) -> Vec<Value> {
     }
     if path == "/api/payments" && method == "post"
         || path == "/api/exchange/orders" && method == "post"
+        || path == "/api/p2p/route-executions" && method == "post"
     {
         parameters.push(json!({
             "name": "Idempotency-Key",
             "in": "header",
             "description": "Stable key used to safely retry a create request.",
-            "required": false,
+            "required": path == "/api/p2p/route-executions",
             "schema": { "type": "string", "example": "payment-2026-09-26-001" }
+        }));
+    }
+    if path == "/api/p2p/route-executions/{id}" && method == "get" {
+        parameters.push(json!({
+            "name": "anonymous_id",
+            "in": "query",
+            "description": "Pseudonymous owner ID used when the execution was created.",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
         }));
     }
     parameters

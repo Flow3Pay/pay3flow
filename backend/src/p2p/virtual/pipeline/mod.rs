@@ -1,4 +1,3 @@
-mod cache;
 mod crypto;
 mod fiat;
 mod provider;
@@ -58,21 +57,6 @@ impl P2pSearchService {
             &self.networks,
             &provider_assets,
         )?;
-        let route_cache_key = cache::route_cache_key(&query);
-        let engagement_scores = self.vote_scores.read().clone();
-        if let Some(key) = route_cache_key.as_deref() {
-            if let Some(mut response) = cache::cached_routes(self, key, search_id).await {
-                crate::p2p::routes::sort_routes_with_scores(
-                    &mut response.routes,
-                    &engagement_scores,
-                );
-                for (index, route) in response.routes.iter_mut().enumerate() {
-                    route.rank = index + 1;
-                }
-                publish_snapshot(updates.as_ref(), response.clone()).await;
-                return Ok(response);
-            }
-        }
         let source_is_crypto =
             is_crypto_currency(&query.source_currency, &self.networks, &provider_assets);
         let target_is_crypto =
@@ -119,6 +103,13 @@ impl P2pSearchService {
                     &query,
                     batch_sender.clone(),
                 )));
+                if query.source_currency == query.target_currency {
+                    producers.push(Box::pin(provider::produce_fiat_cycle_routes(
+                        self,
+                        &query,
+                        batch_sender.clone(),
+                    )));
+                }
             }
         }
         drop(batch_sender);
@@ -187,7 +178,6 @@ impl P2pSearchService {
                                 &routes,
                                 &asset_statuses,
                                 &provider_statuses,
-                                &engagement_scores,
                             ),
                         ).await;
                     }
@@ -206,12 +196,8 @@ impl P2pSearchService {
             &routes,
             &asset_statuses,
             &provider_statuses,
-            &engagement_scores,
         );
         response.routes_exhaustive &= routes_exhaustive;
-        if let Some(key) = route_cache_key.as_deref() {
-            cache::cache_routes(self, key, &response).await;
-        }
         tracing::info!(
             source_currency = %query.source_currency,
             target_currency = %query.target_currency,

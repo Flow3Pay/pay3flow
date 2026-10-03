@@ -1,7 +1,7 @@
 <script lang="ts">
   import { afterUpdate, onMount, onDestroy } from "svelte";
-  import { fetchCorridors, fetchP2pRoutes, fetchProviders, recordInstructionOpen, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderAffiliate, type ProviderDefinition, type ProviderGuidance, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote, type VenueSearchStatus } from "$lib/exchange";
-  import { FALLBACK_NETWORK, fetchNetworks, preferredNetwork, type CryptoNetwork } from "$lib/networks";
+  import { fetchCorridors, fetchP2pRoutes, fetchProviders, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderDefinition, type ProviderGuidance, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote, type VenueSearchStatus } from "$lib/exchange";
+  import { FALLBACK_NETWORK, fetchNetworks, type CryptoNetwork } from "$lib/networks";
   import { assetIcon, networkIcon, swapIcon, venueIcon } from "$lib/icons";
   import { fetchPaymentMethods, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
   import { getAnonymousUserId, registerAnonymousUser } from "$lib/anonymous-user";
@@ -29,7 +29,7 @@
   let INTERMEDIARY_ASSETS: string[] = [];
   const EXCHANGE_METHODS: ExchangeMethod[] = ["p2p", "exchanger"];
   let paymentMethods: PaymentMethod[] = [];
-  const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", sources: "pay3flow.exchange.p2p-sources", knownSources: "pay3flow.exchange.known-p2p-sources", methods: "pay3flow.exchange.methods", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", sourceNetwork: "pay3flow.exchange.source-network", targetNetwork: "pay3flow.exchange.target-network", nativeNetworkMigration: "pay3flow.exchange.native-network-v1", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets" };
+  const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", sources: "pay3flow.exchange.p2p-sources", knownSources: "pay3flow.exchange.known-p2p-sources", methods: "pay3flow.exchange.methods", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", sourceNetwork: "pay3flow.exchange.source-network", targetNetwork: "pay3flow.exchange.target-network", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets" };
 
   let corridors: ExchangeCorridor[] = [];
   let corridorId = "";
@@ -61,7 +61,6 @@
   let p2pSources: P2pSourceOption[] = [];
   let venueNames: Record<string, string> = {};
   let providerGuidance: Record<string, ProviderGuidance> = {};
-  let providerAffiliates: Record<string, ProviderAffiliate> = {};
   let selectedSources: P2pSource[] = [];
   let selectedExchangeMethods: ExchangeMethod[] = [...EXCHANGE_METHODS];
   let selectedIntermediaryAssets: string[] = [];
@@ -230,14 +229,14 @@
         entry_asset: route.asset, entry_network: networkName(route.entry_network), source_network: route.source_network ? networkName(route.source_network) : undefined, target_network: route.target_network ? networkName(route.target_network) : undefined,
         target_amount_minor: Math.round(targetAmount * 100), target_amount: route.target_amount, target_currency: route.target_fiat,
         target_method_icon_url: targetMethod?.kind !== "wallet" ? paymentMethodFavicon(targetMethod) ?? undefined : undefined,
-        route_kind: route.route_kind, bridge_currency: route.bridge_currency, market_path: route.market_path,
-        route_provider: route.route_provider, route_provider_url: route.route_provider_url, route_path: route.route_path, route_fees: route.route_fees, quote_expires_at: route.quote_expires_at,
+        route_kind: route.route_kind, profitability: route.profitability, bridge_currency: route.bridge_currency, market_path: route.market_path,
+        route_provider: route.route_provider, route_provider_url: route.route_provider_url, route_path: route.route_path, route_fees: route.route_fees, quote_expires_at: route.quote_expires_at, execution: route.execution,
         spread_bps: bestTarget > 0 && Number.isFinite(targetAmount) ? Math.round((targetAmount / bestTarget - 1) * 10_000) : 0,
         is_current_best: index === 0, is_live_market: true, payment_methods_verified: route.payment_methods_verified,
         entry_offer_url: entryOffer?.source_url, entry_offer_is_exact: entryOffer?.source_url_is_exact, entry_offer_ad_id: entryOffer?.ad_id,
         exit_offer_url: exitOffer?.source_url, exit_offer_is_exact: exitOffer?.source_url_is_exact, exit_offer_ad_id: exitOffer?.ad_id,
         entry_offer_snapshot: entryOffer, exit_offer_snapshot: exitOffer, warnings: route.warnings,
-        services: route.services, reputation: route.reputation, feedback: route.feedback ?? { likes_total: 0, dislikes_total: 0 }, service_links: route.service_links, instruction_token: route.route_id ? response.instruction_tokens?.[route.route_id] : undefined,
+        services: route.services, reputation: route.reputation, feedback: route.feedback ?? { likes_total: 0, dislikes_total: 0 }, service_links: route.service_links,
         legs,
       };
     });
@@ -313,7 +312,6 @@
         average_response_ms: timing?.average_response_ms ?? null,
         response_samples: timing?.sample_count ?? 0,
         cache_hits: timing?.cache_hits ?? 0,
-        avg_latency_ms: status.avg_latency_ms ?? previous?.avg_latency_ms ?? null,
         offers_found: (previous?.offers_found ?? 0) + status.offers_found,
         routes_found: routeCounts.get(id) ?? 0,
       });
@@ -325,7 +323,7 @@
     }
     for (const [id, count] of routeCounts) {
       const previous = nextVenueStats[id];
-      nextVenueStats[id] = previous ? { ...previous, routes_found: Math.max(previous.routes_found, count) } : { source: id, ok: true, cached: false, latency_ms: 0, last_response_ms: null, average_response_ms: null, response_samples: 0, cache_hits: 0, avg_latency_ms: null, offers_found: 0, routes_found: count };
+      nextVenueStats[id] = previous ? { ...previous, routes_found: Math.max(previous.routes_found, count) } : { source: id, ok: true, cached: false, latency_ms: 0, last_response_ms: null, average_response_ms: null, response_samples: 0, cache_hits: 0, offers_found: 0, routes_found: count };
     }
     venueStats = nextVenueStats;
     const newlyFoundVenueIds = [
@@ -387,7 +385,6 @@
           executions_average: Math.round(services.reduce((sum, item) => sum + item.executions_total, 0) / count),
           likes_average: Math.round(services.reduce((sum, item) => sum + item.likes_total, 0) / count),
           dislikes_average: Math.round(services.reduce((sum, item) => sum + item.dislikes_total, 0) / count),
-          score_average: Math.round(services.reduce((sum, item) => sum + item.reputation_score, 0) / count),
         },
       };
     });
@@ -419,8 +416,8 @@
   $: selectedTargetCurrency = targetMethod?.currency || targetCurrency;
   $: sourceNetworks = sourceMethod?.kind === "wallet" ? networks.filter((network) => network.currencies.includes(sourceMethod!.currency)) : [];
   $: targetNetworks = targetMethod?.kind === "wallet" ? networks.filter((network) => network.currencies.includes(targetMethod!.currency)) : [];
-  $: sourceNetwork = sourceNetworks.find((network) => network.id === sourceNetworkId) ?? preferredNetwork(sourceMethod?.currency ?? "", sourceNetworks);
-  $: targetNetwork = targetNetworks.find((network) => network.id === targetNetworkId) ?? preferredNetwork(targetMethod?.currency ?? "", targetNetworks);
+  $: sourceNetwork = sourceNetworks.find((network) => network.id === sourceNetworkId) ?? sourceNetworks[0];
+  $: targetNetwork = targetNetworks.find((network) => network.id === targetNetworkId) ?? targetNetworks[0];
   $: sourceCurrencyChoices = currencyChoicesFor(sourceMethod, "sender");
   $: targetCurrencyChoices = currencyChoicesFor(targetMethod, "recipient");
   $: showBelarusP2pWarning = selectedExchangeMethods.includes("p2p") && [sourceMethod, targetMethod].some((method) => method?.kind === "bank" && method.country === "BY" && method.currency === "BYN");
@@ -556,8 +553,8 @@
     currencyPicker = null;
     resetResults();
   }
-  function chooseSource(method: PaymentMethod, network?: CryptoNetwork) { initialSearchReady = true; sourceMethodId = method.id; if (method.kind === "wallet") sourceNetworkId = network?.id ?? preferredNetwork(method.currency, networks)?.id ?? FALLBACK_NETWORK.id; methodPicker = null; resetResults(); }
-  function chooseTarget(method: PaymentMethod, network?: CryptoNetwork) { initialSearchReady = true; targetMethodId = method.id; if (method.kind === "wallet") targetNetworkId = network?.id ?? preferredNetwork(method.currency, networks)?.id ?? FALLBACK_NETWORK.id; methodPicker = null; resetResults(); }
+  function chooseSource(method: PaymentMethod, network?: CryptoNetwork) { initialSearchReady = true; sourceMethodId = method.id; if (method.kind === "wallet") sourceNetworkId = network?.id ?? networks.find((item) => item.currencies.includes(method.currency))?.id ?? FALLBACK_NETWORK.id; methodPicker = null; resetResults(); }
+  function chooseTarget(method: PaymentMethod, network?: CryptoNetwork) { initialSearchReady = true; targetMethodId = method.id; if (method.kind === "wallet") targetNetworkId = network?.id ?? networks.find((item) => item.currencies.includes(method.currency))?.id ?? FALLBACK_NETWORK.id; methodPicker = null; resetResults(); }
   function selectNetwork(network: CryptoNetwork) { initialSearchReady = true; if (networkPicker === "source") sourceNetworkId = network.id; else targetNetworkId = network.id; networkPicker = null; resetResults(); }
   function openCurrencyPicker(side: Exclude<PickerSide, null>) { currencyPicker = side; }
   async function openMethodPicker(side: Exclude<PickerSide, null>) {
@@ -569,9 +566,6 @@
   }
   async function openInstructions(route: RouteCandidate) {
     instructionsRoute = route;
-    if (anonymousId && route.instruction_token) {
-      void recordInstructionOpen(anonymousId, route.instruction_token).catch(() => {});
-    }
     routeInstructionsComponent ??= (await import("./RouteInstructions.svelte")).default;
   }
 
@@ -598,7 +592,7 @@
 
   async function voteForRoute(route: RouteCandidate, vote: ServiceVote) {
     try {
-      replaceRouteFeedback(route.route_id, await setRouteVote(route.route_id, anonymousId, vote, route.instruction_token));
+      replaceRouteFeedback(route.route_id, await setRouteVote(route.route_id, anonymousId, vote));
     } catch (cause) {
       error = cause instanceof Error ? cause.message : "Could not save your route feedback";
     }
@@ -626,7 +620,7 @@
     controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; controller = new AbortController(); const signal = controller.signal; const currentRequest = ++requestId; searching = true; awaitingFirstRoute = true; routesFound = 0; foundVenueIds = []; foundVenues = []; venueStats = {}; responseMetrics = new SearchResponseMetrics(); error = null;
     let rerunForTargetAmount = false;
     try {
-      const liveQuery = { sourceFiat: selectedSourceCurrency, targetFiat: selectedTargetCurrency, sourceAmount: value, intermediaryAssets: !sourceWallet && !targetWallet && selectedIntermediaryAssets.length ? selectedIntermediaryAssets : undefined, sourceNetwork: sourceWallet ? sourceNetwork?.id : undefined, targetNetwork: targetWallet ? targetNetwork?.id : undefined, sourcePaymentMethod: sourceWallet ? undefined : sourceMethod.p2pQuery, targetPaymentMethod: targetWallet ? undefined : targetMethod.p2pQuery, sources: selectedSources, exchangeMode, allowCrossVenue: true, limit: 40 };
+      const liveQuery = { sourceFiat: selectedSourceCurrency, targetFiat: selectedTargetCurrency, sourceAmount: value, intermediaryAssets: !sourceWallet && !targetWallet && selectedIntermediaryAssets.length ? selectedIntermediaryAssets : undefined, sourceNetwork: sourceWallet ? sourceNetwork?.id : undefined, targetNetwork: targetWallet ? targetNetwork?.id : undefined, sourcePaymentMethod: sourceWallet ? undefined : sourceMethod.p2pQuery, targetPaymentMethod: targetWallet ? undefined : targetMethod.p2pQuery, sourcePaymentFeePercent: sourceWallet ? 0 : sourceMethod.bankFeePercent, targetPaymentFeePercent: targetWallet ? 0 : targetMethod.bankFeePercent, sources: selectedSources, exchangeMode, allowCrossVenue: true, limit: 40 };
       let response: P2pRouteSearchResponse;
       try {
         if (!anonymousId) throw new Error("Anonymous ID unavailable");
@@ -719,35 +713,6 @@
     image.src = assetIcon("generic");
   }
 
-  const catalogRetryTimers = new Set<number>();
-  let componentDestroyed = false;
-
-  function loadCatalogWithRetry<T>(load: () => Promise<T>, apply: (value: T) => void) {
-    let failures = 0;
-    let reportedError: string | null = null;
-    const attempt = () => {
-      void load().then((value) => {
-        if (componentDestroyed) return;
-        apply(value);
-        if (reportedError && error === reportedError) error = null;
-      }).catch((cause) => {
-        if (componentDestroyed) return;
-        failures += 1;
-        if (failures >= 3) {
-          reportedError = cause instanceof Error ? cause.message : "Could not load exchange data";
-          error ??= reportedError;
-        }
-        const delay = Math.min(30_000, 2_000 * 2 ** Math.min(failures - 1, 4));
-        const timer = window.setTimeout(() => {
-          catalogRetryTimers.delete(timer);
-          attempt();
-        }, delay);
-        catalogRetryTimers.add(timer);
-      });
-    };
-    attempt();
-  }
-
   onMount(() => {
     const shared = readSharedExchange();
     let savedSourceIds: string[] = [];
@@ -769,19 +734,9 @@
     // Keep a saved route search off the initial critical path. User changes
     // still enable the normal debounced search immediately.
     initialSearchTimer = window.setTimeout(() => initialSearchReady = true, 1500);
-    loadCatalogWithRetry(fetchNetworks, (items) => { if (items.length) networks = items; });
-    loadCatalogWithRetry(fetchPaymentMethods, (items) => {
-      paymentMethods = items;
-      try {
-        if (!localStorage.getItem(STORAGE.nativeNetworkMigration)) {
-          // The old alphabetical default selected wrapped ADA on BSC.
-          if (items.find((item) => item.id === sourceMethodId)?.currency === "ADA" && sourceNetworkId === "bnb-smart-chain") sourceNetworkId = "cardano";
-          if (items.find((item) => item.id === targetMethodId)?.currency === "ADA" && targetNetworkId === "bnb-smart-chain") targetNetworkId = "cardano";
-          localStorage.setItem(STORAGE.nativeNetworkMigration, "1");
-        }
-      } catch {}
-    });
-    loadCatalogWithRetry(fetchProviders, (providers) => {
+    fetchNetworks().then((items) => { if (items.length) networks = items; }).catch(() => {});
+    fetchPaymentMethods().then((items) => { paymentMethods = items; }).catch((cause: Error) => error ??= cause.message);
+    fetchProviders().then((providers) => {
       p2pSources = providerSources(providers);
       foundVenues = foundVenueOptions();
       venueNames = Object.fromEntries(p2pSources.map((provider) => [provider.id.toLowerCase(), provider.label]));
@@ -790,11 +745,6 @@
           .filter((provider) => provider.guidance)
           .map((provider) => [provider.slug.toLowerCase(), provider.guidance as ProviderGuidance]),
       );
-      providerAffiliates = Object.fromEntries(
-        providers
-          .filter((provider) => provider.affiliate?.url)
-          .map((provider) => [provider.slug.toLowerCase(), provider.affiliate as ProviderAffiliate]),
-      );
       const catalog = new Set(p2pSources.map((source) => source.id));
       const live = p2pSources.filter((source) => source.searchMode === "selectable").map((source) => source.id);
       const restored = [...new Set(savedSourceIds.filter((source) => catalog.has(source) && p2pSources.find((item) => item.id === source)?.searchMode === "selectable"))];
@@ -802,14 +752,14 @@
       const newlyAdded = live.filter((source) => !known.has(source));
       selectedSources = savedSourceIds.length ? [...new Set([...restored, ...newlyAdded])] : live;
       try { localStorage.setItem(STORAGE.knownSources, live.join(",")); } catch {}
-    });
-    loadCatalogWithRetry(fetchCorridors, (response) => {
+    }).catch((cause: Error) => error ??= cause.message);
+    fetchCorridors().then((response) => {
       const savedDirection = localStorage.getItem(STORAGE.direction);
       const sharedCorridor = shared ? response.items.find((item) => (item.source_currency === shared.sourceCurrency && item.target_currency === shared.targetCurrency) || (item.source_currency === shared.targetCurrency && item.target_currency === shared.sourceCurrency)) : null;
       corridors = response.items; corridorId = corridorId || sharedCorridor?.id || response.items[0]?.id || "";
       if (shared && sharedCorridor?.source_currency === shared.targetCurrency && sharedCorridor.target_currency === shared.sourceCurrency) directionReversed = true; else if (savedDirection != null) directionReversed = savedDirection === "true";
       urlReady = true;
-    });
+    }).catch((cause: Error) => error = cause.message);
     document.addEventListener("mousedown", onDocumentMouseDown);
     clockTimer = window.setInterval(() => clock = Date.now(), 1000);
   });
@@ -835,9 +785,6 @@
     }
   });
   onDestroy(() => {
-    componentDestroyed = true;
-    for (const timer of catalogRetryTimers) clearTimeout(timer);
-    catalogRetryTimers.clear();
     controller?.abort();
     cancelRouteRendering();
     if (debounceTimer) clearTimeout(debounceTimer);
@@ -933,7 +880,7 @@
   {#if currencyPicker === "source" || currencyPicker === "target"}<CurrencyPicker open={currencyPicker !== null} selected={currencyPicker === "source" ? sourceCurrencyChoice : targetCurrencyChoice} choices={currencyPicker === "source" ? sourceCurrencyChoices : targetCurrencyChoices} onClose={() => currencyPicker = null} onSelect={(choice) => chooseCurrency(currencyPicker ?? "source", choice)} />{/if}
   {#if paymentPickerComponent}<svelte:component this={paymentPickerComponent} open={methodPicker === "source"} title="Choose where you pay from" role="sender" {networks} {paymentMethods} selected={sourceMethod} selectedNetwork={sourceNetwork} onClose={() => methodPicker = null} onSelect={chooseSource} /><svelte:component this={paymentPickerComponent} open={methodPicker === "target"} title="Choose where the recipient gets paid" role="recipient" {networks} {paymentMethods} selected={targetMethod} selectedNetwork={targetNetwork} onClose={() => methodPicker = null} onSelect={chooseTarget} />{/if}
   {#if networkPicker === "source" || networkPicker === "target"}<NetworkPicker open={networkPicker !== null} networks={networkPicker === "source" ? sourceNetworks : targetNetworks} selected={networkPicker === "source" ? sourceNetwork : targetNetwork} onClose={() => networkPicker = null} onSelect={selectNetwork} />{/if}
-  {#if routeInstructionsComponent && instructionsRoute}<svelte:component this={routeInstructionsComponent} route={instructionsRoute} {venueNames} {providerGuidance} {providerAffiliates} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} onOpenService={openService} onClose={() => instructionsRoute = null} />{/if}
+  {#if routeInstructionsComponent && instructionsRoute}<svelte:component this={routeInstructionsComponent} route={instructionsRoute} {venueNames} {providerGuidance} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} onOpenService={openService} onClose={() => instructionsRoute = null} />{/if}
 </section>
 
 <style>
