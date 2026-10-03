@@ -176,6 +176,24 @@ impl BackgroundOfferStore {
                 }
             }
         }
+        keys.sort_by_key(|key| {
+            let asset = match key.asset.as_str() {
+                "USDT" => 0,
+                "USDC" => 1,
+                "BTC" => 2,
+                _ => 3,
+            };
+            let fiat = match key.fiat.as_str() {
+                "AMD" => 0,
+                "RUB" => 1,
+                _ => 2,
+            };
+            let market = match key.market {
+                P2pOfferMarket::P2p => 0,
+                P2pOfferMarket::DirectExchange => 1,
+            };
+            (asset, fiat, market, key.side as u8)
+        });
         keys
     }
 
