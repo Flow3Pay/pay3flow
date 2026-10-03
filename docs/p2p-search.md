@@ -16,9 +16,11 @@ money.
 
 Providerfile-backed sources are discovered from the generated provider catalog;
 the list is not hardcoded in the route API. Their normalized advertisements are
-published as FEP-0837 offers to the configured Fmatch actor. A background worker
-queries Fmatch for matching offers; the route endpoint uses its last snapshot to build
-complete routes. Other venues from the research list remain outside the live
+published as FEP-0837 offers to the configured Fmatch actor. Background workers
+query Fmatch for direct exchanger offers across every supported asset and fiat
+direction. User searches compose routes from those snapshots. P2P searches run
+on demand, while common P2P directions also have background snapshots. Other
+venues from the research list remain outside the live
 path until a legitimate read-only interface and adapter review exist.
 
 Background refreshes query the public adapters concurrently so their latest
@@ -46,13 +48,19 @@ direct source such as Whitebird before local route composition. See
 complete runtime pipeline, lazy top-K algorithm, provider snapshots, caches,
 and background quote refresh.
 
-At startup the first background pass starts immediately. P2P partitions refresh
-every 60 seconds when idle, 30 seconds when used, and 15 seconds at high demand.
-Direct exchanger partitions, spot tickers, public provider rates, and direct
-fiat quotes refresh in the background on a five-minute cadence. Offer and spot
-snapshots are shared through Redis. A new corridor waits for its first background
-snapshot for up to 65 seconds, including a worker timeout. Only if no snapshot
-arrives by then does the response report `background_pending`.
+At startup the first background pass starts immediately. Direct exchanger
+targets cover both sides of every fiat in the payment picker and every digital
+asset in the enabled network catalog. Each target refreshes five minutes after its previous poll, with
+bounded concurrency; a large catalog can take longer than five minutes to
+complete a whole pass. Common P2P directions refresh every 60 seconds when
+idle, 30 seconds when used, and 15 seconds at high demand. Other P2P directions
+are searched on demand and enter background refresh after repeated use. Spot
+tickers and fiat quotes refresh in the background. Public provider quotes cover
+all supported ordered asset pairs, with requested pairs prioritized. Offer and
+spot snapshots are shared through Redis. A cold direct exchanger corridor
+waits for its first background snapshot for up to 65 seconds, including a
+worker timeout. Only if no snapshot arrives by then does the response report
+`background_pending`.
 Streaming searches publish cached market partitions as they become available.
 Fiat workflow legs for different assets
 also run concurrently, so a slow or unsupported asset does not hold back routes

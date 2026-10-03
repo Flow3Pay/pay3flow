@@ -5,25 +5,25 @@ This checklist tracks the Pay3Flow/Fmatch routing work in the isolated
 
 ## Expanded market coverage
 
-- [ ] Enumerate every supported exchanger currency and asset direction from
+- [x] Enumerate every supported exchanger currency and asset direction from
   the configured catalogs; refresh them continuously with bounded concurrency.
-- [ ] Keep quote coefficients for every supported public route provider pair in
+- [x] Keep quote coefficients for every supported public route provider pair in
   the background, with popular and requested directions first.
-- [ ] Search P2P on demand, while refreshing popular P2P pairs in the background.
-- [ ] Verify ADA/BNB to AMD and other uncommon corridors retain valid offers.
+- [x] Search P2P on demand, while refreshing popular P2P pairs in the background.
+- [x] Verify ADA to AMD accepts a BestChange offer without a minimum, and
+  uncommon catalog assets remain in background polls.
 - [ ] Update docs, run checks, commit slices, then push the finished fix.
 
 - [x] Keep the shared route response cache in Redis for 15 seconds.
-- [x] Move P2P and direct exchanger offer discovery, including Fmatch calls, to
-  startup and periodic background refreshes.
+- [x] Move direct exchanger offer discovery, including Fmatch calls, to startup
+  and periodic background refreshes.
 - [x] Read offer snapshots from memory or Redis during user searches; retain
   progressive route composition and the current response shape.
 - [x] Poll P2P snapshots on a 15/30/60-second demand cadence and exchanger
   snapshots every five minutes.
 - [x] Start background spot, direct fiat, and public route quote polling at
   service startup.
-- [x] Verify all production route paths avoid live provider calls in user
-  request handling, and test cold and warm searches.
+- [x] Test cold and warm exchanger snapshots and the P2P on-demand path.
 - [x] Keep anonymous instruction and link actions in Redis, detect spam, roll
   back a spam session to its first action, then flush aggregates safely to SQL.
 - [x] Calculate provider reputation from 50 points, with +10 per like, -15 per
