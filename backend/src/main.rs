@@ -113,8 +113,11 @@ async fn main() -> anyhow::Result<()> {
     )?));
     let public_fiat_route_providers: Vec<Arc<dyn PublicFiatRouteProvider>> =
         vec![Arc::new(IdPayRouteProvider::new()?)];
+    let reputation =
+        pay3flow_backend::service_reputation::ServiceReputation::new(pool.clone(), &cfg.jwt_secret)
+            .with_engagement(redis_pool.clone(), &cfg.jwt_secret);
     let network_catalog = pay3flow_backend::networks::NetworkCatalog::load(&pool).await?;
-    let mut p2p = pay3flow_backend::p2p::P2pSearchService::from_database_with_fmatch(
+    let p2p = pay3flow_backend::p2p::P2pSearchService::from_database_with_fmatch(
         &cfg,
         network_catalog,
         &pool,
@@ -122,6 +125,8 @@ async fn main() -> anyhow::Result<()> {
         public_fiat_route_providers,
         ap.clone(),
         redis_pool.as_ref(),
+        reputation.vote_ranking_scores(),
+        reputation.reputation_scores(),
     )
     .await?;
     let route_engine = RouteEngine::new(RouteGraphConfig {
@@ -143,13 +148,6 @@ async fn main() -> anyhow::Result<()> {
         route_engine.registry.clone(),
         Arc::new(LiveEdgeQuoteSource::new(p2p.clone(), near_intents.clone())),
     ));
-    let mut reputation =
-        pay3flow_backend::service_reputation::ServiceReputation::new(pool.clone(), &cfg.jwt_secret);
-    reputation = reputation.with_engagement(redis_pool.clone(), &cfg.jwt_secret);
-    if let Some(scores) = reputation.engagement_scores() {
-        p2p.set_engagement_scores(scores);
-    }
-
     let state = AppState::new(
         pool,
         Jwt::new(&cfg.jwt_secret),

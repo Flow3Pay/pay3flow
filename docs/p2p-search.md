@@ -122,7 +122,7 @@ It then:
 4. calculates the RUB output and checks the exit advertisement limits and
    liquidity;
 5. returns complete routes ranked by estimated RUB output with a capped
-   provider engagement bonus (up to 2%), then
+   likes/dislikes vote adjustment (up to 2%), then
    verified payment methods and same-venue execution.
 
 The optional `sources` parameter limits both legs to a comma-separated list of
@@ -186,9 +186,18 @@ of the same route action are ignored. If one browser ID produces more than 12
 distinct actions of one kind in a session, Redis removes that session's actions
 after its first one before any affected bucket reaches PostgreSQL. A background
 worker flushes completed buckets after the session window with retry-safe batch
-IDs. Likes, dislikes, instruction opens and link opens feed the provider score,
-recalculated every minute including accepted actions still pending in Redis.
-The score adjusts rankings only when estimated payouts are close.
+IDs. Provider reputation starts at 50, gains 10 per like and 5 per instruction
+or link open, loses 15 per dislike and 15 per inactive day, and is bounded to
+0–100. It is recalculated in the background, cached in Redis for all backend
+instances, and used to prioritize background provider polling. Reputation does
+not change route order. Only likes and dislikes affect close-priced routes;
+when there are no votes, the previous price order applies. Vote ranking uses a
+confidence-adjusted like ratio, so 100 likes with 4 dislikes outranks 16 clean
+likes, while 100 likes with 68 dislikes does not.
+The frontend includes the signed route token with a route vote, allowing one
+vote to update the service totals of that route's actual providers. Repeated
+votes from the same browser change the previous vote instead of adding a new
+one.
 
 Run the opt-in live smoke test:
 

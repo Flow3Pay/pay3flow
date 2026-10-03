@@ -285,7 +285,8 @@ pub struct P2pSearchService {
     cache: Arc<RwLock<HashMap<String, CachedSearch>>>,
     pub(in crate::p2p) route_cache_redis: Option<RedisPool>,
     pub(in crate::p2p) background_offers: Option<Arc<BackgroundOfferStore>>,
-    pub(in crate::p2p) engagement_scores: Arc<parking_lot::RwLock<HashMap<String, f64>>>,
+    pub(in crate::p2p) vote_scores: Arc<parking_lot::RwLock<HashMap<String, f64>>>,
+    pub(in crate::p2p) reputation_scores: Arc<parking_lot::RwLock<HashMap<String, u8>>>,
     sources: Arc<[Arc<dyn P2pSource>]>,
     payment_method_aliases: Arc<HashMap<String, BTreeMap<String, Vec<String>>>>,
     pub(in crate::p2p) market_sources: Arc<[Arc<dyn CryptoMarketSource>]>,
@@ -420,6 +421,8 @@ impl P2pSearchService {
         fiat_route_providers: Vec<Arc<dyn PublicFiatRouteProvider>>,
         ap: ActivityPubService,
         redis: Option<&RedisPool>,
+        vote_scores: Option<Arc<parking_lot::RwLock<HashMap<String, f64>>>>,
+        reputation_scores: Option<Arc<parking_lot::RwLock<HashMap<String, u8>>>>,
     ) -> Result<Self> {
         let records = crate::providers::adapters(pool).await?;
         let background_targets = BackgroundOfferStore::targets(config, &records);
@@ -439,6 +442,12 @@ impl P2pSearchService {
             stale_window: Duration::from_secs(config.p2p_fmatch_stale_secs),
             answer_ttl: Duration::from_millis(config.p2p_search_cache_ttl_ms.max(1)),
         });
+        if let Some(scores) = vote_scores {
+            service.vote_scores = scores;
+        }
+        if let Some(scores) = reputation_scores {
+            service.reputation_scores = scores;
+        }
         service.start_background_offer_refresh(background_targets, redis.cloned());
         service.warm_provider_capabilities();
         Ok(service)
@@ -518,7 +527,8 @@ impl P2pSearchService {
             cache: Arc::new(RwLock::new(HashMap::new())),
             route_cache_redis: redis,
             background_offers: None,
-            engagement_scores: Arc::new(parking_lot::RwLock::new(HashMap::new())),
+            vote_scores: Arc::new(parking_lot::RwLock::new(HashMap::new())),
+            reputation_scores: Arc::new(parking_lot::RwLock::new(HashMap::new())),
             sources: sources.into(),
             payment_method_aliases: Arc::new(payment_method_aliases),
             market_sources: market_sources.into(),
@@ -547,7 +557,8 @@ impl P2pSearchService {
             cache: Arc::new(RwLock::new(HashMap::new())),
             route_cache_redis: None,
             background_offers: None,
-            engagement_scores: Arc::new(parking_lot::RwLock::new(HashMap::new())),
+            vote_scores: Arc::new(parking_lot::RwLock::new(HashMap::new())),
+            reputation_scores: Arc::new(parking_lot::RwLock::new(HashMap::new())),
             sources: sources.into(),
             payment_method_aliases: Arc::new(HashMap::new()),
             market_sources: Vec::new().into(),
@@ -593,11 +604,14 @@ impl P2pSearchService {
         }
     }
 
-    pub fn set_engagement_scores(
-        &mut self,
-        scores: Arc<parking_lot::RwLock<HashMap<String, f64>>>,
-    ) {
-        self.engagement_scores = scores;
+    pub(crate) fn rank_enriched_routes(&self, response: &mut crate::p2p::P2pRouteSearchResponse) {
+        crate::p2p::routes::sort_routes_with_feedback(
+            &mut response.routes,
+            &self.vote_scores.read(),
+        );
+        for (index, route) in response.routes.iter_mut().enumerate() {
+            route.rank = index + 1;
+        }
     }
 
     #[cfg(test)]
@@ -1000,10 +1014,19 @@ impl P2pSearchService {
             .cloned()
             .collect::<Vec<_>>();
 
-        // Prefer faster providers first. Providers without a measurement sort last
-        // (f64::MAX) and `sort_by` is stable, so their relative order is preserved.
+        // Background provider work follows the cached global reputation first,
+        // then measured latency. Neither value changes the offer itself.
         let mut ordered_sources = selected_sources;
+        let reputations = self.reputation_scores.read().clone();
         ordered_sources.sort_by(|a, b| {
+            let reputation_order = reputations
+                .get(b.name())
+                .copied()
+                .unwrap_or(50)
+                .cmp(&reputations.get(a.name()).copied().unwrap_or(50));
+            if reputation_order != Ordering::Equal {
+                return reputation_order;
+            }
             let avg_a = self
                 .latency_tracker
                 .avg_latency_ms(a.name())
@@ -1016,12 +1039,15 @@ impl P2pSearchService {
             avg_a.partial_cmp(&avg_b).unwrap_or(Ordering::Equal)
         });
 
+        let poll_semaphore = Arc::new(Semaphore::new(8));
         let mut searches = ordered_sources
             .into_iter()
             .map(|source| {
                 let query = query.clone();
                 let aliases = self.payment_method_aliases.get(source.name()).cloned();
+                let poll_semaphore = poll_semaphore.clone();
                 async move {
+                    let _permit = poll_semaphore.acquire_owned().await.ok();
                     let started = Instant::now();
                     let timeout = source.timeout(self.timeout);
                     let result = tokio::time::timeout(timeout, source.search(&query)).await;

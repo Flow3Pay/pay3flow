@@ -232,14 +232,14 @@ flowchart TD
     D -->|crypto -> fiat| G[Один sell leg]
     D -->|crypto -> crypto| H[Route providers и spot tickers]
 
-    E --> I[Fmatch p2p и direct_exchange параллельно]
+    E --> I[Чтение готовых p2p и direct_exchange snapshots]
     I --> J[Фильтры, outlier rejection, amount и network checks]
     J --> K[Diversity seeds]
     K --> L[Lazy best-first top-K]
 
-    C --> M[Workflow virtualization из capability/quote snapshot]
+    C --> M[Workflow virtualization из фонового capability/quote snapshot]
     M --> N[Cache hit: свежая quote]
-    M --> O[Cache miss: capability estimate + background refresh]
+    M --> O[Cache miss: capability estimate]
 
     L --> P[Deduplicate и merge]
     F --> P
@@ -251,6 +251,10 @@ flowchart TD
     P --> Q[Rank и provider-diverse truncate]
     Q --> R[Reputation/feedback enrichment]
     R --> S[HTTP response или WebSocket snapshot]
+
+    T[Фоновый опрос Fmatch и providers] --> U[Redis offer snapshots]
+    U --> I
+    V[Фоновый опрос котировок и spot] --> M
 ```
 
 ## 1. Вход в API
@@ -475,8 +479,24 @@ path, output, fees, quote id и expiry. Фоновый опрос дополни
 diversity: `max(ceil(limit / 2), provider_count)`. Этот поиск всегда помечает
 общую выдачу как не exhaustive.
 
-Direct fiat providers используют тот же принцип: 30-секундный cache и
-дедуплицированный background refresh на miss.
+Direct fiat providers опрашиваются отдельно каждые пять минут. Для суммы
+запроса готовая ориентировочная котировка масштабируется локально; miss не
+запускает сетевой запрос в пользовательском обработчике.
+
+## Репутация и порядок маршрутов
+
+Глобальная репутация провайдера начинается с 50 баллов и ограничена диапазоном
+0–100: лайк добавляет 10, дизлайк вычитает 15, открытие инструкции и переход
+по ссылке добавляют по 5, полный день без взаимодействий вычитает 15. Счётчик
+кликов живёт в Redis с проверкой повторов и откатом спам-сессии до первого
+действия, затем агрегируется в PostgreSQL без браузерного идентификатора.
+Фоновый пересчёт кладёт баллы в общий Redis snapshot; поиск читает их из
+памяти, чтобы сначала опрашивать провайдеров с более высокой репутацией.
+
+Сам балл репутации не меняет порядок готовых маршрутов. Для близких по курсу
+вариантов используется только confidence-adjusted соотношение лайков и
+дизлайков; его максимальная поправка к оценке курса равна 2%. При отсутствии
+голосов сохраняется исходный порядок по курсу.
 
 ## 9. Остальные направления
 

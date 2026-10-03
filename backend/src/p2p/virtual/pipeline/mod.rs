@@ -59,7 +59,7 @@ impl P2pSearchService {
             &provider_assets,
         )?;
         let route_cache_key = cache::route_cache_key(&query);
-        let engagement_scores = self.engagement_scores.read().clone();
+        let engagement_scores = self.vote_scores.read().clone();
         if let Some(key) = route_cache_key.as_deref() {
             if let Some(mut response) = cache::cached_routes(self, key, search_id).await {
                 crate::p2p::routes::sort_routes_with_scores(

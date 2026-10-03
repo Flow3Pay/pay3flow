@@ -50,6 +50,7 @@ pub struct InstructionOpenRequest {
 pub struct VoteRequest {
     anonymous_id: Uuid,
     vote: VoteChoice,
+    instruction_token: Option<String>,
 }
 
 /// Read-only live search over configured public P2P advertisement sources.
@@ -309,9 +310,12 @@ pub async fn set_route_vote(
     Path(route_id): Path<String>,
     Json(request): Json<VoteRequest>,
 ) -> Result<Json<crate::service_reputation::RouteFeedback>, AppError> {
+    let services = state
+        .reputation
+        .route_services_for_vote(&route_id, request.instruction_token.as_deref());
     let feedback = state
         .reputation
-        .set_route_vote(&route_id, request.anonymous_id, request.vote)
+        .set_route_vote(&route_id, request.anonymous_id, request.vote, &services)
         .await
         .map_err(map_reputation_error)?;
     tracing::info!(route_id = %route_id, vote = ?feedback.viewer_vote, "route.vote.updated");
@@ -390,6 +394,7 @@ async fn enrich_routes_cached(
         route.feedback = cache.feedback.get(&route.route_id).cloned();
         route.service_links = route_links(state, response.search_id, route, &cache.stats)?;
     }
+    state.p2p.rank_enriched_routes(response);
     Ok(())
 }
 

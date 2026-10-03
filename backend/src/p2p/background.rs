@@ -1,6 +1,7 @@
 //! Public offer snapshots refreshed independently of route requests.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -84,11 +85,13 @@ impl OfferKey {
 pub(crate) struct BackgroundOfferStore {
     snapshots: RwLock<HashMap<OfferKey, P2pSearchResponse>>,
     planned: HashSet<OfferKey>,
-    active: Mutex<HashSet<OfferKey>>,
+    active: Mutex<HashMap<OfferKey, u64>>,
+    next_generation: AtomicU64,
     requests: Mutex<HashMap<OfferKey, u32>>,
     last_demand: Mutex<HashMap<OfferKey, Instant>>,
     notify: Notify,
-    semaphore: Semaphore,
+    planned_semaphore: Semaphore,
+    dynamic_semaphore: Semaphore,
     redis: Option<RedisPool>,
 }
 
@@ -97,11 +100,13 @@ impl BackgroundOfferStore {
         Self {
             snapshots: RwLock::new(HashMap::new()),
             planned,
-            active: Mutex::new(HashSet::new()),
+            active: Mutex::new(HashMap::new()),
+            next_generation: AtomicU64::new(1),
             requests: Mutex::new(HashMap::new()),
             last_demand: Mutex::new(HashMap::new()),
             notify: Notify::new(),
-            semaphore: Semaphore::new(MAX_BACKGROUND_POLLS),
+            planned_semaphore: Semaphore::new(MAX_BACKGROUND_POLLS - 2),
+            dynamic_semaphore: Semaphore::new(2),
             redis,
         }
     }
@@ -265,7 +270,10 @@ impl P2pSearchService {
             let cache = self.provider_quote_snapshots.clone();
             let semaphore = self.quote_semaphore.clone();
             tokio::spawn(async move {
+                let mut interval = tokio::time::interval(Duration::from_secs(5 * 60));
+                interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
                 loop {
+                    interval.tick().await;
                     let assets = match tokio::time::timeout(
                         Duration::from_secs(30),
                         provider.supported_assets(),
@@ -333,7 +341,6 @@ impl P2pSearchService {
                             }
                         })
                         .await;
-                    tokio::time::sleep(Duration::from_secs(5 * 60)).await;
                 }
             });
         }
@@ -344,6 +351,8 @@ impl P2pSearchService {
             let cache = self.market_tickers_cache.clone();
             let redis = self.route_cache_redis.clone();
             tokio::spawn(async move {
+                let mut interval = tokio::time::interval(Duration::from_secs(5 * 60));
+                interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
                 let name = source.name().to_string();
                 let key = format!("p2p:spot:v1:{name}");
                 if let Some(redis) = &redis {
@@ -359,6 +368,7 @@ impl P2pSearchService {
                     }
                 }
                 loop {
+                    interval.tick().await;
                     if let Ok(Ok(tickers)) =
                         tokio::time::timeout(Duration::from_secs(30), source.tickers()).await
                     {
@@ -373,7 +383,6 @@ impl P2pSearchService {
                             .await;
                         }
                     }
-                    tokio::time::sleep(Duration::from_secs(5 * 60)).await;
                 }
             });
         }
@@ -391,10 +400,13 @@ impl P2pSearchService {
                     let source = source.clone();
                     let target = target.clone();
                     tokio::spawn(async move {
+                        let mut interval = tokio::time::interval(Duration::from_secs(5 * 60));
+                        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
                         let baseline_amount = 100_000.0;
                         let key =
                             fiat_quote_key(provider.name(), &source, &target, baseline_amount);
                         loop {
+                            interval.tick().await;
                             let _ = service
                                 .fetch_fiat_quote(
                                     key.clone(),
@@ -404,7 +416,6 @@ impl P2pSearchService {
                                     baseline_amount,
                                 )
                                 .await;
-                            tokio::time::sleep(Duration::from_secs(5 * 60)).await;
                         }
                     });
                 }
@@ -416,24 +427,50 @@ impl P2pSearchService {
         let Some(store) = self.background_offers.as_ref() else {
             return;
         };
-        {
+        let generation = {
             let mut active = store.active.lock();
-            if active.contains(&key) {
+            if active.contains_key(&key) {
                 return;
             }
             if !store.planned.contains(&key)
-                && active.iter().filter(|key| !store.planned.contains(*key)).count()
+                && active
+                    .keys()
+                    .filter(|key| !store.planned.contains(*key))
+                    .count()
                     >= MAX_DYNAMIC_TARGETS
             {
-                return;
+                let oldest = {
+                    let demand = store.last_demand.lock();
+                    active
+                        .keys()
+                        .filter(|key| !store.planned.contains(*key))
+                        .min_by_key(|key| demand.get(*key).copied())
+                        .cloned()
+                };
+                if let Some(oldest) = oldest {
+                    active.remove(&oldest);
+                    store.snapshots.write().remove(&oldest);
+                    store.last_demand.lock().remove(&oldest);
+                    store.requests.lock().remove(&oldest);
+                }
             }
-            active.insert(key.clone());
-        }
+            let generation = store.next_generation.fetch_add(1, Ordering::Relaxed);
+            active.insert(key.clone(), generation);
+            generation
+        };
         let store = store.clone();
         let service = self.clone();
         tokio::spawn(async move {
             loop {
-                let Ok(permit) = store.semaphore.acquire().await else {
+                if store.active.lock().get(&key) != Some(&generation) {
+                    break;
+                }
+                let semaphore = if store.planned.contains(&key) {
+                    &store.planned_semaphore
+                } else {
+                    &store.dynamic_semaphore
+                };
+                let Ok(permit) = semaphore.acquire().await else {
                     break;
                 };
                 let query = key.baseline_query();
@@ -455,9 +492,12 @@ impl P2pSearchService {
                 }
                 tokio::time::sleep(key.polling_interval(store.take_requests(&key))).await;
                 if store.dynamic_expired(&key) {
-                    store.active.lock().remove(&key);
-                    store.snapshots.write().remove(&key);
-                    store.last_demand.lock().remove(&key);
+                    let mut active = store.active.lock();
+                    if active.get(&key) == Some(&generation) {
+                        active.remove(&key);
+                        store.snapshots.write().remove(&key);
+                        store.last_demand.lock().remove(&key);
+                    }
                     break;
                 }
             }
@@ -558,6 +598,23 @@ mod tests {
 
     struct CountSource(Arc<AtomicUsize>);
 
+    struct OrderedSource {
+        name: &'static str,
+        calls: Arc<Mutex<Vec<&'static str>>>,
+    }
+
+    #[async_trait]
+    impl P2pSource for OrderedSource {
+        fn name(&self) -> &str {
+            self.name
+        }
+
+        async fn search(&self, _query: &P2pSearchQuery) -> Result<Vec<P2pOffer>> {
+            self.calls.lock().push(self.name);
+            Ok(Vec::new())
+        }
+    }
+
     #[async_trait]
     impl P2pSource for CountSource {
         fn name(&self) -> &str {
@@ -613,6 +670,40 @@ mod tests {
             .unwrap();
         assert_eq!(calls.load(Ordering::Relaxed), before);
         assert_eq!(before, 1);
+    }
+
+    #[tokio::test]
+    async fn cached_reputation_prioritizes_background_provider_calls() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let service = P2pSearchService::with_sources(
+            vec![
+                Arc::new(OrderedSource {
+                    name: "low",
+                    calls: calls.clone(),
+                }),
+                Arc::new(OrderedSource {
+                    name: "high",
+                    calls: calls.clone(),
+                }),
+            ],
+            Duration::from_secs(1),
+        );
+        service
+            .reputation_scores
+            .write()
+            .extend([("low".into(), 20), ("high".into(), 90)]);
+        let query = OfferKey {
+            fiat: "AMD".into(),
+            asset: "USDT".into(),
+            side: P2pSide::BuyCrypto,
+            market: P2pOfferMarket::P2p,
+        }
+        .baseline_query();
+        service
+            .run_search_once(query, None, Some(P2pOfferMarket::P2p))
+            .await
+            .unwrap();
+        assert_eq!(*calls.lock(), vec!["high", "low"]);
     }
 
     #[test]

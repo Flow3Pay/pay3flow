@@ -387,6 +387,7 @@
           executions_average: Math.round(services.reduce((sum, item) => sum + item.executions_total, 0) / count),
           likes_average: Math.round(services.reduce((sum, item) => sum + item.likes_total, 0) / count),
           dislikes_average: Math.round(services.reduce((sum, item) => sum + item.dislikes_total, 0) / count),
+          score_average: Math.round(services.reduce((sum, item) => sum + item.reputation_score, 0) / count),
         },
       };
     });
@@ -597,7 +598,7 @@
 
   async function voteForRoute(route: RouteCandidate, vote: ServiceVote) {
     try {
-      replaceRouteFeedback(route.route_id, await setRouteVote(route.route_id, anonymousId, vote));
+      replaceRouteFeedback(route.route_id, await setRouteVote(route.route_id, anonymousId, vote, route.instruction_token));
     } catch (cause) {
       error = cause instanceof Error ? cause.message : "Could not save your route feedback";
     }

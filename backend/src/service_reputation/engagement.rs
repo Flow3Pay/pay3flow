@@ -364,7 +364,7 @@ fn reputation_score(
     .clamp(0, 100) as u8
 }
 
-fn vote_priority(likes: i64, dislikes: i64) -> f64 {
+pub(crate) fn vote_priority(likes: i64, dislikes: i64) -> f64 {
     let total = likes.max(0).saturating_add(dislikes.max(0)) as f64;
     if total == 0.0 {
         return 0.0;

@@ -114,8 +114,11 @@ CREATE TABLE IF NOT EXISTS route_votes (
     vote TEXT NOT NULL CHECK (vote IN ('like', 'dislike')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    attributed_services TEXT[] NOT NULL DEFAULT '{}',
     PRIMARY KEY (anonymous_id, route_id)
 );
+
+ALTER TABLE route_votes ADD COLUMN IF NOT EXISTS attributed_services TEXT[] NOT NULL DEFAULT '{}';
 
 CREATE INDEX IF NOT EXISTS route_votes_route_idx
     ON route_votes (route_id);

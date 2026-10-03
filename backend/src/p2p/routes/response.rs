@@ -148,24 +148,50 @@ pub(in crate::p2p) fn sort_routes_with_scores(
         sort_routes(routes);
         return;
     }
-    let adjusted = |route: &P2pRoute| {
-        let providers = route_provider_names(route);
-        let average = if providers.is_empty() {
-            0.0
-        } else {
-            providers
-                .iter()
-                .map(|provider| {
-                    scores
-                        .get(&provider.to_ascii_lowercase())
-                        .copied()
-                        .unwrap_or(0.0)
-                })
-                .sum::<f64>()
-                / providers.len() as f64
-        };
-        route_target(route) * (1.0 + average.clamp(0.0, 1.0) * 0.02)
-    };
+    sort_routes_by_vote_score(routes, |route| provider_vote_score(route, scores));
+}
+
+pub(in crate::p2p) fn sort_routes_with_feedback(
+    routes: &mut [P2pRoute],
+    scores: &HashMap<String, f64>,
+) {
+    sort_routes_by_vote_score(routes, |route| {
+        route.feedback.as_ref().map_or_else(
+            || provider_vote_score(route, scores),
+            |feedback| {
+                if feedback.likes_total + feedback.dislikes_total > 0 {
+                    crate::service_reputation::vote_priority(
+                        feedback.likes_total,
+                        feedback.dislikes_total,
+                    )
+                } else {
+                    provider_vote_score(route, scores)
+                }
+            },
+        )
+    });
+}
+
+fn provider_vote_score(route: &P2pRoute, scores: &HashMap<String, f64>) -> f64 {
+    let providers = route_provider_names(route);
+    if providers.is_empty() {
+        return 0.0;
+    }
+    providers
+        .iter()
+        .map(|provider| {
+            scores
+                .get(&provider.to_ascii_lowercase())
+                .copied()
+                .unwrap_or(0.0)
+        })
+        .sum::<f64>()
+        / providers.len() as f64
+}
+
+fn sort_routes_by_vote_score(routes: &mut [P2pRoute], vote_score: impl Fn(&P2pRoute) -> f64) {
+    let adjusted =
+        |route: &P2pRoute| route_target(route) * (1.0 + vote_score(route).clamp(0.0, 1.0) * 0.02);
     routes.sort_by(|left, right| {
         adjusted(right)
             .partial_cmp(&adjusted(left))

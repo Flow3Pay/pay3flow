@@ -14,6 +14,7 @@ use crate::p2p::{
     PublicFiatRouteProvider, SourceStatus,
 };
 use crate::route_engine::{Amount, PublicRouteProvider, PublicRouteQuote};
+use crate::service_reputation::RouteFeedback;
 use async_trait::async_trait;
 
 struct ProgressiveSource;
@@ -1492,6 +1493,48 @@ fn provider_engagement_promotes_a_close_route_without_hiding_a_much_better_price
     let mut routes = vec![popular, empty];
     sort_routes_with_scores(&mut routes, &scores);
     assert_eq!(routes[0].route_id, "empty");
+}
+
+#[test]
+fn route_votes_use_the_like_dislike_ratio_only_for_close_prices() {
+    let normalized = query(true);
+    let mut discovered = Vec::new();
+    compose_fiat_routes(
+        &mut discovered,
+        &normalized,
+        "USDT",
+        &[offer("bybit", P2pSide::BuyCrypto, "400", "1000", "200000")],
+        &[offer("bybit", P2pSide::SellCrypto, "80", "1000", "100000")],
+    );
+    let base = discovered.pop().expect("test route should be composed");
+    let mut popular = base.clone();
+    popular.route_id = "popular".into();
+    popular.target_amount = "10000".into();
+    popular.feedback = Some(RouteFeedback {
+        likes_total: 100,
+        dislikes_total: 4,
+        viewer_vote: None,
+    });
+    let mut clean = base;
+    clean.route_id = "clean".into();
+    clean.target_amount = "9995".into();
+    clean.feedback = Some(RouteFeedback {
+        likes_total: 16,
+        dislikes_total: 0,
+        viewer_vote: None,
+    });
+    let mut routes = vec![clean.clone(), popular.clone()];
+    sort_routes_with_feedback(&mut routes, &HashMap::new());
+    assert_eq!(routes[0].route_id, "popular");
+    popular.feedback.as_mut().unwrap().dislikes_total = 68;
+    let mut routes = vec![popular, clean];
+    sort_routes_with_feedback(&mut routes, &HashMap::new());
+    assert_eq!(routes[0].route_id, "clean");
+    for route in &mut routes {
+        route.feedback = None;
+    }
+    sort_routes_with_feedback(&mut routes, &HashMap::new());
+    assert_eq!(routes[0].route_id, "popular");
 }
 
 #[test]

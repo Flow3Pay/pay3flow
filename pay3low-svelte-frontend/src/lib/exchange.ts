@@ -150,6 +150,7 @@ export interface ServiceStats {
   executions_total: number;
   likes_total: number;
   dislikes_total: number;
+  reputation_score: number;
   viewer_vote?: ServiceVote;
 }
 
@@ -192,6 +193,7 @@ export interface CombinedReputation {
   executions_average: number;
   likes_average: number;
   dislikes_average: number;
+  score_average: number;
 }
 
 export interface ServiceLink {
@@ -573,10 +575,11 @@ export function setRouteVote(
   routeId: string,
   anonymousId: string,
   vote: ServiceVote,
+  instructionToken?: string,
 ): Promise<RouteFeedback> {
   return request(`/api/routes/${encodeURIComponent(routeId)}/vote`, {
     method: "PUT",
-    body: JSON.stringify({ anonymous_id: anonymousId, vote }),
+    body: JSON.stringify({ anonymous_id: anonymousId, vote, instruction_token: instructionToken }),
   });
 }
 
