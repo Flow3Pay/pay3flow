@@ -63,8 +63,23 @@ pub struct BankFilters {
     #[serde(default)]
     pub q: Option<String>,
     /// Restrict results to payment methods declared in Providerfiles.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_optional_bool")]
     pub picker_visible: Option<bool>,
+}
+
+fn deserialize_optional_bool<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<String>::deserialize(deserializer)?;
+    match value.as_deref() {
+        None => Ok(None),
+        Some(value) if value.eq_ignore_ascii_case("true") || value == "1" => Ok(Some(true)),
+        Some(value) if value.eq_ignore_ascii_case("false") || value == "0" => Ok(Some(false)),
+        Some(_) => Err(serde::de::Error::custom(
+            "picker_visible must be true, false, 1, or 0",
+        )),
+    }
 }
 
 impl BankFilters {
