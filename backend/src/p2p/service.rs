@@ -316,6 +316,7 @@ pub struct P2pSearchService {
     pub(crate) quote_refreshes: Arc<Mutex<HashSet<String>>>,
     background_pipeline_semaphore: Arc<Semaphore>,
     background_last_started: Arc<Mutex<Option<Instant>>>,
+    background_provider_semaphore: Arc<Semaphore>,
     pub(crate) provider_capabilities_cache: Arc<RwLock<Option<ProviderCapabilitiesSnapshot>>>,
     pub(crate) service_latencies: ServiceLatencyTracker,
     fmatch: Option<FmatchP2pBackend>,
@@ -346,6 +347,7 @@ struct FmatchP2pBackend {
 // Keep all route combinations, but avoid opening an unbounded number of
 // external quote requests at the same time.
 const MAX_CONCURRENT_PROVIDER_QUOTES: usize = 16;
+const MAX_BACKGROUND_PROVIDER_REQUESTS: usize = 5;
 
 #[derive(Clone)]
 struct CachedSearch {
@@ -588,6 +590,9 @@ impl P2pSearchService {
             quote_refreshes: Arc::new(Mutex::new(HashSet::new())),
             background_pipeline_semaphore: Arc::new(Semaphore::new(MAX_BACKGROUND_SEARCHES)),
             background_last_started: Arc::new(Mutex::new(None)),
+            background_provider_semaphore: Arc::new(Semaphore::new(
+                MAX_BACKGROUND_PROVIDER_REQUESTS,
+            )),
             provider_capabilities_cache: Arc::new(RwLock::new(None)),
             service_latencies: ServiceLatencyTracker::default(),
             fmatch: None,
@@ -642,6 +647,9 @@ impl P2pSearchService {
             quote_refreshes: Arc::new(Mutex::new(HashSet::new())),
             background_pipeline_semaphore: Arc::new(Semaphore::new(MAX_BACKGROUND_SEARCHES)),
             background_last_started: Arc::new(Mutex::new(None)),
+            background_provider_semaphore: Arc::new(Semaphore::new(
+                MAX_BACKGROUND_PROVIDER_REQUESTS,
+            )),
             provider_capabilities_cache: Arc::new(RwLock::new(None)),
             service_latencies: ServiceLatencyTracker::default(),
             fmatch: None,
@@ -967,6 +975,17 @@ impl P2pSearchService {
         updates: Option<mpsc::Sender<P2pSearchResponse>>,
         market: Option<P2pOfferMarket>,
     ) -> Result<P2pSearchResponse> {
+        self.run_search_once_with_mode(query, updates, market, false)
+            .await
+    }
+
+    async fn run_search_once_with_mode(
+        &self,
+        query: P2pSearchQuery,
+        updates: Option<mpsc::Sender<P2pSearchResponse>>,
+        market: Option<P2pOfferMarket>,
+        background: bool,
+    ) -> Result<P2pSearchResponse> {
         if !self.enabled {
             bail!("P2P search is disabled");
         }
@@ -1000,12 +1019,34 @@ impl P2pSearchService {
             })
             .cloned()
             .collect::<Vec<_>>();
+        let background_provider_semaphore = self.background_provider_semaphore.clone();
         let mut searches = selected_sources
             .into_iter()
             .map(|source| {
                 let query = query.clone();
                 let aliases = self.payment_method_aliases.get(source.name()).cloned();
+                let background_provider_semaphore = background_provider_semaphore.clone();
                 async move {
+                    let _background_permit = if background {
+                        match background_provider_semaphore.acquire_owned().await {
+                            Ok(permit) => Some(permit),
+                            Err(error) => {
+                                return (
+                                    Vec::new(),
+                                    SourceStatus {
+                                        source: source.name().to_string(),
+                                        ok: false,
+                                        cached: false,
+                                        latency_ms: 0,
+                                        offers_found: 0,
+                                        error: Some(error.to_string()),
+                                    },
+                                );
+                            }
+                        }
+                    } else {
+                        None
+                    };
                     let started = Instant::now();
                     let timeout = source.timeout(self.timeout);
                     let result = tokio::time::timeout(timeout, source.search(&query)).await;
@@ -1161,7 +1202,9 @@ impl P2pSearchService {
         if let Ok(mut snapshots) = self.provider_snapshots.write() {
             snapshots.remove(&snapshot_key);
         }
-        self.run_search_once(query, None, None).await.map(|_| ())
+        self.run_search_once_with_mode(query, None, None, true)
+            .await
+            .map(|_| ())
     }
 
     fn provider_snapshot(
