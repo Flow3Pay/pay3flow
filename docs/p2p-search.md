@@ -77,6 +77,15 @@ Before the durable idempotent PostgreSQL write, each interaction stores a
 hashed, private 24-hour event snapshot in Redis when Redis is available. A
 Redis timeout does not block the interaction; PostgreSQL remains the durable
 record.
+Anonymous activity is grouped into ten-minute windows. More than 100 unique
+events from one anonymous ID in a window marks that window as spam. Before an
+event is applied, the service stores that window's counter snapshot in Redis;
+the database also records the original vote for each service or route changed
+in that window. A marked window is rolled back under a transaction lock by
+removing only its instruction and provider-link events and restoring only its
+vote state. Other users' totals are adjusted by those event deltas, not reset.
+If Redis is unavailable, events still use the durable PostgreSQL path and the
+rate-based spam rollback is unavailable for that request.
 The daily maintenance task subtracts 15 points from services with no interaction
 for 24 hours, stopping at zero. Shared service counters are cached in Redis for
 30 seconds; the cache includes the score and counters, while viewer-specific

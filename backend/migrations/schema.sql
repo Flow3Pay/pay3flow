@@ -95,6 +95,7 @@ CREATE TABLE IF NOT EXISTS service_executions (
     anonymous_id UUID NOT NULL,
     status TEXT NOT NULL DEFAULT 'started'
         CHECK (status IN ('started', 'success', 'failed', 'cancelled')),
+    reputation_score_delta SMALLINT NOT NULL DEFAULT 5,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (anonymous_id, service_id, search_id, route_id)
@@ -104,15 +105,20 @@ CREATE INDEX IF NOT EXISTS service_executions_service_idx
     ON service_executions (service_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS service_executions_anonymous_idx
     ON service_executions (anonymous_id, service_id);
+ALTER TABLE service_executions
+    ADD COLUMN IF NOT EXISTS reputation_score_delta SMALLINT NOT NULL DEFAULT 5;
 
 CREATE TABLE IF NOT EXISTS service_instruction_opens (
     anonymous_id UUID NOT NULL,
     service_id UUID NOT NULL REFERENCES services(id) ON DELETE CASCADE,
     search_id UUID NOT NULL REFERENCES route_searches(id),
     route_id TEXT NOT NULL,
+    reputation_score_delta SMALLINT NOT NULL DEFAULT 5,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (anonymous_id, service_id, search_id, route_id)
 );
+ALTER TABLE service_instruction_opens
+    ADD COLUMN IF NOT EXISTS reputation_score_delta SMALLINT NOT NULL DEFAULT 5;
 
 -- Non-custodial provider executions. Wallet signatures and private keys are
 -- deliberately never persisted; `action` contains only public quote/tx data.
@@ -155,6 +161,34 @@ CREATE TABLE IF NOT EXISTS service_votes (
 
 CREATE INDEX IF NOT EXISTS service_votes_service_idx
     ON service_votes (service_id);
+
+-- Preserve the vote state that existed when an anonymous session began so a
+-- spam session can be reverted without resetting other users' totals.
+CREATE TABLE IF NOT EXISTS service_vote_session_baselines (
+    anonymous_id UUID NOT NULL,
+    session_started_at TIMESTAMPTZ NOT NULL,
+    service_id UUID NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+    previous_vote TEXT CHECK (previous_vote IN ('like', 'dislike')),
+    reputation_score_delta SMALLINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (anonymous_id, session_started_at, service_id)
+);
+ALTER TABLE service_vote_session_baselines
+    ADD COLUMN IF NOT EXISTS reputation_score_delta SMALLINT NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS route_vote_session_baselines (
+    anonymous_id UUID NOT NULL,
+    session_started_at TIMESTAMPTZ NOT NULL,
+    route_id TEXT NOT NULL,
+    previous_vote TEXT CHECK (previous_vote IN ('like', 'dislike')),
+    PRIMARY KEY (anonymous_id, session_started_at, route_id)
+);
+
+CREATE TABLE IF NOT EXISTS reputation_spam_sessions (
+    anonymous_id UUID NOT NULL,
+    session_started_at TIMESTAMPTZ NOT NULL,
+    processed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (anonymous_id, session_started_at)
+);
 
 -- Route feedback belongs to the concrete route shown to the viewer, not to
 -- the exchange service used by one of its legs.
