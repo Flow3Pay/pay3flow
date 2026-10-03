@@ -176,6 +176,10 @@ async fn main() -> anyhow::Result<()> {
         route_executions,
     );
 
+    // Provider refresh work is paced independently from interactive searches:
+    // at most five observations run at once, with at most 25 started per minute.
+    state.p2p.start_background_warmup();
+
     tracing::info!(
         actor = %cfg.ap_origin,
         "listening on http://{}",

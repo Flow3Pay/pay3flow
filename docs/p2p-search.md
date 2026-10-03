@@ -22,11 +22,22 @@ queries Fmatch for matching offers and uses the existing local composer to build
 complete routes. Other venues from the research list remain outside the live
 path until a legitimate read-only interface and adapter review exist.
 
-Provider refreshes still query the public adapters concurrently so their latest
-offers can be published. One provider response is published as bounded
-ActivityPub `OrderedCollection` batches of up to 64 offers, allowing Fmatch to
-refresh its read snapshot once per batch instead of once per advertisement.
-Public route legs are then resolved through Fmatch.
+At startup, a background poller begins walking the configured fiat currencies
+and supported assets immediately. It starts at most 25 directional pair
+observations per minute and keeps no more than five provider-search pipelines
+active. When all five slots are occupied, later catalog entries wait at the
+cursor instead of building an in-memory task queue. Fiat currencies declared
+by provider adapters are included alongside `route_source_fiats`; network
+assets are included alongside `p2p_search_assets`. The poller publishes offers
+as bounded ActivityPub `OrderedCollection` batches of up to 64, allowing Fmatch
+to refresh its read snapshot once per batch instead of once per advertisement.
+
+Provider-only searches keep generic five-minute snapshots in process memory.
+Interactive searches apply amount, payment-method, merchant, order-count, and
+completion-rate filters to those offers. More specific searches that need a
+larger provider page than the snapshot contains continue to query the providers.
+Public route legs are resolved through Fmatch when it is available; local
+provider results remain the fallback.
 Successful Fmatch answers are stored in PostgreSQL. If Fmatch is unavailable,
 the newest answer within `p2p_fmatch_stale_secs` is used and the response has
 `source: "database_cache"` and `stale: true`. A live Fmatch answer has
