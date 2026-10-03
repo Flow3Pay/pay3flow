@@ -22,6 +22,10 @@ impl P2pSearchService {
         amount: &Amount,
     ) -> Vec<PublicRouteQuote> {
         let key = format!("{provider}|{from}|{to}");
+        if let Ok(mut requests) = self.provider_quote_requests.lock() {
+            let count = requests.entry(key.clone()).or_default();
+            *count = count.saturating_add(1);
+        }
         let Ok(cache) = self.provider_quote_snapshots.read() else {
             return Vec::new();
         };

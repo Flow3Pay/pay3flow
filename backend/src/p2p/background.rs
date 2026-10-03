@@ -12,18 +12,63 @@ use tokio::sync::{Notify, Semaphore};
 
 use crate::config::Config;
 use crate::core::redis::{self, RedisPool};
+use crate::networks::NetworkCatalog;
 use crate::provider_adapter::P2pAdapterMarket;
 use crate::providers::ProviderAdapterRecord;
 
 use super::routes::fiat_quote_key;
 use super::service::{build_search_response, merge_market_responses};
 use super::{P2pOfferMarket, P2pSearchQuery, P2pSearchResponse, P2pSearchService, P2pSide};
-use crate::route_engine::Amount;
+use crate::route_engine::{Amount, Asset};
 
 const MAX_BACKGROUND_POLLS: usize = 8;
 const MAX_DYNAMIC_TARGETS: usize = 64;
 const REDIS_TIMEOUT: Duration = Duration::from_millis(150);
 const COLD_WAIT: Duration = Duration::from_secs(65);
+
+struct QuotePoll {
+    from: Asset,
+    to: Asset,
+    key: String,
+}
+
+fn quote_asset_priority(symbol: &str) -> u8 {
+    match symbol {
+        "USDT" => 0,
+        "USDC" => 1,
+        "BTC" => 2,
+        "ETH" => 3,
+        "BNB" => 4,
+        "ADA" => 5,
+        _ => 6,
+    }
+}
+
+fn quote_polls(provider: &str, mut assets: Vec<Asset>) -> Vec<QuotePoll> {
+    assets.sort_by_key(Asset::to_string);
+    assets.dedup();
+    let mut polls = assets
+        .iter()
+        .flat_map(|from| {
+            assets
+                .iter()
+                .filter(move |to| *to != from)
+                .map(move |to| QuotePoll {
+                    from: from.clone(),
+                    to: to.clone(),
+                    key: format!("{provider}|{from}|{to}"),
+                })
+        })
+        .collect::<Vec<_>>();
+    polls.sort_by_key(|poll| {
+        (
+            quote_asset_priority(&poll.from.symbol),
+            quote_asset_priority(&poll.to.symbol),
+            poll.key.clone(),
+        )
+    });
+    polls
+}
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub(crate) struct OfferKey {
@@ -111,8 +156,14 @@ impl BackgroundOfferStore {
         }
     }
 
-    pub(crate) fn targets(config: &Config, records: &[ProviderAdapterRecord]) -> Vec<OfferKey> {
+    pub(crate) fn targets(
+        config: &Config,
+        records: &[ProviderAdapterRecord],
+        networks: &NetworkCatalog,
+        catalog_fiats: &[String],
+    ) -> Vec<OfferKey> {
         let mut fiats = config.route_source_fiats.clone();
+        fiats.extend_from_slice(catalog_fiats);
         let mut market_assets: HashMap<P2pOfferMarket, Vec<String>> = HashMap::new();
         for record in records {
             if let Some(adapter) = record
@@ -148,11 +199,15 @@ impl BackgroundOfferStore {
         fiats.dedup();
         let mut keys = Vec::new();
         for market in [P2pOfferMarket::P2p, P2pOfferMarket::DirectExchange] {
-            let assets = market_assets.entry(market).or_default();
-            assets.extend(config.p2p_search_assets.iter().cloned());
-            if assets.is_empty() {
-                assets.push("USDT".into());
-            }
+            let mut assets = match market {
+                P2pOfferMarket::P2p => vec!["USDT".into()],
+                P2pOfferMarket::DirectExchange => {
+                    let mut assets = market_assets.remove(&market).unwrap_or_default();
+                    assets.extend(config.p2p_search_assets.iter().cloned());
+                    assets.extend(networks.assets());
+                    assets
+                }
+            };
             assets.sort_by_key(|asset| {
                 let priority = match asset.as_str() {
                     "USDT" => 0,
@@ -165,6 +220,11 @@ impl BackgroundOfferStore {
             assets.dedup();
             for asset in assets {
                 for fiat in &fiats {
+                    if market == P2pOfferMarket::P2p
+                        && !matches!(fiat.as_str(), "AMD" | "RUB" | "USD" | "EUR" | "BYN")
+                    {
+                        continue;
+                    }
                     for side in [P2pSide::BuyCrypto, P2pSide::SellCrypto] {
                         keys.push(OfferKey {
                             fiat: fiat.clone(),
@@ -192,18 +252,23 @@ impl BackgroundOfferStore {
                 P2pOfferMarket::P2p => 0,
                 P2pOfferMarket::DirectExchange => 1,
             };
-            (asset, fiat, market, key.side as u8)
+            (fiat, asset, market, key.side as u8)
         });
         keys
     }
 
-    fn record_request(&self, key: &OfferKey) {
+    fn record_request(&self, key: &OfferKey) -> u32 {
+        let recent = self
+            .last_demand
+            .lock()
+            .insert(key.clone(), Instant::now())
+            .is_some_and(|last| last.elapsed() <= Duration::from_secs(60));
         {
             let mut requests = self.requests.lock();
             let count = requests.entry(key.clone()).or_default();
-            *count = count.saturating_add(1);
+            *count = if recent { count.saturating_add(1) } else { 1 };
+            *count
         }
-        self.last_demand.lock().insert(key.clone(), Instant::now());
     }
 
     fn dynamic_expired(&self, key: &OfferKey) -> bool {
@@ -288,6 +353,7 @@ impl P2pSearchService {
     fn start_background_route_quotes(&self) {
         for provider in self.route_providers.iter().cloned() {
             let cache = self.provider_quote_snapshots.clone();
+            let requests = self.provider_quote_requests.clone();
             let semaphore = self.quote_semaphore.clone();
             tokio::spawn(async move {
                 let mut interval = tokio::time::interval(Duration::from_secs(5 * 60));
@@ -303,64 +369,74 @@ impl P2pSearchService {
                         Ok(assets) => assets,
                         Err(_) => Vec::new(),
                     };
-                    let mut assets = assets;
-                    assets.sort_by_key(|asset| {
-                        let priority = match asset.symbol.as_str() {
-                            "USDT" => 0,
-                            "USDC" => 1,
-                            "BTC" => 2,
-                            "ETH" => 3,
-                            _ => 4,
-                        };
-                        (priority, asset.to_string())
-                    });
-                    assets.dedup();
-                    assets.truncate(12);
-                    let jobs = assets
-                        .iter()
-                        .flat_map(|from| {
-                            assets
-                                .iter()
-                                .filter(move |to| *to != from)
-                                .map(move |to| (from.clone(), to.clone()))
-                        })
-                        .collect::<Vec<_>>();
-                    stream::iter(jobs)
-                        .for_each_concurrent(8, |(from, to)| {
-                            let provider = provider.clone();
-                            let cache = cache.clone();
-                            let semaphore = semaphore.clone();
-                            async move {
-                                let amount_value = match from.symbol.as_str() {
-                                    "USDT" | "USDC" | "DAI" | "FDUSD" => 100.0,
-                                    "BTC" => 0.002,
-                                    "ETH" => 0.05,
-                                    _ => 1.0,
-                                };
-                                let Ok(amount) = Amount::from_f64(amount_value, from.clone())
-                                else {
-                                    return;
-                                };
-                                let Ok(permit) = semaphore.acquire().await else {
-                                    return;
-                                };
-                                let result = tokio::time::timeout(
-                                    Duration::from_secs(12),
-                                    provider.quotes(from.clone(), to.clone(), amount),
-                                )
-                                .await;
-                                drop(permit);
-                                if let Ok(Ok(quotes)) = result {
-                                    if !quotes.is_empty() {
-                                        let key = format!("{}|{}|{}", provider.name(), from, to);
-                                        if let Ok(mut cache) = cache.write() {
-                                            cache.insert(key, (std::time::Instant::now(), quotes));
+                    let mut jobs = quote_polls(provider.name(), assets);
+                    let mut last_demand = HashMap::new();
+                    while !jobs.is_empty() {
+                        let demand = requests
+                            .lock()
+                            .map(|requests| requests.clone())
+                            .unwrap_or_default();
+                        if demand != last_demand {
+                            jobs.sort_by(|left, right| {
+                                let left_count = demand.get(&left.key).copied().unwrap_or_default();
+                                let right_count =
+                                    demand.get(&right.key).copied().unwrap_or_default();
+                                right_count.cmp(&left_count).then_with(|| {
+                                    (
+                                        quote_asset_priority(&left.from.symbol),
+                                        quote_asset_priority(&left.to.symbol),
+                                        &left.key,
+                                    )
+                                        .cmp(&(
+                                            quote_asset_priority(&right.from.symbol),
+                                            quote_asset_priority(&right.to.symbol),
+                                            &right.key,
+                                        ))
+                                })
+                            });
+                            last_demand = demand;
+                        }
+                        let batch = jobs.drain(..jobs.len().min(8)).collect::<Vec<_>>();
+                        stream::iter(batch)
+                            .for_each_concurrent(8, |job| {
+                                let provider = provider.clone();
+                                let cache = cache.clone();
+                                let semaphore = semaphore.clone();
+                                async move {
+                                    let amount_value = match job.from.symbol.as_str() {
+                                        "USDT" | "USDC" | "DAI" | "FDUSD" => 100.0,
+                                        "BTC" => 0.002,
+                                        "ETH" => 0.05,
+                                        _ => 1.0,
+                                    };
+                                    let Ok(amount) =
+                                        Amount::from_f64(amount_value, job.from.clone())
+                                    else {
+                                        return;
+                                    };
+                                    let Ok(permit) = semaphore.acquire().await else {
+                                        return;
+                                    };
+                                    let result = tokio::time::timeout(
+                                        Duration::from_secs(12),
+                                        provider.quotes(job.from.clone(), job.to.clone(), amount),
+                                    )
+                                    .await;
+                                    drop(permit);
+                                    if let Ok(Ok(quotes)) = result {
+                                        if !quotes.is_empty() {
+                                            if let Ok(mut cache) = cache.write() {
+                                                cache.insert(
+                                                    job.key,
+                                                    (std::time::Instant::now(), quotes),
+                                                );
+                                            }
                                         }
                                     }
                                 }
-                            }
-                        })
-                        .await;
+                            })
+                            .await;
+                    }
                 }
             });
         }
@@ -562,41 +638,7 @@ impl P2pSearchService {
                 }
             };
             if let Some(snapshot) = snapshot {
-                let age = Utc::now()
-                    .signed_duration_since(snapshot.searched_at)
-                    .to_std()
-                    .unwrap_or_default();
-                let requested_sources = query.sources.as_deref();
-                let offers = snapshot
-                    .offers
-                    .iter()
-                    .filter(|offer| {
-                        requested_sources
-                            .is_none_or(|names| names.split(',').any(|name| name == offer.source))
-                    })
-                    .cloned()
-                    .collect::<Vec<_>>();
-                let statuses = snapshot
-                    .sources
-                    .into_iter()
-                    .filter(|status| {
-                        requested_sources
-                            .is_none_or(|names| names.split(',').any(|name| name == status.source))
-                    })
-                    .map(|mut status| {
-                        status.cached = true;
-                        status
-                    })
-                    .collect();
-                snapshots.push(build_search_response(
-                    query.clone(),
-                    &offers,
-                    statuses,
-                    true,
-                    &snapshot.source,
-                    snapshot.stale || age > key.polling_interval(0) * 2,
-                    snapshot.observed_at,
-                ));
+                snapshots.push(shape_snapshot(query.clone(), &key, snapshot));
             }
         }
         Ok(match snapshots.len() {
@@ -613,6 +655,62 @@ impl P2pSearchService {
             _ => merge_market_responses(query, snapshots.remove(0), snapshots.remove(0)),
         })
     }
+
+    pub(crate) async fn cached_p2p_offers(
+        &self,
+        query: &P2pSearchQuery,
+    ) -> Option<P2pSearchResponse> {
+        let query = query.clone().normalize().ok()?;
+        let store = self.background_offers.as_ref()?;
+        let key = OfferKey::from_query(&query, P2pOfferMarket::P2p);
+        let requests = store.record_request(&key);
+        if requests >= 3 {
+            self.register_background_target(key.clone());
+        }
+        store
+            .load(&key)
+            .await
+            .map(|snapshot| shape_snapshot(query, &key, snapshot))
+    }
+}
+
+fn shape_snapshot(
+    query: P2pSearchQuery,
+    key: &OfferKey,
+    snapshot: P2pSearchResponse,
+) -> P2pSearchResponse {
+    let age = Utc::now()
+        .signed_duration_since(snapshot.searched_at)
+        .to_std()
+        .unwrap_or_default();
+    let requested_sources = query.sources.as_deref();
+    let offers = snapshot
+        .offers
+        .into_iter()
+        .filter(|offer| {
+            requested_sources.is_none_or(|names| names.split(',').any(|name| name == offer.source))
+        })
+        .collect::<Vec<_>>();
+    let statuses = snapshot
+        .sources
+        .into_iter()
+        .filter(|status| {
+            requested_sources.is_none_or(|names| names.split(',').any(|name| name == status.source))
+        })
+        .map(|mut status| {
+            status.cached = true;
+            status
+        })
+        .collect();
+    build_search_response(
+        query,
+        &offers,
+        statuses,
+        true,
+        &snapshot.source,
+        snapshot.stale || age > key.polling_interval(0) * 2,
+        snapshot.observed_at,
+    )
 }
 
 #[cfg(test)]
@@ -664,6 +762,10 @@ mod tests {
             "slow"
         }
 
+        fn market(&self) -> P2pOfferMarket {
+            P2pOfferMarket::DirectExchange
+        }
+
         async fn search(&self, _query: &P2pSearchQuery) -> Result<Vec<P2pOffer>> {
             self.0.fetch_add(1, Ordering::Relaxed);
             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -672,7 +774,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_cold_search_waits_for_its_background_snapshot() {
+    async fn a_cold_exchanger_search_waits_for_its_background_snapshot() {
         let calls = Arc::new(AtomicUsize::new(0));
         let mut service = P2pSearchService::with_sources(
             vec![Arc::new(SlowSource(calls.clone()))],
@@ -682,16 +784,41 @@ mod tests {
             fiat: "AMD".into(),
             asset: "USDT".into(),
             side: P2pSide::BuyCrypto,
-            market: P2pOfferMarket::P2p,
+            market: P2pOfferMarket::DirectExchange,
         };
         service.start_background_offer_refresh(vec![query.clone()], None);
         let response = tokio::time::timeout(
             Duration::from_secs(3),
-            service.search_market(query.baseline_query(), Some(P2pOfferMarket::P2p)),
+            service.search_market(query.baseline_query(), Some(P2pOfferMarket::DirectExchange)),
         )
         .await
         .expect("cold search must finish when its background poll does")
         .unwrap();
+        assert_eq!(response.source, "provider");
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
+    }
+
+    #[tokio::test]
+    async fn an_unpopular_p2p_pair_is_searched_on_demand() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut service = P2pSearchService::with_sources(
+            vec![Arc::new(CountSource(calls.clone()))],
+            Duration::from_secs(1),
+        );
+        service.start_background_offer_refresh(Vec::new(), None);
+        let response = service
+            .search_market(
+                OfferKey {
+                    fiat: "AMD".into(),
+                    asset: "BNB".into(),
+                    side: P2pSide::SellCrypto,
+                    market: P2pOfferMarket::P2p,
+                }
+                .baseline_query(),
+                Some(P2pOfferMarket::P2p),
+            )
+            .await
+            .unwrap();
         assert_eq!(response.source, "provider");
         assert_eq!(calls.load(Ordering::Relaxed), 1);
     }
@@ -794,5 +921,48 @@ mod tests {
             .polling_interval(10),
             Duration::from_secs(300)
         );
+    }
+
+    #[test]
+    fn quote_polling_keeps_uncommon_assets_after_the_first_twelve() {
+        let mut assets = (0..14)
+            .map(|index| Asset::new(format!("T{index}"), None::<&str>).unwrap())
+            .collect::<Vec<_>>();
+        assets.push(Asset::new("ADA", Some("cardano")).unwrap());
+        assets.push(Asset::new("BNB", Some("bnb-smart-chain")).unwrap());
+        assets.push(Asset::new("USDT", Some("tron")).unwrap());
+        let polls = quote_polls("bestchange", assets.clone());
+
+        assert_eq!(polls.len(), assets.len() * (assets.len() - 1));
+        assert!(polls.iter().any(|poll| {
+            poll.from == Asset::new("ADA", Some("cardano")).unwrap()
+                && poll.to == Asset::new("USDT", Some("tron")).unwrap()
+        }));
+        assert!(polls.iter().any(|poll| {
+            poll.from == Asset::new("BNB", Some("bnb-smart-chain")).unwrap()
+                && poll.to == Asset::new("USDT", Some("tron")).unwrap()
+        }));
+    }
+
+    #[test]
+    fn background_targets_cover_catalog_fiats_and_network_assets() {
+        let config = Config::load().unwrap();
+        let targets = BackgroundOfferStore::targets(
+            &config,
+            &[],
+            &NetworkCatalog::test_default(),
+            &["BYN".into()],
+        );
+        assert!(targets.iter().any(|key| {
+            key.fiat == "BYN"
+                && key.asset == "BTC"
+                && key.side == P2pSide::SellCrypto
+                && key.market == P2pOfferMarket::DirectExchange
+        }));
+        assert!(targets.iter().any(|key| {
+            key.fiat == "BYN"
+                && key.asset == "USDT"
+                && key.market == P2pOfferMarket::P2p
+        }));
     }
 }

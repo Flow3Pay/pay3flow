@@ -299,6 +299,7 @@ pub struct P2pSearchService {
     pub(crate) provider_quote_cache: Arc<RwLock<HashMap<String, CachedProviderQuote>>>,
     pub(in crate::p2p) provider_quote_snapshots:
         Arc<RwLock<HashMap<String, (Instant, Vec<PublicRouteQuote>)>>>,
+    pub(in crate::p2p) provider_quote_requests: Arc<Mutex<HashMap<String, u64>>>,
     pub(crate) fiat_quote_cache: Arc<RwLock<HashMap<String, CachedFiatQuote>>>,
     pub(crate) quote_refreshes: Arc<Mutex<HashSet<String>>>,
     pub(crate) provider_capabilities_cache: Arc<RwLock<Option<ProviderCapabilitiesSnapshot>>>,
@@ -425,7 +426,19 @@ impl P2pSearchService {
         reputation_scores: Option<Arc<parking_lot::RwLock<HashMap<String, u8>>>>,
     ) -> Result<Self> {
         let records = crate::providers::adapters(pool).await?;
-        let background_targets = BackgroundOfferStore::targets(config, &records);
+        let catalog_fiats = pool
+            .get()
+            .await?
+            .query(
+                "SELECT DISTINCT currency FROM banks WHERE status = 'enabled' AND picker_visible AND kind IN ('bank', 'cash', 'currency')",
+                &[],
+            )
+            .await?
+            .into_iter()
+            .map(|row| row.get::<_, String>(0))
+            .collect::<Vec<_>>();
+        let background_targets =
+            BackgroundOfferStore::targets(config, &records, &networks, &catalog_fiats);
         let mut service = Self::from_provider_records(
             config,
             networks,
@@ -540,6 +553,7 @@ impl P2pSearchService {
             quote_semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_PROVIDER_QUOTES)),
             provider_quote_cache: Arc::new(RwLock::new(HashMap::new())),
             provider_quote_snapshots: Arc::new(RwLock::new(HashMap::new())),
+            provider_quote_requests: Arc::new(Mutex::new(HashMap::new())),
             fiat_quote_cache: Arc::new(RwLock::new(HashMap::new())),
             quote_refreshes: Arc::new(Mutex::new(HashSet::new())),
             provider_capabilities_cache: Arc::new(RwLock::new(None)),
@@ -597,6 +611,7 @@ impl P2pSearchService {
             quote_semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_PROVIDER_QUOTES)),
             provider_quote_cache: Arc::new(RwLock::new(HashMap::new())),
             provider_quote_snapshots: Arc::new(RwLock::new(HashMap::new())),
+            provider_quote_requests: Arc::new(Mutex::new(HashMap::new())),
             fiat_quote_cache: Arc::new(RwLock::new(HashMap::new())),
             quote_refreshes: Arc::new(Mutex::new(HashSet::new())),
             provider_capabilities_cache: Arc::new(RwLock::new(None)),
@@ -679,7 +694,7 @@ impl P2pSearchService {
 
     pub async fn search(&self, query: P2pSearchQuery) -> Result<P2pSearchResponse> {
         if self.background_offers.is_some() {
-            return self.search_background_offers(query, None).await;
+            return self.search_market(query, None).await;
         }
         self.run_search(query, None, None).await
     }
@@ -690,7 +705,13 @@ impl P2pSearchService {
         market: Option<P2pOfferMarket>,
     ) -> Result<P2pSearchResponse> {
         if self.background_offers.is_some() {
-            return self.search_background_offers(query, market).await;
+            return match market {
+                Some(P2pOfferMarket::P2p) => self.search_p2p_on_demand(query, None).await,
+                Some(P2pOfferMarket::DirectExchange) => {
+                    self.search_background_offers(query, market).await
+                }
+                None => self.search_all_fmatch_markets(query, None).await,
+            };
         }
         if self.fmatch.is_some() {
             if market.is_none() {
@@ -708,9 +729,15 @@ impl P2pSearchService {
         market: Option<P2pOfferMarket>,
     ) -> Result<P2pSearchResponse> {
         if self.background_offers.is_some() {
-            let response = self.search_background_offers(query, market).await?;
-            let _ = updates.send(response.clone()).await;
-            return Ok(response);
+            return match market {
+                Some(P2pOfferMarket::P2p) => self.search_p2p_on_demand(query, Some(updates)).await,
+                Some(P2pOfferMarket::DirectExchange) => {
+                    let response = self.search_background_offers(query, market).await?;
+                    let _ = updates.send(response.clone()).await;
+                    Ok(response)
+                }
+                None => self.search_all_fmatch_markets(query, Some(&updates)).await,
+            };
         }
         if self.fmatch.is_some() {
             if market.is_none() {
@@ -723,6 +750,26 @@ impl P2pSearchService {
         self.run_search(query, Some(updates), market).await
     }
 
+    async fn search_p2p_on_demand(
+        &self,
+        query: P2pSearchQuery,
+        updates: Option<mpsc::Sender<P2pSearchResponse>>,
+    ) -> Result<P2pSearchResponse> {
+        if let Some(response) = self.cached_p2p_offers(&query).await {
+            if let Some(updates) = updates {
+                let _ = updates.send(response.clone()).await;
+            }
+            return Ok(response);
+        }
+        if self.fmatch.is_some() {
+            self.search_fmatch_market(query, Some(P2pOfferMarket::P2p), updates.as_ref())
+                .await
+        } else {
+            self.run_search(query, updates, Some(P2pOfferMarket::P2p))
+                .await
+        }
+    }
+
     async fn search_all_fmatch_markets(
         &self,
         query: P2pSearchQuery,
@@ -730,13 +777,23 @@ impl P2pSearchService {
     ) -> Result<P2pSearchResponse> {
         let (p2p_tx, mut p2p_updates) = mpsc::channel(16);
         let (direct_tx, mut direct_updates) = mpsc::channel(16);
-        let p2p_search =
-            self.search_fmatch_market(query.clone(), Some(P2pOfferMarket::P2p), Some(&p2p_tx));
-        let direct_search = self.search_fmatch_market(
-            query.clone(),
-            Some(P2pOfferMarket::DirectExchange),
-            Some(&direct_tx),
-        );
+        let p2p_search = self.search_p2p_on_demand(query.clone(), Some(p2p_tx));
+        let direct_search = async {
+            if self.background_offers.is_some() {
+                let response = self
+                    .search_background_offers(query.clone(), Some(P2pOfferMarket::DirectExchange))
+                    .await?;
+                let _ = direct_tx.send(response.clone()).await;
+                Ok(response)
+            } else {
+                self.search_fmatch_market(
+                    query.clone(),
+                    Some(P2pOfferMarket::DirectExchange),
+                    Some(&direct_tx),
+                )
+                .await
+            }
+        };
         tokio::pin!(p2p_search, direct_search);
         let mut p2p = None;
         let mut direct = None;
