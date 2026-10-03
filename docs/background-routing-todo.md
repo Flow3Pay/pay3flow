@@ -3,6 +3,16 @@
 This checklist tracks the Pay3Flow/Fmatch routing work in the isolated
 `pay3flow-fiat-progressive` worktree. Do not push until all items are complete.
 
+## Expanded market coverage
+
+- [ ] Enumerate every supported exchanger currency and asset direction from
+  the configured catalogs; refresh them continuously with bounded concurrency.
+- [ ] Keep quote coefficients for every supported public route provider pair in
+  the background, with popular and requested directions first.
+- [ ] Search P2P on demand, while refreshing popular P2P pairs in the background.
+- [ ] Verify ADA/BNB to AMD and other uncommon corridors retain valid offers.
+- [ ] Update docs, run checks, commit slices, then push the finished fix.
+
 - [x] Keep the shared route response cache in Redis for 15 seconds.
 - [x] Move P2P and direct exchanger offer discovery, including Fmatch calls, to
   startup and periodic background refreshes.
