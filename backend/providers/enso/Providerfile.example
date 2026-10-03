@@ -1,0 +1,26 @@
+# Catalog entry for Enso's onchain routing API.
+exchange_methods = ["exchanger"]
+
+[sell]
+source_url = "https://enso.finance/"
+name = "Enso Sell"
+currency = ["eth", "usdc", "usdt"]
+banks = []
+
+[buy]
+source_url = "https://enso.finance/"
+name = "Enso Buy"
+currency = ["eth", "usdc", "usdt"]
+banks = []
+
+[guidance]
+description = "Catalog entry for routes powered by Enso. Token and network availability depends on the selected integration."
+steps = [
+  "Check the application using Enso for supported tokens and networks.",
+  "Review the route, output amount, network fees, and slippage before signing.",
+  "Confirm transactions only in a wallet or application you trust.",
+]
+
+[[guidance.links]]
+label = "Enso"
+url = "https://enso.finance/"

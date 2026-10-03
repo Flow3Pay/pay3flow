@@ -1,6 +1,34 @@
 use super::*;
 
 #[test]
+fn hot_supported_pairs_are_remembered_for_background_refresh() {
+    let service = P2pSearchService::with_sources(Vec::new(), Duration::from_secs(2));
+    let query = P2pSearchQuery {
+        fiat: "AMD".into(),
+        asset: "USDT".into(),
+        side: P2pSide::BuyCrypto,
+        amount: Some(10_000.0),
+        payment_method: None,
+        merchant_only: None,
+        min_orders: None,
+        min_completion_rate: None,
+        limit: Some(20),
+        sources: None,
+    };
+    for _ in 0..4 {
+        service.record_query_interest(&query);
+    }
+
+    let popular = service
+        .next_popular_pair(&mut 0)
+        .expect("a supported requested pair should be scheduled");
+    assert_eq!(popular.fiat, "AMD");
+    assert_eq!(popular.asset, "USDT");
+    assert_eq!(popular.side, P2pSide::BuyCrypto);
+    assert_eq!(popular.amount, None);
+}
+
+#[test]
 fn source_names_accept_providerfile_slug_characters() {
     assert_eq!(
         normalize_sources(Some("Cifra-Broker,foo_bar".into()))

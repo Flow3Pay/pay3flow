@@ -22,11 +22,91 @@ queries Fmatch for matching offers and uses the existing local composer to build
 complete routes. Other venues from the research list remain outside the live
 path until a legitimate read-only interface and adapter review exist.
 
-Provider refreshes still query the public adapters concurrently so their latest
-offers can be published. One provider response is published as bounded
-ActivityPub `OrderedCollection` batches of up to 64 offers, allowing Fmatch to
-refresh its read snapshot once per batch instead of once per advertisement.
-Public route legs are then resolved through Fmatch.
+At startup, a background poller begins walking the configured fiat currencies
+and supported assets immediately. It starts at most 25 background pipelines
+per minute and keeps no more than five active across catalog polls and quote
+refreshes. Background provider fan-out also shares a semaphore capped at five
+active source requests, so one catalog query cannot multiply the network
+concurrency by the number of adapters. When all five pipeline slots are
+occupied, later catalog entries wait at the cursor instead of building an
+in-memory task queue. Background source requests use the cached provider
+reputation score as their acquisition order; ties use vote quality, vote volume,
+execution volume, then catalog order. The score and counters come from the shared
+Redis reputation snapshot, so background polling does not read reputation rows
+from PostgreSQL per provider. Fiat currencies declared
+by provider adapters are included alongside `route_source_fiats`; network
+assets are included alongside `p2p_search_assets`. The poller publishes offers
+as bounded ActivityPub `OrderedCollection` batches of up to 64, allowing Fmatch
+to refresh its read snapshot once per batch instead of once per advertisement.
+It also remembers up to 512 supported pairs from recent user searches in
+process memory. If a direct fiat quote provider supports configured currency
+pairs, six out of every seven scheduled starts refresh one pair at a reference
+amount and cache its normalized exchange coefficient for 35 minutes. The
+remaining start refreshes a hot P2P pair or advances the P2P catalog cursor.
+The same five-pipeline and 25-starts-per-minute limits cover both kinds of work.
+
+Provider-only searches keep generic offer snapshots in process memory for up to
+35 minutes, bounded to 1,024 pairs. The five-minute portion is considered fresh;
+older snapshots are marked stale. Interactive searches apply amount,
+payment-method, merchant, order-count, and completion-rate filters to those
+offers. More specific searches that need a larger provider page than the
+snapshot contains continue to query the providers. A fresh local snapshot is
+served before contacting Fmatch, and a stale snapshot can satisfy an Fmatch
+miss before another live provider fan-out. Each successful warmup and each
+snapshot hit is logged separately from an interactive route search. Public
+route legs are resolved through Fmatch when it is available; local provider
+results remain the fallback. Direct fiat route quotes reuse the cached pair
+coefficient at the requested amount, instead of keying the quote cache by that
+exact amount. Direct fiat and public route coefficients are also written to
+Redis for 35 minutes and loaded into process memory on demand. Background work
+refreshes coefficients and P2P offers; it does not compose final route results.
+Final routes are composed only for a user's search, which can combine fresh
+provider quotes with saved coefficients and a user-triggered P2P search.
+
+Completed route responses with at least one route are also cached in Redis for
+15 seconds. The key uses a normalized search query and excludes the anonymous
+viewer ID, so identical searches share the result. The cached route graph is
+enriched with the current viewer's votes and fresh service links after the
+cache read. Redis reads have a short timeout and cache writes run in the
+background.
+
+## Route reputation and feedback
+
+Route results expose service counters and anonymous route feedback. Votes are
+accepted at `PUT /api/services/{service_id}/vote` and
+`PUT /api/routes/{route_id}/vote`; each anonymous ID has one replaceable vote
+per service or route. Opening a route's instructions posts the signed service
+link tokens to `POST /api/route-instructions/open`. Opening a provider link
+continues to use `POST /api/service-executions/open`. Repeated instruction and
+link events from the same anonymous ID for the same search, route, and provider
+are counted once.
+
+Provider scores start at 50 and are clamped to 0–100. Likes add 10, dislikes
+subtract 15, and instruction or provider-link opens add 5. The API keeps raw
+vote and click counters separately from the score. Routes are first ordered by
+target amount; vote quality can reorder only routes within 1% of one another,
+and only when each route has at least 10 combined votes. The tie-break uses a
+Wilson lower bound so vote volume and the like/dislike balance both matter.
+Before the durable idempotent PostgreSQL write, each interaction stores a
+hashed, private 24-hour event snapshot in Redis when Redis is available. A
+Redis timeout does not block the interaction; PostgreSQL remains the durable
+record.
+Anonymous activity is grouped into ten-minute windows. More than 100 unique
+events from one anonymous ID in a window marks that window as spam. Before an
+event is applied, the service stores that window's counter snapshot in Redis;
+the database also records the original vote for each service or route changed
+in that window. A marked window is rolled back under a transaction lock by
+removing only its instruction and provider-link events and restoring only its
+vote state. Other users' totals are adjusted by those event deltas, not reset.
+If Redis is unavailable, events still use the durable PostgreSQL path and the
+rate-based spam rollback is unavailable for that request.
+The daily maintenance task subtracts 15 points from services with no interaction
+for 24 hours, stopping at zero. Shared service counters are cached in Redis for
+30 seconds; the cache includes the score and counters, while viewer-specific
+votes are loaded separately. Background polling reads
+that shared cache and checks reputation only to choose which provider to refresh
+first. It does not remove providers from user results or change their economic
+ranking.
 Successful Fmatch answers are stored in PostgreSQL. If Fmatch is unavailable,
 the newest answer within `p2p_fmatch_stale_secs` is used and the response has
 `source: "database_cache"` and `stale: true`. A live Fmatch answer has

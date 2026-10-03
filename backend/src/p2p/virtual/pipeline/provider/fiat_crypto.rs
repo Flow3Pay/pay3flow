@@ -98,14 +98,26 @@ impl P2pSearchService {
                             let query = query.clone();
                             let quote_semaphore = self.quote_semaphore.clone();
                             searches.push(async move {
-                                quote_provider(
-                                    provider,
-                                    intermediary,
-                                    target,
-                                    amount,
-                                    quote_semaphore,
-                                )
-                                .await
+                                let cached_quote = self.cached_provider_coefficient_quote(
+                                    provider.name(),
+                                    &intermediary,
+                                    &target,
+                                    &amount,
+                                ).await;
+                                let provider_name = provider.name().to_string();
+                                let result = if let Some(quote) = cached_quote {
+                                    Some((provider_name, quote))
+                                } else {
+                                    quote_provider(
+                                        provider,
+                                        intermediary,
+                                        target,
+                                        amount,
+                                        quote_semaphore,
+                                    )
+                                    .await
+                                };
+                                result
                                 .into_iter()
                                 .filter_map(|(provider, quote)| {
                                     let output = quote.output.value.parse::<f64>().ok()?;

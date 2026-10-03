@@ -18,5 +18,5 @@ pub use routes::{
     CryptoMarketPath, P2pRoute, P2pRouteSearchQuery, P2pRouteSearchResponse, RouteAssetStatus,
     RouteCostKind, RouteExecutionDescriptor, RouteFee, RouteProfitability,
 };
-pub(crate) use service::P2pSource;
+pub(crate) use service::{normalize_sources, P2pSource};
 pub use service::{P2pSearchService, PublicFiatRouteProvider};

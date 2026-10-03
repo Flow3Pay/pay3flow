@@ -1,6 +1,6 @@
 <script lang="ts">
   import { afterUpdate, onMount, onDestroy } from "svelte";
-  import { fetchCorridors, fetchP2pRoutes, fetchProviders, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderDefinition, type ProviderGuidance, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote, type VenueSearchStatus } from "$lib/exchange";
+  import { fetchCorridors, fetchP2pRoutes, fetchProviders, recordInstructionOpen, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderDefinition, type ProviderGuidance, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote, type VenueSearchStatus } from "$lib/exchange";
   import { FALLBACK_NETWORK, fetchNetworks, type CryptoNetwork } from "$lib/networks";
   import { assetIcon, networkIcon, swapIcon, venueIcon } from "$lib/icons";
   import { anyPaymentMethod, fetchPaymentMethods, isAnyPaymentMethod, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
@@ -579,6 +579,7 @@
   async function openInstructions(route: RouteCandidate) {
     instructionsRoute = route;
     routeInstructionsComponent ??= (await import("./RouteInstructions.svelte")).default;
+    void recordInstructionOpen(anonymousId, (route.service_links ?? []).map((link) => link.tracking_token)).catch(() => {});
   }
 
   function runPrimaryAction() {

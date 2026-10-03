@@ -456,22 +456,29 @@ Live quote хранится 30 секунд и дополнительно про
 - estimate использует тот же asset amount на выходе и явно не заявляет
   неизвестные provider fees;
 - route получает предупреждение, что live output нужно подтвердить;
-- до восьми refresh-задач на поиск запускаются в фоне.
+- quote refreshes share the global background scheduler with catalog polling:
+  at most five pipelines are active and no more than 25 start per minute;
+- a refresh starts only if a slot and rate allowance are available, so it does
+  not wait in an unbounded queue. The current request returns its capability
+  estimate while a refresh is unavailable or in progress.
 
-Background refresh:
-
-- дедуплицируется по provider/from/to/amount;
-- использует общий semaphore на 16 внешних quotes;
-- permit берётся через `try_acquire_owned`, поэтому задача не ждёт в очереди;
-- внешний вызов имеет 12-секундный timeout, но он находится вне critical path;
-- успешный ответ обновляет 30-секундный quote cache.
+Background refresh is deduplicated by provider/from/to/amount. Outbound quote
+calls have a 12-second timeout and successful answers update the 30-second
+quote cache. User-initiated live quotes continue to use their separate request
+path and do not wait for background capacity.
 
 Число workflow-маршрутов ограничено минимумом, достаточным для provider
 diversity: `max(ceil(limit / 2), provider_count)`. Этот поиск всегда помечает
 общую выдачу как не exhaustive.
 
-Direct fiat providers используют тот же принцип: 30-секундный cache и
-дедуплицированный background refresh на miss.
+Direct fiat providers reuse a normalized coefficient keyed by provider and
+currency pair, so changing the requested amount does not trigger another live
+quote. The startup poller refreshes supported configured fiat pairs at a
+reference amount. Coefficients are kept in process memory and Redis for 35
+minutes, then scaled to the amount in the route query. Public route provider
+coefficients use the same persistence lifetime. Final route composition remains
+on the user search path; background work refreshes pair data and P2P offers
+without building complete routes.
 
 ## 9. Остальные направления
 

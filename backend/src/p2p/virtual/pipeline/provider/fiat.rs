@@ -364,6 +364,17 @@ impl P2pSearchService {
             let key = provider_quote_key(&provider_name, &job.from, &job.to, &job.amount);
             if let Some(quote) = self.cached_provider_quote(&key) {
                 quote_results.push((provider_name, quote, job.entry_offer, job.exit_offers, true));
+            } else if let Some(quote) = self
+                .cached_provider_coefficient_quote(&provider_name, &job.from, &job.to, &job.amount)
+                .await
+            {
+                quote_results.push((
+                    provider_name,
+                    quote,
+                    job.entry_offer,
+                    job.exit_offers,
+                    false,
+                ));
             } else if !self.has_fmatch_backend() {
                 if let Some((provider_name, quote)) = quote_provider(
                     job.provider,

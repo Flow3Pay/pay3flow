@@ -5,6 +5,8 @@ use uuid::Uuid;
 use crate::db::DbPool;
 use crate::provider_adapter::{ProviderAdapters, WorkflowConfig};
 
+pub mod dex_aggregator;
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderExchangeMethod {

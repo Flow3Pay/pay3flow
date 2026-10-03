@@ -112,7 +112,7 @@ pub(super) async fn produce_direct_fiat_routes(
                 &query.target_currency,
                 query.source_amount,
             );
-            if let Some(quote) = service.cached_fiat_quote(&key) {
+            if let Some(quote) = service.cached_fiat_quote(&key, query.source_amount).await {
                 return (
                     Some(quote),
                     SourceStatus {

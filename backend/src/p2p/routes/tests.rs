@@ -824,6 +824,96 @@ async fn composes_fiat_provider_route_across_intermediary_networks() {
     assert!(route.route_fees[0].asset.starts_with("USDT@"));
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn discovers_cardano_to_amd_from_the_p2p_catalog() {
+    let service =
+        P2pSearchService::with_sources(vec![Arc::new(ProgressiveSource)], Duration::from_secs(1));
+    let response = service
+        .search_routes(P2pRouteSearchQuery {
+            source_fiat: "ADA".into(),
+            target_fiat: "AMD".into(),
+            source_amount: 100.0,
+            source_network: None,
+            target_network: None,
+            bridge_fiat: None,
+            assets: Some("USDT".into()),
+            intermediary_assets: None,
+            source_payment_method: None,
+            target_payment_method: None,
+            source_payment_fee_percent: None,
+            target_payment_fee_percent: None,
+            merchant_only: Some(false),
+            min_orders: None,
+            min_completion_rate: None,
+            allow_cross_venue: Some(false),
+            max_price_deviation_bps: Some(1_000),
+            limit: Some(20),
+            sources: None,
+            exchange_mode: ExchangeMode::All,
+        })
+        .await
+        .expect("ADA to AMD search should complete");
+
+    assert!(response.routes.iter().any(|route| {
+        route.source_fiat == "ADA"
+            && route.target_fiat == "AMD"
+            && route.asset == "ADA"
+            && route
+                .exit_offer
+                .as_ref()
+                .is_some_and(|offer| offer.asset == "ADA")
+    }));
+    let encoded = serde_json::to_value(&response).expect("route response should serialize");
+    let decoded: P2pRouteSearchResponse =
+        serde_json::from_value(encoded).expect("cached route response should deserialize");
+    assert_eq!(decoded.routes.len(), response.routes.len());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn discovers_bnd_to_amd_through_a_supported_intermediary() {
+    let service =
+        P2pSearchService::with_sources(vec![Arc::new(ProgressiveSource)], Duration::from_secs(1));
+    let response = service
+        .search_routes(P2pRouteSearchQuery {
+            source_fiat: "BND".into(),
+            target_fiat: "AMD".into(),
+            source_amount: 100_000.0,
+            source_network: None,
+            target_network: None,
+            bridge_fiat: None,
+            assets: Some("USDT".into()),
+            intermediary_assets: None,
+            source_payment_method: None,
+            target_payment_method: None,
+            source_payment_fee_percent: None,
+            target_payment_fee_percent: None,
+            merchant_only: Some(false),
+            min_orders: None,
+            min_completion_rate: None,
+            allow_cross_venue: Some(false),
+            max_price_deviation_bps: Some(1_000),
+            limit: Some(20),
+            sources: None,
+            exchange_mode: ExchangeMode::All,
+        })
+        .await
+        .expect("BND to AMD search should complete");
+
+    assert!(response.routes.iter().any(|route| {
+        route.source_fiat == "BND"
+            && route.target_fiat == "AMD"
+            && route.asset == "USDT"
+            && route
+                .entry_offer
+                .as_ref()
+                .is_some_and(|offer| offer.fiat == "BND")
+            && route
+                .exit_offer
+                .as_ref()
+                .is_some_and(|offer| offer.fiat == "AMD")
+    }));
+}
+
 #[tokio::test]
 async fn keeps_independent_quotes_from_multiple_route_providers() {
     let service = P2pSearchService::with_sources(Vec::new(), Duration::from_secs(1))

@@ -53,7 +53,7 @@ pub struct P2pRouteSearchQuery {
     pub exchange_mode: ExchangeMode,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct P2pRoute {
     pub route_id: String,
     pub rank: usize,
@@ -77,23 +77,23 @@ pub struct P2pRoute {
     pub requires_asset_transfer: bool,
     pub transfer_fee_included: bool,
     pub route_kind: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profitability: Option<RouteProfitability>,
     pub bridge_currency: Option<String>,
     pub market_path: Option<CryptoMarketPath>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub route_provider: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub route_provider_url: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_quote_id: Option<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub route_path: Vec<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub route_fees: Vec<RouteFee>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub quote_expires_at: Option<DateTime<Utc>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub execution: Option<RouteExecutionDescriptor>,
     /// True when both selected bank names were present in venue responses.
     /// False means at least one venue returned only opaque payment IDs.
@@ -101,17 +101,17 @@ pub struct P2pRoute {
     pub entry_offer: Option<P2pOffer>,
     pub exit_offer: Option<P2pOffer>,
     pub warnings: Vec<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub services: Vec<RouteServiceStats>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reputation: Option<CombinedReputation>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub feedback: Option<RouteFeedback>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub service_links: Vec<ServiceLink>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RouteExecutionDescriptor {
     pub provider: String,
     pub from_asset: String,
@@ -121,7 +121,7 @@ pub struct RouteExecutionDescriptor {
     pub token: String,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum RouteProfitability {
     Confirmed {
@@ -135,7 +135,7 @@ pub enum RouteProfitability {
     },
 }
 
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]
 pub enum RouteCostKind {
     SourcePaymentFee,
@@ -145,13 +145,13 @@ pub enum RouteCostKind {
     LiveQuote,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RouteFee {
     pub asset: String,
     pub amount: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CryptoMarketPath {
     pub venue: String,
     pub source_pair: String,
@@ -161,7 +161,7 @@ pub struct CryptoMarketPath {
     pub intermediary_amount: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RouteAssetStatus {
     pub asset: String,
     pub entry_offers: usize,
@@ -181,7 +181,7 @@ pub struct RouteAssetStatus {
     pub(in crate::p2p) exit_discovery_source: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct P2pRouteSearchResponse {
     pub search_id: Uuid,
     pub routes_found: usize,
@@ -196,7 +196,7 @@ pub struct P2pRouteSearchResponse {
     pub routes: Vec<P2pRoute>,
     pub asset_statuses: Vec<RouteAssetStatus>,
     /// Completion states for route providers that do not produce P2P offers.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub provider_statuses: Vec<SourceStatus>,
     /// Discovery source for the route snapshot: Fmatch, database cache, or
     /// the legacy provider path used by local-only callers.

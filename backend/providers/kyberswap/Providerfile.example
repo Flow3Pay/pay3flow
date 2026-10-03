@@ -1,0 +1,32 @@
+# Catalog entry for the KyberSwap DEX aggregator.
+exchange_methods = ["exchanger"]
+
+[code]
+language = "rust"
+source = '''
+pub use crate::providers::dex_aggregator::DexAggregatorRouteProvider as KyberSwapRouteProvider;
+'''
+
+[sell]
+source_url = "https://kyberswap.com/"
+name = "KyberSwap Sell"
+currency = ["eth", "usdc", "usdt"]
+banks = []
+
+[buy]
+source_url = "https://kyberswap.com/"
+name = "KyberSwap Buy"
+currency = ["eth", "usdc", "usdt"]
+banks = []
+
+[guidance]
+description = "Catalog entry for token swaps through KyberSwap. Token and network availability depends on the selected route."
+steps = [
+  "Open KyberSwap and select the source and destination tokens and networks.",
+  "Review the quoted output, network fees, and slippage in KyberSwap.",
+  "Connect your wallet and confirm the transaction only after checking the network and token addresses.",
+]
+
+[[guidance.links]]
+label = "Open KyberSwap"
+url = "https://kyberswap.com/"

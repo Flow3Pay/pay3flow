@@ -126,7 +126,8 @@ async fn main() -> anyhow::Result<()> {
         public_fiat_route_providers,
         ap.clone(),
     )
-    .await?;
+    .await?
+    .with_redis(redis_pool.clone());
     let route_engine = RouteEngine::new(RouteGraphConfig {
         max_depth: cfg.route_max_depth,
     })?;
@@ -146,8 +147,12 @@ async fn main() -> anyhow::Result<()> {
         route_engine.registry.clone(),
         Arc::new(LiveEdgeQuoteSource::new(p2p.clone(), near_intents.clone())),
     ));
-    let reputation =
-        pay3flow_backend::service_reputation::ServiceReputation::new(pool.clone(), &cfg.jwt_secret);
+    let reputation = pay3flow_backend::service_reputation::ServiceReputation::new(
+        pool.clone(),
+        redis_pool.clone(),
+        &cfg.jwt_secret,
+    );
+    reputation.start_daily_decay();
     let route_executions = RouteExecutionService::new(
         pool.clone(),
         &cfg.jwt_secret,
@@ -175,6 +180,10 @@ async fn main() -> anyhow::Result<()> {
         reputation,
         route_executions,
     );
+
+    // Provider refresh work is paced independently from interactive searches:
+    // at most five observations run at once, with at most 25 started per minute.
+    state.p2p.start_background_warmup();
 
     tracing::info!(
         actor = %cfg.ap_origin,

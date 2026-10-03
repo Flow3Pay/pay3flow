@@ -143,6 +143,7 @@ pub fn router(state: AppState) -> Router {
             post(route_executions::submit),
         )
         .route("/api/service-executions/open", post(p2p::open_execution))
+        .route("/api/route-instructions/open", post(p2p::open_instruction))
         .route("/api/services/:id/vote", put(p2p::set_vote))
         .route("/api/routes/:route_id/vote", put(p2p::set_route_vote))
         .route("/api/admin/banks", post(banks::admin_create))

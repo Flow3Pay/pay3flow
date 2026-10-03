@@ -1,0 +1,26 @@
+# Catalog entry for the Bebop trading platform.
+exchange_methods = ["exchanger"]
+
+[sell]
+source_url = "https://bebop.xyz/"
+name = "Bebop Sell"
+currency = ["eth", "usdc", "usdt"]
+banks = []
+
+[buy]
+source_url = "https://bebop.xyz/"
+name = "Bebop Buy"
+currency = ["eth", "usdc", "usdt"]
+banks = []
+
+[guidance]
+description = "Catalog entry for token swaps through Bebop. Token and network availability depends on the selected route."
+steps = [
+  "Open Bebop and select the source and destination tokens and networks.",
+  "Review the quoted output, fees, and execution details shown for the route.",
+  "Connect your wallet and confirm the transaction only after checking the network and token addresses.",
+]
+
+[[guidance.links]]
+label = "Open Bebop"
+url = "https://bebop.xyz/"

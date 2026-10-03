@@ -49,13 +49,23 @@ impl P2pSearchService {
                 let Ok(amount) = Amount::from_f64(query.source_amount, from.clone()) else {
                     continue;
                 };
-                searches.push(quote_provider_many(
-                    capability.provider.clone(),
-                    from,
-                    to,
-                    amount,
-                    self.quote_semaphore.clone(),
-                ));
+                let cached_quote = self
+                    .cached_provider_coefficient_quote(
+                        capability.provider.name(),
+                        &from,
+                        &to,
+                        &amount,
+                    )
+                    .await;
+                let provider = capability.provider.clone();
+                let quote_semaphore = self.quote_semaphore.clone();
+                searches.push(async move {
+                    if let Some(quote) = cached_quote {
+                        Some((provider.name().to_string(), vec![quote]))
+                    } else {
+                        quote_provider_many(provider, from, to, amount, quote_semaphore).await
+                    }
+                });
             }
         }
 
