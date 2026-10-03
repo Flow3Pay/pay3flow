@@ -65,7 +65,7 @@ payment_methods = [
   { id = "ua-raiffeisen", name = "Raiffeisen Bank", country = "UA", currency = "UAH", color = "#ffe500", initials = "R", icon_url = "/icons/assets/ua-raiffeisen.png", p2p_query = "Raiffeisen Bank Aval", currency_group = "raiffeisen-ua", domain = "raiffeisen.ua" },
   { id = "ua-sense", name = "Sense Bank", country = "UA", currency = "UAH", color = "#f04e37", initials = "S", icon_url = "/icons/assets/ua-sense.png", p2p_query = "Sense Bank", currency_group = "sense-bank", domain = "sensebank.com.ua" },
   { id = "ua-abank", name = "A-Bank", country = "UA", currency = "UAH", color = "#ed1c24", initials = "A", icon_url = "/icons/assets/ua-abank.png", p2p_query = "A-Bank", currency_group = "a-bank-ua", domain = "a-bank.com.ua" },
-  { id = "ua-ukrsibbank", name = "UkrSibbank", country = "UA", currency = "UAH", color = "#0072bc", initials = "U", icon_url = "/icons/assets/ua-ukrsibbank.ico", p2p_query = "UkrSibbank", currency_group = "ukrsibbank", domain = "ukrsibbank.com" },
+  { id = "ua-ukrsibbank", name = "UkrSibbank", country = "UA", currency = "UAH", color = "#0072bc", initials = "U", icon_url = "/icons/assets/ua-ukrsibbank.jpg", p2p_query = "UkrSibbank", currency_group = "ukrsibbank", domain = "ukrsibbank.com" },
 
   { id = "kz-kaspi", name = "Kaspi.kz", country = "KZ", currency = "KZT", color = "#f14635", initials = "K", popular = true, icon_url = "/icons/assets/kz-kaspi.png", p2p_query = "Kaspi Bank", currency_group = "kaspi", domain = "kaspi.kz" },
   { id = "kz-halyk", name = "Halyk Bank", country = "KZ", currency = "KZT", color = "#00883e", initials = "H", popular = true, icon_url = "/icons/assets/kz-halyk.png", p2p_query = "Halyk Bank", currency_group = "halyk", domain = "halykbank.kz" },

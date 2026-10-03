@@ -1806,7 +1806,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('ua-ukrsibbank', 'ua-ukrsibbank', 'UkrSibbank', 'both', 'UA', 'UAH', 'ukrsibbank.com', '/icons/assets/ua-ukrsibbank.ico', '', 'enabled', 'bank', '#0072bc', 'U', false, NULL, 'UkrSibbank', 'ukrsibbank', TRUE, 'payment-methods/Providerfile')
+VALUES ('ua-ukrsibbank', 'ua-ukrsibbank', 'UkrSibbank', 'both', 'UA', 'UAH', 'ukrsibbank.com', '/icons/assets/ua-ukrsibbank.jpg', '', 'enabled', 'bank', '#0072bc', 'U', false, NULL, 'UkrSibbank', 'ukrsibbank', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,
