@@ -63,6 +63,10 @@ vote and click counters separately from the score. Routes are first ordered by
 target amount; vote quality can reorder only routes within 1% of one another,
 and only when each route has at least 10 combined votes. The tie-break uses a
 Wilson lower bound so vote volume and the like/dislike balance both matter.
+Before the durable idempotent PostgreSQL write, each interaction stores a
+hashed, private 24-hour event snapshot in Redis when Redis is available. A
+Redis timeout does not block the interaction; PostgreSQL remains the durable
+record.
 The daily maintenance task subtracts 15 points from services with no interaction
 for 24 hours, stopping at zero. Shared service counters are cached in Redis for
 30 seconds; viewer-specific votes are loaded separately.

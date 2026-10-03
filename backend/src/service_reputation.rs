@@ -3,6 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -130,6 +131,16 @@ struct TrackingClaims {
     exp: u64,
 }
 
+#[derive(Serialize)]
+struct ReputationEventSnapshot<'a> {
+    event: &'a str,
+    anonymous_id: Uuid,
+    service_id: Option<Uuid>,
+    search_id: Uuid,
+    route_id: &'a str,
+    vote: Option<VoteChoice>,
+}
+
 #[derive(Clone)]
 pub struct ServiceReputation {
     pool: DbPool,
@@ -179,6 +190,41 @@ WHERE reputation_last_interaction_at <= now() - interval '1 day'
                 }
             }
         });
+    }
+
+    async fn cache_event_first(
+        &self,
+        event: &str,
+        anonymous_id: Uuid,
+        service_id: Option<Uuid>,
+        search_id: Uuid,
+        route_id: &str,
+        vote: Option<VoteChoice>,
+    ) {
+        let Some(redis) = self.redis.as_ref() else {
+            return;
+        };
+        let identity = format!("{event}:{anonymous_id}:{service_id:?}:{search_id}:{route_id}");
+        let digest = Sha256::digest(identity.as_bytes());
+        let key = format!("pay3flow:reputation:event:{digest:x}");
+        let snapshot = ReputationEventSnapshot {
+            event,
+            anonymous_id,
+            service_id,
+            search_id,
+            route_id,
+            vote,
+        };
+        match tokio::time::timeout(
+            std::time::Duration::from_millis(50),
+            set_json(redis, &key, &snapshot, 24 * 60 * 60),
+        )
+        .await
+        {
+            Ok(Err(error)) => tracing::debug!(%error, "service.reputation.event_cache_failed"),
+            Err(_) => tracing::debug!("service.reputation.event_cache_timed_out"),
+            Ok(Ok(())) => {}
+        }
     }
 
     pub async fn start_search(&self, search_id: Uuid) -> Result<(), ReputationError> {
@@ -389,6 +435,16 @@ GROUP BY requested.route_id, viewer.vote
                 .map_err(|_| ReputationError::InvalidTrackingToken)?
                 .claims;
 
+        self.cache_event_first(
+            "provider_link_open",
+            anonymous_id,
+            Some(claims.service_id),
+            claims.search_id,
+            &claims.route_id,
+            None,
+        )
+        .await;
+
         let mut client = self.pool.get().await?;
         let transaction = client.transaction().await?;
         let inserted = transaction
@@ -476,6 +532,15 @@ WHERE s.id = $1
         anonymous_id: Uuid,
         vote: VoteChoice,
     ) -> Result<ServiceStats, ReputationError> {
+        self.cache_event_first(
+            "service_vote",
+            anonymous_id,
+            Some(service_id),
+            Uuid::nil(),
+            "",
+            Some(vote),
+        )
+        .await;
         let mut client = self.pool.get().await?;
         let transaction = client.transaction().await?;
         let service_exists = transaction
@@ -576,6 +641,18 @@ FROM services WHERE id = $1
             return Err(ReputationError::InvalidTrackingToken);
         }
 
+        for claim in &claims {
+            self.cache_event_first(
+                "instruction_open",
+                anonymous_id,
+                Some(claim.service_id),
+                claim.search_id,
+                &claim.route_id,
+                None,
+            )
+            .await;
+        }
+
         let mut client = self.pool.get().await?;
         let transaction = client.transaction().await?;
         let mut newly_recorded = 0;
@@ -619,6 +696,15 @@ ON CONFLICT DO NOTHING
         anonymous_id: Uuid,
         vote: VoteChoice,
     ) -> Result<RouteFeedback, ReputationError> {
+        self.cache_event_first(
+            "route_vote",
+            anonymous_id,
+            None,
+            Uuid::nil(),
+            route_id,
+            Some(vote),
+        )
+        .await;
         let mut client = self.pool.get().await?;
         let transaction = client.transaction().await?;
         transaction
