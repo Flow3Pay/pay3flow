@@ -36,6 +36,6 @@
 <div class="appShell" bind:this={shell} use:localize>
   <Header />
   <main><Converter onBelarusP2pWarningChange={(show) => showBelarusP2pWarning = show} onOpenBelarusP2pWarning={() => belarusP2pWarningOpen = true} /></main>
-  <footer class="siteFooter"><span>Pay3Flow</span><span>{t("Live routing infrastructure · Public market estimates", {}, $locale)}</span></footer>
+  <footer class="siteFooter"><span>Pay3Flow</span><span>{t("Live routing infrastructure · Public market estimates", {}, $locale)}</span><a href="/terms">{t("Usage policy", {}, $locale)}</a></footer>
 </div>
 <BelarusP2pWarning open={belarusP2pWarningOpen} onClose={() => belarusP2pWarningOpen = false} />
