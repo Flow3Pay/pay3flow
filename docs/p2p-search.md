@@ -35,6 +35,9 @@ by provider adapters are included alongside `route_source_fiats`; network
 assets are included alongside `p2p_search_assets`. The poller publishes offers
 as bounded ActivityPub `OrderedCollection` batches of up to 64, allowing Fmatch
 to refresh its read snapshot once per batch instead of once per advertisement.
+It also remembers up to 512 supported pairs from recent user searches in
+process memory. Every seventh scheduled poll refreshes one of the three hottest
+pairs, rotating among them; the remaining slots continue through the catalog.
 
 Provider-only searches keep generic five-minute snapshots in process memory.
 Interactive searches apply amount, payment-method, merchant, order-count, and

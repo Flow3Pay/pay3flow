@@ -36,6 +36,9 @@ const DEFAULT_LIMIT: usize = 20;
 const MAX_LIMIT: usize = 100;
 const MAX_BACKGROUND_SEARCHES: usize = 5;
 const BACKGROUND_SEARCH_INTERVAL: Duration = Duration::from_millis(2_400);
+const BACKGROUND_POPULAR_PAIR_CADENCE: usize = 7;
+const MAX_TRACKED_POPULAR_PAIRS: usize = 512;
+const MAX_REFRESHED_POPULAR_PAIRS: usize = 3;
 const PROVIDER_SNAPSHOT_TTL: Duration = Duration::from_secs(5 * 60);
 const MAX_PROVIDER_SNAPSHOTS: usize = 128;
 
@@ -320,6 +323,7 @@ pub struct P2pSearchService {
     background_last_started: Arc<Mutex<Option<Instant>>>,
     background_provider_semaphore: Arc<Semaphore>,
     redis: Option<RedisPool>,
+    pair_popularity: Arc<Mutex<HashMap<String, (u32, Instant)>>>,
     pub(crate) provider_capabilities_cache: Arc<RwLock<Option<ProviderCapabilitiesSnapshot>>>,
     pub(crate) service_latencies: ServiceLatencyTracker,
     fmatch: Option<FmatchP2pBackend>,
@@ -384,6 +388,8 @@ impl P2pSearchService {
         let mut fiat_index = 0;
         let mut asset_index = 0;
         let mut side = P2pSide::BuyCrypto;
+        let mut poll_ticks = 0;
+        let mut popular_pair_cursor = 0;
         let mut interval = tokio::time::interval(BACKGROUND_SEARCH_INTERVAL);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         loop {
@@ -392,19 +398,34 @@ impl P2pSearchService {
                     // Do not queue work while the five background slots are
                     // occupied. The current catalog cursor is retried next tick.
                     if active.len() < MAX_BACKGROUND_SEARCHES {
-                        let fiat = fiats[fiat_index].clone();
-                        let asset = assets[asset_index].clone();
-                        let query = P2pSearchQuery {
-                            fiat: fiat.clone(),
-                            asset: asset.clone(),
-                            side,
-                            amount: None,
-                            payment_method: None,
-                            merchant_only: None,
-                            min_orders: None,
-                            min_completion_rate: None,
-                            limit: Some(DEFAULT_LIMIT),
-                            sources: None,
+                        let popular = if poll_ticks % BACKGROUND_POPULAR_PAIR_CADENCE == 0 {
+                            self.next_popular_pair(&mut popular_pair_cursor)
+                        } else {
+                            None
+                        };
+                        let used_popular_pair = popular.is_some();
+                        poll_ticks = poll_ticks.saturating_add(1);
+                        let (query, fiat, asset, scheduled_side) = if let Some(query) = popular {
+                            let fiat = query.fiat.clone();
+                            let asset = query.asset.clone();
+                            let side = query.side;
+                            (query, fiat, asset, side)
+                        } else {
+                            let fiat = fiats[fiat_index].clone();
+                            let asset = assets[asset_index].clone();
+                            let query = P2pSearchQuery {
+                                fiat: fiat.clone(),
+                                asset: asset.clone(),
+                                side,
+                                amount: None,
+                                payment_method: None,
+                                merchant_only: None,
+                                min_orders: None,
+                                min_completion_rate: None,
+                                limit: Some(DEFAULT_LIMIT),
+                                sources: None,
+                            };
+                            (query, fiat, asset, side)
                         };
                         let Some(permit) = self.try_start_background_pipeline() else {
                             continue;
@@ -413,18 +434,20 @@ impl P2pSearchService {
                         active.push(async move {
                             let _permit = permit;
                             if let Err(error) = service.refresh_background_search(query).await {
-                                tracing::warn!(%error, %fiat, %asset, ?side, "background provider observation failed");
+                                tracing::warn!(%error, %fiat, %asset, ?scheduled_side, "background provider observation failed");
                             }
                         });
 
-                        if side == P2pSide::BuyCrypto {
-                            side = P2pSide::SellCrypto;
-                        } else {
-                            side = P2pSide::BuyCrypto;
-                            asset_index += 1;
-                            if asset_index == assets.len() {
-                                asset_index = 0;
-                                fiat_index = (fiat_index + 1) % fiats.len();
+                        if !used_popular_pair {
+                            if side == P2pSide::BuyCrypto {
+                                side = P2pSide::SellCrypto;
+                            } else {
+                                side = P2pSide::BuyCrypto;
+                                asset_index += 1;
+                                if asset_index == assets.len() {
+                                    asset_index = 0;
+                                    fiat_index = (fiat_index + 1) % fiats.len();
+                                }
                             }
                         }
                     }
@@ -597,6 +620,7 @@ impl P2pSearchService {
                 MAX_BACKGROUND_PROVIDER_REQUESTS,
             )),
             redis: None,
+            pair_popularity: Arc::new(Mutex::new(HashMap::new())),
             provider_capabilities_cache: Arc::new(RwLock::new(None)),
             service_latencies: ServiceLatencyTracker::default(),
             fmatch: None,
@@ -655,6 +679,7 @@ impl P2pSearchService {
                 MAX_BACKGROUND_PROVIDER_REQUESTS,
             )),
             redis: None,
+            pair_popularity: Arc::new(Mutex::new(HashMap::new())),
             provider_capabilities_cache: Arc::new(RwLock::new(None)),
             service_latencies: ServiceLatencyTracker::default(),
             fmatch: None,
@@ -728,6 +753,7 @@ impl P2pSearchService {
     }
 
     pub async fn search(&self, query: P2pSearchQuery) -> Result<P2pSearchResponse> {
+        self.record_query_interest(&query);
         self.run_search(query, None, None).await
     }
 
@@ -736,6 +762,7 @@ impl P2pSearchService {
         query: P2pSearchQuery,
         market: Option<P2pOfferMarket>,
     ) -> Result<P2pSearchResponse> {
+        self.record_query_interest(&query);
         if self.fmatch.is_some() {
             if market.is_none() {
                 return self.search_all_fmatch_markets(query, None).await;
@@ -751,6 +778,7 @@ impl P2pSearchService {
         updates: mpsc::Sender<P2pSearchResponse>,
         market: Option<P2pOfferMarket>,
     ) -> Result<P2pSearchResponse> {
+        self.record_query_interest(&query);
         if self.fmatch.is_some() {
             if market.is_none() {
                 return self.search_all_fmatch_markets(query, Some(&updates)).await;
@@ -760,6 +788,78 @@ impl P2pSearchService {
                 .await;
         }
         self.run_search(query, Some(updates), market).await
+    }
+
+    fn record_query_interest(&self, query: &P2pSearchQuery) {
+        let Ok(query) = query.clone().normalize() else {
+            return;
+        };
+        if !self.fiat_intermediaries.contains(&query.fiat)
+            || !(self.default_assets.contains(&query.asset)
+                || self.networks.assets().contains(&query.asset))
+        {
+            return;
+        }
+        let side = match query.side {
+            P2pSide::BuyCrypto => "buy",
+            P2pSide::SellCrypto => "sell",
+        };
+        let key = format!("{}|{}|{side}", query.fiat, query.asset);
+        let Ok(mut popularity) = self.pair_popularity.lock() else {
+            return;
+        };
+        popularity.retain(|_, (_, seen_at)| seen_at.elapsed() < Duration::from_secs(24 * 60 * 60));
+        if popularity.len() >= MAX_TRACKED_POPULAR_PAIRS && !popularity.contains_key(&key) {
+            if let Some(coldest) = popularity
+                .iter()
+                .min_by_key(|(_, (count, seen_at))| (*count, std::cmp::Reverse(seen_at.elapsed())))
+                .map(|(key, _)| key.clone())
+            {
+                popularity.remove(&coldest);
+            }
+        }
+        let entry = popularity.entry(key).or_insert((0, Instant::now()));
+        entry.0 = entry.0.saturating_add(1);
+        entry.1 = Instant::now();
+    }
+
+    fn next_popular_pair(&self, cursor: &mut usize) -> Option<P2pSearchQuery> {
+        let mut popularity = self.pair_popularity.lock().ok()?;
+        popularity.retain(|_, (_, seen_at)| seen_at.elapsed() < Duration::from_secs(24 * 60 * 60));
+        let mut pairs = popularity
+            .iter()
+            .map(|(key, (count, seen_at))| {
+                let age_penalty = 1.0 + seen_at.elapsed().as_secs_f64() / 300.0;
+                (key.clone(), *count as f64 / age_penalty)
+            })
+            .collect::<Vec<_>>();
+        pairs.sort_by(|left, right| right.1.total_cmp(&left.1));
+        pairs.truncate(MAX_REFRESHED_POPULAR_PAIRS);
+        if pairs.is_empty() {
+            return None;
+        }
+        let pair = &pairs[*cursor % pairs.len()].0;
+        *cursor = cursor.saturating_add(1);
+        let mut parts = pair.split('|');
+        let fiat = parts.next()?.to_string();
+        let asset = parts.next()?.to_string();
+        let side = match parts.next()? {
+            "buy" => P2pSide::BuyCrypto,
+            "sell" => P2pSide::SellCrypto,
+            _ => return None,
+        };
+        Some(P2pSearchQuery {
+            fiat,
+            asset,
+            side,
+            amount: None,
+            payment_method: None,
+            merchant_only: None,
+            min_orders: None,
+            min_completion_rate: None,
+            limit: Some(DEFAULT_LIMIT),
+            sources: None,
+        })
     }
 
     async fn search_all_fmatch_markets(
