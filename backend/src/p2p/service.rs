@@ -35,6 +35,7 @@ const MAX_LIMIT: usize = 100;
 const MAX_BACKGROUND_SEARCHES: usize = 5;
 const BACKGROUND_SEARCH_INTERVAL: Duration = Duration::from_millis(2_400);
 const PROVIDER_SNAPSHOT_TTL: Duration = Duration::from_secs(5 * 60);
+const MAX_PROVIDER_SNAPSHOTS: usize = 128;
 
 impl P2pSearchQuery {
     fn normalize(mut self) -> Result<Self> {
@@ -246,14 +247,8 @@ fn canonical_payment_method(value: &str) -> String {
         .collect()
 }
 
-fn provider_snapshot_key(
-    query: &P2pSearchQuery,
-    market: Option<P2pOfferMarket>,
-) -> String {
-    format!(
-        "{market:?}:{}:{}:{:?}",
-        query.fiat, query.asset, query.side
-    )
+fn provider_snapshot_key(query: &P2pSearchQuery, market: Option<P2pOfferMarket>) -> String {
+    format!("{market:?}:{}:{}:{:?}", query.fiat, query.asset, query.side)
 }
 
 fn canonicalize_offer_payment_methods(
@@ -1221,8 +1216,18 @@ impl P2pSearchService {
     ) {
         if let Ok(mut snapshots) = self.provider_snapshots.write() {
             snapshots.retain(|_, cached| cached.inserted_at.elapsed() <= PROVIDER_SNAPSHOT_TTL);
+            let key = provider_snapshot_key(query, market);
+            if snapshots.len() >= MAX_PROVIDER_SNAPSHOTS && !snapshots.contains_key(&key) {
+                if let Some(oldest_key) = snapshots
+                    .iter()
+                    .min_by_key(|(_, cached)| cached.inserted_at)
+                    .map(|(key, _)| key.clone())
+                {
+                    snapshots.remove(&oldest_key);
+                }
+            }
             snapshots.insert(
-                provider_snapshot_key(query, market),
+                key,
                 CachedSearch {
                     inserted_at: Instant::now(),
                     response,

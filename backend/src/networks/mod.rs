@@ -84,6 +84,11 @@ impl NetworkCatalog {
                 name: "TON".into(),
                 currencies: vec!["TON".into(), "USDT".into()],
             },
+            CryptoNetwork {
+                id: "cardano".into(),
+                name: "Cardano".into(),
+                currencies: vec!["ADA".into()],
+            },
         ])
     }
 }
