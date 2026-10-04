@@ -1336,6 +1336,57 @@
     height: 520px;
     padding: 16px;
   }
+
+  .routeActionRow {
+    gap: 5px;
+  }
+
+  .workflow {
+    gap: 3px;
+  }
+
+  .workflow:has(> .workflowPart:nth-child(2):last-child) {
+    flex-wrap: nowrap;
+  }
+
+  .workflow:has(> .workflowPart:nth-child(2):last-child) > .workflowPart:first-child {
+    flex-shrink: 0;
+  }
+
+  .workflowPart {
+    gap: 2px;
+  }
+
+  .workflowAsset {
+    gap: 3px;
+    padding: 4px 5px 4px 4px;
+  }
+
+  .workflowNetwork {
+    padding: 4px 3px;
+  }
+
+  .workflowVenue {
+    gap: 3px;
+    padding: 4px 5px 4px 4px;
+  }
+
+  .workflowAsset strong,
+  .workflowVenue strong {
+    font-size: 10px;
+  }
+
+  .workflowIcon,
+  .workflowNetworkIcon,
+  .workflowVenueIcon {
+    width: 12px;
+    height: 12px;
+  }
+
+  .workflowArrow {
+    width: 13px;
+    height: 13px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
