@@ -7,7 +7,7 @@
   import { getAnonymousUserId, registerAnonymousUser } from "$lib/anonymous-user";
   import { locale, t } from "$lib/i18n";
   import { SearchResponseMetrics } from "$lib/response-metrics";
-  import { fetchRouteSearchActivity, type RouteSearchActivityHour } from "$lib/route-activity";
+  import { fetchRouteSearchActivity, SEARCH_ACTIVITY_PERIODS, type RouteSearchActivityHour, type SearchActivityPeriod } from "$lib/route-activity";
   import { fiatFlagUrl } from "$lib/currency-flags";
   import SidePanel from "./SidePanel.svelte";
   import SearchActivityChart from "./SearchActivityChart.svelte";
@@ -33,7 +33,7 @@
   let INTERMEDIARY_ASSETS: string[] = [];
   const EXCHANGE_METHODS: ExchangeMethod[] = ["p2p", "exchanger"];
   let paymentMethods: PaymentMethod[] = [];
-  const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", sources: "pay3flow.exchange.p2p-sources", knownSources: "pay3flow.exchange.known-p2p-sources", methods: "pay3flow.exchange.methods", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", sourceNetwork: "pay3flow.exchange.source-network", targetNetwork: "pay3flow.exchange.target-network", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets" };
+  const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", activityPeriod: "pay3flow.exchange.activity-period", sources: "pay3flow.exchange.p2p-sources", knownSources: "pay3flow.exchange.known-p2p-sources", methods: "pay3flow.exchange.methods", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", sourceNetwork: "pay3flow.exchange.source-network", targetNetwork: "pay3flow.exchange.target-network", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets" };
 
   let corridors: ExchangeCorridor[] = [];
   let corridorId = "";
@@ -75,9 +75,11 @@
   let error: string | null = null;
   let anonymousId = "";
   let activityHours: RouteSearchActivityHour[] = [];
+  let activityPeriod: SearchActivityPeriod = "1w";
   let activityLoading = false;
   let activityError = false;
   let activityKey = "";
+  let activityDisplayKey = "";
   let activityController: AbortController | null = null;
   let activityModalOpen = false;
   let settingsElement: HTMLDivElement;
@@ -110,17 +112,19 @@
   $: activeLocale = $locale;
   $: modalOpen = settingsOpen || exchangesOpen;
 
-  async function refreshActivity(source: string, target: string, identity: string, refreshedAt: number | null) {
-    const key = `${source}|${target}|${identity}|${refreshedAt ?? ""}`;
+  async function refreshActivity(source: string, target: string, identity: string, period: SearchActivityPeriod, refreshedAt: number | null, interval: number) {
+    const displayKey = `${source}|${target}|${period}`;
+    const key = `${displayKey}|${identity}|${refreshedAt ?? ""}|${interval}`;
     if (key === activityKey) return;
     activityKey = key;
     activityController?.abort();
     activityController = new AbortController();
-    activityHours = [];
+    if (activityDisplayKey !== displayKey) activityHours = [];
+    activityDisplayKey = displayKey;
     activityLoading = true;
     activityError = false;
     try {
-      const response = await fetchRouteSearchActivity(source, target, identity, activityController.signal);
+      const response = await fetchRouteSearchActivity(source, target, identity, period, activityController.signal);
       if (activityKey === key) activityHours = response.hours;
     } catch (error) {
       if (activityKey === key && !(error instanceof DOMException && error.name === "AbortError")) activityError = true;
@@ -129,7 +133,12 @@
     }
   }
 
-  $: if (typeof window !== "undefined" && selectedSourceCurrency && selectedTargetCurrency && anonymousId) void refreshActivity(selectedSourceCurrency, selectedTargetCurrency, anonymousId, lastUpdatedAt);
+  $: if (typeof document !== "undefined" && !document.hidden && selectedSourceCurrency && selectedTargetCurrency && anonymousId) void refreshActivity(selectedSourceCurrency, selectedTargetCurrency, anonymousId, activityPeriod, lastUpdatedAt, Math.floor(clock / 30_000));
+
+  function selectActivityPeriod(period: SearchActivityPeriod) {
+    activityPeriod = period;
+    try { localStorage.setItem(STORAGE.activityPeriod, period); } catch {}
+  }
 
   function readSharedExchange() {
     const match = window.location.hash.match(/^#\/swap\/([^/?#]+)\/([^/?#]+)(?:\?([^#]*))?$/i);
@@ -487,7 +496,7 @@
   }
   function manageRefresh(seconds: RefreshSeconds, updatedAt: number | null, validAmount: boolean) {
     if (refreshTimer) window.clearInterval(refreshTimer);
-    if (seconds && updatedAt && validAmount) refreshTimer = window.setInterval(startSearch, seconds * 1000);
+    if (seconds && updatedAt && validAmount) refreshTimer = window.setInterval(() => void startSearch(false), seconds * 1000);
   }
   function resetResults() {
     controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; displayRoutes([]); routesFound = 0; selected = null; selectionPinnedByUser = false; instructionsRoute = null; lastUpdatedAt = null; searching = false; awaitingFirstRoute = false; foundVenueIds = []; foundVenues = []; venueStats = {}; error = null;
@@ -629,7 +638,7 @@
     }
   }
 
-  async function startSearch() {
+  async function startSearch(countActivity = true) {
     if (debounceTimer) window.clearTimeout(debounceTimer);
     debounceTimer = undefined;
     if (!corridor || !sourceMethod || !targetMethod) return;
@@ -651,7 +660,7 @@
     controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; controller = new AbortController(); const signal = controller.signal; const currentRequest = ++requestId; searching = true; awaitingFirstRoute = true; routesFound = 0; foundVenueIds = []; foundVenues = []; venueStats = {}; responseMetrics = new SearchResponseMetrics(); error = null;
     let rerunForTargetAmount = false;
     try {
-      const liveQuery = { sourceFiat: selectedSourceCurrency, targetFiat: selectedTargetCurrency, sourceAmount: value, intermediaryAssets: !sourceWallet && !targetWallet && selectedIntermediaryAssets.length ? selectedIntermediaryAssets : undefined, sourceNetwork: sourceWallet ? sourceNetwork?.id : undefined, targetNetwork: targetWallet ? targetNetwork?.id : undefined, sourcePaymentMethod: sourceWallet ? undefined : sourceMethod.p2pQuery, targetPaymentMethod: targetWallet ? undefined : targetMethod.p2pQuery, sourcePaymentFeePercent: sourceWallet ? 0 : sourceMethod.bankFeePercent, targetPaymentFeePercent: targetWallet ? 0 : targetMethod.bankFeePercent, sources: selectedSources, exchangeMode, allowCrossVenue: true, limit: 40 };
+      const liveQuery = { sourceFiat: selectedSourceCurrency, targetFiat: selectedTargetCurrency, sourceAmount: value, intermediaryAssets: !sourceWallet && !targetWallet && selectedIntermediaryAssets.length ? selectedIntermediaryAssets : undefined, sourceNetwork: sourceWallet ? sourceNetwork?.id : undefined, targetNetwork: targetWallet ? targetNetwork?.id : undefined, sourcePaymentMethod: sourceWallet ? undefined : sourceMethod.p2pQuery, targetPaymentMethod: targetWallet ? undefined : targetMethod.p2pQuery, sourcePaymentFeePercent: sourceWallet ? 0 : sourceMethod.bankFeePercent, targetPaymentFeePercent: targetWallet ? 0 : targetMethod.bankFeePercent, sources: selectedSources, exchangeMode, allowCrossVenue: true, limit: 40, countActivity };
       let response: P2pRouteSearchResponse;
       try {
         if (!anonymousId) throw new Error("Anonymous ID unavailable");
@@ -696,7 +705,7 @@
       error = cause instanceof Error ? cause.message : "Could not search live P2P markets";
     } finally {
       if (currentRequest === requestId) { searching = false; awaitingFirstRoute = false; }
-      if (rerunForTargetAmount) window.setTimeout(() => void startSearch(), 0);
+      if (rerunForTargetAmount) window.setTimeout(() => void startSearch(false), 0);
     }
   }
   function toggleSource(source: P2pSource) { initialSearchReady = true; selectedSources = selectedSources.includes(source) ? (selectedSources.length === 1 ? selectedSources : selectedSources.filter((item) => item !== source)) : [...selectedSources, source]; resetResults(); }
@@ -759,6 +768,7 @@
       if (savedMethods.length) selectedExchangeMethods = EXCHANGE_METHODS.filter((method) => savedMethods.includes(method));
       const savedAssets = localStorage.getItem(STORAGE.assets); if (savedAssets != null) selectedIntermediaryAssets = [...new Set(savedAssets.split(",").map((asset) => asset.trim().toUpperCase()).filter(Boolean))];
       const savedRefresh = Number(localStorage.getItem(STORAGE.refresh)); if (REFRESH_OPTIONS.includes(savedRefresh as RefreshSeconds)) refreshSeconds = savedRefresh as RefreshSeconds;
+      const savedActivityPeriod = localStorage.getItem(STORAGE.activityPeriod); if (SEARCH_ACTIVITY_PERIODS.includes(savedActivityPeriod as SearchActivityPeriod)) activityPeriod = savedActivityPeriod as SearchActivityPeriod;
     } catch {}
     void registerAnonymousUser(anonymousId).catch(() => {});
     preferencesLoaded = true;
@@ -824,7 +834,7 @@
       <div class="cardTop">
         <div class="modeTabs" aria-label={t("Exchange mode", {}, activeLocale)}><button type="button" class="modeActive">{t("Bridge", {}, activeLocale)}</button><button type="button" disabled>{t("History", {}, activeLocale)}</button></div>
         <div class="cardActions" bind:this={settingsElement}>
-          <button type="button" class="refreshButton" on:click={startSearch} disabled={!hasAmount || searching} aria-label="Refresh routes now"><svg class:refreshSpin={awaitingFirstRoute} width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M16.2 7.1A6.8 6.8 0 1 0 16.7 12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /><path d="M13.1 3.8h3.6v3.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
+          <button type="button" class="refreshButton" on:click={() => void startSearch()} disabled={!hasAmount || searching} aria-label="Refresh routes now"><svg class:refreshSpin={awaitingFirstRoute} width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M16.2 7.1A6.8 6.8 0 1 0 16.7 12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /><path d="M13.1 3.8h3.6v3.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
           <div class="settingsWrap">
             <button type="button" class="exchangesButton" on:click={() => { settingsOpen = false; exchangesOpen = !exchangesOpen; }} aria-haspopup="dialog" aria-expanded={exchangesOpen} aria-label="Choose exchanges"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAACn0lEQVR4AbSVy0sVURzHZ9q0KcigiIyKrgUZRBS0SSgXLUKMIjAkEIKICHrgQqFF6tJFFEgXiqJNUemi6AGCyBVU0JWuBFHxgS8QUfAPuH6+xznHGe8493pF+X3O7/x+5/c4c+aecZ+3x38FN8hms/vhPnyCL3CrkL3lbUChCnhDsRH4ASm4B1/xX0QnSmwDEs9APfSSLe6gf0KZ7/uV6NtwGCogUSINKHgFtEvt9jWZk1Dt+34KXsEEtofukYajkCiuAYW1q06iD8ILUNE6iv1jXrS4BlR4AhkKVsEHWMbetZgG7L6MSvpVdDH/A5OQKMRLmkJBylGufgRaM5gGzE6A5CNDNQxASx46WP8MNk45yh2n6Un8RmwDYwTDcY6nFprzUMP6I7BxteTXgCStQdgGx2RAmoQFdFFCrp6qnuQqnuI02tvaYExOQUAjTEMmBvkbFRfDUOCLNAh8xSk2kII0rFDhF0huarBP8E0GWK3L1Mojn4LKGORvJd6jqG70MHP9zFFGVhmfsVZqGlBgCXycR3A+Ru9E6gg+AO+oUSKY3wVd2LOmAYZ2Uo7+Dy9pciPEOXxJYj4fBFyGHHENWOkHvZjz6EyIUZrJxpUr7PgvXv3yrhO3IrD1HtbQY+EG13BMBeiLadFF0hNdYm070ZG0hRYPMW+j+Vy4AT6vgaGBhR4Ltv1yKgkzV4gdhOdQwuoDkOjJ3D2Q4z3DU4J0WZg6mWVmGqILkatBkE4j0iDwbyrOsxlLl89dfextJYhvIuAtG11ERxp8x6GzJm5DsBWM8trx6F9nOTruZss3Q6Di5ymuzwWmF2nQjkcvSy/VYo9rhKQ+1pOkm8UW4krRTtxLZmEVfoP9Oup4dFs78F1QBlqN4m62fA9ZV45CHesAAAD//3Y7g4QAAAAGSURBVAMAao5eF665v54AAAAASUVORK5CYII=" alt="" width="18" height="18" aria-hidden="true" /></button>
             {#if exchangesOpen}
@@ -892,11 +902,11 @@
       <button type="button" class="cta" disabled={!hasAmount || (!previewRoute && (searching || !corridor))} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? "Open swap instructions" : "Find routes"}>{#if previewRoute}Swap <span>↗</span>{:else if searching}<span class="spinner"></span> Finding routes{:else if hasAmount}Find routes <span>↗</span>{:else}Enter an amount to begin{/if}</button>
       {#if error}<div class="errorBox" role="alert">{error}</div>{/if}
     </div>
-    <SearchActivityChart sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} hours={activityHours} loading={activityLoading} error={activityError} />
+    <SearchActivityChart sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} hours={activityHours} period={activityPeriod} onPeriodChange={selectActivityPeriod} loading={activityLoading} error={activityError} />
     </div>
     <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {renderingRoutes} {searchingVenues} {foundVenues} {venueStats} {venueNames} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} searched={lastUpdatedAt !== null} {hasAmount} {showBelarusP2pWarning} {onOpenBelarusP2pWarning} onOpenSearchActivity={() => activityModalOpen = true} />
   </div>
-  {#if activityModalOpen}<SearchActivityModal sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} hours={activityHours} loading={activityLoading} error={activityError} onClose={() => activityModalOpen = false} />{/if}
+  {#if activityModalOpen}<SearchActivityModal sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} hours={activityHours} period={activityPeriod} onPeriodChange={selectActivityPeriod} loading={activityLoading} error={activityError} onClose={() => activityModalOpen = false} />{/if}
   {#if currencyPicker === "source" || currencyPicker === "target"}<CurrencyPicker open={currencyPicker !== null} selected={currencyPicker === "source" ? sourceCurrencyChoice : targetCurrencyChoice} choices={currencyPicker === "source" ? sourceCurrencyChoices : targetCurrencyChoices} onClose={() => currencyPicker = null} onSelect={(choice) => chooseCurrency(currencyPicker ?? "source", choice)} />{/if}
   {#if paymentPickerComponent}<svelte:component this={paymentPickerComponent} open={methodPicker === "source"} title="Choose where you pay from" role="sender" {networks} {paymentMethods} selected={sourceMethod} selectedNetwork={sourceNetwork} onClose={() => methodPicker = null} onSelect={chooseSource} /><svelte:component this={paymentPickerComponent} open={methodPicker === "target"} title="Choose where the recipient gets paid" role="recipient" {networks} {paymentMethods} selected={targetMethod} selectedNetwork={targetNetwork} onClose={() => methodPicker = null} onSelect={chooseTarget} />{/if}
   {#if networkPicker === "source" || networkPicker === "target"}<NetworkPicker open={networkPicker !== null} networks={networkPicker === "source" ? sourceNetworks : targetNetworks} selected={networkPicker === "source" ? sourceNetwork : targetNetwork} onClose={() => networkPicker = null} onSelect={selectNetwork} />{/if}

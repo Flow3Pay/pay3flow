@@ -656,8 +656,8 @@ const OPERATIONS: &[Operation] = &[
     (
         "/api/p2p/route-activity",
         "get",
-        "Hourly route search activity",
-        "Return hourly search counts for a currency direction over the last seven days. Searches by the supplied anonymous browser ID are excluded; counts begin when pair tracking was introduced.",
+        "Route search activity",
+        "Return completed user-initiated search counts for a currency direction over the selected period. Automatic route refreshes are excluded. Counts begin with this metric's corrected release.",
         "Routing",
         false,
         false,
@@ -1142,6 +1142,18 @@ fn extra_parameters(path: &str, method: &str) -> Vec<Value> {
             "name": "anonymous_id", "in": "query", "required": false,
             "description": "Browser identity to exclude from the aggregate.",
             "schema": { "type": "string", "format": "uuid" }
+        }));
+        parameters.push(json!({
+            "name": "period", "in": "query", "required": false,
+            "description": "Time range. Longer ranges use daily, weekly, or monthly buckets.",
+            "schema": { "type": "string", "enum": ["1h", "1d", "1w", "1m", "3m", "6m", "1y", "all"], "default": "1w" }
+        }));
+    }
+    if path == "/api/p2p/routes" && method == "get" {
+        parameters.push(json!({
+            "name": "count_activity", "in": "query", "required": false,
+            "description": "Set true for a user-initiated search; false for automatic route refresh.",
+            "schema": { "type": "boolean", "default": false }
         }));
     }
     if path == "/api/exchange/orders" && method == "get" {

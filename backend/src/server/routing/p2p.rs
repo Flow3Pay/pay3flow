@@ -18,13 +18,14 @@ use crate::p2p::{
 };
 use crate::route_engine::canonical_network_id;
 use crate::service_reputation::{
-    average_reputation, vote_quality_score, ReputationError, RouteServiceStats, ServiceLink,
-    ServiceLinkKind, ServiceStats, VoteChoice,
+    average_reputation, vote_quality_score, ReputationError, RouteServiceStats,
+    SearchActivityPeriod, ServiceLink, ServiceLinkKind, ServiceStats, VoteChoice,
 };
 
 #[derive(Debug, Deserialize)]
 pub struct RouteHttpMetadata {
     anonymous_id: Option<Uuid>,
+    count_activity: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -32,6 +33,8 @@ pub struct RouteActivityQuery {
     source_currency: String,
     target_currency: String,
     anonymous_id: Option<Uuid>,
+    #[serde(default)]
+    period: SearchActivityPeriod,
 }
 
 #[derive(Serialize)]
@@ -58,7 +61,12 @@ pub async fn route_activity(
     }
     let hours = state
         .reputation
-        .search_activity(&source_currency, &target_currency, query.anonymous_id)
+        .search_activity(
+            &source_currency,
+            &target_currency,
+            query.anonymous_id,
+            query.period,
+        )
         .await
         .map_err(map_reputation_error)?;
     Ok(Json(RouteActivityResponse {
@@ -72,6 +80,7 @@ pub async fn route_activity(
 #[serde(deny_unknown_fields)]
 pub struct RouteSocketRequest {
     anonymous_id: Uuid,
+    count_activity: Option<bool>,
     query: P2pRouteSearchQuery,
 }
 
@@ -126,6 +135,7 @@ pub async fn routes(
             &query.source_fiat,
             &query.target_fiat,
             metadata.anonymous_id,
+            metadata.count_activity.unwrap_or(false),
         )
         .await
         .map_err(map_reputation_error)?;
@@ -194,6 +204,7 @@ async fn route_socket(state: AppState, mut socket: WebSocket) {
             &request.query.source_fiat,
             &request.query.target_fiat,
             Some(request.anonymous_id),
+            request.count_activity.unwrap_or(false),
         )
         .await
     {

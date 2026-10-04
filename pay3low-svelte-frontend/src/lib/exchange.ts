@@ -504,6 +504,7 @@ export function fetchP2pRoutes(query: {
   limit?: number;
   signal?: AbortSignal;
   anonymousId?: string;
+  countActivity?: boolean;
 }): Promise<P2pRouteSearchResponse> {
   const params = new URLSearchParams({
     source_fiat: query.sourceFiat,
@@ -550,6 +551,7 @@ export function fetchP2pRoutes(query: {
   if (query.anonymousId) {
     params.set("anonymous_id", query.anonymousId);
   }
+  params.set("count_activity", String(query.countActivity ?? false));
   return request(`/api/p2p/routes?${params.toString()}`, { signal: query.signal });
 }
 
@@ -598,7 +600,7 @@ export function streamP2pRoutes(
     const abort = () => fail(new DOMException("Route search cancelled", "AbortError"));
     signal.addEventListener("abort", abort, { once: true });
     socket.onopen = () => {
-      socket.send(JSON.stringify({ anonymous_id: anonymousId, query: routeQueryPayload(query) }));
+      socket.send(JSON.stringify({ anonymous_id: anonymousId, count_activity: query.countActivity ?? false, query: routeQueryPayload(query) }));
     };
     socket.onmessage = (message) => {
       try {

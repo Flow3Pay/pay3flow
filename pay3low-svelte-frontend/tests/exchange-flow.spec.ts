@@ -60,7 +60,7 @@ test("search activity uses hourly counts and fits beside routes or opens in a mo
     await expect.poll(() => page.evaluate(() => document.body.style.position)).toBe("");
   } else {
     await expect(chart.locator(".activityStats strong")).toHaveText("28");
-    await expect(chart.locator(".activityStats span")).toHaveText("searches in the last 7 days");
+    await expect(chart.locator(".activityStats span")).toHaveText("searches in period · 1 week");
     await expect(chart.locator(".brush")).toHaveCount(0);
     const surfaces = await page.evaluate(() => ({
       chart: getComputedStyle(document.querySelector(".activityCard")!).backgroundColor,
@@ -75,6 +75,32 @@ test("search activity uses hourly counts and fits beside routes or opens in a mo
     expect(dimensions.stackBottom).toBeLessThanOrEqual(dimensions.sideBottom + 1);
     await expect(chart.locator(".mainPlot svg path.area")).toHaveCount(1);
   }
+});
+
+test("search activity range menu filters and remembers the selected period", async ({ page, isMobile }) => {
+  await mockBackend(page);
+  await openApp(page);
+  if (isMobile) await page.getByRole("button", { name: "Open search activity graph" }).click();
+  const chart = isMobile ? page.getByRole("dialog", { name: "Others searched this exchange" }).getByTestId("search-activity") : page.getByTestId("search-activity");
+  await expect(chart.locator(".activityStats strong")).toHaveText("28");
+  const rangeButton = chart.getByRole("button", { name: "Chart time range" });
+  await expect(rangeButton.locator("img")).toHaveAttribute("src", "/icons/ui/chart-period.png");
+  await rangeButton.click();
+  const menu = chart.getByRole("menu", { name: "Chart time range" });
+  await expect(menu.getByRole("menuitemradio")).toHaveCount(8);
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  if (isMobile) await expect(page.getByRole("dialog", { name: "Others searched this exchange" })).toBeVisible();
+  await rangeButton.click();
+  await menu.getByRole("menuitemradio", { name: "1 hour" }).click();
+  await expect(menu).toHaveCount(0);
+  await expect(chart.locator(".activityStats span")).toHaveText("searches in period · 1 hour");
+  await expect(chart.locator(".activityStats strong")).toHaveText("3");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("pay3flow.exchange.activity-period"))).toBe("1h");
+  await page.reload();
+  if (isMobile) await page.getByRole("button", { name: "Open search activity graph" }).click();
+  const restoredChart = isMobile ? page.getByRole("dialog", { name: "Others searched this exchange" }).getByTestId("search-activity") : page.getByTestId("search-activity");
+  await expect(restoredChart.locator(".activityStats span")).toHaveText("searches in period · 1 hour");
 });
 
 test("fiat currency controls show local country flags", async ({ page }) => {
@@ -216,12 +242,13 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
 
     if (url.pathname === "/api/p2p/route-activity") {
       const end = Date.UTC(2026, 9, 4, 12);
+      const oneHour = url.searchParams.get("period") === "1h";
       return json({
         source_currency: url.searchParams.get("source_currency"),
         target_currency: url.searchParams.get("target_currency"),
-        hours: Array.from({ length: 168 }, (_, index) => ({
-          started_at: new Date(end - (167 - index) * 3_600_000).toISOString(),
-          count: index % 12 === 0 ? 2 : 0,
+        hours: Array.from({ length: oneHour ? 60 : 168 }, (_, index) => ({
+          started_at: new Date(end - ((oneHour ? 59 : 167) - index) * (oneHour ? 60_000 : 3_600_000)).toISOString(),
+          count: oneHour ? (index % 20 === 0 ? 1 : 0) : (index % 12 === 0 ? 2 : 0),
         })),
       });
     }

@@ -2,12 +2,14 @@
   import { onDestroy, onMount, tick } from "svelte";
   import { locale, t } from "$lib/i18n";
   import { lockPageScroll } from "$lib/page-scroll-lock";
-  import type { RouteSearchActivityHour } from "$lib/route-activity";
+  import type { RouteSearchActivityHour, SearchActivityPeriod } from "$lib/route-activity";
   import SearchActivityChart from "./SearchActivityChart.svelte";
 
   export let sourceCurrency: string;
   export let targetCurrency: string;
   export let hours: RouteSearchActivityHour[];
+  export let period: SearchActivityPeriod;
+  export let onPeriodChange: (period: SearchActivityPeriod) => void;
   export let loading = false;
   export let error = false;
   export let onClose: () => void;
@@ -28,7 +30,7 @@
 <div class="backdrop" role="presentation" on:mousedown={backdrop}>
   <div class="dialog" bind:this={dialog} role="dialog" aria-modal="true" aria-label={t("Others searched this exchange", {}, $locale)} tabindex="-1">
     <button type="button" class="close" on:click={onClose} aria-label={t("Close search activity", {}, $locale)}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button>
-    <SearchActivityChart {sourceCurrency} {targetCurrency} {hours} {loading} {error} />
+    <SearchActivityChart {sourceCurrency} {targetCurrency} {hours} {period} {onPeriodChange} {loading} {error} />
   </div>
 </div>
 

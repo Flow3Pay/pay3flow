@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS route_searches (
     source_currency TEXT,
     target_currency TEXT,
     anonymous_id UUID,
+    counted_for_activity BOOLEAN NOT NULL DEFAULT FALSE,
     status TEXT NOT NULL DEFAULT 'searching'
         CHECK (status IN ('searching', 'finished', 'failed')),
     routes_found BIGINT NOT NULL DEFAULT 0 CHECK (routes_found >= 0),
@@ -88,6 +89,7 @@ CREATE TABLE IF NOT EXISTS route_searches (
 ALTER TABLE route_searches ADD COLUMN IF NOT EXISTS source_currency TEXT;
 ALTER TABLE route_searches ADD COLUMN IF NOT EXISTS target_currency TEXT;
 ALTER TABLE route_searches ADD COLUMN IF NOT EXISTS anonymous_id UUID;
+ALTER TABLE route_searches ADD COLUMN IF NOT EXISTS counted_for_activity BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE INDEX IF NOT EXISTS route_searches_pair_created_idx
     ON route_searches (source_currency, target_currency, created_at DESC);
