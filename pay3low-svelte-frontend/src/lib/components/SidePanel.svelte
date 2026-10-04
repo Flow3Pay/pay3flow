@@ -575,19 +575,13 @@
   overflow-y: auto;
   overflow-anchor: none;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-text-soft) transparent;
+  scrollbar-width: none;
   contain: layout paint;
   transform: translateZ(0);
 }
 
 .routeGroups::-webkit-scrollbar {
-  width: 7px;
-}
-
-.routeGroups::-webkit-scrollbar-thumb {
-  border-radius: 7px;
-  background: var(--color-text-soft);
+  display: none;
 }
 
 .routeGroups:focus-visible {

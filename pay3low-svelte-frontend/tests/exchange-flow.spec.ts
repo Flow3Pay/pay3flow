@@ -107,9 +107,11 @@ test("search activity uses hourly counts and fits beside routes or opens in a mo
     const dimensions = await page.evaluate(() => {
       const stack = document.querySelector(".converterStack")!.getBoundingClientRect();
       const side = document.querySelector(".side")!.getBoundingClientRect();
-      return { stackBottom: stack.bottom, sideBottom: side.bottom };
+      const chart = document.querySelector(".activityReveal .activityCard")!.getBoundingClientRect();
+      return { stackBottom: stack.bottom, sideBottom: side.bottom, chartRight: chart.right, sideLeft: side.left };
     });
     expect(dimensions.stackBottom).toBeLessThanOrEqual(dimensions.sideBottom + 1);
+    expect(Math.abs(dimensions.chartRight - dimensions.sideLeft)).toBeLessThanOrEqual(1);
     await expect(chart.locator(".mainPlot svg path.area")).toHaveCount(1);
     await expect(page.locator(".activityReveal")).toHaveCSS("overflow", "visible");
     const chartSize = await chart.evaluate((element) => ({ visible: element.clientHeight, content: element.scrollHeight }));
@@ -118,8 +120,11 @@ test("search activity uses hourly counts and fits beside routes or opens in a mo
     const narrowDimensions = await page.evaluate(() => ({
       stackBottom: document.querySelector(".converterStack")!.getBoundingClientRect().bottom,
       sideBottom: document.querySelector(".side")!.getBoundingClientRect().bottom,
+      chartRight: document.querySelector(".activityReveal .activityCard")!.getBoundingClientRect().right,
+      sideLeft: document.querySelector(".side")!.getBoundingClientRect().left,
     }));
     expect(narrowDimensions.stackBottom).toBeLessThanOrEqual(narrowDimensions.sideBottom + 1);
+    expect(Math.abs(narrowDimensions.chartRight - narrowDimensions.sideLeft)).toBeLessThanOrEqual(1);
     await page.getByRole("button", { name: "Hide search activity" }).click();
     await expect(chart).toHaveCount(0);
   }
@@ -1089,7 +1094,7 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   }));
   expect(scrollMetrics.overflowY).toBe("auto");
   expect(scrollMetrics.scrollHeight).toBeGreaterThan(scrollMetrics.clientHeight);
-  await expect(routeGroups).toHaveCSS("scrollbar-width", "thin");
+  await expect(routeGroups).toHaveCSS("scrollbar-width", "none");
   await routeGroups.hover();
   await page.mouse.wheel(0, 360);
   await expect.poll(() => routeGroups.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);

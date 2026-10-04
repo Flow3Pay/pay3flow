@@ -2107,9 +2107,10 @@
 }
 
 .workspace {
+  --workspace-gap: 22px;
   width: min(1220px, 100%);
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 22px;
+  gap: var(--workspace-gap);
 }
 
 .converterStack { display: flex; min-width: 0; flex-direction: column; }
@@ -2120,7 +2121,7 @@
 .chartToggle:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 .chartToggle span { display: block; font-size: 21px; line-height: 1; -webkit-text-stroke: .55px currentColor; transform: rotate(90deg); transition: transform .26s ease; }
 .chartToggleOpen span { transform: rotate(-90deg); }
-.activityReveal { height: 176px; min-height: 0; overflow: visible; }
+.activityReveal { width: calc(100% + var(--workspace-gap)); height: 176px; min-height: 0; overflow: visible; }
 .activityReveal :global(.activityCard) { height: 100%; }
 @media (max-width: 980px) { .activityReveal { display: none; } }
 @media (prefers-reduced-motion: reduce) { .chartToggle span { transition: none; } }
