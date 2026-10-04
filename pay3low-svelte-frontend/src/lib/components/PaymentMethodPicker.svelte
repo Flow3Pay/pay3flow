@@ -4,6 +4,7 @@
   import { networkIcon } from "$lib/icons";
   import type { CryptoNetwork } from "$lib/networks";
   import { locale, t } from "$lib/i18n";
+  import { fiatFlagUrl } from "$lib/currency-flags";
   import { lockPageScroll } from "$lib/page-scroll-lock";
   import PickerOptionCard from "./PickerOptionCard.svelte";
 
@@ -78,7 +79,7 @@
 
   $: fiatMethods = paymentMethods.filter((method) => (method.kind === "bank" || method.kind === "cash") && roleAllowed(method));
   $: assetMethods = paymentMethods.filter((method) => method.kind === "wallet" && roleAllowed(method));
-  $: fiatChoices = [...new Set(fiatMethods.map((method) => method.currency.toUpperCase()))].map((currency): CurrencyChoice => { const catalog = paymentMethods.find((method) => method.kind === "currency" && currencyMatches(method, currency)); const source = fiatMethods.find((method) => currencyMatches(method, currency)); return { id: currency, name: catalog?.name ?? source?.name ?? currency, kind: "fiat", initials: catalog?.initials ?? currency.slice(0, 2), color: catalog?.color ?? source?.color ?? "#6d9800", iconUrl: catalog?.iconUrl }; }).sort((left, right) => left.id.localeCompare(right.id));
+  $: fiatChoices = [...new Set(fiatMethods.map((method) => method.currency.toUpperCase()))].map((currency): CurrencyChoice => { const catalog = paymentMethods.find((method) => method.kind === "currency" && currencyMatches(method, currency)); const source = fiatMethods.find((method) => currencyMatches(method, currency)); return { id: currency, name: catalog?.name ?? source?.name ?? currency, kind: "fiat", initials: catalog?.initials ?? currency.slice(0, 2), color: catalog?.color ?? source?.color ?? "#6d9800", iconUrl: fiatFlagUrl(currency) ?? catalog?.iconUrl }; }).sort((left, right) => left.id.localeCompare(right.id));
   $: assetChoices = [...new Map(assetMethods.map((method) => [method.currency.toUpperCase(), method])).values()].map((method): CurrencyChoice => ({ id: method.currency.toUpperCase(), name: method.name, kind: "asset", initials: method.initials || method.currency.slice(0, 2), color: method.color, iconUrl: paymentMethodFavicon(method) ?? undefined })).sort((left, right) => left.id.localeCompare(right.id));
   $: currencyChoices = [...fiatChoices, ...assetChoices];
   $: normalizedQuery = normalizeSearch(query);

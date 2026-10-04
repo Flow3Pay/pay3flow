@@ -7,7 +7,7 @@
   import { getAnonymousUserId, registerAnonymousUser } from "$lib/anonymous-user";
   import { locale, t } from "$lib/i18n";
   import { SearchResponseMetrics } from "$lib/response-metrics";
-  import { lockPageScroll } from "$lib/page-scroll-lock";
+  import { fiatFlagUrl } from "$lib/currency-flags";
   import SidePanel from "./SidePanel.svelte";
   import CurrencyPicker from "./CurrencyPicker.svelte";
   import NetworkPicker from "./NetworkPicker.svelte";
@@ -77,7 +77,6 @@
   let settingsDragStartY = 0;
   let settingsDragDistance = 0;
   let settingsWasOpen = false;
-  let unlockSettingsPage: (() => void) | undefined;
   let preferencesLoaded = false;
   let urlReady = false;
   let requestId = 0;
@@ -411,6 +410,8 @@
   $: targetMethod = resolveMethod(targetMethods, targetMethodId, targetCountry, targetCurrency);
   $: sourceCurrencyChoice = sourceMethod?.currency || sourceCurrency;
   $: targetCurrencyChoice = targetMethod?.currency || targetCurrency;
+  $: sourceCurrencyFlag = sourceMethod?.kind === "wallet" ? null : fiatFlagUrl(sourceCurrencyChoice);
+  $: targetCurrencyFlag = targetMethod?.kind === "wallet" ? null : fiatFlagUrl(targetCurrencyChoice);
   $: selectedSourceCurrency = sourceMethod?.currency || sourceCurrency;
   $: selectedTargetCurrency = targetMethod?.currency || targetCurrency;
   $: sourceNetworks = sourceMethod?.kind === "wallet" ? networks.filter((network) => network.currencies.includes(sourceMethod!.currency)) : [];
@@ -767,11 +768,8 @@
     if (modalOpen === settingsWasOpen) return;
     settingsWasOpen = modalOpen;
     if (modalOpen) {
-      unlockSettingsPage = lockPageScroll();
       window.addEventListener("keydown", onSettingsKeyDown);
     } else {
-      unlockSettingsPage?.();
-      unlockSettingsPage = undefined;
       window.removeEventListener("keydown", onSettingsKeyDown);
     }
   });
@@ -783,7 +781,6 @@
     if (clockTimer) clearInterval(clockTimer);
     if (initialSearchTimer) clearTimeout(initialSearchTimer);
     if (typeof document !== "undefined") document.removeEventListener("mousedown", onDocumentMouseDown);
-    unlockSettingsPage?.();
     if (typeof window !== "undefined") window.removeEventListener("keydown", onSettingsKeyDown);
   });
 </script>
@@ -800,7 +797,7 @@
             <button type="button" class="exchangesButton" on:click={() => { settingsOpen = false; exchangesOpen = !exchangesOpen; }} aria-haspopup="dialog" aria-expanded={exchangesOpen} aria-label="Choose exchanges"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAACn0lEQVR4AbSVy0sVURzHZ9q0KcigiIyKrgUZRBS0SSgXLUKMIjAkEIKICHrgQqFF6tJFFEgXiqJNUemi6AGCyBVU0JWuBFHxgS8QUfAPuH6+xznHGe8493pF+X3O7/x+5/c4c+aecZ+3x38FN8hms/vhPnyCL3CrkL3lbUChCnhDsRH4ASm4B1/xX0QnSmwDEs9APfSSLe6gf0KZ7/uV6NtwGCogUSINKHgFtEvt9jWZk1Dt+34KXsEEtofukYajkCiuAYW1q06iD8ILUNE6iv1jXrS4BlR4AhkKVsEHWMbetZgG7L6MSvpVdDH/A5OQKMRLmkJBylGufgRaM5gGzE6A5CNDNQxASx46WP8MNk45yh2n6Un8RmwDYwTDcY6nFprzUMP6I7BxteTXgCStQdgGx2RAmoQFdFFCrp6qnuQqnuI02tvaYExOQUAjTEMmBvkbFRfDUOCLNAh8xSk2kII0rFDhF0huarBP8E0GWK3L1Mojn4LKGORvJd6jqG70MHP9zFFGVhmfsVZqGlBgCXycR3A+Ru9E6gg+AO+oUSKY3wVd2LOmAYZ2Uo7+Dy9pciPEOXxJYj4fBFyGHHENWOkHvZjz6EyIUZrJxpUr7PgvXv3yrhO3IrD1HtbQY+EG13BMBeiLadFF0hNdYm070ZG0hRYPMW+j+Vy4AT6vgaGBhR4Ltv1yKgkzV4gdhOdQwuoDkOjJ3D2Q4z3DU4J0WZg6mWVmGqILkatBkE4j0iDwbyrOsxlLl89dfextJYhvIuAtG11ERxp8x6GzJm5DsBWM8trx6F9nOTruZss3Q6Di5ymuzwWmF2nQjkcvSy/VYo9rhKQ+1pOkm8UW4krRTtxLZmEVfoP9Oup4dFs78F1QBlqN4m62fA9ZV45CHesAAAD//3Y7g4QAAAAGSURBVAMAao5eF665v54AAAAASUVORK5CYII=" alt="" width="18" height="18" aria-hidden="true" /></button>
             {#if exchangesOpen}
               <div class="settingsBackdrop" on:mousedown={closeSettings} role="presentation">
-                <div class:settingsDragging class="settingsMenu exchangesMenu" bind:this={settingsDialog} role="dialog" aria-modal="true" aria-label="Exchange settings" tabindex="-1" on:mousedown|stopPropagation>
+                <div class:settingsDragging class="settingsMenu exchangesMenu" bind:this={settingsDialog} role="dialog" aria-label="Exchange settings" tabindex="-1" on:mousedown|stopPropagation>
                   <div class="settingsModalHeader"><span class="settingsSheetHandle" aria-hidden="true" on:pointerdown={startSettingsDrag} on:pointermove={moveSettingsDrag} on:pointerup={endSettingsDrag} on:pointercancel={endSettingsDrag}></span><button type="button" class="settingsClose" on:click={closeSettings} aria-label="Close exchange settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button></div>
                   <div class="settingsHead"><div><strong>Search exchanges</strong></div></div>
                   <div class="sourceOptions exchangeOptions exchangeModalOptions" aria-label="Exchanges to search">{#each exchangeChoices as source}{@const enabled = selectedSources.includes(source.id)}<button type="button" class:sourceOptionActive={enabled} class="sourceOption" aria-pressed={enabled} title={sourceTitle(source)} on:click={() => toggleSource(source.id)}><span class="sourceOptionIcon" aria-hidden="true"><img src={source.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackSourceIcon(event, source.id)} /></span>{source.label}</button>{/each}</div>
@@ -818,7 +815,7 @@
             <button type="button" class="settingsButton" on:click={() => { exchangesOpen = false; settingsOpen = !settingsOpen; }} aria-haspopup="dialog" aria-expanded={settingsOpen} aria-label="Route refresh settings"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 6.8a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4Z" stroke="currentColor" stroke-width="1.6" /><path d="M16.2 11.3a6.5 6.5 0 0 0 0-2.6l1.5-1.1-1.8-3.1-1.8.8a6.7 6.7 0 0 0-2.2-1.3L11.7 2H8.3L8 4a6.7 6.7 0 0 0-2.2 1.3L4 4.5 2.2 7.6l1.5 1.1a6.5 6.5 0 0 0 0 2.6l-1.5 1.1L4 15.5l1.8-.8A6.7 6.7 0 0 0 8 16l.3 2h3.4l.3-2a6.7 6.7 0 0 0 2.2-1.3l1.8.8 1.8-3.1-1.6-1.1Z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
             {#if settingsOpen}
               <div class="settingsBackdrop" on:mousedown={closeSettings} role="presentation">
-                <div class:settingsDragging class="settingsMenu" bind:this={settingsDialog} role="dialog" aria-modal="true" aria-label="Refresh settings" tabindex="-1" on:mousedown|stopPropagation>
+                <div class:settingsDragging class="settingsMenu" bind:this={settingsDialog} role="dialog" aria-label="Refresh settings" tabindex="-1" on:mousedown|stopPropagation>
                 <div class="settingsModalHeader"><span class="settingsSheetHandle" aria-hidden="true" on:pointerdown={startSettingsDrag} on:pointermove={moveSettingsDrag} on:pointerup={endSettingsDrag} on:pointercancel={endSettingsDrag}></span><button type="button" class="settingsClose" on:click={closeSettings} aria-label="Close route settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button></div>
                 <div class="settingsHead"><div><strong>Auto-refresh</strong></div></div>
                 <div class="refreshOptions">{#each REFRESH_OPTIONS as seconds}<button type="button" aria-pressed={refreshSeconds === seconds} on:click={() => { refreshSeconds = seconds; settingsOpen = false; }}>{refreshOptionLabel(seconds)}</button>{/each}</div>
@@ -844,7 +841,7 @@
             <span class="methodAvatar" style:background-color={paymentMethodFavicon(sourceMethod) ? "transparent" : sourceMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(sourceMethod)}<img src={paymentMethodFavicon(sourceMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{:else}<span>{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{/if}</span>
             <span class="methodText"><strong>{methodTitle(sourceMethod)}</strong><small>{sourceMethod ? methodDetail(sourceMethod) : corridor ? locationLabel(sourceCountry, sourceCurrency) : "Unavailable"}</small></span><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
           </button>
-          <div class="networkControl"><button type="button" class="networkButton" on:click={() => sourceMethod?.kind === "wallet" ? openNetworkPicker("source") : openCurrencyPicker("source")} aria-haspopup="dialog" aria-label={sourceMethod?.kind === "wallet" ? `Select sending network: ${sourceNetwork?.name ?? "none"}` : `Select sending currency: ${sourceCurrencyChoice}`}><span class:currencyDot={sourceMethod?.kind !== "wallet"} class="networkDot" aria-hidden="true">{#if sourceMethod?.kind === "wallet" && sourceNetwork}<img src={networkIcon(sourceNetwork.name)} alt="" width="18" height="18" loading="lazy" decoding="async" />{:else}{currencyMark(sourceCurrencyChoice)}{/if}</span><span class="networkCopy"><small>{t(sourceMethod?.kind === "wallet" ? "Network" : "Currency", {}, activeLocale)}</small><strong>{sourceMethod?.kind === "wallet" ? sourceNetwork?.name ?? "Select" : sourceCurrencyChoice}</strong></span><span class="networkChevron" aria-hidden="true">⌄</span></button></div>
+          <div class="networkControl"><button type="button" class="networkButton" on:click={() => sourceMethod?.kind === "wallet" ? openNetworkPicker("source") : openCurrencyPicker("source")} aria-haspopup="dialog" aria-label={sourceMethod?.kind === "wallet" ? `Select sending network: ${sourceNetwork?.name ?? "none"}` : `Select sending currency: ${sourceCurrencyChoice}`}><span class:currencyDot={sourceMethod?.kind !== "wallet"} class:flagDot={Boolean(sourceCurrencyFlag)} class="networkDot" aria-hidden="true">{#if sourceMethod?.kind === "wallet" && sourceNetwork}<img src={networkIcon(sourceNetwork.name)} alt="" width="18" height="18" loading="lazy" decoding="async" />{:else if sourceCurrencyFlag}<img src={sourceCurrencyFlag} alt="" width="18" height="18" decoding="async" />{:else}{currencyMark(sourceCurrencyChoice)}{/if}</span><span class="networkCopy"><small>{t(sourceMethod?.kind === "wallet" ? "Network" : "Currency", {}, activeLocale)}</small><strong>{sourceMethod?.kind === "wallet" ? sourceNetwork?.name ?? "Select" : sourceCurrencyChoice}</strong></span><span class="networkChevron" aria-hidden="true">⌄</span></button></div>
         </div>
       </div>
       <div class="flowBridge"><span class="bridgeLine" aria-hidden="true"></span><button type="button" class:bridgeIconReversed={directionReversed} class="bridgeIcon" on:click={swapDirection} aria-label="Swap sender and recipient" title="Swap sender and recipient"><img src={swapIcon} alt="" width="18" height="18" aria-hidden="true" /></button></div>
@@ -856,7 +853,7 @@
             <span class="methodAvatar" style:background-color={paymentMethodFavicon(targetMethod) ? "transparent" : targetMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(targetMethod)}<img src={paymentMethodFavicon(targetMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{:else}<span>{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{/if}</span>
             <span class="methodText"><strong>{methodTitle(targetMethod)}</strong><small>{targetMethod ? methodDetail(targetMethod) : corridor ? locationLabel(targetCountry, targetCurrency) : "Unavailable"}</small></span><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
           </button>
-          <div class="networkControl"><button type="button" class="networkButton" on:click={() => targetMethod?.kind === "wallet" ? openNetworkPicker("target") : openCurrencyPicker("target")} aria-haspopup="dialog" aria-label={targetMethod?.kind === "wallet" ? `Select recipient network: ${targetNetwork?.name ?? "none"}` : `Select recipient currency: ${targetCurrencyChoice}`}><span class:currencyDot={targetMethod?.kind !== "wallet"} class="networkDot" aria-hidden="true">{#if targetMethod?.kind === "wallet" && targetNetwork}<img src={networkIcon(targetNetwork.name)} alt="" width="18" height="18" loading="lazy" decoding="async" />{:else}{currencyMark(targetCurrencyChoice)}{/if}</span><span class="networkCopy"><small>{t(targetMethod?.kind === "wallet" ? "Network" : "Currency", {}, activeLocale)}</small><strong>{targetMethod?.kind === "wallet" ? targetNetwork?.name ?? "Select" : targetCurrencyChoice}</strong></span><span class="networkChevron" aria-hidden="true">⌄</span></button></div>
+          <div class="networkControl"><button type="button" class="networkButton" on:click={() => targetMethod?.kind === "wallet" ? openNetworkPicker("target") : openCurrencyPicker("target")} aria-haspopup="dialog" aria-label={targetMethod?.kind === "wallet" ? `Select recipient network: ${targetNetwork?.name ?? "none"}` : `Select recipient currency: ${targetCurrencyChoice}`}><span class:currencyDot={targetMethod?.kind !== "wallet"} class:flagDot={Boolean(targetCurrencyFlag)} class="networkDot" aria-hidden="true">{#if targetMethod?.kind === "wallet" && targetNetwork}<img src={networkIcon(targetNetwork.name)} alt="" width="18" height="18" loading="lazy" decoding="async" />{:else if targetCurrencyFlag}<img src={targetCurrencyFlag} alt="" width="18" height="18" decoding="async" />{:else}{currencyMark(targetCurrencyChoice)}{/if}</span><span class="networkCopy"><small>{t(targetMethod?.kind === "wallet" ? "Network" : "Currency", {}, activeLocale)}</small><strong>{targetMethod?.kind === "wallet" ? targetNetwork?.name ?? "Select" : targetCurrencyChoice}</strong></span><span class="networkChevron" aria-hidden="true">⌄</span></button></div>
         </div>
       </div>
       {#if refreshSeconds > 0}<div class="marketBar"><div class="marketState"><span class="refreshProgress" role="img" aria-label={secondsUntilRefresh === null ? "Auto-refresh is off" : `Refresh in ${secondsUntilRefresh} seconds`}><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle class="refreshTrack" cx="9" cy="9" r="7" pathLength="100" /><circle class="refreshFill" cx="9" cy="9" r="7" pathLength="100" style:stroke-dashoffset={`${100 - refreshProgress}`} /></svg></span><div><span>{lastUpdatedAt ? `Updated ${Math.max(0, Math.floor((clock - lastUpdatedAt) / 1000))}s ago` : "Public P2P sources only · no order placement"}</span></div></div>{#if secondsUntilRefresh !== null}<span class="nextRefresh">{secondsUntilRefresh}s</span>{/if}</div>{/if}
@@ -1049,6 +1046,11 @@
   width: 18px;
   height: 18px;
   object-fit: contain;
+  filter: brightness(0);
+}
+
+:global(html[data-theme="dark"]) .exchangesButton img {
+  filter: brightness(0) invert(1);
 }
 
 .refreshSpin {
@@ -2339,6 +2341,14 @@
   font-weight: 800;
 }
 
+.networkDot.flagDot {
+  background: transparent;
+}
+
+.networkDot.flagDot img {
+  object-fit: cover;
+}
+
 .networkCopy {
   display: flex;
   flex-direction: column;
@@ -2463,7 +2473,7 @@
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     animation: fadeIn 0.2s ease-out;
-    touch-action: none;
+    pointer-events: none;
   }
 
   .settingsMenu {
@@ -2474,6 +2484,7 @@
     height: auto;
     max-height: calc(100dvh - 16px);
     box-sizing: border-box;
+    pointer-events: auto;
     padding: 10px 16px calc(18px + env(safe-area-inset-bottom));
     border-radius: 14px 14px 0 0;
     animation: settingsSheetIn 0.24s cubic-bezier(0.22, 1, 0.36, 1);

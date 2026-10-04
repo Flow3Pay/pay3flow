@@ -3,6 +3,7 @@
   import type { CryptoNetwork } from "$lib/networks";
   import { networkIcon } from "$lib/icons";
   import { locale, t } from "$lib/i18n";
+  import { fiatFlagUrl } from "$lib/currency-flags";
   import { lockPageScroll } from "$lib/page-scroll-lock";
   import PickerOptionCard from "./PickerOptionCard.svelte";
 
@@ -86,7 +87,7 @@
         {#if mode === "currency"}
           {#each currencies as currency (currency.id)}
             {@const isSelected = currency.id === selectedCurrency}
-            <PickerOptionCard name={currency.id} meta={currency.name} initials={currency.mark} color={currency.color} selected={isSelected} onSelect={() => onSelectCurrency(currency.id)} />
+            <PickerOptionCard name={currency.id} meta={currency.name} iconUrl={fiatFlagUrl(currency.id)} initials={currency.mark} color={currency.color} selected={isSelected} onSelect={() => onSelectCurrency(currency.id)} />
           {/each}
         {:else}
           {#each networks as network (network.id)}

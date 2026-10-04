@@ -10,7 +10,8 @@
     const root = document.documentElement;
     const nextTheme = root.dataset.theme === "dark" ? "light" : "dark";
     root.dataset.theme = nextTheme;
-    localStorage.setItem("pay3flow-theme", nextTheme);
+    root.dataset.themeManual = "true";
+    try { localStorage.setItem("pay3flow-theme", nextTheme); } catch {}
   }
 
   $: activeLocale = $locale;

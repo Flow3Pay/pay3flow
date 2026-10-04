@@ -19,6 +19,47 @@ async function openApp(page: Page) {
     .not.toBe("none");
 }
 
+test("system theme follows the browser until the user chooses a theme", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await mockBackend(page);
+  await openApp(page);
+
+  const root = page.locator("html");
+  const exchangesIcon = page.getByRole("button", { name: "Choose exchanges" }).locator("img");
+  await expect(root).toHaveAttribute("data-theme", "dark");
+  await expect(exchangesIcon).toHaveCSS("filter", "brightness(0) invert(1)");
+
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(root).toHaveAttribute("data-theme", "light");
+  await expect(exchangesIcon).toHaveCSS("filter", "brightness(0)");
+
+  await page.getByRole("button", { name: "Switch theme" }).click();
+  await expect(root).toHaveAttribute("data-theme", "dark");
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(root).toHaveAttribute("data-theme", "dark");
+  await page.reload();
+  await expect(root).toHaveAttribute("data-theme", "dark");
+});
+
+test("fiat currency controls show local country flags", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page);
+
+  const currencyButton = page.getByRole("button", { name: "Select sending currency: AMD" });
+  await expect(currencyButton.locator("img")).toHaveAttribute("src", "/icons/flags/am.svg");
+  await currencyButton.click();
+  const currencyPicker = page.getByRole("dialog", { name: "Choose currency" });
+  await expect(currencyPicker.getByRole("option", { name: /AMD.*Armenian dram/ }).locator("img")).toHaveAttribute("src", "/icons/flags/am.svg");
+  await expect(currencyPicker.getByRole("option", { name: /USD.*US dollar/ }).locator("img")).toHaveAttribute("src", "/icons/flags/us.svg");
+  await page.keyboard.press("Escape");
+
+  const methodPicker = await openCryptoPicker(page, "sending");
+  const rubFlag = methodPicker.getByRole("option", { name: /RUB.*Russian ruble/ }).locator("img");
+  await expect(rubFlag).toHaveAttribute("src", "/icons/flags/ru.svg");
+  await expect.poll(() => rubFlag.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
+});
+
 test("dialogs keep the page still and restore its scroll position", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 600 });
   await mockBackend(page);
@@ -49,16 +90,52 @@ test("dialogs keep the page still and restore its scroll position", async ({ pag
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(lockedAt);
 });
 
-test("desktop settings dialog also locks background scrolling", async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 720 });
+test("settings and exchange menus leave the page scrollable", async ({ page }, testInfo) => {
+  const mobile = testInfo.project.name === "mobile";
+  const height = mobile ? 600 : 500;
+  await page.setViewportSize({ width: mobile ? 390 : 1280, height });
   await mockBackend(page);
   await openApp(page);
 
-  await page.getByRole("button", { name: "Route refresh settings" }).click();
-  await expect(page.getByRole("dialog", { name: "Refresh settings" })).toBeVisible();
+  for (const [button, dialog] of [
+    ["Route refresh settings", "Refresh settings"],
+    ["Choose exchanges", "Exchange settings"],
+  ]) {
+    await page.getByRole("button", { name: button }).click();
+    await expect(page.getByRole("dialog", { name: dialog })).toBeVisible();
+    await expect(page.locator("body")).not.toHaveCSS("position", "fixed");
+    if (mobile) await expect(page.locator(".settingsBackdrop")).toHaveCSS("pointer-events", "none");
+    await page.mouse.move(5, mobile ? 100 : height - 50);
+    await page.mouse.wheel(0, 350);
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: dialog })).not.toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, 0));
+  }
+});
+
+test("route instructions lock the page until closed", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page);
+  const sourcePicker = await openCryptoPicker(page, "sending");
+  await sourcePicker.getByRole("option", { name: /AMD.*Armenian dram/ }).click();
+  await sourcePicker.getByLabel("Search banks and payment methods").fill("IDBank");
+  await sourcePicker.getByRole("option", { name: /IDBank/ }).click();
+
+  const targetPicker = await openCryptoPicker(page, "recipient");
+  await targetPicker.getByRole("option", { name: /RUB.*Russian ruble/ }).click();
+  await targetPicker.getByLabel("Search banks and payment methods").fill("Alfa");
+  await targetPicker.getByRole("option", { name: /Alfa-Bank/ }).click();
+
+  await page.getByLabel("Amount to send").fill("100000");
+  await page.getByTestId("start-search").click();
+  await page.getByTestId("complete-route").first().locator(".routeAmount").click();
+
+  const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
+  await expect(instructions).toBeVisible();
   await expect(page.locator("body")).toHaveCSS("position", "fixed");
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog", { name: "Refresh settings" })).not.toBeVisible();
+  await instructions.getByRole("button", { name: "Close instructions", exact: true }).click();
+  await expect(instructions).toBeHidden();
   await expect(page.locator("body")).not.toHaveCSS("position", "fixed");
 });
 

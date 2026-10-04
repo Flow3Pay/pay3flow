@@ -9,14 +9,19 @@
     <link rel="icon" href="/icons/assets/pay3flow_logo.svg" type="image/svg+xml" />
     <link rel="preload" href="/fonts/manrope-latin.woff2" as="font" type="font/woff2" crossorigin />
     <script>
+      const root = document.documentElement;
+      const systemTheme = matchMedia("(prefers-color-scheme: dark)");
+      let savedTheme;
       try {
-        const savedTheme = localStorage.getItem("pay3flow-theme");
-        document.documentElement.dataset.theme = savedTheme === "light" || savedTheme === "dark"
-          ? savedTheme
-          : matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        savedTheme = localStorage.getItem("pay3flow-theme");
         const savedLocale = localStorage.getItem("pay3flow-locale");
-        if (savedLocale === "en" || savedLocale === "ru" || savedLocale === "hy") document.documentElement.lang = savedLocale;
+        if (savedLocale === "en" || savedLocale === "ru" || savedLocale === "hy") root.lang = savedLocale;
       } catch (_) {}
+      if (savedTheme === "light" || savedTheme === "dark") root.dataset.themeManual = "true";
+      root.dataset.theme = root.dataset.themeManual ? savedTheme : systemTheme.matches ? "dark" : "light";
+      systemTheme.addEventListener("change", (event) => {
+        if (!root.dataset.themeManual) root.dataset.theme = event.matches ? "dark" : "light";
+      });
     </script>
     %sveltekit.head%
   </head>
