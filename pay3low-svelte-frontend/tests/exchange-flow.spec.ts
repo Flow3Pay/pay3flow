@@ -37,12 +37,18 @@ test("system theme follows the browser until the user chooses a theme", async ({
 
   const root = page.locator("html");
   const exchangesIcon = page.getByRole("button", { name: "Choose exchanges" }).locator("img");
+  const refreshIcon = page.getByRole("button", { name: "Refresh routes now" }).locator("img");
+  const settingsIcon = page.getByRole("button", { name: "Route refresh settings" }).locator("img");
   await expect(root).toHaveAttribute("data-theme", "dark");
   await expect(exchangesIcon).toHaveCSS("filter", "brightness(0) invert(1)");
+  await expect(refreshIcon).toHaveCSS("filter", "brightness(0) invert(1)");
+  await expect(settingsIcon).toHaveCSS("filter", "brightness(0) invert(1)");
 
   await page.emulateMedia({ colorScheme: "light" });
   await expect(root).toHaveAttribute("data-theme", "light");
   await expect(exchangesIcon).toHaveCSS("filter", "brightness(0)");
+  await expect(refreshIcon).toHaveCSS("filter", "brightness(0)");
+  await expect(settingsIcon).toHaveCSS("filter", "brightness(0)");
 
   if (isMobile) await page.locator(".menuToggle").click();
   await page.getByRole("button", { name: "Switch theme" }).click();
@@ -1661,7 +1667,7 @@ test("search venues announce providers reported by route statuses", async ({ pag
   await expect(searchingVenues.nth(1)).toHaveCSS("animation-delay", "0.13s");
 
   const refreshButton = page.getByRole("button", { name: "Refresh routes now" });
-  await expect(refreshButton.locator("svg")).toHaveClass(/refreshSpin/);
+  await expect(refreshButton.locator("img")).toHaveClass(/refreshSpin/);
   sendFirstRoute?.();
   await expect(page.getByTestId("complete-route")).toHaveCount(1);
   await expect(page.getByTestId("complete-route").first()).toHaveClass(/selected/);
@@ -1678,7 +1684,7 @@ test("search venues announce providers reported by route statuses", async ({ pag
   await expect(searchingVenues.nth(4)).toHaveAttribute("title", "Searching Whitebird");
   await expect(panelTop.getByTestId("searching-venues-overflow")).toHaveCount(0);
   await expect(refreshButton).toBeDisabled();
-  await expect(refreshButton.locator("svg")).not.toHaveClass(/refreshSpin/);
+  await expect(refreshButton.locator("img")).not.toHaveClass(/refreshSpin/);
 
   sendSecondRoute?.();
   await expect(page.getByTestId("complete-route")).toHaveCount(2);

@@ -967,7 +967,7 @@
       <div class="cardTop">
         <div class="modeTabs" aria-label={t("Exchange mode", {}, activeLocale)}><button type="button" class="modeActive">{t("Bridge", {}, activeLocale)}</button><button type="button" disabled>{t("History", {}, activeLocale)}</button></div>
         <div class="cardActions" bind:this={settingsElement}>
-          <button type="button" class="refreshButton" on:click={() => void startSearch()} disabled={!hasAmount || searching} aria-label="Refresh routes now"><svg class:refreshSpin={awaitingFirstRoute} width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M16.2 7.1A6.8 6.8 0 1 0 16.7 12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /><path d="M13.1 3.8h3.6v3.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
+          <button type="button" class="refreshButton" on:click={() => void startSearch()} disabled={!hasAmount || searching} aria-label="Refresh routes now"><img class:refreshSpin={awaitingFirstRoute} src="/icons/ui/route-refresh.png" alt="" width="18" height="18" aria-hidden="true" /></button>
           <div class="settingsWrap">
             <button type="button" class="exchangesButton" on:click={() => { settingsOpen = false; exchangesOpen = !exchangesOpen; }} aria-haspopup="dialog" aria-expanded={exchangesOpen} aria-label="Choose exchanges"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAACn0lEQVR4AbSVy0sVURzHZ9q0KcigiIyKrgUZRBS0SSgXLUKMIjAkEIKICHrgQqFF6tJFFEgXiqJNUemi6AGCyBVU0JWuBFHxgS8QUfAPuH6+xznHGe8493pF+X3O7/x+5/c4c+aecZ+3x38FN8hms/vhPnyCL3CrkL3lbUChCnhDsRH4ASm4B1/xX0QnSmwDEs9APfSSLe6gf0KZ7/uV6NtwGCogUSINKHgFtEvt9jWZk1Dt+34KXsEEtofukYajkCiuAYW1q06iD8ILUNE6iv1jXrS4BlR4AhkKVsEHWMbetZgG7L6MSvpVdDH/A5OQKMRLmkJBylGufgRaM5gGzE6A5CNDNQxASx46WP8MNk45yh2n6Un8RmwDYwTDcY6nFprzUMP6I7BxteTXgCStQdgGx2RAmoQFdFFCrp6qnuQqnuI02tvaYExOQUAjTEMmBvkbFRfDUOCLNAh8xSk2kII0rFDhF0huarBP8E0GWK3L1Mojn4LKGORvJd6jqG70MHP9zFFGVhmfsVZqGlBgCXycR3A+Ru9E6gg+AO+oUSKY3wVd2LOmAYZ2Uo7+Dy9pciPEOXxJYj4fBFyGHHENWOkHvZjz6EyIUZrJxpUr7PgvXv3yrhO3IrD1HtbQY+EG13BMBeiLadFF0hNdYm070ZG0hRYPMW+j+Vy4AT6vgaGBhR4Ltv1yKgkzV4gdhOdQwuoDkOjJ3D2Q4z3DU4J0WZg6mWVmGqILkatBkE4j0iDwbyrOsxlLl89dfextJYhvIuAtG11ERxp8x6GzJm5DsBWM8trx6F9nOTruZss3Q6Di5ymuzwWmF2nQjkcvSy/VYo9rhKQ+1pOkm8UW4krRTtxLZmEVfoP9Oup4dFs78F1QBlqN4m62fA9ZV45CHesAAAD//3Y7g4QAAAAGSURBVAMAao5eF665v54AAAAASUVORK5CYII=" alt="" width="18" height="18" aria-hidden="true" /></button>
             {#if exchangesOpen}
@@ -987,7 +987,7 @@
             {/if}
           </div>
           <div class="settingsWrap">
-            <button type="button" class="settingsButton" on:click={() => { exchangesOpen = false; settingsOpen = !settingsOpen; }} aria-haspopup="dialog" aria-expanded={settingsOpen} aria-label="Route refresh settings"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 6.8a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4Z" stroke="currentColor" stroke-width="1.6" /><path d="M16.2 11.3a6.5 6.5 0 0 0 0-2.6l1.5-1.1-1.8-3.1-1.8.8a6.7 6.7 0 0 0-2.2-1.3L11.7 2H8.3L8 4a6.7 6.7 0 0 0-2.2 1.3L4 4.5 2.2 7.6l1.5 1.1a6.5 6.5 0 0 0 0 2.6l-1.5 1.1L4 15.5l1.8-.8A6.7 6.7 0 0 0 8 16l.3 2h3.4l.3-2a6.7 6.7 0 0 0 2.2-1.3l1.8.8 1.8-3.1-1.6-1.1Z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
+            <button type="button" class="settingsButton" on:click={() => { exchangesOpen = false; settingsOpen = !settingsOpen; }} aria-haspopup="dialog" aria-expanded={settingsOpen} aria-label="Route refresh settings"><img src="/icons/ui/route-settings.png" alt="" width="18" height="18" aria-hidden="true" /></button>
             {#if settingsOpen}
               <div class="settingsBackdrop" use:portalSettingsBackdrop on:mousedown={closeSettings} role="presentation">
                 <div class:settingsDragging class="settingsMenu" bind:this={settingsDialog} role="dialog" aria-label="Refresh settings" tabindex="-1" on:mousedown|stopPropagation>
@@ -1259,7 +1259,9 @@
   opacity: 0.36;
 }
 
-.exchangesButton img {
+.refreshButton img,
+.exchangesButton img,
+.settingsButton img {
   display: block;
   width: 18px;
   height: 18px;
@@ -1267,7 +1269,9 @@
   filter: brightness(0);
 }
 
-:global(html[data-theme="dark"]) .exchangesButton img {
+:global(html[data-theme="dark"]) .refreshButton img,
+:global(html[data-theme="dark"]) .exchangesButton img,
+:global(html[data-theme="dark"]) .settingsButton img {
   filter: brightness(0) invert(1);
 }
 
@@ -2261,6 +2265,12 @@
   gap: var(--workspace-gap);
 }
 
+@media (min-width: 981px) {
+  .workspace:not(.routesCollapsed) {
+    grid-template-columns: minmax(0, 0.94fr) minmax(0, 1.06fr);
+  }
+}
+
 .converterStack { display: flex; min-width: 0; flex-direction: column; transition: transform .38s cubic-bezier(.22, 1, .36, 1); }
 .workspace.routesCollapsed .converterStack { transform: translateX(calc(50% + 15px)); }
 .routesReveal { display: flex; min-width: 0; align-self: start; }
@@ -2609,8 +2619,7 @@
   transition: border-color 0.15s ease;
 }
 
-.methodControls:hover,
-.methodControls:focus-within {
+.methodControls:has(> .methodTrigger:is(:hover, :focus-visible)) {
   border-color: #a4af9e;
 }
 
@@ -2871,8 +2880,7 @@
   border-color: #3b3b3b;
 }
 
-:global(html[data-theme="dark"]) .methodControls:hover,
-:global(html[data-theme="dark"]) .methodControls:focus-within {
+:global(html[data-theme="dark"]) .methodControls:has(> .methodTrigger:is(:hover, :focus-visible)) {
   border-color: #626262;
 }
 
