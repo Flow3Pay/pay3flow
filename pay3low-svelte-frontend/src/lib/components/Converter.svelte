@@ -35,7 +35,7 @@
   let INTERMEDIARY_ASSETS: string[] = [];
   const EXCHANGE_METHODS: ExchangeMethod[] = ["p2p", "exchanger"];
   let paymentMethods: PaymentMethod[] = [];
-  const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", activityPeriod: "pay3flow.exchange.activity-period", routesVisible: "pay3flow.exchange.routes-visible", sources: "pay3flow.exchange.p2p-sources", knownSources: "pay3flow.exchange.known-p2p-sources", methods: "pay3flow.exchange.methods", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", sourceNetwork: "pay3flow.exchange.source-network", targetNetwork: "pay3flow.exchange.target-network", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets" };
+  const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", activityPeriod: "pay3flow.exchange.activity-period", activityVisible: "pay3flow.exchange.activity-visible", routesVisible: "pay3flow.exchange.routes-visible", sources: "pay3flow.exchange.p2p-sources", knownSources: "pay3flow.exchange.known-p2p-sources", methods: "pay3flow.exchange.methods", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", sourceNetwork: "pay3flow.exchange.source-network", targetNetwork: "pay3flow.exchange.target-network", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets" };
 
   let corridors: ExchangeCorridor[] = [];
   let corridorId = "";
@@ -144,13 +144,19 @@
     try { localStorage.setItem(STORAGE.activityPeriod, period); } catch {}
   }
 
+  function setActivityExpanded(expanded: boolean) {
+    activityExpanded = expanded;
+    try { localStorage.setItem(STORAGE.activityVisible, String(expanded)); } catch {}
+  }
+
   function toggleActivityGraph() {
     if (window.matchMedia("(max-width: 980px)").matches) { activityExpanded = false; activityModalOpen = true; }
-    else activityExpanded = !activityExpanded;
+    else setActivityExpanded(!activityExpanded);
   }
 
   function toggleRoutes() {
     routesExpanded = !routesExpanded;
+    if (!routesExpanded && !window.matchMedia("(max-width: 980px)").matches) setActivityExpanded(true);
     try { localStorage.setItem(STORAGE.routesVisible, String(routesExpanded)); } catch {}
   }
 
@@ -628,6 +634,7 @@
   }
 
   function runPrimaryAction() {
+    if (searching) return;
     if (previewRoute) {
       void openInstructions(previewRoute);
       return;
@@ -788,6 +795,8 @@
       const savedRefresh = Number(localStorage.getItem(STORAGE.refresh)); if (REFRESH_OPTIONS.includes(savedRefresh as RefreshSeconds)) refreshSeconds = savedRefresh as RefreshSeconds;
       const savedActivityPeriod = localStorage.getItem(STORAGE.activityPeriod); if (SEARCH_ACTIVITY_PERIODS.includes(savedActivityPeriod as SearchActivityPeriod)) activityPeriod = savedActivityPeriod as SearchActivityPeriod;
       routesExpanded = localStorage.getItem(STORAGE.routesVisible) !== "false";
+      const savedActivityVisible = localStorage.getItem(STORAGE.activityVisible);
+      activityExpanded = !window.matchMedia("(max-width: 980px)").matches && (savedActivityVisible === null ? !routesExpanded : savedActivityVisible === "true");
     } catch {}
     void registerAnonymousUser(anonymousId).catch(() => {});
     preferencesLoaded = true;
@@ -920,7 +929,7 @@
         </div>
       </div>
       {#if refreshSeconds > 0}<div class="marketBar"><div class="marketState"><span class="refreshProgress" role="img" aria-label={secondsUntilRefresh === null ? "Auto-refresh is off" : `Refresh in ${secondsUntilRefresh} seconds`}><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle class="refreshTrack" cx="9" cy="9" r="7" pathLength="100" /><circle class="refreshFill" cx="9" cy="9" r="7" pathLength="100" style:stroke-dashoffset={`${100 - refreshProgress}`} /></svg></span><div><span>{lastUpdatedAt ? `Updated ${Math.max(0, Math.floor((clock - lastUpdatedAt) / 1000))}s ago` : "Public P2P sources only · no order placement"}</span></div></div>{#if secondsUntilRefresh !== null}<span class="nextRefresh">{secondsUntilRefresh}s</span>{/if}</div>{/if}
-      <button type="button" class="cta" disabled={!hasAmount || (!previewRoute && (searching || !corridor))} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? t("Open route instructions", {}, activeLocale) : t("Find routes", {}, activeLocale)}>{#if previewRoute}Go <span>↗</span>{:else if searching}<span class="spinner"></span> Finding routes{:else if hasAmount}Find routes <span>↗</span>{:else}Enter an amount to begin{/if}</button>
+      <button type="button" class="cta" disabled={!hasAmount || searching || (!previewRoute && !corridor)} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? t("Open route instructions", {}, activeLocale) : t("Find routes", {}, activeLocale)}>{#if previewRoute}Go <span>↗</span>{:else if searching}<span class="spinner"></span> Finding routes{:else if hasAmount}Find routes <span>↗</span>{:else}Enter an amount to begin{/if}</button>
       {#if error}<div class="errorBox" role="alert">{error}</div>{/if}
     </div>
     <div class="panelToggles">
@@ -2120,14 +2129,14 @@
 }
 
 .workspace {
-  --workspace-gap: 22px;
+  --workspace-gap: 30px;
   width: min(1220px, 100%);
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: var(--workspace-gap);
 }
 
 .converterStack { display: flex; min-width: 0; flex-direction: column; transition: transform .38s cubic-bezier(.22, 1, .36, 1); }
-.workspace.routesCollapsed .converterStack { transform: translateX(calc(50% + 11px)); }
+.workspace.routesCollapsed .converterStack { transform: translateX(calc(50% + 15px)); }
 .routesReveal { display: flex; min-width: 0; align-self: start; }
 .routesReveal :global(.side) { width: 100%; }
 .workspace.activityExpanded:not(.routesCollapsed) .converterStack { align-self: stretch; }
@@ -2145,7 +2154,7 @@
 .routesToggleOpen span { transform: rotate(180deg); }
 .activityReveal { width: 100%; min-height: 176px; flex: 1 1 auto; overflow: visible; }
 .activityReveal :global(.activityCard) { height: 100%; }
-@media (max-width: 980px) { .workspace.routesCollapsed .converterStack { transform: none; } .activityReveal { display: none; } .routesToggle { right: 0; width: 30px; } }
+@media (max-width: 980px) { .workspace { --workspace-gap: 22px; gap: 18px; } .workspace.routesCollapsed .converterStack { transform: none; } .activityReveal { display: none; } .routesToggle { right: 0; width: 30px; } }
 @media (prefers-reduced-motion: reduce) { .converterStack, .chartToggle span, .routesToggle span { transition: none; } }
 
 .card {

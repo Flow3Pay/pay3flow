@@ -166,13 +166,17 @@ test("routes can be hidden while the bridge stays centered and restored after re
   })).toBeLessThan(1);
   await expect.poll(() => page.evaluate(() => localStorage.getItem("pay3flow.exchange.routes-visible"))).toBe("false");
 
-  await page.getByRole("button", { name: "Show search activity" }).click();
   if (isMobile) {
+    await page.getByRole("button", { name: "Show search activity" }).click();
     const dialog = page.getByRole("dialog", { name: "Searches for this exchange" });
     await expect(dialog).toBeVisible();
     await page.keyboard.press("Escape");
   } else {
     await expect(page.getByTestId("search-activity")).toBeVisible();
+    await expect(page.locator(".activityReveal .mainPlot svg path.area")).toHaveCount(1);
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("pay3flow.exchange.activity-visible"))).toBe("true");
+    await page.getByRole("button", { name: "Hide search activity" }).click();
+    await expect(page.getByTestId("search-activity")).toHaveCount(0);
   }
 
   await page.reload();
@@ -204,6 +208,8 @@ test("search placeholders stay inside the route panel", async ({ page }) => {
   await page.getByLabel("Amount to send").fill("100000");
   const skeletons = page.locator("#routes .skeletonCard");
   await expect(skeletons).toHaveCount(5);
+  await expect(page.getByTestId("start-search")).toBeDisabled();
+  await expect(page.getByTestId("start-search")).toHaveCSS("background-color", "rgb(243, 246, 240)");
   const bounds = await page.evaluate(() => ({
     panelBottom: document.querySelector("#routes .panel")!.getBoundingClientRect().bottom,
     lastBottom: [...document.querySelectorAll("#routes .skeletonCard")].at(-1)!.getBoundingClientRect().bottom,
@@ -1214,6 +1220,19 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await page.getByTestId("start-search").click();
   await expect(instructions).toBeVisible();
   await instructions.getByRole("button", { name: "Close instructions", exact: true }).click();
+
+  let finishRefresh!: () => void;
+  const heldRefresh = new Promise<void>((resolve) => { finishRefresh = resolve; });
+  await page.route("http://localhost:8080/api/p2p/routes**", async (route) => {
+    await heldRefresh;
+    await route.fallback();
+  });
+  await page.getByRole("button", { name: "Refresh routes now" }).click();
+  await expect(page.getByTestId("start-search")).toHaveText("Go ↗");
+  await expect(page.getByTestId("start-search")).toBeDisabled();
+  await expect(page.getByTestId("start-search")).toHaveCSS("background-color", "rgb(243, 246, 240)");
+  finishRefresh();
+  await expect(page.getByTestId("start-search")).toBeEnabled();
 
   await swapDirection.click();
   await expect(amountInput).toHaveValue("20350");
