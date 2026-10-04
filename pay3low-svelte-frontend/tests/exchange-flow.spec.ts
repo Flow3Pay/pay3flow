@@ -106,12 +106,14 @@ test("search activity uses hourly counts and fits beside routes or opens in a mo
     expect(surfaces.chart).toBe(surfaces.routes);
     const dimensions = await page.evaluate(() => {
       const stack = document.querySelector(".converterStack")!.getBoundingClientRect();
-      const side = document.querySelector(".side")!.getBoundingClientRect();
+      const side = document.querySelector(".side .panel")!.getBoundingClientRect();
+      const card = document.querySelector(".converterStack .card")!.getBoundingClientRect();
       const chart = document.querySelector(".activityReveal .activityCard")!.getBoundingClientRect();
-      return { stackBottom: stack.bottom, sideBottom: side.bottom, chartRight: chart.right, sideLeft: side.left };
+      return { stackBottom: stack.bottom, sideBottom: side.bottom, chartBottom: chart.bottom, chartRight: chart.right, cardRight: card.right };
     });
     expect(dimensions.stackBottom).toBeLessThanOrEqual(dimensions.sideBottom + 1);
-    expect(Math.abs(dimensions.chartRight - dimensions.sideLeft)).toBeLessThanOrEqual(1);
+    expect(Math.abs(dimensions.chartBottom - dimensions.sideBottom)).toBeLessThanOrEqual(2);
+    expect(Math.abs(dimensions.chartRight - dimensions.cardRight)).toBeLessThanOrEqual(1);
     await expect(chart.locator(".mainPlot svg path.area")).toHaveCount(1);
     await expect(page.locator(".activityReveal")).toHaveCSS("overflow", "visible");
     const chartSize = await chart.evaluate((element) => ({ visible: element.clientHeight, content: element.scrollHeight }));
@@ -119,17 +121,59 @@ test("search activity uses hourly counts and fits beside routes or opens in a mo
     await page.setViewportSize({ width: 1024, height: 900 });
     const narrowDimensions = await page.evaluate(() => ({
       stackBottom: document.querySelector(".converterStack")!.getBoundingClientRect().bottom,
-      sideBottom: document.querySelector(".side")!.getBoundingClientRect().bottom,
+      sideBottom: document.querySelector(".side .panel")!.getBoundingClientRect().bottom,
+      chartBottom: document.querySelector(".activityReveal .activityCard")!.getBoundingClientRect().bottom,
       chartRight: document.querySelector(".activityReveal .activityCard")!.getBoundingClientRect().right,
-      sideLeft: document.querySelector(".side")!.getBoundingClientRect().left,
+      cardRight: document.querySelector(".converterStack .card")!.getBoundingClientRect().right,
     }));
     expect(narrowDimensions.stackBottom).toBeLessThanOrEqual(narrowDimensions.sideBottom + 1);
-    expect(Math.abs(narrowDimensions.chartRight - narrowDimensions.sideLeft)).toBeLessThanOrEqual(1);
+    expect(Math.abs(narrowDimensions.chartBottom - narrowDimensions.sideBottom)).toBeLessThanOrEqual(2);
+    expect(Math.abs(narrowDimensions.chartRight - narrowDimensions.cardRight)).toBeLessThanOrEqual(1);
     await page.getByRole("button", { name: "Hide search activity" }).click();
     await expect(chart).toHaveCount(0);
   }
   expect(activityRequests.length).toBeGreaterThan(0);
   expect(new URL(activityRequests[0]).searchParams.has("anonymous_id")).toBe(false);
+});
+
+test("routes can be hidden while the bridge stays centered and restored after reload", async ({ page, isMobile }) => {
+  await mockBackend(page);
+  await openApp(page);
+
+  const routes = page.locator("#routes");
+  const hideRoutes = page.getByRole("button", { name: "Hide routes" });
+  await expect(routes).toBeVisible();
+  await expect(hideRoutes).toHaveAttribute("aria-expanded", "true");
+  await hideRoutes.click();
+  await expect(routes).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => {
+    const card = document.querySelector(".converterStack .card")!.getBoundingClientRect();
+    const workspace = document.querySelector(".workspace")!.getBoundingClientRect();
+    return Math.abs(card.left + card.width / 2 - workspace.left - workspace.width / 2);
+  })).toBeLessThan(1);
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("pay3flow.exchange.routes-visible"))).toBe("false");
+
+  await page.getByRole("button", { name: "Show search activity" }).click();
+  if (isMobile) {
+    const dialog = page.getByRole("dialog", { name: "Searches for this exchange" });
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press("Escape");
+  } else {
+    await expect(page.getByTestId("search-activity")).toBeVisible();
+  }
+
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Show routes" })).toHaveAttribute("aria-expanded", "false");
+  await expect(routes).toHaveCount(0);
+  await page.getByRole("button", { name: "Show routes" }).click();
+  await expect(routes).toBeVisible();
+  if (!isMobile) {
+    await expect.poll(() => page.evaluate(() => {
+      const card = document.querySelector(".converterStack .card")!.getBoundingClientRect();
+      const workspace = document.querySelector(".workspace")!.getBoundingClientRect();
+      return Math.abs(card.left - workspace.left);
+    })).toBeLessThan(1);
+  }
 });
 
 test("search activity range menu filters and remembers the selected period", async ({ page, isMobile }) => {
@@ -1061,6 +1105,8 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await amountInput.fill("100000");
   await page.getByTestId("start-search").click();
   await expect(page.getByTestId("complete-route")).toHaveCount(101);
+  await expect(page.getByTestId("start-search")).toHaveText("Go ↗");
+  await expect(page.getByTestId("start-search")).toHaveAttribute("aria-label", "Open route instructions");
   await expect(page.getByText("101 routes found")).toBeVisible();
   const routeCounter = page.locator(".resultSummary small[aria-live='polite']");
   const languageToggle = page.locator(".languageToggle");
@@ -1127,6 +1173,9 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await expect(offerLinks).toHaveCount(2);
   await instructions.getByRole("button", { name: "Close instructions", exact: true }).click();
   await expect(instructions).toBeHidden();
+  await page.getByTestId("start-search").click();
+  await expect(instructions).toBeVisible();
+  await instructions.getByRole("button", { name: "Close instructions", exact: true }).click();
 
   await swapDirection.click();
   await expect(amountInput).toHaveValue("20350");

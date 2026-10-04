@@ -35,7 +35,7 @@
   let INTERMEDIARY_ASSETS: string[] = [];
   const EXCHANGE_METHODS: ExchangeMethod[] = ["p2p", "exchanger"];
   let paymentMethods: PaymentMethod[] = [];
-  const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", activityPeriod: "pay3flow.exchange.activity-period", sources: "pay3flow.exchange.p2p-sources", knownSources: "pay3flow.exchange.known-p2p-sources", methods: "pay3flow.exchange.methods", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", sourceNetwork: "pay3flow.exchange.source-network", targetNetwork: "pay3flow.exchange.target-network", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets" };
+  const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", activityPeriod: "pay3flow.exchange.activity-period", routesVisible: "pay3flow.exchange.routes-visible", sources: "pay3flow.exchange.p2p-sources", knownSources: "pay3flow.exchange.known-p2p-sources", methods: "pay3flow.exchange.methods", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", sourceNetwork: "pay3flow.exchange.source-network", targetNetwork: "pay3flow.exchange.target-network", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets" };
 
   let corridors: ExchangeCorridor[] = [];
   let corridorId = "";
@@ -85,6 +85,7 @@
   let activityController: AbortController | null = null;
   let activityModalOpen = false;
   let activityExpanded = false;
+  let routesExpanded = true;
   let settingsElement: HTMLDivElement;
   let settingsDialog: HTMLDivElement;
   let settingsDragging = false;
@@ -146,6 +147,11 @@
   function toggleActivityGraph() {
     if (window.matchMedia("(max-width: 980px)").matches) { activityExpanded = false; activityModalOpen = true; }
     else activityExpanded = !activityExpanded;
+  }
+
+  function toggleRoutes() {
+    routesExpanded = !routesExpanded;
+    try { localStorage.setItem(STORAGE.routesVisible, String(routesExpanded)); } catch {}
   }
 
   function closeInlineActivityOnMobile() {
@@ -781,6 +787,7 @@
       const savedAssets = localStorage.getItem(STORAGE.assets); if (savedAssets != null) selectedIntermediaryAssets = [...new Set(savedAssets.split(",").map((asset) => asset.trim().toUpperCase()).filter(Boolean))];
       const savedRefresh = Number(localStorage.getItem(STORAGE.refresh)); if (REFRESH_OPTIONS.includes(savedRefresh as RefreshSeconds)) refreshSeconds = savedRefresh as RefreshSeconds;
       const savedActivityPeriod = localStorage.getItem(STORAGE.activityPeriod); if (SEARCH_ACTIVITY_PERIODS.includes(savedActivityPeriod as SearchActivityPeriod)) activityPeriod = savedActivityPeriod as SearchActivityPeriod;
+      routesExpanded = localStorage.getItem(STORAGE.routesVisible) !== "false";
     } catch {}
     void registerAnonymousUser(anonymousId).catch(() => {});
     preferencesLoaded = true;
@@ -842,7 +849,7 @@
 
 <section class="shell" class:localeLong={activeLocale !== "en"} id="transfer">
   <div class="hero"><h1>{t("Move money.", {}, activeLocale)} <span>{t("Keep more.", {}, activeLocale)}</span></h1><p>{t("Stop spending hours searching for an exchange.", {}, activeLocale)}</p></div>
-  <div class="workspace" class:activityExpanded>
+  <div class="workspace" class:activityExpanded class:routesCollapsed={!routesExpanded}>
     <div class="converterStack">
     <div class="card">
       <div class="cardTop">
@@ -913,17 +920,24 @@
         </div>
       </div>
       {#if refreshSeconds > 0}<div class="marketBar"><div class="marketState"><span class="refreshProgress" role="img" aria-label={secondsUntilRefresh === null ? "Auto-refresh is off" : `Refresh in ${secondsUntilRefresh} seconds`}><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle class="refreshTrack" cx="9" cy="9" r="7" pathLength="100" /><circle class="refreshFill" cx="9" cy="9" r="7" pathLength="100" style:stroke-dashoffset={`${100 - refreshProgress}`} /></svg></span><div><span>{lastUpdatedAt ? `Updated ${Math.max(0, Math.floor((clock - lastUpdatedAt) / 1000))}s ago` : "Public P2P sources only · no order placement"}</span></div></div>{#if secondsUntilRefresh !== null}<span class="nextRefresh">{secondsUntilRefresh}s</span>{/if}</div>{/if}
-      <button type="button" class="cta" disabled={!hasAmount || (!previewRoute && (searching || !corridor))} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? "Open swap instructions" : "Find routes"}>{#if previewRoute}Swap <span>↗</span>{:else if searching}<span class="spinner"></span> Finding routes{:else if hasAmount}Find routes <span>↗</span>{:else}Enter an amount to begin{/if}</button>
+      <button type="button" class="cta" disabled={!hasAmount || (!previewRoute && (searching || !corridor))} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? t("Open route instructions", {}, activeLocale) : t("Find routes", {}, activeLocale)}>{#if previewRoute}Go <span>↗</span>{:else if searching}<span class="spinner"></span> Finding routes{:else if hasAmount}Find routes <span>↗</span>{:else}Enter an amount to begin{/if}</button>
       {#if error}<div class="errorBox" role="alert">{error}</div>{/if}
     </div>
-    <button type="button" class="chartToggle" class:chartToggleOpen={activityExpanded} on:click={toggleActivityGraph} aria-label={t(activityExpanded ? "Hide search activity" : "Show search activity", {}, activeLocale)} aria-expanded={activityExpanded || activityModalOpen} title={t(activityExpanded ? "Hide search activity" : "Show search activity", {}, activeLocale)}><span aria-hidden="true">❯</span></button>
+    <div class="panelToggles">
+      <button type="button" class="chartToggle" class:chartToggleOpen={activityExpanded} on:click={toggleActivityGraph} aria-label={t(activityExpanded ? "Hide search activity" : "Show search activity", {}, activeLocale)} aria-expanded={activityExpanded || activityModalOpen} title={t(activityExpanded ? "Hide search activity" : "Show search activity", {}, activeLocale)}><span aria-hidden="true">❯</span></button>
+      <button type="button" class="routesToggle" class:routesToggleOpen={routesExpanded} on:click={toggleRoutes} aria-label={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)} aria-expanded={routesExpanded} title={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)}><span aria-hidden="true">❯</span></button>
+    </div>
     {#if activityExpanded}
       <div class="activityReveal" transition:fly={{ y: 18, duration: 380, easing: quintOut }}>
         <SearchActivityChart sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} hours={activityHours} period={activityPeriod} onPeriodChange={selectActivityPeriod} loading={activityLoading} error={activityError} />
       </div>
     {/if}
     </div>
-    <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {renderingRoutes} {searchingVenues} {foundVenues} {venueStats} {venueNames} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} searched={lastUpdatedAt !== null} {hasAmount} {showBelarusP2pWarning} {onOpenBelarusP2pWarning} onOpenSearchActivity={() => activityModalOpen = true} />
+    {#if routesExpanded}
+      <div class="routesReveal" transition:fly={{ x: 18, duration: 380, easing: quintOut }}>
+        <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {renderingRoutes} {searchingVenues} {foundVenues} {venueStats} {venueNames} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} searched={lastUpdatedAt !== null} {hasAmount} {showBelarusP2pWarning} {onOpenBelarusP2pWarning} onOpenSearchActivity={() => activityModalOpen = true} />
+      </div>
+    {/if}
   </div>
   {#if activityModalOpen}<SearchActivityModal sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} hours={activityHours} period={activityPeriod} onPeriodChange={selectActivityPeriod} loading={activityLoading} error={activityError} onClose={() => activityModalOpen = false} />{/if}
   {#if currencyPicker === "source" || currencyPicker === "target"}<CurrencyPicker open={currencyPicker !== null} selected={currencyPicker === "source" ? sourceCurrencyChoice : targetCurrencyChoice} choices={currencyPicker === "source" ? sourceCurrencyChoices : targetCurrencyChoices} onClose={() => currencyPicker = null} onSelect={(choice) => chooseCurrency(currencyPicker ?? "source", choice)} />{/if}
@@ -2113,18 +2127,27 @@
   gap: var(--workspace-gap);
 }
 
-.converterStack { display: flex; min-width: 0; flex-direction: column; }
-.workspace.activityExpanded :global(.side) { min-height: 690px; align-self: stretch; contain: size; }
-.workspace.activityExpanded :global(.side .panel) { height: 100%; min-height: 0; }
-.chartToggle { position: relative; z-index: 3; display: grid; width: 48px; height: 30px; flex: 0 0 auto; place-items: center; margin: 8px auto 4px; padding: 0; border: 0; background: transparent; box-shadow: none; color: var(--color-text-soft); opacity: .6; cursor: pointer; transition: opacity .2s ease; -webkit-tap-highlight-color: transparent; }
-.chartToggle:hover { opacity: .85; }
-.chartToggle:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
-.chartToggle span { display: block; font-size: 21px; line-height: 1; -webkit-text-stroke: .55px currentColor; transform: rotate(90deg); transition: transform .26s ease; }
+.converterStack { display: flex; min-width: 0; flex-direction: column; transition: transform .38s cubic-bezier(.22, 1, .36, 1); }
+.workspace.routesCollapsed .converterStack { transform: translateX(calc(50% + 11px)); }
+.routesReveal { display: flex; min-width: 0; align-self: start; }
+.routesReveal :global(.side) { width: 100%; }
+.workspace.activityExpanded:not(.routesCollapsed) .converterStack { align-self: stretch; }
+.workspace.activityExpanded .routesReveal { min-height: 690px; align-self: stretch; contain: size; }
+.workspace.activityExpanded .routesReveal :global(.side) { height: 100%; }
+.workspace.activityExpanded .routesReveal :global(.side .panel) { height: 100%; min-height: 0; }
+.panelToggles { position: relative; display: flex; height: 42px; flex: 0 0 auto; align-items: center; justify-content: center; padding: 8px 0 4px; }
+.chartToggle, .routesToggle { z-index: 3; display: grid; width: 48px; height: 30px; flex: 0 0 auto; place-items: center; padding: 0; border: 0; background: transparent; box-shadow: none; color: var(--color-text-soft); opacity: .6; cursor: pointer; transition: opacity .2s ease; -webkit-tap-highlight-color: transparent; }
+.routesToggle { position: absolute; top: 8px; right: 0; }
+.chartToggle:hover, .routesToggle:hover { opacity: .85; }
+.chartToggle:focus-visible, .routesToggle:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.chartToggle span, .routesToggle span { display: block; font-size: 21px; line-height: 1; -webkit-text-stroke: .55px currentColor; transition: transform .26s ease; }
+.chartToggle span { transform: rotate(90deg); }
 .chartToggleOpen span { transform: rotate(-90deg); }
-.activityReveal { width: calc(100% + var(--workspace-gap)); height: 176px; min-height: 0; overflow: visible; }
+.routesToggleOpen span { transform: rotate(180deg); }
+.activityReveal { width: 100%; min-height: 176px; flex: 1 1 auto; overflow: visible; }
 .activityReveal :global(.activityCard) { height: 100%; }
-@media (max-width: 980px) { .activityReveal { display: none; } }
-@media (prefers-reduced-motion: reduce) { .chartToggle span { transition: none; } }
+@media (max-width: 980px) { .workspace.routesCollapsed .converterStack { transform: none; } .activityReveal { display: none; } }
+@media (prefers-reduced-motion: reduce) { .converterStack, .chartToggle span, .routesToggle span { transition: none; } }
 
 .card {
   min-height: 0;
