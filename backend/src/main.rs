@@ -162,6 +162,8 @@ async fn main() -> anyhow::Result<()> {
         symbiosis,
     );
 
+    let market_prices = pay3flow_backend::market_prices::MarketPriceService::new()?;
+    market_prices.initialize().await;
     let state = AppState::new(
         pool,
         Jwt::new(&cfg.jwt_secret),
@@ -179,7 +181,7 @@ async fn main() -> anyhow::Result<()> {
         route_quotes,
         reputation,
         route_executions,
-        pay3flow_backend::market_prices::MarketPriceService::new()?,
+        market_prices,
     );
 
     // Provider refresh work is paced independently from interactive searches:

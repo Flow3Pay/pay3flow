@@ -2,7 +2,7 @@
   import { afterUpdate, onMount, onDestroy, tick } from "svelte";
   import { quintOut } from "svelte/easing";
   import { fly, slide } from "svelte/transition";
-  import { fetchCorridors, fetchMarketValues, fetchP2pRoutes, fetchProviders, recordInstructionOpen, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderDefinition, type ProviderGuidance, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote, type VenueSearchStatus } from "$lib/exchange";
+  import { fetchCorridors, fetchMarketPrices, fetchP2pRoutes, fetchProviders, recordInstructionOpen, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderDefinition, type ProviderGuidance, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote, type VenueSearchStatus } from "$lib/exchange";
   import { FALLBACK_NETWORK, fetchNetworks, type CryptoNetwork } from "$lib/networks";
   import { assetIcon, networkIcon, swapIcon, venueIcon } from "$lib/icons";
   import { fetchPaymentMethods, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
@@ -106,9 +106,10 @@
   let debounceTimer: number | undefined;
   let refreshTimer: number | undefined;
   let clockTimer: number | undefined;
-  let marketTimer: number | undefined;
+  let marketRefreshTimer: number | undefined;
   let marketController: AbortController | null = null;
-  let lastMarketKey = "";
+  let marketPrices: Record<string, number> = {};
+  let marketPricesUpdatedAt = 0;
   let marketUsd: { source: number | null; target: number | null } = { source: null, target: null };
   let initialSearchTimer: number | undefined;
   let routeRenderTimer: number | undefined;
@@ -562,12 +563,10 @@
   $: previewRoute = selected ?? routes.find((route) => route.status === "complete" && route.is_current_best) ?? routes.find((route) => route.status === "complete") ?? null;
   $: displayedSourceAmount = amountSide === "target" && targetAmountNeedsRate && amountNumber(amount) <= 0 ? "" : amount;
   $: displayedTargetAmount = amountSide === "target" && !previewRoute ? targetAmount : amountFromRoute(previewRoute);
-  $: marketItems = ([
-    sourceMethod?.kind === "wallet" && amountNumber(displayedSourceAmount) > 0 ? { side: "source" as const, asset: selectedSourceCurrency, amount: normalizeAmount(displayedSourceAmount).replace(",", ".") } : null,
-    targetMethod?.kind === "wallet" && amountNumber(displayedTargetAmount) > 0 ? { side: "target" as const, asset: selectedTargetCurrency, amount: normalizeAmount(displayedTargetAmount).replace(",", ".") } : null,
-  ]).filter((item): item is { side: "source" | "target"; asset: string; amount: string } => item !== null);
-  $: marketKey = `${marketItems.map((item) => `${item.side}:${item.asset}:${item.amount}`).join("|")}:${Math.floor(clock / 60_000)}`;
-  $: if (preferencesLoaded) scheduleMarketValues(marketKey, marketItems);
+  $: marketUsd = {
+    source: sourceMethod?.kind === "wallet" ? calculateMarketUsd(displayedSourceAmount, marketPrices[selectedSourceCurrency]) : null,
+    target: targetMethod?.kind === "wallet" ? calculateMarketUsd(displayedTargetAmount, marketPrices[selectedTargetCurrency]) : null,
+  };
   $: converterAmountDigits = Math.min(14, Math.max(10, displayedSourceAmount.replace(/\D/g, "").length, displayedTargetAmount.replace(/\D/g, "").length));
   $: converterWidth = 550 + (converterAmountDigits - 10) * 21;
   $: secondsUntilRefresh = refreshSeconds && lastUpdatedAt ? Math.max(0, refreshSeconds - Math.floor((clock - lastUpdatedAt) / 1000)) : null;
@@ -587,29 +586,31 @@
       localStorage.setItem(STORAGE.amount, value); localStorage.setItem(STORAGE.refresh, String(refresh)); localStorage.setItem(STORAGE.sources, sources.join(",")); localStorage.setItem(STORAGE.methods, methods.join(",")); localStorage.setItem(STORAGE.assets, assets.join(",")); localStorage.setItem(STORAGE.corridor, corridorValue); localStorage.setItem(STORAGE.sourceMethod, sourceMethodValue); localStorage.setItem(STORAGE.targetMethod, targetMethodValue); localStorage.setItem(STORAGE.sourceNetwork, sourceNetworkValue); localStorage.setItem(STORAGE.targetNetwork, targetNetworkValue); localStorage.setItem(STORAGE.direction, String(reversed));
     } catch {}
   }
-  function scheduleMarketValues(key: string, items: typeof marketItems) {
-    if (key === lastMarketKey) return;
-    lastMarketKey = key;
+  async function refreshMarketPrices() {
     marketController?.abort();
-    if (marketTimer) clearTimeout(marketTimer);
-    marketUsd = { source: null, target: null };
-    if (!items.length) return;
-    marketTimer = window.setTimeout(async () => {
-      const controller = new AbortController();
-      marketController = controller;
-      try {
-        const response = await fetchMarketValues(items.map(({ asset, amount }) => ({ asset, amount })), controller.signal);
-        if (lastMarketKey !== key || controller.signal.aborted) return;
-        const values = { source: null, target: null } as typeof marketUsd;
-        items.forEach((item, index) => {
-          const value = response.values[index];
-          if (value?.asset === item.asset && value.amount === item.amount) values[item.side] = value.value_usd;
-        });
-        marketUsd = values;
-      } catch (error) {
-        if (!controller.signal.aborted) console.warn("Market valuation unavailable", error);
+    const controller = new AbortController();
+    marketController = controller;
+    try {
+      const response = await fetchMarketPrices(controller.signal);
+      if (controller.signal.aborted) return;
+      if (Object.keys(response.prices).length) {
+        marketPrices = response.prices;
+        marketPricesUpdatedAt = response.updated_at ?? Math.floor(Date.now() / 1000);
+      } else if (marketPricesUpdatedAt && Date.now() / 1000 - marketPricesUpdatedAt >= 6 * 60 * 60) {
+        marketPrices = {};
       }
-    }, 300);
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        if (marketPricesUpdatedAt && Date.now() / 1000 - marketPricesUpdatedAt >= 6 * 60 * 60) marketPrices = {};
+        console.warn("Market prices unavailable", error);
+      }
+    }
+  }
+  function calculateMarketUsd(value: string, price: number | undefined): number | null {
+    const quantity = amountNumber(value);
+    if (!Number.isFinite(quantity) || quantity <= 0 || !price || !Number.isFinite(price)) return null;
+    const total = quantity * price;
+    return Number.isFinite(total) ? total : null;
   }
   function formatMarketUsd(value: number) {
     if (value > 0 && value < 0.01) return "<$0.01";
@@ -914,6 +915,8 @@
   }
 
   onMount(() => {
+    void refreshMarketPrices();
+    marketRefreshTimer = window.setInterval(() => void refreshMarketPrices(), 60 * 60 * 1000);
     const shared = readSharedExchange();
     let savedSourceIds: string[] = [];
     let savedKnownSourceIds: string[] = [];
@@ -985,7 +988,7 @@
     if (debounceTimer) clearTimeout(debounceTimer);
     if (refreshTimer) clearInterval(refreshTimer);
     if (clockTimer) clearInterval(clockTimer);
-    if (marketTimer) clearTimeout(marketTimer);
+    if (marketRefreshTimer) clearInterval(marketRefreshTimer);
     if (initialSearchTimer) clearTimeout(initialSearchTimer);
     if (typeof document !== "undefined") document.removeEventListener("mousedown", onDocumentMouseDown);
     if (typeof window !== "undefined") window.removeEventListener("keydown", onSettingsKeyDown);

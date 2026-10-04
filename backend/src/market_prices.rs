@@ -10,14 +10,14 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use axum::extract::State;
 use axum::Json;
 use serde::{Deserialize, Serialize};
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
+use tokio::time::MissedTickBehavior;
 
 use crate::core::error::AppError;
 use crate::core::state::AppState;
 
-const CACHE_TTL: Duration = Duration::from_secs(60);
-const FAILURE_RETRY_DELAY: Duration = Duration::from_secs(30);
-const MAX_STALE_AGE: Duration = Duration::from_secs(5 * 60);
+const REFRESH_INTERVAL: Duration = Duration::from_secs(60 * 60);
+const MAX_STALE_AGE: Duration = Duration::from_secs(6 * 60 * 60);
 const MAX_PROVIDER_PRICE_AGE_SECS: i64 = 15 * 60;
 const DEFILLAMA_BASE: &str = "https://coins.llama.fi/prices/current/";
 
@@ -62,18 +62,13 @@ const ASSETS: &[(&str, &str)] = &[
 pub struct MarketPriceService {
     client: reqwest::Client,
     endpoint: String,
-    cache: Arc<Mutex<PriceCache>>,
-}
-
-#[derive(Default)]
-struct PriceCache {
-    snapshot: Option<PriceSnapshot>,
-    last_attempt: Option<Instant>,
+    cache: Arc<RwLock<Option<PriceSnapshot>>>,
 }
 
 #[derive(Clone)]
 struct PriceSnapshot {
     fetched_at: Instant,
+    updated_at: i64,
     prices: HashMap<&'static str, MarketPrice>,
 }
 
@@ -116,6 +111,14 @@ pub struct MarketValuesResponse {
 }
 
 #[derive(Serialize)]
+pub struct MarketPricesResponse {
+    source: &'static str,
+    stale: bool,
+    updated_at: Option<i64>,
+    prices: HashMap<&'static str, f64>,
+}
+
+#[derive(Serialize)]
 struct MarketValue {
     asset: String,
     amount: String,
@@ -141,38 +144,72 @@ impl MarketPriceService {
         Self {
             client,
             endpoint: format!("{base}{ids}"),
-            cache: Arc::new(Mutex::new(PriceCache::default())),
+            cache: Arc::new(RwLock::new(None)),
+        }
+    }
+
+    /// Fetch immediately at server startup, then on a one-hour timer anchored to that startup.
+    pub async fn initialize(&self) {
+        let started_at = tokio::time::Instant::now();
+        self.refresh().await;
+        let service = self.clone();
+        tokio::spawn(async move {
+            let mut interval =
+                tokio::time::interval_at(started_at + REFRESH_INTERVAL, REFRESH_INTERVAL);
+            interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+            loop {
+                interval.tick().await;
+                service.refresh().await;
+            }
+        });
+    }
+
+    async fn refresh(&self) {
+        match self.fetch().await {
+            Ok(mut snapshot) => {
+                let mut cache = self.cache.write().await;
+                if let Some(previous) = cache.as_ref() {
+                    for (&asset, price) in &previous.prices {
+                        if snapshot.updated_at.saturating_sub(price.timestamp)
+                            < MAX_STALE_AGE.as_secs() as i64
+                        {
+                            snapshot
+                                .prices
+                                .entry(asset)
+                                .or_insert_with(|| price.clone());
+                        }
+                    }
+                }
+                *cache = Some(snapshot);
+            }
+            Err(error) => {
+                tracing::warn!(%error, "market price refresh failed");
+            }
         }
     }
 
     async fn prices(&self) -> Option<(PriceSnapshot, bool)> {
-        let mut cache = self.cache.lock().await;
-        if let Some(snapshot) = &cache.snapshot {
-            if snapshot.fetched_at.elapsed() < CACHE_TTL {
-                return Some((snapshot.clone(), false));
-            }
-        }
-        if cache
-            .last_attempt
-            .is_some_and(|at| at.elapsed() < FAILURE_RETRY_DELAY)
-        {
-            return cache.snapshot.as_ref().and_then(|snapshot| {
-                (snapshot.fetched_at.elapsed() < MAX_STALE_AGE).then(|| (snapshot.clone(), true))
-            });
-        }
-        cache.last_attempt = Some(Instant::now());
-        match self.fetch().await {
-            Ok(snapshot) => {
-                cache.snapshot = Some(snapshot.clone());
-                Some((snapshot, false))
-            }
-            Err(error) => {
-                tracing::warn!(%error, "market price refresh failed");
-                cache.snapshot.as_ref().and_then(|snapshot| {
-                    (snapshot.fetched_at.elapsed() < MAX_STALE_AGE)
-                        .then(|| (snapshot.clone(), true))
+        self.cache.read().await.as_ref().and_then(|snapshot| {
+            let age = snapshot.fetched_at.elapsed();
+            (age < MAX_STALE_AGE).then(|| (snapshot.clone(), age >= REFRESH_INTERVAL))
+        })
+    }
+
+    pub async fn list(&self) -> MarketPricesResponse {
+        let snapshot = self.prices().await;
+        MarketPricesResponse {
+            source: "DefiLlama",
+            stale: snapshot.as_ref().is_some_and(|(_, stale)| *stale),
+            updated_at: snapshot.as_ref().map(|(snapshot, _)| snapshot.updated_at),
+            prices: snapshot
+                .map(|(snapshot, _)| {
+                    snapshot
+                        .prices
+                        .into_iter()
+                        .map(|(asset, price)| (asset, price.usd))
+                        .collect()
                 })
-            }
+                .unwrap_or_default(),
         }
     }
 
@@ -211,6 +248,7 @@ impl MarketPriceService {
         }
         Ok(PriceSnapshot {
             fetched_at: Instant::now(),
+            updated_at: now,
             prices,
         })
     }
@@ -243,6 +281,10 @@ impl MarketPriceService {
             values,
         }
     }
+}
+
+pub async fn market_prices(State(state): State<AppState>) -> Json<MarketPricesResponse> {
+    Json(state.market_prices.list().await)
 }
 
 pub async fn market_values(
@@ -287,14 +329,19 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn concurrent_valuations_share_one_upstream_request() {
+    async fn initialized_prices_serve_multiple_valuations_without_refetching() {
         let calls = Arc::new(AtomicUsize::new(0));
         let hit_count = calls.clone();
         let app = Router::new().route(
             "/prices/current/:coins",
             get(move || {
-                hit_count.fetch_add(1, Ordering::SeqCst);
+                let call = hit_count.fetch_add(1, Ordering::SeqCst);
                 async move {
+                    if call > 0 {
+                        return Json(serde_json::json!({ "coins": {
+                            "coingecko:bitcoin": { "price": 100.0, "timestamp": now_epoch(), "confidence": 0.99 }
+                        }}));
+                    }
                     Json(serde_json::json!({ "coins": {
                         "coingecko:bitcoin": { "price": 100.0, "timestamp": now_epoch(), "confidence": 0.99 },
                         "coingecko:tether": { "price": 0.99, "timestamp": now_epoch(), "confidence": 0.99 }
@@ -305,10 +352,11 @@ mod tests {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-        let service = MarketPriceService::with_client(
+        let mut service = MarketPriceService::with_client(
             reqwest::Client::new(),
             format!("http://{address}/prices/current/"),
         );
+        service.initialize().await;
         let pair = || {
             vec![
                 ("BTC".to_owned(), "2".to_owned(), 2.0),
@@ -321,6 +369,15 @@ mod tests {
         assert!((first.values[1].value_usd.unwrap() - 2.97).abs() < 1e-10);
         assert_eq!(second.values[0].value_usd, Some(200.0));
         assert!(!first.stale);
+
+        service.refresh().await;
+        assert!((service.value(pair()).await.values[1].value_usd.unwrap() - 2.97).abs() < 1e-10);
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+
+        service.endpoint = "http://127.0.0.1:1/unavailable".to_owned();
+        service.refresh().await;
+        assert_eq!(service.value(pair()).await.values[0].value_usd, Some(200.0));
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
     }
 
     fn now_epoch() -> i64 {

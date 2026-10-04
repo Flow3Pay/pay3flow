@@ -21,6 +21,8 @@ async function openApp(page: Page, waitForIntro = true) {
 }
 
 async function expectPeriodButtonBesidePair(chart: Locator) {
+  await expect(chart.locator(".pairCurrency")).toHaveCount(2);
+  await expect(chart.locator(".pairCurrency img, .pairCurrency .pairFlag")).toHaveCount(2);
   const pair = await chart.locator(".pair").boundingBox();
   const button = await chart.getByRole("button", { name: "Chart time range" }).boundingBox();
   expect(pair).not.toBeNull();
@@ -477,14 +479,13 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
     const json = (value: unknown, status = 200) =>
       route.fulfill({ status, contentType: "application/json", body: JSON.stringify(value) });
 
-    if (url.pathname === "/api/market-values") {
-      const { items } = route.request().postDataJSON() as { items: Array<{ asset: string; amount: string }> };
-      const prices: Record<string, number> = { USDT: 1, USDC: 1, BTC: 10000, ETH: 1000 };
-      return json({ source: "DefiLlama", stale: false, values: items.map(({ asset, amount }) => ({
-        asset, amount, price_usd: prices[asset] ?? null,
-        value_usd: prices[asset] == null ? null : Number(amount) * prices[asset],
-        price_timestamp: 1_780_000_000,
-      })) });
+    if (url.pathname === "/api/market-prices") {
+      return json({
+        source: "DefiLlama",
+        stale: false,
+        updated_at: Math.floor(Date.now() / 1000),
+        prices: { USDT: 1, USDC: 1, BTC: 10000, ETH: 1000 },
+      });
     }
 
     if (url.pathname === "/api/p2p/route-activity") {
@@ -1823,6 +1824,10 @@ test("reordered progressive snapshots do not restart card rendering at 100", asy
 
 test("currency control only lists currencies supported by the selected payment method", async ({ page, isMobile }) => {
   await mockBackend(page);
+  let marketPriceRequests = 0;
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/api/market-prices") marketPriceRequests += 1;
+  });
   await openApp(page);
 
   await expect(page.getByRole("button", { name: "Select sending currency: AMD" })).toBeVisible();
@@ -1863,6 +1868,9 @@ test("currency control only lists currencies supported by the selected payment m
   await expect(sendingAsset.locator(".methodText")).toHaveText("USDT");
   await page.getByLabel("Amount to send").fill("2");
   await expect(page.locator(".moneyPanelSource .marketValue")).toHaveText("$2.00");
+  await page.getByLabel("Amount to send").fill("3");
+  await expect(page.locator(".moneyPanelSource .marketValue")).toHaveText("$3.00");
+  expect(marketPriceRequests).toBe(1);
   await page.getByLabel("Amount to send").fill("0");
   await expect(page.locator(".moneyPanelSource .marketValue")).toHaveCount(0);
   await expect(page.locator(".moneyPanelSource .currencyHint")).toHaveCount(0);

@@ -18,22 +18,15 @@ export interface CorridorsResponse {
   terms_version: string;
 }
 
-export interface MarketValue {
-  asset: string;
-  amount: string;
-  price_usd: number | null;
-  value_usd: number | null;
-  price_timestamp: number | null;
-}
-
-export interface MarketValuesResponse {
+export interface MarketPricesResponse {
   source: string;
   stale: boolean;
-  values: MarketValue[];
+  updated_at: number | null;
+  prices: Record<string, number>;
 }
 
-export function fetchMarketValues(items: Array<{ asset: string; amount: string }>, signal?: AbortSignal): Promise<MarketValuesResponse> {
-  return request("/api/market-values", { method: "POST", body: JSON.stringify({ items }), signal });
+export function fetchMarketPrices(signal?: AbortSignal): Promise<MarketPricesResponse> {
+  return request("/api/market-prices", { signal });
 }
 
 export interface ProviderDefinition {

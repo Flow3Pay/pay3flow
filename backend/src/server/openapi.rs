@@ -105,6 +105,16 @@ fn components() -> Value {
                     } } }
                 }
             },
+            "MarketPricesResponse": {
+                "type": "object",
+                "required": ["source", "stale", "updated_at", "prices"],
+                "properties": {
+                    "source": { "type": "string", "example": "DefiLlama" },
+                    "stale": { "type": "boolean" },
+                    "updated_at": { "type": "integer", "format": "int64", "nullable": true, "description": "Unix time of the last successful server refresh." },
+                    "prices": { "type": "object", "additionalProperties": { "type": "number", "format": "double" }, "description": "USD price per one unit of each supported asset." }
+                }
+            },
             "User": {
                 "type": "object",
                 "required": ["id", "email", "referral_code"],
@@ -648,6 +658,15 @@ const OPERATIONS: &[Operation] = &[
         false,
     ),
     (
+        "/api/market-prices",
+        "get",
+        "List cached crypto prices in USD",
+        "Return the server's latest crypto price coefficients. The server refreshes them at startup and once per hour.",
+        "Catalogs",
+        false,
+        false,
+    ),
+    (
         "/api/market-values",
         "post",
         "Calculate crypto market values in USD",
@@ -1108,6 +1127,7 @@ fn response_schema(path: &str, method: &str) -> Value {
         ("/api/auth/me", "get") => schema_ref("User"),
         ("/api/anonymous/register", "post") => schema_ref("AnonymousUser"),
         ("/api/market-values", "post") => schema_ref("MarketValuesResponse"),
+        ("/api/market-prices", "get") => schema_ref("MarketPricesResponse"),
         ("/api/referrals/me", "get") => schema_ref("ReferralProfile"),
         ("/api/payments", "post") | ("/api/payments/{id}", "get") => schema_ref("PaymentView"),
         ("/api/payments", "get") => array_schema("PaymentView"),
