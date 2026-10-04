@@ -28,7 +28,7 @@
 </script>
 
 <div class="backdrop" role="presentation" on:mousedown={backdrop}>
-  <div class="dialog" bind:this={dialog} role="dialog" aria-modal="true" aria-label={t("Others searched this exchange", {}, $locale)} tabindex="-1">
+  <div class="dialog" bind:this={dialog} role="dialog" aria-modal="true" aria-label={t("Searches for this exchange", {}, $locale)} tabindex="-1">
     <button type="button" class="close" on:click={onClose} aria-label={t("Close search activity", {}, $locale)}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button>
     <SearchActivityChart {sourceCurrency} {targetCurrency} {hours} {period} {onPeriodChange} {loading} {error} />
   </div>

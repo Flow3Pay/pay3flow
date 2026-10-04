@@ -17,7 +17,6 @@ export interface RouteSearchActivity {
 export async function fetchRouteSearchActivity(
   sourceCurrency: string,
   targetCurrency: string,
-  anonymousId: string,
   period: SearchActivityPeriod,
   signal?: AbortSignal,
 ): Promise<RouteSearchActivity> {
@@ -25,7 +24,6 @@ export async function fetchRouteSearchActivity(
   url.searchParams.set("source_currency", sourceCurrency);
   url.searchParams.set("target_currency", targetCurrency);
   url.searchParams.set("period", period);
-  if (anonymousId) url.searchParams.set("anonymous_id", anonymousId);
   const response = await fetch(url, { signal });
   if (!response.ok) throw new Error(`Route activity request failed: ${response.status}`);
   return response.json() as Promise<RouteSearchActivity>;

@@ -112,9 +112,9 @@
   $: activeLocale = $locale;
   $: modalOpen = settingsOpen || exchangesOpen;
 
-  async function refreshActivity(source: string, target: string, identity: string, period: SearchActivityPeriod, refreshedAt: number | null, interval: number) {
+  async function refreshActivity(source: string, target: string, period: SearchActivityPeriod, refreshedAt: number | null, interval: number) {
     const displayKey = `${source}|${target}|${period}`;
-    const key = `${displayKey}|${identity}|${refreshedAt ?? ""}|${interval}`;
+    const key = `${displayKey}|${refreshedAt ?? ""}|${interval}`;
     if (key === activityKey) return;
     activityKey = key;
     activityController?.abort();
@@ -124,7 +124,7 @@
     activityLoading = true;
     activityError = false;
     try {
-      const response = await fetchRouteSearchActivity(source, target, identity, period, activityController.signal);
+      const response = await fetchRouteSearchActivity(source, target, period, activityController.signal);
       if (activityKey === key) activityHours = response.hours;
     } catch (error) {
       if (activityKey === key && !(error instanceof DOMException && error.name === "AbortError")) activityError = true;
@@ -133,7 +133,7 @@
     }
   }
 
-  $: if (typeof document !== "undefined" && !document.hidden && selectedSourceCurrency && selectedTargetCurrency && anonymousId) void refreshActivity(selectedSourceCurrency, selectedTargetCurrency, anonymousId, activityPeriod, lastUpdatedAt, Math.floor(clock / 30_000));
+  $: if (typeof document !== "undefined" && !document.hidden && selectedSourceCurrency && selectedTargetCurrency) void refreshActivity(selectedSourceCurrency, selectedTargetCurrency, activityPeriod, lastUpdatedAt, Math.floor(clock / 30_000));
 
   function selectActivityPeriod(period: SearchActivityPeriod) {
     activityPeriod = period;

@@ -652,7 +652,6 @@ ON CONFLICT (id) DO NOTHING
         &self,
         source_currency: &str,
         target_currency: &str,
-        anonymous_id: Option<Uuid>,
         period: SearchActivityPeriod,
     ) -> Result<Vec<RouteSearchActivityHour>, ReputationError> {
         let client = self.pool.get().await?;
@@ -672,8 +671,8 @@ ON CONFLICT (id) DO NOTHING
             .query(
                 r#"
 WITH bounds AS (
-    SELECT date_trunc($4::text, now()) AS end_bucket,
-           CASE $4::text
+    SELECT date_trunc($3::text, now()) AS end_bucket,
+           CASE $3::text
                WHEN 'minute' THEN interval '1 minute'
                WHEN 'hour' THEN interval '1 hour'
                WHEN 'day' THEN interval '1 day'
@@ -682,7 +681,7 @@ WITH bounds AS (
            END AS bucket_size
 ), hours AS (
     SELECT generate_series(
-        least(date_trunc($4::text, coalesce($6::timestamptz, now() - ($5::text)::interval)), end_bucket - bucket_size),
+        least(date_trunc($3::text, coalesce($5::timestamptz, now() - ($4::text)::interval)), end_bucket - bucket_size),
         end_bucket,
         bucket_size
     ) AS started_at, bucket_size
@@ -695,13 +694,12 @@ LEFT JOIN route_searches searches
     AND searches.created_at < hours.started_at + hours.bucket_size
     AND searches.source_currency = $1
     AND searches.target_currency = $2
-    AND ($3::uuid IS NULL OR searches.anonymous_id IS DISTINCT FROM $3)
     AND searches.counted_for_activity
     AND searches.status = 'finished'
 GROUP BY hours.started_at
 ORDER BY hours.started_at
 "#,
-                &[&source_currency, &target_currency, &anonymous_id, &grain, &span, &oldest],
+                &[&source_currency, &target_currency, &grain, &span, &oldest],
             )
             .await?;
         Ok(rows

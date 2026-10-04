@@ -43,8 +43,8 @@
 
 <svelte:window on:click={closeOnOutsideClick} on:keydown={closeOnEscape} />
 
-<section class="activityCard" data-testid="search-activity" aria-label={t("Others searched this exchange", {}, $locale)} aria-busy={loading}>
-  <div class="activityHeading"><div><small>{t("Search activity", {}, $locale)}</small><strong>{t("Others searched this exchange", {}, $locale)}</strong></div><div class="headingActions"><span class="pair">{sourceCurrency} <span aria-hidden="true">→</span> {targetCurrency}</span><div class="periodWrap" bind:this={periodMenu}><button type="button" class="periodButton" aria-label={t("Chart time range", {}, $locale)} aria-haspopup="menu" aria-expanded={periodMenuOpen} title={`${t("Chart time range", {}, $locale)}: ${periodLabel}`} on:click={() => periodMenuOpen = !periodMenuOpen}><img src="/icons/ui/chart-period.png" alt="" width="18" height="18" aria-hidden="true" /></button>{#if periodMenuOpen}<div class="periodMenu" role="menu" aria-label={t("Chart time range", {}, $locale)}>{#each SEARCH_ACTIVITY_PERIODS as value}<button type="button" role="menuitemradio" aria-checked={period === value} class:current={period === value} on:click={() => choosePeriod(value)}>{t(periodLabels[value], {}, $locale)}</button>{/each}</div>{/if}</div></div></div>
+<section class="activityCard" data-testid="search-activity" aria-label={t("Searches for this exchange", {}, $locale)} aria-busy={loading}>
+  <div class="activityHeading"><div><small>{t("Search activity", {}, $locale)}</small><strong>{t("Searches for this exchange", {}, $locale)}</strong></div><div class="headingActions"><span class="pair">{sourceCurrency} <span aria-hidden="true">→</span> {targetCurrency}</span><div class="periodWrap" bind:this={periodMenu}><button type="button" class="periodButton" aria-label={t("Chart time range", {}, $locale)} aria-haspopup="menu" aria-expanded={periodMenuOpen} title={`${t("Chart time range", {}, $locale)}: ${periodLabel}`} on:click={() => periodMenuOpen = !periodMenuOpen}><img src="/icons/ui/chart-period.png" alt="" width="18" height="18" aria-hidden="true" /></button>{#if periodMenuOpen}<div class="periodMenu" role="menu" aria-label={t("Chart time range", {}, $locale)}>{#each SEARCH_ACTIVITY_PERIODS as value}<button type="button" role="menuitemradio" aria-checked={period === value} class:current={period === value} on:click={() => choosePeriod(value)}>{t(periodLabels[value], {}, $locale)}</button>{/each}</div>{/if}</div></div></div>
   {#if error}
     <p class="state">{t("Search activity is temporarily unavailable.", {}, $locale)}</p>
   {:else if !points.length}
@@ -55,7 +55,7 @@
       <LayerCake data={points} x="time" y="count" yDomain={[0, yMaximum]}>
         <Svg><ActivityLine /></Svg>
       </LayerCake>
-      {#if !hasSearches}<span class="emptyMessage">{t("No searches by others recorded yet", {}, $locale)}</span>{/if}
+      {#if !hasSearches}<span class="emptyMessage">{t("No searches recorded yet", {}, $locale)}</span>{/if}
     </div>
     <div class="timeLabels"><span>{timeLabel(points[0].time)}</span><span>{timeLabel(points[lastIndex].time)}</span></div>
   {/if}

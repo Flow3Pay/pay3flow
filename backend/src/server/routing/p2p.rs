@@ -32,7 +32,6 @@ pub struct RouteHttpMetadata {
 pub struct RouteActivityQuery {
     source_currency: String,
     target_currency: String,
-    anonymous_id: Option<Uuid>,
     #[serde(default)]
     period: SearchActivityPeriod,
 }
@@ -61,12 +60,7 @@ pub async fn route_activity(
     }
     let hours = state
         .reputation
-        .search_activity(
-            &source_currency,
-            &target_currency,
-            query.anonymous_id,
-            query.period,
-        )
+        .search_activity(&source_currency, &target_currency, query.period)
         .await
         .map_err(map_reputation_error)?;
     Ok(Json(RouteActivityResponse {

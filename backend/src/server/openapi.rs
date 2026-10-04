@@ -1139,11 +1139,6 @@ fn extra_parameters(path: &str, method: &str) -> Vec<Value> {
             }));
         }
         parameters.push(json!({
-            "name": "anonymous_id", "in": "query", "required": false,
-            "description": "Browser identity to exclude from the aggregate.",
-            "schema": { "type": "string", "format": "uuid" }
-        }));
-        parameters.push(json!({
             "name": "period", "in": "query", "required": false,
             "description": "Time range. Longer ranges use daily, weekly, or monthly buckets.",
             "schema": { "type": "string", "enum": ["1h", "1d", "1w", "1m", "3m", "6m", "1y", "all"], "default": "1w" }

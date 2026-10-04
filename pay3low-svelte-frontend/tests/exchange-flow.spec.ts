@@ -44,13 +44,15 @@ test("system theme follows the browser until the user chooses a theme", async ({
 
 test("search activity uses hourly counts and fits beside routes or opens in a mobile modal", async ({ page, isMobile }) => {
   await page.emulateMedia({ colorScheme: "dark" });
+  const activityRequests: string[] = [];
+  page.on("request", (request) => { if (request.url().includes("/api/p2p/route-activity")) activityRequests.push(request.url()); });
   await mockBackend(page);
   await openApp(page);
   const chart = page.getByTestId("search-activity");
   if (isMobile) {
     await expect(chart).toBeHidden();
     await page.getByRole("button", { name: "Open search activity graph" }).click();
-    const dialog = page.getByRole("dialog", { name: "Others searched this exchange" });
+    const dialog = page.getByRole("dialog", { name: "Searches for this exchange" });
     await expect(dialog.getByTestId("search-activity")).toBeVisible();
     await expect(dialog.locator(".activityStats strong")).toHaveText("28");
     await expect(dialog.locator(".brush")).toHaveCount(0);
@@ -75,13 +77,15 @@ test("search activity uses hourly counts and fits beside routes or opens in a mo
     expect(dimensions.stackBottom).toBeLessThanOrEqual(dimensions.sideBottom + 1);
     await expect(chart.locator(".mainPlot svg path.area")).toHaveCount(1);
   }
+  expect(activityRequests.length).toBeGreaterThan(0);
+  expect(new URL(activityRequests[0]).searchParams.has("anonymous_id")).toBe(false);
 });
 
 test("search activity range menu filters and remembers the selected period", async ({ page, isMobile }) => {
   await mockBackend(page);
   await openApp(page);
   if (isMobile) await page.getByRole("button", { name: "Open search activity graph" }).click();
-  const chart = isMobile ? page.getByRole("dialog", { name: "Others searched this exchange" }).getByTestId("search-activity") : page.getByTestId("search-activity");
+  const chart = isMobile ? page.getByRole("dialog", { name: "Searches for this exchange" }).getByTestId("search-activity") : page.getByTestId("search-activity");
   await expect(chart.locator(".activityStats strong")).toHaveText("28");
   const rangeButton = chart.getByRole("button", { name: "Chart time range" });
   await expect(rangeButton.locator("img")).toHaveAttribute("src", "/icons/ui/chart-period.png");
@@ -90,7 +94,7 @@ test("search activity range menu filters and remembers the selected period", asy
   await expect(menu.getByRole("menuitemradio")).toHaveCount(8);
   await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);
-  if (isMobile) await expect(page.getByRole("dialog", { name: "Others searched this exchange" })).toBeVisible();
+  if (isMobile) await expect(page.getByRole("dialog", { name: "Searches for this exchange" })).toBeVisible();
   await rangeButton.click();
   await menu.getByRole("menuitemradio", { name: "1 hour" }).click();
   await expect(menu).toHaveCount(0);
@@ -99,7 +103,7 @@ test("search activity range menu filters and remembers the selected period", asy
   await expect.poll(() => page.evaluate(() => localStorage.getItem("pay3flow.exchange.activity-period"))).toBe("1h");
   await page.reload();
   if (isMobile) await page.getByRole("button", { name: "Open search activity graph" }).click();
-  const restoredChart = isMobile ? page.getByRole("dialog", { name: "Others searched this exchange" }).getByTestId("search-activity") : page.getByTestId("search-activity");
+  const restoredChart = isMobile ? page.getByRole("dialog", { name: "Searches for this exchange" }).getByTestId("search-activity") : page.getByTestId("search-activity");
   await expect(restoredChart.locator(".activityStats span")).toHaveText("searches in period · 1 hour");
 });
 
