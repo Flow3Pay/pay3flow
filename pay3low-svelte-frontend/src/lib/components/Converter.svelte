@@ -2114,8 +2114,8 @@
 .converterStack { display: flex; min-width: 0; flex-direction: column; }
 .workspace.activityExpanded :global(.side) { align-self: stretch; }
 .workspace.activityExpanded :global(.side .panel) { height: 100%; min-height: 690px; }
-.chartToggle { position: relative; z-index: 3; display: grid; width: 64px; height: 32px; flex: 0 0 auto; place-items: center; margin: -9px auto; padding: 0; border: 1px solid rgba(110, 118, 110, .22); border-radius: 0 0 13px 13px; background: rgba(125, 132, 125, .18); color: rgba(100, 108, 100, .7); cursor: pointer; transition: background .2s ease, color .2s ease; }
-.chartToggle:hover { background: rgba(125, 132, 125, .28); color: rgba(90, 98, 90, .86); }
+.chartToggle { position: relative; z-index: 3; display: grid; width: 48px; height: 30px; flex: 0 0 auto; place-items: center; margin: 8px auto 4px; padding: 0; border: 0; background: transparent; box-shadow: none; color: var(--color-text-soft); opacity: .6; cursor: pointer; transition: opacity .2s ease; -webkit-tap-highlight-color: transparent; }
+.chartToggle:hover { opacity: .85; }
 .chartToggle:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 .chartToggle span { display: block; font-size: 21px; line-height: 1; transform: rotate(90deg); transition: transform .26s ease; }
 .chartToggleOpen span { transform: rotate(-90deg); }

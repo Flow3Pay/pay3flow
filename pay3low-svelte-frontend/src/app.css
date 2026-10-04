@@ -158,6 +158,10 @@ button {
   transition: background 0.28s ease, color 0.28s ease;
 }
 
+@media (min-width: 981px) {
+  .appShell { background-attachment: fixed; }
+}
+
 .appShell::before {
   position: absolute;
   inset: 0;

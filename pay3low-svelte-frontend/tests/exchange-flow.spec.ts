@@ -68,9 +68,10 @@ test("search activity uses hourly counts and fits beside routes or opens in a mo
     cardBottom: document.querySelector(".card")!.getBoundingClientRect().bottom,
     background: getComputedStyle(element).backgroundColor,
   }));
-  expect(toggleAppearance.top).toBeGreaterThanOrEqual(toggleAppearance.cardBottom - 12);
-  expect(toggleAppearance.top).toBeLessThan(toggleAppearance.cardBottom);
-  expect(toggleAppearance.background).toMatch(/^rgba\(.+, 0\.18\)$/);
+  expect(toggleAppearance.top).toBeGreaterThanOrEqual(toggleAppearance.cardBottom + 6);
+  expect(toggleAppearance.top).toBeLessThanOrEqual(toggleAppearance.cardBottom + 10);
+  expect(toggleAppearance.background).toBe("rgba(0, 0, 0, 0)");
+  const backgroundBefore = isMobile ? null : await page.screenshot({ clip: { x: 8, y: 180, width: 1, height: 1 } });
   if (isMobile) {
     await chartToggle.click();
     const dialog = page.getByRole("dialog", { name: "Searches for this exchange" });
@@ -87,6 +88,10 @@ test("search activity uses hourly counts and fits beside routes or opens in a mo
   } else {
     await chartToggle.click();
     await expect(page.getByRole("button", { name: "Hide search activity" })).toHaveAttribute("aria-expanded", "true");
+    await expect(page.getByRole("button", { name: "Hide search activity" })).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+    expect(await page.screenshot({ clip: { x: 8, y: 180, width: 1, height: 1 } })).toEqual(backgroundBefore);
     await expect(chart).toBeVisible();
     await expect(chart.locator(".activityStats strong")).toHaveText("28");
     await expectPeriodButtonBesidePair(chart);
