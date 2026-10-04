@@ -457,7 +457,10 @@ async function openCryptoPicker(page: Page, side: "sending" | "recipient") {
 
 async function chooseCrypto(page: Page, side: "sending" | "recipient", search: string) {
   const picker = await openCryptoPicker(page, side);
-  await picker.getByLabel("Search banks and payment methods").fill(search);
+  const [currency, ...networkTerms] = search.split(" ");
+  await picker.getByRole("textbox", { name: "Currencies and digital assets" }).fill(currency);
+  await picker.getByRole("option", { name: new RegExp(`^${currency}\\b`) }).click();
+  await picker.getByRole("textbox", { name: "Blockchains" }).fill(networkTerms.join(" "));
   return picker;
 }
 
@@ -1418,7 +1421,8 @@ test("selected bank currencies override the reversed corridor", async ({ page })
   await page.getByLabel("Amount to send").fill("100000");
   await page.getByTestId("start-search").click();
 
-  await expect(page.getByText("Estimated RUB")).toBeVisible();
+  await expect(page.getByLabel("Amount to receive")).toBeVisible();
+  await expect(page.locator(".moneyPanelTarget .currencyHint")).toHaveCount(0);
   await expect(page).toHaveURL(/#\/swap\/AMD\/RUB\?amount=100000$/);
 });
 
@@ -1801,7 +1805,7 @@ test("reordered progressive snapshots do not restart card rendering at 100", asy
   finishSearch?.();
 });
 
-test("currency control only lists currencies supported by the selected payment method", async ({ page }) => {
+test("currency control only lists currencies supported by the selected payment method", async ({ page, isMobile }) => {
   await mockBackend(page);
   await openApp(page);
 
@@ -1821,6 +1825,7 @@ test("currency control only lists currencies supported by the selected payment m
 
   await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
   const methodPicker = page.getByRole("dialog", { name: "Choose where you pay from" });
+  await methodPicker.getByRole("option", { name: /^USD\b/ }).click();
   await methodPicker.getByLabel("Search banks and payment methods").fill("Ameriabank");
   await expect(methodPicker.getByRole("option", { name: /Ameriabank/ })).toHaveCount(1);
   await methodPicker.getByLabel("Search banks and payment methods").fill("IDBank");
@@ -1828,16 +1833,32 @@ test("currency control only lists currencies supported by the selected payment m
   await methodPicker.getByRole("option", { name: /^IDBank Bank transfer · USD/ }).click();
   await expect(page.getByRole("button", { name: "Select sending bank: IDBank" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Select sending currency: USD" })).toBeVisible();
+  await expect(page.locator(".moneyPanelSource .methodControls > .methodTrigger + .networkControl")).toHaveCount(1);
+  await expect(page.locator(".moneyPanelSource .networkButton .networkCopy")).toHaveText("USD");
 
   await page.getByRole("button", { name: "Select sending bank: IDBank" }).click();
   const reopenedMethodPicker = page.getByRole("dialog", { name: "Choose where you pay from" });
-  await reopenedMethodPicker.getByLabel("Search banks and payment methods").fill("Sberbank");
-  await expect(reopenedMethodPicker.getByRole("option", { name: /Sberbank/ })).toBeVisible();
-  await reopenedMethodPicker.getByLabel("Search banks and payment methods").fill("USDT ERC20");
+  await reopenedMethodPicker.getByRole("option", { name: /^USDT\b/ }).click();
+  await reopenedMethodPicker.getByRole("textbox", { name: "Blockchains" }).fill("ERC20");
   await expect(reopenedMethodPicker.getByRole("option", { name: /Ethereum \(ERC-20\).*USDT/ })).toHaveCount(1);
   await reopenedMethodPicker.getByRole("option", { name: /Ethereum \(ERC-20\).*USDT/ }).click();
-  await expect(page.getByRole("button", { name: "Select sending asset: Tether" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Select sending network: Ethereum (ERC-20)" })).toBeVisible();
+  const sendingAsset = page.getByRole("button", { name: "Select sending asset: USDT" });
+  await expect(sendingAsset).toBeVisible();
+  await expect(sendingAsset.locator(".methodText")).toHaveText("USDT");
+  await expect(page.locator(".moneyPanelSource .currencyHint")).toHaveCount(0);
+  const sendingNetwork = page.getByRole("button", { name: "Select sending network: Ethereum (ERC-20)" });
+  await expect(sendingNetwork).toBeVisible();
+  await expect(sendingNetwork.locator(".networkCopy")).toHaveCount(0);
+  await sendingNetwork.click();
+  const networkPicker = page.getByRole("dialog", { name: "Choose network" });
+  await expect(networkPicker.locator(".optionMeta")).toHaveCount(0);
+  await networkPicker.getByRole("option", { name: "Ethereum (ERC-20)" }).click();
+  const languageToggle = page.locator(".languageToggle");
+  for (let index = 0; index < 3; index += 1) {
+    if (isMobile) await page.locator(".menuToggle").click();
+    await languageToggle.click();
+    await expect(page.locator(".moneyPanelSource .methodTrigger .methodText")).toHaveText("USDT");
+  }
 
   await page.getByRole("button", { name: "Select recipient currency: RUB" }).click();
   const recipientCurrencies = page.getByRole("dialog", { name: "Choose currency" });
@@ -1848,6 +1869,7 @@ test("currency control only lists currencies supported by the selected payment m
 
   await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
   const recipientMethods = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
+  await recipientMethods.getByRole("option", { name: /^AMD\b/ }).click();
   await recipientMethods.getByLabel("Search banks and payment methods").fill("Ameriabank");
   await recipientMethods.getByRole("option", { name: /^Ameriabank Bank transfer · AMD/ }).click();
   await page.getByRole("button", { name: "Select recipient currency: AMD" }).click();
@@ -1875,7 +1897,8 @@ test("USD supports cash and Armenian bank currencies", async ({ page }) => {
   await expect(methodPicker.getByRole("option", { name: /^Ameriabank Bank transfer · USD/ })).toHaveCount(1);
   await methodPicker.getByLabel("Search banks and payment methods").fill("");
   await methodPicker.getByRole("option", { name: /Cash USD/ }).click();
-  await expect(page.getByText("USD available via cash")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Select sending payment method: Cash USD" })).toBeVisible();
+  await expect(page.locator(".moneyPanelSource .currencyHint")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
   const targetMethodPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
@@ -1963,14 +1986,14 @@ test("cryptocurrency search binds the selected asset to its network", async ({ p
   await ethereumUsdt.click();
 
   const selectedNetwork = page.getByRole("button", { name: /Select sending network: Ethereum \(ERC-20\)/ });
-  await expect(selectedNetwork).toContainText("Ethereum (ERC-20)");
+  await expect(selectedNetwork).toHaveAttribute("title", "Ethereum (ERC-20)");
 
   await page.getByLabel("Amount to send").fill("125");
   await page.getByTestId("start-search").click();
   await expect(page.getByTestId("complete-route")).toHaveCount(1);
-  await expect(page.getByTestId("complete-route").locator(".workflow")).toHaveAttribute(
+  await expect(page.getByTestId("complete-route").locator(".routeWorkflowButton")).toHaveAttribute(
     "aria-label",
-    "USDT Tether · Ethereum (ERC-20) (Binance) → RUB",
+    /USDT · ERC 20 \(Binance\) → RUB/,
   );
 });
 
@@ -2190,7 +2213,7 @@ test("bridged spot instructions split both market trades into separate steps", a
   await page.getByTestId("start-search").click();
   await expect(page.getByTestId("complete-route")).toHaveCount(1);
   await page.reload();
-  await expect(page.getByRole("button", { name: /Select sending network: Bitcoin/ })).toContainText("Bitcoin");
+  await expect(page.getByRole("button", { name: /Select sending network: Bitcoin/ })).toHaveAttribute("title", "Bitcoin");
   await expect(page.getByTestId("complete-route")).toHaveCount(1);
   await page.getByTestId("complete-route").locator(".routeAmount").click();
 

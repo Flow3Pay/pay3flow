@@ -652,7 +652,9 @@ export function formatRouteCount(count: number, language: Locale) {
  */
 export function localize(node: HTMLElement) {
   const originalText = new WeakMap<Text, string>();
+  const renderedText = new WeakMap<Text, string>();
   const originalAttributes = new WeakMap<Element, Map<string, string>>();
+  const renderedAttributes = new WeakMap<Element, Map<string, string>>();
   const attributes = ["aria-label", "title", "placeholder"];
 
   function translate(value: string, language: Locale) {
@@ -721,32 +723,46 @@ export function localize(node: HTMLElement) {
 
   function translateTree(root: Node, language: Locale) {
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    const textNodes: Text[] = [];
+    const textNodes: Text[] = root instanceof Text ? [root] : [];
     let current: Node | null;
     while ((current = walker.nextNode())) textNodes.push(current as Text);
     for (const text of textNodes) {
-      if (!originalText.has(text)) originalText.set(text, text.nodeValue ?? "");
+      const value = text.nodeValue ?? "";
+      if (!originalText.has(text) || (renderedText.has(text) && value !== renderedText.get(text))) originalText.set(text, value);
       const source = originalText.get(text) ?? "";
-      if (source.trim()) text.nodeValue = translate(source, language);
+      if (!source.trim()) continue;
+      const rendered = translate(source, language);
+      renderedText.set(text, rendered);
+      if (value !== rendered) text.nodeValue = rendered;
     }
     const elements = root instanceof Element ? [root, ...Array.from(root.querySelectorAll("*"))] : Array.from((root as ParentNode).querySelectorAll?.("*") ?? []);
     for (const element of elements) {
       if (!originalAttributes.has(element)) originalAttributes.set(element, new Map());
+      if (!renderedAttributes.has(element)) renderedAttributes.set(element, new Map());
       const saved = originalAttributes.get(element)!;
+      const rendered = renderedAttributes.get(element)!;
       for (const attribute of attributes) {
         const value = element.getAttribute(attribute);
         if (value === null) continue;
-        if (!saved.has(attribute)) saved.set(attribute, value);
+        if (!saved.has(attribute) || (rendered.has(attribute) && value !== rendered.get(attribute))) saved.set(attribute, value);
         const source = saved.get(attribute)!;
-        element.setAttribute(attribute, translate(source, language));
+        const translated = translate(source, language);
+        rendered.set(attribute, translated);
+        if (value !== translated) element.setAttribute(attribute, translated);
       }
     }
   }
 
   const unsubscribe = locale.subscribe((language) => translateTree(node, language));
   const observer = new MutationObserver((records) => {
-    for (const record of records) for (const added of record.addedNodes) translateTree(added, readLocale());
+    for (const record of records) {
+      if (record.type === "childList") {
+        for (const added of record.addedNodes) translateTree(added, readLocale());
+      } else {
+        translateTree(record.target, readLocale());
+      }
+    }
   });
-  observer.observe(node, { childList: true, subtree: true });
+  observer.observe(node, { childList: true, characterData: true, attributes: true, attributeFilter: attributes, subtree: true });
   return { destroy() { unsubscribe(); observer.disconnect(); } };
 }

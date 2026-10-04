@@ -1,6 +1,6 @@
 <script lang="ts">
   export let name: string;
-  export let meta: string;
+  export let meta: string | undefined = undefined;
   export let iconUrl: string | null = null;
   export let initials: string;
   export let color = "#171a17";
@@ -21,7 +21,7 @@
   </span>
   <span class="optionCopy">
     <span class="optionName">{name}</span>
-    <span class="optionMeta">{meta}</span>
+    {#if meta}<span class="optionMeta">{meta}</span>{/if}
   </span>
   {#if selected}
     <svg class="check" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="currentColor" /><path d="m6 10.2 2.7 2.5 5.3-5.6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>

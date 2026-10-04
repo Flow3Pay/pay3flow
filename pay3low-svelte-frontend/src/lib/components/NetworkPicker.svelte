@@ -92,7 +92,7 @@
         {:else}
           {#each networks as network (network.id)}
             {@const isSelected = network.id === selected?.id}
-            <PickerOptionCard name={network.name} meta={network.currencies.join(" · ")} iconUrl={networkIcon(network.name)} initials={network.name.slice(0, 2).toUpperCase()} color="#eef2ea" selected={isSelected} onSelect={() => onSelect(network)} />
+            <PickerOptionCard name={network.name} iconUrl={networkIcon(network.name)} initials={network.name.slice(0, 2).toUpperCase()} color="#eef2ea" selected={isSelected} onSelect={() => onSelect(network)} />
           {/each}
         {/if}
       </section></div></div>
