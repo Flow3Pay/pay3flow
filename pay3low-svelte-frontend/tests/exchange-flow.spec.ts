@@ -12,11 +12,12 @@ async function expectNumberedTimeline(instructions: Locator, numbers: string[]) 
   expect(markerShape.radius).toBe("50%");
 }
 
-async function openApp(page: Page) {
+async function openApp(page: Page, waitForIntro = true) {
   await page.goto("/");
   await expect
     .poll(() => page.locator(".appShell").evaluate((element) => getComputedStyle(element, "::before").backgroundImage))
     .not.toBe("none");
+  if (waitForIntro) await expect(page.locator(".introOverlay")).toHaveCount(0, { timeout: 6000 });
 }
 
 async function expectPeriodButtonBesidePair(chart: Locator) {
@@ -184,6 +185,7 @@ test("routes can be hidden while the bridge stays centered and restored after re
   }
 
   await page.reload();
+  await expect(page.locator(".introOverlay")).toHaveCount(0, { timeout: 6000 });
   await expect(page.getByRole("button", { name: "Show routes" })).toHaveAttribute("aria-expanded", "false");
   await expect(routes).toHaveCount(0);
   if (!isMobile) {
@@ -369,14 +371,24 @@ test("route instructions lock the page until closed", async ({ page }) => {
   await expect(page.locator("body")).not.toHaveCSS("position", "fixed");
 });
 
-test("viewport resize does not restart completed entrance animations", async ({ page }) => {
+test("headline introduces the bridge and resizing does not replay the entrance", async ({ page }) => {
   await mockBackend(page);
-  await openApp(page);
-  const hero = page.locator(".hero");
-  await expect(hero).toBeVisible();
-  await page.waitForTimeout(900);
+  await openApp(page, false);
+  const intro = page.locator(".introOverlay");
+  const workspace = page.locator(".workspace");
+  await expect(intro).toBeVisible();
+  await expect(workspace).toBeHidden();
+  await expect(intro.locator(".introWordMove")).toHaveCSS("opacity", "1");
+  await expect(intro.locator(".introWordMoney")).toHaveCSS("opacity", "1");
+  await expect(intro.locator(".introWordKeep")).toHaveCSS("opacity", "1");
+  await expect(intro.locator(".introWordMore")).toHaveCSS("opacity", "1");
+  await expect(intro.locator(".introLastPunctuation")).toHaveCSS("opacity", "1");
+  await expect(intro).toHaveCount(0, { timeout: 6000 });
+  await expect(workspace).toBeVisible();
+  await expect(page.locator(".hero h1")).toContainText("Move money. Keep more.");
+  await page.waitForTimeout(800);
 
-  const animationTime = () => hero.evaluate((element) => {
+  const animationTime = () => workspace.evaluate((element) => {
     const animation = element.getAnimations()[0];
     return Number(animation?.currentTime ?? 0);
   });
@@ -389,6 +401,7 @@ test("viewport resize does not restart completed entrance animations", async ({ 
   await page.waitForTimeout(250);
 
   expect(await animationTime()).toBeGreaterThanOrEqual(600);
+  await expect(intro).toHaveCount(0);
 });
 
 async function openCryptoPicker(page: Page, side: "sending" | "recipient") {

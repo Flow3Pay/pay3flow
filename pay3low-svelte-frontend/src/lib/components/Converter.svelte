@@ -87,6 +87,10 @@
   let activityExpanded = false;
   let activityRevealElement: HTMLDivElement | undefined;
   let routesExpanded = true;
+  let introPlaying = true;
+  let introStarted = false;
+  let introOverlayElement: HTMLDivElement;
+  let heroHeadingElement: HTMLHeadingElement;
   let settingsElement: HTMLDivElement;
   let settingsDialog: HTMLDivElement;
   let settingsDragging = false;
@@ -115,7 +119,38 @@
   let responseMetrics = new SearchResponseMetrics();
   let foundVenueIds: string[] = [];
   $: activeLocale = $locale;
+  $: firstHeadline = headlineWords(t("Move money.", {}, activeLocale));
+  $: secondHeadline = headlineWords(t("Keep more.", {}, activeLocale));
   $: modalOpen = settingsOpen || exchangesOpen;
+
+  function headlineWords(value: string) {
+    const match = value.match(/^(\S+)\s+(.+?)([.!։。؟]+)$/u);
+    return match ? { first: match[1], second: match[2], punctuation: match[3] } : { first: value, second: "", punctuation: "" };
+  }
+
+  onMount(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      introPlaying = false;
+      return;
+    }
+    let introTimer: number | undefined;
+    const positionIntro = () => {
+      const heading = heroHeadingElement.getBoundingClientRect();
+      introOverlayElement.style.setProperty("--intro-x", `${heading.left + heading.width / 2 - window.innerWidth / 2}px`);
+      introOverlayElement.style.setProperty("--intro-y", `${heading.top + heading.height / 2 - window.innerHeight / 2}px`);
+    };
+    const frame = window.requestAnimationFrame(() => {
+      positionIntro();
+      window.addEventListener("resize", positionIntro, { passive: true });
+      introStarted = true;
+      introTimer = window.setTimeout(() => introPlaying = false, 8000);
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", positionIntro);
+      if (introTimer) window.clearTimeout(introTimer);
+    };
+  });
 
   async function refreshActivity(source: string, target: string, period: SearchActivityPeriod, refreshedAt: number | null, interval: number) {
     const displayKey = `${source}|${target}|${period}`;
@@ -868,8 +903,13 @@
 
 <svelte:window on:resize={closeInlineActivityOnMobile} />
 
-<section class="shell" class:localeLong={activeLocale !== "en"} id="transfer">
-  <div class="hero"><h1>{t("Move money.", {}, activeLocale)} <span>{t("Keep more.", {}, activeLocale)}</span></h1><p>{t("Stop spending hours searching for an exchange.", {}, activeLocale)}</p></div>
+<section class="shell" class:localeLong={activeLocale !== "en"} class:introPlaying class:introReady={!introPlaying} id="transfer">
+  {#if introPlaying}
+    <div class="introOverlay" class:introStarted bind:this={introOverlayElement} aria-hidden="true">
+      <h1 class="introTitle" on:animationend={(event) => { if (event.animationName.endsWith("introDock")) introPlaying = false; }}><span class="introClip"><span class="introWord introWordMove">{firstHeadline.first}</span></span>{' '}<span class="introSecondWithDot"><span class="introClip"><span class="introWord introWordMoney">{firstHeadline.second}</span></span><span class="introPunctuation introFirstPunctuation">{firstHeadline.punctuation}</span></span>{' '}<span class="introEmphasis"><span class="introClip"><span class="introWord introWordKeep">{secondHeadline.first}</span></span>{' '}<span class="introSecondWithDot"><span class="introClip"><span class="introWord introWordMore">{secondHeadline.second}</span></span><span class="introPunctuation introLastPunctuation">{secondHeadline.punctuation}</span></span></span></h1>
+    </div>
+  {/if}
+  <div class="hero"><h1 bind:this={heroHeadingElement}>{t("Move money.", {}, activeLocale)} <span>{t("Keep more.", {}, activeLocale)}</span></h1><p>{t("Stop spending hours searching for an exchange.", {}, activeLocale)}</p></div>
   <div class="workspace" class:activityExpanded class:routesCollapsed={!routesExpanded}>
     <div class="converterStack">
     <div class="card">
@@ -979,8 +1019,33 @@
   width: min(900px, 100%);
   margin: 0 auto 42px;
   text-align: center;
-  animation: heroIn 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+
+.shell.introPlaying .hero, .shell.introPlaying .workspace { visibility: hidden; }
+.shell.introReady .workspace { animation: workspaceIn .72s cubic-bezier(.22, 1, .36, 1) both; }
+.shell.introReady .hero > p { animation: heroIn .5s .1s cubic-bezier(.22, 1, .36, 1) both; }
+.introOverlay { position: fixed; inset: 0; z-index: 1000; overflow: hidden; background: var(--shell-gradient); }
+.introTitle { position: absolute; top: 50%; left: 50%; width: min(900px, calc(100vw - 48px)); margin: 0; color: var(--color-text); font-size: clamp(44px, 5.5vw, 72px); font-weight: 650; letter-spacing: -.065em; line-height: .96; text-align: center; transform: translate(-50%, -50%) scale(1.2); }
+.introStarted .introTitle { animation: introDock .68s 3.08s cubic-bezier(.22, 1, .36, 1) both; }
+.introClip { display: inline-block; overflow: hidden; vertical-align: bottom; }
+.introSecondWithDot { white-space: nowrap; }
+.introWord { display: inline-block; transform: translateY(115%); opacity: 0; }
+.introStarted .introWordMove { animation: introRise .48s .2s cubic-bezier(.22, 1, .36, 1) forwards; }
+.introStarted .introWordMoney { animation: introRise .48s .7s cubic-bezier(.22, 1, .36, 1) forwards; }
+.introStarted .introWordKeep { animation: introRise .48s 1.35s cubic-bezier(.22, 1, .36, 1) forwards; }
+.introStarted .introWordMore { animation: introRise .48s 1.85s cubic-bezier(.22, 1, .36, 1) forwards; }
+.introPunctuation { opacity: 0; }
+.introStarted .introFirstPunctuation { animation: introDot .02s 1.18s linear forwards; }
+.introStarted .introLastPunctuation { animation: introDot .02s 2.94s linear forwards; }
+.introEmphasis { position: relative; z-index: 0; white-space: nowrap; }
+.introEmphasis::after { position: absolute; right: -.05em; bottom: .02em; left: -.04em; z-index: -1; height: .2em; border-radius: 3px; background: var(--color-accent); content: ""; transform: rotate(-1deg) scaleX(0); transform-origin: left center; }
+.introStarted .introEmphasis::after { animation: introUnderline .48s 2.42s cubic-bezier(.22, 1, .36, 1) forwards; }
+.shell.localeLong .introTitle { font-size: clamp(42px, 5vw, 68px); }
+@media (max-width: 640px) { .introTitle { width: calc(100vw - 24px); font-size: 44px; transform: translate(-50%, -50%) scale(1.08); } .shell.localeLong .introTitle { font-size: 44px; transform: translate(-50%, -50%) scale(1); } .shell.localeLong .introEmphasis { white-space: normal; } }
+@keyframes introRise { to { opacity: 1; transform: translateY(0); } }
+@keyframes introDot { to { opacity: 1; } }
+@keyframes introUnderline { to { transform: rotate(-1deg) scaleX(1); } }
+@keyframes introDock { to { transform: translate(calc(-50% + var(--intro-x)), calc(-50% + var(--intro-y))) scale(1); } }
 
 .modeTabs,
 .cardActions,
@@ -1046,7 +1111,6 @@
   align-items: start;
   gap: 18px;
   margin: 0 auto;
-  animation: workspaceIn 0.72s 0.08s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .card {
@@ -2573,7 +2637,6 @@
 
   .workspace {
     gap: 14px;
-    animation: none;
     transform: none;
   }
 
