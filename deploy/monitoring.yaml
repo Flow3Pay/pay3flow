@@ -267,6 +267,265 @@ spec:
 apiVersion: v1
 kind: ConfigMap
 metadata:
+  name: pay3flow-loki-config
+  namespace: pay3flow-monitoring
+data:
+  loki.yaml: |
+    auth_enabled: false
+    server:
+      http_listen_port: 3100
+    common:
+      path_prefix: /loki
+      storage:
+        filesystem:
+          chunks_directory: /loki/chunks
+          rules_directory: /loki/rules
+      replication_factor: 1
+      ring:
+        kvstore:
+          store: inmemory
+    schema_config:
+      configs:
+        - from: 2024-01-01
+          store: tsdb
+          object_store: filesystem
+          schema: v13
+          index:
+            prefix: index_
+            period: 24h
+    limits_config:
+      retention_period: 168h
+    compactor:
+      working_directory: /loki/compactor
+      retention_enabled: true
+      delete_request_store: filesystem
+    analytics:
+      reporting_enabled: false
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pay3flow-loki-data
+  namespace: pay3flow-monitoring
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pay3flow-loki
+  namespace: pay3flow-monitoring
+  labels:
+    app.kubernetes.io/name: pay3flow-loki
+spec:
+  selector:
+    app.kubernetes.io/name: pay3flow-loki
+  ports:
+    - name: http
+      port: 3100
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pay3flow-loki
+  namespace: pay3flow-monitoring
+  labels:
+    app.kubernetes.io/name: pay3flow-loki
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pay3flow-loki
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pay3flow-loki
+    spec:
+      securityContext:
+        fsGroup: 10001
+      containers:
+        - name: loki
+          image: grafana/loki:3.7.0
+          args:
+            - -config.file=/etc/loki/loki.yaml
+          ports:
+            - name: http
+              containerPort: 3100
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/loki
+              readOnly: true
+            - name: data
+              mountPath: /loki
+      volumes:
+        - name: config
+          configMap:
+            name: pay3flow-loki-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: pay3flow-loki-data
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pay3flow-alloy
+  namespace: pay3flow-monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pay3flow-alloy-logs
+  namespace: pay3flow
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pay3flow-alloy-logs
+  namespace: pay3flow
+subjects:
+  - kind: ServiceAccount
+    name: pay3flow-alloy
+    namespace: pay3flow-monitoring
+roleRef:
+  kind: Role
+  name: pay3flow-alloy-logs
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pay3flow-alloy-config
+  namespace: pay3flow-monitoring
+data:
+  config.alloy: |
+    discovery.kubernetes "pay3flow_pods" {
+      role = "pod"
+      namespaces {
+        names = ["pay3flow"]
+      }
+      selectors {
+        role = "pod"
+        label = "app.kubernetes.io/name in (pay3flow-backend,pay3flow-frontend)"
+      }
+    }
+
+    discovery.relabel "pay3flow_logs" {
+      targets = discovery.kubernetes.pay3flow_pods.targets
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label = "namespace"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label = "pod"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_container_name"]
+        target_label = "container"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_container_name"]
+        regex = "(backend|frontend)"
+        target_label = "service"
+      }
+    }
+
+    loki.source.kubernetes "pay3flow" {
+      targets = discovery.relabel.pay3flow_logs.output
+      forward_to = [loki.write.local.receiver]
+    }
+
+    loki.write "local" {
+      endpoint {
+        url = "http://pay3flow-loki.pay3flow-monitoring.svc.cluster.local.:3100/loki/api/v1/push"
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pay3flow-alloy
+  namespace: pay3flow-monitoring
+  labels:
+    app.kubernetes.io/name: pay3flow-alloy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pay3flow-alloy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pay3flow-alloy
+    spec:
+      serviceAccountName: pay3flow-alloy
+      containers:
+        - name: alloy
+          image: grafana/alloy:v1.20.1
+          args:
+            - run
+            - --server.http.listen-addr=0.0.0.0:12345
+            - --storage.path=/var/lib/alloy/data
+            - /etc/alloy/config.alloy
+          ports:
+            - name: http
+              containerPort: 12345
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alloy
+              readOnly: true
+            - name: data
+              mountPath: /var/lib/alloy/data
+      volumes:
+        - name: config
+          configMap:
+            name: pay3flow-alloy-config
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
   name: pay3flow-grafana-provisioning
   namespace: pay3flow-monitoring
 data:
@@ -279,6 +538,13 @@ data:
         access: proxy
         url: http://pay3flow-prometheus.pay3flow-monitoring.svc.cluster.local.:9090
         isDefault: true
+        editable: false
+      - name: Pay3Flow Loki
+        uid: pay3flow-loki
+        type: loki
+        access: proxy
+        url: http://pay3flow-loki.pay3flow-monitoring.svc.cluster.local.:3100
+        isDefault: false
         editable: false
   dashboard-provider.yaml: |
     apiVersion: 1
@@ -298,6 +564,46 @@ metadata:
   name: pay3flow-grafana-dashboard
   namespace: pay3flow-monitoring
 data:
+  pay3flow-logs.json: |
+    {
+      "annotations": {"list": []},
+      "editable": false,
+      "graphTooltip": 0,
+      "panels": [
+        {
+          "datasource": {"type": "loki", "uid": "pay3flow-loki"},
+          "description": "Log lines from the backend Kubernetes container.",
+          "fieldConfig": {"defaults": {}, "overrides": []},
+          "gridPos": {"h": 12, "w": 24, "x": 0, "y": 0},
+          "id": 1,
+          "options": {"showTime": true, "showLabels": false, "showCommonLabels": false, "wrapLogMessage": true, "prettifyLogMessage": false, "enableLogDetails": true, "sortOrder": "Descending"},
+          "targets": [{"expr": "{namespace=\"pay3flow\",service=\"backend\"}", "queryType": "range", "refId": "A"}],
+          "title": "Backend logs",
+          "type": "logs"
+        },
+        {
+          "datasource": {"type": "loki", "uid": "pay3flow-loki"},
+          "description": "Log lines from the frontend server Kubernetes container. Browser console messages are not collected.",
+          "fieldConfig": {"defaults": {}, "overrides": []},
+          "gridPos": {"h": 12, "w": 24, "x": 0, "y": 12},
+          "id": 2,
+          "options": {"showTime": true, "showLabels": false, "showCommonLabels": false, "wrapLogMessage": true, "prettifyLogMessage": false, "enableLogDetails": true, "sortOrder": "Descending"},
+          "targets": [{"expr": "{namespace=\"pay3flow\",service=\"frontend\"}", "queryType": "range", "refId": "A"}],
+          "title": "Frontend server logs",
+          "type": "logs"
+        }
+      ],
+      "refresh": "15s",
+      "schemaVersion": 39,
+      "tags": ["pay3flow", "logs"],
+      "templating": {"list": []},
+      "time": {"from": "now-1h", "to": "now"},
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Pay3Flow logs",
+      "uid": "pay3flow-logs",
+      "version": 1
+    }
   pay3flow-overview.json: |
     {
       "annotations": {"list": []},

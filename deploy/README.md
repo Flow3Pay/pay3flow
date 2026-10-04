@@ -137,7 +137,8 @@ the correct service.
 
 The backend exposes Prometheus metrics at `/metrics`. The optional monitoring
 stack in [`monitoring.yaml`](monitoring.yaml) adds Prometheus, Grafana,
-PostgreSQL and Redis exporters, plus a provisioned Pay3Flow dashboard. Create
+PostgreSQL and Redis exporters, Loki, and Alloy. It provisions the Pay3Flow
+overview and logs dashboards. Create
 the Grafana admin Secret once, then apply the manifest:
 
 ```sh
@@ -161,14 +162,21 @@ The PostgreSQL exporter Secret must use the same database URL as the
 matching `Caddyfile`; the dashboard is provisioned automatically as
 `Pay3Flow overview`.
 
+`Pay3Flow logs` shows the backend and frontend server container logs. Alloy
+collects only these two services from the `pay3flow` namespace and sends them
+to the in-cluster Loki service. Loki keeps logs for seven days on a persistent
+volume. The dashboard does not include browser console messages. Alloy can
+read retained logs from running Pods, but it cannot backfill logs from Pods
+that Kubernetes has already removed.
+
 The dashboard shows distinct pseudonymous browser IDs, registered accounts,
 and swap route searches during the last rolling hour. Searches include manual
 and automatic refreshes, so they measure swap form activity rather than
 completed exchanges. One person can have several browser IDs. Pay3Flow cannot
 verify whether an exchange opened in an external service completed.
 
-After changing the dashboard ConfigMap, apply the manifest to update the
-provisioned dashboard:
+After changing the monitoring manifest, apply it and restart Grafana to load
+provisioned datasources and dashboards:
 
 ```sh
 kubectl apply -f deploy/monitoring.yaml
