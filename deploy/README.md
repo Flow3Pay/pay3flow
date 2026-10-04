@@ -162,11 +162,10 @@ matching `Caddyfile`; the dashboard is provisioned automatically as
 `Pay3Flow overview`.
 
 The dashboard shows distinct pseudonymous browser IDs, registered accounts,
-swap route searches during the last rolling hour, and wallet swaps confirmed
-completed by Pay3Flow during that hour. Searches include manual and automatic
-refreshes, so they measure swap form activity rather than completed exchanges.
-One person can have several browser IDs. Exchanges opened in external services
-are excluded from completed swaps because Pay3Flow cannot verify their result.
+and swap route searches during the last rolling hour. Searches include manual
+and automatic refreshes, so they measure swap form activity rather than
+completed exchanges. One person can have several browser IDs. Pay3Flow cannot
+verify whether an exchange opened in an external service completed.
 
 After changing the dashboard ConfigMap, apply the manifest to update the
 provisioned dashboard:

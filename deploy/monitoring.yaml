@@ -410,23 +410,12 @@ data:
           "datasource": {"type": "prometheus", "uid": "pay3flow-prometheus"},
           "description": "Rolling one-hour count of swap route searches, including refreshes.",
           "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
-          "gridPos": {"h": 7, "w": 18, "x": 0, "y": 15},
+          "gridPos": {"h": 7, "w": 24, "x": 0, "y": 15},
           "id": 11,
           "options": {"legend": {"displayMode": "hidden"}, "tooltip": {"mode": "single"}},
           "targets": [{"expr": "pay3flow_swap_searches_last_hour", "legendFormat": "swap searches", "refId": "A"}],
           "title": "Swap searches per rolling hour",
           "type": "timeseries"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "pay3flow-prometheus"},
-          "description": "Wallet swaps whose provider status was confirmed completed by Pay3Flow in the last rolling hour. External exchange redirects are not verifiable.",
-          "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
-          "gridPos": {"h": 7, "w": 6, "x": 18, "y": 15},
-          "id": 12,
-          "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
-          "targets": [{"expr": "pay3flow_swaps_completed_last_hour", "refId": "A"}],
-          "title": "Completed swaps (last hour)",
-          "type": "stat"
         }
       ],
       "refresh": "15s",
