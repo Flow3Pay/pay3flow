@@ -906,7 +906,7 @@
 <section class="shell" class:localeLong={activeLocale !== "en"} class:introPlaying class:introReady={!introPlaying} id="transfer">
   {#if introPlaying}
     <div class="introOverlay" class:introStarted bind:this={introOverlayElement} aria-hidden="true">
-      <h1 class="introTitle" on:animationend={(event) => { if (event.animationName.endsWith("introDock")) introPlaying = false; }}><span class="introClip"><span class="introWord introWordMove">{firstHeadline.first}</span></span>{' '}<span class="introSecondWithDot"><span class="introClip"><span class="introWord introWordMoney">{firstHeadline.second}</span></span><span class="introPunctuation introFirstPunctuation">{firstHeadline.punctuation}</span></span>{' '}<span class="introEmphasis"><span class="introClip"><span class="introWord introWordKeep">{secondHeadline.first}</span></span>{' '}<span class="introSecondWithDot"><span class="introClip"><span class="introWord introWordMore">{secondHeadline.second}</span></span><span class="introPunctuation introLastPunctuation">{secondHeadline.punctuation}</span></span><img class="introMarker" src="/icons/ui/marker.svg" alt="" width="512" height="512" aria-hidden="true" /></span></h1>
+      <h1 class="introTitle" on:animationend={(event) => { if (event.animationName.endsWith("introDock")) introPlaying = false; }}><span class="introClip"><span class="introWord introWordMove">{firstHeadline.first}</span></span>{' '}<span class="introSecondWithDot"><span class="introClip"><span class="introWord introWordMoney">{firstHeadline.second}</span></span><span class="introPunctuation introFirstPunctuation">{firstHeadline.punctuation}</span></span>{' '}<span class="introEmphasis"><span class="introClip"><span class="introWord introWordKeep">{secondHeadline.first}</span></span>{' '}<span class="introSecondWithDot"><span class="introClip"><span class="introWord introWordMore">{secondHeadline.second}</span></span><span class="introPunctuation introLastPunctuation">{secondHeadline.punctuation}</span></span><img class="introMarker" src="/icons/ui/marker-down-right.svg" alt="" width="512" height="512" aria-hidden="true" /></span></h1>
     </div>
   {/if}
   <div class="hero"><h1 bind:this={heroHeadingElement}>{t("Move money.", {}, activeLocale)} <span>{t("Keep more.", {}, activeLocale)}</span></h1><p>{t("Stop spending hours searching for an exchange.", {}, activeLocale)}</p></div>
@@ -1040,7 +1040,7 @@
 .introEmphasis { position: relative; z-index: 0; white-space: nowrap; }
 .introEmphasis::after { position: absolute; right: -.05em; bottom: .02em; left: -.04em; z-index: -1; height: .2em; border-radius: 3px; background: var(--color-accent); content: ""; transform: rotate(-1deg) scaleX(0); transform-origin: left center; }
 .introStarted .introEmphasis::after { animation: introUnderline .48s 2.42s cubic-bezier(.22, 1, .36, 1) forwards; }
-.introMarker { position: absolute; bottom: .12em; left: -.04em; z-index: 2; width: 1.02em; height: 1.02em; pointer-events: none; opacity: 0; transform: translateX(-100%); }
+.introMarker { position: absolute; bottom: -.9em; left: -.04em; z-index: 2; width: 1.02em; height: 1.02em; pointer-events: none; opacity: 0; }
 .introStarted .introMarker { animation: introMarkerDraw .48s 2.42s cubic-bezier(.22, 1, .36, 1) both; }
 :global(html[data-theme="dark"]) .introMarker { filter: brightness(0) invert(1); }
 .shell.localeLong .introTitle { font-size: clamp(42px, 5vw, 68px); }

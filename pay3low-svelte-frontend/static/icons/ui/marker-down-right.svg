@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
-  <title>Marker</title>
-  <desc>Vector trace of the marker icon at https://cdn-icons-png.flaticon.com/512/13765/13765710.png, flipped horizontally.</desc>
-  <g fill="#000" transform="translate(512 0) scale(-1 1)">
+  <title>Marker pointing down and right</title>
+  <desc>Vector trace of the marker icon at https://cdn-icons-png.flaticon.com/512/13765/13765710.png, turned so its body points toward five o'clock.</desc>
+  <g fill="#000" transform="rotate(180 256 256) translate(512 0) scale(-1 1)">
     <g transform="translate(0 512) scale(.1 -.1)">
     <path d="M3890 5034 c-62 -17 -118 -47 -181 -99 -24 -20 -734 -726 -1577
 -1568 -1367 -1367 -1532 -1535 -1532 -1562 1 -16 7 -57 15 -90 22 -90 19 -286
