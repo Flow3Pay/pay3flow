@@ -907,7 +907,7 @@
           <div class="networkControl"><button type="button" class="networkButton" on:click={() => sourceMethod?.kind === "wallet" ? openNetworkPicker("source") : openCurrencyPicker("source")} aria-haspopup="dialog" aria-label={sourceMethod?.kind === "wallet" ? `Select sending network: ${sourceNetwork?.name ?? "none"}` : `Select sending currency: ${sourceCurrencyChoice}`}><span class:currencyDot={sourceMethod?.kind !== "wallet"} class:flagDot={Boolean(sourceCurrencyFlag)} class="networkDot" aria-hidden="true">{#if sourceMethod?.kind === "wallet" && sourceNetwork}<img src={networkIcon(sourceNetwork.name)} alt="" width="18" height="18" loading="lazy" decoding="async" />{:else if sourceCurrencyFlag}<img src={sourceCurrencyFlag} alt="" width="18" height="18" decoding="async" />{:else}{currencyMark(sourceCurrencyChoice)}{/if}</span><span class="networkCopy"><small>{t(sourceMethod?.kind === "wallet" ? "Network" : "Currency", {}, activeLocale)}</small><strong>{sourceMethod?.kind === "wallet" ? sourceNetwork?.name ?? "Select" : sourceCurrencyChoice}</strong></span><span class="networkChevron" aria-hidden="true">⌄</span></button></div>
         </div>
       </div>
-      <div class="flowBridge"><span class="bridgeLine" aria-hidden="true"></span><button type="button" class:bridgeIconReversed={directionReversed} class="bridgeIcon" on:click={swapDirection} aria-label="Swap sender and recipient" title="Swap sender and recipient"><img src={swapIcon} alt="" width="18" height="18" aria-hidden="true" /></button></div>
+      <div class="flowBridge"><span class="bridgeLine" aria-hidden="true"></span><button type="button" class:bridgeIconReversed={directionReversed} class="bridgeIcon" on:click={swapDirection} aria-label="Swap sender and recipient" title="Swap sender and recipient"><img src={swapIcon} alt="" width="18" height="18" aria-hidden="true" /></button><button type="button" class="routesToggle" class:routesToggleOpen={routesExpanded} on:click={toggleRoutes} aria-label={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)} aria-expanded={routesExpanded} title={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)}><span aria-hidden="true">❯</span></button></div>
       <div class="intentLabel intentLabelBuy"><span>Buy</span></div>
       <div class="moneyPanel moneyPanelTarget">
         <div class="panelCopy"><label for="exchange-output">Recipient gets</label><input id="exchange-output" class:amountOutputEmpty={!previewRoute && amountSide !== "target"} class="amountInput amountOutput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedTargetAmount} on:focus={(event) => event.currentTarget.select()} on:input={(event) => updateTargetAmount(event.currentTarget.value)} aria-label="Amount to receive" /><span class="currencyHint">{targetMethod?.kind === "wallet" ? `${targetMethod.currency} available via digital wallet` : previewRoute ? `Estimated ${previewRoute.target_currency}` : amountSide === "target" ? `${t("Requested", {}, activeLocale)} ${selectedTargetCurrency}` : "Live estimate appears here"}</span></div>
@@ -925,7 +925,6 @@
     </div>
     <div class="panelToggles">
       <button type="button" class="chartToggle" class:chartToggleOpen={activityExpanded} on:click={toggleActivityGraph} aria-label={t(activityExpanded ? "Hide search activity" : "Show search activity", {}, activeLocale)} aria-expanded={activityExpanded || activityModalOpen} title={t(activityExpanded ? "Hide search activity" : "Show search activity", {}, activeLocale)}><span aria-hidden="true">❯</span></button>
-      <button type="button" class="routesToggle" class:routesToggleOpen={routesExpanded} on:click={toggleRoutes} aria-label={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)} aria-expanded={routesExpanded} title={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)}><span aria-hidden="true">❯</span></button>
     </div>
     {#if activityExpanded}
       <div class="activityReveal" transition:fly={{ y: 18, duration: 380, easing: quintOut }}>
@@ -2137,7 +2136,7 @@
 .workspace.activityExpanded .routesReveal :global(.side .panel) { height: 100%; min-height: 0; }
 .panelToggles { position: relative; display: flex; height: 42px; flex: 0 0 auto; align-items: center; justify-content: center; padding: 8px 0 4px; }
 .chartToggle, .routesToggle { z-index: 3; display: grid; width: 48px; height: 30px; flex: 0 0 auto; place-items: center; padding: 0; border: 0; background: transparent; box-shadow: none; color: var(--color-text-soft); opacity: .6; cursor: pointer; transition: opacity .2s ease; -webkit-tap-highlight-color: transparent; }
-.routesToggle { position: absolute; top: 8px; right: 0; }
+.routesToggle { position: absolute; top: 50%; right: calc(-1 * (var(--workspace-gap) + 20px)); width: var(--workspace-gap); transform: translateY(-50%); }
 .chartToggle:hover, .routesToggle:hover { opacity: .85; }
 .chartToggle:focus-visible, .routesToggle:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 .chartToggle span, .routesToggle span { display: block; font-size: 21px; line-height: 1; -webkit-text-stroke: .55px currentColor; transition: transform .26s ease; }
@@ -2146,7 +2145,7 @@
 .routesToggleOpen span { transform: rotate(180deg); }
 .activityReveal { width: 100%; min-height: 176px; flex: 1 1 auto; overflow: visible; }
 .activityReveal :global(.activityCard) { height: 100%; }
-@media (max-width: 980px) { .workspace.routesCollapsed .converterStack { transform: none; } .activityReveal { display: none; } }
+@media (max-width: 980px) { .workspace.routesCollapsed .converterStack { transform: none; } .activityReveal { display: none; } .routesToggle { right: 0; width: 30px; } }
 @media (prefers-reduced-motion: reduce) { .converterStack, .chartToggle span, .routesToggle span { transition: none; } }
 
 .card {

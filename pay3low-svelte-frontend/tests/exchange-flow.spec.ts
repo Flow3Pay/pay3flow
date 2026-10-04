@@ -144,6 +144,19 @@ test("routes can be hidden while the bridge stays centered and restored after re
   const hideRoutes = page.getByRole("button", { name: "Hide routes" });
   await expect(routes).toBeVisible();
   await expect(hideRoutes).toHaveAttribute("aria-expanded", "true");
+  const togglePosition = await page.evaluate(() => {
+    const card = document.querySelector(".converterStack .card")!.getBoundingClientRect();
+    const bridge = document.querySelector(".flowBridge")!.getBoundingClientRect();
+    const toggle = document.querySelector(".routesToggle")!.getBoundingClientRect();
+    return { cardRight: card.right, toggleLeft: toggle.left, toggleRight: toggle.right, bridgeRight: bridge.right, bridgeCenter: bridge.top + bridge.height / 2, toggleCenter: toggle.top + toggle.height / 2 };
+  });
+  expect(Math.abs(togglePosition.toggleCenter - togglePosition.bridgeCenter)).toBeLessThan(1);
+  if (isMobile) {
+    expect(togglePosition.toggleRight).toBeLessThanOrEqual(togglePosition.bridgeRight + 1);
+  } else {
+    expect(togglePosition.toggleLeft).toBeGreaterThanOrEqual(togglePosition.cardRight - 1);
+    expect(togglePosition.toggleLeft).toBeLessThanOrEqual(togglePosition.cardRight + 1);
+  }
   await hideRoutes.click();
   await expect(routes).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => {
@@ -174,6 +187,31 @@ test("routes can be hidden while the bridge stays centered and restored after re
       return Math.abs(card.left - workspace.left);
     })).toBeLessThan(1);
   }
+});
+
+test("search placeholders stay inside the route panel", async ({ page }) => {
+  await mockBackend(page);
+  let releaseSearch!: () => void;
+  const holdSearch = new Promise<void>((resolve) => { releaseSearch = resolve; });
+  await page.route("http://localhost:8080/api/p2p/routes**", async (route) => {
+    await holdSearch;
+    await route.abort();
+  });
+  await page.routeWebSocket(/\/ws\/p2p\/routes$/, (socket) => {
+    socket.onMessage(() => {});
+  });
+  await openApp(page);
+  await page.getByLabel("Amount to send").fill("100000");
+  const skeletons = page.locator("#routes .skeletonCard");
+  await expect(skeletons).toHaveCount(5);
+  const bounds = await page.evaluate(() => ({
+    panelBottom: document.querySelector("#routes .panel")!.getBoundingClientRect().bottom,
+    lastBottom: [...document.querySelectorAll("#routes .skeletonCard")].at(-1)!.getBoundingClientRect().bottom,
+    lastContentBottom: [...document.querySelectorAll("#routes .skeletonCard")].at(-1)!.lastElementChild!.getBoundingClientRect().bottom,
+  }));
+  expect(bounds.lastBottom).toBeLessThanOrEqual(bounds.panelBottom - 1);
+  expect(bounds.lastContentBottom).toBeLessThanOrEqual(bounds.lastBottom - 1);
+  releaseSearch();
 });
 
 test("search activity range menu filters and remembers the selected period", async ({ page, isMobile }) => {

@@ -928,6 +928,7 @@
   flex-direction: column;
   gap: 9px;
   margin-top: 14px;
+  overflow: hidden;
 }
 
 .searchingVenues {
@@ -971,10 +972,12 @@
 
 .skeletonCard {
   display: flex;
-  min-height: 116px;
+  min-height: 0;
+  flex: 1 1 0;
   flex-direction: column;
-  gap: 12px;
-  padding: 17px;
+  justify-content: center;
+  gap: clamp(6px, 1vh, 12px);
+  padding: clamp(10px, 1.3vh, 17px);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.04);
