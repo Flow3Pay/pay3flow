@@ -69,7 +69,11 @@ pub fn request_finished(status: u16, latency: Duration) {
         .fetch_add(1, Ordering::Relaxed);
 }
 
-pub fn render(anonymous_users: i64) -> String {
+pub fn render(
+    anonymous_users: i64,
+    registered_users: i64,
+    completed_swaps_last_hour: i64,
+) -> String {
     let metrics = metrics();
     let requests_total = metrics.requests_total.load(Ordering::Relaxed);
     let requests_in_flight = metrics.requests_in_flight.load(Ordering::Relaxed);
@@ -130,6 +134,21 @@ pay3flow_build_info{service=\"backend\"} 1\n\
 # TYPE pay3flow_anonymous_users_total gauge\n",
     );
     let _ = writeln!(output, "pay3flow_anonymous_users_total {anonymous_users}");
+
+    output.push_str(
+        "# HELP pay3flow_registered_users_total Number of registered user accounts.\n\
+# TYPE pay3flow_registered_users_total gauge\n",
+    );
+    let _ = writeln!(output, "pay3flow_registered_users_total {registered_users}");
+
+    output.push_str(
+        "# HELP pay3flow_swaps_completed_last_hour Number of in-app wallet swaps confirmed completed in the last rolling hour.\n\
+# TYPE pay3flow_swaps_completed_last_hour gauge\n",
+    );
+    let _ = writeln!(
+        output,
+        "pay3flow_swaps_completed_last_hour {completed_swaps_last_hour}"
+    );
 
     output
 }

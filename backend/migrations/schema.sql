@@ -150,6 +150,9 @@ CREATE TABLE IF NOT EXISTS route_executions (
 CREATE INDEX IF NOT EXISTS route_executions_owner_idx
     ON route_executions (anonymous_id, updated_at DESC);
 
+CREATE INDEX IF NOT EXISTS route_executions_completed_at_idx
+    ON route_executions (updated_at DESC) WHERE status = 'completed';
+
 CREATE TABLE IF NOT EXISTS service_votes (
     anonymous_id UUID NOT NULL,
     service_id UUID NOT NULL REFERENCES services(id) ON DELETE CASCADE,

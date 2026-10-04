@@ -221,7 +221,10 @@ fn observe_request<B>(_: &Request<B>, _: &tracing::Span) {
 }
 
 pub async fn metrics(State(state): axum::extract::State<AppState>) -> impl IntoResponse {
-    let anonymous_users = anonymous::count_users(&state.pool)
+    let (anonymous_users, registered_users) = anonymous::count_users(&state.pool)
+        .await
+        .unwrap_or_default();
+    let completed_swaps_last_hour = route_executions::count_completed_last_hour(&state.pool)
         .await
         .unwrap_or_default();
     (
@@ -229,6 +232,6 @@ pub async fn metrics(State(state): axum::extract::State<AppState>) -> impl IntoR
             CONTENT_TYPE,
             HeaderValue::from_static("text/plain; version=0.0.4; charset=utf-8"),
         )],
-        crate::observability::render(anonymous_users),
+        crate::observability::render(anonymous_users, registered_users, completed_swaps_last_hour),
     )
 }

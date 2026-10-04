@@ -161,6 +161,18 @@ The PostgreSQL exporter Secret must use the same database URL as the
 matching `Caddyfile`; the dashboard is provisioned automatically as
 `Pay3Flow overview`.
 
+The dashboard shows distinct pseudonymous browser IDs, registered accounts,
+and wallet swaps confirmed completed by Pay3Flow during the last rolling hour.
+One person can have several browser IDs. Exchanges opened in external services
+are excluded because Pay3Flow cannot verify whether they completed.
+
+After changing the dashboard ConfigMap, apply the manifest to update the
+provisioned dashboard:
+
+```sh
+kubectl apply -f deploy/monitoring.yaml
+```
+
 The backend creates its schema on startup. Back up external or persistent data
 before changing image revisions, and do not use the development secret values
 for real users or funds.

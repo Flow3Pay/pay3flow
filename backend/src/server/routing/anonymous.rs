@@ -55,12 +55,16 @@ ON CONFLICT (id) DO UPDATE SET
     Ok(())
 }
 
-pub async fn count_users(pool: &DbPool) -> anyhow::Result<i64> {
+pub async fn count_users(pool: &DbPool) -> anyhow::Result<(i64, i64)> {
     let client = pool.get().await?;
     let row = client
-        .query_one("SELECT COUNT(*)::BIGINT FROM anonymous_users", &[])
+        .query_one(
+            "SELECT (SELECT COUNT(*)::BIGINT FROM anonymous_users), \
+                    (SELECT COUNT(*)::BIGINT FROM users)",
+            &[],
+        )
         .await?;
-    Ok(row.get(0))
+    Ok((row.get(0), row.get(1)))
 }
 
 /// Attach usage accounting to every request carrying the anonymous ID. The
