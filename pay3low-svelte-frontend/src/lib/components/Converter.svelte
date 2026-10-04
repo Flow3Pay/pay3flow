@@ -1,5 +1,6 @@
 <script lang="ts">
   import { afterUpdate, onMount, onDestroy } from "svelte";
+  import { slide } from "svelte/transition";
   import { fetchCorridors, fetchP2pRoutes, fetchProviders, recordInstructionOpen, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderDefinition, type ProviderGuidance, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote, type VenueSearchStatus } from "$lib/exchange";
   import { FALLBACK_NETWORK, fetchNetworks, type CryptoNetwork } from "$lib/networks";
   import { assetIcon, networkIcon, swapIcon, venueIcon } from "$lib/icons";
@@ -82,6 +83,7 @@
   let activityDisplayKey = "";
   let activityController: AbortController | null = null;
   let activityModalOpen = false;
+  let activityExpanded = false;
   let settingsElement: HTMLDivElement;
   let settingsDialog: HTMLDivElement;
   let settingsDragging = false;
@@ -138,6 +140,15 @@
   function selectActivityPeriod(period: SearchActivityPeriod) {
     activityPeriod = period;
     try { localStorage.setItem(STORAGE.activityPeriod, period); } catch {}
+  }
+
+  function toggleActivityGraph() {
+    if (window.matchMedia("(max-width: 980px)").matches) { activityExpanded = false; activityModalOpen = true; }
+    else activityExpanded = !activityExpanded;
+  }
+
+  function closeInlineActivityOnMobile() {
+    if (window.matchMedia("(max-width: 980px)").matches) activityExpanded = false;
   }
 
   function readSharedExchange() {
@@ -826,9 +837,11 @@
   });
 </script>
 
+<svelte:window on:resize={closeInlineActivityOnMobile} />
+
 <section class="shell" class:localeLong={activeLocale !== "en"} id="transfer">
   <div class="hero"><h1>{t("Move money.", {}, activeLocale)} <span>{t("Keep more.", {}, activeLocale)}</span></h1><p>{t("Stop spending hours searching for an exchange.", {}, activeLocale)}</p></div>
-  <div class="workspace">
+  <div class="workspace" class:activityExpanded>
     <div class="converterStack">
     <div class="card">
       <div class="cardTop">
@@ -902,7 +915,12 @@
       <button type="button" class="cta" disabled={!hasAmount || (!previewRoute && (searching || !corridor))} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? "Open swap instructions" : "Find routes"}>{#if previewRoute}Swap <span>↗</span>{:else if searching}<span class="spinner"></span> Finding routes{:else if hasAmount}Find routes <span>↗</span>{:else}Enter an amount to begin{/if}</button>
       {#if error}<div class="errorBox" role="alert">{error}</div>{/if}
     </div>
-    <SearchActivityChart sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} hours={activityHours} period={activityPeriod} onPeriodChange={selectActivityPeriod} loading={activityLoading} error={activityError} />
+    <button type="button" class="chartToggle" class:chartToggleOpen={activityExpanded} on:click={toggleActivityGraph} aria-label={t(activityExpanded ? "Hide search activity" : "Show search activity", {}, activeLocale)} aria-expanded={activityExpanded || activityModalOpen} title={t(activityExpanded ? "Hide search activity" : "Show search activity", {}, activeLocale)}><span aria-hidden="true">❯</span></button>
+    {#if activityExpanded}
+      <div class="activityReveal" transition:slide={{ duration: 260 }}>
+        <SearchActivityChart sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} hours={activityHours} period={activityPeriod} onPeriodChange={selectActivityPeriod} loading={activityLoading} error={activityError} />
+      </div>
+    {/if}
     </div>
     <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {renderingRoutes} {searchingVenues} {foundVenues} {venueStats} {venueNames} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} searched={lastUpdatedAt !== null} {hasAmount} {showBelarusP2pWarning} {onOpenBelarusP2pWarning} onOpenSearchActivity={() => activityModalOpen = true} />
   </div>
@@ -2093,10 +2111,18 @@
   gap: 22px;
 }
 
-.converterStack { display: flex; min-width: 0; flex-direction: column; gap: 14px; }
-.converterStack :global(.activityCard) { flex: 1 1 auto; }
-@media (min-width: 981px) { .converterStack { height: 690px; } }
-@media (max-width: 980px) { .converterStack :global(.activityCard) { display: none; } }
+.converterStack { display: flex; min-width: 0; flex-direction: column; }
+.workspace.activityExpanded :global(.side) { align-self: stretch; }
+.workspace.activityExpanded :global(.side .panel) { height: 100%; min-height: 690px; }
+.chartToggle { position: relative; z-index: 3; display: grid; width: 64px; height: 32px; flex: 0 0 auto; place-items: center; margin: -9px auto; padding: 0; border: 1px solid rgba(110, 118, 110, .22); border-radius: 0 0 13px 13px; background: rgba(125, 132, 125, .18); color: rgba(100, 108, 100, .7); cursor: pointer; transition: background .2s ease, color .2s ease; }
+.chartToggle:hover { background: rgba(125, 132, 125, .28); color: rgba(90, 98, 90, .86); }
+.chartToggle:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.chartToggle span { display: block; font-size: 21px; line-height: 1; transform: rotate(90deg); transition: transform .26s ease; }
+.chartToggleOpen span { transform: rotate(-90deg); }
+.activityReveal { height: 176px; min-height: 0; overflow: visible; }
+.activityReveal :global(.activityCard) { height: 100%; }
+@media (max-width: 980px) { .activityReveal { display: none; } }
+@media (prefers-reduced-motion: reduce) { .chartToggle span { transition: none; } }
 
 .card {
   min-height: 0;
