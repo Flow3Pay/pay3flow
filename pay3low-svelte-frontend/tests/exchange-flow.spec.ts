@@ -19,6 +19,49 @@ async function openApp(page: Page) {
     .not.toBe("none");
 }
 
+test("dialogs keep the page still and restore its scroll position", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 600 });
+  await mockBackend(page);
+  await openApp(page);
+
+  const telegram = page.getByRole("link", { name: "Open Pay3Flow Telegram channel" });
+  await expect(telegram).toHaveAttribute("href", "https://t.me/+-lq4m5E_aT4xM2Y6");
+  await expect(telegram.locator("img")).toHaveJSProperty("naturalWidth", 1024);
+
+  await page.evaluate(() => window.scrollTo(0, 180));
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  const picker = await openCryptoPicker(page, "sending");
+  await expect(picker).toBeVisible();
+
+  const lockedAt = await page.locator("body").evaluate((body) => -parseFloat(body.style.top));
+  expect(lockedAt).toBeGreaterThan(0);
+  await page.mouse.move(5, 550);
+  await page.mouse.wheel(0, 400);
+  expect(await page.locator("body").evaluate((body) => -parseFloat(body.style.top))).toBe(lockedAt);
+
+  const methods = picker.locator(".methods");
+  await expect.poll(() => methods.evaluate((element) => element.scrollHeight - element.clientHeight)).toBeGreaterThan(0);
+  await methods.evaluate((element) => element.scrollTo(0, 100));
+  await expect.poll(() => methods.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+
+  await page.keyboard.press("Escape");
+  await expect(picker).not.toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(lockedAt);
+});
+
+test("desktop settings dialog also locks background scrolling", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await mockBackend(page);
+  await openApp(page);
+
+  await page.getByRole("button", { name: "Route refresh settings" }).click();
+  await expect(page.getByRole("dialog", { name: "Refresh settings" })).toBeVisible();
+  await expect(page.locator("body")).toHaveCSS("position", "fixed");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Refresh settings" })).not.toBeVisible();
+  await expect(page.locator("body")).not.toHaveCSS("position", "fixed");
+});
+
 test("viewport resize does not restart completed entrance animations", async ({ page }) => {
   await mockBackend(page);
   await openApp(page);

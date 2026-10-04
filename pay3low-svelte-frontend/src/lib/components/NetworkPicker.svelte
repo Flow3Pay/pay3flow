@@ -3,6 +3,7 @@
   import type { CryptoNetwork } from "$lib/networks";
   import { networkIcon } from "$lib/icons";
   import { locale, t } from "$lib/i18n";
+  import { lockPageScroll } from "$lib/page-scroll-lock";
   import PickerOptionCard from "./PickerOptionCard.svelte";
 
   type CurrencyChoice = {
@@ -22,8 +23,7 @@
   export let onSelect: (network: CryptoNetwork) => void = () => {};
   export let onSelectCurrency: (currency: string) => void = () => {};
   let wasOpen = false;
-  let previousOverflow = "";
-  let previousOverscrollBehavior = "";
+  let unlockPage: (() => void) | undefined;
   let dialog: HTMLDivElement;
   let dragging = false;
   let dragStartY = 0;
@@ -58,22 +58,16 @@
     if (open === wasOpen) return;
     wasOpen = open;
     if (open) {
-      previousOverflow = document.body.style.overflow;
-      previousOverscrollBehavior = document.body.style.overscrollBehavior;
-      document.body.style.overflow = "hidden";
-      document.body.style.overscrollBehavior = "none";
+      unlockPage = lockPageScroll();
       window.addEventListener("keydown", onKeyDown);
     } else {
-      document.body.style.overflow = previousOverflow;
-      document.body.style.overscrollBehavior = previousOverscrollBehavior;
+      unlockPage?.();
+      unlockPage = undefined;
       window.removeEventListener("keydown", onKeyDown);
     }
   });
   onDestroy(() => {
-    if (typeof document !== "undefined" && wasOpen) {
-      document.body.style.overflow = previousOverflow;
-      document.body.style.overscrollBehavior = previousOverscrollBehavior;
-    }
+    unlockPage?.();
     if (typeof window !== "undefined") window.removeEventListener("keydown", onKeyDown);
   });
 </script>

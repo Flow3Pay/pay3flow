@@ -34,6 +34,9 @@
         <img class="moonIcon" src={moonIcon} alt="" width="24" height="24" decoding="async" />
         <img class="sunIcon" src={sunIcon} alt="" width="24" height="24" decoding="async" />
       </button>
+      <a class="telegramLink" href="https://t.me/+-lq4m5E_aT4xM2Y6" target="_blank" rel="noreferrer noopener" aria-label="Open Pay3Flow Telegram channel" title="Telegram">
+        <img src="/icons/assets/telegram-messenger.png" alt="" width="20" height="20" decoding="async" />
+      </a>
       <a class="githubLink" href="https://github.com/Flow3Pay/pay3flow" target="_blank" rel="noreferrer noopener" aria-label="Open Pay3Flow on GitHub">
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 .7a11.3 11.3 0 0 0-3.58 22.02c.57.1.78-.25.78-.55v-2.16c-3.18.7-3.85-1.34-3.85-1.34-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.68 1.24 3.34.95.1-.74.4-1.24.73-1.53-2.54-.29-5.2-1.27-5.2-5.65 0-1.25.45-2.26 1.18-3.06-.12-.29-.51-1.45.11-3.02 0 0 .96-.31 3.12 1.17a10.8 10.8 0 0 1 5.68 0c2.16-1.48 3.12-1.17 3.12-1.17.62 1.57.23 2.73.11 3.02.73.8 1.18 1.81 1.18 3.06 0 4.39-2.67 5.35-5.21 5.64.41.36.78 1.08.78 2.18v3.23c0 .3.2.65.79.54A11.3 11.3 0 0 0 12 .7Z" /></svg>
       </a>
@@ -108,6 +111,7 @@
 }
 
 .githubLink,
+.telegramLink,
 .themeToggle,
 .languageToggle,
 .apiDocsLink {
@@ -123,6 +127,7 @@
 
 .githubLink img,
 .githubLink svg,
+.telegramLink img,
 .themeToggle img {
   display: block;
   width: 20px;
@@ -131,6 +136,7 @@
 }
 
 .githubLink:hover,
+.telegramLink:hover,
 .themeToggle:hover,
 .languageToggle:hover,
 .apiDocsLink:hover {
@@ -194,6 +200,7 @@
 }
 
 :global(html[data-theme="dark"]) .githubLink,
+:global(html[data-theme="dark"]) .telegramLink,
 :global(html[data-theme="dark"]) .themeToggle,
 :global(html[data-theme="dark"]) .languageToggle,
 :global(html[data-theme="dark"]) .apiDocsLink,
@@ -341,6 +348,25 @@
 
   .wordmark {
     font-size: 15px;
+  }
+
+  .actions {
+    gap: 5px;
+  }
+
+  .apiDocsLink {
+    padding: 0 6px;
+  }
+}
+
+@media (max-width: 400px) {
+  .inner {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .actions {
+    justify-content: space-between;
   }
 }
 

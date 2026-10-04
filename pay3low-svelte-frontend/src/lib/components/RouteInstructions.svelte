@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { lockPageScroll } from "$lib/page-scroll-lock";
   import type { ProviderGuidance, RouteCandidate, ServiceLink } from "$lib/exchange";
   import { locale, t } from "$lib/i18n";
   import AdvertiserCard from "./AdvertiserCard.svelte";
@@ -92,14 +93,10 @@
   }
   onMount(() => {
     const handler = (event: KeyboardEvent) => event.key === "Escape" && onClose();
-    const previousOverflow = document.body.style.overflow;
-    const previousOverscrollBehavior = document.body.style.overscrollBehavior;
-    document.body.style.overflow = "hidden";
-    document.body.style.overscrollBehavior = "none";
+    const unlockPage = lockPageScroll();
     document.addEventListener("keydown", handler);
     return () => {
-      document.body.style.overflow = previousOverflow;
-      document.body.style.overscrollBehavior = previousOverscrollBehavior;
+      unlockPage();
       document.removeEventListener("keydown", handler);
     };
   });

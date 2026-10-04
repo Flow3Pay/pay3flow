@@ -7,6 +7,7 @@
   import { getAnonymousUserId, registerAnonymousUser } from "$lib/anonymous-user";
   import { locale, t } from "$lib/i18n";
   import { SearchResponseMetrics } from "$lib/response-metrics";
+  import { lockPageScroll } from "$lib/page-scroll-lock";
   import SidePanel from "./SidePanel.svelte";
   import CurrencyPicker from "./CurrencyPicker.svelte";
   import NetworkPicker from "./NetworkPicker.svelte";
@@ -76,9 +77,7 @@
   let settingsDragStartY = 0;
   let settingsDragDistance = 0;
   let settingsWasOpen = false;
-  let settingsScrollLocked = false;
-  let previousOverflow = "";
-  let previousOverscrollBehavior = "";
+  let unlockSettingsPage: (() => void) | undefined;
   let preferencesLoaded = false;
   let urlReady = false;
   let requestId = 0;
@@ -768,20 +767,11 @@
     if (modalOpen === settingsWasOpen) return;
     settingsWasOpen = modalOpen;
     if (modalOpen) {
-      settingsScrollLocked = window.matchMedia("(max-width: 640px)").matches;
-      if (settingsScrollLocked) {
-        previousOverflow = document.body.style.overflow;
-        previousOverscrollBehavior = document.body.style.overscrollBehavior;
-        document.body.style.overflow = "hidden";
-        document.body.style.overscrollBehavior = "none";
-      }
+      unlockSettingsPage = lockPageScroll();
       window.addEventListener("keydown", onSettingsKeyDown);
     } else {
-      if (settingsScrollLocked) {
-        document.body.style.overflow = previousOverflow;
-        document.body.style.overscrollBehavior = previousOverscrollBehavior;
-        settingsScrollLocked = false;
-      }
+      unlockSettingsPage?.();
+      unlockSettingsPage = undefined;
       window.removeEventListener("keydown", onSettingsKeyDown);
     }
   });
@@ -793,10 +783,7 @@
     if (clockTimer) clearInterval(clockTimer);
     if (initialSearchTimer) clearTimeout(initialSearchTimer);
     if (typeof document !== "undefined") document.removeEventListener("mousedown", onDocumentMouseDown);
-    if (typeof document !== "undefined" && settingsScrollLocked) {
-      document.body.style.overflow = previousOverflow;
-      document.body.style.overscrollBehavior = previousOverscrollBehavior;
-    }
+    unlockSettingsPage?.();
     if (typeof window !== "undefined") window.removeEventListener("keydown", onSettingsKeyDown);
   });
 </script>
