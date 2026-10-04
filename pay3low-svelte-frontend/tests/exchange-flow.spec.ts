@@ -143,6 +143,7 @@ test("routes can be hidden while the bridge stays centered and restored after re
   const routes = page.locator("#routes");
   const hideRoutes = page.getByRole("button", { name: "Hide routes" });
   await expect(routes).toBeVisible();
+  await expect(page.getByTestId("search-activity")).toHaveCount(0);
   await expect(hideRoutes).toHaveAttribute("aria-expanded", "true");
   const togglePosition = await page.evaluate(() => {
     const card = document.querySelector(".converterStack .card")!.getBoundingClientRect();
@@ -159,6 +160,7 @@ test("routes can be hidden while the bridge stays centered and restored after re
   }
   await hideRoutes.click();
   await expect(routes).toHaveCount(0);
+  await expect(page.getByTestId("search-activity")).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => {
     const card = document.querySelector(".converterStack .card")!.getBoundingClientRect();
     const workspace = document.querySelector(".workspace")!.getBoundingClientRect();
@@ -172,8 +174,10 @@ test("routes can be hidden while the bridge stays centered and restored after re
     await expect(dialog).toBeVisible();
     await page.keyboard.press("Escape");
   } else {
+    await page.getByRole("button", { name: "Show search activity" }).click();
     await expect(page.getByTestId("search-activity")).toBeVisible();
     await expect(page.locator(".activityReveal .mainPlot svg path.area")).toHaveCount(1);
+    await expect.poll(() => page.locator(".activityReveal .mainPlot svg path:not(.area)").evaluate((element) => (element as SVGGeometryElement).getBBox().height)).toBeGreaterThan(0);
     await expect.poll(() => page.locator(".activityReveal").evaluate((element) => element.getBoundingClientRect().bottom - window.innerHeight)).toBeLessThanOrEqual(-8);
     await expect.poll(() => page.evaluate(() => localStorage.getItem("pay3flow.exchange.activity-visible"))).toBe("true");
   }

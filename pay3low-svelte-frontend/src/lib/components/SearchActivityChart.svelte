@@ -81,7 +81,7 @@
   @media (max-width: 420px) { .activityHeading { align-items: flex-start; } .headingActions { gap: 4px; } .pair { padding-inline: 5px; font-size: 10px; } .activityHeading strong { font-size: 12px; } }
   .activityStats { display: flex; align-items: baseline; gap: 5px; color: var(--color-text-faint); font-size: 11px; }
   .activityStats strong { color: var(--color-text); font-size: 18px; line-height: 1; }
-  .mainPlot { position: relative; flex: 1 1 auto; min-height: 74px; }
+  .mainPlot { position: relative; height: 74px; flex: 1 1 74px; min-height: 74px; }
   .emptyMessage { position: absolute; top: 45%; left: 50%; width: max-content; max-width: 95%; transform: translate(-50%, -50%); color: var(--color-text-faint); font-size: 11px; text-align: center; }
   .timeLabels { display: flex; justify-content: space-between; color: var(--color-text-faint); font-size: 10px; }
   .state { display: grid; min-height: 0; flex: 1; place-items: center; margin: 0; color: var(--color-text-faint); font-size: 12px; text-align: center; }

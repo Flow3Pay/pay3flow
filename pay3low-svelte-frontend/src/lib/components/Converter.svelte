@@ -167,7 +167,7 @@
 
   function toggleRoutes() {
     routesExpanded = !routesExpanded;
-    if (!routesExpanded && !window.matchMedia("(max-width: 980px)").matches) { setActivityExpanded(true); bringActivityIntoView(); }
+    if (!routesExpanded && activityExpanded) bringActivityIntoView();
     try { localStorage.setItem(STORAGE.routesVisible, String(routesExpanded)); } catch {}
   }
 
@@ -807,7 +807,7 @@
       const savedActivityPeriod = localStorage.getItem(STORAGE.activityPeriod); if (SEARCH_ACTIVITY_PERIODS.includes(savedActivityPeriod as SearchActivityPeriod)) activityPeriod = savedActivityPeriod as SearchActivityPeriod;
       routesExpanded = localStorage.getItem(STORAGE.routesVisible) !== "false";
       const savedActivityVisible = localStorage.getItem(STORAGE.activityVisible);
-      activityExpanded = !window.matchMedia("(max-width: 980px)").matches && (savedActivityVisible === null ? !routesExpanded : savedActivityVisible === "true");
+      activityExpanded = !window.matchMedia("(max-width: 980px)").matches && savedActivityVisible === "true";
       if (activityExpanded && !routesExpanded) bringActivityIntoView("auto");
     } catch {}
     void registerAnonymousUser(anonymousId).catch(() => {});
