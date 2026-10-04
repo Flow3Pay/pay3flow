@@ -76,7 +76,8 @@
   :global(html[data-theme="dark"]) .periodButton img { filter: none; }
   .periodMenu { position: absolute; z-index: 10; top: calc(100% + 7px); right: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; width: 216px; padding: 8px; border: 1px solid var(--color-border-strong); border-radius: 10px; background: var(--color-panel); box-shadow: var(--shadow-card); }
   .periodMenu button { min-height: 34px; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--color-text); font: inherit; font-size: 11px; font-weight: 650; text-align: left; cursor: pointer; }
-  .periodMenu button:hover, .periodMenu button.current { background: var(--color-border-strong); }
+  .periodMenu button:hover { background: var(--color-border-strong); }
+  .periodMenu button.current, .periodMenu button.current:hover { background: var(--color-accent); color: #171717; }
   @media (max-width: 420px) { .activityHeading { align-items: flex-start; } .headingActions { gap: 4px; } .pair { padding-inline: 5px; font-size: 10px; } .activityHeading strong { font-size: 12px; } }
   .activityStats { display: flex; align-items: baseline; gap: 5px; color: var(--color-text-faint); font-size: 11px; }
   .activityStats strong { color: var(--color-text); font-size: 18px; line-height: 1; }

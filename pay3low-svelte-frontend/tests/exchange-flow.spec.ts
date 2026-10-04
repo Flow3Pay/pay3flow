@@ -108,6 +108,20 @@ test("search activity range menu filters and remembers the selected period", asy
   await rangeButton.click();
   const menu = chart.getByRole("menu", { name: "Chart time range" });
   await expect(menu.getByRole("menuitemradio")).toHaveCount(8);
+  const selected = menu.getByRole("menuitemradio", { checked: true });
+  await expect(selected).toHaveText("1 week");
+  const accent = await page.evaluate(() => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--color-accent)";
+    document.body.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  });
+  await expect(selected).toHaveCSS("background-color", accent);
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(selected).toHaveCSS("background-color", accent);
   await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);
   if (isMobile) await expect(page.getByRole("dialog", { name: "Searches for this exchange" })).toBeVisible();
@@ -121,6 +135,8 @@ test("search activity range menu filters and remembers the selected period", asy
   if (isMobile) await page.getByRole("button", { name: "Open search activity graph" }).click();
   const restoredChart = isMobile ? page.getByRole("dialog", { name: "Searches for this exchange" }).getByTestId("search-activity") : page.getByTestId("search-activity");
   await expect(restoredChart.locator(".activityStats span")).toHaveText("searches in period · 1 hour");
+  await restoredChart.getByRole("button", { name: "Chart time range" }).click();
+  await expect(restoredChart.getByRole("menuitemradio", { name: "1 hour", checked: true })).toHaveCSS("background-color", accent);
 });
 
 test("fiat currency controls show local country flags", async ({ page }) => {
