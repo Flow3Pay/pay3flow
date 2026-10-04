@@ -162,15 +162,19 @@ matching `Caddyfile`; the dashboard is provisioned automatically as
 `Pay3Flow overview`.
 
 The dashboard shows distinct pseudonymous browser IDs, registered accounts,
-and wallet swaps confirmed completed by Pay3Flow during the last rolling hour.
+swap route searches during the last rolling hour, and wallet swaps confirmed
+completed by Pay3Flow during that hour. Searches include manual and automatic
+refreshes, so they measure swap form activity rather than completed exchanges.
 One person can have several browser IDs. Exchanges opened in external services
-are excluded because Pay3Flow cannot verify whether they completed.
+are excluded from completed swaps because Pay3Flow cannot verify their result.
 
 After changing the dashboard ConfigMap, apply the manifest to update the
 provisioned dashboard:
 
 ```sh
 kubectl apply -f deploy/monitoring.yaml
+kubectl -n pay3flow-monitoring rollout restart deployment/pay3flow-grafana
+kubectl -n pay3flow-monitoring rollout status deployment/pay3flow-grafana
 ```
 
 The backend creates its schema on startup. Back up external or persistent data

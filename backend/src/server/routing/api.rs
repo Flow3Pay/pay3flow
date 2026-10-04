@@ -227,11 +227,21 @@ pub async fn metrics(State(state): axum::extract::State<AppState>) -> impl IntoR
     let completed_swaps_last_hour = route_executions::count_completed_last_hour(&state.pool)
         .await
         .unwrap_or_default();
+    let swap_searches_last_hour = state
+        .reputation
+        .count_searches_last_hour()
+        .await
+        .unwrap_or_default();
     (
         [(
             CONTENT_TYPE,
             HeaderValue::from_static("text/plain; version=0.0.4; charset=utf-8"),
         )],
-        crate::observability::render(anonymous_users, registered_users, completed_swaps_last_hour),
+        crate::observability::render(
+            anonymous_users,
+            registered_users,
+            completed_swaps_last_hour,
+            swap_searches_last_hour,
+        ),
     )
 }

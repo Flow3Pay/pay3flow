@@ -73,6 +73,7 @@ pub fn render(
     anonymous_users: i64,
     registered_users: i64,
     completed_swaps_last_hour: i64,
+    swap_searches_last_hour: i64,
 ) -> String {
     let metrics = metrics();
     let requests_total = metrics.requests_total.load(Ordering::Relaxed);
@@ -148,6 +149,15 @@ pay3flow_build_info{service=\"backend\"} 1\n\
     let _ = writeln!(
         output,
         "pay3flow_swaps_completed_last_hour {completed_swaps_last_hour}"
+    );
+
+    output.push_str(
+        "# HELP pay3flow_swap_searches_last_hour Number of swap route searches, including refreshes, in the last rolling hour.\n\
+# TYPE pay3flow_swap_searches_last_hour gauge\n",
+    );
+    let _ = writeln!(
+        output,
+        "pay3flow_swap_searches_last_hour {swap_searches_last_hour}"
     );
 
     output

@@ -587,6 +587,18 @@ ON CONFLICT (id) DO NOTHING
         Ok(())
     }
 
+    pub async fn count_searches_last_hour(&self) -> Result<i64, ReputationError> {
+        let client = self.pool.get().await?;
+        let row = client
+            .query_one(
+                "SELECT COUNT(*)::BIGINT FROM route_searches \
+                 WHERE created_at >= now() - INTERVAL '1 hour'",
+                &[],
+            )
+            .await?;
+        Ok(row.get(0))
+    }
+
     pub async fn update_search(
         &self,
         search_id: Uuid,
