@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { afterUpdate, onMount, onDestroy } from "svelte";
+  import { afterUpdate, onMount, onDestroy, tick } from "svelte";
   import { quintOut } from "svelte/easing";
   import { fly } from "svelte/transition";
   import { fetchCorridors, fetchP2pRoutes, fetchProviders, recordInstructionOpen, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderDefinition, type ProviderGuidance, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote, type VenueSearchStatus } from "$lib/exchange";
@@ -85,6 +85,7 @@
   let activityController: AbortController | null = null;
   let activityModalOpen = false;
   let activityExpanded = false;
+  let activityRevealElement: HTMLDivElement | undefined;
   let routesExpanded = true;
   let settingsElement: HTMLDivElement;
   let settingsDialog: HTMLDivElement;
@@ -149,14 +150,24 @@
     try { localStorage.setItem(STORAGE.activityVisible, String(expanded)); } catch {}
   }
 
+  function bringActivityIntoView(behavior: ScrollBehavior = "smooth") {
+    void tick().then(() => window.requestAnimationFrame(() => {
+      const chart = activityRevealElement;
+      if (!chart) return;
+      const bottom = chart.getBoundingClientRect().bottom;
+      const visibleBottom = window.innerHeight - 16;
+      if (bottom > visibleBottom) window.scrollTo({ top: window.scrollY + bottom - visibleBottom, behavior });
+    }));
+  }
+
   function toggleActivityGraph() {
     if (window.matchMedia("(max-width: 980px)").matches) { activityExpanded = false; activityModalOpen = true; }
-    else setActivityExpanded(!activityExpanded);
+    else { setActivityExpanded(!activityExpanded); if (activityExpanded && !routesExpanded) bringActivityIntoView(); }
   }
 
   function toggleRoutes() {
     routesExpanded = !routesExpanded;
-    if (!routesExpanded && !window.matchMedia("(max-width: 980px)").matches) setActivityExpanded(true);
+    if (!routesExpanded && !window.matchMedia("(max-width: 980px)").matches) { setActivityExpanded(true); bringActivityIntoView(); }
     try { localStorage.setItem(STORAGE.routesVisible, String(routesExpanded)); } catch {}
   }
 
@@ -797,6 +808,7 @@
       routesExpanded = localStorage.getItem(STORAGE.routesVisible) !== "false";
       const savedActivityVisible = localStorage.getItem(STORAGE.activityVisible);
       activityExpanded = !window.matchMedia("(max-width: 980px)").matches && (savedActivityVisible === null ? !routesExpanded : savedActivityVisible === "true");
+      if (activityExpanded && !routesExpanded) bringActivityIntoView("auto");
     } catch {}
     void registerAnonymousUser(anonymousId).catch(() => {});
     preferencesLoaded = true;
@@ -936,7 +948,7 @@
       <button type="button" class="chartToggle" class:chartToggleOpen={activityExpanded} on:click={toggleActivityGraph} aria-label={t(activityExpanded ? "Hide search activity" : "Show search activity", {}, activeLocale)} aria-expanded={activityExpanded || activityModalOpen} title={t(activityExpanded ? "Hide search activity" : "Show search activity", {}, activeLocale)}><span aria-hidden="true">❯</span></button>
     </div>
     {#if activityExpanded}
-      <div class="activityReveal" transition:fly={{ y: 18, duration: 380, easing: quintOut }}>
+      <div class="activityReveal" bind:this={activityRevealElement} transition:fly={{ y: 18, duration: 380, easing: quintOut }}>
         <SearchActivityChart sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} hours={activityHours} period={activityPeriod} onPeriodChange={selectActivityPeriod} loading={activityLoading} error={activityError} />
       </div>
     {/if}

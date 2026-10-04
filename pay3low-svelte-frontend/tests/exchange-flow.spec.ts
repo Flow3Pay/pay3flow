@@ -174,14 +174,19 @@ test("routes can be hidden while the bridge stays centered and restored after re
   } else {
     await expect(page.getByTestId("search-activity")).toBeVisible();
     await expect(page.locator(".activityReveal .mainPlot svg path.area")).toHaveCount(1);
+    await expect.poll(() => page.locator(".activityReveal").evaluate((element) => element.getBoundingClientRect().bottom - window.innerHeight)).toBeLessThanOrEqual(-8);
     await expect.poll(() => page.evaluate(() => localStorage.getItem("pay3flow.exchange.activity-visible"))).toBe("true");
-    await page.getByRole("button", { name: "Hide search activity" }).click();
-    await expect(page.getByTestId("search-activity")).toHaveCount(0);
   }
 
   await page.reload();
   await expect(page.getByRole("button", { name: "Show routes" })).toHaveAttribute("aria-expanded", "false");
   await expect(routes).toHaveCount(0);
+  if (!isMobile) {
+    await expect(page.getByTestId("search-activity")).toBeVisible();
+    await expect.poll(() => page.locator(".activityReveal").evaluate((element) => element.getBoundingClientRect().bottom - window.innerHeight)).toBeLessThanOrEqual(-8);
+    await page.getByRole("button", { name: "Hide search activity" }).click();
+    await expect(page.getByTestId("search-activity")).toHaveCount(0);
+  }
   await page.getByRole("button", { name: "Show routes" }).click();
   await expect(routes).toBeVisible();
   if (!isMobile) {
