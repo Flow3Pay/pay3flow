@@ -682,7 +682,7 @@ WITH bounds AS (
            END AS bucket_size
 ), hours AS (
     SELECT generate_series(
-        least(date_trunc($4::text, coalesce($6::timestamptz, now() - $5::interval)), end_bucket - bucket_size),
+        least(date_trunc($4::text, coalesce($6::timestamptz, now() - ($5::text)::interval)), end_bucket - bucket_size),
         end_bucket,
         bucket_size
     ) AS started_at, bucket_size
