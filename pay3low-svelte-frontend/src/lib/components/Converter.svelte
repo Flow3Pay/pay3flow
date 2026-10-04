@@ -612,8 +612,8 @@
     }, 300);
   }
   function formatMarketUsd(value: number) {
-    if (value > 0 && value < 0.01) return "≈ <$0.01";
-    return `≈ $${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    if (value > 0 && value < 0.01) return "<$0.01";
+    return `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
   function updateHash(source: string, target: string, value: string) {
     const params = new URLSearchParams(); if (value !== "0") params.set("amount", value);

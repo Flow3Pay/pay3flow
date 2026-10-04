@@ -1862,7 +1862,7 @@ test("currency control only lists currencies supported by the selected payment m
   await expect(sendingAsset).toBeVisible();
   await expect(sendingAsset.locator(".methodText")).toHaveText("USDT");
   await page.getByLabel("Amount to send").fill("2");
-  await expect(page.locator(".moneyPanelSource .marketValue")).toHaveText("≈ $2.00");
+  await expect(page.locator(".moneyPanelSource .marketValue")).toHaveText("$2.00");
   await page.getByLabel("Amount to send").fill("0");
   await expect(page.locator(".moneyPanelSource .marketValue")).toHaveCount(0);
   await expect(page.locator(".moneyPanelSource .currencyHint")).toHaveCount(0);
