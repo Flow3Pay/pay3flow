@@ -2369,7 +2369,7 @@
 }
 
 .moneyPanel {
-  min-height: 104px;
+  min-height: 96px;
   flex-wrap: wrap;
   align-items: center;
   padding: 15px 15px 12px;
@@ -2795,9 +2795,11 @@
   }
 
   .moneyPanel {
-    min-height: 124px;
+    min-height: 116px;
     justify-content: flex-start;
-    gap: 12px;
+    gap: 8px;
+    padding-top: 13px;
+    padding-bottom: 10px;
   }
 
   .panelCopy {
