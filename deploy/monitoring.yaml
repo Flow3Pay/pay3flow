@@ -277,7 +277,7 @@ data:
         uid: pay3flow-prometheus
         type: prometheus
         access: proxy
-        url: http://pay3flow-prometheus.pay3flow-monitoring.svc.cluster.local:9090
+        url: http://pay3flow-prometheus.pay3flow-monitoring.svc.cluster.local.:9090
         isDefault: true
         editable: false
   dashboard-provider.yaml: |
