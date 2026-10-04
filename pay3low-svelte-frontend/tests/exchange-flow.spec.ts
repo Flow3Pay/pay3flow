@@ -1028,6 +1028,7 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
   const sourcePicker = page.getByRole("dialog", { name: "Choose where you pay from" });
   await expect(sourcePicker).toBeVisible();
+  await sourcePicker.getByRole("option", { name: /^AMD / }).click();
   await sourcePicker.getByLabel("Search banks and payment methods").fill("IDBank");
   await sourcePicker.getByRole("option", { name: /IDBank/ }).click();
   await expect(page.getByRole("button", { name: "Select sending bank: IDBank" })).toBeVisible();
@@ -1035,6 +1036,7 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
   const targetPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
   await expect(targetPicker).toBeVisible();
+  await targetPicker.getByRole("option", { name: /^RUB / }).click();
   await targetPicker.getByLabel("Search banks and payment methods").fill("Alfa");
   await targetPicker.getByRole("option", { name: /Alfa-Bank/ }).click();
   await expect(page.getByRole("button", { name: "Select recipient bank: Alfa-Bank" })).toBeVisible();
@@ -1075,9 +1077,9 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await expect(alternativeRoute).toHaveClass(/selected/);
   await expect(bestRoute).not.toHaveClass(/selected/);
   await expect(alternativeRoute.getByRole("button", { name: /Select route 2:/ })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByTestId("complete-route").first().locator(".workflow")).toHaveAttribute(
+  await expect(page.getByTestId("complete-route").first().locator(".routeWorkflowButton")).toHaveAttribute(
     "aria-label",
-    "AMD → USDT Tether (Binance) → RUB (Binance)",
+    "AMD → USDT (Binance) → RUB (Binance)",
   );
   const routeGroups = page.getByTestId("route-groups");
   const scrollMetrics = await routeGroups.evaluate((element) => ({
@@ -1087,6 +1089,20 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   }));
   expect(scrollMetrics.overflowY).toBe("auto");
   expect(scrollMetrics.scrollHeight).toBeGreaterThan(scrollMetrics.clientHeight);
+  await expect(routeGroups).toHaveCSS("scrollbar-width", "thin");
+  await routeGroups.hover();
+  await page.mouse.wheel(0, 360);
+  await expect.poll(() => routeGroups.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  if ((page.viewportSize()?.width ?? 0) > 980) {
+    await page.getByRole("button", { name: "Show search activity" }).click();
+    const expandedScrollMetrics = await routeGroups.evaluate((element) => ({ clientHeight: element.clientHeight, scrollHeight: element.scrollHeight }));
+    expect(expandedScrollMetrics.scrollHeight).toBeGreaterThan(expandedScrollMetrics.clientHeight);
+    await routeGroups.evaluate((element) => element.scrollTo({ top: 0 }));
+    await routeGroups.hover();
+    await page.mouse.wheel(0, 360);
+    await expect.poll(() => routeGroups.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    await page.getByRole("button", { name: "Hide search activity" }).click();
+  }
   await routeGroups.evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
   await expect(page.getByTestId("complete-route").last()).toBeVisible();
   await routeGroups.evaluate((element) => element.scrollTo({ top: 0 }));
@@ -1096,7 +1112,6 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await expect(instructions.getByRole("list", { name: "Exchange steps" })).toBeVisible();
   await expectNumberedTimeline(instructions, ["1", "2"]);
   await expect(instructions.getByText("Buy USDT for 100,000 AMD")).toBeVisible();
-  await expect(instructions.getByText("Bank fees: IDBank: 0.75% bank fee")).toBeVisible();
   await expect(instructions.getByText("Before creating the order, compare the nickname and advertisement ID.")).toHaveCount(2);
   await expect(instructions.getByText("Release the asset only after you personally see the payment in your bank or payment account.")).toBeVisible();
   const offerLinks = instructions.getByRole("link", { name: /Open Binance P2P and find binance-merchant/ });

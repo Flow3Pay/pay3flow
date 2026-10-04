@@ -1,6 +1,7 @@
 <script lang="ts">
   import { afterUpdate, onMount, onDestroy } from "svelte";
-  import { slide } from "svelte/transition";
+  import { quintOut } from "svelte/easing";
+  import { fly } from "svelte/transition";
   import { fetchCorridors, fetchP2pRoutes, fetchProviders, recordInstructionOpen, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderDefinition, type ProviderGuidance, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote, type VenueSearchStatus } from "$lib/exchange";
   import { FALLBACK_NETWORK, fetchNetworks, type CryptoNetwork } from "$lib/networks";
   import { assetIcon, networkIcon, swapIcon, venueIcon } from "$lib/icons";
@@ -917,7 +918,7 @@
     </div>
     <button type="button" class="chartToggle" class:chartToggleOpen={activityExpanded} on:click={toggleActivityGraph} aria-label={t(activityExpanded ? "Hide search activity" : "Show search activity", {}, activeLocale)} aria-expanded={activityExpanded || activityModalOpen} title={t(activityExpanded ? "Hide search activity" : "Show search activity", {}, activeLocale)}><span aria-hidden="true">❯</span></button>
     {#if activityExpanded}
-      <div class="activityReveal" transition:slide={{ duration: 260 }}>
+      <div class="activityReveal" transition:fly={{ y: 18, duration: 380, easing: quintOut }}>
         <SearchActivityChart sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} hours={activityHours} period={activityPeriod} onPeriodChange={selectActivityPeriod} loading={activityLoading} error={activityError} />
       </div>
     {/if}
@@ -2112,12 +2113,12 @@
 }
 
 .converterStack { display: flex; min-width: 0; flex-direction: column; }
-.workspace.activityExpanded :global(.side) { align-self: stretch; }
-.workspace.activityExpanded :global(.side .panel) { height: 100%; min-height: 690px; }
+.workspace.activityExpanded :global(.side) { min-height: 690px; align-self: stretch; contain: size; }
+.workspace.activityExpanded :global(.side .panel) { height: 100%; min-height: 0; }
 .chartToggle { position: relative; z-index: 3; display: grid; width: 48px; height: 30px; flex: 0 0 auto; place-items: center; margin: 8px auto 4px; padding: 0; border: 0; background: transparent; box-shadow: none; color: var(--color-text-soft); opacity: .6; cursor: pointer; transition: opacity .2s ease; -webkit-tap-highlight-color: transparent; }
 .chartToggle:hover { opacity: .85; }
 .chartToggle:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
-.chartToggle span { display: block; font-size: 21px; line-height: 1; transform: rotate(90deg); transition: transform .26s ease; }
+.chartToggle span { display: block; font-size: 21px; line-height: 1; -webkit-text-stroke: .55px currentColor; transform: rotate(90deg); transition: transform .26s ease; }
 .chartToggleOpen span { transform: rotate(-90deg); }
 .activityReveal { height: 176px; min-height: 0; overflow: visible; }
 .activityReveal :global(.activityCard) { height: 100%; }
