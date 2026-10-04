@@ -217,7 +217,7 @@
                   <span class="workflow">
                   {#each workflowSteps(route) as step, stepIndex}
                     <span class="workflowPart">
-                      {#if stepIndex > 0}<span class="workflowArrow" aria-hidden="true"><img src="/icons/ui/route-arrow.png" alt="" width="20" height="20" /></span>{/if}
+                      {#if stepIndex > 0}<span class="workflowArrow" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 12h16m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span>{/if}
                       <span class="workflowControl">
                         <span class="workflowAsset">
                           {#if FIAT_MARKS[step.currency.toUpperCase()] && !step.iconUrl}
@@ -950,14 +950,13 @@
   height: 20px;
   flex: 0 0 auto;
   place-items: center;
+  color: var(--color-text);
 }
 
-.workflowArrow img {
+.workflowArrow svg {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: contain;
-  filter: brightness(0);
 }
 
 .skeletonList {
@@ -1444,10 +1443,6 @@
 :global(html[data-theme="dark"]) .workflowControl {
   border-color: #3b3b3b;
   background: #2a2a2a;
-}
-
-:global(html[data-theme="dark"]) .workflowArrow img {
-  filter: brightness(0) invert(1);
 }
 
 :global(html[data-theme="dark"]) .workflowNetwork,
