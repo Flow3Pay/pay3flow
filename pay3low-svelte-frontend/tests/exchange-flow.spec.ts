@@ -477,6 +477,16 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
     const json = (value: unknown, status = 200) =>
       route.fulfill({ status, contentType: "application/json", body: JSON.stringify(value) });
 
+    if (url.pathname === "/api/market-values") {
+      const { items } = route.request().postDataJSON() as { items: Array<{ asset: string; amount: string }> };
+      const prices: Record<string, number> = { USDT: 1, USDC: 1, BTC: 10000, ETH: 1000 };
+      return json({ source: "DefiLlama", stale: false, values: items.map(({ asset, amount }) => ({
+        asset, amount, price_usd: prices[asset] ?? null,
+        value_usd: prices[asset] == null ? null : Number(amount) * prices[asset],
+        price_timestamp: 1_780_000_000,
+      })) });
+    }
+
     if (url.pathname === "/api/p2p/route-activity") {
       const end = Date.UTC(2026, 9, 4, 12);
       const oneHour = url.searchParams.get("period") === "1h";
@@ -1851,6 +1861,10 @@ test("currency control only lists currencies supported by the selected payment m
   const sendingAsset = page.getByRole("button", { name: "Select sending asset: USDT" });
   await expect(sendingAsset).toBeVisible();
   await expect(sendingAsset.locator(".methodText")).toHaveText("USDT");
+  await page.getByLabel("Amount to send").fill("2");
+  await expect(page.locator(".moneyPanelSource .marketValue")).toHaveText("≈ $2.00");
+  await page.getByLabel("Amount to send").fill("0");
+  await expect(page.locator(".moneyPanelSource .marketValue")).toHaveCount(0);
   await expect(page.locator(".moneyPanelSource .currencyHint")).toHaveCount(0);
   const sendingNetwork = page.getByRole("button", { name: "Select sending network: Ethereum (ERC-20)" });
   await expect(sendingNetwork).toBeVisible();

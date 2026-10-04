@@ -7,6 +7,7 @@ pub mod compiled_provider_code {
 pub mod core;
 pub mod db;
 pub mod exchange;
+pub mod market_prices;
 pub mod networks;
 pub mod observability;
 pub mod p2p;

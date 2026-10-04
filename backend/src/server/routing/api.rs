@@ -14,6 +14,7 @@ use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 use tracing::Level;
 
 use crate::core::state::AppState;
+use crate::market_prices;
 use crate::server::openapi;
 use crate::server::routing::{
     activitypub, anonymous, auth, banks, exchange, matcher, networks, oauth, p2p, pairs, payments,
@@ -134,6 +135,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/banks", get(banks::list))
         .route("/api/networks", get(networks::list))
+        .route("/api/market-values", post(market_prices::market_values))
         .route("/api/p2p/search", get(p2p::search))
         .route("/api/p2p/routes", get(p2p::routes))
         .route("/api/p2p/route-activity", get(p2p::route_activity))

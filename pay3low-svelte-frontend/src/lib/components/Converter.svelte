@@ -2,7 +2,7 @@
   import { afterUpdate, onMount, onDestroy, tick } from "svelte";
   import { quintOut } from "svelte/easing";
   import { fly, slide } from "svelte/transition";
-  import { fetchCorridors, fetchP2pRoutes, fetchProviders, recordInstructionOpen, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderDefinition, type ProviderGuidance, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote, type VenueSearchStatus } from "$lib/exchange";
+  import { fetchCorridors, fetchMarketValues, fetchP2pRoutes, fetchProviders, recordInstructionOpen, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderDefinition, type ProviderGuidance, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote, type VenueSearchStatus } from "$lib/exchange";
   import { FALLBACK_NETWORK, fetchNetworks, type CryptoNetwork } from "$lib/networks";
   import { assetIcon, networkIcon, swapIcon, venueIcon } from "$lib/icons";
   import { fetchPaymentMethods, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
@@ -106,6 +106,10 @@
   let debounceTimer: number | undefined;
   let refreshTimer: number | undefined;
   let clockTimer: number | undefined;
+  let marketTimer: number | undefined;
+  let marketController: AbortController | null = null;
+  let lastMarketKey = "";
+  let marketUsd: { source: number | null; target: number | null } = { source: null, target: null };
   let initialSearchTimer: number | undefined;
   let routeRenderTimer: number | undefined;
   let routeRenderFrame: number | undefined;
@@ -558,6 +562,12 @@
   $: previewRoute = selected ?? routes.find((route) => route.status === "complete" && route.is_current_best) ?? routes.find((route) => route.status === "complete") ?? null;
   $: displayedSourceAmount = amountSide === "target" && targetAmountNeedsRate && amountNumber(amount) <= 0 ? "" : amount;
   $: displayedTargetAmount = amountSide === "target" && !previewRoute ? targetAmount : amountFromRoute(previewRoute);
+  $: marketItems = ([
+    sourceMethod?.kind === "wallet" && amountNumber(displayedSourceAmount) > 0 ? { side: "source" as const, asset: selectedSourceCurrency, amount: normalizeAmount(displayedSourceAmount).replace(",", ".") } : null,
+    targetMethod?.kind === "wallet" && amountNumber(displayedTargetAmount) > 0 ? { side: "target" as const, asset: selectedTargetCurrency, amount: normalizeAmount(displayedTargetAmount).replace(",", ".") } : null,
+  ]).filter((item): item is { side: "source" | "target"; asset: string; amount: string } => item !== null);
+  $: marketKey = `${marketItems.map((item) => `${item.side}:${item.asset}:${item.amount}`).join("|")}:${Math.floor(clock / 60_000)}`;
+  $: if (preferencesLoaded) scheduleMarketValues(marketKey, marketItems);
   $: converterAmountDigits = Math.min(14, Math.max(10, displayedSourceAmount.replace(/\D/g, "").length, displayedTargetAmount.replace(/\D/g, "").length));
   $: converterWidth = 550 + (converterAmountDigits - 10) * 21;
   $: secondsUntilRefresh = refreshSeconds && lastUpdatedAt ? Math.max(0, refreshSeconds - Math.floor((clock - lastUpdatedAt) / 1000)) : null;
@@ -576,6 +586,34 @@
     try {
       localStorage.setItem(STORAGE.amount, value); localStorage.setItem(STORAGE.refresh, String(refresh)); localStorage.setItem(STORAGE.sources, sources.join(",")); localStorage.setItem(STORAGE.methods, methods.join(",")); localStorage.setItem(STORAGE.assets, assets.join(",")); localStorage.setItem(STORAGE.corridor, corridorValue); localStorage.setItem(STORAGE.sourceMethod, sourceMethodValue); localStorage.setItem(STORAGE.targetMethod, targetMethodValue); localStorage.setItem(STORAGE.sourceNetwork, sourceNetworkValue); localStorage.setItem(STORAGE.targetNetwork, targetNetworkValue); localStorage.setItem(STORAGE.direction, String(reversed));
     } catch {}
+  }
+  function scheduleMarketValues(key: string, items: typeof marketItems) {
+    if (key === lastMarketKey) return;
+    lastMarketKey = key;
+    marketController?.abort();
+    if (marketTimer) clearTimeout(marketTimer);
+    marketUsd = { source: null, target: null };
+    if (!items.length) return;
+    marketTimer = window.setTimeout(async () => {
+      const controller = new AbortController();
+      marketController = controller;
+      try {
+        const response = await fetchMarketValues(items.map(({ asset, amount }) => ({ asset, amount })), controller.signal);
+        if (lastMarketKey !== key || controller.signal.aborted) return;
+        const values = { source: null, target: null } as typeof marketUsd;
+        items.forEach((item, index) => {
+          const value = response.values[index];
+          if (value?.asset === item.asset && value.amount === item.amount) values[item.side] = value.value_usd;
+        });
+        marketUsd = values;
+      } catch (error) {
+        if (!controller.signal.aborted) console.warn("Market valuation unavailable", error);
+      }
+    }, 300);
+  }
+  function formatMarketUsd(value: number) {
+    if (value > 0 && value < 0.01) return "≈ <$0.01";
+    return `≈ $${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
   function updateHash(source: string, target: string, value: string) {
     const params = new URLSearchParams(); if (value !== "0") params.set("amount", value);
@@ -942,10 +980,12 @@
   onDestroy(() => {
     controller?.abort();
     activityController?.abort();
+    marketController?.abort();
     cancelRouteRendering();
     if (debounceTimer) clearTimeout(debounceTimer);
     if (refreshTimer) clearInterval(refreshTimer);
     if (clockTimer) clearInterval(clockTimer);
+    if (marketTimer) clearTimeout(marketTimer);
     if (initialSearchTimer) clearTimeout(initialSearchTimer);
     if (typeof document !== "undefined") document.removeEventListener("mousedown", onDocumentMouseDown);
     if (typeof window !== "undefined") window.removeEventListener("keydown", onSettingsKeyDown);
@@ -1010,7 +1050,7 @@
 
       <div class="intentLabel"><span>Sell</span></div>
       <div class="moneyPanel moneyPanelSource">
-        <div class="panelCopy"><label for="exchange-amount">You send</label><input id="exchange-amount" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedSourceAmount} on:focus={(event) => event.currentTarget.select()} on:input={(event) => updateAmount(event.currentTarget.value)} aria-label="Amount to send" /></div>
+        <div class="panelCopy"><label for="exchange-amount">You send</label><input id="exchange-amount" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedSourceAmount} on:focus={(event) => event.currentTarget.select()} on:input={(event) => updateAmount(event.currentTarget.value)} aria-label="Amount to send" />{#if marketUsd.source !== null}<span class="marketValue" aria-label={t("Approximate USD market value", {}, activeLocale)}>{formatMarketUsd(marketUsd.source)}</span>{/if}</div>
         <div class="methodControls">
           <button type="button" class="methodTrigger" on:click={() => void openMethodPicker("source")} aria-label={`Select sending ${methodNoun(sourceMethod)}: ${sourceMethod ? methodTitle(sourceMethod) : "none"}`}>
             <span class="methodAvatar" style:background-color={paymentMethodFavicon(sourceMethod) ? "transparent" : sourceMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(sourceMethod)}<img src={paymentMethodFavicon(sourceMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{:else}<span>{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{/if}</span>
@@ -1022,7 +1062,7 @@
       <div class="flowBridge"><span class="bridgeLine" aria-hidden="true"></span><button type="button" class:bridgeIconReversed={directionReversed} class="bridgeIcon" on:click={swapDirection} aria-label="Swap sender and recipient" title="Swap sender and recipient"><img src={swapIcon} alt="" width="18" height="18" aria-hidden="true" /></button><button type="button" class="routesToggle" class:routesToggleOpen={routesExpanded} on:click={toggleRoutes} aria-label={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)} aria-expanded={routesExpanded} title={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)}><span aria-hidden="true">❯</span></button></div>
       <div class="intentLabel intentLabelBuy"><span>Buy</span></div>
       <div class="moneyPanel moneyPanelTarget">
-        <div class="panelCopy"><label for="exchange-output">Recipient gets</label><input id="exchange-output" class:amountOutputEmpty={!previewRoute && amountSide !== "target"} class="amountInput amountOutput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedTargetAmount} on:focus={(event) => event.currentTarget.select()} on:input={(event) => updateTargetAmount(event.currentTarget.value)} aria-label="Amount to receive" /></div>
+        <div class="panelCopy"><label for="exchange-output">Recipient gets</label><input id="exchange-output" class:amountOutputEmpty={!previewRoute && amountSide !== "target"} class="amountInput amountOutput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedTargetAmount} on:focus={(event) => event.currentTarget.select()} on:input={(event) => updateTargetAmount(event.currentTarget.value)} aria-label="Amount to receive" />{#if marketUsd.target !== null}<span class="marketValue" aria-label={t("Approximate USD market value", {}, activeLocale)}>{formatMarketUsd(marketUsd.target)}</span>{/if}</div>
         <div class="methodControls">
           <button type="button" class="methodTrigger" on:click={() => void openMethodPicker("target")} aria-label={`Select recipient ${methodNoun(targetMethod)}: ${targetMethod ? methodTitle(targetMethod) : "none"}`}>
             <span class="methodAvatar" style:background-color={paymentMethodFavicon(targetMethod) ? "transparent" : targetMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(targetMethod)}<img src={paymentMethodFavicon(targetMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{:else}<span>{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{/if}</span>
@@ -2408,6 +2448,17 @@
   height: 1px;
   overflow: hidden;
   clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.marketValue {
+  overflow: hidden;
+  color: var(--color-text-soft);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

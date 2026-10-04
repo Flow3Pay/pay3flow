@@ -84,6 +84,27 @@ fn components() -> Value {
                     "anonymous_id": { "type": "string", "format": "uuid" }
                 }
             },
+            "MarketValuesRequest": {
+                "type": "object",
+                "required": ["items"],
+                "properties": { "items": { "type": "array", "minItems": 1, "maxItems": 4, "items": { "type": "object", "required": ["asset", "amount"], "properties": {
+                    "asset": { "type": "string", "example": "BTC" },
+                    "amount": { "type": "string", "example": "0.5" }
+                } } } }
+            },
+            "MarketValuesResponse": {
+                "type": "object",
+                "required": ["source", "stale", "values"],
+                "properties": {
+                    "source": { "type": "string", "example": "DefiLlama" },
+                    "stale": { "type": "boolean" },
+                    "values": { "type": "array", "items": { "type": "object", "required": ["asset", "amount", "price_usd", "value_usd", "price_timestamp"], "properties": {
+                        "asset": { "type": "string" }, "amount": { "type": "string" },
+                        "price_usd": { "type": "number", "nullable": true }, "value_usd": { "type": "number", "nullable": true },
+                        "price_timestamp": { "type": "integer", "format": "int64", "nullable": true }
+                    } } }
+                }
+            },
             "User": {
                 "type": "object",
                 "required": ["id", "email", "referral_code"],
@@ -627,6 +648,15 @@ const OPERATIONS: &[Operation] = &[
         false,
     ),
     (
+        "/api/market-values",
+        "post",
+        "Calculate crypto market values in USD",
+        "Return indicative USD market values for up to four supported crypto amounts using server-cached prices. Unknown or unavailable assets have null values.",
+        "Catalogs",
+        true,
+        false,
+    ),
+    (
         "/api/providers",
         "get",
         "List providers",
@@ -1057,6 +1087,7 @@ fn request_schema(path: &str, method: &str) -> Value {
     let name = match (path, method) {
         ("/api/auth/register", "post") | ("/api/auth/login", "post") => "AuthCodeRequest",
         ("/api/anonymous/register", "post") => "AnonymousRegisterRequest",
+        ("/api/market-values", "post") => "MarketValuesRequest",
         ("/api/payments", "post") => "NewPayment",
         ("/api/exchange/orders", "post") => "CreateExchangeOrder",
         ("/api/exchange/orders/{id}/confirm", "post") => "ConfirmOrderRequest",
@@ -1076,6 +1107,7 @@ fn response_schema(path: &str, method: &str) -> Value {
         | ("/api/auth/oauth/{provider}", "post") => schema_ref("AuthToken"),
         ("/api/auth/me", "get") => schema_ref("User"),
         ("/api/anonymous/register", "post") => schema_ref("AnonymousUser"),
+        ("/api/market-values", "post") => schema_ref("MarketValuesResponse"),
         ("/api/referrals/me", "get") => schema_ref("ReferralProfile"),
         ("/api/payments", "post") | ("/api/payments/{id}", "get") => schema_ref("PaymentView"),
         ("/api/payments", "get") => array_schema("PaymentView"),

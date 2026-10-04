@@ -179,6 +179,7 @@ async fn main() -> anyhow::Result<()> {
         route_quotes,
         reputation,
         route_executions,
+        pay3flow_backend::market_prices::MarketPriceService::new()?,
     );
 
     // Provider refresh work is paced independently from interactive searches:
