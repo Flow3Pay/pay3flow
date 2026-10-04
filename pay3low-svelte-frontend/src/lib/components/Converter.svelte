@@ -1027,7 +1027,7 @@
 .introOverlay { position: fixed; inset: 0; z-index: 1000; overflow: hidden; background: var(--shell-gradient); }
 .introTitle { position: absolute; top: 50%; left: 50%; width: min(900px, calc(100vw - 48px)); margin: 0; color: var(--color-text); font-size: clamp(44px, 5.5vw, 72px); font-weight: 650; letter-spacing: -.065em; line-height: .96; text-align: center; transform: translate(-50%, -50%) scale(1.2); }
 .introStarted .introTitle { animation: introDock .68s 3.08s cubic-bezier(.22, 1, .36, 1) both; }
-.introClip { display: inline-block; overflow: hidden; vertical-align: bottom; }
+.introClip { display: inline-block; clip-path: inset(-.12em -.16em -.18em -.16em); vertical-align: bottom; }
 .introSecondWithDot { white-space: nowrap; }
 .introWord { display: inline-block; transform: translateY(115%); opacity: 0; }
 .introStarted .introWordMove { animation: introRise .48s .2s cubic-bezier(.22, 1, .36, 1) forwards; }
