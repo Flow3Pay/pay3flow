@@ -217,25 +217,25 @@
                   <span class="workflow">
                   {#each workflowSteps(route) as step, stepIndex}
                     <span class="workflowPart">
-                      {#if stepIndex > 0}<span class="workflowArrow" aria-hidden="true">→</span>{/if}
-                      <span class="workflowAsset">
-                        {#if FIAT_MARKS[step.currency.toUpperCase()] && !step.iconUrl}
-                          <span class="workflowFlag" aria-hidden="true">{FIAT_MARKS[step.currency.toUpperCase()]}</span>
-                        {:else}
-                          <span class="workflowIcon" aria-hidden="true"><img src={step.iconUrl ?? assetIcon(step.currency)} alt="" width="15" height="15" loading="lazy" decoding="async" /></span>
-                        {/if}
-                        <span>{assetLabel(step.currency)}</span>
+                      {#if stepIndex > 0}<span class="workflowArrow" aria-hidden="true"><img src="/icons/ui/route-arrow.png" alt="" width="20" height="20" /></span>{/if}
+                      <span class="workflowControl">
+                        <span class="workflowAsset">
+                          {#if FIAT_MARKS[step.currency.toUpperCase()] && !step.iconUrl}
+                            <span class="workflowFlag" aria-hidden="true">{FIAT_MARKS[step.currency.toUpperCase()]}</span>
+                          {:else}
+                            <span class="workflowIcon" aria-hidden="true"><img src={step.iconUrl ?? assetIcon(step.currency)} alt="" width="18" height="18" loading="lazy" decoding="async" /></span>
+                          {/if}
+                          <strong>{step.currency.toUpperCase()}</strong>
+                        </span>
                         {#if step.network}
-                          <span class="workflowNetwork" aria-label={t("Network: {network}", { network: step.networkLabel ?? compactNetwork(step.network) }, $locale)}>
-                            <span aria-hidden="true">·</span>
-                            <span class="workflowNetworkIcon" aria-hidden="true"><img src={networkIcon(step.network)} alt="" width="14" height="14" loading="lazy" decoding="async" /></span>
-                            <span>{step.networkLabel ?? compactNetwork(step.network)}</span>
+                          <span class="workflowNetwork" aria-label={t("Network: {network}", { network: readableNetwork(step.network) }, $locale)} title={readableNetwork(step.network)}>
+                            <span class="workflowNetworkIcon" aria-hidden="true"><img src={networkIcon(step.network)} alt="" width="18" height="18" loading="lazy" decoding="async" /></span>
                           </span>
                         {/if}
+                        {#if step.provider}
+                          <span class="workflowVenue" title={venueName(step.provider)}><span class="workflowVenueIcon" aria-hidden="true"><img src={venueIcon(step.provider)} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackVenueIcon(event, step.provider ?? "")} /></span><strong>{venueName(step.provider)}</strong></span>
+                        {/if}
                       </span>
-                      {#if step.provider}
-                        <span class="workflowVenue"><span aria-hidden="true">(</span><span class="workflowVenueIcon" aria-hidden="true"><img src={venueIcon(step.provider)} alt="" width="12" height="12" loading="lazy" decoding="async" on:error={(event) => fallbackVenueIcon(event, step.provider ?? "")} /></span><span>{venueName(step.provider)}</span><span aria-hidden="true">)</span></span>
-                      {/if}
                     </span>
                   {/each}
                   </span>
@@ -808,19 +808,16 @@
 .workflow {
   position: relative;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
+  gap: 6px 8px;
   padding-top: 1px;
   width: 100%;
   min-width: 0;
   z-index: 1;
-  overflow: hidden;
   color: rgba(255, 255, 255, 0.55);
-  font-size: 9px;
-  font-weight: 650;
-  line-height: 1.5;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1;
 }
 
 .routeQuoteMeta {
@@ -843,24 +840,45 @@
 }
 
 .workflowPart {
-  gap: 3px;
+  max-width: 100%;
+  gap: 6px;
+}
+
+.workflowControl {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid #d7dcd3;
+  border-radius: 5px;
+  background: #e7ebe2;
 }
 
 .workflowAsset {
-  gap: 4px;
+  flex: 0 0 auto;
+  gap: 6px;
+  padding: 5px 8px 5px 6px;
+  color: var(--color-text);
+}
+
+.workflowAsset strong {
+  font-size: 11px;
+  font-weight: 850;
 }
 
 .workflowNetwork {
   display: inline-flex;
-  min-width: 0;
+  flex: 0 0 auto;
   align-items: center;
-  gap: 3px;
+  padding: 5px 7px;
+  border-left: 1px solid #d7dcd3;
 }
 
 .workflowNetworkIcon {
   display: inline-grid;
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   flex: 0 0 auto;
   place-items: center;
   overflow: hidden;
@@ -885,15 +903,14 @@
 }
 
 .workflowIcon {
-  width: 15px;
-  height: 15px;
+  width: 18px;
+  height: 18px;
   background: rgba(255, 255, 255, 0.08);
 }
 
 .workflowVenueIcon {
-  width: 12px;
-  height: 12px;
-  margin: 0 2px;
+  width: 18px;
+  height: 18px;
 }
 
 .workflowIcon img,
@@ -912,12 +929,35 @@
 }
 
 .workflowVenue {
-  color: rgba(255, 255, 255, 0.45);
+  flex: 0 1 auto;
+  gap: 6px;
+  padding: 5px 8px 5px 7px;
+  border-left: 1px solid #d7dcd3;
+  color: var(--color-text);
+}
+
+.workflowVenue strong {
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .workflowArrow {
+  display: inline-grid;
+  width: 20px;
+  height: 20px;
   flex: 0 0 auto;
-  color: rgba(255, 255, 255, 0.32);
+  place-items: center;
+}
+
+.workflowArrow img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: brightness(0);
 }
 
 .skeletonList {
@@ -1217,12 +1257,8 @@
 }
 
 .workflowVenue {
-  color: var(--color-text-soft);
+  color: var(--color-text);
   font-weight: 750;
-}
-
-.workflowArrow {
-  color: var(--color-text-faint);
 }
 
 .bestBadge {
@@ -1403,6 +1439,20 @@
 :global(html[data-theme="dark"]) .workflowAsset,
 :global(html[data-theme="dark"]) .workflowVenue {
   background: transparent;
+}
+
+:global(html[data-theme="dark"]) .workflowControl {
+  border-color: #3b3b3b;
+  background: #2a2a2a;
+}
+
+:global(html[data-theme="dark"]) .workflowArrow img {
+  filter: brightness(0) invert(1);
+}
+
+:global(html[data-theme="dark"]) .workflowNetwork,
+:global(html[data-theme="dark"]) .workflowVenue {
+  border-color: #3b3b3b;
 }
 
 :global(html[data-theme="dark"]) .skeletonShort,
