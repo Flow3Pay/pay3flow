@@ -19,6 +19,15 @@ async function openApp(page: Page) {
     .not.toBe("none");
 }
 
+async function expectPeriodButtonBesidePair(chart: Locator) {
+  const pair = await chart.locator(".pair").boundingBox();
+  const button = await chart.getByRole("button", { name: "Chart time range" }).boundingBox();
+  expect(pair).not.toBeNull();
+  expect(button).not.toBeNull();
+  expect(button!.x).toBeGreaterThanOrEqual(pair!.x + pair!.width - 1);
+  expect(Math.abs(button!.y + button!.height / 2 - pair!.y - pair!.height / 2)).toBeLessThan(5);
+}
+
 test("system theme follows the browser until the user chooses a theme", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "dark" });
   await mockBackend(page);
@@ -54,6 +63,7 @@ test("search activity uses hourly counts and fits beside routes or opens in a mo
     await page.getByRole("button", { name: "Open search activity graph" }).click();
     const dialog = page.getByRole("dialog", { name: "Searches for this exchange" });
     await expect(dialog.getByTestId("search-activity")).toBeVisible();
+    await expectPeriodButtonBesidePair(dialog.getByTestId("search-activity"));
     await expect(dialog.locator(".activityStats strong")).toHaveText("28");
     await expect(dialog.locator(".brush")).toHaveCount(0);
     await expect.poll(() => page.evaluate(() => document.body.style.position)).toBe("fixed");
@@ -62,6 +72,7 @@ test("search activity uses hourly counts and fits beside routes or opens in a mo
     await expect.poll(() => page.evaluate(() => document.body.style.position)).toBe("");
   } else {
     await expect(chart.locator(".activityStats strong")).toHaveText("28");
+    await expectPeriodButtonBesidePair(chart);
     await expect(chart.locator(".activityStats span")).toHaveText("searches in period · 1 week");
     await expect(chart.locator(".brush")).toHaveCount(0);
     const surfaces = await page.evaluate(() => ({

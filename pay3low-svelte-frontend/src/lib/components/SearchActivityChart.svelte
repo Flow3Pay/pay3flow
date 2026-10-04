@@ -44,7 +44,7 @@
 <svelte:window on:click={closeOnOutsideClick} on:keydown={closeOnEscape} />
 
 <section class="activityCard" data-testid="search-activity" aria-label={t("Searches for this exchange", {}, $locale)} aria-busy={loading}>
-  <div class="activityHeading"><div><small>{t("Search activity", {}, $locale)}</small><strong>{t("Searches for this exchange", {}, $locale)}</strong></div><div class="headingActions"><span class="pair">{sourceCurrency} <span aria-hidden="true">→</span> {targetCurrency}</span><div class="periodWrap" bind:this={periodMenu}><button type="button" class="periodButton" aria-label={t("Chart time range", {}, $locale)} aria-haspopup="menu" aria-expanded={periodMenuOpen} title={`${t("Chart time range", {}, $locale)}: ${periodLabel}`} on:click={() => periodMenuOpen = !periodMenuOpen}><img src="/icons/ui/chart-period.png" alt="" width="18" height="18" aria-hidden="true" /></button>{#if periodMenuOpen}<div class="periodMenu" role="menu" aria-label={t("Chart time range", {}, $locale)}>{#each SEARCH_ACTIVITY_PERIODS as value}<button type="button" role="menuitemradio" aria-checked={period === value} class:current={period === value} on:click={() => choosePeriod(value)}>{t(periodLabels[value], {}, $locale)}</button>{/each}</div>{/if}</div></div></div>
+  <div class="activityHeading"><div class="headingCopy"><small>{t("Search activity", {}, $locale)}</small><strong>{t("Searches for this exchange", {}, $locale)}</strong></div><div class="headingActions"><span class="pair">{sourceCurrency} <span aria-hidden="true">→</span> {targetCurrency}</span><div class="periodWrap" bind:this={periodMenu}><button type="button" class="periodButton" aria-label={t("Chart time range", {}, $locale)} aria-haspopup="menu" aria-expanded={periodMenuOpen} title={`${t("Chart time range", {}, $locale)}: ${periodLabel}`} on:click={() => periodMenuOpen = !periodMenuOpen}><img src="/icons/ui/chart-period.png" alt="" width="18" height="18" aria-hidden="true" /></button>{#if periodMenuOpen}<div class="periodMenu" role="menu" aria-label={t("Chart time range", {}, $locale)}>{#each SEARCH_ACTIVITY_PERIODS as value}<button type="button" role="menuitemradio" aria-checked={period === value} class:current={period === value} on:click={() => choosePeriod(value)}>{t(periodLabels[value], {}, $locale)}</button>{/each}</div>{/if}</div></div></div>
   {#if error}
     <p class="state">{t("Search activity is temporarily unavailable.", {}, $locale)}</p>
   {:else if !points.length}
@@ -64,7 +64,7 @@
 <style>
   .activityCard { display: flex; min-width: 0; min-height: 0; flex-direction: column; gap: 6px; padding: 16px 18px 12px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-card); background: rgba(255,255,255,.96); box-shadow: var(--shadow-card); color: var(--color-text); }
   .activityHeading { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-  .activityHeading > div { display: flex; min-width: 0; flex-direction: column; gap: 1px; }
+  .headingCopy { display: flex; min-width: 0; flex-direction: column; gap: 1px; }
   .activityHeading small { color: var(--color-text-faint); font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
   .activityHeading strong { font-size: 14px; line-height: 1.2; }
   .headingActions { display: flex; align-items: center; gap: 7px; flex: 0 0 auto; }
