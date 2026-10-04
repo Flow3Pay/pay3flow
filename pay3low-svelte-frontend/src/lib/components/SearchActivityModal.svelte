@@ -39,6 +39,5 @@
   :global(.dialog .activityHeading) { padding-right: 38px; }
   :global(.dialog .activityCard) { padding: 24px; gap: 14px; }
   :global(.dialog .mainPlot) { height: 180px; }
-  :global(.dialog .brush) { height: 60px; }
   @media (max-width: 640px) { .backdrop { align-items: end; padding: 0; } .dialog { width: 100%; max-height: 86dvh; border-radius: 20px 20px 0 0; overflow: hidden; } :global(.dialog .activityCard) { border-radius: 20px 20px 0 0; padding: 28px 18px 24px; } :global(.dialog .mainPlot) { height: 155px; } }
 </style>

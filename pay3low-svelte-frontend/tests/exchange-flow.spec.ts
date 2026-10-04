@@ -43,6 +43,7 @@ test("system theme follows the browser until the user chooses a theme", async ({
 });
 
 test("search activity uses hourly counts and fits beside routes or opens in a mobile modal", async ({ page, isMobile }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
   await mockBackend(page);
   await openApp(page);
   const chart = page.getByTestId("search-activity");
@@ -51,28 +52,28 @@ test("search activity uses hourly counts and fits beside routes or opens in a mo
     await page.getByRole("button", { name: "Open search activity graph" }).click();
     const dialog = page.getByRole("dialog", { name: "Others searched this exchange" });
     await expect(dialog.getByTestId("search-activity")).toBeVisible();
-    await expect(dialog.locator(".activityStats strong")).toHaveText("8");
+    await expect(dialog.locator(".activityStats strong")).toHaveText("28");
+    await expect(dialog.locator(".brush")).toHaveCount(0);
     await expect.poll(() => page.evaluate(() => document.body.style.position)).toBe("fixed");
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
     await expect.poll(() => page.evaluate(() => document.body.style.position)).toBe("");
   } else {
-    await expect(chart.locator(".activityStats strong")).toHaveText("8");
+    await expect(chart.locator(".activityStats strong")).toHaveText("28");
+    await expect(chart.locator(".activityStats span")).toHaveText("searches in the last 7 days");
+    await expect(chart.locator(".brush")).toHaveCount(0);
+    const surfaces = await page.evaluate(() => ({
+      chart: getComputedStyle(document.querySelector(".activityCard")!).backgroundColor,
+      routes: getComputedStyle(document.querySelector(".side .panel")!).backgroundColor,
+    }));
+    expect(surfaces.chart).toBe(surfaces.routes);
     const dimensions = await page.evaluate(() => {
       const stack = document.querySelector(".converterStack")!.getBoundingClientRect();
       const side = document.querySelector(".side")!.getBoundingClientRect();
       return { stackBottom: stack.bottom, sideBottom: side.bottom };
     });
     expect(dimensions.stackBottom).toBeLessThanOrEqual(dimensions.sideBottom + 1);
-    const brush = chart.locator(".brush");
-    await brush.scrollIntoViewIfNeeded();
-    const box = await brush.boundingBox();
-    expect(box).not.toBeNull();
-    await page.mouse.move(box!.x + box!.width * 0.1, box!.y + box!.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(box!.x + box!.width * 0.55, box!.y + box!.height / 2, { steps: 8 });
-    await page.mouse.up();
-    await expect(chart.locator(".activityStats strong")).not.toHaveText("8");
+    await expect(chart.locator(".mainPlot svg path.area")).toHaveCount(1);
   }
 });
 

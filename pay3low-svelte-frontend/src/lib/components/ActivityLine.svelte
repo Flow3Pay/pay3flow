@@ -2,8 +2,6 @@
   import { getContext } from "svelte";
   import type { Readable } from "svelte/store";
 
-  export let overview = false;
-
   type Point = { time: number; count: number };
   const { data, xGet, yGet, height, width, yScale } = getContext<{
     data: Readable<Point[]>;
@@ -16,21 +14,19 @@
 
   $: line = $data.length ? `M${$data.map((point) => `${$xGet(point)},${$yGet(point)}`).join("L")}` : "";
   $: area = line ? `${line}L${$width},${$height}L0,${$height}Z` : "";
-  $: grid = overview ? [] : [0, 0.5, 1];
+  const grid = [0, 0.5, 1];
 </script>
 
 {#each grid as fraction}
   <line class="grid" x1="0" x2={$width} y1={$yScale(Math.max(...$data.map((point) => point.count), 1) * fraction)} y2={$yScale(Math.max(...$data.map((point) => point.count), 1) * fraction)} />
 {/each}
 <path class="area" d={area} />
-<path class:overview d={line} />
+<path d={line} />
 
 <style>
   .grid { stroke: #dce2d6; stroke-dasharray: 3 4; stroke-width: 1; }
-  .area { fill: rgba(153, 193, 41, 0.17); }
+  .area { fill: var(--color-panel-soft); }
   path:not(.area) { fill: none; stroke: #729b17; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
-  path.overview { stroke-width: 1.8; }
-  :global(html[data-theme="dark"]) .grid { stroke: #3b4737; }
-  :global(html[data-theme="dark"]) .area { fill: rgba(185, 232, 52, 0.16); }
+  :global(html[data-theme="dark"]) .grid { stroke: #383838; }
   :global(html[data-theme="dark"]) path:not(.area) { stroke: #b9e834; }
 </style>
