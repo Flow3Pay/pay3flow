@@ -946,6 +946,7 @@
     </div>
     <div class="panelToggles">
       <button type="button" class="chartToggle" class:chartToggleOpen={activityExpanded} on:click={toggleActivityGraph} aria-label={t(activityExpanded ? "Hide search activity" : "Show search activity", {}, activeLocale)} aria-expanded={activityExpanded || activityModalOpen} title={t(activityExpanded ? "Hide search activity" : "Show search activity", {}, activeLocale)}><span aria-hidden="true">❯</span></button>
+      <button type="button" class="mobileRoutesToggle" class:mobileRoutesToggleOpen={routesExpanded} on:click={toggleRoutes} aria-label={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)} aria-expanded={routesExpanded} title={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)}><span aria-hidden="true">❯</span></button>
     </div>
     {#if activityExpanded}
       <div class="activityReveal" bind:this={activityRevealElement} transition:fly={{ y: 18, duration: 380, easing: quintOut }}>
@@ -2156,18 +2157,19 @@
 .workspace.activityExpanded .routesReveal :global(.side) { height: 100%; }
 .workspace.activityExpanded .routesReveal :global(.side .panel) { height: 100%; min-height: 0; }
 .panelToggles { position: relative; display: flex; height: 42px; flex: 0 0 auto; align-items: center; justify-content: center; padding: 8px 0 4px; }
-.chartToggle, .routesToggle { z-index: 3; display: grid; width: 48px; height: 30px; flex: 0 0 auto; place-items: center; padding: 0; border: 0; background: transparent; box-shadow: none; color: var(--color-text-soft); opacity: .6; cursor: pointer; transition: opacity .2s ease; -webkit-tap-highlight-color: transparent; }
+.chartToggle, .routesToggle, .mobileRoutesToggle { z-index: 3; display: grid; width: 48px; height: 30px; flex: 0 0 auto; place-items: center; padding: 0; border: 0; background: transparent; box-shadow: none; color: var(--color-text-soft); opacity: .6; cursor: pointer; transition: opacity .2s ease; -webkit-tap-highlight-color: transparent; }
 .routesToggle { position: absolute; top: 50%; right: calc(-1 * (var(--workspace-gap) + 20px)); width: var(--workspace-gap); transform: translateY(-50%); }
-.chartToggle:hover, .routesToggle:hover { opacity: .85; }
-.chartToggle:focus-visible, .routesToggle:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
-.chartToggle span, .routesToggle span { display: block; font-size: 21px; line-height: 1; -webkit-text-stroke: .55px currentColor; transition: transform .26s ease; }
-.chartToggle span { transform: rotate(90deg); }
-.chartToggleOpen span { transform: rotate(-90deg); }
+.mobileRoutesToggle { display: none; }
+.chartToggle:hover, .routesToggle:hover, .mobileRoutesToggle:hover { opacity: .85; }
+.chartToggle:focus-visible, .routesToggle:focus-visible, .mobileRoutesToggle:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.chartToggle span, .routesToggle span, .mobileRoutesToggle span { display: block; font-size: 21px; line-height: 1; -webkit-text-stroke: .55px currentColor; transition: transform .26s ease; }
+.chartToggle span, .mobileRoutesToggle span { transform: rotate(90deg); }
+.chartToggleOpen span, .mobileRoutesToggleOpen span { transform: rotate(-90deg); }
 .routesToggleOpen span { transform: rotate(180deg); }
 .activityReveal { width: 100%; min-height: 176px; flex: 1 1 auto; overflow: visible; }
 .activityReveal :global(.activityCard) { height: 100%; }
-@media (max-width: 980px) { .workspace { --workspace-gap: 22px; gap: 18px; } .workspace.routesCollapsed .converterStack { transform: none; } .activityReveal { display: none; } .routesToggle { right: 0; width: 30px; } }
-@media (prefers-reduced-motion: reduce) { .converterStack, .chartToggle span, .routesToggle span { transition: none; } }
+@media (max-width: 980px) { .workspace { --workspace-gap: 22px; gap: 18px; } .workspace.routesCollapsed .converterStack { transform: none; } .activityReveal { display: none; } .routesToggle, .chartToggle { display: none; } .mobileRoutesToggle { display: grid; } }
+@media (prefers-reduced-motion: reduce) { .converterStack, .chartToggle span, .routesToggle span, .mobileRoutesToggle span { transition: none; } }
 
 .card {
   min-height: 0;

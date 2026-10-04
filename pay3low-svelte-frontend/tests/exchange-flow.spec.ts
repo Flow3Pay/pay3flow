@@ -61,19 +61,22 @@ test("search activity uses hourly counts and fits beside routes or opens in a mo
   const chart = page.getByTestId("search-activity");
   const chartToggle = page.getByRole("button", { name: "Show search activity" });
   await expect(chart).toHaveCount(0);
-  await expect(chartToggle).toBeVisible();
-  await expect(chartToggle).toHaveAttribute("aria-expanded", "false");
-  const toggleAppearance = await chartToggle.evaluate((element) => ({
-    top: element.getBoundingClientRect().top,
-    cardBottom: document.querySelector(".card")!.getBoundingClientRect().bottom,
-    background: getComputedStyle(element).backgroundColor,
-  }));
-  expect(toggleAppearance.top).toBeGreaterThanOrEqual(toggleAppearance.cardBottom + 6);
-  expect(toggleAppearance.top).toBeLessThanOrEqual(toggleAppearance.cardBottom + 10);
-  expect(toggleAppearance.background).toBe("rgba(0, 0, 0, 0)");
+  if (!isMobile) {
+    await expect(chartToggle).toBeVisible();
+    await expect(chartToggle).toHaveAttribute("aria-expanded", "false");
+    const toggleAppearance = await chartToggle.evaluate((element) => ({
+      top: element.getBoundingClientRect().top,
+      cardBottom: document.querySelector(".card")!.getBoundingClientRect().bottom,
+      background: getComputedStyle(element).backgroundColor,
+    }));
+    expect(toggleAppearance.top).toBeGreaterThanOrEqual(toggleAppearance.cardBottom + 6);
+    expect(toggleAppearance.top).toBeLessThanOrEqual(toggleAppearance.cardBottom + 10);
+    expect(toggleAppearance.background).toBe("rgba(0, 0, 0, 0)");
+  }
   const backgroundBefore = isMobile ? null : await page.screenshot({ clip: { x: 8, y: 180, width: 1, height: 1 } });
   if (isMobile) {
-    await chartToggle.click();
+    await expect(chartToggle).toBeHidden();
+    await page.getByRole("button", { name: "Open search activity graph" }).click();
     const dialog = page.getByRole("dialog", { name: "Searches for this exchange" });
     await expect(dialog.getByTestId("search-activity")).toBeVisible();
     await expectPeriodButtonBesidePair(dialog.getByTestId("search-activity"));
@@ -145,21 +148,24 @@ test("routes can be hidden while the bridge stays centered and restored after re
   await expect(routes).toBeVisible();
   await expect(page.getByTestId("search-activity")).toHaveCount(0);
   await expect(hideRoutes).toHaveAttribute("aria-expanded", "true");
-  const togglePosition = await page.evaluate(() => {
+  const togglePosition = await page.evaluate((mobile) => {
     const card = document.querySelector(".converterStack .card")!.getBoundingClientRect();
     const bridge = document.querySelector(".flowBridge")!.getBoundingClientRect();
-    const toggle = document.querySelector(".routesToggle")!.getBoundingClientRect();
-    return { cardRight: card.right, toggleLeft: toggle.left, toggleRight: toggle.right, bridgeRight: bridge.right, bridgeCenter: bridge.top + bridge.height / 2, toggleCenter: toggle.top + toggle.height / 2 };
-  });
-  expect(Math.abs(togglePosition.toggleCenter - togglePosition.bridgeCenter)).toBeLessThan(1);
+    const toggle = document.querySelector(mobile ? ".mobileRoutesToggle" : ".routesToggle")!.getBoundingClientRect();
+    return { cardRight: card.right, cardCenter: card.left + card.width / 2, cardBottom: card.bottom, toggleLeft: toggle.left, toggleRight: toggle.right, toggleTop: toggle.top, bridgeCenter: bridge.top + bridge.height / 2, toggleCenter: toggle.top + toggle.height / 2, toggleHorizontalCenter: toggle.left + toggle.width / 2 };
+  }, isMobile);
   if (isMobile) {
-    expect(togglePosition.toggleRight).toBeLessThanOrEqual(togglePosition.bridgeRight + 1);
+    expect(Math.abs(togglePosition.toggleHorizontalCenter - togglePosition.cardCenter)).toBeLessThan(1);
+    expect(togglePosition.toggleTop).toBeGreaterThanOrEqual(togglePosition.cardBottom + 6);
+    expect(togglePosition.toggleTop).toBeLessThanOrEqual(togglePosition.cardBottom + 10);
   } else {
+    expect(Math.abs(togglePosition.toggleCenter - togglePosition.bridgeCenter)).toBeLessThan(1);
     expect(togglePosition.toggleLeft).toBeGreaterThanOrEqual(togglePosition.cardRight - 1);
     expect(togglePosition.toggleLeft).toBeLessThanOrEqual(togglePosition.cardRight + 1);
   }
   await hideRoutes.click();
   await expect(routes).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Searches for this exchange" })).toHaveCount(0);
   await expect(page.getByTestId("search-activity")).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => {
     const card = document.querySelector(".converterStack .card")!.getBoundingClientRect();
@@ -168,12 +174,7 @@ test("routes can be hidden while the bridge stays centered and restored after re
   })).toBeLessThan(1);
   await expect.poll(() => page.evaluate(() => localStorage.getItem("pay3flow.exchange.routes-visible"))).toBe("false");
 
-  if (isMobile) {
-    await page.getByRole("button", { name: "Show search activity" }).click();
-    const dialog = page.getByRole("dialog", { name: "Searches for this exchange" });
-    await expect(dialog).toBeVisible();
-    await page.keyboard.press("Escape");
-  } else {
+  if (!isMobile) {
     await page.getByRole("button", { name: "Show search activity" }).click();
     await expect(page.getByTestId("search-activity")).toBeVisible();
     await expect(page.locator(".activityReveal .mainPlot svg path.area")).toHaveCount(1);
