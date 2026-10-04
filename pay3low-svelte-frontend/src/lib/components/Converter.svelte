@@ -2739,7 +2739,14 @@
   }
 
   .moneyPanel {
-    min-height: 178px;
+    min-height: 0;
+    justify-content: flex-start;
+    gap: 12px;
+  }
+
+  .panelCopy {
+    flex: none;
+    width: 100%;
   }
 
   .methodTrigger {

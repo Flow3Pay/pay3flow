@@ -328,49 +328,6 @@
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-@media (max-width: 560px) {
-  .header {
-    padding: 12px;
-  }
-
-  .inner {
-    min-height: 58px;
-    padding: 6px 7px 6px 13px;
-    border-radius: 18px;
-  }
-
-  .profileAddress {
-    display: none;
-  }
-
-  .profile {
-    padding-right: 8px;
-  }
-
-  .wordmark {
-    font-size: 15px;
-  }
-
-  .actions {
-    gap: 5px;
-  }
-
-  .apiDocsLink {
-    padding: 0 6px;
-  }
-}
-
-@media (max-width: 400px) {
-  .inner {
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
-
-  .actions {
-    justify-content: space-between;
-  }
-}
-
 /* Shared visual language for the light workspace. Existing transitions and pulse motion remain intact. */
 .header {
   padding: 16px 24px 8px;
@@ -417,6 +374,63 @@
   border-radius: 8px;
   background: var(--color-primary);
   color: var(--color-accent);
+}
+
+@media (max-width: 560px) {
+  .header {
+    padding: 12px;
+  }
+
+  .inner {
+    min-height: 58px;
+    gap: 8px;
+    padding: 6px 7px 6px 13px;
+  }
+
+  .profileAddress {
+    display: none;
+  }
+
+  .profile {
+    padding-right: 8px;
+  }
+
+  .wordmark {
+    font-size: 15px;
+  }
+
+  .actions {
+    gap: 5px;
+  }
+
+  .apiDocsLink {
+    padding: 0 6px;
+  }
+}
+
+@media (max-width: 400px) {
+  .actions {
+    gap: 4px;
+  }
+
+  .githubLink,
+  .telegramLink,
+  .themeToggle,
+  .languageToggle {
+    width: 32px;
+    height: 32px;
+  }
+
+  .apiDocsLink {
+    height: 32px;
+    padding: 0 5px;
+  }
+}
+
+@media (max-width: 380px) {
+  .wordmark {
+    display: none;
+  }
 }
 
 .menu {
