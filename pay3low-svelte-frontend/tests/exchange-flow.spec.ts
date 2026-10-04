@@ -26,6 +26,7 @@ async function expectPeriodButtonBesidePair(chart: Locator) {
   expect(button).not.toBeNull();
   expect(button!.x).toBeGreaterThanOrEqual(pair!.x + pair!.width - 1);
   expect(Math.abs(button!.y + button!.height / 2 - pair!.y - pair!.height / 2)).toBeLessThan(5);
+  await expect(chart.locator(".periodButton img")).toHaveCSS("filter", "none");
 }
 
 test("system theme follows the browser until the user chooses a theme", async ({ page }) => {
@@ -64,6 +65,8 @@ test("search activity uses hourly counts and fits beside routes or opens in a mo
     const dialog = page.getByRole("dialog", { name: "Searches for this exchange" });
     await expect(dialog.getByTestId("search-activity")).toBeVisible();
     await expectPeriodButtonBesidePair(dialog.getByTestId("search-activity"));
+    await page.emulateMedia({ colorScheme: "light" });
+    await expect(dialog.locator(".periodButton img")).toHaveCSS("filter", "brightness(0)");
     await expect(dialog.locator(".activityStats strong")).toHaveText("28");
     await expect(dialog.locator(".brush")).toHaveCount(0);
     await expect.poll(() => page.evaluate(() => document.body.style.position)).toBe("fixed");
@@ -73,6 +76,8 @@ test("search activity uses hourly counts and fits beside routes or opens in a mo
   } else {
     await expect(chart.locator(".activityStats strong")).toHaveText("28");
     await expectPeriodButtonBesidePair(chart);
+    await page.emulateMedia({ colorScheme: "light" });
+    await expect(chart.locator(".periodButton img")).toHaveCSS("filter", "brightness(0)");
     await expect(chart.locator(".activityStats span")).toHaveText("searches in period · 1 week");
     await expect(chart.locator(".brush")).toHaveCount(0);
     const surfaces = await page.evaluate(() => ({
