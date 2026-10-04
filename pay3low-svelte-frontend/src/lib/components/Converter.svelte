@@ -7,8 +7,11 @@
   import { getAnonymousUserId, registerAnonymousUser } from "$lib/anonymous-user";
   import { locale, t } from "$lib/i18n";
   import { SearchResponseMetrics } from "$lib/response-metrics";
+  import { fetchRouteSearchActivity, type RouteSearchActivityHour } from "$lib/route-activity";
   import { fiatFlagUrl } from "$lib/currency-flags";
   import SidePanel from "./SidePanel.svelte";
+  import SearchActivityChart from "./SearchActivityChart.svelte";
+  import SearchActivityModal from "./SearchActivityModal.svelte";
   import CurrencyPicker from "./CurrencyPicker.svelte";
   import NetworkPicker from "./NetworkPicker.svelte";
 
@@ -71,6 +74,12 @@
   let clock = Date.now();
   let error: string | null = null;
   let anonymousId = "";
+  let activityHours: RouteSearchActivityHour[] = [];
+  let activityLoading = false;
+  let activityError = false;
+  let activityKey = "";
+  let activityController: AbortController | null = null;
+  let activityModalOpen = false;
   let settingsElement: HTMLDivElement;
   let settingsDialog: HTMLDivElement;
   let settingsDragging = false;
@@ -100,6 +109,27 @@
   let foundVenueIds: string[] = [];
   $: activeLocale = $locale;
   $: modalOpen = settingsOpen || exchangesOpen;
+
+  async function refreshActivity(source: string, target: string, identity: string, refreshedAt: number | null) {
+    const key = `${source}|${target}|${identity}|${refreshedAt ?? ""}`;
+    if (key === activityKey) return;
+    activityKey = key;
+    activityController?.abort();
+    activityController = new AbortController();
+    activityHours = [];
+    activityLoading = true;
+    activityError = false;
+    try {
+      const response = await fetchRouteSearchActivity(source, target, identity, activityController.signal);
+      if (activityKey === key) activityHours = response.hours;
+    } catch (error) {
+      if (activityKey === key && !(error instanceof DOMException && error.name === "AbortError")) activityError = true;
+    } finally {
+      if (activityKey === key) activityLoading = false;
+    }
+  }
+
+  $: if (typeof window !== "undefined" && selectedSourceCurrency && selectedTargetCurrency && anonymousId) void refreshActivity(selectedSourceCurrency, selectedTargetCurrency, anonymousId, lastUpdatedAt);
 
   function readSharedExchange() {
     const match = window.location.hash.match(/^#\/swap\/([^/?#]+)\/([^/?#]+)(?:\?([^#]*))?$/i);
@@ -775,6 +805,7 @@
   });
   onDestroy(() => {
     controller?.abort();
+    activityController?.abort();
     cancelRouteRendering();
     if (debounceTimer) clearTimeout(debounceTimer);
     if (refreshTimer) clearInterval(refreshTimer);
@@ -788,6 +819,7 @@
 <section class="shell" class:localeLong={activeLocale !== "en"} id="transfer">
   <div class="hero"><h1>{t("Move money.", {}, activeLocale)} <span>{t("Keep more.", {}, activeLocale)}</span></h1><p>{t("Stop spending hours searching for an exchange.", {}, activeLocale)}</p></div>
   <div class="workspace">
+    <div class="converterStack">
     <div class="card">
       <div class="cardTop">
         <div class="modeTabs" aria-label={t("Exchange mode", {}, activeLocale)}><button type="button" class="modeActive">{t("Bridge", {}, activeLocale)}</button><button type="button" disabled>{t("History", {}, activeLocale)}</button></div>
@@ -860,8 +892,11 @@
       <button type="button" class="cta" disabled={!hasAmount || (!previewRoute && (searching || !corridor))} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? "Open swap instructions" : "Find routes"}>{#if previewRoute}Swap <span>↗</span>{:else if searching}<span class="spinner"></span> Finding routes{:else if hasAmount}Find routes <span>↗</span>{:else}Enter an amount to begin{/if}</button>
       {#if error}<div class="errorBox" role="alert">{error}</div>{/if}
     </div>
-    <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {renderingRoutes} {searchingVenues} {foundVenues} {venueStats} {venueNames} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} searched={lastUpdatedAt !== null} {hasAmount} {showBelarusP2pWarning} {onOpenBelarusP2pWarning} />
+    <SearchActivityChart sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} hours={activityHours} loading={activityLoading} error={activityError} />
+    </div>
+    <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {renderingRoutes} {searchingVenues} {foundVenues} {venueStats} {venueNames} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} searched={lastUpdatedAt !== null} {hasAmount} {showBelarusP2pWarning} {onOpenBelarusP2pWarning} onOpenSearchActivity={() => activityModalOpen = true} />
   </div>
+  {#if activityModalOpen}<SearchActivityModal sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} hours={activityHours} loading={activityLoading} error={activityError} onClose={() => activityModalOpen = false} />{/if}
   {#if currencyPicker === "source" || currencyPicker === "target"}<CurrencyPicker open={currencyPicker !== null} selected={currencyPicker === "source" ? sourceCurrencyChoice : targetCurrencyChoice} choices={currencyPicker === "source" ? sourceCurrencyChoices : targetCurrencyChoices} onClose={() => currencyPicker = null} onSelect={(choice) => chooseCurrency(currencyPicker ?? "source", choice)} />{/if}
   {#if paymentPickerComponent}<svelte:component this={paymentPickerComponent} open={methodPicker === "source"} title="Choose where you pay from" role="sender" {networks} {paymentMethods} selected={sourceMethod} selectedNetwork={sourceNetwork} onClose={() => methodPicker = null} onSelect={chooseSource} /><svelte:component this={paymentPickerComponent} open={methodPicker === "target"} title="Choose where the recipient gets paid" role="recipient" {networks} {paymentMethods} selected={targetMethod} selectedNetwork={targetNetwork} onClose={() => methodPicker = null} onSelect={chooseTarget} />{/if}
   {#if networkPicker === "source" || networkPicker === "target"}<NetworkPicker open={networkPicker !== null} networks={networkPicker === "source" ? sourceNetworks : targetNetworks} selected={networkPicker === "source" ? sourceNetwork : targetNetwork} onClose={() => networkPicker = null} onSelect={selectNetwork} />{/if}
@@ -2047,6 +2082,11 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 22px;
 }
+
+.converterStack { display: flex; min-width: 0; flex-direction: column; gap: 14px; }
+.converterStack :global(.activityCard) { flex: 1 1 auto; }
+@media (min-width: 981px) { .converterStack { height: 690px; } }
+@media (max-width: 980px) { .converterStack :global(.activityCard) { display: none; } }
 
 .card {
   min-height: 0;

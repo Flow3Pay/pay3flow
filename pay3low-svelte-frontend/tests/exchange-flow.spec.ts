@@ -42,6 +42,40 @@ test("system theme follows the browser until the user chooses a theme", async ({
   await expect(root).toHaveAttribute("data-theme", "dark");
 });
 
+test("search activity uses hourly counts and fits beside routes or opens in a mobile modal", async ({ page, isMobile }) => {
+  await mockBackend(page);
+  await openApp(page);
+  const chart = page.getByTestId("search-activity");
+  if (isMobile) {
+    await expect(chart).toBeHidden();
+    await page.getByRole("button", { name: "Open search activity graph" }).click();
+    const dialog = page.getByRole("dialog", { name: "Others searched this exchange" });
+    await expect(dialog.getByTestId("search-activity")).toBeVisible();
+    await expect(dialog.locator(".activityStats strong")).toHaveText("8");
+    await expect.poll(() => page.evaluate(() => document.body.style.position)).toBe("fixed");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => document.body.style.position)).toBe("");
+  } else {
+    await expect(chart.locator(".activityStats strong")).toHaveText("8");
+    const dimensions = await page.evaluate(() => {
+      const stack = document.querySelector(".converterStack")!.getBoundingClientRect();
+      const side = document.querySelector(".side")!.getBoundingClientRect();
+      return { stackBottom: stack.bottom, sideBottom: side.bottom };
+    });
+    expect(dimensions.stackBottom).toBeLessThanOrEqual(dimensions.sideBottom + 1);
+    const brush = chart.locator(".brush");
+    await brush.scrollIntoViewIfNeeded();
+    const box = await brush.boundingBox();
+    expect(box).not.toBeNull();
+    await page.mouse.move(box!.x + box!.width * 0.1, box!.y + box!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box!.x + box!.width * 0.55, box!.y + box!.height / 2, { steps: 8 });
+    await page.mouse.up();
+    await expect(chart.locator(".activityStats strong")).not.toHaveText("8");
+  }
+});
+
 test("fiat currency controls show local country flags", async ({ page }) => {
   await mockBackend(page);
   await openApp(page);
@@ -178,6 +212,18 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
     const method = route.request().method();
     const json = (value: unknown, status = 200) =>
       route.fulfill({ status, contentType: "application/json", body: JSON.stringify(value) });
+
+    if (url.pathname === "/api/p2p/route-activity") {
+      const end = Date.UTC(2026, 9, 4, 12);
+      return json({
+        source_currency: url.searchParams.get("source_currency"),
+        target_currency: url.searchParams.get("target_currency"),
+        hours: Array.from({ length: 168 }, (_, index) => ({
+          started_at: new Date(end - (167 - index) * 3_600_000).toISOString(),
+          count: index % 12 === 0 ? 2 : 0,
+        })),
+      });
+    }
 
     if (url.pathname === "/api/exchange/corridors") {
       return json({

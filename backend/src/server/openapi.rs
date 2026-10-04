@@ -654,6 +654,15 @@ const OPERATIONS: &[Operation] = &[
         false,
     ),
     (
+        "/api/p2p/route-activity",
+        "get",
+        "Hourly route search activity",
+        "Return hourly search counts for a currency direction over the last seven days. Searches by the supplied anonymous browser ID are excluded; counts begin when pair tracking was introduced.",
+        "Routing",
+        false,
+        false,
+    ),
+    (
         "/api/p2p/route-executions",
         "post",
         "Prepare wallet execution",
@@ -1079,6 +1088,18 @@ fn response_schema(path: &str, method: &str) -> Value {
         ("/api/p2p/route-executions", "post")
         | ("/api/p2p/route-executions/{id}", "get")
         | ("/api/p2p/route-executions/{id}/submissions", "post") => schema_ref("RouteExecution"),
+        ("/api/p2p/route-activity", "get") => json!({
+            "type": "object",
+            "required": ["source_currency", "target_currency", "hours"],
+            "properties": {
+                "source_currency": { "type": "string" },
+                "target_currency": { "type": "string" },
+                "hours": { "type": "array", "items": { "type": "object", "required": ["started_at", "count"], "properties": {
+                    "started_at": { "type": "string", "format": "date-time" },
+                    "count": { "type": "integer", "format": "int64", "minimum": 0 }
+                } } }
+            }
+        }),
         _ => schema_ref("JsonResponse"),
     }
 }
@@ -1110,6 +1131,19 @@ fn success_response(path: &str, method: &str) -> Value {
 
 fn extra_parameters(path: &str, method: &str) -> Vec<Value> {
     let mut parameters = Vec::new();
+    if path == "/api/p2p/route-activity" && method == "get" {
+        for name in ["source_currency", "target_currency"] {
+            parameters.push(json!({
+                "name": name, "in": "query", "required": true,
+                "schema": { "type": "string", "minLength": 2, "maxLength": 12 }
+            }));
+        }
+        parameters.push(json!({
+            "name": "anonymous_id", "in": "query", "required": false,
+            "description": "Browser identity to exclude from the aggregate.",
+            "schema": { "type": "string", "format": "uuid" }
+        }));
+    }
     if path == "/api/exchange/orders" && method == "get" {
         parameters.push(json!({
             "name": "limit",

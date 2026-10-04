@@ -25,6 +25,7 @@
   export let hasAmount = false;
   export let showBelarusP2pWarning = false;
   export let onOpenBelarusP2pWarning: () => void = () => {};
+  export let onOpenSearchActivity: () => void = () => {};
 
   const ASSET_NAMES: Record<string, string> = { BTC: "Bitcoin", ETH: "Ether", USDC: "USD Coin", USDT: "Tether" };
   const FIAT_MARKS: Record<string, string> = { AMD: "🇦🇲", RUB: "🇷🇺", BYN: "🇧🇾", UAH: "🇺🇦", KZT: "🇰🇿" };
@@ -177,6 +178,11 @@
         {#if circularSearch && routes.length > 0 && !hasConfirmedProfit && !searching}<small class="resultLimit" data-testid="no-profitable-routes">No confirmed profitable route right now; showing the best available cycles.</small>{/if}
       </div>
       <div class="panelActions">
+        {#if sourceCurrency && targetCurrency}
+          <button type="button" class="activityButton" on:click={onOpenSearchActivity} aria-label={t("Open search activity graph", {}, $locale)} title={t("Open search activity graph", {}, $locale)}>
+            <img src="/icons/ui/search-activity.png" alt="" width="18" height="18" aria-hidden="true" />
+          </button>
+        {/if}
         {#if searching && pendingVenues.length}
           <div class="searchingVenues" aria-label={`Searching ${pendingVenues.map((venue) => venue.label).join(", ")}`}>
             {#each visiblePendingVenues as venue, index (venue.id)}
@@ -330,6 +336,11 @@
   gap: 8px;
   flex: 0 0 auto;
 }
+
+.activityButton { display: none; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; padding: 0; border: 1px solid #5d7732; border-radius: 9px; background: #40582a; cursor: pointer; }
+.activityButton:hover { background: #587839; }
+.activityButton:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+@media (max-width: 980px) { .activityButton { display: grid; } }
 
 .resultSummary,
 .foundVenues,

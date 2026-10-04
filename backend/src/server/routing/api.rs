@@ -136,6 +136,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/networks", get(networks::list))
         .route("/api/p2p/search", get(p2p::search))
         .route("/api/p2p/routes", get(p2p::routes))
+        .route("/api/p2p/route-activity", get(p2p::route_activity))
         .route("/api/p2p/route-executions", post(route_executions::create))
         .route("/api/p2p/route-executions/:id", get(route_executions::get))
         .route(

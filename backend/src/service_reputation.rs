@@ -25,6 +25,12 @@ pub enum ReputationError {
     Internal(#[from] anyhow::Error),
 }
 
+#[derive(Debug, Serialize)]
+pub struct RouteSearchActivityHour {
+    pub started_at: DateTime<Utc>,
+    pub count: i64,
+}
+
 impl From<tokio_postgres::Error> for ReputationError {
     fn from(error: tokio_postgres::Error) -> Self {
         Self::Internal(error.into())
@@ -572,19 +578,66 @@ return {count, spam}
         }
     }
 
-    pub async fn start_search(&self, search_id: Uuid) -> Result<(), ReputationError> {
+    pub async fn start_search(
+        &self,
+        search_id: Uuid,
+        source_currency: &str,
+        target_currency: &str,
+        anonymous_id: Option<Uuid>,
+    ) -> Result<(), ReputationError> {
         let client = self.pool.get().await?;
+        let source_currency = source_currency.trim().to_ascii_uppercase();
+        let target_currency = target_currency.trim().to_ascii_uppercase();
         client
             .execute(
                 r#"
-INSERT INTO route_searches (id, status, routes_found)
-VALUES ($1, 'searching', 0)
+INSERT INTO route_searches (id, source_currency, target_currency, anonymous_id, status, routes_found)
+VALUES ($1, $2, $3, $4, 'searching', 0)
 ON CONFLICT (id) DO NOTHING
 "#,
-                &[&search_id],
+                &[&search_id, &source_currency, &target_currency, &anonymous_id],
             )
             .await?;
         Ok(())
+    }
+
+    pub async fn search_activity(
+        &self,
+        source_currency: &str,
+        target_currency: &str,
+        anonymous_id: Option<Uuid>,
+    ) -> Result<Vec<RouteSearchActivityHour>, ReputationError> {
+        let client = self.pool.get().await?;
+        let rows = client
+            .query(
+                r#"
+WITH bounds AS (
+    SELECT date_trunc('hour', now()) AS end_hour
+), hours AS (
+    SELECT generate_series(end_hour - interval '167 hours', end_hour, interval '1 hour') AS started_at
+    FROM bounds
+)
+SELECT hours.started_at, count(searches.id)::bigint
+FROM hours
+LEFT JOIN route_searches searches
+    ON searches.created_at >= hours.started_at
+    AND searches.created_at < hours.started_at + interval '1 hour'
+    AND searches.source_currency = $1
+    AND searches.target_currency = $2
+    AND ($3::uuid IS NULL OR searches.anonymous_id IS DISTINCT FROM $3)
+GROUP BY hours.started_at
+ORDER BY hours.started_at
+"#,
+                &[&source_currency, &target_currency, &anonymous_id],
+            )
+            .await?;
+        Ok(rows
+            .into_iter()
+            .map(|row| RouteSearchActivityHour {
+                started_at: row.get(0),
+                count: row.get(1),
+            })
+            .collect())
     }
 
     pub async fn count_searches_last_hour(&self) -> Result<i64, ReputationError> {
