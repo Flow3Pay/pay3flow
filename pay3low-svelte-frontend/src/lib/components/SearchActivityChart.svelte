@@ -1,7 +1,7 @@
 <script lang="ts">
   import { LayerCake, Svg } from "layercake";
   import { locale, t } from "$lib/i18n";
-  import { SEARCH_ACTIVITY_PERIODS, type RouteSearchActivityHour, type SearchActivityPeriod } from "$lib/route-activity";
+  import { SEARCH_ACTIVITY_PERIOD_LABELS, SEARCH_ACTIVITY_PERIODS, type RouteSearchActivityHour, type SearchActivityPeriod } from "$lib/route-activity";
   import ActivityLine from "./ActivityLine.svelte";
 
   export let sourceCurrency: string;
@@ -9,10 +9,11 @@
   export let hours: RouteSearchActivityHour[] = [];
   export let period: SearchActivityPeriod = "1w";
   export let onPeriodChange: (period: SearchActivityPeriod) => void = () => {};
+  export let onOpenPeriodPicker: (() => void) | undefined = undefined;
+  export let periodPickerOpen = false;
   export let loading = false;
   export let error = false;
 
-  const periodLabels: Record<SearchActivityPeriod, string> = { "1h": "1 hour", "1d": "1 day", "1w": "1 week", "1m": "1 month", "3m": "3 months", "6m": "6 months", "1y": "1 year", all: "All time" };
   let periodMenuOpen = false;
   let periodMenu: HTMLDivElement;
   function closeOnOutsideClick(event: MouseEvent) {
@@ -22,6 +23,13 @@
     if (event.key === "Escape" && periodMenuOpen) { event.stopImmediatePropagation(); periodMenuOpen = false; }
   }
   function choosePeriod(value: SearchActivityPeriod) { onPeriodChange(value); periodMenuOpen = false; }
+  function togglePeriodPicker() {
+    if (onOpenPeriodPicker && window.matchMedia("(max-width: 640px)").matches) {
+      periodMenuOpen = false;
+      onOpenPeriodPicker();
+    }
+    else periodMenuOpen = !periodMenuOpen;
+  }
 
   type Point = { time: number; count: number };
   $: points = hours.map((hour) => ({ time: Date.parse(hour.started_at), count: hour.count })).filter((point) => Number.isFinite(point.time));
@@ -29,7 +37,7 @@
   $: total = points.reduce((sum, point) => sum + point.count, 0);
   $: yMaximum = Math.max(1, ...points.map((point) => point.count));
   $: hasSearches = points.some((point) => point.count > 0);
-  $: periodLabel = t(periodLabels[period], {}, $locale);
+  $: periodLabel = t(SEARCH_ACTIVITY_PERIOD_LABELS[period], {}, $locale);
 
   function timeLabel(time: number): string {
     const options: Intl.DateTimeFormatOptions = period === "1h"
@@ -44,7 +52,7 @@
 <svelte:window on:click={closeOnOutsideClick} on:keydown={closeOnEscape} />
 
 <section class="activityCard" data-testid="search-activity" aria-label={t("Searches for this exchange", {}, $locale)} aria-busy={loading}>
-  <div class="activityHeading"><div class="headingCopy"><small>{t("Search activity", {}, $locale)}</small><strong>{t("Searches for this exchange", {}, $locale)}</strong></div><div class="headingActions"><span class="pair">{sourceCurrency} <span aria-hidden="true">→</span> {targetCurrency}</span><div class="periodWrap" bind:this={periodMenu}><button type="button" class="periodButton" aria-label={t("Chart time range", {}, $locale)} aria-haspopup="menu" aria-expanded={periodMenuOpen} title={`${t("Chart time range", {}, $locale)}: ${periodLabel}`} on:click={() => periodMenuOpen = !periodMenuOpen}><img src="/icons/ui/chart-period.png" alt="" width="18" height="18" aria-hidden="true" /></button>{#if periodMenuOpen}<div class="periodMenu" role="menu" aria-label={t("Chart time range", {}, $locale)}>{#each SEARCH_ACTIVITY_PERIODS as value}<button type="button" role="menuitemradio" aria-checked={period === value} class:current={period === value} on:click={() => choosePeriod(value)}>{t(periodLabels[value], {}, $locale)}</button>{/each}</div>{/if}</div></div></div>
+  <div class="activityHeading"><div class="headingCopy"><small>{t("Search activity", {}, $locale)}</small><strong>{t("Searches for this exchange", {}, $locale)}</strong></div><div class="headingActions"><span class="pair">{sourceCurrency} <span aria-hidden="true">→</span> {targetCurrency}</span><div class="periodWrap" bind:this={periodMenu}><button type="button" class="periodButton" aria-label={t("Chart time range", {}, $locale)} aria-haspopup={onOpenPeriodPicker ? "dialog" : "menu"} aria-expanded={periodMenuOpen || periodPickerOpen} title={`${t("Chart time range", {}, $locale)}: ${periodLabel}`} on:click={togglePeriodPicker}><img src="/icons/ui/chart-period.png" alt="" width="18" height="18" aria-hidden="true" /></button>{#if periodMenuOpen}<div class="periodMenu" role="menu" aria-label={t("Chart time range", {}, $locale)}>{#each SEARCH_ACTIVITY_PERIODS as value}<button type="button" role="menuitemradio" aria-checked={period === value} class:current={period === value} on:click={() => choosePeriod(value)}>{t(SEARCH_ACTIVITY_PERIOD_LABELS[value], {}, $locale)}</button>{/each}</div>{/if}</div></div></div>
   {#if error}
     <p class="state">{t("Search activity is temporarily unavailable.", {}, $locale)}</p>
   {:else if !points.length}

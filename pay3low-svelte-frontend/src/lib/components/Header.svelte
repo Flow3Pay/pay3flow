@@ -1,10 +1,67 @@
 <script lang="ts">
   import { API_BASE_URL, apiUrl } from "$lib/api";
   import { cycleLocale, locale, localeLabel, setLocale, t } from "$lib/i18n";
+  import { lockPageScroll } from "$lib/page-scroll-lock";
   const moonIcon = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAACWklEQVR4AbTVTYhNYRzH8TPCRs0kLxsWIvIywkrykvISTZRkbGiSQsqCIkuWyobkpZkiL5PQ2Eyk2BBGErOaZCMz0giRrEyNz/90z3XvzL23e6Zm+n3v/zz/5/n/f8957plzJyTj/FfTYHh4eDM60Il5Y9lLRQPN5uOyho+wH7GuQ8ytKCwr0ni7xHMcxGOsxW68QW6VGWi+TofrmIGzDQ0Nm8QpCL2Oj7wUDTRvVnwVTRqHjrsOLYoPvEJuFQ1U7sFc7ESplhoMcvwo5lZqYPcTVR5Ap0ZdYqmmG/RjTEoNVLZhKi5hpOILXzAyWe84M8jO+VOFwndyje4yW2NYvzKD2P0fx1PJoLfQLp6owmX9odRgoFIZ00H5CzjnLhaKuVRq8LdaJZMj5n7hIXIpM4jCZjuMx7Rag30m5lgzgOWu61Jm8KywuqUQRwV3cV9yI2bhLZMTmO26plIDxS+t+ow1qCrrnpichms4g34mvWjHqRLWm0uVGqRXSXJHbLWo6l2YT5j8QBzXLuMw+SbGy/CwuA0Rb4upigaKjsnE+6aLSfxnG1aX9fdwEhvQiJlW78VX9CFV0SAdJckWcTKeIpdsarGCOIUl4kWkKjOwi5+yq7FKwW/EC9CwtqzbakXWvFWfu8apygwiY/KFOAm3cENxfHktYhyB1H/JrcRNmQdoQllz42SUQSSZDOGQ66BV7MagZu/Rgw/4LteDZYjfjhVqijuXS1XRIJ3xoeAK4myDeJ1Hwy+mwvC0GE9NNI5fv3iapMpV0yBbyqQP7WjDDhzFeXRjKFtXKf4DAAD///Lx6McAAAAGSURBVAMASQPNMX2ya7kAAAAASUVORK5CYII=";
   const sunIcon = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAACD0lEQVR4AbSTPS8FQRSG92o0+Ae0EkKDhk58NJQUoiASlUoQKolCoySESCQaCdEp0BGREBQK4W+goJDreSdnstmdXXe3cHOenDNn3nfO7t7duuiff6UGVKvVWVHmmkoNKHOw15YaUKlU9oQ3F8nBAB7BBSxlmem3ipy9ZfbO03vBAARX8AkuMOm535DfabwK1aDeLGsf8lz7hc/BAB7BOmxLwCEP5F1ogn2YMFSrt2uaCM8WrLOfiGCA38V4TN0Fl9CLeR6OjHn1QHtdpmUZRuYADCNIx0BXNcyhun2WcagHw3S2YMw8lMnIHIBkBZ5gAWqFNNLKE2jzBnSivOcKv8l/hmnuEclDSoYbwO3pTVnUFnUbuQHuoGhI22DeiLwI7g1zA1Kn/Ni65tWbTslrvVc9hxvAbeoL3VCH+o38AT1QNKT9MK9e2Q3qPZndABUpnlkPcJt6VJT5YZoBFPKQkpE34BBZB5xCrZBGWnkCbeYAu71H1ENc4SbUUydCPdikOQSP5qFMRuYASTB0k09gDm45bAemjB31QHsnpmUZRjCAA1ZgWlKM4+RR+IJJODBUqzdqGr2aM/iW2U9EMIDdfmgGFxxwBn3QSKNdqAb1zlj7aKGQlxRHMADjIKzFkrii/yLiTlzRXwX9H3GTKhhALzd4BPri3ReaK0ptlBqQ8hZalhrAI9AX777QQqdHUfQLAAD//91ClIsAAAAGSURBVAMAR3zSMQ+aPXkAAAAASUVORK5CYII=";
+  const menuIcon = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAdElEQVR4AexTwQ3AIAgsXaSzdCpncKrO0knoSYq/xpKoD3OEUx4I8S63b4ODC5oEL0SRqibgBjwvFBGg3bLMSM7dPIpEJAMH4HmiiADtlmVGnv8D39j7rhpAHopsCuOgyPrlbn2DTo5ZsRot9ux/Nxc0uXoAAAD//8ndUOoAAAAGSURBVAMAa9HwMZNspewAAAAASUVORK5CYII=";
 
   const apiDocsHref = API_BASE_URL ? apiUrl("/scalar").toString() : "/scalar";
+  let menuOpen = false;
+  let menuPanel: HTMLDivElement;
+  let menuDragging = false;
+  let menuDragStartY = 0;
+  let menuDragDistance = 0;
+
+  function closeMenu() { menuOpen = false; }
+  function closeOnBackdrop(event: MouseEvent) { if (event.target === event.currentTarget) closeMenu(); }
+  function onKeyDown(event: KeyboardEvent) { if (event.key === "Escape" && menuOpen) closeMenu(); }
+  function startMenuDrag(event: PointerEvent) {
+    menuDragging = true;
+    menuDragStartY = event.clientY;
+    menuDragDistance = 0;
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  }
+  function moveMenuDrag(event: PointerEvent) {
+    if (!menuDragging) return;
+    menuDragDistance = Math.max(0, event.clientY - menuDragStartY);
+    menuPanel?.style.setProperty("--menu-drag", `${menuDragDistance}px`);
+  }
+  function endMenuDrag() {
+    if (!menuDragging) return;
+    menuDragging = false;
+    if (menuDragDistance > 72) closeMenu();
+    else menuPanel?.style.removeProperty("--menu-drag");
+  }
+  function portalActions(node: HTMLDivElement, open: boolean) {
+    const anchor = document.createComment("header actions");
+    node.before(anchor);
+    const mobile = window.matchMedia("(max-width: 640px)");
+    let unlockPage: (() => void) | undefined;
+    const place = () => {
+      if (mobile.matches) {
+        if (node.parentElement !== document.body) document.body.appendChild(node);
+        if (open) unlockPage ??= lockPageScroll();
+        else { unlockPage?.(); unlockPage = undefined; }
+      } else {
+        if (node.previousSibling !== anchor) anchor.after(node);
+        unlockPage?.();
+        unlockPage = undefined;
+        if (open) closeMenu();
+      }
+    };
+    place();
+    mobile.addEventListener("change", place);
+    return {
+      update(value: boolean) { open = value; place(); },
+      destroy() {
+        mobile.removeEventListener("change", place);
+        unlockPage?.();
+        node.remove();
+        anchor.remove();
+      }
+    };
+  }
 
   function toggleTheme() {
     const root = document.documentElement;
@@ -12,13 +69,17 @@
     root.dataset.theme = nextTheme;
     root.dataset.themeManual = "true";
     try { localStorage.setItem("pay3flow-theme", nextTheme); } catch {}
+    closeMenu();
   }
 
   $: activeLocale = $locale;
   function toggleLocale() {
     setLocale(cycleLocale(activeLocale));
+    closeMenu();
   }
 </script>
+
+<svelte:window on:keydown={onKeyDown} />
 
 <header class="header">
   <div class="inner">
@@ -28,20 +89,19 @@
       </span>
       <span class="wordmark">Pay3Flow</span>
     </div>
-    <div class="actions">
-      <a class="apiDocsLink" href={apiDocsHref} target="_blank" rel="noreferrer noopener" aria-label="Open API documentation">API DOCS</a>
-      <button class="languageToggle" type="button" on:click={toggleLocale} aria-label={t("Switch language", {}, activeLocale)} title={t("Switch language", {}, activeLocale)}>{localeLabel(activeLocale)}</button>
-      <button class="themeToggle" type="button" on:click={toggleTheme} aria-label={t("Switch theme", {}, activeLocale)} title={t("Switch theme", {}, activeLocale)}>
-        <img class="moonIcon" src={moonIcon} alt="" width="24" height="24" decoding="async" />
-        <img class="sunIcon" src={sunIcon} alt="" width="24" height="24" decoding="async" />
-      </button>
-      <a class="telegramLink" href="https://t.me/+-lq4m5E_aT4xM2Y6" target="_blank" rel="noreferrer noopener" aria-label="Open Pay3Flow Telegram channel" title="Telegram">
-        <img src="/icons/assets/telegram-messenger.png" alt="" width="20" height="20" decoding="async" />
-      </a>
-      <a class="githubLink" href="https://github.com/Flow3Pay/pay3flow" target="_blank" rel="noreferrer noopener" aria-label="Open Pay3Flow on GitHub">
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 .7a11.3 11.3 0 0 0-3.58 22.02c.57.1.78-.25.78-.55v-2.16c-3.18.7-3.85-1.34-3.85-1.34-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.68 1.24 3.34.95.1-.74.4-1.24.73-1.53-2.54-.29-5.2-1.27-5.2-5.65 0-1.25.45-2.26 1.18-3.06-.12-.29-.51-1.45.11-3.02 0 0 .96-.31 3.12 1.17a10.8 10.8 0 0 1 5.68 0c2.16-1.48 3.12-1.17 3.12-1.17.62 1.57.23 2.73.11 3.02.73.8 1.18 1.81 1.18 3.06 0 4.39-2.67 5.35-5.21 5.64.41.36.78 1.08.78 2.18v3.23c0 .3.2.65.79.54A11.3 11.3 0 0 0 12 .7Z" /></svg>
-      </a>
+    <div class="actionsBackdrop" class:menuOpen use:portalActions={menuOpen} role="presentation" on:mousedown={closeOnBackdrop}>
+      <div class="actionsPanel" bind:this={menuPanel} role={menuOpen ? "dialog" : undefined} aria-modal={menuOpen ? "true" : undefined} aria-label={menuOpen ? t("Menu", {}, activeLocale) : undefined} on:mousedown|stopPropagation>
+        <div class="actionsHeader"><button type="button" class="menuHandle" aria-label={t("Close menu", {}, activeLocale)} on:pointerdown={startMenuDrag} on:pointermove={moveMenuDrag} on:pointerup={endMenuDrag} on:pointercancel={endMenuDrag} on:keydown={(event) => { if (event.key === "Enter" || event.key === " ") closeMenu(); }}><span aria-hidden="true"></span></button><strong>{t("Menu", {}, activeLocale)}</strong></div>
+        <div class="actions">
+          <a class="apiDocsLink" href={apiDocsHref} target="_blank" rel="noreferrer noopener" aria-label="Open API documentation" on:click={closeMenu}>API DOCS</a>
+          <button class="languageToggle" type="button" on:click={toggleLocale} aria-label={t("Switch language", {}, activeLocale)} title={t("Switch language", {}, activeLocale)}><span class="localeCode">{localeLabel(activeLocale)}</span><span class="mobileActionLabel">{t("Switch language", {}, activeLocale)}</span></button>
+          <button class="themeToggle" type="button" on:click={toggleTheme} aria-label={t("Switch theme", {}, activeLocale)} title={t("Switch theme", {}, activeLocale)}><span class="themeIcon"><img class="moonIcon" src={moonIcon} alt="" width="24" height="24" decoding="async" /><img class="sunIcon" src={sunIcon} alt="" width="24" height="24" decoding="async" /></span><span class="mobileActionLabel">{t("Switch theme", {}, activeLocale)}</span></button>
+          <a class="telegramLink" href="https://t.me/+-lq4m5E_aT4xM2Y6" target="_blank" rel="noreferrer noopener" aria-label="Open Pay3Flow Telegram channel" title="Telegram" on:click={closeMenu}><img src="/icons/assets/telegram-messenger.png" alt="" width="20" height="20" decoding="async" /><span class="mobileActionLabel">Telegram</span></a>
+          <a class="githubLink" href="https://github.com/Flow3Pay/pay3flow" target="_blank" rel="noreferrer noopener" aria-label="Open Pay3Flow on GitHub" on:click={closeMenu}><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 .7a11.3 11.3 0 0 0-3.58 22.02c.57.1.78-.25.78-.55v-2.16c-3.18.7-3.85-1.34-3.85-1.34-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.68 1.24 3.34.95.1-.74.4-1.24.73-1.53-2.54-.29-5.2-1.27-5.2-5.65 0-1.25.45-2.26 1.18-3.06-.12-.29-.51-1.45.11-3.02 0 0 .96-.31 3.12 1.17a10.8 10.8 0 0 1 5.68 0c2.16-1.48 3.12-1.17 3.12-1.17.62 1.57.23 2.73.11 3.02.73.8 1.18 1.81 1.18 3.06 0 4.39-2.67 5.35-5.21 5.64.41.36.78 1.08.78 2.18v3.23c0 .3.2.65.79.54A11.3 11.3 0 0 0 12 .7Z" /></svg><span class="mobileActionLabel">GitHub</span></a>
+        </div>
+      </div>
     </div>
+    <button class="menuToggle" type="button" aria-haspopup="dialog" aria-expanded={menuOpen} aria-label={t("Open menu", {}, activeLocale)} title={t("Open menu", {}, activeLocale)} on:click={() => menuOpen = true}><img src={menuIcon} alt="" width="24" height="24" decoding="async" /></button>
   </div>
 </header>
 
@@ -109,6 +169,25 @@
 .actions {
   justify-content: flex-end;
   gap: 9px;
+}
+
+.actionsBackdrop,
+.actionsPanel {
+  display: contents;
+}
+
+.actionsHeader,
+.menuToggle,
+.mobileActionLabel {
+  display: none;
+}
+
+.themeIcon {
+  position: relative;
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
 }
 
 .githubLink,
@@ -376,7 +455,7 @@
   color: var(--color-accent);
 }
 
-@media (max-width: 560px) {
+@media (max-width: 640px) {
   .header {
     padding: 12px;
   }
@@ -399,37 +478,164 @@
     font-size: 15px;
   }
 
-  .actions {
-    gap: 5px;
+  .menuToggle {
+    display: grid;
+    width: 36px;
+    height: 36px;
+    place-items: center;
+    border: 1px solid var(--color-border);
+    border-radius: 11px;
+    background: rgba(255, 255, 255, 0.72);
   }
 
-  .apiDocsLink {
-    padding: 0 6px;
+  .menuToggle img {
+    display: block;
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+    filter: brightness(0);
   }
-}
 
-@media (max-width: 400px) {
-  .actions {
+  .actionsBackdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    display: none;
+    height: 100dvh;
+    background: rgba(8, 11, 8, 0.52);
+    touch-action: none;
+  }
+
+  .actionsBackdrop.menuOpen {
+    display: grid;
+    place-items: end center;
+    animation: menuFadeIn 0.2s ease-out;
+  }
+
+  .actionsPanel {
+    display: block;
+    width: 100%;
+    max-height: calc(100dvh - 16px);
+    overflow-y: auto;
+    padding: 10px 16px calc(18px + env(safe-area-inset-bottom));
+    border: 1px solid var(--color-border);
+    border-radius: 14px 14px 0 0;
+    background: rgba(255, 255, 255, 0.98);
+    box-shadow: var(--shadow-pop);
+    touch-action: auto;
+    transform: translateY(var(--menu-drag, 0px));
+    transition: transform 0.24s ease;
+    animation: menuSheetIn 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .actionsHeader {
+    display: flex;
+    flex-direction: column;
     gap: 4px;
+  }
+
+  .actionsHeader strong {
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .menuHandle {
+    display: flex;
+    width: 100%;
+    height: 30px;
+    align-items: center;
+    justify-content: center;
+    touch-action: none;
+  }
+
+  .menuHandle span {
+    width: 38px;
+    height: 5px;
+    border-radius: 999px;
+    background: var(--color-border-strong);
+  }
+
+  .actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding-top: 14px;
   }
 
   .githubLink,
   .telegramLink,
   .themeToggle,
-  .languageToggle {
-    width: 32px;
-    height: 32px;
+  .languageToggle,
+  .apiDocsLink {
+    display: flex;
+    width: 100%;
+    min-height: 44px;
+    height: auto;
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 0 12px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 750;
+    text-align: left;
   }
 
-  .apiDocsLink {
-    height: 32px;
-    padding: 0 5px;
+  .themeToggle {
+    overflow: visible;
+  }
+
+  .localeCode {
+    display: grid;
+    width: 20px;
+    height: 20px;
+    flex: 0 0 20px;
+    place-items: center;
+    font-size: 10px;
+  }
+
+  .themeIcon,
+  .telegramLink img,
+  .githubLink svg {
+    flex: 0 0 20px;
+  }
+
+  .mobileActionLabel {
+    display: inline;
+    color: var(--color-text);
+    font-size: 13px;
+    font-weight: 700;
   }
 }
 
-@media (max-width: 380px) {
-  .wordmark {
-    display: none;
+@keyframes menuFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes menuSheetIn {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+:global(html[data-theme="dark"]) .actionsPanel {
+  border-color: var(--color-border-strong);
+  background: rgba(25, 25, 25, 0.98);
+}
+
+:global(html[data-theme="dark"]) .menuToggle {
+  border-color: var(--color-border-strong);
+  background: #262626;
+}
+
+:global(html[data-theme="dark"]) .menuToggle img {
+  filter: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .actionsBackdrop.menuOpen,
+  .actionsPanel {
+    animation: none;
+    transition: none;
   }
 }
 

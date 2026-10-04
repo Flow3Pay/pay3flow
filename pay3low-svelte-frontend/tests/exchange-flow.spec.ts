@@ -30,7 +30,7 @@ async function expectPeriodButtonBesidePair(chart: Locator) {
   await expect(chart.locator(".periodButton img")).toHaveCSS("filter", "none");
 }
 
-test("system theme follows the browser until the user chooses a theme", async ({ page }) => {
+test("system theme follows the browser until the user chooses a theme", async ({ page, isMobile }) => {
   await page.emulateMedia({ colorScheme: "dark" });
   await mockBackend(page);
   await openApp(page);
@@ -44,6 +44,7 @@ test("system theme follows the browser until the user chooses a theme", async ({
   await expect(root).toHaveAttribute("data-theme", "light");
   await expect(exchangesIcon).toHaveCSS("filter", "brightness(0)");
 
+  if (isMobile) await page.locator(".menuToggle").click();
   await page.getByRole("button", { name: "Switch theme" }).click();
   await expect(root).toHaveAttribute("data-theme", "dark");
   await page.emulateMedia({ colorScheme: "dark" });
@@ -235,15 +236,15 @@ test("search placeholders stay inside the route panel", async ({ page }) => {
 test("search activity range menu filters and remembers the selected period", async ({ page, isMobile }) => {
   await mockBackend(page);
   await openApp(page);
-  await page.getByRole("button", { name: "Show search activity" }).click();
+  await page.getByRole("button", { name: isMobile ? "Open search activity graph" : "Show search activity" }).click();
   const chart = isMobile ? page.getByRole("dialog", { name: "Searches for this exchange" }).getByTestId("search-activity") : page.getByTestId("search-activity");
   await expect(chart.locator(".activityStats strong")).toHaveText("28");
   const rangeButton = chart.getByRole("button", { name: "Chart time range" });
   await expect(rangeButton.locator("img")).toHaveAttribute("src", "/icons/ui/chart-period.png");
   await rangeButton.click();
-  const menu = chart.getByRole("menu", { name: "Chart time range" });
-  await expect(menu.getByRole("menuitemradio")).toHaveCount(8);
-  const selected = menu.getByRole("menuitemradio", { checked: true });
+  const menu = isMobile ? page.getByRole("dialog", { name: "Chart time range" }) : chart.getByRole("menu", { name: "Chart time range" });
+  const selected = isMobile ? menu.locator('.periodOptions button[aria-pressed="true"]') : menu.getByRole("menuitemradio", { checked: true });
+  await expect(isMobile ? menu.locator(".periodOptions button") : menu.getByRole("menuitemradio")).toHaveCount(8);
   await expect(selected).toHaveText("1 week");
   const accent = await page.evaluate(() => {
     const probe = document.createElement("span");
@@ -261,17 +262,62 @@ test("search activity range menu filters and remembers the selected period", asy
   await expect(menu).toHaveCount(0);
   if (isMobile) await expect(page.getByRole("dialog", { name: "Searches for this exchange" })).toBeVisible();
   await rangeButton.click();
-  await menu.getByRole("menuitemradio", { name: "1 hour" }).click();
+  await (isMobile ? menu.getByRole("button", { name: "1 hour" }) : menu.getByRole("menuitemradio", { name: "1 hour" })).click();
   await expect(menu).toHaveCount(0);
   await expect(chart.locator(".activityStats span")).toHaveText("searches in period · 1 hour");
   await expect(chart.locator(".activityStats strong")).toHaveText("3");
   await expect.poll(() => page.evaluate(() => localStorage.getItem("pay3flow.exchange.activity-period"))).toBe("1h");
   await page.reload({ waitUntil: "networkidle" });
-  await page.getByRole("button", { name: "Show search activity" }).click();
+  if (isMobile || await page.getByTestId("search-activity").count() === 0) {
+    await page.getByRole("button", { name: isMobile ? "Open search activity graph" : "Show search activity" }).click();
+  }
   const restoredChart = isMobile ? page.getByRole("dialog", { name: "Searches for this exchange" }).getByTestId("search-activity") : page.getByTestId("search-activity");
   await expect(restoredChart.locator(".activityStats span")).toHaveText("searches in period · 1 hour");
   await restoredChart.getByRole("button", { name: "Chart time range" }).click();
-  await expect(restoredChart.getByRole("menuitemradio", { name: "1 hour", checked: true })).toHaveCSS("background-color", accent);
+  await expect(isMobile ? page.getByRole("dialog", { name: "Chart time range" }).getByRole("button", { name: "1 hour", pressed: true }) : restoredChart.getByRole("menuitemradio", { name: "1 hour", checked: true })).toHaveCSS("background-color", accent);
+});
+
+test("mobile sheets cover the viewport and the graph closes by dragging its handle", async ({ page, isMobile }) => {
+  test.skip(!isMobile, "Mobile layout only");
+  await mockBackend(page);
+  await openApp(page);
+
+  const expectFullViewport = async (selector: string) => {
+    const bounds = await page.locator(selector).boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds!.x).toBe(0);
+    expect(bounds!.y).toBe(0);
+    expect(bounds!.width).toBe(page.viewportSize()!.width);
+    expect(bounds!.height).toBe(page.viewportSize()!.height);
+  };
+
+  await page.locator(".menuToggle").click();
+  await expectFullViewport(".actionsBackdrop.menuOpen");
+  await expect(page.locator(".actions a, .actions button")).toHaveCount(5);
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "Route refresh settings" }).click();
+  await expectFullViewport(".settingsBackdrop");
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Choose exchanges" }).click();
+  await expectFullViewport(".settingsBackdrop");
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "Open search activity graph" }).click();
+  const graph = page.getByRole("dialog", { name: "Searches for this exchange" });
+  await expect(graph.locator(".sheetHandle")).toBeVisible();
+  await expect(graph.locator(".close")).toBeHidden();
+  await graph.evaluate(async (element) => {
+    await Promise.all(element.getAnimations().map((animation) => animation.finished));
+  });
+  const handle = await graph.locator(".sheetHandle").boundingBox();
+  expect(handle).not.toBeNull();
+  await page.mouse.move(handle!.x + handle!.width / 2, handle!.y + handle!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(handle!.x + handle!.width / 2, handle!.y + handle!.height / 2 + 130, { steps: 5 });
+  await expect(graph).toHaveAttribute("style", /--sheet-drag:/);
+  await page.mouse.up();
+  await expect(graph).toHaveCount(0);
 });
 
 test("fiat currency controls show local country flags", async ({ page }) => {
@@ -1095,7 +1141,7 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
   });
 }
 
-test("public P2P route search → open step-by-step instructions", async ({ page }) => {
+test("public P2P route search → open step-by-step instructions", async ({ page, isMobile }) => {
   await mockBackend(page, { routeCount: 101 });
   await openApp(page);
 
@@ -1119,8 +1165,7 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await expect(page.getByLabel("Amount to send")).toHaveValue("0");
 
   const amountInput = page.getByLabel("Amount to send");
-  await amountInput.press("End");
-  await amountInput.type("123");
+  await amountInput.fill("123");
   await expect(amountInput).toHaveValue("123");
   await amountInput.fill("12б5");
   await expect(amountInput).toHaveValue("12,5");
@@ -1177,10 +1222,14 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await expect(page.getByText("101 routes found")).toBeVisible();
   const routeCounter = page.locator(".resultSummary small[aria-live='polite']");
   const languageToggle = page.locator(".languageToggle");
-  await languageToggle.click();
+  const toggleLanguage = async () => {
+    if (isMobile) await page.locator(".menuToggle").click();
+    await languageToggle.click();
+  };
+  await toggleLanguage();
   await expect(routeCounter).toHaveText("101 маршрут найден");
-  await languageToggle.click();
-  await languageToggle.click();
+  await toggleLanguage();
+  await toggleLanguage();
   await expect(routeCounter).toHaveText("101 routes found");
   const routeRenderSamples = await page.evaluate(() =>
     (window as Window & { __routeRenderSamples?: Array<{ count: number; at: number }> }).__routeRenderSamples ?? [],

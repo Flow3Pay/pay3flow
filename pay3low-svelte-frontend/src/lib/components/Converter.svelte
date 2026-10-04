@@ -1,7 +1,7 @@
 <script lang="ts">
   import { afterUpdate, onMount, onDestroy, tick } from "svelte";
   import { quintOut } from "svelte/easing";
-  import { fly } from "svelte/transition";
+  import { fly, slide } from "svelte/transition";
   import { fetchCorridors, fetchP2pRoutes, fetchProviders, recordInstructionOpen, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderDefinition, type ProviderGuidance, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote, type VenueSearchStatus } from "$lib/exchange";
   import { FALLBACK_NETWORK, fetchNetworks, type CryptoNetwork } from "$lib/networks";
   import { assetIcon, networkIcon, swapIcon, venueIcon } from "$lib/icons";
@@ -11,6 +11,7 @@
   import { SearchResponseMetrics } from "$lib/response-metrics";
   import { fetchRouteSearchActivity, SEARCH_ACTIVITY_PERIODS, type RouteSearchActivityHour, type SearchActivityPeriod } from "$lib/route-activity";
   import { fiatFlagUrl } from "$lib/currency-flags";
+  import { lockPageScroll } from "$lib/page-scroll-lock";
   import SidePanel from "./SidePanel.svelte";
   import SearchActivityChart from "./SearchActivityChart.svelte";
   import SearchActivityModal from "./SearchActivityModal.svelte";
@@ -86,6 +87,7 @@
   let activityModalOpen = false;
   let activityExpanded = false;
   let activityRevealElement: HTMLDivElement | undefined;
+  let routesRevealElement: HTMLDivElement | undefined;
   let routesExpanded = true;
   let introPlaying = true;
   let introStarted = false;
@@ -202,8 +204,30 @@
 
   function toggleRoutes() {
     routesExpanded = !routesExpanded;
+    if (routesExpanded && window.matchMedia("(max-width: 980px)").matches) {
+      void tick().then(() => window.requestAnimationFrame(() => {
+        const panel = routesRevealElement;
+        if (!panel) return;
+        window.scrollTo({
+          top: window.scrollY + panel.getBoundingClientRect().top - 16,
+          behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"
+        });
+      }));
+    }
     if (!routesExpanded && activityExpanded) bringActivityIntoView();
     try { localStorage.setItem(STORAGE.routesVisible, String(routesExpanded)); } catch {}
+  }
+
+  function routesRevealIn(node: Element) {
+    return fly(node, window.matchMedia("(max-width: 980px)").matches
+      ? { y: 18, duration: 320, easing: quintOut }
+      : { x: 18, duration: 380, easing: quintOut });
+  }
+
+  function routesRevealOut(node: Element) {
+    return window.matchMedia("(max-width: 980px)").matches
+      ? slide(node, { duration: 320, easing: quintOut })
+      : fly(node, { x: 18, duration: 380, easing: quintOut });
   }
 
   function closeInlineActivityOnMobile() {
@@ -785,6 +809,34 @@
   function onDocumentMouseDown(event: MouseEvent) { if (modalOpen && settingsElement && !settingsElement.contains(event.target as Node)) closeSettings(); }
   function closeSettings() { settingsOpen = false; exchangesOpen = false; }
   function onSettingsKeyDown(event: KeyboardEvent) { if (event.key === "Escape") closeSettings(); }
+  function portalSettingsBackdrop(node: HTMLDivElement) {
+    const anchor = document.createComment("settings backdrop");
+    node.before(anchor);
+    const mobile = window.matchMedia("(max-width: 640px)");
+    let unlockPage: (() => void) | undefined;
+
+    const place = () => {
+      if (mobile.matches) {
+        document.body.appendChild(node);
+        unlockPage ??= lockPageScroll();
+      } else {
+        anchor.after(node);
+        unlockPage?.();
+        unlockPage = undefined;
+      }
+    };
+
+    place();
+    mobile.addEventListener("change", place);
+    return {
+      destroy() {
+        mobile.removeEventListener("change", place);
+        unlockPage?.();
+        node.remove();
+        anchor.remove();
+      }
+    };
+  }
   function startSettingsDrag(event: PointerEvent) {
     if (!window.matchMedia("(max-width: 640px)").matches) return;
     settingsDragging = true;
@@ -920,7 +972,7 @@
           <div class="settingsWrap">
             <button type="button" class="exchangesButton" on:click={() => { settingsOpen = false; exchangesOpen = !exchangesOpen; }} aria-haspopup="dialog" aria-expanded={exchangesOpen} aria-label="Choose exchanges"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAACn0lEQVR4AbSVy0sVURzHZ9q0KcigiIyKrgUZRBS0SSgXLUKMIjAkEIKICHrgQqFF6tJFFEgXiqJNUemi6AGCyBVU0JWuBFHxgS8QUfAPuH6+xznHGe8493pF+X3O7/x+5/c4c+aecZ+3x38FN8hms/vhPnyCL3CrkL3lbUChCnhDsRH4ASm4B1/xX0QnSmwDEs9APfSSLe6gf0KZ7/uV6NtwGCogUSINKHgFtEvt9jWZk1Dt+34KXsEEtofukYajkCiuAYW1q06iD8ILUNE6iv1jXrS4BlR4AhkKVsEHWMbetZgG7L6MSvpVdDH/A5OQKMRLmkJBylGufgRaM5gGzE6A5CNDNQxASx46WP8MNk45yh2n6Un8RmwDYwTDcY6nFprzUMP6I7BxteTXgCStQdgGx2RAmoQFdFFCrp6qnuQqnuI02tvaYExOQUAjTEMmBvkbFRfDUOCLNAh8xSk2kII0rFDhF0huarBP8E0GWK3L1Mojn4LKGORvJd6jqG70MHP9zFFGVhmfsVZqGlBgCXycR3A+Ru9E6gg+AO+oUSKY3wVd2LOmAYZ2Uo7+Dy9pciPEOXxJYj4fBFyGHHENWOkHvZjz6EyIUZrJxpUr7PgvXv3yrhO3IrD1HtbQY+EG13BMBeiLadFF0hNdYm070ZG0hRYPMW+j+Vy4AT6vgaGBhR4Ltv1yKgkzV4gdhOdQwuoDkOjJ3D2Q4z3DU4J0WZg6mWVmGqILkatBkE4j0iDwbyrOsxlLl89dfextJYhvIuAtG11ERxp8x6GzJm5DsBWM8trx6F9nOTruZss3Q6Di5ymuzwWmF2nQjkcvSy/VYo9rhKQ+1pOkm8UW4krRTtxLZmEVfoP9Oup4dFs78F1QBlqN4m62fA9ZV45CHesAAAD//3Y7g4QAAAAGSURBVAMAao5eF665v54AAAAASUVORK5CYII=" alt="" width="18" height="18" aria-hidden="true" /></button>
             {#if exchangesOpen}
-              <div class="settingsBackdrop" on:mousedown={closeSettings} role="presentation">
+              <div class="settingsBackdrop" use:portalSettingsBackdrop on:mousedown={closeSettings} role="presentation">
                 <div class:settingsDragging class="settingsMenu exchangesMenu" bind:this={settingsDialog} role="dialog" aria-label="Exchange settings" tabindex="-1" on:mousedown|stopPropagation>
                   <div class="settingsModalHeader"><span class="settingsSheetHandle" aria-hidden="true" on:pointerdown={startSettingsDrag} on:pointermove={moveSettingsDrag} on:pointerup={endSettingsDrag} on:pointercancel={endSettingsDrag}></span><button type="button" class="settingsClose" on:click={closeSettings} aria-label="Close exchange settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button></div>
                   <div class="settingsHead"><div><strong>Search exchanges</strong></div></div>
@@ -938,7 +990,7 @@
           <div class="settingsWrap">
             <button type="button" class="settingsButton" on:click={() => { exchangesOpen = false; settingsOpen = !settingsOpen; }} aria-haspopup="dialog" aria-expanded={settingsOpen} aria-label="Route refresh settings"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 6.8a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4Z" stroke="currentColor" stroke-width="1.6" /><path d="M16.2 11.3a6.5 6.5 0 0 0 0-2.6l1.5-1.1-1.8-3.1-1.8.8a6.7 6.7 0 0 0-2.2-1.3L11.7 2H8.3L8 4a6.7 6.7 0 0 0-2.2 1.3L4 4.5 2.2 7.6l1.5 1.1a6.5 6.5 0 0 0 0 2.6l-1.5 1.1L4 15.5l1.8-.8A6.7 6.7 0 0 0 8 16l.3 2h3.4l.3-2a6.7 6.7 0 0 0 2.2-1.3l1.8.8 1.8-3.1-1.6-1.1Z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
             {#if settingsOpen}
-              <div class="settingsBackdrop" on:mousedown={closeSettings} role="presentation">
+              <div class="settingsBackdrop" use:portalSettingsBackdrop on:mousedown={closeSettings} role="presentation">
                 <div class:settingsDragging class="settingsMenu" bind:this={settingsDialog} role="dialog" aria-label="Refresh settings" tabindex="-1" on:mousedown|stopPropagation>
                 <div class="settingsModalHeader"><span class="settingsSheetHandle" aria-hidden="true" on:pointerdown={startSettingsDrag} on:pointermove={moveSettingsDrag} on:pointerup={endSettingsDrag} on:pointercancel={endSettingsDrag}></span><button type="button" class="settingsClose" on:click={closeSettings} aria-label="Close route settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button></div>
                 <div class="settingsHead"><div><strong>Auto-refresh</strong></div></div>
@@ -995,7 +1047,7 @@
     {/if}
     </div>
     {#if routesExpanded}
-      <div class="routesReveal" transition:fly={{ x: 18, duration: 380, easing: quintOut }}>
+      <div class="routesReveal" bind:this={routesRevealElement} in:routesRevealIn out:routesRevealOut>
         <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {renderingRoutes} {searchingVenues} {foundVenues} {venueStats} {venueNames} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} searched={lastUpdatedAt !== null} {hasAmount} {showBelarusP2pWarning} {onOpenBelarusP2pWarning} onOpenSearchActivity={() => activityModalOpen = true} />
       </div>
     {/if}
@@ -2236,7 +2288,7 @@
 .routesToggleOpen span { transform: rotate(180deg); }
 .activityReveal { width: 100%; min-height: 176px; flex: 1 1 auto; overflow: visible; }
 .activityReveal :global(.activityCard) { height: 100%; }
-@media (max-width: 980px) { .workspace { --workspace-gap: 22px; gap: 18px; } .workspace.routesCollapsed .converterStack { transform: none; } .activityReveal { display: none; } .routesToggle, .chartToggle { display: none; } .mobileRoutesToggle { display: grid; } }
+@media (max-width: 980px) { .workspace { --workspace-gap: 22px; gap: 0; } .routesReveal { margin-top: 18px; } .workspace.routesCollapsed .converterStack { transform: none; } .activityReveal { display: none; } .routesToggle, .chartToggle { display: none; } .mobileRoutesToggle { display: grid; } }
 @media (prefers-reduced-motion: reduce) { .converterStack, .chartToggle span, .routesToggle span, .mobileRoutesToggle span { transition: none; } }
 
 .card {
@@ -2640,8 +2692,12 @@
   }
 
   .workspace {
-    gap: 14px;
+    gap: 0;
     transform: none;
+  }
+
+  .routesReveal {
+    margin-top: 14px;
   }
 
   .card {
@@ -2663,7 +2719,7 @@
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     animation: fadeIn 0.2s ease-out;
-    pointer-events: none;
+    touch-action: none;
   }
 
   .settingsMenu {
