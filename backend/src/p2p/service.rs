@@ -284,7 +284,13 @@ fn is_generic_payment_method(method: &str) -> bool {
 }
 
 fn provider_snapshot_key(query: &P2pSearchQuery, market: Option<P2pOfferMarket>) -> String {
-    format!("{market:?}:{}:{}:{:?}", query.fiat, query.asset, query.side)
+    format!(
+        "{market:?}:{}:{}:{:?}:{}",
+        query.fiat,
+        query.asset,
+        query.side,
+        query.sources.as_deref().unwrap_or("")
+    )
 }
 
 fn canonicalize_offer_payment_methods(
@@ -1643,7 +1649,8 @@ impl P2pSearchService {
             .get(&provider_snapshot_key(query, market))
             .or_else(|| snapshots.get(&provider_snapshot_key(query, None)))?;
         (snapshot.inserted_at.elapsed() <= PROVIDER_SNAPSHOT_TTL
-            && query.fetch_limit() <= snapshot.response.query.fetch_limit())
+            && query.fetch_limit() <= snapshot.response.query.fetch_limit()
+            && self.provider_snapshot_complete(query, market, &snapshot.response))
         .then(|| {
             let offers = snapshot
                 .response
@@ -1687,6 +1694,9 @@ impl P2pSearchService {
         market: Option<P2pOfferMarket>,
         response: P2pSearchResponse,
     ) {
+        if !self.provider_snapshot_complete(query, market, &response) {
+            return;
+        }
         if let Ok(mut snapshots) = self.provider_snapshots.write() {
             snapshots.retain(|_, cached| cached.inserted_at.elapsed() <= PROVIDER_SNAPSHOT_TTL);
             let key = provider_snapshot_key(query, market);
@@ -1707,6 +1717,28 @@ impl P2pSearchService {
                 },
             );
         }
+    }
+
+    fn provider_snapshot_complete(
+        &self,
+        query: &P2pSearchQuery,
+        market: Option<P2pOfferMarket>,
+        response: &P2pSearchResponse,
+    ) -> bool {
+        self.sources
+            .iter()
+            .filter(|source| {
+                market.is_none_or(|market| source.market() == market)
+                    && query.sources.as_deref().is_none_or(|requested| {
+                        requested.split(',').any(|name| name == source.name())
+                    })
+            })
+            .all(|source| {
+                response
+                    .sources
+                    .iter()
+                    .any(|status| status.source == source.name() && status.ok)
+            })
     }
 
     pub(crate) async fn stream_market_tickers(

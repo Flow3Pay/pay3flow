@@ -884,6 +884,55 @@ async fn provider_snapshot_keeps_bank_offers_beyond_display_limit() {
     assert_eq!(response.offers[0].payment_methods, ["Kaspi Bank"]);
 }
 
+#[tokio::test]
+async fn source_specific_search_does_not_replace_the_full_provider_snapshot() {
+    let service = P2pSearchService::with_sources(
+        vec![
+            Arc::new(StubSource {
+                name: "binance",
+                offers: vec![offer("binance", "400", "1", "100000", 20)],
+                delay: Duration::ZERO,
+            }),
+            Arc::new(StubSource {
+                name: "bitget",
+                offers: vec![offer("bitget", "410", "1", "100000", 20)],
+                delay: Duration::ZERO,
+            }),
+        ],
+        Duration::from_secs(1),
+    );
+    let query = P2pSearchQuery {
+        fiat: "AMD".into(),
+        asset: "USDT".into(),
+        side: P2pSide::BuyCrypto,
+        amount: None,
+        asset_amount: None,
+        payment_method: None,
+        merchant_only: None,
+        min_orders: None,
+        min_completion_rate: None,
+        limit: Some(20),
+        sources: None,
+    };
+    let only_bitget = service
+        .search(P2pSearchQuery {
+            sources: Some("bitget".into()),
+            ..query.clone()
+        })
+        .await
+        .unwrap();
+    assert_eq!(only_bitget.offers.len(), 1);
+
+    let full = service.search(query.clone()).await.unwrap();
+    assert_eq!(full.offers.len(), 2);
+    assert!(full.offers.iter().any(|offer| offer.source == "binance"));
+    assert!(full.offers.iter().any(|offer| offer.source == "bitget"));
+
+    service.cache_provider_snapshot(&query, None, only_bitget);
+    let cached = service.provider_snapshot(&query, None).unwrap();
+    assert_eq!(cached.offers.len(), 2);
+}
+
 #[test]
 fn payment_filter_keeps_opaque_ids_but_rejects_known_mismatch() {
     let mut numeric = offer("bybit", "360", "1", "100000", 20);
