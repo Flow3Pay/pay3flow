@@ -183,7 +183,10 @@ impl P2pOffer {
         let requested = canonical_payment_method(requested);
         if self.payment_methods.iter().any(|method| {
             let method = canonical_payment_method(method);
-            !method.is_empty() && (method.contains(&requested) || requested.contains(&method))
+            !method.is_empty()
+                && !is_generic_payment_method(&method)
+                && (method.contains(&requested)
+                    || (method.len() >= 6 && requested.contains(&method)))
         }) {
             return PaymentMethodMatch::Exact;
         }
@@ -192,10 +195,10 @@ impl P2pOffer {
         // numeric payment IDs. Keep these offers as unverified estimates rather
         // than incorrectly claiming that the requested bank is unavailable.
         if self.payment_methods.is_empty()
-            || self
-                .payment_methods
-                .iter()
-                .all(|method| method.bytes().all(|byte| byte.is_ascii_digit()))
+            || self.payment_methods.iter().all(|method| {
+                method.bytes().all(|byte| byte.is_ascii_digit())
+                    || is_generic_payment_method(&canonical_payment_method(method))
+            })
         {
             return PaymentMethodMatch::Unknown;
         }
@@ -253,6 +256,13 @@ fn canonical_payment_method(value: &str) -> String {
         .filter(|character| character.is_alphanumeric())
         .flat_map(char::to_lowercase)
         .collect()
+}
+
+fn is_generic_payment_method(method: &str) -> bool {
+    matches!(
+        method,
+        "bank" | "banktransfer" | "transferswithspecificbank"
+    )
 }
 
 fn provider_snapshot_key(query: &P2pSearchQuery, market: Option<P2pOfferMarket>) -> String {
@@ -1467,6 +1477,10 @@ impl P2pSearchService {
             false,
             Some(Utc::now()),
         );
+        let matching_raw_offers = collected_offers
+            .into_iter()
+            .filter(|offer| offer.matches(&query))
+            .collect::<Vec<_>>();
         if response.sources.iter().any(|source| source.ok) {
             self.cache_response(cache_key, response.clone());
             if query.amount.is_none()
@@ -1475,9 +1489,16 @@ impl P2pSearchService {
                 && query.min_orders.is_none()
                 && query.min_completion_rate.is_none()
             {
-                self.cache_provider_snapshot(&query, market, response.clone());
+                self.cache_provider_snapshot(
+                    &query,
+                    market,
+                    P2pSearchResponse {
+                        offers: matching_raw_offers.clone(),
+                        ..response.clone()
+                    },
+                );
             }
-            self.publish_p2p_offers(&response.offers);
+            self.publish_p2p_offers(&matching_raw_offers);
         }
         Ok(response)
     }
@@ -1631,6 +1652,7 @@ impl P2pSearchService {
                 snapshot.response.observed_at.clone(),
             )
         })
+        .filter(|response| !response.offers.is_empty())
     }
 
     fn cache_provider_snapshot(

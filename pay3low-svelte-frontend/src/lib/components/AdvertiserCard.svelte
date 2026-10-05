@@ -12,11 +12,10 @@
   $: language = $locale;
   const copy = (key: string, params: Record<string, string | number> = {}) => t(key, params, language);
   const percentage = (value?: number | null) => value == null ? "—" : `${(value * 100).toFixed(1)}%`;
-  const profileFallback = (value: P2pOffer) => value.source.toLowerCase() === "bybit" && value.advertiser.id ? `https://www.bybit.com/en/p2p/profile/${encodeURIComponent(value.advertiser.id)}/${encodeURIComponent(value.asset)}/${encodeURIComponent(value.fiat)}/item` : null;
   $: venue = offer ? venueName(offer.source) : "";
   $: directExchange = offer?.advertiser.user_type === "service" || offer?.source.toLowerCase() === "whitebird";
   $: offerIcon = offer ? VENUE_ICONS[offer.source.toLowerCase()] : undefined;
-  $: profileUrl = offer ? offer.advertiser_profile_url ?? profileFallback(offer) : null;
+  $: profileUrl = offer?.advertiser_profile_url ?? null;
   $: actionUrl = offer ? profileUrl ?? offer.source_url : "";
   $: actionLabel = offer ? (directExchange ? copy("Open {venue} exchange", { venue }) : profileUrl ? copy("Open {venue} profile", { venue }) : copy("Open {venue} P2P and find {nickname}", { venue, nickname: offer.advertiser.nickname })) : "";
   function fallbackVenueIcon(event: Event, source: string) {

@@ -1,5 +1,15 @@
 exchange_methods = ["p2p", "exchanger"]
 
+[guidance]
+description = "Binance P2P listings can change before an order is placed. Open the listing in Binance and use the terms shown in the order."
+steps = ["Match the advertiser nickname and advertisement ID, then confirm the amount, price, limits, and payment method in Binance."]
+buy_steps = ["Create a buy order only if the listing still matches. Pay only to the recipient details shown in that order, then mark it paid in Binance after the transfer succeeds."]
+sell_steps = ["Create a sell order only if the listing still matches. Release crypto in Binance only after the payment is visible in your own bank or payment account."]
+
+[[guidance.links]]
+label = "Binance P2P"
+url = "https://p2p.binance.com/"
+
 [sell]
 source_url = "https://www.binance.com"
 name = "Binance Sell"
@@ -17,8 +27,9 @@ kind = "http_json"
 endpoint = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
 method = "POST"
 headers = { Origin = "https://www.binance.com", Referer = "https://www.binance.com/" }
-timeout_ms = 4000
-max_results = 20
+timeout_ms = 10000
+max_results = 100
+page_size = 20
 supported_assets = ["USDT", "USDC", "BTC", "ETH", "BNB"]
 supported_fiats = ["USD", "RUB", "EUR", "AMD", "BYN", "UAH", "KZT"]
 
@@ -51,14 +62,14 @@ supported_fiats = ["USD", "RUB", "EUR", "AMD", "BYN", "UAH", "KZT"]
 "Eurasian Bank" = ["Eurasian Bank"]
 
 [adapter.p2p.buy]
-request_json = '''{"fiat":"{{fiat}}","page":1,"rows":"{{limit_number}}","tradeType":"BUY","asset":"{{asset}}","countries":[],"proMerchantAds":false,"shieldMerchantAds":false,"publisherType":null,"payTypes":[],"additionalKycVerifyFilter":0}'''
+request_json = '''{"fiat":"{{fiat}}","page":"{{page_number}}","rows":"{{limit_number}}","tradeType":"BUY","asset":"{{asset}}","countries":[],"proMerchantAds":false,"shieldMerchantAds":false,"publisherType":null,"payTypes":[],"additionalKycVerifyFilter":0}'''
 items_pointer = "/data"
 success_pointer = "/code"
 success_value = "000000"
 error_pointer = "/message"
 
 [adapter.p2p.sell]
-request_json = '''{"fiat":"{{fiat}}","page":1,"rows":"{{limit_number}}","tradeType":"SELL","asset":"{{asset}}","countries":[],"proMerchantAds":false,"shieldMerchantAds":false,"publisherType":null,"payTypes":[],"additionalKycVerifyFilter":0}'''
+request_json = '''{"fiat":"{{fiat}}","page":"{{page_number}}","rows":"{{limit_number}}","tradeType":"SELL","asset":"{{asset}}","countries":[],"proMerchantAds":false,"shieldMerchantAds":false,"publisherType":null,"payTypes":[],"additionalKycVerifyFilter":0}'''
 items_pointer = "/data"
 success_pointer = "/code"
 success_value = "000000"

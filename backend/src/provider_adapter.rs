@@ -2,13 +2,15 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-const REQUEST_PLACEHOLDERS: [&str; 6] = [
+const REQUEST_PLACEHOLDERS: [&str; 8] = [
     "fiat",
     "asset",
     "amount",
     "amount_number",
     "limit",
     "limit_number",
+    "page",
+    "page_number",
 ];
 
 /// Live adapters compiled from a Providerfile and stored as JSON in Postgres.
@@ -162,7 +164,8 @@ pub struct P2pAdapterConfig {
     pub payment_method_aliases: BTreeMap<String, Vec<String>>,
     #[serde(default = "default_timeout_ms")]
     pub timeout_ms: u64,
-    pub max_results: Option<usize>,
+    pub max_results: Option<P2pMaxResults>,
+    pub page_size: Option<usize>,
     pub fiat_probe_amount: Option<f64>,
     pub asset_probe_amount: Option<f64>,
     pub default_min_fiat: Option<f64>,
@@ -173,6 +176,29 @@ pub struct P2pAdapterConfig {
     pub sell: Option<P2pOperation>,
     pub offer: Option<OfferMapping>,
     pub rate_table: Option<RateTableConfig>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum P2pMaxResults {
+    Limited(usize),
+    Infinite(String),
+}
+
+impl P2pMaxResults {
+    pub fn request_limit(&self, query_limit: usize) -> usize {
+        match self {
+            Self::Limited(limit) => query_limit.min(*limit),
+            Self::Infinite(_) => 1_000,
+        }
+    }
+
+    pub fn item_limit(&self, query_limit: usize) -> usize {
+        match self {
+            Self::Limited(limit) => query_limit.min(*limit),
+            Self::Infinite(_) => usize::MAX,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -658,12 +684,20 @@ impl P2pAdapterConfig {
                 ));
             }
         }
+        if self.max_results.as_ref().is_some_and(|limit| match limit {
+            P2pMaxResults::Limited(limit) => !(1..=100).contains(limit),
+            P2pMaxResults::Infinite(keyword) => keyword != "infinite",
+        }) {
+            return Err(format!(
+                "{context}: adapter/p2p/max_results must be between 1 and 100 or \"infinite\""
+            ));
+        }
         if self
-            .max_results
-            .is_some_and(|limit| !(1..=100).contains(&limit))
+            .page_size
+            .is_some_and(|size| !(1..=100).contains(&size))
         {
             return Err(format!(
-                "{context}: adapter/p2p/max_results must be between 1 and 100"
+                "{context}: adapter/p2p/page_size must be between 1 and 100"
             ));
         }
         if self
@@ -758,6 +792,22 @@ impl P2pOperation {
             auth.validate(context)?;
         }
         validate_request(method, &self.query, self.request_json.as_deref(), context)?;
+        if adapter.page_size.is_some()
+            && !self
+                .query
+                .values()
+                .map(String::as_str)
+                .chain(self.request_json.as_deref())
+                .chain(self.endpoint.as_deref())
+                .chain(Some(adapter.endpoint.as_str()))
+                .any(|template| {
+                    template.contains("{{page}}") || template.contains("{{page_number}}")
+                })
+        {
+            return Err(format!(
+                "{context}: adapter/p2p/{operation} needs a page placeholder when page_size is set"
+            ));
+        }
         if !matches!(
             self.amount_mode.as_str(),
             "query_or_empty" | "fiat_probe" | "asset_probe"

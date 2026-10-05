@@ -1,5 +1,15 @@
 exchange_methods = ["p2p"]
 
+[guidance]
+description = "Rapira P2P offers are estimates until you open the active advertisement on Rapira."
+steps = ["Check the advertisement ID, rate, limits, and payment method in Rapira before placing an order."]
+buy_steps = ["Use only the payment details shown in the Rapira order and confirm the transfer there after sending it."]
+sell_steps = ["Check that payment has arrived in your own account before releasing crypto in Rapira."]
+
+[[guidance.links]]
+label = "Rapira P2P"
+url = "https://rapira.net/p2p"
+
 [sell]
 source_url = "https://rapira.net"
 name = "Rapira Sell"

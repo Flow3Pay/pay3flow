@@ -1350,7 +1350,7 @@ test("editing the receive amount updates the send amount", async ({ page }) => {
   await expect(receiveAmount).toHaveValue("10000");
 });
 
-test("RUB to RUB bank routes explain SBP payment", async ({ page }) => {
+test("RUB to RUB bank routes require checking the order payment method", async ({ page }) => {
   await mockBackend(page);
   await openApp(page);
 
@@ -1373,8 +1373,8 @@ test("RUB to RUB bank routes explain SBP payment", async ({ page }) => {
   const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
   await expectNumberedTimeline(instructions, ["1", "2"]);
   await expect(instructions.getByText("Buy USDT for 10,000 RUB")).toBeVisible();
-  await expect(instructions.getByText("For RUB, use SBP from Sberbank using the exact recipient details shown in the order.")).toBeVisible();
-  await expect(instructions.getByText("For RUB payout to Alfa-Bank, confirm the SBP transfer has arrived before releasing the crypto.")).toBeVisible();
+  await expect(instructions.getByText("Check the current rate, order limits, and payment method on Binance.")).toBeVisible();
+  await expect(instructions.getByText("Release the asset only after you personally see the payment in your bank or payment account.")).toBeVisible();
 });
 
 test("AMD cycle keeps the best route visible when profit is unconfirmed", async ({ page }) => {

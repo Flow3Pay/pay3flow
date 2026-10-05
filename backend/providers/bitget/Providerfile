@@ -1,15 +1,25 @@
 exchange_methods = ["p2p", "exchanger"]
 
+[guidance]
+description = "Bitget P2P offers may change. Check the live advertisement and order details in Bitget."
+steps = ["Match the advertiser and advertisement ID, then verify the amount, rate, limits, and payment method in Bitget."]
+buy_steps = ["Pay only to the details shown in the active Bitget order. Confirm payment in Bitget after the transfer succeeds."]
+sell_steps = ["Release crypto in Bitget only after the payment is visible in your own bank or payment account."]
+
+[[guidance.links]]
+label = "Bitget P2P"
+url = "https://www.bitget.com/p2p-trade"
+
 [sell]
 source_url = "https://www.bitget.com"
 name = "Bitget Sell"
-currency = ["usd", "rub", "eur", "amd"]
+currency = ["usd", "rub", "eur", "amd", "uah", "kzt"]
 banks = []
 
 [buy]
 source_url = "https://www.bitget.com"
 name = "Bitget Buy"
-currency = ["usd", "rub", "eur", "amd"]
+currency = ["usd", "rub", "eur", "amd", "uah", "kzt"]
 banks = []
 
 [adapter.p2p]

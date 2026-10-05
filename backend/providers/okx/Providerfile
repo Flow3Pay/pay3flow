@@ -1,15 +1,25 @@
 exchange_methods = ["p2p", "exchanger"]
 
+[guidance]
+description = "OKX P2P listings are estimates until the order is created. Check the current offer and available payment methods in OKX."
+steps = ["Match the advertiser nickname and advertisement ID, and check the order amount, rate, limits, and payment method in OKX."]
+buy_steps = ["Place the buy order in OKX. Follow the payment details in that order and confirm payment there only after you have sent it."]
+sell_steps = ["Place the sell order in OKX. Check receipt in your own payment account before releasing crypto in OKX."]
+
+[[guidance.links]]
+label = "OKX P2P"
+url = "https://www.okx.com/p2p-markets/"
+
 [sell]
 source_url = "https://www.okx.com"
 name = "OKX Sell"
-currency = ["usd", "rub", "eur", "amd", "byn"]
+currency = ["usd", "rub", "eur", "amd", "byn", "uah", "kzt"]
 banks = []
 
 [buy]
 source_url = "https://www.okx.com"
 name = "OKX Buy"
-currency = ["usd", "rub", "eur", "amd", "byn"]
+currency = ["usd", "rub", "eur", "amd", "byn", "uah", "kzt"]
 banks = []
 
 [adapter.p2p]
@@ -19,7 +29,7 @@ method = "GET"
 headers = { Origin = "https://www.okx.com", Referer = "https://www.okx.com/p2p-markets/" }
 timeout_ms = 10000
 supported_assets = ["USDT", "USDC", "BTC", "ETH"]
-supported_fiats = ["USD", "RUB", "EUR", "AMD", "BYN"]
+supported_fiats = ["USD", "RUB", "EUR", "AMD", "BYN", "UAH", "KZT"]
 
 [adapter.p2p.payment_method_aliases]
 "T-Bank" = ["Tinkoff", "Tinkoff Bank"]
@@ -32,6 +42,22 @@ supported_fiats = ["USD", "RUB", "EUR", "AMD", "BYN"]
 "Bank Reshenie" = ["Reshenie Bank"]
 "Paritetbank" = ["Paritet Bank"]
 "Priorbank" = ["PriorBank"]
+"PrivatBank" = ["PrivatBank (CARD)", "Privat Bank"]
+"Monobank" = ["Monobank (Card)"]
+"Oschadbank" = ["OschadBank (Card)"]
+"PUMB" = ["PUMB (CARD)"]
+"Raiffeisen Bank Aval" = ["Raiffeisen Bank (CARD)"]
+"Sense Bank" = ["Sense SuperApp (CARD)"]
+"A-Bank" = ["A-Bank (CARD)"]
+"UkrSibbank" = ["Ukrsibbank"]
+"Kaspi Bank" = ["Kaspi Bank"]
+"Halyk Bank" = ["Halyk Bank"]
+"ForteBank" = ["ForteBank"]
+"Bank CenterCredit" = ["CenterCredit Bank"]
+"Freedom Bank" = ["Freedom Bank"]
+"Bereke Bank" = ["Bereke Bank"]
+"Jusan Bank" = ["Jysan Bank"]
+"Eurasian Bank" = ["Eurasian Bank"]
 
 [adapter.p2p.buy]
 query = { quoteCurrency = "{{fiat}}", baseCurrency = "{{asset}}", side = "sell", paymentMethod = "all", userType = "all", showTrade = "false", showFollow = "false", showAlreadyTraded = "false", isAbleFilter = "false", urlId = "0" }

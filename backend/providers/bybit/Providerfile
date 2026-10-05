@@ -1,5 +1,15 @@
 exchange_methods = ["p2p", "exchanger"]
 
+[guidance]
+description = "Bybit P2P results are public advertisements. Confirm that the same offer is still available in Bybit before ordering."
+steps = ["Match the advertiser and advertisement ID, then verify the amount, price, limits, and payment method in Bybit."]
+buy_steps = ["Follow the payment details in the active Bybit order and mark it paid only after sending the transfer."]
+sell_steps = ["Check the payment in your own account before releasing crypto in Bybit."]
+
+[[guidance.links]]
+label = "Bybit P2P"
+url = "https://www.bybit.com/fiat/trade/otc/"
+
 [sell]
 source_url = "https://www.bybit.com"
 name = "Bybit Sell"

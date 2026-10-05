@@ -60,6 +60,10 @@ Provider capabilities live in
 [`backend/providers/*/Providerfile`](backend/providers/). They are compiled
 into [`backend/migrations/providers.sql`](backend/migrations/providers.sql) and
 loaded into PostgreSQL when the backend starts.
+Providerfiles also define provider-specific guidance shown in route and order
+instructions. P2P providers can declare `currency = ["all"]` and use
+`max_results = "infinite"` with paged requests to search more ads. See the
+[Providerfile reference](Providerfile.md) for the supported fields and limits.
 
 ## How live routing works
 

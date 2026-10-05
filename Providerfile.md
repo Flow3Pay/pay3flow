@@ -137,6 +137,11 @@ uppercased, whitespace is trimmed, duplicates are removed, and the result is
 sorted. Bank names are trimmed, deduplicated, and sorted; empty names are
 discarded.
 
+Use `currency = ["all"]` when a provider accepts any fiat currency. Do not
+combine `"all"` with specific codes. For P2P adapters, leave `supported_fiats`
+empty to allow any fiat in direct searches; background polling still uses the
+configured fiat catalog.
+
 `buy` means that the customer buys crypto with fiat. `sell` means that the
 customer sells crypto for fiat.
 
@@ -171,6 +176,8 @@ steps = [
   "Select the exact source and destination assets and networks shown in the route.",
   "Check fees, slippage, expiry, and the destination address before signing.",
 ]
+buy_steps = ["Steps shown when the user buys crypto on this provider."]
+sell_steps = ["Steps shown when the user sells crypto on this provider."]
 
 [[guidance.links]]
 label = "Open provider"
@@ -181,7 +188,9 @@ label = "Read the provider guide"
 url = "https://provider.example/docs"
 ```
 
-`description` is required. `steps` and `links` may be empty, but every link
+`description` is required. `steps` apply to either direction; `buy_steps` and
+`sell_steps` apply only to the corresponding P2P order. All step lists and
+`links` may be empty, but every link
 must use HTTP or HTTPS. Keep these steps provider-specific; generic safety
 checks remain part of the route UI.
 
@@ -253,7 +262,8 @@ asset_codes = { USDT = "USDT_TRC" }
 supported_assets = ["USDT", "BTC", "ETH"]
 supported_fiats = ["USD", "EUR"]
 timeout_ms = 5000
-max_results = 50
+max_results = "infinite"
+page_size = 20
 
 [adapter.p2p.payment_method_aliases]
 "Sber Bank Belarus" = ["BPS-Sberbank", "Sberbank Belarus"]
@@ -261,14 +271,14 @@ max_results = 50
 
 [adapter.p2p.buy]
 amount_mode = "query_or_empty"
-request_json = '''{"side":"BUY","fiat":"{{fiat}}","asset":"{{asset}}","amount":"{{amount}}","limit":"{{limit_number}}"}'''
+request_json = '''{"side":"BUY","fiat":"{{fiat}}","asset":"{{asset}}","amount":"{{amount}}","page":"{{page_number}}","limit":"{{limit_number}}"}'''
 items_pointer = "/data/items"
 success_pointer = "/code"
 success_value = "0"
 error_pointer = "/message"
 
 [adapter.p2p.sell]
-request_json = '''{"side":"SELL","fiat":"{{fiat}}","asset":"{{asset}}","amount":"{{amount}}","limit":"{{limit_number}}"}'''
+request_json = '''{"side":"SELL","fiat":"{{fiat}}","asset":"{{asset}}","amount":"{{amount}}","page":"{{page_number}}","limit":"{{limit_number}}"}'''
 items_pointer = "/data/items"
 success_pointer = "/code"
 success_value = "0"
@@ -333,6 +343,13 @@ can use these placeholders:
 | `{{amount_number}}` | A JSON number when it is the whole JSON string value; otherwise rendered as text. |
 | `{{limit}}` | Result limit as a string. |
 | `{{limit_number}}` | A JSON number when it is the whole JSON string value; otherwise rendered as text. |
+| `{{page_number}}` | The current page as a JSON number when it is the whole JSON string value. Requires `page_size`. |
+| `{{page}}` | The current page as a string. Requires `page_size`. |
+
+Set `page_size` and put a page placeholder in each operation to fetch successive
+pages. The adapter stops when a page is short or the search result limit is
+reached. `max_results = "infinite"` removes the provider-specific cap; it does
+not override the search API limit, and a provider can return fewer ads.
 
 `request_json` must be valid JSON before substitution. POST adapters require
 it; GET adapters may also send it, although normal GET APIs should use query
@@ -747,13 +764,15 @@ Checked-in Rust examples: CoW Swap, NEAR Intents, and ID Pay.
 | --- | --- | --- | --- |
 | `buy.source_url`, `sell.source_url` | Per present operation | — | HTTP/HTTPS user-facing URL. |
 | `buy.name`, `sell.name` | Yes | — | Non-empty display name. |
-| `buy.currency`, `sell.currency` | Yes | — | Non-empty fiat-code array. |
+| `buy.currency`, `sell.currency` | Yes | — | Non-empty fiat-code array, or `["all"]` for any fiat. The wildcard must stand alone. |
 | `buy.banks`, `sell.banks` | No | `[]` | Bank/payment filters. |
 | `fees.kind` | In `[fees]` | — | Non-empty normalized identifier. |
 | `fees.description` | In `[fees]` | — | Human-readable disclosure. |
 | `fees.docs_url` | In `[fees]` | — | HTTP/HTTPS documentation URL. |
 | `guidance.description` | In `[guidance]` | — | User-facing provider explanation shown in route instructions. |
 | `guidance.steps` | No | `[]` | Provider-specific steps shown in order instructions. |
+| `guidance.buy_steps` | No | `[]` | Provider steps shown only when buying crypto. |
+| `guidance.sell_steps` | No | `[]` | Provider steps shown only when selling crypto. |
 | `guidance.links` | No | `[]` | Links with `label` and HTTP/HTTPS `url` shown with the steps. |
 
 ### `payment_methods`
@@ -812,7 +831,8 @@ Checked-in Rust examples: CoW Swap, NEAR Intents, and ID Pay.
 | `supported_fiats` | No | `[]` | Empty means no adapter-level fiat filter. Use this when an endpoint is fixed to specific fiat currencies. |
 | `payment_method_aliases` | No | `{}` | Canonical method label to provider-returned aliases. |
 | `timeout_ms` | No | `10000` | 250–30000 ms. |
-| `max_results` | No | request limit | 1–100. |
+| `max_results` | No | request limit | 1–100, or `"infinite"` to remove the provider-specific cap. The API search limit and provider response still bound results. |
+| `page_size` | No | — | 1–100. Request successive pages up to the API search limit; use `{{page_number}}` in the operation request. |
 | `fiat_probe_amount` | By mode | — | Positive finite fallback fiat amount. |
 | `asset_probe_amount` | By mode | — | Positive finite asset probe amount. |
 | `default_min_fiat` | If no pointer | — | Positive fallback minimum. |

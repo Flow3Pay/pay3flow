@@ -18,6 +18,10 @@
   let dragDistance = 0;
   const venueName = (value?: string | null) => value ? venueNames[value.toLowerCase()] ?? value : "P2P market";
   const providerGuide = (value?: string | null) => value ? providerGuidance[value.toLowerCase()] : undefined;
+  const guideSteps = (guide: ProviderGuidance | undefined, side: "buy" | "sell") => [
+    ...(guide?.steps ?? []),
+    ...(side === "buy" ? guide?.buy_steps ?? [] : guide?.sell_steps ?? []),
+  ];
   const readableNetwork = (value: string) => networkNames[value.toLowerCase()] ?? value.replace(/-/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
   const readablePath = (path: string[]) => path.map((part) => {
     const [asset, network] = part.split("@", 2);
@@ -37,18 +41,6 @@
   const bankFeeLabel = (bank?: string, percent?: number) => {
     if (!bank || percent == null) return null;
     return percent === 0 ? copy("{bank}: no bank fee", { bank }) : copy("{bank}: {percent}% bank fee", { bank, percent: percent.toFixed(2) });
-  };
-  const rubPaymentInstruction = (currency: string | undefined, bank: string | undefined, direction: "send" | "receive", offer?: RouteCandidate["entry_offer_snapshot"]) => {
-    if (currency?.toUpperCase() !== "RUB" || !bank) return null;
-    const supportsSbp = offer?.payment_methods.some((method) => /сбп|sbp|fast payment/i.test(method)) ?? false;
-    if (direction === "send") {
-      return supportsSbp
-        ? copy("For RUB, use SBP from {bank} using the exact recipient details shown in the order.", { bank })
-        : copy("For RUB, use SBP from {bank} only if the advertiser lists it; otherwise use the payment method shown in the order.", { bank });
-    }
-    return supportsSbp
-      ? copy("For RUB payout to {bank}, confirm the SBP transfer has arrived before releasing the crypto.", { bank })
-      : copy("For RUB payout to {bank}, use SBP only if the order supports it and confirm the money has arrived before releasing the crypto.", { bank });
   };
 
   function spotPair(symbol: string, firstAsset: string, secondAsset: string) {
@@ -116,14 +108,14 @@
   $: providerSwapTo = route.exit_offer_snapshot?.asset ?? route.target_currency;
   $: sourceFeeLabel = language && bankFeeLabel(route.source_payment_method, route.source_bank_fee_percent);
   $: targetFeeLabel = language && bankFeeLabel(route.target_payment_method, route.target_bank_fee_percent);
-  $: sourceRubInstruction = language && rubPaymentInstruction(route.source_currency, route.source_payment_method, "send", route.entry_offer_snapshot);
-  $: targetRubInstruction = language && rubPaymentInstruction(route.target_currency, route.target_payment_method, "receive", route.exit_offer_snapshot);
   $: firstMarketUrl = route.market_path ? spotUrl(route.market_path.venue, route.market_path.source_pair, route.source_currency, route.bridge_currency ?? route.target_currency ?? route.entry_asset) : null;
   $: secondMarketUrl = route.market_path && route.bridge_currency ? spotUrl(route.market_path.venue, route.market_path.target_pair, route.bridge_currency, route.target_currency ?? route.entry_asset) : null;
   $: standaloneProvider = Boolean(route.route_provider && !providerSwap);
   $: routeGuide = providerGuide(route.route_provider);
   $: entryGuide = providerGuide(entry?.provider ?? route.entry_offer_snapshot?.source);
   $: exitGuide = providerGuide(exit?.provider ?? route.exit_offer_snapshot?.source);
+  $: entryGuideSteps = guideSteps(entryGuide, cryptoToCrypto ? "sell" : "buy");
+  $: exitGuideSteps = guideSteps(exitGuide, cryptoToCrypto ? "buy" : "sell");
   $: marketStepCount = cryptoToCrypto && route.market_path ? (route.bridge_currency ? 2 : 1) : 0;
   $: entryStepNumber = (standaloneProvider ? 1 : 0) + marketStepCount + 1;
   $: providerStepNumber = entryStepNumber + (route.entry_offer_snapshot ? 1 : 0);
@@ -204,19 +196,18 @@
               <li>{copy("After the exchange, check that the new balance is available before continuing.")}</li>
             </ul>
           {:else}
-            <p class="stepSummary">{cryptoToCrypto ? copy("Open the buyer's profile on {venue} and create the first P2P order.", { venue: entryVenue }) : copy("Open the seller's profile on {venue}, create the P2P order, and pay using the selected method.", { venue: entryVenue })}</p>
+            <p class="stepSummary">{copy("Open the P2P listing on {venue}. Check the offer inside the platform before placing an order.", { venue: entryVenue })}</p>
             <ul class="checklist">
               <li>{copy("Before creating the order, compare the nickname and advertisement ID.")}</li>
               <li>{copy("Check the current rate, order limits, and payment method on {venue}.", { venue: entryVenue })}</li>
               {#if sourceFeeLabel}<li>{copy("This bank fee is only an estimate. Check the final bank fee before sending.")}</li>{/if}
-              {#if sourceRubInstruction}<li>{sourceRubInstruction}</li>{/if}
               <li>{cryptoToCrypto ? copy("Release the asset only after you personally see that the payment has arrived.") : copy("Use only the payment details shown inside the order. After sending, mark the order as paid.")}</li>
             </ul>
           {/if}
           {#if entryGuide}
             <div class="providerGuide">
               <p>{entryGuide.description}</p>
-              {#if entryGuide.steps.length}<ul class="checklist">{#each entryGuide.steps as step}<li>{step}</li>{/each}</ul>{/if}
+              {#if entryGuideSteps.length}<ul class="checklist">{#each entryGuideSteps as step}<li>{step}</li>{/each}</ul>{/if}
               {#if entryGuide.links.length}<div class="guideLinks">{#each entryGuide.links as link}<a href={link.url} target="_blank" rel="noreferrer noopener" class="profileLink">{link.label} <span>↗</span></a>{/each}</div>{/if}
             </div>
           {/if}
@@ -266,19 +257,18 @@
               <li>{copy("After the sale, check that the money has arrived in your account before considering the exchange finished.")}</li>
             </ul>
           {:else}
-            <p class="stepSummary">{cryptoToCrypto ? copy("Open the seller's profile on {venue} and create the order for the asset you want to receive.", { venue: exitVenue }) : copy("Open the buyer's profile on {venue} and create a sell order using the selected payment method.", { venue: exitVenue })}</p>
+            <p class="stepSummary">{copy("Open the P2P listing on {venue}. Check the offer inside the platform before placing an order.", { venue: exitVenue })}</p>
             <ul class="checklist">
               <li>{copy("Before creating the order, compare the nickname and advertisement ID.")}</li>
               <li>{copy("Check the current rate, order limits, {thing}, and expected amount.", { thing: cryptoToCrypto ? copy("asset network") : copy("recipient payment method") })}</li>
               {#if targetFeeLabel}<li>{copy("This bank fee is only an estimate. Check the final fee before accepting the payout.")}</li>{/if}
-              {#if targetRubInstruction}<li>{targetRubInstruction}</li>{/if}
               <li>{cryptoToCrypto ? copy("Confirm the {asset} balance and network before withdrawing.", { asset: route.target_currency ?? "" }) : copy("Release the asset only after you personally see the payment in your bank or payment account.")}</li>
             </ul>
           {/if}
           {#if exitGuide}
             <div class="providerGuide">
               <p>{exitGuide.description}</p>
-              {#if exitGuide.steps.length}<ul class="checklist">{#each exitGuide.steps as step}<li>{step}</li>{/each}</ul>{/if}
+              {#if exitGuideSteps.length}<ul class="checklist">{#each exitGuideSteps as step}<li>{step}</li>{/each}</ul>{/if}
               {#if exitGuide.links.length}<div class="guideLinks">{#each exitGuide.links as link}<a href={link.url} target="_blank" rel="noreferrer noopener" class="profileLink">{link.label} <span>↗</span></a>{/each}</div>{/if}
             </div>
           {/if}

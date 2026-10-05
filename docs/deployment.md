@@ -3,10 +3,12 @@
 Pay3Flow is currently an experimental MVP. The Compose setup is intended for
 development and demonstrations, not as a production deployment blueprint.
 
-For k3s, use the repository flake and [`deploy/README.md`](../deploy/README.md).
-It renders Kubernetes resources, builds the backend and frontend with
-in-cluster Kaniko Jobs, and supports either persistent in-cluster PostgreSQL
-and Redis or externally managed URLs.
+For production k3s, use `nix run .#deploy` and
+[`deploy/README.md`](../deploy/README.md). This builds the backend and
+frontend on the production host, imports their images into k3s, rolls out both
+Deployments, and checks the public endpoints. The separate
+`nix run .#deploy-k8s` path builds with in-cluster Kaniko Jobs and supports
+either persistent in-cluster PostgreSQL and Redis or externally managed URLs.
 
 ## Release sequence
 

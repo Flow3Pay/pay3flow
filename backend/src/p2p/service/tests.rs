@@ -745,6 +745,49 @@ async fn reuses_short_lived_search_cache() {
     assert_eq!(first.offers, second.offers);
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn provider_snapshot_keeps_bank_offers_beyond_display_limit() {
+    let mut offers = (0..75)
+        .map(|index| offer("binance", &format!("{}", index + 300), "1", "100000", 20))
+        .collect::<Vec<_>>();
+    let mut bank_offer = offer("binance", "400", "1", "100000", 20);
+    bank_offer.payment_methods = vec!["Kaspi Bank".into()];
+    offers.push(bank_offer);
+    let service = P2pSearchService::with_sources(
+        vec![Arc::new(StubSource {
+            name: "binance",
+            offers,
+            delay: Duration::ZERO,
+        })],
+        Duration::from_secs(1),
+    );
+    let query = P2pSearchQuery {
+        fiat: "AMD".into(),
+        asset: "USDT".into(),
+        side: P2pSide::BuyCrypto,
+        amount: None,
+        payment_method: None,
+        merchant_only: None,
+        min_orders: None,
+        min_completion_rate: None,
+        limit: Some(60),
+        sources: None,
+    };
+    assert_eq!(
+        service.search(query.clone()).await.unwrap().offers.len(),
+        60
+    );
+    let response = service
+        .search(P2pSearchQuery {
+            payment_method: Some("Kaspi Bank".into()),
+            ..query
+        })
+        .await
+        .unwrap();
+    assert_eq!(response.offers.len(), 1);
+    assert_eq!(response.offers[0].payment_methods, ["Kaspi Bank"]);
+}
+
 #[test]
 fn payment_filter_keeps_opaque_ids_but_rejects_known_mismatch() {
     let mut numeric = offer("bybit", "360", "1", "100000", 20);
@@ -772,4 +815,20 @@ fn payment_filter_keeps_opaque_ids_but_rejects_known_mismatch() {
         &BTreeMap::from([("Cash".into(), vec!["SkyLabs ATM".into()])]),
     );
     assert_eq!(cash.payment_method_match("Cash"), PaymentMethodMatch::Exact);
+
+    let mut generic = offer("okx", "360", "1", "100000", 20);
+    generic.payment_methods = vec!["bank".into()];
+    assert_eq!(
+        generic.payment_method_match("Kaspi Bank"),
+        PaymentMethodMatch::Unknown
+    );
+    generic.payment_methods = vec!["Bank Transfer".into(), "Monobank (Card)".into()];
+    assert_eq!(
+        generic.payment_method_match("Kaspi Bank"),
+        PaymentMethodMatch::No
+    );
+    assert_eq!(
+        generic.payment_method_match("Monobank"),
+        PaymentMethodMatch::Exact
+    );
 }

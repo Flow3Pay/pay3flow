@@ -47,6 +47,8 @@ export interface ProviderDefinition {
 export interface ProviderGuidance {
   description: string;
   steps: string[];
+  buy_steps?: string[];
+  sell_steps?: string[];
   links: Array<{ label: string; url: string }>;
 }
 

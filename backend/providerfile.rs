@@ -532,6 +532,12 @@ fn normalize(
             operation.as_str()
         )));
     }
+    if currencies.contains(&"ALL".to_string()) && currencies.len() != 1 {
+        return Err(ProviderFileError(format!(
+            "{source_file}: {}/currency = [\"all\"] cannot be combined with specific currencies",
+            operation.as_str()
+        )));
+    }
 
     Ok(ProviderDefinition {
         slug: slug.to_string(),
@@ -584,6 +590,18 @@ fn normalize_guidance(
     }
     guidance.steps = guidance
         .steps
+        .into_iter()
+        .map(|step| step.trim().to_string())
+        .filter(|step| !step.is_empty())
+        .collect();
+    guidance.buy_steps = guidance
+        .buy_steps
+        .into_iter()
+        .map(|step| step.trim().to_string())
+        .filter(|step| !step.is_empty())
+        .collect();
+    guidance.sell_steps = guidance
+        .sell_steps
         .into_iter()
         .map(|step| step.trim().to_string())
         .filter(|step| !step.is_empty())
@@ -906,6 +924,21 @@ payment_methods = [
         assert_eq!(definitions[0].currencies, ["AMD", "EUR", "RUB", "USD"]);
         assert!(definitions[0].banks.is_empty());
         assert_eq!(definitions[1].operation, Operation::Sell);
+    }
+
+    #[test]
+    fn accepts_all_currencies_only_as_a_standalone_wildcard() {
+        let source = r#"
+exchange_methods = ["p2p"]
+[buy]
+source_url = "https://example.com/p2p"
+name = "Any fiat"
+currency = ["all"]
+"#;
+        let definitions = parse(source, "example", "example/Providerfile").unwrap();
+        assert_eq!(definitions[0].currencies, ["ALL"]);
+        let invalid = source.replace("[\"all\"]", "[\"all\", \"AMD\"]");
+        assert!(parse(&invalid, "example", "example/Providerfile").is_err());
     }
 
     #[test]

@@ -101,9 +101,15 @@ impl DeclarativeP2pSource {
             fiat: &query.fiat,
             asset,
             amount,
-            limit: query
-                .fetch_limit()
-                .min(self.config.max_results.unwrap_or(100)),
+            limit: self.config.page_size.unwrap_or_else(|| {
+                self.config
+                    .max_results
+                    .as_ref()
+                    .map_or(query.fetch_limit(), |limit| {
+                        limit.request_limit(query.fetch_limit())
+                    })
+            }),
+            page: 1,
         })
     }
 
@@ -345,14 +351,12 @@ impl P2pSource for DeclarativeP2pSource {
 
         let operation = self.operation(query.side)?;
         let values = self.template_values(query, operation)?;
-        let endpoint = render_request_string(
-            operation
-                .endpoint
-                .as_deref()
-                .unwrap_or(&self.config.endpoint),
-            &values,
-        );
+        let endpoint_template = operation
+            .endpoint
+            .as_deref()
+            .unwrap_or(&self.config.endpoint);
         if let Some(table) = &self.config.rate_table {
+            let endpoint = render_request_string(endpoint_template, &values);
             let response = send_json(
                 &self.client,
                 &self.config.method,
@@ -394,34 +398,55 @@ impl P2pSource for DeclarativeP2pSource {
             request_templates.into_iter().map(Some).collect()
         };
         let mut offers = Vec::new();
+        let wanted = self
+            .config
+            .max_results
+            .as_ref()
+            .map_or(query.fetch_limit(), |limit| {
+                limit.item_limit(query.fetch_limit())
+            });
         for request_json in request_templates {
-            let response = send_json(
-                &self.client,
-                &self.config.method,
-                &endpoint,
-                &self.config.headers,
-                self.config.auth.as_ref(),
-                &operation.query,
-                request_json,
-                &values,
-                &self.slug,
-            )
-            .await?;
-            validate_response(
-                &response,
-                operation.success_pointer.as_deref(),
-                operation.success_value.as_deref(),
-                operation.success_missing_allowed,
-                operation.error_pointer.as_deref(),
-                &self.slug,
-            )?;
-            offers.extend(
-                response_items(&response, operation.items_pointer.as_deref())?
-                    .into_iter()
-                    .take(query.fetch_limit())
-                    .map(|item| self.into_offer(item, query, mapping))
-                    .collect::<Result<Vec<_>>>()?,
-            );
+            let template_start = offers.len();
+            let pages = self
+                .config
+                .page_size
+                .map_or(1, |size| wanted.min(query.fetch_limit()).div_ceil(size));
+            for page in 1..=pages {
+                let page_values = TemplateValues { page, ..values };
+                let endpoint = render_request_string(endpoint_template, &page_values);
+                let response = send_json(
+                    &self.client,
+                    &self.config.method,
+                    &endpoint,
+                    &self.config.headers,
+                    self.config.auth.as_ref(),
+                    &operation.query,
+                    request_json,
+                    &page_values,
+                    &self.slug,
+                )
+                .await?;
+                validate_response(
+                    &response,
+                    operation.success_pointer.as_deref(),
+                    operation.success_value.as_deref(),
+                    operation.success_missing_allowed,
+                    operation.error_pointer.as_deref(),
+                    &self.slug,
+                )?;
+                let items = response_items(&response, operation.items_pointer.as_deref())?;
+                let count = items.len();
+                offers.extend(
+                    items
+                        .into_iter()
+                        .take(wanted.saturating_sub(offers.len() - template_start))
+                        .map(|item| self.into_offer(item, query, mapping))
+                        .collect::<Result<Vec<_>>>()?,
+                );
+                if offers.len() - template_start >= wanted || count < page_values.limit {
+                    break;
+                }
+            }
         }
         Ok(offers)
     }
@@ -462,6 +487,7 @@ impl CryptoMarketSource for DeclarativeMarketSource {
             asset: "",
             amount: None,
             limit: 100,
+            page: 1,
         };
         let response = send_json(
             &self.client,
@@ -500,11 +526,13 @@ impl CryptoMarketSource for DeclarativeMarketSource {
     }
 }
 
+#[derive(Clone, Copy)]
 struct TemplateValues<'a> {
     fiat: &'a str,
     asset: &'a str,
     amount: Option<f64>,
     limit: usize,
+    page: usize,
 }
 
 async fn send_json(
@@ -609,6 +637,9 @@ fn render_request_json(value: &mut Value, values: &TemplateValues<'_>) -> Result
         Value::String(template) if template == "{{limit_number}}" => {
             *value = Value::Number(Number::from(values.limit));
         }
+        Value::String(template) if template == "{{page_number}}" => {
+            *value = Value::Number(Number::from(values.page));
+        }
         Value::String(template) => *template = render_request_string(template, values),
         Value::Array(values_json) => {
             for value in values_json {
@@ -639,6 +670,8 @@ fn render_request_string(template: &str, values: &TemplateValues<'_>) -> String 
         )
         .replace("{{limit_number}}", &values.limit.to_string())
         .replace("{{limit}}", &values.limit.to_string())
+        .replace("{{page_number}}", &values.page.to_string())
+        .replace("{{page}}", &values.page.to_string())
 }
 
 fn validate_response(
@@ -1062,6 +1095,7 @@ mod tests {
                 asset: "USDT_TRC",
                 amount: Some(1_000.0),
                 limit: 20,
+                page: 1,
             },
         )
         .unwrap();
@@ -1153,6 +1187,70 @@ mod tests {
                 .map(String::as_str),
             Some("BUY")
         );
+    }
+
+    #[test]
+    fn mexc_supports_the_reported_fiat_markets() {
+        let source = mexc_source();
+        for fiat in ["AMD", "BYN", "KZT", "UAH"] {
+            let query = P2pSearchQuery {
+                fiat: fiat.into(),
+                asset: "USDT".into(),
+                side: P2pSide::BuyCrypto,
+                amount: None,
+                payment_method: None,
+                merchant_only: None,
+                min_orders: None,
+                min_completion_rate: None,
+                limit: Some(60),
+                sources: Some("mexc".into()),
+            };
+            assert!(source.supports_query(&query), "{fiat}");
+            assert_eq!(
+                source
+                    .template_values(&query, source.operation(query.side).unwrap())
+                    .unwrap()
+                    .limit,
+                1_000
+            );
+        }
+    }
+
+    #[test]
+    fn binance_uses_supported_page_size_and_numeric_page_placeholder() {
+        let document: toml::Value =
+            toml::from_str(include_str!("../../providers/binance/Providerfile")).unwrap();
+        let adapters: ProviderAdapters =
+            document.get("adapter").unwrap().clone().try_into().unwrap();
+        let record = ProviderAdapterRecord {
+            slug: "binance".into(),
+            source_url: "https://www.binance.com".into(),
+            display_name: "Binance".into(),
+            exchange_methods: vec![crate::providers::ProviderExchangeMethod::P2p],
+            config: Some(adapters),
+            workflow: None,
+        };
+        let source = DeclarativeP2pSource::from_record(Client::new(), &record).unwrap();
+        let query = P2pSearchQuery {
+            fiat: "UAH".into(),
+            asset: "USDT".into(),
+            side: P2pSide::BuyCrypto,
+            amount: None,
+            payment_method: None,
+            merchant_only: None,
+            min_orders: None,
+            min_completion_rate: None,
+            limit: Some(60),
+            sources: Some("binance".into()),
+        };
+        let operation = source.operation(query.side).unwrap();
+        let values = source.template_values(&query, operation).unwrap();
+        assert_eq!(values.limit, 20);
+        let mut request: Value =
+            serde_json::from_str(operation.request_json.as_ref().unwrap()).unwrap();
+        render_request_json(&mut request, &TemplateValues { page: 2, ..values }).unwrap();
+        assert_eq!(request["page"], 2);
+        assert_eq!(request["rows"], 20);
     }
 
     #[test]

@@ -54,6 +54,10 @@ pub struct ProviderGuidance {
     #[serde(default)]
     pub steps: Vec<String>,
     #[serde(default)]
+    pub buy_steps: Vec<String>,
+    #[serde(default)]
+    pub sell_steps: Vec<String>,
+    #[serde(default)]
     pub links: Vec<ProviderLink>,
 }
 
@@ -109,7 +113,7 @@ SELECT id, slug, operation, source_url, name, currencies, banks, exchange_method
 FROM providers
 WHERE status = 'enabled'
   AND ($1::TEXT IS NULL OR operation = $1)
-  AND ($2::TEXT IS NULL OR $2 = ANY(currencies))
+  AND ($2::TEXT IS NULL OR $2 = ANY(currencies) OR 'ALL' = ANY(currencies))
   AND ($3::TEXT IS NULL OR $3 = ANY(banks))
 ORDER BY name, operation, slug
 "#,
