@@ -97,6 +97,9 @@ flowchart LR
   results already returned by other sources.
 - Routes are ranked by estimated target amount first, then verified
   payment-method matches and same-venue execution.
+- Search and route limits reserve several candidates per P2P source while
+  keeping the returned routes ranked by price, so a busy venue does not
+  crowd out other markets.
 - The best route remains selected while results arrive unless the user has
   explicitly selected another route.
 - Venue icons summarize successful source statuses, not only cards that made

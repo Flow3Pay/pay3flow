@@ -1527,6 +1527,72 @@ fn route_limit_preserves_a_lower_ranked_provider_route() {
 }
 
 #[test]
+fn route_limit_counts_every_provider_in_a_combined_route() {
+    let normalized = query(true);
+    let mut discovered = Vec::new();
+    compose_fiat_routes(
+        &mut discovered,
+        &normalized,
+        "USDT",
+        &[offer("bybit", P2pSide::BuyCrypto, "400", "1000", "200000")],
+        &[offer("bybit", P2pSide::SellCrypto, "80", "1000", "100000")],
+    );
+    let mut first = discovered.pop().unwrap();
+    first.route_id = "first".into();
+    first.route_provider = Some("shared".into());
+    let mut second = first.clone();
+    second.route_id = "second".into();
+    let mut bitget = first.clone();
+    bitget.route_id = "bitget".into();
+    bitget.exit_offer.as_mut().unwrap().source = "bitget".into();
+    let mut routes = vec![first, second, bitget];
+
+    truncate_routes_preserving_providers(&mut routes, 2);
+
+    assert_eq!(routes.len(), 2);
+    assert_eq!(routes[0].route_id, "first");
+    assert_eq!(routes[1].route_id, "bitget");
+}
+
+#[test]
+fn route_limit_keeps_several_routes_per_provider() {
+    let normalized = query(true);
+    let mut discovered = Vec::new();
+    compose_fiat_routes(
+        &mut discovered,
+        &normalized,
+        "USDT",
+        &[offer("bybit", P2pSide::BuyCrypto, "400", "1000", "200000")],
+        &[offer("bybit", P2pSide::SellCrypto, "80", "1000", "100000")],
+    );
+    let first = discovered.pop().unwrap();
+    let mut routes = (0..50)
+        .map(|index| {
+            let mut route = first.clone();
+            route.route_id = format!("bybit-{index}");
+            route
+        })
+        .collect::<Vec<_>>();
+    routes.extend((0..10).map(|index| {
+        let mut route = first.clone();
+        route.route_id = format!("binance-{index}");
+        route.entry_offer.as_mut().unwrap().source = "binance".into();
+        route.exit_offer.as_mut().unwrap().source = "binance".into();
+        route
+    }));
+    truncate_routes_preserving_providers(&mut routes, 20);
+
+    assert_eq!(routes.len(), 20);
+    assert_eq!(
+        routes
+            .iter()
+            .filter(|route| route.route_id.starts_with("binance-"))
+            .count(),
+        8
+    );
+}
+
+#[test]
 fn route_sort_prefers_higher_payout_before_route_quality() {
     let normalized = query(true);
     let mut discovered = Vec::new();

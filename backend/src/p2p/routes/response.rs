@@ -77,15 +77,32 @@ pub(in crate::p2p) fn truncate_routes_preserving_providers(
     }
 
     let reserved_indices = {
-        let mut represented_providers = HashSet::new();
+        let provider_count = routes
+            .iter()
+            .flat_map(route_provider_names)
+            .collect::<HashSet<_>>()
+            .len();
+        if provider_count == 0 {
+            routes.truncate(limit);
+            return;
+        }
+        let per_provider = (limit / provider_count).clamp(1, 8);
+        let mut provider_counts = HashMap::new();
         routes
             .iter()
             .enumerate()
             .filter_map(|(index, route)| {
-                route_provider_names(route)
-                    .iter()
-                    .any(|provider| represented_providers.insert(*provider))
-                    .then_some(index)
+                let providers = route_provider_names(route);
+                if providers.iter().any(|provider| {
+                    provider_counts.get(provider).copied().unwrap_or(0) < per_provider
+                }) {
+                    for provider in providers {
+                        *provider_counts.entry(provider).or_insert(0) += 1;
+                    }
+                    Some(index)
+                } else {
+                    None
+                }
             })
             .take(limit)
             .collect::<HashSet<_>>()
@@ -123,6 +140,8 @@ pub(in crate::p2p) fn route_provider_names(route: &P2pRoute) -> Vec<&str> {
     if let Some(provider) = route.exit_offer.as_ref().map(|offer| offer.source.as_str()) {
         providers.push(provider);
     }
+    providers.sort_unstable();
+    providers.dedup();
     providers
 }
 

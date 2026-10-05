@@ -1905,14 +1905,24 @@ fn truncate_offers_preserving_sources(offers: &mut Vec<P2pOffer>, limit: usize) 
     }
 
     let reserved_indices = {
-        let mut represented_sources = HashSet::new();
+        let source_count = offers
+            .iter()
+            .map(|offer| offer.source.as_str())
+            .collect::<HashSet<_>>()
+            .len();
+        let per_source = (limit / source_count).clamp(1, 8);
+        let mut source_counts = HashMap::new();
         offers
             .iter()
             .enumerate()
             .filter_map(|(index, offer)| {
-                represented_sources
-                    .insert(offer.source.as_str())
-                    .then_some(index)
+                let count = source_counts.entry(offer.source.as_str()).or_insert(0);
+                if *count < per_source {
+                    *count += 1;
+                    Some(index)
+                } else {
+                    None
+                }
             })
             .take(limit)
             .collect::<HashSet<_>>()

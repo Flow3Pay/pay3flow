@@ -159,6 +159,51 @@ fn crypto_amount_filters_unusable_ads_before_global_offer_limit() {
 }
 
 #[test]
+fn global_offer_limit_keeps_several_ads_per_source() {
+    let query = P2pSearchQuery {
+        fiat: "KZT".into(),
+        asset: "USDT".into(),
+        side: P2pSide::SellCrypto,
+        amount: None,
+        asset_amount: None,
+        payment_method: None,
+        merchant_only: None,
+        min_orders: None,
+        min_completion_rate: None,
+        limit: Some(20),
+        sources: None,
+    };
+    let offers = (0..50)
+        .map(|index| {
+            let mut offer = offer("bybit", "490", "1", "100000", 100);
+            offer.ad_id = format!("bybit-{index}");
+            offer.fiat = "KZT".into();
+            offer.side = P2pSide::SellCrypto;
+            offer
+        })
+        .chain((0..10).map(|index| {
+            let mut offer = offer("binance", "450", "1", "100000", 100);
+            offer.ad_id = format!("binance-{index}");
+            offer.fiat = "KZT".into();
+            offer.side = P2pSide::SellCrypto;
+            offer
+        }))
+        .collect::<Vec<_>>();
+
+    let response =
+        build_search_response(query, &offers, Vec::new(), false, "provider", false, None);
+    assert_eq!(response.offers.len(), 20);
+    assert_eq!(
+        response
+            .offers
+            .iter()
+            .filter(|offer| offer.source == "binance")
+            .count(),
+        8
+    );
+}
+
+#[test]
 fn parses_p2p_offer_candidates_from_fmatch() {
     let expected = offer("binance", "390.5", "100", "100000", 42);
     let reply = serde_json::json!({
