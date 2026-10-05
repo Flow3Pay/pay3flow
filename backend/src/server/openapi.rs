@@ -84,6 +84,37 @@ fn components() -> Value {
                     "anonymous_id": { "type": "string", "format": "uuid" }
                 }
             },
+            "MarketValuesRequest": {
+                "type": "object",
+                "required": ["items"],
+                "properties": { "items": { "type": "array", "minItems": 1, "maxItems": 4, "items": { "type": "object", "required": ["asset", "amount"], "properties": {
+                    "asset": { "type": "string", "example": "BTC" },
+                    "amount": { "type": "string", "example": "0.5" }
+                } } } }
+            },
+            "MarketValuesResponse": {
+                "type": "object",
+                "required": ["source", "stale", "values"],
+                "properties": {
+                    "source": { "type": "string", "example": "DefiLlama" },
+                    "stale": { "type": "boolean" },
+                    "values": { "type": "array", "items": { "type": "object", "required": ["asset", "amount", "price_usd", "value_usd", "price_timestamp"], "properties": {
+                        "asset": { "type": "string" }, "amount": { "type": "string" },
+                        "price_usd": { "type": "number", "nullable": true }, "value_usd": { "type": "number", "nullable": true },
+                        "price_timestamp": { "type": "integer", "format": "int64", "nullable": true }
+                    } } }
+                }
+            },
+            "MarketPricesResponse": {
+                "type": "object",
+                "required": ["source", "stale", "updated_at", "prices"],
+                "properties": {
+                    "source": { "type": "string", "example": "DefiLlama" },
+                    "stale": { "type": "boolean" },
+                    "updated_at": { "type": "integer", "format": "int64", "nullable": true, "description": "Unix time of the last successful server refresh." },
+                    "prices": { "type": "object", "additionalProperties": { "type": "number", "format": "double" }, "description": "USD price per one unit of each supported asset." }
+                }
+            },
             "User": {
                 "type": "object",
                 "required": ["id", "email", "referral_code"],
@@ -627,6 +658,24 @@ const OPERATIONS: &[Operation] = &[
         false,
     ),
     (
+        "/api/market-prices",
+        "get",
+        "List cached crypto prices in USD",
+        "Return the server's latest crypto price coefficients. The server refreshes them at startup and once per hour.",
+        "Catalogs",
+        false,
+        false,
+    ),
+    (
+        "/api/market-values",
+        "post",
+        "Calculate crypto market values in USD",
+        "Return indicative USD market values for up to four supported crypto amounts using server-cached prices. Unknown or unavailable assets have null values.",
+        "Catalogs",
+        true,
+        false,
+    ),
+    (
         "/api/providers",
         "get",
         "List providers",
@@ -649,6 +698,15 @@ const OPERATIONS: &[Operation] = &[
         "get",
         "List routes",
         "Return currently available payment routes.",
+        "Routing",
+        false,
+        false,
+    ),
+    (
+        "/api/p2p/route-activity",
+        "get",
+        "Route search activity",
+        "Return completed user-initiated search counts for a currency direction over the selected period. Automatic route refreshes are excluded. Counts begin with this metric's corrected release.",
         "Routing",
         false,
         false,
@@ -1048,6 +1106,7 @@ fn request_schema(path: &str, method: &str) -> Value {
     let name = match (path, method) {
         ("/api/auth/register", "post") | ("/api/auth/login", "post") => "AuthCodeRequest",
         ("/api/anonymous/register", "post") => "AnonymousRegisterRequest",
+        ("/api/market-values", "post") => "MarketValuesRequest",
         ("/api/payments", "post") => "NewPayment",
         ("/api/exchange/orders", "post") => "CreateExchangeOrder",
         ("/api/exchange/orders/{id}/confirm", "post") => "ConfirmOrderRequest",
@@ -1067,6 +1126,8 @@ fn response_schema(path: &str, method: &str) -> Value {
         | ("/api/auth/oauth/{provider}", "post") => schema_ref("AuthToken"),
         ("/api/auth/me", "get") => schema_ref("User"),
         ("/api/anonymous/register", "post") => schema_ref("AnonymousUser"),
+        ("/api/market-values", "post") => schema_ref("MarketValuesResponse"),
+        ("/api/market-prices", "get") => schema_ref("MarketPricesResponse"),
         ("/api/referrals/me", "get") => schema_ref("ReferralProfile"),
         ("/api/payments", "post") | ("/api/payments/{id}", "get") => schema_ref("PaymentView"),
         ("/api/payments", "get") => array_schema("PaymentView"),
@@ -1079,6 +1140,18 @@ fn response_schema(path: &str, method: &str) -> Value {
         ("/api/p2p/route-executions", "post")
         | ("/api/p2p/route-executions/{id}", "get")
         | ("/api/p2p/route-executions/{id}/submissions", "post") => schema_ref("RouteExecution"),
+        ("/api/p2p/route-activity", "get") => json!({
+            "type": "object",
+            "required": ["source_currency", "target_currency", "hours"],
+            "properties": {
+                "source_currency": { "type": "string" },
+                "target_currency": { "type": "string" },
+                "hours": { "type": "array", "items": { "type": "object", "required": ["started_at", "count"], "properties": {
+                    "started_at": { "type": "string", "format": "date-time" },
+                    "count": { "type": "integer", "format": "int64", "minimum": 0 }
+                } } }
+            }
+        }),
         _ => schema_ref("JsonResponse"),
     }
 }
@@ -1110,6 +1183,26 @@ fn success_response(path: &str, method: &str) -> Value {
 
 fn extra_parameters(path: &str, method: &str) -> Vec<Value> {
     let mut parameters = Vec::new();
+    if path == "/api/p2p/route-activity" && method == "get" {
+        for name in ["source_currency", "target_currency"] {
+            parameters.push(json!({
+                "name": name, "in": "query", "required": true,
+                "schema": { "type": "string", "minLength": 2, "maxLength": 12 }
+            }));
+        }
+        parameters.push(json!({
+            "name": "period", "in": "query", "required": false,
+            "description": "Time range. Longer ranges use daily, weekly, or monthly buckets.",
+            "schema": { "type": "string", "enum": ["1h", "1d", "1w", "1m", "3m", "6m", "1y", "all"], "default": "1w" }
+        }));
+    }
+    if path == "/api/p2p/routes" && method == "get" {
+        parameters.push(json!({
+            "name": "count_activity", "in": "query", "required": false,
+            "description": "Set true for a user-initiated search; false for automatic route refresh.",
+            "schema": { "type": "boolean", "default": false }
+        }));
+    }
     if path == "/api/exchange/orders" && method == "get" {
         parameters.push(json!({
             "name": "limit",

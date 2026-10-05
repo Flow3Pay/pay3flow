@@ -25,6 +25,7 @@
   export let hasAmount = false;
   export let showBelarusP2pWarning = false;
   export let onOpenBelarusP2pWarning: () => void = () => {};
+  export let onOpenSearchActivity: () => void = () => {};
 
   const ASSET_NAMES: Record<string, string> = { BTC: "Bitcoin", ETH: "Ether", USDC: "USD Coin", USDT: "Tether" };
   const FIAT_MARKS: Record<string, string> = { AMD: "🇦🇲", RUB: "🇷🇺", BYN: "🇧🇾", UAH: "🇺🇦", KZT: "🇰🇿" };
@@ -177,6 +178,11 @@
         {#if circularSearch && routes.length > 0 && !hasConfirmedProfit && !searching}<small class="resultLimit" data-testid="no-profitable-routes">No confirmed profitable route right now; showing the best available cycles.</small>{/if}
       </div>
       <div class="panelActions">
+        {#if sourceCurrency && targetCurrency}
+          <button type="button" class="activityButton" on:click={onOpenSearchActivity} aria-label={t("Open search activity graph", {}, $locale)} title={t("Open search activity graph", {}, $locale)}>
+            <img src="/icons/ui/search-activity.png" alt="" width="18" height="18" aria-hidden="true" />
+          </button>
+        {/if}
         {#if searching && pendingVenues.length}
           <div class="searchingVenues" aria-label={`Searching ${pendingVenues.map((venue) => venue.label).join(", ")}`}>
             {#each visiblePendingVenues as venue, index (venue.id)}
@@ -211,25 +217,25 @@
                   <span class="workflow">
                   {#each workflowSteps(route) as step, stepIndex}
                     <span class="workflowPart">
-                      {#if stepIndex > 0}<span class="workflowArrow" aria-hidden="true">→</span>{/if}
-                      <span class="workflowAsset">
-                        {#if FIAT_MARKS[step.currency.toUpperCase()] && !step.iconUrl}
-                          <span class="workflowFlag" aria-hidden="true">{FIAT_MARKS[step.currency.toUpperCase()]}</span>
-                        {:else}
-                          <span class="workflowIcon" aria-hidden="true"><img src={step.iconUrl ?? assetIcon(step.currency)} alt="" width="15" height="15" loading="lazy" decoding="async" /></span>
-                        {/if}
-                        <span>{assetLabel(step.currency)}</span>
+                      {#if stepIndex > 0}<span class="workflowArrow" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 12h16m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span>{/if}
+                      <span class="workflowControl">
+                        <span class="workflowAsset">
+                          {#if FIAT_MARKS[step.currency.toUpperCase()] && !step.iconUrl}
+                            <span class="workflowFlag" aria-hidden="true">{FIAT_MARKS[step.currency.toUpperCase()]}</span>
+                          {:else}
+                            <span class="workflowIcon" aria-hidden="true"><img src={step.iconUrl ?? assetIcon(step.currency)} alt="" width="18" height="18" loading="lazy" decoding="async" /></span>
+                          {/if}
+                          <strong>{step.currency.toUpperCase()}</strong>
+                        </span>
                         {#if step.network}
-                          <span class="workflowNetwork" aria-label={t("Network: {network}", { network: step.networkLabel ?? compactNetwork(step.network) }, $locale)}>
-                            <span aria-hidden="true">·</span>
-                            <span class="workflowNetworkIcon" aria-hidden="true"><img src={networkIcon(step.network)} alt="" width="14" height="14" loading="lazy" decoding="async" /></span>
-                            <span>{step.networkLabel ?? compactNetwork(step.network)}</span>
+                          <span class="workflowNetwork" aria-label={t("Network: {network}", { network: readableNetwork(step.network) }, $locale)} title={readableNetwork(step.network)}>
+                            <span class="workflowNetworkIcon" aria-hidden="true"><img src={networkIcon(step.network)} alt="" width="18" height="18" loading="lazy" decoding="async" /></span>
                           </span>
                         {/if}
+                        {#if step.provider}
+                          <span class="workflowVenue" title={venueName(step.provider)}><span class="workflowVenueIcon" aria-hidden="true"><img src={venueIcon(step.provider)} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackVenueIcon(event, step.provider ?? "")} /></span><strong>{venueName(step.provider)}</strong></span>
+                        {/if}
                       </span>
-                      {#if step.provider}
-                        <span class="workflowVenue"><span aria-hidden="true">(</span><span class="workflowVenueIcon" aria-hidden="true"><img src={venueIcon(step.provider)} alt="" width="12" height="12" loading="lazy" decoding="async" on:error={(event) => fallbackVenueIcon(event, step.provider ?? "")} /></span><span>{venueName(step.provider)}</span><span aria-hidden="true">)</span></span>
-                      {/if}
                     </span>
                   {/each}
                   </span>
@@ -330,6 +336,11 @@
   gap: 8px;
   flex: 0 0 auto;
 }
+
+.activityButton { display: none; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; padding: 0; border: 1px solid #5d7732; border-radius: 9px; background: #40582a; cursor: pointer; }
+.activityButton:hover { background: #587839; }
+.activityButton:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+@media (max-width: 980px) { .activityButton { display: grid; } }
 
 .resultSummary,
 .foundVenues,
@@ -797,19 +808,16 @@
 .workflow {
   position: relative;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
+  gap: 6px 8px;
   padding-top: 1px;
   width: 100%;
   min-width: 0;
   z-index: 1;
-  overflow: hidden;
   color: rgba(255, 255, 255, 0.55);
-  font-size: 9px;
-  font-weight: 650;
-  line-height: 1.5;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1;
 }
 
 .routeQuoteMeta {
@@ -832,24 +840,45 @@
 }
 
 .workflowPart {
-  gap: 3px;
+  max-width: 100%;
+  gap: 6px;
+}
+
+.workflowControl {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid #d7dcd3;
+  border-radius: 5px;
+  background: #e7ebe2;
 }
 
 .workflowAsset {
-  gap: 4px;
+  flex: 0 0 auto;
+  gap: 6px;
+  padding: 5px 8px 5px 6px;
+  color: var(--color-text);
+}
+
+.workflowAsset strong {
+  font-size: 11px;
+  font-weight: 850;
 }
 
 .workflowNetwork {
   display: inline-flex;
-  min-width: 0;
+  flex: 0 0 auto;
   align-items: center;
-  gap: 3px;
+  padding: 5px 7px;
+  border-left: 1px solid #d7dcd3;
 }
 
 .workflowNetworkIcon {
   display: inline-grid;
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   flex: 0 0 auto;
   place-items: center;
   overflow: hidden;
@@ -874,15 +903,14 @@
 }
 
 .workflowIcon {
-  width: 15px;
-  height: 15px;
+  width: 18px;
+  height: 18px;
   background: rgba(255, 255, 255, 0.08);
 }
 
 .workflowVenueIcon {
-  width: 12px;
-  height: 12px;
-  margin: 0 2px;
+  width: 18px;
+  height: 18px;
 }
 
 .workflowIcon img,
@@ -901,12 +929,34 @@
 }
 
 .workflowVenue {
-  color: rgba(255, 255, 255, 0.45);
+  flex: 0 1 auto;
+  gap: 6px;
+  padding: 5px 8px 5px 7px;
+  border-left: 1px solid #d7dcd3;
+  color: var(--color-text);
+}
+
+.workflowVenue strong {
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .workflowArrow {
+  display: inline-grid;
+  width: 20px;
+  height: 20px;
   flex: 0 0 auto;
-  color: rgba(255, 255, 255, 0.32);
+  place-items: center;
+  color: var(--color-text);
+}
+
+.workflowArrow svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .skeletonList {
@@ -917,6 +967,7 @@
   flex-direction: column;
   gap: 9px;
   margin-top: 14px;
+  overflow: hidden;
 }
 
 .searchingVenues {
@@ -960,10 +1011,12 @@
 
 .skeletonCard {
   display: flex;
-  min-height: 116px;
+  min-height: 0;
+  flex: 1 1 0;
   flex-direction: column;
-  gap: 12px;
-  padding: 17px;
+  justify-content: center;
+  gap: clamp(6px, 1vh, 12px);
+  padding: clamp(10px, 1.3vh, 17px);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.04);
@@ -1203,12 +1256,8 @@
 }
 
 .workflowVenue {
-  color: var(--color-text-soft);
+  color: var(--color-text);
   font-weight: 750;
-}
-
-.workflowArrow {
-  color: var(--color-text-faint);
 }
 
 .bestBadge {
@@ -1286,6 +1335,57 @@
   .panel {
     height: 520px;
     padding: 16px;
+  }
+
+  .routeActionRow {
+    gap: 5px;
+  }
+
+  .workflow {
+    gap: 3px;
+  }
+
+  .workflow:has(> .workflowPart:nth-child(2):last-child) {
+    flex-wrap: nowrap;
+  }
+
+  .workflow:has(> .workflowPart:nth-child(2):last-child) > .workflowPart:first-child {
+    flex-shrink: 0;
+  }
+
+  .workflowPart {
+    gap: 2px;
+  }
+
+  .workflowAsset {
+    gap: 3px;
+    padding: 4px 5px 4px 4px;
+  }
+
+  .workflowNetwork {
+    padding: 4px 3px;
+  }
+
+  .workflowVenue {
+    gap: 3px;
+    padding: 4px 5px 4px 4px;
+  }
+
+  .workflowAsset strong,
+  .workflowVenue strong {
+    font-size: 10px;
+  }
+
+  .workflowIcon,
+  .workflowNetworkIcon,
+  .workflowVenueIcon {
+    width: 12px;
+    height: 12px;
+  }
+
+  .workflowArrow {
+    width: 13px;
+    height: 13px;
   }
 }
 
@@ -1389,6 +1489,16 @@
 :global(html[data-theme="dark"]) .workflowAsset,
 :global(html[data-theme="dark"]) .workflowVenue {
   background: transparent;
+}
+
+:global(html[data-theme="dark"]) .workflowControl {
+  border-color: #3b3b3b;
+  background: #2a2a2a;
+}
+
+:global(html[data-theme="dark"]) .workflowNetwork,
+:global(html[data-theme="dark"]) .workflowVenue {
+  border-color: #3b3b3b;
 }
 
 :global(html[data-theme="dark"]) .skeletonShort,

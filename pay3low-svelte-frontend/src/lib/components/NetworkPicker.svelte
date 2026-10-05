@@ -3,6 +3,8 @@
   import type { CryptoNetwork } from "$lib/networks";
   import { networkIcon } from "$lib/icons";
   import { locale, t } from "$lib/i18n";
+  import { fiatFlagUrl } from "$lib/currency-flags";
+  import { lockPageScroll } from "$lib/page-scroll-lock";
   import PickerOptionCard from "./PickerOptionCard.svelte";
 
   type CurrencyChoice = {
@@ -22,8 +24,7 @@
   export let onSelect: (network: CryptoNetwork) => void = () => {};
   export let onSelectCurrency: (currency: string) => void = () => {};
   let wasOpen = false;
-  let previousOverflow = "";
-  let previousOverscrollBehavior = "";
+  let unlockPage: (() => void) | undefined;
   let dialog: HTMLDivElement;
   let dragging = false;
   let dragStartY = 0;
@@ -58,22 +59,16 @@
     if (open === wasOpen) return;
     wasOpen = open;
     if (open) {
-      previousOverflow = document.body.style.overflow;
-      previousOverscrollBehavior = document.body.style.overscrollBehavior;
-      document.body.style.overflow = "hidden";
-      document.body.style.overscrollBehavior = "none";
+      unlockPage = lockPageScroll();
       window.addEventListener("keydown", onKeyDown);
     } else {
-      document.body.style.overflow = previousOverflow;
-      document.body.style.overscrollBehavior = previousOverscrollBehavior;
+      unlockPage?.();
+      unlockPage = undefined;
       window.removeEventListener("keydown", onKeyDown);
     }
   });
   onDestroy(() => {
-    if (typeof document !== "undefined" && wasOpen) {
-      document.body.style.overflow = previousOverflow;
-      document.body.style.overscrollBehavior = previousOverscrollBehavior;
-    }
+    unlockPage?.();
     if (typeof window !== "undefined") window.removeEventListener("keydown", onKeyDown);
   });
 </script>
@@ -92,12 +87,12 @@
         {#if mode === "currency"}
           {#each currencies as currency (currency.id)}
             {@const isSelected = currency.id === selectedCurrency}
-            <PickerOptionCard name={currency.id} meta={currency.name} initials={currency.mark} color={currency.color} selected={isSelected} onSelect={() => onSelectCurrency(currency.id)} />
+            <PickerOptionCard name={currency.id} meta={currency.name} iconUrl={fiatFlagUrl(currency.id)} initials={currency.mark} color={currency.color} selected={isSelected} onSelect={() => onSelectCurrency(currency.id)} />
           {/each}
         {:else}
           {#each networks as network (network.id)}
             {@const isSelected = network.id === selected?.id}
-            <PickerOptionCard name={network.name} meta={network.currencies.join(" · ")} iconUrl={networkIcon(network.name)} initials={network.name.slice(0, 2).toUpperCase()} color="#eef2ea" selected={isSelected} onSelect={() => onSelect(network)} />
+            <PickerOptionCard name={network.name} iconUrl={networkIcon(network.name)} initials={network.name.slice(0, 2).toUpperCase()} color="#eef2ea" selected={isSelected} onSelect={() => onSelect(network)} />
           {/each}
         {/if}
       </section></div></div>

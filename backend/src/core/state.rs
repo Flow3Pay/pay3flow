@@ -3,6 +3,7 @@ use crate::banks::BanksService;
 use crate::core::jwt::Jwt;
 use crate::core::redis::RedisPool;
 use crate::db::DbPool;
+use crate::market_prices::MarketPriceService;
 use crate::p2p::P2pSearchService;
 use crate::pairs::ExchangePairsService;
 use crate::payments::PaymentService;
@@ -43,6 +44,8 @@ pub struct AppState {
     pub reputation: ServiceReputation,
     /// Non-custodial execution sessions for executable provider routes.
     pub route_executions: RouteExecutionService,
+    /// Cached indicative USD prices for the converter.
+    pub market_prices: MarketPriceService,
 }
 
 impl AppState {
@@ -64,6 +67,7 @@ impl AppState {
         route_quotes: Arc<RouteQuoteService<LiveEdgeQuoteSource>>,
         reputation: ServiceReputation,
         route_executions: RouteExecutionService,
+        market_prices: MarketPriceService,
     ) -> Self {
         Self {
             pool,
@@ -82,6 +86,7 @@ impl AppState {
             route_quotes,
             reputation,
             route_executions,
+            market_prices,
         }
     }
 }

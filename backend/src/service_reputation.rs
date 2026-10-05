@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -23,6 +23,58 @@ pub enum ReputationError {
     InvalidTrackingToken,
     #[error(transparent)]
     Internal(#[from] anyhow::Error),
+}
+
+#[derive(Debug, Serialize)]
+pub struct RouteSearchActivityHour {
+    pub started_at: DateTime<Utc>,
+    pub count: i64,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+pub enum SearchActivityPeriod {
+    #[serde(rename = "1h")]
+    Hour,
+    #[serde(rename = "1d")]
+    Day,
+    #[default]
+    #[serde(rename = "1w")]
+    Week,
+    #[serde(rename = "1m")]
+    Month,
+    #[serde(rename = "3m")]
+    ThreeMonths,
+    #[serde(rename = "6m")]
+    SixMonths,
+    #[serde(rename = "1y")]
+    Year,
+    #[serde(rename = "all")]
+    All,
+}
+
+impl SearchActivityPeriod {
+    fn aggregation(self, oldest: Option<DateTime<Utc>>) -> (&'static str, &'static str) {
+        match self {
+            Self::Hour => ("minute", "59 minutes"),
+            Self::Day => ("hour", "23 hours"),
+            Self::Week => ("hour", "167 hours"),
+            Self::Month => ("day", "29 days"),
+            Self::ThreeMonths => ("day", "89 days"),
+            Self::SixMonths => ("day", "179 days"),
+            Self::Year => ("day", "364 days"),
+            Self::All => {
+                let age = oldest.map(|started| Utc::now().signed_duration_since(started));
+                let grain = match age {
+                    Some(age) if age <= Duration::days(7) => "hour",
+                    Some(age) if age <= Duration::days(365) => "day",
+                    Some(age) if age <= Duration::days(365 * 5) => "week",
+                    Some(_) => "month",
+                    None => "hour",
+                };
+                (grain, "0 seconds")
+            }
+        }
+    }
 }
 
 impl From<tokio_postgres::Error> for ReputationError {
@@ -572,19 +624,91 @@ return {count, spam}
         }
     }
 
-    pub async fn start_search(&self, search_id: Uuid) -> Result<(), ReputationError> {
+    pub async fn start_search(
+        &self,
+        search_id: Uuid,
+        source_currency: &str,
+        target_currency: &str,
+        anonymous_id: Option<Uuid>,
+        count_activity: bool,
+    ) -> Result<(), ReputationError> {
         let client = self.pool.get().await?;
+        let source_currency = source_currency.trim().to_ascii_uppercase();
+        let target_currency = target_currency.trim().to_ascii_uppercase();
         client
             .execute(
                 r#"
-INSERT INTO route_searches (id, status, routes_found)
-VALUES ($1, 'searching', 0)
+INSERT INTO route_searches (id, source_currency, target_currency, anonymous_id, counted_for_activity, status, routes_found)
+VALUES ($1, $2, $3, $4, $5, 'searching', 0)
 ON CONFLICT (id) DO NOTHING
 "#,
-                &[&search_id],
+                &[&search_id, &source_currency, &target_currency, &anonymous_id, &count_activity],
             )
             .await?;
         Ok(())
+    }
+
+    pub async fn search_activity(
+        &self,
+        source_currency: &str,
+        target_currency: &str,
+        period: SearchActivityPeriod,
+    ) -> Result<Vec<RouteSearchActivityHour>, ReputationError> {
+        let client = self.pool.get().await?;
+        let oldest: Option<DateTime<Utc>> = if matches!(period, SearchActivityPeriod::All) {
+            client
+                .query_one(
+                    "SELECT min(created_at) FROM route_searches WHERE source_currency = $1 AND target_currency = $2 AND counted_for_activity AND status = 'finished'",
+                    &[&source_currency, &target_currency],
+                )
+                .await?
+                .get(0)
+        } else {
+            None
+        };
+        let (grain, span) = period.aggregation(oldest);
+        let rows = client
+            .query(
+                r#"
+WITH bounds AS (
+    SELECT date_trunc($3::text, now()) AS end_bucket,
+           CASE $3::text
+               WHEN 'minute' THEN interval '1 minute'
+               WHEN 'hour' THEN interval '1 hour'
+               WHEN 'day' THEN interval '1 day'
+               WHEN 'week' THEN interval '1 week'
+               ELSE interval '1 month'
+           END AS bucket_size
+), hours AS (
+    SELECT generate_series(
+        least(date_trunc($3::text, coalesce($5::timestamptz, now() - ($4::text)::interval)), end_bucket - bucket_size),
+        end_bucket,
+        bucket_size
+    ) AS started_at, bucket_size
+    FROM bounds
+)
+SELECT hours.started_at, count(searches.id)::bigint
+FROM hours
+LEFT JOIN route_searches searches
+    ON searches.created_at >= hours.started_at
+    AND searches.created_at < hours.started_at + hours.bucket_size
+    AND searches.source_currency = $1
+    AND searches.target_currency = $2
+    AND searches.counted_for_activity
+    AND searches.status = 'finished'
+GROUP BY hours.started_at
+ORDER BY hours.started_at
+"#,
+                &[&source_currency, &target_currency, &grain, &span, &oldest],
+            )
+            .await?;
+        Ok(rows
+            .into_iter()
+            .map(|row| RouteSearchActivityHour {
+                started_at: row.get(0),
+                count: row.get(1),
+            })
+            .collect())
     }
 
     pub async fn count_searches_last_hour(&self) -> Result<i64, ReputationError> {

@@ -4,7 +4,7 @@ use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use axum::Json;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::time::Duration;
@@ -18,19 +18,63 @@ use crate::p2p::{
 };
 use crate::route_engine::canonical_network_id;
 use crate::service_reputation::{
-    average_reputation, vote_quality_score, ReputationError, RouteServiceStats, ServiceLink,
-    ServiceLinkKind, ServiceStats, VoteChoice,
+    average_reputation, vote_quality_score, ReputationError, RouteServiceStats,
+    SearchActivityPeriod, ServiceLink, ServiceLinkKind, ServiceStats, VoteChoice,
 };
 
 #[derive(Debug, Deserialize)]
 pub struct RouteHttpMetadata {
     anonymous_id: Option<Uuid>,
+    count_activity: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RouteActivityQuery {
+    source_currency: String,
+    target_currency: String,
+    #[serde(default)]
+    period: SearchActivityPeriod,
+}
+
+#[derive(Serialize)]
+pub struct RouteActivityResponse {
+    source_currency: String,
+    target_currency: String,
+    hours: Vec<crate::service_reputation::RouteSearchActivityHour>,
+}
+
+/// Hourly search counts for a currency direction during the last seven days.
+/// When a browser identity is provided, its own searches are excluded.
+pub async fn route_activity(
+    State(state): State<AppState>,
+    Query(query): Query<RouteActivityQuery>,
+) -> Result<Json<RouteActivityResponse>, AppError> {
+    let source_currency = query.source_currency.trim().to_ascii_uppercase();
+    let target_currency = query.target_currency.trim().to_ascii_uppercase();
+    let valid = |currency: &str| {
+        (2..=12).contains(&currency.len())
+            && currency.bytes().all(|byte| byte.is_ascii_alphanumeric())
+    };
+    if !valid(&source_currency) || !valid(&target_currency) {
+        return Err(AppError::BadRequest("Invalid currency pair".into()));
+    }
+    let hours = state
+        .reputation
+        .search_activity(&source_currency, &target_currency, query.period)
+        .await
+        .map_err(map_reputation_error)?;
+    Ok(Json(RouteActivityResponse {
+        source_currency,
+        target_currency,
+        hours,
+    }))
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RouteSocketRequest {
     anonymous_id: Uuid,
+    count_activity: Option<bool>,
     query: P2pRouteSearchQuery,
 }
 
@@ -80,7 +124,13 @@ pub async fn routes(
     let search_id = Uuid::new_v4();
     state
         .reputation
-        .start_search(search_id)
+        .start_search(
+            search_id,
+            &query.source_fiat,
+            &query.target_fiat,
+            metadata.anonymous_id,
+            metadata.count_activity.unwrap_or(false),
+        )
         .await
         .map_err(map_reputation_error)?;
     let mut response = match cached_route_response(&state, &query).await {
@@ -141,7 +191,17 @@ async fn route_socket(state: AppState, mut socket: WebSocket) {
         }
     };
     let search_id = Uuid::new_v4();
-    if let Err(error) = state.reputation.start_search(search_id).await {
+    if let Err(error) = state
+        .reputation
+        .start_search(
+            search_id,
+            &request.query.source_fiat,
+            &request.query.target_fiat,
+            Some(request.anonymous_id),
+            request.count_activity.unwrap_or(false),
+        )
+        .await
+    {
         let _ = send_json(
             &mut socket,
             json!({ "type": "search_failed", "search_id": search_id, "error": error.to_string() }),

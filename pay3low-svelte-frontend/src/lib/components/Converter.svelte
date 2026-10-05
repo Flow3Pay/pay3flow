@@ -1,13 +1,20 @@
 <script lang="ts">
-  import { afterUpdate, onMount, onDestroy } from "svelte";
-  import { fetchCorridors, fetchP2pRoutes, fetchProviders, recordInstructionOpen, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderDefinition, type ProviderGuidance, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote, type VenueSearchStatus } from "$lib/exchange";
+  import { afterUpdate, onMount, onDestroy, tick } from "svelte";
+  import { quintOut } from "svelte/easing";
+  import { fly, slide } from "svelte/transition";
+  import { fetchCorridors, fetchMarketPrices, fetchP2pRoutes, fetchProviders, recordInstructionOpen, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderDefinition, type ProviderGuidance, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote, type VenueSearchStatus } from "$lib/exchange";
   import { FALLBACK_NETWORK, fetchNetworks, type CryptoNetwork } from "$lib/networks";
   import { assetIcon, networkIcon, swapIcon, venueIcon } from "$lib/icons";
   import { fetchPaymentMethods, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
   import { getAnonymousUserId, registerAnonymousUser } from "$lib/anonymous-user";
   import { locale, t } from "$lib/i18n";
   import { SearchResponseMetrics } from "$lib/response-metrics";
+  import { fetchRouteSearchActivity, SEARCH_ACTIVITY_PERIODS, type RouteSearchActivityHour, type SearchActivityPeriod } from "$lib/route-activity";
+  import { fiatFlagUrl } from "$lib/currency-flags";
+  import { lockPageScroll } from "$lib/page-scroll-lock";
   import SidePanel from "./SidePanel.svelte";
+  import SearchActivityChart from "./SearchActivityChart.svelte";
+  import SearchActivityModal from "./SearchActivityModal.svelte";
   import CurrencyPicker from "./CurrencyPicker.svelte";
   import NetworkPicker from "./NetworkPicker.svelte";
 
@@ -29,7 +36,7 @@
   let INTERMEDIARY_ASSETS: string[] = [];
   const EXCHANGE_METHODS: ExchangeMethod[] = ["p2p", "exchanger"];
   let paymentMethods: PaymentMethod[] = [];
-  const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", sources: "pay3flow.exchange.p2p-sources", knownSources: "pay3flow.exchange.known-p2p-sources", methods: "pay3flow.exchange.methods", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", sourceNetwork: "pay3flow.exchange.source-network", targetNetwork: "pay3flow.exchange.target-network", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets" };
+  const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", activityPeriod: "pay3flow.exchange.activity-period", activityVisible: "pay3flow.exchange.activity-visible", routesVisible: "pay3flow.exchange.routes-visible", sources: "pay3flow.exchange.p2p-sources", knownSources: "pay3flow.exchange.known-p2p-sources", methods: "pay3flow.exchange.methods", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", sourceNetwork: "pay3flow.exchange.source-network", targetNetwork: "pay3flow.exchange.target-network", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets" };
 
   let corridors: ExchangeCorridor[] = [];
   let corridorId = "";
@@ -70,15 +77,28 @@
   let clock = Date.now();
   let error: string | null = null;
   let anonymousId = "";
+  let activityHours: RouteSearchActivityHour[] = [];
+  let activityPeriod: SearchActivityPeriod = "1w";
+  let activityLoading = false;
+  let activityError = false;
+  let activityKey = "";
+  let activityDisplayKey = "";
+  let activityController: AbortController | null = null;
+  let activityModalOpen = false;
+  let activityExpanded = false;
+  let activityRevealElement: HTMLDivElement | undefined;
+  let routesRevealElement: HTMLDivElement | undefined;
+  let routesExpanded = true;
+  let introPlaying = true;
+  let introStarted = false;
+  let introOverlayElement: HTMLDivElement;
+  let heroHeadingElement: HTMLHeadingElement;
   let settingsElement: HTMLDivElement;
   let settingsDialog: HTMLDivElement;
   let settingsDragging = false;
   let settingsDragStartY = 0;
   let settingsDragDistance = 0;
   let settingsWasOpen = false;
-  let settingsScrollLocked = false;
-  let previousOverflow = "";
-  let previousOverscrollBehavior = "";
   let preferencesLoaded = false;
   let urlReady = false;
   let requestId = 0;
@@ -86,6 +106,11 @@
   let debounceTimer: number | undefined;
   let refreshTimer: number | undefined;
   let clockTimer: number | undefined;
+  let marketRefreshTimer: number | undefined;
+  let marketController: AbortController | null = null;
+  let marketPrices: Record<string, number> = {};
+  let marketPricesUpdatedAt = 0;
+  let marketUsd: { source: number | null; target: number | null } = { source: null, target: null };
   let initialSearchTimer: number | undefined;
   let routeRenderTimer: number | undefined;
   let routeRenderFrame: number | undefined;
@@ -101,7 +126,118 @@
   let responseMetrics = new SearchResponseMetrics();
   let foundVenueIds: string[] = [];
   $: activeLocale = $locale;
+  $: firstHeadline = headlineWords(t("Move money.", {}, activeLocale));
+  $: secondHeadline = headlineWords(t("Keep more.", {}, activeLocale));
   $: modalOpen = settingsOpen || exchangesOpen;
+
+  function headlineWords(value: string) {
+    const match = value.match(/^(\S+)\s+(.+?)([.!։。؟]+)$/u);
+    return match ? { first: match[1], second: match[2], punctuation: match[3] } : { first: value, second: "", punctuation: "" };
+  }
+
+  onMount(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      introPlaying = false;
+      return;
+    }
+    let introTimer: number | undefined;
+    const positionIntro = () => {
+      const heading = heroHeadingElement.getBoundingClientRect();
+      introOverlayElement.style.setProperty("--intro-x", `${heading.left + heading.width / 2 - window.innerWidth / 2}px`);
+      introOverlayElement.style.setProperty("--intro-y", `${heading.top + heading.height / 2 - window.innerHeight / 2}px`);
+    };
+    const frame = window.requestAnimationFrame(() => {
+      positionIntro();
+      window.addEventListener("resize", positionIntro, { passive: true });
+      introStarted = true;
+      introTimer = window.setTimeout(() => introPlaying = false, 8000);
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", positionIntro);
+      if (introTimer) window.clearTimeout(introTimer);
+    };
+  });
+
+  async function refreshActivity(source: string, target: string, period: SearchActivityPeriod, refreshedAt: number | null, interval: number) {
+    const displayKey = `${source}|${target}|${period}`;
+    const key = `${displayKey}|${refreshedAt ?? ""}|${interval}`;
+    if (key === activityKey) return;
+    activityKey = key;
+    activityController?.abort();
+    activityController = new AbortController();
+    if (activityDisplayKey !== displayKey) activityHours = [];
+    activityDisplayKey = displayKey;
+    activityLoading = true;
+    activityError = false;
+    try {
+      const response = await fetchRouteSearchActivity(source, target, period, activityController.signal);
+      if (activityKey === key) activityHours = response.hours;
+    } catch (error) {
+      if (activityKey === key && !(error instanceof DOMException && error.name === "AbortError")) activityError = true;
+    } finally {
+      if (activityKey === key) activityLoading = false;
+    }
+  }
+
+  $: if (typeof document !== "undefined" && !document.hidden && selectedSourceCurrency && selectedTargetCurrency) void refreshActivity(selectedSourceCurrency, selectedTargetCurrency, activityPeriod, lastUpdatedAt, Math.floor(clock / 30_000));
+
+  function selectActivityPeriod(period: SearchActivityPeriod) {
+    activityPeriod = period;
+    try { localStorage.setItem(STORAGE.activityPeriod, period); } catch {}
+  }
+
+  function setActivityExpanded(expanded: boolean) {
+    activityExpanded = expanded;
+    try { localStorage.setItem(STORAGE.activityVisible, String(expanded)); } catch {}
+  }
+
+  function bringActivityIntoView(behavior: ScrollBehavior = "smooth") {
+    void tick().then(() => window.requestAnimationFrame(() => {
+      const chart = activityRevealElement;
+      if (!chart) return;
+      const bottom = chart.getBoundingClientRect().bottom;
+      const visibleBottom = window.innerHeight - 16;
+      if (bottom > visibleBottom) window.scrollTo({ top: window.scrollY + bottom - visibleBottom, behavior });
+    }));
+  }
+
+  function toggleActivityGraph() {
+    if (window.matchMedia("(max-width: 980px)").matches) { activityExpanded = false; activityModalOpen = true; }
+    else { setActivityExpanded(!activityExpanded); if (activityExpanded && !routesExpanded) bringActivityIntoView(); }
+  }
+
+  function toggleRoutes() {
+    routesExpanded = !routesExpanded;
+    if (routesExpanded && window.matchMedia("(max-width: 980px)").matches) {
+      void tick().then(() => window.requestAnimationFrame(() => {
+        const panel = routesRevealElement;
+        if (!panel) return;
+        window.scrollTo({
+          top: window.scrollY + panel.getBoundingClientRect().top - 16,
+          behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"
+        });
+      }));
+    }
+    if (!routesExpanded && activityExpanded) bringActivityIntoView();
+    try { localStorage.setItem(STORAGE.routesVisible, String(routesExpanded)); } catch {}
+  }
+
+  function routesRevealIn(node: Element) {
+    return fly(node, window.matchMedia("(max-width: 980px)").matches
+      ? { y: 18, duration: 320, easing: quintOut }
+      : { x: 18, duration: 380, easing: quintOut });
+  }
+
+  function routesRevealOut(node: Element) {
+    return window.matchMedia("(max-width: 980px)").matches
+      ? slide(node, { duration: 320, easing: quintOut })
+      : fly(node, { x: 18, duration: 380, easing: quintOut });
+  }
+
+  function closeInlineActivityOnMobile() {
+    if (window.matchMedia("(max-width: 980px)").matches) activityExpanded = false;
+  }
 
   function readSharedExchange() {
     const match = window.location.hash.match(/^#\/swap\/([^/?#]+)\/([^/?#]+)(?:\?([^#]*))?$/i);
@@ -137,11 +273,8 @@
   };
   const intermediaryIcon = (asset: string) => paymentMethods.find((method) => method.kind === "wallet" && method.currency === asset)?.iconUrl ?? assetIcon(asset);
   const networkName = (id: string | null | undefined) => !id ? "internal" : networks.find((network) => network.id === id)?.name ?? id;
-  const locationLabel = (country: string, currency: string) => { try { return `${new Intl.DisplayNames([activeLocale], { type: "region" }).of(country) ?? country} · ${currency}`; } catch { return `${country} · ${currency}`; } };
   const methodNoun = (method: PaymentMethod | null | undefined) => method?.kind === "wallet" ? "asset" : method?.kind === "cash" ? "payment method" : "bank";
-  const methodAvailability = (method: PaymentMethod | null | undefined) => method?.kind === "wallet" ? "digital wallet" : method?.kind === "cash" ? "cash" : "bank transfer";
-  const methodTitle = (method: PaymentMethod | null | undefined) => method?.name ?? "Select payment method";
-  const methodDetail = (method: PaymentMethod | null | undefined) => method?.kind === "wallet" ? `${method.currency} · Digital asset` : method?.kind === "cash" ? `${method.currency} · Cash settlement` : method ? locationLabel(method.country, method.currency) : "Unavailable";
+  const methodTitle = (method: PaymentMethod | null | undefined) => method?.kind === "wallet" ? method.currency : method?.name ?? "Select payment method";
   const currencyMark = (currency: string) => currency === "USD" ? "$" : currency === "RUB" ? "₽" : currency === "AMD" ? "֏" : currency === "BYN" ? "Br" : currency === "UAH" ? "₴" : currency === "KZT" ? "₸" : currency.slice(0, 1);
 
   function providerLabel(provider: ProviderDefinition) {
@@ -412,6 +545,8 @@
   $: targetMethod = resolveMethod(targetMethods, targetMethodId, targetCountry, targetCurrency);
   $: sourceCurrencyChoice = sourceMethod?.currency || sourceCurrency;
   $: targetCurrencyChoice = targetMethod?.currency || targetCurrency;
+  $: sourceCurrencyFlag = sourceMethod?.kind === "wallet" ? null : fiatFlagUrl(sourceCurrencyChoice);
+  $: targetCurrencyFlag = targetMethod?.kind === "wallet" ? null : fiatFlagUrl(targetCurrencyChoice);
   $: selectedSourceCurrency = sourceMethod?.currency || sourceCurrency;
   $: selectedTargetCurrency = targetMethod?.currency || targetCurrency;
   $: sourceNetworks = sourceMethod?.kind === "wallet" ? networks.filter((network) => network.currencies.includes(sourceMethod!.currency)) : [];
@@ -428,6 +563,12 @@
   $: previewRoute = selected ?? routes.find((route) => route.status === "complete" && route.is_current_best) ?? routes.find((route) => route.status === "complete") ?? null;
   $: displayedSourceAmount = amountSide === "target" && targetAmountNeedsRate && amountNumber(amount) <= 0 ? "" : amount;
   $: displayedTargetAmount = amountSide === "target" && !previewRoute ? targetAmount : amountFromRoute(previewRoute);
+  $: marketUsd = {
+    source: sourceMethod?.kind === "wallet" ? calculateMarketUsd(displayedSourceAmount, marketPrices[selectedSourceCurrency]) : null,
+    target: targetMethod?.kind === "wallet" ? calculateMarketUsd(displayedTargetAmount, marketPrices[selectedTargetCurrency]) : null,
+  };
+  $: converterAmountDigits = Math.min(14, Math.max(10, displayedSourceAmount.replace(/\D/g, "").length, displayedTargetAmount.replace(/\D/g, "").length));
+  $: converterWidth = 550 + (converterAmountDigits - 10) * 21;
   $: secondsUntilRefresh = refreshSeconds && lastUpdatedAt ? Math.max(0, refreshSeconds - Math.floor((clock - lastUpdatedAt) / 1000)) : null;
   $: refreshProgress = secondsUntilRefresh !== null && refreshSeconds ? ((refreshSeconds - secondsUntilRefresh) / refreshSeconds) * 100 : 0;
   $: exchangeChoices = p2pSources.filter((source) => source.searchMode !== "always_on");
@@ -445,6 +586,36 @@
       localStorage.setItem(STORAGE.amount, value); localStorage.setItem(STORAGE.refresh, String(refresh)); localStorage.setItem(STORAGE.sources, sources.join(",")); localStorage.setItem(STORAGE.methods, methods.join(",")); localStorage.setItem(STORAGE.assets, assets.join(",")); localStorage.setItem(STORAGE.corridor, corridorValue); localStorage.setItem(STORAGE.sourceMethod, sourceMethodValue); localStorage.setItem(STORAGE.targetMethod, targetMethodValue); localStorage.setItem(STORAGE.sourceNetwork, sourceNetworkValue); localStorage.setItem(STORAGE.targetNetwork, targetNetworkValue); localStorage.setItem(STORAGE.direction, String(reversed));
     } catch {}
   }
+  async function refreshMarketPrices() {
+    marketController?.abort();
+    const controller = new AbortController();
+    marketController = controller;
+    try {
+      const response = await fetchMarketPrices(controller.signal);
+      if (controller.signal.aborted) return;
+      if (Object.keys(response.prices).length) {
+        marketPrices = response.prices;
+        marketPricesUpdatedAt = response.updated_at ?? Math.floor(Date.now() / 1000);
+      } else if (marketPricesUpdatedAt && Date.now() / 1000 - marketPricesUpdatedAt >= 6 * 60 * 60) {
+        marketPrices = {};
+      }
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        if (marketPricesUpdatedAt && Date.now() / 1000 - marketPricesUpdatedAt >= 6 * 60 * 60) marketPrices = {};
+        console.warn("Market prices unavailable", error);
+      }
+    }
+  }
+  function calculateMarketUsd(value: string, price: number | undefined): number | null {
+    const quantity = amountNumber(value);
+    if (!Number.isFinite(quantity) || quantity <= 0 || !price || !Number.isFinite(price)) return null;
+    const total = quantity * price;
+    return Number.isFinite(total) ? total : null;
+  }
+  function formatMarketUsd(value: number) {
+    if (value > 0 && value < 0.01) return "<$0.01";
+    return `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
   function updateHash(source: string, target: string, value: string) {
     const params = new URLSearchParams(); if (value !== "0") params.set("amount", value);
     const query = params.toString();
@@ -457,7 +628,7 @@
   }
   function manageRefresh(seconds: RefreshSeconds, updatedAt: number | null, validAmount: boolean) {
     if (refreshTimer) window.clearInterval(refreshTimer);
-    if (seconds && updatedAt && validAmount) refreshTimer = window.setInterval(startSearch, seconds * 1000);
+    if (seconds && updatedAt && validAmount) refreshTimer = window.setInterval(() => void startSearch(false), seconds * 1000);
   }
   function resetResults() {
     controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; displayRoutes([]); routesFound = 0; selected = null; selectionPinnedByUser = false; instructionsRoute = null; lastUpdatedAt = null; searching = false; awaitingFirstRoute = false; foundVenueIds = []; foundVenues = []; venueStats = {}; error = null;
@@ -571,6 +742,7 @@
   }
 
   function runPrimaryAction() {
+    if (searching) return;
     if (previewRoute) {
       void openInstructions(previewRoute);
       return;
@@ -599,7 +771,7 @@
     }
   }
 
-  async function startSearch() {
+  async function startSearch(countActivity = true) {
     if (debounceTimer) window.clearTimeout(debounceTimer);
     debounceTimer = undefined;
     if (!corridor || !sourceMethod || !targetMethod) return;
@@ -621,7 +793,7 @@
     controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; controller = new AbortController(); const signal = controller.signal; const currentRequest = ++requestId; searching = true; awaitingFirstRoute = true; routesFound = 0; foundVenueIds = []; foundVenues = []; venueStats = {}; responseMetrics = new SearchResponseMetrics(); error = null;
     let rerunForTargetAmount = false;
     try {
-      const liveQuery = { sourceFiat: selectedSourceCurrency, targetFiat: selectedTargetCurrency, sourceAmount: value, intermediaryAssets: !sourceWallet && !targetWallet && selectedIntermediaryAssets.length ? selectedIntermediaryAssets : undefined, sourceNetwork: sourceWallet ? sourceNetwork?.id : undefined, targetNetwork: targetWallet ? targetNetwork?.id : undefined, sourcePaymentMethod: sourceWallet ? undefined : sourceMethod.p2pQuery, targetPaymentMethod: targetWallet ? undefined : targetMethod.p2pQuery, sourcePaymentFeePercent: sourceWallet ? 0 : sourceMethod.bankFeePercent, targetPaymentFeePercent: targetWallet ? 0 : targetMethod.bankFeePercent, sources: selectedSources, exchangeMode, allowCrossVenue: true, limit: 40 };
+      const liveQuery = { sourceFiat: selectedSourceCurrency, targetFiat: selectedTargetCurrency, sourceAmount: value, intermediaryAssets: !sourceWallet && !targetWallet && selectedIntermediaryAssets.length ? selectedIntermediaryAssets : undefined, sourceNetwork: sourceWallet ? sourceNetwork?.id : undefined, targetNetwork: targetWallet ? targetNetwork?.id : undefined, sourcePaymentMethod: sourceWallet ? undefined : sourceMethod.p2pQuery, targetPaymentMethod: targetWallet ? undefined : targetMethod.p2pQuery, sourcePaymentFeePercent: sourceWallet ? 0 : sourceMethod.bankFeePercent, targetPaymentFeePercent: targetWallet ? 0 : targetMethod.bankFeePercent, sources: selectedSources, exchangeMode, allowCrossVenue: true, limit: 40, countActivity };
       let response: P2pRouteSearchResponse;
       try {
         if (!anonymousId) throw new Error("Anonymous ID unavailable");
@@ -666,7 +838,7 @@
       error = cause instanceof Error ? cause.message : "Could not search live P2P markets";
     } finally {
       if (currentRequest === requestId) { searching = false; awaitingFirstRoute = false; }
-      if (rerunForTargetAmount) window.setTimeout(() => void startSearch(), 0);
+      if (rerunForTargetAmount) window.setTimeout(() => void startSearch(false), 0);
     }
   }
   function toggleSource(source: P2pSource) { initialSearchReady = true; selectedSources = selectedSources.includes(source) ? (selectedSources.length === 1 ? selectedSources : selectedSources.filter((item) => item !== source)) : [...selectedSources, source]; resetResults(); }
@@ -675,6 +847,34 @@
   function onDocumentMouseDown(event: MouseEvent) { if (modalOpen && settingsElement && !settingsElement.contains(event.target as Node)) closeSettings(); }
   function closeSettings() { settingsOpen = false; exchangesOpen = false; }
   function onSettingsKeyDown(event: KeyboardEvent) { if (event.key === "Escape") closeSettings(); }
+  function portalSettingsBackdrop(node: HTMLDivElement) {
+    const anchor = document.createComment("settings backdrop");
+    node.before(anchor);
+    const mobile = window.matchMedia("(max-width: 640px)");
+    let unlockPage: (() => void) | undefined;
+
+    const place = () => {
+      if (mobile.matches) {
+        document.body.appendChild(node);
+        unlockPage ??= lockPageScroll();
+      } else {
+        anchor.after(node);
+        unlockPage?.();
+        unlockPage = undefined;
+      }
+    };
+
+    place();
+    mobile.addEventListener("change", place);
+    return {
+      destroy() {
+        mobile.removeEventListener("change", place);
+        unlockPage?.();
+        node.remove();
+        anchor.remove();
+      }
+    };
+  }
   function startSettingsDrag(event: PointerEvent) {
     if (!window.matchMedia("(max-width: 640px)").matches) return;
     settingsDragging = true;
@@ -715,6 +915,8 @@
   }
 
   onMount(() => {
+    void refreshMarketPrices();
+    marketRefreshTimer = window.setInterval(() => void refreshMarketPrices(), 60 * 60 * 1000);
     const shared = readSharedExchange();
     let savedSourceIds: string[] = [];
     let savedKnownSourceIds: string[] = [];
@@ -729,6 +931,11 @@
       if (savedMethods.length) selectedExchangeMethods = EXCHANGE_METHODS.filter((method) => savedMethods.includes(method));
       const savedAssets = localStorage.getItem(STORAGE.assets); if (savedAssets != null) selectedIntermediaryAssets = [...new Set(savedAssets.split(",").map((asset) => asset.trim().toUpperCase()).filter(Boolean))];
       const savedRefresh = Number(localStorage.getItem(STORAGE.refresh)); if (REFRESH_OPTIONS.includes(savedRefresh as RefreshSeconds)) refreshSeconds = savedRefresh as RefreshSeconds;
+      const savedActivityPeriod = localStorage.getItem(STORAGE.activityPeriod); if (SEARCH_ACTIVITY_PERIODS.includes(savedActivityPeriod as SearchActivityPeriod)) activityPeriod = savedActivityPeriod as SearchActivityPeriod;
+      routesExpanded = localStorage.getItem(STORAGE.routesVisible) !== "false";
+      const savedActivityVisible = localStorage.getItem(STORAGE.activityVisible);
+      activityExpanded = !window.matchMedia("(max-width: 980px)").matches && savedActivityVisible === "true";
+      if (activityExpanded && !routesExpanded) bringActivityIntoView("auto");
     } catch {}
     void registerAnonymousUser(anonymousId).catch(() => {});
     preferencesLoaded = true;
@@ -768,52 +975,47 @@
     if (modalOpen === settingsWasOpen) return;
     settingsWasOpen = modalOpen;
     if (modalOpen) {
-      settingsScrollLocked = window.matchMedia("(max-width: 640px)").matches;
-      if (settingsScrollLocked) {
-        previousOverflow = document.body.style.overflow;
-        previousOverscrollBehavior = document.body.style.overscrollBehavior;
-        document.body.style.overflow = "hidden";
-        document.body.style.overscrollBehavior = "none";
-      }
       window.addEventListener("keydown", onSettingsKeyDown);
     } else {
-      if (settingsScrollLocked) {
-        document.body.style.overflow = previousOverflow;
-        document.body.style.overscrollBehavior = previousOverscrollBehavior;
-        settingsScrollLocked = false;
-      }
       window.removeEventListener("keydown", onSettingsKeyDown);
     }
   });
   onDestroy(() => {
     controller?.abort();
+    activityController?.abort();
+    marketController?.abort();
     cancelRouteRendering();
     if (debounceTimer) clearTimeout(debounceTimer);
     if (refreshTimer) clearInterval(refreshTimer);
     if (clockTimer) clearInterval(clockTimer);
+    if (marketRefreshTimer) clearInterval(marketRefreshTimer);
     if (initialSearchTimer) clearTimeout(initialSearchTimer);
     if (typeof document !== "undefined") document.removeEventListener("mousedown", onDocumentMouseDown);
-    if (typeof document !== "undefined" && settingsScrollLocked) {
-      document.body.style.overflow = previousOverflow;
-      document.body.style.overscrollBehavior = previousOverscrollBehavior;
-    }
     if (typeof window !== "undefined") window.removeEventListener("keydown", onSettingsKeyDown);
   });
 </script>
 
-<section class="shell" class:localeLong={activeLocale !== "en"} id="transfer">
-  <div class="hero"><h1>{t("Move money.", {}, activeLocale)} <span>{t("Keep more.", {}, activeLocale)}</span></h1><p>{t("Stop spending hours searching for an exchange.", {}, activeLocale)}</p></div>
-  <div class="workspace">
-    <div class="card">
+<svelte:window on:resize={closeInlineActivityOnMobile} />
+
+<section class="shell" class:localeLong={activeLocale !== "en"} class:introPlaying class:introReady={!introPlaying} id="transfer">
+  {#if introPlaying}
+    <div class="introOverlay" class:introStarted bind:this={introOverlayElement} aria-hidden="true">
+      <h1 class="introTitle" on:animationend={(event) => { if (event.animationName.endsWith("introDock")) introPlaying = false; }}><span class="introClip"><span class="introWord introWordMove">{firstHeadline.first}</span></span>{' '}<span class="introSecondWithDot"><span class="introClip"><span class="introWord introWordMoney">{firstHeadline.second}</span></span><span class="introPunctuation introFirstPunctuation">{firstHeadline.punctuation}</span></span>{' '}<span class="introEmphasis"><span class="introClip"><span class="introWord introWordKeep">{secondHeadline.first}</span></span>{' '}<span class="introSecondWithDot"><span class="introClip"><span class="introWord introWordMore">{secondHeadline.second}</span></span><span class="introPunctuation introLastPunctuation">{secondHeadline.punctuation}</span></span><img class="introMarker" src="/icons/ui/marker-down-right.svg" alt="" width="512" height="512" aria-hidden="true" /></span></h1>
+    </div>
+  {/if}
+  <div class="hero"><h1 bind:this={heroHeadingElement}>{t("Move money.", {}, activeLocale)} <span>{t("Keep more.", {}, activeLocale)}</span></h1><p>{t("Stop spending hours searching for an exchange.", {}, activeLocale)}</p></div>
+  <div class="workspace" class:activityExpanded class:routesCollapsed={!routesExpanded} style:--converter-width={`${converterWidth}px`} style:--amount-digits={converterAmountDigits}>
+    <div class="converterStack">
+    <div class="card" class:modalOpen>
       <div class="cardTop">
         <div class="modeTabs" aria-label={t("Exchange mode", {}, activeLocale)}><button type="button" class="modeActive">{t("Bridge", {}, activeLocale)}</button><button type="button" disabled>{t("History", {}, activeLocale)}</button></div>
         <div class="cardActions" bind:this={settingsElement}>
-          <button type="button" class="refreshButton" on:click={startSearch} disabled={!hasAmount || searching} aria-label="Refresh routes now"><svg class:refreshSpin={awaitingFirstRoute} width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M16.2 7.1A6.8 6.8 0 1 0 16.7 12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /><path d="M13.1 3.8h3.6v3.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
+          <button type="button" class="refreshButton" on:click={() => void startSearch()} disabled={!hasAmount || searching} aria-label="Refresh routes now"><img class:refreshSpin={awaitingFirstRoute} src="/icons/ui/route-refresh.png" alt="" width="18" height="18" aria-hidden="true" /></button>
           <div class="settingsWrap">
             <button type="button" class="exchangesButton" on:click={() => { settingsOpen = false; exchangesOpen = !exchangesOpen; }} aria-haspopup="dialog" aria-expanded={exchangesOpen} aria-label="Choose exchanges"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAACn0lEQVR4AbSVy0sVURzHZ9q0KcigiIyKrgUZRBS0SSgXLUKMIjAkEIKICHrgQqFF6tJFFEgXiqJNUemi6AGCyBVU0JWuBFHxgS8QUfAPuH6+xznHGe8493pF+X3O7/x+5/c4c+aecZ+3x38FN8hms/vhPnyCL3CrkL3lbUChCnhDsRH4ASm4B1/xX0QnSmwDEs9APfSSLe6gf0KZ7/uV6NtwGCogUSINKHgFtEvt9jWZk1Dt+34KXsEEtofukYajkCiuAYW1q06iD8ILUNE6iv1jXrS4BlR4AhkKVsEHWMbetZgG7L6MSvpVdDH/A5OQKMRLmkJBylGufgRaM5gGzE6A5CNDNQxASx46WP8MNk45yh2n6Un8RmwDYwTDcY6nFprzUMP6I7BxteTXgCStQdgGx2RAmoQFdFFCrp6qnuQqnuI02tvaYExOQUAjTEMmBvkbFRfDUOCLNAh8xSk2kII0rFDhF0huarBP8E0GWK3L1Mojn4LKGORvJd6jqG70MHP9zFFGVhmfsVZqGlBgCXycR3A+Ru9E6gg+AO+oUSKY3wVd2LOmAYZ2Uo7+Dy9pciPEOXxJYj4fBFyGHHENWOkHvZjz6EyIUZrJxpUr7PgvXv3yrhO3IrD1HtbQY+EG13BMBeiLadFF0hNdYm070ZG0hRYPMW+j+Vy4AT6vgaGBhR4Ltv1yKgkzV4gdhOdQwuoDkOjJ3D2Q4z3DU4J0WZg6mWVmGqILkatBkE4j0iDwbyrOsxlLl89dfextJYhvIuAtG11ERxp8x6GzJm5DsBWM8trx6F9nOTruZss3Q6Di5ymuzwWmF2nQjkcvSy/VYo9rhKQ+1pOkm8UW4krRTtxLZmEVfoP9Oup4dFs78F1QBlqN4m62fA9ZV45CHesAAAD//3Y7g4QAAAAGSURBVAMAao5eF665v54AAAAASUVORK5CYII=" alt="" width="18" height="18" aria-hidden="true" /></button>
             {#if exchangesOpen}
-              <div class="settingsBackdrop" on:mousedown={closeSettings} role="presentation">
-                <div class:settingsDragging class="settingsMenu exchangesMenu" bind:this={settingsDialog} role="dialog" aria-modal="true" aria-label="Exchange settings" tabindex="-1" on:mousedown|stopPropagation>
+              <div class="settingsBackdrop" use:portalSettingsBackdrop on:mousedown={closeSettings} role="presentation">
+                <div class:settingsDragging class="settingsMenu exchangesMenu" bind:this={settingsDialog} role="dialog" aria-label="Exchange settings" tabindex="-1" on:mousedown|stopPropagation>
                   <div class="settingsModalHeader"><span class="settingsSheetHandle" aria-hidden="true" on:pointerdown={startSettingsDrag} on:pointermove={moveSettingsDrag} on:pointerup={endSettingsDrag} on:pointercancel={endSettingsDrag}></span><button type="button" class="settingsClose" on:click={closeSettings} aria-label="Close exchange settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button></div>
                   <div class="settingsHead"><div><strong>Search exchanges</strong></div></div>
                   <div class="sourceOptions exchangeOptions exchangeModalOptions" aria-label="Exchanges to search">{#each exchangeChoices as source}{@const enabled = selectedSources.includes(source.id)}<button type="button" class:sourceOptionActive={enabled} class="sourceOption" aria-pressed={enabled} title={sourceTitle(source)} on:click={() => toggleSource(source.id)}><span class="sourceOptionIcon" aria-hidden="true"><img src={source.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackSourceIcon(event, source.id)} /></span>{source.label}</button>{/each}</div>
@@ -828,10 +1030,10 @@
             {/if}
           </div>
           <div class="settingsWrap">
-            <button type="button" class="settingsButton" on:click={() => { exchangesOpen = false; settingsOpen = !settingsOpen; }} aria-haspopup="dialog" aria-expanded={settingsOpen} aria-label="Route refresh settings"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 6.8a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4Z" stroke="currentColor" stroke-width="1.6" /><path d="M16.2 11.3a6.5 6.5 0 0 0 0-2.6l1.5-1.1-1.8-3.1-1.8.8a6.7 6.7 0 0 0-2.2-1.3L11.7 2H8.3L8 4a6.7 6.7 0 0 0-2.2 1.3L4 4.5 2.2 7.6l1.5 1.1a6.5 6.5 0 0 0 0 2.6l-1.5 1.1L4 15.5l1.8-.8A6.7 6.7 0 0 0 8 16l.3 2h3.4l.3-2a6.7 6.7 0 0 0 2.2-1.3l1.8.8 1.8-3.1-1.6-1.1Z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
+            <button type="button" class="settingsButton" on:click={() => { exchangesOpen = false; settingsOpen = !settingsOpen; }} aria-haspopup="dialog" aria-expanded={settingsOpen} aria-label="Route refresh settings"><img src="/icons/ui/route-settings.png" alt="" width="18" height="18" aria-hidden="true" /></button>
             {#if settingsOpen}
-              <div class="settingsBackdrop" on:mousedown={closeSettings} role="presentation">
-                <div class:settingsDragging class="settingsMenu" bind:this={settingsDialog} role="dialog" aria-modal="true" aria-label="Refresh settings" tabindex="-1" on:mousedown|stopPropagation>
+              <div class="settingsBackdrop" use:portalSettingsBackdrop on:mousedown={closeSettings} role="presentation">
+                <div class:settingsDragging class="settingsMenu" bind:this={settingsDialog} role="dialog" aria-label="Refresh settings" tabindex="-1" on:mousedown|stopPropagation>
                 <div class="settingsModalHeader"><span class="settingsSheetHandle" aria-hidden="true" on:pointerdown={startSettingsDrag} on:pointermove={moveSettingsDrag} on:pointerup={endSettingsDrag} on:pointercancel={endSettingsDrag}></span><button type="button" class="settingsClose" on:click={closeSettings} aria-label="Close route settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button></div>
                 <div class="settingsHead"><div><strong>Auto-refresh</strong></div></div>
                 <div class="refreshOptions">{#each REFRESH_OPTIONS as seconds}<button type="button" aria-pressed={refreshSeconds === seconds} on:click={() => { refreshSeconds = seconds; settingsOpen = false; }}>{refreshOptionLabel(seconds)}</button>{/each}</div>
@@ -851,33 +1053,48 @@
 
       <div class="intentLabel"><span>Sell</span></div>
       <div class="moneyPanel moneyPanelSource">
-        <div class="panelCopy"><label for="exchange-amount">You send</label><input id="exchange-amount" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedSourceAmount} on:focus={(event) => event.currentTarget.select()} on:input={(event) => updateAmount(event.currentTarget.value)} aria-label="Amount to send" /><span class="currencyHint">{amountSide === "target" && targetAmountNeedsRate ? t("Calculating from live quotes", {}, activeLocale) : `${selectedSourceCurrency || "AMD"} available via ${methodAvailability(sourceMethod)}`}</span></div>
+        <div class="panelCopy"><label for="exchange-amount">You send</label><input id="exchange-amount" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedSourceAmount} on:focus={(event) => event.currentTarget.select()} on:input={(event) => updateAmount(event.currentTarget.value)} aria-label="Amount to send" />{#if marketUsd.source !== null}<span class="marketValue" aria-label={t("Approximate USD market value", {}, activeLocale)}>{formatMarketUsd(marketUsd.source)}</span>{/if}</div>
         <div class="methodControls">
-          <button type="button" class="methodTrigger" on:click={() => void openMethodPicker("source")} aria-label={`Select sending ${methodNoun(sourceMethod)}: ${sourceMethod?.name ?? "none"}`}>
+          <button type="button" class="methodTrigger" on:click={() => void openMethodPicker("source")} aria-label={`Select sending ${methodNoun(sourceMethod)}: ${sourceMethod ? methodTitle(sourceMethod) : "none"}`}>
             <span class="methodAvatar" style:background-color={paymentMethodFavicon(sourceMethod) ? "transparent" : sourceMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(sourceMethod)}<img src={paymentMethodFavicon(sourceMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{:else}<span>{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{/if}</span>
-            <span class="methodText"><strong>{methodTitle(sourceMethod)}</strong><small>{sourceMethod ? methodDetail(sourceMethod) : corridor ? locationLabel(sourceCountry, sourceCurrency) : "Unavailable"}</small></span><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+            <span class="methodText" class:methodTextAsset={sourceMethod?.kind === "wallet"}><strong>{methodTitle(sourceMethod)}</strong></span><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
           </button>
-          <div class="networkControl"><button type="button" class="networkButton" on:click={() => sourceMethod?.kind === "wallet" ? openNetworkPicker("source") : openCurrencyPicker("source")} aria-haspopup="dialog" aria-label={sourceMethod?.kind === "wallet" ? `Select sending network: ${sourceNetwork?.name ?? "none"}` : `Select sending currency: ${sourceCurrencyChoice}`}><span class:currencyDot={sourceMethod?.kind !== "wallet"} class="networkDot" aria-hidden="true">{#if sourceMethod?.kind === "wallet" && sourceNetwork}<img src={networkIcon(sourceNetwork.name)} alt="" width="18" height="18" loading="lazy" decoding="async" />{:else}{currencyMark(sourceCurrencyChoice)}{/if}</span><span class="networkCopy"><small>{t(sourceMethod?.kind === "wallet" ? "Network" : "Currency", {}, activeLocale)}</small><strong>{sourceMethod?.kind === "wallet" ? sourceNetwork?.name ?? "Select" : sourceCurrencyChoice}</strong></span><span class="networkChevron" aria-hidden="true">⌄</span></button></div>
+          <div class="networkControl"><button type="button" class="networkButton" on:click={() => sourceMethod?.kind === "wallet" ? openNetworkPicker("source") : openCurrencyPicker("source")} aria-haspopup="dialog" aria-label={sourceMethod?.kind === "wallet" ? `Select sending network: ${sourceNetwork?.name ?? "none"}` : `Select sending currency: ${sourceCurrencyChoice}`} title={sourceMethod?.kind === "wallet" ? sourceNetwork?.name ?? "Select network" : sourceCurrencyChoice}><span class:currencyDot={sourceMethod?.kind !== "wallet"} class:flagDot={Boolean(sourceCurrencyFlag)} class="networkDot" aria-hidden="true">{#if sourceMethod?.kind === "wallet" && sourceNetwork}<img src={networkIcon(sourceNetwork.name)} alt="" width="18" height="18" loading="lazy" decoding="async" />{:else if sourceCurrencyFlag}<img src={sourceCurrencyFlag} alt="" width="18" height="18" decoding="async" />{:else}{currencyMark(sourceCurrencyChoice)}{/if}</span>{#if sourceMethod?.kind !== "wallet"}<span class="networkCopy"><strong>{sourceCurrencyChoice}</strong></span>{/if}<svg class="networkChevron" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></button></div>
         </div>
       </div>
-      <div class="flowBridge"><span class="bridgeLine" aria-hidden="true"></span><button type="button" class:bridgeIconReversed={directionReversed} class="bridgeIcon" on:click={swapDirection} aria-label="Swap sender and recipient" title="Swap sender and recipient"><img src={swapIcon} alt="" width="18" height="18" aria-hidden="true" /></button></div>
+      <div class="flowBridge"><span class="bridgeLine" aria-hidden="true"></span><button type="button" class:bridgeIconReversed={directionReversed} class="bridgeIcon" on:click={swapDirection} aria-label="Swap sender and recipient" title="Swap sender and recipient"><img src={swapIcon} alt="" width="18" height="18" aria-hidden="true" /></button><button type="button" class="routesToggle" class:routesToggleOpen={routesExpanded} on:click={toggleRoutes} aria-label={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)} aria-expanded={routesExpanded} title={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)}><span aria-hidden="true">❯</span></button></div>
       <div class="intentLabel intentLabelBuy"><span>Buy</span></div>
       <div class="moneyPanel moneyPanelTarget">
-        <div class="panelCopy"><label for="exchange-output">Recipient gets</label><input id="exchange-output" class:amountOutputEmpty={!previewRoute && amountSide !== "target"} class="amountInput amountOutput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedTargetAmount} on:focus={(event) => event.currentTarget.select()} on:input={(event) => updateTargetAmount(event.currentTarget.value)} aria-label="Amount to receive" /><span class="currencyHint">{targetMethod?.kind === "wallet" ? `${targetMethod.currency} available via digital wallet` : previewRoute ? `Estimated ${previewRoute.target_currency}` : amountSide === "target" ? `${t("Requested", {}, activeLocale)} ${selectedTargetCurrency}` : "Live estimate appears here"}</span></div>
+        <div class="panelCopy"><label for="exchange-output">Recipient gets</label><input id="exchange-output" class:amountOutputEmpty={!previewRoute && amountSide !== "target"} class="amountInput amountOutput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedTargetAmount} on:focus={(event) => event.currentTarget.select()} on:input={(event) => updateTargetAmount(event.currentTarget.value)} aria-label="Amount to receive" />{#if marketUsd.target !== null}<span class="marketValue" aria-label={t("Approximate USD market value", {}, activeLocale)}>{formatMarketUsd(marketUsd.target)}</span>{/if}</div>
         <div class="methodControls">
-          <button type="button" class="methodTrigger" on:click={() => void openMethodPicker("target")} aria-label={`Select recipient ${methodNoun(targetMethod)}: ${targetMethod?.name ?? "none"}`}>
+          <button type="button" class="methodTrigger" on:click={() => void openMethodPicker("target")} aria-label={`Select recipient ${methodNoun(targetMethod)}: ${targetMethod ? methodTitle(targetMethod) : "none"}`}>
             <span class="methodAvatar" style:background-color={paymentMethodFavicon(targetMethod) ? "transparent" : targetMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(targetMethod)}<img src={paymentMethodFavicon(targetMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{:else}<span>{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{/if}</span>
-            <span class="methodText"><strong>{methodTitle(targetMethod)}</strong><small>{targetMethod ? methodDetail(targetMethod) : corridor ? locationLabel(targetCountry, targetCurrency) : "Unavailable"}</small></span><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+            <span class="methodText" class:methodTextAsset={targetMethod?.kind === "wallet"}><strong>{methodTitle(targetMethod)}</strong></span><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
           </button>
-          <div class="networkControl"><button type="button" class="networkButton" on:click={() => targetMethod?.kind === "wallet" ? openNetworkPicker("target") : openCurrencyPicker("target")} aria-haspopup="dialog" aria-label={targetMethod?.kind === "wallet" ? `Select recipient network: ${targetNetwork?.name ?? "none"}` : `Select recipient currency: ${targetCurrencyChoice}`}><span class:currencyDot={targetMethod?.kind !== "wallet"} class="networkDot" aria-hidden="true">{#if targetMethod?.kind === "wallet" && targetNetwork}<img src={networkIcon(targetNetwork.name)} alt="" width="18" height="18" loading="lazy" decoding="async" />{:else}{currencyMark(targetCurrencyChoice)}{/if}</span><span class="networkCopy"><small>{t(targetMethod?.kind === "wallet" ? "Network" : "Currency", {}, activeLocale)}</small><strong>{targetMethod?.kind === "wallet" ? targetNetwork?.name ?? "Select" : targetCurrencyChoice}</strong></span><span class="networkChevron" aria-hidden="true">⌄</span></button></div>
+          <div class="networkControl"><button type="button" class="networkButton" on:click={() => targetMethod?.kind === "wallet" ? openNetworkPicker("target") : openCurrencyPicker("target")} aria-haspopup="dialog" aria-label={targetMethod?.kind === "wallet" ? `Select recipient network: ${targetNetwork?.name ?? "none"}` : `Select recipient currency: ${targetCurrencyChoice}`} title={targetMethod?.kind === "wallet" ? targetNetwork?.name ?? "Select network" : targetCurrencyChoice}><span class:currencyDot={targetMethod?.kind !== "wallet"} class:flagDot={Boolean(targetCurrencyFlag)} class="networkDot" aria-hidden="true">{#if targetMethod?.kind === "wallet" && targetNetwork}<img src={networkIcon(targetNetwork.name)} alt="" width="18" height="18" loading="lazy" decoding="async" />{:else if targetCurrencyFlag}<img src={targetCurrencyFlag} alt="" width="18" height="18" decoding="async" />{:else}{currencyMark(targetCurrencyChoice)}{/if}</span>{#if targetMethod?.kind !== "wallet"}<span class="networkCopy"><strong>{targetCurrencyChoice}</strong></span>{/if}<svg class="networkChevron" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></button></div>
         </div>
       </div>
       {#if refreshSeconds > 0}<div class="marketBar"><div class="marketState"><span class="refreshProgress" role="img" aria-label={secondsUntilRefresh === null ? "Auto-refresh is off" : `Refresh in ${secondsUntilRefresh} seconds`}><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle class="refreshTrack" cx="9" cy="9" r="7" pathLength="100" /><circle class="refreshFill" cx="9" cy="9" r="7" pathLength="100" style:stroke-dashoffset={`${100 - refreshProgress}`} /></svg></span><div><span>{lastUpdatedAt ? `Updated ${Math.max(0, Math.floor((clock - lastUpdatedAt) / 1000))}s ago` : "Public P2P sources only · no order placement"}</span></div></div>{#if secondsUntilRefresh !== null}<span class="nextRefresh">{secondsUntilRefresh}s</span>{/if}</div>{/if}
-      <button type="button" class="cta" disabled={!hasAmount || (!previewRoute && (searching || !corridor))} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? "Open swap instructions" : "Find routes"}>{#if previewRoute}Swap <span>↗</span>{:else if searching}<span class="spinner"></span> Finding routes{:else if hasAmount}Find routes <span>↗</span>{:else}Enter an amount to begin{/if}</button>
+      <button type="button" class="cta" disabled={!hasAmount || searching || (!previewRoute && !corridor)} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? t("Open route instructions", {}, activeLocale) : t("Find routes", {}, activeLocale)}>{#if previewRoute}Go <span>↗</span>{:else if searching}<span class="spinner"></span> Finding routes{:else if hasAmount}Find routes <span>↗</span>{:else}Enter an amount to begin{/if}</button>
       {#if error}<div class="errorBox" role="alert">{error}</div>{/if}
     </div>
-    <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {renderingRoutes} {searchingVenues} {foundVenues} {venueStats} {venueNames} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} searched={lastUpdatedAt !== null} {hasAmount} {showBelarusP2pWarning} {onOpenBelarusP2pWarning} />
+    <div class="panelToggles">
+      <button type="button" class="chartToggle" class:chartToggleOpen={activityExpanded} on:click={toggleActivityGraph} aria-label={t(activityExpanded ? "Hide search activity" : "Show search activity", {}, activeLocale)} aria-expanded={activityExpanded || activityModalOpen} title={t(activityExpanded ? "Hide search activity" : "Show search activity", {}, activeLocale)}><span aria-hidden="true">❯</span></button>
+      <button type="button" class="mobileRoutesToggle" class:mobileRoutesToggleOpen={routesExpanded} on:click={toggleRoutes} aria-label={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)} aria-expanded={routesExpanded} title={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)}><span aria-hidden="true">❯</span></button>
+    </div>
+    {#if activityExpanded}
+      <div class="activityReveal" bind:this={activityRevealElement} transition:fly={{ y: 18, duration: 380, easing: quintOut }}>
+        <SearchActivityChart sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} hours={activityHours} period={activityPeriod} onPeriodChange={selectActivityPeriod} loading={activityLoading} error={activityError} />
+      </div>
+    {/if}
+    </div>
+    {#if routesExpanded}
+      <div class="routesReveal" bind:this={routesRevealElement} in:routesRevealIn out:routesRevealOut>
+        <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {renderingRoutes} {searchingVenues} {foundVenues} {venueStats} {venueNames} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} searched={lastUpdatedAt !== null} {hasAmount} {showBelarusP2pWarning} {onOpenBelarusP2pWarning} onOpenSearchActivity={() => activityModalOpen = true} />
+      </div>
+    {/if}
   </div>
+  {#if activityModalOpen}<SearchActivityModal sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} hours={activityHours} period={activityPeriod} onPeriodChange={selectActivityPeriod} loading={activityLoading} error={activityError} onClose={() => activityModalOpen = false} />{/if}
   {#if currencyPicker === "source" || currencyPicker === "target"}<CurrencyPicker open={currencyPicker !== null} selected={currencyPicker === "source" ? sourceCurrencyChoice : targetCurrencyChoice} choices={currencyPicker === "source" ? sourceCurrencyChoices : targetCurrencyChoices} onClose={() => currencyPicker = null} onSelect={(choice) => chooseCurrency(currencyPicker ?? "source", choice)} />{/if}
   {#if paymentPickerComponent}<svelte:component this={paymentPickerComponent} open={methodPicker === "source"} title="Choose where you pay from" role="sender" {networks} {paymentMethods} selected={sourceMethod} selectedNetwork={sourceNetwork} onClose={() => methodPicker = null} onSelect={chooseSource} /><svelte:component this={paymentPickerComponent} open={methodPicker === "target"} title="Choose where the recipient gets paid" role="recipient" {networks} {paymentMethods} selected={targetMethod} selectedNetwork={targetNetwork} onClose={() => methodPicker = null} onSelect={chooseTarget} />{/if}
   {#if networkPicker === "source" || networkPicker === "target"}<NetworkPicker open={networkPicker !== null} networks={networkPicker === "source" ? sourceNetworks : targetNetworks} selected={networkPicker === "source" ? sourceNetwork : targetNetwork} onClose={() => networkPicker = null} onSelect={selectNetwork} />{/if}
@@ -896,8 +1113,37 @@
   width: min(900px, 100%);
   margin: 0 auto 42px;
   text-align: center;
-  animation: heroIn 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+
+.shell.introPlaying .hero, .shell.introPlaying .workspace { visibility: hidden; }
+.shell.introReady .workspace { animation: workspaceIn .72s cubic-bezier(.22, 1, .36, 1) both; }
+.shell.introReady .hero > p { animation: heroIn .5s .1s cubic-bezier(.22, 1, .36, 1) both; }
+.introOverlay { position: fixed; inset: 0; z-index: 1000; overflow: hidden; background: var(--shell-gradient); }
+.introTitle { position: absolute; top: 50%; left: 50%; width: min(900px, calc(100vw - 48px)); margin: 0; color: var(--color-text); font-size: clamp(44px, 5.5vw, 72px); font-weight: 650; letter-spacing: -.065em; line-height: .96; text-align: center; transform: translate(-50%, -50%) scale(1.2); }
+.introStarted .introTitle { animation: introDock .68s 3.08s cubic-bezier(.22, 1, .36, 1) both; }
+.introClip { display: inline-block; clip-path: inset(-.12em -.16em -.18em -.16em); vertical-align: bottom; }
+.introSecondWithDot { white-space: nowrap; }
+.introWord { display: inline-block; transform: translateY(115%); opacity: 0; }
+.introStarted .introWordMove { animation: introRise .48s .2s cubic-bezier(.22, 1, .36, 1) forwards; }
+.introStarted .introWordMoney { animation: introRise .48s .7s cubic-bezier(.22, 1, .36, 1) forwards; }
+.introStarted .introWordKeep { animation: introRise .48s 1.35s cubic-bezier(.22, 1, .36, 1) forwards; }
+.introStarted .introWordMore { animation: introRise .48s 1.85s cubic-bezier(.22, 1, .36, 1) forwards; }
+.introPunctuation { opacity: 0; }
+.introStarted .introFirstPunctuation { animation: introDot .02s 1.18s linear forwards; }
+.introStarted .introLastPunctuation { animation: introDot .02s 2.94s linear forwards; }
+.introEmphasis { position: relative; z-index: 0; white-space: nowrap; }
+.introEmphasis::after { position: absolute; right: -.05em; bottom: .02em; left: -.04em; z-index: -1; height: .2em; border-radius: 3px; background: var(--color-accent); content: ""; transform: rotate(-1deg) scaleX(0); transform-origin: left center; }
+.introStarted .introEmphasis::after { animation: introUnderline .48s 2.42s cubic-bezier(.22, 1, .36, 1) forwards; }
+.introMarker { position: absolute; bottom: -.9em; left: -.04em; z-index: 2; width: 1.02em; height: 1.02em; pointer-events: none; opacity: 0; }
+.introStarted .introMarker { animation: introMarkerDraw .48s 2.42s cubic-bezier(.22, 1, .36, 1) both; }
+:global(html[data-theme="dark"]) .introMarker { filter: brightness(0) invert(1); }
+.shell.localeLong .introTitle { font-size: clamp(42px, 5vw, 68px); }
+@media (max-width: 640px) { .introTitle { width: calc(100vw - 24px); font-size: 44px; transform: translate(-50%, -50%) scale(1.08); } .shell.localeLong .introTitle { font-size: 44px; transform: translate(-50%, -50%) scale(1); } .shell.localeLong .introEmphasis { white-space: normal; } }
+@keyframes introRise { to { opacity: 1; transform: translateY(0); } }
+@keyframes introDot { to { opacity: 1; } }
+@keyframes introUnderline { to { transform: rotate(-1deg) scaleX(1); } }
+@keyframes introMarkerDraw { 0% { left: -.04em; opacity: 0; } 8%, 88% { opacity: 1; } 100% { left: calc(100% + .05em); opacity: 0; } }
+@keyframes introDock { to { transform: translate(calc(-50% + var(--intro-x)), calc(-50% + var(--intro-y))) scale(1); } }
 
 .modeTabs,
 .cardActions,
@@ -963,7 +1209,6 @@
   align-items: start;
   gap: 18px;
   margin: 0 auto;
-  animation: workspaceIn 0.72s 0.08s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .card {
@@ -1057,11 +1302,20 @@
   opacity: 0.36;
 }
 
-.exchangesButton img {
+.refreshButton img,
+.exchangesButton img,
+.settingsButton img {
   display: block;
   width: 18px;
   height: 18px;
   object-fit: contain;
+  filter: brightness(0);
+}
+
+:global(html[data-theme="dark"]) .refreshButton img,
+:global(html[data-theme="dark"]) .exchangesButton img,
+:global(html[data-theme="dark"]) .settingsButton img {
+  filter: brightness(0) invert(1);
 }
 
 .refreshSpin {
@@ -1426,12 +1680,6 @@
   color: #b7b8b2;
 }
 
-.currencyHint {
-  color: var(--color-text-faint);
-  font-size: 10px;
-  font-weight: 650;
-}
-
 .methodTrigger {
   position: relative;
   z-index: 1;
@@ -1490,12 +1738,9 @@
   display: flex;
   min-width: 0;
   flex: 1;
-  flex-direction: column;
-  gap: 3px;
 }
 
-.methodText strong,
-.methodText small {
+.methodText strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1504,12 +1749,6 @@
 .methodText strong {
   font-size: 12px;
   font-weight: 800;
-}
-
-.methodText small {
-  color: var(--color-text-faint);
-  font-size: 9px;
-  font-weight: 650;
 }
 
 .flowBridge {
@@ -2054,10 +2293,49 @@
 }
 
 .workspace {
+  --workspace-gap: 30px;
   width: min(1220px, 100%);
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 22px;
+  gap: var(--workspace-gap);
 }
+
+@media (min-width: 981px) {
+  .workspace:not(.routesCollapsed) {
+    width: min(1300px, 100%);
+    grid-template-columns: minmax(0, min(var(--converter-width), 49%)) minmax(0, 1fr);
+  }
+
+  .workspace:not(.routesCollapsed) .amountInput {
+    font-size: clamp(28px, calc(2.9vw - (var(--amount-digits) - 10) * 1px), 38px);
+  }
+}
+
+.card.modalOpen {
+  z-index: 5;
+}
+
+.converterStack { display: flex; min-width: 0; flex-direction: column; transition: transform .38s cubic-bezier(.22, 1, .36, 1); }
+.workspace.routesCollapsed .converterStack { transform: translateX(calc(50% + 15px)); }
+.routesReveal { display: flex; min-width: 0; align-self: start; }
+.routesReveal :global(.side) { width: 100%; }
+.workspace.activityExpanded:not(.routesCollapsed) .converterStack { align-self: stretch; }
+.workspace.activityExpanded .routesReveal { min-height: 690px; align-self: stretch; contain: size; }
+.workspace.activityExpanded .routesReveal :global(.side) { height: 100%; }
+.workspace.activityExpanded .routesReveal :global(.side .panel) { height: 100%; min-height: 0; }
+.panelToggles { position: relative; display: flex; height: 42px; flex: 0 0 auto; align-items: center; justify-content: center; padding: 8px 0 4px; }
+.chartToggle, .routesToggle, .mobileRoutesToggle { z-index: 3; display: grid; width: 48px; height: 30px; flex: 0 0 auto; place-items: center; padding: 0; border: 0; background: transparent; box-shadow: none; color: var(--color-text-soft); opacity: .6; cursor: pointer; transition: opacity .2s ease; -webkit-tap-highlight-color: transparent; }
+.routesToggle { position: absolute; top: 50%; right: calc(-1 * (var(--workspace-gap) + 20px)); width: var(--workspace-gap); transform: translateY(-50%); }
+.mobileRoutesToggle { display: none; }
+.chartToggle:hover, .routesToggle:hover, .mobileRoutesToggle:hover { opacity: .85; }
+.chartToggle:focus-visible, .routesToggle:focus-visible, .mobileRoutesToggle:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.chartToggle span, .routesToggle span, .mobileRoutesToggle span { display: block; font-size: 21px; line-height: 1; -webkit-text-stroke: .55px currentColor; transition: transform .26s ease; }
+.chartToggle span, .mobileRoutesToggle span { transform: rotate(90deg); }
+.chartToggleOpen span, .mobileRoutesToggleOpen span { transform: rotate(-90deg); }
+.routesToggleOpen span { transform: rotate(180deg); }
+.activityReveal { width: 100%; min-height: 176px; flex: 1 1 auto; overflow: visible; }
+.activityReveal :global(.activityCard) { height: 100%; }
+@media (max-width: 980px) { .workspace { --workspace-gap: 22px; gap: 0; } .routesReveal { margin-top: 18px; } .workspace.routesCollapsed .converterStack { transform: none; } .activityReveal { display: none; } .routesToggle, .chartToggle { display: none; } .mobileRoutesToggle { display: grid; } }
+@media (prefers-reduced-motion: reduce) { .converterStack, .chartToggle span, .routesToggle span, .mobileRoutesToggle span { transition: none; } }
 
 .card {
   min-height: 0;
@@ -2144,9 +2422,9 @@
 }
 
 .moneyPanel {
-  min-height: 0;
+  min-height: 96px;
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: center;
   padding: 15px 15px 12px;
   border: 1px solid #d9ded4;
   border-radius: 7px;
@@ -2176,6 +2454,17 @@
   white-space: nowrap;
 }
 
+.marketValue {
+  overflow: hidden;
+  color: var(--color-text-soft);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .amountInput,
 .amountOutput,
 .amountOutputEmpty {
@@ -2183,17 +2472,6 @@
   font-size: clamp(28px, 3.2vw, 38px);
   font-weight: 500;
   letter-spacing: -0.05em;
-}
-
-.currencyHint {
-  font-family: var(--font-mono);
-  color: #667064;
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  line-height: 1.35;
-  opacity: 1;
-  -webkit-font-smoothing: auto;
 }
 
 .methodTrigger {
@@ -2230,17 +2508,13 @@
   border-radius: 50%;
 }
 
-.methodText {
-  gap: 2px;
-}
-
 .methodText strong {
-  font-size: 11px;
+  font-size: 13px;
 }
 
-.methodText small {
-  font-family: var(--font-mono);
-  font-size: 8px;
+.methodTextAsset strong {
+  font-size: 14px;
+  font-weight: 850;
 }
 
 .flowBridge {
@@ -2352,19 +2626,12 @@
   font-weight: 800;
 }
 
-.networkCopy {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.networkDot.flagDot {
+  background: transparent;
 }
 
-.networkCopy small {
-  color: #8a9588;
-  font-family: var(--font-mono);
-  font-size: 8px;
-  letter-spacing: 0.08em;
-  line-height: 1;
-  text-transform: uppercase;
+.networkDot.flagDot img {
+  object-fit: cover;
 }
 
 .networkCopy strong {
@@ -2376,10 +2643,8 @@
 }
 
 .networkChevron {
-  margin-left: 1px;
   color: #7b8878;
-  font-size: 14px;
-  line-height: 1;
+  flex: 0 0 auto;
 }
 
 .methodControls {
@@ -2390,29 +2655,58 @@
   flex: 0 0 auto;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  max-width: min(100%, 256px);
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid #d7dcd3;
+  border-radius: 5px;
+  background: #e7ebe2;
+  transition: border-color 0.15s ease;
+}
+
+.methodControls:has(> .methodTrigger:is(:hover, :focus-visible)) {
+  border-color: #a4af9e;
 }
 
 .methodControls .methodTrigger {
   width: auto;
-  max-width: 190px;
+  min-width: 0;
+  min-height: 44px;
+  max-width: none;
+  flex: 1 1 auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.methodControls .methodTrigger:hover {
+  background: #edf2e8;
+  box-shadow: none;
+  transform: none;
+}
+
+.methodControls .methodTrigger:focus-visible,
+.methodControls .networkButton:focus-visible {
+  outline: 2px solid var(--color-accent-strong);
+  outline-offset: -2px;
 }
 
 .methodControls .networkControl {
   margin-top: 0;
+  border-left: 1px solid #d7dcd3;
 }
 
 .methodControls .networkButton {
-  min-height: 42px;
+  min-height: 44px;
   padding: 6px 8px;
-  border: 1px solid #d7dcd3;
-  border-radius: 5px;
-  background: #eef2ea;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .methodControls .networkButton:hover {
-  border-color: #a4af9e;
-  background: #f3f7ef;
+  background: #edf2e8;
 }
 
 @media (max-width: 980px) {
@@ -2452,9 +2746,12 @@
   }
 
   .workspace {
-    gap: 14px;
-    animation: none;
+    gap: 0;
     transform: none;
+  }
+
+  .routesReveal {
+    margin-top: 14px;
   }
 
   .card {
@@ -2487,6 +2784,7 @@
     height: auto;
     max-height: calc(100dvh - 16px);
     box-sizing: border-box;
+    pointer-events: auto;
     padding: 10px 16px calc(18px + env(safe-area-inset-bottom));
     border-radius: 14px 14px 0 0;
     animation: settingsSheetIn 0.24s cubic-bezier(0.22, 1, 0.36, 1);
@@ -2551,7 +2849,16 @@
   }
 
   .moneyPanel {
-    min-height: 178px;
+    min-height: 116px;
+    justify-content: flex-start;
+    gap: 8px;
+    padding-top: 13px;
+    padding-bottom: 10px;
+  }
+
+  .panelCopy {
+    flex: none;
+    width: 100%;
   }
 
   .methodTrigger {
@@ -2560,16 +2867,11 @@
 
   .methodControls {
     width: 100%;
+    max-width: none;
   }
 
   .methodControls .methodTrigger {
     width: auto;
-    flex: 1 1 auto;
-  }
-
-  .methodControls:not(:has(.networkControl)) .methodTrigger {
-    width: auto;
-    max-width: none;
     flex: 1 1 auto;
   }
 
@@ -2603,8 +2905,7 @@
   box-shadow: var(--shadow-pop);
 }
 
-:global(html[data-theme="dark"]) .intentLabel,
-:global(html[data-theme="dark"]) .currencyHint {
+:global(html[data-theme="dark"]) .intentLabel {
   color: var(--color-text-soft);
 }
 
@@ -2615,15 +2916,21 @@
   background: #202020;
 }
 
-:global(html[data-theme="dark"]) .methodTrigger,
-:global(html[data-theme="dark"]) .methodControls .networkButton {
+:global(html[data-theme="dark"]) .methodControls {
   border-color: #3b3b3b;
   background: #2a2a2a;
 }
 
-:global(html[data-theme="dark"]) .methodTrigger:hover,
-:global(html[data-theme="dark"]) .methodControls .networkButton:hover {
+:global(html[data-theme="dark"]) .methodControls .networkControl {
+  border-color: #3b3b3b;
+}
+
+:global(html[data-theme="dark"]) .methodControls:has(> .methodTrigger:is(:hover, :focus-visible)) {
   border-color: #626262;
+}
+
+:global(html[data-theme="dark"]) .methodControls .methodTrigger:hover,
+:global(html[data-theme="dark"]) .methodControls .networkButton:hover {
   background: #323232;
 }
 
@@ -2646,7 +2953,6 @@
   color: var(--color-text);
 }
 
-:global(html[data-theme="dark"]) .networkCopy small,
 :global(html[data-theme="dark"]) .networkChevron {
   color: var(--color-text-faint);
 }

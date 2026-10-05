@@ -4,6 +4,8 @@
   import { networkIcon } from "$lib/icons";
   import type { CryptoNetwork } from "$lib/networks";
   import { locale, t } from "$lib/i18n";
+  import { fiatFlagUrl } from "$lib/currency-flags";
+  import { lockPageScroll } from "$lib/page-scroll-lock";
   import PickerOptionCard from "./PickerOptionCard.svelte";
 
   export let open: boolean;
@@ -27,8 +29,7 @@
   let input: HTMLInputElement;
   let dialog: HTMLDivElement;
   let wasOpen = false;
-  let previousOverflow = "";
-  let previousOverscrollBehavior = "";
+  let unlockPage: (() => void) | undefined;
   let focusTimer: number | undefined;
   let dragging = false;
   let dragStartY = 0;
@@ -68,18 +69,17 @@
     wasOpen = open;
     if (open) {
       stage = "currency"; activeCurrency = ""; query = "";
-      previousOverflow = document.body.style.overflow; previousOverscrollBehavior = document.body.style.overscrollBehavior;
-      document.body.style.overflow = "hidden"; document.body.style.overscrollBehavior = "none"; window.addEventListener("keydown", onKeyDown);
+      unlockPage = lockPageScroll(); window.addEventListener("keydown", onKeyDown);
       focusTimer = window.setTimeout(() => input?.focus(), 80);
     } else {
-      document.body.style.overflow = previousOverflow; document.body.style.overscrollBehavior = previousOverscrollBehavior; window.removeEventListener("keydown", onKeyDown); if (focusTimer) window.clearTimeout(focusTimer);
+      unlockPage?.(); unlockPage = undefined; window.removeEventListener("keydown", onKeyDown); if (focusTimer) window.clearTimeout(focusTimer);
     }
   });
-  onDestroy(() => { if (typeof document !== "undefined" && wasOpen) { document.body.style.overflow = previousOverflow; document.body.style.overscrollBehavior = previousOverscrollBehavior; } if (typeof window !== "undefined") window.removeEventListener("keydown", onKeyDown); if (typeof window !== "undefined" && focusTimer) window.clearTimeout(focusTimer); });
+  onDestroy(() => { unlockPage?.(); if (typeof window !== "undefined") window.removeEventListener("keydown", onKeyDown); if (typeof window !== "undefined" && focusTimer) window.clearTimeout(focusTimer); });
 
   $: fiatMethods = paymentMethods.filter((method) => (method.kind === "bank" || method.kind === "cash") && roleAllowed(method));
   $: assetMethods = paymentMethods.filter((method) => method.kind === "wallet" && roleAllowed(method));
-  $: fiatChoices = [...new Set(fiatMethods.map((method) => method.currency.toUpperCase()))].map((currency): CurrencyChoice => { const catalog = paymentMethods.find((method) => method.kind === "currency" && currencyMatches(method, currency)); const source = fiatMethods.find((method) => currencyMatches(method, currency)); return { id: currency, name: catalog?.name ?? source?.name ?? currency, kind: "fiat", initials: catalog?.initials ?? currency.slice(0, 2), color: catalog?.color ?? source?.color ?? "#6d9800", iconUrl: catalog?.iconUrl }; }).sort((left, right) => left.id.localeCompare(right.id));
+  $: fiatChoices = [...new Set(fiatMethods.map((method) => method.currency.toUpperCase()))].map((currency): CurrencyChoice => { const catalog = paymentMethods.find((method) => method.kind === "currency" && currencyMatches(method, currency)); const source = fiatMethods.find((method) => currencyMatches(method, currency)); return { id: currency, name: catalog?.name ?? source?.name ?? currency, kind: "fiat", initials: catalog?.initials ?? currency.slice(0, 2), color: catalog?.color ?? source?.color ?? "#6d9800", iconUrl: fiatFlagUrl(currency) ?? catalog?.iconUrl }; }).sort((left, right) => left.id.localeCompare(right.id));
   $: assetChoices = [...new Map(assetMethods.map((method) => [method.currency.toUpperCase(), method])).values()].map((method): CurrencyChoice => ({ id: method.currency.toUpperCase(), name: method.name, kind: "asset", initials: method.initials || method.currency.slice(0, 2), color: method.color, iconUrl: paymentMethodFavicon(method) ?? undefined })).sort((left, right) => left.id.localeCompare(right.id));
   $: currencyChoices = [...fiatChoices, ...assetChoices];
   $: normalizedQuery = normalizeSearch(query);

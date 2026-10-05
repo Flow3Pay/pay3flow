@@ -8,8 +8,33 @@ const supportedLocales: Locale[] = ["en", "ru", "hy"];
 const messages: Record<Locale, Record<string, string>> = {
   en: {},
   ru: {
+    "Search activity": "Активность поиска",
+    "Searches for this exchange": "Этот обмен искали:",
+    "Chart time range": "Период графика",
+    "searches in period": "поисков за период",
+    "1 hour": "1 час",
+    "1 day": "1 день",
+    "1 week": "1 неделя",
+    "1 month": "1 месяц",
+    "3 months": "3 месяца",
+    "6 months": "6 месяцев",
+    "1 year": "1 год",
+    "All time": "За всё время",
+    "searches in the last 7 days": "поисков за последние 7 дней",
+    "No searches recorded yet": "Этот обмен пока не искали",
+    "Loading search activity…": "Загружаем историю поисков…",
+    "Search activity is temporarily unavailable.": "История поисков временно недоступна.",
+    "Open search activity graph": "Открыть график поисков",
+    "Show search activity": "Показать график поисков",
+    "Hide search activity": "Скрыть график поисков",
+    "Show routes": "Показать маршруты",
+    "Hide routes": "Скрыть маршруты",
+    "Close search activity": "Закрыть график поисков",
     "Switch language": "Переключить язык",
     "Switch theme": "Переключить тему",
+    "Menu": "Меню",
+    "Open menu": "Открыть меню",
+    "Close menu": "Закрыть меню",
     "Pay3Flow home": "Главная Pay3Flow",
     "Live routing infrastructure · Public market estimates": "Инфраструктура маршрутизации · Публичные оценки рынка",
     "Usage policy": "Правила использования",
@@ -36,6 +61,7 @@ const messages: Record<Locale, Record<string, string>> = {
     Buy: "Купить",
     "You send": "Вы отправляете",
     "Recipient gets": "Получатель получает",
+    "Approximate USD market value": "Примерная рыночная стоимость в долларах",
     "Amount to receive": "Сумма к получению",
     Requested: "Запрошено",
     "Calculating from live quotes": "Рассчитываем по актуальным котировкам",
@@ -55,6 +81,7 @@ const messages: Record<Locale, Record<string, string>> = {
     "Public P2P sources only · no order placement": "Только публичные P2P-источники · без размещения ордера",
     "Auto-refresh is off": "Автообновление выключено",
     "Open swap instructions": "Открыть инструкции обмена",
+    "Open route instructions": "Открыть инструкцию маршрута",
     "Find routes": "Найти маршруты",
     "Finding routes": "Поиск маршрутов",
     "Enter an amount to begin": "Введите сумму, чтобы начать",
@@ -295,8 +322,33 @@ const messages: Record<Locale, Record<string, string>> = {
     "Approval confirmed. Review and sign the refreshed swap transaction.": "Разрешение подтверждено. Проверьте и подпишите обновлённую транзакцию обмена.",
   },
   hy: {
+    "Search activity": "Որոնումների ակտիվություն",
+    "Searches for this exchange": "Այս փոխանակումը որոնել են՝",
+    "Chart time range": "Գրաֆիկի ժամանակահատված",
+    "searches in period": "որոնում ժամանակահատվածում",
+    "1 hour": "1 ժամ",
+    "1 day": "1 օր",
+    "1 week": "1 շաբաթ",
+    "1 month": "1 ամիս",
+    "3 months": "3 ամիս",
+    "6 months": "6 ամիս",
+    "1 year": "1 տարի",
+    "All time": "Ամբողջ ժամանակը",
+    "searches in the last 7 days": "որոնում վերջին 7 օրում",
+    "No searches recorded yet": "Այս փոխանակման որոնումներ դեռ չկան",
+    "Loading search activity…": "Բեռնվում են որոնումները…",
+    "Search activity is temporarily unavailable.": "Որոնումների պատմությունը ժամանակավորապես անհասանելի է։",
+    "Open search activity graph": "Բացել որոնումների գրաֆիկը",
+    "Show search activity": "Ցույց տալ որոնումների գրաֆիկը",
+    "Hide search activity": "Թաքցնել որոնումների գրաֆիկը",
+    "Show routes": "Ցույց տալ երթուղիները",
+    "Hide routes": "Թաքցնել երթուղիները",
+    "Close search activity": "Փակել որոնումների գրաֆիկը",
     "Switch language": "Փոխել լեզուն",
     "Switch theme": "Փոխել թեման",
+    "Menu": "Մենյու",
+    "Open menu": "Բացել մենյուն",
+    "Close menu": "Փակել մենյուն",
     "Pay3Flow home": "Pay3Flow-ի գլխավոր էջ",
     "Live routing infrastructure · Public market estimates": "Ուղղորդման ենթակառուցվածք · Շուկայի հանրային գնահատականներ",
     "Usage policy": "Օգտագործման կանոններ",
@@ -323,6 +375,7 @@ const messages: Record<Locale, Record<string, string>> = {
     Buy: "Գնել",
     "You send": "Դուք ուղարկում եք",
     "Recipient gets": "Ստացողը ստանում է",
+    "Approximate USD market value": "Մոտավոր շուկայական արժեքը դոլարով",
     "Amount to receive": "Ստացվող գումարը",
     Requested: "Պահանջվող",
     "Calculating from live quotes": "Հաշվարկվում է ընթացիկ գնանշումներով",
@@ -342,6 +395,7 @@ const messages: Record<Locale, Record<string, string>> = {
     "Public P2P sources only · no order placement": "Միայն հանրային P2P աղբյուրներ · պատվեր չի տեղադրվում",
     "Auto-refresh is off": "Ավտոմատ թարմացումն անջատված է",
     "Open swap instructions": "Բացել փոխանակման հրահանգները",
+    "Open route instructions": "Բացել երթուղու հրահանգները",
     "Find routes": "Գտնել ուղղություններ",
     "Finding routes": "Ուղղությունների որոնում",
     "Enter an amount to begin": "Մուտքագրեք գումարը՝ սկսելու համար",
@@ -600,7 +654,9 @@ export function formatRouteCount(count: number, language: Locale) {
  */
 export function localize(node: HTMLElement) {
   const originalText = new WeakMap<Text, string>();
+  const renderedText = new WeakMap<Text, string>();
   const originalAttributes = new WeakMap<Element, Map<string, string>>();
+  const renderedAttributes = new WeakMap<Element, Map<string, string>>();
   const attributes = ["aria-label", "title", "placeholder"];
 
   function translate(value: string, language: Locale) {
@@ -669,32 +725,46 @@ export function localize(node: HTMLElement) {
 
   function translateTree(root: Node, language: Locale) {
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    const textNodes: Text[] = [];
+    const textNodes: Text[] = root instanceof Text ? [root] : [];
     let current: Node | null;
     while ((current = walker.nextNode())) textNodes.push(current as Text);
     for (const text of textNodes) {
-      if (!originalText.has(text)) originalText.set(text, text.nodeValue ?? "");
+      const value = text.nodeValue ?? "";
+      if (!originalText.has(text) || (renderedText.has(text) && value !== renderedText.get(text))) originalText.set(text, value);
       const source = originalText.get(text) ?? "";
-      if (source.trim()) text.nodeValue = translate(source, language);
+      if (!source.trim()) continue;
+      const rendered = translate(source, language);
+      renderedText.set(text, rendered);
+      if (value !== rendered) text.nodeValue = rendered;
     }
     const elements = root instanceof Element ? [root, ...Array.from(root.querySelectorAll("*"))] : Array.from((root as ParentNode).querySelectorAll?.("*") ?? []);
     for (const element of elements) {
       if (!originalAttributes.has(element)) originalAttributes.set(element, new Map());
+      if (!renderedAttributes.has(element)) renderedAttributes.set(element, new Map());
       const saved = originalAttributes.get(element)!;
+      const rendered = renderedAttributes.get(element)!;
       for (const attribute of attributes) {
         const value = element.getAttribute(attribute);
         if (value === null) continue;
-        if (!saved.has(attribute)) saved.set(attribute, value);
+        if (!saved.has(attribute) || (rendered.has(attribute) && value !== rendered.get(attribute))) saved.set(attribute, value);
         const source = saved.get(attribute)!;
-        element.setAttribute(attribute, translate(source, language));
+        const translated = translate(source, language);
+        rendered.set(attribute, translated);
+        if (value !== translated) element.setAttribute(attribute, translated);
       }
     }
   }
 
   const unsubscribe = locale.subscribe((language) => translateTree(node, language));
   const observer = new MutationObserver((records) => {
-    for (const record of records) for (const added of record.addedNodes) translateTree(added, readLocale());
+    for (const record of records) {
+      if (record.type === "childList") {
+        for (const added of record.addedNodes) translateTree(added, readLocale());
+      } else {
+        translateTree(record.target, readLocale());
+      }
+    }
   });
-  observer.observe(node, { childList: true, subtree: true });
+  observer.observe(node, { childList: true, characterData: true, attributes: true, attributeFilter: attributes, subtree: true });
   return { destroy() { unsubscribe(); observer.disconnect(); } };
 }

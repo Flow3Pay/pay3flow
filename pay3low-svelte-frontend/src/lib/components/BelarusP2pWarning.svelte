@@ -2,6 +2,7 @@
   import { onDestroy, tick } from "svelte";
   import { warningIcon } from "$lib/icons";
   import { locale, t } from "$lib/i18n";
+  import { lockPageScroll } from "$lib/page-scroll-lock";
 
   export let open = false;
   export let onClose: () => void;
@@ -9,7 +10,7 @@
   const DECREE_URL = "https://president.gov.by/ru/documents/ukaz-no-367-ot-17-sentabra-2024-g";
   let dialog: HTMLDivElement;
   let active = false;
-  let previousOverflow = "";
+  let unlockPage: (() => void) | undefined;
   $: activeLocale = $locale;
 
   function handleKeydown(event: KeyboardEvent) {
@@ -19,8 +20,7 @@
   async function activate() {
     if (active || typeof document === "undefined") return;
     active = true;
-    previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    unlockPage = lockPageScroll();
     window.addEventListener("keydown", handleKeydown);
     await tick();
     dialog?.focus();
@@ -29,7 +29,8 @@
   function deactivate() {
     if (!active || typeof document === "undefined") return;
     active = false;
-    document.body.style.overflow = previousOverflow;
+    unlockPage?.();
+    unlockPage = undefined;
     window.removeEventListener("keydown", handleKeydown);
   }
 

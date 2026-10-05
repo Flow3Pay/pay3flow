@@ -18,7 +18,7 @@ const NETWORK_ASSETS: Array<[RegExp, string]> = [
   [/bitcoin cash/i, "bch"],
   [/bitcoin/i, "btc"],
   [/ethereum|arbitrum|optimism|base/i, "eth"],
-  [/bnb smart chain|bep-20/i, "bnb"],
+  [/(?:bnb|binance)[- ]smart[- ]chain|\bbsc\b|\bbep[- ]?20\b/i, "bnb"],
   [/solana/i, "sol"],
   [/tron|trc-20/i, "trx"],
   [/ton/i, "ton"],
