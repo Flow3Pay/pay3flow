@@ -16,6 +16,9 @@ pub struct P2pSearchQuery {
     pub side: P2pSide,
     /// Fiat amount, for example `100000` AMD. Omit to search every limit range.
     pub amount: Option<f64>,
+    /// Crypto amount to sell. Filters by available asset and the resulting fiat limits.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub asset_amount: Option<f64>,
     pub payment_method: Option<String>,
     pub merchant_only: Option<bool>,
     pub min_orders: Option<u64>,

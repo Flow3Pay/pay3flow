@@ -69,6 +69,7 @@ pub struct Provider {
     pub source_url: String,
     pub name: String,
     pub currencies: Vec<String>,
+    pub currency_exceptions: Vec<String>,
     pub banks: Vec<String>,
     pub exchange_methods: Vec<ProviderExchangeMethod>,
     pub fee_model: Option<ProviderFeeModel>,
@@ -109,11 +110,11 @@ pub async fn list(pool: &DbPool, filters: ProviderFilters) -> Result<Vec<Provide
     let statement = client
         .prepare_cached(
             r#"
-SELECT id, slug, operation, source_url, name, currencies, banks, exchange_methods, fee_model, guidance
+SELECT id, slug, operation, source_url, name, currencies, currency_exceptions, banks, exchange_methods, fee_model, guidance
 FROM providers
 WHERE status = 'enabled'
   AND ($1::TEXT IS NULL OR operation = $1)
-  AND ($2::TEXT IS NULL OR $2 = ANY(currencies) OR 'ALL' = ANY(currencies))
+  AND ($2::TEXT IS NULL OR ($2 <> ALL(currency_exceptions) AND ($2 = ANY(currencies) OR 'ALL' = ANY(currencies))))
   AND ($3::TEXT IS NULL OR $3 = ANY(banks))
 ORDER BY name, operation, slug
 "#,
@@ -149,6 +150,7 @@ ORDER BY name, operation, slug
                 source_url: row.get("source_url"),
                 name: row.get("name"),
                 currencies: row.get("currencies"),
+                currency_exceptions: row.get("currency_exceptions"),
                 banks: row.get("banks"),
                 exchange_methods,
                 fee_model,

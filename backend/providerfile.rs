@@ -17,6 +17,8 @@ use providerfile_code::{normalize_path_source, CodeSource};
 struct RawProviderFile {
     #[serde(default)]
     exchange_methods: Vec<ProviderExchangeMethod>,
+    #[serde(default)]
+    currency_exceptions: Vec<String>,
     buy: Option<RawProvider>,
     sell: Option<RawProvider>,
     adapter: Option<ProviderAdapters>,
@@ -101,6 +103,7 @@ pub struct ProviderDefinition {
     pub source_url: String,
     pub name: String,
     pub currencies: Vec<String>,
+    pub currency_exceptions: Vec<String>,
     pub banks: Vec<String>,
     pub adapter: Option<ProviderAdapters>,
     pub workflow: Option<WorkflowConfig>,
@@ -160,8 +163,30 @@ fn parse_document_with_path(
 ) -> Result<ParsedProviderFile, ProviderFileError> {
     let normalized = normalize_path_source(contents)
         .map_err(|error| ProviderFileError(format!("{source_file}: {error}")))?;
-    let raw: RawProviderFile = toml::from_str(&normalized)
+    let mut raw: RawProviderFile = toml::from_str(&normalized)
         .map_err(|error| ProviderFileError(format!("{source_file}: {error}")))?;
+    let currency_exceptions = normalized_values(raw.currency_exceptions, true);
+    if currency_exceptions.iter().any(|currency| {
+        currency == "ALL"
+            || !(2..=12).contains(&currency.len())
+            || !currency.bytes().all(|byte| byte.is_ascii_alphanumeric())
+    }) {
+        return Err(ProviderFileError(format!(
+            "{source_file}: currency_exceptions must contain fiat codes, not ALL"
+        )));
+    }
+    if let Some(p2p) = raw
+        .adapter
+        .as_mut()
+        .and_then(|adapter| adapter.p2p.as_mut())
+    {
+        if !p2p.excluded_fiats.is_empty() {
+            return Err(ProviderFileError(format!(
+                "{source_file}: use top-level currency_exceptions instead of adapter.p2p.excluded_fiats"
+            )));
+        }
+        p2p.excluded_fiats = currency_exceptions.clone();
+    }
     if raw.buy.is_none() && raw.sell.is_none() && raw.payment_methods.is_empty() {
         return Err(ProviderFileError(format!(
             "{source_file}: at least one [buy], [sell], or [[payment_methods]] section is required"
@@ -256,6 +281,7 @@ fn parse_document_with_path(
                 exchange_methods.clone(),
                 operation,
                 source_file,
+                &currency_exceptions,
                 adapter.clone(),
                 workflow.clone(),
                 fee_model.clone(),
@@ -365,6 +391,7 @@ fn render_sql_with_payment_methods(
     for definition in definitions {
         let currencies = sql_array(&definition.currencies);
         let banks = sql_array(&definition.banks);
+        let currency_exceptions = sql_array(&definition.currency_exceptions);
         let exchange_methods = sql_array(
             &definition
                 .exchange_methods
@@ -395,12 +422,13 @@ fn render_sql_with_payment_methods(
             })
             .unwrap_or_else(|| "{}".into());
         sql.push_str(&format!(
-            "INSERT INTO providers (slug, operation, source_url, name, currencies, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)\n\
-             VALUES ({}, {}, {}, {}, {currencies}, {banks}, {exchange_methods}, {}::JSONB, {}::JSONB, {}::JSONB, {}::JSONB, {})\n\
+            "INSERT INTO providers (slug, operation, source_url, name, currencies, currency_exceptions, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)\n\
+             VALUES ({}, {}, {}, {}, {currencies}, {currency_exceptions}, {banks}, {exchange_methods}, {}::JSONB, {}::JSONB, {}::JSONB, {}::JSONB, {})\n\
              ON CONFLICT (slug, operation) DO UPDATE SET\n\
                  source_url = EXCLUDED.source_url,\n\
                  name = EXCLUDED.name,\n\
                  currencies = EXCLUDED.currencies,\n\
+                 currency_exceptions = EXCLUDED.currency_exceptions,\n\
                  banks = EXCLUDED.banks,\n\
                  exchange_methods = EXCLUDED.exchange_methods,\n\
                  adapter = EXCLUDED.adapter,\n\
@@ -497,6 +525,7 @@ fn normalize(
     exchange_methods: Vec<ProviderExchangeMethod>,
     operation: Operation,
     source_file: &str,
+    currency_exceptions: &[String],
     adapter: Option<ProviderAdapters>,
     workflow: Option<WorkflowConfig>,
     fee_model: Option<ProviderFeeModel>,
@@ -538,6 +567,12 @@ fn normalize(
             operation.as_str()
         )));
     }
+    if !currency_exceptions.is_empty() && currencies != ["ALL"] {
+        return Err(ProviderFileError(format!(
+            "{source_file}: currency_exceptions requires {}/currency = [\"all\"]",
+            operation.as_str()
+        )));
+    }
 
     Ok(ProviderDefinition {
         slug: slug.to_string(),
@@ -546,6 +581,7 @@ fn normalize(
         source_url,
         name,
         currencies,
+        currency_exceptions: currency_exceptions.to_vec(),
         banks: normalized_values(raw.banks, false),
         adapter,
         workflow,
@@ -939,6 +975,91 @@ currency = ["all"]
         assert_eq!(definitions[0].currencies, ["ALL"]);
         let invalid = source.replace("[\"all\"]", "[\"all\", \"AMD\"]");
         assert!(parse(&invalid, "example", "example/Providerfile").is_err());
+    }
+
+    #[test]
+    fn currency_exceptions_apply_to_catalog_and_p2p_adapter() {
+        let source = r#"
+exchange_methods = ["p2p"]
+currency_exceptions = ["rub", " RUB "]
+[buy]
+source_url = "https://example.com/p2p"
+name = "Example Buy"
+currency = ["all"]
+[adapter.p2p]
+kind = "http_json"
+endpoint = "https://example.com/api"
+method = "GET"
+default_min_fiat = 1
+default_max_fiat = 10000
+default_available_asset = 10000
+[adapter.p2p.buy]
+query = { fiat = "{{fiat}}" }
+items_pointer = "/data"
+[adapter.p2p.offer]
+price_pointer = "/price"
+"#;
+        let definitions = parse(source, "example", "example/Providerfile").unwrap();
+        assert_eq!(definitions[0].currency_exceptions, ["RUB"]);
+        assert_eq!(
+            definitions[0]
+                .adapter
+                .as_ref()
+                .unwrap()
+                .p2p
+                .as_ref()
+                .unwrap()
+                .excluded_fiats,
+            ["RUB"]
+        );
+        assert!(parse(
+            &source.replace("[\"all\"]", "[\"KZT\"]"),
+            "example",
+            "example/Providerfile"
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn checked_in_p2p_currency_rules_match_observed_market_support() {
+        for (slug, source, exclusions) in [
+            (
+                "binance",
+                include_str!("providers/binance/Providerfile"),
+                &["RUB"][..],
+            ),
+            (
+                "bybit",
+                include_str!("providers/bybit/Providerfile"),
+                &[][..],
+            ),
+            ("okx", include_str!("providers/okx/Providerfile"), &[][..]),
+            (
+                "bitget",
+                include_str!("providers/bitget/Providerfile"),
+                &[][..],
+            ),
+            ("mexc", include_str!("providers/mexc/Providerfile"), &[][..]),
+        ] {
+            let definitions = parse(source, slug, "Providerfile").unwrap();
+            assert_eq!(definitions.len(), 2, "{slug}");
+            for definition in definitions {
+                assert_eq!(definition.currencies, ["ALL"], "{slug}");
+                assert_eq!(definition.currency_exceptions, exclusions, "{slug}");
+                let adapter = definition.adapter.unwrap().p2p.unwrap();
+                assert!(adapter.supported_fiats.is_empty(), "{slug}");
+                assert_eq!(adapter.excluded_fiats, exclusions, "{slug}");
+            }
+        }
+        let rapira = parse(
+            include_str!("providers/rapira/Providerfile"),
+            "rapira",
+            "Providerfile",
+        )
+        .unwrap();
+        assert!(rapira
+            .iter()
+            .all(|definition| definition.currencies == ["RUB"]));
     }
 
     #[test]

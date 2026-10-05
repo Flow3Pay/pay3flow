@@ -27,12 +27,14 @@ kind = "http_json"
 endpoint = "https://api.rapira.net/otc/offers/page-query/v2"
 method = "GET"
 headers = { Origin = "https://rapira.net", Referer = "https://rapira.net/ru/p2p/BUY?p=1" }
-timeout_ms = 4000
-max_results = 100
+timeout_ms = 10000
+max_results = "infinite"
+page_size = 20
 supported_assets = ["USDT"]
+supported_fiats = ["RUB"]
 
 [adapter.p2p.buy]
-query = { listingType = "RECOMMENDED", merchantSide = "SELL", internalCoinUnit = "{{asset}}", externalCoinUnit = "{{fiat}}", paymentIds = "", showOnlyEligible = "false", sortByNumberOfMutualOrders = "false", amount = "{{amount}}", pageNo = "1", pageSize = "{{limit}}" }
+query = { listingType = "RECOMMENDED", merchantSide = "SELL", internalCoinUnit = "{{asset}}", externalCoinUnit = "{{fiat}}", paymentIds = "", showOnlyEligible = "false", sortByNumberOfMutualOrders = "false", amount = "{{amount}}", pageNo = "{{page}}", pageSize = "{{limit}}" }
 items_pointer = "/content"
 success_pointer = "/code"
 success_value = "0"
@@ -40,7 +42,7 @@ success_missing_allowed = true
 error_pointer = "/message"
 
 [adapter.p2p.sell]
-query = { listingType = "RECOMMENDED", merchantSide = "BUY", internalCoinUnit = "{{asset}}", externalCoinUnit = "{{fiat}}", paymentIds = "", showOnlyEligible = "false", sortByNumberOfMutualOrders = "false", amount = "{{amount}}", pageNo = "1", pageSize = "{{limit}}" }
+query = { listingType = "RECOMMENDED", merchantSide = "BUY", internalCoinUnit = "{{asset}}", externalCoinUnit = "{{fiat}}", paymentIds = "", showOnlyEligible = "false", sortByNumberOfMutualOrders = "false", amount = "{{amount}}", pageNo = "{{page}}", pageSize = "{{limit}}" }
 items_pointer = "/content"
 success_pointer = "/code"
 success_value = "0"

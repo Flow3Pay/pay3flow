@@ -13,13 +13,13 @@ url = "https://www.bybit.com/fiat/trade/otc/"
 [sell]
 source_url = "https://www.bybit.com"
 name = "Bybit Sell"
-currency = ["usd", "rub", "eur", "amd", "byn", "uah", "kzt"]
+currency = ["all"]
 banks = []
 
 [buy]
 source_url = "https://www.bybit.com"
 name = "Bybit Buy"
-currency = ["usd", "rub", "eur", "amd", "byn", "uah", "kzt"]
+currency = ["all"]
 banks = []
 
 [adapter.p2p]
@@ -29,7 +29,6 @@ method = "POST"
 headers = { Origin = "https://www.bybit.com", Referer = "https://www.bybit.com/" }
 timeout_ms = 4000
 supported_assets = ["USDT", "USDC", "BTC", "ETH"]
-supported_fiats = ["USD", "RUB", "EUR", "AMD", "BYN", "UAH", "KZT"]
 
 [adapter.p2p.payment_method_aliases]
 "T-Bank" = ["Tinkoff", "Tinkoff Bank"]

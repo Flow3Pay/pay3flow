@@ -704,7 +704,8 @@ fn composes_usd_bank_accounts_through_crypto() {
     assert_eq!(route.target_fiat, "USD");
     assert_eq!(route.asset, "USDT");
     assert!(route.same_venue);
-    assert!(route.payment_methods_verified);
+    // A generic bank-transfer label does not confirm a specific payment rail.
+    assert!(!route.payment_methods_verified);
     assert_eq!(
         route.entry_offer.as_ref().unwrap().payment_methods,
         ["Bank Transfer"]
@@ -747,7 +748,7 @@ fn composes_armenian_usd_account_to_usd_bank_through_crypto() {
     assert_eq!(route.exit_offer.as_ref().unwrap().source, "skylabs");
     assert!(!route.same_venue);
     assert!(route.requires_asset_transfer);
-    assert!(route.payment_methods_verified);
+    assert!(!route.payment_methods_verified);
     assert_eq!(
         route.entry_offer.as_ref().unwrap().payment_methods,
         ["Ameriabank"]

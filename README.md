@@ -62,6 +62,7 @@ into [`backend/migrations/providers.sql`](backend/migrations/providers.sql) and
 loaded into PostgreSQL when the backend starts.
 Providerfiles also define provider-specific guidance shown in route and order
 instructions. P2P providers can declare `currency = ["all"]` and use
+`currency_exceptions` for unsupported fiat codes. They can use
 `max_results = "infinite"` with paged requests to search more ads. See the
 [Providerfile reference](Providerfile.md) for the supported fields and limits.
 
@@ -229,6 +230,8 @@ REST response, plus `type`.
 
 `GET /api/p2p/search` returns raw public advertisements for one fiat/asset
 side. It is useful for adapter diagnostics; the main UI uses complete routes.
+`amount` is a fiat amount. For a crypto-to-fiat search, pass `asset_amount`
+to retain ads whose available asset and fiat order limits cover that amount.
 
 ```bash
 curl -G 'http://localhost:8080/api/p2p/search' \

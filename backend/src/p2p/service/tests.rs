@@ -8,6 +8,7 @@ fn hot_supported_pairs_are_remembered_for_background_refresh() {
         asset: "USDT".into(),
         side: P2pSide::BuyCrypto,
         amount: Some(10_000.0),
+        asset_amount: None,
         payment_method: None,
         merchant_only: None,
         min_orders: None,
@@ -123,6 +124,41 @@ fn offer(source: &str, price: &str, min: &str, max: &str, orders: u64) -> P2pOff
 }
 
 #[test]
+fn crypto_amount_filters_unusable_ads_before_global_offer_limit() {
+    let query = P2pSearchQuery {
+        fiat: "KZT".into(),
+        asset: "USDT".into(),
+        side: P2pSide::SellCrypto,
+        amount: None,
+        asset_amount: Some(100.0),
+        payment_method: None,
+        merchant_only: None,
+        min_orders: None,
+        min_completion_rate: None,
+        limit: Some(60),
+        sources: None,
+    };
+    let mut offers = (0..100)
+        .map(|index| {
+            let mut offer = offer("bybit", "490", "1000000", "2000000", 100);
+            offer.ad_id = format!("bybit-{index}");
+            offer.fiat = "KZT".into();
+            offer.side = P2pSide::SellCrypto;
+            offer
+        })
+        .collect::<Vec<_>>();
+    let mut binance = offer("binance", "450", "20000", "100000", 100);
+    binance.fiat = "KZT".into();
+    binance.side = P2pSide::SellCrypto;
+    offers.push(binance);
+
+    let response =
+        build_search_response(query, &offers, Vec::new(), false, "provider", false, None);
+    assert_eq!(response.offers.len(), 1);
+    assert_eq!(response.offers[0].source, "binance");
+}
+
+#[test]
 fn parses_p2p_offer_candidates_from_fmatch() {
     let expected = offer("binance", "390.5", "100", "100000", 42);
     let reply = serde_json::json!({
@@ -164,6 +200,7 @@ fn all_market_query_uses_a_generic_wildcard_fact() {
         asset: "USDT".into(),
         side: P2pSide::SellCrypto,
         amount: Some(100.0),
+        asset_amount: None,
         payment_method: None,
         merchant_only: None,
         min_orders: None,
@@ -183,6 +220,7 @@ fn cached_p2p_answer_round_trips_with_market_restored_by_query() {
             asset: "USDT".into(),
             side: P2pSide::BuyCrypto,
             amount: Some(1000.0),
+            asset_amount: None,
             payment_method: None,
             merchant_only: None,
             min_orders: None,
@@ -214,6 +252,7 @@ fn provider_fallback_does_not_expose_fmatch_as_a_venue() {
             asset: "USDT".into(),
             side: P2pSide::BuyCrypto,
             amount: Some(1000.0),
+            asset_amount: None,
             payment_method: None,
             merchant_only: None,
             min_orders: None,
@@ -270,6 +309,7 @@ fn empty_fmatch_response_is_not_usable() {
             asset: "USDT".into(),
             side: P2pSide::BuyCrypto,
             amount: Some(10_000.0),
+            asset_amount: None,
             payment_method: None,
             merchant_only: None,
             min_orders: None,
@@ -295,6 +335,7 @@ fn reputation_filters_keep_offers_when_metrics_are_not_published() {
         asset: "USDC".into(),
         side: P2pSide::SellCrypto,
         amount: Some(100.0),
+        asset_amount: None,
         payment_method: Some("Sberbank".into()),
         merchant_only: None,
         min_orders: Some(20),
@@ -327,6 +368,7 @@ fn fmatch_boundary_rejects_wrong_pair_side_and_unrequested_source() {
         asset: "USDT".into(),
         side: P2pSide::BuyCrypto,
         amount: Some(100_000.0),
+        asset_amount: None,
         payment_method: None,
         merchant_only: None,
         min_orders: None,
@@ -370,6 +412,7 @@ fn global_limit_keeps_the_best_offer_from_each_source() {
         asset: "USDC".into(),
         side: P2pSide::SellCrypto,
         amount: None,
+        asset_amount: None,
         payment_method: None,
         merchant_only: None,
         min_orders: None,
@@ -425,6 +468,7 @@ fn merging_market_partitions_keeps_a_lower_ranked_direct_source() {
         asset: "USDT".into(),
         side: P2pSide::BuyCrypto,
         amount: Some(10_000.0),
+        asset_amount: None,
         payment_method: None,
         merchant_only: None,
         min_orders: None,
@@ -493,6 +537,7 @@ async fn market_filter_only_queries_matching_sources() {
         asset: "USDT".into(),
         side: P2pSide::BuyCrypto,
         amount: None,
+        asset_amount: None,
         payment_method: None,
         merchant_only: None,
         min_orders: None,
@@ -543,6 +588,7 @@ async fn fans_out_filters_and_sorts() {
             asset: "usdt".into(),
             side: P2pSide::BuyCrypto,
             amount: Some(50_000.0),
+            asset_amount: None,
             payment_method: None,
             merchant_only: Some(true),
             min_orders: Some(50),
@@ -582,6 +628,7 @@ async fn times_out_one_source_without_losing_other_results() {
             asset: "USDT".into(),
             side: P2pSide::BuyCrypto,
             amount: None,
+            asset_amount: None,
             payment_method: None,
             merchant_only: None,
             min_orders: None,
@@ -623,6 +670,7 @@ async fn queries_only_requested_sources() {
             asset: "USDT".into(),
             side: P2pSide::BuyCrypto,
             amount: None,
+            asset_amount: None,
             payment_method: None,
             merchant_only: None,
             min_orders: None,
@@ -656,6 +704,7 @@ async fn unavailable_requested_source_returns_an_empty_result() {
             asset: "USDT".into(),
             side: P2pSide::BuyCrypto,
             amount: None,
+            asset_amount: None,
             payment_method: None,
             merchant_only: None,
             min_orders: None,
@@ -730,6 +779,7 @@ async fn reuses_short_lived_search_cache() {
         asset: "USDT".into(),
         side: P2pSide::BuyCrypto,
         amount: None,
+        asset_amount: None,
         payment_method: None,
         merchant_only: None,
         min_orders: None,
@@ -766,6 +816,7 @@ async fn provider_snapshot_keeps_bank_offers_beyond_display_limit() {
         asset: "USDT".into(),
         side: P2pSide::BuyCrypto,
         amount: None,
+        asset_amount: None,
         payment_method: None,
         merchant_only: None,
         min_orders: None,

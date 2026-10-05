@@ -1,4 +1,5 @@
 exchange_methods = ["p2p", "exchanger"]
+currency_exceptions = ["RUB"]
 
 [guidance]
 description = "Binance P2P listings can change before an order is placed. Open the listing in Binance and use the terms shown in the order."
@@ -13,13 +14,13 @@ url = "https://p2p.binance.com/"
 [sell]
 source_url = "https://www.binance.com"
 name = "Binance Sell"
-currency = ["usd", "rub", "eur", "amd", "byn", "uah", "kzt"]
+currency = ["all"]
 banks = []
 
 [buy]
 source_url = "https://www.binance.com"
 name = "Binance Buy"
-currency = ["usd", "rub", "eur", "amd", "byn", "uah", "kzt"]
+currency = ["all"]
 banks = []
 
 [adapter.p2p]
@@ -31,7 +32,6 @@ timeout_ms = 10000
 max_results = 100
 page_size = 20
 supported_assets = ["USDT", "USDC", "BTC", "ETH", "BNB"]
-supported_fiats = ["USD", "RUB", "EUR", "AMD", "BYN", "UAH", "KZT"]
 
 [adapter.p2p.payment_method_aliases]
 "T-Bank" = ["Tinkoff", "Tinkoff Bank"]

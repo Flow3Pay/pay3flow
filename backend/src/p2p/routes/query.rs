@@ -186,6 +186,7 @@ pub(in crate::p2p) fn leg_query(
         asset: asset.into(),
         side,
         amount,
+        asset_amount: None,
         payment_method,
         merchant_only: Some(route.merchant_only),
         min_orders: route.min_orders,

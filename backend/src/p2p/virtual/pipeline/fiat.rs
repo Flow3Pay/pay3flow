@@ -133,7 +133,8 @@ pub(super) async fn produce_crypto_to_fiat(
     batches: mpsc::Sender<RouteBatch>,
 ) -> Result<()> {
     let asset = query.source_currency.clone();
-    let leg = super::leg_query_for(query, &query.target_currency, &asset, P2pSide::SellCrypto);
+    let mut leg = super::leg_query_for(query, &query.target_currency, &asset, P2pSide::SellCrypto);
+    leg.asset_amount = Some(query.source_amount);
     stream_single_leg(service, query, asset, leg, false, batches).await
 }
 

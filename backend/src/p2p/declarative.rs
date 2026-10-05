@@ -52,12 +52,17 @@ impl DeclarativeP2pSource {
     }
 
     fn supports_fiat(&self, fiat: &str) -> bool {
-        self.config.supported_fiats.is_empty()
-            || self
-                .config
-                .supported_fiats
-                .iter()
-                .any(|supported| supported.eq_ignore_ascii_case(fiat))
+        !self
+            .config
+            .excluded_fiats
+            .iter()
+            .any(|excluded| excluded.eq_ignore_ascii_case(fiat))
+            && (self.config.supported_fiats.is_empty()
+                || self
+                    .config
+                    .supported_fiats
+                    .iter()
+                    .any(|supported| supported.eq_ignore_ascii_case(fiat)))
     }
 
     pub(crate) fn supports_query(&self, query: &P2pSearchQuery) -> bool {
@@ -1134,6 +1139,7 @@ mod tests {
             asset: "ETH".into(),
             side: P2pSide::BuyCrypto,
             amount: Some(10_000.0),
+            asset_amount: None,
             payment_method: Some("Sberbank".into()),
             merchant_only: None,
             min_orders: None,
@@ -1198,6 +1204,7 @@ mod tests {
                 asset: "USDT".into(),
                 side: P2pSide::BuyCrypto,
                 amount: None,
+                asset_amount: None,
                 payment_method: None,
                 merchant_only: None,
                 min_orders: None,
@@ -1236,6 +1243,7 @@ mod tests {
             asset: "USDT".into(),
             side: P2pSide::BuyCrypto,
             amount: None,
+            asset_amount: None,
             payment_method: None,
             merchant_only: None,
             min_orders: None,
@@ -1280,6 +1288,7 @@ mod tests {
             asset: "USDT".into(),
             side: P2pSide::BuyCrypto,
             amount: Some(20_000.0),
+            asset_amount: None,
             payment_method: None,
             merchant_only: None,
             min_orders: None,
@@ -1309,6 +1318,7 @@ mod tests {
             asset: "BTC".into(),
             side: P2pSide::BuyCrypto,
             amount: Some(100_000.0),
+            asset_amount: None,
             payment_method: None,
             merchant_only: None,
             min_orders: None,
@@ -1349,6 +1359,7 @@ mod tests {
             asset: "ETH".into(),
             side: P2pSide::BuyCrypto,
             amount: Some(10_000.0),
+            asset_amount: None,
             payment_method: None,
             merchant_only: None,
             min_orders: None,
@@ -1379,6 +1390,7 @@ mod tests {
             asset: "USDT".into(),
             side: P2pSide::BuyCrypto,
             amount: Some(100_000.0),
+            asset_amount: None,
             payment_method: None,
             merchant_only: None,
             min_orders: None,
@@ -1433,6 +1445,7 @@ mod tests {
             asset: "USDC".into(),
             side: P2pSide::BuyCrypto,
             amount: Some(250_000.0),
+            asset_amount: None,
             payment_method: None,
             merchant_only: None,
             min_orders: None,
@@ -1501,6 +1514,7 @@ mod tests {
             asset: "USDT".into(),
             side: P2pSide::BuyCrypto,
             amount: Some(100_000.0),
+            asset_amount: None,
             payment_method: None,
             merchant_only: None,
             min_orders: None,
@@ -1541,6 +1555,7 @@ mod tests {
             asset: "USDT".into(),
             side: P2pSide::BuyCrypto,
             amount: Some(100_000.0),
+            asset_amount: None,
             payment_method: None,
             merchant_only: None,
             min_orders: None,
@@ -1599,6 +1614,7 @@ mod tests {
                     asset: "USDT".into(),
                     side,
                     amount: (side == P2pSide::BuyCrypto).then_some(100_000.0),
+                    asset_amount: None,
                     payment_method: Some("Bank Transfer".into()),
                     merchant_only: None,
                     min_orders: None,
@@ -1628,6 +1644,7 @@ mod tests {
                     asset: "USDT".into(),
                     side,
                     amount: (side == P2pSide::BuyCrypto).then_some(100_000.0),
+                    asset_amount: None,
                     payment_method: None,
                     merchant_only: None,
                     min_orders: None,
@@ -1656,6 +1673,7 @@ mod tests {
                     asset: "ETH".into(),
                     side,
                     amount: (side == P2pSide::BuyCrypto).then_some(10_000.0),
+                    asset_amount: None,
                     payment_method: None,
                     merchant_only: None,
                     min_orders: None,
@@ -1682,6 +1700,7 @@ mod tests {
             asset: "USDT".into(),
             side: P2pSide::BuyCrypto,
             amount: Some(100_000.0),
+            asset_amount: None,
             payment_method: None,
             merchant_only: None,
             min_orders: None,
@@ -1710,6 +1729,7 @@ mod tests {
             asset: "SOL".into(),
             side: P2pSide::BuyCrypto,
             amount: Some(100_000.0),
+            asset_amount: None,
             payment_method: None,
             merchant_only: None,
             min_orders: None,
@@ -1747,6 +1767,7 @@ mod tests {
             asset: "USDT".into(),
             side: P2pSide::BuyCrypto,
             amount: Some(100_000.0),
+            asset_amount: None,
             payment_method: None,
             merchant_only: None,
             min_orders: None,
@@ -1774,6 +1795,7 @@ mod tests {
                     asset: "USDT".into(),
                     side,
                     amount: Some(1_000.0),
+                    asset_amount: None,
                     payment_method: None,
                     merchant_only: None,
                     min_orders: None,
@@ -1826,6 +1848,7 @@ mod tests {
                     asset: "USDT".into(),
                     side,
                     amount: Some(100_000.0),
+                    asset_amount: None,
                     payment_method: None,
                     merchant_only: None,
                     min_orders: None,

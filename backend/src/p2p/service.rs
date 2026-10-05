@@ -56,6 +56,12 @@ impl P2pSearchQuery {
             bail!("amount must be a positive finite number");
         }
         if self
+            .asset_amount
+            .is_some_and(|amount| !amount.is_finite() || amount <= 0.0)
+        {
+            bail!("asset_amount must be a positive finite number");
+        }
+        if self
             .min_completion_rate
             .is_some_and(|rate| !rate.is_finite() || !(0.0..=1.0).contains(&rate))
         {
@@ -222,6 +228,18 @@ impl P2pOffer {
             .amount
             .is_some_and(|amount| !self.covers_amount(amount))
         {
+            return false;
+        }
+        if query.asset_amount.is_some_and(|amount| {
+            self.available_asset
+                .parse::<f64>()
+                .map_or(true, |available| {
+                    !available.is_finite() || available < amount
+                })
+                || self
+                    .price_number()
+                    .is_none_or(|price| !self.covers_amount(amount * price))
+        }) {
             return false;
         }
         if query.merchant_only.unwrap_or(false) && !self.advertiser.is_merchant {
@@ -558,6 +576,7 @@ impl P2pSearchService {
                                 asset: asset.clone(),
                                 side,
                                 amount: None,
+                                asset_amount: None,
                                 payment_method: None,
                                 merchant_only: None,
                                 min_orders: None,
@@ -1040,6 +1059,7 @@ impl P2pSearchService {
             asset,
             side,
             amount: None,
+            asset_amount: None,
             payment_method: None,
             merchant_only: None,
             min_orders: None,
@@ -1822,11 +1842,12 @@ fn fmatch_p2p_content(query: &P2pSearchQuery, market: Option<P2pOfferMarket>) ->
         None => "all",
     };
     format!(
-        "p2p route candidates; market={market}; fiat={}; asset={}; side={:?}; amount={:?}; payment_method={:?}; merchant_only={:?}; min_orders={:?}; min_completion_rate={:?}; limit={:?}; sources={:?}",
+        "p2p route candidates; market={market}; fiat={}; asset={}; side={:?}; amount={:?}; asset_amount={:?}; payment_method={:?}; merchant_only={:?}; min_orders={:?}; min_completion_rate={:?}; limit={:?}; sources={:?}",
         query.fiat,
         query.asset,
         query.side,
         query.amount,
+        query.asset_amount,
         query.payment_method,
         query.merchant_only,
         query.min_orders,

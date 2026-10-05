@@ -473,6 +473,7 @@ mod tests {
                 asset: "USDT".into(),
                 side: P2pSide::BuyCrypto,
                 amount: Some(100_000.0),
+                asset_amount: None,
                 payment_method: None,
                 merchant_only: None,
                 min_orders: None,

@@ -155,6 +155,8 @@ pub struct P2pAdapterConfig {
     pub supported_assets: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub supported_fiats: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub excluded_fiats: Vec<String>,
     /// Provider-specific names (or opaque IDs) for canonical payment methods.
     ///
     /// The map key is the canonical name used by Pay3Flow. Every value is a
@@ -641,6 +643,13 @@ impl P2pAdapterConfig {
             if !valid_asset_code(fiat) {
                 return Err(format!(
                     "{context}: adapter/p2p/supported_fiats contains invalid code `{fiat}`"
+                ));
+            }
+        }
+        for fiat in &self.excluded_fiats {
+            if !valid_asset_code(fiat) {
+                return Err(format!(
+                    "{context}: adapter/p2p/excluded_fiats contains invalid code `{fiat}`"
                 ));
             }
         }

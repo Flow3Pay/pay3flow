@@ -313,6 +313,7 @@ CREATE TABLE IF NOT EXISTS providers (
     source_url TEXT NOT NULL,
     name TEXT NOT NULL,
     currencies TEXT[] NOT NULL DEFAULT '{}',
+    currency_exceptions TEXT[] NOT NULL DEFAULT '{}',
     banks TEXT[] NOT NULL DEFAULT '{}',
     exchange_methods TEXT[] NOT NULL DEFAULT ARRAY['p2p', 'exchanger']::TEXT[],
     adapter JSONB NOT NULL DEFAULT '{}'::JSONB,
@@ -329,6 +330,8 @@ CREATE TABLE IF NOT EXISTS providers (
 
 ALTER TABLE providers
     ADD COLUMN IF NOT EXISTS adapter JSONB NOT NULL DEFAULT '{}'::JSONB;
+ALTER TABLE providers
+    ADD COLUMN IF NOT EXISTS currency_exceptions TEXT[] NOT NULL DEFAULT '{}';
 ALTER TABLE providers
     ADD COLUMN IF NOT EXISTS workflow JSONB NOT NULL DEFAULT '{}'::JSONB;
 ALTER TABLE providers

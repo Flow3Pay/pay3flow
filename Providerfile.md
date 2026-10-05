@@ -138,9 +138,26 @@ sorted. Bank names are trimmed, deduplicated, and sorted; empty names are
 discarded.
 
 Use `currency = ["all"]` when a provider accepts any fiat currency. Do not
-combine `"all"` with specific codes. For P2P adapters, leave `supported_fiats`
-empty to allow any fiat in direct searches; background polling still uses the
-configured fiat catalog.
+combine `"all"` with specific codes. To exclude known unsupported currencies,
+declare `currency_exceptions` at the top level, before any section:
+
+```toml
+exchange_methods = ["p2p"]
+currency_exceptions = ["RUB"]
+
+[buy]
+source_url = "https://provider.example/p2p"
+name = "Example Buy"
+currency = ["all"]
+```
+
+`currency_exceptions` applies to both operations and must be used with
+`currency = ["all"]`. The generator normalizes and deduplicates the codes,
+then excludes them from catalog filters and P2P searches. For P2P adapters,
+leave `supported_fiats` empty to try any other fiat; an empty live response
+still produces no route. Providers with a fixed fiat set should declare that
+set instead of `all`. Background polling continues to use its configured fiat
+catalog.
 
 `buy` means that the customer buys crypto with fiat. `sell` means that the
 customer sells crypto for fiat.
@@ -765,6 +782,7 @@ Checked-in Rust examples: CoW Swap, NEAR Intents, and ID Pay.
 | `buy.source_url`, `sell.source_url` | Per present operation | — | HTTP/HTTPS user-facing URL. |
 | `buy.name`, `sell.name` | Yes | — | Non-empty display name. |
 | `buy.currency`, `sell.currency` | Yes | — | Non-empty fiat-code array, or `["all"]` for any fiat. The wildcard must stand alone. |
+| `currency_exceptions` | No | `[]` | Top-level fiat codes excluded from both operations when their `currency` is `["all"]`. |
 | `buy.banks`, `sell.banks` | No | `[]` | Bank/payment filters. |
 | `fees.kind` | In `[fees]` | — | Non-empty normalized identifier. |
 | `fees.description` | In `[fees]` | — | Human-readable disclosure. |

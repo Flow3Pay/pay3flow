@@ -36,6 +36,7 @@ export interface ProviderDefinition {
   source_url: string;
   name: string;
   currencies: string[];
+  currency_exceptions: string[];
   banks: string[];
   exchange_methods: Array<"p2p" | "exchanger">;
   fee_model?: ProviderFeeModel | null;

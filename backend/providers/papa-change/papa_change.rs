@@ -592,6 +592,7 @@ mod tests {
             asset: "USDT".into(),
             side,
             amount: Some(10_000.0),
+            asset_amount: None,
             payment_method: Some("Sberbank".into()),
             merchant_only: None,
             min_orders: None,

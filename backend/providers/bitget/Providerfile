@@ -13,13 +13,13 @@ url = "https://www.bitget.com/p2p-trade"
 [sell]
 source_url = "https://www.bitget.com"
 name = "Bitget Sell"
-currency = ["usd", "rub", "eur", "amd", "uah", "kzt"]
+currency = ["all"]
 banks = []
 
 [buy]
 source_url = "https://www.bitget.com"
 name = "Bitget Buy"
-currency = ["usd", "rub", "eur", "amd", "uah", "kzt"]
+currency = ["all"]
 banks = []
 
 [adapter.p2p]

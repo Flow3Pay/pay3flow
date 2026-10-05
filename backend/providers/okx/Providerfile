@@ -13,13 +13,13 @@ url = "https://www.okx.com/p2p-markets/"
 [sell]
 source_url = "https://www.okx.com"
 name = "OKX Sell"
-currency = ["usd", "rub", "eur", "amd", "byn", "uah", "kzt"]
+currency = ["all"]
 banks = []
 
 [buy]
 source_url = "https://www.okx.com"
 name = "OKX Buy"
-currency = ["usd", "rub", "eur", "amd", "byn", "uah", "kzt"]
+currency = ["all"]
 banks = []
 
 [adapter.p2p]
@@ -29,7 +29,6 @@ method = "GET"
 headers = { Origin = "https://www.okx.com", Referer = "https://www.okx.com/p2p-markets/" }
 timeout_ms = 10000
 supported_assets = ["USDT", "USDC", "BTC", "ETH"]
-supported_fiats = ["USD", "RUB", "EUR", "AMD", "BYN", "UAH", "KZT"]
 
 [adapter.p2p.payment_method_aliases]
 "T-Bank" = ["Tinkoff", "Tinkoff Bank"]
