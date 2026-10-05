@@ -91,6 +91,9 @@ flowchart LR
 ```
 
 - Selected sources and intermediary assets are searched concurrently.
+- P2P route legs read provider advertisements directly; Fmatch candidate
+  pages can omit valid ads from a venue. Direct-exchange discovery may use
+  Fmatch.
 - `/ws/p2p/routes` publishes a new ranked snapshot whenever another source
   finishes; the UI does not wait for every venue before showing results.
 - A failed or slow source is reported in route status data without discarding

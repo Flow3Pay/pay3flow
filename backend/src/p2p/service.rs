@@ -1098,6 +1098,12 @@ impl P2pSearchService {
         market: Option<P2pOfferMarket>,
         updates: Option<&mpsc::Sender<P2pSearchResponse>>,
     ) -> Result<P2pSearchResponse> {
+        // Fmatch may return only a few ads from a busy venue and omit smaller
+        // venues altogether. P2P routes need the providers' full ad pages.
+        if market == Some(P2pOfferMarket::P2p) {
+            return self.run_search(query, updates.cloned(), market).await;
+        }
+
         let started = Instant::now();
         let backend = self
             .fmatch
