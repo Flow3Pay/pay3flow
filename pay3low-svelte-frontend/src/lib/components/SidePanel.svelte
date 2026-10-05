@@ -28,7 +28,7 @@
   export let onOpenSearchActivity: () => void = () => {};
 
   const ASSET_NAMES: Record<string, string> = { BTC: "Bitcoin", ETH: "Ether", USDC: "USD Coin", USDT: "Tether" };
-  const FIAT_MARKS: Record<string, string> = { AMD: "🇦🇲", RUB: "🇷🇺", BYN: "🇧🇾", UAH: "🇺🇦", KZT: "🇰🇿" };
+  const FIAT_CURRENCIES = new Set(["AMD", "BYN", "KZT", "RUB", "UAH", "USD"]);
   type Step = { currency: string; network?: string; networkLabel?: string; provider?: string; iconUrl?: string };
 
   const venueName = (value?: string) => value ? venueNames[value.toLowerCase()] ?? value : "Searching";
@@ -220,11 +220,7 @@
                       {#if stepIndex > 0}<span class="workflowArrow" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 12h16m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span>{/if}
                       <span class="workflowControl">
                         <span class="workflowAsset">
-                          {#if FIAT_MARKS[step.currency.toUpperCase()] && !step.iconUrl}
-                            <span class="workflowFlag" aria-hidden="true">{FIAT_MARKS[step.currency.toUpperCase()]}</span>
-                          {:else}
-                            <span class="workflowIcon" aria-hidden="true"><img src={step.iconUrl ?? assetIcon(step.currency)} alt="" width="18" height="18" loading="lazy" decoding="async" /></span>
-                          {/if}
+                          <span class="workflowIcon" aria-hidden="true"><img src={FIAT_CURRENCIES.has(step.currency.toUpperCase()) ? assetIcon(step.currency) : step.iconUrl ?? assetIcon(step.currency)} alt="" width="18" height="18" loading="lazy" decoding="async" /></span>
                           <strong>{step.currency.toUpperCase()}</strong>
                         </span>
                         {#if step.network}
@@ -919,13 +915,6 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
-}
-
-.workflowFlag {
-  display: inline-block;
-  flex: 0 0 auto;
-  font-size: 13px;
-  line-height: 1;
 }
 
 .workflowVenue {
