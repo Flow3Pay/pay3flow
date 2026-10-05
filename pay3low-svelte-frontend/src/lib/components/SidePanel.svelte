@@ -27,7 +27,7 @@
   export let onOpenBelarusP2pWarning: () => void = () => {};
 
   const ASSET_NAMES: Record<string, string> = { BTC: "Bitcoin", ETH: "Ether", USDC: "USD Coin", USDT: "Tether" };
-  const FIAT_MARKS: Record<string, string> = { AMD: "🇦🇲", RUB: "🇷🇺", BYN: "🇧🇾" };
+  const FIAT_CURRENCIES = new Set(["AMD", "BYN", "KZT", "RUB", "UAH", "USD"]);
   type Step = { currency: string; network?: string; networkLabel?: string; provider?: string; iconUrl?: string };
 
   const venueName = (value?: string) => value ? venueNames[value.toLowerCase()] ?? value : "Searching";
@@ -213,11 +213,7 @@
                     <span class="workflowPart">
                       {#if stepIndex > 0}<span class="workflowArrow" aria-hidden="true">→</span>{/if}
                       <span class="workflowAsset">
-                        {#if FIAT_MARKS[step.currency.toUpperCase()] && !step.iconUrl}
-                          <span class="workflowFlag" aria-hidden="true">{FIAT_MARKS[step.currency.toUpperCase()]}</span>
-                        {:else}
-                          <span class="workflowIcon" aria-hidden="true"><img src={step.iconUrl ?? assetIcon(step.currency)} alt="" width="15" height="15" loading="lazy" decoding="async" /></span>
-                        {/if}
+                        <span class="workflowIcon" aria-hidden="true"><img src={FIAT_CURRENCIES.has(step.currency.toUpperCase()) ? assetIcon(step.currency) : step.iconUrl ?? assetIcon(step.currency)} alt="" width="15" height="15" loading="lazy" decoding="async" /></span>
                         <span>{assetLabel(step.currency)}</span>
                         {#if step.network}
                           <span class="workflowNetwork" aria-label={t("Network: {network}", { network: step.networkLabel ?? compactNetwork(step.network) }, $locale)}>
@@ -891,13 +887,6 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
-}
-
-.workflowFlag {
-  display: inline-block;
-  flex: 0 0 auto;
-  font-size: 13px;
-  line-height: 1;
 }
 
 .workflowVenue {
