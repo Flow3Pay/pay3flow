@@ -1913,6 +1913,67 @@ fn removes_large_price_outlier() {
     assert_eq!(filtered.len(), 2);
 }
 
+#[tokio::test]
+async fn direct_fiat_crypto_routes_keep_real_venue_price_outliers() {
+    let service = P2pSearchService::with_sources(
+        vec![
+            Arc::new(DelayedRouteSource {
+                name: "binance",
+                delay: Duration::ZERO,
+                price: "450",
+            }),
+            Arc::new(DelayedRouteSource {
+                name: "bybit",
+                delay: Duration::ZERO,
+                price: "451",
+            }),
+            Arc::new(DelayedRouteSource {
+                name: "bitget",
+                delay: Duration::ZERO,
+                price: "615",
+            }),
+        ],
+        Duration::from_secs(1),
+    );
+    let mut query = P2pRouteSearchQuery {
+        source_fiat: "KZT".into(),
+        target_fiat: "USDT".into(),
+        source_amount: 50_000.0,
+        source_network: None,
+        target_network: Some("tron".into()),
+        bridge_fiat: None,
+        assets: None,
+        intermediary_assets: None,
+        source_payment_method: None,
+        target_payment_method: None,
+        source_payment_fee_percent: None,
+        target_payment_fee_percent: None,
+        merchant_only: Some(false),
+        min_orders: None,
+        min_completion_rate: None,
+        allow_cross_venue: Some(false),
+        max_price_deviation_bps: Some(1_000),
+        limit: Some(40),
+        sources: None,
+        exchange_mode: ExchangeMode::P2p,
+    };
+    for (source, target, amount) in [("KZT", "USDT", 50_000.0), ("USDT", "KZT", 100.0)] {
+        query.source_fiat = source.into();
+        query.target_fiat = target.into();
+        query.source_amount = amount;
+        query.source_network = (source == "USDT").then(|| "tron".into());
+        query.target_network = (target == "USDT").then(|| "tron".into());
+        let response = service.search_routes(query.clone()).await.unwrap();
+        assert!(response.routes.iter().any(|route| {
+            route
+                .entry_offer
+                .as_ref()
+                .or(route.exit_offer.as_ref())
+                .is_some_and(|offer| offer.source == "bitget")
+        }));
+    }
+}
+
 #[test]
 fn amd_crypto_cycle_reports_confirmed_profit_in_minor_units() {
     let mut query = query(false);

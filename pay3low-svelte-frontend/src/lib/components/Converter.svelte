@@ -246,6 +246,13 @@
     const value = params.get("amount");
     return { sourceCurrency: decodeURIComponent(match[1]).toUpperCase(), targetCurrency: decodeURIComponent(match[2]).toUpperCase(), amount: value && /^[0-9.,\s]+$/.test(value) ? value : null };
   }
+  function sharedMethod(methods: PaymentMethod[], currency: string, role: "sender" | "recipient", currentId: string) {
+    const choices = methods.filter((method) => method.kind !== "currency" && method.currency === currency && (method.role === role || method.role === "both"));
+    return choices.find((method) => method.id === currentId)
+      ?? choices.find((method) => method.kind === "wallet")
+      ?? choices.find((method) => method.popular)
+      ?? choices[0];
+  }
   function normalizeAmount(value: string) {
     const sanitized = value.normalize("NFKC").replace(/[\u00a0\u200b-\u200d\ufeff]/g, "").replace(/[бБ]/g, ",").replace(/[юЮ٫٬]/g, ".").replace(/[^0-9.,]/g, "");
     const separator = Math.max(sanitized.lastIndexOf("."), sanitized.lastIndexOf(","));
@@ -918,6 +925,9 @@
     void refreshMarketPrices();
     marketRefreshTimer = window.setInterval(() => void refreshMarketPrices(), 60 * 60 * 1000);
     const shared = readSharedExchange();
+    let methodsReady = false;
+    let corridorsReady = false;
+    const markUrlReady = () => { if (methodsReady && corridorsReady) urlReady = true; };
     let savedSourceIds: string[] = [];
     let savedKnownSourceIds: string[] = [];
     try {
@@ -943,7 +953,13 @@
     // still enable the normal debounced search immediately.
     initialSearchTimer = window.setTimeout(() => initialSearchReady = true, 1500);
     fetchNetworks().then((items) => { if (items.length) networks = items; }).catch(() => {});
-    fetchPaymentMethods().then((items) => { paymentMethods = items; }).catch((cause: Error) => error ??= cause.message);
+    fetchPaymentMethods().then((items) => {
+      paymentMethods = items;
+      if (shared) {
+        sourceMethodId = sharedMethod(items, shared.sourceCurrency, "sender", sourceMethodId)?.id ?? sourceMethodId;
+        targetMethodId = sharedMethod(items, shared.targetCurrency, "recipient", targetMethodId)?.id ?? targetMethodId;
+      }
+    }).catch((cause: Error) => error ??= cause.message).finally(() => { methodsReady = true; markUrlReady(); });
     fetchProviders().then((providers) => {
       p2pSources = providerSources(providers);
       foundVenues = foundVenueOptions();
@@ -966,8 +982,7 @@
       const sharedCorridor = shared ? response.items.find((item) => (item.source_currency === shared.sourceCurrency && item.target_currency === shared.targetCurrency) || (item.source_currency === shared.targetCurrency && item.target_currency === shared.sourceCurrency)) : null;
       corridors = response.items; corridorId = corridorId || sharedCorridor?.id || response.items[0]?.id || "";
       if (shared && sharedCorridor?.source_currency === shared.targetCurrency && sharedCorridor.target_currency === shared.sourceCurrency) directionReversed = true; else if (savedDirection != null) directionReversed = savedDirection === "true";
-      urlReady = true;
-    }).catch((cause: Error) => error = cause.message);
+    }).catch((cause: Error) => error = cause.message).finally(() => { corridorsReady = true; markUrlReady(); });
     document.addEventListener("mousedown", onDocumentMouseDown);
     clockTimer = window.setInterval(() => clock = Date.now(), 1000);
   });

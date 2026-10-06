@@ -32,6 +32,15 @@ async function expectPeriodButtonBesidePair(chart: Locator) {
   await expect(chart.locator(".periodButton img")).toHaveCSS("filter", "none");
 }
 
+test("shared fiat and crypto link restores its currencies in a new browser", async ({ page }) => {
+  await mockBackend(page);
+  await page.goto("/#/swap/USDT/KZT?amount=287.0062069");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("pay3flow.exchange.source-method"))).toBe("global-usdt");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("pay3flow.exchange.target-method"))).toBe("kz-kaspi");
+  await expect(page.getByLabel("Amount to send")).toHaveValue("287.0062069");
+  await expect(page).toHaveURL(/#\/swap\/USDT\/KZT\?amount=287\.0062069$/);
+});
+
 test("system theme follows the browser until the user chooses a theme", async ({ page, isMobile }) => {
   await page.emulateMedia({ colorScheme: "dark" });
   await mockBackend(page);
@@ -222,7 +231,7 @@ test("search placeholders stay inside the route panel", async ({ page }) => {
     await holdSearch;
     await route.abort();
   });
-  await page.routeWebSocket(/\/ws\/p2p\/routes$/, (socket) => {
+  await page.routeWebSocket(/\/ws\/p2p\/routes(?:\?|$)/, (socket) => {
     socket.onMessage(() => {});
   });
   await openApp(page);
@@ -534,7 +543,7 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
       });
       const items = [
         currency("AMD", "Armenian dram", "֏", "#6d2c91"), currency("RUB", "Russian ruble", "₽", "#21a038"),
-        currency("USD", "US dollar", "$", "#168451"), currency("BYN", "Belarusian ruble", "Br", "#006b3f"),
+        currency("USD", "US dollar", "$", "#168451"), currency("BYN", "Belarusian ruble", "Br", "#006b3f"), currency("KZT", "Kazakhstani tenge", "₸", "#168451"),
         { ...method("global-usd-cash", "Cash USD", "GLOBAL", "USD", "", "cash", true), kind: "cash", initials: "$", p2p_query: "Cash" },
         method("am-ameriabank", "Ameriabank", "AM", "AMD", "/icons/assets/ameriabank-green.png", "ameriabank", true),
         method("am-ameriabank-usd-account", "Ameriabank", "AM", "USD", "/icons/assets/ameriabank-green.png", "ameriabank", true),
@@ -548,6 +557,7 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
         method("ru-tbank", "T-Bank", "RU", "RUB", "/icons/assets/tbank.webp", "tbank", true),
         method("ru-tbank-usd-account", "T-Bank", "RU", "USD", "/icons/assets/tbank.webp", "tbank", true),
         method("ru-alfabank", "Alfa-Bank", "RU", "RUB", "/icons/assets/alfabank.webp", "alfabank", true),
+        method("kz-kaspi", "Kaspi.kz", "KZ", "KZT", "/icons/assets/kz-kaspi.png", "kaspi", true),
         wallet("USDT", "Tether"), wallet("USDC", "USD Coin"), wallet("BTC", "Bitcoin"), wallet("ETH", "Ethereum"),
       ];
       return json({ items, total: items.length, limit: 100, offset: 0 });
@@ -1553,7 +1563,7 @@ test("search venues announce providers reported by route statuses", async ({ pag
   let sendSecondRoute: (() => void) | undefined;
   let finishSearch: (() => void) | undefined;
   let socketConnections = 0;
-  await page.routeWebSocket(/\/ws\/p2p\/routes$/, (socket) => {
+  await page.routeWebSocket(/\/ws\/p2p\/routes(?:\?|$)/, (socket) => {
     socketConnections += 1;
     socket.onMessage((message) => {
       const request = JSON.parse(String(message));
@@ -1685,11 +1695,11 @@ test("search venues announce providers reported by route statuses", async ({ pag
   const foundVenues = panelTop.locator(".resultSummary").getByTestId("found-venue");
   await expect(foundVenues).toHaveCount(6);
   await expect(foundVenues.first()).toHaveAttribute("title", "Found on Bybit");
-  await expect(foundVenues.nth(1)).toHaveAttribute("title", "Found on SkyLabs");
+  await expect(foundVenues.nth(1)).toHaveAttribute("title", "Found on Skylabs");
   await expect(foundVenues.nth(2)).toHaveAttribute("title", "Found on Bncex");
   await expect(foundVenues.nth(3)).toHaveAttribute("title", "Found on Bitcoin Center");
   await expect(foundVenues.nth(4)).toHaveAttribute("title", "No route on Binance");
-  await expect(foundVenues.nth(5)).toHaveAttribute("title", "No route on OKX");
+  await expect(foundVenues.nth(5)).toHaveAttribute("title", "No route on Okx");
   await expect(searchingVenues).toHaveCount(5);
   await expect(searchingVenues.nth(0)).toHaveAttribute("title", "Searching Cifra Markets");
   await expect(searchingVenues.nth(4)).toHaveAttribute("title", "Searching Whitebird");
@@ -1702,12 +1712,17 @@ test("search venues announce providers reported by route statuses", async ({ pag
   await expect(page.getByTestId("complete-route").first()).toContainText("20420 RUB");
   await expect(page.getByTestId("complete-route").first()).toHaveClass(/selected/);
   await expect(foundVenues).toHaveCount(7);
-  for (const title of ["Whitebird", "Bybit", "SkyLabs", "Bncex", "Bitcoin Center"]) {
+  for (const title of ["Whitebird", "Bybit", "Skylabs", "Bncex", "Bitcoin Center"]) {
     await expect(panelTop.locator(`[data-testid="found-venue"][title="Found on ${title}"]`)).toHaveCount(1);
   }
-  for (const title of ["Binance", "OKX"]) {
+  for (const title of ["Binance", "Okx"]) {
     await expect(panelTop.locator(`[data-testid="found-venue"][title="No route on ${title}"]`)).toHaveCount(1);
   }
+  await page.getByRole("button", { name: "Show Whitebird routes" }).click();
+  await expect(page.getByTestId("complete-route")).toHaveCount(1);
+  await expect(page.getByTestId("complete-route").first()).toContainText("Whitebird");
+  await page.getByRole("button", { name: "Show Whitebird routes" }).click();
+  await expect(page.getByTestId("complete-route")).toHaveCount(2);
   await expect(searchingVenues).toHaveCount(4);
 
   await page.getByTestId("complete-route").nth(1).click();
@@ -1724,7 +1739,7 @@ test("reordered progressive snapshots do not restart card rendering at 100", asy
   let sendFirstSnapshot: (() => void) | undefined;
   let sendReorderedSnapshot: (() => void) | undefined;
   let finishSearch: (() => void) | undefined;
-  await page.routeWebSocket(/\/ws\/p2p\/routes$/, (socket) => {
+  await page.routeWebSocket(/\/ws\/p2p\/routes(?:\?|$)/, (socket) => {
     socket.onMessage(() => {
       const offer = (adId: string) => ({
         source: "bybit",

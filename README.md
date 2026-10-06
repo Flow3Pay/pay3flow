@@ -110,6 +110,9 @@ flowchart LR
 - Venue icons summarize successful source statuses, not only cards that made
   the final ranking. An icon therefore remains visible when a venue returned
   matching offers but those offers did not produce a ranked route.
+- Click a venue icon above the results to show its ranked routes; click it
+  again to return to all venues. Shared `/swap/SOURCE/TARGET?amount=...` links
+  restore the selected currencies in a new browser session.
 - Route cards are rendered immediately for responses of up to 100 items. For
   larger snapshots, the frontend renders 100 cards per batch, waits for a
   browser paint and then 10 ms before the next batch. Progressive snapshots
@@ -197,7 +200,7 @@ Useful route parameters:
 | `merchant_only` | Keep merchant ads only |
 | `min_orders` | Minimum completed orders reported by a venue |
 | `min_completion_rate` | Completion-rate fraction from `0` to `1` |
-| `max_price_deviation_bps` | P2P outlier threshold; default `1000` (10%) |
+| `max_price_deviation_bps` | P2P outlier threshold for multi-leg routes; default `1000` (10%). Direct fiat/crypto routes keep real ads and rank them by price. |
 | `limit` | Returned route limit from `1` to `100`; default `20` |
 
 `routes_found` counts all unique valid routes before `limit` is applied.

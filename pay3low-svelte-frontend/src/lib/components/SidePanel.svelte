@@ -26,6 +26,8 @@
   export let showBelarusP2pWarning = false;
   export let onOpenBelarusP2pWarning: () => void = () => {};
   export let onOpenSearchActivity: () => void = () => {};
+  let selectedVenueId: string | null = null;
+  let lastPair = "";
 
   const ASSET_NAMES: Record<string, string> = { BTC: "Bitcoin", ETH: "Ether", USDC: "USD Coin", USDT: "Tether" };
   const FIAT_CURRENCIES = new Set(["AMD", "BYN", "KZT", "RUB", "UAH", "USD"]);
@@ -74,6 +76,14 @@
   $: hasHiddenPendingVenues = pendingVenues.length > visiblePendingVenues.length;
   $: circularSearch = sourceCurrency.toUpperCase() === "AMD" && targetCurrency.toUpperCase() === "AMD";
   $: hasConfirmedProfit = routes.some((route) => route.profitability?.status === "confirmed" && route.profitability.net_profit_minor > 0);
+  $: if (`${sourceCurrency}:${targetCurrency}` !== lastPair) {
+    lastPair = `${sourceCurrency}:${targetCurrency}`;
+    selectedVenueId = null;
+  }
+  $: visibleRoutes = selectedVenueId
+    ? routes.filter((route) => route.legs.some((leg) => leg.provider.toLowerCase() === selectedVenueId) || route.route_provider?.toLowerCase() === selectedVenueId || route.market_path?.venue.toLowerCase() === selectedVenueId)
+    : routes;
+  $: selectedVenueName = foundVenues.find((venue) => venue.id.toLowerCase() === selectedVenueId)?.label ?? selectedVenueId;
 
   function pathStepProvider(route: RouteCandidate, index: number, lastIndex: number) {
     if (index === 0) return undefined;
@@ -148,8 +158,8 @@
                 {#each foundVenues as venue, index (venue.id)}
                   {@const status = venueStats[venue.id.toLowerCase()]}
                   {@const hasMatch = (status?.routes_found ?? 0) > 0 || (status?.offers_found ?? 0) > 0}
-                  <div class="foundVenue" data-testid="found-venue" title={status?.ok === false ? `Error from ${venue.label}` : hasMatch ? `Found on ${venue.label}` : `No route on ${venue.label}`} style:animation-delay={`${index * 70}ms`}>
-                    <button type="button" class="foundVenueButton" aria-label={`Show ${venue.label} response`}>
+                  <div class:foundVenueActive={selectedVenueId === venue.id.toLowerCase()} class="foundVenue" data-testid="found-venue" title={status?.ok === false ? `Error from ${venue.label}` : hasMatch ? `Found on ${venue.label}` : `No route on ${venue.label}`} style:animation-delay={`${index * 70}ms`}>
+                    <button type="button" class="foundVenueButton" aria-label={`Show ${venue.label} routes`} aria-pressed={selectedVenueId === venue.id.toLowerCase()} on:click={() => selectedVenueId = selectedVenueId === venue.id.toLowerCase() ? null : venue.id.toLowerCase()}>
                       <img src={venue.iconUrl || venueIcon(venue.id)} alt="" width="18" height="18" decoding="async" on:error={fallbackFoundVenueIcon} />
                       <span class="foundVenueFallback" aria-hidden="true" hidden>{venue.label.slice(0, 1).toUpperCase()}</span>
                     </button>
@@ -175,6 +185,7 @@
           </span>
         {/if}
         {#if hasAmount && renderingRoutes}<small class="resultLimit" data-testid="route-render-progress">Showing {routes.length} now · loading more…</small>{/if}
+        {#if selectedVenueId}<button type="button" class="venueFilterClear" on:click={() => selectedVenueId = null}>Showing {visibleRoutes.length} from {selectedVenueName} · Show all</button>{/if}
         {#if circularSearch && routes.length > 0 && !hasConfirmedProfit && !searching}<small class="resultLimit" data-testid="no-profitable-routes">No confirmed profitable route right now; showing the best available cycles.</small>{/if}
       </div>
       <div class="panelActions">
@@ -204,7 +215,7 @@
       <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
       <div class="routeGroups" data-testid="route-groups" role="region" tabindex="0" aria-label="Found routes">
         <ul class="routeList">
-          {#each routes as route, index (route.route_id)}
+          {#each visibleRoutes as route, index (route.route_id)}
             {@const complete = route.status === "complete"}
             <li animate:flip={{ duration: routeFlipDuration, easing: quintOut }} in:fly={{ y: 18, duration: routeEnterDuration(), easing: quintOut }}><div class="routeCardShell">
               <div class:routeBest={route.is_current_best} class:selected={route.route_id === selectedRouteId} class="routeCard" data-testid={complete ? "complete-route" : "partial-route"}>
@@ -248,6 +259,7 @@
             </div></li>
           {/each}
         </ul>
+        {#if selectedVenueId && visibleRoutes.length === 0}<p class="venueFilterEmpty">No ranked routes from {selectedVenueName} for this amount and payment method.</p>{/if}
       </div>
     {:else if searching}
       <div class="skeletonList" aria-label="Searching live routes">
@@ -409,6 +421,28 @@
   border: 0;
   background: transparent;
   cursor: pointer;
+}
+
+.foundVenueActive {
+  border-color: #94dd00;
+  box-shadow: 0 0 0 2px rgba(148, 221, 0, 0.35);
+}
+
+.venueFilterClear {
+  width: fit-content;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: #527b00;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.venueFilterEmpty {
+  padding: 16px;
+  color: var(--color-text-soft);
+  font-size: 12px;
 }
 
 .foundVenue:hover,

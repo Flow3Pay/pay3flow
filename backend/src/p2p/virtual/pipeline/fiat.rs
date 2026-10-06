@@ -240,10 +240,7 @@ pub(super) fn apply_fiat_to_crypto(
     asset: &str,
     response: &P2pSearchResponse,
 ) {
-    let offers = reject_price_outliers(
-        matching_offers(&response.offers, query),
-        query.max_price_deviation_bps,
-    );
+    let offers = matching_offers(&response.offers, query);
     let mut discovered = Vec::new();
     compose_fiat_to_crypto_routes(&mut discovered, query, asset, &offers);
     let routes_built = discovered.len();
@@ -271,10 +268,7 @@ pub(super) fn apply_crypto_to_fiat(
     asset: &str,
     response: &P2pSearchResponse,
 ) {
-    let offers = reject_price_outliers(
-        matching_offers(&response.offers, query),
-        query.max_price_deviation_bps,
-    );
+    let offers = matching_offers(&response.offers, query);
     let mut discovered = Vec::new();
     compose_crypto_to_fiat_routes(&mut discovered, query, asset, &offers);
     let routes_built = discovered.len();
