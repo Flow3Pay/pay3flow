@@ -48,6 +48,15 @@ test("shared fiat and crypto link restores its currencies in a new browser", asy
   await expect(page).toHaveURL(/#\/swap\/USDT\/KZT\?amount=287\.0062069$/);
 });
 
+test("an older shared link without bank details uses the same default bank for every visitor", async ({ page }) => {
+  await mockBackend(page);
+  await page.addInitScript(() => localStorage.setItem("pay3flow.exchange.target-method", "am-acba"));
+  await page.goto("/swap/USDC/AMD?amount=20000&receive=7122558.77");
+  await expect(page.locator(".introOverlay")).toHaveCount(0, { timeout: 10000 });
+  await expect(page.getByRole("button", { name: "Select recipient bank: Ameriabank" })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("pay3flow.exchange.target-method"))).toBe("am-ameriabank");
+});
+
 test("routes start collapsed and remember the user's choice", async ({ page }) => {
   await mockBackend(page);
   await openApp(page, true, false);
@@ -94,6 +103,8 @@ test("Share creates a crawlable bridge preview and restores its exchange", async
   const link = await dialog.getByRole("textbox", { name: "Link" }).inputValue();
   expect(new URL(link).pathname).toBe("/swap/USDT/KZT");
   expect(new URL(link).searchParams.get("amount")).toBe("287.0062069");
+  expect(new URL(link).searchParams.get("sm")).toBe("global-usdt");
+  expect(new URL(link).searchParams.get("tm")).toBe("kz-kaspi");
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
 

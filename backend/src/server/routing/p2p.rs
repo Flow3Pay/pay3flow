@@ -163,11 +163,7 @@ pub async fn routes(
         return Err(error);
     }
     if let Err(error) = save_shared_response(&state, &response).await {
-        let _ = state
-            .reputation
-            .update_search(search_id, response.routes_found, "failed")
-            .await;
-        return Err(error);
+        tracing::warn!(%search_id, ?error, "could not save shared route search");
     }
     state
         .reputation
@@ -181,7 +177,8 @@ async fn save_shared_response(
     state: &AppState,
     response: &P2pRouteSearchResponse,
 ) -> Result<(), AppError> {
-    let body = serde_json::to_string(response).map_err(|error| AppError::Internal(error.into()))?;
+    let body: serde_json::Value =
+        serde_json::to_value(response).map_err(|error| AppError::Internal(error.into()))?;
     let client = state
         .pool
         .get()
@@ -291,11 +288,6 @@ async fn route_socket(state: AppState, mut socket: WebSocket) {
         }
         if let Err(error) = save_shared_response(&state, &response).await {
             tracing::warn!(%search_id, ?error, "could not save shared route search");
-            let _ = state
-                .reputation
-                .update_search(search_id, response.routes_found, "failed")
-                .await;
-            return;
         }
         if state
             .reputation
@@ -382,11 +374,6 @@ async fn route_socket(state: AppState, mut socket: WebSocket) {
             }
             if let Err(error) = save_shared_response(&state, &response).await {
                 tracing::warn!(%search_id, ?error, "could not save shared route search");
-                let _ = state
-                    .reputation
-                    .update_search(search_id, response.routes_found, "failed")
-                    .await;
-                return;
             }
             if state
                 .reputation

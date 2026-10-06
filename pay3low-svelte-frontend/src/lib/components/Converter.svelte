@@ -257,6 +257,7 @@
     const choices = methods.filter((method) => method.kind !== "currency" && method.currency === currency && (method.role === role || method.role === "both"));
     return choices.find((method) => method.id === currentId)
       ?? choices.find((method) => method.kind === "wallet")
+      ?? choices.find((method) => method.id === "am-ameriabank")
       ?? choices.find((method) => method.popular)
       ?? choices[0];
   }
@@ -1005,8 +1006,8 @@
     fetchPaymentMethods().then((items) => {
       paymentMethods = items;
       if (shared) {
-        sourceMethodId = sharedMethod(items, shared.sourceCurrency, "sender", sourceMethodId)?.id ?? sourceMethodId;
-        targetMethodId = sharedMethod(items, shared.targetCurrency, "recipient", targetMethodId)?.id ?? targetMethodId;
+        sourceMethodId = sharedMethod(items, shared.sourceCurrency, "sender", shared.sourceMethodId ?? "")?.id ?? sourceMethodId;
+        targetMethodId = sharedMethod(items, shared.targetCurrency, "recipient", shared.targetMethodId ?? "")?.id ?? targetMethodId;
       }
     }).catch((cause: Error) => error ??= cause.message).finally(() => { methodsReady = true; markUrlReady(); });
     fetchProviders().then((providers) => {
