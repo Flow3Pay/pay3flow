@@ -15,10 +15,10 @@
   let languageOpen = false;
   let languagePicker: HTMLDivElement;
   let languageToggle: HTMLButtonElement;
-  const languages: { code: Locale; name: string }[] = [
-    { code: "en", name: "English" },
-    { code: "ru", name: "Русский" },
-    { code: "hy", name: "Հայերեն" }
+  const languages: { code: Locale; name: string; flag: string }[] = [
+    { code: "en", name: "English", flag: "/icons/flags/us.svg" },
+    { code: "ru", name: "Русский", flag: "/icons/flags/ru.svg" },
+    { code: "hy", name: "Հայերեն", flag: "/icons/flags/am.svg" }
   ];
   let menuPanel: HTMLDivElement;
   let menuDragging = false;
@@ -134,6 +134,7 @@
   }
 
   $: activeLocale = $locale;
+  $: activeLanguage = languages.find((language) => language.code === activeLocale) ?? languages[0];
   function chooseLocale(next: Locale) {
     setLocale(next);
     languageOpen = false;
@@ -158,11 +159,11 @@
           <a class="apiDocsLink" href={apiDocsHref} target="_blank" rel="noreferrer noopener" aria-label="Open API documentation" on:click={closeMenu}>API DOCS</a>
           <button class="shareButton" type="button" on:click={openShare} disabled={!shareState} aria-label={t("Share bridge", {}, activeLocale)}>{t("Share", {}, activeLocale)}</button>
           <div class="languagePicker" bind:this={languagePicker}>
-            <button class="languageToggle" bind:this={languageToggle} type="button" on:click={() => languageOpen = !languageOpen} aria-label={t("Switch language", {}, activeLocale)} aria-haspopup="true" aria-expanded={languageOpen} aria-controls="language-options" title={t("Switch language", {}, activeLocale)}><span class="localeCode">{localeLabel(activeLocale)}</span><span class="mobileActionLabel">{t("Switch language", {}, activeLocale)}</span><span class="languageChevron" aria-hidden="true"></span></button>
+            <button class="languageToggle" bind:this={languageToggle} type="button" on:click={() => languageOpen = !languageOpen} aria-label={t("Switch language", {}, activeLocale)} aria-haspopup="true" aria-expanded={languageOpen} aria-controls="language-options" title={t("Switch language", {}, activeLocale)}><img class="languageFlag" src={activeLanguage.flag} alt="" width="16" height="16" aria-hidden="true" /><span class="localeCode">{localeLabel(activeLocale)}</span><span class="mobileActionLabel">{t("Switch language", {}, activeLocale)}</span><span class="languageChevron" aria-hidden="true"></span></button>
             {#if languageOpen}
               <div class="languageOptions" id="language-options" role="group" aria-label={t("Switch language", {}, activeLocale)}>
                 {#each languages as language}
-                  <button type="button" class="languageOption" class:selected={activeLocale === language.code} aria-pressed={activeLocale === language.code} lang={language.code} on:click={() => chooseLocale(language.code)}><span>{language.name}</span><span class="languageOptionCode">{localeLabel(language.code)}</span></button>
+                  <button type="button" class="languageOption" class:selected={activeLocale === language.code} aria-pressed={activeLocale === language.code} lang={language.code} on:click={() => chooseLocale(language.code)}><img class="languageFlag" src={language.flag} alt="" width="18" height="18" aria-hidden="true" /><span class="languageOptionName">{language.name}</span><span class="languageOptionCode">{localeLabel(language.code)}</span></button>
                 {/each}
               </div>
             {/if}
@@ -327,7 +328,7 @@
 
 .languageToggle {
   display: flex;
-  width: 48px;
+  width: 64px;
   align-items: center;
   justify-content: center;
   gap: 4px;
@@ -339,11 +340,14 @@
 }
 
 .languagePicker { position: relative; }
+.languageFlag { display: block; width: 16px; height: 16px; flex: 0 0 16px; border: 1px solid var(--color-border); border-radius: 50%; object-fit: cover; }
 .languageChevron { width: 6px; height: 6px; flex: 0 0 6px; margin-top: -3px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); }
 .languageToggle[aria-expanded="true"] .languageChevron { margin-top: 3px; transform: rotate(225deg); }
 .languageOptions { position: absolute; top: calc(100% + 8px); right: 0; z-index: 2; width: 172px; padding: 5px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-paper); box-shadow: var(--shadow-pop); }
 .languageOption { display: flex; width: 100%; min-height: 38px; align-items: center; justify-content: space-between; gap: 12px; padding: 0 10px; border-radius: 8px; color: var(--color-text); font-size: 13px; font-weight: 700; text-align: left; }
 .languageOption:hover, .languageOption:focus-visible, .languageOption.selected { background: var(--color-accent-soft); }
+.languageOption .languageFlag { width: 18px; height: 18px; flex-basis: 18px; }
+.languageOptionName { flex: 1; }
 .languageOptionCode { color: var(--color-text-soft); font-size: 10px; font-weight: 800; }
 
 .apiDocsLink,

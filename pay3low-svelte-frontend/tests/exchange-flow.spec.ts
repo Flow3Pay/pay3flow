@@ -196,6 +196,9 @@ test("language menu selects a locale without cycling and remembers it", async ({
   await toggle.click();
   const options = page.locator(".languageOptions");
   await expect(options.getByRole("button")).toHaveCount(3);
+  await expect(toggle.locator(".languageFlag")).toHaveAttribute("src", "/icons/flags/us.svg");
+  await expect(options.locator(".languageFlag")).toHaveCount(3);
+  await expect(options.getByRole("button", { name: "Հայերեն ՀԱՅ" }).locator(".languageFlag")).toHaveAttribute("src", "/icons/flags/am.svg");
   await expect(options.getByRole("button", { name: "English EN" })).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await page.keyboard.press("Escape");
@@ -204,6 +207,7 @@ test("language menu selects a locale without cycling and remembers it", async ({
   await toggle.click();
   await options.getByRole("button", { name: "Հայերեն ՀԱՅ" }).click();
   await expect(page.locator("html")).toHaveAttribute("lang", "hy");
+  await expect(toggle.locator(".languageFlag")).toHaveAttribute("src", "/icons/flags/am.svg");
   await expect(options).toHaveCount(0);
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("lang", "hy");
