@@ -1695,9 +1695,11 @@ test("search venues announce providers reported by route statuses", async ({ pag
   const foundVenues = panelTop.locator(".resultSummary").getByTestId("found-venue");
   await expect(foundVenues).toHaveCount(6);
   await expect(foundVenues.first()).toHaveAttribute("title", "Found on Bybit");
-  await expect(foundVenues.nth(1)).toHaveAttribute("title", "Found on Skylabs");
-  await expect(foundVenues.nth(2)).toHaveAttribute("title", "Found on Bncex");
-  await expect(foundVenues.nth(3)).toHaveAttribute("title", "Found on Bitcoin Center");
+  await expect(foundVenues.nth(1)).toHaveAttribute("title", "No route on Skylabs");
+  await expect(foundVenues.nth(1).getByRole("button", { name: "Show Skylabs routes" })).toBeDisabled();
+  await expect(foundVenues.nth(1).locator(".foundVenuePopover")).toContainText("Offers received · no matching route");
+  await expect(foundVenues.nth(2)).toHaveAttribute("title", "No route on Bncex");
+  await expect(foundVenues.nth(3)).toHaveAttribute("title", "No route on Bitcoin Center");
   await expect(foundVenues.nth(4)).toHaveAttribute("title", "No route on Binance");
   await expect(foundVenues.nth(5)).toHaveAttribute("title", "No route on Okx");
   await expect(searchingVenues).toHaveCount(5);
@@ -1712,10 +1714,10 @@ test("search venues announce providers reported by route statuses", async ({ pag
   await expect(page.getByTestId("complete-route").first()).toContainText("20420 RUB");
   await expect(page.getByTestId("complete-route").first()).toHaveClass(/selected/);
   await expect(foundVenues).toHaveCount(7);
-  for (const title of ["Whitebird", "Bybit", "Skylabs", "Bncex", "Bitcoin Center"]) {
+  for (const title of ["Whitebird", "Bybit"]) {
     await expect(panelTop.locator(`[data-testid="found-venue"][title="Found on ${title}"]`)).toHaveCount(1);
   }
-  for (const title of ["Binance", "Okx"]) {
+  for (const title of ["Skylabs", "Bncex", "Bitcoin Center", "Binance", "Okx"]) {
     await expect(panelTop.locator(`[data-testid="found-venue"][title="No route on ${title}"]`)).toHaveCount(1);
   }
   await page.getByRole("button", { name: "Show Whitebird routes" }).click();

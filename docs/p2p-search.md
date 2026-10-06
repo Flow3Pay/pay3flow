@@ -123,6 +123,9 @@ arrives instead of waiting for the complete fallback fan-out. Provider-only
 local searches retain `source: "provider"`.
 Route-search snapshots use the same source labels and mark `stale: true` only
 when results actually came from the bounded-stale database cache.
+The UI labels a venue as found only when the current route set includes a
+matching route; raw advertisements for a different bank remain visible in
+source diagnostics but do not claim an exchange path.
 
 Pay3Flow requests up to 64 candidates per Fmatch page. `exchange_mode=all`
 queries `market=p2p` and `market=direct_exchange` concurrently, merges the two

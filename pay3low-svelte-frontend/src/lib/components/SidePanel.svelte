@@ -157,9 +157,9 @@
               <span class="foundVenues" aria-label={`Responses received from ${foundVenues.map((venue) => venue.label).join(", ")}`}>
                 {#each foundVenues as venue, index (venue.id)}
                   {@const status = venueStats[venue.id.toLowerCase()]}
-                  {@const hasMatch = (status?.routes_found ?? 0) > 0 || (status?.offers_found ?? 0) > 0}
-                  <div class:foundVenueActive={selectedVenueId === venue.id.toLowerCase()} class="foundVenue" data-testid="found-venue" title={status?.ok === false ? `Error from ${venue.label}` : hasMatch ? `Found on ${venue.label}` : `No route on ${venue.label}`} style:animation-delay={`${index * 70}ms`}>
-                    <button type="button" class="foundVenueButton" aria-label={`Show ${venue.label} routes`} aria-pressed={selectedVenueId === venue.id.toLowerCase()} on:click={() => selectedVenueId = selectedVenueId === venue.id.toLowerCase() ? null : venue.id.toLowerCase()}>
+                  {@const hasRoute = (status?.routes_found ?? 0) > 0}
+                  <div class:foundVenueActive={selectedVenueId === venue.id.toLowerCase()} class="foundVenue" data-testid="found-venue" title={status?.ok === false ? `Error from ${venue.label}` : hasRoute ? `Found on ${venue.label}` : `No route on ${venue.label}`} style:animation-delay={`${index * 70}ms`}>
+                    <button type="button" class="foundVenueButton" aria-label={`Show ${venue.label} routes`} aria-pressed={selectedVenueId === venue.id.toLowerCase()} disabled={!hasRoute} on:click={() => selectedVenueId = selectedVenueId === venue.id.toLowerCase() ? null : venue.id.toLowerCase()}>
                       <img src={venue.iconUrl || venueIcon(venue.id)} alt="" width="18" height="18" decoding="async" on:error={fallbackFoundVenueIcon} />
                       <span class="foundVenueFallback" aria-hidden="true" hidden>{venue.label.slice(0, 1).toUpperCase()}</span>
                     </button>
@@ -168,7 +168,7 @@
                         <img src={venue.iconUrl || venueIcon(venue.id)} alt="" width="20" height="20" decoding="async" on:error={(event) => fallbackVenueIcon(event, venue.id)} />
                         <strong>{venue.label}</strong>
                       </div>
-                      <span class:venueOk={status?.ok} class:venueError={status && !status.ok}>{status?.ok === false ? "Response error" : hasMatch ? "Response received" : "No matching route"}</span>
+                      <span class:venueOk={status?.ok} class:venueError={status && !status.ok}>{status?.ok === false ? "Response error" : hasRoute ? "Route found" : (status?.offers_found ?? 0) > 0 ? "Offers received · no matching route" : "No matching route"}</span>
                       <dl>
                         <div><dt>Routes found</dt><dd>{status?.routes_found ?? 0}</dd></div>
                         <div><dt>Offers found</dt><dd>{status?.offers_found ?? 0}</dd></div>

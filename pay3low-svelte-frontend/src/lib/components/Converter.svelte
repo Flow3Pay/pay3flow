@@ -456,14 +456,15 @@
         routes_found: routeCounts.get(id) ?? 0,
       });
     }
-    const nextVenueStats = { ...venueStats };
+    const nextVenueStats = Object.fromEntries(
+      Object.entries(venueStats).map(([id, status]) => [id, { ...status, routes_found: 0 }]),
+    ) as Record<string, VenueSearchStatus>;
     for (const [id, status] of observedVenueStats) {
-      const previous = nextVenueStats[id];
-      nextVenueStats[id] = { ...status, routes_found: Math.max(previous?.routes_found ?? 0, status.routes_found) };
+      nextVenueStats[id] = status;
     }
     for (const [id, count] of routeCounts) {
       const previous = nextVenueStats[id];
-      nextVenueStats[id] = previous ? { ...previous, routes_found: Math.max(previous.routes_found, count) } : { source: id, ok: true, cached: false, latency_ms: 0, last_response_ms: null, average_response_ms: null, response_samples: 0, cache_hits: 0, offers_found: 0, routes_found: count };
+      nextVenueStats[id] = previous ? { ...previous, routes_found: count } : { source: id, ok: true, cached: false, latency_ms: 0, last_response_ms: null, average_response_ms: null, response_samples: 0, cache_hits: 0, offers_found: 0, routes_found: count };
     }
     venueStats = nextVenueStats;
     const newlyFoundVenueIds = [
