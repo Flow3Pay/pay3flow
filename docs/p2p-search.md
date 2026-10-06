@@ -46,11 +46,14 @@ remaining start refreshes a hot P2P pair or advances the P2P catalog cursor.
 The same five-pipeline and 25-starts-per-minute limits cover both kinds of work.
 
 Provider-only searches keep generic offer snapshots in process memory for up to
-35 minutes, bounded to 1,024 pairs. The five-minute portion is considered fresh;
+35 minutes, bounded to 1,024 pairs. The first 30 minutes are considered fresh;
 older snapshots are marked stale. Interactive searches apply amount,
 payment-method, merchant, order-count, and completion-rate filters to those
 offers. More specific searches that need a larger provider page than the
-snapshot contains continue to query the providers. A fresh local snapshot is
+snapshot contains continue to query the providers. A complete snapshot from an
+all-venue search can serve a selected-venue search, and a complete P2P subset
+is saved even when a direct-exchange source fails. Partial provider responses
+are not cached as complete search answers. A fresh local snapshot is
 served before contacting Fmatch, and a stale snapshot can satisfy an Fmatch
 miss before another live provider fan-out. Each successful warmup and each
 snapshot hit is logged separately from an interactive route search. Public
@@ -63,8 +66,9 @@ refreshes coefficients and P2P offers; it does not compose final route results.
 Final routes are composed only for a user's search, which can combine fresh
 provider quotes with saved coefficients and a user-triggered P2P search.
 
-Completed route responses with at least one route are also cached in Redis for
-15 seconds. The key uses a normalized search query and excludes the anonymous
+Completed, non-stale route responses with at least one route and no failed
+leg source are also cached in Redis for 15 seconds. The key uses a normalized
+search query and excludes the anonymous
 viewer ID, so identical searches share the result. The cached route graph is
 enriched with the current viewer's votes and fresh service links after the
 cache read. Redis reads have a short timeout and cache writes run in the

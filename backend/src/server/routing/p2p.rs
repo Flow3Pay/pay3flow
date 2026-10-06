@@ -753,7 +753,17 @@ fn cache_route_response(
     query: &P2pRouteSearchQuery,
     response: &P2pRouteSearchResponse,
 ) {
-    if response.routes_found == 0 || response.routes.is_empty() {
+    if response.routes_found == 0
+        || response.routes.is_empty()
+        || response.stale
+        || response.asset_statuses.iter().any(|asset| {
+            asset
+                .entry_sources
+                .iter()
+                .chain(&asset.exit_sources)
+                .any(|source| !source.ok)
+        })
+    {
         return;
     }
     let (Some(redis), Some(key)) = (state.redis.clone(), route_result_cache_key(query)) else {

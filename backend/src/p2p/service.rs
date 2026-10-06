@@ -1514,21 +1514,47 @@ impl P2pSearchService {
             .filter(|offer| offer.matches(&query))
             .collect::<Vec<_>>();
         if response.sources.iter().any(|source| source.ok) {
-            self.cache_response(cache_key, response.clone());
+            if self.provider_snapshot_complete(&query, market, &response) {
+                self.cache_response(cache_key, response.clone());
+            }
             if query.amount.is_none()
                 && query.payment_method.is_none()
                 && query.merchant_only.is_none()
                 && query.min_orders.is_none()
                 && query.min_completion_rate.is_none()
             {
-                self.cache_provider_snapshot(
-                    &query,
-                    market,
-                    P2pSearchResponse {
-                        offers: matching_raw_offers.clone(),
-                        ..response.clone()
-                    },
-                );
+                let snapshot_response = P2pSearchResponse {
+                    offers: matching_raw_offers.clone(),
+                    ..response.clone()
+                };
+                if market.is_none() {
+                    let p2p_sources = self
+                        .sources
+                        .iter()
+                        .filter(|source| source.market() == P2pOfferMarket::P2p)
+                        .map(|source| source.name())
+                        .collect::<HashSet<_>>();
+                    self.cache_provider_snapshot(
+                        &query,
+                        Some(P2pOfferMarket::P2p),
+                        P2pSearchResponse {
+                            offers: snapshot_response
+                                .offers
+                                .iter()
+                                .filter(|offer| offer.market == P2pOfferMarket::P2p)
+                                .cloned()
+                                .collect(),
+                            sources: snapshot_response
+                                .sources
+                                .iter()
+                                .filter(|status| p2p_sources.contains(status.source.as_str()))
+                                .cloned()
+                                .collect(),
+                            ..snapshot_response.clone()
+                        },
+                    );
+                }
+                self.cache_provider_snapshot(&query, market, snapshot_response);
             }
             self.publish_p2p_offers(&matching_raw_offers);
         }
@@ -1645,13 +1671,23 @@ impl P2pSearchService {
         market: Option<P2pOfferMarket>,
     ) -> Option<P2pSearchResponse> {
         let snapshots = self.provider_snapshots.read().ok()?;
-        let snapshot = snapshots
-            .get(&provider_snapshot_key(query, market))
-            .or_else(|| snapshots.get(&provider_snapshot_key(query, None)))?;
-        (snapshot.inserted_at.elapsed() <= PROVIDER_SNAPSHOT_TTL
-            && query.fetch_limit() <= snapshot.response.query.fetch_limit()
-            && self.provider_snapshot_complete(query, market, &snapshot.response))
-        .then(|| {
+        let mut all_sources_query = query.clone();
+        all_sources_query.sources = None;
+        for key in [
+            provider_snapshot_key(query, market),
+            provider_snapshot_key(query, None),
+            provider_snapshot_key(&all_sources_query, market),
+            provider_snapshot_key(&all_sources_query, None),
+        ] {
+            let Some(snapshot) = snapshots.get(&key) else {
+                continue;
+            };
+            if snapshot.inserted_at.elapsed() > PROVIDER_SNAPSHOT_TTL
+                || query.fetch_limit() > snapshot.response.query.fetch_limit()
+                || !self.provider_snapshot_complete(query, market, &snapshot.response)
+            {
+                continue;
+            }
             let offers = snapshot
                 .response
                 .offers
@@ -1666,8 +1702,12 @@ impl P2pSearchService {
                 .sources
                 .iter()
                 .filter(|source| {
-                    query.sources.as_deref().is_none_or(|requested| {
-                        requested.split(',').any(|name| name == source.source)
+                    self.sources.iter().any(|configured| {
+                        configured.name() == source.source
+                            && market.is_none_or(|market| configured.market() == market)
+                            && query.sources.as_deref().is_none_or(|requested| {
+                                requested.split(',').any(|name| name == source.source)
+                            })
                     })
                 })
                 .cloned()
@@ -1675,7 +1715,7 @@ impl P2pSearchService {
             for source in &mut sources {
                 source.cached = true;
             }
-            build_search_response(
+            let response = build_search_response(
                 query.clone(),
                 &offers,
                 sources,
@@ -1683,9 +1723,12 @@ impl P2pSearchService {
                 "provider_snapshot",
                 snapshot.inserted_at.elapsed() > PROVIDER_SNAPSHOT_STALE_AFTER,
                 snapshot.response.observed_at.clone(),
-            )
-        })
-        .filter(|response| !response.offers.is_empty())
+            );
+            if !response.offers.is_empty() {
+                return Some(response);
+            }
+        }
+        None
     }
 
     fn cache_provider_snapshot(
@@ -1817,12 +1860,16 @@ fn merge_market_responses(
     } else {
         "provider"
     };
+    let sources = p2p
+        .sources
+        .into_iter()
+        .chain(direct.sources)
+        .collect::<Vec<_>>();
     let offers = p2p
         .offers
         .into_iter()
         .chain(direct.offers)
         .collect::<Vec<_>>();
-    let sources = source_statuses_from_offers(&offers);
     build_search_response(query, &offers, sources, cached, source, stale, observed_at)
 }
 

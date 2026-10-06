@@ -94,8 +94,9 @@ flowchart LR
 - P2P route legs read provider advertisements directly; Fmatch candidate
   pages can omit valid ads from a venue. Direct-exchange discovery may use
   Fmatch.
-- Provider snapshots are scoped to the selected venues and reused only when
-  every requested venue responded successfully.
+- Provider snapshots can serve selected venues from a complete all-venue
+  observation, and are reused only when every requested venue responded
+  successfully. Failed venue responses do not enter the short search cache.
 - `/ws/p2p/routes` publishes a new ranked snapshot whenever another source
   finishes; the UI does not wait for every venue before showing results.
 - A failed or slow source is reported in route status data without discarding

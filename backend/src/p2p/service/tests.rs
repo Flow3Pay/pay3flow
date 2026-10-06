@@ -47,6 +47,8 @@ struct StubSource {
 
 struct DirectStubSource(StubSource);
 
+struct FailingDirectStubSource;
+
 struct StubRouteProvider;
 
 #[async_trait]
@@ -89,6 +91,21 @@ impl P2pSource for DirectStubSource {
 
     async fn search(&self, _query: &P2pSearchQuery) -> Result<Vec<P2pOffer>> {
         Ok(self.0.offers.clone())
+    }
+}
+
+#[async_trait]
+impl P2pSource for FailingDirectStubSource {
+    fn name(&self) -> &str {
+        "failing-direct"
+    }
+
+    fn market(&self) -> P2pOfferMarket {
+        P2pOfferMarket::DirectExchange
+    }
+
+    async fn search(&self, _query: &P2pSearchQuery) -> Result<Vec<P2pOffer>> {
+        bail!("direct provider unavailable")
     }
 }
 
@@ -536,7 +553,7 @@ fn merging_market_partitions_keeps_a_lower_ranked_direct_source() {
         false,
         Some(Utc::now()),
     );
-    let direct = build_search_response(
+    let mut direct = build_search_response(
         query.clone(),
         &direct_offers,
         source_statuses_from_offers(&direct_offers),
@@ -545,10 +562,23 @@ fn merging_market_partitions_keeps_a_lower_ranked_direct_source() {
         false,
         Some(Utc::now()),
     );
+    direct.sources.push(SourceStatus {
+        source: "failed-direct".into(),
+        ok: false,
+        cached: false,
+        latency_ms: 100,
+        offers_found: 0,
+        error: Some("unavailable".into()),
+    });
 
     let response = merge_market_responses(query, p2p, direct);
 
     assert_eq!(response.offers.len(), 5);
+    assert_eq!(response.sources.len(), 3);
+    assert!(response
+        .sources
+        .iter()
+        .any(|source| source.source == "failed-direct" && !source.ok));
     assert!(
         response
             .offers
@@ -931,6 +961,66 @@ async fn source_specific_search_does_not_replace_the_full_provider_snapshot() {
     service.cache_provider_snapshot(&query, None, only_bitget);
     let cached = service.provider_snapshot(&query, None).unwrap();
     assert_eq!(cached.offers.len(), 2);
+
+    let selected = service
+        .provider_snapshot(
+            &P2pSearchQuery {
+                sources: Some("binance".into()),
+                min_orders: Some(10),
+                ..query
+            },
+            None,
+        )
+        .unwrap();
+    assert_eq!(selected.source, "provider_snapshot");
+    assert_eq!(selected.offers.len(), 1);
+    assert_eq!(selected.offers[0].source, "binance");
+    assert_eq!(selected.sources.len(), 1);
+    assert_eq!(selected.sources[0].source, "binance");
+}
+
+#[tokio::test]
+async fn p2p_snapshot_survives_a_failed_direct_provider() {
+    let service = P2pSearchService::with_sources(
+        vec![
+            Arc::new(StubSource {
+                name: "binance",
+                offers: vec![offer("binance", "400", "1", "100000", 20)],
+                delay: Duration::ZERO,
+            }),
+            Arc::new(FailingDirectStubSource),
+        ],
+        Duration::from_secs(1),
+    );
+    let query = P2pSearchQuery {
+        fiat: "AMD".into(),
+        asset: "USDT".into(),
+        side: P2pSide::BuyCrypto,
+        amount: None,
+        asset_amount: None,
+        payment_method: None,
+        merchant_only: None,
+        min_orders: None,
+        min_completion_rate: None,
+        limit: Some(40),
+        sources: None,
+    };
+    let first = service.search(query.clone()).await.unwrap();
+    let second = service.search(query.clone()).await.unwrap();
+    assert!(!first.cached);
+    assert!(!second.cached);
+    assert!(service.provider_snapshot(&query, None).is_none());
+    let p2p = service
+        .provider_snapshot(
+            &P2pSearchQuery {
+                sources: Some("binance".into()),
+                ..query
+            },
+            Some(P2pOfferMarket::P2p),
+        )
+        .unwrap();
+    assert_eq!(p2p.offers.len(), 1);
+    assert_eq!(p2p.offers[0].source, "binance");
 }
 
 #[test]
