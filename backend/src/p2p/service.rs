@@ -366,6 +366,7 @@ pub struct P2pSearchService {
     background_pipeline_semaphore: Arc<Semaphore>,
     background_last_started: Arc<Mutex<Option<Instant>>>,
     background_provider_semaphore: Arc<Semaphore>,
+    provider_search_semaphores: Arc<HashMap<String, Arc<Semaphore>>>,
     pub(crate) redis: Option<RedisPool>,
     pair_popularity: Arc<Mutex<HashMap<String, (u32, Instant)>>>,
     pub(crate) provider_capabilities_cache: Arc<RwLock<Option<ProviderCapabilitiesSnapshot>>>,
@@ -405,6 +406,17 @@ struct FmatchP2pBackend {
 // external quote requests at the same time.
 const MAX_CONCURRENT_PROVIDER_QUOTES: usize = 16;
 const MAX_BACKGROUND_PROVIDER_REQUESTS: usize = 5;
+
+fn provider_search_semaphores(
+    sources: &[Arc<dyn P2pSource>],
+) -> Arc<HashMap<String, Arc<Semaphore>>> {
+    Arc::new(
+        sources
+            .iter()
+            .map(|source| (source.name().to_string(), Arc::new(Semaphore::new(1))))
+            .collect(),
+    )
+}
 
 #[derive(Clone)]
 struct CachedSearch {
@@ -805,6 +817,7 @@ impl P2pSearchService {
         });
         fiat_intermediaries.sort();
         fiat_intermediaries.dedup();
+        let provider_search_semaphores = provider_search_semaphores(&sources);
         Ok(Self {
             enabled: config.p2p_search_enabled,
             timeout,
@@ -829,6 +842,7 @@ impl P2pSearchService {
             background_provider_semaphore: Arc::new(Semaphore::new(
                 MAX_BACKGROUND_PROVIDER_REQUESTS,
             )),
+            provider_search_semaphores,
             redis: None,
             pair_popularity: Arc::new(Mutex::new(HashMap::new())),
             provider_capabilities_cache: Arc::new(RwLock::new(None)),
@@ -839,6 +853,7 @@ impl P2pSearchService {
 
     #[cfg(test)]
     pub(crate) fn with_sources(sources: Vec<Arc<dyn P2pSource>>, timeout: Duration) -> Self {
+        let provider_search_semaphores = provider_search_semaphores(&sources);
         Self {
             enabled: true,
             timeout,
@@ -889,6 +904,7 @@ impl P2pSearchService {
             background_provider_semaphore: Arc::new(Semaphore::new(
                 MAX_BACKGROUND_PROVIDER_REQUESTS,
             )),
+            provider_search_semaphores,
             redis: None,
             pair_popularity: Arc::new(Mutex::new(HashMap::new())),
             provider_capabilities_cache: Arc::new(RwLock::new(None)),
@@ -1355,19 +1371,21 @@ impl P2pSearchService {
             "{market:?}:{}",
             serde_json::to_string(&query).context("failed to build P2P cache key")?
         );
-        if let Some(mut response) = self.cached(&cache_key) {
-            response.cached = true;
-            if let Some(updates) = updates {
-                let _ = updates.send(response.clone()).await;
+        if !background {
+            if let Some(mut response) = self.cached(&cache_key) {
+                response.cached = true;
+                if let Some(updates) = updates {
+                    let _ = updates.send(response.clone()).await;
+                }
+                return Ok(response);
             }
-            return Ok(response);
-        }
-        if let Some(mut response) = self.provider_snapshot(&query, market) {
-            response.cached = true;
-            if let Some(updates) = &updates {
-                let _ = updates.send(response.clone()).await;
+            if let Some(mut response) = self.provider_snapshot(&query, market) {
+                response.cached = true;
+                if let Some(updates) = &updates {
+                    let _ = updates.send(response.clone()).await;
+                }
+                return Ok(response);
             }
-            return Ok(response);
         }
         let mut selected_sources = self
             .sources
@@ -1400,12 +1418,17 @@ impl P2pSearchService {
             });
         }
         let background_provider_semaphore = self.background_provider_semaphore.clone();
+        let provider_search_semaphores = self.provider_search_semaphores.clone();
         let mut searches = selected_sources
             .into_iter()
             .map(|source| {
                 let query = query.clone();
                 let aliases = self.payment_method_aliases.get(source.name()).cloned();
                 let background_provider_semaphore = background_provider_semaphore.clone();
+                let source_semaphore = provider_search_semaphores
+                    .get(source.name())
+                    .expect("configured P2P source has a semaphore")
+                    .clone();
                 async move {
                     let _background_permit = if background {
                         match background_provider_semaphore.acquire_owned().await {
@@ -1426,6 +1449,29 @@ impl P2pSearchService {
                         }
                     } else {
                         None
+                    };
+                    let source_permit = if background {
+                        source_semaphore.try_acquire_owned().ok()
+                    } else {
+                        source_semaphore.acquire_owned().await.ok()
+                    };
+                    let Some(_source_permit) = source_permit else {
+                        return (
+                            Vec::new(),
+                            SourceStatus {
+                                source: source.name().to_string(),
+                                ok: false,
+                                cached: false,
+                                latency_ms: 0,
+                                offers_found: 0,
+                                error: Some(if background {
+                                    "background provider request skipped because source is busy"
+                                } else {
+                                    "provider request semaphore closed"
+                                }
+                                .into()),
+                            },
+                        );
                     };
                     let started = Instant::now();
                     let timeout = source.timeout(self.timeout);
@@ -1618,17 +1664,6 @@ impl P2pSearchService {
 
     async fn refresh_background_search(&self, query: P2pSearchQuery) -> Result<()> {
         let query = query.normalize()?;
-        let exact_key = format!(
-            "None:{}",
-            serde_json::to_string(&query).context("failed to build background cache key")?
-        );
-        if let Ok(mut cache) = self.cache.write() {
-            cache.remove(&exact_key);
-        }
-        let snapshot_key = provider_snapshot_key(&query, None);
-        if let Ok(mut snapshots) = self.provider_snapshots.write() {
-            snapshots.remove(&snapshot_key);
-        }
         let started = Instant::now();
         let response = self
             .run_search_once_with_mode(query.clone(), None, None, true)

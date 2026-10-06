@@ -53,6 +53,15 @@ struct FlakyStubSource {
     attempts: Arc<std::sync::atomic::AtomicUsize>,
 }
 
+struct ConcurrentStubSource {
+    active: Arc<std::sync::atomic::AtomicUsize>,
+    peak: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+struct FailsAfterFirstStubSource {
+    attempts: Arc<std::sync::atomic::AtomicUsize>,
+}
+
 struct StubRouteProvider;
 
 #[async_trait]
@@ -126,6 +135,40 @@ impl P2pSource for FlakyStubSource {
             == 0
         {
             bail!("temporary provider failure");
+        }
+        Ok(vec![offer("binance", "400", "1", "100000", 20)])
+    }
+}
+
+#[async_trait]
+impl P2pSource for ConcurrentStubSource {
+    fn name(&self) -> &str {
+        "binance"
+    }
+
+    async fn search(&self, _query: &P2pSearchQuery) -> Result<Vec<P2pOffer>> {
+        use std::sync::atomic::Ordering::SeqCst;
+        let active = self.active.fetch_add(1, SeqCst) + 1;
+        self.peak.fetch_max(active, SeqCst);
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        self.active.fetch_sub(1, SeqCst);
+        Ok(vec![offer("binance", "400", "1", "100000", 20)])
+    }
+}
+
+#[async_trait]
+impl P2pSource for FailsAfterFirstStubSource {
+    fn name(&self) -> &str {
+        "binance"
+    }
+
+    async fn search(&self, _query: &P2pSearchQuery) -> Result<Vec<P2pOffer>> {
+        if self
+            .attempts
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+            > 0
+        {
+            bail!("provider temporarily unavailable");
         }
         Ok(vec![offer("binance", "400", "1", "100000", 20)])
     }
@@ -1073,6 +1116,82 @@ async fn transient_provider_failure_is_retried_before_finishing_search() {
     assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 2);
     assert_eq!(response.offers.len(), 1);
     assert!(response.sources[0].ok);
+}
+
+#[tokio::test]
+async fn concurrent_searches_do_not_query_the_same_provider_at_once() {
+    use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
+    let active = Arc::new(AtomicUsize::new(0));
+    let peak = Arc::new(AtomicUsize::new(0));
+    let service = P2pSearchService::with_sources(
+        vec![Arc::new(ConcurrentStubSource {
+            active,
+            peak: peak.clone(),
+        })],
+        Duration::from_secs(1),
+    );
+    let query = P2pSearchQuery {
+        fiat: "AMD".into(),
+        asset: "USDT".into(),
+        side: P2pSide::BuyCrypto,
+        amount: Some(10_000.0),
+        asset_amount: None,
+        payment_method: None,
+        merchant_only: None,
+        min_orders: None,
+        min_completion_rate: None,
+        limit: Some(20),
+        sources: None,
+    };
+    let (first, second) = tokio::join!(
+        service.search(query.clone()),
+        service.search(P2pSearchQuery {
+            amount: Some(20_000.0),
+            ..query
+        })
+    );
+    assert_eq!(first.unwrap().offers.len(), 1);
+    assert_eq!(second.unwrap().offers.len(), 1);
+    assert_eq!(peak.load(SeqCst), 1);
+}
+
+#[tokio::test]
+async fn failed_background_refresh_keeps_the_last_complete_snapshot() {
+    let attempts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let service = P2pSearchService::with_sources(
+        vec![Arc::new(FailsAfterFirstStubSource {
+            attempts: attempts.clone(),
+        })],
+        Duration::from_secs(1),
+    );
+    let query = P2pSearchQuery {
+        fiat: "AMD".into(),
+        asset: "USDT".into(),
+        side: P2pSide::BuyCrypto,
+        amount: None,
+        asset_amount: None,
+        payment_method: None,
+        merchant_only: None,
+        min_orders: None,
+        min_completion_rate: None,
+        limit: Some(20),
+        sources: None,
+    };
+    service.search(query.clone()).await.unwrap();
+    assert!(service.provider_snapshot(&query, None).is_some());
+    service
+        .refresh_background_search(query.clone())
+        .await
+        .unwrap();
+    assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 3);
+    assert_eq!(
+        service
+            .provider_snapshot(&query, None)
+            .unwrap()
+            .offers
+            .len(),
+        1
+    );
 }
 
 #[test]

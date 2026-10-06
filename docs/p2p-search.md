@@ -55,6 +55,9 @@ all-venue search can serve a selected-venue search, and a complete P2P subset
 is saved even when a direct-exchange source fails. Partial provider responses
 are not cached as complete search answers. A provider request that fails or
 times out is retried once before the search records that source as failed.
+Only one search per venue runs at a time; a background refresh skips a busy
+venue instead of piling up requests, and keeps the previous complete snapshot
+until a successful refresh replaces it.
 A fresh local snapshot is
 served before contacting Fmatch, and a stale snapshot can satisfy an Fmatch
 miss before another live provider fan-out. Each successful warmup and each
