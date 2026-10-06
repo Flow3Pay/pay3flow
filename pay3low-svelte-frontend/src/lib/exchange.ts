@@ -339,6 +339,11 @@ export interface P2pRouteSearchResponse {
   stale?: boolean;
 }
 
+export function fetchSharedRoutes(searchId: string, anonymousId: string, signal?: AbortSignal): Promise<P2pRouteSearchResponse> {
+  const params = new URLSearchParams({ anonymous_id: anonymousId });
+  return request(`/api/p2p/shared-routes/${encodeURIComponent(searchId)}?${params}`, { signal });
+}
+
 export interface SourceStatus {
   source: string;
   ok: boolean;

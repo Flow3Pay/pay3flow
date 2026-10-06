@@ -162,11 +162,61 @@ pub async fn routes(
             .await;
         return Err(error);
     }
+    if let Err(error) = save_shared_response(&state, &response).await {
+        let _ = state
+            .reputation
+            .update_search(search_id, response.routes_found, "failed")
+            .await;
+        return Err(error);
+    }
     state
         .reputation
         .update_search(search_id, response.routes_found, "finished")
         .await
         .map_err(map_reputation_error)?;
+    Ok(Json(response))
+}
+
+async fn save_shared_response(
+    state: &AppState,
+    response: &P2pRouteSearchResponse,
+) -> Result<(), AppError> {
+    let body = serde_json::to_string(response).map_err(|error| AppError::Internal(error.into()))?;
+    let client = state
+        .pool
+        .get()
+        .await
+        .map_err(|error| AppError::Internal(error.into()))?;
+    client
+        .execute(
+            "UPDATE route_searches SET shared_response = $2::jsonb WHERE id = $1",
+            &[&response.search_id, &body],
+        )
+        .await
+        .map_err(|error| AppError::Internal(error.into()))?;
+    Ok(())
+}
+
+/// Return the exact completed search so a shared link opens without searching again.
+pub async fn shared_routes(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Query(metadata): Query<RouteHttpMetadata>,
+) -> Result<Json<P2pRouteSearchResponse>, AppError> {
+    let client = state
+        .pool
+        .get()
+        .await
+        .map_err(|error| AppError::Internal(error.into()))?;
+    let row = client.query_opt(
+        "SELECT shared_response::text FROM route_searches WHERE id = $1 AND status = 'finished'",
+        &[&id],
+    ).await.map_err(|error| AppError::Internal(error.into()))?;
+    let body: Option<String> = row.and_then(|row| row.get(0));
+    let body = body.ok_or_else(|| AppError::NotFound("Shared search not found".into()))?;
+    let mut response: P2pRouteSearchResponse =
+        serde_json::from_str(&body).map_err(|error| AppError::Internal(error.into()))?;
+    enrich_routes(&state, &mut response, metadata.anonymous_id).await?;
     Ok(Json(response))
 }
 
@@ -237,6 +287,14 @@ async fn route_socket(state: AppState, mut socket: WebSocket) {
                 }),
             )
             .await;
+            return;
+        }
+        if let Err(error) = save_shared_response(&state, &response).await {
+            tracing::warn!(%search_id, ?error, "could not save shared route search");
+            let _ = state
+                .reputation
+                .update_search(search_id, response.routes_found, "failed")
+                .await;
             return;
         }
         if state
@@ -320,6 +378,14 @@ async fn route_socket(state: AppState, mut socket: WebSocket) {
                     }),
                 )
                 .await;
+                return;
+            }
+            if let Err(error) = save_shared_response(&state, &response).await {
+                tracing::warn!(%search_id, ?error, "could not save shared route search");
+                let _ = state
+                    .reputation
+                    .update_search(search_id, response.routes_found, "failed")
+                    .await;
                 return;
             }
             if state

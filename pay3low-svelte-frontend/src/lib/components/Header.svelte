@@ -163,7 +163,7 @@
         <div><span class="shareEyebrow">Pay3Flow</span><h2>{t("Share bridge", {}, activeLocale)}</h2></div>
         <button class="shareClose" type="button" on:click={closeShare} aria-label={t("Close share dialog", {}, activeLocale)}>×</button>
       </div>
-      <p>{t("Send this link to open the same exchange. Rates refresh when opened.", {}, activeLocale)}</p>
+      <p>{t("Send this link to open the saved route. Rates refresh on your timer.", {}, activeLocale)}</p>
       <div class="sharePreview"><img src={sharePreview} alt={t("Bridge preview", {}, activeLocale)} /></div>
       <label for="share-link">{t("Link", {}, activeLocale)}</label>
       <div class="shareLinkField">

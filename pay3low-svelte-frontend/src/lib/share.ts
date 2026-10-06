@@ -1,5 +1,6 @@
-export type ShareState = { source: string; target: string; amount: string; receive: string };
-export const SHARE_IMAGE_VERSION = "dark-2";
+export type ShareState = { source: string; target: string; amount: string; receive: string; searchId?: string; routeId?: string; sourceMethodId?: string; targetMethodId?: string; sourceNetworkId?: string; targetNetworkId?: string; sources?: string[]; exchangeMethods?: string[]; assets?: string[] };
+export const SHARE_IMAGE_VERSION = "dark-3";
+export const SHARE_SEARCH_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function shareCurrency(value: string): string | null {
   const currency = value.toUpperCase();
@@ -18,5 +19,16 @@ export function shareUrl(origin: string, state: ShareState): URL {
   const receive = shareAmount(state.receive.replace(",", "."));
   if (amount) url.searchParams.set("amount", amount);
   if (receive) url.searchParams.set("receive", receive);
+  if (receive && state.searchId && SHARE_SEARCH_ID_PATTERN.test(state.searchId)) {
+    url.searchParams.set("search", state.searchId);
+    if (state.routeId) url.searchParams.set("route", state.routeId);
+    if (state.sourceMethodId) url.searchParams.set("sm", state.sourceMethodId);
+    if (state.targetMethodId) url.searchParams.set("tm", state.targetMethodId);
+    if (state.sourceNetworkId) url.searchParams.set("sn", state.sourceNetworkId);
+    if (state.targetNetworkId) url.searchParams.set("tn", state.targetNetworkId);
+    if (state.sources?.length) url.searchParams.set("sources", state.sources.join(","));
+    if (state.exchangeMethods?.length) url.searchParams.set("modes", state.exchangeMethods.join(","));
+    if (state.assets?.length) url.searchParams.set("assets", state.assets.join(","));
+  }
   return url;
 }

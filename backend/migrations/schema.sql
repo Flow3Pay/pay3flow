@@ -90,6 +90,7 @@ ALTER TABLE route_searches ADD COLUMN IF NOT EXISTS source_currency TEXT;
 ALTER TABLE route_searches ADD COLUMN IF NOT EXISTS target_currency TEXT;
 ALTER TABLE route_searches ADD COLUMN IF NOT EXISTS anonymous_id UUID;
 ALTER TABLE route_searches ADD COLUMN IF NOT EXISTS counted_for_activity BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE route_searches ADD COLUMN IF NOT EXISTS shared_response JSONB;
 
 CREATE INDEX IF NOT EXISTS route_searches_pair_created_idx
     ON route_searches (source_currency, target_currency, created_at DESC);

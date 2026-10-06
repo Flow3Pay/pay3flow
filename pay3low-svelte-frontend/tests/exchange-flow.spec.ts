@@ -12,7 +12,14 @@ async function expectNumberedTimeline(instructions: Locator, numbers: string[]) 
   expect(markerShape.radius).toBe("50%");
 }
 
-async function openApp(page: Page, waitForIntro = true) {
+async function openApp(page: Page, waitForIntro = true, useSavedExpandedRoutes = true) {
+  if (useSavedExpandedRoutes) {
+    await page.addInitScript(() => {
+      if (localStorage.getItem("pay3flow.exchange.routes-visible") === null) {
+        localStorage.setItem("pay3flow.exchange.routes-visible", "true");
+      }
+    });
+  }
   await page.goto("/");
   await expect
     .poll(() => page.locator(".appShell").evaluate((element) => getComputedStyle(element, "::before").backgroundImage))
@@ -39,6 +46,27 @@ test("shared fiat and crypto link restores its currencies in a new browser", asy
   await expect.poll(() => page.evaluate(() => localStorage.getItem("pay3flow.exchange.target-method"))).toBe("kz-kaspi");
   await expect(page.getByLabel("Amount to send")).toHaveValue("287.0062069");
   await expect(page).toHaveURL(/#\/swap\/USDT\/KZT\?amount=287\.0062069$/);
+});
+
+test("routes start collapsed and remember the user's choice", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page, true, false);
+  await expect(page.locator(".routesReveal")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Show routes" })).toHaveAttribute("aria-expanded", "false");
+
+  await page.getByRole("button", { name: "Show routes" }).click();
+  await expect(page.locator(".routesReveal")).toBeVisible();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("pay3flow.exchange.routes-visible"))).toBe("true");
+  await page.reload();
+  await expect(page.locator(".introOverlay")).toHaveCount(0, { timeout: 10000 });
+  await expect(page.locator(".routesReveal")).toBeVisible();
+
+  await page.getByRole("button", { name: "Hide routes" }).click();
+  await expect(page.locator(".routesReveal")).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("pay3flow.exchange.routes-visible"))).toBe("false");
+  await page.reload();
+  await expect(page.locator(".routesReveal")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Show routes" })).toHaveAttribute("aria-expanded", "false");
 });
 
 test("Share creates a crawlable bridge preview and restores its exchange", async ({ page, request, isMobile }) => {
@@ -79,6 +107,75 @@ test("Share creates a crawlable bridge preview and restores its exchange", async
   const image = await request.get(imageUrl!);
   expect(image.headers()["content-type"]).toBe("image/png");
   expect((await image.body()).subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
+});
+
+test("the homepage exposes its dark logo preview to crawlers", async ({ request }) => {
+  const document = await request.get("/", { headers: { "User-Agent": "TelegramBot" } });
+  expect(document.ok()).toBeTruthy();
+  const html = await document.text();
+  expect(html).toContain('property="og:url"');
+  expect(html).toContain('property="og:image:secure_url"');
+  const imageUrl = html.match(/property="og:image" content="([^"]+)"/)?.[1]?.replaceAll("&amp;", "&");
+  expect(imageUrl).toBeTruthy();
+  const image = await request.get(imageUrl!);
+  expect(image.headers()["content-type"]).toBe("image/png");
+  expect((await image.body()).subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
+});
+
+test("a shared result opens the saved route without starting a new search", async ({ page, isMobile }) => {
+  await mockBackend(page);
+  await page.addInitScript(() => localStorage.setItem("pay3flow.exchange.refresh-seconds", "0"));
+  let liveSearches = 0;
+  await page.route("http://localhost:8080/api/p2p/routes**", async (route) => {
+    liveSearches += 1;
+    await route.fulfill({ status: 500, body: "Unexpected new search" });
+  });
+  await page.route("http://localhost:8080/api/p2p/shared-routes/**", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+      search_id: "00000000-0000-4000-8000-000000000120",
+      routes_found: 1,
+      searched_at: new Date().toISOString(),
+      source_fiat: "AMD",
+      target_fiat: "RUB",
+      source_amount: "20000.00",
+      assets_searched: ["USDT"],
+      can_exchange_to_target: true,
+      routes: [{
+        route_id: "saved-route",
+        rank: 1,
+        asset: "USDT",
+        source_fiat: "AMD",
+        source_amount: "20000.00",
+        acquired_asset_amount: "51.00",
+        target_fiat: "RUB",
+        target_amount: "86049.62",
+        effective_rate: "4.302481",
+        same_venue: true,
+        requires_asset_transfer: false,
+        transfer_fee_included: true,
+        route_kind: "fiat_to_fiat",
+        route_provider: "id-pay",
+        payment_methods_verified: true,
+        warnings: [],
+      }],
+    }) });
+  });
+  await page.goto("/swap/AMD/RUB?amount=20000&receive=86049.62&search=00000000-0000-4000-8000-000000000120&route=saved-route");
+  await expect(page.getByLabel("Amount to receive")).toHaveValue("86049.62");
+  await expect(page.getByTestId("start-search")).toHaveText("Go ↗");
+  await page.getByRole("button", { name: "Show routes" }).click();
+  await expect(page.getByTestId("complete-route")).toHaveCount(1);
+  if (isMobile) await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("button", { name: "Share bridge" }).click();
+  const link = await page.getByRole("dialog", { name: "Share bridge" }).getByRole("textbox", { name: "Link" }).inputValue();
+  expect(new URL(link).searchParams.get("search")).toBe("00000000-0000-4000-8000-000000000120");
+  expect(new URL(link).searchParams.get("route")).toBe("saved-route");
+  await page.waitForTimeout(2200);
+  expect(liveSearches).toBe(0);
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Route refresh settings" }).click();
+  await page.getByRole("button", { name: "5s", exact: true }).click();
+  await expect.poll(() => liveSearches, { timeout: 8000 }).toBeGreaterThan(0);
 });
 
 test("system theme follows the browser until the user chooses a theme", async ({ page, isMobile }) => {
@@ -1387,9 +1484,6 @@ test("editing the receive amount updates the send amount", async ({ page }) => {
   const sendAmount = page.getByLabel("Amount to send");
   const receiveAmount = page.getByLabel("Amount to receive");
   await receiveAmount.fill("10000");
-  await expect(sendAmount).toHaveValue("");
-  await expect(page.getByText("Calculating from live quotes")).toBeVisible();
-  await page.getByTestId("start-search").click();
   await expect(sendAmount).toHaveValue("42269");
   await expect(receiveAmount).toHaveValue("10000");
   await expect(page.getByTestId("complete-route")).toHaveCount(1);

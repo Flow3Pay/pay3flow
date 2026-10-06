@@ -703,6 +703,15 @@ const OPERATIONS: &[Operation] = &[
         false,
     ),
     (
+        "/api/p2p/shared-routes/{id}",
+        "get",
+        "Open a shared route search",
+        "Return a previously completed route search without querying providers again. The optional anonymous_id query parameter refreshes viewer-specific service links.",
+        "Routing",
+        false,
+        false,
+    ),
+    (
         "/api/p2p/route-activity",
         "get",
         "Route search activity",
@@ -1201,6 +1210,13 @@ fn extra_parameters(path: &str, method: &str) -> Vec<Value> {
             "name": "count_activity", "in": "query", "required": false,
             "description": "Set true for a user-initiated search; false for automatic route refresh.",
             "schema": { "type": "boolean", "default": false }
+        }));
+    }
+    if path == "/api/p2p/shared-routes/{id}" && method == "get" {
+        parameters.push(json!({
+            "name": "anonymous_id", "in": "query", "required": false,
+            "description": "Recipient browser identity for viewer-specific service links.",
+            "schema": { "type": "string", "format": "uuid" }
         }));
     }
     if path == "/api/exchange/orders" && method == "get" {

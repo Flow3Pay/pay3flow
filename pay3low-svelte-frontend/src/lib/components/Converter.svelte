@@ -2,7 +2,7 @@
   import { afterUpdate, onMount, onDestroy, tick } from "svelte";
   import { quintOut } from "svelte/easing";
   import { fly, slide } from "svelte/transition";
-  import { fetchCorridors, fetchMarketPrices, fetchP2pRoutes, fetchProviders, recordInstructionOpen, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderDefinition, type ProviderGuidance, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote, type VenueSearchStatus } from "$lib/exchange";
+  import { fetchCorridors, fetchMarketPrices, fetchP2pRoutes, fetchProviders, fetchSharedRoutes, recordInstructionOpen, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderDefinition, type ProviderGuidance, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote, type VenueSearchStatus } from "$lib/exchange";
   import { FALLBACK_NETWORK, fetchNetworks, type CryptoNetwork } from "$lib/networks";
   import { assetIcon, networkIcon, swapIcon, venueIcon } from "$lib/icons";
   import { fetchPaymentMethods, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
@@ -12,7 +12,7 @@
   import { fetchRouteSearchActivity, SEARCH_ACTIVITY_PERIODS, type RouteSearchActivityHour, type SearchActivityPeriod } from "$lib/route-activity";
   import { fiatFlagUrl } from "$lib/currency-flags";
   import { lockPageScroll } from "$lib/page-scroll-lock";
-  import type { ShareState } from "$lib/share";
+  import { SHARE_SEARCH_ID_PATTERN, type ShareState } from "$lib/share";
   import SidePanel from "./SidePanel.svelte";
   import SearchActivityChart from "./SearchActivityChart.svelte";
   import SearchActivityModal from "./SearchActivityModal.svelte";
@@ -90,7 +90,7 @@
   let activityExpanded = false;
   let activityRevealElement: HTMLDivElement | undefined;
   let routesRevealElement: HTMLDivElement | undefined;
-  let routesExpanded = true;
+  let routesExpanded = false;
   let introPlaying = true;
   let introStarted = false;
   let introOverlayElement: HTMLDivElement;
@@ -114,6 +114,8 @@
   let marketPricesUpdatedAt = 0;
   let marketUsd: { source: number | null; target: number | null } = { source: null, target: null };
   let lastShareSignature = "";
+  let lastSearchId: string | null = null;
+  let sharedReceive = "";
   let initialSearchTimer: number | undefined;
   let routeRenderTimer: number | undefined;
   let routeRenderFrame: number | undefined;
@@ -248,7 +250,8 @@
     if (!match) return null;
     const params = new URLSearchParams(match[3] ?? window.location.search);
     const value = params.get("amount");
-    return { sourceCurrency: decodeURIComponent(match[1]).toUpperCase(), targetCurrency: decodeURIComponent(match[2]).toUpperCase(), amount: value && /^[0-9.,\s]+$/.test(value) ? value : null };
+    const searchId = params.get("search");
+    return { sourceCurrency: decodeURIComponent(match[1]).toUpperCase(), targetCurrency: decodeURIComponent(match[2]).toUpperCase(), amount: value && /^[0-9.,\s]+$/.test(value) ? value : null, receive: params.get("receive"), searchId: searchId && SHARE_SEARCH_ID_PATTERN.test(searchId) ? searchId : null, routeId: params.get("route"), sourceMethodId: params.get("sm"), targetMethodId: params.get("tm"), sourceNetworkId: params.get("sn"), targetNetworkId: params.get("tn"), sources: params.get("sources")?.split(",").filter(Boolean), exchangeMethods: params.get("modes")?.split(",").filter((method): method is ExchangeMethod => EXCHANGE_METHODS.includes(method as ExchangeMethod)), assets: params.get("assets")?.split(",").filter(Boolean) };
   }
   function sharedMethod(methods: PaymentMethod[], currency: string, role: "sender" | "recipient", currentId: string) {
     const choices = methods.filter((method) => method.kind !== "currency" && method.currency === currency && (method.role === role || method.role === "both"));
@@ -574,13 +577,13 @@
     : Number.isFinite(amountNumber(amount)) && amountNumber(amount) > 0;
   $: previewRoute = selected ?? routes.find((route) => route.status === "complete" && route.is_current_best) ?? routes.find((route) => route.status === "complete") ?? null;
   $: displayedSourceAmount = amountSide === "target" && targetAmountNeedsRate && amountNumber(amount) <= 0 ? "" : amount;
-  $: displayedTargetAmount = amountSide === "target" && !previewRoute ? targetAmount : amountFromRoute(previewRoute);
-  $: publishShareState(selectedSourceCurrency, selectedTargetCurrency, displayedSourceAmount, previewRoute ? displayedTargetAmount : "");
-  function publishShareState(source: string, target: string, amount: string, receive: string) {
-    const signature = `${source}:${target}:${amount}:${receive}`;
+  $: displayedTargetAmount = amountSide === "target" && !previewRoute ? targetAmount : previewRoute ? amountFromRoute(previewRoute) : sharedReceive;
+  $: publishShareState(selectedSourceCurrency, selectedTargetCurrency, displayedSourceAmount, previewRoute || sharedReceive ? displayedTargetAmount : "", lastSearchId, previewRoute?.route_id, sourceMethod?.id, targetMethod?.id, sourceNetwork?.id, targetNetwork?.id, selectedSources, selectedExchangeMethods, selectedIntermediaryAssets);
+  function publishShareState(source: string, target: string, amount: string, receive: string, searchId: string | null, routeId: string | undefined, sourceMethodId: string | undefined, targetMethodId: string | undefined, sourceNetworkId: string | undefined, targetNetworkId: string | undefined, sources: string[], exchangeMethods: ExchangeMethod[], assets: string[]) {
+    const signature = `${source}:${target}:${amount}:${receive}:${searchId}:${routeId}:${sourceMethodId}:${targetMethodId}:${sourceNetworkId}:${targetNetworkId}:${sources.join(",")}:${exchangeMethods.join(",")}:${assets.join(",")}`;
     if (signature === lastShareSignature) return;
     lastShareSignature = signature;
-    onShareStateChange(source && target ? { source, target, amount, receive } : null);
+    onShareStateChange(source && target ? { source, target, amount, receive, searchId: searchId ?? undefined, routeId, sourceMethodId, targetMethodId, sourceNetworkId, targetNetworkId, sources, exchangeMethods, assets } : null);
   }
   $: marketUsd = {
     source: sourceMethod?.kind === "wallet" ? calculateMarketUsd(displayedSourceAmount, marketPrices[selectedSourceCurrency]) : null,
@@ -652,12 +655,16 @@
     if (loaded && ready && initialReady && corridor && sourceMethod && targetMethod && validAmount) debounceTimer = window.setTimeout(startSearch, 650);
   }
   function manageRefresh(seconds: RefreshSeconds, updatedAt: number | null, validAmount: boolean) {
-    if (refreshTimer) window.clearInterval(refreshTimer);
-    if (seconds && updatedAt && validAmount) refreshTimer = window.setInterval(() => void startSearch(false), seconds * 1000);
+    if (refreshTimer) window.clearTimeout(refreshTimer);
+    if (seconds && updatedAt && validAmount) refreshTimer = window.setTimeout(async () => {
+      refreshTimer = undefined;
+      await startSearch(false);
+      if (lastUpdatedAt === updatedAt && refreshSeconds === seconds && hasAmount) manageRefresh(seconds, Date.now(), true);
+    }, Math.max(0, updatedAt + seconds * 1000 - Date.now()));
   }
   function resetResults() {
-    controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; displayRoutes([]); routesFound = 0; selected = null; selectionPinnedByUser = false; instructionsRoute = null; lastUpdatedAt = null; searching = false; awaitingFirstRoute = false; foundVenueIds = []; foundVenues = []; venueStats = {}; error = null;
-    if (refreshTimer) window.clearInterval(refreshTimer);
+    controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; displayRoutes([]); routesFound = 0; selected = null; selectionPinnedByUser = false; instructionsRoute = null; lastUpdatedAt = null; lastSearchId = null; sharedReceive = ""; searching = false; awaitingFirstRoute = false; foundVenueIds = []; foundVenues = []; venueStats = {}; error = null;
+    if (refreshTimer) window.clearTimeout(refreshTimer);
   }
   function updateAmount(value: string) {
     initialSearchReady = true;
@@ -856,7 +863,7 @@
         }
       }
       if (!rerunForTargetAmount) {
-        applySearchResponse(response); awaitingFirstRoute = false; lastUpdatedAt = Date.now(); clock = Date.now();
+        applySearchResponse(response); awaitingFirstRoute = false; sharedReceive = ""; lastSearchId = response.search_id ?? null; lastUpdatedAt = Date.now(); clock = Date.now();
       }
     } catch (cause) {
       if (signal.aborted || currentRequest !== requestId) return;
@@ -945,22 +952,46 @@
     const shared = readSharedExchange();
     let methodsReady = false;
     let corridorsReady = false;
-    const markUrlReady = () => { if (methodsReady && corridorsReady) urlReady = true; };
+    let networksReady = false;
+    let providersReady = false;
+    const markUrlReady = () => {
+      if (!methodsReady || !corridorsReady || !networksReady || !providersReady) return;
+      if (shared?.searchId && shared.amount && anonymousId) {
+        void fetchSharedRoutes(shared.searchId, anonymousId).then((response) => {
+          if (initialSearchReady || response.source_fiat !== shared.sourceCurrency || response.target_fiat !== shared.targetCurrency || Number(response.source_amount) !== Number(shared.amount)) return;
+          applySearchResponse(response);
+          if (shared.routeId) {
+            const sharedRoute = routes.find((route) => route.route_id === shared.routeId);
+            if (sharedRoute) { selected = sharedRoute; selectionPinnedByUser = true; }
+          }
+          lastSearchId = response.search_id ?? null;
+          sharedReceive = "";
+          lastUpdatedAt = Date.parse(response.searched_at) || Date.now();
+          clock = Date.now();
+        }).catch(() => { if (!shared.receive) initialSearchReady = true; }).finally(() => { urlReady = true; });
+      } else urlReady = true;
+    };
     let savedSourceIds: string[] = [];
     let savedKnownSourceIds: string[] = [];
     try {
       anonymousId = getAnonymousUserId() ?? "";
       amount = shared?.amount ?? localStorage.getItem(STORAGE.amount) ?? "0";
-      corridorId = localStorage.getItem(STORAGE.corridor) ?? ""; sourceMethodId = localStorage.getItem(STORAGE.sourceMethod) ?? sourceMethodId; targetMethodId = localStorage.getItem(STORAGE.targetMethod) ?? targetMethodId; sourceNetworkId = localStorage.getItem(STORAGE.sourceNetwork) ?? sourceNetworkId; targetNetworkId = localStorage.getItem(STORAGE.targetNetwork) ?? targetNetworkId;
+      if (shared?.receive && /^[0-9.,]+$/.test(shared.receive)) {
+        sharedReceive = shared.receive;
+        lastUpdatedAt = Date.now();
+      }
+      corridorId = localStorage.getItem(STORAGE.corridor) ?? ""; sourceMethodId = shared?.sourceMethodId ?? localStorage.getItem(STORAGE.sourceMethod) ?? sourceMethodId; targetMethodId = shared?.targetMethodId ?? localStorage.getItem(STORAGE.targetMethod) ?? targetMethodId; sourceNetworkId = shared?.sourceNetworkId ?? localStorage.getItem(STORAGE.sourceNetwork) ?? sourceNetworkId; targetNetworkId = shared?.targetNetworkId ?? localStorage.getItem(STORAGE.targetNetwork) ?? targetNetworkId;
       const savedDirection = localStorage.getItem(STORAGE.direction); if (savedDirection != null) directionReversed = savedDirection === "true";
-      savedSourceIds = localStorage.getItem(STORAGE.sources)?.split(",").map((value) => value.trim()).filter(Boolean) ?? [];
+      savedSourceIds = shared?.sources ?? localStorage.getItem(STORAGE.sources)?.split(",").map((value) => value.trim()).filter(Boolean) ?? [];
       savedKnownSourceIds = localStorage.getItem(STORAGE.knownSources)?.split(",").map((value) => value.trim()).filter(Boolean) ?? [];
-      const savedMethods = localStorage.getItem(STORAGE.methods)?.split(",").filter((method): method is ExchangeMethod => EXCHANGE_METHODS.includes(method as ExchangeMethod)) ?? [];
+      const savedMethods = shared?.exchangeMethods ?? localStorage.getItem(STORAGE.methods)?.split(",").filter((method): method is ExchangeMethod => EXCHANGE_METHODS.includes(method as ExchangeMethod)) ?? [];
       if (savedMethods.length) selectedExchangeMethods = EXCHANGE_METHODS.filter((method) => savedMethods.includes(method));
-      const savedAssets = localStorage.getItem(STORAGE.assets); if (savedAssets != null) selectedIntermediaryAssets = [...new Set(savedAssets.split(",").map((asset) => asset.trim().toUpperCase()).filter(Boolean))];
-      const savedRefresh = Number(localStorage.getItem(STORAGE.refresh)); if (REFRESH_OPTIONS.includes(savedRefresh as RefreshSeconds)) refreshSeconds = savedRefresh as RefreshSeconds;
+      const savedAssets = shared?.assets?.join(",") ?? localStorage.getItem(STORAGE.assets); if (savedAssets != null) selectedIntermediaryAssets = [...new Set(savedAssets.split(",").map((asset) => asset.trim().toUpperCase()).filter(Boolean))];
+      const savedRefreshValue = localStorage.getItem(STORAGE.refresh);
+      const savedRefresh = Number(savedRefreshValue);
+      if (savedRefreshValue !== null && REFRESH_OPTIONS.includes(savedRefresh as RefreshSeconds)) refreshSeconds = savedRefresh as RefreshSeconds;
       const savedActivityPeriod = localStorage.getItem(STORAGE.activityPeriod); if (SEARCH_ACTIVITY_PERIODS.includes(savedActivityPeriod as SearchActivityPeriod)) activityPeriod = savedActivityPeriod as SearchActivityPeriod;
-      routesExpanded = localStorage.getItem(STORAGE.routesVisible) !== "false";
+      routesExpanded = localStorage.getItem(STORAGE.routesVisible) === "true";
       const savedActivityVisible = localStorage.getItem(STORAGE.activityVisible);
       activityExpanded = !window.matchMedia("(max-width: 980px)").matches && savedActivityVisible === "true";
       if (activityExpanded && !routesExpanded) bringActivityIntoView("auto");
@@ -969,8 +1000,8 @@
     preferencesLoaded = true;
     // Keep a saved route search off the initial critical path. User changes
     // still enable the normal debounced search immediately.
-    initialSearchTimer = window.setTimeout(() => initialSearchReady = true, 1500);
-    fetchNetworks().then((items) => { if (items.length) networks = items; }).catch(() => {});
+    if (!shared?.receive && !shared?.searchId) initialSearchTimer = window.setTimeout(() => initialSearchReady = true, 1500);
+    fetchNetworks().then((items) => { if (items.length) networks = items; }).catch(() => {}).finally(() => { networksReady = true; markUrlReady(); });
     fetchPaymentMethods().then((items) => {
       paymentMethods = items;
       if (shared) {
@@ -992,9 +1023,9 @@
       const restored = [...new Set(savedSourceIds.filter((source) => catalog.has(source) && p2pSources.find((item) => item.id === source)?.searchMode === "selectable"))];
       const known = new Set(savedKnownSourceIds.length ? savedKnownSourceIds : savedSourceIds);
       const newlyAdded = live.filter((source) => !known.has(source));
-      selectedSources = savedSourceIds.length ? [...new Set([...restored, ...newlyAdded])] : live;
+      selectedSources = shared?.sources?.length ? (restored.length ? restored : live) : savedSourceIds.length ? [...new Set([...restored, ...newlyAdded])] : live;
       try { localStorage.setItem(STORAGE.knownSources, live.join(",")); } catch {}
-    }).catch((cause: Error) => error ??= cause.message);
+    }).catch((cause: Error) => error ??= cause.message).finally(() => { providersReady = true; markUrlReady(); });
     fetchCorridors().then((response) => {
       const savedDirection = localStorage.getItem(STORAGE.direction);
       const sharedCorridor = shared ? response.items.find((item) => (item.source_currency === shared.sourceCurrency && item.target_currency === shared.targetCurrency) || (item.source_currency === shared.targetCurrency && item.target_currency === shared.sourceCurrency)) : null;
@@ -1019,7 +1050,7 @@
     marketController?.abort();
     cancelRouteRendering();
     if (debounceTimer) clearTimeout(debounceTimer);
-    if (refreshTimer) clearInterval(refreshTimer);
+    if (refreshTimer) clearTimeout(refreshTimer);
     if (clockTimer) clearInterval(clockTimer);
     if (marketRefreshTimer) clearInterval(marketRefreshTimer);
     if (initialSearchTimer) clearTimeout(initialSearchTimer);
