@@ -23,6 +23,8 @@ URL includes its receive amount as a snapshot for the preview image. The
 browser searches again when the recipient opens the link. Older `#/swap/...`
 links still open the bridge, but their fragment is invisible to link crawlers,
 so they receive only the generic home-page preview.
+The home-page preview is the Pay3Flow logo on a dark background; exchange
+previews show the dark Bridge card with local currency icons.
 
 ## Live result rendering
 

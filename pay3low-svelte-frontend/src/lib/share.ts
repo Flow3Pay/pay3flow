@@ -1,4 +1,5 @@
 export type ShareState = { source: string; target: string; amount: string; receive: string };
+export const SHARE_IMAGE_VERSION = "dark-2";
 
 export function shareCurrency(value: string): string | null {
   const currency = value.toUpperCase();

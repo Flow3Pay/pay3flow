@@ -3,8 +3,9 @@
   import { cycleLocale, locale, localeLabel, setLocale, t } from "$lib/i18n";
   import { lockPageScroll } from "$lib/page-scroll-lock";
   import { onDestroy } from "svelte";
-  import { shareUrl, type ShareState } from "$lib/share";
+  import { shareUrl, SHARE_IMAGE_VERSION, type ShareState } from "$lib/share";
   export let shareState: ShareState | null = null;
+  const copyIcon = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAABt0lEQVR4AcyULU8DQRCG2WoSCCgS0gYLBgWiCgl4FAbDxx8gKQYcBoco4PkDCBAYTAVBoEAhaEOC4EsQkBzPbGYud5ftfSQloZn3Zmf2nXk7u7mrDf3x738IRFE0AfbANXgDWfsgcQuOswdSOAFF0xRdgl0wB8ZA1kZJzIJ1+BE+tkIBmDtgBpQ2RPaNXEZg0cgV/LJxywicQb5S3OAfwRfIs7pt9hVgTCck59yac27BAeJ5/BQYZn0A+tmIbaQEaFoHbdCF8INPmea6JNusDxHyf4J1X4sFKJKxOjA3gaxxQZM94XS0ZiPI0mQsQNwCk6CsCbfFFCcUfIOgJQWWgoz8pNW8ZGjvFnsBRpWzlNEtX9bLnUnta6bgwWIvwJipt882y3it/cxwLyz2AhYMyN/RJ/4mDUpAXkA591OarzDVM97bQARouA3GwSq495314QX0kjVVzRXVegFU5ZJ71Vp7dk9rfRB6eAHdOFdfxRXWJAXkG/5UobtwpSa3JBZgVDmiJuwjIGtc0GRPOE2tCZIsGQtIQgrAFmgQ1/Ap01yDpHBEiFS+pQSSVJrIxSdTQ6FcihAIfgEAAP//VzkXCgAAAAZJREFUAwA+5Z8xrrhgWAAAAABJRU5ErkJggg==";
   const moonIcon = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAACWklEQVR4AbTVTYhNYRzH8TPCRs0kLxsWIvIywkrykvISTZRkbGiSQsqCIkuWyobkpZkiL5PQ2Eyk2BBGErOaZCMz0giRrEyNz/90z3XvzL23e6Zm+n3v/zz/5/n/f8957plzJyTj/FfTYHh4eDM60Il5Y9lLRQPN5uOyho+wH7GuQ8ytKCwr0ni7xHMcxGOsxW68QW6VGWi+TofrmIGzDQ0Nm8QpCL2Oj7wUDTRvVnwVTRqHjrsOLYoPvEJuFQ1U7sFc7ESplhoMcvwo5lZqYPcTVR5Ap0ZdYqmmG/RjTEoNVLZhKi5hpOILXzAyWe84M8jO+VOFwndyje4yW2NYvzKD2P0fx1PJoLfQLp6owmX9odRgoFIZ00H5CzjnLhaKuVRq8LdaJZMj5n7hIXIpM4jCZjuMx7Rag30m5lgzgOWu61Jm8KywuqUQRwV3cV9yI2bhLZMTmO26plIDxS+t+ow1qCrrnpichms4g34mvWjHqRLWm0uVGqRXSXJHbLWo6l2YT5j8QBzXLuMw+SbGy/CwuA0Rb4upigaKjsnE+6aLSfxnG1aX9fdwEhvQiJlW78VX9CFV0SAdJckWcTKeIpdsarGCOIUl4kWkKjOwi5+yq7FKwW/EC9CwtqzbakXWvFWfu8apygwiY/KFOAm3cENxfHktYhyB1H/JrcRNmQdoQllz42SUQSSZDOGQ66BV7MagZu/Rgw/4LteDZYjfjhVqijuXS1XRIJ3xoeAK4myDeJ1Hwy+mwvC0GE9NNI5fv3iapMpV0yBbyqQP7WjDDhzFeXRjKFtXKf4DAAD///Lx6McAAAAGSURBVAMASQPNMX2ya7kAAAAASUVORK5CYII=";
   const sunIcon = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAACD0lEQVR4AbSTPS8FQRSG92o0+Ae0EkKDhk58NJQUoiASlUoQKolCoySESCQaCdEp0BGREBQK4W+goJDreSdnstmdXXe3cHOenDNn3nfO7t7duuiff6UGVKvVWVHmmkoNKHOw15YaUKlU9oQ3F8nBAB7BBSxlmem3ipy9ZfbO03vBAARX8AkuMOm535DfabwK1aDeLGsf8lz7hc/BAB7BOmxLwCEP5F1ogn2YMFSrt2uaCM8WrLOfiGCA38V4TN0Fl9CLeR6OjHn1QHtdpmUZRuYADCNIx0BXNcyhun2WcagHw3S2YMw8lMnIHIBkBZ5gAWqFNNLKE2jzBnSivOcKv8l/hmnuEclDSoYbwO3pTVnUFnUbuQHuoGhI22DeiLwI7g1zA1Kn/Ni65tWbTslrvVc9hxvAbeoL3VCH+o38AT1QNKT9MK9e2Q3qPZndABUpnlkPcJt6VJT5YZoBFPKQkpE34BBZB5xCrZBGWnkCbeYAu71H1ENc4SbUUydCPdikOQSP5qFMRuYASTB0k09gDm45bAemjB31QHsnpmUZRjCAA1ZgWlKM4+RR+IJJODBUqzdqGr2aM/iW2U9EMIDdfmgGFxxwBn3QSKNdqAb1zlj7aKGQlxRHMADjIKzFkrii/yLiTlzRXwX9H3GTKhhALzd4BPri3ReaK0ptlBqQ8hZalhrAI9AX777QQqdHUfQLAAD//91ClIsAAAAGSURBVAMAR3zSMQ+aPXkAAAAASUVORK5CYII=";
   const menuIcon = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAdElEQVR4AexTwQ3AIAgsXaSzdCpncKrO0knoSYq/xpKoD3OEUx4I8S63b4ODC5oEL0SRqibgBjwvFBGg3bLMSM7dPIpEJAMH4HmiiADtlmVGnv8D39j7rhpAHopsCuOgyPrlbn2DTo5ZsRot9ux/Nxc0uXoAAAD//8ndUOoAAAAGSURBVAMAa9HwMZNspewAAAAASUVORK5CYII=";
@@ -17,6 +18,7 @@
   let menuDragDistance = 0;
   let shareOpen = false;
   let shareLink = "";
+  let sharePreview = "";
   let shareCopied = false;
   let shareError = "";
   let unlockShare: (() => void) | undefined;
@@ -25,6 +27,16 @@
     closeMenu();
     if (!shareState) return;
     shareLink = shareUrl(location.origin, shareState).toString();
+    const preview = new URL("/share-image.png", location.origin);
+    preview.searchParams.set("v", SHARE_IMAGE_VERSION);
+    preview.searchParams.set("from", shareState.source);
+    preview.searchParams.set("to", shareState.target);
+    const shared = new URL(shareLink);
+    for (const key of ["amount", "receive"]) {
+      const value = shared.searchParams.get(key);
+      if (value) preview.searchParams.set(key, value);
+    }
+    sharePreview = preview.toString();
     shareCopied = false;
     shareError = "";
     shareOpen = true;
@@ -146,14 +158,20 @@
 {#if shareOpen}
   <div class="shareBackdrop" role="presentation" on:mousedown={(event) => { if (event.target === event.currentTarget) closeShare(); }}>
     <div class="shareDialog" role="dialog" aria-modal="true" aria-label={t("Share bridge", {}, activeLocale)}>
-      <button class="shareClose" type="button" on:click={closeShare} aria-label={t("Close share dialog", {}, activeLocale)}>×</button>
-      <span class="shareEyebrow">Pay3Flow</span>
-      <h2>{t("Share bridge", {}, activeLocale)}</h2>
+      <div class="shareHeading">
+        <span class="shareMark" aria-hidden="true"><img src="/icons/assets/pay3flow_logo.svg" alt="" width="30" height="30" /></span>
+        <div><span class="shareEyebrow">Pay3Flow</span><h2>{t("Share bridge", {}, activeLocale)}</h2></div>
+        <button class="shareClose" type="button" on:click={closeShare} aria-label={t("Close share dialog", {}, activeLocale)}>×</button>
+      </div>
       <p>{t("Send this link to open the same exchange. Rates refresh when opened.", {}, activeLocale)}</p>
+      <div class="sharePreview"><img src={sharePreview} alt={t("Bridge preview", {}, activeLocale)} /></div>
       <label for="share-link">{t("Link", {}, activeLocale)}</label>
-      <input id="share-link" value={shareLink} readonly on:focus={(event) => event.currentTarget.select()} />
+      <div class="shareLinkField">
+        <input id="share-link" value={shareLink} readonly on:focus={(event) => event.currentTarget.select()} />
+        <button class="shareCopy" class:copied={shareCopied} type="button" on:click={copyShareLink} aria-label={t(shareCopied ? "Copied" : "Copy link", {}, activeLocale)} title={t(shareCopied ? "Copied" : "Copy link", {}, activeLocale)}><img src={copyIcon} alt="" width="20" height="20" /></button>
+      </div>
+      {#if shareCopied}<span class="shareSuccess" role="status">{t("Copied", {}, activeLocale)}</span>{/if}
       {#if shareError}<span class="shareError" role="status">{shareError}</span>{/if}
-      <button class="shareCopy" type="button" on:click={copyShareLink}>{t(shareCopied ? "Copied" : "Copy link", {}, activeLocale)}</button>
     </div>
   </div>
 {/if}
@@ -305,17 +323,51 @@
 }
 
 .shareButton:disabled { opacity: 0.5; cursor: wait; }
-.shareBackdrop { position: fixed; inset: 0; z-index: 2000; display: grid; place-items: center; padding: 20px; background: rgba(8, 15, 9, 0.58); }
-.shareDialog { position: relative; width: min(100%, 440px); padding: 28px; border: 1px solid var(--color-border-strong); border-radius: 18px; background: var(--color-surface, #fff); box-shadow: 0 24px 80px rgba(0, 0, 0, 0.2); }
-.shareEyebrow { color: var(--color-text-soft); font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
-.shareDialog h2 { margin: 8px 0; font-size: 24px; }
-.shareDialog p { margin: 0 0 22px; color: var(--color-text-soft); font-size: 13px; line-height: 1.5; }
-.shareDialog label { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 750; }
-.shareDialog input { width: 100%; padding: 12px; border: 1px solid var(--color-border-strong); border-radius: 9px; background: var(--color-background, #f5f7f3); color: var(--color-text); font: 12px monospace; }
-.shareCopy { width: 100%; margin-top: 14px; padding: 12px; border-radius: 9px; background: var(--color-primary); color: #fff; font-size: 13px; font-weight: 800; }
-.shareClose { position: absolute; top: 12px; right: 15px; color: var(--color-text-soft); font-size: 26px; line-height: 1; }
-.shareError { display: block; margin-top: 8px; color: var(--color-danger); font-size: 12px; }
-:global(html[data-theme="dark"]) .shareDialog { background: #202420; }
+
+.shareBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(8, 11, 8, 0.68);
+  backdrop-filter: blur(5px);
+}
+
+.shareDialog {
+  width: min(100%, 500px);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  padding: 20px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-card);
+  background: var(--color-paper);
+  color: var(--color-text);
+  box-shadow: var(--shadow-pop);
+}
+
+.shareHeading { display: flex; align-items: center; gap: 11px; }
+.shareMark { display: grid; width: 40px; height: 40px; flex: 0 0 40px; place-items: center; border-radius: 10px; background: var(--color-panel); }
+.shareMark img { display: block; width: 30px; height: 30px; }
+.shareEyebrow { color: var(--color-text-faint); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.shareDialog h2 { margin: 1px 0 0; font-size: 19px; font-weight: 800; line-height: 1.25; }
+.shareDialog p { margin: 16px 0; color: var(--color-text-soft); font-size: 13px; line-height: 1.5; }
+.sharePreview { overflow: hidden; padding: 5px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-panel); }
+.sharePreview img { display: block; width: 100%; height: auto; aspect-ratio: 1200 / 630; border-radius: 8px; object-fit: cover; }
+.shareDialog label { display: block; margin: 18px 0 8px; font-size: 12px; font-weight: 750; }
+.shareLinkField { display: flex; min-width: 0; align-items: center; padding: 4px; border: 1px solid var(--color-border-strong); border-radius: 10px; background: var(--color-panel); transition: border-color .16s ease; }
+.shareLinkField:focus-within { border-color: var(--color-accent-strong); }
+.shareLinkField input { min-width: 0; flex: 1; padding: 9px 10px; border: 0; outline: 0; background: transparent; color: var(--color-text); font: 12px var(--font-mono); }
+.shareCopy { display: grid; width: 38px; height: 38px; flex: 0 0 38px; place-items: center; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-paper); transition: border-color .16s ease, background .16s ease; }
+.shareCopy:hover, .shareCopy.copied { border-color: var(--color-accent-strong); background: var(--color-accent-soft); }
+.shareCopy img { display: block; width: 20px; height: 20px; filter: brightness(0); }
+.shareClose { display: grid; width: 32px; height: 32px; flex: 0 0 32px; place-items: center; margin-left: auto; border-radius: 8px; background: var(--color-panel); color: var(--color-text-soft); font-size: 23px; line-height: 1; }
+.shareClose:hover { color: var(--color-text); }
+.shareSuccess, .shareError { display: block; margin-top: 8px; font-size: 12px; }
+.shareSuccess { color: var(--color-good); }
+.shareError { color: var(--color-danger); }
+:global(html[data-theme="dark"]) .shareCopy img { filter: none; }
 
 .themeToggle img {
   position: absolute;

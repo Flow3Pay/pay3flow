@@ -1,5 +1,5 @@
 import { error } from "@sveltejs/kit";
-import { shareAmount, shareCurrency } from "$lib/share";
+import { shareAmount, shareCurrency, SHARE_IMAGE_VERSION } from "$lib/share";
 import type { PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = ({ params, url }) => {
@@ -9,6 +9,7 @@ export const load: PageServerLoad = ({ params, url }) => {
   const amount = shareAmount(url.searchParams.get("amount"));
   const receive = shareAmount(url.searchParams.get("receive"));
   const image = new URL("/share-image.png", url.origin);
+  image.searchParams.set("v", SHARE_IMAGE_VERSION);
   image.searchParams.set("from", source);
   image.searchParams.set("to", target);
   if (amount) image.searchParams.set("amount", amount);

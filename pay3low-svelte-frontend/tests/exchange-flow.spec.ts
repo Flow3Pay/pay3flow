@@ -41,16 +41,29 @@ test("shared fiat and crypto link restores its currencies in a new browser", asy
   await expect(page).toHaveURL(/#\/swap\/USDT\/KZT\?amount=287\.0062069$/);
 });
 
-test("Share creates a crawlable bridge preview and restores its exchange", async ({ page, request }) => {
+test("Share creates a crawlable bridge preview and restores its exchange", async ({ page, request, isMobile }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
   await mockBackend(page);
   await page.goto("/swap/USDT/KZT?amount=287.0062069");
   await expect(page.getByLabel("Amount to send")).toHaveValue("287.0062069");
   await expect.poll(() => page.evaluate(() => localStorage.getItem("pay3flow.exchange.target-method"))).toBe("kz-kaspi");
 
+  if (isMobile) await page.getByRole("button", { name: "Open menu" }).click();
   await page.getByRole("button", { name: "Share bridge" }).click();
   const dialog = page.getByRole("dialog", { name: "Share bridge" });
   await expect(dialog).toBeVisible();
-  const link = await dialog.getByLabel("Link").inputValue();
+  await expect(dialog).toHaveCSS("background-color", "rgb(25, 25, 25)");
+  await expect(dialog.locator(".shareLinkField")).toHaveCSS("background-color", "rgb(34, 34, 34)");
+  await expect(dialog.locator(".sharePreview img")).toHaveJSProperty("complete", true);
+  const copyButton = dialog.getByRole("button", { name: "Copy link" });
+  await expect(copyButton.locator("img")).toHaveCSS("filter", "none");
+  const field = await dialog.locator(".shareLinkField").boundingBox();
+  const copy = await copyButton.boundingBox();
+  expect(field).not.toBeNull();
+  expect(copy).not.toBeNull();
+  expect(copy!.x + copy!.width).toBeLessThanOrEqual(field!.x + field!.width);
+  expect(copy!.width).toBeLessThan(45);
+  const link = await dialog.getByRole("textbox", { name: "Link" }).inputValue();
   expect(new URL(link).pathname).toBe("/swap/USDT/KZT");
   expect(new URL(link).searchParams.get("amount")).toBe("287.0062069");
   await page.keyboard.press("Escape");

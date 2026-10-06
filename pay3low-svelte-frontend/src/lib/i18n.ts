@@ -10,6 +10,7 @@ const messages: Record<Locale, Record<string, string>> = {
   ru: {
     Share: "Поделиться",
     "Share bridge": "Поделиться маршрутом",
+    "Bridge preview": "Предпросмотр маршрута",
     "Close share dialog": "Закрыть окно отправки",
     "Send this link to open the same exchange. Rates refresh when opened.": "Отправьте ссылку, чтобы открыть этот обмен. Котировки обновятся при открытии.",
     Link: "Ссылка",
@@ -333,6 +334,7 @@ const messages: Record<Locale, Record<string, string>> = {
   hy: {
     Share: "Կիսվել",
     "Share bridge": "Կիսվել ուղղորդմամբ",
+    "Bridge preview": "Ուղղորդման նախադիտում",
     "Close share dialog": "Փակել կիսվելու պատուհանը",
     "Send this link to open the same exchange. Rates refresh when opened.": "Ուղարկեք հղումը նույն փոխանակումը բացելու համար։ Գները կթարմացվեն բացելիս։",
     Link: "Հղում",
