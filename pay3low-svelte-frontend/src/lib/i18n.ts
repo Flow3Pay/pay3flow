@@ -642,10 +642,6 @@ export function setLocale(next: Locale) {
   if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_KEY, next);
 }
 
-export function cycleLocale(current: Locale): Locale {
-  return supportedLocales[(supportedLocales.indexOf(current) + 1) % supportedLocales.length];
-}
-
 export function t(key: string, params: Record<string, string | number> = {}, language: Locale = "en") {
   let value = messages[language][key] ?? key;
   for (const [name, replacement] of Object.entries(params)) value = value.replaceAll(`{${name}}`, String(replacement));

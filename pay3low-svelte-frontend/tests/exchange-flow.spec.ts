@@ -189,6 +189,26 @@ test("a shared result opens the saved route without starting a new search", asyn
   await expect.poll(() => liveSearches, { timeout: 8000 }).toBeGreaterThan(0);
 });
 
+test("language menu selects a locale without cycling and remembers it", async ({ page, isMobile }) => {
+  await page.goto("/");
+  if (isMobile) await page.locator(".menuToggle").click();
+  const toggle = page.locator(".languageToggle");
+  await toggle.click();
+  const options = page.locator(".languageOptions");
+  await expect(options.getByRole("button")).toHaveCount(3);
+  await expect(options.getByRole("button", { name: "English EN" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await page.keyboard.press("Escape");
+  await expect(options).toHaveCount(0);
+  await expect(toggle).toBeFocused();
+  await toggle.click();
+  await options.getByRole("button", { name: "Հայերեն ՀԱՅ" }).click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "hy");
+  await expect(options).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("lang", "hy");
+});
+
 test("system theme follows the browser until the user chooses a theme", async ({ page, isMobile }) => {
   await page.emulateMedia({ colorScheme: "dark" });
   await mockBackend(page);
@@ -1400,14 +1420,14 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await expect(page.getByText("101 routes found")).toBeVisible();
   const routeCounter = page.locator(".resultSummary small[aria-live='polite']");
   const languageToggle = page.locator(".languageToggle");
-  const toggleLanguage = async () => {
+  const chooseLanguage = async (name: string) => {
     if (isMobile) await page.locator(".menuToggle").click();
     await languageToggle.click();
+    await page.locator(".languageOptions").getByRole("button", { name }).click();
   };
-  await toggleLanguage();
+  await chooseLanguage("Русский RU");
   await expect(routeCounter).toHaveText("101 маршрут найден");
-  await toggleLanguage();
-  await toggleLanguage();
+  await chooseLanguage("English EN");
   await expect(routeCounter).toHaveText("101 routes found");
   const routeRenderSamples = await page.evaluate(() =>
     (window as Window & { __routeRenderSamples?: Array<{ count: number; at: number }> }).__routeRenderSamples ?? [],
@@ -2044,9 +2064,10 @@ test("currency control only lists currencies supported by the selected payment m
   await expect(networkPicker.locator(".optionMeta")).toHaveCount(0);
   await networkPicker.getByRole("option", { name: "Ethereum (ERC-20)" }).click();
   const languageToggle = page.locator(".languageToggle");
-  for (let index = 0; index < 3; index += 1) {
+  for (const name of ["Русский RU", "Հայերեն ՀԱՅ", "English EN"]) {
     if (isMobile) await page.locator(".menuToggle").click();
     await languageToggle.click();
+    await page.locator(".languageOptions").getByRole("button", { name }).click();
     await expect(page.locator(".moneyPanelSource .methodTrigger .methodText")).toHaveText("USDT");
   }
 

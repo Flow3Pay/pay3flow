@@ -1,6 +1,6 @@
 <script lang="ts">
   import { API_BASE_URL, apiUrl } from "$lib/api";
-  import { cycleLocale, locale, localeLabel, setLocale, t } from "$lib/i18n";
+  import { locale, localeLabel, setLocale, t, type Locale } from "$lib/i18n";
   import { lockPageScroll } from "$lib/page-scroll-lock";
   import { onDestroy } from "svelte";
   import { shareUrl, SHARE_IMAGE_VERSION, type ShareState } from "$lib/share";
@@ -12,6 +12,14 @@
 
   const apiDocsHref = API_BASE_URL ? apiUrl("/scalar").toString() : "/scalar";
   let menuOpen = false;
+  let languageOpen = false;
+  let languagePicker: HTMLDivElement;
+  let languageToggle: HTMLButtonElement;
+  const languages: { code: Locale; name: string }[] = [
+    { code: "en", name: "English" },
+    { code: "ru", name: "Русский" },
+    { code: "hy", name: "Հայերեն" }
+  ];
   let menuPanel: HTMLDivElement;
   let menuDragging = false;
   let menuDragStartY = 0;
@@ -58,11 +66,15 @@
   }
   onDestroy(() => unlockShare?.());
 
-  function closeMenu() { menuOpen = false; }
+  function closeMenu() { menuOpen = false; languageOpen = false; }
   function closeOnBackdrop(event: MouseEvent) { if (event.target === event.currentTarget) closeMenu(); }
+  function closeLanguageOnOutsideClick(event: PointerEvent) {
+    if (languageOpen && !languagePicker?.contains(event.target as Node)) languageOpen = false;
+  }
   function onKeyDown(event: KeyboardEvent) {
     if (event.key !== "Escape") return;
     if (shareOpen) closeShare();
+    else if (languageOpen) { languageOpen = false; languageToggle?.focus(); }
     else if (menuOpen) closeMenu();
   }
   function startMenuDrag(event: PointerEvent) {
@@ -122,13 +134,14 @@
   }
 
   $: activeLocale = $locale;
-  function toggleLocale() {
-    setLocale(cycleLocale(activeLocale));
+  function chooseLocale(next: Locale) {
+    setLocale(next);
+    languageOpen = false;
     closeMenu();
   }
 </script>
 
-<svelte:window on:keydown={onKeyDown} />
+<svelte:window on:keydown={onKeyDown} on:pointerdown={closeLanguageOnOutsideClick} />
 
 <header class="header">
   <div class="inner">
@@ -144,7 +157,16 @@
         <div class="actions">
           <a class="apiDocsLink" href={apiDocsHref} target="_blank" rel="noreferrer noopener" aria-label="Open API documentation" on:click={closeMenu}>API DOCS</a>
           <button class="shareButton" type="button" on:click={openShare} disabled={!shareState} aria-label={t("Share bridge", {}, activeLocale)}>{t("Share", {}, activeLocale)}</button>
-          <button class="languageToggle" type="button" on:click={toggleLocale} aria-label={t("Switch language", {}, activeLocale)} title={t("Switch language", {}, activeLocale)}><span class="localeCode">{localeLabel(activeLocale)}</span><span class="mobileActionLabel">{t("Switch language", {}, activeLocale)}</span></button>
+          <div class="languagePicker" bind:this={languagePicker}>
+            <button class="languageToggle" bind:this={languageToggle} type="button" on:click={() => languageOpen = !languageOpen} aria-label={t("Switch language", {}, activeLocale)} aria-haspopup="true" aria-expanded={languageOpen} aria-controls="language-options" title={t("Switch language", {}, activeLocale)}><span class="localeCode">{localeLabel(activeLocale)}</span><span class="mobileActionLabel">{t("Switch language", {}, activeLocale)}</span><span class="languageChevron" aria-hidden="true"></span></button>
+            {#if languageOpen}
+              <div class="languageOptions" id="language-options" role="group" aria-label={t("Switch language", {}, activeLocale)}>
+                {#each languages as language}
+                  <button type="button" class="languageOption" class:selected={activeLocale === language.code} aria-pressed={activeLocale === language.code} lang={language.code} on:click={() => chooseLocale(language.code)}><span>{language.name}</span><span class="languageOptionCode">{localeLabel(language.code)}</span></button>
+                {/each}
+              </div>
+            {/if}
+          </div>
           <button class="themeToggle" type="button" on:click={toggleTheme} aria-label={t("Switch theme", {}, activeLocale)} title={t("Switch theme", {}, activeLocale)}><span class="themeIcon"><img class="moonIcon" src={moonIcon} alt="" width="24" height="24" decoding="async" /><img class="sunIcon" src={sunIcon} alt="" width="24" height="24" decoding="async" /></span><span class="mobileActionLabel">{t("Switch theme", {}, activeLocale)}</span></button>
           <a class="telegramLink" href="https://t.me/+-lq4m5E_aT4xM2Y6" target="_blank" rel="noreferrer noopener" aria-label="Open Pay3Flow Telegram channel" title="Telegram" on:click={closeMenu}><img src="/icons/assets/telegram-messenger.png" alt="" width="20" height="20" decoding="async" /><span class="mobileActionLabel">Telegram</span></a>
           <a class="githubLink" href="https://github.com/Flow3Pay/pay3flow" target="_blank" rel="noreferrer noopener" aria-label="Open Pay3Flow on GitHub" on:click={closeMenu}><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 .7a11.3 11.3 0 0 0-3.58 22.02c.57.1.78-.25.78-.55v-2.16c-3.18.7-3.85-1.34-3.85-1.34-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.68 1.24 3.34.95.1-.74.4-1.24.73-1.53-2.54-.29-5.2-1.27-5.2-5.65 0-1.25.45-2.26 1.18-3.06-.12-.29-.51-1.45.11-3.02 0 0 .96-.31 3.12 1.17a10.8 10.8 0 0 1 5.68 0c2.16-1.48 3.12-1.17 3.12-1.17.62 1.57.23 2.73.11 3.02.73.8 1.18 1.81 1.18 3.06 0 4.39-2.67 5.35-5.21 5.64.41.36.78 1.08.78 2.18v3.23c0 .3.2.65.79.54A11.3 11.3 0 0 0 12 .7Z" /></svg><span class="mobileActionLabel">GitHub</span></a>
@@ -304,12 +326,25 @@
 }
 
 .languageToggle {
-  padding: 0 7px;
+  display: flex;
+  width: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 6px;
   color: var(--color-text-soft);
   font-size: 10px;
   font-weight: 850;
   letter-spacing: 0.04em;
 }
+
+.languagePicker { position: relative; }
+.languageChevron { width: 6px; height: 6px; flex: 0 0 6px; margin-top: -3px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); }
+.languageToggle[aria-expanded="true"] .languageChevron { margin-top: 3px; transform: rotate(225deg); }
+.languageOptions { position: absolute; top: calc(100% + 8px); right: 0; z-index: 2; width: 172px; padding: 5px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-paper); box-shadow: var(--shadow-pop); }
+.languageOption { display: flex; width: 100%; min-height: 38px; align-items: center; justify-content: space-between; gap: 12px; padding: 0 10px; border-radius: 8px; color: var(--color-text); font-size: 13px; font-weight: 700; text-align: left; }
+.languageOption:hover, .languageOption:focus-visible, .languageOption.selected { background: var(--color-accent-soft); }
+.languageOptionCode { color: var(--color-text-soft); font-size: 10px; font-weight: 800; }
 
 .apiDocsLink,
 .shareButton {
@@ -706,6 +741,12 @@
   .themeToggle {
     overflow: visible;
   }
+
+  .languagePicker { width: 100%; }
+  .languageToggle { justify-content: flex-start; }
+  .languageChevron { margin-left: auto; }
+  .languageOptions { position: static; width: 100%; margin-top: 6px; box-shadow: none; }
+  .languageOption { min-height: 44px; }
 
   .localeCode {
     display: grid;
