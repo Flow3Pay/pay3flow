@@ -2,7 +2,14 @@
 # it creates no exchange provider rows, but is compiled into the public bank
 # directory consumed by the frontend.
 payment_methods = [
-  { id = "global-usd-cash", name = "Cash USD", country = "GLOBAL", currency = "USD", kind = "cash", color = "#168451", initials = "$", popular = true, p2p_query = "Cash" },
+  # Cash settlement in each supported country currency. The shared
+  # currency_group lets the compact currency picker switch between them.
+  { id = "global-usd-cash", name = "Cash USD", country = "GLOBAL", currency = "USD", kind = "cash", color = "#168451", initials = "$", popular = true, p2p_query = "Cash", currency_group = "cash" },
+  { id = "am-amd-cash", name = "Cash AMD", country = "AM", currency = "AMD", kind = "cash", color = "#6d2c91", initials = "֏", popular = true, p2p_query = "Cash", currency_group = "cash" },
+  { id = "ru-rub-cash", name = "Cash RUB", country = "RU", currency = "RUB", kind = "cash", color = "#21a038", initials = "₽", popular = true, p2p_query = "Cash", currency_group = "cash" },
+  { id = "by-byn-cash", name = "Cash BYN", country = "BY", currency = "BYN", kind = "cash", color = "#006b3f", initials = "Br", popular = true, p2p_query = "Cash", currency_group = "cash" },
+  { id = "ua-uah-cash", name = "Cash UAH", country = "UA", currency = "UAH", kind = "cash", color = "#0057b7", initials = "₴", popular = true, p2p_query = "Cash", currency_group = "cash" },
+  { id = "kz-kzt-cash", name = "Cash KZT", country = "KZ", currency = "KZT", kind = "cash", color = "#00a3e0", initials = "₸", popular = true, p2p_query = "Cash", currency_group = "cash" },
 
   # Currency cards used by each institution's compact account-currency picker.
   { id = "currency-amd", name = "Armenian dram", country = "AM", currency = "AMD", kind = "currency", color = "#6d2c91", initials = "֏", p2p_query = "AMD" },

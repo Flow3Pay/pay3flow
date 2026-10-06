@@ -545,6 +545,9 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
         currency("AMD", "Armenian dram", "֏", "#6d2c91"), currency("RUB", "Russian ruble", "₽", "#21a038"),
         currency("USD", "US dollar", "$", "#168451"), currency("BYN", "Belarusian ruble", "Br", "#006b3f"), currency("KZT", "Kazakhstani tenge", "₸", "#168451"),
         { ...method("global-usd-cash", "Cash USD", "GLOBAL", "USD", "", "cash", true), kind: "cash", initials: "$", p2p_query: "Cash" },
+        { ...method("am-amd-cash", "Cash AMD", "AM", "AMD", "", "cash", true), kind: "cash", initials: "֏", p2p_query: "Cash" },
+        { ...method("ru-rub-cash", "Cash RUB", "RU", "RUB", "", "cash", true), kind: "cash", initials: "₽", p2p_query: "Cash" },
+        { ...method("by-byn-cash", "Cash BYN", "BY", "BYN", "", "cash", true), kind: "cash", initials: "Br", p2p_query: "Cash" },
         method("am-ameriabank", "Ameriabank", "AM", "AMD", "/icons/assets/ameriabank-green.png", "ameriabank", true),
         method("am-ameriabank-usd-account", "Ameriabank", "AM", "USD", "/icons/assets/ameriabank-green.png", "ameriabank", true),
         method("am-idbank", "IDBank", "AM", "AMD", "/icons/assets/idbank.png", "idbank", true),
@@ -1922,6 +1925,33 @@ test("currency control only lists currencies supported by the selected payment m
   await expect(ameriaCurrencies.getByRole("option", { name: /^AMD\b/ })).toBeVisible();
   await expect(ameriaCurrencies.getByRole("option", { name: /^USD\b/ })).toBeVisible();
   await expect(ameriaCurrencies.getByRole("option", { name: /^RUB\b/ })).toHaveCount(0);
+});
+
+test("cash is available in each country currency without replacing default banks", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page);
+
+  await expect(page.getByRole("button", { name: "Select sending bank: Ameriabank" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Select recipient bank: Sberbank" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
+  const targetMethodPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
+  await targetMethodPicker.getByRole("option", { name: /^RUB\b/ }).click();
+  await expect(targetMethodPicker.getByRole("option", { name: /^Cash RUB Cash settlement · RUB/ })).toHaveCount(1);
+  await targetMethodPicker.getByRole("option", { name: /Cash RUB/ }).click();
+  await expect(page.getByRole("button", { name: "Select recipient payment method: Cash RUB" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
+  const sourceMethodPicker = page.getByRole("dialog", { name: "Choose where you pay from" });
+  await sourceMethodPicker.getByRole("option", { name: /^AMD\b/ }).click();
+  await sourceMethodPicker.getByRole("option", { name: /Cash AMD/ }).click();
+  await expect(page.getByRole("button", { name: "Select sending payment method: Cash AMD" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Select sending currency: AMD" }).click();
+  const currencies = page.getByRole("dialog", { name: "Choose currency" });
+  for (const code of ["AMD", "BYN", "RUB", "USD"]) await expect(currencies.getByRole("option", { name: new RegExp(`^${code}\\b`) })).toBeVisible();
+  await currencies.getByRole("option", { name: /^BYN\b/ }).click();
+  await expect(page.getByRole("button", { name: "Select sending payment method: Cash BYN" })).toBeVisible();
 });
 
 test("USD supports cash and Armenian bank currencies", async ({ page }) => {
