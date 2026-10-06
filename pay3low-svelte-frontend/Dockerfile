@@ -11,6 +11,7 @@ RUN npm run build
 
 FROM node:24-alpine AS runner
 WORKDIR /app
+RUN apk add --no-cache font-dejavu
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=3000
