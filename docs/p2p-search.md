@@ -53,7 +53,9 @@ offers. More specific searches that need a larger provider page than the
 snapshot contains continue to query the providers. A complete snapshot from an
 all-venue search can serve a selected-venue search, and a complete P2P subset
 is saved even when a direct-exchange source fails. Partial provider responses
-are not cached as complete search answers. A fresh local snapshot is
+are not cached as complete search answers. A provider request that fails or
+times out is retried once before the search records that source as failed.
+A fresh local snapshot is
 served before contacting Fmatch, and a stale snapshot can satisfy an Fmatch
 miss before another live provider fan-out. Each successful warmup and each
 snapshot hit is logged separately from an interactive route search. Public

@@ -49,6 +49,10 @@ struct DirectStubSource(StubSource);
 
 struct FailingDirectStubSource;
 
+struct FlakyStubSource {
+    attempts: Arc<std::sync::atomic::AtomicUsize>,
+}
+
 struct StubRouteProvider;
 
 #[async_trait]
@@ -106,6 +110,24 @@ impl P2pSource for FailingDirectStubSource {
 
     async fn search(&self, _query: &P2pSearchQuery) -> Result<Vec<P2pOffer>> {
         bail!("direct provider unavailable")
+    }
+}
+
+#[async_trait]
+impl P2pSource for FlakyStubSource {
+    fn name(&self) -> &str {
+        "binance"
+    }
+
+    async fn search(&self, _query: &P2pSearchQuery) -> Result<Vec<P2pOffer>> {
+        if self
+            .attempts
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+            == 0
+        {
+            bail!("temporary provider failure");
+        }
+        Ok(vec![offer("binance", "400", "1", "100000", 20)])
     }
 }
 
@@ -1021,6 +1043,36 @@ async fn p2p_snapshot_survives_a_failed_direct_provider() {
         .unwrap();
     assert_eq!(p2p.offers.len(), 1);
     assert_eq!(p2p.offers[0].source, "binance");
+}
+
+#[tokio::test]
+async fn transient_provider_failure_is_retried_before_finishing_search() {
+    let attempts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let service = P2pSearchService::with_sources(
+        vec![Arc::new(FlakyStubSource {
+            attempts: attempts.clone(),
+        })],
+        Duration::from_secs(1),
+    );
+    let response = service
+        .search(P2pSearchQuery {
+            fiat: "AMD".into(),
+            asset: "USDT".into(),
+            side: P2pSide::BuyCrypto,
+            amount: Some(10_000.0),
+            asset_amount: None,
+            payment_method: None,
+            merchant_only: None,
+            min_orders: None,
+            min_completion_rate: None,
+            limit: Some(20),
+            sources: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 2);
+    assert_eq!(response.offers.len(), 1);
+    assert!(response.sources[0].ok);
 }
 
 #[test]

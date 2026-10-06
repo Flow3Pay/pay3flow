@@ -1429,7 +1429,17 @@ impl P2pSearchService {
                     };
                     let started = Instant::now();
                     let timeout = source.timeout(self.timeout);
-                    let result = tokio::time::timeout(timeout, source.search(&query)).await;
+                    let mut result = tokio::time::timeout(timeout, source.search(&query)).await;
+                    let retry_reason = match &result {
+                        Ok(Err(error)) => Some(error.to_string()),
+                        Err(_) => Some(format!("source timed out after {} ms", timeout.as_millis())),
+                        Ok(Ok(_)) => None,
+                    };
+                    if let Some(reason) = retry_reason.filter(|_| source.market() == P2pOfferMarket::P2p) {
+                        tracing::warn!(source = source.name(), %reason, "retrying P2P provider request");
+                        tokio::time::sleep(Duration::from_millis(300)).await;
+                        result = tokio::time::timeout(timeout, source.search(&query)).await;
+                    }
                     let elapsed = started.elapsed().as_millis();
                     match result {
                         Ok(Ok(mut offers)) => {
