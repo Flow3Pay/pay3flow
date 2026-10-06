@@ -2,6 +2,9 @@
   import { API_BASE_URL, apiUrl } from "$lib/api";
   import { cycleLocale, locale, localeLabel, setLocale, t } from "$lib/i18n";
   import { lockPageScroll } from "$lib/page-scroll-lock";
+  import { onDestroy } from "svelte";
+  import { shareUrl, type ShareState } from "$lib/share";
+  export let shareState: ShareState | null = null;
   const moonIcon = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAACWklEQVR4AbTVTYhNYRzH8TPCRs0kLxsWIvIywkrykvISTZRkbGiSQsqCIkuWyobkpZkiL5PQ2Eyk2BBGErOaZCMz0giRrEyNz/90z3XvzL23e6Zm+n3v/zz/5/n/f8957plzJyTj/FfTYHh4eDM60Il5Y9lLRQPN5uOyho+wH7GuQ8ytKCwr0ni7xHMcxGOsxW68QW6VGWi+TofrmIGzDQ0Nm8QpCL2Oj7wUDTRvVnwVTRqHjrsOLYoPvEJuFQ1U7sFc7ESplhoMcvwo5lZqYPcTVR5Ap0ZdYqmmG/RjTEoNVLZhKi5hpOILXzAyWe84M8jO+VOFwndyje4yW2NYvzKD2P0fx1PJoLfQLp6owmX9odRgoFIZ00H5CzjnLhaKuVRq8LdaJZMj5n7hIXIpM4jCZjuMx7Rag30m5lgzgOWu61Jm8KywuqUQRwV3cV9yI2bhLZMTmO26plIDxS+t+ow1qCrrnpichms4g34mvWjHqRLWm0uVGqRXSXJHbLWo6l2YT5j8QBzXLuMw+SbGy/CwuA0Rb4upigaKjsnE+6aLSfxnG1aX9fdwEhvQiJlW78VX9CFV0SAdJckWcTKeIpdsarGCOIUl4kWkKjOwi5+yq7FKwW/EC9CwtqzbakXWvFWfu8apygwiY/KFOAm3cENxfHktYhyB1H/JrcRNmQdoQllz42SUQSSZDOGQ66BV7MagZu/Rgw/4LteDZYjfjhVqijuXS1XRIJ3xoeAK4myDeJ1Hwy+mwvC0GE9NNI5fv3iapMpV0yBbyqQP7WjDDhzFeXRjKFtXKf4DAAD///Lx6McAAAAGSURBVAMASQPNMX2ya7kAAAAASUVORK5CYII=";
   const sunIcon = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAACD0lEQVR4AbSTPS8FQRSG92o0+Ae0EkKDhk58NJQUoiASlUoQKolCoySESCQaCdEp0BGREBQK4W+goJDreSdnstmdXXe3cHOenDNn3nfO7t7duuiff6UGVKvVWVHmmkoNKHOw15YaUKlU9oQ3F8nBAB7BBSxlmem3ipy9ZfbO03vBAARX8AkuMOm535DfabwK1aDeLGsf8lz7hc/BAB7BOmxLwCEP5F1ogn2YMFSrt2uaCM8WrLOfiGCA38V4TN0Fl9CLeR6OjHn1QHtdpmUZRuYADCNIx0BXNcyhun2WcagHw3S2YMw8lMnIHIBkBZ5gAWqFNNLKE2jzBnSivOcKv8l/hmnuEclDSoYbwO3pTVnUFnUbuQHuoGhI22DeiLwI7g1zA1Kn/Ni65tWbTslrvVc9hxvAbeoL3VCH+o38AT1QNKT9MK9e2Q3qPZndABUpnlkPcJt6VJT5YZoBFPKQkpE34BBZB5xCrZBGWnkCbeYAu71H1ENc4SbUUydCPdikOQSP5qFMRuYASTB0k09gDm45bAemjB31QHsnpmUZRjCAA1ZgWlKM4+RR+IJJODBUqzdqGr2aM/iW2U9EMIDdfmgGFxxwBn3QSKNdqAb1zlj7aKGQlxRHMADjIKzFkrii/yLiTlzRXwX9H3GTKhhALzd4BPri3ReaK0ptlBqQ8hZalhrAI9AX777QQqdHUfQLAAD//91ClIsAAAAGSURBVAMAR3zSMQ+aPXkAAAAASUVORK5CYII=";
   const menuIcon = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAdElEQVR4AexTwQ3AIAgsXaSzdCpncKrO0knoSYq/xpKoD3OEUx4I8S63b4ODC5oEL0SRqibgBjwvFBGg3bLMSM7dPIpEJAMH4HmiiADtlmVGnv8D39j7rhpAHopsCuOgyPrlbn2DTo5ZsRot9ux/Nxc0uXoAAAD//8ndUOoAAAAGSURBVAMAa9HwMZNspewAAAAASUVORK5CYII=";
@@ -12,10 +15,44 @@
   let menuDragging = false;
   let menuDragStartY = 0;
   let menuDragDistance = 0;
+  let shareOpen = false;
+  let shareLink = "";
+  let shareCopied = false;
+  let shareError = "";
+  let unlockShare: (() => void) | undefined;
+
+  function openShare() {
+    closeMenu();
+    if (!shareState) return;
+    shareLink = shareUrl(location.origin, shareState).toString();
+    shareCopied = false;
+    shareError = "";
+    shareOpen = true;
+    unlockShare ??= lockPageScroll();
+  }
+  function closeShare() {
+    shareOpen = false;
+    unlockShare?.();
+    unlockShare = undefined;
+  }
+  async function copyShareLink() {
+    try {
+      await navigator.clipboard.writeText(shareLink);
+      shareCopied = true;
+      shareError = "";
+    } catch {
+      shareError = t("Select and copy the link", {}, activeLocale);
+    }
+  }
+  onDestroy(() => unlockShare?.());
 
   function closeMenu() { menuOpen = false; }
   function closeOnBackdrop(event: MouseEvent) { if (event.target === event.currentTarget) closeMenu(); }
-  function onKeyDown(event: KeyboardEvent) { if (event.key === "Escape" && menuOpen) closeMenu(); }
+  function onKeyDown(event: KeyboardEvent) {
+    if (event.key !== "Escape") return;
+    if (shareOpen) closeShare();
+    else if (menuOpen) closeMenu();
+  }
   function startMenuDrag(event: PointerEvent) {
     menuDragging = true;
     menuDragStartY = event.clientY;
@@ -94,6 +131,7 @@
         <div class="actionsHeader"><button type="button" class="menuHandle" aria-label={t("Close menu", {}, activeLocale)} on:pointerdown={startMenuDrag} on:pointermove={moveMenuDrag} on:pointerup={endMenuDrag} on:pointercancel={endMenuDrag} on:keydown={(event) => { if (event.key === "Enter" || event.key === " ") closeMenu(); }}><span aria-hidden="true"></span></button><strong>{t("Menu", {}, activeLocale)}</strong></div>
         <div class="actions">
           <a class="apiDocsLink" href={apiDocsHref} target="_blank" rel="noreferrer noopener" aria-label="Open API documentation" on:click={closeMenu}>API DOCS</a>
+          <button class="shareButton" type="button" on:click={openShare} disabled={!shareState} aria-label={t("Share bridge", {}, activeLocale)}>{t("Share", {}, activeLocale)}</button>
           <button class="languageToggle" type="button" on:click={toggleLocale} aria-label={t("Switch language", {}, activeLocale)} title={t("Switch language", {}, activeLocale)}><span class="localeCode">{localeLabel(activeLocale)}</span><span class="mobileActionLabel">{t("Switch language", {}, activeLocale)}</span></button>
           <button class="themeToggle" type="button" on:click={toggleTheme} aria-label={t("Switch theme", {}, activeLocale)} title={t("Switch theme", {}, activeLocale)}><span class="themeIcon"><img class="moonIcon" src={moonIcon} alt="" width="24" height="24" decoding="async" /><img class="sunIcon" src={sunIcon} alt="" width="24" height="24" decoding="async" /></span><span class="mobileActionLabel">{t("Switch theme", {}, activeLocale)}</span></button>
           <a class="telegramLink" href="https://t.me/+-lq4m5E_aT4xM2Y6" target="_blank" rel="noreferrer noopener" aria-label="Open Pay3Flow Telegram channel" title="Telegram" on:click={closeMenu}><img src="/icons/assets/telegram-messenger.png" alt="" width="20" height="20" decoding="async" /><span class="mobileActionLabel">Telegram</span></a>
@@ -104,6 +142,21 @@
     <button class="menuToggle" type="button" aria-haspopup="dialog" aria-expanded={menuOpen} aria-label={t("Open menu", {}, activeLocale)} title={t("Open menu", {}, activeLocale)} on:click={() => menuOpen = true}><img src={menuIcon} alt="" width="24" height="24" decoding="async" /></button>
   </div>
 </header>
+
+{#if shareOpen}
+  <div class="shareBackdrop" role="presentation" on:mousedown={(event) => { if (event.target === event.currentTarget) closeShare(); }}>
+    <div class="shareDialog" role="dialog" aria-modal="true" aria-label={t("Share bridge", {}, activeLocale)}>
+      <button class="shareClose" type="button" on:click={closeShare} aria-label={t("Close share dialog", {}, activeLocale)}>×</button>
+      <span class="shareEyebrow">Pay3Flow</span>
+      <h2>{t("Share bridge", {}, activeLocale)}</h2>
+      <p>{t("Send this link to open the same exchange. Rates refresh when opened.", {}, activeLocale)}</p>
+      <label for="share-link">{t("Link", {}, activeLocale)}</label>
+      <input id="share-link" value={shareLink} readonly on:focus={(event) => event.currentTarget.select()} />
+      {#if shareError}<span class="shareError" role="status">{shareError}</span>{/if}
+      <button class="shareCopy" type="button" on:click={copyShareLink}>{t(shareCopied ? "Copied" : "Copy link", {}, activeLocale)}</button>
+    </div>
+  </div>
+{/if}
 
 <style>
 .header {
@@ -194,7 +247,8 @@
 .telegramLink,
 .themeToggle,
 .languageToggle,
-.apiDocsLink {
+.apiDocsLink,
+.shareButton {
   display: grid;
   width: 36px;
   height: 36px;
@@ -219,7 +273,8 @@
 .telegramLink:hover,
 .themeToggle:hover,
 .languageToggle:hover,
-.apiDocsLink:hover {
+.apiDocsLink:hover,
+.shareButton:hover {
   border-color: var(--color-accent-strong);
   background: var(--color-accent-soft);
   transform: translateY(-1px);
@@ -238,7 +293,8 @@
   letter-spacing: 0.04em;
 }
 
-.apiDocsLink {
+.apiDocsLink,
+.shareButton {
   width: auto;
   padding: 0 12px;
   color: var(--color-text-soft);
@@ -247,6 +303,19 @@
   letter-spacing: 0.04em;
   white-space: nowrap;
 }
+
+.shareButton:disabled { opacity: 0.5; cursor: wait; }
+.shareBackdrop { position: fixed; inset: 0; z-index: 2000; display: grid; place-items: center; padding: 20px; background: rgba(8, 15, 9, 0.58); }
+.shareDialog { position: relative; width: min(100%, 440px); padding: 28px; border: 1px solid var(--color-border-strong); border-radius: 18px; background: var(--color-surface, #fff); box-shadow: 0 24px 80px rgba(0, 0, 0, 0.2); }
+.shareEyebrow { color: var(--color-text-soft); font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.shareDialog h2 { margin: 8px 0; font-size: 24px; }
+.shareDialog p { margin: 0 0 22px; color: var(--color-text-soft); font-size: 13px; line-height: 1.5; }
+.shareDialog label { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 750; }
+.shareDialog input { width: 100%; padding: 12px; border: 1px solid var(--color-border-strong); border-radius: 9px; background: var(--color-background, #f5f7f3); color: var(--color-text); font: 12px monospace; }
+.shareCopy { width: 100%; margin-top: 14px; padding: 12px; border-radius: 9px; background: var(--color-primary); color: #fff; font-size: 13px; font-weight: 800; }
+.shareClose { position: absolute; top: 12px; right: 15px; color: var(--color-text-soft); font-size: 26px; line-height: 1; }
+.shareError { display: block; margin-top: 8px; color: var(--color-danger); font-size: 12px; }
+:global(html[data-theme="dark"]) .shareDialog { background: #202420; }
 
 .themeToggle img {
   position: absolute;
@@ -284,6 +353,7 @@
 :global(html[data-theme="dark"]) .themeToggle,
 :global(html[data-theme="dark"]) .languageToggle,
 :global(html[data-theme="dark"]) .apiDocsLink,
+:global(html[data-theme="dark"]) .shareButton,
 :global(html[data-theme="dark"]) .profile {
   border-color: var(--color-border-strong);
   background: #262626;
@@ -566,7 +636,8 @@
   .telegramLink,
   .themeToggle,
   .languageToggle,
-  .apiDocsLink {
+  .apiDocsLink,
+  .shareButton {
     display: flex;
     width: 100%;
     min-height: 44px;

@@ -14,6 +14,16 @@ npm run dev -- --host 127.0.0.1 --port 3000
 The frontend expects the backend at `http://localhost:8080` during local
 development. Set `PUBLIC_API_URL` when the backend is hosted elsewhere.
 
+## Sharing a bridge
+
+The header's Share button copies a `/swap/SOURCE/TARGET?amount=...` URL. The
+server renders Open Graph and Twitter metadata for that page and serves a
+1200×630 PNG at `/share-image.png`. If a complete quote is selected, the share
+URL includes its receive amount as a snapshot for the preview image. The
+browser searches again when the recipient opens the link. Older `#/swap/...`
+links still open the bridge, but their fragment is invisible to link crawlers,
+so they receive only the generic home-page preview.
+
 ## Live result rendering
 
 WebSocket route snapshots can arrive while other providers are still being

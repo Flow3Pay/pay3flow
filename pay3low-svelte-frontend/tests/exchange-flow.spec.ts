@@ -41,6 +41,33 @@ test("shared fiat and crypto link restores its currencies in a new browser", asy
   await expect(page).toHaveURL(/#\/swap\/USDT\/KZT\?amount=287\.0062069$/);
 });
 
+test("Share creates a crawlable bridge preview and restores its exchange", async ({ page, request }) => {
+  await mockBackend(page);
+  await page.goto("/swap/USDT/KZT?amount=287.0062069");
+  await expect(page.getByLabel("Amount to send")).toHaveValue("287.0062069");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("pay3flow.exchange.target-method"))).toBe("kz-kaspi");
+
+  await page.getByRole("button", { name: "Share bridge" }).click();
+  const dialog = page.getByRole("dialog", { name: "Share bridge" });
+  await expect(dialog).toBeVisible();
+  const link = await dialog.getByLabel("Link").inputValue();
+  expect(new URL(link).pathname).toBe("/swap/USDT/KZT");
+  expect(new URL(link).searchParams.get("amount")).toBe("287.0062069");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+
+  const document = await request.get(link);
+  expect(document.ok()).toBeTruthy();
+  const html = await document.text();
+  expect(html).toContain('property="og:image"');
+  expect(html).toContain("USDT → KZT | Pay3Flow Bridge");
+  const imageUrl = html.match(/property="og:image" content="([^"]+)"/)?.[1]?.replaceAll("&amp;", "&");
+  expect(imageUrl).toBeTruthy();
+  const image = await request.get(imageUrl!);
+  expect(image.headers()["content-type"]).toBe("image/png");
+  expect((await image.body()).subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
+});
+
 test("system theme follows the browser until the user chooses a theme", async ({ page, isMobile }) => {
   await page.emulateMedia({ colorScheme: "dark" });
   await mockBackend(page);

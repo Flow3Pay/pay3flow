@@ -18,6 +18,7 @@
     "@sveltejs/adapter-node": "^5.5.7",
     "@sveltejs/kit": "^2.48.0",
     "@sveltejs/vite-plugin-svelte": "^6.2.1",
+    "@types/node": "^24.19.1",
     "svelte": "^5.46.0",
     "svelte-check": "^4.3.4",
     "typescript": "^5.9.3",
@@ -35,6 +36,7 @@
     "@tanstack/query-core": "^5.104.1",
     "compression": "^1.8.2",
     "layercake": "^10.0.3",
+    "sharp": "^0.34.5",
     "viem": "^2.57.2",
     "wagmi": "^3.7.7"
   }

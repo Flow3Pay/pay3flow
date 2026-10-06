@@ -12,6 +12,7 @@
   import { fetchRouteSearchActivity, SEARCH_ACTIVITY_PERIODS, type RouteSearchActivityHour, type SearchActivityPeriod } from "$lib/route-activity";
   import { fiatFlagUrl } from "$lib/currency-flags";
   import { lockPageScroll } from "$lib/page-scroll-lock";
+  import type { ShareState } from "$lib/share";
   import SidePanel from "./SidePanel.svelte";
   import SearchActivityChart from "./SearchActivityChart.svelte";
   import SearchActivityModal from "./SearchActivityModal.svelte";
@@ -20,6 +21,7 @@
 
   export let onBelarusP2pWarningChange: (show: boolean) => void = () => {};
   export let onOpenBelarusP2pWarning: () => void = () => {};
+  export let onShareStateChange: (state: ShareState | null) => void = () => {};
 
   type RefreshSeconds = 0 | 5 | 15 | 30 | 60 | 300;
   type PickerSide = "source" | "target" | null;
@@ -111,6 +113,7 @@
   let marketPrices: Record<string, number> = {};
   let marketPricesUpdatedAt = 0;
   let marketUsd: { source: number | null; target: number | null } = { source: null, target: null };
+  let lastShareSignature = "";
   let initialSearchTimer: number | undefined;
   let routeRenderTimer: number | undefined;
   let routeRenderFrame: number | undefined;
@@ -240,9 +243,10 @@
   }
 
   function readSharedExchange() {
-    const match = window.location.hash.match(/^#\/swap\/([^/?#]+)\/([^/?#]+)(?:\?([^#]*))?$/i);
+    const match = window.location.hash.match(/^#\/swap\/([^/?#]+)\/([^/?#]+)(?:\?([^#]*))?$/i)
+      ?? window.location.pathname.match(/^\/swap\/([^/?#]+)\/([^/?#]+)\/?$/i);
     if (!match) return null;
-    const params = new URLSearchParams(match[3] ?? "");
+    const params = new URLSearchParams(match[3] ?? window.location.search);
     const value = params.get("amount");
     return { sourceCurrency: decodeURIComponent(match[1]).toUpperCase(), targetCurrency: decodeURIComponent(match[2]).toUpperCase(), amount: value && /^[0-9.,\s]+$/.test(value) ? value : null };
   }
@@ -571,6 +575,13 @@
   $: previewRoute = selected ?? routes.find((route) => route.status === "complete" && route.is_current_best) ?? routes.find((route) => route.status === "complete") ?? null;
   $: displayedSourceAmount = amountSide === "target" && targetAmountNeedsRate && amountNumber(amount) <= 0 ? "" : amount;
   $: displayedTargetAmount = amountSide === "target" && !previewRoute ? targetAmount : amountFromRoute(previewRoute);
+  $: publishShareState(selectedSourceCurrency, selectedTargetCurrency, displayedSourceAmount, previewRoute ? displayedTargetAmount : "");
+  function publishShareState(source: string, target: string, amount: string, receive: string) {
+    const signature = `${source}:${target}:${amount}:${receive}`;
+    if (signature === lastShareSignature) return;
+    lastShareSignature = signature;
+    onShareStateChange(source && target ? { source, target, amount, receive } : null);
+  }
   $: marketUsd = {
     source: sourceMethod?.kind === "wallet" ? calculateMarketUsd(displayedSourceAmount, marketPrices[selectedSourceCurrency]) : null,
     target: targetMethod?.kind === "wallet" ? calculateMarketUsd(displayedTargetAmount, marketPrices[selectedTargetCurrency]) : null,
@@ -627,6 +638,12 @@
   function updateHash(source: string, target: string, value: string) {
     const params = new URLSearchParams(); if (value !== "0") params.set("amount", value);
     const query = params.toString();
+    if (location.pathname.startsWith("/swap/")) {
+      const path = `/swap/${encodeURIComponent(source)}/${encodeURIComponent(target)}`;
+      if (location.pathname === path && new URLSearchParams(location.search).get("amount") === (value === "0" ? null : value)) return;
+      history.replaceState(null, "", `${path}${query ? `?${query}` : ""}`);
+      return;
+    }
     history.replaceState(null, "", `${location.pathname}${location.search}#/swap/${encodeURIComponent(source)}/${encodeURIComponent(target)}${query ? `?${query}` : ""}`);
   }
   function scheduleAutomaticSearch(_signature: string, loaded: boolean, ready: boolean, validAmount: boolean, initialReady: boolean) {
@@ -981,7 +998,7 @@
     fetchCorridors().then((response) => {
       const savedDirection = localStorage.getItem(STORAGE.direction);
       const sharedCorridor = shared ? response.items.find((item) => (item.source_currency === shared.sourceCurrency && item.target_currency === shared.targetCurrency) || (item.source_currency === shared.targetCurrency && item.target_currency === shared.sourceCurrency)) : null;
-      corridors = response.items; corridorId = corridorId || sharedCorridor?.id || response.items[0]?.id || "";
+      corridors = response.items; corridorId = sharedCorridor?.id || corridorId || response.items[0]?.id || "";
       if (shared && sharedCorridor?.source_currency === shared.targetCurrency && sharedCorridor.target_currency === shared.sourceCurrency) directionReversed = true; else if (savedDirection != null) directionReversed = savedDirection === "true";
     }).catch((cause: Error) => error = cause.message).finally(() => { corridorsReady = true; markUrlReady(); });
     document.addEventListener("mousedown", onDocumentMouseDown);
