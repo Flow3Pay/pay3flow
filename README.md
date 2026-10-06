@@ -94,9 +94,9 @@ flowchart LR
 - P2P route legs read provider advertisements directly; Fmatch candidate
   pages can omit valid ads from a venue. Direct-exchange discovery may use
   Fmatch.
-- Provider snapshots can serve selected venues from a complete all-venue
-  observation, and are reused only when every requested venue responded
-  successfully. Failed venue responses do not enter the short search cache.
+- Each user P2P search requests current advertisements from the selected
+  venues. Direct exchanger quotes and completed exchanger-only routes may use
+  cached responses. Failed venue responses never become cached answers.
 - `/ws/p2p/routes` publishes a new ranked snapshot whenever another source
   finishes; the UI does not wait for every venue before showing results.
 - A failed or slow source is reported in route status data without discarding
@@ -143,8 +143,9 @@ Open <http://localhost:3000>. The API is available at
 The backend image includes Chromium and the Playwright driver for providers
 that use browser workflows; Whitebird itself uses its anonymous quote API. The
 compose file also contains the older `fmatch` stack; that stack needs a
-separate `fmatch/` checkout. Production route discovery uses Lefine's Fmatch
-actor, while a local outage can use the PostgreSQL answer cache.
+separate `fmatch/` checkout. Production direct-exchanger discovery can use
+Lefine's Fmatch actor, while P2P advertisements are queried live from each
+venue.
 
 To stop the stack:
 

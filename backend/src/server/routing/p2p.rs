@@ -14,7 +14,8 @@ use uuid::Uuid;
 use crate::core::error::AppError;
 use crate::core::state::AppState;
 use crate::p2p::{
-    P2pRoute, P2pRouteSearchQuery, P2pRouteSearchResponse, P2pSearchQuery, P2pSearchResponse,
+    ExchangeMode, P2pRoute, P2pRouteSearchQuery, P2pRouteSearchResponse, P2pSearchQuery,
+    P2pSearchResponse,
 };
 use crate::route_engine::canonical_network_id;
 use crate::service_reputation::{
@@ -727,6 +728,9 @@ async fn cached_route_response(
     state: &AppState,
     query: &P2pRouteSearchQuery,
 ) -> Option<P2pRouteSearchResponse> {
+    if query.exchange_mode != ExchangeMode::Exchanger {
+        return None;
+    }
     let redis = state.redis.as_ref()?;
     let key = route_result_cache_key(query)?;
     match tokio::time::timeout(
@@ -753,7 +757,8 @@ fn cache_route_response(
     query: &P2pRouteSearchQuery,
     response: &P2pRouteSearchResponse,
 ) {
-    if response.routes_found == 0
+    if query.exchange_mode != ExchangeMode::Exchanger
+        || response.routes_found == 0
         || response.routes.is_empty()
         || response.stale
         || response.asset_statuses.iter().any(|asset| {

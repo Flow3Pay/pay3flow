@@ -18,66 +18,44 @@ only after the user confirms the transaction in their own wallet.
 Providerfile-backed sources are discovered from the generated provider catalog;
 the list is not hardcoded in the route API. Their normalized advertisements are
 published as FEP-0837 offers to the configured Fmatch actor. The route endpoint
-queries Fmatch for matching offers and uses the existing local composer to build
-complete routes. Other venues from the research list remain outside the live
-path until a legitimate read-only interface and adapter review exist.
+reads P2P advertisements directly from each venue and uses the local composer
+to build complete routes. Direct exchangers may use Fmatch. Other venues from
+the research list remain outside the live path until a legitimate read-only
+interface and adapter review exist.
 
-At startup, a background poller begins walking the configured fiat currencies
-and supported assets immediately. It starts at most 25 background pipelines
-per minute and keeps no more than five active across catalog polls and quote
-refreshes. Background provider fan-out also shares a semaphore capped at five
-active source requests, so one catalog query cannot multiply the network
-concurrency by the number of adapters. When all five pipeline slots are
-occupied, later catalog entries wait at the cursor instead of building an
-in-memory task queue. Background source requests use the cached provider
-reputation score as their acquisition order; ties use vote quality, vote volume,
-execution volume, then catalog order. The score and counters come from the shared
-Redis reputation snapshot, so background polling does not read reputation rows
-from PostgreSQL per provider. Fiat currencies declared
-by provider adapters are included alongside `route_source_fiats`; network
-assets are included alongside `p2p_search_assets`. The poller publishes offers
-as bounded ActivityPub `OrderedCollection` batches of up to 64, allowing Fmatch
-to refresh its read snapshot once per batch instead of once per advertisement.
-It also remembers up to 512 supported pairs from recent user searches in
-process memory. If a direct fiat quote provider supports configured currency
-pairs, six out of every seven scheduled starts refresh one pair at a reference
-amount and cache its normalized exchange coefficient for 35 minutes. The
-remaining start refreshes a hot P2P pair or advances the P2P catalog cursor.
-The same five-pipeline and 25-starts-per-minute limits cover both kinds of work.
+At startup, a background poller refreshes direct exchanger and public route
+coefficients. It starts at most 25 background pipelines per minute and keeps no
+more than five active. It does not poll P2P advertisement lists, leaving venue
+request capacity for user searches. Direct fiat quotes are cached as normalized
+exchange coefficients for 35 minutes and scaled to the requested amount.
 
-Provider-only searches keep generic offer snapshots in process memory for up to
-35 minutes, bounded to 1,024 pairs. The first 30 minutes are considered fresh;
-older snapshots are marked stale. Interactive searches apply amount,
-payment-method, merchant, order-count, and completion-rate filters to those
-offers. More specific searches that need a larger provider page than the
-snapshot contains continue to query the providers. A complete snapshot from an
-all-venue search can serve a selected-venue search, and a complete P2P subset
-is saved even when a direct-exchange source fails. Partial provider responses
-are not cached as complete search answers. A provider request that fails or
-times out is retried once before the search records that source as failed.
-Successful venue offer pages are also cached independently for 60 seconds,
-so one venue's error does not force fresh requests to every other venue.
-Only one search per venue runs at a time; a background refresh skips a busy
-venue instead of piling up requests, and keeps the previous complete snapshot
-until a successful refresh replaces it. After HTTP 429, background refreshes
-pause that venue for 30 seconds. An interactive search can still retry it after
-a short delay. A fresh local snapshot is served before contacting Fmatch, and
-a stale snapshot can satisfy an Fmatch
-miss before another live provider fan-out. Each successful warmup and each
-snapshot hit is logged separately from an interactive route search. Public
-route legs are resolved through Fmatch when it is available; local provider
-results remain the fallback. Direct fiat route quotes reuse the cached pair
-coefficient at the requested amount, instead of keying the quote cache by that
+Every interactive P2P leg queries its selected venues. P2P advertisement pages,
+complete route results containing P2P offers, and generic provider snapshots
+are never served as P2P answers. A provider request that fails or times out is
+retried once before that venue is recorded as failed. Only one search per venue
+runs at a time. A user search can retry an HTTP 429 after a short delay.
+
+Direct exchanger searches may reuse complete provider snapshots in process
+memory for up to 35 minutes, bounded to 1,024 pairs. The first 30 minutes are
+considered fresh; older snapshots are marked stale. Interactive exchanger
+searches apply amount, payment-method, merchant, order-count, and
+completion-rate filters to those offers. More specific searches that need a
+larger provider page continue to query the providers. Partial provider
+responses are not cached as complete search answers. A fresh local direct
+exchanger snapshot is served before contacting Fmatch, and a stale one can
+satisfy an Fmatch miss before another live provider fan-out. Direct fiat route
+quotes reuse the cached pair coefficient at the requested amount, instead of
+keying the quote cache by that
 exact amount. Direct fiat and public route coefficients are also written to
 Redis for 35 minutes and loaded into process memory on demand. Background work
-refreshes coefficients and P2P offers; it does not compose final route results.
+refreshes coefficients; it does not compose final route results.
 Final routes are composed only for a user's search, which can combine fresh
 provider quotes with saved coefficients and a user-triggered P2P search.
 
-Completed, non-stale route responses with at least one route and no failed
-leg source are also cached in Redis for 15 seconds. The key uses a normalized
-search query and excludes the anonymous
-viewer ID, so identical searches share the result. The cached route graph is
+Completed, non-stale exchanger-only route responses with at least one route and
+no failed leg source are also cached in Redis for 15 seconds. The key uses a
+normalized search query and excludes the anonymous viewer ID, so identical
+searches share the result. The cached route graph is
 enriched with the current viewer's votes and fresh service links after the
 cache read. Redis reads have a short timeout and cache writes run in the
 background.
@@ -115,11 +93,9 @@ rate-based spam rollback is unavailable for that request.
 The daily maintenance task subtracts 15 points from services with no interaction
 for 24 hours, stopping at zero. Shared service counters are cached in Redis for
 30 seconds; the cache includes the score and counters, while viewer-specific
-votes are loaded separately. Background polling reads
-that shared cache and checks reputation only to choose which provider to refresh
-first. It does not remove providers from user results or change their economic
-ranking.
-Successful Fmatch answers are stored in PostgreSQL. If Fmatch is unavailable,
+votes are loaded separately. Reputation does not remove providers from user
+results or change their economic ranking.
+Successful direct-exchanger Fmatch answers are stored in PostgreSQL. If Fmatch is unavailable,
 the newest answer within `p2p_fmatch_stale_secs` is used and the response has
 `source: "database_cache"` and `stale: true`. A live Fmatch answer has
 `source: "fmatch"`. Empty Fmatch replies and empty cached answers are not
@@ -135,10 +111,11 @@ The UI labels a venue as found only when the current route set includes a
 matching route; raw advertisements for a different bank remain visible in
 source diagnostics but do not claim an exchange path.
 
-Pay3Flow requests up to 64 candidates per Fmatch page. `exchange_mode=all`
-queries `market=p2p` and `market=direct_exchange` concurrently, merges the two
-partitions, and preserves source diversity. P2P volume therefore cannot evict a
-direct source such as Whitebird before local route composition. See
+Pay3Flow requests up to 64 candidates per direct-exchanger Fmatch page.
+`exchange_mode=all` searches live P2P ads and direct-exchanger candidates
+concurrently, then merges the partitions while preserving source diversity.
+P2P volume therefore cannot evict a direct source such as Whitebird before
+local route composition. See
 [`route-virtualization-pipeline.md`](route-virtualization-pipeline.md) for the
 complete runtime pipeline, lazy top-K algorithm, provider snapshots, caches,
 and background quote refresh.
@@ -317,10 +294,9 @@ Sources, endpoint URLs, response mappings, and browser workflows are declared
 in `backend/providers/*/Providerfile`. Regenerate the provider migration and
 rebuild after changing one; see [`../Providerfile.md`](../Providerfile.md).
 
-Fmatch offer publication is best-effort. A provider refresh is retained locally
-when Lefine is unavailable. Public route discovery prefers a live Fmatch answer,
-then a bounded-stale PostgreSQL answer, and finally fans out to the configured
-live providers so an empty Fmatch catalog does not make route search unavailable.
+Fmatch offer publication is best-effort. P2P route discovery queries the venue
+APIs for each user search. Direct-exchanger discovery can use a live Fmatch
+answer, a bounded-stale PostgreSQL answer, or the configured direct providers.
 
 Run the opt-in live smoke test:
 

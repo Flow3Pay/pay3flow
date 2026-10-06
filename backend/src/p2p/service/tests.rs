@@ -1,35 +1,6 @@
 use super::*;
 
 #[test]
-fn hot_supported_pairs_are_remembered_for_background_refresh() {
-    let service = P2pSearchService::with_sources(Vec::new(), Duration::from_secs(2));
-    let query = P2pSearchQuery {
-        fiat: "AMD".into(),
-        asset: "USDT".into(),
-        side: P2pSide::BuyCrypto,
-        amount: Some(10_000.0),
-        asset_amount: None,
-        payment_method: None,
-        merchant_only: None,
-        min_orders: None,
-        min_completion_rate: None,
-        limit: Some(20),
-        sources: None,
-    };
-    for _ in 0..4 {
-        service.record_query_interest(&query);
-    }
-
-    let popular = service
-        .next_popular_pair(&mut 0)
-        .expect("a supported requested pair should be scheduled");
-    assert_eq!(popular.fiat, "AMD");
-    assert_eq!(popular.asset, "USDT");
-    assert_eq!(popular.side, P2pSide::BuyCrypto);
-    assert_eq!(popular.amount, None);
-}
-
-#[test]
 fn source_names_accept_providerfile_slug_characters() {
     assert_eq!(
         normalize_sources(Some("Cifra-Broker,foo_bar".into()))
@@ -59,10 +30,6 @@ struct ConcurrentStubSource {
 }
 
 struct FailsAfterFirstStubSource {
-    attempts: Arc<std::sync::atomic::AtomicUsize>,
-}
-
-struct RateLimitedStubSource {
     attempts: Arc<std::sync::atomic::AtomicUsize>,
 }
 
@@ -175,19 +142,6 @@ impl P2pSource for FailsAfterFirstStubSource {
             bail!("provider temporarily unavailable");
         }
         Ok(vec![offer("binance", "400", "1", "100000", 20)])
-    }
-}
-
-#[async_trait]
-impl P2pSource for RateLimitedStubSource {
-    fn name(&self) -> &str {
-        "bitget"
-    }
-
-    async fn search(&self, _query: &P2pSearchQuery) -> Result<Vec<P2pOffer>> {
-        self.attempts
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        bail!("HTTP 429 Too Many Requests")
     }
 }
 
@@ -599,12 +553,10 @@ fn global_limit_keeps_the_best_offer_from_each_source() {
     );
 
     assert_eq!(response.offers.len(), 60);
-    assert!(
-        response
-            .offers
-            .iter()
-            .any(|offer| offer.source == "whitebird")
-    );
+    assert!(response
+        .offers
+        .iter()
+        .any(|offer| offer.source == "whitebird"));
 }
 
 #[test]
@@ -625,9 +577,9 @@ fn merging_market_partitions_keeps_a_lower_ranked_direct_source() {
     let p2p_offers = (0..5)
         .map(|index| offer("binance", &format!("{}", 390 + index), "100", "100000", 42))
         .collect::<Vec<_>>();
-    let direct_offers = vec![
-        offer("whitebird", "500", "100", "100000", 0).with_market(P2pOfferMarket::DirectExchange),
-    ];
+    let direct_offers =
+        vec![offer("whitebird", "500", "100", "100000", 0)
+            .with_market(P2pOfferMarket::DirectExchange)];
     let p2p = build_search_response(
         query.clone(),
         &p2p_offers,
@@ -659,12 +611,10 @@ fn merging_market_partitions_keeps_a_lower_ranked_direct_source() {
 
     assert_eq!(response.offers.len(), 5);
     assert_eq!(response.sources.len(), 3);
-    assert!(
-        response
-            .sources
-            .iter()
-            .any(|source| source.source == "failed-direct" && !source.ok)
-    );
+    assert!(response
+        .sources
+        .iter()
+        .any(|source| source.source == "failed-direct" && !source.ok));
     assert!(
         response
             .offers
@@ -925,7 +875,7 @@ fn reports_route_provider_names_separately() {
 }
 
 #[tokio::test]
-async fn reuses_short_lived_search_cache() {
+async fn p2p_search_refreshes_on_every_request() {
     let service = P2pSearchService::with_sources(
         vec![Arc::new(StubSource {
             name: "cached",
@@ -951,6 +901,47 @@ async fn reuses_short_lived_search_cache() {
 
     let first = service.search(query.clone()).await.unwrap();
     let second = service.search(query).await.unwrap();
+    assert!(!first.cached);
+    assert!(!second.cached);
+    assert!(second.sources.iter().all(|source| !source.cached));
+    assert_eq!(first.offers, second.offers);
+}
+
+#[tokio::test]
+async fn direct_exchanger_search_keeps_its_cache() {
+    let mut direct_offer = offer("direct", "360", "1", "100000", 20);
+    direct_offer.market = P2pOfferMarket::DirectExchange;
+    let service = P2pSearchService::with_sources(
+        vec![Arc::new(DirectStubSource(StubSource {
+            name: "direct",
+            offers: vec![direct_offer],
+            delay: Duration::ZERO,
+        }))],
+        Duration::from_secs(1),
+    )
+    .with_cache_ttl(Duration::from_secs(1));
+    let query = P2pSearchQuery {
+        fiat: "AMD".into(),
+        asset: "USDT".into(),
+        side: P2pSide::BuyCrypto,
+        amount: Some(10_000.0),
+        asset_amount: None,
+        payment_method: None,
+        merchant_only: None,
+        min_orders: None,
+        min_completion_rate: None,
+        limit: Some(20),
+        sources: None,
+    };
+
+    let first = service
+        .search_market(query.clone(), Some(P2pOfferMarket::DirectExchange))
+        .await
+        .unwrap();
+    let second = service
+        .search_market(query, Some(P2pOfferMarket::DirectExchange))
+        .await
+        .unwrap();
     assert!(!first.cached);
     assert!(second.cached);
     assert_eq!(first.offers, second.offers);
@@ -1177,76 +1168,7 @@ async fn concurrent_searches_do_not_query_the_same_provider_at_once() {
 }
 
 #[tokio::test]
-async fn failed_background_refresh_keeps_the_last_complete_snapshot() {
-    let attempts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let service = P2pSearchService::with_sources(
-        vec![Arc::new(FailsAfterFirstStubSource {
-            attempts: attempts.clone(),
-        })],
-        Duration::from_secs(1),
-    );
-    let query = P2pSearchQuery {
-        fiat: "AMD".into(),
-        asset: "USDT".into(),
-        side: P2pSide::BuyCrypto,
-        amount: None,
-        asset_amount: None,
-        payment_method: None,
-        merchant_only: None,
-        min_orders: None,
-        min_completion_rate: None,
-        limit: Some(20),
-        sources: None,
-    };
-    service.search(query.clone()).await.unwrap();
-    assert!(service.provider_snapshot(&query, None).is_some());
-    service
-        .refresh_background_search(query.clone())
-        .await
-        .unwrap();
-    assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 3);
-    assert_eq!(
-        service
-            .provider_snapshot(&query, None)
-            .unwrap()
-            .offers
-            .len(),
-        1
-    );
-}
-
-#[tokio::test]
-async fn background_refresh_pauses_a_rate_limited_venue() {
-    let attempts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let service = P2pSearchService::with_sources(
-        vec![Arc::new(RateLimitedStubSource {
-            attempts: attempts.clone(),
-        })],
-        Duration::from_secs(1),
-    );
-    let query = P2pSearchQuery {
-        fiat: "KZT".into(),
-        asset: "USDT".into(),
-        side: P2pSide::BuyCrypto,
-        amount: None,
-        asset_amount: None,
-        payment_method: None,
-        merchant_only: None,
-        min_orders: None,
-        min_completion_rate: None,
-        limit: Some(20),
-        sources: None,
-    };
-    service
-        .refresh_background_search(query.clone())
-        .await
-        .unwrap();
-    service.refresh_background_search(query).await.unwrap();
-    assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 1);
-}
-
-#[tokio::test]
-async fn successful_venue_offers_survive_another_venue_failure() {
+async fn a_failed_venue_is_not_hidden_by_its_previous_offers() {
     let attempts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let service = P2pSearchService::with_sources(
         vec![
@@ -1273,14 +1195,12 @@ async fn successful_venue_offers_survive_another_venue_failure() {
     let first = service.search(query.clone()).await.unwrap();
     let second = service.search(query).await.unwrap();
     assert_eq!(first.offers.len(), 1);
-    assert_eq!(second.offers.len(), 1);
-    assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 1);
-    assert!(
-        second
-            .sources
-            .iter()
-            .any(|source| source.source == "binance" && source.cached)
-    );
+    assert!(second.offers.is_empty());
+    assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 3);
+    assert!(second
+        .sources
+        .iter()
+        .any(|source| source.source == "binance" && !source.ok && !source.cached));
 }
 
 #[test]
