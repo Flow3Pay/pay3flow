@@ -62,6 +62,10 @@ struct FailsAfterFirstStubSource {
     attempts: Arc<std::sync::atomic::AtomicUsize>,
 }
 
+struct RateLimitedStubSource {
+    attempts: Arc<std::sync::atomic::AtomicUsize>,
+}
+
 struct StubRouteProvider;
 
 #[async_trait]
@@ -171,6 +175,19 @@ impl P2pSource for FailsAfterFirstStubSource {
             bail!("provider temporarily unavailable");
         }
         Ok(vec![offer("binance", "400", "1", "100000", 20)])
+    }
+}
+
+#[async_trait]
+impl P2pSource for RateLimitedStubSource {
+    fn name(&self) -> &str {
+        "bitget"
+    }
+
+    async fn search(&self, _query: &P2pSearchQuery) -> Result<Vec<P2pOffer>> {
+        self.attempts
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        bail!("HTTP 429 Too Many Requests")
     }
 }
 
@@ -582,10 +599,12 @@ fn global_limit_keeps_the_best_offer_from_each_source() {
     );
 
     assert_eq!(response.offers.len(), 60);
-    assert!(response
-        .offers
-        .iter()
-        .any(|offer| offer.source == "whitebird"));
+    assert!(
+        response
+            .offers
+            .iter()
+            .any(|offer| offer.source == "whitebird")
+    );
 }
 
 #[test]
@@ -606,9 +625,9 @@ fn merging_market_partitions_keeps_a_lower_ranked_direct_source() {
     let p2p_offers = (0..5)
         .map(|index| offer("binance", &format!("{}", 390 + index), "100", "100000", 42))
         .collect::<Vec<_>>();
-    let direct_offers =
-        vec![offer("whitebird", "500", "100", "100000", 0)
-            .with_market(P2pOfferMarket::DirectExchange)];
+    let direct_offers = vec![
+        offer("whitebird", "500", "100", "100000", 0).with_market(P2pOfferMarket::DirectExchange),
+    ];
     let p2p = build_search_response(
         query.clone(),
         &p2p_offers,
@@ -640,10 +659,12 @@ fn merging_market_partitions_keeps_a_lower_ranked_direct_source() {
 
     assert_eq!(response.offers.len(), 5);
     assert_eq!(response.sources.len(), 3);
-    assert!(response
-        .sources
-        .iter()
-        .any(|source| source.source == "failed-direct" && !source.ok));
+    assert!(
+        response
+            .sources
+            .iter()
+            .any(|source| source.source == "failed-direct" && !source.ok)
+    );
     assert!(
         response
             .offers
@@ -1118,7 +1139,7 @@ async fn transient_provider_failure_is_retried_before_finishing_search() {
     assert!(response.sources[0].ok);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn concurrent_searches_do_not_query_the_same_provider_at_once() {
     use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
     let active = Arc::new(AtomicUsize::new(0));
@@ -1191,6 +1212,74 @@ async fn failed_background_refresh_keeps_the_last_complete_snapshot() {
             .offers
             .len(),
         1
+    );
+}
+
+#[tokio::test]
+async fn background_refresh_pauses_a_rate_limited_venue() {
+    let attempts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let service = P2pSearchService::with_sources(
+        vec![Arc::new(RateLimitedStubSource {
+            attempts: attempts.clone(),
+        })],
+        Duration::from_secs(1),
+    );
+    let query = P2pSearchQuery {
+        fiat: "KZT".into(),
+        asset: "USDT".into(),
+        side: P2pSide::BuyCrypto,
+        amount: None,
+        asset_amount: None,
+        payment_method: None,
+        merchant_only: None,
+        min_orders: None,
+        min_completion_rate: None,
+        limit: Some(20),
+        sources: None,
+    };
+    service
+        .refresh_background_search(query.clone())
+        .await
+        .unwrap();
+    service.refresh_background_search(query).await.unwrap();
+    assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn successful_venue_offers_survive_another_venue_failure() {
+    let attempts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let service = P2pSearchService::with_sources(
+        vec![
+            Arc::new(FailsAfterFirstStubSource {
+                attempts: attempts.clone(),
+            }),
+            Arc::new(FailingDirectStubSource),
+        ],
+        Duration::from_secs(1),
+    );
+    let query = P2pSearchQuery {
+        fiat: "AMD".into(),
+        asset: "USDT".into(),
+        side: P2pSide::BuyCrypto,
+        amount: Some(10_000.0),
+        asset_amount: None,
+        payment_method: None,
+        merchant_only: None,
+        min_orders: None,
+        min_completion_rate: None,
+        limit: Some(20),
+        sources: None,
+    };
+    let first = service.search(query.clone()).await.unwrap();
+    let second = service.search(query).await.unwrap();
+    assert_eq!(first.offers.len(), 1);
+    assert_eq!(second.offers.len(), 1);
+    assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert!(
+        second
+            .sources
+            .iter()
+            .any(|source| source.source == "binance" && source.cached)
     );
 }
 

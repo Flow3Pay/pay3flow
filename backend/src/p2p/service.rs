@@ -4,21 +4,21 @@ use std::path::Path;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use futures::future::{join_all, BoxFuture};
+use futures::future::{BoxFuture, join_all};
 use futures::stream::{FuturesUnordered, StreamExt};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use tokio::sync::{mpsc, Semaphore};
+use tokio::sync::{Semaphore, mpsc};
 
 use crate::activitypub::Service as ActivityPubService;
 use crate::compiled_provider_code::bestchange::BestChangeSource;
 use crate::compiled_provider_code::papa_change::PapaChangeSource;
 use crate::compiled_provider_code::skylabs::SkyLabsSource;
 use crate::config::Config;
-use crate::core::redis::{get_json, RedisPool};
+use crate::core::redis::{RedisPool, get_json};
 use crate::db::DbPool;
 use crate::networks::NetworkCatalog;
 use crate::p2p::declarative::{DeclarativeMarketSource, DeclarativeP2pSource};
@@ -30,7 +30,7 @@ pub(crate) use crate::p2p::models::{
 use crate::p2p::spot::{CryptoMarketSource, CryptoTicker};
 use crate::p2p::workflow::WorkflowP2pSource;
 use crate::route_engine::{Asset, PublicRouteProvider, PublicRouteQuote};
-use crate::service_reputation::{vote_quality_score, ServiceStats};
+use crate::service_reputation::{ServiceStats, vote_quality_score};
 
 const DEFAULT_LIMIT: usize = 20;
 const MAX_LIMIT: usize = 100;
@@ -44,6 +44,8 @@ const MAX_REFRESHED_POPULAR_PAIRS: usize = 3;
 const PROVIDER_SNAPSHOT_TTL: Duration = Duration::from_secs(35 * 60);
 const PROVIDER_SNAPSHOT_STALE_AFTER: Duration = Duration::from_secs(30 * 60);
 const MAX_PROVIDER_SNAPSHOTS: usize = 1_024;
+const SOURCE_OFFERS_TTL: Duration = Duration::from_secs(60);
+const MAX_SOURCE_OFFERS: usize = 2_048;
 
 impl P2pSearchQuery {
     fn normalize(mut self) -> Result<Self> {
@@ -350,6 +352,7 @@ pub struct P2pSearchService {
     cache_ttl: Duration,
     cache: Arc<RwLock<HashMap<String, CachedSearch>>>,
     provider_snapshots: Arc<RwLock<HashMap<String, CachedSearch>>>,
+    source_offers: Arc<RwLock<HashMap<String, CachedSourceOffers>>>,
     sources: Arc<[Arc<dyn P2pSource>]>,
     payment_method_aliases: Arc<HashMap<String, BTreeMap<String, Vec<String>>>>,
     market_sources: Arc<[Arc<dyn CryptoMarketSource>]>,
@@ -367,6 +370,7 @@ pub struct P2pSearchService {
     background_last_started: Arc<Mutex<Option<Instant>>>,
     background_provider_semaphore: Arc<Semaphore>,
     provider_search_semaphores: Arc<HashMap<String, Arc<Semaphore>>>,
+    provider_rate_limit_until: Arc<Mutex<HashMap<String, Instant>>>,
     pub(crate) redis: Option<RedisPool>,
     pair_popularity: Arc<Mutex<HashMap<String, (u32, Instant)>>>,
     pub(crate) provider_capabilities_cache: Arc<RwLock<Option<ProviderCapabilitiesSnapshot>>>,
@@ -406,6 +410,7 @@ struct FmatchP2pBackend {
 // external quote requests at the same time.
 const MAX_CONCURRENT_PROVIDER_QUOTES: usize = 16;
 const MAX_BACKGROUND_PROVIDER_REQUESTS: usize = 5;
+const PROVIDER_RATE_LIMIT_BACKOFF: Duration = Duration::from_secs(30);
 
 fn provider_search_semaphores(
     sources: &[Arc<dyn P2pSource>],
@@ -418,10 +423,19 @@ fn provider_search_semaphores(
     )
 }
 
+fn provider_rate_limited(error: &str) -> bool {
+    error.contains("429") || error.contains("Too Many Requests")
+}
+
 #[derive(Clone)]
 struct CachedSearch {
     inserted_at: Instant,
     response: P2pSearchResponse,
+}
+
+struct CachedSourceOffers {
+    inserted_at: Instant,
+    offers: Vec<P2pOffer>,
 }
 
 impl P2pSearchService {
@@ -824,6 +838,7 @@ impl P2pSearchService {
             cache_ttl: Duration::from_millis(config.p2p_search_cache_ttl_ms.min(60_000)),
             cache: Arc::new(RwLock::new(HashMap::new())),
             provider_snapshots: Arc::new(RwLock::new(HashMap::new())),
+            source_offers: Arc::new(RwLock::new(HashMap::new())),
             sources: sources.into(),
             payment_method_aliases: Arc::new(payment_method_aliases),
             market_sources: market_sources.into(),
@@ -843,6 +858,7 @@ impl P2pSearchService {
                 MAX_BACKGROUND_PROVIDER_REQUESTS,
             )),
             provider_search_semaphores,
+            provider_rate_limit_until: Arc::new(Mutex::new(HashMap::new())),
             redis: None,
             pair_popularity: Arc::new(Mutex::new(HashMap::new())),
             provider_capabilities_cache: Arc::new(RwLock::new(None)),
@@ -860,6 +876,7 @@ impl P2pSearchService {
             cache_ttl: Duration::ZERO,
             cache: Arc::new(RwLock::new(HashMap::new())),
             provider_snapshots: Arc::new(RwLock::new(HashMap::new())),
+            source_offers: Arc::new(RwLock::new(HashMap::new())),
             sources: sources.into(),
             payment_method_aliases: Arc::new(HashMap::new()),
             market_sources: Vec::new().into(),
@@ -905,6 +922,7 @@ impl P2pSearchService {
                 MAX_BACKGROUND_PROVIDER_REQUESTS,
             )),
             provider_search_semaphores,
+            provider_rate_limit_until: Arc::new(Mutex::new(HashMap::new())),
             redis: None,
             pair_popularity: Arc::new(Mutex::new(HashMap::new())),
             provider_capabilities_cache: Arc::new(RwLock::new(None)),
@@ -1417,8 +1435,14 @@ impl P2pSearchService {
                     .then_with(|| right.3.cmp(&left.3))
             });
         }
+        let mut source_cache_query = query.clone();
+        source_cache_query.sources = None;
+        let source_cache_query_key = serde_json::to_string(&source_cache_query)
+            .context("failed to build P2P source cache key")?;
         let background_provider_semaphore = self.background_provider_semaphore.clone();
         let provider_search_semaphores = self.provider_search_semaphores.clone();
+        let provider_rate_limit_until = self.provider_rate_limit_until.clone();
+        let source_offers = self.source_offers.clone();
         let mut searches = selected_sources
             .into_iter()
             .map(|source| {
@@ -1429,6 +1453,9 @@ impl P2pSearchService {
                     .get(source.name())
                     .expect("configured P2P source has a semaphore")
                     .clone();
+                let provider_rate_limit_until = provider_rate_limit_until.clone();
+                let source_offers = source_offers.clone();
+                let source_cache_key = format!("{}:{source_cache_query_key}", source.name());
                 async move {
                     let _background_permit = if background {
                         match background_provider_semaphore.acquire_owned().await {
@@ -1473,6 +1500,47 @@ impl P2pSearchService {
                             },
                         );
                     };
+                    if !background && source.market() == P2pOfferMarket::P2p {
+                        let cached = source_offers.read().ok().and_then(|cache| {
+                            cache.get(&source_cache_key).and_then(|cached| {
+                                (cached.inserted_at.elapsed() <= SOURCE_OFFERS_TTL)
+                                    .then(|| cached.offers.clone())
+                            })
+                        });
+                        if let Some(offers) = cached {
+                            let count = offers.len();
+                            return (
+                                offers,
+                                SourceStatus {
+                                    source: source.name().to_string(),
+                                    ok: true,
+                                    cached: true,
+                                    latency_ms: 0,
+                                    offers_found: count,
+                                    error: None,
+                                },
+                            );
+                        }
+                    }
+                    if background
+                        && provider_rate_limit_until
+                            .lock()
+                            .ok()
+                            .and_then(|limits| limits.get(source.name()).copied())
+                            .is_some_and(|until| until > Instant::now())
+                    {
+                        return (
+                            Vec::new(),
+                            SourceStatus {
+                                source: source.name().to_string(),
+                                ok: false,
+                                cached: false,
+                                latency_ms: 0,
+                                offers_found: 0,
+                                error: Some("background provider request paused after HTTP 429".into()),
+                            },
+                        );
+                    }
                     let started = Instant::now();
                     let timeout = source.timeout(self.timeout);
                     let mut result = tokio::time::timeout(timeout, source.search(&query)).await;
@@ -1482,9 +1550,28 @@ impl P2pSearchService {
                         Ok(Ok(_)) => None,
                     };
                     if let Some(reason) = retry_reason.filter(|_| source.market() == P2pOfferMarket::P2p) {
-                        tracing::warn!(source = source.name(), %reason, "retrying P2P provider request");
-                        tokio::time::sleep(Duration::from_millis(300)).await;
-                        result = tokio::time::timeout(timeout, source.search(&query)).await;
+                        let rate_limited = provider_rate_limited(&reason);
+                        if rate_limited {
+                            if let Ok(mut limits) = provider_rate_limit_until.lock() {
+                                limits.insert(source.name().to_string(), Instant::now() + PROVIDER_RATE_LIMIT_BACKOFF);
+                            }
+                        }
+                        if !background || !rate_limited {
+                            tracing::warn!(source = source.name(), %reason, "retrying P2P provider request");
+                            tokio::time::sleep(if rate_limited {
+                                Duration::from_secs(2)
+                            } else {
+                                Duration::from_millis(300)
+                            }).await;
+                            result = tokio::time::timeout(timeout, source.search(&query)).await;
+                        }
+                    }
+                    if let Ok(Err(error)) = &result {
+                        if provider_rate_limited(&error.to_string()) {
+                            if let Ok(mut limits) = provider_rate_limit_until.lock() {
+                                limits.insert(source.name().to_string(), Instant::now() + PROVIDER_RATE_LIMIT_BACKOFF);
+                            }
+                        }
                     }
                     let elapsed = started.elapsed().as_millis();
                     match result {
@@ -1495,6 +1582,31 @@ impl P2pSearchService {
                                 }
                             }
                             let count = offers.len();
+                            if source.market() == P2pOfferMarket::P2p {
+                                if let Ok(mut cache) = source_offers.write() {
+                                    cache.retain(|_, cached| {
+                                        cached.inserted_at.elapsed() <= SOURCE_OFFERS_TTL
+                                    });
+                                    if cache.len() >= MAX_SOURCE_OFFERS
+                                        && !cache.contains_key(&source_cache_key)
+                                    {
+                                        if let Some(oldest_key) = cache
+                                            .iter()
+                                            .min_by_key(|(_, cached)| cached.inserted_at)
+                                            .map(|(key, _)| key.clone())
+                                        {
+                                            cache.remove(&oldest_key);
+                                        }
+                                    }
+                                    cache.insert(
+                                        source_cache_key,
+                                        CachedSourceOffers {
+                                            inserted_at: Instant::now(),
+                                            offers: offers.clone(),
+                                        },
+                                    );
+                                }
+                            }
                             (
                                 offers,
                                 SourceStatus {
