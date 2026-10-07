@@ -530,7 +530,13 @@ fn rank_close_routes_by_votes(routes: &mut [P2pRoute]) {
 }
 
 fn route_service_slugs(route: &P2pRoute) -> Vec<String> {
-    let mut slugs = Vec::new();
+    let mut slugs = route
+        .cycle_legs
+        .iter()
+        .map(|leg| leg.provider.to_ascii_lowercase())
+        .collect::<Vec<_>>();
+    slugs.sort();
+    slugs.dedup();
     if let Some(entry) = &route.entry_offer {
         slugs.push(entry.source.to_ascii_lowercase());
     }
@@ -556,6 +562,24 @@ fn route_links(
     stats: &HashMap<String, ServiceStats>,
 ) -> Result<Vec<ServiceLink>, AppError> {
     let mut links = Vec::new();
+    for (index, leg) in route.cycle_legs.iter().enumerate() {
+        if let Some(url) = leg.source_url.as_deref() {
+            push_link(
+                state,
+                &mut links,
+                stats,
+                search_id,
+                route,
+                &leg.provider,
+                if index == 0 {
+                    ServiceLinkKind::Entry
+                } else {
+                    ServiceLinkKind::Exit
+                },
+                url,
+            )?;
+        }
+    }
     if let Some(offer) = &route.entry_offer {
         push_link(
             state,

@@ -27,7 +27,7 @@ pub struct P2pRouteSearchQuery {
     pub bridge_fiat: Option<String>,
     /// Backward-compatible alias for `intermediary_assets`.
     pub assets: Option<String>,
-    /// Optional comma-separated crypto intermediaries for fiat-to-fiat routes.
+    /// Optional comma-separated crypto intermediaries for fiat routes or crypto cycles.
     /// Defaults to the configured `p2p_search_assets` list when omitted.
     pub intermediary_assets: Option<String>,
     pub source_payment_method: Option<String>,
@@ -79,6 +79,12 @@ pub struct P2pRoute {
     pub route_kind: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profitability: Option<RouteProfitability>,
+    /// Ordered live swap quotes making up a wallet-to-wallet cycle.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cycle_legs: Vec<CryptoCycleLeg>,
+    /// Decimal scale of the integer amounts in `profitability`; fiat defaults to 2.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profitability_decimals: Option<u8>,
     pub bridge_currency: Option<String>,
     pub market_path: Option<CryptoMarketPath>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -202,4 +208,17 @@ pub struct P2pRouteSearchResponse {
     /// the legacy provider path used by local-only callers.
     pub source: String,
     pub stale: bool,
+}
+
+/// One sequential swap in a circular crypto route.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CryptoCycleLeg {
+    pub provider: String,
+    pub from_asset: String,
+    pub to_asset: String,
+    pub input_amount: String,
+    pub output_amount: String,
+    pub source_url: Option<String>,
+    pub quote_id: Option<String>,
+    pub expires_at: Option<DateTime<Utc>>,
 }

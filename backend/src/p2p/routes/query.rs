@@ -62,14 +62,6 @@ pub(in crate::p2p) fn normalize_query(
         &target_currency,
         provider_assets,
     )?;
-    if source_currency.eq_ignore_ascii_case(&target_currency) {
-        match (&source_network, &target_network) {
-            (Some(source_network), Some(target_network)) if source_network == target_network => {
-                bail!("source and target asset/network must differ")
-            }
-            _ => {}
-        }
-    }
 
     Ok(NormalizedRouteQuery {
         source_currency,

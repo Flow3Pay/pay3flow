@@ -341,7 +341,9 @@
     const bestTarget = Number(response.routes[0]?.target_amount ?? 0);
     return response.routes.map((route, index) => {
     const entryOffer = route.entry_offer, exitOffer = route.exit_offer, targetAmount = Number(route.target_amount);
-      const legs = route.route_provider
+      const legs = route.cycle_legs?.length
+        ? route.cycle_legs.map((leg, index) => ({ kind: index === 0 ? "entry" as const : "exit" as const, from: leg.from_asset, to: leg.to_asset, provider: leg.provider, status: "found" as const }))
+        : route.route_provider
         ? [
             ...(entryOffer
               ? [{ kind: "entry" as const, from: route.source_fiat, to: entryOffer.asset, provider: entryOffer.source, status: "found" as const }]
@@ -369,7 +371,7 @@
         entry_asset: route.asset, entry_network: networkName(route.entry_network), source_network: route.source_network ? networkName(route.source_network) : undefined, target_network: route.target_network ? networkName(route.target_network) : undefined,
         target_amount_minor: Math.round(targetAmount * 100), target_amount: route.target_amount, target_currency: route.target_fiat,
         target_method_icon_url: targetMethod?.kind !== "wallet" ? paymentMethodFavicon(targetMethod) ?? undefined : undefined,
-        route_kind: route.route_kind, profitability: route.profitability, bridge_currency: route.bridge_currency, market_path: route.market_path,
+        route_kind: route.route_kind, profitability: route.profitability, cycle_legs: route.cycle_legs, profitability_decimals: route.profitability_decimals, bridge_currency: route.bridge_currency, market_path: route.market_path,
         route_provider: route.route_provider, route_provider_url: route.route_provider_url, route_path: route.route_path, route_fees: route.route_fees, quote_expires_at: route.quote_expires_at, execution: route.execution,
         spread_bps: bestTarget > 0 && Number.isFinite(targetAmount) ? Math.round((targetAmount / bestTarget - 1) * 10_000) : 0,
         is_current_best: index === 0, is_live_market: true, payment_methods_verified: route.payment_methods_verified,
@@ -791,11 +793,6 @@
     if ((sourceWallet && !sourceNetwork) || (targetWallet && !targetNetwork)) {
       resetResults();
       error = "No compatible network is available for the selected cryptocurrency";
-      return;
-    }
-    if (sourceWallet && targetWallet && selectedSourceCurrency.toUpperCase() === selectedTargetCurrency.toUpperCase() && sourceNetwork?.id === targetNetwork?.id) {
-      resetResults();
-      error = `Choose different networks for ${selectedSourceCurrency}; the same asset on the same network is not a swap route.`;
       return;
     }
     controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; controller = new AbortController(); const signal = controller.signal; const currentRequest = ++requestId; searching = true; awaitingFirstRoute = true; routesFound = 0; foundVenueIds = []; foundVenues = []; venueStats = {}; responseMetrics = new SearchResponseMetrics(); error = null;

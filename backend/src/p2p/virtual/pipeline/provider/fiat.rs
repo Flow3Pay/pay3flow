@@ -141,6 +141,8 @@ impl P2pSearchService {
                                 transfer_fee_included: !route_quote.fees.is_empty(),
                                 route_kind: "crypto_to_fiat".into(),
                                 profitability: None,
+                    cycle_legs: Vec::new(),
+                    profitability_decimals: None,
                                 bridge_currency: None,
                                 market_path: None,
                                 route_provider: Some(provider.clone()),
@@ -466,6 +468,8 @@ impl P2pSearchService {
                         "fiat_to_fiat".into()
                     },
                     profitability: None,
+                    cycle_legs: Vec::new(),
+                    profitability_decimals: None,
                     bridge_currency: None,
                     market_path: None,
                     route_provider: Some(provider_name.clone()),

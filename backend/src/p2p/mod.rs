@@ -15,8 +15,9 @@ pub use models::{
 pub(crate) use declarative::DeclarativeP2pSource;
 pub(crate) use models::P2pOfferMarket;
 pub use routes::{
-    CryptoMarketPath, ExchangeMode, P2pRoute, P2pRouteSearchQuery, P2pRouteSearchResponse,
-    RouteAssetStatus, RouteCostKind, RouteExecutionDescriptor, RouteFee, RouteProfitability,
+    CryptoCycleLeg, CryptoMarketPath, ExchangeMode, P2pRoute, P2pRouteSearchQuery,
+    P2pRouteSearchResponse, RouteAssetStatus, RouteCostKind, RouteExecutionDescriptor, RouteFee,
+    RouteProfitability,
 };
 pub(crate) use service::{normalize_sources, P2pSource};
 pub use service::{P2pSearchService, PublicFiatRouteProvider};

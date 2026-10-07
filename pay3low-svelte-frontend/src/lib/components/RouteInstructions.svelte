@@ -100,7 +100,7 @@
   $: exitDirect = isDirectOffer(route.exit_offer_snapshot);
   $: directFiat = route.route_kind === "fiat_to_fiat" && entryDirect && !route.exit_offer_snapshot && !route.route_provider;
   $: crossVenue = Boolean(entry && exit && !route.route_provider && entry.provider !== exit.provider);
-  $: cryptoToCrypto = route.route_kind === "crypto_to_crypto";
+  $: cryptoToCrypto = route.route_kind === "crypto_to_crypto" || Boolean(route.cycle_legs?.length);
   $: providerSwap = Boolean(route.route_provider && (route.entry_offer_snapshot || route.exit_offer_snapshot));
   $: transferNetwork = route.entry_network && route.entry_network.toLowerCase() !== "internal" ? route.entry_network : null;
   $: entryAsset = route.entry_offer_snapshot?.asset ?? route.entry_asset;
@@ -135,7 +135,17 @@
     <button type="button" class="sheetHandle" aria-label={copy("Close instructions by dragging down")} on:pointerdown={startSheetDrag} on:pointermove={moveSheetDrag} on:pointerup={endSheetDrag} on:pointercancel={endSheetDrag}><span aria-hidden="true"></span></button>
     <div class="header"><div><span class="eyebrow">{copy("Selected route")}</span><h2 id="route-instructions-title">{copy("How to complete this exchange")}</h2><p class="intro">{copy("Complete each step in order. You stay in control—Pay3Flow never places an order or moves your funds.")}</p><p class="estimate">{copy("Estimated output:")} <strong>{money(route.target_amount_minor, route.target_currency, route.target_amount)}</strong></p>{#if sourceFeeLabel || targetFeeLabel}<p class="feeSummary">{copy("Bank fees:")} {[sourceFeeLabel, targetFeeLabel].filter(Boolean).join(" · ")}</p>{/if}</div><button type="button" class="closeButton" on:click={onClose} aria-label={copy("Close instructions")}>×</button></div>
     <ol class="workflow" aria-label={copy("Exchange steps")}>
-      {#if route.route_provider && !providerSwap}
+      {#if route.cycle_legs?.length}
+        {#each route.cycle_legs as leg, index}
+          <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">{index + 1}</span><div class="stepBody">
+            <h3>{copy("Convert {from} to {to}", { from: readablePath([leg.from_asset]), to: readablePath([leg.to_asset]) })}</h3>
+            <p class="stepSummary">{copy("Route through {venue}", { venue: venueName(leg.provider) })}</p>
+            <p class="routePath">{leg.input_amount} {leg.from_asset.split("@")[0]} → {leg.output_amount} {leg.to_asset.split("@")[0]}</p>
+            <ul class="checklist"><li>{copy("Check the current price, fee, and amount you should receive before pressing the exchange button.")}</li><li>{copy("Wait until the new balance appears before doing the next step.")}</li><li>{copy("Never send money after the quote expires. Get a new quote first.")}</li></ul>
+            {#if leg.source_url}<a href={leg.source_url} target="_blank" rel="noreferrer noopener" class="profileLink">{copy("Open {venue}", { venue: venueName(leg.provider) })} <span>↗</span></a>{/if}
+          </div></li>
+        {/each}
+      {:else if route.route_provider && !providerSwap}
         <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">1</span><div class="stepBody">
           <h3>{copy("Route through {venue}", { venue: venueName(route.route_provider) })}</h3>
           <p class="stepSummary">{copy("This is a current estimate only. Pay3Flow does not send money or make the exchange for you.")}</p>

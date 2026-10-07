@@ -5,7 +5,7 @@ crypto across public P2P markets, direct exchangers, and spot markets. The web
 application searches the selected venues in parallel, streams results as each
 venue responds, and keeps the best route at the top of the ranking.
 
-Pay3Flow currently supports six route shapes:
+Pay3Flow currently supports seven route shapes:
 
 ```text
 fiat   -> crypto -> fiat     AMD -> USDT -> RUB
@@ -14,6 +14,7 @@ bank   -> crypto -> bank     USD account <-> USDT <-> Armenian USD account
 fiat   -> crypto             RUB -> USDC
 crypto -> fiat               USDC (ERC-20) -> RUB
 crypto -> crypto             USDC (ERC-20) -> ETH
+crypto -> crypto -> crypto   USDT (BEP-20) -> USDC -> USDT (BEP-20)
 ```
 
 Search results are public market estimates. Pay3Flow does not place an order,
@@ -65,6 +66,23 @@ instructions. P2P providers can declare `currency = ["all"]` and use
 `currency_exceptions` for unsupported fiat codes. They can use
 `max_results = "infinite"` with paged requests to search more ads. See the
 [Providerfile reference](Providerfile.md) for the supported fields and limits.
+
+Selecting the same crypto asset on the same network searches circular routes
+through up to 12 intermediaries from the selected providers' token catalogs.
+Each cycle uses two fresh swap quotes; the return quote consumes the actual
+output of the first quote. The router checks asset/network continuity, amounts,
+and expiry, and returns only cycles with a positive quoted gain at eight decimal
+places. `allow_cross_venue` controls whether the swaps may use different providers.
+Cached exchange coefficients and spot tickers are not used for these wallet cycles.
+This bounded search reports `routes_exhaustive = false`.
+
+Cycle results include ordered `cycle_legs` with providers and input/output amounts.
+`profitability_decimals = 8` specifies the scale of their profitability integers;
+existing fiat cycles retain the default scale of 2. Quoted swap outputs include
+the costs reflected by each provider, but wallet gas, approvals and deposit costs
+are not fully established. These results therefore show an estimated gain with
+unconfirmed net profit. Quotes must be refreshed before executing each step;
+the service does not guarantee a profit or automatically execute the cycle.
 
 ## How live routing works
 
@@ -195,7 +213,7 @@ Useful route parameters:
 | `source_fiat`, `target_fiat` | Source and target currency or asset codes |
 | `source_amount` | Positive amount in source-currency units |
 | `source_network`, `target_network` | Canonical network IDs from `/api/networks` |
-| `intermediary_assets` | Comma-separated crypto bridges for fiat-to-fiat routes |
+| `intermediary_assets` | Comma-separated crypto bridges for fiat routes or crypto cycles; omitted crypto-cycle intermediaries come from provider catalogs |
 | `source_payment_method`, `target_payment_method` | Bank or payment-method filters |
 | `sources` | Comma-separated source slugs; omit to search all configured adapters |
 | `allow_cross_venue` | Allow routes whose legs execute on different venues |

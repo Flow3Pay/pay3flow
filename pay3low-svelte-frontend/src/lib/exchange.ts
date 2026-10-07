@@ -119,6 +119,8 @@ export interface RouteCandidate {
   target_method_icon_url?: string;
   route_kind?: "fiat_to_fiat" | "fiat_to_crypto" | "crypto_to_fiat" | "crypto_to_crypto" | "crypto_cycle" | "fiat_cycle";
   profitability?: RouteProfitability;
+  cycle_legs?: CryptoCycleLeg[];
+  profitability_decimals?: number;
   bridge_currency?: string | null;
   market_path?: CryptoMarketPath;
   route_provider?: string | null;
@@ -298,6 +300,8 @@ export interface P2pRoute {
   transfer_fee_included: boolean;
   route_kind?: "fiat_to_fiat" | "fiat_to_crypto" | "crypto_to_fiat" | "crypto_to_crypto" | "crypto_cycle" | "fiat_cycle";
   profitability?: RouteProfitability;
+  cycle_legs?: CryptoCycleLeg[];
+  profitability_decimals?: number;
   bridge_currency?: string | null;
   market_path?: CryptoMarketPath;
   route_provider?: string | null;
@@ -806,4 +810,15 @@ export function quoteToCandidate(quote: ExchangeQuote): RouteCandidate {
       { kind: "exit", from: entry?.to ?? "TOKEN", to: quote.target_currency, provider: quote.settlement_plan.exit?.provider ?? "solver", status: "found" },
     ],
   };
+}
+
+export interface CryptoCycleLeg {
+  provider: string;
+  from_asset: string;
+  to_asset: string;
+  input_amount: string;
+  output_amount: string;
+  source_url?: string | null;
+  quote_id?: string | null;
+  expires_at?: string | null;
 }

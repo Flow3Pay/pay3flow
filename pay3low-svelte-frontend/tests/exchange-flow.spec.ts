@@ -890,6 +890,29 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
         });
       }
       if (url.searchParams.get("source_fiat") === "USDT" && url.searchParams.get("target_fiat") === "USDT") {
+        if (url.searchParams.get("source_network") === "ethereum" && url.searchParams.get("target_network") === "ethereum") {
+          return json({
+            search_id: "00000000-0000-4000-8000-000000000109", routes_found: 1,
+            routes_exhaustive: false, searched_at: "2026-10-07T10:00:00Z",
+            source_fiat: "USDT", target_fiat: "USDT", source_amount: "100",
+            assets_searched: [], can_exchange_to_target: true,
+            routes: [{
+              route_id: "crypto-cycle", rank: 1, asset: "USDC",
+              source_fiat: "USDT", target_fiat: "USDT", source_amount: "100",
+              target_amount: "101", acquired_asset_amount: "99", effective_rate: "1.01",
+              source_network: "ethereum", target_network: "ethereum", entry_network: "ethereum",
+              same_venue: false, requires_asset_transfer: true, transfer_fee_included: false,
+              route_kind: "crypto_cycle", profitability_decimals: 8,
+              profitability: { status: "unconfirmed", gross_profit_minor: 100000000, gross_profit_bps: 100, missing_costs: ["network_fee"] },
+              route_path: ["USDT@ethereum", "USDC@ethereum", "USDT@ethereum"],
+              cycle_legs: [
+                { provider: "cow-swap", from_asset: "USDT@ethereum", to_asset: "USDC@ethereum", input_amount: "100", output_amount: "99", source_url: "https://swap.cow.fi" },
+                { provider: "near-intents", from_asset: "USDC@ethereum", to_asset: "USDT@ethereum", input_amount: "99", output_amount: "101", source_url: "https://1click.chaindefuser.com" },
+              ],
+              payment_methods_verified: true, warnings: [],
+            }],
+          });
+        }
         expect(url.searchParams.get("source_network")).toBe("tron");
         expect(url.searchParams.get("target_network")).toBe("ton");
         return json({ error: "No live bridge provider is configured for USDT: TRON (TRC-20) → TON" }, 400);
@@ -2286,4 +2309,29 @@ test("same asset on different networks reports unavailable bridge provider", asy
   await expect(page.getByRole("alert")).toContainText(
     "No live bridge provider is configured for USDT: TRON (TRC-20) → TON",
   );
+});
+
+
+test("same asset on the same network searches a cycle and displays both swap steps", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page);
+  for (const side of ["sending", "recipient"] as const) {
+    const picker = await chooseCrypto(page, side, "USDT ERC20");
+    await picker.getByRole("option", { name: /Ethereum \(ERC-20\).*USDT/ }).click();
+  }
+  await page.getByLabel("Amount to send").fill("100");
+  await page.getByTestId("start-search").click();
+  const card = page.locator(".routeCard").first();
+  await expect(card).toBeVisible();
+  await expect(card).toContainText("Est. +1 USDT (+1.00%)");
+  await expect(card).toContainText("101 USDT");
+  await expect(card).toContainText("USDC");
+  await expect(card).not.toContainText("AMD");
+  await card.locator(".workflow").click();
+  const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
+  await expectNumberedTimeline(instructions, ["1", "2"]);
+  await expect(instructions.getByRole("heading", { name: "Convert USDT in Ethereum (ERC-20) to USDC in Ethereum (ERC-20)" })).toBeVisible();
+  await expect(instructions.getByRole("heading", { name: "Convert USDC in Ethereum (ERC-20) to USDT in Ethereum (ERC-20)" })).toBeVisible();
+  await expect(instructions.getByRole("link", { name: /Open CoW/ })).toBeVisible();
+  await expect(instructions.getByRole("link", { name: /Open NEAR/ })).toBeVisible();
 });

@@ -80,7 +80,7 @@ impl P2pSearchService {
                 &query,
                 batch_sender.clone(),
             ))),
-            (true, true) if query.includes_exchangers() => {
+            (true, true) if query.includes_exchangers() && !query.is_crypto_cycle() => {
                 producers.push(Box::pin(crypto::produce_market_routes(
                     self,
                     &query,

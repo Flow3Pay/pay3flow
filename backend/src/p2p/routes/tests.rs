@@ -28,6 +28,217 @@ struct DelayedRouteSource {
 
 struct FixedIntentProvider;
 
+fn crypto_cycle_request(amount: f64) -> P2pRouteSearchQuery {
+    P2pRouteSearchQuery {
+        source_fiat: "USDT".into(),
+        target_fiat: "USDT".into(),
+        source_amount: amount,
+        source_network: Some("BEP20".into()),
+        target_network: Some("bnb-smart-chain".into()),
+        bridge_fiat: None,
+        assets: None,
+        intermediary_assets: Some("USDC".into()),
+        source_payment_method: None,
+        target_payment_method: None,
+        source_payment_fee_percent: None,
+        target_payment_fee_percent: None,
+        merchant_only: None,
+        min_orders: None,
+        min_completion_rate: None,
+        allow_cross_venue: Some(true),
+        max_price_deviation_bps: None,
+        limit: Some(40),
+        sources: None,
+        exchange_mode: ExchangeMode::Exchanger,
+    }
+}
+
+#[test]
+fn same_asset_on_same_network_is_allowed_for_cycle_search() {
+    let query = normalize_query(
+        crypto_cycle_request(100.0),
+        &["USDT".into()],
+        &crate::networks::NetworkCatalog::test_default(),
+        &[Asset::new("USDT", Some("bnb-smart-chain")).unwrap()],
+    )
+    .expect("same-asset same-network request must search arbitrage cycles");
+    assert_eq!(query.source_network.as_deref(), Some("bnb-smart-chain"));
+    assert_eq!(query.source_network, query.target_network);
+}
+
+struct CycleProvider {
+    name: &'static str,
+    buy_rate: f64,
+    sell_rate: f64,
+    invalid_return: bool,
+    calls: Arc<std::sync::Mutex<Vec<(String, String)>>>,
+}
+
+#[async_trait]
+impl PublicRouteProvider for CycleProvider {
+    fn name(&self) -> &str {
+        self.name
+    }
+
+    async fn supported_assets(&self) -> Vec<Asset> {
+        ["USDT", "USDC"]
+            .into_iter()
+            .map(|symbol| Asset::new(symbol, Some("bnb-smart-chain")).unwrap())
+            .collect()
+    }
+
+    async fn quote(&self, from: Asset, to: Asset, amount: Amount) -> Result<PublicRouteQuote> {
+        assert_ne!(from, to, "cycles must never send a self-swap to a provider");
+        self.calls
+            .lock()
+            .unwrap()
+            .push((from.symbol.clone(), amount.value.clone()));
+        let rate = if from.symbol == "USDT" {
+            self.buy_rate
+        } else {
+            self.sell_rate
+        };
+        let input_value = amount.value.parse::<f64>().unwrap();
+        let output = Amount::new(fixed(input_value * rate, 8), to.clone())?;
+        let input = if self.invalid_return && from.symbol == "USDC" {
+            Amount::new("1", from.clone())?
+        } else {
+            amount
+        };
+        Ok(PublicRouteQuote {
+            provider: self.name.into(),
+            quote_id: None,
+            description: None,
+            source_url: Some(format!("https://{}.example.test", self.name)),
+            from: from.clone(),
+            to: to.clone(),
+            input,
+            output,
+            fees: vec![Amount::new("0.01", from.clone())?],
+            expires_at: Some(chrono::Utc::now() + chrono::Duration::minutes(2)),
+            path: vec![from, to],
+        })
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn crypto_cycles_quote_the_actual_return_amount_and_exclude_losses() {
+    for (sell_rate, invalid_return, expected) in [
+        (1.02, false, 1),
+        (1.0, false, 0),
+        (1.01, false, 0),
+        (1.02, true, 0),
+    ] {
+        let calls = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let service = P2pSearchService::with_sources(vec![], Duration::from_secs(1))
+            .with_route_providers(vec![Arc::new(CycleProvider {
+                name: "cycle",
+                buy_rate: 0.99,
+                sell_rate,
+                invalid_return,
+                calls: calls.clone(),
+            })]);
+        let response = service
+            .search_routes(crypto_cycle_request(100.0))
+            .await
+            .unwrap();
+        assert_eq!(
+            response.routes_found, expected,
+            "sell_rate={sell_rate}, invalid_return={invalid_return}"
+        );
+        assert!(
+            calls
+                .lock()
+                .unwrap()
+                .contains(&("USDC".into(), "99.00000000".into())),
+            "return quote must use the first leg's actual output"
+        );
+        if let Some(route) = response.routes.first() {
+            assert_eq!(route.target_amount, "100.98000000");
+            assert_eq!(route.route_kind, "crypto_cycle");
+            assert_eq!(
+                route.route_path,
+                [
+                    "USDT@bnb-smart-chain",
+                    "USDC@bnb-smart-chain",
+                    "USDT@bnb-smart-chain"
+                ]
+            );
+            assert_eq!(route.cycle_legs.len(), 2);
+            assert_eq!(route.profitability_decimals, Some(8));
+            assert!(matches!(
+                route.profitability,
+                Some(RouteProfitability::Unconfirmed {
+                    gross_profit_minor: 98_000_000,
+                    ..
+                })
+            ));
+            assert!(!route.transfer_fee_included);
+            assert!(route.execution.is_none());
+        }
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn crypto_cycles_respect_selected_providers_and_cross_venue_setting() {
+    for (cross_venue, sources, expected) in
+        [(true, None, 1), (false, None, 0), (true, Some("buy"), 0)]
+    {
+        let providers = [("buy", 1.02, 0.97), ("sell", 0.97, 1.02)]
+            .into_iter()
+            .map(|(name, buy_rate, sell_rate)| {
+                Arc::new(CycleProvider {
+                    name,
+                    buy_rate,
+                    sell_rate,
+                    invalid_return: false,
+                    calls: Arc::new(std::sync::Mutex::new(Vec::new())),
+                }) as Arc<dyn PublicRouteProvider>
+            })
+            .collect();
+        let service = P2pSearchService::with_sources(vec![], Duration::from_secs(1))
+            .with_route_providers(providers);
+        let mut request = crypto_cycle_request(100.0);
+        request.allow_cross_venue = Some(cross_venue);
+        request.sources = sources.map(str::to_owned);
+        let response = service.search_routes(request).await.unwrap();
+        assert_eq!(
+            response.routes_found, expected,
+            "cross_venue={cross_venue}, sources={sources:?}"
+        );
+        if let Some(route) = response.routes.first() {
+            assert_eq!(route.cycle_legs[0].provider, "buy");
+            assert_eq!(route.cycle_legs[1].provider, "sell");
+            assert!(!route.same_venue);
+        }
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn crypto_cycles_keep_gains_smaller_than_a_cent() {
+    let service = P2pSearchService::with_sources(vec![], Duration::from_secs(1))
+        .with_route_providers(vec![Arc::new(CycleProvider {
+            name: "cycle",
+            buy_rate: 1.0,
+            sell_rate: 1.02,
+            invalid_return: false,
+            calls: Arc::new(std::sync::Mutex::new(Vec::new())),
+        })]);
+    let response = service
+        .search_routes(crypto_cycle_request(0.001))
+        .await
+        .unwrap();
+    assert_eq!(response.routes_found, 1);
+    assert!(matches!(
+        response.routes[0].profitability,
+        Some(RouteProfitability::Unconfirmed {
+            gross_profit_minor: 2_000,
+            gross_profit_bps: 200,
+            ..
+        })
+    ));
+}
+
 struct FixedFiatRouteProvider;
 
 #[test]

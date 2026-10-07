@@ -64,7 +64,8 @@
     const bps = profit.status === "confirmed" ? profit.profit_bps : profit.gross_profit_bps;
     const sign = minor > 0 ? "+" : "";
     const prefix = profit.status === "confirmed" ? "" : "Est. ";
-    return `${prefix}${sign}${(minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2, useGrouping: false })} AMD (${sign}${(bps / 100).toFixed(2)}%)`;
+    const decimals = route.profitability_decimals ?? 2;
+    return `${prefix}${sign}${(minor / 10 ** decimals).toLocaleString("en-US", { maximumFractionDigits: decimals, useGrouping: false })} ${route.source_currency} (${sign}${(bps / 100).toFixed(2)}%)`;
   };
   const compact = (value: number) => Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(value);
   const routeCountLabel = (count: number, language: Locale) => formatRouteCount(count, language);
@@ -74,7 +75,7 @@
   $: pendingVenues = searchingVenues.filter((venue) => !foundVenues.some((found) => found.id === venue.id));
   $: visiblePendingVenues = pendingVenues.slice(0, 5);
   $: hasHiddenPendingVenues = pendingVenues.length > visiblePendingVenues.length;
-  $: circularSearch = sourceCurrency.toUpperCase() === "AMD" && targetCurrency.toUpperCase() === "AMD";
+  $: circularSearch = sourceCurrency.toUpperCase() === targetCurrency.toUpperCase();
   $: hasConfirmedProfit = routes.some((route) => route.profitability?.status === "confirmed" && route.profitability.net_profit_minor > 0);
   $: if (`${sourceCurrency}:${targetCurrency}` !== lastPair) {
     lastPair = `${sourceCurrency}:${targetCurrency}`;
@@ -87,6 +88,7 @@
 
   function pathStepProvider(route: RouteCandidate, index: number, lastIndex: number) {
     if (index === 0) return undefined;
+    if (route.cycle_legs?.length) return route.cycle_legs.find((leg) => leg.to_asset === route.route_path?.[index])?.provider;
     if (route.route_kind === "fiat_to_fiat" || route.route_kind === "fiat_cycle" || route.route_kind === "crypto_cycle") {
       if (index === 1 && route.entry_offer_snapshot) return route.entry_offer_snapshot.source;
       if (index === lastIndex && route.exit_offer_snapshot) return route.exit_offer_snapshot.source;
@@ -270,7 +272,7 @@
     {:else}
       <div class="emptyState">
         <div class="emptyVisual" aria-hidden="true"><span class="emptyNode">AM</span><span class="emptyPath"><i></i><i></i><i></i></span><span class="emptyNode">RU</span></div>
-        <div><strong>{searched && hasAmount ? "No routes found" : hasAmount ? "Preparing market scan" : "Your routes will appear here"}</strong><p>{searched && hasAmount ? "No compatible live offers were found for this amount and payment method." : hasAmount ? "Pay3Flow is ready to compare entry assets, venues and recipient payout options." : "Enter an amount and we will assemble live cross-border paths in real time."}</p></div>
+        <div><strong>{searched && hasAmount ? "No routes found" : hasAmount ? "Preparing market scan" : "Your routes will appear here"}</strong><p>{searched && hasAmount ? circularSearch ? "No profitable quoted cycle was found for this amount and selected providers." : "No compatible live offers were found for this amount and payment method." : hasAmount ? "Pay3Flow is ready to compare entry assets, venues and recipient payout options." : "Enter an amount and we will assemble live cross-border paths in real time."}</p></div>
       </div>
     {/if}
   </div>

@@ -140,6 +140,7 @@ pub(in crate::p2p) fn route_provider_names(route: &P2pRoute) -> Vec<&str> {
     if let Some(provider) = route.exit_offer.as_ref().map(|offer| offer.source.as_str()) {
         providers.push(provider);
     }
+    providers.extend(route.cycle_legs.iter().map(|leg| leg.provider.as_str()));
     providers.sort_unstable();
     providers.dedup();
     providers
@@ -195,19 +196,26 @@ pub(in crate::p2p) fn profitability_for_route(
     if !matches!(route.route_kind.as_str(), "crypto_cycle" | "fiat_cycle") {
         return None;
     }
-    let source_minor = minor_units(&route.source_amount)?;
-    let target_minor = minor_units(&route.target_amount)?;
+    let scale = route.profitability_decimals.unwrap_or(2);
+    let source_minor = minor_units(&route.source_amount, scale)?;
+    let target_minor = minor_units(&route.target_amount, scale)?;
     let gross_profit_minor = target_minor.checked_sub(source_minor)?;
     let mut missing_costs = Vec::new();
 
-    let source_fee = match query.source_payment_fee_bps {
+    let source_fee = match query
+        .source_payment_fee_bps
+        .or_else(|| (!route.cycle_legs.is_empty()).then_some(0))
+    {
         Some(bps) => fee_minor(source_minor, bps)?,
         None => {
             missing_costs.push(RouteCostKind::SourcePaymentFee);
             0
         }
     };
-    let target_fee = match query.target_payment_fee_bps {
+    let target_fee = match query
+        .target_payment_fee_bps
+        .or_else(|| (!route.cycle_legs.is_empty()).then_some(0))
+    {
         Some(bps) => fee_minor(target_minor, bps)?,
         None => {
             missing_costs.push(RouteCostKind::TargetPaymentFee);
@@ -249,21 +257,30 @@ pub(in crate::p2p) fn profitability_for_route(
     }
 }
 
-fn minor_units(value: &str) -> Option<i64> {
+pub(in crate::p2p) fn crypto_profit_units(value: &str) -> Option<i64> {
+    minor_units(value, 8)
+}
+
+fn minor_units(value: &str, scale: u8) -> Option<i64> {
     let (whole, fraction) = value.split_once('.').unwrap_or((value, ""));
     if whole.starts_with('-') || !whole.bytes().all(|byte| byte.is_ascii_digit()) {
         return None;
     }
-    let mut cents = fraction.bytes().take(2).collect::<Vec<_>>();
+    let mut cents = fraction
+        .bytes()
+        .take(usize::from(scale))
+        .collect::<Vec<_>>();
     if cents.iter().any(|byte| !byte.is_ascii_digit()) {
         return None;
     }
-    while cents.len() < 2 {
+    while cents.len() < usize::from(scale) {
         cents.push(b'0');
     }
     let whole = whole.parse::<i64>().ok()?;
     let fraction = std::str::from_utf8(&cents).ok()?.parse::<i64>().ok()?;
-    whole.checked_mul(100)?.checked_add(fraction)
+    whole
+        .checked_mul(10_i64.checked_pow(u32::from(scale))?)?
+        .checked_add(fraction)
 }
 
 fn fee_minor(amount_minor: i64, fee_bps: u32) -> Option<i64> {
@@ -345,6 +362,12 @@ pub(in crate::p2p) fn route_fingerprint(route: &P2pRoute) -> String {
         market,
         route.source_amount,
     );
+    for leg in &route.cycle_legs {
+        identity.push_str(&format!(
+            "|{}:{}>{}",
+            leg.provider, leg.from_asset, leg.to_asset
+        ));
+    }
     if let Some(quote_id) = route.provider_quote_id.as_deref() {
         identity.push('|');
         identity.push_str(quote_id);

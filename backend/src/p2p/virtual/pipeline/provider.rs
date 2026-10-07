@@ -1,3 +1,4 @@
+mod cycle;
 mod discovery;
 mod fiat;
 mod fiat_crypto;
@@ -49,6 +50,10 @@ pub(super) async fn produce_workflow_routes(
                 .await,
             true,
         ),
+        (true, true) if query.is_crypto_cycle() => {
+            service.search_crypto_cycles(query, &batches).await?;
+            (Vec::new(), false)
+        }
         (true, true) => (
             service.search_provider_routes(query, Some(&batches)).await,
             true,
@@ -311,6 +316,8 @@ fn fiat_cycle_route(
         transfer_fee_included: true,
         route_kind: "fiat_cycle".into(),
         profitability: None,
+                    cycle_legs: Vec::new(),
+                    profitability_decimals: None,
         bridge_currency: Some(intermediary.clone()),
         market_path: None,
         route_provider: None,
@@ -416,6 +423,8 @@ fn direct_fiat_route(query: &NormalizedRouteQuery, quote: FiatRouteQuote) -> Opt
         transfer_fee_included: true,
         route_kind: "fiat_to_fiat".into(),
         profitability: None,
+                    cycle_legs: Vec::new(),
+                    profitability_decimals: None,
         bridge_currency: None,
         market_path: None,
         route_provider: None,

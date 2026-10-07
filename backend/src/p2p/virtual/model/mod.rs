@@ -27,6 +27,12 @@ pub(in crate::p2p) struct NormalizedRouteQuery {
 }
 
 impl NormalizedRouteQuery {
+    pub(in crate::p2p) fn is_crypto_cycle(&self) -> bool {
+        self.source_currency == self.target_currency
+            && self.source_network.is_some()
+            && self.source_network == self.target_network
+    }
+
     pub(in crate::p2p) fn includes_p2p(&self) -> bool {
         matches!(self.exchange_mode, ExchangeMode::All | ExchangeMode::P2p)
     }
