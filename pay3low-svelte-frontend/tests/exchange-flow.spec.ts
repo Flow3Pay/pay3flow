@@ -1584,7 +1584,7 @@ test("saved provider choices adopt new providers and retain later deselections",
     .toHaveAttribute("aria-pressed", "false");
 });
 
-test("search venues announce providers reported by route statuses", async ({ page }) => {
+test("search venues distinguish route providers from checked services", async ({ page }) => {
   await mockBackend(page);
 
   let sendFirstRoute: (() => void) | undefined;
@@ -1638,7 +1638,7 @@ test("search venues announce providers reported by route statuses", async ({ pag
           entry_sources: [
             { source: "bybit", ok: true, latency_ms: 10, offers_found: 1, error: null },
             { source: "skylabs", ok: true, latency_ms: 15, offers_found: 2, error: null },
-            { source: "bncex", ok: true, latency_ms: 18, offers_found: 1, error: null },
+            { source: "bncex", ok: false, latency_ms: 18, offers_found: 1, error: "Provider temporarily unavailable" },
             { source: "bitcoin-center", ok: true, latency_ms: 19, offers_found: 1, error: null },
             { source: "binance", ok: true, latency_ms: 20, offers_found: 0, error: null },
           ],
@@ -1721,15 +1721,21 @@ test("search venues announce providers reported by route statuses", async ({ pag
   await expect(page.getByTestId("complete-route")).toHaveCount(1);
   await expect(page.getByTestId("complete-route").first()).toHaveClass(/selected/);
   const foundVenues = panelTop.locator(".resultSummary").getByTestId("found-venue");
-  await expect(foundVenues).toHaveCount(6);
+  await expect(foundVenues).toHaveCount(1);
   await expect(foundVenues.first()).toHaveAttribute("title", "Found on Bybit");
-  await expect(foundVenues.nth(1)).toHaveAttribute("title", "No route on Skylabs");
-  await expect(foundVenues.nth(1).getByRole("button", { name: "Show Skylabs routes" })).toBeDisabled();
-  await expect(foundVenues.nth(1).locator(".foundVenuePopover")).toContainText("Offers received · no matching route");
-  await expect(foundVenues.nth(2)).toHaveAttribute("title", "No route on Bncex");
-  await expect(foundVenues.nth(3)).toHaveAttribute("title", "No route on Bitcoin Center");
-  await expect(foundVenues.nth(4)).toHaveAttribute("title", "No route on Binance");
-  await expect(foundVenues.nth(5)).toHaveAttribute("title", "No route on Okx");
+  await expect(panelTop.locator(".resultSummary")).toContainText("1 venue in routes");
+  const checkedServices = panelTop.getByTestId("checked-services");
+  await expect(checkedServices.locator("summary")).toHaveText("6 services checked");
+  await checkedServices.locator("summary").click();
+  await expect(checkedServices.getByTestId("checked-venue")).toHaveCount(6);
+  await expect(checkedServices.locator('[data-venue="skylabs"]')).toContainText("Offers received · no matching route");
+  await expect(checkedServices.locator('[data-venue="skylabs"]')).toContainText("0 routes");
+  await expect(checkedServices.locator('[data-venue="bncex"]')).toContainText("Provider temporarily unavailable");
+  await expect(checkedServices.locator('[data-venue="bncex"]')).toContainText("Some quotes unavailable · no matching route");
+  for (const venue of ["bitcoin-center", "binance", "okx"]) {
+    await expect(checkedServices.locator(`[data-venue="${venue}"]`)).toContainText("0 routes");
+  }
+  await checkedServices.locator("summary").click();
   await expect(searchingVenues).toHaveCount(5);
   await expect(searchingVenues.nth(0)).toHaveAttribute("title", "Searching Cifra Markets");
   await expect(searchingVenues.nth(4)).toHaveAttribute("title", "Searching Whitebird");
@@ -1741,12 +1747,10 @@ test("search venues announce providers reported by route statuses", async ({ pag
   await expect(page.getByTestId("complete-route")).toHaveCount(2);
   await expect(page.getByTestId("complete-route").first()).toContainText("20420 RUB");
   await expect(page.getByTestId("complete-route").first()).toHaveClass(/selected/);
-  await expect(foundVenues).toHaveCount(7);
+  await expect(foundVenues).toHaveCount(2);
+  await expect(checkedServices.locator("summary")).toHaveText("7 services checked");
   for (const title of ["Whitebird", "Bybit"]) {
     await expect(panelTop.locator(`[data-testid="found-venue"][title="Found on ${title}"]`)).toHaveCount(1);
-  }
-  for (const title of ["Skylabs", "Bncex", "Bitcoin Center", "Binance", "Okx"]) {
-    await expect(panelTop.locator(`[data-testid="found-venue"][title="No route on ${title}"]`)).toHaveCount(1);
   }
   await page.getByRole("button", { name: "Show Whitebird routes" }).click();
   await expect(page.getByTestId("complete-route")).toHaveCount(1);

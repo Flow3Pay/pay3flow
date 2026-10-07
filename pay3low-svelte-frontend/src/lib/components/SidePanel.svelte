@@ -73,6 +73,7 @@
   const routeFlipDuration = (distance: number) => reduceMotion() || routes.length > 12 ? 0 : Math.min(680, 260 + distance * 0.65);
   const routeEnterDuration = () => reduceMotion() || routes.length > 12 ? 0 : 380;
   $: pendingVenues = searchingVenues.filter((venue) => !foundVenues.some((found) => found.id === venue.id));
+  $: routeVenues = foundVenues.filter((venue) => (venueStats[venue.id.toLowerCase()]?.routes_found ?? 0) > 0);
   $: visiblePendingVenues = pendingVenues.slice(0, 5);
   $: hasHiddenPendingVenues = pendingVenues.length > visiblePendingVenues.length;
   $: circularSearch = sourceCurrency.toUpperCase() === targetCurrency.toUpperCase();
@@ -155,12 +156,12 @@
         {#if hasAmount}
           <span class="resultSummary">
             {#if hasAmount}<small aria-live="polite">{routeCountLabel(routesFound, $locale)}{searching ? " · searching…" : ""}</small>{/if}
-            {#if hasAmount && foundVenues.length}
-              <span class="foundVenues" aria-label={`Responses received from ${foundVenues.map((venue) => venue.label).join(", ")}`}>
-                {#each foundVenues as venue, index (venue.id)}
+            {#if routeVenues.length}
+              <span class="foundVenues" aria-label={`Venues used in found routes: ${routeVenues.map((venue) => venue.label).join(", ")}`}>
+                {#each routeVenues as venue, index (venue.id)}
                   {@const status = venueStats[venue.id.toLowerCase()]}
                   {@const hasRoute = (status?.routes_found ?? 0) > 0}
-                  <div class:foundVenueActive={selectedVenueId === venue.id.toLowerCase()} class="foundVenue" data-testid="found-venue" title={status?.ok === false ? `Error from ${venue.label}` : hasRoute ? `Found on ${venue.label}` : `No route on ${venue.label}`} style:animation-delay={`${index * 70}ms`}>
+                  <div class:foundVenueActive={selectedVenueId === venue.id.toLowerCase()} class="foundVenue" data-testid="found-venue" title={`Found on ${venue.label}`} style:animation-delay={`${index * 70}ms`}>
                     <button type="button" class="foundVenueButton" aria-label={`Show ${venue.label} routes`} aria-pressed={selectedVenueId === venue.id.toLowerCase()} disabled={!hasRoute} on:click={() => selectedVenueId = selectedVenueId === venue.id.toLowerCase() ? null : venue.id.toLowerCase()}>
                       <img src={venue.iconUrl || venueIcon(venue.id)} alt="" width="18" height="18" decoding="async" on:error={fallbackFoundVenueIcon} />
                       <span class="foundVenueFallback" aria-hidden="true" hidden>{venue.label.slice(0, 1).toUpperCase()}</span>
@@ -173,9 +174,9 @@
                       <span class:venueOk={status?.ok} class:venueError={status && !status.ok}>{status?.ok === false ? (status.offers_found > 0 ? "Some quotes unavailable" : "Response error") : hasRoute ? "Route found" : (status?.offers_found ?? 0) > 0 ? "Offers received · no matching route" : "No matching route"}</span>
                       <dl>
                         <div><dt>Routes found</dt><dd>{status?.routes_found ?? 0}</dd></div>
-                        <div><dt>Offers found</dt><dd>{status?.offers_found ?? 0}</dd></div>
-                        {#if status?.last_response_ms !== null}<div><dt>Last response</dt><dd>{status.last_response_ms} ms</dd></div>{/if}
-                        {#if status?.average_response_ms !== null}<div><dt>Average response</dt><dd>{status.average_response_ms} ms ({status.response_samples})</dd></div>{/if}
+                        <div><dt>Quotes / markets received</dt><dd>{status?.offers_found ?? 0}</dd></div>
+                        {#if status?.last_response_ms != null}<div><dt>Last response</dt><dd>{status.last_response_ms} ms</dd></div>{/if}
+                        {#if status?.average_response_ms != null}<div><dt>Average response</dt><dd>{status.average_response_ms} ms ({status.response_samples})</dd></div>{/if}
                         {#if status?.cache_hits}<div><dt>Cache hits</dt><dd>{status.cache_hits}</dd></div>{/if}
                       </dl>
                       {#if status?.error}<small>{status.error}</small>{/if}
@@ -183,8 +184,32 @@
                   </div>
                 {/each}
               </span>
+              <small>{routeVenues.length} {routeVenues.length === 1 ? "venue" : "venues"} in routes</small>
             {/if}
           </span>
+          {#if foundVenues.length}
+            <details class="checkedServices" data-testid="checked-services">
+              <summary>{foundVenues.length} {foundVenues.length === 1 ? "service checked" : "services checked"}</summary>
+              <p>Quotes and market prices are used to build complete routes. A service response can contain no matching route.</p>
+              <ul>
+                {#each foundVenues as venue (venue.id)}
+                  {@const status = venueStats[venue.id.toLowerCase()]}
+                  {@const routeCount = status?.routes_found ?? 0}
+                  <li data-testid="checked-venue" data-venue={venue.id}>
+                    <div class="checkedVenueHeading">
+                      <img src={venue.iconUrl || venueIcon(venue.id)} alt="" width="18" height="18" decoding="async" on:error={fallbackFoundVenueIcon} />
+                      <span class="foundVenueFallback" aria-hidden="true" hidden>{venue.label.slice(0, 1).toUpperCase()}</span>
+                      <strong>{venue.label}</strong>
+                      <span>{routeCount} {routeCount === 1 ? "route" : "routes"}</span>
+                    </div>
+                    <small>{status?.ok === false ? (routeCount > 0 ? "Route found · some quotes unavailable" : (status.offers_found > 0 ? "Some quotes unavailable · no matching route" : "Response error")) : routeCount > 0 ? "Route found" : (status?.offers_found ?? 0) > 0 ? "Offers received · no matching route" : "No matching route"}</small>
+                    <small>Quotes / markets received: {status?.offers_found ?? 0}{status?.last_response_ms != null ? ` · ${status.last_response_ms} ms` : ""}</small>
+                    {#if status?.error}<small class="checkedVenueError">{status.error}</small>{/if}
+                  </li>
+                {/each}
+              </ul>
+            </details>
+          {/if}
         {/if}
         {#if hasAmount && renderingRoutes}<small class="resultLimit" data-testid="route-render-progress">Showing {routes.length} now · loading more…</small>{/if}
         {#if selectedVenueId}<button type="button" class="venueFilterClear" on:click={() => selectedVenueId = null}>Showing {visibleRoutes.length} from {selectedVenueName} · Show all</button>{/if}
@@ -364,6 +389,23 @@
   flex-wrap: wrap;
   gap: 7px;
 }
+
+.checkedServices {
+  margin-top: 3px;
+  color: var(--color-text-soft);
+  font-size: 11px;
+}
+
+.checkedServices summary { width: fit-content; cursor: pointer; }
+.checkedServices summary:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+.checkedServices p { max-width: 400px; margin: 8px 0; line-height: 1.5; }
+.checkedServices ul { display: grid; gap: 9px; max-height: 280px; margin: 0; padding: 0; overflow: auto; list-style: none; }
+.checkedServices li { display: grid; gap: 4px; padding: 9px; border: 1px solid var(--color-border); border-radius: 8px; }
+.checkedVenueHeading { display: flex; align-items: center; gap: 7px; }
+.checkedVenueHeading img { border-radius: 5px; object-fit: contain; }
+.checkedServices .checkedVenueHeading strong { flex: 1; font-size: 12px; }
+.checkedServices small { overflow-wrap: anywhere; line-height: 1.4; }
+.checkedServices .checkedVenueError { color: #b0443d; }
 
 .legalWarning {
   display: grid;
@@ -1491,6 +1533,10 @@
 
 :global(html[data-theme="dark"]) .foundVenueFallback {
   color: #d8f59a;
+}
+
+:global(html[data-theme="dark"]) .checkedServices .checkedVenueError {
+  color: #ffa89b;
 }
 
 :global(html[data-theme="dark"]) .routeBest,
