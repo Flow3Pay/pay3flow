@@ -1,7 +1,12 @@
 //! Wallet cycles use fresh, amount-specific quotes, never cached price coefficients.
 
 use super::*;
-use crate::p2p::CryptoCycleLeg;
+use crate::route_engine::PublicRouteProvider;
+use futures::future::{BoxFuture, FutureExt, Shared};
+
+const MAX_CYCLE_ASSETS_PER_PROVIDER: usize = 48;
+const CYCLE_SEARCH_BUDGET: std::time::Duration = std::time::Duration::from_secs(60);
+type QuoteJob = Shared<BoxFuture<'static, std::result::Result<Vec<PublicRouteQuote>, String>>>;
 
 impl P2pSearchService {
     pub(super) async fn search_crypto_cycles(
@@ -12,123 +17,307 @@ impl P2pSearchService {
         let origin = Asset::new(&query.source_currency, query.source_network.as_deref())?;
         let amount = Amount::from_f64(query.source_amount, origin.clone())?;
         let capabilities = self.provider_capabilities_for_query(query).await;
-        let mut intermediaries = capabilities
-            .iter()
-            .flat_map(|capability| capability.assets.iter())
-            .filter(|asset| **asset != origin && asset.qualified())
-            .filter(|asset| !query.assets_explicit || query.assets.contains(&asset.symbol))
-            .filter(|asset| {
-                capabilities
-                    .iter()
-                    .any(|capability| capability.supports(&origin, asset))
-            })
-            .cloned()
-            .collect::<Vec<_>>();
-        intermediaries.sort_by_key(|asset| {
-            (
-                asset.symbol == origin.symbol,
-                intermediary_asset_priority(&asset.symbol, ""),
-                ["SOL", "BNB", "TRX", "TON", "DAI", "XRP", "AVAX", "NEAR"]
-                    .iter()
-                    .position(|symbol| *symbol == asset.symbol)
-                    .unwrap_or(8),
-                asset.location != origin.location,
-                asset.to_string(),
-            )
-        });
-        intermediaries.dedup();
-        // Reserve one candidate per symbol before additional network variants,
-        // otherwise many USDC chains can crowd BTC, ETH or SOL out of the search.
-        let mut symbols = std::collections::HashSet::new();
-        let mut primary = Vec::new();
-        let mut variants = Vec::new();
-        for asset in intermediaries {
-            if symbols.insert(asset.symbol.clone()) {
-                primary.push(asset);
-            } else {
-                variants.push(asset);
-            }
-        }
-        primary.extend(variants);
-        primary.truncate(MAX_PROVIDER_ASSETS);
-        let intermediaries = primary;
-
+        let started = Instant::now();
+        let mut statuses = HashMap::new();
+        let mut jobs = HashMap::<String, QuoteJob>::new();
+        let failures = Arc::new(std::sync::Mutex::new(HashMap::<String, String>::new()));
+        let mut recorded = std::collections::HashSet::new();
         let mut entries = FuturesUnordered::new();
         for capability in capabilities.iter() {
-            for intermediary in intermediaries.iter().filter(|intermediary| {
-                capability.supports(&origin, intermediary)
-                    && capabilities.iter().any(|exit| {
-                        exit.supports(intermediary, &origin)
-                            && (query.allow_cross_venue
-                                || exit.provider.name() == capability.provider.name())
-                    })
-            }) {
-                let provider = capability.provider.clone();
-                let origin = origin.clone();
-                let intermediary = intermediary.clone();
-                let amount = amount.clone();
-                let semaphore = self.quote_semaphore.clone();
-                entries.push(async move {
-                    let (_, quotes) = quote_provider_many(
-                        provider.clone(),
-                        origin.clone(),
-                        intermediary.clone(),
-                        amount.clone(),
-                        semaphore,
-                    )
-                    .await?;
-                    let quotes = quotes
-                        .into_iter()
-                        .filter(|quote| {
-                            quote.provider == provider.name()
-                                && valid_cycle_quote(quote, &origin, &intermediary, &amount)
+            // Select separately for each provider: a large catalog must never
+            // crowd another provider's supported assets or networks out.
+            let mut candidates = capability
+                .assets
+                .iter()
+                .filter(|asset| {
+                    **asset != origin
+                        && asset.qualified()
+                        && (!query.assets_explicit || query.assets.contains(&asset.symbol))
+                        && capability.supports(&origin, asset)
+                        && capabilities.iter().any(|exit| {
+                            exit.supports(asset, &origin)
+                                && (query.allow_cross_venue
+                                    || exit.provider.name() == capability.provider.name())
                         })
-                        .take(MAX_PROVIDER_OFFERS_PER_LEG)
-                        .collect::<Vec<_>>();
-                    Some((provider, intermediary, quotes))
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            candidates.sort_by_key(|asset| {
+                (
+                    intermediary_asset_priority(&asset.symbol, ""),
+                    asset.symbol == origin.symbol,
+                    asset.location != origin.location,
+                    network_priority(asset.location.as_deref()),
+                    asset.to_string(),
+                )
+            });
+            candidates.dedup();
+            // Round-robin symbols, then their network variants. Both are part
+            // of the graph, including the origin symbol on a different chain.
+            let mut groups = Vec::<Vec<Asset>>::new();
+            let mut group_indices = HashMap::new();
+            for asset in candidates {
+                let next = groups.len();
+                let index = *group_indices.entry(asset.symbol.clone()).or_insert(next);
+                if index == next {
+                    groups.push(Vec::new());
+                }
+                groups[index].push(asset);
+            }
+            // Reserve capacity for other chains even in catalogs with hundreds
+            // of distinct symbols; then fill unused slots with more symbols.
+            let mut candidates = groups
+                .iter()
+                .take(32)
+                .filter_map(|group| group.first())
+                .cloned()
+                .collect::<Vec<_>>();
+            for variant in 1..groups.iter().map(Vec::len).max().unwrap_or(0) {
+                for group in &groups {
+                    if let Some(asset) = group.get(variant) {
+                        candidates.push(asset.clone());
+                    }
+                }
+                if candidates.len() >= MAX_CYCLE_ASSETS_PER_PROVIDER {
+                    break;
+                }
+            }
+            candidates.extend(
+                groups
+                    .iter()
+                    .skip(32)
+                    .filter_map(|group| group.first())
+                    .cloned(),
+            );
+            candidates.truncate(MAX_CYCLE_ASSETS_PER_PROVIDER);
+            let name = capability.provider.name().to_string();
+            statuses.insert(
+                name.clone(),
+                SourceStatus {
+                    source: name.clone(),
+                    ok: true,
+                    cached: false,
+                    latency_ms: 0,
+                    offers_found: 0,
+                    error: candidates.is_empty().then(|| {
+                        format!("No supported return path for {origin} in this provider's catalog")
+                    }),
+                },
+            );
+            let entry_gate = Arc::new(tokio::sync::Semaphore::new(1));
+            for intermediary in candidates {
+                let job = self.cycle_quote_job(
+                    capability.provider.clone(),
+                    origin.clone(),
+                    intermediary.clone(),
+                    amount.clone(),
+                    failures.clone(),
+                );
+                let key = provider_quote_key(&name, &origin, &intermediary, &amount);
+                jobs.insert(key.clone(), job.clone());
+                let name = name.clone();
+                let entry_gate = entry_gate.clone();
+                entries.push(async move {
+                    // Leave the provider lane available for return quotes, so
+                    // a large catalog cannot queue every entry ahead of exits.
+                    let result = match entry_gate.acquire_owned().await {
+                        Ok(_permit) => job.await,
+                        Err(error) => Err(error.to_string()),
+                    };
+                    (name, key, intermediary, result)
                 });
             }
         }
-
         let mut exits = FuturesUnordered::new();
+        let deadline = tokio::time::sleep(CYCLE_SEARCH_BUDGET);
+        tokio::pin!(deadline);
         while !entries.is_empty() || !exits.is_empty() {
-            tokio::select! {
-                Some(result) = entries.next(), if !entries.is_empty() => {
-                    let Some((entry_provider, intermediary, quotes)) = result else { continue; };
-                    for entry in quotes {
-                        for exit in capabilities.iter().filter(|exit| {
-                            exit.supports(&intermediary, &origin)
-                                && (query.allow_cross_venue || exit.provider.name() == entry_provider.name())
-                        }) {
-                            let provider = exit.provider.clone();
-                            let semaphore = self.quote_semaphore.clone();
+            let changed = tokio::select! {
+                _ = batches.closed() => return Ok(()),
+                _ = &mut deadline => {
+                    for status in statuses.values_mut() {
+                        if status.error.is_none() { status.error = Some("Search time limit reached; some paths remain unchecked".into()); }
+                    }
+                    break;
+                }
+                Some((name, key, intermediary, result)) = entries.next(), if !entries.is_empty() => {
+                    if recorded.insert(key) { record_cycle_result(&mut statuses, &name, &result, started); }
+                    let quotes = result.unwrap_or_default();
+                    for entry in quotes.into_iter().filter(|quote| quote.provider == name && valid_cycle_quote(quote, &origin, &intermediary, &amount)).take(MAX_PROVIDER_OFFERS_PER_LEG) {
+                        for exit in capabilities.iter().filter(|exit| exit.supports(&intermediary, &origin)
+                            && (query.allow_cross_venue || exit.provider.name() == name)) {
+                            let exit_name = exit.provider.name().to_string();
+                            let key = provider_quote_key(&exit_name, &intermediary, &origin, &entry.output);
+                            // Identical input amounts share one exact quote; keep
+                            // all exchanger identities when building routes.
+                            let job = jobs.entry(key.clone()).or_insert_with(|| self.cycle_quote_job(exit.provider.clone(), intermediary.clone(), origin.clone(), entry.output.clone(), failures.clone())).clone();
                             let origin = origin.clone();
                             let intermediary = intermediary.clone();
                             let entry = entry.clone();
                             exits.push(async move {
-                                let (_, quotes) = quote_provider_many(
-                                    provider.clone(), intermediary.clone(), origin.clone(), entry.output.clone(), semaphore,
-                                ).await?;
-                                Some(quotes.into_iter().filter(|quote| {
-                                    quote.provider == provider.name()
-                                        && valid_cycle_quote(quote, &intermediary, &origin, &entry.output)
-                                }).take(MAX_PROVIDER_OFFERS_PER_LEG).filter_map(|exit| {
-                                    crypto_cycle_route(query, &entry, exit)
-                                }).collect::<Vec<_>>())
+                                let result = job.await;
+                                let routes = result.as_ref().map(|quotes| quotes.iter().filter(|quote| quote.provider == exit_name && valid_cycle_quote(quote, &intermediary, &origin, &entry.output)).take(MAX_PROVIDER_OFFERS_PER_LEG).filter_map(|exit| crypto_cycle_route(query, &entry, exit.clone())).collect::<Vec<_>>()).unwrap_or_default();
+                                (exit_name, key, result, routes)
                             });
                         }
                     }
+                    name
                 }
-                Some(result) = exits.next(), if !exits.is_empty() => {
-                    if let Some(routes) = result {
-                        if !send_batch(batches, RouteBatch::Routes { routes, exhaustive: false }).await {
-                            return Ok(());
-                        }
-                    }
+                Some((name, key, result, routes)) = exits.next(), if !exits.is_empty() => {
+                    if recorded.insert(key) { record_cycle_result(&mut statuses, &name, &result, started); }
+                    if !routes.is_empty() && !send_batch(batches, RouteBatch::Routes { routes, exhaustive: false }).await { return Ok(()); }
+                    name
+                }
+            };
+            if let Some(status) = statuses.get(&changed) {
+                if !send_batch(
+                    batches,
+                    RouteBatch::ProviderResult {
+                        status: status.clone(),
+                        routes: Vec::new(),
+                        exhaustive: false,
+                    },
+                )
+                .await
+                {
+                    return Ok(());
                 }
             }
         }
+        for status in statuses.into_values() {
+            if !send_batch(
+                batches,
+                RouteBatch::ProviderResult {
+                    status,
+                    routes: Vec::new(),
+                    exhaustive: false,
+                },
+            )
+            .await
+            {
+                break;
+            }
+        }
         Ok(())
+    }
+
+    fn cycle_quote_job(
+        &self,
+        provider: Arc<dyn PublicRouteProvider>,
+        from: Asset,
+        to: Asset,
+        amount: Amount,
+        failures: Arc<std::sync::Mutex<HashMap<String, String>>>,
+    ) -> QuoteJob {
+        let service = self.clone();
+        async move {
+            let failure_key = format!("{}|{}|{}", provider.name(), from, amount.value);
+            let prior_failure = failures
+                .lock()
+                .map_err(|error| error.to_string())?
+                .get(&failure_key)
+                .cloned();
+            if let Some(error) = prior_failure {
+                return Err(error);
+            }
+            service
+                .paced_cycle_quotes(provider, from, to, amount, failures)
+                .await
+        }
+        .boxed()
+        .shared()
+    }
+
+    async fn paced_cycle_quotes(
+        &self,
+        provider: Arc<dyn PublicRouteProvider>,
+        from: Asset,
+        to: Asset,
+        amount: Amount,
+        failures: Arc<std::sync::Mutex<HashMap<String, String>>>,
+    ) -> std::result::Result<Vec<PublicRouteQuote>, String> {
+        let lane = {
+            let mut lanes = self
+                .cycle_quote_lanes
+                .lock()
+                .map_err(|error| error.to_string())?;
+            lanes
+                .entry(provider.name().to_string())
+                .or_default()
+                .clone()
+        };
+        // This asynchronous guard intentionally serializes one provider's HTTP
+        // calls, while different providers continue independently.
+        let mut lane = lane.lock().await;
+        if let Some(error) = failures
+            .lock()
+            .map_err(|error| error.to_string())?
+            .get(&format!("{}|{}|{}", provider.name(), from, amount.value))
+            .cloned()
+        {
+            return Err(error);
+        }
+        if let Some((until, error)) = &lane.blocked_until {
+            if *until > tokio::time::Instant::now() {
+                return Err(error.clone());
+            }
+        }
+        if let Some(next) = lane.next_start {
+            tokio::time::sleep_until(next).await;
+        }
+        let spacing = match provider.name() {
+            "symbiosis" => 350,
+            "near-intents" | "cow-swap" => 150,
+            _ => 0,
+        };
+        lane.next_start =
+            Some(tokio::time::Instant::now() + std::time::Duration::from_millis(spacing));
+        let _permit = self
+            .quote_semaphore
+            .acquire()
+            .await
+            .map_err(|error| error.to_string())?;
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(12),
+            provider.quotes(from.clone(), to.clone(), amount.clone()),
+        )
+        .await
+        .map_err(|_| "Quote request timed out after 12 seconds".to_string())
+        .and_then(|result| result.map_err(|error| error.to_string()));
+        if let Err(error) = &result {
+            tracing::warn!(provider = provider.name(), %from, %to, amount = %amount.value, %error, "crypto cycle quote unavailable");
+            if error.contains("Temporary swap limits: minimum swap amount") {
+                failures.lock().map_err(|error| error.to_string())?.insert(
+                    format!("{}|{}|{}", provider.name(), from, amount.value),
+                    error.clone(),
+                );
+            }
+            if error.contains("429") || error.contains("quota exceeded") {
+                lane.blocked_until = Some((
+                    tokio::time::Instant::now() + std::time::Duration::from_secs(60),
+                    error.clone(),
+                ));
+            }
+        }
+        result
+    }
+}
+
+fn record_cycle_result(
+    statuses: &mut HashMap<String, SourceStatus>,
+    name: &str,
+    result: &std::result::Result<Vec<PublicRouteQuote>, String>,
+    started: Instant,
+) {
+    if let Some(status) = statuses.get_mut(name) {
+        status.latency_ms = started.elapsed().as_millis();
+        match result {
+            Ok(quotes) => status.offers_found += quotes.len(),
+            Err(error) => {
+                status.ok = false;
+                status.error = Some(error.clone());
+            }
+        }
     }
 }
 
@@ -145,94 +334,4 @@ fn valid_cycle_quote(quote: &PublicRouteQuote, from: &Asset, to: &Asset, input: 
             .is_none_or(|expiry| expiry > chrono::Utc::now())
         && (quote.path.is_empty()
             || (quote.path.first() == Some(from) && quote.path.last() == Some(to)))
-}
-
-fn cycle_leg(quote: &PublicRouteQuote) -> CryptoCycleLeg {
-    CryptoCycleLeg {
-        provider: quote.provider.clone(),
-        from_asset: quote.from.to_string(),
-        to_asset: quote.to.to_string(),
-        input_amount: quote.input.value.clone(),
-        output_amount: quote.output.value.clone(),
-        source_url: quote.source_url.clone(),
-        quote_id: quote.quote_id.clone(),
-        expires_at: quote.expires_at,
-    }
-}
-
-fn crypto_cycle_route(
-    query: &NormalizedRouteQuery,
-    entry: &PublicRouteQuote,
-    exit: PublicRouteQuote,
-) -> Option<P2pRoute> {
-    // Compare at the display's crypto precision; a sub-unit gain is not a route.
-    let input = crypto_profit_units(&entry.input.value)?;
-    let output = crypto_profit_units(&exit.output.value)?;
-    if output <= input {
-        return None;
-    }
-    let input_value = positive_number(&entry.input.value)?;
-    let output_value = positive_number(&exit.output.value)?;
-    let expires_at = entry.expires_at.into_iter().chain(exit.expires_at).min();
-    if expires_at.is_some_and(|expiry| expiry <= chrono::Utc::now()) {
-        return None;
-    }
-    let same_venue = entry.provider == exit.provider;
-    let mut path = if entry.path.is_empty() {
-        vec![entry.from.to_string(), entry.to.to_string()]
-    } else {
-        entry.path.iter().map(ToString::to_string).collect()
-    };
-    if exit.path.is_empty() {
-        path.push(exit.to.to_string());
-    } else {
-        path.extend(exit.path.iter().skip(1).map(ToString::to_string));
-    }
-    Some(P2pRoute {
-        route_id: String::new(),
-        rank: 0,
-        asset: entry.to.symbol.clone(),
-        entry_network: query.source_network.clone(),
-        source_network: query.source_network.clone(),
-        target_network: query.target_network.clone(),
-        source_fiat: query.source_currency.clone(),
-        source_amount: entry.input.value.clone(),
-        acquired_asset_amount: entry.output.value.clone(),
-        provider_input_amount: None,
-        target_fiat: query.target_currency.clone(),
-        target_amount: exit.output.value.clone(),
-        effective_rate: fixed(output_value / input_value, 12),
-        same_venue,
-        requires_asset_transfer: true,
-        // Public swap quotes do not establish the cost of sending from the wallet
-        // on both legs (gas, approvals, deposits). Never confirm net arbitrage here.
-        transfer_fee_included: false,
-        route_kind: "crypto_cycle".into(),
-        profitability: None,
-        profitability_decimals: Some(8),
-        cycle_legs: vec![cycle_leg(entry), cycle_leg(&exit)],
-        bridge_currency: Some(entry.to.symbol.clone()),
-        market_path: None,
-        route_provider: same_venue.then(|| entry.provider.clone()),
-        route_provider_url: None,
-        provider_quote_id: None,
-        route_path: path,
-        route_fees: entry.fees.iter().chain(&exit.fees).map(|fee| RouteFee {
-            asset: fee.asset.to_string(),
-            amount: fee.value.clone(),
-        }).collect(),
-        quote_expires_at: expires_at,
-        execution: None,
-        payment_methods_verified: true,
-        entry_offer: None,
-        exit_offer: None,
-        warnings: vec![
-            "Positive quoted cycle output; wallet gas, approvals and deposit costs are not fully verified. Net profit is unconfirmed.".into(),
-            "The return quote uses the first swap's output. Both rates can change before the sequential swaps finish; re-quote every step before sending.".into(),
-        ],
-        services: Vec::new(),
-        reputation: None,
-        feedback: None,
-        service_links: Vec::new(),
-    })
 }

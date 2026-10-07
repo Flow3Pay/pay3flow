@@ -183,3 +183,14 @@ pub(in crate::p2p) async fn quote_provider_many(
         }
     }
 }
+
+/// A provider owns one paced quote lane shared by concurrent wallet-cycle searches.
+#[derive(Default)]
+pub(in crate::p2p) struct CycleQuoteLane {
+    pub(in crate::p2p) next_start: Option<tokio::time::Instant>,
+    pub(in crate::p2p) blocked_until: Option<(tokio::time::Instant, String)>,
+}
+
+pub(in crate::p2p) type CycleQuoteLanes = Arc<
+    std::sync::Mutex<std::collections::HashMap<String, Arc<tokio::sync::Mutex<CycleQuoteLane>>>>,
+>;

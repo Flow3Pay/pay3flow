@@ -137,16 +137,23 @@
     <ol class="workflow" aria-label={copy("Exchange steps")}>
       {#if route.cycle_legs?.length}
         {#each route.cycle_legs as leg, index}
-          {@const guide = providerGuide(leg.provider)}
+          {@const guide = leg.market_pair ? null : providerGuide(leg.provider)}
+          {@const legUrl = leg.source_url ?? (leg.market_pair ? spotUrl(leg.provider, leg.market_pair, leg.from_asset.split("@")[0], leg.to_asset.split("@")[0]) : null)}
           <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">{index + 1}</span><div class="stepBody">
             <h3>{copy("Convert {from} to {to}", { from: readablePath([leg.from_asset]), to: readablePath([leg.to_asset]) })}</h3>
-            <p class="stepSummary">{copy("Route through {venue}", { venue: venueName(leg.provider) })}</p>
+            <p class="stepSummary">{copy("Route through {venue}", { venue: leg.description ? `${venueName(leg.provider)} · ${leg.description}` : venueName(leg.provider) })}</p>
             <p class="routePath">{leg.input_amount} {leg.from_asset.split("@")[0]} → {leg.output_amount} {leg.to_asset.split("@")[0]}</p>
+            {#if leg.market_pair}
+              <p class="routePath">Spot · {leg.market_pair}</p>
+              {#if index === 0}<p>{copy("Deposit the source asset to this exchange using the selected network. Verify deposit availability, minimum amounts, and fees first.")}</p>{/if}
+              {#if index > 0 && route.cycle_legs[index - 1].provider !== leg.provider}<p>{copy("Transfer the previous step's output to this exchange. Verify a shared withdrawal/deposit network, transfer fees, and the minimum amount before sending.")}</p>{/if}
+              {#if index === route.cycle_legs.length - 1}<p>{copy("After the last trade, withdraw the original asset to your wallet on the selected network. Deduct the withdrawal fee when checking profit.")}</p>{/if}
+            {/if}
             <ul class="checklist"><li>{copy("Check the current price, fee, and amount you should receive before pressing the exchange button.")}</li><li>{copy("Wait until the new balance appears before doing the next step.")}</li><li>{copy("Never send money after the quote expires. Get a new quote first.")}</li></ul>
             {#if guide}
               <div class="providerGuide"><p>{guide.description}</p>{#if guide.steps.length}<ul class="checklist">{#each guide.steps as step}<li>{step}</li>{/each}</ul>{/if}{#if guide.links.length}<div class="guideLinks">{#each guide.links as link}<a href={link.url} target="_blank" rel="noreferrer noopener" class="profileLink">{link.label} <span>↗</span></a>{/each}</div>{/if}</div>
             {/if}
-            {#if leg.source_url}<a href={leg.source_url} target="_blank" rel="noreferrer noopener" class="profileLink">{copy("Open {venue}", { venue: venueName(leg.provider) })} <span>↗</span></a>{/if}
+            {#if legUrl}<a href={legUrl} target="_blank" rel="noreferrer noopener" class="profileLink">{copy("Open {venue}", { venue: venueName(leg.provider) })} <span>↗</span></a>{/if}
           </div></li>
         {/each}
       {:else if route.route_provider && !providerSwap}

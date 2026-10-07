@@ -170,7 +170,7 @@
                         <img src={venue.iconUrl || venueIcon(venue.id)} alt="" width="20" height="20" decoding="async" on:error={(event) => fallbackVenueIcon(event, venue.id)} />
                         <strong>{venue.label}</strong>
                       </div>
-                      <span class:venueOk={status?.ok} class:venueError={status && !status.ok}>{status?.ok === false ? "Response error" : hasRoute ? "Route found" : (status?.offers_found ?? 0) > 0 ? "Offers received · no matching route" : "No matching route"}</span>
+                      <span class:venueOk={status?.ok} class:venueError={status && !status.ok}>{status?.ok === false ? (status.offers_found > 0 ? "Some quotes unavailable" : "Response error") : hasRoute ? "Route found" : (status?.offers_found ?? 0) > 0 ? "Offers received · no matching route" : "No matching route"}</span>
                       <dl>
                         <div><dt>Routes found</dt><dd>{status?.routes_found ?? 0}</dd></div>
                         <div><dt>Offers found</dt><dd>{status?.offers_found ?? 0}</dd></div>

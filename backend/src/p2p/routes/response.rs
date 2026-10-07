@@ -365,8 +365,12 @@ pub(in crate::p2p) fn route_fingerprint(route: &P2pRoute) -> String {
     );
     for leg in &route.cycle_legs {
         identity.push_str(&format!(
-            "|{}:{}>{}",
-            leg.provider, leg.from_asset, leg.to_asset
+            "|{}:{}>{}:{}:{}",
+            leg.provider,
+            leg.from_asset,
+            leg.to_asset,
+            leg.description.as_deref().unwrap_or_default(),
+            leg.source_url.as_deref().unwrap_or_default()
         ));
     }
     if let Some(quote_id) = route.provider_quote_id.as_deref() {

@@ -4,7 +4,8 @@ exchange_methods = ["exchanger"]
 language = "rust"
 source = '''
 use std::collections::HashMap;
-use std::time::Duration;
+use std::time::{Duration, Instant};
+use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
@@ -76,13 +77,13 @@ struct ApiChanger {
     pages: HashMap<String, String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct RateResponse {
     #[serde(default)]
     rates: HashMap<String, Vec<ApiRate>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct ApiRate {
     changer: u64,
     rate: ApiNumber,
@@ -91,7 +92,7 @@ struct ApiRate {
     inmax: Option<ApiNumber>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
 enum ApiNumber {
     Number(f64),
@@ -113,6 +114,7 @@ pub(crate) struct BestChangeSource {
     slug: String,
     config: BestChangeAdapterConfig,
     metadata: OnceCell<Catalog>,
+    rate_cache: tokio::sync::Mutex<HashMap<String, (Instant, Arc<RateResponse>)>>,
 }
 
 impl BestChangeSource {
@@ -126,6 +128,7 @@ impl BestChangeSource {
             slug: record.slug.clone(),
             config,
             metadata: OnceCell::new(),
+            rate_cache: Default::default(),
         })
     }
 
@@ -178,6 +181,21 @@ impl BestChangeSource {
             );
         }
         serde_json::from_slice(&body).context("BestChange API returned invalid JSON")
+    }
+
+    // BestChange rates are amount-independent. Share a short-lived pair
+    // observation, then recheck every exchanger's limits and reserve for each
+    // exact amount; never scale a previously validated quote.
+    async fn route_rates(&self, pair: &str) -> Result<Arc<RateResponse>> {
+        let mut cache = self.rate_cache.lock().await;
+        let ttl = Duration::from_secs(5);
+        if let Some((inserted, rates)) = cache.get(pair) {
+            if inserted.elapsed() < ttl { return Ok(rates.clone()); }
+        }
+        let rates = Arc::new(self.api_json::<RateResponse>(&format!("rates/{pair}")).await?);
+        if cache.len() >= 512 { cache.retain(|_, (inserted, _)| inserted.elapsed() < ttl); }
+        cache.insert(pair.to_owned(), (Instant::now(), rates.clone()));
+        Ok(rates)
     }
 
     async fn metadata(&self) -> Result<&Catalog> {
@@ -433,9 +451,7 @@ impl PublicRouteProvider for BestChangeSource {
             .find(|unit| unit.route_asset.as_ref() == Some(&to))
             .with_context(|| format!("BestChange does not support {to}"))?;
         let pair = format!("{}-{}", from_unit.id, to_unit.id);
-        let response = self
-            .api_json::<RateResponse>(&format!("rates/{pair}"))
-            .await?;
+        let response = self.route_rates(&pair).await?;
         let rates = response
             .rates
             .get(&pair)
@@ -694,6 +710,7 @@ mod tests {
                 max_results: 100,
             },
             metadata: OnceCell::new(),
+            rate_cache: Default::default(),
         }
     }
 

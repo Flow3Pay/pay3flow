@@ -638,7 +638,7 @@
   }
   function manageRefresh(seconds: RefreshSeconds, updatedAt: number | null, validAmount: boolean) {
     if (refreshTimer) window.clearInterval(refreshTimer);
-    if (seconds && updatedAt && validAmount) refreshTimer = window.setInterval(() => void startSearch(false), seconds * 1000);
+    if (seconds && updatedAt && validAmount) refreshTimer = window.setInterval(() => { if (!searching) void startSearch(false); }, seconds * 1000);
   }
   function resetResults() {
     controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; displayRoutes([]); routesFound = 0; selected = null; selectionPinnedByUser = false; instructionsRoute = null; lastUpdatedAt = null; searching = false; awaitingFirstRoute = false; foundVenueIds = []; foundVenues = []; venueStats = {}; error = null;

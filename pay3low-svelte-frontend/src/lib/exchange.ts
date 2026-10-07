@@ -813,7 +813,9 @@ export function quoteToCandidate(quote: ExchangeQuote): RouteCandidate {
 }
 
 export interface CryptoCycleLeg {
+  market_pair?: string | null;
   provider: string;
+  description?: string | null;
   from_asset: string;
   to_asset: string;
   input_amount: string;

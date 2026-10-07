@@ -241,6 +241,139 @@ async fn crypto_cycles_keep_gains_smaller_than_a_cent() {
 
 struct FixedFiatRouteProvider;
 
+struct BroadCycleProvider;
+
+#[async_trait]
+impl PublicRouteProvider for BroadCycleProvider {
+    fn name(&self) -> &str {
+        "broad-cycle"
+    }
+
+    async fn supported_assets(&self) -> Vec<Asset> {
+        let mut assets = vec![Asset::new("USDT", Some("bnb-smart-chain")).unwrap()];
+        for symbol in [
+            "USDC", "BTC", "ETH", "SOL", "BNB", "TRX", "TON", "DAI", "XRP", "AVAX", "NEAR", "AAA",
+            "ZZZ",
+        ] {
+            for network in ["bnb-smart-chain", "ethereum"] {
+                assets.push(Asset::new(symbol, Some(network)).unwrap());
+            }
+        }
+        assets
+    }
+
+    async fn quote(&self, from: Asset, to: Asset, amount: Amount) -> Result<PublicRouteQuote> {
+        self.quotes(from, to, amount)
+            .await?
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("no offer"))
+    }
+
+    async fn quotes(
+        &self,
+        from: Asset,
+        to: Asset,
+        amount: Amount,
+    ) -> Result<Vec<PublicRouteQuote>> {
+        let profitable = from.symbol == "USDT"
+            || from.symbol == "ZZZ"
+            || from.location.as_deref() == Some("ethereum");
+        Ok(["exchanger-a", "exchanger-b"]
+            .into_iter()
+            .map(|id| PublicRouteQuote {
+                provider: self.name().into(),
+                quote_id: Some(id.into()),
+                description: Some(id.into()),
+                source_url: Some(format!("https://{id}.example.test")),
+                from: from.clone(),
+                to: to.clone(),
+                input: amount.clone(),
+                output: Amount::new(
+                    fixed(
+                        amount.value.parse::<f64>().unwrap() * if profitable { 1.01 } else { 0.98 },
+                        8,
+                    ),
+                    to.clone(),
+                )
+                .unwrap(),
+                fees: vec![],
+                expires_at: None,
+                path: vec![from.clone(), to.clone()],
+            })
+            .collect())
+    }
+}
+
+#[tokio::test]
+async fn crypto_cycles_preserve_exchangers_and_search_beyond_twelve_assets_and_network_variants() {
+    let service = P2pSearchService::with_sources(vec![], Duration::from_secs(1))
+        .with_route_providers(vec![Arc::new(BroadCycleProvider)]);
+    let mut request = crypto_cycle_request(100.0);
+    request.intermediary_assets = None;
+    request.limit = Some(100);
+    let response = service.search_routes(request).await.unwrap();
+    assert!(
+        response.routes.iter().any(|r| r.asset == "ZZZ"),
+        "a profitable asset beyond the old twelve-asset cap must be searched"
+    );
+    assert!(
+        response
+            .routes
+            .iter()
+            .any(|r| r.route_path.contains(&"USDC@ethereum".into())),
+        "additional networks must be searched"
+    );
+    let distinct = response
+        .routes
+        .iter()
+        .filter(|r| r.asset == "ZZZ" && r.route_path.contains(&"ZZZ@bnb-smart-chain".into()))
+        .count();
+    assert_eq!(
+        distinct, 4,
+        "two entry and two exit exchangers are four distinct combinations"
+    );
+    assert!(response
+        .provider_statuses
+        .iter()
+        .any(|s| s.source == "broad-cycle" && s.ok && s.offers_found > 0));
+}
+
+struct UnavailableCycleProvider;
+
+#[async_trait]
+impl PublicRouteProvider for UnavailableCycleProvider {
+    fn name(&self) -> &str {
+        "unavailable-cycle"
+    }
+    async fn supported_assets(&self) -> Vec<Asset> {
+        ["USDT", "USDC"]
+            .into_iter()
+            .map(|s| Asset::new(s, Some("bnb-smart-chain")).unwrap())
+            .collect()
+    }
+    async fn quote(&self, _: Asset, _: Asset, _: Amount) -> Result<PublicRouteQuote> {
+        anyhow::bail!("HTTP 429: quota exceeded")
+    }
+}
+
+#[tokio::test]
+async fn crypto_cycles_report_provider_failures_instead_of_silently_hiding_sources() {
+    let service = P2pSearchService::with_sources(vec![], Duration::from_secs(1))
+        .with_route_providers(vec![Arc::new(UnavailableCycleProvider)]);
+    let response = service
+        .search_routes(crypto_cycle_request(100.0))
+        .await
+        .unwrap();
+    let status = response
+        .provider_statuses
+        .iter()
+        .find(|s| s.source == "unavailable-cycle")
+        .expect("failed provider must remain visible");
+    assert!(!status.ok);
+    assert!(status.error.as_deref().unwrap().contains("429"));
+}
+
 #[test]
 fn route_snapshot_distinguishes_live_fallback_from_stale_cache() {
     let live_provider = SourceStatus {
@@ -2670,4 +2803,70 @@ async fn live_bank_filtered_amd_to_rub_route_search() {
                 .as_ref()
                 .is_some_and(|offer| offer.side == P2pSide::SellCrypto)
     }));
+}
+
+#[test]
+fn crypto_market_cycles_compare_venues_and_find_three_trade_paths_after_fees() {
+    let mut request = crypto_cycle_request(100.0);
+    request.intermediary_assets = None;
+    let origin = Asset::new("USDT", Some("bnb-smart-chain")).unwrap();
+    let mut query = normalize_query(
+        request,
+        &["USDT".into()],
+        &crate::networks::NetworkCatalog::test_default(),
+        &[origin],
+    )
+    .unwrap();
+    let ticker = |symbol: &str, bid, ask| CryptoTicker {
+        symbol: symbol.into(),
+        bid,
+        ask,
+    };
+    let cross = HashMap::from([
+        ("bybit".into(), vec![ticker("ETHUSDT", 99.0, 100.0)]),
+        ("binance".into(), vec![ticker("ETHUSDT", 103.0, 104.0)]),
+    ]);
+    let routes = compose_crypto_market_cycles(&query, &cross);
+    assert_eq!(
+        routes.len(),
+        1,
+        "cross-venue spread should create one positive round trip"
+    );
+    assert_eq!(
+        routes[0]
+            .cycle_legs
+            .iter()
+            .map(|l| l.provider.as_str())
+            .collect::<Vec<_>>(),
+        ["bybit", "binance"]
+    );
+    assert!((routes[0].target_amount.parse::<f64>().unwrap() - 102.794103).abs() < 1e-7);
+    query.allow_cross_venue = false;
+    assert!(compose_crypto_market_cycles(&query, &cross).is_empty());
+    let triangles = HashMap::from([(
+        "bybit".into(),
+        vec![
+            ticker("ETHUSDT", 99.0, 100.0),
+            ticker("BTCETH", 2.0, 2.01),
+            ticker("BTCUSDT", 205.0, 206.0),
+        ],
+    )]);
+    let routes = compose_crypto_market_cycles(&query, &triangles);
+    assert_eq!(routes.len(), 1);
+    assert_eq!(routes[0].cycle_legs.len(), 3);
+    assert!(routes[0].target_amount.parse::<f64>().unwrap() > 100.0);
+    assert_eq!(
+        routes[0].route_path,
+        ["USDT@bnb-smart-chain", "ETH", "BTC", "USDT@bnb-smart-chain"]
+    );
+    assert!(routes[0]
+        .warnings
+        .iter()
+        .any(|w| w.contains("order-book depth")));
+    query.assets_explicit = true;
+    query.assets = vec!["USDC".into()];
+    assert!(compose_crypto_market_cycles(&query, &triangles).is_empty());
+    query.assets_explicit = false;
+    query.sources = Some("binance".into());
+    assert!(compose_crypto_market_cycles(&query, &triangles).is_empty());
 }

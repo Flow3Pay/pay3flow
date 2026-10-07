@@ -481,7 +481,7 @@ async function chooseCrypto(page: Page, side: "sending" | "recipient", search: s
   return picker;
 }
 
-async function mockBackend(page: Page, options: { includeNewProviders?: boolean; routeCount?: number } = {}) {
+async function mockBackend(page: Page, options: { includeNewProviders?: boolean; routeCount?: number; spotCycle?: boolean } = {}) {
   await page.route("http://localhost:8080/api/**", async (route) => {
     const url = new URL(route.request().url());
     const method = route.request().method();
@@ -891,6 +891,14 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
       }
       if (url.searchParams.get("source_fiat") === "USDT" && url.searchParams.get("target_fiat") === "USDT") {
         if (url.searchParams.get("source_network") === "ethereum" && url.searchParams.get("target_network") === "ethereum") {
+          const cycleLegs = options.spotCycle ? [
+            { provider: "bybit", market_pair: "ETHUSDT", description: "Spot ETHUSDT", from_asset: "USDT@ethereum", to_asset: "ETH", input_amount: "100", output_amount: "1" },
+            { provider: "bybit", market_pair: "BTCETH", description: "Spot BTCETH", from_asset: "ETH", to_asset: "BTC", input_amount: "1", output_amount: "0.5" },
+            { provider: "bybit", market_pair: "BTCUSDT", description: "Spot BTCUSDT", from_asset: "BTC", to_asset: "USDT@ethereum", input_amount: "0.5", output_amount: "101" },
+          ] : [
+            { provider: "cow-swap", from_asset: "USDT@ethereum", to_asset: "USDC@ethereum", input_amount: "100", output_amount: "99", source_url: "https://swap.cow.fi" },
+            { provider: "near-intents", from_asset: "USDC@ethereum", to_asset: "USDT@ethereum", input_amount: "99", output_amount: "101", source_url: "https://1click.chaindefuser.com" },
+          ];
           return json({
             search_id: "00000000-0000-4000-8000-000000000109", routes_found: 1,
             routes_exhaustive: false, searched_at: "2026-10-07T10:00:00Z",
@@ -904,11 +912,8 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
               same_venue: false, requires_asset_transfer: true, transfer_fee_included: false,
               route_kind: "crypto_cycle", profitability_decimals: 8,
               profitability: { status: "unconfirmed", gross_profit_minor: 100000000, gross_profit_bps: 100, missing_costs: ["network_fee"] },
-              route_path: ["USDT@ethereum", "USDC@ethereum", "USDT@ethereum"],
-              cycle_legs: [
-                { provider: "cow-swap", from_asset: "USDT@ethereum", to_asset: "USDC@ethereum", input_amount: "100", output_amount: "99", source_url: "https://swap.cow.fi" },
-                { provider: "near-intents", from_asset: "USDC@ethereum", to_asset: "USDT@ethereum", input_amount: "99", output_amount: "101", source_url: "https://1click.chaindefuser.com" },
-              ],
+              route_path: [cycleLegs[0].from_asset, ...cycleLegs.map((leg) => leg.to_asset)],
+              cycle_legs: cycleLegs,
               payment_methods_verified: true, warnings: [],
             }],
           });
@@ -2331,4 +2336,25 @@ test("same asset on the same network searches a cycle and displays both swap ste
   await expect(instructions.getByRole("heading", { name: "Convert USDC in Ethereum (ERC-20) to USDT in Ethereum (ERC-20)" })).toBeVisible();
   await expect(instructions.getByRole("link", { name: /Open CoW/ })).toBeVisible();
   await expect(instructions.getByRole("link", { name: /Open NEAR/ })).toBeVisible();
+});
+
+test("spot crypto cycles show three trades and wallet deposit and withdrawal instructions", async ({ page }) => {
+  await mockBackend(page, { spotCycle: true });
+  await openApp(page);
+  for (const side of ["sending", "recipient"] as const) {
+    const picker = await chooseCrypto(page, side, "USDT ERC20");
+    await picker.getByRole("option", { name: /Ethereum \(ERC-20\).*USDT/ }).click();
+  }
+  await page.getByLabel("Amount to send").fill("100");
+  await page.getByTestId("start-search").click();
+  const card = page.locator(".routeCard").first();
+  await expect(card).toContainText("Est. +1 USDT (+1.00%)");
+  await card.locator(".workflow").click();
+  const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
+  await expectNumberedTimeline(instructions, ["1", "2", "3"]);
+  await expect(instructions.getByText("Spot · BTCETH", { exact: true })).toBeVisible();
+  await expect(instructions.getByText(/Deposit the source asset to this exchange/)).toBeVisible();
+  await expect(instructions.getByText(/withdraw the original asset to your wallet/)).toBeVisible();
+  await expect(instructions.getByRole("link", { name: /Open Bybit/ }).nth(1)).toHaveAttribute("href", "https://www.bybit.com/trade/spot/BTC/ETH");
+  await expect(instructions).not.toContainText("Bybit P2P results");
 });

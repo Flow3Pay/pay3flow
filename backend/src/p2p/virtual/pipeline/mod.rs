@@ -80,7 +80,7 @@ impl P2pSearchService {
                 &query,
                 batch_sender.clone(),
             ))),
-            (true, true) if query.includes_exchangers() && !query.is_crypto_cycle() => {
+            (true, true) if query.includes_exchangers() => {
                 producers.push(Box::pin(crypto::produce_market_routes(
                     self,
                     &query,
@@ -121,6 +121,7 @@ impl P2pSearchService {
         let mut channel_open = true;
         while channel_open || !producers.is_empty() {
             tokio::select! {
+                _ = async { match updates.as_ref() { Some(sender) => sender.closed().await, None => std::future::pending::<()>().await } } => break,
                 batch = batches.recv(), if channel_open => {
                     let Some(batch) = batch else {
                         channel_open = false;

@@ -1,8 +1,12 @@
 use std::cmp::Ordering;
 
+mod cycle;
 mod diversity;
+mod market_cycle;
 mod top_k;
 
+pub(in crate::p2p) use cycle::{crypto_cycle_from_quotes, crypto_cycle_route};
+pub(in crate::p2p) use market_cycle::compose_crypto_market_cycles;
 pub(in crate::p2p) use top_k::compose_fiat_routes;
 
 use crate::p2p::routes::{CryptoMarketPath, NormalizedRouteQuery, P2pRoute, RouteAssetStatus};

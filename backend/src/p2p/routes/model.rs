@@ -213,7 +213,11 @@ pub struct P2pRouteSearchResponse {
 /// One sequential swap in a circular crypto route.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CryptoCycleLeg {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub market_pair: Option<String>,
     pub provider: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     pub from_asset: String,
     pub to_asset: String,
     pub input_amount: String,

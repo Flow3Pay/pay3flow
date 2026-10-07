@@ -76,14 +76,31 @@ instructions. P2P providers can declare `currency = ["all"]` and use
 `max_results = "infinite"` with paged requests to search more ads. See the
 [Providerfile reference](Providerfile.md) for the supported fields and limits.
 
-Selecting the same crypto asset on the same network searches circular routes
-through up to 12 intermediaries from the selected providers' token catalogs.
-Each cycle uses two fresh swap quotes; the return quote consumes the actual
-output of the first quote. The router checks asset/network continuity, amounts,
-and expiry, and returns only cycles with a positive quoted gain at eight decimal
-places. `allow_cross_venue` controls whether the swaps may use different providers.
-Cached exchange coefficients and spot tickers are not used for these wallet cycles.
-This bounded search reports `routes_exhaustive = false`.
+Selecting the same crypto asset on the same network searches circular routes.
+Public swap providers each search up to 48 intermediary asset/network candidates
+from their own catalogs. The return quote consumes the actual output of the
+first quote; different BestChange exchangers remain separate combinations.
+Requests to each provider are serialized and paced; quota failures trigger a
+short cooldown, and identical amount-specific jobs share one quote within the
+search. BestChange pair rates are retained for five seconds, with limits and
+reserves checked again for every exact input amount. Provider responses and
+failures remain visible even when they produce no profitable route.
+
+The selected spot venues also contribute two-trade cycles across venues and
+three-trade cycles within one venue, searching up to 96 intermediary symbols.
+These estimates use bid for sales, ask for purchases, and an estimated 0.1%
+trading fee per trade. They do not verify order-book depth, account-specific
+fees, network deposits/withdrawals, or transfer costs; instructions identify
+the required deposits, transfers and withdrawal back to the original wallet.
+Spot instructions link to the trading pairs, separately from P2P guidance.
+
+The router checks continuity, amounts, and quote expiry and returns only cycles
+with a positive quoted or estimated gain at eight decimal places.
+`allow_cross_venue` controls whether steps may use different venues.
+Cached exchange coefficients are not used for wallet cycles. The bounded
+provider search has a 60-second budget and reports `routes_exhaustive = false`.
+Disconnecting cancels pending search work; auto-refresh waits for the current
+search to finish.
 
 Cycle results include ordered `cycle_legs` with providers and input/output amounts.
 `profitability_decimals = 8` specifies the scale of their profitability integers;
