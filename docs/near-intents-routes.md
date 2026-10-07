@@ -42,6 +42,10 @@ provider failures. Cached minimum-amount rejections retain that distinction
 and apply only to the exact origin, destination, and input amount; they do
 not suppress other destinations or amounts.
 
+Symbiosis previews likewise use chain-specific sender and recipient addresses
+for Bitcoin, TRON, and Solana, and the configured EVM preview address for EVM
+chains. Networks without a preview wallet address are excluded before quoting.
+
 ## Refresh configuration
 
 The background capability refresh reads these keys from `config.toml`:

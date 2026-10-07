@@ -39,8 +39,8 @@ struct SymbiosisToken {
 /// Read-only Symbiosis cross-chain quote provider.
 ///
 /// Token metadata is loaded lazily from the provider's public catalog. Quotes
-/// use a configured preview address because the route-search API does not have
-/// a user's wallet context; executable swaps must be re-quoted with wallet
+/// use preview addresses for each chain because the route-search API does not
+/// have a user's wallet context; executable swaps must be re-quoted with wallet
 /// addresses by the execution layer.
 #[derive(Clone)]
 pub struct SymbiosisRouteProvider {
@@ -144,6 +144,24 @@ impl SymbiosisRouteProvider {
 
     fn endpoint(&self, path: &str) -> String {
         format!("{}/{}", self.base_url.trim_end_matches('/'), path)
+    }
+
+    fn quote_wallet_address(&self, asset: &Asset) -> Result<&str> {
+        let network = asset
+            .location
+            .as_deref()
+            .map(canonical_network_id)
+            .context("Symbiosis preview wallet requires a blockchain network")?;
+        // These addresses are used only to price the swap. The execution
+        // method receives the user's own wallet and recipient separately.
+        match network.as_str() {
+            "ethereum" | "base" | "bnb-smart-chain" | "arbitrum-one" | "optimism"
+            | "polygon-pos" | "avalanche-c" => Ok(&self.quote_address),
+            "bitcoin" => Ok("bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"),
+            "tron" => Ok("T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb"),
+            "solana" => Ok("So11111111111111111111111111111111111111112"),
+            _ => bail!("Symbiosis preview wallet is not configured for {network}"),
+        }
     }
 
     fn token_for<'a>(tokens: &'a [SymbiosisToken], asset: &Asset) -> Result<&'a SymbiosisToken> {
@@ -332,6 +350,12 @@ impl PublicRouteProvider for SymbiosisRouteProvider {
         "symbiosis"
     }
 
+    fn supports_pair(&self, from: &Asset, to: &Asset) -> bool {
+        from != to
+            && self.quote_wallet_address(from).is_ok()
+            && self.quote_wallet_address(to).is_ok()
+    }
+
     async fn supported_assets(&self) -> Vec<Asset> {
         let Ok(tokens) = self.load_tokens().await else {
             return Vec::new();
@@ -363,8 +387,8 @@ impl PublicRouteProvider for SymbiosisRouteProvider {
         let body = json!({
             "tokenAmountIn": Self::token_payload(&from_token, Some(atomic_amount)),
             "tokenOut": Self::token_payload(&to_token, None),
-            "from": self.quote_address,
-            "to": self.quote_address,
+            "from": self.quote_wallet_address(&from)?,
+            "to": self.quote_wallet_address(&to)?,
             "slippage": self.slippage_bps,
         });
 
@@ -509,6 +533,77 @@ mod tests {
 
         assert_eq!(normalized, "12.345678");
         assert_eq!(atomic, "12345678");
+    }
+
+    #[tokio::test]
+    async fn preview_quotes_use_wallet_addresses_for_each_chain() {
+        const EVM: &str = "0x0000000000000000000000000000000000000001";
+        const BTC: &str = "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh";
+        const TRON: &str = "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb";
+        const SOLANA: &str = "So11111111111111111111111111111111111111112";
+        let app = axum::Router::new()
+            .route(
+                "/v2/tokens",
+                axum::routing::get(|| async {
+                    axum::Json(json!([
+                        {"symbol": "USDT", "address": "usdt", "chainId": 1, "decimals": 6},
+                        {"symbol": "BTC", "address": "", "chainId": 3652501241_u64, "decimals": 8},
+                        {"symbol": "TRX", "address": "", "chainId": 728126428, "decimals": 6},
+                        {"symbol": "SOL", "address": "", "chainId": 5426, "decimals": 9}
+                    ]))
+                }),
+            )
+            .route(
+                "/v1/swap",
+                axum::routing::post(|axum::Json(body): axum::Json<Value>| async move {
+                    let wallets = [
+                        (1, EVM),
+                        (3652501241_u64, BTC),
+                        (728126428, TRON),
+                        (5426, SOLANA),
+                    ];
+                    let origin = body["tokenAmountIn"]["chainId"].as_u64().unwrap();
+                    let destination = body["tokenOut"]["chainId"].as_u64().unwrap();
+                    assert_eq!(
+                        body["from"],
+                        wallets
+                            .iter()
+                            .find(|(chain, _)| *chain == origin)
+                            .unwrap()
+                            .1,
+                        "origin address must match chain {origin}"
+                    );
+                    assert_eq!(
+                        body["to"],
+                        wallets
+                            .iter()
+                            .find(|(chain, _)| *chain == destination)
+                            .unwrap()
+                            .1,
+                        "recipient address must match chain {destination}"
+                    );
+                    axum::Json(json!({"tokenAmountOut": {"amount": "1000000", "decimals": 6}}))
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let provider =
+            SymbiosisRouteProvider::new(format!("http://{address}"), None, EVM, 300).unwrap();
+        for native in ["BTC@bitcoin", "TRX@tron", "SOL@solana"] {
+            for (from, to) in [("USDT@ethereum", native), (native, "USDT@ethereum")] {
+                let from = Asset::parse(from).unwrap();
+                provider
+                    .quote(
+                        from.clone(),
+                        Asset::parse(to).unwrap(),
+                        Amount::new("100", from).unwrap(),
+                    )
+                    .await
+                    .unwrap();
+            }
+        }
+        server.abort();
     }
 
     #[test]
