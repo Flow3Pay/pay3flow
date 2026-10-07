@@ -10,7 +10,11 @@ use serde::Deserialize;
 #[path = "providerfile_code.rs"]
 mod providerfile_code;
 
+#[path = "providerfile_test.rs"]
+mod providerfile_test;
+
 use providerfile_code::{normalize_path_source, CodeSource};
+use providerfile_test::TestBlock;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -26,6 +30,7 @@ struct RawProviderFile {
     fees: Option<ProviderFeeModel>,
     guidance: Option<ProviderGuidance>,
     code: Option<RawCodeBlock>,
+    test: Option<TestBlock>,
     #[serde(default)]
     payment_methods: Vec<RawPaymentMethod>,
 }
@@ -134,6 +139,7 @@ pub struct PaymentMethodDefinition {
 struct ParsedProviderFile {
     providers: Vec<ProviderDefinition>,
     payment_methods: Vec<PaymentMethodDefinition>,
+    test: Option<TestBlock>,
 }
 
 #[derive(Debug)]
@@ -208,6 +214,15 @@ fn parse_document_with_path(
             .map_err(|error| ProviderFileError(format!("{source_file}: {error}")))?;
         if let Some(path) = providerfile_path {
             code.source
+                .load(path)
+                .map_err(|error| ProviderFileError(format!("{source_file}: {error}")))?;
+        }
+    }
+    if let Some(test) = &raw.test {
+        test.validate()
+            .map_err(|error| ProviderFileError(format!("{source_file}: {error}")))?;
+        if let (Some(source), Some(path)) = (&test.source, providerfile_path) {
+            source
                 .load(path)
                 .map_err(|error| ProviderFileError(format!("{source_file}: {error}")))?;
         }
@@ -292,6 +307,7 @@ fn parse_document_with_path(
     Ok(ParsedProviderFile {
         providers,
         payment_methods,
+        test: raw.test,
     })
 }
 
@@ -320,6 +336,7 @@ pub fn compile_dir(root: &Path) -> Result<String, ProviderFileError> {
     let mut payment_methods = Vec::new();
     let mut identities = HashSet::new();
     let mut payment_method_ids = HashSet::new();
+    let mut tests = Vec::new();
     for path in files {
         let relative = path.strip_prefix(root).unwrap_or(&path);
         let slug = slug_for(relative)?;
@@ -328,6 +345,9 @@ pub fn compile_dir(root: &Path) -> Result<String, ProviderFileError> {
             ProviderFileError(format!("cannot read {}: {error}", path.display()))
         })?;
         let parsed = parse_document_with_path(&contents, &slug, &source_file, Some(&path))?;
+        if let Some(test) = parsed.test {
+            tests.push((path, source_file, test));
+        }
         for definition in parsed.providers {
             let identity = (definition.slug.clone(), definition.operation);
             if !identities.insert(identity) {
@@ -348,6 +368,11 @@ pub fn compile_dir(root: &Path) -> Result<String, ProviderFileError> {
             }
             payment_methods.push(method);
         }
+    }
+    for (path, source_file, test) in tests {
+        test.run(&path)
+            .map_err(|error| ProviderFileError(format!("{source_file}: {error}")))?;
+        eprintln!("{source_file}: [test] passed");
     }
     Ok(render_sql_with_payment_methods(
         &definitions,
@@ -1242,5 +1267,49 @@ payment_methods = [
         assert!(sql.contains("'by-belarusbank'"));
         assert!(sql.contains("'BYN'"));
         assert!(sql.contains("workflow"));
+    }
+
+    #[test]
+    fn runs_optional_tests_before_rendering_sql() {
+        let root = tempfile::tempdir().unwrap();
+        let provider = root.path().join("example");
+        fs::create_dir(&provider).unwrap();
+        let providerfile = provider.join("Providerfile");
+        fs::write(&providerfile, EXAMPLE).unwrap();
+        let expected = compile_dir(root.path()).unwrap();
+        let with_tests = format!("{EXAMPLE}\n[test]\nsource = path[\"tests.rs\"]\n");
+        fs::write(&providerfile, &with_tests).unwrap();
+        fs::write(
+            provider.join("tests.rs"),
+            "#[test] fn passes() { assert_eq!(6 * 7, 42); }",
+        )
+        .unwrap();
+        assert_eq!(compile_dir(root.path()).unwrap(), expected);
+
+        fs::write(
+            provider.join("tests.rs"),
+            "#[test] fn fails() { assert_eq!(1, 2); }",
+        )
+        .unwrap();
+        let error = compile_dir(root.path()).unwrap_err().to_string();
+        assert!(error.contains("example/Providerfile: [test]: Rust tests failed"));
+
+        fs::remove_file(provider.join("tests.rs")).unwrap();
+        assert!(compile_dir(root.path())
+            .unwrap_err()
+            .to_string()
+            .contains("cannot read"));
+    }
+
+    #[test]
+    fn accepts_declarative_tests_and_validates_custom_test_paths() {
+        let http_test =
+            format!("{EXAMPLE}\n[test]\nsource_url = 'https://provider.example/health'\n");
+        assert!(parse(&http_test, "example", "example/Providerfile").is_ok());
+        let invalid = format!("{EXAMPLE}\n[test]\nsource = path[\"../tests.rs\"]\n");
+        assert!(parse(&invalid, "example", "example/Providerfile")
+            .unwrap_err()
+            .to_string()
+            .contains("[test].source path must stay inside"));
     }
 }

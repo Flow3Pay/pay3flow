@@ -19,12 +19,16 @@ pub struct CodePath {
 
 impl CodeSource {
     pub fn validate(&self) -> Result<(), String> {
+        self.validate_for("code")
+    }
+
+    pub fn validate_for(&self, section: &str) -> Result<(), String> {
         match self {
             Self::Inline(source) if source.trim().is_empty() => {
-                Err("[code].source must not be empty".to_string())
+                Err(format!("[{section}].source must not be empty"))
             }
             Self::Inline(_) => Ok(()),
-            Self::External(source) => validate_relative_path(&source.path),
+            Self::External(source) => validate_relative_path(&source.path, section),
         }
     }
 
@@ -58,13 +62,13 @@ impl CodeSource {
     }
 }
 
-fn validate_relative_path(path: &str) -> Result<(), String> {
+fn validate_relative_path(path: &str, section: &str) -> Result<(), String> {
     let path = Path::new(path);
     if path.as_os_str().is_empty() {
-        return Err("[code].source path must not be empty".to_string());
+        return Err(format!("[{section}].source path must not be empty"));
     }
     if path.extension().and_then(|extension| extension.to_str()) != Some("rs") {
-        return Err("[code].source path must point to a .rs file".to_string());
+        return Err(format!("[{section}].source path must point to a .rs file"));
     }
     if path.is_absolute()
         || path.components().any(|component| {
@@ -74,18 +78,21 @@ fn validate_relative_path(path: &str) -> Result<(), String> {
             )
         })
     {
-        return Err("[code].source path must stay inside the Providerfile directory".to_string());
+        return Err(format!(
+            "[{section}].source path must stay inside the Providerfile directory"
+        ));
     }
     Ok(())
 }
 
-/// Converts the Providerfile shorthand `source = path["file.rs"]` into an
+/// Converts `[code]` / `[test]` shorthand `source = path["file.rs"]` into an
 /// equivalent TOML inline table before deserialization.
 pub fn normalize_path_source(contents: &str) -> Result<Cow<'_, str>, String> {
-    let mut in_code = false;
+    let mut section = None;
     let mut rewritten = None::<String>;
     let mut copied_until = 0;
     let mut offset = 0;
+    let mut string_state = None;
 
     for line in contents.split_inclusive('\n') {
         let without_newline = line.strip_suffix('\n').unwrap_or(line);
@@ -93,10 +100,20 @@ pub fn normalize_path_source(contents: &str) -> Result<Cow<'_, str>, String> {
             .strip_suffix('\r')
             .unwrap_or(without_newline);
         let trimmed = body.trim();
+        let inside_string = string_state.is_some();
+        scan_strings(body, &mut string_state);
 
+        if inside_string {
+            offset += line.len();
+            continue;
+        }
         if trimmed.starts_with('[') {
-            in_code = trimmed == "[code]";
-        } else if in_code {
+            section = match trimmed.split('#').next().unwrap_or_default().trim() {
+                "[code]" => Some("code"),
+                "[test]" => Some("test"),
+                _ => None,
+            };
+        } else if let Some(section) = section {
             let Some(equals) = body.find('=') else {
                 offset += line.len();
                 continue;
@@ -122,15 +139,17 @@ pub fn normalize_path_source(contents: &str) -> Result<Cow<'_, str>, String> {
                 continue;
             };
             let Some(closing) = bracketed.rfind(']') else {
-                return Err("[code].source path is missing a closing `]`".to_string());
+                return Err(format!("[{section}].source path is missing a closing `]`"));
             };
             let path_literal = bracketed[..closing].trim();
             if path_literal.is_empty() {
-                return Err("[code].source path must not be empty".to_string());
+                return Err(format!("[{section}].source path must not be empty"));
             }
             let suffix = &bracketed[closing + 1..];
             if !suffix.trim().is_empty() && !suffix.trim_start().starts_with('#') {
-                return Err("only a comment may follow [code].source path shorthand".to_string());
+                return Err(format!(
+                    "only a comment may follow [{section}].source path shorthand"
+                ));
             }
 
             let output =
@@ -159,6 +178,38 @@ pub fn normalize_path_source(contents: &str) -> Result<Cow<'_, str>, String> {
     }
 }
 
+// Track TOML strings so path-like lines inside inline Rust are left untouched.
+fn scan_strings(line: &str, state: &mut Option<(u8, bool)>) {
+    let bytes = line.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        match *state {
+            Some((b'"', _)) if bytes[index] == b'\\' => index += 2,
+            Some((quote, multiline)) if bytes[index] == quote => {
+                let count = bytes[index..]
+                    .iter()
+                    .take_while(|&&byte| byte == quote)
+                    .count();
+                if !multiline || count >= 3 {
+                    *state = None;
+                    index += if multiline { count } else { 1 };
+                } else {
+                    index += count;
+                }
+            }
+            Some(_) => index += 1,
+            None if bytes[index] == b'#' => break,
+            None if matches!(bytes[index], b'"' | b'\'') => {
+                let quote = bytes[index];
+                let multiline = bytes[index..].starts_with(&[quote; 3]);
+                *state = Some((quote, multiline));
+                index += if multiline { 3 } else { 1 };
+            }
+            None => index += 1,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -182,5 +233,17 @@ mod tests {
         });
 
         assert!(source.validate().is_err());
+    }
+
+    #[test]
+    fn rewrites_test_paths_and_preserves_inline_rust() {
+        let input = "[code]\nsource = '''\n[test]\nsource = path[\"untouched.rs\"]\n'''\n[test] # tests\nsource = path[\"tests.rs\"]\n";
+        assert_eq!(
+            normalize_path_source(input).unwrap(),
+            input.replace(
+                "source = path[\"tests.rs\"]",
+                "source = { path = \"tests.rs\" }"
+            )
+        );
     }
 }

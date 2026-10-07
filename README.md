@@ -314,6 +314,11 @@ cargo run --manifest-path backend/Cargo.toml --bin providerfile -- generate
 cargo run --manifest-path backend/Cargo.toml --bin providerfile -- check
 ```
 
+Optional `[test]` sections run before SQL generation and stop it on failure.
+Use `cargo run --manifest-path backend/Cargo.toml --bin providerfile -- test`
+to validate and run them without writing SQL;
+HTTP assertions and standalone Rust examples are documented in [Providerfile.md](Providerfile.md#tests-before-sql-generation).
+
 ### Frontend
 
 Requirements: Node.js 24 and npm.

@@ -15,6 +15,15 @@ name = "Example Provider Buy"
 currency = ["usd", "rub", "eur", "amd"]
 banks = []
 
+# Optional tests run before SQL generation. Uncomment and point to a real
+# endpoint, or use source = path["tests.rs"] for standalone Rust tests.
+# [test]
+# source_url = "https://provider.example/health"
+# expected_status = 200
+# timeout_ms = 10000
+# body_contains = "ok"
+# json_equals = { "/status" = "ok" }
+
 [guidance]
 description = "Explain what the customer must verify and where the exchange is completed."
 steps = [

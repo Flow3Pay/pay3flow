@@ -10,6 +10,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let source = root.join("providers");
     let destination = root.join("migrations/providers.sql");
     let command = env::args().nth(1).unwrap_or_else(|| "generate".into());
+    if !matches!(command.as_str(), "generate" | "check" | "print" | "test") {
+        return Err("usage: providerfile [generate|check|print|test]".into());
+    }
 
     let sql = providerfile::compile_dir(&source)?;
     match command.as_str() {
@@ -34,7 +37,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("{} is up to date", destination.display());
         }
         "print" => print!("{sql}"),
-        _ => return Err("usage: providerfile [generate|check|print]".into()),
+        "test" => println!("Providerfile validation and tests passed"),
+        _ => unreachable!("command was validated above"),
     }
     Ok(())
 }

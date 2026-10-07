@@ -28,6 +28,7 @@ generated database rows and compiled modules, never the Providerfiles.
 - [Spot-market adapter](#spot-market-adapter)
 - [Browser workflow](#browser-workflow)
 - [Compile-time Rust code](#compile-time-rust-code)
+- [Tests before SQL generation](#tests-before-sql-generation)
 - [Complete field reference](#complete-field-reference)
 - [Generate and validate](#generate-and-validate)
 - [Checked-in examples](#checked-in-examples)
@@ -88,6 +89,7 @@ optional and can be combined as follows:
 | `[adapter.papa_change]` | Papa Change public directions and rates | Intended for the Papa Change Providerfile and its compiled Rust adapter. |
 | `[workflow]` | Browser-driven calculator | Cannot coexist with `[adapter.p2p]`. |
 | `[code]` | Trusted Rust compiled into the backend | Independent of declarative sections. |
+| `[test]` | HTTP assertions or custom Rust tests before SQL generation | Optional; can accompany any provider type. |
 
 If `[buy]` exists, `[adapter.p2p.buy]` or `[workflow.buy]` must exist for the
 selected live mechanism. The same rule applies to `sell`. A file containing
@@ -773,6 +775,70 @@ not copied into SQL and is never evaluated as a runtime script.
 
 Checked-in Rust examples: CoW Swap, NEAR Intents, and ID Pay.
 
+## Tests before SQL generation
+
+Add an optional `[test]` block. The generator validates all Providerfiles,
+runs their tests, and only then renders SQL. A failed assertion, HTTP request,
+Rust compilation, or timeout stops the command before the migration is written.
+Files without `[test]` keep their existing behavior. These tests run for
+`providerfile generate`, `check`, `print`, and `test`; ordinary Cargo builds
+and Docker builds do not run them.
+
+The smallest declarative test makes a GET request and expects HTTP 200:
+
+```toml
+[test]
+source_url = "https://provider.example/health"
+```
+
+Add response assertions without writing Rust:
+
+```toml
+[test]
+source_url = "https://provider.example/api/status"
+expected_status = 200
+timeout_ms = 10000
+body_contains = "ok"
+json_equals = { "/status" = "ok", "/ready" = true }
+```
+
+`json_equals` maps JSON pointers to expected values. Every configured assertion
+must pass; a missing pointer is a failure, even when the expected value is null.
+
+Custom Rust tests use the same inline and path syntax as `[code]`:
+
+```toml
+[test]
+language = "rust"
+source = path["tests.rs"]
+```
+
+Alternatively, `source = { path = "tests.rs" }` works. An inline example:
+
+```toml
+[test]
+source = '''
+#[test]
+fn provider_has_catalog_operations() {
+    let providerfile = std::fs::read_to_string(env!("PROVIDERFILE")).unwrap();
+    assert!(providerfile.contains("[buy]") || providerfile.contains("[sell]"));
+}
+'''
+```
+
+Rust test sources are standalone Rust 2021 crates compiled with `rustc --test`.
+They can use `std` and their own local modules; backend modules and Cargo
+dependencies are not automatically linked. External sources can import sibling
+modules with `#[path = "helpers.rs"]`. Tests run from the Providerfile's
+directory, and `PROVIDERFILE` contains its absolute path at compilation and
+execution. At least one `#[test]` function is required. Ignored tests are also
+run so a declared suite cannot silently skip its checks. `timeout_ms` limits
+HTTP requests and execution of the custom test binary, excluding compilation.
+
+HTTP assertions and Rust `source` may be combined in one `[test]` block;
+the HTTP checks run first. Test configuration is not stored in generated SQL
+or loaded by the running backend.
+
 ## Complete field reference
 
 ### Catalog and metadata
@@ -977,6 +1043,18 @@ non-empty `steps` array, and required `fiat_amount`/`asset_amount` readers.
 | `language` | Yes | Must be `rust`. |
 | `source` | Yes | Non-empty inline string, `path["file.rs"]`, or `{ path = "file.rs" }`. |
 
+### `test`
+
+| Field | Required | Default | Meaning |
+| --- | --- | --- | --- |
+| `source_url` | Unless `source` is set | — | HTTP/HTTPS URL checked with GET. |
+| `expected_status` | No | `200` | Expected HTTP status, 100–599; requires `source_url`. |
+| `body_contains` | No | — | Required response substring; requires `source_url`. |
+| `json_equals` | No | `{}` | JSON-pointer-to-value assertions; requires `source_url`. |
+| `source` | Unless `source_url` is set | — | Non-empty inline Rust, `path["tests.rs"]`, or `{ path = "tests.rs" }`. |
+| `language` | No; requires `source` | `rust` | Only `rust` is supported. |
+| `timeout_ms` | No | `10000` | HTTP request / Rust test execution limit, 250–30000 ms. |
+
 ## Generate and validate
 
 Generate SQL without applying it:
@@ -989,6 +1067,12 @@ Verify all Providerfiles and ensure the committed migration is current:
 
 ```bash
 cargo run --manifest-path backend/Cargo.toml --bin providerfile -- check
+```
+
+Validate and run optional tests without writing the migration:
+
+```bash
+cargo run --manifest-path backend/Cargo.toml --bin providerfile -- test
 ```
 
 Print generated SQL:
