@@ -26,9 +26,21 @@ The provider uses the documented 1-Click API surfaces:
 - `GET /v0/status?depositAddress=...` tracks an executable swap.
 
 The normal `QuoteProvider::quote` implementation always uses `dry=true`.
-The two quote-address settings are required because 1Click validates address
-syntax even for dry quotes. Credentials are read from `NEAR_INTENTS_JWT` and
-are not included in route capabilities or logs.
+1Click validates addresses even for dry quotes. Network-specific preview
+addresses take precedence; a legacy global address is used only on networks
+with a compatible address format. TRON, Aptos, and Cardano have built-in
+preview addresses used only for dry quotes. Paths without an address for both
+chains are excluded before requesting prices. Executable quotes always use
+the wallet addresses supplied by the user. Credentials are read from
+`NEAR_INTENTS_JWT` and are not included in route capabilities or logs.
+
+During crypto cycle searches, a provider minimum-amount limit or Symbiosis's
+explicit unavailable-swap response excludes that path without marking the
+provider as failed. The reason remains in the provider status. Invalid
+requests, authentication errors, rate limits, and server errors remain
+provider failures. Cached minimum-amount rejections retain that distinction
+and apply only to the exact origin, destination, and input amount; they do
+not suppress other destinations or amounts.
 
 ## Refresh configuration
 

@@ -1,12 +1,18 @@
 //! Wallet cycles use fresh, amount-specific quotes, never cached price coefficients.
 
 use super::*;
-use crate::route_engine::PublicRouteProvider;
+use crate::route_engine::{PublicRouteProvider, QuoteUnavailable};
 use futures::future::{BoxFuture, FutureExt, Shared};
 
 const MAX_CYCLE_ASSETS_PER_PROVIDER: usize = 48;
 const CYCLE_SEARCH_BUDGET: std::time::Duration = std::time::Duration::from_secs(60);
-type QuoteJob = Shared<BoxFuture<'static, std::result::Result<Vec<PublicRouteQuote>, String>>>;
+type QuoteResult = std::result::Result<Vec<PublicRouteQuote>, Arc<anyhow::Error>>;
+type QuoteJob = Shared<BoxFuture<'static, QuoteResult>>;
+type QuoteFailures = Arc<std::sync::Mutex<HashMap<String, Arc<anyhow::Error>>>>;
+
+fn quote_error(message: impl ToString) -> Arc<anyhow::Error> {
+    Arc::new(anyhow::anyhow!(message.to_string()))
+}
 
 impl P2pSearchService {
     pub(super) async fn search_crypto_cycles(
@@ -20,7 +26,7 @@ impl P2pSearchService {
         let started = Instant::now();
         let mut statuses = HashMap::new();
         let mut jobs = HashMap::<String, QuoteJob>::new();
-        let failures = Arc::new(std::sync::Mutex::new(HashMap::<String, String>::new()));
+        let failures = QuoteFailures::default();
         let mut recorded = std::collections::HashSet::new();
         let mut entries = FuturesUnordered::new();
         for capability in capabilities.iter() {
@@ -122,7 +128,7 @@ impl P2pSearchService {
                     // a large catalog cannot queue every entry ahead of exits.
                     let result = match entry_gate.acquire_owned().await {
                         Ok(_permit) => job.await,
-                        Err(error) => Err(error.to_string()),
+                        Err(error) => Err(quote_error(error)),
                     };
                     (name, key, intermediary, result)
                 });
@@ -207,14 +213,14 @@ impl P2pSearchService {
         from: Asset,
         to: Asset,
         amount: Amount,
-        failures: Arc<std::sync::Mutex<HashMap<String, String>>>,
+        failures: QuoteFailures,
     ) -> QuoteJob {
         let service = self.clone();
         async move {
-            let failure_key = format!("{}|{}|{}", provider.name(), from, amount.value);
+            let failure_key = provider_quote_key(provider.name(), &from, &to, &amount);
             let prior_failure = failures
                 .lock()
-                .map_err(|error| error.to_string())?
+                .map_err(quote_error)?
                 .get(&failure_key)
                 .cloned();
             if let Some(error) = prior_failure {
@@ -234,13 +240,10 @@ impl P2pSearchService {
         from: Asset,
         to: Asset,
         amount: Amount,
-        failures: Arc<std::sync::Mutex<HashMap<String, String>>>,
-    ) -> std::result::Result<Vec<PublicRouteQuote>, String> {
+        failures: QuoteFailures,
+    ) -> QuoteResult {
         let lane = {
-            let mut lanes = self
-                .cycle_quote_lanes
-                .lock()
-                .map_err(|error| error.to_string())?;
+            let mut lanes = self.cycle_quote_lanes.lock().map_err(quote_error)?;
             lanes
                 .entry(provider.name().to_string())
                 .or_default()
@@ -251,15 +254,15 @@ impl P2pSearchService {
         let mut lane = lane.lock().await;
         if let Some(error) = failures
             .lock()
-            .map_err(|error| error.to_string())?
-            .get(&format!("{}|{}|{}", provider.name(), from, amount.value))
+            .map_err(quote_error)?
+            .get(&provider_quote_key(provider.name(), &from, &to, &amount))
             .cloned()
         {
             return Err(error);
         }
         if let Some((until, error)) = &lane.blocked_until {
             if *until > tokio::time::Instant::now() {
-                return Err(error.clone());
+                return Err(quote_error(error));
             }
         }
         if let Some(next) = lane.next_start {
@@ -272,30 +275,33 @@ impl P2pSearchService {
         };
         lane.next_start =
             Some(tokio::time::Instant::now() + std::time::Duration::from_millis(spacing));
-        let _permit = self
-            .quote_semaphore
-            .acquire()
-            .await
-            .map_err(|error| error.to_string())?;
+        let _permit = self.quote_semaphore.acquire().await.map_err(quote_error)?;
         let result = tokio::time::timeout(
             std::time::Duration::from_secs(12),
             provider.quotes(from.clone(), to.clone(), amount.clone()),
         )
         .await
-        .map_err(|_| "Quote request timed out after 12 seconds".to_string())
-        .and_then(|result| result.map_err(|error| error.to_string()));
+        .map_err(|_| quote_error("Quote request timed out after 12 seconds"))
+        // Shared futures need cloneable errors. Keep the original error type
+        // behind Arc so cached limits remain distinguishable from failures.
+        .and_then(|result| result.map_err(Arc::new));
         if let Err(error) = &result {
-            tracing::warn!(provider = provider.name(), %from, %to, amount = %amount.value, %error, "crypto cycle quote unavailable");
-            if error.contains("Temporary swap limits: minimum swap amount") {
-                failures.lock().map_err(|error| error.to_string())?.insert(
-                    format!("{}|{}|{}", provider.name(), from, amount.value),
+            if error.downcast_ref::<QuoteUnavailable>().is_some() {
+                tracing::debug!(provider = provider.name(), %from, %to, amount = %amount.value, %error, "crypto cycle path unavailable");
+            } else {
+                tracing::warn!(provider = provider.name(), %from, %to, amount = %amount.value, %error, "crypto cycle quote failed");
+            }
+            let message = error.to_string();
+            if message.contains("Temporary swap limits: minimum swap amount") {
+                failures.lock().map_err(quote_error)?.insert(
+                    provider_quote_key(provider.name(), &from, &to, &amount),
                     error.clone(),
                 );
             }
-            if error.contains("429") || error.contains("quota exceeded") {
+            if message.contains("429") || message.contains("quota exceeded") {
                 lane.blocked_until = Some((
                     tokio::time::Instant::now() + std::time::Duration::from_secs(60),
-                    error.clone(),
+                    message,
                 ));
             }
         }
@@ -306,7 +312,7 @@ impl P2pSearchService {
 fn record_cycle_result(
     statuses: &mut HashMap<String, SourceStatus>,
     name: &str,
-    result: &std::result::Result<Vec<PublicRouteQuote>, String>,
+    result: &QuoteResult,
     started: Instant,
 ) {
     if let Some(status) = statuses.get_mut(name) {
@@ -314,8 +320,12 @@ fn record_cycle_result(
         match result {
             Ok(quotes) => status.offers_found += quotes.len(),
             Err(error) => {
-                status.ok = false;
-                status.error = Some(error.clone());
+                if error.downcast_ref::<QuoteUnavailable>().is_none() {
+                    status.ok = false;
+                    status.error = Some(error.to_string());
+                } else if status.ok {
+                    status.error = Some(error.to_string());
+                }
             }
         }
     }

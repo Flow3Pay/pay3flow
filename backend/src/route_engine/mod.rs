@@ -485,6 +485,14 @@ pub struct PublicRouteQuote {
     pub path: Vec<Asset>,
 }
 
+/// A valid provider response that cannot quote this route or amount.
+#[derive(Debug, thiserror::Error)]
+#[error("{provider}: {reason}")]
+pub(crate) struct QuoteUnavailable {
+    pub provider: &'static str,
+    pub reason: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct CowExecutionQuote {
     pub chain: String,
@@ -1397,6 +1405,121 @@ mod tests {
             provider.quote_refunds.get("avalanche-c"),
             Some(&"refund-avax".to_string())
         );
+    }
+
+    #[test]
+    fn near_preview_addresses_never_reuse_an_evm_address_on_other_chains() {
+        let evm_address = "0x8ba1f109551bD432803012645Ac136ddd64DBA72";
+        let fallback = Some(evm_address);
+        let addresses = HashMap::new();
+        for (network, expected) in [
+            ("tron", "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb"),
+            (
+                "aptos",
+                "0x0000000000000000000000000000000000000000000000000000000000000001",
+            ),
+            (
+                "cardano",
+                "addr1vyqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqkdl5mw",
+            ),
+            ("base", evm_address),
+        ] {
+            let address = NearIntentsProvider::preview_address(
+                &addresses,
+                fallback,
+                &Asset::new("TOKEN", Some(network)).unwrap(),
+                "refund address",
+            )
+            .unwrap();
+            assert_eq!(address, expected, "network: {network}");
+        }
+        assert!(NearIntentsProvider::preview_address(
+            &addresses,
+            fallback,
+            &asset("TOKEN@unknown-chain"),
+            "refund address",
+        )
+        .is_err());
+        let evm_addresses = HashMap::from([("ethereum".into(), evm_address.into())]);
+        assert_eq!(
+            NearIntentsProvider::preview_address(
+                &evm_addresses,
+                Some("So11111111111111111111111111111111111111112"),
+                &asset("USDT@base"),
+                "recipient",
+            )
+            .unwrap(),
+            evm_address
+        );
+    }
+
+    #[tokio::test]
+    async fn near_minimum_limits_preserve_origin_chain_refunds_and_do_not_hide_invalid_requests() {
+        for (message, status, unavailable) in [
+            (
+                "Temporary swap limits: minimum swap amount is $1,000",
+                StatusCode::BAD_REQUEST,
+                true,
+            ),
+            ("refundTo is not valid", StatusCode::BAD_REQUEST, false),
+            (
+                "Temporary swap limits: minimum swap amount is $1,000",
+                StatusCode::UNAUTHORIZED,
+                false,
+            ),
+        ] {
+            let app = axum::Router::new().route(
+                "/v0/quote",
+                axum::routing::post(move |axum::Json(body): axum::Json<Value>| async move {
+                    assert_eq!(body["dry"], true);
+                    assert_eq!(body["refundTo"], "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb");
+                    assert_eq!(body["refundType"], "ORIGIN_CHAIN");
+                    assert_eq!(body["recipientType"], "DESTINATION_CHAIN");
+                    (status, axum::Json(json!({"message": message})))
+                }),
+            );
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+            let provider = NearIntentsProvider::new(format!("http://{address}"), None)
+                .unwrap()
+                .with_quote_addresses(
+                    "0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+                    "0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+                )
+                .unwrap();
+            provider.set_supported_tokens(vec![
+                NearToken {
+                    asset_id: "trx".into(),
+                    blockchain: "tron".into(),
+                    symbol: "TRX".into(),
+                    decimals: Some(6),
+                    contract_address: None,
+                },
+                NearToken {
+                    asset_id: "usdt".into(),
+                    blockchain: "eth".into(),
+                    symbol: "USDT".into(),
+                    decimals: Some(6),
+                    contract_address: None,
+                },
+            ]);
+            let from = asset("TRX@tron");
+            let error = QuoteProvider::quote(
+                &provider,
+                from.clone(),
+                asset("USDT@ethereum"),
+                Amount::new("100", from).unwrap(),
+            )
+            .await
+            .unwrap_err();
+            assert_eq!(
+                error.downcast_ref::<QuoteUnavailable>().is_some(),
+                unavailable,
+                "status: {status}, message: {message}"
+            );
+            server.abort();
+        }
     }
 
     #[test]

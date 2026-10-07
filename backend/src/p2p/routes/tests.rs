@@ -374,6 +374,83 @@ async fn crypto_cycles_report_provider_failures_instead_of_silently_hiding_sourc
     assert!(status.error.as_deref().unwrap().contains("429"));
 }
 
+struct LimitedCycleProvider {
+    reason: &'static str,
+    calls: Arc<AtomicUsize>,
+}
+
+#[async_trait]
+impl PublicRouteProvider for LimitedCycleProvider {
+    fn name(&self) -> &str {
+        "limited-cycle"
+    }
+    async fn supported_assets(&self) -> Vec<Asset> {
+        ["USDT", "USDC", "DAI"]
+            .into_iter()
+            .map(|symbol| Asset::new(symbol, Some("bnb-smart-chain")).unwrap())
+            .collect()
+    }
+    async fn quote(&self, from: Asset, to: Asset, amount: Amount) -> Result<PublicRouteQuote> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        if self.reason.starts_with("Temporary swap limits")
+            && (from.symbol == "DAI" || to.symbol == "DAI")
+        {
+            return Ok(PublicRouteQuote {
+                provider: self.name().into(),
+                quote_id: None,
+                description: None,
+                source_url: None,
+                from: from.clone(),
+                to: to.clone(),
+                input: amount,
+                output: Amount::new(if to.symbol == "DAI" { "100" } else { "101" }, to.clone())
+                    .unwrap(),
+                fees: Vec::new(),
+                expires_at: None,
+                path: vec![from, to],
+            });
+        }
+        Err(crate::route_engine::QuoteUnavailable {
+            provider: "limited-cycle",
+            reason: self.reason.into(),
+        }
+        .into())
+    }
+}
+
+#[tokio::test]
+async fn crypto_cycles_keep_searching_other_pairs_after_a_minimum_amount_rejection() {
+    for (reason, expected_calls, expected_routes) in [
+        ("Temporary swap limits: minimum swap amount is $1,000", 3, 1),
+        ("No swap available for BTC → USDT", 2, 0),
+    ] {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let service = P2pSearchService::with_sources(vec![], Duration::from_secs(1))
+            .with_route_providers(vec![Arc::new(LimitedCycleProvider {
+                reason,
+                calls: calls.clone(),
+            })]);
+        let mut request = crypto_cycle_request(100.0);
+        request.intermediary_assets = Some("USDC,DAI".into());
+        let response = service.search_routes(request).await.unwrap();
+        let status = response
+            .provider_statuses
+            .iter()
+            .find(|s| s.source == "limited-cycle")
+            .unwrap();
+        assert!(
+            status.ok,
+            "a rejected path does not mean the provider failed: {reason}"
+        );
+        assert_eq!(
+            response.routes_found, expected_routes,
+            "a limit on USDC must not suppress the DAI return path"
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), expected_calls);
+        assert!(status.error.as_deref().unwrap().contains(reason));
+    }
+}
+
 #[test]
 fn route_snapshot_distinguishes_live_fallback_from_stale_cache() {
     let live_provider = SourceStatus {

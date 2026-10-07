@@ -12,7 +12,8 @@ use tokio::sync::RwLock;
 
 use crate::route_engine::{
     atomic_to_decimal, canonical_network_id, decimal_to_atomic, ensure_success, truncate_decimal,
-    Amount, Asset, PublicRouteProvider, PublicRouteQuote, SymbiosisExecutionQuote,
+    Amount, Asset, PublicRouteProvider, PublicRouteQuote, QuoteUnavailable,
+    SymbiosisExecutionQuote,
 };
 
 const DEFAULT_API_URL: &str = "https://api.symbiosis.finance/crosschain";
@@ -380,6 +381,18 @@ impl PublicRouteProvider for SymbiosisRouteProvider {
             .await
             .context("decode Symbiosis quote")?;
         if !status.is_success() {
+            if status == reqwest::StatusCode::BAD_REQUEST
+                && raw.get("message").and_then(Value::as_str) == Some("This swap is not available")
+            {
+                return Err(QuoteUnavailable {
+                    provider: "symbiosis",
+                    reason: format!(
+                        "No swap available for {from} → {to} at {} {}",
+                        amount.value, from.symbol
+                    ),
+                }
+                .into());
+            }
             bail!("Symbiosis quote returned HTTP {status}: {}", raw);
         }
         let output = raw
@@ -516,10 +529,75 @@ mod tests {
             "0xf621Fb08BBE51aF70e7E0F4EA63496894166Ff7F"
         );
 
-        assert!(SymbiosisRouteProvider::new(DEFAULT_API_URL, None, "preview", 300)
-            .unwrap()
-            .with_execution_contracts(&["1=not-an-address,also-invalid".into()])
-            .is_err());
+        assert!(
+            SymbiosisRouteProvider::new(DEFAULT_API_URL, None, "preview", 300)
+                .unwrap()
+                .with_execution_contracts(&["1=not-an-address,also-invalid".into()])
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn rejected_swaps_are_path_limits_but_other_api_errors_remain_failures() {
+        for (message, status, unavailable) in [
+            (
+                "This swap is not available",
+                reqwest::StatusCode::BAD_REQUEST,
+                true,
+            ),
+            (
+                "Invalid token address",
+                reqwest::StatusCode::BAD_REQUEST,
+                false,
+            ),
+            (
+                "This swap is not available",
+                reqwest::StatusCode::INTERNAL_SERVER_ERROR,
+                false,
+            ),
+        ] {
+            let app = axum::Router::new()
+                .route(
+                    "/v2/tokens",
+                    axum::routing::get(|| async {
+                        axum::Json(json!([
+                            {"symbol": "USDT", "address": "usdt", "chainId": 56, "decimals": 18},
+                            {"symbol": "USDC", "address": "usdc", "chainId": 56, "decimals": 18}
+                        ]))
+                    }),
+                )
+                .route(
+                    "/v1/swap",
+                    axum::routing::post(move || async move {
+                        (status, axum::Json(json!({"message": message})))
+                    }),
+                );
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+            let provider = SymbiosisRouteProvider::new(
+                format!("http://{address}"),
+                None,
+                "0x0000000000000000000000000000000000000001",
+                300,
+            )
+            .unwrap();
+            let from = Asset::parse("USDT@bnb-smart-chain").unwrap();
+            let error = provider
+                .quote(
+                    from.clone(),
+                    Asset::parse("USDC@bnb-smart-chain").unwrap(),
+                    Amount::new("100", from).unwrap(),
+                )
+                .await
+                .unwrap_err();
+            assert_eq!(
+                error.downcast_ref::<QuoteUnavailable>().is_some(),
+                unavailable,
+                "status: {status}, message: {message}"
+            );
+            server.abort();
+        }
     }
 
     #[tokio::test]

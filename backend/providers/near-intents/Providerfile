@@ -19,11 +19,11 @@ use serde_json::{json, Value};
 use tokio::sync::RwLock;
 
 use crate::route_engine::{
-    decimal_to_atomic, ensure_success, first_string,
+    canonical_network_id, decimal_to_atomic, ensure_success, first_string,
     parse_near_quote_with_decimals, parse_network_addresses, truncate_decimal, Amount, Asset,
     NearQuote, NearQuoteRequest, NearSwapStatus, NearToken, PublicRouteProvider, PublicRouteQuote,
-    QuoteProvider, DEFAULT_INTENTS_URL, DEFAULT_QUOTE_TTL, DEFAULT_QUOTE_WAITING_TIME_MS,
-    DEFAULT_SLIPPAGE_BPS,
+    QuoteProvider, QuoteUnavailable, DEFAULT_INTENTS_URL, DEFAULT_QUOTE_TTL,
+    DEFAULT_QUOTE_WAITING_TIME_MS, DEFAULT_SLIPPAGE_BPS,
 };
 
 /// NEAR Intents 1-Click provider.  The provider is read-only by default:
@@ -111,11 +111,60 @@ impl NearIntentsProvider {
         asset: &Asset,
         label: &str,
     ) -> Result<String> {
+        let network = canonical_network_id(asset.location.as_deref().unwrap_or_default());
         addresses
-            .get(asset.location.as_deref().unwrap_or_default())
+            .get(&network)
             .cloned()
-            .or_else(|| fallback.map(str::to_owned))
+            .or_else(|| {
+                fallback
+                    .filter(|address| Self::fallback_matches_network(address, &network))
+                    .map(str::to_owned)
+            })
+            .or_else(|| {
+                addresses
+                    .get("ethereum")
+                    .filter(|address| Self::fallback_matches_network(address, &network))
+                    .cloned()
+            })
+            .or_else(|| Self::default_preview_address(&network).map(str::to_owned))
             .with_context(|| format!("NEAR Intents quote {label} is not configured for {asset}"))
+    }
+
+    fn fallback_matches_network(address: &str, network: &str) -> bool {
+        // A legacy global address is useful only on chains with the same
+        // address format. Never send an EVM fallback as a TRON/ADA/APT refund.
+        match network {
+            "ethereum" | "base" | "bnb-smart-chain" | "arbitrum-one" | "optimism"
+            | "polygon-pos" | "avalanche-c" | "gnosis" | "scroll" | "plasma" | "monad"
+            | "xlayer" | "bera" | "berachain" | "abs" | "abstract" | "hood" | "adi" => {
+                address.len() == 42
+                    && address.starts_with("0x")
+                    && address[2..].bytes().all(|byte| byte.is_ascii_hexdigit())
+            }
+            "solana" => {
+                (32..=44).contains(&address.len())
+                    && address.bytes().all(|byte| {
+                        b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+                            .contains(&byte)
+                    })
+            }
+            "near" => address.ends_with(".near"),
+            "bitcoin" => {
+                address.starts_with("bc1") || address.starts_with('1') || address.starts_with('3')
+            }
+            _ => false,
+        }
+    }
+
+    fn default_preview_address(network: &str) -> Option<&'static str> {
+        // Syntax-valid placeholders for dry quotes only. Execution requests
+        // always carry the user's own recipient and refund wallet addresses.
+        match network {
+            "tron" => Some("T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb"),
+            "aptos" => Some("0x0000000000000000000000000000000000000000000000000000000000000001"),
+            "cardano" => Some("addr1vyqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqkdl5mw"),
+            _ => None,
+        }
     }
 
     pub async fn load_supported_tokens(&self) -> Result<Vec<NearToken>> {
@@ -180,10 +229,13 @@ impl NearIntentsProvider {
     }
 
     pub async fn submit_deposit_tx(&self, tx_hash: &str, deposit_address: &str) -> Result<()> {
-        let mut request = self.client.post(self.endpoint("deposit/submit")).json(&json!({
-            "txHash": tx_hash,
-            "depositAddress": deposit_address,
-        }));
+        let mut request = self
+            .client
+            .post(self.endpoint("deposit/submit"))
+            .json(&json!({
+                "txHash": tx_hash,
+                "depositAddress": deposit_address,
+            }));
         if let Some(jwt) = &self.jwt {
             request = request.bearer_auth(jwt);
         }
@@ -285,6 +337,22 @@ impl NearIntentsProvider {
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
+            let message = serde_json::from_str::<Value>(&body).ok().and_then(|body| {
+                body.get("message")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+            });
+            if status == reqwest::StatusCode::BAD_REQUEST
+                && message.as_deref().is_some_and(|message| {
+                    message.starts_with("Temporary swap limits: minimum swap amount")
+                })
+            {
+                return Err(QuoteUnavailable {
+                    provider: "near-intents",
+                    reason: message.unwrap_or_default(),
+                }
+                .into());
+            }
             let detail = body.chars().take(500).collect::<String>();
             bail!("request NEAR Intents quote failed with HTTP {status}: {detail}");
         }
@@ -348,6 +416,23 @@ impl QuoteProvider for NearIntentsProvider {
 impl PublicRouteProvider for NearIntentsProvider {
     fn name(&self) -> &str {
         "near-intents"
+    }
+
+    fn supports_pair(&self, from: &Asset, to: &Asset) -> bool {
+        Self::preview_address(
+            &self.quote_refunds,
+            self.quote_refund_to.as_deref(),
+            from,
+            "refund address",
+        )
+        .is_ok()
+            && Self::preview_address(
+                &self.quote_recipients,
+                self.quote_recipient.as_deref(),
+                to,
+                "recipient",
+            )
+            .is_ok()
     }
 
     async fn supported_assets(&self) -> Vec<Asset> {
