@@ -824,6 +824,12 @@ fn route_result_cache_key(query: &P2pRouteSearchQuery) -> Option<String> {
         .map(str::trim)
         .filter(|network| !network.is_empty())
         .map(canonical_network_id);
+    if query.source_fiat == query.target_fiat
+        && query.source_network.is_some()
+        && query.source_network == query.target_network
+    {
+        return None;
+    }
     if query.intermediary_assets.is_none() {
         query.intermediary_assets = query.assets.take();
     } else {
@@ -930,6 +936,20 @@ mod tests {
 
             assert!(serde_json::from_value::<VoteRequest>(payload).is_err());
         }
+    }
+
+    #[test]
+    fn crypto_cycle_requests_bypass_completed_route_cache() {
+        let query: P2pRouteSearchQuery = serde_json::from_value(serde_json::json!({
+            "source_fiat": " usdt ", "target_fiat": "USDT", "source_amount": 100,
+            "source_network": "BEP20", "target_network": "bnb-smart-chain",
+            "exchange_mode": "exchanger"
+        }))
+        .unwrap();
+        assert!(
+            route_result_cache_key(&query).is_none(),
+            "crypto cycles require fresh quotes for both swaps"
+        );
     }
 
     #[test]

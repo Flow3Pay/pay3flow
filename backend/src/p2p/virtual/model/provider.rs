@@ -12,7 +12,9 @@ pub(in crate::p2p) struct RouteProviderCapability {
 
 impl RouteProviderCapability {
     pub(in crate::p2p) fn supports(&self, from: &Asset, to: &Asset) -> bool {
-        self.assets.contains(from) && self.assets.contains(to)
+        self.assets.contains(from)
+            && self.assets.contains(to)
+            && self.provider.supports_pair(from, to)
     }
 }
 

@@ -38,10 +38,19 @@ still be available when the venue is opened.
 | Bitcoin Center | Public route API | AMD bank transfer ↔ USDT on Solana, including the reported output fee |
 | BestChange | Official authenticated rates API | Aggregated exchanger offers |
 | Dzengi | Public market-data API | Crypto spot-market paths |
-| CoW Swap | CoW Protocol quote API | Selectable same-chain crypto swap quotes for configured chains and tokens |
+| CoW Swap | CoW Protocol quote API | Selectable swaps and bridge quotes discovered from live token catalogs |
 | NEAR Intents | 1Click quote API | Selectable cross-chain and same-chain crypto swap quotes from the live token catalog |
 | Symbiosis | Official cross-chain swap API | Selectable cross-chain crypto quotes from the live Symbiosis token catalog |
 | ID Pay | Public server-rendered calculator rate | Selectable direct AMD/RUB and RUB/AMD transfer estimates |
+
+CoW Swap loads token addresses and per-network precision from its live token
+list and the bridge catalog. The protocol network registry supplies public API
+endpoints; `cow_api_urls` can override them. The shared `cow_tokens` settings
+remain an offline fallback for legacy adapters and custom deployments.
+Bridge destinations and intermediate tokens are discovered at runtime. Quotes
+combine CoW execution on the origin network with a dry NEAR Intents bridge
+quote; the selected pair opens in CoW Swap for a fresh quote and execution.
+Embedded CoW wallet execution supports same-chain ERC20 orders on EVM networks.
 
 CoW Swap fees are quote-dependent rather than a universal fixed percentage.
 The live quote accounts for execution costs, while liquidity, gas, and optional

@@ -35,8 +35,9 @@ near_intents_quote_refunds = [
   "ethereum=<valid EVM address>",
 ]
 
-# Optional same-chain CoW Protocol quotes.
+# CoW discovers tokens and bridge routes; token entries provide an offline fallback.
 cow_api_urls = ["ethereum=https://api.cow.fi/mainnet"]
+cow_token_list_url = "https://files.cow.fi/tokens/CowSwap.json"
 cow_tokens = [
   "ethereum:USDT=0xdAC17F958D2ee523a2206206994597C13D831ec7",
 ]

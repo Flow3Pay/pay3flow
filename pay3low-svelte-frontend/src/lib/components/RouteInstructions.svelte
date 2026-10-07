@@ -99,7 +99,7 @@
   $: entryDirect = isDirectOffer(route.entry_offer_snapshot);
   $: exitDirect = isDirectOffer(route.exit_offer_snapshot);
   $: directFiat = route.route_kind === "fiat_to_fiat" && entryDirect && !route.exit_offer_snapshot && !route.route_provider;
-  $: crossVenue = Boolean(entry && exit && !route.route_provider && entry.provider !== exit.provider);
+  $: crossVenue = Boolean(entry && exit && !route.cycle_legs?.length && !route.route_provider && entry.provider !== exit.provider);
   $: cryptoToCrypto = route.route_kind === "crypto_to_crypto" || Boolean(route.cycle_legs?.length);
   $: providerSwap = Boolean(route.route_provider && (route.entry_offer_snapshot || route.exit_offer_snapshot));
   $: transferNetwork = route.entry_network && route.entry_network.toLowerCase() !== "internal" ? route.entry_network : null;
@@ -137,11 +137,15 @@
     <ol class="workflow" aria-label={copy("Exchange steps")}>
       {#if route.cycle_legs?.length}
         {#each route.cycle_legs as leg, index}
+          {@const guide = providerGuide(leg.provider)}
           <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">{index + 1}</span><div class="stepBody">
             <h3>{copy("Convert {from} to {to}", { from: readablePath([leg.from_asset]), to: readablePath([leg.to_asset]) })}</h3>
             <p class="stepSummary">{copy("Route through {venue}", { venue: venueName(leg.provider) })}</p>
             <p class="routePath">{leg.input_amount} {leg.from_asset.split("@")[0]} → {leg.output_amount} {leg.to_asset.split("@")[0]}</p>
             <ul class="checklist"><li>{copy("Check the current price, fee, and amount you should receive before pressing the exchange button.")}</li><li>{copy("Wait until the new balance appears before doing the next step.")}</li><li>{copy("Never send money after the quote expires. Get a new quote first.")}</li></ul>
+            {#if guide}
+              <div class="providerGuide"><p>{guide.description}</p>{#if guide.steps.length}<ul class="checklist">{#each guide.steps as step}<li>{step}</li>{/each}</ul>{/if}{#if guide.links.length}<div class="guideLinks">{#each guide.links as link}<a href={link.url} target="_blank" rel="noreferrer noopener" class="profileLink">{link.label} <span>↗</span></a>{/each}</div>{/if}</div>
+            {/if}
             {#if leg.source_url}<a href={leg.source_url} target="_blank" rel="noreferrer noopener" class="profileLink">{copy("Open {venue}", { venue: venueName(leg.provider) })} <span>↗</span></a>{/if}
           </div></li>
         {/each}

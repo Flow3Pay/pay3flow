@@ -2084,13 +2084,11 @@ test("direct provider quotes keep their API names and independent prices", async
   await expect(cards.nth(0)).not.toContainText("Quote by");
   await expect(cards.nth(1)).toContainText("97.3 USDC");
   await expect(cards.nth(1)).not.toContainText("Quote by");
-  await expect(cards.nth(0).locator(".workflow")).toHaveAttribute(
-    "aria-label",
-    "USDT Tether · ethereum → USDC USD Coin · ethereum (NEAR 1Click)",
+  await expect(cards.nth(0).locator(".routeWorkflowButton")).toHaveAttribute(
+    "aria-label", /USDT.*ERC-20.*USDC.*ERC-20.*NEAR 1Click/,
   );
-  await expect(cards.nth(1).locator(".workflow")).toHaveAttribute(
-    "aria-label",
-    "USDT Tether · ethereum → USDC USD Coin · ethereum (CoW Protocol Live)",
+  await expect(cards.nth(1).locator(".routeWorkflowButton")).toHaveAttribute(
+    "aria-label", /USDT.*ERC-20.*USDC.*ERC-20.*CoW Protocol Live/,
   );
   await cards.nth(0).locator(".routeAmount").click();
   let instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
@@ -2137,10 +2135,9 @@ test("small AMD to BTC@near routes keep crypto precision", async ({ page }) => {
   const route = page.getByTestId("complete-route").first();
   await expect(route).toBeVisible();
   await expect(route.locator(".routeAmount")).toHaveText("0.00032478 BTC");
-  await expect(page.locator("#exchange-output")).toHaveText("0.00032478");
-  await expect(route.locator(".workflow")).toHaveAttribute(
-    "aria-label",
-    "AMD → USDT Tether · optimism (Bybit) → BTC Bitcoin · near (NEAR 1Click)",
+  await expect(page.locator("#exchange-output")).toHaveValue("0.00032478");
+  await expect(route.locator(".routeWorkflowButton")).toHaveAttribute(
+    "aria-label", /AMD.*USDT.*Bybit.*BTC.*NEAR/,
   );
   await route.locator(".routeAmount").click();
   const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
@@ -2256,8 +2253,8 @@ test("crypto route keeps distinct source and target networks", async ({ page }) 
   await page.getByLabel("Amount to send").fill("0.03");
   await page.getByTestId("start-search").click();
 
-  await expect(page.getByTestId("complete-route")).toContainText(
-    "ETH Ether · Base → USDT Tether · TON (Binance)",
+  await expect(page.getByTestId("complete-route").locator(".routeWorkflowButton")).toHaveAttribute(
+    "aria-label", /ETH Ether.*Base.*USDT.*TON.*Binance/,
   );
 
   await page.getByTestId("complete-route").locator(".routeAmount").click();

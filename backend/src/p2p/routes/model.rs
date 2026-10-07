@@ -28,7 +28,7 @@ pub struct P2pRouteSearchQuery {
     /// Backward-compatible alias for `intermediary_assets`.
     pub assets: Option<String>,
     /// Optional comma-separated crypto intermediaries for fiat routes or crypto cycles.
-    /// Defaults to the configured `p2p_search_assets` list when omitted.
+    /// Fiat routes default to `p2p_search_assets`; crypto cycles use provider catalogs.
     pub intermediary_assets: Option<String>,
     pub source_payment_method: Option<String>,
     pub target_payment_method: Option<String>,

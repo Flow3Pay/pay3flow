@@ -103,7 +103,11 @@ async fn main() -> anyhow::Result<()> {
         &cfg.cow_api_urls,
         &cfg.cow_tokens,
         cfg.cow_quote_address.as_deref(),
-    )?;
+    )?
+    .map(|cow| {
+        cow.with_token_catalog(&cfg.cow_token_list_url)
+            .with_bridge(near_intents.clone())
+    });
     if let Some(cow) = &cow {
         public_route_providers.push(Arc::new(cow.clone()));
     }

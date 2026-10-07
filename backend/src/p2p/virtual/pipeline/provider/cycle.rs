@@ -28,6 +28,10 @@ impl P2pSearchService {
             (
                 asset.symbol == origin.symbol,
                 intermediary_asset_priority(&asset.symbol, ""),
+                ["SOL", "BNB", "TRX", "TON", "DAI", "XRP", "AVAX", "NEAR"]
+                    .iter()
+                    .position(|symbol| *symbol == asset.symbol)
+                    .unwrap_or(8),
                 asset.location != origin.location,
                 asset.to_string(),
             )

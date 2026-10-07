@@ -597,7 +597,9 @@ impl P2pSearchService {
             let from = assets[*from_index].clone();
             let to = assets[*to_index].clone();
             *to_index += 1;
-            if self.background_provider_coefficient_is_due(provider.name(), &from, &to) {
+            if provider.supports_pair(&from, &to)
+                && self.background_provider_coefficient_is_due(provider.name(), &from, &to)
+            {
                 return Some((provider.clone(), from, to));
             }
             return None;

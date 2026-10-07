@@ -225,7 +225,8 @@ pub(in crate::p2p) fn profitability_for_route(
     if route.requires_asset_transfer && !route.transfer_fee_included {
         missing_costs.push(RouteCostKind::NetworkFee);
     }
-    if route.route_provider.is_some() && !route.transfer_fee_included {
+    if route.route_provider.is_some() && !route.transfer_fee_included && route.cycle_legs.is_empty()
+    {
         missing_costs.push(RouteCostKind::LiveQuote);
     }
     if route.route_kind == "fiat_cycle"
