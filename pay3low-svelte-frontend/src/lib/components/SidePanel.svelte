@@ -187,29 +187,6 @@
               <small>{routeVenues.length} {routeVenues.length === 1 ? "venue" : "venues"} in routes</small>
             {/if}
           </span>
-          {#if foundVenues.length}
-            <details class="checkedServices" data-testid="checked-services">
-              <summary>{foundVenues.length} {foundVenues.length === 1 ? "service checked" : "services checked"}</summary>
-              <p>Quotes and market prices are used to build complete routes. A service response can contain no matching route.</p>
-              <ul>
-                {#each foundVenues as venue (venue.id)}
-                  {@const status = venueStats[venue.id.toLowerCase()]}
-                  {@const routeCount = status?.routes_found ?? 0}
-                  <li data-testid="checked-venue" data-venue={venue.id}>
-                    <div class="checkedVenueHeading">
-                      <img src={venue.iconUrl || venueIcon(venue.id)} alt="" width="18" height="18" decoding="async" on:error={fallbackFoundVenueIcon} />
-                      <span class="foundVenueFallback" aria-hidden="true" hidden>{venue.label.slice(0, 1).toUpperCase()}</span>
-                      <strong>{venue.label}</strong>
-                      <span>{routeCount} {routeCount === 1 ? "route" : "routes"}</span>
-                    </div>
-                    <small>{status?.ok === false ? (routeCount > 0 ? "Route found · some quotes unavailable" : (status.offers_found > 0 ? "Some quotes unavailable · no matching route" : "Response error")) : routeCount > 0 ? "Route found" : (status?.offers_found ?? 0) > 0 ? "Offers received · no matching route" : "No matching route"}</small>
-                    <small>Quotes / markets received: {status?.offers_found ?? 0}{status?.last_response_ms != null ? ` · ${status.last_response_ms} ms` : ""}</small>
-                    {#if status?.error}<small class="checkedVenueError">{status.error}</small>{/if}
-                  </li>
-                {/each}
-              </ul>
-            </details>
-          {/if}
         {/if}
         {#if hasAmount && renderingRoutes}<small class="resultLimit" data-testid="route-render-progress">Showing {routes.length} now · loading more…</small>{/if}
         {#if selectedVenueId}<button type="button" class="venueFilterClear" on:click={() => selectedVenueId = null}>Showing {visibleRoutes.length} from {selectedVenueName} · Show all</button>{/if}
@@ -390,22 +367,6 @@
   gap: 7px;
 }
 
-.checkedServices {
-  margin-top: 3px;
-  color: var(--color-text-soft);
-  font-size: 11px;
-}
-
-.checkedServices summary { width: fit-content; cursor: pointer; }
-.checkedServices summary:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
-.checkedServices p { max-width: 400px; margin: 8px 0; line-height: 1.5; }
-.checkedServices ul { display: grid; gap: 9px; max-height: 280px; margin: 0; padding: 0; overflow: auto; list-style: none; }
-.checkedServices li { display: grid; gap: 4px; padding: 9px; border: 1px solid var(--color-border); border-radius: 8px; }
-.checkedVenueHeading { display: flex; align-items: center; gap: 7px; }
-.checkedVenueHeading img { border-radius: 5px; object-fit: contain; }
-.checkedServices .checkedVenueHeading strong { flex: 1; font-size: 12px; }
-.checkedServices small { overflow-wrap: anywhere; line-height: 1.4; }
-.checkedServices .checkedVenueError { color: #b0443d; }
 
 .legalWarning {
   display: grid;
@@ -1535,9 +1496,6 @@
   color: #d8f59a;
 }
 
-:global(html[data-theme="dark"]) .checkedServices .checkedVenueError {
-  color: #ffa89b;
-}
 
 :global(html[data-theme="dark"]) .routeBest,
 :global(html[data-theme="dark"]) .selected {

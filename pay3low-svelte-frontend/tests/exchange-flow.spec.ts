@@ -1584,7 +1584,7 @@ test("saved provider choices adopt new providers and retain later deselections",
     .toHaveAttribute("aria-pressed", "false");
 });
 
-test("search venues distinguish route providers from checked services", async ({ page }) => {
+test("search venues only show providers with matching routes", async ({ page }) => {
   await mockBackend(page);
 
   let sendFirstRoute: (() => void) | undefined;
@@ -1724,18 +1724,6 @@ test("search venues distinguish route providers from checked services", async ({
   await expect(foundVenues).toHaveCount(1);
   await expect(foundVenues.first()).toHaveAttribute("title", "Found on Bybit");
   await expect(panelTop.locator(".resultSummary")).toContainText("1 venue in routes");
-  const checkedServices = panelTop.getByTestId("checked-services");
-  await expect(checkedServices.locator("summary")).toHaveText("6 services checked");
-  await checkedServices.locator("summary").click();
-  await expect(checkedServices.getByTestId("checked-venue")).toHaveCount(6);
-  await expect(checkedServices.locator('[data-venue="skylabs"]')).toContainText("Offers received · no matching route");
-  await expect(checkedServices.locator('[data-venue="skylabs"]')).toContainText("0 routes");
-  await expect(checkedServices.locator('[data-venue="bncex"]')).toContainText("Provider temporarily unavailable");
-  await expect(checkedServices.locator('[data-venue="bncex"]')).toContainText("Some quotes unavailable · no matching route");
-  for (const venue of ["bitcoin-center", "binance", "okx"]) {
-    await expect(checkedServices.locator(`[data-venue="${venue}"]`)).toContainText("0 routes");
-  }
-  await checkedServices.locator("summary").click();
   await expect(searchingVenues).toHaveCount(5);
   await expect(searchingVenues.nth(0)).toHaveAttribute("title", "Searching Cifra Markets");
   await expect(searchingVenues.nth(4)).toHaveAttribute("title", "Searching Whitebird");
@@ -1748,7 +1736,6 @@ test("search venues distinguish route providers from checked services", async ({
   await expect(page.getByTestId("complete-route").first()).toContainText("20420 RUB");
   await expect(page.getByTestId("complete-route").first()).toHaveClass(/selected/);
   await expect(foundVenues).toHaveCount(2);
-  await expect(checkedServices.locator("summary")).toHaveText("7 services checked");
   for (const title of ["Whitebird", "Bybit"]) {
     await expect(panelTop.locator(`[data-testid="found-venue"][title="Found on ${title}"]`)).toHaveCount(1);
   }
