@@ -75,6 +75,10 @@ Deployments, rolls back their images if readiness fails, and checks the public
 home, health, and provider endpoints. See `nix run .#deploy -- --help` for
 host, identity, namespace, URL, and image-tag overrides.
 
+Application Pods use `ndots:1` and `single-request-reopen` so external provider
+API names resolve before cluster search suffixes and A/AAAA lookups do not
+share a socket. Kubernetes service names still use the cluster DNS search list.
+
 The cluster and `pay3flow-secrets` must already be bootstrapped. In particular,
 the Secret must contain `BESTCHANGE_API_KEY`; `SYMBIOSIS_PARTNER_ID` may be
 omitted or empty for the public API tier. `backend/.env` is never copied to the

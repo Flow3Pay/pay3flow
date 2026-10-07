@@ -109,7 +109,7 @@ kind = "http_json"
 endpoint = "https://api.bybit.com/v5/market/tickers"
 method = "GET"
 query = { category = "spot" }
-timeout_ms = 4000
+timeout_ms = 10000
 items_pointer = "/result/list"
 symbol_pointer = "/symbol"
 bid_pointer = "/bid1Price"

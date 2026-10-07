@@ -93,6 +93,8 @@ trading fee per trade. They do not verify order-book depth, account-specific
 fees, network deposits/withdrawals, or transfer costs; instructions identify
 the required deposits, transfers and withdrawal back to the original wallet.
 Spot instructions link to the trading pairs, separately from P2P guidance.
+Fiat balances are excluded as intermediate assets. Estimated gains above
+`max_price_deviation_bps` (10% by default) are discarded as unverified outliers.
 
 The router checks continuity, amounts, and quote expiry and returns only cycles
 with a positive quoted or estimated gain at eight decimal places.

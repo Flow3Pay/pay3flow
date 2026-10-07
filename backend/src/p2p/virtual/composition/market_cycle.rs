@@ -75,6 +75,7 @@ pub(in crate::p2p) fn compose_crypto_market_cycles(
     };
     let allowed = |symbol: &str| {
         symbol != origin.symbol
+            && !matches!(symbol, "USD" | "EUR")
             && (!query.assets_explicit || query.assets.iter().any(|allowed| allowed == symbol))
     };
     let mut intermediaries = entries
@@ -163,6 +164,11 @@ fn market_cycle(query: &NormalizedRouteQuery, origin: &Asset, edges: &[&Edge]) -
         amount = output;
     }
     let mut route = crypto_cycle_from_quotes(query, &quotes)?;
+    let output = route.target_amount.parse::<f64>().ok()?;
+    let gain_bps = (output / query.source_amount - 1.0) * 10_000.0;
+    if query.max_price_deviation_bps > 0 && gain_bps > f64::from(query.max_price_deviation_bps) {
+        return None;
+    }
     for (leg, edge) in route.cycle_legs.iter_mut().zip(edges) {
         leg.market_pair = Some(edge.pair.clone());
     }

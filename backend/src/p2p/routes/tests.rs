@@ -2870,3 +2870,38 @@ fn crypto_market_cycles_compare_venues_and_find_three_trade_paths_after_fees() {
     query.sources = Some("binance".into());
     assert!(compose_crypto_market_cycles(&query, &triangles).is_empty());
 }
+
+#[test]
+fn crypto_market_cycles_reject_large_price_outliers_and_fiat_intermediaries() {
+    let mut request = crypto_cycle_request(100.0);
+    request.intermediary_assets = None;
+    let query = normalize_query(
+        request,
+        &["USDT".into()],
+        &crate::networks::NetworkCatalog::test_default(),
+        &[Asset::new("USDT", Some("bnb-smart-chain")).unwrap()],
+    )
+    .unwrap();
+    let ticker = |symbol: &str, bid, ask| CryptoTicker {
+        symbol: symbol.into(),
+        bid,
+        ask,
+    };
+    let markets = HashMap::from([
+        (
+            "bybit".into(),
+            vec![ticker("ETHUSDT", 99.0, 100.0), ticker("USDTEUR", 0.9, 0.91)],
+        ),
+        (
+            "okx".into(),
+            vec![
+                ticker("ETHUSDT", 200.0, 201.0),
+                ticker("USDTEUR", 0.88, 0.89),
+            ],
+        ),
+    ]);
+    assert!(
+        compose_crypto_market_cycles(&query, &markets).is_empty(),
+        "unverified 100% spreads and bank-money transfers must not be offered as crypto arbitrage"
+    );
+}

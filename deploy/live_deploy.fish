@@ -167,12 +167,16 @@ end
 set deployed_at (date -u +%Y-%m-%dT%H:%M:%SZ)
 set rollout_started 1
 set backend_patch "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"pay3flow.io/deployed-at\":\"$deployed_at\",\"pay3flow.io/source-revision\":\"$revision\"}},\"spec\":{\"containers\":[{\"name\":\"backend\",\"image\":\"$backend_image\",\"imagePullPolicy\":\"IfNotPresent\",\"env\":[{\"name\":\"BESTCHANGE_API_KEY\",\"valueFrom\":{\"secretKeyRef\":{\"name\":\"pay3flow-secrets\",\"key\":\"BESTCHANGE_API_KEY\"}}},{\"name\":\"SYMBIOSIS_PARTNER_ID\",\"valueFrom\":{\"secretKeyRef\":{\"name\":\"pay3flow-secrets\",\"key\":\"SYMBIOSIS_PARTNER_ID\"}}}] }]}}}}"
+# Resolve public API names before Kubernetes search suffixes, and use separate
+# sockets for A/AAAA lookups to avoid five-second resolver stalls.
+set backend_patch (string replace '"containers":' '"dnsConfig":{"options":[{"name":"ndots","value":"1"},{"name":"single-request-reopen"}]},"containers":' -- $backend_patch)
 printf '%s' $backend_patch | remote "sudo '$kubectl' -n '$namespace' patch deployment pay3flow-backend --type=strategic --patch-file=/dev/stdin"; or begin
     rollback_images
     exit 1
 end
 
 set frontend_patch "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"pay3flow.io/deployed-at\":\"$deployed_at\",\"pay3flow.io/source-revision\":\"$revision\"}},\"spec\":{\"containers\":[{\"name\":\"frontend\",\"image\":\"$frontend_image\",\"imagePullPolicy\":\"IfNotPresent\"}]}}}}"
+set frontend_patch (string replace '"containers":' '"dnsConfig":{"options":[{"name":"ndots","value":"1"},{"name":"single-request-reopen"}]},"containers":' -- $frontend_patch)
 printf '%s' $frontend_patch | remote "sudo '$kubectl' -n '$namespace' patch deployment pay3flow-frontend --type=strategic --patch-file=/dev/stdin"; or begin
     rollback_images
     exit 1
