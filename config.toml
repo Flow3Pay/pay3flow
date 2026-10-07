@@ -45,9 +45,10 @@ route_withdrawals = []
 
 # Optional CoW Protocol and public DEX quote adapters. Each CoW endpoint is
 # "chain=url"; token addresses are shared by CoW, LI.FI, KyberSwap, Nordstern,
-# and Velora in "chain:SYMBOL=address" form. EVM token decimals are inferred
-# from the configured symbol by the quote adapters.
+# and Velora in "chain:SYMBOL=address" form. CoW loads token precision from
+# live catalogs; legacy adapters infer it from the configured symbol.
 cow_api_urls = ["ethereum=https://api.cow.fi/mainnet"]
+cow_token_list_url = "https://files.cow.fi/tokens/CowSwap.json"
 cow_tokens = [
   "ethereum:USDT=0xdAC17F958D2ee523a2206206994597C13D831ec7",
   "ethereum:USDC=0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",

@@ -63,6 +63,8 @@ pub struct Config {
     /// Optional CoW token addresses, formatted as `chain:SYMBOL=address`.
     pub cow_tokens: Vec<String>,
     pub cow_quote_address: Option<String>,
+    /// CoW token-list URL used to discover addresses and per-chain decimals.
+    pub cow_token_list_url: String,
     /// Symbiosis cross-chain quote API settings.
     pub symbiosis_url: String,
     pub symbiosis_partner_id: Option<String>,
@@ -114,6 +116,7 @@ struct FileConfig {
     cow_api_urls: Vec<String>,
     cow_tokens: Vec<String>,
     cow_quote_address: Option<String>,
+    cow_token_list_url: String,
     symbiosis_url: String,
     symbiosis_quote_address: String,
     symbiosis_slippage_bps: u32,
@@ -159,6 +162,7 @@ impl Default for FileConfig {
             cow_api_urls: Vec::new(),
             cow_tokens: Vec::new(),
             cow_quote_address: None,
+            cow_token_list_url: "https://files.cow.fi/tokens/CowSwap.json".into(),
             symbiosis_url: "https://api.symbiosis.finance/crosschain".into(),
             symbiosis_quote_address: "0x0000000000000000000000000000000000000001".into(),
             symbiosis_slippage_bps: 300,
@@ -223,6 +227,7 @@ impl Config {
             cow_api_urls: file.cow_api_urls,
             cow_tokens: file.cow_tokens,
             cow_quote_address: clean_optional(file.cow_quote_address),
+            cow_token_list_url: file.cow_token_list_url,
             symbiosis_url: file.symbiosis_url,
             symbiosis_partner_id: optional_secret_env("SYMBIOSIS_PARTNER_ID"),
             symbiosis_quote_address: file.symbiosis_quote_address,

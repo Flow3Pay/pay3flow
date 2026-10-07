@@ -49,6 +49,7 @@ data:
     route_intent_assets = ["USDT@tron", "USDT@avalanche-c", "USDT@solana", "USDC@solana", "XRP@xrpl", "WETH@base", "USDC@base", "USDT@base"]
     route_withdrawals = []
     cow_api_urls = ["ethereum=https://api.cow.fi/mainnet"]
+    cow_token_list_url = "https://files.cow.fi/tokens/CowSwap.json"
     # Token map shared by CoW Protocol, LI.FI, KyberSwap, Nordstern, and Velora.
     cow_tokens = [
       "ethereum:USDT=0xdAC17F958D2ee523a2206206994597C13D831ec7",

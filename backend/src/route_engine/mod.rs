@@ -399,13 +399,32 @@ pub struct NearToken {
 impl NearToken {
     pub fn matches(&self, asset: &Asset) -> bool {
         asset.location.as_deref().is_some_and(|location| {
-            self.symbol.eq_ignore_ascii_case(&asset.symbol)
+            self.asset_symbol().eq_ignore_ascii_case(&asset.symbol)
                 && same_chain(location, &self.blockchain)
         })
     }
 
     pub fn asset(&self) -> Result<Asset> {
-        Asset::new(&self.symbol, Some(&canonical_network_id(&self.blockchain)))
+        Asset::new(
+            self.asset_symbol(),
+            Some(&canonical_network_id(&self.blockchain)),
+        )
+    }
+
+    fn asset_symbol(&self) -> &str {
+        // Native-coin entries can include the bridge's name in their display
+        // ticker (e.g. BTC(OMNI)); the asset remains the network's native coin.
+        if self.asset_id.starts_with("1cs_v1:")
+            && self.asset_id.contains(":native:")
+            && self
+                .contract_address
+                .as_deref()
+                .is_none_or(|address| address == "coin")
+        {
+            self.symbol.split('(').next().unwrap_or(&self.symbol).trim()
+        } else {
+            &self.symbol
+        }
     }
 }
 
@@ -496,6 +515,10 @@ pub struct SymbiosisExecutionQuote {
 #[async_trait]
 pub trait PublicRouteProvider: Send + Sync {
     fn name(&self) -> &str;
+    /// Whether the provider can quote in this direction between these networks.
+    fn supports_pair(&self, _from: &Asset, _to: &Asset) -> bool {
+        true
+    }
     async fn supported_assets(&self) -> Vec<Asset> {
         Vec::new()
     }
@@ -1567,3 +1590,6 @@ mod tests {
         assert!(parse_route_edges(&["USDT@binance>USDT@tron|binance|1|extra".into()]).is_err());
     }
 }
+
+#[cfg(test)]
+mod cow_tests;

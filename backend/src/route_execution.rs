@@ -223,6 +223,15 @@ impl RouteExecutionService {
         if from_asset == to_asset {
             return;
         }
+        // Bridge and native-asset orders use CoW Swap's execution flow.
+        if provider == "cow-swap"
+            && !Asset::parse(from_asset)
+                .ok()
+                .zip(Asset::parse(to_asset).ok())
+                .is_some_and(|(from, to)| CowRouteProvider::supports_wallet_execution(&from, &to))
+        {
+            return;
+        }
         let expires_at = Utc::now() + ChronoDuration::minutes(DESCRIPTOR_TTL_MINUTES);
         let claims = ExecutionClaims {
             route_id: route.route_id.clone(),
