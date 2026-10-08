@@ -153,8 +153,8 @@
   article { min-width: 0; padding: 20px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-panel); }
   .exampleIndex { display: block; margin-bottom: 20px; color: var(--color-text-faint); font: 12px/1 var(--font-mono); }
   h4 { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 16px; font: 500 14px/1.4 var(--font-mono); }
-  .examplePart { display: inline-flex; align-items: center; gap: 8px; }
-  .routeAsset { display: inline-flex; align-items: center; border: 1px solid var(--color-border-strong); border-radius: 5px; background: var(--color-panel-soft); color: var(--color-text); }
+  .examplePart { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
+  .routeAsset { display: inline-flex; flex-wrap: wrap; align-items: center; min-width: 0; border: 1px solid var(--color-border-strong); border-radius: 5px; background: var(--color-panel-soft); color: var(--color-text); }
   .routeAssetMain { display: flex; align-items: center; gap: 6px; padding: 5px 7px; }
   .routeAsset strong { font-family: var(--font-sans); font-size: 12px; font-weight: 800; white-space: nowrap; }
   .routeAsset img { display: block; width: 18px; height: 18px; flex: 0 0 auto; border-radius: 50%; object-fit: contain; }
