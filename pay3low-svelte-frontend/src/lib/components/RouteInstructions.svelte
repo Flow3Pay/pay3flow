@@ -150,7 +150,7 @@
     <aside class="chapters">
       <span class="eyebrow">{copy("YOUR ROUTE")}</span>
       <div class="routePair"><span><img src={fiatFlagUrl(route.source_currency) ?? assetIcon(route.source_currency)} alt="" />{route.source_currency}</span><svg class="pairArrow" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h16m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" /></svg><span><img src={fiatFlagUrl(route.target_currency ?? route.entry_asset) ?? assetIcon(route.target_currency ?? route.entry_asset)} alt="" />{route.target_currency ?? route.entry_asset}</span></div>
-      <button type="button" class="overviewButton" class:current={chapter === -1 && tab === "guide"} aria-current={chapter === -1 && tab === "guide" ? "step" : undefined} on:click={() => navigate(-1)}><img class="beforeIcon" src="/icons/ui/guide-before.png" alt="" width="24" height="24" />{copy("Before you begin")}</button>
+      <button type="button" class="overviewButton" class:current={chapter === -1 && tab === "guide"} aria-current={chapter === -1 && tab === "guide" ? "step" : undefined} on:click={() => navigate(-1)}><img class="beforeIcon" src="/icons/ui/guide-before.svg" alt="" width="24" height="24" />{copy("Before you begin")}</button>
       <ol aria-label={copy("Exchange steps")}>
         {#each steps as item, index}
           <li data-testid="instruction-step" class:complete={index < completed} class:active={chapter === index && tab === "guide"}>
@@ -225,7 +225,7 @@
             </section>
           {/if}
           {#if chapter === -1}
-            <div class="routeNotice"><img class="beforeIcon" src="/icons/ui/guide-before.png" alt="" width="24" height="24" /><div><strong>{copy("Before you begin")}</strong><p>{copy("Rates, limits, and offers can change. Check the provider, payment details, and network before sending money. Pay3Flow does not create orders or move money.")}</p>{#if route.source_bank_fee_percent != null}<p>{copy("Bank fees:")} {route.source_payment_method ?? route.source_currency}: {route.source_bank_fee_percent}%</p>{/if}{#if route.target_bank_fee_percent != null}<p>{copy("Bank fees:")} {route.target_payment_method ?? route.target_currency}: {route.target_bank_fee_percent}%</p>{/if}{#each route.warnings ?? [] as warning}<p>{warn(warning)}</p>{/each}</div></div>
+            <div class="routeNotice"><img class="beforeIcon" src="/icons/ui/guide-before.svg" alt="" width="24" height="24" /><div><strong>{copy("Before you begin")}</strong><p>{copy("Rates, limits, and offers can change. Check the provider, payment details, and network before sending money. Pay3Flow does not create orders or move money.")}</p>{#if route.source_bank_fee_percent != null}<p>{copy("Bank fees:")} {route.source_payment_method ?? route.source_currency}: {route.source_bank_fee_percent}%</p>{/if}{#if route.target_bank_fee_percent != null}<p>{copy("Bank fees:")} {route.target_payment_method ?? route.target_currency}: {route.target_bank_fee_percent}%</p>{/if}{#each route.warnings ?? [] as warning}<p>{warn(warning)}</p>{/each}</div></div>
           {/if}
         </div>
       {/key}

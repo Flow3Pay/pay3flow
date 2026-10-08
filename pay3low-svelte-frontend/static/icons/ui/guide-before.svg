@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+  <defs>
+    <mask id="rings">
+      <circle cx="12" cy="12" r="10" fill="#fff"/>
+      <path d="M12 4a8 8 0 1 1-8 8M12 8a4 4 0 0 1 0 8" stroke="#000" stroke-width="2.4"/>
+    </mask>
+  </defs>
+  <circle cx="12" cy="12" r="10" fill="#000" mask="url(#rings)"/>
+</svg>
