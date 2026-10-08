@@ -8,6 +8,12 @@ const supportedLocales: Locale[] = ["en", "ru", "hy"];
 const messages: Record<Locale, Record<string, string>> = {
   en: {},
   ru: {
+    "Not rated": "Без оценки",
+    "How to find a route": "Как найти маршрут",
+    "Start with Bridge": "Начните с Bridge",
+    "Enter an amount": "Введите сумму",
+    "Your route starts here": "Теперь можно искать маршрут",
+
     "on": "на",
     "Previous scene": "Предыдущая сцена",
     "Next scene": "Следующая сцена",
@@ -456,6 +462,12 @@ const messages: Record<Locale, Record<string, string>> = {
     "Approval confirmed. Review and sign the refreshed swap transaction.": "Разрешение подтверждено. Проверьте и подпишите обновлённую транзакцию обмена.",
   },
   hy: {
+    "Not rated": "Առանց գնահատականի",
+    "How to find a route": "Ինչպես գտնել երթուղի",
+    "Start with Bridge": "Սկսեք Bridge-ից",
+    "Enter an amount": "Մուտքագրեք գումարը",
+    "Your route starts here": "Այժմ կարող եք որոնել երթուղի",
+
     "on": "հարթակում",
     "Previous scene": "Նախորդ տեսարան",
     "Next scene": "Հաջորդ տեսարան",

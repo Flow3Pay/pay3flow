@@ -60,7 +60,7 @@
   {@html `<script type="application/ld+json">${website}</script>`}
 </svelte:head>
 
-<div class="appShell" bind:this={shell} use:localize>
+<div class="appShell" class:guideActive bind:this={shell} use:localize>
   <Header />
   <main>
     <Converter onGuideChange={(active) => guideActive = active} onPaymentMethodsLoaded={(items) => paymentMethods = items} onProvidersLoaded={(items) => providerCatalog = items} onBelarusP2pWarningChange={(show) => showBelarusP2pWarning = show} onOpenBelarusP2pWarning={() => belarusP2pWarningOpen = true} />

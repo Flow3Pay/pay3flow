@@ -2676,20 +2676,14 @@ test("route instructions load provider reviews for every cycle step", async ({ p
   const instructions = page.getByTestId("route-guide");
   await instructions.locator(".reviewsTab").click();
   const reviews = instructions.getByRole("region", { name: "Customer reviews" });
-  await expect(reviews).toHaveCount(1);
+  await expect(reviews).toHaveCount(2);
   await expect(reviews.first()).toContainText("cow-swap review 1");
-  await expect(reviews.first().locator(".review")).toHaveCount(5);
-  await reviews.first().getByRole("button", { name: /Show 10 more reviews/ }).click();
   await expect(reviews.first().locator(".review")).toHaveCount(7);
-  await reviews.getByRole("button", { name: /^Critical/ }).click();
-  await expect(reviews.locator(".review")).toHaveCount(1);
-  await expect(reviews.locator(".review")).toContainText("review 7");
-  await reviews.getByRole("button", { name: /^All reviews/ }).click();
+  await expect(reviews.first().locator(".stars")).toHaveCount(7);
+  await expect(instructions.locator(".reviewSources, .reviewTools, .cardFoot")).toHaveCount(0);
+  await expect(reviews.nth(1)).toContainText("near-intents review 1");
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ animations: "disabled", path: test.info().outputPath("guide-reviews.png") });
-  await instructions.locator(".reviewSources").getByRole("button", { name: /NEAR/ }).click();
-  await expect(reviews).toHaveCount(1);
-  await expect(reviews).toContainText("near-intents review 1");
   expect(requests.sort()).toEqual(["cow-swap", "near-intents"]);
   await instructions.locator(".guideToolbar").getByRole("button", { name: /Back to routes/ }).click();
   await expect(instructions).toBeHidden();
@@ -2719,10 +2713,8 @@ test("P2P instructions restore written advertiser reviews", async ({ page }) => 
   const instructions = page.getByTestId("route-guide");
   await instructions.locator(".reviewsTab").click();
   const reviews = instructions.getByRole("region", { name: "Customer reviews" });
-  await expect(reviews).toHaveCount(1);
+  await expect(reviews).toHaveCount(2);
   for (const section of await reviews.all()) await expect(section).toContainText("Written feedback for");
-  await instructions.locator(".reviewSources button").nth(1).click();
-  await expect(reviews).toContainText("Written feedback for");
   await expect.poll(() => new Set(profiles).size).toBe(2);
 });
 
@@ -2763,7 +2755,8 @@ test("animated guide is a page with fixed footer, scene controls and saved progr
   await center.click();
   await page.mouse.move(0, 0);
   await expect(center).toHaveCSS("opacity", "1");
-  await expect(center).toHaveText("▶");
+  await expect(center).toHaveAttribute("aria-label", "Play walkthrough");
+  await expect(center.locator(".playIcon")).toBeVisible();
   await guide.getByRole("button", { name: "Next scene", exact: true }).click();
   await expect(guide.locator(".sceneCount")).toHaveText("02 / 04");
   await guide.getByRole("button", { name: "Previous scene", exact: true }).click();
@@ -2896,4 +2889,108 @@ test("a guide does not substitute a missing bank or an unavailable operation", a
   await page.goto('/#/guide/AMD/RUB?amount=100000&from=am-idbank&to=ru-alfabank&path=unavailable-operation');
   await expect(page.getByRole("heading", { name: "This route is no longer available" })).toBeVisible();
   await expect(page.getByTestId("route-guide")).toHaveCount(0);
+});
+
+test("converter walkthrough demonstrates both pickers without changing the exchange", async ({ page }) => {
+  await mockBackend(page);
+  await page.addInitScript(() => { localStorage.setItem("pay3flow.exchange.source-method", "am-idbank"); localStorage.setItem("pay3flow.exchange.target-method", "ru-alfabank"); });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await openApp(page);
+  await page.getByLabel("Amount to send").fill("2500");
+  await expect(page.getByTestId("complete-route").first()).toBeVisible();
+  await page.getByTestId("complete-route").nth(1).locator(".routeRank").click();
+  const original = await page.evaluate(() => ({ hash: location.hash, storage: JSON.stringify(localStorage), amount: (document.querySelector("#exchange-amount") as HTMLInputElement).value, selected: document.querySelector(".routeCard.selected .routeRank")?.textContent }));
+  let searches = 0;
+  page.on("request", request => { if (/\/api\/p2p\/routes/.test(request.url())) searches++; });
+  await page.getByTestId("start-converter-walkthrough").click();
+  const guide = page.getByTestId("converter-walkthrough");
+  await expect(guide).toBeVisible();
+  await expect(guide.locator(".demoPicker .dialog")).toBeVisible({ timeout: 5000 });
+  await expect(guide.locator(".demoStage .moneyPanelSource .methodText strong")).toHaveText("Ameriabank", { timeout: 6000 });
+  await expect(guide).toHaveAttribute("data-step", "3", { timeout: 6000 });
+  await expect(guide.locator(".demoPicker .dialog")).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath("demo-picker.png") });
+  await expect(guide).toHaveAttribute("data-step", "5", { timeout: 7000 });
+  await page.screenshot({ path: test.info().outputPath("demo-amount.png") });
+  await expect(guide.locator(".demoStage .moneyPanelTarget .methodText strong")).toHaveText("Sberbank");
+  await expect(guide.locator(".demoStage .moneyPanelSource .amountInput")).toHaveValue("1000");
+  await expect(guide).toHaveCount(0, { timeout: 4000 });
+  expect(await page.evaluate(() => ({ hash: location.hash, storage: JSON.stringify(localStorage), amount: (document.querySelector("#exchange-amount") as HTMLInputElement).value, selected: document.querySelector(".routeCard.selected .routeRank")?.textContent }))).toEqual(original);
+  expect(searches).toBe(0);
+  await expect(page.getByTestId("start-converter-walkthrough")).toBeFocused();
+  expect(await page.locator("body").evaluate(node => node.style.position)).not.toBe("fixed");
+  expect(await page.locator(".shell").evaluate(node => node.inert)).toBe(false);
+});
+
+test("converter walkthrough cancels from an open picker and restores scroll and focus", async ({ page }) => {
+  await mockBackend(page);
+  await page.addInitScript(() => { localStorage.setItem("pay3flow.exchange.source-method", "am-idbank"); localStorage.setItem("pay3flow.exchange.target-method", "ru-alfabank"); });
+  await openApp(page);
+  await page.getByTestId("start-converter-walkthrough").scrollIntoViewIfNeeded();
+  const scroll = await page.evaluate(() => scrollY);
+  await page.getByTestId("start-converter-walkthrough").click();
+  const guide = page.getByTestId("converter-walkthrough");
+  await expect(guide.locator(".demoPicker .dialog")).toBeVisible({ timeout: 6000 });
+  await page.keyboard.press("Escape");
+  await expect(guide).toHaveCount(0);
+  await expect(page.getByTestId("start-converter-walkthrough")).toBeFocused();
+  expect(await page.evaluate(() => scrollY)).toBe(scroll);
+  expect(await page.locator("body").evaluate(node => node.style.position)).not.toBe("fixed");
+  await page.getByTestId("start-converter-walkthrough").click();
+  await expect(guide).toBeVisible();
+  await guide.getByRole("button", { name: "Close guide", exact: true }).click();
+  await expect(guide).toHaveCount(0);
+  await page.getByLabel("Amount to send").fill("1000");
+  await expect(page.getByTestId("complete-route").first()).toBeVisible();
+});
+
+test("route scrollbar follows ranking depth and overview includes bank routes", async ({ page }) => {
+  await mockBackend(page, { routeCount: 101 });
+  await page.addInitScript(() => { localStorage.setItem("pay3flow.exchange.source-method", "am-idbank"); localStorage.setItem("pay3flow.exchange.target-method", "ru-alfabank"); });
+  await openApp(page);
+  await expect(page.locator("#how-it-works")).toHaveCount(0);
+  await expect(page.locator(".bankTags")).toContainText("Ameriabank");
+  await expect(page.locator(".bankTags")).toContainText("Sberbank");
+  await expect(page.locator(".examples article").first()).toContainText("Ameriabank");
+  await expect(page.locator(".examples article").first()).toContainText("Sberbank");
+  await page.getByLabel("Amount to send").fill("1000");
+  await expect(page.getByTestId("complete-route").first()).toBeVisible();
+  const group = page.getByTestId("route-groups");
+  await expect(page.getByTestId("complete-route")).toHaveCount(101);
+  await page.evaluate(() => document.fonts.ready);
+  await expect(group).toHaveCSS("scrollbar-color", /rgb\(181, 245, 0\)/);
+  for (const [fraction, color] of [[1 / 3, "rgb(250, 204, 21)"], [2 / 3, "rgb(249, 115, 22)"], [1, "rgb(239, 68, 68)"]] as const) {
+    await expect.poll(async () => {
+      await group.evaluate((node, fraction) => { node.scrollTop = (node.scrollHeight - node.clientHeight) * fraction; }, fraction);
+      return group.evaluate(node => getComputedStyle(node).getPropertyValue("--route-scroll-color"));
+    }).toBe(color);
+  }
+  await expect(page.getByTestId("complete-route").first().locator(".workflowAsset img").first()).toHaveAttribute("src", "/icons/flags/am.svg");
+  await expect(page.getByTestId("complete-route").first().locator(".workflowAsset img").last()).toHaveAttribute("src", "/icons/flags/ru.svg");
+  for (const popover of await page.locator(".foundVenuePopover").all()) await expect(popover).not.toContainText("Route found");
+});
+
+
+test("guide suspends offscreen animation while scrolling", async ({ page, isMobile }) => {
+  await mockBackend(page);
+  await page.addInitScript(() => { localStorage.setItem("pay3flow.exchange.source-method", "am-idbank"); localStorage.setItem("pay3flow.exchange.target-method", "ru-alfabank"); });
+  await page.setViewportSize({ width: isMobile ? 393 : 1280, height: 400 });
+  await openApp(page);
+  await page.getByLabel("Amount to send").fill("1000");
+  await expect(page.getByTestId("complete-route").first()).toBeVisible();
+  await page.getByTestId("complete-route").first().locator(".routeWorkflowButton").click();
+  const guide = page.getByTestId("route-guide");
+  await guide.getByTestId("start-guide").click();
+  await expect(guide.locator(".scene")).not.toHaveClass(/paused/);
+  await expect(guide.getByTestId("playback-toggle").locator("img")).toHaveAttribute("src", "/icons/ui/guide-pause.png");
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await expect(guide.locator(".scene")).toHaveClass(/paused/);
+  const progress = await guide.locator(".playerTimeline button[aria-pressed=true] > span").getAttribute("style");
+  // Exercise several playback ticks while its illustration is offscreen.
+  await page.waitForTimeout(400);
+  await expect(guide.locator(".playerTimeline button[aria-pressed=true] > span")).toHaveAttribute("style", progress!);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(guide.locator(".scene")).not.toHaveClass(/paused/);
+  await expect(guide.locator(".checkpoint")).toHaveCount(0);
+  await expect(page.locator(".appShell")).toHaveClass(/guideActive/);
 });

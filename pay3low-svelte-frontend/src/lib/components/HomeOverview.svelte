@@ -3,7 +3,7 @@
   import { COMMUNITY_URL, PROJECT_URL, homeContent } from "$lib/home-content";
   import { assetIcon, networkIcon, venueIcon } from "$lib/icons";
   import { fiatFlagUrl } from "$lib/currency-flags";
-  import type { PaymentMethod } from "$lib/payment-methods";
+  import { paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
   import type { ProviderDefinition } from "$lib/exchange";
   export let paymentMethods: PaymentMethod[] = [];
   export let providerCatalog: ProviderDefinition[] = [];
@@ -41,6 +41,25 @@
         id: provider.slug, name: provider.name.replace(/\s+(buy|sell)$/i, "").trim() || provider.slug
       }])).values()].sort((a, b) => a.name.localeCompare(b.name))
     : defaultProviders;
+  const defaultBanks = [
+    { name: "Ameriabank", currency: "AMD", iconUrl: "/icons/assets/ameriabank-green.png" },
+    { name: "IDBank", currency: "AMD", iconUrl: "/icons/assets/idbank.png" },
+    { name: "Sberbank", currency: "RUB", iconUrl: "/icons/assets/sberbank.webp" },
+    { name: "Belarusbank", currency: "BYN", iconUrl: "/icons/assets/belarusbank.webp" },
+  ];
+  $: banks = paymentMethods.length
+    ? [...new Map(paymentMethods.filter(method => method.kind === "bank").map(method => [
+        `${method.country}:${method.currencyGroup ?? method.name.toLowerCase()}`,
+        { name: method.name, currency: method.currency, iconUrl: paymentMethodFavicon(method) ?? assetIcon(method.currency) }
+      ])).values()].sort((a, b) => a.name.localeCompare(b.name))
+    : defaultBanks;
+  function exampleBank(currency: string) {
+    const preferred = currency === "AMD" ? "am-ameriabank" : currency === "RUB" ? "ru-sberbank" : "";
+    const method = paymentMethods.find(method => method.id === preferred)
+      ?? paymentMethods.find(method => method.kind === "bank" && method.currency === currency);
+    return method ? { name: method.name, iconUrl: paymentMethodFavicon(method) ?? assetIcon(currency) }
+      : defaultBanks.find(bank => bank.currency === currency);
+  }
   function assetOrder(asset: string) {
     const index = defaultAssets.indexOf(asset);
     return index < 0 ? defaultAssets.length : index;
@@ -56,22 +75,32 @@
       <div class="marketTags"><span>P2P</span><span>{t("Exchangers", {}, $locale)}</span><span>SPOT</span></div>
       <div class="flowPreview" aria-hidden="true">{#each ["AMD", "USDT", "RUB"] as asset, index}{@const flag = fiatFlagUrl(asset)}{#if index}<span class="routeArrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 12h16m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span>{/if}<span class="flowAsset"><img src={flag ?? assetIcon(asset)} class:fiatFlag={Boolean(flag)} alt="" width="24" height="24" loading="lazy" decoding="async" />{asset}</span>{/each}</div>
     </section>
-    <section id="how-it-works" class="howCard" aria-labelledby="how-heading">
-      <div class="sectionHead"><h2 id="how-heading">{copy.howTitle}</h2></div>
-      <ol>{#each copy.steps as step, index}<li><span class="stepIndex" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span><p>{step}</p></li>{/each}</ol>
-    </section>
   </div>
 
   <section class="coverage" aria-labelledby="coverage-heading">
     <div class="sectionHead"><h2 id="coverage-heading">{copy.coverageTitle}</h2></div>
     <div class="coverageGrid">
       <div class="coverageItem"><div class="assetTags">{#each assets as asset}{@const flag = fiatFlagUrl(asset)}<span><img src={flag ?? assetIcon(asset)} class:fiatFlag={Boolean(flag)} alt="" width="20" height="20" loading="lazy" decoding="async" />{asset}</span>{/each}</div><p>{copy.currencies}</p></div>
-      <div class="coverageItem"><div class="providerTags">{#each providers as provider}<span><img src={venueIcon(provider.id)} alt="" width="20" height="20" loading="lazy" decoding="async" />{provider.name}</span>{/each}</div><p>{copy.sources}</p></div>
+      <div class="coverageItem"><div class="providerTags">{#each providers as provider}<span><img src={venueIcon(provider.id)} alt="" width="20" height="20" loading="lazy" decoding="async" />{provider.name}</span>{/each}</div><h3 class="bankHeading">{t("Banks", {}, $locale)}</h3><div class="providerTags bankTags">{#each banks as bank}<span><img src={bank.iconUrl} alt="" width="20" height="20" loading="lazy" decoding="async" />{bank.name}</span>{/each}</div><p>{copy.sources}</p></div>
     </div>
     <h3>{copy.examplesTitle}</h3>
     <div class="examples">
       {#each copy.examples as example, index}
-        <article><span class="exampleIndex" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span><h4>{#each example.route.split(" → ") as asset, assetIndex}<span class="examplePart">{#if assetIndex}<span class="routeArrow" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 12h16m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span>{/if}<span class="routeAsset"><span class="routeAssetMain"><img src={fiatFlagUrl(asset.split(" ")[0]) ?? assetIcon(asset.split(" ")[0])} class:fiatFlag={Boolean(fiatFlagUrl(asset.split(" ")[0]))} alt="" width="18" height="18" loading="lazy" decoding="async" /><strong>{asset.split(" (")[0]}</strong></span>{#if asset.includes(" (")}{@const network = asset.split(" (")[1].replace(")", "")}<span class="routeNetwork" title={network}><img src={networkIcon(network)} alt={network} width="18" height="18" loading="lazy" decoding="async" /></span>{/if}</span></span>{/each}</h4><p>{example.explanation}</p></article>
+        <article><span class="exampleIndex" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
+          <h4>{#each example.route.split(" → ") as asset, assetIndex}
+            {@const currency = asset.split(" ")[0]}
+            {@const bank = asset.includes("cash") ? undefined : exampleBank(currency)}
+            <span class="examplePart">
+              {#if assetIndex}<span class="routeArrow" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 12h16m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span>{/if}
+              <span class="routeAsset">
+                <span class="routeAssetMain"><img src={fiatFlagUrl(currency) ?? assetIcon(currency)} class:fiatFlag={Boolean(fiatFlagUrl(currency))} alt="" width="18" height="18" loading="lazy" decoding="async" /><strong>{asset.split(" (")[0]}</strong></span>
+                {#if bank}<span class="routeNetwork" title={bank.name}><img src={bank.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" /><strong>{bank.name}</strong></span>{/if}
+                {#if asset.includes(" (")}{@const network = asset.split(" (")[1].replace(")", "")}<span class="routeNetwork" title={network}><img src={networkIcon(network)} alt={network} width="18" height="18" loading="lazy" decoding="async" /></span>{/if}
+                {#if assetIndex}<span class="routeNetwork routeVenue"><img src={venueIcon(index === 2 && assetIndex === 1 ? "bestchange" : "bybit")} alt="" width="18" height="18" loading="lazy" decoding="async" /><strong>{index === 2 && assetIndex === 1 ? "BestChange" : "Bybit"}</strong></span>{/if}
+              </span>
+            </span>
+          {/each}</h4><p>{example.explanation}</p>
+        </article>
       {/each}
     </div>
   </section>
@@ -95,7 +124,7 @@
 <style>
   .overview { display: grid; gap: 24px; width: min(var(--layout-width), calc(100% - 2 * var(--page-gutter))); margin: 64px auto 0; color: var(--color-text); }
   section { min-width: 0; padding: 32px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-card); background: var(--color-paper); scroll-margin-top: 24px; }
-  .introduction { display: grid; grid-template-columns: .9fr 1.1fr; gap: 24px; }
+  .introduction { display: grid; grid-template-columns: 1fr; gap: 24px; }
   .sectionHead, .brandLine { display: flex; align-items: start; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
   .sectionHead h2 { margin: 0; max-width: 30ch; }
   h2 { margin: 0 0 20px; font-size: clamp(24px, 2.3vw, 30px); font-weight: 750; line-height: 1.2; letter-spacing: -.045em; text-wrap: balance; }
@@ -106,21 +135,14 @@
   .aboutCard { display: flex; flex-direction: column; background: var(--color-panel); }
   .brandLine { align-items: center; justify-content: start; margin-bottom: 32px; font-size: 16px; font-weight: 800; letter-spacing: -.04em; }
   .brandMark { display: block; width: 36px; height: 36px; flex: 0 0 auto; border-radius: 9px; object-fit: contain; }
-  .aboutCard h2 { font-size: clamp(30px, 3.3vw, 44px); max-width: 14ch; }
+  .aboutCard p { max-width: 90ch; }
+  .aboutCard h2 { font-size: clamp(30px, 3.3vw, 44px); max-width: 25ch; }
   .marketTags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
   .marketTags span { padding: 5px 10px; border: 1px solid var(--color-border-strong); border-radius: 6px; color: var(--color-text-soft); font: 12px/1.5 var(--font-mono); }
-  .flowPreview { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; padding-top: 32px; font: 500 clamp(18px, 2vw, 25px)/1.2 var(--font-mono); }
+  .flowPreview { max-width: 500px; width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; padding-top: 32px; font: 500 clamp(18px, 2vw, 25px)/1.2 var(--font-mono); }
   .flowPreview .flowAsset { display: inline-flex; align-items: center; gap: 8px; padding: 12px 0; }
   .flowPreview img { width: 24px; height: 24px; flex: 0 0 auto; border-radius: 50%; object-fit: contain; }
   .flowPreview img.fiatFlag { object-fit: cover; }
-  ol { display: grid; gap: 0; list-style: none; }
-  .howCard { display: flex; flex-direction: column; }
-  .howCard ol { flex: 1; grid-template-rows: repeat(3, minmax(0, 1fr)); }
-  .howCard li { align-items: center; padding: 20px 0; }
-  li { position: relative; display: grid; grid-template-columns: 40px 1fr; gap: 20px; padding: 24px 0; border-top: 1px solid var(--color-border); }
-  li:first-child { padding-top: 0; border-top: 0; }
-  li:last-child { padding-bottom: 0; }
-  .stepIndex { display: grid; width: 40px; height: 40px; place-items: center; border: 1px solid var(--color-border-strong); border-radius: 50%; background: var(--color-panel); color: var(--color-accent-text); font: 500 14px/1 var(--font-mono); }
   .coverageGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
   .coverageItem { min-width: 0; }
   .assetTags, .providerTags { display: flex; flex-wrap: wrap; align-content: start; gap: 8px; min-height: 80px; margin-bottom: 16px; }
@@ -137,7 +159,8 @@
   .routeAsset strong { font-family: var(--font-sans); font-size: 12px; font-weight: 800; white-space: nowrap; }
   .routeAsset img { display: block; width: 18px; height: 18px; flex: 0 0 auto; border-radius: 50%; object-fit: contain; }
   .routeAsset img.fiatFlag { object-fit: cover; }
-  .routeNetwork { display: flex; align-items: center; padding: 5px 7px; border-left: 1px solid var(--color-border-strong); }
+  .bankHeading { margin: 22px 0 12px; }
+  .routeNetwork { gap: 6px; display: flex; align-items: center; padding: 5px 7px; border-left: 1px solid var(--color-border-strong); }
   .routeArrow { display: grid; width: 20px; height: 20px; flex: 0 0 auto; place-items: center; color: var(--color-text); }
   .routeArrow svg { display: block; }
   article p { font-size: 14px; line-height: 1.6; }
@@ -162,7 +185,7 @@
   a.primaryLink:hover { background: var(--color-accent-strong); }
   @media (max-width: 980px) {
     .overview { margin-top: 44px; gap: 16px; }
-    .introduction { grid-template-columns: 1fr 1fr; gap: 16px; }
+    .introduction { grid-template-columns: 1fr; gap: 16px; }
     section { padding: 24px; }
     .coverageGrid { gap: 16px; }
     .examples { grid-template-columns: 1fr; }
@@ -180,11 +203,6 @@
     .flowPreview { gap: 6px; }
     .flowPreview .flowAsset { gap: 6px; }
     .flowPreview img { width: 20px; height: 20px; }
-    li { gap: 14px; padding: 20px 0; }
-    .howCard ol { flex: initial; grid-template-rows: none; }
-    .howCard li { align-items: start; }
-    .howCard li:first-child { padding-top: 0; }
-    .howCard li:last-child { padding-bottom: 0; }
     .coverageGrid { gap: 24px; }
     .assetTags, .providerTags { min-height: 0; }
     article { grid-template-columns: 24px 1fr; padding: 18px; gap: 12px; }

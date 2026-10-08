@@ -313,3 +313,6 @@ input { min-height: 32px; }
 /* The entrance hides only the scrollbar; page scrolling remains available. */
 html.introPlaying, html.introPlaying body { scrollbar-width: none; }
 html.introPlaying::-webkit-scrollbar, html.introPlaying body::-webkit-scrollbar { display: none; }
+
+.appShell.guideActive { background: var(--color-bg); }
+.appShell.guideActive::before, .appShell.guideActive::after { display: none; }

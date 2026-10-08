@@ -5,6 +5,8 @@
   import type { RouteCandidate, ServiceVote, VenueSearchStatus } from "$lib/exchange";
   import { formatRouteCount, locale, t, type Locale } from "$lib/i18n";
   import { assetIcon, dislikeIcon, likeIcon, networkIcon, venueIcon, warningIcon } from "$lib/icons";
+  import { fiatFlagUrl } from "$lib/currency-flags";
+  import { routeScrollColor } from "$lib/route-scroll-color";
 
   export let routes: RouteCandidate[];
   export let routesFound = 0;
@@ -179,7 +181,7 @@
                         <img src={venue.iconUrl || venueIcon(venue.id)} alt="" width="20" height="20" decoding="async" on:error={(event) => fallbackVenueIcon(event, venue.id)} />
                         <strong>{venue.label}</strong>
                       </div>
-                      <span class:venueOk={status?.ok} class:venueError={status && !status.ok}>{status?.ok === false ? (status.offers_found > 0 ? "Some quotes unavailable" : "Response error") : hasRoute ? "Route found" : (status?.offers_found ?? 0) > 0 ? "Offers received · no matching route" : "No matching route"}</span>
+                      {#if !hasRoute || status?.ok === false}<span class:venueOk={status?.ok} class:venueError={status && !status.ok}>{status?.ok === false ? (status.offers_found > 0 ? "Some quotes unavailable" : "Response error") : (status?.offers_found ?? 0) > 0 ? "Offers received · no matching route" : "No matching route"}</span>{/if}
                       <dl>
                         <div><dt>Routes found</dt><dd>{status?.routes_found ?? 0}</dd></div>
                         <div><dt>Quotes / markets received</dt><dd>{status?.offers_found ?? 0}</dd></div>
@@ -223,7 +225,7 @@
     </div>
     {#if routes.length > 0}
       <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-      <div class="routeGroups" data-testid="route-groups" role="region" tabindex="0" aria-label="Found routes">
+      <div class="routeGroups" use:routeScrollColor data-testid="route-groups" role="region" tabindex="0" aria-label="Found routes">
         <ul class="routeList">
           {#each visibleRoutes as route, index (route.route_id)}
             {@const complete = route.status === "complete"}
@@ -241,7 +243,7 @@
                       {#if stepIndex > 0}<span class="workflowArrow" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 12h16m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span>{/if}
                       <span class="workflowControl">
                         <span class="workflowAsset">
-                          <span class="workflowIcon" aria-hidden="true"><img src={FIAT_CURRENCIES.has(step.currency.toUpperCase()) ? assetIcon(step.currency) : step.iconUrl ?? assetIcon(step.currency)} alt="" width="18" height="18" loading="lazy" decoding="async" /></span>
+                          <span class="workflowIcon" aria-hidden="true"><img class:fiatFlag={Boolean(fiatFlagUrl(step.currency))} src={fiatFlagUrl(step.currency) ?? (FIAT_CURRENCIES.has(step.currency.toUpperCase()) ? assetIcon(step.currency) : step.iconUrl ?? assetIcon(step.currency))} alt="" width="18" height="18" loading="lazy" decoding="async" /></span>
                           <strong>{step.currency.toUpperCase()}</strong>
                         </span>
                         {#if step.network}
@@ -617,6 +619,7 @@
 }
 
 .routeGroups {
+  scrollbar-color: var(--route-scroll-color, #b5f500) var(--color-panel);
   min-height: 0;
   flex: 1;
   margin-top: 14px;
@@ -969,6 +972,11 @@
   object-fit: contain;
 }
 
+.workflowIcon img.fiatFlag { object-fit: cover; }
+.routeGroups::-webkit-scrollbar { width: 8px; }
+.routeGroups::-webkit-scrollbar-track { background: var(--color-panel); }
+.routeGroups::-webkit-scrollbar-thumb { background: var(--route-scroll-color, #b5f500); border-radius: 8px; }
+
 .workflowVenue {
   flex: 0 1 auto;
   gap: 6px;
@@ -979,6 +987,8 @@
 
 .workflowVenue strong {
   overflow: hidden;
+  line-height: 1.5;
+  padding-block: 1px;
   font-size: 12px;
   font-weight: 850;
   text-overflow: ellipsis;
