@@ -1509,9 +1509,12 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   });
   await page.getByRole("button", { name: "Refresh routes now" }).click();
   await expect(page.getByTestId("start-search")).toHaveText("Go ↗");
-  await expect(page.getByTestId("start-search")).toBeDisabled();
-  await expect(page.getByTestId("start-search")).toHaveCSS("background-color", "rgb(243, 246, 240)");
+  await expect(page.getByTestId("start-search")).toBeEnabled();
+  await page.getByTestId("start-search").click();
+  await expect(instructions).toBeVisible();
   finishRefresh();
+  await expect(instructions).toBeVisible();
+  await instructions.locator(".guideToolbar").getByRole("button", { name: /Back to routes/ }).click();
   await expect(page.getByTestId("start-search")).toBeEnabled();
 
   await swapDirection.click();
@@ -1526,15 +1529,13 @@ test("editing the receive amount updates the send amount", async ({ page }) => {
   const receiveAmount = page.getByLabel("Amount to receive");
   await receiveAmount.fill("10000");
   await expect(sendAmount).toHaveValue("");
-  await expect(page.getByText("Calculating from live quotes")).toBeVisible();
-  await page.getByTestId("start-search").click();
   await expect(sendAmount).toHaveValue("42269");
   await expect(receiveAmount).toHaveValue("10000");
   await expect(page.getByTestId("complete-route")).toHaveCount(1);
 
   const quotedSendAmount = await sendAmount.inputValue();
   await sendAmount.fill(quotedSendAmount);
-  await page.getByTestId("start-search").click();
+  await expect(page.getByTestId("complete-route")).toHaveCount(1);
   await expect(receiveAmount).toHaveValue("10000");
 });
 
@@ -1879,8 +1880,10 @@ test("search venues only show providers with matching routes", async ({ page }) 
 
   const refreshButton = page.getByRole("button", { name: "Refresh routes now" });
   await expect(refreshButton.locator("img")).toHaveClass(/refreshSpin/);
+  await expect(page.getByTestId("start-search")).toBeDisabled();
   sendFirstRoute?.();
   await expect(page.getByTestId("complete-route")).toHaveCount(1);
+  await expect(page.getByTestId("start-search")).toBeEnabled();
   await expect(page.getByTestId("complete-route").first()).toHaveClass(/selected/);
   const foundVenues = panelTop.locator(".resultSummary").getByTestId("found-venue");
   await expect(foundVenues).toHaveCount(1);
@@ -1908,9 +1911,17 @@ test("search venues only show providers with matching routes", async ({ page }) 
   await expect(page.getByTestId("complete-route")).toHaveCount(2);
   await expect(searchingVenues).toHaveCount(4);
 
-  await page.getByTestId("complete-route").nth(1).click();
+  await page.getByTestId("complete-route").nth(1).locator(".routeRank").click();
   await expect(page.getByTestId("complete-route").nth(1)).toHaveClass(/selected/);
+  await expect(refreshButton).toBeDisabled();
+  await page.getByTestId("start-search").click();
+  const guide = page.getByTestId("route-guide");
+  await expect(guide).toBeVisible();
+  await guide.getByTestId("start-guide").click();
+  await expect(guide.locator(".headingVenue")).toContainText("Bybit");
   finishSearch?.();
+  await expect(guide.locator(".headingVenue")).toContainText("Bybit");
+  await guide.locator(".guideToolbar").getByRole("button", { name: /Back to routes/ }).click();
   await expect(refreshButton).toBeEnabled();
   await expect(searchingVenues).toHaveCount(0);
   await expect(page.getByTestId("complete-route").nth(1)).toHaveClass(/selected/);
