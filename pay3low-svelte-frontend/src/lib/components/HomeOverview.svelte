@@ -50,7 +50,7 @@
 <div class="overview" data-testid="home-overview">
   <div class="introduction">
     <section id="about" class="aboutCard" aria-labelledby="about-heading">
-      <div class="brandLine"><span class="brandMark" aria-hidden="true">↗</span><span>Pay3Flow</span></div>
+      <div class="brandLine"><img class="brandMark" src="/icons/assets/pay3flow_logo.svg" alt="" aria-hidden="true" width="36" height="36" loading="lazy" decoding="async" /><span>Pay3Flow</span></div>
       <h2 id="about-heading">{copy.aboutTitle}</h2>
       <p>{copy.about}</p>
       <div class="marketTags"><span>P2P</span><span>{t("Exchangers", {}, $locale)}</span><span>SPOT</span></div>
@@ -105,7 +105,7 @@
   p { margin: 0; font-size: 16px; line-height: 1.65; color: var(--color-text-soft); }
   .aboutCard { display: flex; flex-direction: column; background: var(--color-panel); }
   .brandLine { align-items: center; justify-content: start; margin-bottom: 32px; font-size: 16px; font-weight: 800; letter-spacing: -.04em; }
-  .brandMark { display: grid; width: 36px; height: 36px; place-items: center; border: var(--border-highlight-width) solid var(--color-accent-strong); border-radius: 9px; background: var(--color-accent); color: #132015; font-size: 25px; }
+  .brandMark { display: block; width: 36px; height: 36px; flex: 0 0 auto; border-radius: 9px; object-fit: contain; }
   .aboutCard h2 { font-size: clamp(30px, 3.3vw, 44px); max-width: 14ch; }
   .marketTags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
   .marketTags span { padding: 5px 10px; border: 1px solid var(--color-border-strong); border-radius: 6px; color: var(--color-text-soft); font: 12px/1.5 var(--font-mono); }
