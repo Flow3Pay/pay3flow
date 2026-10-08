@@ -44,11 +44,13 @@
 
   .optionCard:hover {
     border-color: var(--color-border-strong);
+    border-width: var(--border-highlight-width);
     background: var(--color-panel-soft);
   }
 
   .optionCard[data-selected] {
     border-color: var(--color-accent-text);
+    border-width: var(--border-highlight-width);
     background: var(--color-accent-soft);
   }
 
@@ -107,11 +109,13 @@
 
   :global(html[data-theme="dark"]) .optionCard:hover {
     border-color: var(--color-border-strong);
+    border-width: var(--border-highlight-width);
     background: var(--color-panel-soft);
   }
 
   :global(html[data-theme="dark"]) .optionCard[data-selected] {
     border-color: var(--color-accent-text);
+    border-width: var(--border-highlight-width);
     background: var(--color-accent-soft);
   }
 

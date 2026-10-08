@@ -131,7 +131,7 @@
   .resultPanel { flex: 1; overflow: hidden; display: flex; min-height: 0; flex-direction: column; }
   .searchRow { flex: 0 0 auto; padding: 14px 18px 13px; border-bottom: 1px solid var(--color-border); }
   .searchBox { height: 48px; gap: 11px; padding: 0 16px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-panel-soft); color: var(--color-text-faint); transition: border-color .16s ease, background .16s ease, box-shadow .16s ease, color .16s ease; }
-  .searchBox:focus-within { border-color: var(--color-accent-strong); background: var(--color-paper); color: var(--color-text-soft); box-shadow: none; outline: 2px solid var(--color-focus); outline-offset: 2px; }
+  .searchBox:focus-within { border-color: var(--color-accent-strong); background: var(--color-paper); color: var(--color-text-soft); box-shadow: none; outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 2px; }
   .searchBox input { width: 100%; border: 0; outline: 0; background: transparent; font: inherit; font-size: 13px; font-weight: 650; }
   .searchBox input::placeholder { color: var(--color-text-faint); opacity: 1; }
   .methods { flex-shrink: 1; height: min(540px, calc(92vh - 160px)); min-height: 0; overflow-y: auto; padding: 5px 14px 22px; scrollbar-gutter: stable; }

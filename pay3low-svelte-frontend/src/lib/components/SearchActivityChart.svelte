@@ -102,7 +102,7 @@
   .pairCurrency img { display: block; width: 16px; height: 16px; border-radius: 50%; object-fit: cover; }
   .periodWrap { position: relative; flex: 0 0 auto; }
   .periodButton { display: grid; width: 32px; height: 32px; place-items: center; padding: 0; border: 0; border-radius: 9px; background: transparent; cursor: pointer; }
-  .periodButton:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+  .periodButton:focus-visible { outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 2px; }
   @media (max-width: 980px), (pointer: coarse) { .periodButton { width: 44px; height: 44px; } .headingActions { margin-right: -6px; } }
   .periodButton img { width: 18px; height: 18px; object-fit: contain; filter: brightness(0); }
   :global(html[data-theme="dark"]) .periodButton img { filter: none; }

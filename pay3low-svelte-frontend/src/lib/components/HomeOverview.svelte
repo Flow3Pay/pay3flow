@@ -54,7 +54,7 @@
       <h2 id="about-heading">{copy.aboutTitle}</h2>
       <p>{copy.about}</p>
       <div class="marketTags"><span>P2P</span><span>{t("Exchangers", {}, $locale)}</span><span>SPOT</span></div>
-      <div class="flowPreview" aria-hidden="true">{#each ["AMD", "USDT", "RUB"] as asset, index}{@const flag = fiatFlagUrl(asset)}{#if index}<b>→</b>{/if}<span><img src={flag ?? assetIcon(asset)} class:fiatFlag={Boolean(flag)} alt="" width="24" height="24" loading="lazy" />{asset}</span>{/each}</div>
+      <div class="flowPreview" aria-hidden="true">{#each ["AMD", "USDT", "RUB"] as asset, index}{@const flag = fiatFlagUrl(asset)}{#if index}<span class="routeArrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 12h16m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span>{/if}<span class="flowAsset"><img src={flag ?? assetIcon(asset)} class:fiatFlag={Boolean(flag)} alt="" width="24" height="24" loading="lazy" />{asset}</span>{/each}</div>
     </section>
     <section id="how-it-works" class="howCard" aria-labelledby="how-heading">
       <div class="sectionHead"><h2 id="how-heading">{copy.howTitle}</h2></div>
@@ -105,15 +105,14 @@
   p { margin: 0; font-size: 16px; line-height: 1.65; color: var(--color-text-soft); }
   .aboutCard { display: flex; flex-direction: column; background: var(--color-panel); }
   .brandLine { align-items: center; justify-content: start; margin-bottom: 32px; font-size: 16px; font-weight: 800; letter-spacing: -.04em; }
-  .brandMark { display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid var(--color-accent-strong); border-radius: 9px; background: var(--color-accent); color: #132015; font-size: 25px; }
+  .brandMark { display: grid; width: 36px; height: 36px; place-items: center; border: var(--border-highlight-width) solid var(--color-accent-strong); border-radius: 9px; background: var(--color-accent); color: #132015; font-size: 25px; }
   .aboutCard h2 { font-size: clamp(30px, 3.3vw, 44px); max-width: 14ch; }
   .marketTags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
   .marketTags span { padding: 5px 10px; border: 1px solid var(--color-border-strong); border-radius: 6px; color: var(--color-text-soft); font: 12px/1.5 var(--font-mono); }
   .flowPreview { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; padding-top: 32px; font: 500 clamp(18px, 2vw, 25px)/1.2 var(--font-mono); }
-  .flowPreview span { display: inline-flex; align-items: center; gap: 8px; padding: 12px 0; }
+  .flowPreview .flowAsset { display: inline-flex; align-items: center; gap: 8px; padding: 12px 0; }
   .flowPreview img { width: 24px; height: 24px; flex: 0 0 auto; border-radius: 50%; object-fit: contain; }
   .flowPreview img.fiatFlag { object-fit: cover; }
-  .flowPreview b { color: var(--color-text-faint); font-size: 18px; font-weight: 400; }
   ol { display: grid; gap: 0; list-style: none; }
   .howCard { display: flex; flex-direction: column; }
   .howCard ol { flex: 1; grid-template-rows: repeat(3, minmax(0, 1fr)); }
@@ -158,8 +157,8 @@
   a > span:last-child { font-size: 20px; }
   .projectLinkLabel { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
   .projectLinkLabel img, .projectLinkLabel svg { display: block; width: 20px; height: 20px; flex: 0 0 auto; }
-  a:hover { border-color: var(--color-accent-strong); }
-  a.primaryLink { border-color: var(--color-accent-strong); background: var(--color-accent); color: #132015; }
+  a:hover { border-color: var(--color-accent-strong); border-width: var(--border-highlight-width); }
+  a.primaryLink { border-color: var(--color-accent-strong); border-width: var(--border-highlight-width); background: var(--color-accent); color: #132015; }
   a.primaryLink:hover { background: var(--color-accent-strong); }
   @media (max-width: 980px) {
     .overview { margin-top: 44px; gap: 16px; }
@@ -179,7 +178,7 @@
     .brandLine { margin-bottom: 24px; }
     .aboutCard h2 { max-width: none; }
     .flowPreview { gap: 6px; }
-    .flowPreview span { gap: 6px; }
+    .flowPreview .flowAsset { gap: 6px; }
     .flowPreview img { width: 20px; height: 20px; }
     li { gap: 14px; padding: 20px 0; }
     .howCard ol { flex: initial; grid-template-rows: none; }

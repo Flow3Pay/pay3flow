@@ -192,8 +192,9 @@
 
 .searchBox:focus-within {
   border-color: var(--color-violet);
+  border-width: var(--border-highlight-width);
   background: #fff;
-  box-shadow: none; outline: 2px solid var(--color-focus); outline-offset: 2px;
+  box-shadow: none; outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 2px;
 }
 
 .searchBox input {
@@ -255,11 +256,13 @@
 .methodRow:hover {
   background: #fff;
   border-color: var(--color-border);
+  border-width: var(--border-highlight-width);
   transform: translateX(2px);
 }
 
 .methodRow[data-selected] {
   border-color: rgba(117, 88, 246, 0.16);
+  border-width: var(--border-highlight-width);
   background: var(--color-violet-soft);
 }
 
@@ -369,6 +372,7 @@
 .countryButton:hover,
 .countryButton[aria-pressed="true"] {
   border-color: var(--color-border);
+  border-width: var(--border-highlight-width);
   background: #fff;
 }
 
@@ -491,6 +495,7 @@
 
 :global(html[data-theme="dark"]) .searchBox:focus-within {
   border-color: var(--color-accent-strong);
+  border-width: var(--border-highlight-width);
   background: #202020;
 }
 
@@ -498,11 +503,13 @@
 :global(html[data-theme="dark"]) .countryButton:hover,
 :global(html[data-theme="dark"]) .countryButton[aria-pressed="true"] {
   border-color: #4b4b4b;
+  border-width: var(--border-highlight-width);
   background: #2d2d2d;
 }
 
 :global(html[data-theme="dark"]) .methodRow[data-selected] {
   border-color: rgba(181, 245, 0, 0.32);
+  border-width: var(--border-highlight-width);
   background: rgba(181, 245, 0, 0.09);
 }
 
@@ -559,7 +566,8 @@
 
 .searchBox:focus-within {
   border-color: var(--color-accent-strong);
-  box-shadow: none; outline: 2px solid var(--color-focus); outline-offset: 2px;
+  border-width: var(--border-highlight-width);
+  box-shadow: none; outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 2px;
 }
 
 .methods {
@@ -573,12 +581,14 @@
 
 .methodRow:hover {
   border-color: #b7cead;
+  border-width: var(--border-highlight-width);
   background: #fbfcfa;
   box-shadow: none;
 }
 
 .methodRow[data-selected] {
   border-color: #cce29a;
+  border-width: var(--border-highlight-width);
   background: #f1f8df;
 }
 
@@ -599,6 +609,7 @@
 .countryButton:hover,
 .countryButton[aria-pressed="true"] {
   border-color: #b7cead;
+  border-width: var(--border-highlight-width);
   background: #fff;
 }
 
@@ -648,8 +659,9 @@
 
 .searchBox:focus-within {
   border-color: #c5e092;
+  border-width: var(--border-highlight-width);
   background: #fff;
-  box-shadow: none; outline: 2px solid var(--color-focus); outline-offset: 2px;
+  box-shadow: none; outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 2px;
 }
 
 .methods {
@@ -665,12 +677,14 @@
 
 .methodRow:hover {
   border-color: #dae2d2;
+  border-width: var(--border-highlight-width);
   background: #f3f7ec;
   box-shadow: none;
 }
 
 .methodRow[data-selected] {
   border-color: #c5e092;
+  border-width: var(--border-highlight-width);
   background: #eef7dc;
 }
 
@@ -697,6 +711,7 @@
 .countryButton:hover,
 .countryButton[aria-pressed="true"] {
   border-color: #dae2d2;
+  border-width: var(--border-highlight-width);
   background: #fff;
 }
 
@@ -763,6 +778,7 @@
 
 .methodRow:hover {
   border-color: #dae2d2;
+  border-width: var(--border-highlight-width);
   background: #f3f7ec;
   box-shadow: none;
   transform: none;
@@ -770,6 +786,7 @@
 
 .methodRow[data-selected] {
   border-color: #c5e092;
+  border-width: var(--border-highlight-width);
   background: #eef7dc;
 }
 

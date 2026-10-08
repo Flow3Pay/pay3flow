@@ -105,7 +105,7 @@
   .periodHeading strong { font-size: 13px; font-weight: 800; }
   .periodOptions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
   .periodOptions button { min-height: 44px; padding: 0 9px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-panel); color: var(--color-text-soft); font-size: 12px; font-weight: 800; }
-  .periodOptions button[aria-pressed="true"] { border-color: var(--color-accent); background: var(--color-accent); color: #171717; box-shadow: none; }
+  .periodOptions button[aria-pressed="true"] { border-color: var(--color-accent); border-width: var(--border-highlight-width); background: var(--color-accent); color: #171717; box-shadow: none; }
   :global(html[data-theme="dark"]) .periodDialog { border-color: var(--color-border-strong); background: rgba(25, 25, 25, .98); }
   :global(.dialog .activityHeading) { padding-right: 38px; }
   :global(.dialog .activityCard) { padding: 24px; gap: 14px; }

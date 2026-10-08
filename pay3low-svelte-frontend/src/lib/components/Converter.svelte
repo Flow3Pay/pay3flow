@@ -1345,6 +1345,7 @@
 .exchangesButton:hover,
 .settingsButton:hover {
   border-color: var(--color-border);
+  border-width: var(--border-highlight-width);
   background: var(--color-panel);
 }
 
@@ -1623,10 +1624,12 @@
 
 .sourceOption:hover {
   border-color: var(--color-accent);
+  border-width: var(--border-highlight-width);
 }
 
 .sourceOptionActive {
   border-color: var(--color-accent);
+  border-width: var(--border-highlight-width);
   background: var(--color-accent);
   color: #171717;
   box-shadow: none;
@@ -1688,7 +1691,8 @@
 .moneyPanel:hover,
 .moneyPanel:focus-within {
   border-color: var(--color-border-strong);
-  box-shadow: none; outline: 2px solid var(--color-focus); outline-offset: 2px;
+  border-width: var(--border-highlight-width);
+  box-shadow: none; outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 2px;
 }
 
 .panelCopy {
@@ -1756,6 +1760,7 @@
 
 .methodTrigger:hover {
   border-color: rgba(19, 22, 19, 0.2);
+  border-width: var(--border-highlight-width);
   box-shadow: none;
   transform: translateY(-1px);
 }
@@ -2147,7 +2152,7 @@
 
 .textInput:focus {
   border-color: var(--color-violet);
-  box-shadow: none; outline: 2px solid var(--color-focus); outline-offset: 2px;
+  box-shadow: none; outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 2px;
 }
 
 .demoNote {
@@ -2360,7 +2365,7 @@
 .routesToggle { position: absolute; top: 50%; right: calc(-1 * (var(--workspace-gap) + 20px)); width: var(--workspace-gap); transform: translateY(-50%); }
 .mobileRoutesToggle { display: none; }
 .chartToggle:hover, .routesToggle:hover, .mobileRoutesToggle:hover { opacity: .85; }
-.chartToggle:focus-visible, .routesToggle:focus-visible, .mobileRoutesToggle:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.chartToggle:focus-visible, .routesToggle:focus-visible, .mobileRoutesToggle:focus-visible { outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 2px; }
 .chartToggle span, .routesToggle span, .mobileRoutesToggle span { display: block; font-size: 21px; line-height: 1; -webkit-text-stroke: .55px currentColor; transition: transform .26s ease; }
 .chartToggle span, .mobileRoutesToggle span { transform: rotate(90deg); }
 .chartToggleOpen span, .mobileRoutesToggleOpen span { transform: rotate(-90deg); }
@@ -2520,6 +2525,7 @@
 
 .methodTrigger:hover {
   border-color: #a4af9e;
+  border-width: var(--border-highlight-width);
   background: #edf2e8;
   box-shadow: none;
   transform: translateY(-1px);
@@ -2699,6 +2705,7 @@
 
 .methodControls:has(> .methodTrigger:is(:hover, :focus-visible)) {
   border-color: #a4af9e;
+  border-width: var(--border-highlight-width);
 }
 
 .methodControls .methodTrigger {
@@ -2721,8 +2728,8 @@
 
 .methodControls .methodTrigger:focus-visible,
 .methodControls .networkButton:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: -2px;
+  outline: var(--focus-ring-width) solid var(--color-focus);
+  outline-offset: calc(-1 * var(--focus-ring-width));
 }
 
 .methodControls .networkControl {
@@ -2960,6 +2967,7 @@
 
 :global(html[data-theme="dark"]) .methodControls:has(> .methodTrigger:is(:hover, :focus-visible)) {
   border-color: #626262;
+  border-width: var(--border-highlight-width);
 }
 
 :global(html[data-theme="dark"]) .methodControls .methodTrigger:hover,

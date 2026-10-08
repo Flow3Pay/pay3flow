@@ -348,7 +348,7 @@
 .activityButton { display: none; width: 32px; height: 32px; flex: 0 0 auto; place-items: center; padding: 0; border: 0; border-radius: 9px; background: transparent; color: var(--color-text-soft); cursor: pointer; }
 .activityButton img { display: block; width: 18px; height: 18px; object-fit: contain; filter: brightness(0); }
 :global(html[data-theme="dark"]) .activityButton img { filter: brightness(0) invert(1); }
-.activityButton:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.activityButton:focus-visible { outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 2px; }
 @media (max-width: 980px) { .activityButton { display: grid; } }
 
 .resultSummary,
@@ -381,6 +381,7 @@
 
 .legalWarning:hover {
   border-color: #ffc700;
+  border-width: var(--border-highlight-width);
   background: rgba(255, 199, 0, 0.2);
   transform: translateY(-1px);
 }
@@ -390,7 +391,7 @@
 }
 
 .legalWarning:focus-visible {
-  outline: 2px solid var(--color-focus);
+  outline: var(--focus-ring-width) solid var(--color-focus);
   outline-offset: 2px;
 }
 
@@ -428,7 +429,7 @@
 
 .foundVenueActive {
   border-color: #94dd00;
-  box-shadow: none; outline: 2px solid var(--color-accent-strong); outline-offset: 2px;
+  box-shadow: none; outline: var(--focus-ring-width) solid var(--color-accent-strong); outline-offset: 2px;
 }
 
 .venueFilterClear {
@@ -614,7 +615,7 @@
 }
 
 .routeGroups:focus-visible {
-  outline: 2px solid var(--color-focus);
+  outline: var(--focus-ring-width) solid var(--color-focus);
   outline-offset: 4px;
   border-radius: 18px;
 }
@@ -765,11 +766,13 @@
 
 .routeBest {
   border-color: rgba(185, 242, 39, 0.3);
+  border-width: var(--border-highlight-width);
   background: linear-gradient(135deg, rgba(185, 242, 39, 0.095), rgba(255, 255, 255, 0.04));
 }
 
 .selected {
   border-color: var(--color-accent);
+  border-width: var(--border-highlight-width);
   box-shadow: none;
 }
 
@@ -1265,13 +1268,14 @@
 
 .routeBest {
   border-color: #b5d27d;
+  border-width: var(--border-highlight-width);
   background: #f3f9e8;
 }
 
 .selected {
   border-color: var(--color-accent-text);
   box-shadow: none;
-  border-width: 2px;
+  border-width: var(--focus-ring-width);
 }
 
 .routeRank,

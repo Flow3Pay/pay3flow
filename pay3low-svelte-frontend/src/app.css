@@ -61,6 +61,8 @@
   --color-text-invert: #ffffff;
   --layout-width: 1300px;
   --page-gutter: 24px;
+  --border-highlight-width: 2px;
+  --focus-ring-width: 3px;
   --radius-card: 15px;
   --radius-panel: 12px;
   --radius-pill: 999px;
@@ -229,7 +231,7 @@ html[data-zooming] *::after {
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-focus);
+  outline: var(--focus-ring-width) solid var(--color-focus);
   outline-offset: 3px;
 }
 

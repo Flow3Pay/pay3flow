@@ -361,7 +361,7 @@
   .primary { border-color: var(--color-primary); background: var(--color-primary); color: var(--color-text-invert); }
   .secondary { width: fit-content; }
   .choiceRow button { flex: 1; }
-  .choiceRow button.active { border-color: var(--color-accent-text); background: var(--color-accent-soft); }
+  .choiceRow button.active { border-color: var(--color-accent-text); border-width: var(--border-highlight-width); background: var(--color-accent-soft); }
   input { width: 100%; padding: 0 11px; background: transparent; color: inherit; }
   .review { display: grid; gap: 7px; padding: 10px; border-radius: 12px; background: rgba(127,127,127,.08); }
   .review span { display: flex; justify-content: space-between; gap: 12px; }
