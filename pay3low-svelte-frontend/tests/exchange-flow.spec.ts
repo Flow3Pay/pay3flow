@@ -82,6 +82,11 @@ test("main exchange share copies settings and restores them in a fresh browser",
   expect(link).toContain("/swap/USDT/KZT?");
   const params = new URL(link!).searchParams;
   expect(Object.fromEntries(params)).toMatchObject({ amount: "287.0062069", from: "global-usdt", to: "kz-kaspi", fromNetwork: "tron", sources: "bybit", methods: "p2p", assets: "USDC" });
+  expect(params.get("toName")).toContain("Kaspi");
+  expect(params.get("fromNetworkName")).toMatch(/tron/i);
+  const previewParams = new URL(await dialog.locator(".sharePreview").getAttribute("src") as string).searchParams;
+  expect(previewParams.get("toName")).toBe(params.get("toName"));
+  expect(previewParams.get("fromNetworkName")).toBe(params.get("fromNetworkName"));
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
   await expect(isMobile ? page.locator(".menuToggle") : trigger).toBeFocused();
@@ -2994,7 +2999,7 @@ test("guide URL restores banks and selected operations in a fresh browser", asyn
 });
 
 test("exchange share exposes a bridge card to messengers without JavaScript", async ({ request, browser, baseURL }) => {
-  const path = "/swap/AMD/RUB?amount=100000&receive=20350&from=am-idbank&to=ru-alfabank&sources=bybit&methods=p2p&lang=ru&execution_token=excluded";
+  const path = "/swap/AMD/RUB?amount=100000&receive=20350&from=am-idbank&to=ru-alfabank&sources=bybit&methods=p2p&lang=ru&fromName=IDBank&toName=Alfa-Bank&fromIcon=/icons/assets/idbank.png&toIcon=/icons/assets/alfabank.webp&execution_token=excluded";
   const response = await request.get(path);
   expect(response.ok()).toBe(true);
   const html = await response.text();
@@ -3004,11 +3009,19 @@ test("exchange share exposes a bridge card to messengers without JavaScript", as
   expect(html).toContain('name="twitter:card" content="summary_large_image"');
   expect(html).not.toContain("execution_token");
   const imageUrl = html.match(/property="og:image" content="([^"]+)"/)![1].replaceAll("&amp;", "&");
+  expect(new URL(imageUrl).searchParams.get("fromName")).toBe("IDBank");
+  expect(new URL(imageUrl).searchParams.get("toName")).toBe("Alfa-Bank");
   const image = await request.get(imageUrl);
   expect(image.headers()["content-type"]).toBe("image/png");
   const png = await image.body();
   const sharp = (await import("sharp")).default;
   expect(await sharp(png).metadata()).toMatchObject({ width: 1200, height: 630, format: "png" });
+  const differentBank = new URL(imageUrl);
+  differentBank.searchParams.set("toName", "Sberbank");
+  expect((await (await request.get(differentBank.toString())).body()).equals(png)).toBe(false);
+  const networkImage = new URL(imageUrl);
+  networkImage.searchParams.set("fromNetworkName", "Ethereum (ERC-20)");
+  expect((await (await request.get(networkImage.toString())).body()).equals(png)).toBe(false);
   const other = await request.get("/share-image.png?from=ETH&to=BYN&amount=1&receive=840.11");
   expect((await other.body()).equals(png)).toBe(false);
   const context = await browser.newContext({ javaScriptEnabled: false });

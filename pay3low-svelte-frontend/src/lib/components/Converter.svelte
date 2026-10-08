@@ -620,6 +620,9 @@
     amount: displayedSourceAmount, receive: displayedTargetAmount,
     from: sourceMethod.id, to: targetMethod.id,
     fromName: t(methodTitle(sourceMethod), {}, activeLocale), toName: t(methodTitle(targetMethod), {}, activeLocale),
+    fromIcon: sourceMethod.iconUrl, toIcon: targetMethod.iconUrl,
+    fromNetworkName: sourceMethod.kind === "wallet" ? sourceNetwork?.name : undefined,
+    toNetworkName: targetMethod.kind === "wallet" ? targetNetwork?.name : undefined,
     fromNetwork: sourceNetwork?.id ?? "", toNetwork: targetNetwork?.id ?? "",
     sources: [...selectedSources], methods: [...selectedExchangeMethods], assets: [...selectedIntermediaryAssets],
   } : null);

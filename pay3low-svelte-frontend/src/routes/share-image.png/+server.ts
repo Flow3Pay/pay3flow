@@ -2,6 +2,7 @@ import sharp from "sharp";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { shareAmount, shareCurrency } from "$lib/exchange-share";
+import { networkIcon } from "$lib/icons";
 import type { RequestHandler } from "./$types";
 
 function xml(value: string): string {
@@ -14,6 +15,28 @@ function avatar(currency: string, x: number, y: number, data: string | null): st
 }
 
 const FIAT_FLAGS: Record<string, string> = { AMD: "am", BYN: "by", KZT: "kz", RUB: "ru", UAH: "ua", USD: "us" };
+
+async function localIcon(path: string): Promise<string | null> {
+  if (!/^\/icons\/(?:assets|flags)\/[a-z0-9_-]+\.(?:png|webp|svg|jpg)$/i.test(path)) return null;
+  for (const directory of ["build/client", "static"]) {
+    try {
+      const bytes = await readFile(join(process.cwd(), directory, path.slice(1)));
+      if (bytes.length > 200_000) continue;
+      const png = await sharp(bytes).resize(58, 58, { fit: "contain" }).png().toBuffer();
+      return `data:image/png;base64,${png.toString("base64")}`;
+    } catch { /* Try the other packaged asset directory. */ }
+  }
+  return null;
+}
+
+async function paymentDetail(params: URLSearchParams, side: "from" | "to", y: number): Promise<string> {
+  const network = params.get(`${side}NetworkName`) || params.get(`${side}Network`);
+  const name = network || params.get(`${side}Name`);
+  if (!name) return "";
+  const icon = await localIcon(network ? networkIcon(network) : params.get(`${side}Icon`) ?? "");
+  const label = name.length > 49 ? `${name.slice(0, 48)}…` : name;
+  return `${icon ? `<image x="318" y="${y - 20}" width="26" height="26" href="${icon}"/>` : ""}<text x="${icon ? 354 : 318}" y="${y}" fill="#c7d0c3" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="600">${xml(label)}</text>`;
+}
 
 async function assetIcon(currency: string): Promise<string | null> {
   if (!currency || !/^[a-z0-9]{2,12}$/.test(currency.toLowerCase())) return null;
@@ -68,9 +91,11 @@ export const GET: RequestHandler = async ({ url }) => {
   const target = shareCurrency(url.searchParams.get("to") ?? "") ?? "GET";
   const amount = shareAmount(url.searchParams.get("amount"));
   const receive = amount ? shareAmount(url.searchParams.get("receive")) : null;
-  const [sourceIcon, targetIcon] = await Promise.all([assetIcon(source), assetIcon(target)]);
-  const sourceSize = amount && amount.length > 18 ? 22 : amount && amount.length > 13 ? 30 : 39;
-  const targetSize = receive && receive.length > 18 ? 22 : receive && receive.length > 13 ? 30 : 39;
+  const [sourceIcon, targetIcon, sourceDetail, targetDetail] = await Promise.all([
+    assetIcon(source), assetIcon(target), paymentDetail(url.searchParams, "from", 278), paymentDetail(url.searchParams, "to", 516),
+  ]);
+  const sourceSize = !amount ? 28 : amount.length > 18 ? 22 : amount.length > 13 ? 30 : 39;
+  const targetSize = !receive ? 25 : receive.length > 18 ? 22 : receive.length > 13 ? 30 : 39;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1200" height="630" viewBox="0 0 1200 630">
     <rect width="1200" height="630" fill="#101110"/>
     <circle cx="80" cy="80" r="230" fill="#263222" opacity=".55"/>
@@ -85,7 +110,8 @@ export const GET: RequestHandler = async ({ url }) => {
     <text x="297" y="135" fill="#b1bdad" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="700">SELL</text>
     <rect x="292" y="151" width="596" height="146" rx="18" fill="#242724" stroke="#414740" stroke-width="2"/>
     <text x="318" y="187" fill="#b3bdb0" font-family="DejaVu Sans, sans-serif" font-size="18">You send</text>
-    <text x="318" y="253" fill="#f5f7f3" font-family="DejaVu Sans, sans-serif" font-size="${sourceSize}" font-weight="700">${xml(amount ?? "Choose amount")}</text>
+    <text x="318" y="239" fill="#f5f7f3" font-family="DejaVu Sans, sans-serif" font-size="${sourceSize}" font-weight="700">${xml(amount ?? "Choose amount")}</text>
+    ${sourceDetail}
     ${avatar(source, 730, 194, sourceIcon)}
     <text x="860" y="234" text-anchor="end" fill="#f5f7f3" font-family="DejaVu Sans, sans-serif" font-size="22" font-weight="700">${xml(source)}</text>
     <line x1="296" y1="327" x2="884" y2="327" stroke="#414740" stroke-width="3"/>
@@ -94,7 +120,8 @@ export const GET: RequestHandler = async ({ url }) => {
     <text x="297" y="371" fill="#b1bdad" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="700">BUY</text>
     <rect x="292" y="387" width="596" height="146" rx="18" fill="#242724" stroke="#414740" stroke-width="2"/>
     <text x="318" y="423" fill="#b3bdb0" font-family="DejaVu Sans, sans-serif" font-size="18">Recipient gets</text>
-    <text x="318" y="490" fill="#f5f7f3" font-family="DejaVu Sans, sans-serif" font-size="${targetSize}" font-weight="700">${xml(receive ?? "Live quote on open")}</text>
+    <text x="318" y="477" fill="#f5f7f3" font-family="DejaVu Sans, sans-serif" font-size="${targetSize}" font-weight="700">${xml(receive ?? "Live quote on open")}</text>
+    ${targetDetail}
     ${avatar(target, 730, 432, targetIcon)}
     <text x="860" y="473" text-anchor="end" fill="#f5f7f3" font-family="DejaVu Sans, sans-serif" font-size="22" font-weight="700">${xml(target)}</text>
     <text x="306" y="566" fill="#a6afa3" font-family="DejaVu Sans, sans-serif" font-size="15">${receive ? "Quote at sharing · live routes refresh on open" : "Find current routes and quotes on Pay3Flow"}</text>
