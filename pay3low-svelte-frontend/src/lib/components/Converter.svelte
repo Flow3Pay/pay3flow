@@ -8,17 +8,27 @@
   import { assetIcon, networkIcon, swapIcon, venueIcon } from "$lib/icons";
   import { fetchPaymentMethods, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
   import { getAnonymousUserId, registerAnonymousUser } from "$lib/anonymous-user";
-  import { locale, t } from "$lib/i18n";
+  import { locale, t, setLocale } from "$lib/i18n";
   import { homeContent } from "$lib/home-content";
   import { SearchResponseMetrics } from "$lib/response-metrics";
   import { fetchRouteSearchActivity, SEARCH_ACTIVITY_PERIODS, type RouteSearchActivityHour, type SearchActivityPeriod } from "$lib/route-activity";
   import { fiatFlagUrl } from "$lib/currency-flags";
   import { lockPageScroll } from "$lib/page-scroll-lock";
+  import { parseExchangeHash, guideHash, guideRoutePath, sharedIdentifiers } from "$lib/guide-link";
   import SidePanel from "./SidePanel.svelte";
   import SearchActivityChart from "./SearchActivityChart.svelte";
   import SearchActivityModal from "./SearchActivityModal.svelte";
   import CurrencyPicker from "./CurrencyPicker.svelte";
   import NetworkPicker from "./NetworkPicker.svelte";
+
+  export let onGuideChange: (active: boolean) => void = () => {};
+  export let guideActive = false;
+  let guideRequested = browser && Boolean(parseExchangeHash(window.location.hash)?.guide);
+  let pendingGuide = browser ? parseExchangeHash(window.location.hash) : null;
+  let lastLocationHash = browser ? window.location.hash : "";
+  let guideUnavailable = Boolean(pendingGuide?.guide && !pendingGuide.amount);
+  $: guideActive = guideRequested;
+  $: onGuideChange(guideActive);
 
   export let onPaymentMethodsLoaded: (items: PaymentMethod[]) => void = () => {};
   export let onProvidersLoaded: (items: ProviderDefinition[]) => void = () => {};
@@ -151,7 +161,7 @@
   }
 
   onMount(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (guideRequested || window.matchMedia("(prefers-reduced-motion: reduce)").matches) { introCompleted = true; return; }
     let frame: number | undefined;
     let timer: number | undefined;
     const positionIntro = () => {
@@ -267,11 +277,7 @@
   }
 
   function readSharedExchange() {
-    const match = window.location.hash.match(/^#\/swap\/([^/?#]+)\/([^/?#]+)(?:\?([^#]*))?$/i);
-    if (!match) return null;
-    const params = new URLSearchParams(match[3] ?? "");
-    const value = params.get("amount");
-    return { sourceCurrency: decodeURIComponent(match[1]).toUpperCase(), targetCurrency: decodeURIComponent(match[2]).toUpperCase(), amount: value && /^[0-9.,\s]+$/.test(value) ? value : null };
+    return parseExchangeHash(window.location.hash);
   }
   function sharedMethod(methods: PaymentMethod[], currency: string, role: "sender" | "recipient", currentId: string) {
     const choices = methods.filter((method) => method.kind !== "currency" && method.currency === currency && (method.role === role || method.role === "both"));
@@ -524,7 +530,7 @@
       if (pinnedRoute) selected = pinnedRoute;
       else { selectionPinnedByUser = false; selected = bestRoute; }
     } else selected = bestRoute;
-    if (instructionsRoute) instructionsRoute = nextRoutes.find((route) => route.route_id === instructionsRoute?.route_id) ?? instructionsRoute;
+
   }
 
   function selectRoute(route: RouteCandidate) {
@@ -614,7 +620,7 @@
   $: exchangeMode = selectedExchangeMethods.length === EXCHANGE_METHODS.length ? "all" as const : selectedExchangeMethods[0];
   $: searchSignature = `${corridor?.id ?? ""}:${sourceMethod?.id ?? ""}:${sourceNetwork?.id ?? ""}:${targetMethod?.id ?? ""}:${targetNetwork?.id ?? ""}:${amountSide}:${amount}:${targetAmount}:${selectedSources.join(",")}:${selectedExchangeMethods.join(",")}:${selectedIntermediaryAssets.join(",")}:${directionReversed}`;
   $: scheduleAutomaticSearch(searchSignature, preferencesLoaded, urlReady, hasAmount, initialSearchReady);
-  $: manageRefresh(refreshSeconds, lastUpdatedAt, hasAmount);
+  $: manageRefresh(guideRequested ? 0 : refreshSeconds, lastUpdatedAt, hasAmount);
   $: if (preferencesLoaded) persistPreferences(amount, refreshSeconds, selectedSources, selectedExchangeMethods, selectedIntermediaryAssets, corridorId, sourceMethodId, targetMethodId, sourceNetwork?.id ?? sourceNetworkId, targetNetwork?.id ?? targetNetworkId, directionReversed);
   $: if (urlReady && corridor && selectedSourceCurrency && selectedTargetCurrency) updateHash(selectedSourceCurrency, selectedTargetCurrency, amount);
 
@@ -654,6 +660,7 @@
     return `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
   function updateHash(source: string, target: string, value: string) {
+    if (guideRequested || parseExchangeHash(location.hash)?.guide) return;
     const params = new URLSearchParams(); if (value !== "0") params.set("amount", value);
     const query = params.toString();
     history.replaceState(null, "", `${location.pathname}${location.search}#/swap/${encodeURIComponent(source)}/${encodeURIComponent(target)}${query ? `?${query}` : ""}`);
@@ -661,11 +668,11 @@
   function scheduleAutomaticSearch(_signature: string, loaded: boolean, ready: boolean, validAmount: boolean, initialReady: boolean) {
     if (debounceTimer) window.clearTimeout(debounceTimer);
     debounceTimer = undefined;
-    if (loaded && ready && initialReady && corridor && sourceMethod && targetMethod && validAmount) debounceTimer = window.setTimeout(startSearch, 650);
+    if ((!guideRequested || (!instructionsRoute && !guideUnavailable)) && loaded && ready && initialReady && corridor && sourceMethod && targetMethod && validAmount) debounceTimer = window.setTimeout(startSearch, 650);
   }
   function manageRefresh(seconds: RefreshSeconds, updatedAt: number | null, validAmount: boolean) {
     if (refreshTimer) window.clearInterval(refreshTimer);
-    if (seconds && updatedAt && validAmount) refreshTimer = window.setInterval(() => { if (!searching) void startSearch(false); }, seconds * 1000);
+    if (!guideRequested && seconds && updatedAt && validAmount) refreshTimer = window.setInterval(() => { if (!searching) void startSearch(false); }, seconds * 1000);
   }
   function resetResults() {
     controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; displayRoutes([]); routesFound = 0; selected = null; selectionPinnedByUser = false; instructionsRoute = null; lastUpdatedAt = null; searching = false; awaitingFirstRoute = false; foundVenueIds = []; foundVenues = []; venueStats = {}; error = null;
@@ -773,10 +780,52 @@
   function openNetworkPicker(side: Exclude<PickerSide, null>) {
     networkPicker = side;
   }
-  async function openInstructions(route: RouteCandidate) {
+  function closeGuide() {
+    guideRequested = false; pendingGuide = null; guideUnavailable = false; instructionsRoute = null;
+    history.replaceState(history.state, "", `${location.pathname}${location.search}`);
+    updateHash(selectedSourceCurrency, selectedTargetCurrency, amount);
+    lastLocationHash = location.hash;
+    window.scrollTo({ top: 0 });
+  }
+  function restoreShared(shared: NonNullable<ReturnType<typeof readSharedExchange>>) {
+    const from = sharedMethod(paymentMethods, shared.sourceCurrency, "sender", shared.params.get("from") ?? "");
+    const to = sharedMethod(paymentMethods, shared.targetCurrency, "recipient", shared.params.get("to") ?? "");
+    guideUnavailable = !shared.amount || !from || !to || Boolean(shared.params.get("from") && shared.params.get("from") !== from?.id) || Boolean(shared.params.get("to") && shared.params.get("to") !== to?.id);
+    for (const [method, key] of [[from, "fromNetwork"], [to, "toNetwork"]] as const) {
+      const networkId = shared.params.get(key);
+      if (method?.kind === "wallet" && networkId && !networks.some(network => network.id === networkId && network.currencies.includes(method.currency))) guideUnavailable = true;
+    }
+    amountSide = "source"; targetAmount = "0"; targetAmountNeedsRate = false; targetProbeAmount = null; targetRefinementAttempts = 0; targetQuoteRouteKey = null;
+    amount = shared.amount ?? "0";
+    sourceMethodId = sharedMethod(paymentMethods, shared.sourceCurrency, "sender", shared.params.get("from") ?? "")?.id ?? sourceMethodId;
+    targetMethodId = sharedMethod(paymentMethods, shared.targetCurrency, "recipient", shared.params.get("to") ?? "")?.id ?? targetMethodId;
+    sourceNetworkId = shared.params.get("fromNetwork") ?? FALLBACK_NETWORK.id;
+    targetNetworkId = shared.params.get("toNetwork") ?? FALLBACK_NETWORK.id;
+    const sources = sharedIdentifiers(shared.params, "sources");
+    if (sources.length) selectedSources = sources;
+    const methods = sharedIdentifiers(shared.params, "methods").filter((item): item is ExchangeMethod => EXCHANGE_METHODS.includes(item as ExchangeMethod));
+    if (methods.length) selectedExchangeMethods = methods;
+    selectedIntermediaryAssets = sharedIdentifiers(shared.params, "assets");
+  }
+  function locationChanged(eventOrForce: Event | boolean = false) {
+    if (eventOrForce !== true && lastLocationHash === location.hash) return;
+    lastLocationHash = location.hash;
+    const shared = readSharedExchange();
+    if (!shared?.guide) { closeGuide(); return; }
+    controller?.abort(); instructionsRoute = null; guideRequested = true; guideUnavailable = false; pendingGuide = shared;
+    finishIntro(); restoreShared(shared); initialSearchReady = true;
+    if (!guideUnavailable) void tick().then(() => startSearch(false));
+  }
+  async function openInstructions(route: RouteCandidate, replace = false) {
     if (!browser) return;
-    instructionsRoute = route;
+    const params = new URLSearchParams({ amount: route.source_amount ?? String(route.source_amount_minor / 100), from: sourceMethodId, to: targetMethodId, fromNetwork: sourceNetwork?.id ?? sourceNetworkId, toNetwork: targetNetwork?.id ?? targetNetworkId, sources: selectedSources.join(","), methods: selectedExchangeMethods.join(","), assets: selectedIntermediaryAssets.join(","), path: guideRoutePath(route), venues: [...new Set([route.route_provider, ...route.legs.map(leg => leg.provider), ...(route.cycle_legs ?? []).map(leg => leg.provider)].filter(Boolean))].join(","), lang: activeLocale });
+    const hash = guideHash(route.source_currency, route.target_currency ?? route.entry_asset, params);
+    if (replace) history.replaceState(history.state, "", hash); else history.pushState(history.state, "", hash);
+    lastLocationHash = location.hash;
+    guideRequested = true; pendingGuide = null; guideUnavailable = false; instructionsRoute = route;
+    finishIntro();
     routeInstructionsComponent ??= (await import("./RouteInstructions.svelte")).default;
+    window.scrollTo({ top: 0 });
     void recordInstructionOpen(anonymousId, (route.service_links ?? []).map((link) => link.tracking_token)).catch(() => {});
   }
 
@@ -866,6 +915,11 @@
       }
       if (!rerunForTargetAmount) {
         applySearchResponse(response); awaitingFirstRoute = false; lastUpdatedAt = Date.now(); clock = Date.now();
+        if (guideRequested && pendingGuide) {
+          const path = pendingGuide.params.get("path");
+          const fresh = mapRoutes(response).find(item => item.status === "complete" && item.source_currency === pendingGuide!.sourceCurrency && item.target_currency === pendingGuide!.targetCurrency && (!path || guideRoutePath(item) === path));
+          if (fresh) await openInstructions(fresh, true); else guideUnavailable = true;
+        }
       }
     } catch (cause) {
       if (signal.aborted || currentRequest !== requestId) return;
@@ -952,9 +1006,12 @@
     void refreshMarketPrices();
     marketRefreshTimer = window.setInterval(() => void refreshMarketPrices(), 60 * 60 * 1000);
     const shared = readSharedExchange();
+    const sharedLanguage = shared?.params.get("lang");
+    if (shared?.guide && (sharedLanguage === "en" || sharedLanguage === "ru" || sharedLanguage === "hy")) setLocale(sharedLanguage);
     let methodsReady = false;
     let corridorsReady = false;
-    const markUrlReady = () => { if (methodsReady && corridorsReady) urlReady = true; };
+    let providersReady = false, networksReady = false;
+    const markUrlReady = () => { if (methodsReady && corridorsReady && providersReady && networksReady) { if (shared?.guide) { restoreShared(shared); initialSearchReady = true; } urlReady = true; } };
     let savedSourceIds: string[] = [];
     let savedKnownSourceIds: string[] = [];
     try {
@@ -979,13 +1036,13 @@
     // Keep a saved route search off the initial critical path. User changes
     // still enable the normal debounced search immediately.
     initialSearchTimer = window.setTimeout(() => initialSearchReady = true, 1500);
-    fetchNetworks().then((items) => { if (items.length) networks = items; }).catch(() => {});
+    fetchNetworks().then((items) => { if (items.length) networks = items; }).catch(() => {}).finally(() => { networksReady = true; markUrlReady(); });
     fetchPaymentMethods().then((items) => {
       paymentMethods = items;
       onPaymentMethodsLoaded(items);
       if (shared) {
-        sourceMethodId = sharedMethod(items, shared.sourceCurrency, "sender", sourceMethodId)?.id ?? sourceMethodId;
-        targetMethodId = sharedMethod(items, shared.targetCurrency, "recipient", targetMethodId)?.id ?? targetMethodId;
+        sourceMethodId = sharedMethod(items, shared.sourceCurrency, "sender", shared.params.get("from") ?? sourceMethodId)?.id ?? sourceMethodId;
+        targetMethodId = sharedMethod(items, shared.targetCurrency, "recipient", shared.params.get("to") ?? targetMethodId)?.id ?? targetMethodId;
       }
     }).catch((cause: Error) => error ??= cause.message).finally(() => { methodsReady = true; markUrlReady(); });
     fetchProviders().then((providers) => {
@@ -1005,13 +1062,15 @@
       const newlyAdded = live.filter((source) => !known.has(source));
       selectedSources = savedSourceIds.length ? [...new Set([...restored, ...newlyAdded])] : live;
       try { localStorage.setItem(STORAGE.knownSources, live.join(",")); } catch {}
-    }).catch((cause: Error) => error ??= cause.message);
+    }).catch((cause: Error) => error ??= cause.message).finally(() => { providersReady = true; markUrlReady(); });
     fetchCorridors().then((response) => {
       const savedDirection = localStorage.getItem(STORAGE.direction);
       const sharedCorridor = shared ? response.items.find((item) => (item.source_currency === shared.sourceCurrency && item.target_currency === shared.targetCurrency) || (item.source_currency === shared.targetCurrency && item.target_currency === shared.sourceCurrency)) : null;
-      corridors = response.items; corridorId = corridorId || sharedCorridor?.id || response.items[0]?.id || "";
-      if (shared && sharedCorridor?.source_currency === shared.targetCurrency && sharedCorridor.target_currency === shared.sourceCurrency) directionReversed = true; else if (savedDirection != null) directionReversed = savedDirection === "true";
+      corridors = response.items; corridorId = sharedCorridor?.id || corridorId || response.items[0]?.id || "";
+      if (shared && sharedCorridor?.source_currency === shared.targetCurrency && sharedCorridor.target_currency === shared.sourceCurrency) directionReversed = true; else if (shared) directionReversed = false; else if (savedDirection != null) directionReversed = savedDirection === "true";
     }).catch((cause: Error) => error = cause.message).finally(() => { corridorsReady = true; markUrlReady(); });
+    window.addEventListener("hashchange", locationChanged);
+    window.addEventListener("popstate", locationChanged);
     document.addEventListener("mousedown", onDocumentMouseDown);
     clockTimer = window.setInterval(() => clock = Date.now(), 1000);
   });
@@ -1035,13 +1094,13 @@
     if (marketRefreshTimer) clearInterval(marketRefreshTimer);
     if (initialSearchTimer) clearTimeout(initialSearchTimer);
     if (typeof document !== "undefined") document.removeEventListener("mousedown", onDocumentMouseDown);
-    if (typeof window !== "undefined") window.removeEventListener("keydown", onSettingsKeyDown);
+    if (typeof window !== "undefined") { window.removeEventListener("keydown", onSettingsKeyDown); window.removeEventListener("hashchange", locationChanged); window.removeEventListener("popstate", locationChanged); }
   });
 </script>
 
 <svelte:window on:resize={closeInlineActivityOnMobile} />
 
-<section class="shell" class:localeLong={activeLocale !== "en"} class:introReady={introCompleted} id="transfer">
+<section hidden={guideRequested} class="shell" class:localeLong={activeLocale !== "en"} class:introReady={introCompleted} id="transfer">
   {#if introPlaying}
     <div class="introOverlay" class:introStarted bind:this={introOverlayElement} aria-hidden="true">
       <p class="introTitle" on:animationend={(event) => { if (event.animationName.endsWith("introDock")) finishIntro(); }}><span class="introClip"><span class="introWord introWordMove">{firstHeadline.first}</span></span>{' '}<span class="introSecondWithDot"><span class="introClip"><span class="introWord introWordMoney">{firstHeadline.second}</span></span><span class="introPunctuation introFirstPunctuation">{firstHeadline.punctuation}</span></span>{' '}<span class="introEmphasis"><span class="introClip"><span class="introWord introWordKeep">{secondHeadline.first}</span></span>{' '}<span class="introSecondWithDot"><span class="introClip"><span class="introWord introWordMore">{secondHeadline.second}</span></span><span class="introPunctuation introLastPunctuation">{secondHeadline.punctuation}</span></span><img class="introMarker" src="/icons/ui/marker-down-right.svg" alt="" width="512" height="512" aria-hidden="true" /></span></p>
@@ -1143,10 +1202,20 @@
   {#if currencyPicker === "source" || currencyPicker === "target"}<CurrencyPicker open={currencyPicker !== null} selected={currencyPicker === "source" ? sourceCurrencyChoice : targetCurrencyChoice} choices={currencyPicker === "source" ? sourceCurrencyChoices : targetCurrencyChoices} onClose={() => currencyPicker = null} onSelect={(choice) => chooseCurrency(currencyPicker ?? "source", choice)} />{/if}
   {#if paymentPickerComponent}<svelte:component this={paymentPickerComponent} open={methodPicker === "source"} title="Choose where you pay from" role="sender" {networks} {paymentMethods} selected={sourceMethod} selectedNetwork={sourceNetwork} onClose={() => methodPicker = null} onSelect={chooseSource} /><svelte:component this={paymentPickerComponent} open={methodPicker === "target"} title="Choose where the recipient gets paid" role="recipient" {networks} {paymentMethods} selected={targetMethod} selectedNetwork={targetNetwork} onClose={() => methodPicker = null} onSelect={chooseTarget} />{/if}
   {#if networkPicker === "source" || networkPicker === "target"}<NetworkPicker open={networkPicker !== null} networks={networkPicker === "source" ? sourceNetworks : targetNetworks} selected={networkPicker === "source" ? sourceNetwork : targetNetwork} onClose={() => networkPicker = null} onSelect={selectNetwork} />{/if}
-  {#if routeInstructionsComponent && instructionsRoute}<svelte:component this={routeInstructionsComponent} route={instructionsRoute} {venueNames} {providerGuidance} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} onOpenService={openService} onClose={() => instructionsRoute = null} />{/if}
+
 </section>
+{#if guideRequested}
+  {#if routeInstructionsComponent && instructionsRoute}
+    <svelte:component this={routeInstructionsComponent} route={instructionsRoute} {venueNames} {providerGuidance} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} onOpenService={openService} onClose={closeGuide} />
+  {:else}
+    <section class="guideLoading" aria-live="polite"><span class="loadingMark">↗</span><h1>{t(guideUnavailable ? "This route is no longer available" : error ? "Could not load this guide" : "Preparing your guide", {}, activeLocale)}</h1><p>{t(guideUnavailable ? "Quotes have changed. Choose a current route to continue." : error ? "Try again or choose a current route." : "Checking the selected banks, networks and platforms for a fresh quote.", {}, activeLocale)}</p><button type="button" on:click={() => locationChanged(true)}>{t("Try again", {}, activeLocale)}</button><button type="button" on:click={closeGuide}>← {t("Back to routes", {}, activeLocale)}</button></section>
+  {/if}
+{/if}
 
 <style>
+.shell[hidden] { display: none; }
+.guideLoading { min-height: 70vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 32px; text-align: center; }.loadingMark { font-size: 50px; color: var(--color-accent-text); }.guideLoading h1 { font-size: 32px; }.guideLoading p { color: var(--color-text-soft); }.guideLoading button { min-height: 44px; padding: 10px 20px; border: 1px solid var(--color-border); border-radius: 12px; }
+
 .shell {
   position: relative;
   width: 100%;

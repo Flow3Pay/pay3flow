@@ -9,6 +9,7 @@
   import BelarusP2pWarning from "$lib/components/BelarusP2pWarning.svelte";
   import { generatePuzzleBackground } from "$lib/puzzle-background";
   import { localize, locale, t } from "$lib/i18n";
+  let guideActive = false;
   let shell: HTMLDivElement;
   let paymentMethods: PaymentMethod[] = [];
   let providerCatalog: ProviderDefinition[] = [];
@@ -62,9 +63,9 @@
 <div class="appShell" bind:this={shell} use:localize>
   <Header />
   <main>
-    <Converter onPaymentMethodsLoaded={(items) => paymentMethods = items} onProvidersLoaded={(items) => providerCatalog = items} onBelarusP2pWarningChange={(show) => showBelarusP2pWarning = show} onOpenBelarusP2pWarning={() => belarusP2pWarningOpen = true} />
-    <HomeOverview {paymentMethods} {providerCatalog} />
+    <Converter onGuideChange={(active) => guideActive = active} onPaymentMethodsLoaded={(items) => paymentMethods = items} onProvidersLoaded={(items) => providerCatalog = items} onBelarusP2pWarningChange={(show) => showBelarusP2pWarning = show} onOpenBelarusP2pWarning={() => belarusP2pWarningOpen = true} />
+    {#if !guideActive}<HomeOverview {paymentMethods} {providerCatalog} />{/if}
   </main>
-  <footer class="siteFooter"><span>Pay3Flow</span><span>{t("Live routing infrastructure · Public market estimates", {}, $locale)}</span><a href="/terms">{t("Usage policy", {}, $locale)}</a></footer>
+  {#if !guideActive}<footer class="siteFooter"><span>Pay3Flow</span><span>{t("Live routing infrastructure · Public market estimates", {}, $locale)}</span><a href="/terms">{t("Usage policy", {}, $locale)}</a></footer>{/if}
 </div>
 <BelarusP2pWarning open={belarusP2pWarningOpen} onClose={() => belarusP2pWarningOpen = false} />

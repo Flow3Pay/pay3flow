@@ -41,7 +41,7 @@
       <div class="counterpartyIdentityCopy"><div class="counterpartyTopline"><span class="counterpartyLabel">{label}</span><span class={directExchange || profileUrl ? "profileBadge" : "manualBadge"}>{directExchange ? copy("Direct exchange") : profileUrl ? copy("User profile") : copy("Find by nickname")}</span></div><strong class="advertiser">{offer.advertiser.nickname}</strong><span class="venueLine">{venue} · {directExchange ? copy("Exchange service") : offer.advertiser.is_merchant ? copy("Merchant") : copy("Advertiser")}</span></div>
     </div>
     <div class="metrics">{#if !directExchange}<span><b>{percentage(offer.advertiser.completion_rate_30d)}</b> {copy("completion")}</span><span><b>{offer.advertiser.completed_orders_30d ?? "—"}</b> {copy("orders / 30d")}</span>{/if}<span><b>{offer.price} {offer.fiat}</b> {copy("rate")}</span></div>
-    <span class="paymentLine">{directExchange ? copy("Settlement") : copy("Payment")}: {offer.payment_methods.length ? offer.payment_methods.join(", ") : copy("confirm on provider")}</span>
+    {#if offer.payment_methods.length}<span class="paymentLine">{directExchange ? copy("Settlement") : copy("Payment")}: {offer.payment_methods.join(", ")}</span>{/if}
     {#if serviceLink}<button type="button" class="profileLink" on:click={() => onOpenService(serviceLink!)}>{actionLabel} <span>↗</span></button>{:else}<a href={actionUrl} target="_blank" rel="noreferrer noopener" class="profileLink">{actionLabel} <span>↗</span></a>{/if}
     {#if !directExchange && !profileUrl}<small class="adHint">{copy("Match the nickname and ad ID {id} before opening an order.", { id: offer.ad_id })}</small>{/if}
   </div>

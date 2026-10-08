@@ -14,7 +14,7 @@
 
 <div class="scene" class:paused={!playing} class:overview={!step} class:finished aria-hidden="true" data-testid="instruction-scene">
   <div class="sceneGrid"></div>
-  <div class="sceneTop"><span><i></i> {copy(step ? "Animated walkthrough" : "Your exchange, explained")}</span><span>PAY3FLOW / GUIDE</span></div>
+  <div class="sceneTop">{#if step}<span><i></i> {copy("Animated walkthrough")}</span>{/if}<span>PAY3FLOW / GUIDE</span></div>
   {#if !step}
     <div class="orbit orbitOne"></div><div class="orbit orbitTwo"></div>
     <div class="journey">
@@ -25,7 +25,7 @@
     <div class="journeyCard">
       <div class="journeyCardTop"><span class="smallLogo">↗</span><span>{copy(finished ? "All steps confirmed" : "One route. One step at a time.")}</span><span class="cardCheck">{finished ? "✓" : "↗"}</span></div>
       <div class="journeyChapters">{#each steps as item, index}<div style={`--order:${index}`}><span class="miniNumber">{finished ? "✓" : String(index + 1).padStart(2, "0")}</span><img src={venueIcon(item.provider)} alt="" /><span>{item.venue}</span><b>{item.kind === "transfer" ? "↗" : "⇄"}</b></div>{/each}</div>
-      <div class="journeyCardBottom"><span>{copy("You control every step")}</span><span>● ● ●</span></div>
+      <div class="journeyCardBottom"><span>{copy("You control every step")}</span></div>
     </div>
     <div class="floatTag"><span>✓</span> {copy(finished ? "Confirmed by you" : "At your own pace")}</div>
   {:else}
@@ -67,6 +67,7 @@
   .sceneTop { position: absolute; inset: 25px 25px auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 10px; color: #b5c0b7; letter-spacing: .02em; }
   .sceneTop > span:first-child { display: flex; align-items: center; gap: 7px; }
   .sceneTop > span:last-child { font: 9px var(--font-mono); letter-spacing: .08em; }
+  .overview .sceneTop { justify-content: flex-end; }
   .sceneTop i { width: 5px; height: 5px; border-radius: 50%; background: #b5f500; box-shadow: 0 0 10px #b5f50066; }
   .browser { width: 330px; position: relative; margin: 76px auto 66px; border: 1px solid #ffffff32; border-radius: 15px; background: #f8faf6; color: #152016; box-shadow: 0 24px 70px #0005; transform: perspective(1200px) rotateY(-7deg) rotateX(3deg); animation: browserIn .8s cubic-bezier(.22,1,.36,1) both; }
   .browserChrome { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid #14201615; color: #4e5b4d; font: 9px var(--font-mono); }
@@ -112,9 +113,9 @@
   .journeyCard { position: relative; width: 318px; margin: 29px auto 68px; padding: 17px; background: #f4f6ed; color: #182414; border-radius: 14px; box-shadow: 0 18px 60px #0004; transform: rotate(-4deg); animation: cardIn 1s cubic-bezier(.22,1,.36,1) both; }
   .journeyCardTop { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 800; padding-bottom: 14px; }.smallLogo { display: grid; place-items: center; flex: 0 0 23px; height: 23px; border-radius: 7px; background: #b5f500; font-size: 17px; }.cardCheck { margin-left: auto; }
   .journeyChapters { display: grid; gap: 6px; max-height: 200px; overflow: auto; }.journeyChapters > div { display: flex; align-items: center; gap: 9px; padding: 9px; background: #e9eddf; border-radius: 7px; font-size: 11px; animation: rowIn .65s calc(var(--order) * .1s + .3s) both; }.miniNumber { font: 9px var(--font-mono); color: #5d6d4b; }.journeyChapters img { width: 18px; height: 18px; border-radius: 50%; }.journeyChapters b { margin-left: auto; font-size: 17px; font-weight: 400; }
-  .journeyCardBottom { display: flex; justify-content: space-between; margin-top: 13px; font-size: 9px; color: #60704f; }.journeyCardBottom > span:last-child { color: #89b500; letter-spacing: 3px; }
+  .journeyCardBottom { display: flex; justify-content: space-between; margin-top: 13px; font-size: 9px; color: #60704f; }
   .floatTag { position: absolute; bottom: 46px; right: 35px; display: flex; align-items: center; gap: 8px; padding: 12px 15px; border: 1px solid #c1d89536; border-radius: 9px; background: #273222; font-size: 11px; transform: rotate(3deg); animation: float 6s ease-in-out -2s infinite; }.floatTag > span { color: #b5f500; }
-  .finished .journeyCard { transform: rotate(0); }.paused *, .paused *::before { animation-play-state: paused !important; }
+  .finished .journeyCard { transform: rotate(0); }.paused .demoCursor, .paused .sourceCoin, .paused .targetCoin, .paused .journeyLine span, .paused .floatTag { animation-play-state: paused !important; }
   @keyframes browserIn { from { opacity: 0; transform: perspective(1200px) rotateY(-12deg) rotateX(5deg) translateY(25px); } }
   @keyframes annotationIn { from { opacity: 0; transform: translateX(20px); } }
   @keyframes phoneIn { from { opacity: 0; transform: translateY(20px) rotate(-10deg); } }

@@ -39,7 +39,7 @@ responsive without delaying normal search results.
 
 ## Animated route instructions
 
-The route guide opens as a full-screen walkthrough: overview, one chapter per
+The route guide opens below the existing site header at `#/guide/SOURCE/TARGET` as a walkthrough: overview, one chapter per
 operation, and a final checklist. Scene playback never advances a chapter;
 users explicitly confirm each completed operation. Progress is kept for the
 selected route in session storage and restored when reopening the guide.
@@ -68,3 +68,20 @@ docker compose up --build backend pay3low-svelte-frontend
 The frontend is not a custody or payment-processing component. It must show
 the selected route, fees, timing, consent terms, and any TOKEN or crypto
 settlement asset clearly before the user confirms funding.
+
+Guide links carry the amount, payment method IDs, networks, search settings, and
+an ordered operation signature. A new browser fetches fresh routes and matches
+that signature; it shows an unavailable state if the route is gone. Execution
+and tracking tokens are never included. Browser Back/Forward returns between
+routes and the guide. The action footer stays fixed to the viewport.
+
+The sidebar has a separate customer reviews view. Its summaries describe only
+collected reviews; Binance feedback remains a positive/negative percentage.
+Review sources, rating filters, expandable text, and links to originals preserve
+provider and advertiser attribution.
+
+The Share guide button copies `/share/guide/SOURCE/TARGET?...`. This server-rendered
+page exposes Open Graph/Twitter metadata and a dynamic 1200×630 PNG inspired by
+the guide overview, then opens the corresponding hash guide. The image endpoint
+uses only bundled asset/venue icons, bounded parameters and a bounded cache;
+Sharp renders it on Node. The runtime image includes DejaVu fonts.
