@@ -14,7 +14,6 @@
 
 <div class="scene" class:paused={!playing} class:overview={!step} class:finished aria-hidden="true" data-testid="instruction-scene">
   <div class="sceneGrid"></div>
-  <div class="sceneTop">{#if step}<span><i></i> {copy("Animated walkthrough")}</span>{/if}</div>
   {#if !step}
     <div class="orbit orbitOne"></div><div class="orbit orbitTwo"></div>
     <div class="journey">
@@ -64,10 +63,6 @@
 <style>
   .scene { contain: layout paint; position: relative; min-height: 490px; height: 100%; overflow: hidden; border-radius: 24px; color: #f1f4ec; background: #19211d; isolation: isolate; }
   .sceneGrid { position: absolute; inset: 0; z-index: -1; opacity: .45; background-image: linear-gradient(#c9ddbd0d 1px, transparent 1px), linear-gradient(90deg, #c9ddbd0d 1px, transparent 1px), radial-gradient(ellipse at 50% 50%, #b5f50013, transparent 65%); background-size: 32px 32px, 32px 32px, auto; }
-  .sceneTop { position: absolute; inset: 25px 25px auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 10px; color: #b5c0b7; letter-spacing: .02em; }
-  .sceneTop > span:first-child { display: flex; align-items: center; gap: 7px; }
-  .overview .sceneTop { justify-content: flex-end; }
-  .sceneTop i { width: 5px; height: 5px; border-radius: 50%; background: #b5f500; box-shadow: 0 0 10px #b5f50066; }
   .browser { width: 330px; position: relative; margin: 76px auto 66px; border: 1px solid #ffffff32; border-radius: 15px; background: #f8faf6; color: #152016; box-shadow: 0 24px 70px #0005; transform: perspective(1200px) rotateY(-7deg) rotateX(3deg); animation: browserIn .8s cubic-bezier(.22,1,.36,1) both; }
   .browserChrome { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid #14201615; color: #4e5b4d; font: 9px var(--font-mono); }
   .browserChrome > div { display: flex; gap: 4px; }
@@ -128,7 +123,7 @@
     .journey { margin-top: 65px; }.journeyCoin img { width: 39px; height: 39px; }.journeyCard { margin-top: 18px; padding: 12px; }.journeyCardTop { padding-bottom: 8px; }.journeyChapters { max-height: 113px; gap: 4px; }.journeyChapters > div { padding: 7px; }.floatTag { bottom: 16px; padding: 8px 11px; }
   }
   @media (max-width: 760px) {
-    .scene { min-height: 340px; height: 340px; border-radius: 18px; }.sceneTop { inset: 17px 18px auto; }.browser { margin-top: 52px; scale: .65; transform-origin: top center; }.sceneAnnotation { bottom: 32px; right: 18px; padding: 8px 12px 8px 8px; }.sceneFootnote { bottom: 12px; font-size: 8px; }.paymentPreview { left: 10px; bottom: 54px; scale: .75; transform-origin: bottom left; }
+    .scene { min-height: 340px; height: 340px; border-radius: 18px; }.browser { margin-top: 52px; scale: .65; transform-origin: top center; }.sceneAnnotation { bottom: 32px; right: 18px; padding: 8px 12px 8px 8px; }.sceneFootnote { bottom: 12px; font-size: 8px; }.paymentPreview { left: 10px; bottom: 54px; scale: .75; transform-origin: bottom left; }
     .journey { margin-top: 65px; gap: 20px; }.journeyCoin img { width: 39px; height: 39px; }.journeyCard { width: 260px; margin-top: 18px; padding: 12px; }.journeyCardTop { font-size: 10px; padding-bottom: 8px; }.journeyChapters { max-height: 113px; gap: 4px; }.journeyChapters > div { padding: 7px; font-size: 10px; }.journeyCardBottom { font-size: 8px; }.floatTag { bottom: 16px; right: 20px; padding: 8px 11px; font-size: 9px; }
   }
   @media (prefers-reduced-motion: reduce) { *, *::before { animation: none !important; transition: none !important; } }
