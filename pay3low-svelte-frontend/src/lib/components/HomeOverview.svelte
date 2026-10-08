@@ -49,10 +49,14 @@
   ];
   $: banks = paymentMethods.length
     ? [...new Map(paymentMethods.filter(method => method.kind === "bank").map(method => [
-        `${method.name.trim().toLowerCase()}:${paymentMethodFavicon(method) ?? ""}`,
-        { name: method.name, currency: method.currency, iconUrl: paymentMethodFavicon(method) ?? assetIcon(method.currency) }
+        bankBrandName(method.name).toLowerCase().replace(/\s+/g, ""),
+        { name: bankBrandName(method.name), currency: method.currency, iconUrl: paymentMethodFavicon(method) ?? assetIcon(method.currency) }
       ])).values()].sort((a, b) => a.name.localeCompare(b.name))
     : defaultBanks;
+  function bankBrandName(name: string) {
+    const trimmed = name.trim();
+    return /^raiffeisen\s*bank$/i.test(trimmed) ? "Raiffeisenbank" : trimmed;
+  }
   function exampleBank(currency: string) {
     const preferred = currency === "AMD" ? "am-ameriabank" : currency === "RUB" ? "ru-sberbank" : "";
     const method = paymentMethods.find(method => method.id === preferred)
