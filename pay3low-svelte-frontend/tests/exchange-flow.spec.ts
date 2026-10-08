@@ -266,6 +266,46 @@ test("search placeholders stay inside the route panel", async ({ page }) => {
   releaseSearch();
 });
 
+test("search activity keeps valid dimensions when opening guides and resizing", async ({ page, isMobile }) => {
+  const chartWarnings: string[] = [];
+  page.on("console", message => { if (message.text().includes("[LayerCake]")) chartWarnings.push(message.text()); });
+  await page.addInitScript(() => {
+    localStorage.setItem("pay3flow.exchange.source-method", "am-idbank");
+    localStorage.setItem("pay3flow.exchange.target-method", "ru-alfabank");
+  });
+  await mockBackend(page);
+  await openApp(page);
+  await page.getByLabel("Amount to send").fill("100000");
+  await expect(page.getByTestId("complete-route").first()).toBeVisible();
+  const chart = page.getByTestId("search-activity");
+  await page.getByRole("button", { name: isMobile ? "Open search activity graph" : "Show search activity" }).click();
+  await expect(chart.locator(".mainPlot svg path.area")).toHaveCount(1);
+  if (isMobile) await page.keyboard.press("Escape");
+  await page.getByTestId("complete-route").first().locator(".routeAmount").click();
+  const guide = page.getByTestId("route-guide");
+  await expect(guide.getByTestId("start-guide")).toBeVisible();
+  await expect(chart).toHaveCount(0);
+  await page.reload();
+  await expect(guide.getByTestId("start-guide")).toBeVisible();
+  await expect(chart).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(guide).toHaveCount(0);
+  if (!isMobile) {
+    await expect(chart.locator(".mainPlot svg path.area")).toHaveCount(1);
+    await page.setViewportSize({ width: 393, height: 851 });
+    await expect(chart).toHaveCount(0);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.getByRole("button", { name: "Show search activity" }).click();
+  } else {
+    await page.getByRole("button", { name: "Open search activity graph" }).click();
+  }
+  await expect(chart.locator(".mainPlot svg path.area")).toHaveCount(1);
+  const size = await chart.locator(".mainPlot svg").boundingBox();
+  expect(size!.width).toBeGreaterThan(0);
+  expect(size!.height).toBeGreaterThan(0);
+  expect(chartWarnings).toEqual([]);
+});
+
 test("search activity range menu filters and remembers the selected period", async ({ page, isMobile }) => {
   await mockBackend(page);
   await openApp(page);
