@@ -2718,7 +2718,7 @@ test("P2P instructions restore written advertiser reviews", async ({ page }) => 
   await expect.poll(() => new Set(profiles).size).toBe(2);
 });
 
-test("animated guide is a page with fixed footer, scene controls and saved progress", async ({ page }, testInfo) => {
+test("animated guide is a page with inline actions, scene controls and saved progress", async ({ page }, testInfo) => {
   await page.addInitScript(() => {
     localStorage.setItem("pay3flow.exchange.source-method", "am-idbank");
     localStorage.setItem("pay3flow.exchange.target-method", "ru-alfabank");
@@ -2738,10 +2738,17 @@ test("animated guide is a page with fixed footer, scene controls and saved progr
   await expect(page.locator(".header .brand")).toBeVisible();
   await expect(page.locator(".workspace")).toBeHidden();
   await expect(guide.locator(".routePair img")).toHaveCount(2);
-  const footer = guide.locator(".guideFooter");
+  const actions = guide.locator(".guideActions");
+  await expect(guide.locator("footer")).toHaveCount(0);
+  await expect(actions).toHaveCSS("position", "static");
+  await expect(guide.locator(".guideMain > .guideActions")).toHaveCount(1);
+  await expect(guide.locator(".smallLogo")).toHaveAttribute("src", "/icons/assets/pay3flow_logo.svg");
+  await expect(guide.locator(".sourceCoin img")).toHaveAttribute("src", "/icons/flags/am.svg");
+  await expect(guide.locator(".targetCoin img")).toHaveAttribute("src", "/icons/flags/ru.svg");
+  await expect(guide.locator(".overviewButton img")).toHaveAttribute("src", "/icons/ui/guide-before.svg");
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
-  expect((await footer.boundingBox())!.y + (await footer.boundingBox())!.height).toBeCloseTo(page.viewportSize()!.height, 0);
+  await expect(guide.getByTestId("start-guide")).toBeInViewport();
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ animations: "disabled", path: testInfo.outputPath("guide-overview.png") });
   const chapters = guide.getByTestId("instruction-step").getByRole("button");
@@ -2783,7 +2790,7 @@ test("animated guide is a page with fixed footer, scene controls and saved progr
   await guide.getByTestId("confirm-instruction-step").click();
   await expect(guide.getByRole("heading", { name: "Every step. Done." })).toBeVisible();
   await expect(guide.getByText("This checklist records your confirmations. It does not verify payments or balances.")).toBeVisible();
-  await guide.locator(".guideFooter").getByRole("button", { name: "Back to routes", exact: true }).click();
+  await guide.locator(".guideActions").getByRole("button", { name: "Back to routes", exact: true }).click();
   await expect(guide).toHaveCount(0);
 });
 
@@ -2829,6 +2836,7 @@ test("guide URL restores banks and selected operations in a fresh browser", asyn
   await page.getByTestId("complete-route").first().locator(".routeAmount").click();
   const url = page.url();
   await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text: string) => sessionStorage.setItem("test.share-url", text) } }));
+  await expect(page.getByTestId("route-guide").getByRole("button", { name: /Share guide/ }).locator(".shareIcon")).toBeVisible();
   await page.getByTestId("route-guide").getByRole("button", { name: /Share guide/ }).click();
   await expect(page.getByTestId("route-guide").getByRole("button", { name: /Link copied/ })).toBeVisible();
   const share = await page.evaluate(() => sessionStorage.getItem("test.share-url"));

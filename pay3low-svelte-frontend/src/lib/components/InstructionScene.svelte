@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { fiatFlagUrl } from "$lib/currency-flags";
   import { assetIcon, venueIcon } from "$lib/icons";
   import { locale, t } from "$lib/i18n";
   import type { RouteCandidate } from "$lib/exchange";
@@ -17,12 +18,12 @@
   {#if !step}
     <div class="orbit orbitOne"></div><div class="orbit orbitTwo"></div>
     <div class="journey">
-      <div class="journeyCoin sourceCoin"><img src={assetIcon(route.source_currency)} alt="" /><span>{route.source_currency}</span></div>
+      <div class="journeyCoin sourceCoin"><img src={fiatFlagUrl(route.source_currency) ?? assetIcon(route.source_currency)} class:fiatFlag={Boolean(fiatFlagUrl(route.source_currency))} alt="" /><span>{route.source_currency}</span></div>
       <div class="journeyLine"><span></span><span></span><span></span></div>
-      <div class="journeyCoin targetCoin"><img src={assetIcon(route.target_currency ?? route.entry_asset)} alt="" /><span>{route.target_currency ?? route.entry_asset}</span></div>
+      <div class="journeyCoin targetCoin"><img src={fiatFlagUrl(route.target_currency ?? route.entry_asset) ?? assetIcon(route.target_currency ?? route.entry_asset)} class:fiatFlag={Boolean(fiatFlagUrl(route.target_currency ?? route.entry_asset))} alt="" /><span>{route.target_currency ?? route.entry_asset}</span></div>
     </div>
     <div class="journeyCard">
-      <div class="journeyCardTop"><span class="smallLogo">↗</span><span>{copy(finished ? "All steps confirmed" : "One route. One step at a time.")}</span><span class="cardCheck">{finished ? "✓" : "↗"}</span></div>
+      <div class="journeyCardTop"><img class="smallLogo" src="/icons/assets/pay3flow_logo.svg" alt="" width="23" height="23" /><span>{copy(finished ? "All steps confirmed" : "One route. One step at a time.")}</span><span class="cardCheck">{finished ? "✓" : "↗"}</span></div>
       <div class="journeyChapters">{#each steps as item, index}<div style={`--order:${index}`}><span class="miniNumber">{finished ? "✓" : String(index + 1).padStart(2, "0")}</span><img src={venueIcon(item.provider)} alt="" /><span>{item.venue}</span><b>{item.kind === "transfer" ? "↗" : "⇄"}</b></div>{/each}</div>
       <div class="journeyCardBottom"><span>{copy("You control every step")}</span></div>
     </div>
@@ -37,9 +38,9 @@
           <div><small>{copy(step.offer && !step.direct ? "Advertiser" : "Selected route")}</small><strong>{step.offer && !step.direct ? step.offer.advertiser.nickname : step.pair ?? `${step.from} → ${step.to}`}</strong>{#if step.offer && !step.direct}<small>ID {step.offer.ad_id}</small>{/if}</div><span class="verified">✓</span>
         </div>
         <div class="assetFields" class:highlight={frame === 1}>
-          <div><small>{copy("You send")}</small><strong>{step.amount ?? step.from}</strong><img src={assetIcon(step.from)} alt="" /></div>
+          <div><small>{copy("You send")}</small><strong>{step.amount ?? step.from}</strong><img src={fiatFlagUrl(step.from) ?? assetIcon(step.from)} class:fiatFlag={Boolean(fiatFlagUrl(step.from))} alt="" /></div>
           <span class="fieldArrow">↓</span>
-          <div><small>{copy(step.kind === "transfer" ? "Deposit address" : "You receive")}</small><strong>{step.kind === "transfer" ? "•••• •••• ••••" : step.output ?? step.to}</strong>{#if step.kind === "transfer"}<span class="copyAddress">⧉</span>{:else}<img src={assetIcon(step.to)} alt="" />{/if}</div>
+          <div><small>{copy(step.kind === "transfer" ? "Deposit address" : "You receive")}</small><strong>{step.kind === "transfer" ? "•••• •••• ••••" : step.output ?? step.to}</strong>{#if step.kind === "transfer"}<span class="copyAddress">⧉</span>{:else}<img src={fiatFlagUrl(step.to) ?? assetIcon(step.to)} class:fiatFlag={Boolean(fiatFlagUrl(step.to))} alt="" />{/if}</div>
         </div>
         <div class="networkLine" class:highlight={frame === 1 && step.kind === "transfer"}><span>{copy(step.kind === "transfer" || step.network ? "Network" : "Payment methods")}</span><strong>{step.network ?? step.offer?.payment_methods.join(", ") ?? copy("Check on the platform")}</strong></div>
         <div class="demoAction" class:highlight={frame === 2} class:received={frame === 3}>{frame === 3 ? "✓" : "↗"} {copy(frame === 3 ? "Check your actual balance" : step.kind === "transfer" ? "Confirm the transfer" : step.kind === "sell" && !step.direct ? "Wait for the payment" : "Confirm on the platform")}</div>
@@ -102,10 +103,11 @@
   .orbit { position: absolute; border: 1px solid #b5f50012; border-radius: 50%; width: 390px; height: 390px; top: 45px; left: calc(50% - 195px); }.orbitTwo { width: 520px; height: 520px; top: -20px; left: calc(50% - 260px); }
   .journey { display: flex; align-items: center; justify-content: center; gap: 24px; margin: 94px 0 0; }
   .journeyCoin { display: grid; place-items: center; gap: 9px; }.journeyCoin img { width: 56px; height: 56px; border-radius: 50%; box-shadow: 0 0 0 10px #ffffff04; }.journeyCoin > span { font: 11px var(--font-mono); }
+  img.fiatFlag { object-fit: cover; border-radius: 50%; }
   .sourceCoin { animation: float 6s ease-in-out infinite; }.targetCoin { animation: float 6s ease-in-out -3s infinite; }
   .journeyLine { display: flex; gap: 10px; margin-top: -20px; }.journeyLine span { width: 5px; height: 5px; border-radius: 50%; background: #b5f500; animation: signal 2.8s ease-in-out infinite; }.journeyLine span:nth-child(2) { animation-delay: .35s; }.journeyLine span:nth-child(3) { animation-delay: .7s; }
   .journeyCard { position: relative; width: 318px; margin: 29px auto 68px; padding: 17px; background: #f4f6ed; color: #182414; border-radius: 14px; box-shadow: 0 18px 60px #0004; transform: rotate(-4deg); animation: cardIn 1s cubic-bezier(.22,1,.36,1) both; }
-  .journeyCardTop { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 800; padding-bottom: 14px; }.smallLogo { display: grid; place-items: center; flex: 0 0 23px; height: 23px; border-radius: 7px; background: #b5f500; font-size: 17px; }.cardCheck { margin-left: auto; }
+  .journeyCardTop { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 800; padding-bottom: 14px; }.smallLogo { display: block; flex: 0 0 23px; width: 23px; height: 23px; border-radius: 7px; object-fit: contain; }.cardCheck { margin-left: auto; }
   .journeyChapters { display: grid; gap: 6px; max-height: 200px; overflow: auto; }.journeyChapters > div { display: flex; align-items: center; gap: 9px; padding: 9px; background: #e9eddf; border-radius: 7px; font-size: 11px; animation: rowIn .65s calc(var(--order) * .1s + .3s) both; }.miniNumber { font: 9px var(--font-mono); color: #5d6d4b; }.journeyChapters img { width: 18px; height: 18px; border-radius: 50%; }.journeyChapters b { margin-left: auto; font-size: 17px; font-weight: 400; }
   .journeyCardBottom { display: flex; justify-content: space-between; margin-top: 13px; font-size: 9px; color: #60704f; }
   .floatTag { position: absolute; bottom: 46px; right: 35px; display: flex; align-items: center; gap: 8px; padding: 12px 15px; border: 1px solid #c1d89536; border-radius: 9px; background: #273222; font-size: 11px; transform: rotate(3deg); animation: float 6s ease-in-out -2s infinite; }.floatTag > span { color: #b5f500; }
