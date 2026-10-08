@@ -17,7 +17,7 @@ type HomeContent = {
   currencies: string;
   sources: string;
   examplesTitle: string;
-  examples: { route: string; explanation: string }[];
+  examples: { route: string; explanation: string; provider?: string; providerName?: string }[];
   methodTitle: string;
   method: string[];
   faqTitle: string;
@@ -51,6 +51,9 @@ export const homeContent: Record<Locale, HomeContent> = {
       { route: "AMD → USDT → RUB", explanation: "Обмен драмов на рубли через промежуточный цифровой актив." },
       { route: "USDC (Ethereum) → RUB", explanation: "Сравнение выхода из цифрового актива в рубли через доступные способы получения." },
       { route: "USD cash → USDT → AMD", explanation: "Поиск маршрута из наличных долларов в драмы, когда площадки предлагают подходящие условия." },
+      { route: "ETH (Ethereum) → USDC (Ethereum)", explanation: "Обмен ETH на USDC в сети Ethereum через CoW Swap.", provider: "cow-swap", providerName: "CoW Swap" },
+      { route: "USDT (Ethereum) → USDC (Solana)", explanation: "Обмен USDT в Ethereum на USDC в Solana через Symbiosis.", provider: "symbiosis", providerName: "Symbiosis" },
+      { route: "BTC → ETH (Ethereum)", explanation: "Обмен BTC на ETH через NEAR Intents.", provider: "near-intents", providerName: "NEAR Intents" },
     ],
     methodTitle: "Как считаются и сравниваются предложения",
     method: [
@@ -90,6 +93,9 @@ export const homeContent: Record<Locale, HomeContent> = {
       { route: "AMD → USDT → RUB", explanation: "Exchange dram for rubles through an intermediate digital asset." },
       { route: "USDC (Ethereum) → RUB", explanation: "Compare ways to exchange a digital asset for rubles using available payout methods." },
       { route: "USD cash → USDT → AMD", explanation: "Find a route from cash dollars to dram when matching provider offers are available." },
+      { route: "ETH (Ethereum) → USDC (Ethereum)", explanation: "Swap ETH for USDC on Ethereum through CoW Swap.", provider: "cow-swap", providerName: "CoW Swap" },
+      { route: "USDT (Ethereum) → USDC (Solana)", explanation: "Swap USDT on Ethereum for USDC on Solana through Symbiosis.", provider: "symbiosis", providerName: "Symbiosis" },
+      { route: "BTC → ETH (Ethereum)", explanation: "Exchange BTC for ETH through NEAR Intents.", provider: "near-intents", providerName: "NEAR Intents" },
     ],
     methodTitle: "How offers are calculated and compared",
     method: [
@@ -129,6 +135,9 @@ export const homeContent: Record<Locale, HomeContent> = {
       { route: "AMD → USDT → RUB", explanation: "Դրամի փոխանակում ռուբլու՝ միջանկյալ թվային ակտիվի միջոցով։" },
       { route: "USDC (Ethereum) → RUB", explanation: "Թվային ակտիվից ռուբլու անցման եղանակների համեմատություն։" },
       { route: "USD cash → USDT → AMD", explanation: "Կանխիկ դոլարից դրամի ուղու որոնում՝ համապատասխան առաջարկների առկայության դեպքում։" },
+      { route: "ETH (Ethereum) → USDC (Ethereum)", explanation: "ETH-ի փոխանակում USDC-ի Ethereum ցանցում՝ CoW Swap-ի միջոցով։", provider: "cow-swap", providerName: "CoW Swap" },
+      { route: "USDT (Ethereum) → USDC (Solana)", explanation: "Ethereum ցանցի USDT-ի փոխանակում Solana ցանցի USDC-ի՝ Symbiosis-ի միջոցով։", provider: "symbiosis", providerName: "Symbiosis" },
+      { route: "BTC → ETH (Ethereum)", explanation: "BTC-ի փոխանակում ETH-ի՝ NEAR Intents-ի միջոցով։", provider: "near-intents", providerName: "NEAR Intents" },
     ],
     methodTitle: "Ինչպես են համեմատվում առաջարկները",
     method: [

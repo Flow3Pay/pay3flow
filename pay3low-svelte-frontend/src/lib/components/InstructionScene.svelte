@@ -63,7 +63,7 @@
 <style>
   .scene { contain: layout paint; position: relative; min-height: 490px; height: 100%; overflow: hidden; border-radius: 24px; color: #f1f4ec; background: #19211d; isolation: isolate; }
   .sceneGrid { position: absolute; inset: 0; z-index: -1; opacity: .45; background-image: linear-gradient(#c9ddbd0d 1px, transparent 1px), linear-gradient(90deg, #c9ddbd0d 1px, transparent 1px), radial-gradient(ellipse at 50% 50%, #b5f50013, transparent 65%); background-size: 32px 32px, 32px 32px, auto; }
-  .browser { width: 330px; position: relative; margin: 76px auto 66px; border: 1px solid #ffffff32; border-radius: 15px; background: #f8faf6; color: #152016; box-shadow: 0 24px 70px #0005; transform: perspective(1200px) rotateY(-7deg) rotateX(3deg); animation: browserIn .8s cubic-bezier(.22,1,.36,1) both; }
+  .browser { width: 330px; position: relative; left: calc(50% - 165px); margin: 76px 0 66px; border: 1px solid #ffffff32; border-radius: 15px; background: #f8faf6; color: #152016; box-shadow: 0 24px 70px #0005; transform: perspective(1200px) rotateY(-7deg) rotateX(3deg); animation: browserIn .8s cubic-bezier(.22,1,.36,1) both; }
   .browserChrome { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid #14201615; color: #4e5b4d; font: 9px var(--font-mono); }
   .browserChrome > div { display: flex; gap: 4px; }
   .browserChrome i { width: 5px; height: 5px; border-radius: 50%; background: #c2cac0; }

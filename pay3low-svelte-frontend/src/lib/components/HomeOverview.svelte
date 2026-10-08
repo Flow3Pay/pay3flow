@@ -49,7 +49,7 @@
   ];
   $: banks = paymentMethods.length
     ? [...new Map(paymentMethods.filter(method => method.kind === "bank").map(method => [
-        `${method.country}:${method.currencyGroup ?? method.name.toLowerCase()}`,
+        `${method.name.trim().toLowerCase()}:${paymentMethodFavicon(method) ?? ""}`,
         { name: method.name, currency: method.currency, iconUrl: paymentMethodFavicon(method) ?? assetIcon(method.currency) }
       ])).values()].sort((a, b) => a.name.localeCompare(b.name))
     : defaultBanks;
@@ -66,6 +66,29 @@
   }
 </script>
 
+{#snippet exampleCards(offset: number)}
+    <div class="examples" class:stacked={offset === 0}>
+      {#each copy.examples.slice(offset, offset + 3) as example, localIndex}
+        {@const index = offset + localIndex}
+        <article><span class="exampleIndex" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
+          <h4>{#each example.route.split(" → ") as asset, assetIndex}
+            {@const currency = asset.split(" ")[0]}
+            {@const bank = asset.includes("cash") ? undefined : exampleBank(currency)}
+            <span class="examplePart">
+              {#if assetIndex}<span class="routeArrow" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 12h16m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span>{/if}
+              <span class="routeAsset">
+                <span class="routeAssetMain"><img src={fiatFlagUrl(currency) ?? assetIcon(currency)} class:fiatFlag={Boolean(fiatFlagUrl(currency))} alt="" width="18" height="18" loading="lazy" decoding="async" /><strong>{asset.split(" (")[0]}</strong></span>
+                {#if bank}<span class="routeNetwork" title={bank.name}><img src={bank.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" /><strong>{bank.name}</strong></span>{/if}
+                {#if asset.includes(" (")}{@const network = asset.split(" (")[1].replace(")", "")}<span class="routeNetwork" title={network}><img src={networkIcon(network)} alt={network} width="18" height="18" loading="lazy" decoding="async" /></span>{/if}
+                {#if assetIndex}<span class="routeNetwork routeVenue"><img src={venueIcon(example.provider ?? (index === 2 && assetIndex === 1 ? "bestchange" : "bybit"))} alt="" width="18" height="18" loading="lazy" decoding="async" /><strong>{example.providerName ?? (index === 2 && assetIndex === 1 ? "BestChange" : "Bybit")}</strong></span>{/if}
+              </span>
+            </span>
+          {/each}</h4><p>{example.explanation}</p>
+        </article>
+      {/each}
+    </div>
+{/snippet}
+
 <div class="overview" data-testid="home-overview">
   <div class="introduction">
     <section id="about" class="aboutCard" aria-labelledby="about-heading">
@@ -80,29 +103,10 @@
   <section class="coverage" aria-labelledby="coverage-heading">
     <div class="sectionHead"><h2 id="coverage-heading">{copy.coverageTitle}</h2></div>
     <div class="coverageGrid">
-      <div class="coverageItem"><div class="assetTags">{#each assets as asset}{@const flag = fiatFlagUrl(asset)}<span><img src={flag ?? assetIcon(asset)} class:fiatFlag={Boolean(flag)} alt="" width="20" height="20" loading="lazy" decoding="async" />{asset}</span>{/each}</div><p>{copy.currencies}</p></div>
+      <div class="coverageItem"><div class="assetTags">{#each assets as asset}{@const flag = fiatFlagUrl(asset)}<span><img src={flag ?? assetIcon(asset)} class:fiatFlag={Boolean(flag)} alt="" width="20" height="20" loading="lazy" decoding="async" />{asset}</span>{/each}</div><p>{copy.currencies}</p><h3>{copy.examplesTitle}</h3>{@render exampleCards(0)}</div>
       <div class="coverageItem"><div class="providerTags">{#each providers as provider}<span><img src={venueIcon(provider.id)} alt="" width="20" height="20" loading="lazy" decoding="async" />{provider.name}</span>{/each}</div><h3 class="bankHeading">{t("Banks", {}, $locale)}</h3><div class="providerTags bankTags">{#each banks as bank}<span><img src={bank.iconUrl} alt="" width="20" height="20" loading="lazy" decoding="async" />{bank.name}</span>{/each}</div><p>{copy.sources}</p></div>
     </div>
-    <h3>{copy.examplesTitle}</h3>
-    <div class="examples">
-      {#each copy.examples as example, index}
-        <article><span class="exampleIndex" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
-          <h4>{#each example.route.split(" → ") as asset, assetIndex}
-            {@const currency = asset.split(" ")[0]}
-            {@const bank = asset.includes("cash") ? undefined : exampleBank(currency)}
-            <span class="examplePart">
-              {#if assetIndex}<span class="routeArrow" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 12h16m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span>{/if}
-              <span class="routeAsset">
-                <span class="routeAssetMain"><img src={fiatFlagUrl(currency) ?? assetIcon(currency)} class:fiatFlag={Boolean(fiatFlagUrl(currency))} alt="" width="18" height="18" loading="lazy" decoding="async" /><strong>{asset.split(" (")[0]}</strong></span>
-                {#if bank}<span class="routeNetwork" title={bank.name}><img src={bank.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" /><strong>{bank.name}</strong></span>{/if}
-                {#if asset.includes(" (")}{@const network = asset.split(" (")[1].replace(")", "")}<span class="routeNetwork" title={network}><img src={networkIcon(network)} alt={network} width="18" height="18" loading="lazy" decoding="async" /></span>{/if}
-                {#if assetIndex}<span class="routeNetwork routeVenue"><img src={venueIcon(index === 2 && assetIndex === 1 ? "bestchange" : "bybit")} alt="" width="18" height="18" loading="lazy" decoding="async" /><strong>{index === 2 && assetIndex === 1 ? "BestChange" : "Bybit"}</strong></span>{/if}
-              </span>
-            </span>
-          {/each}</h4><p>{example.explanation}</p>
-        </article>
-      {/each}
-    </div>
+    {@render exampleCards(3)}
   </section>
 
 
@@ -149,7 +153,7 @@
   .assetTags span, .providerTags span { display: flex; align-items: center; gap: 7px; min-height: 34px; padding: 6px 10px; border: 1px solid var(--color-border); border-radius: 7px; background: var(--color-panel); font-size: 12px; font-weight: 750; }
   .assetTags img, .providerTags img { object-fit: contain; border-radius: 50%; }
   .assetTags img.fiatFlag { object-fit: cover; }
-  .examples { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .examples.stacked { grid-template-columns: 1fr; margin-top: 0; }.examples { margin-top: 24px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
   article { min-width: 0; padding: 20px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-panel); }
   .exampleIndex { display: block; margin-bottom: 20px; color: var(--color-text-faint); font: 12px/1 var(--font-mono); }
   h4 { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 16px; font: 500 14px/1.4 var(--font-mono); }
@@ -189,8 +193,9 @@
     section { padding: 24px; }
     .coverageGrid { gap: 16px; }
     .examples { grid-template-columns: 1fr; }
-    article { display: grid; grid-template-columns: 28px 1fr 1fr; align-items: center; gap: 16px; }
+    article { display: grid; grid-template-columns: 28px 1fr; align-items: center; gap: 16px; }
     article .exampleIndex, article h4 { margin: 0; }
+    article p { grid-column: 2; }
     .faq { gap: 24px; }
     .project { gap: 32px; }
   }

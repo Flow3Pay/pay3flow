@@ -2981,6 +2981,7 @@ test("guide suspends offscreen animation while scrolling", async ({ page, isMobi
   await page.getByTestId("complete-route").first().locator(".routeWorkflowButton").click();
   const guide = page.getByTestId("route-guide");
   await guide.getByTestId("start-guide").click();
+  await guide.locator(".scene").scrollIntoViewIfNeeded();
   await expect(guide.locator(".scene")).not.toHaveClass(/paused/);
   await expect(guide.getByTestId("playback-toggle").locator("img")).toHaveAttribute("src", "/icons/ui/guide-pause.png");
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
@@ -2989,7 +2990,7 @@ test("guide suspends offscreen animation while scrolling", async ({ page, isMobi
   // Exercise several playback ticks while its illustration is offscreen.
   await page.waitForTimeout(400);
   await expect(guide.locator(".playerTimeline button[aria-pressed=true] > span")).toHaveAttribute("style", progress!);
-  await page.evaluate(() => window.scrollTo(0, 0));
+  await guide.locator(".scene").scrollIntoViewIfNeeded();
   await expect(guide.locator(".scene")).not.toHaveClass(/paused/);
   await expect(guide.locator(".checkpoint")).toHaveCount(0);
   await expect(page.locator(".appShell")).toHaveClass(/guideActive/);

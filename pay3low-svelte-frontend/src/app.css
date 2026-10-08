@@ -314,5 +314,5 @@ input { min-height: 32px; }
 html.introPlaying, html.introPlaying body { scrollbar-width: none; }
 html.introPlaying::-webkit-scrollbar, html.introPlaying body::-webkit-scrollbar { display: none; }
 
-.appShell.guideActive { background: var(--color-bg); }
-.appShell.guideActive::before, .appShell.guideActive::after { display: none; }
+.appShell.guideActive .header { padding-bottom: 0; }
+.appShell.guideActive .header .inner { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
