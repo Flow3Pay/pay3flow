@@ -48,7 +48,7 @@
   }
 
   .optionCard[data-selected] {
-    border-color: var(--color-accent-strong);
+    border-color: var(--color-accent-text);
     background: var(--color-accent-soft);
   }
 
@@ -63,7 +63,7 @@
     border-radius: 15px;
     color: #fff;
     box-shadow: 0 6px 15px rgba(20, 23, 19, 0.14);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 850;
     letter-spacing: 0.03em;
   }
@@ -87,7 +87,7 @@
 
   .optionName {
     overflow: hidden;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 780;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -96,13 +96,13 @@
   .optionMeta {
     color: var(--color-text-faint);
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: 12px;
     font-weight: 600;
   }
 
   .check {
     flex: 0 0 auto;
-    color: var(--color-accent-strong);
+    color: var(--color-accent-text);
   }
 
   :global(html[data-theme="dark"]) .optionCard:hover {
@@ -111,7 +111,7 @@
   }
 
   :global(html[data-theme="dark"]) .optionCard[data-selected] {
-    border-color: var(--color-accent-strong);
+    border-color: var(--color-accent-text);
     background: var(--color-accent-soft);
   }
 

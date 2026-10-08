@@ -124,7 +124,7 @@
   .eyebrow {
     margin: 0 0 8px;
     color: #9a7100;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 850;
     letter-spacing: 0.09em;
     text-transform: uppercase;

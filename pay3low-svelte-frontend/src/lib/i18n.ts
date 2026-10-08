@@ -1,4 +1,4 @@
-import { writable } from "svelte/store";
+import { get, writable } from "svelte/store";
 
 export type Locale = "en" | "ru" | "hy";
 
@@ -31,6 +31,9 @@ const messages: Record<Locale, Record<string, string>> = {
     "Hide routes": "Скрыть маршруты",
     "Close search activity": "Закрыть график поисков",
     "Switch language": "Переключить язык",
+    "Open API documentation": "Открыть документацию API",
+    "Open Pay3Flow Telegram channel": "Открыть Telegram-канал Pay3Flow",
+    "Open Pay3Flow on GitHub": "Открыть Pay3Flow на GitHub",
     "Switch theme": "Переключить тему",
     "Menu": "Меню",
     "Open menu": "Открыть меню",
@@ -43,6 +46,8 @@ const messages: Record<Locale, Record<string, string>> = {
     "Stop spending hours searching for an exchange.": "Не тратьте часы на поиск обмена.",
     "Exchange mode": "Режим обмена",
     Bridge: "Маршрут",
+    "Select payment method": "Выберите способ оплаты",
+    Go: "Открыть",
     History: "История",
     "Refresh routes now": "Обновить маршруты",
     "Route refresh settings": "Настройки обновления маршрутов",
@@ -346,6 +351,9 @@ const messages: Record<Locale, Record<string, string>> = {
     "Hide routes": "Թաքցնել երթուղիները",
     "Close search activity": "Փակել որոնումների գրաֆիկը",
     "Switch language": "Փոխել լեզուն",
+    "Open API documentation": "Բացել API փաստաթղթերը",
+    "Open Pay3Flow Telegram channel": "Բացել Pay3Flow Telegram ալիքը",
+    "Open Pay3Flow on GitHub": "Բացել Pay3Flow-ը GitHub-ում",
     "Switch theme": "Փոխել թեման",
     "Menu": "Մենյու",
     "Open menu": "Բացել մենյուն",
@@ -358,6 +366,8 @@ const messages: Record<Locale, Record<string, string>> = {
     "Stop spending hours searching for an exchange.": "Այլևս ժամեր մի ծախսեք փոխանակում փնտրելու վրա։",
     "Exchange mode": "Փոխանակման ռեժիմ",
     Bridge: "Ուղղորդում",
+    "Select payment method": "Ընտրեք վճարման եղանակը",
+    Go: "Բացել",
     History: "Պատմություն",
     "Refresh routes now": "Թարմացնել ուղղությունները",
     "Route refresh settings": "Ուղղությունների թարմացման կարգավորումներ",
@@ -610,18 +620,26 @@ const messages: Record<Locale, Record<string, string>> = {
   },
 };
 
-function readLocale(): Locale {
-  if (typeof window === "undefined") return "en";
-  const stored = window.localStorage.getItem(STORAGE_KEY) as Locale | null;
-  return stored && supportedLocales.includes(stored) ? stored : "en";
-}
+// The server and the first hydration render must use the same language.
+export const DEFAULT_LOCALE: Locale = "ru";
+export const locale = writable<Locale>(DEFAULT_LOCALE);
 
-export const locale = writable<Locale>(readLocale());
+export function restoreLocale() {
+  let next = DEFAULT_LOCALE;
+  try {
+    const stored = window.localStorage.getItem(STORAGE_KEY) as Locale | null;
+    if (stored && supportedLocales.includes(stored)) next = stored;
+  } catch { /* Keep the server language when storage is unavailable. */ }
+  locale.set(next);
+  document.documentElement.lang = next;
+}
 
 export function setLocale(next: Locale) {
   locale.set(next);
   if (typeof document !== "undefined") document.documentElement.lang = next;
-  if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_KEY, next);
+  if (typeof window !== "undefined") {
+    try { window.localStorage.setItem(STORAGE_KEY, next); } catch { /* Language changes still work without storage. */ }
+  }
 }
 
 export function cycleLocale(current: Locale): Locale {
@@ -761,9 +779,9 @@ export function localize(node: HTMLElement) {
   const observer = new MutationObserver((records) => {
     for (const record of records) {
       if (record.type === "childList") {
-        for (const added of record.addedNodes) translateTree(added, readLocale());
+        for (const added of record.addedNodes) translateTree(added, get(locale));
       } else {
-        translateTree(record.target, readLocale());
+        translateTree(record.target, get(locale));
       }
     }
   });

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { browser } from "$app/environment";
   import { afterUpdate, onMount, onDestroy, tick } from "svelte";
   import { quintOut } from "svelte/easing";
   import { fly, slide } from "svelte/transition";
@@ -8,6 +9,7 @@
   import { fetchPaymentMethods, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
   import { getAnonymousUserId, registerAnonymousUser } from "$lib/anonymous-user";
   import { locale, t } from "$lib/i18n";
+  import { homeContent } from "$lib/home-content";
   import { SearchResponseMetrics } from "$lib/response-metrics";
   import { fetchRouteSearchActivity, SEARCH_ACTIVITY_PERIODS, type RouteSearchActivityHour, type SearchActivityPeriod } from "$lib/route-activity";
   import { fiatFlagUrl } from "$lib/currency-flags";
@@ -89,10 +91,6 @@
   let activityRevealElement: HTMLDivElement | undefined;
   let routesRevealElement: HTMLDivElement | undefined;
   let routesExpanded = true;
-  let introPlaying = true;
-  let introStarted = false;
-  let introOverlayElement: HTMLDivElement;
-  let heroHeadingElement: HTMLHeadingElement;
   let settingsElement: HTMLDivElement;
   let settingsDialog: HTMLDivElement;
   let settingsDragging = false;
@@ -126,38 +124,8 @@
   let responseMetrics = new SearchResponseMetrics();
   let foundVenueIds: string[] = [];
   $: activeLocale = $locale;
-  $: firstHeadline = headlineWords(t("Move money.", {}, activeLocale));
-  $: secondHeadline = headlineWords(t("Keep more.", {}, activeLocale));
+  $: home = homeContent[activeLocale];
   $: modalOpen = settingsOpen || exchangesOpen;
-
-  function headlineWords(value: string) {
-    const match = value.match(/^(\S+)\s+(.+?)([.!։。؟]+)$/u);
-    return match ? { first: match[1], second: match[2], punctuation: match[3] } : { first: value, second: "", punctuation: "" };
-  }
-
-  onMount(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      introPlaying = false;
-      return;
-    }
-    let introTimer: number | undefined;
-    const positionIntro = () => {
-      const heading = heroHeadingElement.getBoundingClientRect();
-      introOverlayElement.style.setProperty("--intro-x", `${heading.left + heading.width / 2 - window.innerWidth / 2}px`);
-      introOverlayElement.style.setProperty("--intro-y", `${heading.top + heading.height / 2 - window.innerHeight / 2}px`);
-    };
-    const frame = window.requestAnimationFrame(() => {
-      positionIntro();
-      window.addEventListener("resize", positionIntro, { passive: true });
-      introStarted = true;
-      introTimer = window.setTimeout(() => introPlaying = false, 8000);
-    });
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.removeEventListener("resize", positionIntro);
-      if (introTimer) window.clearTimeout(introTimer);
-    };
-  });
 
   async function refreshActivity(source: string, target: string, period: SearchActivityPeriod, refreshedAt: number | null, interval: number) {
     const displayKey = `${source}|${target}|${period}`;
@@ -739,6 +707,7 @@
   function selectNetwork(network: CryptoNetwork) { initialSearchReady = true; if (networkPicker === "source") sourceNetworkId = network.id; else targetNetworkId = network.id; networkPicker = null; resetResults(); }
   function openCurrencyPicker(side: Exclude<PickerSide, null>) { currencyPicker = side; }
   async function openMethodPicker(side: Exclude<PickerSide, null>) {
+    if (!browser) return;
     methodPicker = side;
     paymentPickerComponent ??= (await import("./PaymentMethodPicker.svelte")).default;
   }
@@ -746,6 +715,7 @@
     networkPicker = side;
   }
   async function openInstructions(route: RouteCandidate) {
+    if (!browser) return;
     instructionsRoute = route;
     routeInstructionsComponent ??= (await import("./RouteInstructions.svelte")).default;
     void recordInstructionOpen(anonymousId, (route.service_links ?? []).map((link) => link.tracking_token)).catch(() => {});
@@ -1010,22 +980,18 @@
 
 <svelte:window on:resize={closeInlineActivityOnMobile} />
 
-<section class="shell" class:localeLong={activeLocale !== "en"} class:introPlaying class:introReady={!introPlaying} id="transfer">
-  {#if introPlaying}
-    <div class="introOverlay" class:introStarted bind:this={introOverlayElement} aria-hidden="true">
-      <h1 class="introTitle" on:animationend={(event) => { if (event.animationName.endsWith("introDock")) introPlaying = false; }}><span class="introClip"><span class="introWord introWordMove">{firstHeadline.first}</span></span>{' '}<span class="introSecondWithDot"><span class="introClip"><span class="introWord introWordMoney">{firstHeadline.second}</span></span><span class="introPunctuation introFirstPunctuation">{firstHeadline.punctuation}</span></span>{' '}<span class="introEmphasis"><span class="introClip"><span class="introWord introWordKeep">{secondHeadline.first}</span></span>{' '}<span class="introSecondWithDot"><span class="introClip"><span class="introWord introWordMore">{secondHeadline.second}</span></span><span class="introPunctuation introLastPunctuation">{secondHeadline.punctuation}</span></span><img class="introMarker" src="/icons/ui/marker-down-right.svg" alt="" width="512" height="512" aria-hidden="true" /></span></h1>
-    </div>
-  {/if}
-  <div class="hero"><h1 bind:this={heroHeadingElement}>{t("Move money.", {}, activeLocale)} <span>{t("Keep more.", {}, activeLocale)}</span></h1><p>{t("Stop spending hours searching for an exchange.", {}, activeLocale)}</p></div>
+<section class="shell" id="transfer">
+  <div class="hero"><h1>{home.heading}</h1><p>{home.intro}</p></div>
+  <noscript><p class="nojsNotice">{home.nojs}</p></noscript>
   <div class="workspace" class:activityExpanded class:routesCollapsed={!routesExpanded} style:--converter-width={`${converterWidth}px`} style:--amount-digits={converterAmountDigits}>
     <div class="converterStack">
     <div class="card" class:modalOpen>
       <div class="cardTop">
         <div class="modeTabs" aria-label={t("Exchange mode", {}, activeLocale)}><button type="button" class="modeActive">{t("Bridge", {}, activeLocale)}</button><button type="button" disabled>{t("History", {}, activeLocale)}</button></div>
         <div class="cardActions" bind:this={settingsElement}>
-          <button type="button" class="refreshButton" on:click={() => void startSearch()} disabled={!hasAmount || searching} aria-label="Refresh routes now"><img class:refreshSpin={awaitingFirstRoute} src="/icons/ui/route-refresh.png" alt="" width="18" height="18" aria-hidden="true" /></button>
+          <button type="button" class="refreshButton" on:click={() => void startSearch()} disabled={!hasAmount || searching} aria-label={t("Refresh routes now", {}, activeLocale)}><img class:refreshSpin={awaitingFirstRoute} src="/icons/ui/route-refresh.png" alt="" width="18" height="18" aria-hidden="true" /></button>
           <div class="settingsWrap">
-            <button type="button" class="exchangesButton" on:click={() => { settingsOpen = false; exchangesOpen = !exchangesOpen; }} aria-haspopup="dialog" aria-expanded={exchangesOpen} aria-label="Choose exchanges"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAACn0lEQVR4AbSVy0sVURzHZ9q0KcigiIyKrgUZRBS0SSgXLUKMIjAkEIKICHrgQqFF6tJFFEgXiqJNUemi6AGCyBVU0JWuBFHxgS8QUfAPuH6+xznHGe8493pF+X3O7/x+5/c4c+aecZ+3x38FN8hms/vhPnyCL3CrkL3lbUChCnhDsRH4ASm4B1/xX0QnSmwDEs9APfSSLe6gf0KZ7/uV6NtwGCogUSINKHgFtEvt9jWZk1Dt+34KXsEEtofukYajkCiuAYW1q06iD8ILUNE6iv1jXrS4BlR4AhkKVsEHWMbetZgG7L6MSvpVdDH/A5OQKMRLmkJBylGufgRaM5gGzE6A5CNDNQxASx46WP8MNk45yh2n6Un8RmwDYwTDcY6nFprzUMP6I7BxteTXgCStQdgGx2RAmoQFdFFCrp6qnuQqnuI02tvaYExOQUAjTEMmBvkbFRfDUOCLNAh8xSk2kII0rFDhF0huarBP8E0GWK3L1Mojn4LKGORvJd6jqG70MHP9zFFGVhmfsVZqGlBgCXycR3A+Ru9E6gg+AO+oUSKY3wVd2LOmAYZ2Uo7+Dy9pciPEOXxJYj4fBFyGHHENWOkHvZjz6EyIUZrJxpUr7PgvXv3yrhO3IrD1HtbQY+EG13BMBeiLadFF0hNdYm070ZG0hRYPMW+j+Vy4AT6vgaGBhR4Ltv1yKgkzV4gdhOdQwuoDkOjJ3D2Q4z3DU4J0WZg6mWVmGqILkatBkE4j0iDwbyrOsxlLl89dfextJYhvIuAtG11ERxp8x6GzJm5DsBWM8trx6F9nOTruZss3Q6Di5ymuzwWmF2nQjkcvSy/VYo9rhKQ+1pOkm8UW4krRTtxLZmEVfoP9Oup4dFs78F1QBlqN4m62fA9ZV45CHesAAAD//3Y7g4QAAAAGSURBVAMAao5eF665v54AAAAASUVORK5CYII=" alt="" width="18" height="18" aria-hidden="true" /></button>
+            <button type="button" class="exchangesButton" on:click={() => { settingsOpen = false; exchangesOpen = !exchangesOpen; }} aria-haspopup="dialog" aria-expanded={exchangesOpen} aria-label={t("Choose exchanges", {}, activeLocale)}><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAACn0lEQVR4AbSVy0sVURzHZ9q0KcigiIyKrgUZRBS0SSgXLUKMIjAkEIKICHrgQqFF6tJFFEgXiqJNUemi6AGCyBVU0JWuBFHxgS8QUfAPuH6+xznHGe8493pF+X3O7/x+5/c4c+aecZ+3x38FN8hms/vhPnyCL3CrkL3lbUChCnhDsRH4ASm4B1/xX0QnSmwDEs9APfSSLe6gf0KZ7/uV6NtwGCogUSINKHgFtEvt9jWZk1Dt+34KXsEEtofukYajkCiuAYW1q06iD8ILUNE6iv1jXrS4BlR4AhkKVsEHWMbetZgG7L6MSvpVdDH/A5OQKMRLmkJBylGufgRaM5gGzE6A5CNDNQxASx46WP8MNk45yh2n6Un8RmwDYwTDcY6nFprzUMP6I7BxteTXgCStQdgGx2RAmoQFdFFCrp6qnuQqnuI02tvaYExOQUAjTEMmBvkbFRfDUOCLNAh8xSk2kII0rFDhF0huarBP8E0GWK3L1Mojn4LKGORvJd6jqG70MHP9zFFGVhmfsVZqGlBgCXycR3A+Ru9E6gg+AO+oUSKY3wVd2LOmAYZ2Uo7+Dy9pciPEOXxJYj4fBFyGHHENWOkHvZjz6EyIUZrJxpUr7PgvXv3yrhO3IrD1HtbQY+EG13BMBeiLadFF0hNdYm070ZG0hRYPMW+j+Vy4AT6vgaGBhR4Ltv1yKgkzV4gdhOdQwuoDkOjJ3D2Q4z3DU4J0WZg6mWVmGqILkatBkE4j0iDwbyrOsxlLl89dfextJYhvIuAtG11ERxp8x6GzJm5DsBWM8trx6F9nOTruZss3Q6Di5ymuzwWmF2nQjkcvSy/VYo9rhKQ+1pOkm8UW4krRTtxLZmEVfoP9Oup4dFs78F1QBlqN4m62fA9ZV45CHesAAAD//3Y7g4QAAAAGSURBVAMAao5eF665v54AAAAASUVORK5CYII=" alt="" width="18" height="18" aria-hidden="true" /></button>
             {#if exchangesOpen}
               <div class="settingsBackdrop" use:portalSettingsBackdrop on:mousedown={closeSettings} role="presentation">
                 <div class:settingsDragging class="settingsMenu exchangesMenu" bind:this={settingsDialog} role="dialog" aria-label="Exchange settings" tabindex="-1" on:mousedown|stopPropagation>
@@ -1043,7 +1009,7 @@
             {/if}
           </div>
           <div class="settingsWrap">
-            <button type="button" class="settingsButton" on:click={() => { exchangesOpen = false; settingsOpen = !settingsOpen; }} aria-haspopup="dialog" aria-expanded={settingsOpen} aria-label="Route refresh settings"><img src="/icons/ui/route-settings.png" alt="" width="18" height="18" aria-hidden="true" /></button>
+            <button type="button" class="settingsButton" on:click={() => { exchangesOpen = false; settingsOpen = !settingsOpen; }} aria-haspopup="dialog" aria-expanded={settingsOpen} aria-label={t("Route refresh settings", {}, activeLocale)}><img src="/icons/ui/route-settings.png" alt="" width="18" height="18" aria-hidden="true" /></button>
             {#if settingsOpen}
               <div class="settingsBackdrop" use:portalSettingsBackdrop on:mousedown={closeSettings} role="presentation">
                 <div class:settingsDragging class="settingsMenu" bind:this={settingsDialog} role="dialog" aria-label="Refresh settings" tabindex="-1" on:mousedown|stopPropagation>
@@ -1064,31 +1030,31 @@
         </div>
       </div>
 
-      <div class="intentLabel"><span>Sell</span></div>
+      <div class="intentLabel"><span>{t("Sell", {}, activeLocale)}</span></div>
       <div class="moneyPanel moneyPanelSource">
-        <div class="panelCopy"><label for="exchange-amount">You send</label><input id="exchange-amount" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedSourceAmount} on:focus={(event) => event.currentTarget.select()} on:input={(event) => updateAmount(event.currentTarget.value)} aria-label="Amount to send" />{#if marketUsd.source !== null}<span class="marketValue" aria-label={t("Approximate USD market value", {}, activeLocale)}>{formatMarketUsd(marketUsd.source)}</span>{/if}</div>
+        <div class="panelCopy"><label for="exchange-amount">{t("You send", {}, activeLocale)}</label><input id="exchange-amount" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedSourceAmount} on:focus={(event) => event.currentTarget.select()} on:input={(event) => updateAmount(event.currentTarget.value)} aria-label={t("Amount to send", {}, activeLocale)} />{#if marketUsd.source !== null}<span class="marketValue" aria-label={t("Approximate USD market value", {}, activeLocale)}>{formatMarketUsd(marketUsd.source)}</span>{/if}</div>
         <div class="methodControls">
           <button type="button" class="methodTrigger" on:click={() => void openMethodPicker("source")} aria-label={`Select sending ${methodNoun(sourceMethod)}: ${sourceMethod ? methodTitle(sourceMethod) : "none"}`}>
             <span class="methodAvatar" style:background-color={paymentMethodFavicon(sourceMethod) ? "transparent" : sourceMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(sourceMethod)}<img src={paymentMethodFavicon(sourceMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{:else}<span>{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{/if}</span>
-            <span class="methodText" class:methodTextAsset={sourceMethod?.kind === "wallet"}><strong>{methodTitle(sourceMethod)}</strong></span><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+            <span class="methodText" class:methodTextAsset={sourceMethod?.kind === "wallet"}><strong>{t(methodTitle(sourceMethod), {}, activeLocale)}</strong></span><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
           </button>
           <div class="networkControl"><button type="button" class="networkButton" on:click={() => sourceMethod?.kind === "wallet" ? openNetworkPicker("source") : openCurrencyPicker("source")} aria-haspopup="dialog" aria-label={sourceMethod?.kind === "wallet" ? `Select sending network: ${sourceNetwork?.name ?? "none"}` : `Select sending currency: ${sourceCurrencyChoice}`} title={sourceMethod?.kind === "wallet" ? sourceNetwork?.name ?? "Select network" : sourceCurrencyChoice}><span class:currencyDot={sourceMethod?.kind !== "wallet"} class:flagDot={Boolean(sourceCurrencyFlag)} class="networkDot" aria-hidden="true">{#if sourceMethod?.kind === "wallet" && sourceNetwork}<img src={networkIcon(sourceNetwork.name)} alt="" width="18" height="18" loading="lazy" decoding="async" />{:else if sourceCurrencyFlag}<img src={sourceCurrencyFlag} alt="" width="18" height="18" decoding="async" />{:else}{currencyMark(sourceCurrencyChoice)}{/if}</span>{#if sourceMethod?.kind !== "wallet"}<span class="networkCopy"><strong>{sourceCurrencyChoice}</strong></span>{/if}<svg class="networkChevron" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></button></div>
         </div>
       </div>
-      <div class="flowBridge"><span class="bridgeLine" aria-hidden="true"></span><button type="button" class:bridgeIconReversed={directionReversed} class="bridgeIcon" on:click={swapDirection} aria-label="Swap sender and recipient" title="Swap sender and recipient"><img src={swapIcon} alt="" width="18" height="18" aria-hidden="true" /></button><button type="button" class="routesToggle" class:routesToggleOpen={routesExpanded} on:click={toggleRoutes} aria-label={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)} aria-expanded={routesExpanded} title={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)}><span aria-hidden="true">❯</span></button></div>
-      <div class="intentLabel intentLabelBuy"><span>Buy</span></div>
+      <div class="flowBridge"><span class="bridgeLine" aria-hidden="true"></span><button type="button" class:bridgeIconReversed={directionReversed} class="bridgeIcon" on:click={swapDirection} aria-label={t("Swap sender and recipient", {}, activeLocale)} title="Swap sender and recipient"><img src={swapIcon} alt="" width="18" height="18" aria-hidden="true" /></button><button type="button" class="routesToggle" class:routesToggleOpen={routesExpanded} on:click={toggleRoutes} aria-label={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)} aria-expanded={routesExpanded} title={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)}><span aria-hidden="true">❯</span></button></div>
+      <div class="intentLabel intentLabelBuy"><span>{t("Buy", {}, activeLocale)}</span></div>
       <div class="moneyPanel moneyPanelTarget">
-        <div class="panelCopy"><label for="exchange-output">Recipient gets</label><input id="exchange-output" class:amountOutputEmpty={!previewRoute && amountSide !== "target"} class="amountInput amountOutput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedTargetAmount} on:focus={(event) => event.currentTarget.select()} on:input={(event) => updateTargetAmount(event.currentTarget.value)} aria-label="Amount to receive" />{#if marketUsd.target !== null}<span class="marketValue" aria-label={t("Approximate USD market value", {}, activeLocale)}>{formatMarketUsd(marketUsd.target)}</span>{/if}</div>
+        <div class="panelCopy"><label for="exchange-output">{t("Recipient gets", {}, activeLocale)}</label><input id="exchange-output" class:amountOutputEmpty={!previewRoute && amountSide !== "target"} class="amountInput amountOutput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedTargetAmount} on:focus={(event) => event.currentTarget.select()} on:input={(event) => updateTargetAmount(event.currentTarget.value)} aria-label={t("Amount to receive", {}, activeLocale)} />{#if marketUsd.target !== null}<span class="marketValue" aria-label={t("Approximate USD market value", {}, activeLocale)}>{formatMarketUsd(marketUsd.target)}</span>{/if}</div>
         <div class="methodControls">
           <button type="button" class="methodTrigger" on:click={() => void openMethodPicker("target")} aria-label={`Select recipient ${methodNoun(targetMethod)}: ${targetMethod ? methodTitle(targetMethod) : "none"}`}>
             <span class="methodAvatar" style:background-color={paymentMethodFavicon(targetMethod) ? "transparent" : targetMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(targetMethod)}<img src={paymentMethodFavicon(targetMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{:else}<span>{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{/if}</span>
-            <span class="methodText" class:methodTextAsset={targetMethod?.kind === "wallet"}><strong>{methodTitle(targetMethod)}</strong></span><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+            <span class="methodText" class:methodTextAsset={targetMethod?.kind === "wallet"}><strong>{t(methodTitle(targetMethod), {}, activeLocale)}</strong></span><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
           </button>
           <div class="networkControl"><button type="button" class="networkButton" on:click={() => targetMethod?.kind === "wallet" ? openNetworkPicker("target") : openCurrencyPicker("target")} aria-haspopup="dialog" aria-label={targetMethod?.kind === "wallet" ? `Select recipient network: ${targetNetwork?.name ?? "none"}` : `Select recipient currency: ${targetCurrencyChoice}`} title={targetMethod?.kind === "wallet" ? targetNetwork?.name ?? "Select network" : targetCurrencyChoice}><span class:currencyDot={targetMethod?.kind !== "wallet"} class:flagDot={Boolean(targetCurrencyFlag)} class="networkDot" aria-hidden="true">{#if targetMethod?.kind === "wallet" && targetNetwork}<img src={networkIcon(targetNetwork.name)} alt="" width="18" height="18" loading="lazy" decoding="async" />{:else if targetCurrencyFlag}<img src={targetCurrencyFlag} alt="" width="18" height="18" decoding="async" />{:else}{currencyMark(targetCurrencyChoice)}{/if}</span>{#if targetMethod?.kind !== "wallet"}<span class="networkCopy"><strong>{targetCurrencyChoice}</strong></span>{/if}<svg class="networkChevron" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></button></div>
         </div>
       </div>
-      {#if refreshSeconds > 0}<div class="marketBar"><div class="marketState"><span class="refreshProgress" role="img" aria-label={secondsUntilRefresh === null ? "Auto-refresh is off" : `Refresh in ${secondsUntilRefresh} seconds`}><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle class="refreshTrack" cx="9" cy="9" r="7" pathLength="100" /><circle class="refreshFill" cx="9" cy="9" r="7" pathLength="100" style:stroke-dashoffset={`${100 - refreshProgress}`} /></svg></span><div><span>{lastUpdatedAt ? `Updated ${Math.max(0, Math.floor((clock - lastUpdatedAt) / 1000))}s ago` : "Public P2P sources only · no order placement"}</span></div></div>{#if secondsUntilRefresh !== null}<span class="nextRefresh">{secondsUntilRefresh}s</span>{/if}</div>{/if}
-      <button type="button" class="cta" disabled={!hasAmount || searching || (!previewRoute && !corridor)} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? t("Open route instructions", {}, activeLocale) : t("Find routes", {}, activeLocale)}>{#if previewRoute}Go <span>↗</span>{:else if searching}<span class="spinner"></span> Finding routes{:else if hasAmount}Find routes <span>↗</span>{:else}Enter an amount to begin{/if}</button>
+      {#if refreshSeconds > 0}<div class="marketBar"><div class="marketState"><span class="refreshProgress" role="img" aria-label={secondsUntilRefresh === null ? "Auto-refresh is off" : `Refresh in ${secondsUntilRefresh} seconds`}><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle class="refreshTrack" cx="9" cy="9" r="7" pathLength="100" /><circle class="refreshFill" cx="9" cy="9" r="7" pathLength="100" style:stroke-dashoffset={`${100 - refreshProgress}`} /></svg></span><div><span>{lastUpdatedAt ? `Updated ${Math.max(0, Math.floor((clock - lastUpdatedAt) / 1000))}s ago` : t("Public P2P sources only · no order placement", {}, activeLocale)}</span></div></div>{#if secondsUntilRefresh !== null}<span class="nextRefresh">{secondsUntilRefresh}s</span>{/if}</div>{/if}
+      <button type="button" class="cta" disabled={!hasAmount || searching || (!previewRoute && !corridor)} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? t("Open route instructions", {}, activeLocale) : t("Find routes", {}, activeLocale)}>{#if previewRoute}{t("Go", {}, activeLocale)} <span>↗</span>{:else if searching}<span class="spinner"></span> {t("Finding routes", {}, activeLocale)}{:else if hasAmount}{t("Find routes", {}, activeLocale)} <span>↗</span>{:else}{t("Enter an amount to begin", {}, activeLocale)}{/if}</button>
       {#if error}<div class="errorBox" role="alert">{error}</div>{/if}
     </div>
     <div class="panelToggles">
@@ -1118,7 +1084,7 @@
 .shell {
   position: relative;
   width: 100%;
-  padding: 62px 24px 0;
+  padding: 62px var(--page-gutter) 0;
   font-family: var(--font-sans);
 }
 
@@ -1128,35 +1094,7 @@
   text-align: center;
 }
 
-.shell.introPlaying .hero, .shell.introPlaying .workspace { visibility: hidden; }
-.shell.introReady .workspace { animation: workspaceIn .72s cubic-bezier(.22, 1, .36, 1) both; }
-.shell.introReady .hero > p { animation: heroIn .5s .1s cubic-bezier(.22, 1, .36, 1) both; }
-.introOverlay { position: fixed; inset: 0; z-index: 1000; overflow: hidden; background: var(--shell-gradient); }
-.introTitle { position: absolute; top: 50%; left: 50%; width: min(900px, calc(100vw - 48px)); margin: 0; color: var(--color-text); font-size: clamp(44px, 5.5vw, 72px); font-weight: 650; letter-spacing: -.065em; line-height: .96; text-align: center; transform: translate(-50%, -50%) scale(1.2); }
-.introStarted .introTitle { animation: introDock .68s 3.08s cubic-bezier(.22, 1, .36, 1) both; }
-.introClip { display: inline-block; clip-path: inset(-.12em -.16em -.18em -.16em); vertical-align: bottom; }
-.introSecondWithDot { white-space: nowrap; }
-.introWord { display: inline-block; transform: translateY(115%); opacity: 0; }
-.introStarted .introWordMove { animation: introRise .48s .2s cubic-bezier(.22, 1, .36, 1) forwards; }
-.introStarted .introWordMoney { animation: introRise .48s .7s cubic-bezier(.22, 1, .36, 1) forwards; }
-.introStarted .introWordKeep { animation: introRise .48s 1.35s cubic-bezier(.22, 1, .36, 1) forwards; }
-.introStarted .introWordMore { animation: introRise .48s 1.85s cubic-bezier(.22, 1, .36, 1) forwards; }
-.introPunctuation { opacity: 0; }
-.introStarted .introFirstPunctuation { animation: introDot .02s 1.18s linear forwards; }
-.introStarted .introLastPunctuation { animation: introDot .02s 2.94s linear forwards; }
-.introEmphasis { position: relative; z-index: 0; white-space: nowrap; }
-.introEmphasis::after { position: absolute; right: -.05em; bottom: .02em; left: -.04em; z-index: -1; height: .2em; border-radius: 3px; background: var(--color-accent); content: ""; transform: rotate(-1deg) scaleX(0); transform-origin: left center; }
-.introStarted .introEmphasis::after { animation: introUnderline .48s 2.42s cubic-bezier(.22, 1, .36, 1) forwards; }
-.introMarker { position: absolute; bottom: -.9em; left: -.04em; z-index: 2; width: 1.02em; height: 1.02em; pointer-events: none; opacity: 0; }
-.introStarted .introMarker { animation: introMarkerDraw .48s 2.42s cubic-bezier(.22, 1, .36, 1) both; }
-:global(html[data-theme="dark"]) .introMarker { filter: brightness(0) invert(1); }
-.shell.localeLong .introTitle { font-size: clamp(42px, 5vw, 68px); }
-@media (max-width: 640px) { .introTitle { width: calc(100vw - 24px); font-size: 44px; transform: translate(-50%, -50%) scale(1.08); } .shell.localeLong .introTitle { font-size: 44px; transform: translate(-50%, -50%) scale(1); } .shell.localeLong .introEmphasis { white-space: normal; } }
-@keyframes introRise { to { opacity: 1; transform: translateY(0); } }
-@keyframes introDot { to { opacity: 1; } }
-@keyframes introUnderline { to { transform: rotate(-1deg) scaleX(1); } }
-@keyframes introMarkerDraw { 0% { left: -.04em; opacity: 0; } 8%, 88% { opacity: 1; } 100% { left: calc(100% + .05em); opacity: 0; } }
-@keyframes introDock { to { transform: translate(calc(-50% + var(--intro-x)), calc(-50% + var(--intro-y))) scale(1); } }
+.nojsNotice { max-width: 900px; margin: 0 auto 24px; color: var(--color-text-soft); font-size: 16px; line-height: 1.6; }
 
 .modeTabs,
 .cardActions,
@@ -1175,36 +1113,14 @@
   max-width: 900px;
   margin: 0 auto;
   color: var(--color-text);
-  font-size: clamp(50px, 6.8vw, 84px);
+  font-size: clamp(30px, 4.5vw, 54px);
   font-weight: 650;
-  letter-spacing: -0.07em;
-  line-height: 0.96;
+  letter-spacing: -0.04em;
+  line-height: 1.12;
 }
 
-@media (min-width: 981px) {
-  .hero h1 {
-    white-space: nowrap;
-  }
-}
 
-.hero h1 span {
-  position: relative;
-  z-index: 0;
-  white-space: nowrap;
-}
 
-.hero h1 span::after {
-  position: absolute;
-  right: -0.05em;
-  bottom: 0.02em;
-  left: -0.04em;
-  z-index: -1;
-  height: 0.26em;
-  border-radius: 3px;
-  background: var(--color-accent);
-  content: "";
-  transform: rotate(-1deg);
-}
 
 .hero > p {
   max-width: 650px;
@@ -1271,7 +1187,7 @@
   padding: 0 15px;
   border-radius: var(--radius-pill);
   color: var(--color-text-faint);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 750;
 }
 
@@ -1392,7 +1308,7 @@
 
 .settingsHead span {
   color: var(--color-text-faint);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
@@ -1408,7 +1324,7 @@
   border-radius: 10px;
   background: var(--color-panel);
   color: var(--color-text-soft);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 750;
 }
 
@@ -1445,7 +1361,7 @@
 .intermediarySettingsHead small {
   color: var(--color-text-faint);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
@@ -1488,12 +1404,12 @@
 }
 
 .alwaysOnHeading strong {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .alwaysOnHeading span {
   color: var(--color-text-faint);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .exchangeOptions .alwaysOnProvider {
@@ -1505,7 +1421,7 @@
 .alwaysOnProvider small {
   margin-left: auto;
   color: var(--color-good);
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -1578,7 +1494,7 @@
   border-radius: 10px;
   background: var(--color-panel);
   color: var(--color-text-soft);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
   transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -1591,14 +1507,14 @@
   border-color: var(--color-accent);
   background: var(--color-accent);
   color: #171717;
-  box-shadow: 0 5px 13px rgba(185, 242, 39, 0.2);
+  box-shadow: none;
 }
 
 .intentLabel {
   justify-content: space-between;
   padding: 5px 5px 3px;
   color: var(--color-text-faint);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1665,7 +1581,7 @@
 
 .panelCopy label {
   color: var(--color-text-soft);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 750;
 }
 
@@ -1690,7 +1606,7 @@
 }
 
 .amountOutputEmpty {
-  color: #b7b8b2;
+  color: var(--color-text-faint);
 }
 
 .methodTrigger {
@@ -1709,7 +1625,7 @@
   background: rgba(255, 255, 255, 0.8);
   color: var(--color-text);
   text-align: left;
-  box-shadow: 0 5px 15px rgba(21, 24, 20, 0.05);
+  box-shadow: none;
   /* Avoid repaint-heavy backdrop sampling while the browser is zooming. */
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -1718,7 +1634,7 @@
 
 .methodTrigger:hover {
   border-color: rgba(19, 22, 19, 0.2);
-  box-shadow: 0 8px 20px rgba(21, 24, 20, 0.08);
+  box-shadow: none;
   transform: translateY(-1px);
 }
 
@@ -1732,8 +1648,8 @@
   border: 2px solid rgba(255, 255, 255, 0.72);
   border-radius: 15px;
   color: #fff;
-  box-shadow: 0 5px 13px rgba(20, 23, 19, 0.13);
-  font-size: 11px;
+  box-shadow: none;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.02em;
 }
@@ -1795,12 +1711,12 @@
   background: var(--color-primary);
   color: var(--color-accent);
   cursor: pointer;
-  box-shadow: 0 7px 16px rgba(20, 23, 19, 0.18);
+  box-shadow: none;
   transition: box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 .bridgeIcon:hover {
-  box-shadow: 0 10px 22px rgba(20, 23, 19, 0.24);
+  box-shadow: none;
   transform: translateY(-1px) scale(1.04);
 }
 
@@ -1840,7 +1756,7 @@
 
 .marketState strong {
   overflow: hidden;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1849,7 +1765,7 @@
 .marketState > div > span {
   overflow: hidden;
   color: var(--color-text-faint);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1888,7 +1804,7 @@
   flex: 0 0 auto;
   color: var(--color-text-soft);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .cta {
@@ -1967,14 +1883,14 @@
 
 .selectionBox strong,
 .selectionBox span {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
 }
 
 .selectionBox small {
   grid-column: 1 / -1;
   color: var(--color-text-faint);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .errorBox {
@@ -1983,7 +1899,7 @@
   border-radius: 14px;
   background: rgba(212, 61, 53, 0.06);
   color: var(--color-danger);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1.45;
 }
@@ -2036,7 +1952,7 @@
   position: relative;
   justify-content: space-between;
   color: var(--color-text-soft);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.14em;
 }
@@ -2049,7 +1965,7 @@
   border-radius: 12px;
   background: var(--color-primary);
   color: var(--color-accent);
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: -0.03em;
 }
 
@@ -2063,7 +1979,7 @@
 
 .authEyebrow {
   color: var(--color-violet);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -2090,7 +2006,7 @@
   flex-direction: column;
   gap: 7px;
   color: var(--color-text-soft);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -2115,7 +2031,7 @@
 .demoNote {
   gap: 7px;
   color: var(--color-text-faint);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .demoNote span {
@@ -2123,7 +2039,7 @@
   border-radius: var(--radius-pill);
   background: var(--color-accent-soft);
   color: #536d0f;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 850;
   text-transform: uppercase;
 }
@@ -2152,7 +2068,7 @@
 
 .authLegal {
   color: var(--color-text-faint);
-  font-size: 8px;
+  font-size: 12px;
   line-height: 1.5;
   text-align: center;
 }
@@ -2164,16 +2080,6 @@
 @keyframes scanPulse {
   0%, 100% { opacity: 0.55; transform: scale(0.82); }
   50% { opacity: 1; transform: scale(1.12); }
-}
-
-@keyframes heroIn {
-  from { opacity: 0; transform: translateY(18px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes workspaceIn {
-  from { opacity: 0; transform: translateY(25px) scale(0.985); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 @keyframes popIn {
@@ -2213,7 +2119,7 @@
   }
 
   .hero h1 {
-    font-size: clamp(43px, 14vw, 64px);
+    font-size: clamp(30px, 4.5vw, 54px);
   }
 
   .hero > p {
@@ -2265,56 +2171,38 @@
 
 .hero h1 {
   margin: 0 auto;
-  font-size: clamp(44px, 5.5vw, 72px);
-  letter-spacing: -0.065em;
+  font-size: clamp(30px, 4.5vw, 54px);
+  letter-spacing: -0.04em;
 }
 
-@media (min-width: 981px) {
-  .hero h1 {
-    white-space: nowrap;
-  }
-}
 
-.hero h1 span::after {
-  height: 0.2em;
-}
 
 .hero > p {
   max-width: 560px;
   margin: 12px auto 0;
   color: var(--color-text-soft);
-  font-size: 13px;
+  font-size: 16px;
   line-height: 1.55;
 }
 
-/* Translated headlines can be longer than the compact English headline. */
+/* Keep descriptive headings readable in every language. */
 .hero h1 {
   max-width: 100%;
   text-wrap: balance;
 }
 
-.hero h1 span {
-  white-space: normal;
-}
 
-@media (min-width: 981px) {
-  .shell.localeLong .hero h1 {
-    max-width: 900px;
-    font-size: clamp(42px, 5vw, 68px);
-    white-space: normal;
-  }
-}
 
 .workspace {
-  --workspace-gap: 30px;
-  width: min(1220px, 100%);
+  --workspace-gap: 32px;
+  width: min(var(--layout-width), 100%);
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: var(--workspace-gap);
 }
 
 @media (min-width: 981px) {
   .workspace:not(.routesCollapsed) {
-    width: min(1300px, 100%);
+    width: min(var(--layout-width), 100%);
     grid-template-columns: minmax(0, min(var(--converter-width), 49%)) minmax(0, 1fr);
   }
 
@@ -2328,7 +2216,7 @@
 }
 
 .converterStack { display: flex; min-width: 0; flex-direction: column; transition: transform .38s cubic-bezier(.22, 1, .36, 1); }
-.workspace.routesCollapsed .converterStack { transform: translateX(calc(50% + 15px)); }
+.workspace.routesCollapsed .converterStack { transform: translateX(calc(50% + var(--workspace-gap) / 2)); }
 .routesReveal { display: flex; min-width: 0; align-self: start; }
 .routesReveal :global(.side) { width: 100%; }
 .workspace.activityExpanded:not(.routesCollapsed) .converterStack { align-self: stretch; }
@@ -2336,11 +2224,11 @@
 .workspace.activityExpanded .routesReveal :global(.side) { height: 100%; }
 .workspace.activityExpanded .routesReveal :global(.side .panel) { height: 100%; min-height: 0; }
 .panelToggles { position: relative; display: flex; height: 42px; flex: 0 0 auto; align-items: center; justify-content: center; padding: 8px 0 4px; }
-.chartToggle, .routesToggle, .mobileRoutesToggle { z-index: 3; display: grid; width: 48px; height: 30px; flex: 0 0 auto; place-items: center; padding: 0; border: 0; background: transparent; box-shadow: none; color: var(--color-text-soft); opacity: .6; cursor: pointer; transition: opacity .2s ease; -webkit-tap-highlight-color: transparent; }
+.chartToggle, .routesToggle, .mobileRoutesToggle { z-index: 3; display: grid; width: 48px; height: 30px; flex: 0 0 auto; place-items: center; padding: 0; border: 0; background: transparent; box-shadow: none; color: var(--color-text-soft); opacity: 1; cursor: pointer; transition: opacity .2s ease; -webkit-tap-highlight-color: transparent; }
 .routesToggle { position: absolute; top: 50%; right: calc(-1 * (var(--workspace-gap) + 20px)); width: var(--workspace-gap); transform: translateY(-50%); }
 .mobileRoutesToggle { display: none; }
 .chartToggle:hover, .routesToggle:hover, .mobileRoutesToggle:hover { opacity: .85; }
-.chartToggle:focus-visible, .routesToggle:focus-visible, .mobileRoutesToggle:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.chartToggle:focus-visible, .routesToggle:focus-visible, .mobileRoutesToggle:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
 .chartToggle span, .routesToggle span, .mobileRoutesToggle span { display: block; font-size: 21px; line-height: 1; -webkit-text-stroke: .55px currentColor; transition: transform .26s ease; }
 .chartToggle span, .mobileRoutesToggle span { transform: rotate(90deg); }
 .chartToggleOpen span, .mobileRoutesToggleOpen span { transform: rotate(-90deg); }
@@ -2357,7 +2245,7 @@
   border: 1px solid var(--color-border-strong);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 28px 70px rgba(41, 54, 38, 0.11);
+  box-shadow: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
@@ -2377,7 +2265,7 @@
 }
 
 .modeTabs button {
-  min-height: 27px;
+  min-height: 32px;
   padding: 0;
   color: var(--color-text);
   font-size: 16px;
@@ -2395,7 +2283,7 @@
 }
 
 .cardActions {
-  gap: 2px;
+  gap: 8px;
 }
 
 .refreshButton,
@@ -2413,7 +2301,7 @@
   padding: 0;
   color: #687164;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -2501,7 +2389,7 @@
 .methodTrigger:hover {
   border-color: #a4af9e;
   background: #edf2e8;
-  box-shadow: 0 6px 16px rgba(41, 54, 38, 0.08);
+  box-shadow: none;
   transform: translateY(-1px);
 }
 
@@ -2511,7 +2399,7 @@
   border: 0;
   border-radius: 50%;
   box-shadow: none;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .methodAvatar img {
@@ -2522,7 +2410,7 @@
 }
 
 .methodText strong {
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .methodTextAsset strong {
@@ -2546,12 +2434,12 @@
   border: 1px solid #cad8c6;
   border-radius: 50%;
   background: #eff5eb;
-  color: #689000;
+  color: var(--color-accent-text);
   box-shadow: none;
 }
 
 .bridgeIcon:hover {
-  box-shadow: 0 4px 12px rgba(53, 84, 43, 0.1);
+  box-shadow: none;
   transform: translateY(-1px) scale(1.04);
 }
 
@@ -2577,7 +2465,7 @@
 
 .cta:hover:not(:disabled) {
   background: #c9f34b;
-  box-shadow: 0 8px 18px rgba(55, 77, 52, 0.11);
+  box-shadow: none;
   transform: translateY(-1px);
 }
 
@@ -2635,7 +2523,7 @@
 .networkDot.currencyDot {
   background: #536253;
   color: #fff;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -2649,7 +2537,7 @@
 
 .networkCopy strong {
   color: #344235;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1;
   transition: color 0.15s ease;
@@ -2701,7 +2589,7 @@
 
 .methodControls .methodTrigger:focus-visible,
 .methodControls .networkButton:focus-visible {
-  outline: 2px solid var(--color-accent-strong);
+  outline: 2px solid var(--color-focus);
   outline-offset: -2px;
 }
 
@@ -2747,7 +2635,7 @@
 
 @media (max-width: 640px) {
   .shell {
-    padding: 25px 12px 0;
+    padding: 25px var(--page-gutter) 0;
   }
 
   .hero {
@@ -2755,7 +2643,7 @@
   }
 
   .hero h1 {
-    font-size: 44px;
+    font-size: clamp(30px, 8vw, 40px);
   }
 
   .workspace {
@@ -2981,4 +2869,15 @@
   background: #151515;
 }
 
+
+@media (max-width: 980px), (pointer: coarse) {
+  .modeTabs button { min-height: 44px; }
+  .refreshButton, .exchangesButton, .settingsButton { width: 44px; height: 44px; }
+  .panelToggles { height: 56px; }
+  .chartToggle, .mobileRoutesToggle { height: 44px; }
+  .refreshOptions { grid-template-columns: repeat(3, minmax(44px, 1fr)); gap: 8px; }
+  .sourceOptions { gap: 8px; }
+  .sourceOption { min-height: 44px; }
+  .searchBox input, .textInput { font-size: 16px; }
+}
 </style>

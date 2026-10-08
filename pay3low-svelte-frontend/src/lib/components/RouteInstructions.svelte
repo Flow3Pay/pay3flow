@@ -320,7 +320,9 @@
   width: min(100%, 560px);
   max-height: min(720px, calc(100vh - 40px));
   overflow-y: auto;
-  scrollbar-width: none;
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+  scrollbar-color: var(--color-text-faint) var(--color-panel);
   padding: 28px;
   border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: 28px;
@@ -342,9 +344,8 @@
   display: none;
 }
 
-.modal::-webkit-scrollbar {
-  display: none;
-}
+.modal::-webkit-scrollbar { width: 8px; }
+.modal::-webkit-scrollbar-thumb { border-radius: 8px; background: var(--color-text-faint); }
 
 .header {
   display: flex;
@@ -354,7 +355,7 @@
 
 .eyebrow {
   color: var(--color-violet);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -480,7 +481,7 @@
 .providerGuide > p {
   margin: 0;
   color: var(--color-text-soft);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
@@ -500,7 +501,7 @@
   margin: 13px 0 0;
   padding: 0;
   color: var(--color-text-soft);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
   list-style: none;
 }
@@ -522,7 +523,7 @@
   background: rgba(109, 152, 0, 0.13);
   color: #5f8308;
   content: "✓";
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 900;
   line-height: 1;
 }
@@ -593,7 +594,7 @@
 
 .counterpartyLabel {
   color: var(--color-violet);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -603,7 +604,7 @@
 .manualBadge {
   padding: 4px 7px;
   border-radius: 999px;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -611,12 +612,12 @@
 
 .profileBadge {
   background: rgba(181, 224, 58, 0.2);
-  color: #557309;
+  color: var(--color-accent-text);
 }
 
 .manualBadge {
   background: rgba(240, 166, 89, 0.16);
-  color: #8a5b1e;
+  color: var(--color-warn);
 }
 
 .advertiser {
@@ -635,7 +636,7 @@
 .adHint {
   display: block;
   color: var(--color-text-faint);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -646,7 +647,7 @@
   margin: 10px 0 7px;
   color: var(--color-text-soft);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .metrics b {
@@ -659,8 +660,8 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: #587b08;
-  font-size: 10px;
+  color: var(--color-accent-text);
+  font-size: 12px;
   font-weight: 850;
   text-decoration: none;
 }
@@ -675,7 +676,7 @@
 
 .adHint {
   margin-top: 6px;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .missing {
@@ -692,12 +693,12 @@
   border-radius: 14px;
   background: rgba(240, 166, 89, 0.1);
   color: #75501f;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
 .warning strong {
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
@@ -727,7 +728,7 @@
 
 .eyebrow,
 .counterpartyLabel {
-  color: #6d9800;
+  color: var(--color-accent-text);
 }
 
 .closeButton {
@@ -800,7 +801,7 @@
   .stepNumber {
     width: 34px;
     height: 34px;
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .step h3 {
@@ -843,4 +844,8 @@
   color: var(--color-accent);
 }
 
+
+.header { padding-bottom: 16px; border-bottom: 1px solid var(--color-border); }
+.warning { border-top: 1px solid var(--color-border); }
+.header p, .step .stepSummary, .checklist, .providerGuide > p { font-size: 14px; line-height: 1.6; }
 </style>

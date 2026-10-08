@@ -151,7 +151,7 @@
         {#if hasAmount}
           <strong>Send {sourceCurrency} → {targetCurrency}</strong>
         {:else}
-          <strong>Awaiting your intent</strong>
+          <strong>{t("Awaiting your intent", {}, $locale)}</strong>
         {/if}
         {#if hasAmount}
           <span class="resultSummary">
@@ -274,7 +274,7 @@
     {:else}
       <div class="emptyState">
         <div class="emptyVisual" aria-hidden="true"><span class="emptyNode">AM</span><span class="emptyPath"><i></i><i></i><i></i></span><span class="emptyNode">RU</span></div>
-        <div><strong>{searched && hasAmount ? "No routes found" : hasAmount ? "Preparing market scan" : "Your routes will appear here"}</strong><p>{searched && hasAmount ? circularSearch ? "No profitable quoted cycle was found for this amount and selected providers." : "No compatible live offers were found for this amount and payment method." : hasAmount ? "Pay3Flow is ready to compare entry assets, venues and recipient payout options." : "Enter an amount and we will assemble live cross-border paths in real time."}</p></div>
+        <div><strong>{t(searched && hasAmount ? "No routes found" : hasAmount ? "Preparing market scan" : "Your routes will appear here", {}, $locale)}</strong><p>{t(searched && hasAmount ? circularSearch ? "No profitable quoted cycle was found for this amount and selected providers." : "No compatible live offers were found for this amount and payment method." : hasAmount ? "Pay3Flow is ready to compare entry assets, venues and recipient payout options." : "Enter an amount and we will assemble live cross-border paths in real time.", {}, $locale)}</p></div>
       </div>
     {/if}
   </div>
@@ -351,7 +351,7 @@
 
 .activityButton { display: none; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; padding: 0; border: 1px solid #5d7732; border-radius: 9px; background: #40582a; cursor: pointer; }
 .activityButton:hover { background: #587839; }
-.activityButton:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.activityButton:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
 @media (max-width: 980px) { .activityButton { display: grid; } }
 
 .resultSummary,
@@ -393,22 +393,23 @@
 }
 
 .legalWarning:focus-visible {
-  outline: 2px solid #ffc700;
+  outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
 
 .foundVenues {
   position: relative;
   z-index: 41;
-  gap: 4px;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .foundVenue {
   position: relative;
   z-index: 1;
   display: grid;
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   place-items: center;
   border: 1px solid #555b54;
   border-radius: 8px;
@@ -438,8 +439,8 @@
   padding: 2px 0;
   border: 0;
   background: none;
-  color: #527b00;
-  font-size: 11px;
+  color: var(--color-accent-text);
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -470,7 +471,7 @@
   background: #fff;
   box-shadow: 0 18px 42px rgba(20, 24, 18, 0.28);
   color: var(--color-text);
-  font-size: 11px;
+  font-size: 12px;
   opacity: 0;
   pointer-events: none;
   transform: translate(-50%, -4px);
@@ -486,11 +487,11 @@
 
 .foundVenuePopover > span {
   color: var(--color-text-soft);
-  font-size: 10px;
+  font-size: 12px;
 }
 
-.foundVenuePopover .venueOk { color: #5f8308; }
-.foundVenuePopover .venueError { color: #b0443d; }
+.foundVenuePopover .venueOk { color: var(--color-accent-text); }
+.foundVenuePopover .venueError { color: var(--color-danger); }
 
 .foundVenuePopover dl {
   display: grid;
@@ -506,7 +507,7 @@
 
 .foundVenuePopover dt { color: var(--color-text-soft); }
 .foundVenuePopover dd { margin: 0; font-weight: 800; }
-.foundVenuePopover small { color: #b0443d; line-height: 1.35; }
+.foundVenuePopover small { color: var(--color-danger); line-height: 1.35; }
 
 .foundVenuePopover strong {
   color: #1c2419;
@@ -541,7 +542,7 @@
 
 .foundVenueFallback {
   color: #49630c;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 850;
   line-height: 1;
 }
@@ -554,12 +555,12 @@
 
 .panelTop small {
   color: rgba(255, 255, 255, 0.68);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .panelTop .resultLimit {
   color: rgba(255, 255, 255, 0.42);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .liveBadge,
@@ -573,7 +574,7 @@
   border-radius: var(--radius-pill);
   background: rgba(255, 255, 255, 0.06);
   color: rgba(255, 255, 255, 0.62);
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -610,17 +611,18 @@
   overflow-y: auto;
   overflow-anchor: none;
   overscroll-behavior: contain;
-  scrollbar-width: none;
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+  scrollbar-color: var(--color-text-faint) var(--color-panel);
   contain: layout paint;
   transform: translateZ(0);
 }
 
-.routeGroups::-webkit-scrollbar {
-  display: none;
-}
+.routeGroups::-webkit-scrollbar { width: 8px; }
+.routeGroups::-webkit-scrollbar-thumb { border-radius: 8px; background: var(--color-text-faint); }
 
 .routeGroups:focus-visible {
-  outline: 2px solid rgba(185, 242, 39, 0.55);
+  outline: 2px solid var(--color-focus);
   outline-offset: 4px;
   border-radius: 18px;
 }
@@ -714,13 +716,13 @@
   margin: 0;
   color: rgba(255, 255, 255, 0.58);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .serviceVote {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 8px;
 }
 
 .routeVote {
@@ -739,8 +741,8 @@
 
 .serviceVote button {
   display: inline-flex;
-  min-width: 24px;
-  min-height: 24px;
+  min-width: 32px;
+  min-height: 32px;
   align-items: center;
   justify-content: center;
   gap: 3px;
@@ -750,7 +752,7 @@
   background: transparent;
   color: inherit;
   font-family: inherit;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .serviceVote button:hover {
@@ -759,7 +761,7 @@
 
 .serviceVote button.active {
   background: var(--color-accent-soft);
-  color: var(--color-accent-strong);
+  color: var(--color-accent-text);
 }
 
 .serviceVote img {
@@ -790,7 +792,7 @@
 .routeRank {
   color: rgba(255, 255, 255, 0.32);
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 12px;
 }
 
 .routeBadges {
@@ -804,7 +806,7 @@
 .deltaBadge {
   padding: 4px 8px;
   border-radius: var(--radius-pill);
-  font-size: 7px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -837,7 +839,7 @@
 }
 
 .routeAmount:hover {
-  color: #6d9800;
+  color: var(--color-accent-text);
 }
 
 .workflow {
@@ -851,7 +853,7 @@
   min-width: 0;
   z-index: 1;
   color: rgba(255, 255, 255, 0.55);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1;
 }
 
@@ -860,7 +862,7 @@
   z-index: 1;
   overflow: hidden;
   color: rgba(255, 255, 255, 0.42);
-  font-size: 8px;
+  font-size: 12px;
   line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -898,7 +900,7 @@
 }
 
 .workflowAsset strong {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 850;
 }
 
@@ -966,7 +968,7 @@
 
 .workflowVenue strong {
   overflow: hidden;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 850;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1014,7 +1016,7 @@
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 11px;
   background: rgba(27, 30, 26, 0.92);
-  box-shadow: 0 8px 18px rgba(9, 12, 8, 0.18);
+  box-shadow: none;
   animation: venueBounce 1.3s cubic-bezier(0.45, 0, 0.55, 1) infinite;
   will-change: transform;
 }
@@ -1092,7 +1094,7 @@
   background: rgba(255, 255, 255, 0.06);
   color: #fff;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .emptyNode:last-child {
@@ -1143,7 +1145,7 @@
   max-width: 330px;
   margin-top: 8px;
   color: rgba(255, 255, 255, 0.42);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.65;
 }
 
@@ -1265,7 +1267,7 @@
 
 .serviceVote button.active {
   background: var(--color-accent-soft);
-  color: var(--color-accent-strong);
+  color: var(--color-accent-text);
 }
 
 .routeBest {
@@ -1274,8 +1276,9 @@
 }
 
 .selected {
-  border-color: var(--color-accent-strong);
-  box-shadow: inset 0 0 0 1px var(--color-accent-strong), 0 8px 18px rgba(141, 203, 0, 0.1);
+  border-color: var(--color-accent-text);
+  box-shadow: none;
+  border-width: 2px;
 }
 
 .routeRank,
@@ -1311,7 +1314,7 @@
 .searchingVenue {
   border-color: var(--color-border-strong);
   background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 14px 34px rgba(22, 25, 21, 0.14);
+  box-shadow: none;
 }
 
 .foundVenue {
@@ -1339,7 +1342,7 @@
 .emptyNode:last-child {
   border-color: #cce29a;
   background: #f1f8df;
-  color: #6d9800;
+  color: var(--color-accent-text);
 }
 
 .emptyPath::before {
@@ -1401,7 +1404,7 @@
 
   .workflowAsset strong,
   .workflowVenue strong {
-    font-size: 10px;
+    font-size: 12px;
   }
 
   .workflowIcon,
@@ -1457,7 +1460,7 @@
 
 :global(html[data-theme="dark"]) .serviceVote button.active {
   background: var(--color-accent-soft);
-  color: var(--color-accent-strong);
+  color: var(--color-accent-text);
 }
 
 :global(html[data-theme="dark"]) .serviceVote img {
@@ -1467,7 +1470,7 @@
 :global(html[data-theme="dark"]) .searchingVenue {
   border-color: #454545;
   background: rgba(32, 32, 32, 0.96);
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.3);
+  box-shadow: none;
 }
 
 :global(html[data-theme="dark"]) .foundVenue {
@@ -1536,4 +1539,24 @@
   background: #383838;
 }
 
+
+.panelTop { transform: none; padding-bottom: 16px; border-bottom: 1px solid var(--color-border); }
+.routeGroups { padding: 12px 6px 12px 0; border-bottom: 1px solid var(--color-border); }
+.emptyState p { font-size: 14px; }
+.routeQuoteMeta { overflow-wrap: anywhere; }
+.foundVenuePopover::before { position: absolute; height: 12px; left: 0; right: 0; bottom: 100%; content: ""; }
+:global(html[data-theme="dark"]) .venueFilterClear,
+:global(html[data-theme="dark"]) .foundVenuePopover .venueOk { color: var(--color-accent-text); }
+@media (max-width: 980px), (pointer: coarse) {
+  .activityButton, .legalWarning, .foundVenue { width: 44px; height: 44px; }
+  .serviceVote button { min-width: 44px; min-height: 44px; }
+  .routeActionRow { flex-wrap: wrap; gap: 12px; }
+  .routeWorkflowButton { flex-basis: 100%; }
+  .workflow { flex-wrap: wrap; gap: 8px; }
+  .workflow:has(> .workflowPart:nth-child(2):last-child) { flex-wrap: wrap; }
+  .workflowIcon, .workflowNetworkIcon, .workflowVenueIcon { width: 16px; height: 16px; }
+  .panelTop { gap: 12px; }
+  .panelHeading { flex: 1; }
+  .resultSummary { gap: 8px; }
+}
 </style>

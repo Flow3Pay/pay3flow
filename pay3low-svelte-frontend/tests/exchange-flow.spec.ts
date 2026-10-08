@@ -12,15 +12,25 @@ async function expectNumberedTimeline(instructions: Locator, numbers: string[]) 
   expect(markerShape.radius).toBe("50%");
 }
 
-async function openApp(page: Page, waitForIntro = true) {
+async function openApp(page: Page) {
   await page.goto("/");
   await expect
     .poll(() => page.locator(".appShell").evaluate((element) => getComputedStyle(element, "::before").backgroundImage))
     .not.toBe("none");
-  if (waitForIntro) await expect(page.locator(".introOverlay")).toHaveCount(0, { timeout: 6000 });
+  await expect(page.locator(".workspace")).toBeVisible();
+}
+
+async function settleEntrance(page: Page) {
+  await page.locator(".workspace, .hero > p").evaluateAll(async (elements) => {
+    await Promise.all(elements.flatMap((element) => element.getAnimations().map((animation) => animation.finished.catch(() => {}))));
+  });
 }
 
 async function expectPeriodButtonBesidePair(chart: Locator) {
+  await chart.evaluate(async (element) => {
+    const dialog = element.closest('[role="dialog"]');
+    if (dialog) await Promise.all(dialog.getAnimations().map((animation) => animation.finished.catch(() => {})));
+  });
   await expect(chart.locator(".pairCurrency")).toHaveCount(2);
   await expect(chart.locator(".pairCurrency img, .pairCurrency .pairFlag")).toHaveCount(2);
   const pair = await chart.locator(".pair").boundingBox();
@@ -41,7 +51,7 @@ test("shared fiat and crypto link restores its currencies in a new browser", asy
   await expect(page).toHaveURL(/#\/swap\/USDT\/KZT\?amount=287\.0062069$/);
 });
 
-test("system theme follows the browser until the user chooses a theme", async ({ page, isMobile }) => {
+test("system theme follows the browser until the user chooses a theme", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "dark" });
   await mockBackend(page);
   await openApp(page);
@@ -61,7 +71,6 @@ test("system theme follows the browser until the user chooses a theme", async ({
   await expect(refreshIcon).toHaveCSS("filter", "brightness(0)");
   await expect(settingsIcon).toHaveCSS("filter", "brightness(0)");
 
-  if (isMobile) await page.locator(".menuToggle").click();
   await page.getByRole("button", { name: "Switch theme" }).click();
   await expect(root).toHaveAttribute("data-theme", "dark");
   await page.emulateMedia({ colorScheme: "dark" });
@@ -203,7 +212,7 @@ test("routes can be hidden while the bridge stays centered and restored after re
   }
 
   await page.reload();
-  await expect(page.locator(".introOverlay")).toHaveCount(0, { timeout: 6000 });
+  await expect(page.locator(".workspace")).toBeVisible();
   await expect(page.getByRole("button", { name: "Show routes" })).toHaveAttribute("aria-expanded", "false");
   await expect(routes).toHaveCount(0);
   if (!isMobile) {
@@ -227,7 +236,7 @@ test("search placeholders stay inside the route panel", async ({ page }) => {
   await mockBackend(page);
   let releaseSearch!: () => void;
   const holdSearch = new Promise<void>((resolve) => { releaseSearch = resolve; });
-  await page.route("http://localhost:8080/api/p2p/routes**", async (route) => {
+  await page.route("**/api/p2p/routes**", async (route) => {
     await holdSearch;
     await route.abort();
   });
@@ -310,7 +319,7 @@ test("mobile sheets cover the viewport and the graph closes by dragging its hand
 
   await page.locator(".menuToggle").click();
   await expectFullViewport(".actionsBackdrop.menuOpen");
-  await expect(page.locator(".actions a, .actions button")).toHaveCount(5);
+  await expect(page.locator(".actions a, .actions button")).toHaveCount(3);
   await page.keyboard.press("Escape");
 
   await page.getByRole("button", { name: "Route refresh settings" }).click();
@@ -360,9 +369,12 @@ test("dialogs keep the page still and restore its scroll position", async ({ pag
   await mockBackend(page);
   await openApp(page);
 
+  await page.getByRole("button", { name: "Open menu" }).click();
   const telegram = page.getByRole("link", { name: "Open Pay3Flow Telegram channel" });
   await expect(telegram).toHaveAttribute("href", "https://t.me/+-lq4m5E_aT4xM2Y6");
   await expect(telegram.locator("img")).toHaveJSProperty("naturalWidth", 1024);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Open menu" })).toBeFocused();
 
   await page.evaluate(() => window.scrollTo(0, 180));
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
@@ -434,37 +446,18 @@ test("route instructions lock the page until closed", async ({ page }) => {
   await expect(page.locator("body")).not.toHaveCSS("position", "fixed");
 });
 
-test("headline introduces the bridge and resizing does not replay the entrance", async ({ page }) => {
+test("headline explains the product and resizing keeps the content visible", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
   await mockBackend(page);
-  await openApp(page, false);
-  const intro = page.locator(".introOverlay");
-  const workspace = page.locator(".workspace");
-  await expect(intro).toBeVisible();
-  await expect(workspace).toBeHidden();
-  await expect(intro.locator(".introWordMove")).toHaveCSS("opacity", "1");
-  await expect(intro.locator(".introWordMoney")).toHaveCSS("opacity", "1");
-  await expect(intro.locator(".introWordKeep")).toHaveCSS("opacity", "1");
-  await expect(intro.locator(".introWordMore")).toHaveCSS("opacity", "1");
-  await expect(intro.locator(".introLastPunctuation")).toHaveCSS("opacity", "1");
-  await expect(intro).toHaveCount(0, { timeout: 6000 });
-  await expect(workspace).toBeVisible();
-  await expect(page.locator(".hero h1")).toContainText("Move money. Keep more.");
-  await page.waitForTimeout(800);
-
-  const animationTime = () => workspace.evaluate((element) => {
-    const animation = element.getAnimations()[0];
-    return Number(animation?.currentTime ?? 0);
-  });
-  const completedAt = await animationTime();
-  expect(completedAt).toBeGreaterThanOrEqual(600);
-
-  const viewport = page.viewportSize();
-  expect(viewport).not.toBeNull();
-  await page.setViewportSize({ width: viewport!.width - 40, height: viewport!.height });
-  await page.waitForTimeout(250);
-
-  expect(await animationTime()).toBeGreaterThanOrEqual(600);
-  await expect(intro).toHaveCount(0);
+  await openApp(page);
+  await expect(page.locator(".hero h1")).toHaveText("Compare currency and crypto exchange routes");
+  await expect(page.locator(".workspace")).toBeVisible();
+  const viewport = page.viewportSize()!;
+  await page.setViewportSize({ width: viewport.width - 40, height: viewport.height });
+  await expect(page.locator(".workspace")).toBeVisible();
+  await expect(page.locator(".introOverlay")).toHaveCount(0);
+  expect(errors).toEqual([]);
 });
 
 async function openCryptoPicker(page: Page, side: "sending" | "recipient") {
@@ -482,7 +475,10 @@ async function chooseCrypto(page: Page, side: "sending" | "recipient", search: s
 }
 
 async function mockBackend(page: Page, options: { includeNewProviders?: boolean; routeCount?: number; spotCycle?: boolean } = {}) {
-  await page.route("http://localhost:8080/api/**", async (route) => {
+  await page.addInitScript(() => {
+    if (!localStorage.getItem("pay3flow-locale")) localStorage.setItem("pay3flow-locale", "en");
+  });
+  await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
     const method = route.request().method();
     const json = (value: unknown, status = 200) =>
@@ -1281,7 +1277,6 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   const routeCounter = page.locator(".resultSummary small[aria-live='polite']");
   const languageToggle = page.locator(".languageToggle");
   const toggleLanguage = async () => {
-    if (isMobile) await page.locator(".menuToggle").click();
     await languageToggle.click();
   };
   await toggleLanguage();
@@ -1314,7 +1309,7 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   }));
   expect(scrollMetrics.overflowY).toBe("auto");
   expect(scrollMetrics.scrollHeight).toBeGreaterThan(scrollMetrics.clientHeight);
-  await expect(routeGroups).toHaveCSS("scrollbar-width", "none");
+  await expect(routeGroups).toHaveCSS("scrollbar-width", "thin");
   await routeGroups.hover();
   await page.mouse.wheel(0, 360);
   await expect.poll(() => routeGroups.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
@@ -1353,7 +1348,7 @@ test("public P2P route search → open step-by-step instructions", async ({ page
 
   let finishRefresh!: () => void;
   const heldRefresh = new Promise<void>((resolve) => { finishRefresh = resolve; });
-  await page.route("http://localhost:8080/api/p2p/routes**", async (route) => {
+  await page.route("**/api/p2p/routes**", async (route) => {
     await heldRefresh;
     await route.fallback();
   });
@@ -1858,7 +1853,7 @@ test("reordered progressive snapshots do not restart card rendering at 100", asy
   finishSearch?.();
 });
 
-test("currency control only lists currencies supported by the selected payment method", async ({ page, isMobile }) => {
+test("currency control only lists currencies supported by the selected payment method", async ({ page }) => {
   await mockBackend(page);
   let marketPriceRequests = 0;
   page.on("request", (request) => {
@@ -1919,7 +1914,6 @@ test("currency control only lists currencies supported by the selected payment m
   await networkPicker.getByRole("option", { name: "Ethereum (ERC-20)" }).click();
   const languageToggle = page.locator(".languageToggle");
   for (let index = 0; index < 3; index += 1) {
-    if (isMobile) await page.locator(".menuToggle").click();
     await languageToggle.click();
     await expect(page.locator(".moneyPanelSource .methodTrigger .methodText")).toHaveText("USDT");
   }
@@ -2349,3 +2343,137 @@ test("spot crypto cycles show three trades and wallet deposit and withdrawal ins
   await expect(instructions.getByRole("link", { name: /Open Bybit/ }).nth(1)).toHaveAttribute("href", "https://www.bybit.com/trade/spot/BTC/ETH");
   await expect(instructions).not.toContainText("Bybit P2P results");
 });
+
+test("header and footer align with the workspace and mobile controls remain reachable", async ({ page, isMobile }) => {
+  await mockBackend(page);
+  await openApp(page);
+  await settleEntrance(page);
+  for (const width of isMobile ? [320, 412, 768] : [1024, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    const layout = await page.evaluate(() => {
+      const rect = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
+      const header = rect(".header .inner"), workspace = rect(".workspace"), footer = rect(".siteFooter");
+      return { headerLeft: header.left, headerRight: header.right, workspaceLeft: workspace.left, workspaceRight: workspace.right, footerLeft: footer.left, footerRight: footer.right };
+    });
+    expect(Math.abs(layout.headerLeft - layout.workspaceLeft)).toBeLessThan(1);
+    expect(Math.abs(layout.headerRight - layout.workspaceRight)).toBeLessThan(1);
+    expect(Math.abs(layout.footerLeft - layout.workspaceLeft)).toBeLessThan(1);
+    expect(Math.abs(layout.footerRight - layout.workspaceRight)).toBeLessThan(1);
+    await expect(page.locator(".header .inner")).toHaveCSS("box-shadow", "none");
+    await expect(page.locator(".card")).toHaveCSS("box-shadow", "none");
+    if (isMobile) {
+      const smallTargets = await page.locator("button, a[aria-label]").evaluateAll((elements) => elements.filter((element) => {
+        const rect = element.getBoundingClientRect();
+        return element.checkVisibility({ checkVisibilityCSS: true }) && (rect.width < 43.9 || rect.height < 43.9);
+      }).map((element) => element.outerHTML));
+      expect(smallTargets).toEqual([]);
+    }
+  }
+});
+
+test("mobile navigation opens on the left and traps and restores keyboard focus", async ({ page, isMobile }) => {
+  test.skip(!isMobile, "Mobile navigation only");
+  await mockBackend(page);
+  await openApp(page);
+  await settleEntrance(page);
+  const toggle = page.getByRole("button", { name: "Open menu" });
+  await expect(page.getByRole("button", { name: "Switch language" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Switch theme" })).toBeVisible();
+  const toggleBox = await toggle.boundingBox(), logoBox = await page.locator(".brand").boundingBox();
+  expect(toggleBox!.x + toggleBox!.width).toBeLessThanOrEqual(logoBox!.x);
+  await toggle.click();
+  const menu = page.getByRole("dialog", { name: "Menu", exact: true });
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole("link")).toHaveCount(3);
+  await expect(menu.getByRole("button", { name: "Close menu" })).toBeFocused();
+  await expect.poll(async () => (await menu.boundingBox())!.x).toBe(0);
+  await page.keyboard.press("Shift+Tab");
+  await expect(menu.getByRole("link", { name: "Open Pay3Flow on GitHub" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(menu.getByRole("button", { name: "Close menu" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await expect(toggle).toBeFocused();
+  await expect(page.locator(".appShell")).not.toHaveAttribute("inert", "");
+});
+
+test("icon tooltips work on hover and keyboard focus without clipping", async ({ page, isMobile }) => {
+  test.skip(isMobile, "Hover and keyboard layout only");
+  await mockBackend(page);
+  await openApp(page);
+  await settleEntrance(page);
+  const button = page.getByRole("button", { name: "Route refresh settings" });
+  const tooltip = page.locator("#icon-control-tooltip");
+  await button.hover();
+  await expect(tooltip).toHaveText("Route refresh settings");
+  await expect(button).toHaveAttribute("aria-describedby", "icon-control-tooltip");
+  const buttonBox = await button.boundingBox(), tipBox = await tooltip.boundingBox();
+  expect(tipBox!.y).toBeGreaterThan(buttonBox!.y + buttonBox!.height);
+  await tooltip.hover();
+  await expect(tooltip).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(tooltip).toHaveCount(0);
+  await expect(button).not.toHaveAttribute("aria-describedby");
+  await page.mouse.move(0, 0);
+  await page.keyboard.press("Tab");
+  await button.focus();
+  await expect(tooltip).toHaveText("Route refresh settings");
+});
+
+for (const theme of ["light", "dark"] as const) {
+  test(`readable text and WCAG contrast in ${theme} theme across exchange dialogs`, async ({ page, isMobile }) => {
+    const { default: AxeBuilder } = await import("@axe-core/playwright");
+    await page.emulateMedia({ colorScheme: theme });
+    await mockBackend(page);
+    await page.addInitScript(() => {
+      localStorage.setItem("pay3flow.exchange.source-method", "am-idbank");
+      localStorage.setItem("pay3flow.exchange.target-method", "ru-alfabank");
+    });
+    await openApp(page);
+    await settleEntrance(page);
+    const audit = async () => {
+      await page.locator('[role="dialog"], .side, .routeList > li').evaluateAll(async (elements) => {
+        await Promise.all(elements.flatMap((element) => element.getAnimations().filter((animation) => animation.effect?.getTiming().iterations !== Infinity).map((animation) => animation.finished.catch(() => {}))));
+      });
+      const report = await new AxeBuilder({ page }).withRules(["color-contrast"]).analyze();
+      expect(report.violations.map((violation) => ({ id: violation.id, nodes: violation.nodes.map((node) => ({ target: node.target, summary: node.failureSummary })) }))).toEqual([]);
+      const smallText = await page.locator("body *").evaluateAll((elements) => elements.filter((element) =>
+        element.checkVisibility() && [...element.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim()) && Number.parseFloat(getComputedStyle(element).fontSize) < 12
+      ).map((element) => ({ text: element.textContent, size: getComputedStyle(element).fontSize })));
+      expect(smallText).toEqual([]);
+      if (isMobile) {
+        const smallTargets = await page.locator('button, a[aria-label]').evaluateAll((elements) => elements.filter((element) => {
+          const rect = element.getBoundingClientRect();
+          return element.checkVisibility({ checkVisibilityCSS: true }) && (rect.width < 43.9 || rect.height < 43.9);
+        }).map((element) => ({ label: element.getAttribute("aria-label") || element.textContent?.trim(), width: element.getBoundingClientRect().width, height: element.getBoundingClientRect().height })));
+        expect(smallTargets).toEqual([]);
+      }
+    };
+    await audit();
+    const assetPicker = await openCryptoPicker(page, "sending");
+    await assetPicker.getByRole("option", { name: /^USDT\b/ }).click();
+    await audit();
+    await assetPicker.getByRole("option", { name: "Ethereum (ERC-20) USDT · Tether" }).click();
+    await page.getByRole("button", { name: "Select sending network: Ethereum (ERC-20)" }).click();
+    await audit();
+    await page.keyboard.press("Escape");
+    const bankPicker = await openCryptoPicker(page, "sending");
+    await bankPicker.getByRole("option", { name: /^AMD\b/ }).click();
+    await bankPicker.getByRole("option", { name: /^IDBank Bank transfer · AMD/ }).click();
+    await page.getByLabel("Amount to send").fill("100000");
+    await expect(page.getByTestId("complete-route").first()).toBeVisible();
+    await audit();
+    await page.getByRole("button", { name: "Route refresh settings" }).click();
+    await audit();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Choose exchanges" }).click();
+    await audit();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: /Select sending bank:/ }).click();
+    await audit();
+    await page.keyboard.press("Escape");
+    await page.getByTestId("start-search").click();
+    await expect(page.getByRole("dialog", { name: "How to complete this exchange" })).toBeVisible();
+    await audit();
+  });
+}

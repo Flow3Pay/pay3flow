@@ -99,10 +99,10 @@
   .activityCard { display: flex; min-width: 0; min-height: 0; flex-direction: column; gap: 6px; padding: 16px 18px 12px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-card); background: rgba(255,255,255,.96); box-shadow: var(--shadow-card); color: var(--color-text); }
   .activityHeading { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
   .headingCopy { display: flex; min-width: 0; flex-direction: column; gap: 1px; }
-  .activityHeading small { color: var(--color-text-faint); font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+  .activityHeading small { color: var(--color-text-faint); font-size: 12px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
   .activityHeading strong { font-size: 14px; line-height: 1.2; }
   .headingActions { display: flex; align-items: center; gap: 7px; flex: 0 0 auto; }
-  .pair { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 5px; padding: 5px 8px; border-radius: 6px; background: var(--color-panel); color: var(--color-text-soft); font-size: 11px; font-weight: 750; }
+  .pair { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 5px; padding: 5px 8px; border-radius: 6px; background: var(--color-panel); color: var(--color-text-soft); font-size: 12px; font-weight: 750; }
   .pairCurrency { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
   .pairCurrency img { display: block; width: 16px; height: 16px; border-radius: 50%; object-fit: cover; }
   .pairFlag { font-size: 15px; line-height: 1; }
@@ -112,15 +112,15 @@
   .periodButton img { width: 18px; height: 18px; object-fit: contain; filter: brightness(0); }
   :global(html[data-theme="dark"]) .periodButton img { filter: none; }
   .periodMenu { position: absolute; z-index: 10; top: calc(100% + 7px); right: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; width: 216px; padding: 8px; border: 1px solid var(--color-border-strong); border-radius: 10px; background: var(--color-panel); box-shadow: var(--shadow-card); }
-  .periodMenu button { min-height: 34px; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--color-text); font: inherit; font-size: 11px; font-weight: 650; text-align: left; cursor: pointer; }
+  .periodMenu button { min-height: 34px; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--color-text); font: inherit; font-size: 12px; font-weight: 650; text-align: left; cursor: pointer; }
   .periodMenu button:hover { background: var(--color-border-strong); }
   .periodMenu button.current, .periodMenu button.current:hover { background: var(--color-accent); color: #171717; }
-  @media (max-width: 420px) { .activityHeading { align-items: flex-start; } .headingActions { gap: 4px; } .pair { gap: 3px; padding-inline: 5px; font-size: 10px; } .pairCurrency { gap: 3px; } .pairCurrency img { width: 14px; height: 14px; } .pairFlag { font-size: 13px; } .activityHeading strong { font-size: 12px; } }
-  .activityStats { display: flex; align-items: baseline; gap: 5px; color: var(--color-text-faint); font-size: 11px; }
+  @media (max-width: 420px) { .activityHeading { align-items: flex-start; } .headingActions { gap: 4px; } .pair { gap: 3px; padding-inline: 5px; font-size: 12px; } .pairCurrency { gap: 3px; } .pairCurrency img { width: 14px; height: 14px; } .pairFlag { font-size: 13px; } .activityHeading strong { font-size: 12px; } }
+  .activityStats { display: flex; align-items: baseline; gap: 5px; color: var(--color-text-faint); font-size: 12px; }
   .activityStats strong { color: var(--color-text); font-size: 18px; line-height: 1; }
   .mainPlot { position: relative; height: 74px; flex: 1 1 74px; min-height: 74px; }
-  .emptyMessage { position: absolute; top: 45%; left: 50%; width: max-content; max-width: 95%; transform: translate(-50%, -50%); color: var(--color-text-faint); font-size: 11px; text-align: center; }
-  .timeLabels { display: flex; justify-content: space-between; color: var(--color-text-faint); font-size: 10px; }
+  .emptyMessage { position: absolute; top: 45%; left: 50%; width: max-content; max-width: 95%; transform: translate(-50%, -50%); color: var(--color-text-faint); font-size: 12px; text-align: center; }
+  .timeLabels { display: flex; justify-content: space-between; color: var(--color-text-faint); font-size: 12px; }
   .state { display: grid; min-height: 0; flex: 1; place-items: center; margin: 0; color: var(--color-text-faint); font-size: 12px; text-align: center; }
   :global(html[data-theme="dark"]) .activityCard { background: rgba(25,25,25,.96); }
 </style>

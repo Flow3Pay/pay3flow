@@ -118,28 +118,32 @@
 
 <style>
   .backdrop { position: fixed; inset: 0; z-index: 1100; display: grid; place-items: center; padding: 24px; background: rgba(8, 11, 8, .52); touch-action: none; }
-  .dialog { width: min(100%, 620px); max-height: min(720px, 92vh); overflow: hidden; border: 1px solid var(--color-border-strong); border-radius: 18px; background: var(--color-paper); box-shadow: var(--shadow-pop); touch-action: auto; }
+  .dialog { display: flex; flex-direction: column; width: min(100%, 620px); max-height: min(720px, 92vh); overflow: hidden; border: 1px solid var(--color-border-strong); border-radius: 18px; background: var(--color-paper); box-shadow: var(--shadow-pop); touch-action: auto; }
   .titleBar, .titleGroup, .searchBox { display: flex; align-items: center; }
   .titleBar { min-height: 72px; justify-content: space-between; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--color-border); }
   .titleGroup { min-width: 0; gap: 10px; }
   .title { margin: 0; font-size: 18px; font-weight: 750; letter-spacing: -.035em; }
-  .stageHint { display: block; margin-top: 3px; color: var(--color-text-faint); font-family: var(--font-mono); font-size: 10px; }
+  .stageHint { display: block; margin-top: 3px; color: var(--color-text-faint); font-family: var(--font-mono); font-size: 12px; }
   .stageBack, .closeButton { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; border-radius: 9px; color: var(--color-text-soft); }
   .stageBack:hover, .closeButton:hover { background: var(--color-panel); }
   .closeButton { width: 36px; height: 36px; }
   .sheetHandle { display: none; }
-  .resultPanel { display: flex; min-height: 0; flex-direction: column; }
+  .resultPanel { flex: 1; overflow: hidden; display: flex; min-height: 0; flex-direction: column; }
   .searchRow { flex: 0 0 auto; padding: 14px 18px 13px; border-bottom: 1px solid var(--color-border); }
   .searchBox { height: 48px; gap: 11px; padding: 0 16px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-panel-soft); color: var(--color-text-faint); transition: border-color .16s ease, background .16s ease, box-shadow .16s ease, color .16s ease; }
   .searchBox:focus-within { border-color: var(--color-accent-strong); background: var(--color-paper); color: var(--color-text-soft); box-shadow: 0 0 0 4px var(--color-accent-soft); }
   .searchBox input { width: 100%; border: 0; outline: 0; background: transparent; font: inherit; font-size: 13px; font-weight: 650; }
   .searchBox input::placeholder { color: var(--color-text-faint); opacity: 1; }
-  .methods { height: min(540px, calc(92vh - 160px)); min-height: 330px; overflow-y: auto; padding: 5px 14px 22px; scrollbar-width: thin; scrollbar-color: var(--color-border-strong) transparent; }
+  .methods { flex-shrink: 1; height: min(540px, calc(92vh - 160px)); min-height: 0; overflow-y: auto; padding: 5px 14px 22px; scrollbar-width: thin; scrollbar-color: var(--color-text-faint) var(--color-panel); scrollbar-gutter: stable; }
   .section + .section { margin-top: 12px; }
-  .section h3 { margin: 0; padding: 14px 10px 6px; color: var(--color-text-faint); font-family: var(--font-mono); font-size: 9px; font-weight: 500; letter-spacing: .09em; text-transform: uppercase; }
+  .section h3 { margin: 0; padding: 14px 10px 6px; color: var(--color-text-faint); font-family: var(--font-mono); font-size: 12px; font-weight: 500; letter-spacing: .09em; text-transform: uppercase; }
   .empty { display: flex; min-height: 250px; align-items: center; justify-content: center; gap: 6px; color: var(--color-text-faint); text-align: center; flex-direction: column; }
   .empty strong { color: var(--color-text); font-size: 14px; }
-  .empty span { font-size: 11px; }
-  @media (max-width: 700px) { .backdrop { align-items: end; padding: 0; } .dialog { max-height: 94vh; border-right: 0; border-bottom: 0; border-left: 0; border-radius: 18px 18px 0 0; transform: translateY(var(--sheet-drag, 0)); transition: transform .24s ease; } .dialog.dragging { transition: none; } .sheetHandle { display: flex; width: 100%; height: 30px; align-items: center; justify-content: center; padding: 0; color: var(--color-text-faint); } .sheetHandle span { display: block; width: 38px; height: 5px; border-radius: 999px; background: currentColor; } .closeButton { display: none; } .methods { height: min(650px, calc(94vh - 145px)); } }
+  .empty span { font-size: 12px; }
+  @media (max-width: 700px) { .backdrop { align-items: end; padding: 0; } .dialog { max-height: 94vh; border-right: 0; border-bottom: 0; border-left: 0; border-radius: 18px 18px 0 0; transform: translateY(var(--sheet-drag, 0)); transition: transform .24s ease; } .dialog.dragging { transition: none; } .sheetHandle { display: flex; width: 100%; height: 30px; align-items: center; justify-content: center; padding: 0; color: var(--color-text-faint); } .sheetHandle span { display: block; width: 38px; height: 5px; border-radius: 999px; background: currentColor; } .closeButton { display: none; } .methods { flex-shrink: 1; height: min(650px, calc(94vh - 145px)); } }
   :global(html[data-theme="dark"]) .searchBox:focus-within { background: var(--color-panel); }
+
+.resultPanel, .body { border-bottom: 1px solid var(--color-border); }
+.searchBox input { font-size: 16px; }
+@media (max-width: 700px) { .closeButton { display: grid; width: 44px; height: 44px; } }
 </style>

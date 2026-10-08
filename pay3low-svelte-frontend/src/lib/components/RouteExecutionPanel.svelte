@@ -348,28 +348,30 @@
 {/if}
 
 <style>
-  .execution { display: grid; gap: 12px; margin-top: 14px; padding: 14px; border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-surface, rgba(255,255,255,.72)); }
+  .execution { display: grid; gap: 12px; margin-top: 14px; padding: 14px; border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-panel); }
   .executionTitle, .walletRow, .choiceRow { display: flex; align-items: center; gap: 8px; }
   .executionTitle { justify-content: space-between; }
-  .executionTitle span { padding: 4px 8px; border-radius: 999px; background: var(--color-accent-soft); color: var(--color-accent-strong); font-size: 10px; font-weight: 800; text-transform: uppercase; }
+  .executionTitle span { padding: 4px 8px; border-radius: 999px; background: var(--color-accent-soft); color: var(--color-accent-text); font-size: 12px; font-weight: 800; text-transform: uppercase; }
   fieldset { display: grid; gap: 9px; margin: 0; padding: 0; border: 0; }
-  legend, small { color: var(--color-text-soft); font-size: 11px; }
+  legend, small { color: var(--color-text-soft); font-size: 12px; }
   button, input { min-height: 40px; border: 1px solid var(--color-border); border-radius: 11px; font: inherit; }
   button { padding: 0 12px; cursor: pointer; background: transparent; color: inherit; font-weight: 750; }
   button:disabled { cursor: not-allowed; opacity: .55; }
   .walletButton, .primary { width: 100%; }
-  .primary { border-color: var(--color-primary); background: var(--color-primary); color: white; }
+  .primary { border-color: var(--color-primary); background: var(--color-primary); color: var(--color-text-invert); }
   .secondary { width: fit-content; }
   .choiceRow button { flex: 1; }
-  .choiceRow button.active { border-color: var(--color-accent-strong); background: var(--color-accent-soft); }
+  .choiceRow button.active { border-color: var(--color-accent-text); background: var(--color-accent-soft); }
   input { width: 100%; padding: 0 11px; background: transparent; color: inherit; }
   .review { display: grid; gap: 7px; padding: 10px; border-radius: 12px; background: rgba(127,127,127,.08); }
   .review span { display: flex; justify-content: space-between; gap: 12px; }
   .review strong { overflow-wrap: anywhere; text-align: right; font-size: 12px; }
   p { margin: 0; line-height: 1.45; }
   .muted, .safety, .address { color: var(--color-text-soft); font-size: 12px; }
-  .ready { color: var(--color-accent-strong); font-size: 12px; }
-  .success { color: #15803d; font-weight: 700; }
-  .errorText { color: #b42318; font-size: 12px; }
+  .ready { color: var(--color-accent-text); font-size: 12px; }
+  .success { color: var(--color-good); font-weight: 700; }
+  .errorText { color: var(--color-danger); font-size: 12px; }
   .safety { padding-top: 4px; border-top: 1px solid var(--color-border); }
+
+  @media (max-width: 980px), (pointer: coarse) { button, input { min-height: 44px; } input { font-size: 16px; } }
 </style>

@@ -87,7 +87,7 @@
 
 .eyebrow {
   color: var(--color-violet);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -152,7 +152,7 @@
   background: var(--color-primary);
   color: var(--color-accent);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -165,7 +165,7 @@
 .step p {
   margin: 6px 0 10px;
   color: var(--color-text-soft);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
@@ -249,7 +249,7 @@
 
 .counterpartyLabel {
   color: var(--color-violet);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -259,7 +259,7 @@
 .manualBadge {
   padding: 4px 7px;
   border-radius: 999px;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -267,12 +267,12 @@
 
 .profileBadge {
   background: rgba(181, 224, 58, 0.2);
-  color: #557309;
+  color: var(--color-accent-text);
 }
 
 .manualBadge {
   background: rgba(240, 166, 89, 0.16);
-  color: #8a5b1e;
+  color: var(--color-warn);
 }
 
 .advertiser {
@@ -291,7 +291,7 @@
 .adHint {
   display: block;
   color: var(--color-text-faint);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -302,7 +302,7 @@
   margin: 10px 0 7px;
   color: var(--color-text-soft);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .metrics b {
@@ -315,8 +315,8 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: #587b08;
-  font-size: 10px;
+  color: var(--color-accent-text);
+  font-size: 12px;
   font-weight: 850;
   text-decoration: none;
 }
@@ -331,7 +331,7 @@
 
 .adHint {
   margin-top: 6px;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .missing {
@@ -348,12 +348,12 @@
   border-radius: 14px;
   background: rgba(240, 166, 89, 0.1);
   color: #75501f;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
 .warning strong {
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
@@ -383,7 +383,7 @@
 
 .eyebrow,
 .counterpartyLabel {
-  color: #6d9800;
+  color: var(--color-accent-text);
 }
 
 .closeButton {

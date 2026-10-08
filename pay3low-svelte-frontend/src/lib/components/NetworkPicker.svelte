@@ -221,7 +221,8 @@
 .countries {
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-color: var(--color-border-strong) transparent;
+  scrollbar-color: var(--color-text-faint) var(--color-panel);
+  scrollbar-gutter: stable;
   scrollbar-width: thin;
 }
 
@@ -237,7 +238,7 @@
 .methods::-webkit-scrollbar-thumb,
 .countries::-webkit-scrollbar-thumb {
   border-radius: 10px;
-  background: var(--color-border-strong);
+  background: var(--color-text-faint);
 }
 
 .section + .section {
@@ -248,7 +249,7 @@
   margin: 0;
   padding: 10px 11px 8px;
   color: var(--color-text-faint);
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.11em;
   text-transform: uppercase;
@@ -286,7 +287,7 @@
   border-radius: 15px;
   color: #fff;
   box-shadow: 0 6px 15px rgba(20, 23, 19, 0.14);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.03em;
 }
@@ -329,7 +330,7 @@
 
 .methodMeta {
   color: var(--color-text-faint);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -359,7 +360,7 @@
   display: block;
   margin-top: 4px;
   color: var(--color-text-faint);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .countryList {
@@ -394,7 +395,7 @@
   background: var(--color-primary);
   color: var(--color-accent);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -406,7 +407,7 @@
 
 .countryCopy strong {
   overflow: hidden;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -414,7 +415,7 @@
 
 .countryCopy span {
   color: var(--color-text-faint);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .empty {
@@ -432,7 +433,7 @@
 }
 
 .empty span {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 @media (max-width: 700px) {
@@ -688,7 +689,7 @@
 
 .methodMeta {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .check,
@@ -758,9 +759,9 @@
 
 .section h3 {
   padding: 14px 10px 5px;
-  color: #8a9689;
+  color: var(--color-text-faint);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 400;
   letter-spacing: 0.09em;
 }
@@ -831,4 +832,7 @@
   }
 }
 
+
+.searchBox input { font-size: 16px; }
+.body { border-bottom: 1px solid var(--color-border); }
 </style>
