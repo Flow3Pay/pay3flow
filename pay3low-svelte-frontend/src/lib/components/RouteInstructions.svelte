@@ -43,7 +43,6 @@
     observer.observe(node);
     return { destroy() { observer.disconnect(); } };
   }
-  let mounted = false;
   const FRAME_DURATION = 6500;
   $: language = $locale;
   $: copy = (key: string, params: Record<string, string | number> = {}) => t(key, params, language);
@@ -52,8 +51,6 @@
   $: finished = steps.length > 0 && chapter === steps.length;
   $: titleIncludesVenue = Boolean(step && step.title.endsWith(step.venue));
   $: headingTitle = titleIncludesVenue && step ? step.title.slice(0, -step.venue.length).trimEnd() : step?.title;
-  $: storageKey = `pay3flow.tutorial.v1.${route.route_id}`;
-  $: if (mounted) remember(storageKey, chapter, completed);
 
   async function shareGuide() {
     const url = new URL(guideSharePath(location.hash), location.origin).href;
@@ -64,9 +61,6 @@
     tab = next;
     if (next === "reviews") playing = false;
     await tick(); window.scrollTo({ top: 0 }); heading?.focus({ preventScroll: true });
-  }
-  function remember(key: string, active: number, done: number) {
-    try { sessionStorage.setItem(key, JSON.stringify({ chapter: active, completed: done, steps: steps.map((item) => item.id) })); } catch { /* Optional in private browsing. */ }
   }
   async function navigate(next: number) {
     tab = "guide";
@@ -102,13 +96,6 @@
     return exchanger ? copy("Quoted exchanger: {description}.", { description: exchanger[1] }) : copy(warning);
   }
   onMount(() => {
-    try {
-      const saved = JSON.parse(sessionStorage.getItem(storageKey) ?? "null");
-      if (saved && JSON.stringify(saved.steps) === JSON.stringify(steps.map((item) => item.id)) && Number.isInteger(saved.completed) && Number.isInteger(saved.chapter) && saved.completed >= 0 && saved.completed <= steps.length && saved.chapter >= -1 && saved.chapter <= saved.completed) {
-        completed = saved.completed; chapter = saved.chapter;
-      }
-    } catch { /* A malformed or unavailable cache must not block the guide. */ }
-    mounted = true;
     const media = matchMedia("(prefers-reduced-motion: reduce)");
     const motionChanged = () => { reducedMotion = media.matches; if (reducedMotion) playing = false; };
     motionChanged(); media.addEventListener("change", motionChanged);
@@ -192,7 +179,7 @@
                   <span class="sceneCount">{String(frame + 1).padStart(2, "0")} / {String(step.frames.length).padStart(2, "0")}</span>
                   <button type="button" on:click={replay} aria-label={copy("Replay walkthrough")}>↻</button>
                 </div>
-              {:else}<div class="visualCaption"><span>✦</span>{copy(finished ? "Confirmed by you" : "An animated guide for your selected route")}</div>{/if}
+              {/if}
             </div>
             <section class="explanation" aria-label={copy("Step instructions")}>
               {#if step}
@@ -209,7 +196,7 @@
                 <div class="planItem"><span>01</span><div><strong>{copy("See the whole picture")}</strong><p>{copy("Your route is split into {count} steps. We explain each action before you do it.", { count: steps.length })}</p></div></div>
                 <div class="planItem"><span>02</span><div><strong>{copy("Follow the demonstration")}</strong><p>{copy("Watch the highlights, pause whenever you need, and open the actual platform from the step.")}</p></div></div>
                 <div class="planItem"><span>03</span><div><strong>{copy("Confirm, then continue")}</strong><p>{copy("Once the payment or balance arrives, press “Done, continue”. You decide when to move on.")}</p></div></div>
-                <div class="estimate"><span>{copy("Estimated output:")}</span><strong>{tutorialMoney(route.target_amount_minor, route.target_currency, route.target_amount)}</strong><small>{copy("Check the current quote on the platform before exchanging.")}</small></div>
+                <div class="estimate"><span>{copy("Estimated output:")}</span><strong>{tutorialMoney(route.target_amount_minor, route.target_currency, route.target_amount)}</strong><small>{copy("Check the current quote on the platform before exchanging.")}</small><button type="button" class="continueButton" disabled={!steps.length} on:click={() => navigate(0)} data-testid="start-guide">{copy("Let’s begin")} <span>→</span></button></div>
               {/if}
             </section>
           </div>
@@ -230,7 +217,9 @@
         </div>
       {/key}
       {/if}
-      <div class="guideActions"><div><span class="footerDot"></span><span>{finished ? copy("All steps confirmed") : step ? copy("Only continue once you have completed this step.") : copy("You control every step")}</span></div><div class="footerActions">{#if tab === "reviews"}<button type="button" class="continueButton" on:click={() => selectTab("guide")}>{copy("Return to guide")} <span>→</span></button>{:else}{#if chapter >= 0 && !finished}<button type="button" class="backButton" on:click={() => navigate(chapter - 1)}>← {copy("Back")}</button>{/if}{#if finished}<button type="button" class="backButton" on:click={() => navigate(0)}>{copy("Review steps")}</button><button type="button" class="continueButton" on:click={onClose} aria-label={copy("Back to routes")}>{copy("Back to routes")} <span aria-hidden="true">↗</span></button>{:else if step}<button type="button" class="continueButton" on:click={confirmStep} data-testid="confirm-instruction-step">{copy(chapter === steps.length - 1 ? "Done, finish" : "Done, continue")} <span>→</span></button>{:else}<button type="button" class="continueButton" disabled={!steps.length} on:click={() => navigate(0)} data-testid="start-guide">{copy("Let’s begin")} <span>→</span></button>{/if}{/if}</div></div>
+      {#if tab === "reviews" || chapter >= 0}
+      <div class="guideActions"><div class="footerActions">{#if tab === "reviews"}<button type="button" class="continueButton" on:click={() => selectTab("guide")}>{copy("Return to guide")} <span>→</span></button>{:else}{#if chapter >= 0 && !finished}<button type="button" class="backButton" on:click={() => navigate(chapter - 1)}>← {copy("Back")}</button>{/if}{#if finished}<button type="button" class="backButton" on:click={() => navigate(0)}>{copy("Review steps")}</button><button type="button" class="continueButton" on:click={onClose} aria-label={copy("Back to routes")}>{copy("Back to routes")} <span aria-hidden="true">↗</span></button>{:else if step}<button type="button" class="continueButton" on:click={confirmStep} data-testid="confirm-instruction-step">{copy(chapter === steps.length - 1 ? "Done, finish" : "Done, continue")} <span>→</span></button>{/if}{/if}</div></div>
+      {/if}
     </div>
   </div>
 </div>
@@ -254,15 +243,14 @@
   h1 { font-size: clamp(30px, 3.3vw, 49px); line-height: 1.15; font-weight: 750; letter-spacing: -.055em; margin-top: 17px; max-width: 960px; }h1:focus { outline: none; }.lead { max-width: 710px; color: var(--color-text-soft); font-size: 13px; line-height: 1.8; margin-top: 14px; }
   .chapterContent { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(260px, .85fr); gap: 33px; margin-top: 31px; align-items: start; }.visualColumn { min-width: 0; }.explanation { padding-top: 7px; min-width: 0; }
   .planItem { display: flex; align-items: flex-start; gap: 14px; margin-top: 25px; }.planItem > span { padding-top: 2px; color: var(--color-text-faint); font: 11px var(--font-mono); }.planItem strong { font-size: 14px; font-weight: 750; letter-spacing: -.02em; }.planItem p { color: var(--color-text-soft); font-size: 12px; line-height: 1.85; margin-top: 7px; }
-  .estimate { display: grid; gap: 10px; margin-top: 31px; padding: 20px; border: 1px solid var(--color-border); border-radius: 13px; background: var(--color-paper); }.estimate > span { color: var(--color-text-soft); font-size: 11px; }.estimate strong { font-size: 27px; font-weight: 750; letter-spacing: -.04em; overflow-wrap: anywhere; }.estimate small { font-size: 10px; color: var(--color-text-soft); line-height: 1.7; }
-  .visualCaption { display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 16px; font-size: 10px; color: var(--color-text-soft); }.visualCaption > span { color: var(--color-accent-text); }
+  .estimate { display: grid; gap: 10px; margin-top: 31px; padding: 20px; border: 1px solid var(--color-border); border-radius: 13px; background: var(--color-paper); }.estimate > span { color: var(--color-text-soft); font-size: 11px; }.estimate strong { font-size: 27px; font-weight: 750; letter-spacing: -.04em; overflow-wrap: anywhere; }.estimate .continueButton { width: 100%; margin-top: 6px; }.estimate small { font-size: 10px; color: var(--color-text-soft); line-height: 1.7; }
   .frameList { display: grid; gap: 7px; margin-top: 15px; }.frameList button { display: flex; align-items: flex-start; width: 100%; gap: 11px; text-align: left; padding: 13px 12px; border: 1px solid transparent; border-radius: 11px; transition: background .3s, border-color .3s; }.frameList button.selected { border-color: var(--color-border); background: var(--color-paper); }.frameNumber { flex: 0 0 22px; margin-top: 2px; font: 10px var(--font-mono); color: var(--color-text-faint); }.selected .frameNumber { color: var(--color-accent-text); }.frameList strong { font-size: 12px; font-weight: 750; line-height: 1.5; }.frameText { display: block; color: var(--color-text-soft); font-size: 11px; line-height: 1.8; margin-top: 5px; }.frameIndicator { font-size: 15px; color: var(--color-accent-text); margin-left: auto; }
   .checkpoint { display: flex; gap: 10px; padding: 17px; background: var(--color-accent-soft); border: 1px solid var(--color-border); border-radius: 11px; margin-top: 19px; }.checkpoint > span { color: var(--color-accent-text); font-size: 18px; }.checkpoint strong { font-size: 11px; }.checkpoint p { font-size: 11px; line-height: 1.8; margin-top: 5px; color: var(--color-text-soft); }
   .playerControls { display: flex; align-items: center; gap: 10px; padding: 8px 4px; margin-top: 5px; }.playerControls > button { display: grid; place-items: center; font-size: 17px; color: var(--color-text-soft); width: 32px; height: 32px; }.playerTimeline { display: flex; gap: 4px; flex: 1; }.playerTimeline button { position: relative; flex: 1; min-width: 0; height: 32px; background: transparent; }.playerTimeline button::before { content: ""; position: absolute; left: 0; right: 0; height: 3px; top: 15px; border-radius: 3px; background: var(--color-border); }.playerTimeline button > span { position: absolute; top: 15px; left: 0; height: 3px; border-radius: 3px; background: var(--color-accent-text); transition: width .1s linear; }.sceneCount { white-space: nowrap; font: 9px var(--font-mono); color: var(--color-text-soft); }
   .realAction { padding: 22px; margin-top: 28px; border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-paper); }.platformLink { display: flex; align-items: center; justify-content: space-between; gap: 18px; width: fit-content; min-height: 44px; padding: 0 16px; background: var(--color-accent); color: #152016; border-radius: 10px; font-size: 12px; font-weight: 750; }.platformLink:hover { background: #c3ff22; }.platformLink > span { font-size: 19px; }.marketInfo { margin-top: 14px; font-size: 12px; font-family: var(--font-mono); }.marketInfo > span { display: block; font-family: var(--font-sans); margin-top: 5px; color: var(--color-text-soft); }
   .guideLinks { display: flex; flex-wrap: wrap; gap: 15px; margin-top: 13px; }.guideLinks a { text-decoration: underline; text-underline-offset: 3px; }
   .routeNotice { display: flex; align-items: flex-start; gap: 12px; margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--color-border); color: var(--color-text-soft); font-size: 11px; line-height: 1.9; }.routeNotice > span { font-size: 18px; }.routeNotice strong { color: var(--color-text); font-size: 11px; }.routeNotice p { margin-top: 5px; }.finishChecklist { margin-top: 22px; display: grid; gap: 17px; }.finishChecklist > div { display: flex; gap: 11px; font-size: 12px; line-height: 1.7; }.finishChecklist > div > span { color: var(--color-accent-text); }
-  .guideActions { margin-top: 32px; display: flex; justify-content: space-between; align-items: center; gap: 22px; padding: 20px 0; border-top: 1px solid var(--color-border); }.guideActions > div:first-child { display: flex; align-items: center; gap: 8px; color: var(--color-text-soft); font-size: 11px; }.footerDot { width: 5px; height: 5px; border-radius: 50%; background: var(--color-accent-text); flex-shrink: 0; }.footerActions { display: flex; align-items: center; gap: 24px; }.backButton { font-size: 12px; color: var(--color-text-soft); }.continueButton { display: flex; align-items: center; justify-content: space-between; gap: 35px; min-height: 47px; padding: 0 21px; border-radius: 10px; background: var(--color-accent); color: #152016; font-size: 13px; font-weight: 800; }.continueButton > span { font-size: 22px; font-weight: 400; }.continueButton:hover { background: #c3ff22; }.continueButton:disabled { opacity: .5; cursor: default; }
+  .guideActions { margin-top: 32px; display: flex; justify-content: flex-end; align-items: center; padding: 20px 0; border-top: 1px solid var(--color-border); }.footerActions { display: flex; align-items: center; gap: 24px; }.backButton { font-size: 12px; color: var(--color-text-soft); }.continueButton { display: flex; align-items: center; justify-content: space-between; gap: 35px; min-height: 47px; padding: 0 21px; border-radius: 10px; background: var(--color-accent); color: #152016; font-size: 13px; font-weight: 800; }.continueButton > span { font-size: 22px; font-weight: 400; }.continueButton:hover { background: #c3ff22; }.continueButton:disabled { opacity: .5; cursor: default; }
   .guideToolbar { display: flex; justify-content: space-between; width: min(var(--layout-width), calc(100% - 2 * var(--page-gutter))); margin: 0 auto; padding: 18px 24px; border-bottom: 1px solid var(--color-border); }.guideToolbar button { min-height: 44px; font-size: 12px; color: var(--color-text-soft); display: flex; align-items: center; gap: 8px; }.guideToolbar button:hover { color: var(--color-text); }
   .shareIcon { display: block; flex: 0 0 auto; }
   .routePair { gap: 10px; font-size: 18px; flex-wrap: wrap; }.routePair > span { display: inline-flex; align-items: center; gap: 7px; color: var(--color-text); font-size: inherit; }.routePair img { width: 26px; height: 26px; border-radius: 50%; }.routePair b { color: var(--color-text-soft); font-weight: 400; }
@@ -279,7 +267,7 @@
   @media (max-width: 900px) and (min-width: 761px) { .guideLayout { grid-template-columns: 170px minmax(0,1fr); }.chapters { padding-left: 0; padding-right: 12px; }.chapterContent { grid-template-columns: minmax(0,1fr); }.guideMain { padding-left: 25px; padding-right: 0; }.frameList { grid-template-columns: 1fr 1fr; } }
   @media (max-width: 760px) {
     .guideLayout { display: block; padding-inline: 0; }.guideToolbar { padding: 8px 18px; }.reviewsTab { width: auto; flex: 0 0 auto; margin: 0; min-height: 44px; white-space: nowrap; }.reviewsTab > span:last-child { display: none; }.chapters { padding: 15px 18px; border-right: 0; border-bottom: 1px solid var(--color-border); }.chapters > .eyebrow, .routePair, .chapterCopy { display: none; }.chapters { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px; }.chapterProgress, .reviewsTab { grid-column: 1 / -1; }.chapterProgress { margin-top: 4px; padding-top: 14px; }.chapterProgress p { display: none; }.reviewsTab { width: 100%; }.overviewButton { flex: 0 0 auto; width: auto; margin: 0; padding: 7px 10px; font-size: 11px; }.chapters ol { display: flex; gap: 8px; margin: 0; overflow-x: auto; }.chapters li:not(:last-child)::after { display: none; }.chapters li button { padding: 5px; min-width: 44px; min-height: 44px; display: grid; place-items: center; }.stepNumber { width: 29px; height: 29px; }.guideMain { padding: 26px 18px 32px; }h1 { margin-top: 13px; font-size: 33px; }.lead { font-size: 12px; line-height: 1.85; margin-top: 11px; }.chapterContent { grid-template-columns: minmax(0,1fr); gap: 25px; margin-top: 23px; }.planItem { margin-top: 21px; }.estimate { margin-top: 24px; }.frameList button { padding: 12px 10px; }.frameText { font-size: 12px; }.frameList strong { font-size: 13px; }.checkpoint p { font-size: 12px; }.realAction { padding: 17px; margin-top: 24px; }.routeNotice { font-size: 11px; }
-    .guideActions { padding: 18px 0 max(18px, env(safe-area-inset-bottom)); gap: 12px; }.guideActions > div:first-child { display: none; }.footerActions { justify-content: space-between; width: 100%; gap: 14px; }.continueButton { min-height: 48px; flex: 1; justify-content: center; gap: 23px; }.backButton { flex: 0 0 auto; font-size: 11px; }.playerControls > button { min-width: 44px; min-height: 44px; }.playerTimeline button { min-width: 0; }
+    .guideActions { padding: 18px 0 max(18px, env(safe-area-inset-bottom)); gap: 12px; }.footerActions { justify-content: space-between; width: 100%; gap: 14px; }.continueButton { min-height: 48px; flex: 1; justify-content: center; gap: 23px; }.backButton { flex: 0 0 auto; font-size: 11px; }.playerControls > button { min-width: 44px; min-height: 44px; }.playerTimeline button { min-width: 0; }
   }
   @media (prefers-reduced-motion: reduce) { .guidePage, .chapterEntrance { animation: none; } }
 </style>

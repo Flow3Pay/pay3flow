@@ -2718,7 +2718,7 @@ test("P2P instructions restore written advertiser reviews", async ({ page }) => 
   await expect.poll(() => new Set(profiles).size).toBe(2);
 });
 
-test("animated guide is a page with inline actions, scene controls and saved progress", async ({ page }, testInfo) => {
+test("animated guide has inline actions, scene controls and fresh progress on every opening", async ({ page }, testInfo) => {
   await page.addInitScript(() => {
     localStorage.setItem("pay3flow.exchange.source-method", "am-idbank");
     localStorage.setItem("pay3flow.exchange.target-method", "ru-alfabank");
@@ -2740,14 +2740,16 @@ test("animated guide is a page with inline actions, scene controls and saved pro
   await expect(guide.locator(".routePair img")).toHaveCount(2);
   const actions = guide.locator(".guideActions");
   await expect(guide.locator("footer")).toHaveCount(0);
-  await expect(actions).toHaveCSS("position", "static");
-  await expect(guide.locator(".guideMain > .guideActions")).toHaveCount(1);
+  await expect(actions).toHaveCount(0);
+  await expect(guide.locator(".estimate").getByTestId("start-guide")).toHaveCount(1);
+  await expect(guide.locator(".visualCaption")).toHaveCount(0);
   await expect(guide.locator(".smallLogo")).toHaveAttribute("src", "/icons/assets/pay3flow_logo.svg");
   await expect(guide.locator(".sourceCoin img")).toHaveAttribute("src", "/icons/flags/am.svg");
   await expect(guide.locator(".targetCoin img")).toHaveAttribute("src", "/icons/flags/ru.svg");
   await expect(guide.locator(".overviewButton img")).toHaveAttribute("src", "/icons/ui/guide-before.svg");
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  await guide.getByTestId("start-guide").scrollIntoViewIfNeeded();
   await expect(guide.getByTestId("start-guide")).toBeInViewport();
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ animations: "disabled", path: testInfo.outputPath("guide-overview.png") });
@@ -2755,6 +2757,9 @@ test("animated guide is a page with inline actions, scene controls and saved pro
   await expect(chapters.nth(1)).toBeDisabled();
   await guide.getByTestId("start-guide").click();
   await expect(guide.locator("h1")).toBeFocused();
+  await expect(actions).toHaveCSS("position", "static");
+  await expect(guide.locator(".guideMain > .guideActions")).toHaveCount(1);
+  await expect(guide.locator(".footerDot")).toHaveCount(0);
   await expect(guide.getByTestId("confirm-instruction-step")).toBeVisible();
   await guide.locator(".videoStage").hover();
   const center = guide.getByTestId("center-playback");
@@ -2779,10 +2784,19 @@ test("animated guide is a page with inline actions, scene controls and saved pro
   await guide.getByTestId("confirm-instruction-step").click();
   await expect(guide.locator("h1")).toContainText("Sell USDT");
   await expect(chapters.nth(0).locator(".stepNumber")).toHaveText("✓");
+  expect(await page.evaluate(() => Object.keys(sessionStorage).filter(key => key.startsWith("pay3flow.tutorial.v1.")))).toEqual([]);
   await page.keyboard.press("Escape");
   await expect(guide).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => document.body.style.position)).toBe("");
   await trigger.click();
+  await expect(guide.locator("h1")).toHaveText("A clear route. At your pace.");
+  await expect(guide.locator(".chapterProgress strong")).toHaveText("0/2");
+  await expect(chapters.nth(1)).toBeDisabled();
+  await page.reload();
+  await expect(guide.locator("h1")).toHaveText("A clear route. At your pace.");
+  await expect(guide.locator(".chapterProgress strong")).toHaveText("0/2");
+  await guide.getByTestId("start-guide").click();
+  await guide.getByTestId("confirm-instruction-step").click();
   await expect(guide.locator("h1")).toContainText("Sell USDT");
   await guide.getByTestId("confirm-instruction-step").focus();
   await page.keyboard.press("Tab");
@@ -2855,6 +2869,9 @@ test("guide URL restores banks and selected operations in a fresh browser", asyn
   await guide.getByRole("button", { name: "Scene 3: Make the payment", exact: true }).click();
   await expect(guide.locator(".paymentPreview")).toContainText("IDBank");
   await fresh.reload();
+  await expect(guide.locator("h1")).toHaveText("A clear route. At your pace.");
+  await expect(guide.locator(".chapterProgress strong")).toHaveText("0/2");
+  await guide.getByTestId("start-guide").click();
   await expect(guide.locator(".headingVenue")).toContainText("Binance");
   await guide.locator(".guideToolbar").getByRole("button", { name: /Back to routes/ }).click();
   await expect(fresh).toHaveURL(/#\/swap\/AMD\/RUB/);
