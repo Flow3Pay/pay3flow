@@ -320,14 +320,13 @@
   width: min(100%, 560px);
   max-height: min(720px, calc(100vh - 40px));
   overflow-y: auto;
-  scrollbar-width: thin;
+
   scrollbar-gutter: stable;
-  scrollbar-color: var(--color-text-faint) var(--color-panel);
   padding: 28px;
   border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: 28px;
   background: rgba(250, 250, 246, 0.98);
-  box-shadow: 0 35px 110px rgba(0, 0, 0, 0.3);
+  box-shadow: none;
   color: var(--color-text);
   animation: modalIn 0.3s cubic-bezier(0.22, 1, 0.36, 1);
   touch-action: auto;
@@ -343,9 +342,6 @@
 .sheetHandle {
   display: none;
 }
-
-.modal::-webkit-scrollbar { width: 8px; }
-.modal::-webkit-scrollbar-thumb { border-radius: 8px; background: var(--color-text-faint); }
 
 .header {
   display: flex;
@@ -448,7 +444,7 @@
   font-family: var(--font-mono);
   font-size: 13px;
   font-weight: 800;
-  box-shadow: 0 0 0 5px rgba(181, 224, 58, 0.12);
+  box-shadow: none;
 }
 
 .stepBody {
@@ -568,7 +564,7 @@
   color: #30430b;
   font-size: 16px;
   font-weight: 850;
-  box-shadow: 0 5px 12px rgba(55, 77, 52, 0.12);
+  box-shadow: none;
 }
 
 .avatarVenue {
@@ -723,7 +719,7 @@
   border-color: var(--color-border-strong);
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 30px 80px rgba(44, 64, 42, 0.18);
+  box-shadow: none;
 }
 
 .eyebrow,
@@ -812,7 +808,7 @@
 :global(html[data-theme="dark"]) .modal {
   border-color: var(--color-border-strong);
   background: rgba(25, 25, 25, 0.99);
-  box-shadow: var(--shadow-pop);
+  box-shadow: none;
 }
 
 :global(html[data-theme="dark"]) .closeButton,
@@ -827,7 +823,7 @@
 
 :global(html[data-theme="dark"]) .stepNumber {
   border-color: #91b52b;
-  box-shadow: 0 0 0 5px rgba(181, 224, 58, 0.08);
+  box-shadow: none;
 }
 
 :global(html[data-theme="dark"]) .checklist li::before {

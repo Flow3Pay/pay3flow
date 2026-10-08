@@ -97,13 +97,13 @@
   .sheetHandle { display: none; }
   .close { position: absolute; z-index: 2; top: 12px; right: 12px; display: grid; width: 30px; height: 30px; place-items: center; border: 0; border-radius: 7px; background: #e9eee2; color: #283125; cursor: pointer; }
   .periodBackdrop { position: fixed; inset: 0; z-index: 3; display: grid; place-items: end center; background: rgba(8, 11, 8, .52); animation: fadeIn .2s ease-out; touch-action: none; }
-  .periodDialog { width: 100%; max-height: calc(100dvh - 16px); overflow-y: auto; padding: 10px 16px calc(18px + env(safe-area-inset-bottom)); border: 1px solid var(--color-border); border-radius: 14px 14px 0 0; background: rgba(255, 255, 255, .98); box-shadow: var(--shadow-pop); touch-action: auto; transform: translateY(var(--sheet-drag, 0px)); transition: transform .24s ease; animation: sheetIn .24s cubic-bezier(.22, 1, .36, 1); }
+  .periodDialog { width: 100%; max-height: calc(100dvh - 16px); overflow-y: auto; padding: 10px 16px calc(18px + env(safe-area-inset-bottom)); border: 1px solid var(--color-border); border-radius: 14px 14px 0 0; background: rgba(255, 255, 255, .98); box-shadow: none; touch-action: auto; transform: translateY(var(--sheet-drag, 0px)); transition: transform .24s ease; animation: sheetIn .24s cubic-bezier(.22, 1, .36, 1); }
   .periodHandle { display: flex; width: 100%; height: 30px; align-items: center; justify-content: center; touch-action: none; }
   .periodHandle span { width: 38px; height: 5px; border-radius: 999px; background: var(--color-border-strong); }
   .periodHeading strong { font-size: 13px; font-weight: 800; }
   .periodOptions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
   .periodOptions button { min-height: 44px; padding: 0 9px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-panel); color: var(--color-text-soft); font-size: 12px; font-weight: 800; }
-  .periodOptions button[aria-pressed="true"] { border-color: var(--color-accent); background: var(--color-accent); color: #171717; box-shadow: 0 5px 13px rgba(185, 242, 39, .2); }
+  .periodOptions button[aria-pressed="true"] { border-color: var(--color-accent); background: var(--color-accent); color: #171717; box-shadow: none; }
   :global(html[data-theme="dark"]) .periodDialog { border-color: var(--color-border-strong); background: rgba(25, 25, 25, .98); }
   :global(.dialog .activityHeading) { padding-right: 38px; }
   :global(.dialog .activityCard) { padding: 24px; gap: 14px; }

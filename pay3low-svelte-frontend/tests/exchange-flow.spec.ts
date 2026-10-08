@@ -2338,7 +2338,8 @@ test("same asset on the same network searches a cycle and displays both swap ste
   const card = page.locator(".routeCard").first();
   await expect(card).toBeVisible();
   await expect(card).toContainText("+1 USDT (+1.00%)");
-  await expect(card.locator(".routeBadges")).toContainText("Best route");
+  await expect(card.locator(".routeBadges")).not.toContainText("Best route");
+  await expect(card.locator(".routeBadges .bestBadge")).toHaveText("+1 USDT (+1.00%)");
   await expect(card.locator(".routeBadges")).not.toContainText("Est.");
   await expect(card).toContainText("101 USDT");
   await expect(card).toContainText("USDC");
@@ -2363,7 +2364,8 @@ test("spot crypto cycles show three trades and wallet deposit and withdrawal ins
   await page.getByTestId("start-search").click();
   const card = page.locator(".routeCard").first();
   await expect(card).toContainText("+1 USDT (+1.00%)");
-  await expect(card.locator(".routeBadges")).toContainText("Best route");
+  await expect(card.locator(".routeBadges")).not.toContainText("Best route");
+  await expect(card.locator(".routeBadges .bestBadge")).toHaveText("+1 USDT (+1.00%)");
   await expect(card.locator(".routeBadges")).not.toContainText("Est.");
   await card.locator(".workflow").click();
   const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
@@ -2508,3 +2510,74 @@ for (const theme of ["light", "dark"] as const) {
     await audit();
   });
 }
+
+
+test("route panel slides in both directions and respects reduced motion", async ({ page, isMobile }) => {
+  await mockBackend(page);
+  await openApp(page);
+  await settleEntrance(page);
+  const selector = isMobile ? ".mobileRoutesToggle" : ".routesToggle";
+  for (const expanded of [false, true]) {
+    const motion = await page.evaluate(async (selector) => {
+      (document.querySelector(selector) as HTMLButtonElement).click();
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      const panel = document.querySelector(".routesReveal") as HTMLElement;
+      return {
+        present: !!panel,
+        inert: panel?.inert,
+        keyframes: panel?.getAnimations().flatMap((animation) => (animation.effect as KeyframeEffect).getKeyframes()).map((frame) => frame.transform).filter(Boolean) ?? [],
+        animations: panel?.getAnimations().filter((animation) => animation.playState === "running").length ?? 0
+      };
+    }, selector);
+    expect(motion.present).toBe(true);
+    expect(motion.inert).toBe(!expanded);
+    expect(motion.animations).toBeGreaterThan(0);
+    expect(motion.keyframes.some((transform) => transform !== "none")).toBe(true);
+    if (expanded) await expect(page.locator("#routes")).toBeVisible();
+    else await expect(page.locator("#routes")).toHaveCount(0);
+    await page.locator(".routesReveal").evaluateAll(async (elements) => {
+      await Promise.all(elements.flatMap((element) => element.getAnimations().map((animation) => animation.finished.catch(() => {}))));
+    });
+  }
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.getByRole("button", { name: "Hide routes" }).click();
+  await expect(page.locator("#routes")).toHaveCount(0);
+  await page.getByRole("button", { name: "Show routes" }).click();
+  await expect(page.locator("#routes")).toBeVisible();
+  await expect(page.locator(".routesReveal")).toHaveCSS("transform", "none");
+});
+
+
+test("mobile menu animates closed with its inward arrow and a leftward touch swipe", async ({ page, isMobile }) => {
+  test.skip(!isMobile, "Mobile drawer only");
+  await mockBackend(page);
+  await openApp(page);
+  await settleEntrance(page);
+  const toggle = page.getByRole("button", { name: "Open menu" });
+  const menu = page.getByRole("dialog", { name: "Menu", exact: true });
+  await toggle.click();
+  await expect.poll(async () => (await menu.boundingBox())!.x).toBe(0);
+  await expect(menu.locator(".menuClose span")).toHaveText("❯");
+  await expect(menu.locator(".menuClose span")).toHaveCSS("transform", "matrix(-1, 0, 0, -1, 0, 0)");
+  const closing = await menu.evaluate(async (element) => {
+    (element.querySelector(".menuClose") as HTMLButtonElement).click();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    return { present: element.isConnected, animations: element.getAnimations().length };
+  });
+  expect(closing.present).toBe(true);
+  expect(closing.animations).toBeGreaterThan(0);
+  await expect(menu).toHaveCount(0);
+  await expect(toggle).toBeFocused();
+  await toggle.click();
+  await expect.poll(async () => (await menu.boundingBox())!.x).toBe(0);
+  const touch = await page.context().newCDPSession(page);
+  await touch.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: 270, y: 300 }] });
+  for (const x of [240, 210, 170, 130]) {
+    await touch.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x, y: 302 }] });
+  }
+  await expect.poll(async () => (await menu.boundingBox())!.x).toBeLessThan(-50);
+  await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await expect(menu).toHaveCount(0);
+  await expect(toggle).toBeFocused();
+  await expect(page.locator(".appShell")).not.toHaveAttribute("inert", "");
+});

@@ -64,8 +64,11 @@
   --radius-card: 15px;
   --radius-panel: 12px;
   --radius-pill: 999px;
+  --scrollbar-track: var(--color-panel);
+  --scrollbar-thumb: color-mix(in srgb, var(--color-accent-strong) 55%, var(--color-text-soft));
+  --scrollbar-thumb-end: color-mix(in srgb, var(--color-accent-strong) 35%, var(--color-text-soft));
   --shadow-card: none;
-  --shadow-pop: 0 26px 80px rgba(17, 20, 18, 0.18), 0 3px 12px rgba(17, 20, 18, 0.08);
+  --shadow-pop: none;
   --page-bg: #f4f4f3;
   --shell-glow: rgba(255, 255, 255, 0.72);
   --shell-accent-glow: rgba(80, 80, 80, 0.035);
@@ -99,7 +102,7 @@ html[data-theme="dark"] {
   --color-border-strong: rgba(255, 255, 255, 0.17);
   --color-text-invert: #111111;
   --shadow-card: none;
-  --shadow-pop: 0 28px 90px rgba(0, 0, 0, 0.58), 0 3px 14px rgba(0, 0, 0, 0.35);
+  --shadow-pop: none;
   --page-bg: #101010;
   --shell-glow: rgba(255, 255, 255, 0.035);
   --shell-accent-glow: rgba(255, 255, 255, 0.025);
@@ -266,11 +269,44 @@ button { min-width: 32px; min-height: 32px; }
 input { min-height: 32px; }
 :where(input, button, a) { -webkit-tap-highlight-color: transparent; }
 :where(.methods, .countries, .settingsMenu, .routeGroups, .modal, .actionsPanel) {
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-text-faint) var(--color-panel);
   scrollbar-gutter: stable;
 }
 @media (max-width: 980px), (pointer: coarse) {
   button, a[aria-label], .profileLink { min-width: 44px; min-height: 44px; }
   input { font-size: max(16px, 1em); }
+}
+
+/* One lime scrollbar treatment for the page, pickers and route instructions. */
+* {
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+@supports selector(::-webkit-scrollbar) {
+  * { scrollbar-color: auto; }
+  ::-webkit-scrollbar { width: 12px; height: 12px; }
+  ::-webkit-scrollbar-track {
+    border-radius: var(--radius-pill);
+    background: var(--scrollbar-track);
+  }
+  ::-webkit-scrollbar-thumb {
+    min-height: 44px;
+    min-width: 44px;
+    border: 3px solid var(--scrollbar-track);
+    border-radius: var(--radius-pill);
+    background: linear-gradient(180deg, var(--scrollbar-thumb), var(--scrollbar-thumb-end));
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-accent-strong);
+  }
+  ::-webkit-scrollbar-thumb:active {
+    background: var(--color-accent);
+  }
+  ::-webkit-scrollbar-corner { background: var(--scrollbar-track); }
+}
+
+@media (forced-colors: active) {
+  * { scrollbar-color: auto; }
+  ::-webkit-scrollbar-thumb { background: ButtonText; border-color: Canvas; }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner { background: Canvas; }
 }

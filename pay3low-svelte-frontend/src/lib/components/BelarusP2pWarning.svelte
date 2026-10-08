@@ -84,7 +84,7 @@
     border-radius: 28px;
     outline: none;
     background: #faf9f3;
-    box-shadow: 0 35px 110px rgba(0, 0, 0, 0.38);
+    box-shadow: none;
     color: #20221f;
     animation: dialogIn 0.26s cubic-bezier(0.22, 1, 0.36, 1);
   }

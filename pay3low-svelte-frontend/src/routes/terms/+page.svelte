@@ -255,7 +255,7 @@
     border: 1px solid var(--color-border);
     border-radius: 18px;
     background: var(--color-paper);
-    box-shadow: var(--shadow-card);
+    box-shadow: none;
   }
 
   .eyebrow {

@@ -122,7 +122,7 @@
   border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: 30px;
   background: rgba(250, 250, 246, 0.98);
-  box-shadow: 0 38px 120px rgba(0, 0, 0, 0.35);
+  box-shadow: none;
   animation: dialogIn 0.28s cubic-bezier(0.22, 1, 0.36, 1);
   touch-action: auto;
   overscroll-behavior: contain;
@@ -193,7 +193,7 @@
 .searchBox:focus-within {
   border-color: var(--color-violet);
   background: #fff;
-  box-shadow: 0 0 0 4px var(--color-violet-soft);
+  box-shadow: none; outline: 2px solid var(--color-focus); outline-offset: 2px;
 }
 
 .searchBox input {
@@ -221,24 +221,11 @@
 .countries {
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-color: var(--color-text-faint) var(--color-panel);
   scrollbar-gutter: stable;
-  scrollbar-width: thin;
 }
 
 .methods {
   padding: 13px 17px 26px;
-}
-
-.methods::-webkit-scrollbar,
-.countries::-webkit-scrollbar {
-  width: 6px;
-}
-
-.methods::-webkit-scrollbar-thumb,
-.countries::-webkit-scrollbar-thumb {
-  border-radius: 10px;
-  background: var(--color-text-faint);
 }
 
 .section + .section {
@@ -286,7 +273,7 @@
   border: 2px solid rgba(255, 255, 255, 0.72);
   border-radius: 15px;
   color: #fff;
-  box-shadow: 0 6px 15px rgba(20, 23, 19, 0.14);
+  box-shadow: none;
   font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.03em;
@@ -487,7 +474,7 @@
 :global(html[data-theme="dark"]) .dialog {
   border-color: var(--color-border-strong);
   background: rgba(25, 25, 25, 0.99);
-  box-shadow: var(--shadow-pop);
+  box-shadow: none;
 }
 
 :global(html[data-theme="dark"]) .titleBar {
@@ -544,7 +531,7 @@
   border-color: var(--color-border-strong);
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 30px 80px rgba(44, 64, 42, 0.18);
+  box-shadow: none;
 }
 
 .titleBar {
@@ -572,7 +559,7 @@
 
 .searchBox:focus-within {
   border-color: var(--color-accent-strong);
-  box-shadow: 0 0 0 3px rgba(181, 245, 0, 0.16);
+  box-shadow: none; outline: 2px solid var(--color-focus); outline-offset: 2px;
 }
 
 .methods {
@@ -587,7 +574,7 @@
 .methodRow:hover {
   border-color: #b7cead;
   background: #fbfcfa;
-  box-shadow: 0 5px 12px rgba(55, 77, 52, 0.06);
+  box-shadow: none;
 }
 
 .methodRow[data-selected] {
@@ -634,7 +621,7 @@
   max-height: min(680px, 92vh);
   border-radius: 14px;
   background: #fff;
-  box-shadow: 0 48px 96px rgba(16, 36, 14, 0.22), 0 8px 24px rgba(16, 36, 14, 0.12);
+  box-shadow: none;
 }
 
 .titleBar {
@@ -662,7 +649,7 @@
 .searchBox:focus-within {
   border-color: #c5e092;
   background: #fff;
-  box-shadow: 0 0 0 3px rgba(185, 232, 52, 0.18);
+  box-shadow: none; outline: 2px solid var(--color-focus); outline-offset: 2px;
 }
 
 .methods {
@@ -719,7 +706,7 @@
   max-height: min(680px, 88vh);
   border-radius: 14px;
   background: #fff;
-  box-shadow: 0 48px 96px rgba(16, 36, 14, 0.22), 0 8px 24px rgba(16, 36, 14, 0.12);
+  box-shadow: none;
   contain: layout paint;
   isolation: isolate;
 }

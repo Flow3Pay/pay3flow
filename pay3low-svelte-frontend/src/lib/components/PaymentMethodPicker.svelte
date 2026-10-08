@@ -118,7 +118,7 @@
 
 <style>
   .backdrop { position: fixed; inset: 0; z-index: 1100; display: grid; place-items: center; padding: 24px; background: rgba(8, 11, 8, .52); touch-action: none; }
-  .dialog { display: flex; flex-direction: column; width: min(100%, 620px); max-height: min(720px, 92vh); overflow: hidden; border: 1px solid var(--color-border-strong); border-radius: 18px; background: var(--color-paper); box-shadow: var(--shadow-pop); touch-action: auto; }
+  .dialog { display: flex; flex-direction: column; width: min(100%, 620px); max-height: min(720px, 92vh); overflow: hidden; border: 1px solid var(--color-border-strong); border-radius: 18px; background: var(--color-paper); box-shadow: none; touch-action: auto; }
   .titleBar, .titleGroup, .searchBox { display: flex; align-items: center; }
   .titleBar { min-height: 72px; justify-content: space-between; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--color-border); }
   .titleGroup { min-width: 0; gap: 10px; }
@@ -131,10 +131,10 @@
   .resultPanel { flex: 1; overflow: hidden; display: flex; min-height: 0; flex-direction: column; }
   .searchRow { flex: 0 0 auto; padding: 14px 18px 13px; border-bottom: 1px solid var(--color-border); }
   .searchBox { height: 48px; gap: 11px; padding: 0 16px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-panel-soft); color: var(--color-text-faint); transition: border-color .16s ease, background .16s ease, box-shadow .16s ease, color .16s ease; }
-  .searchBox:focus-within { border-color: var(--color-accent-strong); background: var(--color-paper); color: var(--color-text-soft); box-shadow: 0 0 0 4px var(--color-accent-soft); }
+  .searchBox:focus-within { border-color: var(--color-accent-strong); background: var(--color-paper); color: var(--color-text-soft); box-shadow: none; outline: 2px solid var(--color-focus); outline-offset: 2px; }
   .searchBox input { width: 100%; border: 0; outline: 0; background: transparent; font: inherit; font-size: 13px; font-weight: 650; }
   .searchBox input::placeholder { color: var(--color-text-faint); opacity: 1; }
-  .methods { flex-shrink: 1; height: min(540px, calc(92vh - 160px)); min-height: 0; overflow-y: auto; padding: 5px 14px 22px; scrollbar-width: thin; scrollbar-color: var(--color-text-faint) var(--color-panel); scrollbar-gutter: stable; }
+  .methods { flex-shrink: 1; height: min(540px, calc(92vh - 160px)); min-height: 0; overflow-y: auto; padding: 5px 14px 22px; scrollbar-gutter: stable; }
   .section + .section { margin-top: 12px; }
   .section h3 { margin: 0; padding: 14px 10px 6px; color: var(--color-text-faint); font-family: var(--font-mono); font-size: 12px; font-weight: 500; letter-spacing: .09em; text-transform: uppercase; }
   .empty { display: flex; min-height: 250px; align-items: center; justify-content: center; gap: 6px; color: var(--color-text-faint); text-align: center; flex-direction: column; }

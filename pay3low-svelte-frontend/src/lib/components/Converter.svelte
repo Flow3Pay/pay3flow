@@ -230,6 +230,7 @@
 
   function toggleRoutes() {
     routesExpanded = !routesExpanded;
+    if (routesRevealElement) routesRevealElement.inert = !routesExpanded;
     if (routesExpanded && window.matchMedia("(max-width: 980px)").matches) {
       void tick().then(() => window.requestAnimationFrame(() => {
         const panel = routesRevealElement;
@@ -244,16 +245,17 @@
     try { localStorage.setItem(STORAGE.routesVisible, String(routesExpanded)); } catch {}
   }
 
-  function routesRevealIn(node: Element) {
-    return fly(node, window.matchMedia("(max-width: 980px)").matches
-      ? { y: 18, duration: 320, easing: quintOut }
-      : { x: 18, duration: 380, easing: quintOut });
-  }
+  function routesRevealTransition(node: HTMLElement) {
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const mobile = window.matchMedia("(max-width: 980px)").matches;
+    const duration = reducedMotion ? 0 : 420;
+    if (!mobile) return fly(node, { x: 56, duration, easing: quintOut });
 
-  function routesRevealOut(node: Element) {
-    return window.matchMedia("(max-width: 980px)").matches
-      ? slide(node, { duration: 320, easing: quintOut })
-      : fly(node, { x: 18, duration: 380, easing: quintOut });
+    const collapse = slide(node, { duration, easing: quintOut });
+    return {
+      ...collapse,
+      css: (t: number, u: number) => `${collapse.css?.(t, u) ?? ""}; transform: translateY(${u * 24}px); opacity: ${t};`
+    };
   }
 
   function closeInlineActivityOnMobile() {
@@ -1126,7 +1128,7 @@
     {/if}
     </div>
     {#if routesExpanded}
-      <div class="routesReveal" bind:this={routesRevealElement} in:routesRevealIn out:routesRevealOut>
+      <div class="routesReveal" bind:this={routesRevealElement} transition:routesRevealTransition inert={!routesExpanded} aria-hidden={!routesExpanded}>
         <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {renderingRoutes} {searchingVenues} {foundVenues} {venueStats} {venueNames} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} searched={lastUpdatedAt !== null} {hasAmount} {showBelarusP2pWarning} {onOpenBelarusP2pWarning} onOpenSearchActivity={() => activityModalOpen = true} />
       </div>
     {/if}
@@ -1266,7 +1268,7 @@
   border: 1px solid rgba(255, 255, 255, 0.78);
   border-radius: var(--radius-card);
   background: rgba(255, 255, 252, 0.96);
-  box-shadow: var(--shadow-card);
+  box-shadow: none;
   backdrop-filter: blur(28px) saturate(145%);
   -webkit-backdrop-filter: blur(28px) saturate(145%);
   isolation: isolate;
@@ -1313,7 +1315,7 @@
 .modeTabs .modeActive {
   background: #fff;
   color: var(--color-text);
-  box-shadow: 0 3px 10px rgba(20, 23, 19, 0.07);
+  box-shadow: none;
 }
 
 .cardActions {
@@ -1385,7 +1387,7 @@
   border: 1px solid var(--color-border);
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.97);
-  box-shadow: var(--shadow-pop);
+  box-shadow: none;
   backdrop-filter: blur(24px);
   animation: popIn 0.18s ease;
 }
@@ -1680,7 +1682,7 @@
 .moneyPanel:hover,
 .moneyPanel:focus-within {
   border-color: var(--color-border-strong);
-  box-shadow: 0 10px 26px rgba(25, 28, 24, 0.05);
+  box-shadow: none; outline: 2px solid var(--color-focus); outline-offset: 2px;
 }
 
 .panelCopy {
@@ -1932,7 +1934,7 @@
   border-radius: 19px;
   background: var(--color-primary);
   color: #fff;
-  box-shadow: 0 12px 24px rgba(14, 16, 14, 0.16);
+  box-shadow: none;
   font-size: 14px;
   font-weight: 800;
   letter-spacing: -0.01em;
@@ -1946,7 +1948,7 @@
 
 .cta:hover:not(:disabled) {
   background: #050605;
-  box-shadow: 0 16px 30px rgba(14, 16, 14, 0.2);
+  box-shadow: none;
   transform: translateY(-1px);
 }
 
@@ -2046,7 +2048,7 @@
   border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: 30px;
   background: rgba(250, 250, 246, 0.97);
-  box-shadow: 0 35px 110px rgba(0, 0, 0, 0.3);
+  box-shadow: none;
 }
 
 .authBox::before {
@@ -2139,7 +2141,7 @@
 
 .textInput:focus {
   border-color: var(--color-violet);
-  box-shadow: 0 0 0 4px var(--color-violet-soft);
+  box-shadow: none; outline: 2px solid var(--color-focus); outline-offset: 2px;
 }
 
 .demoNote {
@@ -2164,7 +2166,7 @@
   border-radius: 16px;
   background: var(--color-primary);
   color: #fff;
-  box-shadow: 0 10px 24px rgba(14, 16, 14, 0.18);
+  box-shadow: none;
   font-size: 13px;
   font-weight: 800;
   transition: background 0.15s ease, transform 0.15s ease;
@@ -2914,7 +2916,7 @@
 :global(html[data-theme="dark"]) .card {
   border-color: var(--color-border-strong);
   background: rgba(25, 25, 25, 0.96);
-  box-shadow: var(--shadow-card);
+  box-shadow: none;
 }
 
 :global(html[data-theme="dark"]) .refreshButton:hover:not(:disabled),
@@ -2927,7 +2929,7 @@
 :global(html[data-theme="dark"]) .authBox {
   border-color: var(--color-border-strong);
   background: rgba(25, 25, 25, 0.98);
-  box-shadow: var(--shadow-pop);
+  box-shadow: none;
 }
 
 :global(html[data-theme="dark"]) .intentLabel {
@@ -2998,6 +3000,7 @@
   .modeTabs button { min-height: 44px; }
   .refreshButton, .exchangesButton, .settingsButton { width: 44px; height: 44px; }
   .panelToggles { height: 56px; }
+  .flowBridge { height: 44px; margin-block: 4px; }
   .chartToggle, .mobileRoutesToggle { height: 44px; }
   .refreshOptions { grid-template-columns: repeat(3, minmax(44px, 1fr)); gap: 8px; }
   .sourceOptions { gap: 8px; }

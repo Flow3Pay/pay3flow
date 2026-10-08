@@ -222,7 +222,7 @@
             <li animate:flip={{ duration: routeFlipDuration, easing: quintOut }} in:fly={{ y: 18, duration: routeEnterDuration(), easing: quintOut }}><div class="routeCardShell">
               <div class:routeBest={route.is_current_best} class:selected={route.route_id === selectedRouteId} class="routeCard" data-testid={complete ? "complete-route" : "partial-route"}>
               <button type="button" class="routeCardMain" disabled={!complete} aria-pressed={route.route_id === selectedRouteId} aria-label={`Select route ${index + 1}: ${money(route.target_amount_minor, route.target_currency, route.target_amount)}`} on:click={(event) => cardClick(event, route)}>
-                <span class="routeTopline"><span class="routeRank">#{String(index + 1).padStart(2, "0")}</span><span class="routeBadges">{#if route.is_current_best}<span class="bestBadge">{t("Best route", {}, $locale)}</span>{/if}{#if route.profitability}<span class={route.profitability.status === "confirmed" && route.profitability.net_profit_minor > 0 ? "bestBadge" : "deltaBadge"}>{profitLabel(route)}</span>{:else if !route.is_current_best}<span class="deltaBadge">{spreadLabel(route.spread_bps, $locale)}</span>{/if}</span></span>
+                <span class="routeTopline"><span class="routeRank">#{String(index + 1).padStart(2, "0")}</span><span class="routeBadges">{#if route.profitability}<span class={route.is_current_best ? "bestBadge" : "deltaBadge"}>{profitLabel(route)}</span>{:else if !route.is_current_best}<span class="deltaBadge">{spreadLabel(route.spread_bps, $locale)}</span>{/if}</span></span>
                 <span class="routeAmount">{money(route.target_amount_minor, route.target_currency, route.target_amount)}</span>
               </button>
               <div class="routeActionRow">
@@ -308,7 +308,7 @@
   border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: var(--radius-card);
   background: #1b1e1a;
-  box-shadow: 0 28px 75px rgba(22, 25, 21, 0.18);
+  box-shadow: none;
   color: #fff;
   isolation: isolate;
 }
@@ -347,8 +347,9 @@
   flex: 0 0 auto;
 }
 
-.activityButton { display: none; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; padding: 0; border: 1px solid #5d7732; border-radius: 9px; background: #40582a; cursor: pointer; }
-.activityButton:hover { background: #587839; }
+.activityButton { display: none; width: 32px; height: 32px; flex: 0 0 auto; place-items: center; padding: 0; border: 0; border-radius: 9px; background: transparent; color: var(--color-text-soft); cursor: pointer; }
+.activityButton img { display: block; width: 18px; height: 18px; object-fit: contain; filter: brightness(0); }
+:global(html[data-theme="dark"]) .activityButton img { filter: brightness(0) invert(1); }
 .activityButton:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
 @media (max-width: 980px) { .activityButton { display: grid; } }
 
@@ -429,7 +430,7 @@
 
 .foundVenueActive {
   border-color: #94dd00;
-  box-shadow: 0 0 0 2px rgba(148, 221, 0, 0.35);
+  box-shadow: none; outline: 2px solid var(--color-accent-strong); outline-offset: 2px;
 }
 
 .venueFilterClear {
@@ -467,7 +468,7 @@
   border: 1px solid var(--color-border-strong);
   border-radius: 14px;
   background: #fff;
-  box-shadow: 0 18px 42px rgba(20, 24, 18, 0.28);
+  box-shadow: none;
   color: var(--color-text);
   font-size: 12px;
   opacity: 0;
@@ -588,12 +589,12 @@
 
 .liveBadge i {
   background: var(--color-accent);
-  box-shadow: 0 0 0 4px rgba(185, 242, 39, 0.1);
+  box-shadow: none;
 }
 
 .searchBadge i {
   background: #a28dff;
-  box-shadow: 0 0 0 4px rgba(162, 141, 255, 0.1);
+  box-shadow: none;
   animation: pulse 1s ease-in-out infinite;
 }
 
@@ -609,15 +610,10 @@
   overflow-y: auto;
   overflow-anchor: none;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
   scrollbar-gutter: stable;
-  scrollbar-color: var(--color-text-faint) var(--color-panel);
   contain: layout paint;
   transform: translateZ(0);
 }
-
-.routeGroups::-webkit-scrollbar { width: 8px; }
-.routeGroups::-webkit-scrollbar-thumb { border-radius: 8px; background: var(--color-text-faint); }
 
 .routeGroups:focus-visible {
   outline: 2px solid var(--color-focus);
@@ -776,7 +772,7 @@
 
 .selected {
   border-color: var(--color-accent);
-  box-shadow: inset 0 0 0 1px var(--color-accent);
+  box-shadow: none;
 }
 
 .routeTopline,
@@ -1200,7 +1196,7 @@
   border-color: var(--color-border-strong);
   border-radius: var(--radius-card);
   background: rgba(255, 255, 255, 0.96);
-  box-shadow: var(--shadow-card);
+  box-shadow: none;
   color: var(--color-text);
 }
 
@@ -1231,11 +1227,11 @@
 }
 
 .liveBadge i {
-  box-shadow: 0 0 0 4px rgba(45, 142, 69, 0.1);
+  box-shadow: none;
 }
 
 .searchBadge i {
-  box-shadow: 0 0 0 4px rgba(117, 88, 246, 0.09);
+  box-shadow: none;
 }
 
 .routeList {
@@ -1432,7 +1428,7 @@
 :global(html[data-theme="dark"]) .panel {
   border-color: var(--color-border-strong);
   background: rgba(25, 25, 25, 0.96);
-  box-shadow: var(--shadow-card);
+  box-shadow: none;
 }
 
 :global(html[data-theme="dark"]) .routeCard,
@@ -1480,7 +1476,7 @@
 :global(html[data-theme="dark"]) .foundVenuePopover {
   border-color: #555b54;
   background: #2d302d;
-  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.56);
+  box-shadow: none;
   color: #f0f5ea;
 }
 

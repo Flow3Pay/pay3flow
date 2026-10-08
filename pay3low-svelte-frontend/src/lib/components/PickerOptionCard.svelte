@@ -62,7 +62,7 @@
     border: 2px solid rgba(255, 255, 255, 0.72);
     border-radius: 15px;
     color: #fff;
-    box-shadow: 0 6px 15px rgba(20, 23, 19, 0.14);
+    box-shadow: none;
     font-size: 12px;
     font-weight: 850;
     letter-spacing: 0.03em;

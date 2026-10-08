@@ -10,19 +10,88 @@
 
   const apiDocsHref = API_BASE_URL ? apiUrl("/scalar").toString() : "/scalar";
   let menuOpen = false;
+  let menuClosing = false;
+  let menuDragging = false;
+  let menuDrag = 0;
+  let menuMotion = 0;
   let menuPanel: HTMLDivElement;
   let menuToggle: HTMLButtonElement;
   $: activeLocale = $locale;
 
   async function openMenu() {
+    menuMotion += 1;
+    menuClosing = false;
+    menuDrag = 0;
     menuOpen = true;
     await tick();
     menuPanel.querySelector<HTMLButtonElement>("button")?.focus();
   }
   async function closeMenu() {
+    if (!menuOpen || menuClosing) return;
+    const motion = ++menuMotion;
+    menuDragging = false;
+    menuClosing = true;
+    await tick();
+    // Flush the closing style so we can wait for its real CSS transition.
+    getComputedStyle(menuPanel).transform;
+    await Promise.all(menuPanel.getAnimations().map((animation) => animation.finished.catch(() => {})));
+    if (motion !== menuMotion) return;
     menuOpen = false;
+    menuClosing = false;
+    menuDrag = 0;
     await tick();
     menuToggle?.focus();
+  }
+  function swipeMenu(node: HTMLElement) {
+    let start: { id: number; x: number; y: number; time: number } | null = null;
+    let swiping = false;
+    let suppressClick = false;
+    const down = (event: PointerEvent) => {
+      if (!menuOpen || menuClosing || event.pointerType === "mouse" || !event.isPrimary) return;
+      start = { id: event.pointerId, x: event.clientX, y: event.clientY, time: event.timeStamp };
+      swiping = false;
+      suppressClick = false;
+    };
+    const move = (event: PointerEvent) => {
+      if (!start || event.pointerId !== start.id) return;
+      const dx = event.clientX - start.x, dy = event.clientY - start.y;
+      if (!swiping) {
+        if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { start = null; return; }
+        if (dx >= -10 || Math.abs(dx) <= Math.abs(dy) * 1.2) return;
+        swiping = true;
+        menuDragging = true;
+        node.setPointerCapture(event.pointerId);
+      }
+      menuDrag = Math.min(0, dx);
+      suppressClick = true;
+    };
+    const end = (event: PointerEvent) => {
+      if (!start || event.pointerId !== start.id) return;
+      const dx = event.clientX - start.x;
+      const velocity = dx / Math.max(1, event.timeStamp - start.time);
+      const shouldClose = event.type !== "pointercancel" && swiping &&
+        (dx < -Math.min(90, node.clientWidth * .25) || (dx < -24 && velocity < -.5));
+      start = null;
+      menuDragging = false;
+      if (node.hasPointerCapture(event.pointerId)) node.releasePointerCapture(event.pointerId);
+      if (shouldClose) void closeMenu();
+      else menuDrag = 0;
+    };
+    const click = (event: MouseEvent) => {
+      if (suppressClick) { event.preventDefault(); event.stopPropagation(); suppressClick = false; }
+    };
+    node.addEventListener("pointerdown", down);
+    node.addEventListener("pointermove", move);
+    node.addEventListener("pointerup", end);
+    node.addEventListener("pointercancel", end);
+    node.addEventListener("click", click, true);
+    return { destroy() {
+      node.removeEventListener("pointerdown", down);
+      node.removeEventListener("pointermove", move);
+      node.removeEventListener("pointerup", end);
+      node.removeEventListener("pointercancel", end);
+      node.removeEventListener("click", click, true);
+    } };
   }
   function onKeyDown(event: KeyboardEvent) {
     if (!menuOpen) return;
@@ -63,7 +132,7 @@
         if (node.previousSibling !== anchor) anchor.after(node);
         unlockPage?.(); unlockPage = undefined;
         restoreBackground?.(); restoreBackground = undefined;
-        if (open) menuOpen = false;
+        if (open) { menuMotion += 1; menuOpen = false; menuClosing = false; menuDrag = 0; }
       }
     };
     place(); mobile.addEventListener("change", place);
@@ -89,9 +158,9 @@
   <div class="inner">
     <button class="menuToggle" bind:this={menuToggle} type="button" aria-haspopup="dialog" aria-controls="header-menu" aria-expanded={menuOpen} aria-label={t("Open menu", {}, activeLocale)} on:click={openMenu}><img src={menuIcon} alt="" width="24" height="24" /></button>
     <div class="brand"><img class="logo" src="/icons/assets/pay3flow_logo.svg" alt="" width="34" height="34" /><span class="wordmark">Pay3Flow</span></div>
-    <div class="actionsBackdrop" class:menuOpen use:portalActions={menuOpen} role="presentation" on:mousedown={closeOnBackdrop}>
-      <div id="header-menu" class="actionsPanel" bind:this={menuPanel} role={menuOpen ? "dialog" : undefined} aria-modal={menuOpen ? "true" : undefined} aria-label={menuOpen ? t("Menu", {}, activeLocale) : undefined}>
-        <div class="actionsHeader"><strong>{t("Menu", {}, activeLocale)}</strong><button type="button" class="menuClose" aria-label={t("Close menu", {}, activeLocale)} on:click={closeMenu}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button></div>
+    <div class="actionsBackdrop" class:menuOpen class:menuClosing use:portalActions={menuOpen} role="presentation" on:mousedown={closeOnBackdrop}>
+      <div id="header-menu" class="actionsPanel" class:menuDragging style:--menu-drag={`${menuDrag}px`} bind:this={menuPanel} use:swipeMenu role={menuOpen ? "dialog" : undefined} aria-modal={menuOpen ? "true" : undefined} aria-label={menuOpen ? t("Menu", {}, activeLocale) : undefined}>
+        <div class="actionsHeader"><strong>{t("Menu", {}, activeLocale)}</strong><button type="button" class="menuClose" aria-label={t("Close menu", {}, activeLocale)} on:click={closeMenu}><span aria-hidden="true">❯</span></button></div>
         <nav class="actions" aria-label={t("Menu", {}, activeLocale)}>
           <a class="apiDocsLink" href={apiDocsHref} target="_blank" rel="noreferrer noopener" aria-label={t("Open API documentation", {}, activeLocale)} on:click={closeMenu}>API DOCS</a>
           <a class="telegramLink" href="https://t.me/+-lq4m5E_aT4xM2Y6" target="_blank" rel="noreferrer noopener" aria-label={t("Open Pay3Flow Telegram channel", {}, activeLocale)} on:click={closeMenu}><img src="/icons/assets/telegram-messenger.png" alt="" width="20" height="20" /><span class="mobileActionLabel">Telegram</span></a>
@@ -137,15 +206,20 @@
   .menuToggle, .menuClose { display: grid; width: 44px; height: 44px; flex: 0 0 auto; place-items: center; border: 1px solid var(--color-border); border-radius: 9px; background: var(--color-panel); }
   .menuToggle img { filter: brightness(0); }
   :global(html[data-theme="dark"]) .menuToggle img { filter: brightness(0) invert(1); }
-  .actionsBackdrop { position: fixed; inset: 0; z-index: 1200; display: none; height: 100dvh; background: rgba(8, 11, 8, .52); touch-action: none; }
-  .actionsBackdrop.menuOpen { display: flex; }
-  .actionsPanel { display: block; width: min(320px, calc(100% - 48px)); height: 100%; overflow-y: auto; padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); border-right: 1px solid var(--color-border); background: var(--color-paper); touch-action: auto; animation: drawerIn .24s ease; }
+  .actionsBackdrop { position: fixed; inset: 0; z-index: 1200; display: flex; height: 100dvh; background: rgba(8, 11, 8, .52); touch-action: none; visibility: hidden; pointer-events: none; opacity: 0; transition: opacity .38s ease, visibility 0s .38s; }
+  .actionsBackdrop.menuOpen { visibility: visible; pointer-events: auto; opacity: 1; transition-delay: 0s; }
+  .actionsBackdrop.menuClosing { opacity: 0; pointer-events: none; }
+  .actionsPanel { display: block; width: min(320px, calc(100% - 48px)); height: 100%; overflow-y: auto; padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); border-right: 1px solid var(--color-border); background: var(--color-paper); touch-action: pan-y; transform: translateX(calc(-100% - 1px)); transition: transform .38s cubic-bezier(.22, 1, .36, 1); }
+  .menuOpen .actionsPanel { transform: translateX(var(--menu-drag, 0px)); }
+  .menuClosing .actionsPanel { transform: translateX(calc(-100% - 1px)); }
+  .actionsPanel.menuDragging { transition: none; }
+  .menuClose { border: 0; background: transparent; color: var(--color-text-soft); }
+  .menuClose span { display: block; font-size: 21px; line-height: 1; -webkit-text-stroke: .55px currentColor; transform: rotate(180deg); }
   .actionsHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 16px; border-bottom: 1px solid var(--color-border); }
   .actionsHeader strong { font-size: 16px; }
   .actions { display: grid; gap: 12px; padding-top: 20px; }
   .githubLink, .telegramLink, .apiDocsLink { display: flex; width: 100%; height: 48px; align-items: center; gap: 12px; padding: 0 12px; font-size: 14px; }
   .mobileActionLabel { display: inline; }
 }
-@keyframes drawerIn { from { transform: translateX(-100%); } to { transform: translateX(0); } }
-@media (prefers-reduced-motion: reduce) { .actionsPanel { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .actionsPanel, .actionsBackdrop { transition: none; } }
 </style>

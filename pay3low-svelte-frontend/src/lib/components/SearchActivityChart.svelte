@@ -96,7 +96,7 @@
 </section>
 
 <style>
-  .activityCard { display: flex; min-width: 0; min-height: 0; flex-direction: column; gap: 6px; padding: 16px 18px 12px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-card); background: rgba(255,255,255,.96); box-shadow: var(--shadow-card); color: var(--color-text); }
+  .activityCard { display: flex; min-width: 0; min-height: 0; flex-direction: column; gap: 6px; padding: 16px 18px 12px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-card); background: rgba(255,255,255,.96); box-shadow: none; color: var(--color-text); }
   .activityHeading { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
   .headingCopy { display: flex; min-width: 0; flex-direction: column; gap: 1px; }
   .activityHeading small { color: var(--color-text-faint); font-size: 12px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
@@ -111,7 +111,7 @@
   .periodButton:hover, .periodButton[aria-expanded="true"] { border-color: var(--color-text-soft); }
   .periodButton img { width: 18px; height: 18px; object-fit: contain; filter: brightness(0); }
   :global(html[data-theme="dark"]) .periodButton img { filter: none; }
-  .periodMenu { position: absolute; z-index: 10; top: calc(100% + 7px); right: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; width: 216px; padding: 8px; border: 1px solid var(--color-border-strong); border-radius: 10px; background: var(--color-panel); box-shadow: var(--shadow-card); }
+  .periodMenu { position: absolute; z-index: 10; top: calc(100% + 7px); right: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; width: 216px; padding: 8px; border: 1px solid var(--color-border-strong); border-radius: 10px; background: var(--color-panel); box-shadow: none; }
   .periodMenu button { min-height: 34px; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--color-text); font: inherit; font-size: 12px; font-weight: 650; text-align: left; cursor: pointer; }
   .periodMenu button:hover { background: var(--color-border-strong); }
   .periodMenu button.current, .periodMenu button.current:hover { background: var(--color-accent); color: #171717; }
