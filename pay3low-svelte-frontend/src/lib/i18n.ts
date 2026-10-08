@@ -11,6 +11,7 @@ const messages: Record<Locale, Record<string, string>> = {
     "Not rated": "Без оценки",
     "How to find a route": "Как найти маршрут",
     "Start with Bridge": "Начните с Bridge",
+    "Close guide": "Закрыть гайд",
     "Enter an amount": "Введите сумму",
     "Your route starts here": "Теперь можно искать маршрут",
 
@@ -465,6 +466,7 @@ const messages: Record<Locale, Record<string, string>> = {
     "Not rated": "Առանց գնահատականի",
     "How to find a route": "Ինչպես գտնել երթուղի",
     "Start with Bridge": "Սկսեք Bridge-ից",
+    "Close guide": "Փակել ուղեցույցը",
     "Enter an amount": "Մուտքագրեք գումարը",
     "Your route starts here": "Այժմ կարող եք որոնել երթուղի",
 
