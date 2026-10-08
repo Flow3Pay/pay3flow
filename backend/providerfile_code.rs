@@ -111,6 +111,7 @@ pub fn normalize_path_source(contents: &str) -> Result<Cow<'_, str>, String> {
             section = match trimmed.split('#').next().unwrap_or_default().trim() {
                 "[code]" => Some("code"),
                 "[test]" => Some("test"),
+                "[review_code]" => Some("review_code"),
                 _ => None,
             };
         } else if let Some(section) = section {

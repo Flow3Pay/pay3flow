@@ -46,7 +46,7 @@
     dragStartY = event.clientY;
     dragDistance = 0;
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-    dragDialog = (event.currentTarget as HTMLElement).parentElement as HTMLDivElement;
+    dragDialog = (event.currentTarget as HTMLElement).closest('[role="dialog"]') as HTMLDivElement;
   }
   function moveDrag(event: PointerEvent) {
     if (!dragging) return;
@@ -76,9 +76,11 @@
 
 <div class="backdrop" role="presentation" on:mousedown={backdrop}>
   <div class:dragging class="dialog" bind:this={dialog} role="dialog" aria-modal="true" aria-label={t("Searches for this exchange", {}, $locale)} tabindex="-1">
-    <button type="button" class="sheetHandle" aria-label={t("Close search activity", {}, $locale)} on:pointerdown={startDrag} on:pointermove={moveDrag} on:pointerup={endDrag} on:pointercancel={cancelDrag} on:keydown={(event) => { if (event.key === "Enter" || event.key === " ") onClose(); }}><span aria-hidden="true"></span></button>
+
     <button type="button" class="close" on:click={onClose} aria-label={t("Close search activity", {}, $locale)}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button>
-    <SearchActivityChart {sourceCurrency} {targetCurrency} {hours} {period} {onPeriodChange} onOpenPeriodPicker={openPeriodPicker} {periodPickerOpen} {loading} {error} />
+    <SearchActivityChart {sourceCurrency} {targetCurrency} {hours} {period} {onPeriodChange} onOpenPeriodPicker={openPeriodPicker} {periodPickerOpen} {loading} {error}>
+      {#snippet sheetHandle()}<button type="button" class="sheetHandle" aria-label={t("Close search activity", {}, $locale)} on:click={() => { if (dragDistance < 8) onClose(); }} on:pointerdown={startDrag} on:pointermove={moveDrag} on:pointerup={endDrag} on:pointercancel={cancelDrag} on:keydown={(event) => { if (event.key === "Enter" || event.key === " ") onClose(); }}><span aria-hidden="true"></span></button>{/snippet}
+    </SearchActivityChart>
   </div>
   {#if periodPickerOpen}
     <div class="periodBackdrop" role="presentation" on:mousedown={closePeriodPicker}>
@@ -112,10 +114,11 @@
     .backdrop { align-items: end; padding: 0; background: rgba(8, 11, 8, .52); backdrop-filter: none; }
     .dialog { width: 100%; max-height: 86dvh; border-radius: 20px 20px 0 0; overflow: hidden; transform: translateY(var(--sheet-drag, 0px)); transition: transform .24s ease; animation: sheetIn .28s cubic-bezier(.22, 1, .36, 1); }
     .dialog.dragging { transition: none; }
-    .sheetHandle { display: flex; width: 100%; height: 30px; align-items: center; justify-content: center; touch-action: none; }
-    .sheetHandle span { width: 38px; height: 5px; border-radius: 999px; background: var(--color-border-strong); }
+    .sheetHandle { display: flex; width: 100%; min-height: 44px; padding: 0; border: 0; background: transparent; align-items: center; justify-content: center; touch-action: none; cursor: pointer; }
+    .sheetHandle span { width: 44px; height: 5px; border-radius: 999px; background: var(--color-text-soft); }
     .close { display: none; }
-    :global(.dialog .activityCard) { border-radius: 20px 20px 0 0; padding: 16px 18px 24px; }
+    :global(.dialog .activityCard) { border-radius: 20px 20px 0 0; padding: 4px 18px 24px; }
+    :global(.dialog .activityHeading) { padding-right: 0; }
     :global(.dialog .mainPlot) { height: 155px; }
   }
   @keyframes sheetIn { from { transform: translateY(100%); } to { transform: translateY(0); } }

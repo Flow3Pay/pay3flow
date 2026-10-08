@@ -34,6 +34,10 @@ steps = [
   "Submit the swap only after checking the network one more time, then wait for the destination transaction to complete.",
 ]
 
+[[guidance.review_sources]]
+kind = "trustpilot"
+url = "https://www.trustpilot.com/review/symbiosis.finance"
+
 [[guidance.links]]
 label = "Open Symbiosis WebApp"
 url = "https://app.symbiosis.finance/"
@@ -45,3 +49,7 @@ url = "https://docs.symbiosis.finance/main-concepts/symbiosis-cross-chain-swaps"
 [[guidance.links]]
 label = "Symbiosis fees and troubleshooting"
 url = "https://docs.symbiosis.finance/user-guide-webapp/where-are-my-tokens-troubleshooting-guide"
+
+[review_code]
+language = "rust"
+source = { path = "reviews.rs" }

@@ -14,6 +14,7 @@ use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 use tracing::Level;
 
 use crate::core::state::AppState;
+use crate::external_reviews;
 use crate::market_prices;
 use crate::server::openapi;
 use crate::server::routing::{
@@ -136,6 +137,14 @@ pub fn router(state: AppState) -> Router {
         .route("/api/banks", get(banks::list))
         .route("/api/networks", get(networks::list))
         .route("/api/market-prices", get(market_prices::market_prices))
+        .route(
+            "/api/reviews/providers/:slug",
+            get(external_reviews::provider_reviews),
+        )
+        .route(
+            "/api/reviews/profile",
+            get(external_reviews::profile_reviews),
+        )
         .route("/api/market-values", post(market_prices::market_values))
         .route("/api/p2p/search", get(p2p::search))
         .route("/api/p2p/routes", get(p2p::routes))

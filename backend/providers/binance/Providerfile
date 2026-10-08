@@ -115,3 +115,8 @@ timeout_ms = 10000
 symbol_pointer = "/symbol"
 bid_pointer = "/bidPrice"
 ask_pointer = "/askPrice"
+
+[review_code]
+language = "rust"
+source = { path = "reviews.rs" }
+profile_host = "c2c.binance.com"

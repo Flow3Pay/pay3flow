@@ -80,3 +80,15 @@ source_url_template = "https://www.bncex.com/en"
 kind = "quote_dependent"
 description = "The live calculator quote includes bncex's amount-tiered exchange percentage and selected network fee. Bank or card charges may be separate."
 docs_url = "https://www.bncex.com/en"
+
+[guidance]
+description = "Check the current bncex rate, network, and payout amount before exchanging."
+
+[[guidance.review_sources]]
+kind = "yandex-maps"
+url = "https://yandex.com/maps/org/bncex/149025252431/reviews/"
+
+
+[review_code]
+language = "rust"
+source = { path = "reviews.rs" }

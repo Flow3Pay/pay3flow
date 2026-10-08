@@ -1,6 +1,8 @@
 <script lang="ts">
+  import type { Snippet } from "svelte";
   import { LayerCake, Svg } from "layercake";
   import { locale, t } from "$lib/i18n";
+  import { fiatFlagUrl } from "$lib/currency-flags";
   import { assetIcon } from "$lib/icons";
   import { SEARCH_ACTIVITY_PERIOD_LABELS, SEARCH_ACTIVITY_PERIODS, type RouteSearchActivityHour, type SearchActivityPeriod } from "$lib/route-activity";
   import ActivityLine from "./ActivityLine.svelte";
@@ -14,10 +16,10 @@
   export let periodPickerOpen = false;
   export let loading = false;
   export let error = false;
+  export let sheetHandle: Snippet | undefined = undefined;
 
   let periodMenuOpen = false;
   let periodMenu: HTMLDivElement;
-  const fiatMarks: Record<string, string> = { AMD: "🇦🇲", RUB: "🇷🇺", BYN: "🇧🇾", UAH: "🇺🇦", KZT: "🇰🇿", USD: "🇺🇸", EUR: "🇪🇺" };
   function closeOnOutsideClick(event: MouseEvent) {
     if (periodMenuOpen && periodMenu && !periodMenu.contains(event.target as Node)) periodMenuOpen = false;
   }
@@ -54,25 +56,18 @@
 <svelte:window on:click={closeOnOutsideClick} on:keydown={closeOnEscape} />
 
 <section class="activityCard" data-testid="search-activity" aria-label={t("Searches for this exchange", {}, $locale)} aria-busy={loading}>
+  {@render sheetHandle?.()}
   <div class="activityHeading">
     <div class="headingCopy"><small>{t("Search activity", {}, $locale)}</small><strong>{t("Searches for this exchange", {}, $locale)}</strong></div>
     <div class="headingActions">
       <span class="pair">
         <span class="pairCurrency">
-          {#if fiatMarks[sourceCurrency.toUpperCase()]}
-            <span class="pairFlag" aria-hidden="true">{fiatMarks[sourceCurrency.toUpperCase()]}</span>
-          {:else}
-            <img src={assetIcon(sourceCurrency)} alt="" width="16" height="16" aria-hidden="true" />
-          {/if}
+          <img src={fiatFlagUrl(sourceCurrency) ?? assetIcon(sourceCurrency)} alt="" width="16" height="16" aria-hidden="true" />
           {sourceCurrency}
         </span>
         <span aria-hidden="true">→</span>
         <span class="pairCurrency">
-          {#if fiatMarks[targetCurrency.toUpperCase()]}
-            <span class="pairFlag" aria-hidden="true">{fiatMarks[targetCurrency.toUpperCase()]}</span>
-          {:else}
-            <img src={assetIcon(targetCurrency)} alt="" width="16" height="16" aria-hidden="true" />
-          {/if}
+          <img src={fiatFlagUrl(targetCurrency) ?? assetIcon(targetCurrency)} alt="" width="16" height="16" aria-hidden="true" />
           {targetCurrency}
         </span>
       </span>
@@ -105,17 +100,17 @@
   .pair { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 5px; padding: 5px 8px; border-radius: 6px; background: var(--color-panel); color: var(--color-text-soft); font-size: 12px; font-weight: 750; }
   .pairCurrency { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
   .pairCurrency img { display: block; width: 16px; height: 16px; border-radius: 50%; object-fit: cover; }
-  .pairFlag { font-size: 15px; line-height: 1; }
   .periodWrap { position: relative; flex: 0 0 auto; }
-  .periodButton { display: grid; width: 30px; height: 30px; place-items: center; padding: 0; border: 1px solid var(--color-border-strong); border-radius: 7px; background: var(--color-panel); cursor: pointer; }
-  .periodButton:hover, .periodButton[aria-expanded="true"] { border-color: var(--color-text-soft); }
+  .periodButton { display: grid; width: 32px; height: 32px; place-items: center; padding: 0; border: 0; border-radius: 9px; background: transparent; cursor: pointer; }
+  .periodButton:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+  @media (max-width: 980px), (pointer: coarse) { .periodButton { width: 44px; height: 44px; } .headingActions { margin-right: -6px; } }
   .periodButton img { width: 18px; height: 18px; object-fit: contain; filter: brightness(0); }
   :global(html[data-theme="dark"]) .periodButton img { filter: none; }
   .periodMenu { position: absolute; z-index: 10; top: calc(100% + 7px); right: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; width: 216px; padding: 8px; border: 1px solid var(--color-border-strong); border-radius: 10px; background: var(--color-panel); box-shadow: none; }
   .periodMenu button { min-height: 34px; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--color-text); font: inherit; font-size: 12px; font-weight: 650; text-align: left; cursor: pointer; }
   .periodMenu button:hover { background: var(--color-border-strong); }
   .periodMenu button.current, .periodMenu button.current:hover { background: var(--color-accent); color: #171717; }
-  @media (max-width: 420px) { .activityHeading { align-items: flex-start; } .headingActions { gap: 4px; } .pair { gap: 3px; padding-inline: 5px; font-size: 12px; } .pairCurrency { gap: 3px; } .pairCurrency img { width: 14px; height: 14px; } .pairFlag { font-size: 13px; } .activityHeading strong { font-size: 12px; } }
+  @media (max-width: 420px) { .activityHeading { align-items: flex-start; } .headingActions { gap: 4px; } .pair { gap: 3px; padding-inline: 5px; font-size: 12px; } .pairCurrency { gap: 3px; } .pairCurrency img { width: 14px; height: 14px; } .activityHeading strong { font-size: 12px; } }
   .activityStats { display: flex; align-items: baseline; gap: 5px; color: var(--color-text-faint); font-size: 12px; }
   .activityStats strong { color: var(--color-text); font-size: 18px; line-height: 1; }
   .mainPlot { position: relative; height: 74px; flex: 1 1 74px; min-height: 74px; }

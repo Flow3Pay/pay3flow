@@ -20,6 +20,8 @@
   import CurrencyPicker from "./CurrencyPicker.svelte";
   import NetworkPicker from "./NetworkPicker.svelte";
 
+  export let onPaymentMethodsLoaded: (items: PaymentMethod[]) => void = () => {};
+  export let onProvidersLoaded: (items: ProviderDefinition[]) => void = () => {};
   export let onBelarusP2pWarningChange: (show: boolean) => void = () => {};
   export let onOpenBelarusP2pWarning: () => void = () => {};
 
@@ -159,10 +161,12 @@
       introOverlayElement.style.setProperty("--intro-y", `${heading.top + heading.height / 2 - window.innerHeight / 2}px`);
     };
     cleanupIntro = () => {
+      document.documentElement.classList.remove("introPlaying");
       window.removeEventListener("resize", positionIntro);
       if (frame !== undefined) window.cancelAnimationFrame(frame);
       if (timer !== undefined) window.clearTimeout(timer);
     };
+    document.documentElement.classList.add("introPlaying");
     introPlaying = true;
     void tick().then(() => {
       if (!introPlaying) return;
@@ -978,6 +982,7 @@
     fetchNetworks().then((items) => { if (items.length) networks = items; }).catch(() => {});
     fetchPaymentMethods().then((items) => {
       paymentMethods = items;
+      onPaymentMethodsLoaded(items);
       if (shared) {
         sourceMethodId = sharedMethod(items, shared.sourceCurrency, "sender", sourceMethodId)?.id ?? sourceMethodId;
         targetMethodId = sharedMethod(items, shared.targetCurrency, "recipient", targetMethodId)?.id ?? targetMethodId;
@@ -985,6 +990,7 @@
     }).catch((cause: Error) => error ??= cause.message).finally(() => { methodsReady = true; markUrlReady(); });
     fetchProviders().then((providers) => {
       p2pSources = providerSources(providers);
+      onProvidersLoaded(providers);
       foundVenues = foundVenueOptions();
       venueNames = Object.fromEntries(p2pSources.map((provider) => [provider.id.toLowerCase(), provider.label]));
       providerGuidance = Object.fromEntries(
@@ -1094,7 +1100,7 @@
       <div class="moneyPanel moneyPanelSource">
         <div class="panelCopy"><label for="exchange-amount">{t("You send", {}, activeLocale)}</label><input id="exchange-amount" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedSourceAmount} on:focus={(event) => event.currentTarget.select()} on:input={(event) => updateAmount(event.currentTarget.value)} aria-label={t("Amount to send", {}, activeLocale)} />{#if marketUsd.source !== null}<span class="marketValue" aria-label={t("Approximate USD market value", {}, activeLocale)}>{formatMarketUsd(marketUsd.source)}</span>{/if}</div>
         <div class="methodControls">
-          <button type="button" class="methodTrigger" on:click={() => void openMethodPicker("source")} aria-label={`Select sending ${methodNoun(sourceMethod)}: ${sourceMethod ? methodTitle(sourceMethod) : "none"}`}>
+          <button type="button" class="methodTrigger" data-tooltip={sourceMethod?.kind === "wallet" ? `${sourceCurrencyChoice} · ${t(sourceMethod.name, {}, activeLocale)}` : t(methodTitle(sourceMethod), {}, activeLocale)} on:click={() => void openMethodPicker("source")} aria-label={`Select sending ${methodNoun(sourceMethod)}: ${sourceMethod ? methodTitle(sourceMethod) : "none"}`}>
             <span class="methodAvatar" style:background-color={paymentMethodFavicon(sourceMethod) ? "transparent" : sourceMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(sourceMethod)}<img src={paymentMethodFavicon(sourceMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{:else}<span>{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{/if}</span>
             <span class="methodText" class:methodTextAsset={sourceMethod?.kind === "wallet"}><strong>{t(methodTitle(sourceMethod), {}, activeLocale)}</strong></span><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
           </button>
@@ -1106,7 +1112,7 @@
       <div class="moneyPanel moneyPanelTarget">
         <div class="panelCopy"><label for="exchange-output">{t("Recipient gets", {}, activeLocale)}</label><input id="exchange-output" class:amountOutputEmpty={!previewRoute && amountSide !== "target"} class="amountInput amountOutput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedTargetAmount} on:focus={(event) => event.currentTarget.select()} on:input={(event) => updateTargetAmount(event.currentTarget.value)} aria-label={t("Amount to receive", {}, activeLocale)} />{#if marketUsd.target !== null}<span class="marketValue" aria-label={t("Approximate USD market value", {}, activeLocale)}>{formatMarketUsd(marketUsd.target)}</span>{/if}</div>
         <div class="methodControls">
-          <button type="button" class="methodTrigger" on:click={() => void openMethodPicker("target")} aria-label={`Select recipient ${methodNoun(targetMethod)}: ${targetMethod ? methodTitle(targetMethod) : "none"}`}>
+          <button type="button" class="methodTrigger" data-tooltip={targetMethod?.kind === "wallet" ? `${targetCurrencyChoice} · ${t(targetMethod.name, {}, activeLocale)}` : t(methodTitle(targetMethod), {}, activeLocale)} on:click={() => void openMethodPicker("target")} aria-label={`Select recipient ${methodNoun(targetMethod)}: ${targetMethod ? methodTitle(targetMethod) : "none"}`}>
             <span class="methodAvatar" style:background-color={paymentMethodFavicon(targetMethod) ? "transparent" : targetMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(targetMethod)}<img src={paymentMethodFavicon(targetMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{:else}<span>{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{/if}</span>
             <span class="methodText" class:methodTextAsset={targetMethod?.kind === "wallet"}><strong>{t(methodTitle(targetMethod), {}, activeLocale)}</strong></span><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
           </button>
@@ -3000,7 +3006,7 @@
   .modeTabs button { min-height: 44px; }
   .refreshButton, .exchangesButton, .settingsButton { width: 44px; height: 44px; }
   .panelToggles { height: 56px; }
-  .flowBridge { height: 44px; margin-block: 4px; }
+  .flowBridge { height: 44px; margin: 10px 0 4px; }
   .chartToggle, .mobileRoutesToggle { height: 44px; }
   .refreshOptions { grid-template-columns: repeat(3, minmax(44px, 1fr)); gap: 8px; }
   .sourceOptions { gap: 8px; }

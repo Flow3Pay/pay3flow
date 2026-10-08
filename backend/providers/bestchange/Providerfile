@@ -551,7 +551,9 @@ fn catalog(
         .changers
         .into_iter()
         .map(|changer| {
-            let profile_url = changer.pages.get(language).cloned();
+            let profile_url = changer.pages.get(language).map(|url| {
+                format!("{url}#pay3flow-id={}", changer.id)
+            });
             (
                 changer.id,
                 CatalogChanger {
@@ -1030,3 +1032,8 @@ affiliate_id = "1345467"
 language = "ru"
 timeout_ms = 10000
 max_results = 100
+
+[review_code]
+language = "rust"
+source = { path = "reviews.rs" }
+profile_hosts = ["www.bestchange.com", "www.bestchange.pro", "www.bestchange.net"]

@@ -310,3 +310,7 @@ input { min-height: 32px; }
   ::-webkit-scrollbar-track,
   ::-webkit-scrollbar-corner { background: Canvas; }
 }
+
+/* The entrance hides only the scrollbar; page scrolling remains available. */
+html.introPlaying, html.introPlaying body { scrollbar-width: none; }
+html.introPlaying::-webkit-scrollbar, html.introPlaying body::-webkit-scrollbar { display: none; }

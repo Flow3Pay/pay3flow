@@ -1,6 +1,7 @@
 exchange_methods = ["p2p", "exchanger"]
 
 [guidance]
+profile_reviews_available = false
 description = "Bybit P2P results are public advertisements. Confirm that the same offer is still available in Bybit before ordering."
 steps = ["Match the advertiser and advertisement ID, then verify the amount, price, limits, and payment method in Bybit."]
 buy_steps = ["Follow the payment details in the active Bybit order and mark it paid only after sending the transfer."]

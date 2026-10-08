@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import type { PaymentMethod } from "$lib/payment-methods";
+  import type { ProviderDefinition } from "$lib/exchange";
   import Header from "$lib/components/Header.svelte";
   import Converter from "$lib/components/Converter.svelte";
   import HomeOverview from "$lib/components/HomeOverview.svelte";
@@ -8,6 +10,8 @@
   import { generatePuzzleBackground } from "$lib/puzzle-background";
   import { localize, locale, t } from "$lib/i18n";
   let shell: HTMLDivElement;
+  let paymentMethods: PaymentMethod[] = [];
+  let providerCatalog: ProviderDefinition[] = [];
   let showBelarusP2pWarning = false;
   let belarusP2pWarningOpen = false;
   $: copy = homeContent[$locale];
@@ -58,8 +62,8 @@
 <div class="appShell" bind:this={shell} use:localize>
   <Header />
   <main>
-    <Converter onBelarusP2pWarningChange={(show) => showBelarusP2pWarning = show} onOpenBelarusP2pWarning={() => belarusP2pWarningOpen = true} />
-    <HomeOverview />
+    <Converter onPaymentMethodsLoaded={(items) => paymentMethods = items} onProvidersLoaded={(items) => providerCatalog = items} onBelarusP2pWarningChange={(show) => showBelarusP2pWarning = show} onOpenBelarusP2pWarning={() => belarusP2pWarningOpen = true} />
+    <HomeOverview {paymentMethods} {providerCatalog} />
   </main>
   <footer class="siteFooter"><span>Pay3Flow</span><span>{t("Live routing infrastructure · Public market estimates", {}, $locale)}</span><a href="/terms">{t("Usage policy", {}, $locale)}</a></footer>
 </div>

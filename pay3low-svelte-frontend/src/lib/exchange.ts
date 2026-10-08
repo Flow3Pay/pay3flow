@@ -51,6 +51,43 @@ export interface ProviderGuidance {
   buy_steps?: string[];
   sell_steps?: string[];
   links: Array<{ label: string; url: string }>;
+  review_sources?: Array<{ kind: string; url: string }>;
+  profile_reviews_available?: boolean;
+}
+
+export interface ExternalReview {
+  id: string;
+  author: string;
+  text: string;
+  rating: number | null;
+  created_at: string | null;
+  url: string;
+  avatar_url?: string | null;
+}
+
+export interface ExternalReviewSnapshot {
+  source_url: string;
+  fetched_at: string | null;
+  reviews: ExternalReview[];
+}
+
+export function fetchProviderReviews(slug: string, signal?: AbortSignal): Promise<ExternalReviewSnapshot> {
+  return request(`/api/reviews/providers/${encodeURIComponent(slug)}`, { signal });
+}
+
+const profileReviewRequests = new Map<string, Promise<ExternalReviewSnapshot>>();
+
+export function fetchProfileReviews(url: string, signal?: AbortSignal, refresh = false): Promise<ExternalReviewSnapshot> {
+  const cached = refresh ? undefined : profileReviewRequests.get(url);
+  if (cached) return cached;
+  const pending = request<ExternalReviewSnapshot>(`/api/reviews/profile?url=${encodeURIComponent(url)}`, { signal })
+    .catch((error) => { profileReviewRequests.delete(url); throw error; });
+  profileReviewRequests.set(url, pending);
+  return pending;
+}
+
+export function preloadProfileReviews(url: string): Promise<ExternalReviewSnapshot> {
+  return fetchProfileReviews(url);
 }
 
 export interface ProviderFeeModel {

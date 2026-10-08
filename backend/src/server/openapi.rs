@@ -676,6 +676,24 @@ const OPERATIONS: &[Operation] = &[
         false,
     ),
     (
+        "/api/reviews/providers/{slug}",
+        "get",
+        "Provider customer reviews",
+        "Return cached written reviews from the provider's configured public review sources.",
+        "Catalogs",
+        false,
+        false,
+    ),
+    (
+        "/api/reviews/profile",
+        "get",
+        "Advertiser customer reviews",
+        "Return written reviews for a supported public advertiser profile. The url query parameter identifies the profile.",
+        "Catalogs",
+        false,
+        false,
+    ),
+    (
         "/api/providers",
         "get",
         "List providers",
@@ -1201,6 +1219,13 @@ fn extra_parameters(path: &str, method: &str) -> Vec<Value> {
             "name": "count_activity", "in": "query", "required": false,
             "description": "Set true for a user-initiated search; false for automatic route refresh.",
             "schema": { "type": "boolean", "default": false }
+        }));
+    }
+    if path == "/api/reviews/profile" && method == "get" {
+        parameters.push(json!({
+            "name": "url", "in": "query", "required": true,
+            "description": "Supported public advertiser profile URL.",
+            "schema": { "type": "string", "format": "uri" }
         }));
     }
     if path == "/api/exchange/orders" && method == "get" {

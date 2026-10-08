@@ -46,6 +46,14 @@ pub struct ProviderLink {
     pub url: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderReviewSource {
+    /// Review collector kind, such as `trustpilot`, `otzovik`, or `forum`.
+    pub kind: String,
+    pub url: String,
+}
+
 /// User-facing provider information sourced from Providerfiles.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -59,6 +67,21 @@ pub struct ProviderGuidance {
     pub sell_steps: Vec<String>,
     #[serde(default)]
     pub links: Vec<ProviderLink>,
+    #[serde(default)]
+    pub review_sources: Vec<ProviderReviewSource>,
+    /// Whether a P2P profile has a configured written-review collector.
+    #[serde(
+        default = "profile_reviews_available_by_default",
+        skip_serializing_if = "profile_reviews_are_available"
+    )]
+    pub profile_reviews_available: bool,
+}
+
+fn profile_reviews_available_by_default() -> bool {
+    true
+}
+fn profile_reviews_are_available(value: &bool) -> bool {
+    *value
 }
 
 #[derive(Debug, Clone, Serialize)]

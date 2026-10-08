@@ -81,3 +81,8 @@ ask_pointer = "/askPr"
 success_pointer = "/code"
 success_value = "00000"
 error_pointer = "/msg"
+
+[review_code]
+language = "rust"
+source = { path = "reviews.rs" }
+profile_host = "www.bitget.com"

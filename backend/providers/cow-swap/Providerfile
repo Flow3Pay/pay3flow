@@ -23,3 +23,15 @@ banks = []
 kind = "quote_dependent"
 description = "No universal fixed protocol percentage: market-order costs are included in the live quote; liquidity, gas, and optional partner fees can affect execution."
 docs_url = "https://docs.cow.fi/cow-protocol"
+
+[guidance]
+description = "Check the current CoW Swap quote and transaction details in the official app."
+
+[[guidance.review_sources]]
+kind = "trustscores"
+url = "https://trustscores.org/companies/defi/swap.cow.fi"
+
+
+[review_code]
+language = "rust"
+source = { path = "reviews.rs" }

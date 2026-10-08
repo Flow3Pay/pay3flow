@@ -31,6 +31,7 @@ struct RawProviderFile {
     guidance: Option<ProviderGuidance>,
     code: Option<RawCodeBlock>,
     test: Option<TestBlock>,
+    review_code: Option<RawReviewCodeBlock>,
     #[serde(default)]
     payment_methods: Vec<RawPaymentMethod>,
 }
@@ -40,6 +41,16 @@ struct RawProviderFile {
 struct RawCodeBlock {
     language: String,
     source: CodeSource,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawReviewCodeBlock {
+    language: String,
+    source: CodeSource,
+    profile_host: Option<String>,
+    #[serde(default)]
+    profile_hosts: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -226,6 +237,43 @@ fn parse_document_with_path(
                 .load(path)
                 .map_err(|error| ProviderFileError(format!("{source_file}: {error}")))?;
         }
+    }
+    if let Some(code) = &raw.review_code {
+        if code.language != "rust" {
+            return Err(ProviderFileError(format!(
+                "{source_file}: [review_code].language must be \"rust\""
+            )));
+        }
+        code.source
+            .validate()
+            .map_err(|error| ProviderFileError(format!("{source_file}: {error}")))?;
+        if let Some(path) = providerfile_path {
+            code.source
+                .load(path)
+                .map_err(|error| ProviderFileError(format!("{source_file}: {error}")))?;
+        }
+        for host in code.profile_host.iter().chain(code.profile_hosts.iter()) {
+            if host.is_empty()
+                || host.len() > 253
+                || !host
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-'))
+            {
+                return Err(ProviderFileError(format!(
+                    "{source_file}: [review_code] profile hosts must be DNS hosts"
+                )));
+            }
+        }
+    }
+    if raw
+        .guidance
+        .as_ref()
+        .is_some_and(|guidance| !guidance.review_sources.is_empty())
+        && raw.review_code.is_none()
+    {
+        return Err(ProviderFileError(format!(
+            "{source_file}: configured review sources require [review_code]"
+        )));
     }
 
     if let Some(adapter) = &raw.adapter {
@@ -678,6 +726,36 @@ fn normalize_guidance(
         if !link.url.starts_with("https://") && !link.url.starts_with("http://") {
             return Err(ProviderFileError(format!(
                 "guidance/links/{index}/url must use http or https"
+            )));
+        }
+    }
+    if guidance.review_sources.len() > 2 {
+        return Err(ProviderFileError(
+            "guidance/review_sources supports at most two sources per provider".into(),
+        ));
+    }
+    for (index, source) in guidance.review_sources.iter_mut().enumerate() {
+        source.kind = source.kind.trim().to_ascii_lowercase();
+        source.url = source.url.trim().to_string();
+        if source.kind.is_empty()
+            || source.kind.len() > 32
+            || !source
+                .kind
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+        {
+            return Err(ProviderFileError(format!(
+                "guidance/review_sources/{index}/kind must be a lowercase source identifier"
+            )));
+        }
+        let url = reqwest::Url::parse(&source.url).map_err(|_| {
+            ProviderFileError(format!(
+                "guidance/review_sources/{index}/url must use https"
+            ))
+        })?;
+        if url.scheme() != "https" || url.host_str().is_none() {
+            return Err(ProviderFileError(format!(
+                "guidance/review_sources/{index}/url must be a valid review URL"
             )));
         }
     }

@@ -72,3 +72,15 @@ symbol_remove = "-"
 success_pointer = "/success"
 success_value = "true"
 error_pointer = "/message"
+
+[guidance]
+description = "Check the current Cifra Markets quote and account requirements before trading."
+
+[[guidance.review_sources]]
+kind = "rustore"
+url = "https://www.rustore.ru/catalog/app/by.ciframarkets.app/reviews"
+
+
+[review_code]
+language = "rust"
+source = { path = "reviews.rs" }

@@ -4,6 +4,7 @@
   import type { ProviderGuidance, RouteCandidate, ServiceLink } from "$lib/exchange";
   import { locale, t } from "$lib/i18n";
   import AdvertiserCard from "./AdvertiserCard.svelte";
+  import ExternalReviews from "./ExternalReviews.svelte";
   import RouteExecutionPanel from "./RouteExecutionPanel.svelte";
 
   export let route: RouteCandidate;
@@ -22,6 +23,8 @@
     ...(guide?.steps ?? []),
     ...(side === "buy" ? guide?.buy_steps ?? [] : guide?.sell_steps ?? []),
   ];
+  const reviewSourceName = (kind: string) => ({ trustpilot: "Trustpilot", trustscores: "TrustScores", otzovik: "Otzovik", forum: "Bits.media", bestchange: "BestChange", "yandex-maps": "Yandex Maps", rustore: "RuStore", provider: "Provider" } as Record<string, string>)[kind] ?? kind;
+  const canLoadProfileReviews = (url: string | null | undefined, guide: ProviderGuidance | null | undefined) => Boolean(url) && guide?.profile_reviews_available !== false;
   const readableNetwork = (value: string) => networkNames[value.toLowerCase()] ?? value.replace(/-/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
   const readablePath = (path: string[]) => path.map((part) => {
     const [asset, network] = part.split("@", 2);
@@ -130,6 +133,14 @@
   };
 </script>
 
+{#snippet providerReviews(provider: string | null | undefined, profileUrl: string | null | undefined, guide: ProviderGuidance | null | undefined, direct: boolean)}
+  {#if direct && guide?.review_sources?.[0]}
+    <ExternalReviews provider={provider ?? null} sourceUrl={guide.review_sources[0].url} sourceName={reviewSourceName(guide.review_sources[0].kind)} />
+  {:else if canLoadProfileReviews(profileUrl, guide)}
+    <ExternalReviews profileUrl={profileUrl ?? null} sourceName={venueName(provider)} />
+  {/if}
+{/snippet}
+
 <div class="backdrop" role="presentation" on:mousedown={backdrop}>
   <div class:dragging class="modal" bind:this={modal} role="dialog" aria-modal="true" aria-labelledby="route-instructions-title" tabindex="-1">
     <button type="button" class="sheetHandle" aria-label={copy("Close instructions by dragging down")} on:pointerdown={startSheetDrag} on:pointermove={moveSheetDrag} on:pointerup={endSheetDrag} on:pointercancel={endSheetDrag}><span aria-hidden="true"></span></button>
@@ -153,6 +164,7 @@
             {#if guide}
               <div class="providerGuide"><p>{guide.description}</p>{#if guide.steps.length}<ul class="checklist">{#each guide.steps as step}<li>{step}</li>{/each}</ul>{/if}{#if guide.links.length}<div class="guideLinks">{#each guide.links as link}<a href={link.url} target="_blank" rel="noreferrer noopener" class="profileLink">{link.label} <span>↗</span></a>{/each}</div>{/if}</div>
             {/if}
+            {@render providerReviews(leg.provider, legUrl, guide, true)}
             {#if legUrl}<a href={legUrl} target="_blank" rel="noreferrer noopener" class="profileLink">{copy("Open {venue}", { venue: venueName(leg.provider) })} <span>↗</span></a>{/if}
           </div></li>
         {/each}
@@ -174,6 +186,7 @@
             <li>{copy("Never send money after the quote expires. Get a new quote first.")}</li>
           </ul>
           {#if route.route_provider_url}<a href={route.route_provider_url} target="_blank" rel="noreferrer noopener" class="profileLink">{copy("Open {venue}", { venue: venueName(route.route_provider) })} <span>↗</span></a>{/if}
+          {@render providerReviews(route.route_provider, route.route_provider_url, routeGuide, true)}
           <RouteExecutionPanel {route} />
         </div></li>
       {/if}
@@ -233,6 +246,7 @@
             </div>
           {/if}
           <AdvertiserCard offer={route.entry_offer_snapshot} label={entryDirect ? copy("Direct exchange on {venue}", { venue: entryVenue }) : `${cryptoToCrypto ? copy("Buyer") : copy("Seller")} ${copy("on {venue}", { venue: entryVenue })}`} serviceLink={linkFor("entry")} {venueNames} {onOpenService} />
+          {@render providerReviews(entry?.provider ?? route.entry_offer_snapshot.source, route.entry_offer_snapshot.advertiser_profile_url, entryGuide, entryDirect)}
         </div></li>
       {/if}
       {#if providerSwap}
@@ -253,6 +267,7 @@
             <li>{copy("Wait until the new balance appears before considering this step finished.")}</li>
           </ul>
           {#if route.route_provider_url}<a href={route.route_provider_url} target="_blank" rel="noreferrer noopener" class="profileLink">{copy("Open {venue}", { venue: venueName(route.route_provider) })} <span>↗</span></a>{/if}
+          {@render providerReviews(route.route_provider, route.route_provider_url, routeGuide, true)}
           <RouteExecutionPanel {route} />
         </div></li>
       {/if}
@@ -294,6 +309,7 @@
             </div>
           {/if}
           <AdvertiserCard offer={route.exit_offer_snapshot} label={exitDirect ? copy("Direct exchange on {venue}", { venue: exitVenue }) : `${cryptoToCrypto ? copy("Seller") : copy("Buyer")} ${copy("on {venue}", { venue: exitVenue })}`} serviceLink={linkFor("exit")} {venueNames} {onOpenService} />
+          {@render providerReviews(exit?.provider ?? route.exit_offer_snapshot.source, route.exit_offer_snapshot.advertiser_profile_url, exitGuide, exitDirect)}
         </div></li>
       {/if}
     </ol>

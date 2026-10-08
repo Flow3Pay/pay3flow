@@ -76,7 +76,6 @@
   $: visiblePendingVenues = pendingVenues.slice(0, 5);
   $: hasHiddenPendingVenues = pendingVenues.length > visiblePendingVenues.length;
   $: circularSearch = sourceCurrency.toUpperCase() === targetCurrency.toUpperCase();
-  $: hasConfirmedProfit = routes.some((route) => route.profitability?.status === "confirmed" && route.profitability.net_profit_minor > 0);
   $: if (`${sourceCurrency}:${targetCurrency}` !== lastPair) {
     lastPair = `${sourceCurrency}:${targetCurrency}`;
     selectedVenueId = null;
@@ -188,7 +187,6 @@
         {/if}
         {#if hasAmount && renderingRoutes}<small class="resultLimit" data-testid="route-render-progress">Showing {routes.length} now · loading more…</small>{/if}
         {#if selectedVenueId}<button type="button" class="venueFilterClear" on:click={() => selectedVenueId = null}>Showing {visibleRoutes.length} from {selectedVenueName} · Show all</button>{/if}
-        {#if circularSearch && routes.length > 0 && !hasConfirmedProfit && !searching}<small class="resultLimit" data-testid="no-profitable-routes">No confirmed profitable route right now; showing the best available cycles.</small>{/if}
       </div>
       <div class="panelActions">
         {#if sourceCurrency && targetCurrency}
@@ -1543,10 +1541,27 @@
 :global(html[data-theme="dark"]) .venueFilterClear,
 :global(html[data-theme="dark"]) .foundVenuePopover .venueOk { color: var(--color-accent-text); }
 @media (max-width: 980px), (pointer: coarse) {
-  .activityButton, .legalWarning, .foundVenue { width: 44px; height: 44px; }
+  .activityButton, .legalWarning { width: 44px; height: 44px; }
+  .panelActions { margin-right: -4px; }
+  .foundVenues { gap: 12px; padding: 6px 0; }
+  .foundVenue { width: 32px; height: 32px; }
+  .foundVenueButton { position: absolute; width: 44px; height: 44px; min-width: 44px; min-height: 44px; }
   .serviceVote button { min-width: 44px; min-height: 44px; }
-  .routeActionRow { flex-wrap: wrap; gap: 12px; }
-  .routeWorkflowButton { flex-basis: 100%; }
+  .routeCard { gap: 12px; padding: 12px; }
+  .routeTopline { align-items: start; gap: 8px; }
+  .routeBadges { flex: 1; min-width: 0; justify-content: flex-end; }
+  .bestBadge, .deltaBadge { max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: right; line-height: 1.45; }
+  .routeAmount { max-width: 100%; font-size: clamp(22px, 6vw, 28px); overflow-wrap: anywhere; }
+  .routeActionRow { flex-direction: column; align-items: stretch; gap: 10px; }
+  .routeWorkflowButton { width: 100%; flex: initial; }
+  .routeFeedback { justify-content: flex-end; padding-top: 8px; border-top: 1px solid var(--color-border); }
+  .routeVote { gap: 8px; padding: 0; border: 0; background: transparent; }
+  .workflowPart { width: 100%; gap: 8px; }
+  .workflowControl { flex: 1; }
+  .workflowPart:first-child { padding-left: 28px; }
+  .workflowArrow { width: 20px; flex: 0 0 20px; }
+  .workflowVenue { min-width: 0; margin-left: auto; }
+  .workflowVenue strong { max-width: 110px; }
   .workflow { flex-wrap: wrap; gap: 8px; }
   .workflow:has(> .workflowPart:nth-child(2):last-child) { flex-wrap: wrap; }
   .workflowIcon, .workflowNetworkIcon, .workflowVenueIcon { width: 16px; height: 16px; }

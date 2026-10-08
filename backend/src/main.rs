@@ -191,6 +191,7 @@ async fn main() -> anyhow::Result<()> {
     // Provider refresh work is paced independently from interactive searches:
     // at most five observations run at once, with at most 25 started per minute.
     state.p2p.start_background_warmup();
+    pay3flow_backend::external_reviews::start_background_sync(state.pool.clone());
 
     tracing::info!(
         actor = %cfg.ap_origin,

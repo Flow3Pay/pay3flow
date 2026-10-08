@@ -33,7 +33,13 @@ async function expectPeriodButtonBesidePair(chart: Locator) {
     if (dialog) await Promise.all(dialog.getAnimations().map((animation) => animation.finished.catch(() => {})));
   });
   await expect(chart.locator(".pairCurrency")).toHaveCount(2);
-  await expect(chart.locator(".pairCurrency img, .pairCurrency .pairFlag")).toHaveCount(2);
+  await expect(chart.locator(".periodButton")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(chart.locator(".periodButton")).toHaveCSS("border-top-width", "0px");
+  await expect(chart.locator(".pairCurrency img")).toHaveCount(2);
+  for (const icon of await chart.locator(".pairCurrency img").all()) {
+    await expect(icon).toHaveAttribute("src", /^\/icons\/(flags|assets)\//);
+    await expect.poll(() => icon.evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth > 0)).toBe(true);
+  }
   const pair = await chart.locator(".pair").boundingBox();
   const button = await chart.getByRole("button", { name: "Chart time range" }).boundingBox();
   expect(pair).not.toBeNull();
@@ -332,7 +338,10 @@ test("mobile sheets cover the viewport and the graph closes by dragging its hand
 
   await page.getByRole("button", { name: "Open search activity graph" }).click();
   const graph = page.getByRole("dialog", { name: "Searches for this exchange" });
-  await expect(graph.locator(".sheetHandle")).toBeVisible();
+  await expect(graph.getByTestId("search-activity").locator(".sheetHandle")).toBeVisible();
+  const handleAppearance = await graph.locator(".sheetHandle").evaluate((element) => ({ height: element.getBoundingClientRect().height, marker: getComputedStyle(element.querySelector("span")!).backgroundColor }));
+  expect(handleAppearance.height).toBeGreaterThanOrEqual(44);
+  expect(handleAppearance.marker).not.toBe("rgba(0, 0, 0, 0)");
   await expect(graph.locator(".close")).toBeHidden();
   await graph.evaluate(async (element) => {
     await Promise.all(element.getAnimations().map((animation) => animation.finished));
@@ -476,10 +485,14 @@ test("original entrance animates the slogan and cleans up resize after docking",
   await page.goto("/");
   const intro = page.locator(".introOverlay");
   await expect(intro).toBeVisible();
+  await expect(page.locator("html")).toHaveClass(/introPlaying/);
+  await expect(page.locator("html")).toHaveCSS("scrollbar-width", "none");
   await expect(page.locator(".workspace")).toBeVisible();
   await expect(intro.locator(".introMarker")).toHaveCount(1);
   await expect(intro.locator(".introWordMore")).toHaveCSS("opacity", "1");
   await expect(intro).toHaveCount(0, { timeout: 6000 });
+  await expect(page.locator("html")).not.toHaveClass(/introPlaying/);
+  await expect(page.locator("html")).toHaveCSS("scrollbar-width", "auto");
   await page.setViewportSize({ width: 1024, height: 900 });
   await page.setViewportSize({ width: 393, height: 851 });
   await expect(page.locator(".hero h1")).toHaveText("Move money. Keep more.");
@@ -501,7 +514,7 @@ async function chooseCrypto(page: Page, side: "sending" | "recipient", search: s
   return picker;
 }
 
-async function mockBackend(page: Page, options: { includeNewProviders?: boolean; routeCount?: number; spotCycle?: boolean } = {}) {
+async function mockBackend(page: Page, options: { includeNewProviders?: boolean; routeCount?: number; spotCycle?: boolean; reviews?: boolean } = {}) {
   await page.addInitScript(() => {
     if (!localStorage.getItem("pay3flow-locale")) localStorage.setItem("pay3flow-locale", "en");
   });
@@ -607,6 +620,13 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
         { slug: "near-intents", name: "NEAR 1Click Sell", side: "sell", source_url: "https://1click.chaindefuser.com", currencies: ["BTC", "USDT"], banks: [], searchable: true, search_mode: "selectable" },
         { slug: "id-pay", name: "ID Pay Live Sell", side: "sell", source_url: "https://id-pay.ru/", currencies: ["AMD", "RUB"], banks: [], searchable: true, search_mode: "selectable" },
       ];
+      if (options.reviews) {
+        for (const provider of providers) {
+          if (["cow-swap", "near-intents"].includes(String(provider.slug))) {
+            provider.guidance = { description: "Review the provider before exchanging.", steps: [], links: [], review_sources: [{ kind: "trustscores", url: `https://trustscores.org/companies/${provider.slug}` }] };
+          }
+        }
+      }
       if (options.includeNewProviders) {
         providers.push(
           { slug: "bitcoin-center", name: "Bitcoin Center Buy", side: "buy", source_url: "https://www.bitcoincenter.am", currencies: ["AMD"], banks: ["Bank Transfer"], searchable: true, search_mode: "selectable" },
@@ -650,6 +670,7 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
           completion_rate_30d: 0.99 as number | null,
         },
         source_url: `https://example.com/${adId}`,
+        advertiser_profile_url: options.reviews ? `https://c2c.binance.com/en/advertiserDetail?advertiserNo=${adId}` : null,
       });
       if (url.searchParams.get("source_fiat") === "AMD" && url.searchParams.get("target_fiat") === "AMD") {
         expect(url.searchParams.get("source_payment_method")).toBe("Ameriabank");
@@ -1439,21 +1460,15 @@ test("RUB to RUB bank routes require checking the order payment method", async (
 
 test("AMD cycle keeps the best route visible when profit is unconfirmed", async ({ page }) => {
   await mockBackend(page);
+  await page.addInitScript(() => localStorage.setItem("pay3flow.exchange.target-method", "am-idbank"));
   await openApp(page);
-
-  await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
-  const targetPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
-  await targetPicker.getByLabel("Search banks and payment methods").fill("IDBank");
-  await targetPicker.getByRole("option", { name: /IDBank/ }).click();
 
   await page.getByLabel("Amount to send").fill("10000");
   await page.getByTestId("start-search").click();
 
   await expect(page.getByTestId("complete-route")).toHaveCount(1);
   await expect(page.getByTestId("complete-route").first()).toContainText("-100 AMD (-1.00%)");
-  await expect(page.getByTestId("no-profitable-routes")).toHaveText(
-    "No confirmed profitable route right now; showing the best available cycles.",
-  );
+  await expect(page.getByTestId("no-profitable-routes")).toHaveCount(0);
 });
 
 test("cross-venue instructions include a numbered transfer step", async ({ page }) => {
@@ -2451,6 +2466,18 @@ test("icon tooltips work on hover and keyboard focus without clipping", async ({
   await page.keyboard.press("Tab");
   await button.focus();
   await expect(tooltip).toHaveText("Route refresh settings");
+  await page.keyboard.press("Escape");
+  const picker = await chooseCrypto(page, "sending", "USDT ERC20");
+  await picker.getByRole("option", { name: /Ethereum \(ERC-20\).*USDT/ }).click();
+  const asset = page.getByRole("button", { name: "Select sending asset: USDT", exact: true });
+  await asset.hover();
+  await expect(tooltip).toContainText("USDT");
+  await expect(tooltip).toContainText("Tether");
+  await page.mouse.move(0, 0);
+  await page.getByLabel("Amount to send").focus();
+  await page.keyboard.press("Tab");
+  await expect(asset).toBeFocused();
+  await expect(tooltip).toContainText("USDT");
 });
 
 for (const theme of ["light", "dark"] as const) {
@@ -2580,4 +2607,69 @@ test("mobile menu animates closed with its inward arrow and a leftward touch swi
   await expect(menu).toHaveCount(0);
   await expect(toggle).toBeFocused();
   await expect(page.locator(".appShell")).not.toHaveAttribute("inert", "");
+});
+
+
+test("route instructions load provider reviews for every cycle step", async ({ page }) => {
+  await mockBackend(page, { reviews: true });
+  const requests: string[] = [];
+  await page.route("**/api/reviews/providers/*", async (request) => {
+    const provider = new URL(request.request().url()).pathname.split("/").pop()!;
+    requests.push(provider);
+    await request.fulfill({ contentType: "application/json", body: JSON.stringify({
+      source_url: `https://trustscores.org/companies/${provider}`,
+      fetched_at: "2026-10-08T12:00:00Z",
+      reviews: Array.from({ length: 7 }, (_, index) => ({
+        id: `${provider}-${index}`, author: `Reviewer ${index + 1}`, text: `${provider} review ${index + 1}`,
+        rating: 5, created_at: "2026-10-01T12:00:00Z", url: `https://trustscores.org/companies/${provider}`,
+      })),
+    }) });
+  });
+  await openApp(page);
+  for (const side of ["sending", "recipient"] as const) {
+    const picker = await chooseCrypto(page, side, "USDT ERC20");
+    await picker.getByRole("option", { name: /Ethereum \(ERC-20\).*USDT/ }).click();
+  }
+  await page.getByLabel("Amount to send").fill("100");
+  await page.getByTestId("start-search").click();
+  await page.locator(".routeCard").first().locator(".workflow").click();
+  const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
+  const reviews = instructions.getByRole("region", { name: "Customer reviews" });
+  await expect(reviews).toHaveCount(2);
+  await expect(reviews.first()).toContainText("cow-swap review 1");
+  await expect(reviews.last()).toContainText("near-intents review 1");
+  await expect(reviews.first().locator(".review")).toHaveCount(5);
+  await reviews.first().getByRole("button", { name: /Show 10 more reviews/ }).click();
+  await expect(reviews.first().locator(".review")).toHaveCount(7);
+  expect(requests.sort()).toEqual(["cow-swap", "near-intents"]);
+  await instructions.getByRole("button", { name: "Close instructions", exact: true }).click();
+  await expect(instructions).toBeHidden();
+});
+
+
+test("P2P instructions restore written advertiser reviews", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("pay3flow.exchange.source-method", "am-idbank");
+    localStorage.setItem("pay3flow.exchange.target-method", "ru-alfabank");
+  });
+  await mockBackend(page, { reviews: true });
+  const profiles: string[] = [];
+  await page.route("**/api/reviews/profile?*", async (request) => {
+    const profile = new URL(request.request().url()).searchParams.get("url")!;
+    profiles.push(profile);
+    const id = new URL(profile).searchParams.get("advertiserNo")!;
+    await request.fulfill({ contentType: "application/json", body: JSON.stringify({
+      source_url: profile, fetched_at: "2026-10-08T12:00:00Z",
+      reviews: [{ id, author: "Customer", text: `Written feedback for ${id}`, rating: 5, created_at: null, url: profile }],
+    }) });
+  });
+  await openApp(page);
+  await page.getByLabel("Amount to send").fill("100000");
+  await page.getByTestId("start-search").click();
+  await page.getByTestId("complete-route").first().locator(".workflow").click();
+  const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
+  const reviews = instructions.getByRole("region", { name: "Customer reviews" });
+  await expect(reviews).toHaveCount(2);
+  for (const section of await reviews.all()) await expect(section).toContainText("Written feedback for");
+  expect(new Set(profiles).size).toBe(2);
 });

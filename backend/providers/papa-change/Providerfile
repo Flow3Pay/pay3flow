@@ -32,3 +32,19 @@ max_results = 100
 kind = "included_in_quote"
 description = "The live rate includes Papa Change's direction commission and public amount-tiered rate; payment-system and blockchain fees may still apply."
 docs_url = "https://papa-change.biz/agreement"
+
+[guidance]
+description = "Check the current exchange amount and payout details in Papa Change."
+
+[[guidance.review_sources]]
+kind = "bestchange"
+url = "https://bestchange.biz/papa-change-exchanger"
+
+[[guidance.review_sources]]
+kind = "provider"
+url = "https://papa-change.biz/#reviews"
+
+
+[review_code]
+language = "rust"
+source = { path = "reviews.rs" }

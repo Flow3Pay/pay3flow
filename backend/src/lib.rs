@@ -4,9 +4,13 @@ pub mod config;
 pub mod compiled_provider_code {
     include!(concat!(env!("OUT_DIR"), "/provider_code.rs"));
 }
+pub mod compiled_review_code {
+    include!(concat!(env!("OUT_DIR"), "/provider_reviews.rs"));
+}
 pub mod core;
 pub mod db;
 pub mod exchange;
+pub mod external_reviews;
 pub mod market_prices;
 pub mod networks;
 pub mod observability;

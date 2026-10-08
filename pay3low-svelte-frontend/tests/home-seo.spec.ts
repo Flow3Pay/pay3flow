@@ -12,7 +12,7 @@ test("server HTML contains Russian product content, canonical and brand metadata
     expect(html).toContain("Переводите деньги.");
     expect(html).toContain("Сохраняйте больше.");
     expect(html.match(/<h1\b/g)).toHaveLength(1);
-    expect(html).toContain("Как считаются и сравниваются предложения");
+    expect(html).toContain("Как найти маршрут");
     expect(html).toContain("Binance, Bybit, OKX, Bitget");
     expect(html).toContain("армянский драм (AMD)");
     expect(html).toMatch(/<title>Pay3Flow — сравнение маршрутов обмена валют и криптовалют<\/title>/);

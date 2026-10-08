@@ -84,3 +84,8 @@ value = "trusted"
 pointer = "/merchant/p2pLevel"
 operator = "equals_ci"
 value = "premium"
+
+[review_code]
+language = "rust"
+source = { path = "reviews.rs" }
+profile_host = "rapira.net"

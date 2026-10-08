@@ -57,3 +57,19 @@ source_url_template = "https://whitebird.io/exchanger"
 kind = "included_in_quote"
 description = "The effective Pay3Flow rate uses Whitebird's final quoted input and output amounts, which already reflect the input and output fee amounts returned by the live quote API."
 docs_url = "https://whitebird.io/exchanger"
+
+[guidance]
+description = "Open Whitebird and check the final exchange details before continuing."
+
+[[guidance.review_sources]]
+kind = "otzovik"
+url = "https://otzovik.com/reviews/whitebird_io-krupneyshaya_legalnaya_kriptoplatforma/"
+
+[[guidance.review_sources]]
+kind = "forum"
+url = "https://forum.bits.media/index.php?/topic/175604-whitebirdio/"
+
+
+[review_code]
+language = "rust"
+source = { path = "reviews.rs" }

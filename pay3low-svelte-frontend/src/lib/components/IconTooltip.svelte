@@ -44,7 +44,7 @@
     trigger = node;
     previousDescription = node.getAttribute("aria-describedby");
     previousTitle = node.getAttribute("title");
-    label = node.getAttribute("aria-label") || previousTitle || "";
+    label = node.getAttribute("data-tooltip") || node.getAttribute("aria-label") || previousTitle || "";
     node.removeAttribute("title");
     node.setAttribute("aria-describedby", [previousDescription, id].filter(Boolean).join(" "));
     await tick();
@@ -56,7 +56,7 @@
     if (!node || node.matches(":disabled") || node.closest(".foundVenue") || node.matches(".sheetHandle, .periodHandle")) return null;
     // Text-labelled controls already explain themselves. Icon buttons and compact
     // language/currency controls need the longer accessible name on hover/focus.
-    return (node.textContent?.trim().length ?? 0) <= 3 ? node : null;
+    return node.hasAttribute("data-tooltip") || (node.textContent?.trim().length ?? 0) <= 3 ? node : null;
   }
   onMount(() => {
     const over = (event: PointerEvent) => {

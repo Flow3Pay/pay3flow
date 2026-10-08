@@ -489,3 +489,15 @@ banks = []
 kind = "quote_dependent"
 description = "Fees and the guaranteed output are returned by each live NEAR Intents quote and may differ from other providers."
 docs_url = "https://docs.near-intents.org/near-intents"
+
+[guidance]
+description = "Check the current NEAR Intents quote and destination before sending funds."
+
+[[guidance.review_sources]]
+kind = "trustpilot"
+url = "https://www.trustpilot.com/review/near.com"
+
+
+[review_code]
+language = "rust"
+source = { path = "reviews.rs" }

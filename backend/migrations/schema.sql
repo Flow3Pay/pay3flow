@@ -808,3 +808,10 @@ CREATE TABLE IF NOT EXISTS exchange_consents (
 
 CREATE INDEX IF NOT EXISTS exchange_consents_order_idx
     ON exchange_consents (order_id, accepted_at);
+
+CREATE TABLE IF NOT EXISTS external_review_cache (
+    subject_key TEXT PRIMARY KEY,
+    source_url TEXT NOT NULL,
+    reviews JSONB NOT NULL DEFAULT '[]'::JSONB,
+    fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

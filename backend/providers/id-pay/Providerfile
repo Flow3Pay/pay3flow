@@ -167,3 +167,15 @@ banks = []
 kind = "quote_dependent"
 description = "ID Pay advertises commission-free transfers for supported corridors; confirm the live rate and any card or bank charges before sending."
 docs_url = "https://id-pay.ru/tariff/"
+
+[guidance]
+description = "Check the live ID Pay conversion rate and transfer details before confirming."
+
+[[guidance.review_sources]]
+kind = "provider"
+url = "https://id-pay.ru/#feedback"
+
+
+[review_code]
+language = "rust"
+source = { path = "reviews.rs" }

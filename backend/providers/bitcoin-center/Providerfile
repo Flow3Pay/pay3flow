@@ -81,3 +81,14 @@ source_url_is_exact = true
 kind = "quote_dependent"
 description = "The effective Pay3Flow rate includes Bitcoin Center's fixed output fee reported by the live route API; bank and blockchain charges may still apply."
 docs_url = "https://www.bitcoincenter.am/en/?from=WIREAMD&to=USDTSOL"
+
+[guidance]
+description = "Check the current exchange terms in Bitcoin Center before paying."
+
+[[guidance.review_sources]]
+kind = "trustpilot"
+url = "https://www.trustpilot.com/review/bitcoincenter.am"
+
+[review_code]
+language = "rust"
+source = { path = "reviews.rs" }
