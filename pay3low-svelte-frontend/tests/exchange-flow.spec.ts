@@ -70,8 +70,8 @@ test("main exchange share copies settings and restores them in a fresh browser",
   await trigger.click();
   const dialog = page.getByRole("dialog", { name: "Share exchange", exact: true });
   await expect(dialog).toBeVisible();
-  await expect(dialog.locator(".sharePair img").last()).toHaveAttribute("src", "/icons/flags/kz.svg");
-  await expect(dialog).toContainText("Kaspi.kz");
+  await expect(dialog.locator(".sharePreview")).toHaveAttribute("src", /share-image\.png.*from=USDT&to=KZT/);
+  await expect.poll(() => dialog.locator(".sharePreview").evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(1200);
   await expect.poll(() => page.locator(".appShell").evaluate((node) => (node as HTMLElement).inert)).toBe(true);
   await expect(dialog.getByRole("button", { name: "Close share dialog" })).toBeFocused();
   await page.keyboard.press("Shift+Tab");
@@ -79,8 +79,8 @@ test("main exchange share copies settings and restores them in a fresh browser",
   await dialog.getByRole("button", { name: "Copy link" }).click();
   await expect(dialog.getByRole("button", { name: "Link copied" })).toBeVisible();
   const link = await page.evaluate(() => sessionStorage.getItem("test.exchange-share"));
-  expect(link).toContain("/#/swap/USDT/KZT?");
-  const params = new URLSearchParams(new URL(link!).hash.split("?")[1]);
+  expect(link).toContain("/swap/USDT/KZT?");
+  const params = new URL(link!).searchParams;
   expect(Object.fromEntries(params)).toMatchObject({ amount: "287.0062069", from: "global-usdt", to: "kz-kaspi", fromNetwork: "tron", sources: "bybit", methods: "p2p", assets: "USDC" });
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
@@ -2991,6 +2991,35 @@ test("guide URL restores banks and selected operations in a fresh browser", asyn
   await expect(page.getByTestId("route-guide")).toHaveCount(0);
   await page.goForward();
   await expect(page.getByTestId("route-guide")).toBeVisible();
+});
+
+test("exchange share exposes a bridge card to messengers without JavaScript", async ({ request, browser, baseURL }) => {
+  const path = "/swap/AMD/RUB?amount=100000&receive=20350&from=am-idbank&to=ru-alfabank&sources=bybit&methods=p2p&lang=ru&execution_token=excluded";
+  const response = await request.get(path);
+  expect(response.ok()).toBe(true);
+  const html = await response.text();
+  expect(html).toContain("100000 AMD → 20350 RUB");
+  expect(html).toContain('property="og:image"');
+  expect(html).toContain('property="og:image:width" content="1200"');
+  expect(html).toContain('name="twitter:card" content="summary_large_image"');
+  expect(html).not.toContain("execution_token");
+  const imageUrl = html.match(/property="og:image" content="([^"]+)"/)![1].replaceAll("&amp;", "&");
+  const image = await request.get(imageUrl);
+  expect(image.headers()["content-type"]).toBe("image/png");
+  const png = await image.body();
+  const sharp = (await import("sharp")).default;
+  expect(await sharp(png).metadata()).toMatchObject({ width: 1200, height: 630, format: "png" });
+  const other = await request.get("/share-image.png?from=ETH&to=BYN&amount=1&receive=840.11");
+  expect((await other.body()).equals(png)).toBe(false);
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  try {
+    const page = await context.newPage();
+    await page.goto(new URL(path, baseURL).toString());
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("100000 AMD → 20350 RUB");
+    await expect(page.getByRole("link", { name: "Открыть обмен" })).toHaveAttribute("href", /#\/swap\/AMD\/RUB\?amount=100000&from=am-idbank&to=ru-alfabank/);
+  } finally { await context.close(); }
+  const legacy = await request.get("/swap/USDT/KZT?amount=125&sm=global-usdt&tm=kz-kaspi&sn=tron&modes=p2p");
+  expect(await legacy.text()).toContain("from=global-usdt");
 });
 
 test("guide share exposes server metadata and a route-specific PNG", async ({ request }) => {

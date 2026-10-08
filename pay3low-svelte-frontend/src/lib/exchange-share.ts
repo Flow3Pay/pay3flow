@@ -1,3 +1,5 @@
+import { guideParameters } from "./guide-link";
+
 export type ExchangeShareState = {
   source: string;
   target: string;
@@ -25,5 +27,38 @@ export function exchangeShareUrl(origin: string, state: ExchangeShareState, lang
     if (state[key].length) params.set(key, state[key].join(','));
   }
   params.set('lang', language);
-  return `${origin}/#/swap/${encodeURIComponent(state.source)}/${encodeURIComponent(state.target)}?${params}`;
+  const receive = shareAmount(state.receive);
+  if (receive) params.set('receive', receive);
+  return `${origin}/swap/${encodeURIComponent(state.source)}/${encodeURIComponent(state.target)}?${params}`;
+}
+
+export function shareCurrency(value: string) {
+  return /^[a-z0-9._-]{1,20}$/i.test(value) ? value.toUpperCase() : null;
+}
+export function shareAmount(value: string | null) {
+  const normalized = value?.replace(',', '.');
+  return normalized && normalized.length <= 30 && /^\d+(?:\.\d+)?$/.test(normalized) && Number(normalized) > 0 ? normalized : null;
+}
+export function exchangeShareParameters(input: URLSearchParams) {
+  const normalized = new URLSearchParams(input);
+  for (const [oldKey, key] of [['sm', 'from'], ['tm', 'to'], ['sn', 'fromNetwork'], ['tn', 'toNetwork'], ['modes', 'methods']]) {
+    if (!normalized.has(key) && normalized.has(oldKey)) normalized.set(key, normalized.get(oldKey)!);
+  }
+  const params = guideParameters(normalized);
+  params.delete('path'); params.delete('venues');
+  const amount = shareAmount(params.get('amount'));
+  if (amount) params.set('amount', amount); else params.delete('amount');
+  const receive = shareAmount(input.get('receive'));
+  if (receive) params.set('receive', receive);
+  return params;
+}
+export function exchangeShareImage(origin: string, source: string, target: string, params: URLSearchParams) {
+  const image = new URL('/share-image.png', origin);
+  image.searchParams.set('v', 'bridge-4');
+  image.searchParams.set('from', source); image.searchParams.set('to', target);
+  for (const key of ['amount', 'receive']) {
+    const value = shareAmount(params.get(key));
+    if (value) image.searchParams.set(key, value);
+  }
+  return image.toString();
 }
