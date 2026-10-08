@@ -1,11 +1,12 @@
 <script lang="ts">
-  import type { Snippet } from "svelte";
+  import { tick, type Snippet } from "svelte";
   import { LayerCake, Svg } from "layercake";
   import { locale, t } from "$lib/i18n";
   import { fiatFlagUrl } from "$lib/currency-flags";
   import { assetIcon } from "$lib/icons";
-  import { SEARCH_ACTIVITY_PERIOD_LABELS, SEARCH_ACTIVITY_PERIODS, type RouteSearchActivityHour, type SearchActivityPeriod } from "$lib/route-activity";
+  import { SEARCH_ACTIVITY_PERIOD_LABELS, type RouteSearchActivityHour, type SearchActivityPeriod } from "$lib/route-activity";
   import ActivityLine from "./ActivityLine.svelte";
+  import ChartPeriodOptions from "./ChartPeriodOptions.svelte";
 
   export let sourceCurrency: string;
   export let targetCurrency: string;
@@ -20,19 +21,26 @@
 
   let periodMenuOpen = false;
   let periodMenu: HTMLDivElement;
+  let periodButton: HTMLButtonElement;
   function closeOnOutsideClick(event: MouseEvent) {
-    if (periodMenuOpen && periodMenu && !periodMenu.contains(event.target as Node)) periodMenuOpen = false;
+    if (periodMenuOpen && periodMenu && !periodMenu.contains(event.target as Node)) closePeriodMenu();
   }
   function closeOnEscape(event: KeyboardEvent) {
-    if (event.key === "Escape" && periodMenuOpen) { event.stopImmediatePropagation(); periodMenuOpen = false; }
+    if (event.key === "Escape" && periodMenuOpen) { event.stopImmediatePropagation(); closePeriodMenu(); }
   }
-  function choosePeriod(value: SearchActivityPeriod) { onPeriodChange(value); periodMenuOpen = false; }
-  function togglePeriodPicker() {
+  function closePeriodMenu() { periodMenuOpen = false; periodButton?.focus(); }
+  function choosePeriod(value: SearchActivityPeriod) { onPeriodChange(value); closePeriodMenu(); }
+  async function togglePeriodPicker() {
     if (onOpenPeriodPicker && window.matchMedia("(max-width: 640px)").matches) {
       periodMenuOpen = false;
       onOpenPeriodPicker();
     }
-    else periodMenuOpen = !periodMenuOpen;
+    else if (periodMenuOpen) closePeriodMenu();
+    else {
+      periodMenuOpen = true;
+      await tick();
+      periodMenu?.querySelector<HTMLButtonElement>('[aria-pressed="true"]')?.focus();
+    }
   }
 
   type Point = { time: number; count: number };
@@ -71,7 +79,7 @@
           {targetCurrency}
         </span>
       </span>
-      <div class="periodWrap" bind:this={periodMenu}><button type="button" class="periodButton" aria-label={t("Chart time range", {}, $locale)} aria-haspopup={onOpenPeriodPicker ? "dialog" : "menu"} aria-expanded={periodMenuOpen || periodPickerOpen} title={`${t("Chart time range", {}, $locale)}: ${periodLabel}`} on:click={togglePeriodPicker}><img src="/icons/ui/chart-period.png" alt="" width="18" height="18" aria-hidden="true" /></button>{#if periodMenuOpen}<div class="periodMenu" role="menu" aria-label={t("Chart time range", {}, $locale)}>{#each SEARCH_ACTIVITY_PERIODS as value}<button type="button" role="menuitemradio" aria-checked={period === value} class:current={period === value} on:click={() => choosePeriod(value)}>{t(SEARCH_ACTIVITY_PERIOD_LABELS[value], {}, $locale)}</button>{/each}</div>{/if}</div>
+      <div class="periodWrap" bind:this={periodMenu}><button type="button" class="periodButton" bind:this={periodButton} aria-label={t("Chart time range", {}, $locale)} aria-haspopup="dialog" aria-expanded={periodMenuOpen || periodPickerOpen} title={`${t("Chart time range", {}, $locale)}: ${periodLabel}`} on:click={togglePeriodPicker}><img src="/icons/ui/chart-period.png" alt="" width="18" height="18" aria-hidden="true" /></button>{#if periodMenuOpen}<div class="periodMenu" role="dialog" aria-label={t("Chart time range", {}, $locale)} tabindex="-1"><ChartPeriodOptions {period} onSelect={choosePeriod} onClose={closePeriodMenu} /></div>{/if}</div>
     </div>
   </div>
   {#if error}
@@ -105,10 +113,8 @@
   @media (max-width: 980px), (pointer: coarse) { .periodButton { width: 44px; height: 44px; } .headingActions { margin-right: -6px; } }
   .periodButton img { width: 18px; height: 18px; object-fit: contain; filter: brightness(0); }
   :global(html[data-theme="dark"]) .periodButton img { filter: none; }
-  .periodMenu { position: absolute; z-index: 10; top: calc(100% + 7px); right: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; width: 216px; padding: 8px; border: 1px solid var(--color-border-strong); border-radius: 10px; background: var(--color-panel); box-shadow: none; }
-  .periodMenu button { min-height: 34px; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--color-text); font: inherit; font-size: 12px; font-weight: 650; text-align: left; cursor: pointer; }
-  .periodMenu button:hover { background: var(--color-border-strong); }
-  .periodMenu button.current, .periodMenu button.current:hover { background: var(--color-accent); color: #171717; }
+  .periodMenu { position: absolute; z-index: 80; top: calc(100% + 9px); right: 0; width: 310px; max-width: calc(100vw - 32px); max-height: min(680px, calc(100dvh - 32px)); overflow-y: auto; padding: 17px; border: 1px solid var(--color-border); border-radius: 20px; background: rgba(255,255,255,.97); box-shadow: none; }
+  :global(html[data-theme="dark"]) .periodMenu { border-color: var(--color-border-strong); background: #191919; }
   @media (max-width: 420px) { .activityHeading { align-items: flex-start; } .headingActions { gap: 4px; } .pair { gap: 3px; padding-inline: 5px; font-size: 12px; } .pairCurrency { gap: 3px; } .pairCurrency img { width: 14px; height: 14px; } .activityHeading strong { font-size: 12px; } }
   .activityStats { display: flex; align-items: baseline; gap: 5px; color: var(--color-text-faint); font-size: 12px; }
   .activityStats strong { color: var(--color-text); font-size: 18px; line-height: 1; }

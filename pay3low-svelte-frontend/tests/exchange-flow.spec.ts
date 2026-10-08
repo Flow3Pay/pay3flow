@@ -275,9 +275,10 @@ test("search activity range menu filters and remembers the selected period", asy
   const rangeButton = chart.getByRole("button", { name: "Chart time range" });
   await expect(rangeButton.locator("img")).toHaveAttribute("src", "/icons/ui/chart-period.png");
   await rangeButton.click();
-  const menu = isMobile ? page.getByRole("dialog", { name: "Chart time range" }) : chart.getByRole("menu", { name: "Chart time range" });
-  const selected = isMobile ? menu.locator('.periodOptions button[aria-pressed="true"]') : menu.getByRole("menuitemradio", { checked: true });
-  await expect(isMobile ? menu.locator(".periodOptions button") : menu.getByRole("menuitemradio")).toHaveCount(8);
+  await expect(chart.locator(".headingCopy small")).toHaveCount(0);
+  const menu = page.getByRole("dialog", { name: "Chart time range", exact: true });
+  const selected = menu.locator('.periodOptions button[aria-pressed="true"]');
+  await expect(menu.locator(".periodOptions button")).toHaveCount(8);
   await expect(selected).toHaveText("1 week");
   const accent = await page.evaluate(() => {
     const probe = document.createElement("span");
@@ -295,7 +296,7 @@ test("search activity range menu filters and remembers the selected period", asy
   await expect(menu).toHaveCount(0);
   if (isMobile) await expect(page.getByRole("dialog", { name: "Searches for this exchange" })).toBeVisible();
   await rangeButton.click();
-  await (isMobile ? menu.getByRole("button", { name: "1 hour" }) : menu.getByRole("menuitemradio", { name: "1 hour" })).click();
+  await menu.getByRole("button", { name: "1 hour", exact: true }).click();
   await expect(menu).toHaveCount(0);
   await expect(chart.locator(".activityStats span")).toHaveText("searches in period · 1 hour");
   await expect(chart.locator(".activityStats strong")).toHaveText("3");
@@ -307,7 +308,11 @@ test("search activity range menu filters and remembers the selected period", asy
   const restoredChart = isMobile ? page.getByRole("dialog", { name: "Searches for this exchange" }).getByTestId("search-activity") : page.getByTestId("search-activity");
   await expect(restoredChart.locator(".activityStats span")).toHaveText("searches in period · 1 hour");
   await restoredChart.getByRole("button", { name: "Chart time range" }).click();
-  await expect(isMobile ? page.getByRole("dialog", { name: "Chart time range" }).getByRole("button", { name: "1 hour", pressed: true }) : restoredChart.getByRole("menuitemradio", { name: "1 hour", checked: true })).toHaveCSS("background-color", accent);
+  const restoredMenu = page.getByRole("dialog", { name: "Chart time range", exact: true });
+  await expect(restoredMenu.getByRole("button", { name: "1 hour", pressed: true })).toHaveCSS("background-color", accent);
+  await restoredMenu.getByRole("button", { name: "Close chart time range" }).click();
+  await expect(restoredMenu).toHaveCount(0);
+  await expect(restoredChart.getByRole("button", { name: "Chart time range" })).toBeFocused();
 });
 
 test("mobile sheets cover the viewport and the graph closes by dragging its handle", async ({ page, isMobile }) => {
@@ -1437,11 +1442,13 @@ test("RUB to RUB bank routes require checking the order payment method", async (
 
   await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
   const sourcePicker = page.getByRole("dialog", { name: "Choose where you pay from" });
+  await sourcePicker.getByRole("option", { name: /^RUB\b/ }).click();
   await sourcePicker.getByLabel("Search banks and payment methods").fill("Sberbank");
   await sourcePicker.getByRole("option", { name: /Sberbank/ }).click();
 
   await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
   const targetPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
+  await targetPicker.getByRole("option", { name: /^RUB\b/ }).click();
   await targetPicker.getByLabel("Search banks and payment methods").fill("Alfa");
   await targetPicker.getByRole("option", { name: /Alfa-Bank/ }).click();
 
@@ -1449,6 +1456,11 @@ test("RUB to RUB bank routes require checking the order payment method", async (
   await page.getByTestId("start-search").click();
   const route = page.getByTestId("complete-route").first();
   await expect(route).toBeVisible();
+  await expect(route.locator(".workflowPayment")).toHaveCount(2);
+  await expect(route.locator(".workflowPayment").first()).toHaveAttribute("title", "Sberbank");
+  await expect(route.locator(".workflowPayment").last()).toHaveAttribute("title", "Alfa-Bank");
+  await expect(route.locator(".workflowPayment img").first()).toHaveAttribute("src", "/icons/assets/sberbank.webp");
+  await expect(route.locator(".workflowPayment img").last()).toHaveAttribute("src", "/icons/assets/alfabank.webp");
   await route.locator(".routeAmount").click();
 
   const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
@@ -1468,6 +1480,10 @@ test("AMD cycle keeps the best route visible when profit is unconfirmed", async 
 
   await expect(page.getByTestId("complete-route")).toHaveCount(1);
   await expect(page.getByTestId("complete-route").first()).toContainText("-100 AMD (-1.00%)");
+  const payments = page.getByTestId("complete-route").locator(".workflowPayment");
+  await expect(payments).toHaveCount(2);
+  await expect(payments.first()).toHaveAttribute("title", "Ameriabank");
+  await expect(payments.last()).toHaveAttribute("title", "IDBank");
   await expect(page.getByTestId("no-profitable-routes")).toHaveCount(0);
 });
 

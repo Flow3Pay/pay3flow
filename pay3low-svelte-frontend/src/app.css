@@ -168,12 +168,9 @@ button {
   transition: background 0.28s ease, color 0.28s ease;
 }
 
-@media (min-width: 981px) {
-  .appShell { background-attachment: fixed; }
-}
-
 .appShell::before {
-  position: absolute;
+  /* Keep the repeated pattern on a viewport-sized layer while scrolling. */
+  position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;

@@ -31,7 +31,7 @@
 
   const ASSET_NAMES: Record<string, string> = { BTC: "Bitcoin", ETH: "Ether", USDC: "USD Coin", USDT: "Tether" };
   const FIAT_CURRENCIES = new Set(["AMD", "BYN", "KZT", "RUB", "UAH", "USD"]);
-  type Step = { currency: string; network?: string; networkLabel?: string; provider?: string; iconUrl?: string };
+  type Step = { currency: string; network?: string; networkLabel?: string; provider?: string; iconUrl?: string; paymentMethod?: string; paymentMethodIcon?: string };
 
   const venueName = (value?: string) => value ? venueNames[value.toLowerCase()] ?? value : "Searching";
   const readableNetwork = (value?: string) => value ? networkNames[value.toLowerCase()] ?? value.replace(/-/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) : "";
@@ -104,7 +104,7 @@
     return route.route_provider ?? undefined;
   }
 
-  function workflowSteps(route: RouteCandidate): Step[] {
+  function currencySteps(route: RouteCandidate): Step[] {
     const entry = route.legs.find((leg) => leg.kind === "entry");
     const exit = route.legs.find((leg) => leg.kind === "exit");
     const source = route.source_currency ?? "—";
@@ -121,7 +121,17 @@
     return [{ currency: source, iconUrl: route.source_method_icon_url }, { currency: route.entry_asset ?? "—", network: route.entry_network !== "internal" ? route.entry_network : undefined, provider: entry?.provider }, { currency: target, provider: exit?.provider, iconUrl: route.target_method_icon_url }];
   }
 
-  const workflowLabel = (route: RouteCandidate) => workflowSteps(route).map((step) => `${assetLabel(step.currency)}${step.network ? ` · ${step.networkLabel ?? compactNetwork(step.network)}` : ""}${step.provider ? ` (${venueName(step.provider)})` : ""}`).join(" → ");
+  function workflowSteps(route: RouteCandidate): Step[] {
+    const steps = currencySteps(route);
+    return steps.map((step, index) => {
+      if (!FIAT_CURRENCIES.has(step.currency.toUpperCase())) return step;
+      if (index === 0) return { ...step, paymentMethod: route.source_payment_method, paymentMethodIcon: route.source_method_icon_url };
+      if (index === steps.length - 1) return { ...step, paymentMethod: route.target_payment_method, paymentMethodIcon: route.target_method_icon_url };
+      return step;
+    });
+  }
+
+  const workflowLabel = (route: RouteCandidate) => workflowSteps(route).map((step) => `${assetLabel(step.currency)}${step.paymentMethod ? ` · ${step.paymentMethod}` : ""}${step.network ? ` · ${step.networkLabel ?? compactNetwork(step.network)}` : ""}${step.provider ? ` (${venueName(step.provider)})` : ""}`).join(" → ");
 
   function cardClick(event: MouseEvent, route: RouteCandidate) {
     onSelect(route);
@@ -237,6 +247,11 @@
                         {#if step.network}
                           <span class="workflowNetwork" aria-label={t("Network: {network}", { network: readableNetwork(step.network) }, $locale)} title={readableNetwork(step.network)}>
                             <span class="workflowNetworkIcon" aria-hidden="true"><img src={networkIcon(step.network)} alt="" width="18" height="18" loading="lazy" decoding="async" /></span>
+                          </span>
+                        {/if}
+                        {#if step.paymentMethod}
+                          <span class="workflowNetwork workflowPayment" aria-label={t("Payment method: {method}", { method: step.paymentMethod }, $locale)} title={step.paymentMethod}>
+                            <span class="workflowNetworkIcon" aria-hidden="true">{#if step.paymentMethodIcon}<img src={step.paymentMethodIcon} alt="" width="18" height="18" loading="lazy" decoding="async" />{:else}<span class="paymentInitials">{step.paymentMethod.slice(0, 2).toUpperCase()}</span>{/if}</span>
                           </span>
                         {/if}
                         {#if step.provider}
@@ -977,6 +992,12 @@
   flex: 0 0 auto;
   place-items: center;
   color: var(--color-text);
+}
+
+.paymentInitials {
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .workflowArrow svg {

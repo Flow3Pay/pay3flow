@@ -54,7 +54,7 @@
       <h2 id="about-heading">{copy.aboutTitle}</h2>
       <p>{copy.about}</p>
       <div class="marketTags"><span>P2P</span><span>{t("Exchangers", {}, $locale)}</span><span>SPOT</span></div>
-      <div class="flowPreview" aria-hidden="true">{#each ["AMD", "USDT", "RUB"] as asset, index}{@const flag = fiatFlagUrl(asset)}{#if index}<span class="routeArrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 12h16m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span>{/if}<span class="flowAsset"><img src={flag ?? assetIcon(asset)} class:fiatFlag={Boolean(flag)} alt="" width="24" height="24" loading="lazy" />{asset}</span>{/each}</div>
+      <div class="flowPreview" aria-hidden="true">{#each ["AMD", "USDT", "RUB"] as asset, index}{@const flag = fiatFlagUrl(asset)}{#if index}<span class="routeArrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 12h16m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span>{/if}<span class="flowAsset"><img src={flag ?? assetIcon(asset)} class:fiatFlag={Boolean(flag)} alt="" width="24" height="24" loading="lazy" decoding="async" />{asset}</span>{/each}</div>
     </section>
     <section id="how-it-works" class="howCard" aria-labelledby="how-heading">
       <div class="sectionHead"><h2 id="how-heading">{copy.howTitle}</h2></div>
@@ -65,13 +65,13 @@
   <section class="coverage" aria-labelledby="coverage-heading">
     <div class="sectionHead"><h2 id="coverage-heading">{copy.coverageTitle}</h2></div>
     <div class="coverageGrid">
-      <div class="coverageItem"><div class="assetTags">{#each assets as asset}{@const flag = fiatFlagUrl(asset)}<span><img src={flag ?? assetIcon(asset)} class:fiatFlag={Boolean(flag)} alt="" width="20" height="20" loading="lazy" />{asset}</span>{/each}</div><p>{copy.currencies}</p></div>
-      <div class="coverageItem"><div class="providerTags">{#each providers as provider}<span><img src={venueIcon(provider.id)} alt="" width="20" height="20" loading="lazy" />{provider.name}</span>{/each}</div><p>{copy.sources}</p></div>
+      <div class="coverageItem"><div class="assetTags">{#each assets as asset}{@const flag = fiatFlagUrl(asset)}<span><img src={flag ?? assetIcon(asset)} class:fiatFlag={Boolean(flag)} alt="" width="20" height="20" loading="lazy" decoding="async" />{asset}</span>{/each}</div><p>{copy.currencies}</p></div>
+      <div class="coverageItem"><div class="providerTags">{#each providers as provider}<span><img src={venueIcon(provider.id)} alt="" width="20" height="20" loading="lazy" decoding="async" />{provider.name}</span>{/each}</div><p>{copy.sources}</p></div>
     </div>
     <h3>{copy.examplesTitle}</h3>
     <div class="examples">
       {#each copy.examples as example, index}
-        <article><span class="exampleIndex" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span><h4>{#each example.route.split(" → ") as asset, assetIndex}<span class="examplePart">{#if assetIndex}<span class="routeArrow" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 12h16m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span>{/if}<span class="routeAsset"><span class="routeAssetMain"><img src={fiatFlagUrl(asset.split(" ")[0]) ?? assetIcon(asset.split(" ")[0])} class:fiatFlag={Boolean(fiatFlagUrl(asset.split(" ")[0]))} alt="" width="18" height="18" loading="lazy" /><strong>{asset.split(" (")[0]}</strong></span>{#if asset.includes(" (")}{@const network = asset.split(" (")[1].replace(")", "")}<span class="routeNetwork" title={network}><img src={networkIcon(network)} alt={network} width="18" height="18" loading="lazy" /></span>{/if}</span></span>{/each}</h4><p>{example.explanation}</p></article>
+        <article><span class="exampleIndex" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span><h4>{#each example.route.split(" → ") as asset, assetIndex}<span class="examplePart">{#if assetIndex}<span class="routeArrow" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 12h16m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span>{/if}<span class="routeAsset"><span class="routeAssetMain"><img src={fiatFlagUrl(asset.split(" ")[0]) ?? assetIcon(asset.split(" ")[0])} class:fiatFlag={Boolean(fiatFlagUrl(asset.split(" ")[0]))} alt="" width="18" height="18" loading="lazy" decoding="async" /><strong>{asset.split(" (")[0]}</strong></span>{#if asset.includes(" (")}{@const network = asset.split(" (")[1].replace(")", "")}<span class="routeNetwork" title={network}><img src={networkIcon(network)} alt={network} width="18" height="18" loading="lazy" decoding="async" /></span>{/if}</span></span>{/each}</h4><p>{example.explanation}</p></article>
       {/each}
     </div>
   </section>
@@ -86,7 +86,7 @@
     <div class="projectCopy"><h2 id="project-heading">{copy.projectTitle}</h2><p>{copy.project}</p></div>
     <div class="projectLinks">
       <a class="primaryLink" href={PROJECT_URL} target="_blank" rel="noreferrer noopener"><span class="projectLinkLabel"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M12 .7a11.3 11.3 0 0 0-3.58 22.02c.57.1.78-.25.78-.55v-2.16c-3.18.7-3.85-1.34-3.85-1.34-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.68 1.24 3.34.95.1-.74.4-1.24.73-1.53-2.54-.29-5.2-1.27-5.2-5.65 0-1.25.45-2.26 1.18-3.06-.12-.29-.51-1.45.11-3.02 0 0 .96-.31 3.12 1.17a10.8 10.8 0 0 1 5.68 0c2.16-1.48 3.12-1.17 3.12-1.17.62 1.57.23 2.73.11 3.02.73.8 1.18 1.81 1.18 3.06 0 4.39-2.67 5.35-5.21 5.64.41.36.78 1.08.78 2.18v3.23c0 .3.2.65.79.54A11.3 11.3 0 0 0 12 .7Z" /></svg><span>{copy.github}</span></span><span aria-hidden="true">↗</span></a>
-      <a href={COMMUNITY_URL} target="_blank" rel="noreferrer noopener"><span class="projectLinkLabel"><img src="/icons/assets/telegram-messenger.png" alt="" width="20" height="20" loading="lazy" /><span>{copy.telegram}</span></span><span aria-hidden="true">↗</span></a>
+      <a href={COMMUNITY_URL} target="_blank" rel="noreferrer noopener"><span class="projectLinkLabel"><img src="/icons/assets/telegram-messenger.png" alt="" width="20" height="20" loading="lazy" decoding="async" /><span>{copy.telegram}</span></span><span aria-hidden="true">↗</span></a>
       <a href="/terms"><span class="projectLinkLabel"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9m-6-6 6 6m-6-6v6h6M8 13h8M8 17h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" /></svg><span>{copy.terms}</span></span><span aria-hidden="true">↗</span></a>
     </div>
   </section>

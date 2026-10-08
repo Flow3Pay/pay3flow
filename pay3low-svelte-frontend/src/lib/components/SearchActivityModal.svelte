@@ -2,8 +2,9 @@
   import { onDestroy, onMount, tick } from "svelte";
   import { locale, t } from "$lib/i18n";
   import { lockPageScroll } from "$lib/page-scroll-lock";
-  import { SEARCH_ACTIVITY_PERIOD_LABELS, SEARCH_ACTIVITY_PERIODS, type RouteSearchActivityHour, type SearchActivityPeriod } from "$lib/route-activity";
+  import type { RouteSearchActivityHour, SearchActivityPeriod } from "$lib/route-activity";
   import SearchActivityChart from "./SearchActivityChart.svelte";
+  import ChartPeriodOptions from "./ChartPeriodOptions.svelte";
 
   export let sourceCurrency: string;
   export let targetCurrency: string;
@@ -31,11 +32,11 @@
   async function openPeriodPicker() {
     periodPickerOpen = true;
     await tick();
-    periodDialog?.focus();
+    periodDialog?.querySelector<HTMLButtonElement>('[aria-pressed="true"]')?.focus();
   }
   function closePeriodPicker() {
     periodPickerOpen = false;
-    void tick().then(() => dialog?.focus());
+    void tick().then(() => dialog?.querySelector<HTMLButtonElement>(".periodButton")?.focus());
   }
   function choosePeriod(value: SearchActivityPeriod) {
     onPeriodChange(value);
@@ -85,9 +86,9 @@
   {#if periodPickerOpen}
     <div class="periodBackdrop" role="presentation" on:mousedown={closePeriodPicker}>
       <div class="periodDialog" bind:this={periodDialog} role="dialog" aria-modal="true" aria-label={t("Chart time range", {}, $locale)} tabindex="-1" on:mousedown|stopPropagation>
-        <button type="button" class="periodHandle" aria-label={t("Chart time range", {}, $locale)} on:pointerdown={startDrag} on:pointermove={moveDrag} on:pointerup={endDrag} on:pointercancel={cancelDrag} on:keydown={(event) => { if (event.key === "Enter" || event.key === " ") closePeriodPicker(); }}><span aria-hidden="true"></span></button>
-        <div class="periodHeading"><strong>{t("Chart time range", {}, $locale)}</strong></div>
-        <div class="periodOptions">{#each SEARCH_ACTIVITY_PERIODS as value}<button type="button" aria-pressed={period === value} on:click={() => choosePeriod(value)}>{t(SEARCH_ACTIVITY_PERIOD_LABELS[value], {}, $locale)}</button>{/each}</div>
+        <ChartPeriodOptions {period} onSelect={choosePeriod} onClose={closePeriodPicker}>
+          {#snippet sheetHandle()}<button type="button" class="periodHandle" aria-label={t("Chart time range", {}, $locale)} on:pointerdown={startDrag} on:pointermove={moveDrag} on:pointerup={endDrag} on:pointercancel={cancelDrag} on:keydown={(event) => { if (event.key === "Enter" || event.key === " ") closePeriodPicker(); }}><span aria-hidden="true"></span></button>{/snippet}
+        </ChartPeriodOptions>
       </div>
     </div>
   {/if}
@@ -102,10 +103,6 @@
   .periodDialog { width: 100%; max-height: calc(100dvh - 16px); overflow-y: auto; padding: 10px 16px calc(18px + env(safe-area-inset-bottom)); border: 1px solid var(--color-border); border-radius: 14px 14px 0 0; background: rgba(255, 255, 255, .98); box-shadow: none; touch-action: auto; transform: translateY(var(--sheet-drag, 0px)); transition: transform .24s ease; animation: sheetIn .24s cubic-bezier(.22, 1, .36, 1); }
   .periodHandle { display: flex; width: 100%; height: 30px; align-items: center; justify-content: center; touch-action: none; }
   .periodHandle span { width: 38px; height: 5px; border-radius: 999px; background: var(--color-border-strong); }
-  .periodHeading strong { font-size: 13px; font-weight: 800; }
-  .periodOptions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
-  .periodOptions button { min-height: 44px; padding: 0 9px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-panel); color: var(--color-text-soft); font-size: 12px; font-weight: 800; }
-  .periodOptions button[aria-pressed="true"] { border-color: var(--color-accent); border-width: var(--border-highlight-width); background: var(--color-accent); color: #171717; box-shadow: none; }
   :global(html[data-theme="dark"]) .periodDialog { border-color: var(--color-border-strong); background: rgba(25, 25, 25, .98); }
   :global(.dialog .activityHeading) { padding-right: 38px; }
   :global(.dialog .activityCard) { padding: 24px; gap: 14px; }
