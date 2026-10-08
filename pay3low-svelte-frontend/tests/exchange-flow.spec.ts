@@ -1484,6 +1484,7 @@ test("AMD cycle keeps the best route visible when profit is unconfirmed", async 
   await expect(payments).toHaveCount(2);
   await expect(payments.first()).toHaveAttribute("title", "Ameriabank");
   await expect(payments.last()).toHaveAttribute("title", "IDBank");
+  await expect(page.getByTestId("complete-route").getByTestId("best-route-badge")).toHaveText("Best router");
   await expect(page.getByTestId("no-profitable-routes")).toHaveCount(0);
 });
 
@@ -2369,8 +2370,8 @@ test("same asset on the same network searches a cycle and displays both swap ste
   const card = page.locator(".routeCard").first();
   await expect(card).toBeVisible();
   await expect(card).toContainText("+1 USDT (+1.00%)");
-  await expect(card.locator(".routeBadges")).not.toContainText("Best route");
-  await expect(card.locator(".routeBadges .bestBadge")).toHaveText("+1 USDT (+1.00%)");
+  await expect(card.getByTestId("best-route-badge")).toHaveText("Best router");
+  await expect(card.locator('.routeBadges .bestBadge:not([data-testid="best-route-badge"])')).toHaveText("+1 USDT (+1.00%)");
   await expect(card.locator(".routeBadges")).not.toContainText("Est.");
   await expect(card).toContainText("101 USDT");
   await expect(card).toContainText("USDC");
@@ -2395,8 +2396,8 @@ test("spot crypto cycles show three trades and wallet deposit and withdrawal ins
   await page.getByTestId("start-search").click();
   const card = page.locator(".routeCard").first();
   await expect(card).toContainText("+1 USDT (+1.00%)");
-  await expect(card.locator(".routeBadges")).not.toContainText("Best route");
-  await expect(card.locator(".routeBadges .bestBadge")).toHaveText("+1 USDT (+1.00%)");
+  await expect(card.getByTestId("best-route-badge")).toHaveText("Best router");
+  await expect(card.locator('.routeBadges .bestBadge:not([data-testid="best-route-badge"])')).toHaveText("+1 USDT (+1.00%)");
   await expect(card.locator(".routeBadges")).not.toContainText("Est.");
   await card.locator(".workflow").click();
   const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
