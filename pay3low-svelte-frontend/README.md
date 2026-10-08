@@ -37,6 +37,20 @@ monotonic for the duration of a search. Starting a newer search cancels any
 pending frame or timer from the older snapshot. This keeps large DOM updates
 responsive without delaying normal search results.
 
+## Animated route instructions
+
+The route guide opens as a full-screen walkthrough: overview, one chapter per
+operation, and a final checklist. Scene playback never advances a chapter;
+users explicitly confirm each completed operation. Progress is kept for the
+selected route in session storage and restored when reopening the guide.
+
+`src/lib/route-tutorial.ts` builds chapters from route data, ordered cycle legs,
+provider guidance, and service links. `InstructionScene.svelte` renders shared
+buy, sell, swap, and transfer demonstrations; new currency corridors do not
+need separate pages. Demonstrations are illustrative, while platform links,
+advertiser details, reviews, and wallet execution belong to the active chapter.
+The guide supports keyboard navigation, reduced motion, and mobile layouts.
+
 ## Verification and production build
 
 ```bash

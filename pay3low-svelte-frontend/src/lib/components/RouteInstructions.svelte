@@ -1,11 +1,14 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import { lockPageScroll } from "$lib/page-scroll-lock";
   import type { ProviderGuidance, RouteCandidate, ServiceLink } from "$lib/exchange";
   import { locale, t } from "$lib/i18n";
+  import { buildRouteTutorial, tutorialMoney } from "$lib/route-tutorial";
+  import { venueIcon } from "$lib/icons";
   import AdvertiserCard from "./AdvertiserCard.svelte";
   import ExternalReviews from "./ExternalReviews.svelte";
   import RouteExecutionPanel from "./RouteExecutionPanel.svelte";
+  import InstructionScene from "./InstructionScene.svelte";
 
   export let route: RouteCandidate;
   export let venueNames: Record<string, string> = {};
@@ -13,851 +16,253 @@
   export let networkNames: Record<string, string> = {};
   export let onClose: () => void;
   export let onOpenService: (link: ServiceLink) => void = () => {};
-  let modal: HTMLDivElement;
-  let dragging = false;
-  let dragStartY = 0;
-  let dragDistance = 0;
-  const venueName = (value?: string | null) => value ? venueNames[value.toLowerCase()] ?? value : "P2P market";
-  const providerGuide = (value?: string | null) => value ? providerGuidance[value.toLowerCase()] : undefined;
-  const guideSteps = (guide: ProviderGuidance | undefined, side: "buy" | "sell") => [
-    ...(guide?.steps ?? []),
-    ...(side === "buy" ? guide?.buy_steps ?? [] : guide?.sell_steps ?? []),
-  ];
-  const reviewSourceName = (kind: string) => ({ trustpilot: "Trustpilot", trustscores: "TrustScores", otzovik: "Otzovik", forum: "Bits.media", bestchange: "BestChange", "yandex-maps": "Yandex Maps", rustore: "RuStore", provider: "Provider" } as Record<string, string>)[kind] ?? kind;
-  const canLoadProfileReviews = (url: string | null | undefined, guide: ProviderGuidance | null | undefined) => Boolean(url) && guide?.profile_reviews_available !== false;
-  const readableNetwork = (value: string) => networkNames[value.toLowerCase()] ?? value.replace(/-/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-  const readablePath = (path: string[]) => path.map((part) => {
-    const [asset, network] = part.split("@", 2);
-    return network ? `${asset} in ${readableNetwork(network)}` : asset;
-  }).join(" → ");
-  $: language = $locale;
-  const copy = (key: string, params: Record<string, string | number> = {}) => t(key, params, language);
-  const isDirectOffer = (offer?: RouteCandidate["entry_offer_snapshot"]) => offer?.advertiser.user_type === "service" || offer?.source.toLowerCase() === "whitebird";
-  const money = (minor?: number, currency?: string, exact?: string) => {
-    if (exact && ["BTC", "ETH", "USDC", "USDT", "SOL", "TRX", "TON", "XRP", "ADA", "AVAX", "DOT", "LINK", "LTC", "BCH", "BNB", "DOGE", "MATIC", "NEAR", "SUI", "APT", "ATOM", "UNI", "DAI", "FDUSD"].includes(currency?.toUpperCase() ?? "")) {
-      return `${Number(exact).toLocaleString("en-US", { maximumFractionDigits: 8 })} ${currency ?? ""}`;
-    }
-    return minor == null ? "—" : `${(minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })} ${currency ?? ""}`;
-  };
-  const marketRate = (value: string) => Number.isFinite(Number(value)) ? Number(value).toLocaleString("en-US", { maximumFractionDigits: 12, useGrouping: false }) : value;
-  const linkFor = (kind: ServiceLink["kind"]) => route.service_links?.find((link) => link.kind === kind);
-  const bankFeeLabel = (bank?: string, percent?: number) => {
-    if (!bank || percent == null) return null;
-    return percent === 0 ? copy("{bank}: no bank fee", { bank }) : copy("{bank}: {percent}% bank fee", { bank, percent: percent.toFixed(2) });
-  };
 
-  function spotPair(symbol: string, firstAsset: string, secondAsset: string) {
-    const normalized = symbol.replace(/[^a-z0-9]/gi, "").toUpperCase();
-    const first = firstAsset.toUpperCase(), second = secondAsset.toUpperCase();
-    if (normalized === `${first}${second}`) return { base: first, quote: second };
-    if (normalized === `${second}${first}`) return { base: second, quote: first };
-    return null;
+  let page: HTMLDivElement;
+  let heading: HTMLHeadingElement;
+  let chapter = -1;
+  let completed = 0;
+  let frame = 0;
+  let elapsed = 0;
+  let playing = true;
+  let reducedMotion = false;
+  let documentVisible = true;
+  let mounted = false;
+  const FRAME_DURATION = 6500;
+  $: language = $locale;
+  $: copy = (key: string, params: Record<string, string | number> = {}) => t(key, params, language);
+  $: steps = buildRouteTutorial(route, venueNames, providerGuidance, networkNames, copy);
+  $: step = steps[chapter];
+  $: finished = steps.length > 0 && chapter === steps.length;
+  $: activeFrame = step?.frames[frame];
+  $: storageKey = `pay3flow.tutorial.v1.${route.route_id}`;
+  $: if (mounted) remember(storageKey, chapter, completed);
+
+  function portal(node: HTMLElement) {
+    document.body.appendChild(node);
+    return { destroy() { node.remove(); } };
   }
-  function spotUrl(venue: string, symbol: string, first: string, second: string) {
-    const pair = spotPair(symbol, first, second), key = venue.toLowerCase();
-    if (!pair) return ({ binance: "https://www.binance.com/en/trade", bybit: "https://www.bybit.com/trade/spot/", okx: "https://www.okx.com/trade-spot/", bitget: "https://www.bitget.com/spot/", mexc: "https://www.mexc.com/exchange/" } as Record<string, string>)[key] ?? null;
-    if (key === "binance") return `https://www.binance.com/en/trade/${pair.base}_${pair.quote}?type=spot`;
-    if (key === "bybit") return `https://www.bybit.com/trade/spot/${pair.base}/${pair.quote}`;
-    if (key === "okx") return `https://www.okx.com/trade-spot/${pair.base.toLowerCase()}-${pair.quote.toLowerCase()}`;
-    if (key === "bitget") return `https://www.bitget.com/spot/${pair.base}${pair.quote}`;
-    if (key === "mexc") return `https://www.mexc.com/exchange/${pair.base}_${pair.quote}`;
-    if (key === "cifra-broker") return "https://tradernet.by/authentication/signup";
-    return null;
+  function remember(key: string, active: number, done: number) {
+    try { sessionStorage.setItem(key, JSON.stringify({ chapter: active, completed: done, steps: steps.map((item) => item.id) })); } catch { /* Optional in private browsing. */ }
   }
-  function backdrop(event: MouseEvent) { if (event.target === event.currentTarget) onClose(); }
-  function startSheetDrag(event: PointerEvent) {
-    dragging = true;
-    dragStartY = event.clientY;
-    dragDistance = 0;
-    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  async function navigate(next: number) {
+    chapter = next;
+    frame = 0;
+    elapsed = 0;
+    playing = !reducedMotion;
+    await tick();
+    page?.scrollTo({ top: 0, behavior: "instant" });
+    heading?.focus({ preventScroll: true });
   }
-  function moveSheetDrag(event: PointerEvent) {
-    if (!dragging) return;
-    dragDistance = Math.max(0, event.clientY - dragStartY);
-    modal?.style.setProperty("--sheet-drag", `${dragDistance}px`);
+  function confirmStep() {
+    completed = Math.max(completed, chapter + 1);
+    void navigate(chapter + 1);
   }
-  function endSheetDrag() {
-    if (!dragging) return;
-    const shouldClose = dragDistance > 96 || (modal && dragDistance > modal.clientHeight * 0.24);
-    dragging = false;
-    if (shouldClose) {
-      onClose();
-    } else {
-      modal?.style.removeProperty("--sheet-drag");
-    }
+  function selectFrame(index: number) {
+    frame = index;
+    elapsed = 0;
+    playing = false;
+  }
+  function replay() { frame = 0; elapsed = 0; playing = !reducedMotion; }
+  function togglePlayback() {
+    if (!playing && frame === (step?.frames.length ?? 0) - 1 && elapsed >= FRAME_DURATION) replay();
+    else playing = !playing;
+  }
+  function reviewSource(kind: string) {
+    return ({ trustpilot: "Trustpilot", trustscores: "TrustScores", otzovik: "Otzovik", forum: "Bits.media", bestchange: "BestChange", "yandex-maps": "Yandex Maps", rustore: "RuStore", provider: "Provider" } as Record<string, string>)[kind] ?? kind;
+  }
+  function warn(warning: string) {
+    const dry = warning.match(/^Live dry quote from (.+); execution and wallet compatibility are not verified\.$/);
+    if (dry) return copy("Live dry quote from {provider}; execution and wallet compatibility are not verified.", { provider: dry[1] });
+    const exchanger = warning.match(/^Quoted exchanger: (.+)\.$/);
+    return exchanger ? copy("Quoted exchanger: {description}.", { description: exchanger[1] }) : copy(warning);
   }
   onMount(() => {
-    const handler = (event: KeyboardEvent) => event.key === "Escape" && onClose();
-    const unlockPage = lockPageScroll();
-    document.addEventListener("keydown", handler);
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const unlock = lockPageScroll();
+    // Isolate the full-screen guide while retaining the route search beneath it.
+    const siblings: Array<{ element: HTMLElement; inert: boolean }> = [];
+    let branch: HTMLElement = page;
+    while (branch.parentElement) {
+      for (const child of branch.parentElement.children) {
+        if (child !== branch && child instanceof HTMLElement && !["SCRIPT", "STYLE", "LINK"].includes(child.tagName)) {
+          siblings.push({ element: child, inert: child.inert }); child.inert = true;
+        }
+      }
+      branch = branch.parentElement;
+      if (branch === document.body) break;
+    }
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(storageKey) ?? "null");
+      if (saved && JSON.stringify(saved.steps) === JSON.stringify(steps.map((item) => item.id)) && Number.isInteger(saved.completed) && Number.isInteger(saved.chapter) && saved.completed >= 0 && saved.completed <= steps.length && saved.chapter >= -1 && saved.chapter <= saved.completed) {
+        completed = saved.completed; chapter = saved.chapter;
+      }
+    } catch { /* A malformed or unavailable cache must not block the guide. */ }
+    mounted = true;
+    const media = matchMedia("(prefers-reduced-motion: reduce)");
+    const motionChanged = () => { reducedMotion = media.matches; if (reducedMotion) playing = false; };
+    motionChanged(); media.addEventListener("change", motionChanged);
+    const visibilityChanged = () => documentVisible = !document.hidden;
+    visibilityChanged(); document.addEventListener("visibilitychange", visibilityChanged);
+    const keyboard = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); onClose(); }
+      if (event.key !== "Tab") return;
+      const focusable = [...page.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), summary, [tabindex="0"]')].filter((item) => item.getClientRects().length > 0);
+      const first = focusable[0], last = focusable.at(-1);
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === heading || document.activeElement === page)) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    document.addEventListener("keydown", keyboard);
+    heading?.focus({ preventScroll: true });
+    let previousTick = performance.now();
+    const timer = setInterval(() => {
+      const now = performance.now(), delta = Math.min(now - previousTick, 500); previousTick = now;
+      if (!playing || !documentVisible || !step) return;
+      elapsed = Math.min(FRAME_DURATION, elapsed + delta);
+      if (elapsed >= FRAME_DURATION) {
+        if (frame < step.frames.length - 1) { frame += 1; elapsed = 0; }
+        else playing = false;
+      }
+    }, 100);
     return () => {
-      unlockPage();
-      document.removeEventListener("keydown", handler);
+      clearInterval(timer); unlock();
+      siblings.forEach(({ element, inert }) => element.inert = inert);
+      document.removeEventListener("keydown", keyboard);
+      document.removeEventListener("visibilitychange", visibilityChanged);
+      media.removeEventListener("change", motionChanged);
+      previousFocus?.focus({ preventScroll: true });
     };
   });
-  $: entry = route.legs.find((leg) => leg.kind === "entry");
-  $: exit = route.legs.find((leg) => leg.kind === "exit");
-  $: entryVenue = venueName(entry?.provider);
-  $: exitVenue = venueName(exit?.provider);
-  $: entryDirect = isDirectOffer(route.entry_offer_snapshot);
-  $: exitDirect = isDirectOffer(route.exit_offer_snapshot);
-  $: directFiat = route.route_kind === "fiat_to_fiat" && entryDirect && !route.exit_offer_snapshot && !route.route_provider;
-  $: crossVenue = Boolean(entry && exit && !route.cycle_legs?.length && !route.route_provider && entry.provider !== exit.provider);
-  $: cryptoToCrypto = route.route_kind === "crypto_to_crypto" || Boolean(route.cycle_legs?.length);
-  $: providerSwap = Boolean(route.route_provider && (route.entry_offer_snapshot || route.exit_offer_snapshot));
-  $: transferNetwork = route.entry_network && route.entry_network.toLowerCase() !== "internal" ? route.entry_network : null;
-  $: entryAsset = route.entry_offer_snapshot?.asset ?? route.entry_asset;
-  $: providerSwapFrom = route.entry_offer_snapshot?.asset ?? route.source_currency;
-  $: providerSwapTo = route.exit_offer_snapshot?.asset ?? route.target_currency;
-  $: sourceFeeLabel = language && bankFeeLabel(route.source_payment_method, route.source_bank_fee_percent);
-  $: targetFeeLabel = language && bankFeeLabel(route.target_payment_method, route.target_bank_fee_percent);
-  $: firstMarketUrl = route.market_path ? spotUrl(route.market_path.venue, route.market_path.source_pair, route.source_currency, route.bridge_currency ?? route.target_currency ?? route.entry_asset) : null;
-  $: secondMarketUrl = route.market_path && route.bridge_currency ? spotUrl(route.market_path.venue, route.market_path.target_pair, route.bridge_currency, route.target_currency ?? route.entry_asset) : null;
-  $: standaloneProvider = Boolean(route.route_provider && !providerSwap);
-  $: routeGuide = providerGuide(route.route_provider);
-  $: entryGuide = providerGuide(entry?.provider ?? route.entry_offer_snapshot?.source);
-  $: exitGuide = providerGuide(exit?.provider ?? route.exit_offer_snapshot?.source);
-  $: entryGuideSteps = guideSteps(entryGuide, cryptoToCrypto ? "sell" : "buy");
-  $: exitGuideSteps = guideSteps(exitGuide, cryptoToCrypto ? "buy" : "sell");
-  $: marketStepCount = cryptoToCrypto && route.market_path ? (route.bridge_currency ? 2 : 1) : 0;
-  $: entryStepNumber = (standaloneProvider ? 1 : 0) + marketStepCount + 1;
-  $: providerStepNumber = entryStepNumber + (route.entry_offer_snapshot ? 1 : 0);
-  $: transferStepNumber = providerStepNumber + (providerSwap ? 1 : 0);
-  $: exitStepNumber = transferStepNumber + (crossVenue ? 1 : 0);
-  const warningText = (warning: string) => {
-    let match = warning.match(/^Live dry quote from (.+); execution and wallet compatibility are not verified\.$/);
-    if (match) return copy("Live dry quote from {provider}; execution and wallet compatibility are not verified.", { provider: match[1] });
-    match = warning.match(/^Quoted exchanger: (.+)\.$/);
-    if (match) return copy("Quoted exchanger: {description}.", { description: match[1] });
-    return copy(warning);
-  };
 </script>
 
-{#snippet providerReviews(provider: string | null | undefined, profileUrl: string | null | undefined, guide: ProviderGuidance | null | undefined, direct: boolean)}
-  {#if direct && guide?.review_sources?.[0]}
-    <ExternalReviews provider={provider ?? null} sourceUrl={guide.review_sources[0].url} sourceName={reviewSourceName(guide.review_sources[0].kind)} />
-  {:else if canLoadProfileReviews(profileUrl, guide)}
-    <ExternalReviews profileUrl={profileUrl ?? null} sourceName={venueName(provider)} />
-  {/if}
-{/snippet}
-
-<div class="backdrop" role="presentation" on:mousedown={backdrop}>
-  <div class:dragging class="modal" bind:this={modal} role="dialog" aria-modal="true" aria-labelledby="route-instructions-title" tabindex="-1">
-    <button type="button" class="sheetHandle" aria-label={copy("Close instructions by dragging down")} on:pointerdown={startSheetDrag} on:pointermove={moveSheetDrag} on:pointerup={endSheetDrag} on:pointercancel={endSheetDrag}><span aria-hidden="true"></span></button>
-    <div class="header"><div><span class="eyebrow">{copy("Selected route")}</span><h2 id="route-instructions-title">{copy("How to complete this exchange")}</h2><p class="intro">{copy("Complete each step in order. You stay in control—Pay3Flow never places an order or moves your funds.")}</p><p class="estimate">{copy("Estimated output:")} <strong>{money(route.target_amount_minor, route.target_currency, route.target_amount)}</strong></p>{#if sourceFeeLabel || targetFeeLabel}<p class="feeSummary">{copy("Bank fees:")} {[sourceFeeLabel, targetFeeLabel].filter(Boolean).join(" · ")}</p>{/if}</div><button type="button" class="closeButton" on:click={onClose} aria-label={copy("Close instructions")}>×</button></div>
-    <ol class="workflow" aria-label={copy("Exchange steps")}>
-      {#if route.cycle_legs?.length}
-        {#each route.cycle_legs as leg, index}
-          {@const guide = leg.market_pair ? null : providerGuide(leg.provider)}
-          {@const legUrl = leg.source_url ?? (leg.market_pair ? spotUrl(leg.provider, leg.market_pair, leg.from_asset.split("@")[0], leg.to_asset.split("@")[0]) : null)}
-          <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">{index + 1}</span><div class="stepBody">
-            <h3>{copy("Convert {from} to {to}", { from: readablePath([leg.from_asset]), to: readablePath([leg.to_asset]) })}</h3>
-            <p class="stepSummary">{copy("Route through {venue}", { venue: leg.description ? `${venueName(leg.provider)} · ${leg.description}` : venueName(leg.provider) })}</p>
-            <p class="routePath">{leg.input_amount} {leg.from_asset.split("@")[0]} → {leg.output_amount} {leg.to_asset.split("@")[0]}</p>
-            {#if leg.market_pair}
-              <p class="routePath">Spot · {leg.market_pair}</p>
-              {#if index === 0}<p>{copy("Deposit the source asset to this exchange using the selected network. Verify deposit availability, minimum amounts, and fees first.")}</p>{/if}
-              {#if index > 0 && route.cycle_legs[index - 1].provider !== leg.provider}<p>{copy("Transfer the previous step's output to this exchange. Verify a shared withdrawal/deposit network, transfer fees, and the minimum amount before sending.")}</p>{/if}
-              {#if index === route.cycle_legs.length - 1}<p>{copy("After the last trade, withdraw the original asset to your wallet on the selected network. Deduct the withdrawal fee when checking profit.")}</p>{/if}
-            {/if}
-            <ul class="checklist"><li>{copy("Check the current price, fee, and amount you should receive before pressing the exchange button.")}</li><li>{copy("Wait until the new balance appears before doing the next step.")}</li><li>{copy("Never send money after the quote expires. Get a new quote first.")}</li></ul>
-            {#if guide}
-              <div class="providerGuide"><p>{guide.description}</p>{#if guide.steps.length}<ul class="checklist">{#each guide.steps as step}<li>{step}</li>{/each}</ul>{/if}{#if guide.links.length}<div class="guideLinks">{#each guide.links as link}<a href={link.url} target="_blank" rel="noreferrer noopener" class="profileLink">{link.label} <span>↗</span></a>{/each}</div>{/if}</div>
-            {/if}
-            {@render providerReviews(leg.provider, legUrl, guide, true)}
-            {#if legUrl}<a href={legUrl} target="_blank" rel="noreferrer noopener" class="profileLink">{copy("Open {venue}", { venue: venueName(leg.provider) })} <span>↗</span></a>{/if}
-          </div></li>
+<div class="guidePage" use:portal bind:this={page} role="dialog" aria-modal="true" aria-labelledby="route-instructions-title" tabindex="-1" data-testid="route-guide">
+  <h2 id="route-instructions-title" class="srOnly">{copy("How to complete this exchange")}</h2>
+  <header class="guideHeader">
+    <div class="guideBrand"><span class="brandMark">↗</span><strong>pay3flow<span>.</span></strong><span class="brandDivider"></span><span class="guideLabel">{copy("Exchange guide")}</span></div>
+    <button type="button" class="closeButton" on:click={onClose} aria-label={copy("Close instructions")}><span class="closeText">{copy("Back to routes")}</span><span>×</span></button>
+  </header>
+  <div class="guideLayout">
+    <aside class="chapters">
+      <span class="eyebrow">{copy("YOUR ROUTE")}</span>
+      <div class="routePair">{route.source_currency}<span>↗</span>{route.target_currency ?? route.entry_asset}</div>
+      <button type="button" class="overviewButton" class:current={chapter === -1} aria-current={chapter === -1 ? "step" : undefined} on:click={() => navigate(-1)}><span>◎</span>{copy("Before you begin")}</button>
+      <ol aria-label={copy("Exchange steps")}>
+        {#each steps as item, index}
+          <li data-testid="instruction-step" class:complete={index < completed} class:active={chapter === index}>
+            <button type="button" aria-label={copy("Step {number}: {title}", { number: index + 1, title: item.title })} disabled={index > completed} aria-current={chapter === index ? "step" : undefined} on:click={() => navigate(index)}>
+              <span class="stepNumber">{index < completed ? "✓" : index + 1}</span><span class="chapterCopy"><strong>{item.title}</strong><small>{item.venue}</small></span>
+            </button>
+          </li>
         {/each}
-      {:else if route.route_provider && !providerSwap}
-        <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">1</span><div class="stepBody">
-          <h3>{copy("Route through {venue}", { venue: venueName(route.route_provider) })}</h3>
-          <p class="stepSummary">{copy("This is a current estimate only. Pay3Flow does not send money or make the exchange for you.")}</p>
-          {#if route.route_path?.length}<p class="routePath">{readablePath(route.route_path)}</p>{/if}
-          {#if routeGuide}
-            <div class="providerGuide">
-              <p>{routeGuide.description}</p>
-              {#if routeGuide.steps.length}<ul class="checklist">{#each routeGuide.steps as step}<li>{step}</li>{/each}</ul>{/if}
-              {#if routeGuide.links.length}<div class="guideLinks">{#each routeGuide.links as link}<a href={link.url} target="_blank" rel="noreferrer noopener" class="profileLink">{link.label} <span>↗</span></a>{/each}</div>{/if}
+      </ol>
+      <div class="chapterProgress"><div><span>{copy("Your progress")}</span><strong>{completed}/{steps.length}</strong></div><div class="progressTrack"><span style={`width:${steps.length ? completed / steps.length * 100 : 0}%`}></span></div><p>{copy("Continue after completing each step on the platform.")}</p></div>
+      <div class="sidebarNote"><span>↗</span><p>{copy("Watch. Do. Continue.")}</p></div>
+    </aside>
+    <main class="guideMain">
+      {#key chapter}
+        <div class="chapterEntrance">
+          <div class="chapterHeading"><span class="eyebrow">{finished ? copy("GUIDE COMPLETED") : chapter === -1 ? copy("LET’S GET YOU THERE") : copy("STEP {current} OF {total}", { current: chapter + 1, total: steps.length })}</span><span class="chapterType">{step ? copy({ buy: "Buy", sell: "Sell", swap: "Exchange", transfer: "Transfer" }[step.kind]) : copy("Step by step")}</span></div>
+          <h1 bind:this={heading} tabindex="-1">{finished ? copy("Every step. Done.") : step?.title ?? copy("A clear route. At your pace.")}</h1>
+          <p class="lead">{finished ? copy("You have confirmed every step. Check the final balance in your bank, wallet or exchange account.") : step?.summary ?? copy("First, see how your exchange works. Then follow the animated walkthrough, one step at a time.")}</p>
+          <div class="chapterContent">
+            <div class="visualColumn">
+              <InstructionScene {route} {steps} {step} {frame} {finished} playing={playing && documentVisible && !reducedMotion} />
+              {#if step}
+                <div class="playerControls">
+                  <button type="button" on:click={togglePlayback} aria-label={copy(playing ? "Pause walkthrough" : "Play walkthrough")} aria-pressed={playing}><span>{playing ? "Ⅱ" : "▶"}</span></button>
+                  <div class="playerTimeline" aria-label={copy("Walkthrough scenes")}>{#each step.frames as item, index}<button type="button" aria-label={copy("Scene {number}: {title}", { number: index + 1, title: item.title })} aria-pressed={index === frame} on:click={() => selectFrame(index)}><span style={`width:${index < frame ? 100 : index === frame ? Math.max(4, elapsed / FRAME_DURATION * 100) : 0}%`}></span></button>{/each}</div>
+                  <span class="sceneCount">{String(frame + 1).padStart(2, "0")} / {String(step.frames.length).padStart(2, "0")}</span>
+                  <button type="button" on:click={replay} aria-label={copy("Replay walkthrough")}>↻</button>
+                </div>
+              {:else}<div class="visualCaption"><span>✦</span>{copy(finished ? "Confirmed by you" : "An animated guide for your selected route")}</div>{/if}
             </div>
-          {/if}
-          <ul class="checklist">
-            <li>{copy("Check which asset and network you send, and which asset and network you receive.")}</li>
-            <li>{copy("Check the amount you will receive, the provider fee, how long the quote is valid, and whether a memo or tag is required.")}</li>
-            <li>{copy("Never send money after the quote expires. Get a new quote first.")}</li>
-          </ul>
-          {#if route.route_provider_url}<a href={route.route_provider_url} target="_blank" rel="noreferrer noopener" class="profileLink">{copy("Open {venue}", { venue: venueName(route.route_provider) })} <span>↗</span></a>{/if}
-          {@render providerReviews(route.route_provider, route.route_provider_url, routeGuide, true)}
-          <RouteExecutionPanel {route} />
-        </div></li>
-      {/if}
-      {#if cryptoToCrypto && route.market_path}
-        {@const market = route.market_path}
-        <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">1</span><div class="stepBody">
-          <h3>{copy("Convert {from} to {to}", { from: route.source_currency, to: route.bridge_currency ?? route.target_currency ?? "" })}</h3>
-          <p class="stepSummary">{copy("This is a normal exchange on {venue}. There is no separate person to message.", { venue: venueName(market.venue) })}</p>
-          <ul class="checklist">
-            <li>{copy("First check that the pair changes {from} into {to}.", { from: route.source_currency, to: route.bridge_currency ?? route.target_currency ?? "" })}</li>
-            <li>{copy("Check the current price, fee, and amount you should receive before pressing the exchange button.")}</li>
-            <li>{copy("Wait until the new balance appears before doing the next step.")}</li>
-          </ul>
-          <div class="counterparty"><div class="counterpartyTopline"><span class="counterpartyLabel">{copy("Spot market")}</span><span class="profileBadge">{venueName(market.venue)}</span></div><strong class="advertiser">{market.source_pair}</strong><span class="venueLine">{copy("Conversion rate {rate}", { rate: marketRate(market.source_rate) })}</span>
-            {#if linkFor("market_source")}<button type="button" class="profileLink" on:click={() => onOpenService(linkFor("market_source")!)}>{copy("Open {pair} on {venue}", { pair: market.source_pair, venue: venueName(market.venue) })} <span>↗</span></button>{:else if firstMarketUrl}<a href={firstMarketUrl} target="_blank" rel="noreferrer noopener" class="profileLink">{copy("Open {pair} on {venue}", { pair: market.source_pair, venue: venueName(market.venue) })} <span>↗</span></a>{/if}
+            <section class="explanation" aria-label={copy("Step instructions")}>
+              {#if step}
+                <span class="eyebrow">{copy("WHAT TO DO")}</span>
+                <div class="frameList">{#each step.frames as item, index}<button type="button" class:selected={index === frame} aria-pressed={index === frame} on:click={() => selectFrame(index)}><span class="frameNumber">{String(index + 1).padStart(2, "0")}</span><span><strong>{item.title}</strong><span class="frameText">{item.text}</span></span>{#if index === frame}<span class="frameIndicator">←</span>{/if}</button>{/each}</div>
+                <div class="checkpoint"><span>✓</span><div><strong>{copy("Before moving on")}</strong><p>{step.checkpoint}</p></div></div>
+              {:else if finished}
+                <span class="eyebrow">{copy("YOUR CHECKLIST")}</span>
+                <div class="finishChecklist">{#each steps as item}<div><span>✓</span><p>{item.title}</p></div>{/each}</div>
+                <div class="checkpoint"><span>◎</span><div><strong>{copy("Confirmed by you")}</strong><p>{copy("This checklist records your confirmations. It does not verify payments or balances.")}</p></div></div>
+              {:else}
+                <span class="eyebrow">{copy("THE PLAN")}</span>
+                <div class="planItem"><span>01</span><div><strong>{copy("See the whole picture")}</strong><p>{copy("Your route is split into {count} steps. We explain each action before you do it.", { count: steps.length })}</p></div></div>
+                <div class="planItem"><span>02</span><div><strong>{copy("Follow the demonstration")}</strong><p>{copy("Watch the highlights, pause whenever you need, and open the actual platform from the step.")}</p></div></div>
+                <div class="planItem"><span>03</span><div><strong>{copy("Confirm, then continue")}</strong><p>{copy("Once the payment or balance arrives, press “Done, continue”. You decide when to move on.")}</p></div></div>
+                <div class="estimate"><span>{copy("Estimated output:")}</span><strong>{tutorialMoney(route.target_amount_minor, route.target_currency, route.target_amount)}</strong><small>{copy("Check the current quote on the platform before exchanging.")}</small></div>
+              {/if}
+            </section>
           </div>
-        </div></li>
-        {#if route.bridge_currency}
-          <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">2</span><div class="stepBody">
-            <h3>{copy("Convert {from} to {to}", { from: route.bridge_currency, to: route.target_currency ?? "" })}</h3>
-            <p class="stepSummary">{copy("Do the second exchange on {venue} only after the first balance is available.", { venue: venueName(market.venue) })}</p>
-            <ul class="checklist">
-              <li>{copy("Open {pair} and check that it changes {from} into {to}.", { pair: market.target_pair, from: route.bridge_currency, to: route.target_currency ?? "" })}</li>
-              <li>{copy("Check the current price, fee, and amount you should receive before pressing the exchange button.")}</li>
-              <li>{copy("Before withdrawing, check the receiving asset and the network one more time.")}</li>
-            </ul>
-            <div class="counterparty"><div class="counterpartyTopline"><span class="counterpartyLabel">{copy("Spot market")}</span><span class="profileBadge">{venueName(market.venue)}</span></div><strong class="advertiser">{market.target_pair}</strong><span class="venueLine">{copy("Conversion rate {rate}", { rate: marketRate(market.target_rate) })}</span>
-              {#if linkFor("market_target")}<button type="button" class="profileLink" on:click={() => onOpenService(linkFor("market_target")!)}>{copy("Open {pair} on {venue}", { pair: market.target_pair, venue: venueName(market.venue) })} <span>↗</span></button>{:else if secondMarketUrl}<a href={secondMarketUrl} target="_blank" rel="noreferrer noopener" class="profileLink">{copy("Open {pair} on {venue}", { pair: market.target_pair, venue: venueName(market.venue) })} <span>↗</span></a>{/if}
-            </div>
-          </div></li>
-        {/if}
-      {/if}
-      {#if route.entry_offer_snapshot}
-        <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">{entryStepNumber}</span><div class="stepBody">
-          <h3>{directFiat ? copy("Transfer {from} to {to} via {venue}", { from: route.source_currency, to: route.target_currency ?? "", venue: entryVenue }) : cryptoToCrypto ? copy("Sell {asset} for {amount}", { asset: route.source_currency, amount: route.bridge_currency ?? route.entry_asset }) : copy("Buy {asset} for {amount}", { asset: entryAsset, amount: money(route.source_amount_minor, route.source_currency) })}</h3>
-          {#if entryDirect}
-            <p class="stepSummary">{copy("Open the direct exchange on {venue}, check the final amount, and follow the provider's instructions.", { venue: entryVenue })}</p>
-            <ul class="checklist">
-              <li>{copy("Check the currencies, amount, current rate, fee, and limits before continuing.")}</li>
-              <li>{copy("Sign in or complete verification on {venue}, if it asks you to, then follow the payment instructions shown there.", { venue: entryVenue })}</li>
-              <li>{copy("After the exchange, check that the new balance is available before continuing.")}</li>
-            </ul>
-          {:else}
-            <p class="stepSummary">{copy("Open the P2P listing on {venue}. Check the offer inside the platform before placing an order.", { venue: entryVenue })}</p>
-            <ul class="checklist">
-              <li>{copy("Before creating the order, compare the nickname and advertisement ID.")}</li>
-              <li>{copy("Check the current rate, order limits, and payment method on {venue}.", { venue: entryVenue })}</li>
-              {#if sourceFeeLabel}<li>{copy("This bank fee is only an estimate. Check the final bank fee before sending.")}</li>{/if}
-              <li>{cryptoToCrypto ? copy("Release the asset only after you personally see that the payment has arrived.") : copy("Use only the payment details shown inside the order. After sending, mark the order as paid.")}</li>
-            </ul>
+          {#if step}
+            <section class="realAction" aria-label={copy("On the actual platform")}>
+              <div class="realActionHeading"><div><img src={venueIcon(step.provider)} alt="" /><div><span class="eyebrow">{copy("ON THE ACTUAL PLATFORM")}</span><h2>{step.venue}</h2></div></div><span>{copy("Complete this step here")}</span></div>
+              {#if step.offer}<AdvertiserCard offer={step.offer} label={step.direct ? copy("Direct exchange on {venue}", { venue: step.venue }) : `${copy(step.kind === "buy" ? "Seller" : "Buyer")} ${copy("on {venue}", { venue: step.venue })}`} serviceLink={step.serviceLink} {venueNames} {onOpenService} />
+              {:else if step.serviceLink}<button type="button" class="platformLink" on:click={() => onOpenService(step!.serviceLink!)}>{copy("Open {venue}", { venue: step.venue })}<span>↗</span></button>
+              {:else if step.url}<a class="platformLink" href={step.url} target="_blank" rel="noreferrer noopener">{copy("Open {venue}", { venue: step.venue })}<span>↗</span></a>{/if}
+              {#if step.pair}<p class="marketInfo">Spot · {step.pair}{#if step.rate}<span>{copy("Conversion rate {rate}", { rate: step.rate })}</span>{/if}</p>{/if}
+              {#if step.execution}<RouteExecutionPanel {route} />{/if}
+              {#if step.guide || step.notes.length}
+                <details class="providerDetails" open={step.kind === "transfer" || Boolean(step.notes.length)}><summary>{copy("Details and platform instructions")}</summary><div>{#if step.guide}<p>{step.guide.description}</p>{/if}<ul>{#each [...step.guideSteps, ...step.notes] as note}<li>{note}</li>{/each}</ul>{#if step.guide?.links.length}<div class="guideLinks">{#each step.guide.links as link}<a href={link.url} target="_blank" rel="noreferrer noopener">{link.label} ↗</a>{/each}</div>{/if}</div></details>
+              {/if}
+              {#if step.direct && step.guide?.review_sources?.[0]}
+                {@const source = step.guide.review_sources[0]}
+                <ExternalReviews provider={step.provider} sourceUrl={source.url} sourceName={reviewSource(source.kind)} />
+              {:else if step.offer?.advertiser_profile_url && step.guide?.profile_reviews_available !== false}
+                <ExternalReviews profileUrl={step.offer.advertiser_profile_url} sourceName={step.venue} />
+              {:else if step.direct && step.url && step.guide?.profile_reviews_available !== false}
+                <ExternalReviews profileUrl={step.url} sourceName={step.venue} />
+              {/if}
+            </section>
           {/if}
-          {#if entryGuide}
-            <div class="providerGuide">
-              <p>{entryGuide.description}</p>
-              {#if entryGuideSteps.length}<ul class="checklist">{#each entryGuideSteps as step}<li>{step}</li>{/each}</ul>{/if}
-              {#if entryGuide.links.length}<div class="guideLinks">{#each entryGuide.links as link}<a href={link.url} target="_blank" rel="noreferrer noopener" class="profileLink">{link.label} <span>↗</span></a>{/each}</div>{/if}
-            </div>
+          {#if chapter === -1}
+            <div class="routeNotice"><span>ⓘ</span><div><strong>{copy("Before you begin")}</strong><p>{copy("Rates, limits, and offers can change. Check the provider, payment details, and network before sending money. Pay3Flow does not create orders or move money.")}</p>{#if route.source_bank_fee_percent != null}<p>{copy("Bank fees:")} {route.source_payment_method ?? route.source_currency}: {route.source_bank_fee_percent}%</p>{/if}{#if route.target_bank_fee_percent != null}<p>{copy("Bank fees:")} {route.target_payment_method ?? route.target_currency}: {route.target_bank_fee_percent}%</p>{/if}{#each route.warnings ?? [] as warning}<p>{warn(warning)}</p>{/each}</div></div>
           {/if}
-          <AdvertiserCard offer={route.entry_offer_snapshot} label={entryDirect ? copy("Direct exchange on {venue}", { venue: entryVenue }) : `${cryptoToCrypto ? copy("Buyer") : copy("Seller")} ${copy("on {venue}", { venue: entryVenue })}`} serviceLink={linkFor("entry")} {venueNames} {onOpenService} />
-          {@render providerReviews(entry?.provider ?? route.entry_offer_snapshot.source, route.entry_offer_snapshot.advertiser_profile_url, entryGuide, entryDirect)}
-        </div></li>
-      {/if}
-      {#if providerSwap}
-        <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">{providerStepNumber}</span><div class="stepBody">
-          <h3>{copy("Swap {from} for {to} via {venue}", { from: providerSwapFrom ?? "", to: providerSwapTo ?? "", venue: venueName(route.route_provider) })}</h3>
-          <p class="stepSummary">{route.entry_offer_snapshot ? copy("After you get {from}, send it to {venue} and exchange it for {to}.", { from: providerSwapFrom ?? "", venue: venueName(route.route_provider), to: providerSwapTo ?? "" }) : copy("Send {from} to {venue} first, then exchange it for {to}.", { from: providerSwapFrom ?? "", venue: venueName(route.route_provider), to: providerSwapTo ?? "" })}</p>
-          {#if route.route_path?.length}<p class="routePath">{readablePath(route.route_path)}</p>{/if}
-          {#if routeGuide}
-            <div class="providerGuide">
-              <p>{routeGuide.description}</p>
-              {#if routeGuide.steps.length}<ul class="checklist">{#each routeGuide.steps as step}<li>{step}</li>{/each}</ul>{/if}
-              {#if routeGuide.links.length}<div class="guideLinks">{#each routeGuide.links as link}<a href={link.url} target="_blank" rel="noreferrer noopener" class="profileLink">{link.label} <span>↗</span></a>{/each}</div>{/if}
-            </div>
-          {/if}
-          <ul class="checklist">
-            <li>{copy("Before sending, check the asset, the receiving asset, and the exact network.")}</li>
-            <li>{copy("Check the current rate, provider fee, quote expiry, and any address, memo, or tag requirement.")}</li>
-            <li>{copy("Wait until the new balance appears before considering this step finished.")}</li>
-          </ul>
-          {#if route.route_provider_url}<a href={route.route_provider_url} target="_blank" rel="noreferrer noopener" class="profileLink">{copy("Open {venue}", { venue: venueName(route.route_provider) })} <span>↗</span></a>{/if}
-          {@render providerReviews(route.route_provider, route.route_provider_url, routeGuide, true)}
-          <RouteExecutionPanel {route} />
-        </div></li>
-      {/if}
-      {#if crossVenue}
-        <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">{transferStepNumber}</span><div class="stepBody">
-          <h3>{copy("Transfer {asset} to {venue}", { asset: route.entry_asset, venue: exitVenue })}</h3>
-          <p class="stepSummary">{copy("Send the purchased asset from {from} to the deposit address on {to} before opening the next order.", { from: entryVenue, to: exitVenue })}</p>
-          <ul class="checklist">
-            <li>{#if transferNetwork}{copy("Copy the deposit address from {venue}. Choose the exact {network} network on both platforms.", { venue: exitVenue, network: transferNetwork })}{:else}{copy("First check that both platforms support the same asset and network. Then copy the deposit address from {venue}.", { venue: exitVenue })}{/if}</li>
-            <li>{copy("Check the complete address, memo or tag if required, and the withdrawal fee before confirming.")}</li>
-            <li>{copy("Wait until {venue} shows the deposit as received before continuing.", { venue: exitVenue })}</li>
-          </ul>
-        </div></li>
-      {/if}
-      {#if route.exit_offer_snapshot}
-        <li class="step" data-testid="instruction-step"><span class="stepNumber" aria-hidden="true">{exitStepNumber}</span><div class="stepBody">
-          <h3>{cryptoToCrypto ? copy("Buy {asset} with {bridge}", { asset: route.target_currency ?? "", bridge: route.bridge_currency ?? route.entry_asset }) : copy("Sell {asset} for {amount}", { asset: route.entry_asset, amount: money(route.target_amount_minor, route.target_currency, route.target_amount) })}</h3>
-          {#if exitDirect}
-            <p class="stepSummary">{copy("Open the direct exchange on {venue}, check the final amount, and follow the provider's instructions.", { venue: exitVenue })}</p>
-            <ul class="checklist">
-              <li>{copy("Check the currencies, amount, current rate, fee, and limits before continuing.")}</li>
-              <li>{copy("Sign in or complete verification on {venue}, if it asks you to, then follow the payment instructions shown there.", { venue: exitVenue })}</li>
-              <li>{copy("After the sale, check that the money has arrived in your account before considering the exchange finished.")}</li>
-            </ul>
-          {:else}
-            <p class="stepSummary">{copy("Open the P2P listing on {venue}. Check the offer inside the platform before placing an order.", { venue: exitVenue })}</p>
-            <ul class="checklist">
-              <li>{copy("Before creating the order, compare the nickname and advertisement ID.")}</li>
-              <li>{copy("Check the current rate, order limits, {thing}, and expected amount.", { thing: cryptoToCrypto ? copy("asset network") : copy("recipient payment method") })}</li>
-              {#if targetFeeLabel}<li>{copy("This bank fee is only an estimate. Check the final fee before accepting the payout.")}</li>{/if}
-              <li>{cryptoToCrypto ? copy("Confirm the {asset} balance and network before withdrawing.", { asset: route.target_currency ?? "" }) : copy("Release the asset only after you personally see the payment in your bank or payment account.")}</li>
-            </ul>
-          {/if}
-          {#if exitGuide}
-            <div class="providerGuide">
-              <p>{exitGuide.description}</p>
-              {#if exitGuideSteps.length}<ul class="checklist">{#each exitGuideSteps as step}<li>{step}</li>{/each}</ul>{/if}
-              {#if exitGuide.links.length}<div class="guideLinks">{#each exitGuide.links as link}<a href={link.url} target="_blank" rel="noreferrer noopener" class="profileLink">{link.label} <span>↗</span></a>{/each}</div>{/if}
-            </div>
-          {/if}
-          <AdvertiserCard offer={route.exit_offer_snapshot} label={exitDirect ? copy("Direct exchange on {venue}", { venue: exitVenue }) : `${cryptoToCrypto ? copy("Seller") : copy("Buyer")} ${copy("on {venue}", { venue: exitVenue })}`} serviceLink={linkFor("exit")} {venueNames} {onOpenService} />
-          {@render providerReviews(exit?.provider ?? route.exit_offer_snapshot.source, route.exit_offer_snapshot.advertiser_profile_url, exitGuide, exitDirect)}
-        </div></li>
-      {/if}
-    </ol>
-    <div class="warning"><strong>{copy("Important")}</strong><span>{copy("Rates, limits, and offers can change. Check the provider, payment details, and network before sending money. Pay3Flow does not create orders or move money.")}</span>{#each route.warnings ?? [] as warning}<span>{warningText(warning)}</span>{/each}</div>
+        </div>
+      {/key}
+    </main>
   </div>
+  <footer class="guideFooter"><div><span class="footerDot"></span><span>{finished ? copy("All steps confirmed") : step ? copy("Only continue once you have completed this step.") : copy("You control every step")}</span></div><div class="footerActions">{#if chapter >= 0 && !finished}<button type="button" class="backButton" on:click={() => navigate(chapter - 1)}>← {copy("Back")}</button>{/if}{#if finished}<button type="button" class="backButton" on:click={() => navigate(0)}>{copy("Review steps")}</button><button type="button" class="continueButton" on:click={onClose} aria-label={copy("Back to routes")}>{copy("Back to routes")} <span aria-hidden="true">↗</span></button>{:else if step}<button type="button" class="continueButton" on:click={confirmStep} data-testid="confirm-instruction-step">{copy(chapter === steps.length - 1 ? "Done, finish" : "Done, continue")} <span>→</span></button>{:else}<button type="button" class="continueButton" disabled={!steps.length} on:click={() => navigate(0)} data-testid="start-guide">{copy("Let’s begin")} <span>→</span></button>{/if}</div></footer>
 </div>
 
 <style>
-.backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1200;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  background: rgba(15, 17, 14, 0.68);
-  backdrop-filter: blur(18px) saturate(120%);
-  -webkit-backdrop-filter: blur(18px) saturate(120%);
-  animation: fadeIn 0.2s ease;
-  touch-action: none;
-}
-
-.modal {
-  width: min(100%, 560px);
-  max-height: min(720px, calc(100vh - 40px));
-  overflow-y: auto;
-
-  scrollbar-gutter: stable;
-  padding: 28px;
-  border: 1px solid rgba(255, 255, 255, 0.72);
-  border-radius: 28px;
-  background: rgba(250, 250, 246, 0.98);
-  box-shadow: none;
-  color: var(--color-text);
-  animation: modalIn 0.3s cubic-bezier(0.22, 1, 0.36, 1);
-  touch-action: auto;
-  overscroll-behavior: contain;
-  transform: translateY(var(--sheet-drag, 0));
-  transition: transform 0.24s ease;
-}
-
-.modal.dragging {
-  transition: none;
-}
-
-.sheetHandle {
-  display: none;
-}
-
-.header {
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-}
-
-.eyebrow {
-  color: var(--color-violet);
-  font-size: 12px;
-  font-weight: 850;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.header h2 {
-  margin: 8px 0 7px;
-  font-size: 27px;
-  letter-spacing: -0.055em;
-  line-height: 1.05;
-}
-
-.header p {
-  margin: 0;
-  color: var(--color-text-soft);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.header p strong {
-  color: var(--color-text);
-}
-
-.header .intro {
-  max-width: 420px;
-}
-
-.header .estimate {
-  margin-top: 8px;
-}
-
-.closeButton {
-  width: 36px;
-  height: 36px;
-  flex: 0 0 auto;
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  color: var(--color-text-soft);
-  font-size: 24px;
-  line-height: 1;
-}
-
-.closeButton:hover {
-  background: var(--color-accent-soft);
-  color: var(--color-text);
-}
-
-.workflow {
-  display: grid;
-  gap: 0;
-  margin: 28px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.step {
-  position: relative;
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  gap: 16px;
-  padding: 0 0 30px;
-}
-
-.step:last-child {
-  padding-bottom: 0;
-}
-
-.step:not(:last-child)::before {
-  position: absolute;
-  top: 40px;
-  bottom: 0;
-  left: 19px;
-  width: 2px;
-  border-radius: 999px;
-  background: #d9e5d1;
-  content: "";
-}
-
-.stepNumber {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  width: 40px;
-  height: 40px;
-  place-items: center;
-  border: 1px solid #76951e;
-  border-radius: 50%;
-  background: var(--color-primary);
-  color: var(--color-accent);
-  font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 800;
-  box-shadow: none;
-}
-
-.stepBody {
-  min-width: 0;
-  padding-top: 2px;
-}
-
-.step h3 {
-  margin: 0;
-  font-size: 16px;
-  letter-spacing: -0.025em;
-  line-height: 1.3;
-}
-
-.step .stepSummary {
-  margin: 7px 0 0;
-  color: var(--color-text-soft);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.providerGuide {
-  margin-top: 14px;
-  padding: 12px 13px;
-  border: 1px solid rgba(109, 152, 0, 0.2);
-  border-radius: 14px;
-  background: rgba(181, 224, 58, 0.08);
-}
-
-.providerGuide > p {
-  margin: 0;
-  color: var(--color-text-soft);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.providerGuide .checklist {
-  margin-top: 10px;
-}
-
-.guideLinks {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 14px;
-}
-
-.checklist {
-  display: grid;
-  gap: 7px;
-  margin: 13px 0 0;
-  padding: 0;
-  color: var(--color-text-soft);
-  font-size: 12px;
-  line-height: 1.5;
-  list-style: none;
-}
-
-.checklist li {
-  position: relative;
-  padding-left: 19px;
-}
-
-.checklist li::before {
-  position: absolute;
-  top: 0.12em;
-  left: 0;
-  display: grid;
-  width: 14px;
-  height: 14px;
-  place-items: center;
-  border-radius: 50%;
-  background: rgba(109, 152, 0, 0.13);
-  color: #5f8308;
-  content: "✓";
-  font-size: 12px;
-  font-weight: 900;
-  line-height: 1;
-}
-
-.counterparty {
-  margin-top: 12px;
-  padding: 12px;
-  border: 1px solid rgba(111, 83, 190, 0.2);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.78);
-}
-
-.counterpartyTopline {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.counterpartyIdentity {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.counterpartyIdentityCopy {
-  min-width: 0;
-  flex: 1;
-}
-
-.counterpartyAvatar {
-  position: relative;
-  display: grid;
-  width: 42px;
-  height: 42px;
-  flex: 0 0 42px;
-  place-items: center;
-  border: 1px solid #cfe0bf;
-  border-radius: 50%;
-  background: linear-gradient(145deg, #d9f28c, #8dbd2b);
-  color: #30430b;
-  font-size: 16px;
-  font-weight: 850;
-  box-shadow: none;
-}
-
-.avatarVenue {
-  position: absolute;
-  right: -3px;
-  bottom: -2px;
-  display: grid;
-  width: 16px;
-  height: 16px;
-  place-items: center;
-  overflow: hidden;
-  border: 2px solid #f4f8f1;
-  border-radius: 50%;
-  background: #fff;
-}
-
-.avatarVenue img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.counterpartyLabel {
-  color: var(--color-violet);
-  font-size: 12px;
-  font-weight: 850;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.profileBadge,
-.manualBadge {
-  padding: 4px 7px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 850;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.profileBadge {
-  background: rgba(181, 224, 58, 0.2);
-  color: var(--color-accent-text);
-}
-
-.manualBadge {
-  background: rgba(240, 166, 89, 0.16);
-  color: var(--color-warn);
-}
-
-.advertiser {
-  display: block;
-  margin-top: 9px;
-  font-size: 16px;
-  letter-spacing: -0.03em;
-}
-
-.counterpartyIdentityCopy .advertiser {
-  margin-top: 6px;
-}
-
-.venueLine,
-.paymentLine,
-.adHint {
-  display: block;
-  color: var(--color-text-faint);
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.metrics {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 12px;
-  margin: 10px 0 7px;
-  color: var(--color-text-soft);
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-
-.metrics b {
-  color: var(--color-text);
-}
-
-.profileLink {
-  display: inline-block;
-  margin-top: 10px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--color-accent-text);
-  font-size: 12px;
-  font-weight: 850;
-  text-decoration: none;
-}
-
-.profileLink:hover {
-  text-decoration: underline;
-}
-
-.profileLink span {
-  margin-left: 3px;
-}
-
-.adHint {
-  margin-top: 6px;
-  font-size: 12px;
-}
-
-.missing {
-  color: var(--color-text-soft);
-}
-
-.warning {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-top: 16px;
-  padding: 12px 14px;
-  border: 1px solid rgba(240, 166, 89, 0.28);
-  border-radius: 14px;
-  background: rgba(240, 166, 89, 0.1);
-  color: #75501f;
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.warning strong {
-  font-size: 12px;
-  text-transform: uppercase;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes modalIn {
-  from { opacity: 0; transform: translateY(16px) scale(0.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-.backdrop {
-  background: rgba(38, 57, 37, 0.28);
-  backdrop-filter: blur(9px);
-  -webkit-backdrop-filter: blur(9px);
-}
-
-.modal {
-  padding: 24px;
-  border-color: var(--color-border-strong);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.98);
-  box-shadow: none;
-}
-
-.eyebrow,
-.counterpartyLabel {
-  color: var(--color-accent-text);
-}
-
-.closeButton {
-  border-color: var(--color-border);
-  border-radius: 9px;
-}
-
-.counterparty {
-  border-color: #d4e4c5;
-  background: #f4f8f1;
-}
-
-@media (max-width: 560px) {
-  .backdrop {
-    align-items: end;
-    padding: 0;
+  .guidePage { position: fixed; inset: 0; z-index: 1200; overflow-y: auto; overscroll-behavior: contain; background: var(--color-bg); color: var(--color-text); animation: pageIn .35s ease both; }
+  .srOnly { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+  .guideHeader { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 23px 40px; border-bottom: 1px solid var(--color-border); }
+  .guideBrand { display: flex; align-items: center; gap: 10px; }.brandMark { display: grid; place-items: center; width: 31px; height: 31px; border-radius: 10px; background: var(--color-accent); color: #152016; font-size: 25px; }.guideBrand > strong { font-size: 23px; font-weight: 800; letter-spacing: -1.3px; }.guideBrand > strong > span { color: var(--color-accent-text); }.brandDivider { height: 22px; width: 1px; background: var(--color-border); margin: 0 9px; }.guideLabel { font-size: 12px; color: var(--color-text-soft); }
+  .closeButton { display: flex; align-items: center; gap: 17px; color: var(--color-text-soft); font-size: 12px; }.closeButton > span:last-child { display: grid; place-items: center; width: 35px; height: 35px; border: 1px solid var(--color-border); border-radius: 50%; font-size: 23px; }.closeButton:hover { color: var(--color-text); }
+  .guideLayout { display: grid; grid-template-columns: 246px minmax(0, 1fr); width: min(1440px, 100%); margin: 0 auto; }
+  .chapters { padding: 37px 24px 120px 40px; border-right: 1px solid var(--color-border); min-width: 0; }
+  .eyebrow { font: 10px var(--font-mono); letter-spacing: .09em; color: var(--color-text-soft); }
+  .routePair { display: flex; align-items: center; gap: 13px; margin-top: 15px; font-size: 24px; font-weight: 800; letter-spacing: -.05em; }.routePair > span { font-size: 20px; color: var(--color-text-soft); }
+  .overviewButton { display: flex; align-items: center; gap: 13px; width: 100%; padding: 12px 8px; margin-top: 31px; border-radius: 8px; text-align: left; font-size: 12px; font-weight: 650; color: var(--color-text-soft); }.overviewButton > span { font-size: 20px; }.overviewButton.current { color: var(--color-text); background: var(--color-panel-soft); }
+  .chapters ol { list-style: none; display: grid; gap: 9px; margin-top: 19px; }
+  .chapters li { position: relative; }.chapters li:not(:last-child)::after { content: ""; position: absolute; left: 20px; top: 44px; bottom: -13px; width: 1px; background: var(--color-border); }
+  .chapters li button { display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 10px 6px; text-align: left; border-radius: 9px; }.chapters li button:disabled { cursor: default; color: var(--color-text-soft); }.chapters li.active button { background: var(--color-accent-soft); }
+  .stepNumber { display: grid; place-items: center; flex: 0 0 28px; height: 28px; border: 1px solid var(--color-border-strong); border-radius: 50%; font: 11px var(--font-mono); }.active .stepNumber, .complete .stepNumber { background: var(--color-accent); border-color: var(--color-accent); color: #182414; }
+  .chapterCopy { display: grid; gap: 6px; padding-top: 3px; min-width: 0; }.chapterCopy strong { font-size: 11px; font-weight: 700; line-height: 1.55; overflow-wrap: anywhere; }.chapterCopy small { font-size: 10px; color: var(--color-text-soft); }
+  .chapterProgress { margin-top: 36px; padding-top: 24px; border-top: 1px solid var(--color-border); }.chapterProgress > div:first-child { display: flex; justify-content: space-between; font-size: 10px; color: var(--color-text-soft); }.chapterProgress strong { font: 11px var(--font-mono); color: var(--color-text); }.progressTrack { margin-top: 12px; height: 3px; border-radius: 3px; background: var(--color-border); overflow: hidden; }.progressTrack > span { display: block; height: 100%; background: var(--color-accent-strong); transition: width .6s ease; }.chapterProgress p { margin-top: 12px; color: var(--color-text-soft); font-size: 10px; line-height: 1.8; }.sidebarNote { display: flex; align-items: center; gap: 12px; margin-top: 70px; color: var(--color-text-faint); font-size: 11px; }.sidebarNote > span { font-size: 27px; }
+  .guideMain { min-width: 0; padding: 38px 42px 120px; }.chapterEntrance { animation: chapterIn .5s cubic-bezier(.22,1,.36,1) both; }.chapterHeading { display: flex; align-items: center; justify-content: space-between; gap: 15px; }.chapterType { border: 1px solid var(--color-border); border-radius: 999px; padding: 5px 10px; font-size: 10px; color: var(--color-text-soft); }
+  h1 { font-size: clamp(30px, 3.3vw, 49px); line-height: 1.15; font-weight: 750; letter-spacing: -.055em; margin-top: 17px; max-width: 960px; }h1:focus { outline: none; }.lead { max-width: 710px; color: var(--color-text-soft); font-size: 13px; line-height: 1.8; margin-top: 14px; }
+  .chapterContent { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(260px, .85fr); gap: 33px; margin-top: 31px; align-items: start; }.visualColumn { min-width: 0; }.explanation { padding-top: 7px; min-width: 0; }
+  .planItem { display: flex; align-items: flex-start; gap: 14px; margin-top: 25px; }.planItem > span { padding-top: 2px; color: var(--color-text-faint); font: 11px var(--font-mono); }.planItem strong { font-size: 14px; font-weight: 750; letter-spacing: -.02em; }.planItem p { color: var(--color-text-soft); font-size: 12px; line-height: 1.85; margin-top: 7px; }
+  .estimate { display: grid; gap: 10px; margin-top: 31px; padding: 20px; border: 1px solid var(--color-border); border-radius: 13px; background: var(--color-paper); }.estimate > span { color: var(--color-text-soft); font-size: 11px; }.estimate strong { font-size: 27px; font-weight: 750; letter-spacing: -.04em; overflow-wrap: anywhere; }.estimate small { font-size: 10px; color: var(--color-text-soft); line-height: 1.7; }
+  .visualCaption { display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 16px; font-size: 10px; color: var(--color-text-soft); }.visualCaption > span { color: var(--color-accent-text); }
+  .frameList { display: grid; gap: 7px; margin-top: 15px; }.frameList button { display: flex; align-items: flex-start; width: 100%; gap: 11px; text-align: left; padding: 13px 12px; border: 1px solid transparent; border-radius: 11px; transition: background .3s, border-color .3s; }.frameList button.selected { border-color: var(--color-border); background: var(--color-paper); }.frameNumber { flex: 0 0 22px; margin-top: 2px; font: 10px var(--font-mono); color: var(--color-text-faint); }.selected .frameNumber { color: var(--color-accent-text); }.frameList strong { font-size: 12px; font-weight: 750; line-height: 1.5; }.frameText { display: block; color: var(--color-text-soft); font-size: 11px; line-height: 1.8; margin-top: 5px; }.frameIndicator { font-size: 15px; color: var(--color-accent-text); margin-left: auto; }
+  .checkpoint { display: flex; gap: 10px; padding: 17px; background: var(--color-accent-soft); border: 1px solid var(--color-border); border-radius: 11px; margin-top: 19px; }.checkpoint > span { color: var(--color-accent-text); font-size: 18px; }.checkpoint strong { font-size: 11px; }.checkpoint p { font-size: 11px; line-height: 1.8; margin-top: 5px; color: var(--color-text-soft); }
+  .playerControls { display: flex; align-items: center; gap: 10px; padding: 8px 4px; margin-top: 5px; }.playerControls > button { font-size: 17px; color: var(--color-text-soft); width: 32px; height: 32px; }.playerTimeline { display: flex; gap: 4px; flex: 1; }.playerTimeline button { position: relative; flex: 1; min-width: 0; height: 32px; background: transparent; }.playerTimeline button::before { content: ""; position: absolute; left: 0; right: 0; height: 3px; top: 15px; border-radius: 3px; background: var(--color-border); }.playerTimeline button > span { position: absolute; top: 15px; left: 0; height: 3px; border-radius: 3px; background: var(--color-accent-text); transition: width .1s linear; }.sceneCount { white-space: nowrap; font: 9px var(--font-mono); color: var(--color-text-soft); }
+  .realAction { padding: 22px; margin-top: 28px; border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-paper); }.realActionHeading { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 14px; }.realActionHeading > div { display: flex; align-items: center; gap: 11px; }.realActionHeading img { width: 32px; height: 32px; border-radius: 50%; }.realActionHeading h2 { margin-top: 5px; font-size: 16px; }.realActionHeading > span { color: var(--color-text-soft); font-size: 11px; }.platformLink { display: flex; align-items: center; justify-content: space-between; gap: 18px; width: fit-content; min-height: 44px; padding: 0 16px; background: var(--color-accent); color: #152016; border-radius: 10px; font-size: 12px; font-weight: 750; }.platformLink:hover { background: #c3ff22; }.platformLink > span { font-size: 19px; }.marketInfo { margin-top: 14px; font-size: 12px; font-family: var(--font-mono); }.marketInfo > span { display: block; font-family: var(--font-sans); margin-top: 5px; color: var(--color-text-soft); }
+  .providerDetails { margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--color-border); font-size: 12px; line-height: 1.85; }.providerDetails summary { cursor: pointer; font-weight: 700; }.providerDetails > div { margin-top: 13px; color: var(--color-text-soft); }.providerDetails ul { padding-left: 18px; display: grid; gap: 7px; margin-top: 10px; }.guideLinks { display: flex; flex-wrap: wrap; gap: 15px; margin-top: 13px; }.guideLinks a { text-decoration: underline; text-underline-offset: 3px; }
+  .routeNotice { display: flex; align-items: flex-start; gap: 12px; margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--color-border); color: var(--color-text-soft); font-size: 11px; line-height: 1.9; }.routeNotice > span { font-size: 18px; }.routeNotice strong { color: var(--color-text); font-size: 11px; }.routeNotice p { margin-top: 5px; }.finishChecklist { margin-top: 22px; display: grid; gap: 17px; }.finishChecklist > div { display: flex; gap: 11px; font-size: 12px; line-height: 1.7; }.finishChecklist > div > span { color: var(--color-accent-text); }
+  .guideFooter { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: flex; justify-content: space-between; align-items: center; gap: 22px; padding: 17px 40px; background: var(--color-paper); border-top: 1px solid var(--color-border); }.guideFooter > div:first-child { display: flex; align-items: center; gap: 8px; color: var(--color-text-soft); font-size: 11px; }.footerDot { width: 5px; height: 5px; border-radius: 50%; background: var(--color-accent-text); flex-shrink: 0; }.footerActions { display: flex; align-items: center; gap: 24px; }.backButton { font-size: 12px; color: var(--color-text-soft); }.continueButton { display: flex; align-items: center; justify-content: space-between; gap: 35px; min-height: 47px; padding: 0 21px; border-radius: 10px; background: var(--color-accent); color: #152016; font-size: 13px; font-weight: 800; }.continueButton > span { font-size: 22px; font-weight: 400; }.continueButton:hover { background: #c3ff22; }.continueButton:disabled { opacity: .5; cursor: default; }
+  @keyframes pageIn { from { opacity: 0; transform: translateY(12px); } }@keyframes chapterIn { from { opacity: 0; transform: translateY(14px); } }
+  @media (min-width: 761px) { .guideFooter { position: fixed; left: 0; right: 0; }.guideLayout { min-height: calc(100dvh - 82px); } }
+  @media (max-height: 820px) and (min-width: 901px) { .guideHeader { padding-top: 16px; padding-bottom: 16px; }.guideMain { padding-top: 25px; }h1 { font-size: 38px; margin-top: 12px; }.lead { margin-top: 10px; }.chapterContent { margin-top: 24px; } }
+  @media (max-width: 1100px) { .guideLayout { grid-template-columns: 205px minmax(0,1fr); }.chapters { padding-left: 24px; padding-right: 18px; }.guideMain { padding-left: 27px; padding-right: 27px; }.chapterContent { gap: 20px; grid-template-columns: minmax(0,1fr) minmax(235px,.85fr); }.guideHeader { padding-left: 24px; padding-right: 24px; }.guideFooter { padding-left: 24px; padding-right: 24px; } }
+  @media (max-width: 900px) and (min-width: 761px) { .guideLayout { grid-template-columns: 170px minmax(0,1fr); }.chapters { padding-left: 18px; padding-right: 12px; }.chapterContent { grid-template-columns: minmax(0,1fr); }.guideMain { padding-left: 25px; padding-right: 25px; }.frameList { grid-template-columns: 1fr 1fr; }.sidebarNote { display: none; } }
+  @media (max-width: 760px) {
+    .guideHeader { padding: 14px 18px; }.guideBrand { gap: 7px; }.guideBrand > strong { font-size: 21px; }.brandMark { width: 27px; height: 27px; font-size: 23px; border-radius: 8px; }.brandDivider, .guideLabel, .closeText { display: none; }.closeButton > span:last-child { width: 32px; height: 32px; }
+    .guideLayout { display: block; }.chapters { padding: 15px 18px; border-right: 0; border-bottom: 1px solid var(--color-border); }.chapters > .eyebrow, .routePair, .chapterProgress, .sidebarNote, .chapterCopy { display: none; }.chapters { display: flex; align-items: center; gap: 12px; overflow-x: auto; }.overviewButton { flex: 0 0 auto; width: auto; margin: 0; padding: 7px 10px; font-size: 11px; }.chapters ol { display: flex; gap: 8px; margin: 0; }.chapters li:not(:last-child)::after { display: none; }.chapters li button { padding: 5px; min-width: 44px; min-height: 44px; display: grid; place-items: center; }.stepNumber { width: 29px; height: 29px; }.guideMain { padding: 26px 18px 100px; }h1 { margin-top: 13px; font-size: 33px; }.lead { font-size: 12px; line-height: 1.85; margin-top: 11px; }.chapterContent { grid-template-columns: minmax(0,1fr); gap: 25px; margin-top: 23px; }.chapterType { font-size: 9px; }.planItem { margin-top: 21px; }.estimate { margin-top: 24px; }.frameList button { padding: 12px 10px; }.frameText { font-size: 12px; }.frameList strong { font-size: 13px; }.checkpoint p { font-size: 12px; }.realAction { padding: 17px; margin-top: 24px; }.realActionHeading > span { display: none; }.realActionHeading .eyebrow { font-size: 9px; }.routeNotice { font-size: 11px; }
+    .guideFooter { padding: 12px 18px max(12px, env(safe-area-inset-bottom)); gap: 12px; }.guideFooter > div:first-child { display: none; }.footerActions { justify-content: space-between; width: 100%; gap: 14px; }.continueButton { min-height: 48px; flex: 1; justify-content: center; gap: 23px; }.backButton { flex: 0 0 auto; font-size: 11px; }.playerControls > button { min-width: 44px; min-height: 44px; }.playerTimeline button { min-width: 0; }
   }
-
-  .modal {
-    width: 100%;
-    max-height: min(90vh, 760px);
-    padding: 8px 18px max(18px, env(safe-area-inset-bottom));
-    border-radius: 23px 23px 0 0;
-    transform: translateY(var(--sheet-drag, 0));
-  }
-
-  .sheetHandle {
-    display: flex;
-    width: 100%;
-    height: 30px;
-    align-items: center;
-    justify-content: center;
-    color: var(--color-text-faint);
-    cursor: grab;
-    touch-action: none;
-    user-select: none;
-  }
-
-  .sheetHandle:active {
-    cursor: grabbing;
-  }
-
-  .sheetHandle span {
-    display: block;
-    width: 38px;
-    height: 5px;
-    border-radius: 999px;
-    background: currentColor;
-  }
-
-  .header h2 {
-    font-size: 23px;
-  }
-
-  .workflow {
-    margin-top: 24px;
-  }
-
-  .step {
-    grid-template-columns: 36px minmax(0, 1fr);
-    gap: 12px;
-    padding-bottom: 26px;
-  }
-
-  .step:not(:last-child)::before {
-    top: 35px;
-    left: 16px;
-  }
-
-  .stepNumber {
-    width: 34px;
-    height: 34px;
-    font-size: 12px;
-  }
-
-  .step h3 {
-    font-size: 15px;
-  }
-}
-
-:global(html[data-theme="dark"]) .modal {
-  border-color: var(--color-border-strong);
-  background: rgba(25, 25, 25, 0.99);
-  box-shadow: none;
-}
-
-:global(html[data-theme="dark"]) .closeButton,
-:global(html[data-theme="dark"]) .counterparty {
-  border-color: #3b3b3b;
-  background: #222222;
-}
-
-:global(html[data-theme="dark"]) .step:not(:last-child)::before {
-  background: #3c4435;
-}
-
-:global(html[data-theme="dark"]) .stepNumber {
-  border-color: #91b52b;
-  box-shadow: none;
-}
-
-:global(html[data-theme="dark"]) .checklist li::before {
-  background: rgba(181, 224, 58, 0.12);
-  color: var(--color-accent);
-}
-
-:global(html[data-theme="dark"]) .avatarVenue {
-  border-color: #222222;
-  background: #ffffff;
-}
-
-:global(html[data-theme="dark"]) .profileBadge {
-  color: var(--color-accent);
-}
-
-
-.header { padding-bottom: 16px; border-bottom: 1px solid var(--color-border); }
-.warning { border-top: 1px solid var(--color-border); }
-.header p, .step .stepSummary, .checklist, .providerGuide > p { font-size: 14px; line-height: 1.6; }
+  @media (prefers-reduced-motion: reduce) { .guidePage, .chapterEntrance { animation: none; } }
 </style>

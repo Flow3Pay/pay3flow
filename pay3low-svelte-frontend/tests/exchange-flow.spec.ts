@@ -1352,7 +1352,7 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await expect(alternativeRoute.getByRole("button", { name: /Select route 2:/ })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByTestId("complete-route").first().locator(".routeWorkflowButton")).toHaveAttribute(
     "aria-label",
-    "AMD → USDT (Binance) → RUB (Binance)",
+    "AMD · IDBank → USDT (Binance) → RUB · Alfa-Bank (Binance)",
   );
   const routeGroups = page.getByTestId("route-groups");
   const scrollMetrics = await routeGroups.evaluate((element) => ({
@@ -1362,7 +1362,7 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   }));
   expect(scrollMetrics.overflowY).toBe("auto");
   expect(scrollMetrics.scrollHeight).toBeGreaterThan(scrollMetrics.clientHeight);
-  await expect(routeGroups).toHaveCSS("scrollbar-width", "thin");
+  await expect(routeGroups).toHaveCSS("scrollbar-width", "auto");
   await routeGroups.hover();
   await page.mouse.wheel(0, 360);
   await expect.poll(() => routeGroups.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
@@ -1384,15 +1384,17 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await expect(instructions).toBeVisible();
   await expect(instructions.getByRole("list", { name: "Exchange steps" })).toBeVisible();
   await expectNumberedTimeline(instructions, ["1", "2"]);
-  await expect(instructions.getByText("Buy USDT for 100,000 AMD")).toBeVisible();
-  await expect(instructions.getByText("Before creating the order, compare the nickname and advertisement ID.")).toHaveCount(2);
-  await expect(instructions.getByText("Release the asset only after you personally see the payment in your bank or payment account.")).toBeVisible();
+  await instructions.getByTestId("start-guide").click();
+  await expect(instructions.getByRole("heading", { name: "Buy USDT for 100,000 AMD" })).toBeVisible();
+  await expect(instructions.locator(".frameList").getByText("Before creating the order, compare the nickname and advertisement ID.")).toBeVisible();
+  await instructions.getByTestId("confirm-instruction-step").click();
+  await expect(instructions.locator(".frameList").getByText("Release the asset only after you personally see the payment in your bank or payment account.").first()).toBeVisible();
   const offerLinks = instructions.getByRole("link", { name: /Open Binance P2P and find binance-merchant/ });
   await expect(offerLinks.first()).toHaveAttribute(
     "href",
-    "https://example.com/entry-1",
+    "https://example.com/exit-1",
   );
-  await expect(offerLinks).toHaveCount(2);
+  await expect(offerLinks).toHaveCount(1);
   await instructions.getByRole("button", { name: "Close instructions", exact: true }).click();
   await expect(instructions).toBeHidden();
   await page.getByTestId("start-search").click();
@@ -1465,9 +1467,11 @@ test("RUB to RUB bank routes require checking the order payment method", async (
 
   const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
   await expectNumberedTimeline(instructions, ["1", "2"]);
-  await expect(instructions.getByText("Buy USDT for 10,000 RUB")).toBeVisible();
+  await instructions.getByTestId("start-guide").click();
+  await expect(instructions.getByRole("heading", { name: "Buy USDT for 10,000 RUB" })).toBeVisible();
   await expect(instructions.getByText("Check the current rate, order limits, and payment method on Binance.")).toBeVisible();
-  await expect(instructions.getByText("Release the asset only after you personally see the payment in your bank or payment account.")).toBeVisible();
+  await instructions.getByTestId("confirm-instruction-step").click();
+  await expect(instructions.locator(".frameList").getByText("Release the asset only after you personally see the payment in your bank or payment account.").first()).toBeVisible();
 });
 
 test("AMD cycle keeps the best route visible when profit is unconfirmed", async ({ page }) => {
@@ -1494,10 +1498,12 @@ test("cross-venue instructions include a numbered transfer step", async ({ page 
 
   await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
   const sourcePicker = page.getByRole("dialog", { name: "Choose where you pay from" });
+  await sourcePicker.getByRole("option", { name: /^AMD / }).click();
   await sourcePicker.getByLabel("Search banks and payment methods").fill("IDBank");
   await sourcePicker.getByRole("option", { name: /IDBank/ }).click();
   await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
   const targetPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
+  await targetPicker.getByRole("option", { name: /^RUB / }).click();
   await targetPicker.getByLabel("Search banks and payment methods").fill("Alfa");
   await targetPicker.getByRole("option", { name: /Alfa-Bank/ }).click();
   await page.getByLabel("Amount to send").fill("100000");
@@ -1507,9 +1513,11 @@ test("cross-venue instructions include a numbered transfer step", async ({ page 
   await page.getByTestId("complete-route").nth(2).locator(".routeAmount").click();
   const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
   await expectNumberedTimeline(instructions, ["1", "2", "3"]);
+  await instructions.getByTestId("start-guide").click();
+  await instructions.getByTestId("confirm-instruction-step").click();
   await expect(instructions.getByRole("heading", { name: "Transfer USDT to Bybit" })).toBeVisible();
   await expect(instructions.getByText("Choose the exact Ethereum (ERC-20) network on both platforms", { exact: false })).toBeVisible();
-  await expect(instructions.getByText("Wait until Bybit shows the deposit as received before continuing.")).toBeVisible();
+  await expect(instructions.locator(".frameList").getByText("Wait until Bybit shows the deposit as received before continuing.")).toBeVisible();
 });
 
 test("selected bank currencies override the reversed corridor", async ({ page }) => {
@@ -2141,11 +2149,13 @@ test("direct provider quotes keep their API names and independent prices", async
   );
   await cards.nth(0).locator(".routeAmount").click();
   let instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
+  await instructions.getByTestId("start-guide").click();
   await expect(instructions.getByTestId("route-wallet-execution")).toBeVisible();
   await expect(instructions.getByRole("button", { name: "Connect ethereum wallet" })).toBeVisible();
   await instructions.getByRole("button", { name: "Close instructions", exact: true }).click();
   await cards.nth(1).locator(".routeAmount").click();
   instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
+  await instructions.getByTestId("start-guide").click();
   await expect(instructions.getByTestId("route-wallet-execution")).toBeVisible();
 });
 
@@ -2154,19 +2164,20 @@ test("ID Pay provides a direct AMD to RUB route with its API name", async ({ pag
   await openApp(page);
 
   await page.getByLabel("Amount to send").fill("42269");
-  await page.getByTestId("start-search").click();
+  await expect(page.getByTestId("complete-route")).toBeVisible();
 
   const route = page.getByTestId("complete-route");
   await expect(route).toHaveCount(1);
-  await expect(route).toContainText("10,000 RUB");
+  await expect(route).toContainText(/10,?000 RUB/);
   await expect(route).not.toContainText("Quote by");
-  await expect(route.locator(".workflow")).toHaveAttribute(
+  await expect(route.locator(".routeWorkflowButton")).toHaveAttribute(
     "aria-label",
-    "AMD → RUB (ID Pay Live)",
+    "AMD · Ameriabank → RUB · Sberbank (ID Pay Live)",
   );
 
   await route.locator(".routeAmount").click();
   const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
+  await instructions.getByTestId("start-guide").click();
   await expect(instructions.getByRole("heading", { name: "Transfer AMD to RUB via ID Pay Live" })).toBeVisible();
   await expect(instructions.getByRole("link", { name: "Open ID Pay Live exchange" })).toHaveAttribute("href", "https://id-pay.ru/");
 });
@@ -2191,7 +2202,9 @@ test("small AMD to BTC@near routes keep crypto precision", async ({ page }) => {
   await route.locator(".routeAmount").click();
   const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
   await expectNumberedTimeline(instructions, ["1", "2"]);
-  await expect(instructions.getByText("Buy USDT for 10,000 AMD")).toBeVisible();
+  await instructions.getByTestId("start-guide").click();
+  await expect(instructions.getByRole("heading", { name: "Buy USDT for 10,000 AMD" })).toBeVisible();
+  await instructions.getByTestId("confirm-instruction-step").click();
   await expect(instructions.getByRole("heading", { name: "Swap USDT for BTC via NEAR 1Click" })).toBeVisible();
   await expect(instructions.getByRole("button", { name: "Connect optimism wallet" })).toBeVisible();
 });
@@ -2207,9 +2220,9 @@ test("direct Whitebird exchange uses provider wording and local venue icons", as
   await page.getByTestId("start-search").click();
   const route = page.getByTestId("complete-route");
   await expect(route).toHaveCount(1);
-  await expect(route.locator(".workflow")).toHaveAttribute(
+  await expect(route.locator(".routeWorkflowButton")).toHaveAttribute(
     "aria-label",
-    "USDC USD Coin · Ethereum (ERC-20) (Whitebird) → RUB",
+    "USDC USD Coin · ERC 20 (Whitebird) → RUB · Sberbank",
   );
   await expect(route.locator(".workflowVenueIcon img")).toHaveAttribute(
     "src",
@@ -2218,6 +2231,7 @@ test("direct Whitebird exchange uses provider wording and local venue icons", as
 
   await route.locator(".routeAmount").click();
   const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
+  await instructions.getByTestId("start-guide").click();
   await expect(instructions.getByText("Direct exchange on Whitebird", { exact: true })).toBeVisible();
   await expect(instructions.getByRole("link", { name: "Open Whitebird exchange" })).toHaveAttribute(
     "href",
@@ -2309,6 +2323,7 @@ test("crypto route keeps distinct source and target networks", async ({ page }) 
   await page.getByTestId("complete-route").locator(".routeAmount").click();
   const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
   await expectNumberedTimeline(instructions, ["1"]);
+  await instructions.getByTestId("start-guide").click();
   await expect(instructions.getByRole("heading", { name: "Convert ETH to USDT" })).toBeVisible();
   await expect(instructions.getByText("First check that the pair changes ETH into USDT.")).toBeVisible();
 });
@@ -2333,10 +2348,12 @@ test("bridged spot instructions split both market trades into separate steps", a
 
   const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
   await expectNumberedTimeline(instructions, ["1", "2"]);
+  await instructions.getByTestId("start-guide").click();
   await expect(instructions.getByRole("heading", { name: "Convert BTC to USDC" })).toBeVisible();
+  await expect(instructions.locator(".marketInfo")).toContainText("BTCUSDC");
+  await instructions.getByTestId("confirm-instruction-step").click();
   await expect(instructions.getByRole("heading", { name: "Convert USDC to USDT" })).toBeVisible();
-  await expect(instructions.getByText("BTCUSDC", { exact: true })).toBeVisible();
-  await expect(instructions.getByText("USDCUSDT", { exact: true })).toBeVisible();
+  await expect(instructions.locator(".marketInfo")).toContainText("USDCUSDT");
 });
 
 test("same asset on different networks reports unavailable bridge provider", async ({ page }) => {
@@ -2379,9 +2396,11 @@ test("same asset on the same network searches a cycle and displays both swap ste
   await card.locator(".workflow").click();
   const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
   await expectNumberedTimeline(instructions, ["1", "2"]);
+  await instructions.getByTestId("start-guide").click();
   await expect(instructions.getByRole("heading", { name: "Convert USDT in Ethereum (ERC-20) to USDC in Ethereum (ERC-20)" })).toBeVisible();
-  await expect(instructions.getByRole("heading", { name: "Convert USDC in Ethereum (ERC-20) to USDT in Ethereum (ERC-20)" })).toBeVisible();
   await expect(instructions.getByRole("link", { name: /Open CoW/ })).toBeVisible();
+  await instructions.getByTestId("confirm-instruction-step").click();
+  await expect(instructions.getByRole("heading", { name: "Convert USDC in Ethereum (ERC-20) to USDT in Ethereum (ERC-20)" })).toBeVisible();
   await expect(instructions.getByRole("link", { name: /Open NEAR/ })).toBeVisible();
 });
 
@@ -2402,10 +2421,13 @@ test("spot crypto cycles show three trades and wallet deposit and withdrawal ins
   await card.locator(".workflow").click();
   const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
   await expectNumberedTimeline(instructions, ["1", "2", "3"]);
-  await expect(instructions.getByText("Spot · BTCETH", { exact: true })).toBeVisible();
+  await instructions.getByTestId("start-guide").click();
+  await expect(instructions.getByText("Spot · ETHUSDT", { exact: true })).toBeVisible();
   await expect(instructions.getByText(/Deposit the source asset to this exchange/)).toBeVisible();
+  await instructions.getByTestId("confirm-instruction-step").click();
+  await expect(instructions.getByRole("link", { name: /Open Bybit/, exact: true })).toHaveAttribute("href", "https://www.bybit.com/trade/spot/BTC/ETH");
+  await instructions.getByTestId("confirm-instruction-step").click();
   await expect(instructions.getByText(/withdraw the original asset to your wallet/)).toBeVisible();
-  await expect(instructions.getByRole("link", { name: /Open Bybit/ }).nth(1)).toHaveAttribute("href", "https://www.bybit.com/trade/spot/BTC/ETH");
   await expect(instructions).not.toContainText("Bybit P2P results");
 });
 
@@ -2651,13 +2673,16 @@ test("route instructions load provider reviews for every cycle step", async ({ p
   await page.getByTestId("start-search").click();
   await page.locator(".routeCard").first().locator(".workflow").click();
   const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
+  await instructions.getByTestId("start-guide").click();
   const reviews = instructions.getByRole("region", { name: "Customer reviews" });
-  await expect(reviews).toHaveCount(2);
+  await expect(reviews).toHaveCount(1);
   await expect(reviews.first()).toContainText("cow-swap review 1");
-  await expect(reviews.last()).toContainText("near-intents review 1");
   await expect(reviews.first().locator(".review")).toHaveCount(5);
   await reviews.first().getByRole("button", { name: /Show 10 more reviews/ }).click();
   await expect(reviews.first().locator(".review")).toHaveCount(7);
+  await instructions.getByTestId("confirm-instruction-step").click();
+  await expect(reviews).toHaveCount(1);
+  await expect(reviews).toContainText("near-intents review 1");
   expect(requests.sort()).toEqual(["cow-swap", "near-intents"]);
   await instructions.getByRole("button", { name: "Close instructions", exact: true }).click();
   await expect(instructions).toBeHidden();
@@ -2685,8 +2710,90 @@ test("P2P instructions restore written advertiser reviews", async ({ page }) => 
   await page.getByTestId("start-search").click();
   await page.getByTestId("complete-route").first().locator(".workflow").click();
   const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
+  await instructions.getByTestId("start-guide").click();
   const reviews = instructions.getByRole("region", { name: "Customer reviews" });
-  await expect(reviews).toHaveCount(2);
+  await expect(reviews).toHaveCount(1);
   for (const section of await reviews.all()) await expect(section).toContainText("Written feedback for");
-  expect(new Set(profiles).size).toBe(2);
+  await instructions.getByTestId("confirm-instruction-step").click();
+  await expect(reviews).toContainText("Written feedback for");
+  await expect.poll(() => new Set(profiles).size).toBe(2);
+});
+
+test("animated guide requires confirmation, resumes progress and contains keyboard focus", async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("pay3flow.exchange.source-method", "am-idbank");
+    localStorage.setItem("pay3flow.exchange.target-method", "ru-alfabank");
+  });
+  await mockBackend(page);
+  await openApp(page);
+  await page.getByLabel("Amount to send").fill("100000");
+  await expect(page.getByTestId("complete-route").first()).toBeVisible();
+  const trigger = page.getByTestId("complete-route").first().locator(".routeAmount");
+  await trigger.click();
+  const guide = page.getByTestId("route-guide");
+  await expect(guide.getByRole("heading", { name: "A clear route. At your pace." })).toBeVisible();
+  const box = await guide.boundingBox();
+  expect(box!.width).toBeCloseTo(page.viewportSize()!.width, 1);
+  expect(box!.height).toBeCloseTo(page.viewportSize()!.height, 1);
+  await page.screenshot({ animations: "disabled", path: testInfo.outputPath("guide-overview.png") });
+  const chapters = guide.getByTestId("instruction-step").getByRole("button");
+  await expect(chapters.nth(1)).toBeDisabled();
+  await guide.getByTestId("start-guide").click();
+  await expect(guide.locator("h1")).toBeFocused();
+  await expect(guide.getByTestId("confirm-instruction-step")).toBeVisible();
+  await guide.getByRole("button", { name: "Pause walkthrough" }).click();
+  await expect(guide.getByRole("button", { name: "Play walkthrough", exact: true })).toBeVisible();
+  await guide.getByRole("button", { name: "Scene 3: Make the payment" }).click();
+  await expect(guide.locator(".sceneCount")).toHaveText("03 / 04");
+  await expect(chapters.nth(1)).toBeDisabled();
+  await guide.getByRole("button", { name: "Replay walkthrough" }).click();
+  await expect(guide.locator(".sceneCount")).toHaveText("01 / 04");
+  await guide.evaluate((element) => element.scrollTo({ top: 0 }));
+  await page.mouse.move(0, 0);
+  await page.screenshot({ animations: "disabled", path: testInfo.outputPath("guide-first-step.png") });
+  await guide.getByTestId("confirm-instruction-step").click();
+  await expect(guide.locator("h1")).toContainText("Sell USDT");
+  await expect(chapters.nth(0).locator(".stepNumber")).toHaveText("✓");
+  await page.keyboard.press("Escape");
+  await expect(guide).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => document.body.style.position)).toBe("");
+  await trigger.click();
+  await expect(guide.locator("h1")).toContainText("Sell USDT");
+  await guide.getByTestId("confirm-instruction-step").focus();
+  await page.keyboard.press("Tab");
+  await expect(guide.getByRole("button", { name: "Close instructions", exact: true })).toBeFocused();
+  await guide.getByTestId("confirm-instruction-step").click();
+  await expect(guide.getByRole("heading", { name: "Every step. Done." })).toBeVisible();
+  await expect(guide.getByText("This checklist records your confirmations. It does not verify payments or balances.")).toBeVisible();
+  await guide.getByRole("button", { name: "Back to routes", exact: true }).click();
+  await expect(guide).toHaveCount(0);
+});
+
+test("Russian guide supports reduced motion and accessible controls", async ({ page }, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+  await page.addInitScript(() => localStorage.setItem("pay3flow-locale", "ru"));
+  await page.addInitScript(() => {
+    localStorage.setItem("pay3flow.exchange.source-method", "am-idbank");
+    localStorage.setItem("pay3flow.exchange.target-method", "ru-alfabank");
+  });
+  await mockBackend(page);
+  await openApp(page);
+  await page.locator("#exchange-amount").fill("100000");
+  await expect(page.getByTestId("complete-route").first()).toBeVisible();
+  await page.getByTestId("complete-route").first().locator(".routeAmount").click();
+  const guide = page.getByTestId("route-guide");
+  await expect(guide.locator("h1")).toHaveText("Понятный маршрут. В вашем темпе.");
+  await guide.getByTestId("start-guide").click();
+  await expect(guide.getByRole("button", { name: "Продолжить демонстрацию" })).toBeVisible();
+  await guide.getByRole("button", { name: "Сцена 2: Проверьте условия" }).click();
+  await expect(guide.locator(".sceneCount")).toHaveText("02 / 04");
+  await expect(guide.getByTestId("confirm-instruction-step")).toHaveText("Сделал, дальше →");
+  const overflow = await guide.evaluate((element) => element.scrollWidth > element.clientWidth);
+  expect(overflow).toBe(false);
+  const AxeBuilder = (await import("@axe-core/playwright")).default;
+  const accessibility = await new AxeBuilder({ page }).include('[data-testid="route-guide"]').analyze();
+  expect(accessibility.violations.map((item) => ({ id: item.id, nodes: item.nodes.map((node) => node.target) }))).toEqual([]);
+  await guide.evaluate((element) => element.scrollTo({ top: 0 }));
+  await page.mouse.move(0, 0);
+  await page.screenshot({ animations: "disabled", path: testInfo.outputPath("guide-russian-dark.png") });
 });
