@@ -63,9 +63,8 @@
     const minor = profit.status === "confirmed" ? profit.net_profit_minor : profit.gross_profit_minor;
     const bps = profit.status === "confirmed" ? profit.profit_bps : profit.gross_profit_bps;
     const sign = minor > 0 ? "+" : "";
-    const prefix = profit.status === "confirmed" ? "" : "Est. ";
     const decimals = route.profitability_decimals ?? 2;
-    return `${prefix}${sign}${(minor / 10 ** decimals).toLocaleString("en-US", { maximumFractionDigits: decimals, useGrouping: false })} ${route.source_currency} (${sign}${(bps / 100).toFixed(2)}%)`;
+    return `${sign}${(minor / 10 ** decimals).toLocaleString("en-US", { maximumFractionDigits: decimals, useGrouping: false })} ${route.source_currency} (${sign}${(bps / 100).toFixed(2)}%)`;
   };
   const compact = (value: number) => Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(value);
   const routeCountLabel = (count: number, language: Locale) => formatRouteCount(count, language);
@@ -184,7 +183,6 @@
                   </div>
                 {/each}
               </span>
-              <small>{routeVenues.length} {routeVenues.length === 1 ? "venue" : "venues"} in routes</small>
             {/if}
           </span>
         {/if}
@@ -224,7 +222,7 @@
             <li animate:flip={{ duration: routeFlipDuration, easing: quintOut }} in:fly={{ y: 18, duration: routeEnterDuration(), easing: quintOut }}><div class="routeCardShell">
               <div class:routeBest={route.is_current_best} class:selected={route.route_id === selectedRouteId} class="routeCard" data-testid={complete ? "complete-route" : "partial-route"}>
               <button type="button" class="routeCardMain" disabled={!complete} aria-pressed={route.route_id === selectedRouteId} aria-label={`Select route ${index + 1}: ${money(route.target_amount_minor, route.target_currency, route.target_amount)}`} on:click={(event) => cardClick(event, route)}>
-                <span class="routeTopline"><span class="routeRank">#{String(index + 1).padStart(2, "0")}</span><span class="routeBadges">{#if route.profitability}<span class={route.profitability.status === "confirmed" && route.profitability.net_profit_minor > 0 ? "bestBadge" : "deltaBadge"}>{profitLabel(route)}</span>{:else if route.is_current_best}<span class="bestBadge">Best route</span>{:else}<span class="deltaBadge">{spreadLabel(route.spread_bps, $locale)}</span>{/if}</span></span>
+                <span class="routeTopline"><span class="routeRank">#{String(index + 1).padStart(2, "0")}</span><span class="routeBadges">{#if route.is_current_best}<span class="bestBadge">{t("Best route", {}, $locale)}</span>{/if}{#if route.profitability}<span class={route.profitability.status === "confirmed" && route.profitability.net_profit_minor > 0 ? "bestBadge" : "deltaBadge"}>{profitLabel(route)}</span>{:else if !route.is_current_best}<span class="deltaBadge">{spreadLabel(route.spread_bps, $locale)}</span>{/if}</span></span>
                 <span class="routeAmount">{money(route.target_amount_minor, route.target_currency, route.target_amount)}</span>
               </button>
               <div class="routeActionRow">
@@ -797,6 +795,7 @@
 
 .routeBadges {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 5px;

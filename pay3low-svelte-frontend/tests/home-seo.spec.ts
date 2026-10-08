@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 const canonical = "https://pay3flow.lefine.pro/";
-const heading = "Сравните маршруты обмена валют и криптовалют";
+const heading = "Переводите деньги. Сохраняйте больше.";
 
 test("server HTML contains Russian product content, canonical and brand metadata", async ({ request }) => {
   for (const path of ["/", "/?utm_source=seo-test"]) {
@@ -9,7 +9,8 @@ test("server HTML contains Russian product content, canonical and brand metadata
     expect(response.status()).toBe(200);
     const html = await response.text();
     expect(html).toMatch(/<html lang="ru"/);
-    expect(html).toContain(heading);
+    expect(html).toContain("Переводите деньги.");
+    expect(html).toContain("Сохраняйте больше.");
     expect(html.match(/<h1\b/g)).toHaveLength(1);
     expect(html).toContain("Как считаются и сравниваются предложения");
     expect(html).toContain("Binance, Bybit, OKX, Bitget");
@@ -18,7 +19,7 @@ test("server HTML contains Russian product content, canonical and brand metadata
     expect(html.match(/name="description"/g)).toHaveLength(1);
     expect(html).toContain(`rel="canonical" href="${canonical}"`);
     expect(html).toContain("включите JavaScript в браузере");
-    expect(html).not.toContain("introOverlay");
+    expect(html).not.toMatch(/<div[^>]*class="introOverlay/);
     expect(html).not.toMatch(/<link[^>]+RouteInstructions/);
     const json = html.match(/<script type="application\/ld\+json">(.*?)<\/script>/s);
     expect(json).not.toBeNull();
@@ -88,6 +89,8 @@ test("saved language restores after hydration and updates page metadata", async 
   await expect(page.locator("#about-heading")).toHaveText("Что такое Pay3Flow");
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", canonical);
   await page.reload();
+  await expect.poll(() => page.locator(".appShell").evaluate((element) => getComputedStyle(element, "::before").backgroundImage)).not.toBe("none");
+  await expect(page.locator(".introOverlay")).toHaveCount(0, { timeout: 6000 });
   await expect(page.locator("html")).toHaveAttribute("lang", "ru");
   await page.locator(".languageToggle").click();
   await expect(page.locator("html")).toHaveAttribute("lang", "hy");

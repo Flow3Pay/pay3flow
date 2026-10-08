@@ -18,6 +18,7 @@ async function openApp(page: Page) {
     .poll(() => page.locator(".appShell").evaluate((element) => getComputedStyle(element, "::before").backgroundImage))
     .not.toBe("none");
   await expect(page.locator(".workspace")).toBeVisible();
+  await expect(page.locator(".introOverlay")).toHaveCount(0, { timeout: 6000 });
 }
 
 async function settleEntrance(page: Page) {
@@ -446,17 +447,43 @@ test("route instructions lock the page until closed", async ({ page }) => {
   await expect(page.locator("body")).not.toHaveCSS("position", "fixed");
 });
 
-test("headline explains the product and resizing keeps the content visible", async ({ page }) => {
+test("brand slogan and underline stay visible when resizing", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await mockBackend(page);
   await openApp(page);
-  await expect(page.locator(".hero h1")).toHaveText("Compare currency and crypto exchange routes");
+  await expect(page.locator(".hero h1")).toHaveText("Move money. Keep more.");
+  const underline = await page.locator(".hero h1 span").evaluate((span) => {
+    const style = getComputedStyle(span, "::after");
+    return { content: style.content, height: parseFloat(style.height), background: style.backgroundColor };
+  });
+  expect(underline.content).toBe('""');
+  expect(underline.height).toBeGreaterThan(0);
+  expect(underline.background).not.toBe("rgba(0, 0, 0, 0)");
   await expect(page.locator(".workspace")).toBeVisible();
   const viewport = page.viewportSize()!;
   await page.setViewportSize({ width: viewport.width - 40, height: viewport.height });
   await expect(page.locator(".workspace")).toBeVisible();
   await expect(page.locator(".introOverlay")).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+
+test("original entrance animates the slogan and cleans up resize after docking", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await mockBackend(page);
+  await page.goto("/");
+  const intro = page.locator(".introOverlay");
+  await expect(intro).toBeVisible();
+  await expect(page.locator(".workspace")).toBeVisible();
+  await expect(intro.locator(".introMarker")).toHaveCount(1);
+  await expect(intro.locator(".introWordMore")).toHaveCSS("opacity", "1");
+  await expect(intro).toHaveCount(0, { timeout: 6000 });
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await page.setViewportSize({ width: 393, height: 851 });
+  await expect(page.locator(".hero h1")).toHaveText("Move money. Keep more.");
+  await expect(page.locator(".workspace")).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -1423,7 +1450,7 @@ test("AMD cycle keeps the best route visible when profit is unconfirmed", async 
   await page.getByTestId("start-search").click();
 
   await expect(page.getByTestId("complete-route")).toHaveCount(1);
-  await expect(page.getByTestId("complete-route").first()).toContainText("Est. -100 AMD (-1.00%)");
+  await expect(page.getByTestId("complete-route").first()).toContainText("-100 AMD (-1.00%)");
   await expect(page.getByTestId("no-profitable-routes")).toHaveText(
     "No confirmed profitable route right now; showing the best available cycles.",
   );
@@ -1718,7 +1745,7 @@ test("search venues only show providers with matching routes", async ({ page }) 
   const foundVenues = panelTop.locator(".resultSummary").getByTestId("found-venue");
   await expect(foundVenues).toHaveCount(1);
   await expect(foundVenues.first()).toHaveAttribute("title", "Found on Bybit");
-  await expect(panelTop.locator(".resultSummary")).toContainText("1 venue in routes");
+  await expect(panelTop.locator(".resultSummary")).not.toContainText("venue in routes");
   await expect(searchingVenues).toHaveCount(5);
   await expect(searchingVenues.nth(0)).toHaveAttribute("title", "Searching Cifra Markets");
   await expect(searchingVenues.nth(4)).toHaveAttribute("title", "Searching Whitebird");
@@ -2310,7 +2337,9 @@ test("same asset on the same network searches a cycle and displays both swap ste
   await page.getByTestId("start-search").click();
   const card = page.locator(".routeCard").first();
   await expect(card).toBeVisible();
-  await expect(card).toContainText("Est. +1 USDT (+1.00%)");
+  await expect(card).toContainText("+1 USDT (+1.00%)");
+  await expect(card.locator(".routeBadges")).toContainText("Best route");
+  await expect(card.locator(".routeBadges")).not.toContainText("Est.");
   await expect(card).toContainText("101 USDT");
   await expect(card).toContainText("USDC");
   await expect(card).not.toContainText("AMD");
@@ -2333,7 +2362,9 @@ test("spot crypto cycles show three trades and wallet deposit and withdrawal ins
   await page.getByLabel("Amount to send").fill("100");
   await page.getByTestId("start-search").click();
   const card = page.locator(".routeCard").first();
-  await expect(card).toContainText("Est. +1 USDT (+1.00%)");
+  await expect(card).toContainText("+1 USDT (+1.00%)");
+  await expect(card.locator(".routeBadges")).toContainText("Best route");
+  await expect(card.locator(".routeBadges")).not.toContainText("Est.");
   await card.locator(".workflow").click();
   const instructions = page.getByRole("dialog", { name: "How to complete this exchange" });
   await expectNumberedTimeline(instructions, ["1", "2", "3"]);

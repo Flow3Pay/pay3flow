@@ -7,7 +7,6 @@ export const COMMUNITY_URL = "https://t.me/+-lq4m5E_aT4xM2Y6";
 type HomeContent = {
   title: string;
   description: string;
-  heading: string;
   intro: string;
   nojs: string;
   aboutTitle: string;
@@ -34,7 +33,6 @@ export const homeContent: Record<Locale, HomeContent> = {
   ru: {
     title: "Pay3Flow — сравнение маршрутов обмена валют и криптовалют",
     description: "Сравните маршруты обмена валют и криптовалют через P2P, обменники и спот. Pay3Flow показывает расчётную сумму получения, шаги обмена и условия площадок.",
-    heading: "Сравните маршруты обмена валют и криптовалют",
     intro: "Выберите, чем платите и что хотите получить. Pay3Flow сравнит предложения площадок и покажет расчётную сумму и шаги обмена.",
     nojs: "Описание сервиса и ответы на вопросы доступны без JavaScript. Для загрузки котировок и поиска маршрутов включите JavaScript в браузере.",
     aboutTitle: "Что такое Pay3Flow",
@@ -74,7 +72,6 @@ export const homeContent: Record<Locale, HomeContent> = {
   en: {
     title: "Pay3Flow — compare currency and crypto exchange routes",
     description: "Compare currency and crypto exchange routes across P2P markets, exchangers and spot markets. See estimated amounts, exchange steps and provider conditions with Pay3Flow.",
-    heading: "Compare currency and crypto exchange routes",
     intro: "Choose what you pay with and what you want to receive. Pay3Flow compares provider offers and shows estimated amounts and exchange steps.",
     nojs: "Product information and answers are available without JavaScript. Enable JavaScript in your browser to load quotes and search for routes.",
     aboutTitle: "What is Pay3Flow?",
@@ -114,7 +111,6 @@ export const homeContent: Record<Locale, HomeContent> = {
   hy: {
     title: "Pay3Flow — համեմատեք արժույթի և կրիպտոարժույթի փոխանակման ուղիները",
     description: "Համեմատեք արժույթի և կրիպտոարժույթի փոխանակման ուղիները P2P հարթակներում, փոխանակման ծառայություններում և սփոթ շուկաներում։ Տեսեք մոտավոր գումարներն ու քայլերը։",
-    heading: "Համեմատեք արժույթի և կրիպտոարժույթի փոխանակման ուղիները",
     intro: "Ընտրեք վճարման և ստացման արժույթները։ Pay3Flow-ը կհամեմատի առաջարկները և ցույց կտա մոտավոր գումարն ու փոխանակման քայլերը։",
     nojs: "Ծառայության նկարագրությունն ու պատասխանները հասանելի են առանց JavaScript-ի։ Հաշվարկները բեռնելու և ուղիներ որոնելու համար միացրեք JavaScript-ը։",
     aboutTitle: "Ի՞նչ է Pay3Flow-ը",
