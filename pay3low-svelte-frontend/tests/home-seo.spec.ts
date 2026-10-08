@@ -27,7 +27,7 @@ test("server HTML contains Russian product content, canonical and brand metadata
   }
 });
 
-test("homepage and FAQ are usable without JavaScript", async ({ browser, baseURL, isMobile }) => {
+test("homepage product content is usable without JavaScript", async ({ browser, baseURL, isMobile }) => {
   const context = await browser.newContext({
     javaScriptEnabled: false,
     viewport: isMobile ? { width: 393, height: 851 } : { width: 1280, height: 900 },
@@ -41,9 +41,7 @@ test("homepage and FAQ are usable without JavaScript", async ({ browser, baseURL
     await expect(page.locator(".nojsNotice")).toBeVisible();
     await expect(page.locator(".nojsNotice")).toContainText("включите JavaScript");
     await expect(page.getByRole("heading", { name: "Что такое Pay3Flow", exact: true })).toBeVisible();
-    const question = page.locator("details").filter({ hasText: "Почему сумма расчётная?" });
-    await question.locator("summary").click();
-    await expect(question.locator("p")).toBeVisible();
+    await expect(page.locator(".flowPreview, .faq")).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Исходный код и сообщения об ошибках" })).toHaveAttribute("href", "https://github.com/Flow3Pay/pay3flow");
     expect(await page.locator("body").evaluate((body) => body.scrollWidth <= window.innerWidth)).toBe(true);
   } finally {

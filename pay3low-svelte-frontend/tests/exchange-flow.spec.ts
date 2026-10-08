@@ -58,6 +58,65 @@ test("shared fiat and crypto link restores its currencies in a new browser", asy
   await expect(page).toHaveURL(/#\/swap\/USDT\/KZT\?amount=287\.0062069$/);
 });
 
+test("main exchange share copies settings and restores them in a fresh browser", async ({ page, browser, isMobile }) => {
+  await mockBackend(page, { usdtFiatNetwork: "tron" });
+  await page.goto("/#/swap/USDT/KZT?amount=287.0062069&from=global-usdt&to=kz-kaspi&fromNetwork=tron&sources=bybit&methods=p2p&assets=USDC");
+  await expect(page.getByLabel("Amount to send")).toHaveValue("287.0062069");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("pay3flow.exchange.source-network"))).toBe("tron");
+  await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text: string) => sessionStorage.setItem("test.exchange-share", text) } }));
+  await expect(page.locator(".introOverlay")).toHaveCount(0, { timeout: 6000 });
+  if (isMobile) await page.locator(".menuToggle").click();
+  const trigger = page.getByRole("button", { name: "Share exchange", exact: true });
+  await trigger.click();
+  const dialog = page.getByRole("dialog", { name: "Share exchange", exact: true });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator(".sharePair img").last()).toHaveAttribute("src", "/icons/flags/kz.svg");
+  await expect(dialog).toContainText("Kaspi.kz");
+  await expect.poll(() => page.locator(".appShell").evaluate((node) => (node as HTMLElement).inert)).toBe(true);
+  await expect(dialog.getByRole("button", { name: "Close share dialog" })).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(dialog.getByRole("button", { name: "Copy link" })).toBeFocused();
+  await dialog.getByRole("button", { name: "Copy link" }).click();
+  await expect(dialog.getByRole("button", { name: "Link copied" })).toBeVisible();
+  const link = await page.evaluate(() => sessionStorage.getItem("test.exchange-share"));
+  expect(link).toContain("/#/swap/USDT/KZT?");
+  const params = new URLSearchParams(new URL(link!).hash.split("?")[1]);
+  expect(Object.fromEntries(params)).toMatchObject({ amount: "287.0062069", from: "global-usdt", to: "kz-kaspi", fromNetwork: "tron", sources: "bybit", methods: "p2p", assets: "USDC" });
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(isMobile ? page.locator(".menuToggle") : trigger).toBeFocused();
+  expect(await page.locator(".appShell").evaluate((node) => (node as HTMLElement).inert)).toBe(false);
+  const fresh = await browser.newPage();
+  await mockBackend(fresh, { usdtFiatNetwork: "tron" });
+  await fresh.goto(link!);
+  await expect(fresh.getByLabel("Amount to send")).toHaveValue("287.0062069");
+  await expect.poll(() => fresh.evaluate(() => ({
+    source: localStorage.getItem("pay3flow.exchange.source-method"),
+    target: localStorage.getItem("pay3flow.exchange.target-method"),
+    network: localStorage.getItem("pay3flow.exchange.source-network"),
+    sources: localStorage.getItem("pay3flow.exchange.p2p-sources"),
+    methods: localStorage.getItem("pay3flow.exchange.methods"),
+    assets: localStorage.getItem("pay3flow.exchange.intermediary-assets"),
+  }))).toMatchObject({ source: "global-usdt", target: "kz-kaspi", network: "tron", sources: "bybit", methods: "p2p", assets: "USDC" });
+  await fresh.close();
+});
+
+test("exchange share selects its link when clipboard access is denied", async ({ page, isMobile }) => {
+  await mockBackend(page);
+  await openApp(page);
+  await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async () => { throw new Error("Denied"); } } }));
+  if (isMobile) await page.locator(".menuToggle").click();
+  await page.getByRole("button", { name: "Share exchange", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Share exchange", exact: true });
+  await dialog.getByRole("button", { name: "Copy link" }).click();
+  const input = dialog.getByLabel("Exchange link");
+  await expect(input).toBeFocused();
+  expect(await input.evaluate((node: HTMLInputElement) => node.selectionEnd! - node.selectionStart!)).toBe((await input.inputValue()).length);
+  await expect(dialog).toContainText("Select and copy the link manually.");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+});
+
 test("system theme follows the browser until the user chooses a theme", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "dark" });
   await mockBackend(page);
@@ -371,7 +430,7 @@ test("mobile sheets cover the viewport and the graph closes by dragging its hand
 
   await page.locator(".menuToggle").click();
   await expectFullViewport(".actionsBackdrop.menuOpen");
-  await expect(page.locator(".actions a, .actions button")).toHaveCount(3);
+  await expect(page.locator(".actions a, .actions button")).toHaveCount(4);
   await page.keyboard.press("Escape");
 
   await page.getByRole("button", { name: "Route refresh settings" }).click();
@@ -560,7 +619,7 @@ async function chooseCrypto(page: Page, side: "sending" | "recipient", search: s
   return picker;
 }
 
-async function mockBackend(page: Page, options: { includeNewProviders?: boolean; routeCount?: number; spotCycle?: boolean; reviews?: boolean } = {}) {
+async function mockBackend(page: Page, options: { includeNewProviders?: boolean; routeCount?: number; spotCycle?: boolean; reviews?: boolean; usdtFiatNetwork?: string } = {}) {
   await page.addInitScript(() => {
     if (!localStorage.getItem("pay3flow-locale")) localStorage.setItem("pay3flow-locale", "en");
   });
@@ -1013,7 +1072,7 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
         return json({ error: "No live bridge provider is configured for USDT: TRON (TRC-20) → TON" }, 400);
       }
       if (url.searchParams.get("source_fiat") === "USDT") {
-        expect(url.searchParams.get("source_network")).toBe("ethereum");
+        expect(url.searchParams.get("source_network")).toBe(options.usdtFiatNetwork ?? "ethereum");
         expect(url.searchParams.has("source_payment_method")).toBe(false);
         return json({
           search_id: "00000000-0000-4000-8000-000000000101",
@@ -1028,8 +1087,8 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
             route_id: "route-usdt-rub",
             rank: 1,
             asset: "USDT",
-            entry_network: "ethereum",
-            source_network: "ethereum",
+            entry_network: options.usdtFiatNetwork ?? "ethereum",
+            source_network: options.usdtFiatNetwork ?? "ethereum",
             target_network: null,
             source_fiat: "USDT",
             source_amount: "125.00000000",

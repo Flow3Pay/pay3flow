@@ -55,6 +55,7 @@
     : defaultBanks;
   function bankBrandName(name: string) {
     const trimmed = name.trim();
+    if (/^vtb(?:\s+armenia)?$/i.test(trimmed)) return "VTB";
     return /^raiffeisen\s*bank$/i.test(trimmed) ? "Raiffeisenbank" : trimmed;
   }
   function exampleBank(currency: string) {
@@ -100,7 +101,6 @@
       <h2 id="about-heading">{copy.aboutTitle}</h2>
       <p>{copy.about}</p>
       <div class="marketTags"><span>P2P</span><span>{t("Exchangers", {}, $locale)}</span><span>SPOT</span></div>
-      <div class="flowPreview" aria-hidden="true">{#each ["AMD", "USDT", "RUB"] as asset, index}{@const flag = fiatFlagUrl(asset)}{#if index}<span class="routeArrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 12h16m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span>{/if}<span class="flowAsset"><img src={flag ?? assetIcon(asset)} class:fiatFlag={Boolean(flag)} alt="" width="24" height="24" loading="lazy" decoding="async" />{asset}</span>{/each}</div>
     </section>
   </div>
 
@@ -113,11 +113,6 @@
     {@render exampleCards(3)}
   </section>
 
-
-  <section class="faq" aria-labelledby="faq-heading">
-    <div class="faqHeading"><h2 id="faq-heading">{copy.faqTitle}</h2></div>
-    <div class="faqItems">{#each copy.faq as item}<details><summary><span>{item.question}</span><span class="expandIcon" aria-hidden="true">+</span></summary><p>{item.answer}</p></details>{/each}</div>
-  </section>
 
   <section id="project" class="project" aria-labelledby="project-heading">
     <div class="projectCopy"><h2 id="project-heading">{copy.projectTitle}</h2><p>{copy.project}</p></div>
@@ -137,8 +132,8 @@
   .sectionHead h2 { margin: 0; max-width: 30ch; }
   h2 { margin: 0 0 20px; font-size: clamp(24px, 2.3vw, 30px); font-weight: 750; line-height: 1.2; letter-spacing: -.045em; text-wrap: balance; }
   h3 { margin: 32px 0 16px; font-size: 16px; font-weight: 750; letter-spacing: -.02em; }
-  p, h2, h3, h4, a, summary { min-width: 0; overflow-wrap: anywhere; }
-  .projectCopy, .faqHeading, .faqItems { min-width: 0; }
+  p, h2, h3, h4, a { min-width: 0; overflow-wrap: anywhere; }
+  .projectCopy { min-width: 0; }
   p { margin: 0; font-size: 16px; line-height: 1.65; color: var(--color-text-soft); }
   .aboutCard { display: flex; flex-direction: column; background: var(--color-panel); }
   .brandLine { align-items: center; justify-content: start; margin-bottom: 32px; font-size: 16px; font-weight: 800; letter-spacing: -.04em; }
@@ -147,10 +142,6 @@
   .aboutCard h2 { font-size: clamp(30px, 3.3vw, 44px); max-width: 25ch; }
   .marketTags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
   .marketTags span { padding: 5px 10px; border: 1px solid var(--color-border-strong); border-radius: 6px; color: var(--color-text-soft); font: 12px/1.5 var(--font-mono); }
-  .flowPreview { max-width: 500px; width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; padding-top: 32px; font: 500 clamp(18px, 2vw, 25px)/1.2 var(--font-mono); }
-  .flowPreview .flowAsset { display: inline-flex; align-items: center; gap: 8px; padding: 12px 0; }
-  .flowPreview img { width: 24px; height: 24px; flex: 0 0 auto; border-radius: 50%; object-fit: contain; }
-  .flowPreview img.fiatFlag { object-fit: cover; }
   .coverageGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
   .coverageItem { min-width: 0; }
   .assetTags, .providerTags { display: flex; flex-wrap: wrap; align-content: start; gap: 8px; min-height: 80px; margin-bottom: 16px; }
@@ -173,15 +164,6 @@
   .routeArrow svg { display: block; }
   article p { font-size: 14px; line-height: 1.6; }
 
-  .faq { display: grid; grid-template-columns: 1fr; gap: 8px; }
-
-  details { border-bottom: 1px solid var(--color-border); }
-  details:first-child { border-top: 1px solid var(--color-border); }
-  summary { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 64px; padding: 16px 0; cursor: pointer; list-style: none; font-size: 16px; font-weight: 650; line-height: 1.5; }
-  summary::-webkit-details-marker { display: none; }
-  .expandIcon { display: grid; width: 28px; height: 28px; flex: 0 0 auto; place-items: center; border: 1px solid var(--color-border); border-radius: 50%; color: var(--color-text-soft); font-size: 20px; font-weight: 400; transition: transform .2s ease, background .2s ease; }
-  details[open] .expandIcon { transform: rotate(45deg); border-color: var(--color-accent-strong); background: var(--color-accent); color: #132015; }
-  details p { max-width: 85ch; padding: 0 48px 24px 0; font-size: 14px; }
   .project { display: grid; grid-template-columns: 1.5fr 1fr; align-items: center; gap: 64px; background: var(--color-panel); }
   .projectLinks { display: grid; gap: 10px; }
   a { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 48px; padding: 12px 16px; border: 1px solid var(--color-border-strong); border-radius: 8px; background: var(--color-paper); font-size: 14px; font-weight: 650; line-height: 1.5; transition: border-color .16s ease, background .16s ease; }
@@ -200,26 +182,19 @@
     article { display: grid; grid-template-columns: 28px 1fr; align-items: center; gap: 16px; }
     article .exampleIndex, article h4 { margin: 0; }
     article p { grid-column: 2; }
-    .faq { gap: 24px; }
     .project { gap: 32px; }
   }
   @media (max-width: 640px) {
-    .introduction, .coverageGrid, .faq, .project { grid-template-columns: 1fr; }
+    .introduction, .coverageGrid, .project { grid-template-columns: 1fr; }
     section { padding: 22px 18px; border-radius: 12px; }
     .sectionHead { gap: 12px; }
     .brandLine { margin-bottom: 24px; }
     .aboutCard h2 { max-width: none; }
-    .flowPreview { gap: 6px; }
-    .flowPreview .flowAsset { gap: 6px; }
-    .flowPreview img { width: 20px; height: 20px; }
     .coverageGrid { gap: 24px; }
     .assetTags, .providerTags { min-height: 0; }
     article { grid-template-columns: 24px 1fr; padding: 18px; gap: 12px; }
     article p { grid-column: 2; }
 
-    .faqHeading h2 { margin: 0; }
-    summary { gap: 12px; }
-    details p { padding-right: 0; }
     .project { gap: 24px; }
   }
 </style>

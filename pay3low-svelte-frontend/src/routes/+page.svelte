@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import type { PaymentMethod } from "$lib/payment-methods";
   import type { ProviderDefinition } from "$lib/exchange";
+  import type { ExchangeShareState } from "$lib/exchange-share";
   import Header from "$lib/components/Header.svelte";
   import Converter from "$lib/components/Converter.svelte";
   import HomeOverview from "$lib/components/HomeOverview.svelte";
@@ -10,6 +11,7 @@
   import { generatePuzzleBackground } from "$lib/puzzle-background";
   import { localize, locale, t } from "$lib/i18n";
   let guideActive = false;
+  let shareState: ExchangeShareState | null = null;
   let shell: HTMLDivElement;
   let paymentMethods: PaymentMethod[] = [];
   let providerCatalog: ProviderDefinition[] = [];
@@ -61,9 +63,9 @@
 </svelte:head>
 
 <div class="appShell" class:guideActive bind:this={shell} use:localize>
-  <Header />
+  <Header shareState={guideActive ? null : shareState} />
   <main>
-    <Converter onGuideChange={(active) => guideActive = active} onPaymentMethodsLoaded={(items) => paymentMethods = items} onProvidersLoaded={(items) => providerCatalog = items} onBelarusP2pWarningChange={(show) => showBelarusP2pWarning = show} onOpenBelarusP2pWarning={() => belarusP2pWarningOpen = true} />
+    <Converter onShareStateChange={(state) => shareState = state} onGuideChange={(active) => guideActive = active} onPaymentMethodsLoaded={(items) => paymentMethods = items} onProvidersLoaded={(items) => providerCatalog = items} onBelarusP2pWarningChange={(show) => showBelarusP2pWarning = show} onOpenBelarusP2pWarning={() => belarusP2pWarningOpen = true} />
     {#if !guideActive}<HomeOverview {paymentMethods} {providerCatalog} />{/if}
   </main>
   {#if !guideActive}<footer class="siteFooter"><span>Pay3Flow</span><span>{t("Live routing infrastructure · Public market estimates", {}, $locale)}</span><a href="/terms">{t("Usage policy", {}, $locale)}</a></footer>{/if}

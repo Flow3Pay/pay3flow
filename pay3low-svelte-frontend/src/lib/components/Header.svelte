@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { exchangeShareUrl, type ExchangeShareState } from "$lib/exchange-share";
   import { tick } from "svelte";
   import { API_BASE_URL, apiUrl } from "$lib/api";
   import { cycleLocale, locale, localeLabel, setLocale, t } from "$lib/i18n";
@@ -8,6 +9,23 @@
   const menuIcon = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAdElEQVR4AexTwQ3AIAgsXaSzdCpncKrO0knoSYq/xpKoD3OEUx4I8S63b4ODC5oEL0SRqibgBjwvFBGg3bLMSM7dPIpEJAMH4HmiiADtlmVGnv8D39j7rhpAHopsCuOgyPrlbn2DTo5ZsRot9ux/Nxc0uXoAAAD//8ndUOoAAAAGSURBVAMAa9HwMZNspewAAAAASUVORK5CYII=";
 
 
+  export let shareState: ExchangeShareState | null = null;
+  let ShareDialog: typeof import("./ExchangeShareDialog.svelte").default | null = null;
+  let sharedState: ExchangeShareState | null = null;
+  let shareLink = "";
+  let shareOpen = false;
+  let shareLoading = false;
+  async function openShare() {
+    if (!shareState || shareLoading) return;
+    sharedState = { ...shareState, sources: [...shareState.sources], methods: [...shareState.methods], assets: [...shareState.assets] };
+    shareLink = exchangeShareUrl(location.origin, sharedState, activeLocale);
+    shareLoading = true;
+    try {
+      if (menuOpen) await closeMenu();
+      ShareDialog ??= (await import("./ExchangeShareDialog.svelte")).default;
+      shareOpen = true;
+    } finally { shareLoading = false; }
+  }
   const apiDocsHref = API_BASE_URL ? apiUrl("/scalar").toString() : "/scalar";
   let menuOpen = false;
   let menuClosing = false;
@@ -162,6 +180,7 @@
       <div id="header-menu" class="actionsPanel" class:menuDragging style:--menu-drag={`${menuDrag}px`} bind:this={menuPanel} use:swipeMenu role={menuOpen ? "dialog" : undefined} aria-modal={menuOpen ? "true" : undefined} aria-label={menuOpen ? t("Menu", {}, activeLocale) : undefined}>
         <div class="actionsHeader"><strong>{t("Menu", {}, activeLocale)}</strong><button type="button" class="menuClose" aria-label={t("Close menu", {}, activeLocale)} on:click={closeMenu}><span aria-hidden="true">❯</span></button></div>
         <nav class="actions" aria-label={t("Menu", {}, activeLocale)}>
+          {#if shareState}<button type="button" class="shareButton" aria-label={t("Share exchange", {}, activeLocale)} title={t("Share exchange", {}, activeLocale)} aria-haspopup="dialog" aria-expanded={shareOpen} aria-busy={shareLoading} on:click={openShare}><img src="/icons/ui/share.png" alt="" width="20" height="20" /><span class="mobileActionLabel">{t("Share exchange", {}, activeLocale)}</span></button>{/if}
           <a class="apiDocsLink" href={apiDocsHref} target="_blank" rel="noreferrer noopener" aria-label={t("Open API documentation", {}, activeLocale)} on:click={closeMenu}>API DOCS</a>
           <a class="telegramLink" href="https://t.me/+-lq4m5E_aT4xM2Y6" target="_blank" rel="noreferrer noopener" aria-label={t("Open Pay3Flow Telegram channel", {}, activeLocale)} on:click={closeMenu}><img src="/icons/assets/telegram-messenger.png" alt="" width="20" height="20" /><span class="mobileActionLabel">Telegram</span></a>
           <a class="githubLink" href="https://github.com/Flow3Pay/pay3flow" target="_blank" rel="noreferrer noopener" aria-label={t("Open Pay3Flow on GitHub", {}, activeLocale)} on:click={closeMenu}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .7a11.3 11.3 0 0 0-3.58 22.02c.57.1.78-.25.78-.55v-2.16c-3.18.7-3.85-1.34-3.85-1.34-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.68 1.24 3.34.95.1-.74.4-1.24.73-1.53-2.54-.29-5.2-1.27-5.2-5.65 0-1.25.45-2.26 1.18-3.06-.12-.29-.51-1.45.11-3.02 0 0 .96-.31 3.12 1.17a10.8 10.8 0 0 1 5.68 0c2.16-1.48 3.12-1.17 3.12-1.17.62 1.57.23 2.73.11 3.02.73.8 1.18 1.81 1.18 3.06 0 4.39-2.67 5.35-5.21 5.64.41.36.78 1.08.78 2.18v3.23c0 .3.2.65.79.54A11.3 11.3 0 0 0 12 .7Z" /></svg><span class="mobileActionLabel">GitHub</span></a>
@@ -174,6 +193,7 @@
     </div>
   </div>
 </header>
+{#if shareOpen && ShareDialog && sharedState}<svelte:component this={ShareDialog} state={sharedState} url={shareLink} onClose={() => shareOpen = false} />{/if}
 
 <style>
 .header { position: relative; z-index: 50; padding: 16px var(--page-gutter) 8px; }
@@ -184,11 +204,13 @@
 .actionsBackdrop, .actionsPanel { display: contents; }
 .actions, .utilityActions { display: flex; align-items: center; gap: 8px; }
 .actionsHeader, .menuToggle, .mobileActionLabel { display: none; }
-.githubLink, .telegramLink, .themeToggle, .languageToggle, .apiDocsLink { display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid var(--color-border); border-radius: 9px; background: var(--color-panel); transition: background .16s ease; }
-.githubLink:hover, .telegramLink:hover, .themeToggle:hover, .languageToggle:hover, .apiDocsLink:hover { background: var(--color-accent-soft); }
-.githubLink svg, .telegramLink img { display: block; width: 20px; height: 20px; }
+.shareButton, .githubLink, .telegramLink, .themeToggle, .languageToggle, .apiDocsLink { display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid var(--color-border); border-radius: 9px; background: var(--color-panel); transition: background .16s ease; }
+.shareButton:hover, .githubLink:hover, .telegramLink:hover, .themeToggle:hover, .languageToggle:hover, .apiDocsLink:hover { background: var(--color-accent-soft); }
+.shareButton img, .githubLink svg, .telegramLink img { display: block; width: 20px; height: 20px; }
 .languageToggle, .apiDocsLink { color: var(--color-text-soft); font-size: 12px; font-weight: 800; }
 .apiDocsLink { width: auto; padding: 0 12px; white-space: nowrap; }
+.shareButton img { filter: brightness(0); }
+:global(html[data-theme="dark"]) .shareButton img { filter: brightness(0) invert(1); }
 .themeToggle { position: relative; }
 .themeToggle img { position: absolute; }
 .moonIcon { filter: brightness(0); }
@@ -218,7 +240,7 @@
   .actionsHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 16px; border-bottom: 1px solid var(--color-border); }
   .actionsHeader strong { font-size: 16px; }
   .actions { display: grid; gap: 12px; padding-top: 20px; }
-  .githubLink, .telegramLink, .apiDocsLink { display: flex; width: 100%; height: 48px; align-items: center; gap: 12px; padding: 0 12px; font-size: 14px; }
+  .shareButton, .githubLink, .telegramLink, .apiDocsLink { display: flex; width: 100%; height: 48px; align-items: center; gap: 12px; padding: 0 12px; font-size: 14px; }
   .mobileActionLabel { display: inline; }
 }
 @media (prefers-reduced-motion: reduce) { .actionsPanel, .actionsBackdrop { transition: none; } }

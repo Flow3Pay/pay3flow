@@ -8,6 +8,13 @@ const supportedLocales: Locale[] = ["en", "ru", "hy"];
 const messages: Record<Locale, Record<string, string>> = {
   en: {},
   ru: {
+    "Share exchange": "Поделиться обменом",
+    "Close share dialog": "Закрыть окно ссылки",
+    "Send this link to open the same exchange settings.": "По этой ссылке откроется обмен с выбранными валютами, банками и настройками поиска.",
+    "Exchange link": "Ссылка на обмен",
+    "Copy link": "Скопировать ссылку",
+    "Select and copy the link manually.": "Выделите и скопируйте ссылку вручную.",
+
     "Not rated": "Без оценки",
     "How to find a route": "Как найти маршрут",
     "Start with Bridge": "Начните с Bridge",
@@ -463,6 +470,13 @@ const messages: Record<Locale, Record<string, string>> = {
     "Approval confirmed. Review and sign the refreshed swap transaction.": "Разрешение подтверждено. Проверьте и подпишите обновлённую транзакцию обмена.",
   },
   hy: {
+    "Share exchange": "Կիսվել փոխանակմամբ",
+    "Close share dialog": "Փակել հղման պատուհանը",
+    "Send this link to open the same exchange settings.": "Այս հղումը բացում է փոխանակումը նույն արժույթներով, բանկերով և որոնման կարգավորումներով։",
+    "Exchange link": "Փոխանակման հղում",
+    "Copy link": "Պատճենել հղումը",
+    "Select and copy the link manually.": "Ընտրեք և պատճենեք հղումը ձեռքով։",
+
     "Not rated": "Առանց գնահատականի",
     "How to find a route": "Ինչպես գտնել երթուղի",
     "Start with Bridge": "Սկսեք Bridge-ից",

@@ -14,6 +14,7 @@
   import { fetchRouteSearchActivity, SEARCH_ACTIVITY_PERIODS, type RouteSearchActivityHour, type SearchActivityPeriod } from "$lib/route-activity";
   import { fiatFlagUrl } from "$lib/currency-flags";
   import { lockPageScroll } from "$lib/page-scroll-lock";
+  import type { ExchangeShareState } from "$lib/exchange-share";
   import { parseExchangeHash, guideHash, guideRoutePath, sharedIdentifiers } from "$lib/guide-link";
   import SidePanel from "./SidePanel.svelte";
   import SearchActivityChart from "./SearchActivityChart.svelte";
@@ -30,6 +31,7 @@
   $: guideActive = guideRequested;
   $: onGuideChange(guideActive);
 
+  export let onShareStateChange: (state: ExchangeShareState | null) => void = () => {};
   export let onPaymentMethodsLoaded: (items: PaymentMethod[]) => void = () => {};
   export let onProvidersLoaded: (items: ProviderDefinition[]) => void = () => {};
   export let onBelarusP2pWarningChange: (show: boolean) => void = () => {};
@@ -613,6 +615,14 @@
   $: previewRoute = selected ?? routes.find((route) => route.status === "complete" && route.is_current_best) ?? routes.find((route) => route.status === "complete") ?? null;
   $: displayedSourceAmount = amountSide === "target" && targetAmountNeedsRate && amountNumber(amount) <= 0 ? "" : amount;
   $: displayedTargetAmount = amountSide === "target" && !previewRoute ? targetAmount : amountFromRoute(previewRoute);
+  $: onShareStateChange(urlReady && sourceMethod && targetMethod ? {
+    source: selectedSourceCurrency, target: selectedTargetCurrency,
+    amount: displayedSourceAmount, receive: displayedTargetAmount,
+    from: sourceMethod.id, to: targetMethod.id,
+    fromName: t(methodTitle(sourceMethod), {}, activeLocale), toName: t(methodTitle(targetMethod), {}, activeLocale),
+    fromNetwork: sourceNetwork?.id ?? "", toNetwork: targetNetwork?.id ?? "",
+    sources: [...selectedSources], methods: [...selectedExchangeMethods], assets: [...selectedIntermediaryAssets],
+  } : null);
   $: marketUsd = {
     source: sourceMethod?.kind === "wallet" ? calculateMarketUsd(displayedSourceAmount, marketPrices[selectedSourceCurrency]) : null,
     target: targetMethod?.kind === "wallet" ? calculateMarketUsd(displayedTargetAmount, marketPrices[selectedTargetCurrency]) : null,
@@ -1014,11 +1024,11 @@
     marketRefreshTimer = window.setInterval(() => void refreshMarketPrices(), 60 * 60 * 1000);
     const shared = readSharedExchange();
     const sharedLanguage = shared?.params.get("lang");
-    if (shared?.guide && (sharedLanguage === "en" || sharedLanguage === "ru" || sharedLanguage === "hy")) setLocale(sharedLanguage);
+    if (shared && (sharedLanguage === "en" || sharedLanguage === "ru" || sharedLanguage === "hy")) setLocale(sharedLanguage);
     let methodsReady = false;
     let corridorsReady = false;
     let providersReady = false, networksReady = false;
-    const markUrlReady = () => { if (methodsReady && corridorsReady && providersReady && networksReady) { if (shared?.guide) { restoreShared(shared); initialSearchReady = true; } urlReady = true; } };
+    const markUrlReady = () => { if (methodsReady && corridorsReady && providersReady && networksReady) { if (shared) { restoreShared(shared); initialSearchReady = true; } urlReady = true; } };
     let savedSourceIds: string[] = [];
     let savedKnownSourceIds: string[] = [];
     try {

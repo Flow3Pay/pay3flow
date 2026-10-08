@@ -20,8 +20,6 @@ type HomeContent = {
   examples: { route: string; explanation: string; provider?: string; providerName?: string }[];
   methodTitle: string;
   method: string[];
-  faqTitle: string;
-  faq: { question: string; answer: string }[];
   projectTitle: string;
   project: string;
   github: string;
@@ -34,7 +32,7 @@ export const homeContent: Record<Locale, HomeContent> = {
     title: "Pay3Flow — сравнение маршрутов обмена валют и криптовалют",
     description: "Сравните маршруты обмена валют и криптовалют через P2P, обменники и спот. Pay3Flow показывает расчётную сумму получения, шаги обмена и условия площадок.",
     intro: "Не тратьте своё время на поиск обмена.",
-    nojs: "Описание сервиса и ответы на вопросы доступны без JavaScript. Для загрузки котировок и поиска маршрутов включите JavaScript в браузере.",
+    nojs: "Описание сервиса доступно без JavaScript. Для загрузки котировок и поиска маршрутов включите JavaScript в браузере.",
     aboutTitle: "Что такое Pay3Flow",
     about: "Pay3Flow — экспериментальный сервис с открытым исходным кодом для сравнения маршрутов обмена. Он сопоставляет публичные P2P-объявления, предложения обменников и цены спотовых рынков. Вы можете сравнить прямой обмен с маршрутом через промежуточный цифровой актив и увидеть, сколько примерно получите на каждом шаге.",
     howTitle: "Как найти маршрут",
@@ -60,12 +58,6 @@ export const homeContent: Record<Locale, HomeContent> = {
       "При поиске Pay3Flow запрашивает выбранные источники параллельно; часть ответов может поступать из кеша. Для обычного обмена сравнивается расчётная сумма в конечной валюте, для циклического — также расчётный прирост. В порядке отображения учитываются подтверждённое соответствие способу оплаты, использование одной площадки и отзывы пользователей при близких суммах. Это сравнение расчётов, а не оценка надёжности продавца или гарантия исполнения.",
       "В расчёте отражаются комиссии, которые источник передаёт в котировке, и оценки, указанные в условиях маршрута. Для спотовых шагов может использоваться оценочная торговая комиссия. Не все расходы известны заранее: комиссии банка, перевода между площадками, вывода, газа и особенности вашего аккаунта могут изменить итог. Проверьте предупреждения, лимиты, сеть и окончательную сумму у каждого участника обмена.",
     ],
-    faqTitle: "Частые вопросы",
-    faq: [
-      { question: "Почему сумма расчётная?", answer: "Курс, доступный объём и лимиты могут измениться между поиском и созданием заявки на площадке. Котировка не резервирует предложение. Обновите поиск и подтвердите условия непосредственно перед обменом." },
-      { question: "Pay3Flow хранит деньги или создаёт P2P-заявку?", answer: "Поиск маршрутов не принимает ваши деньги, не создаёт P2P-заявки и не связывается с продавцом. Если отдельная функция предлагает действие через подключённый кошелёк, проверьте параметры и запрос на подпись перед подтверждением." },
-      { question: "Почему нет подходящего маршрута?", answer: "Для выбранной суммы, валют, сети или способа оплаты может не быть предложений в нужных лимитах. Источник также может временно не отвечать. Попробуйте другую сумму, набор площадок или способ оплаты и запустите поиск снова." },
-    ],
     projectTitle: "О проекте и обратная связь",
     project: "Pay3Flow развивается как открытый проект Flow3Pay на GitHub. Там можно изучить исходный код, методику расчётов и сообщить об ошибке через Issues. Обсуждение проекта доступно в Telegram; правила использования описывают возможности и ограничения сервиса.",
     github: "Исходный код и сообщения об ошибках",
@@ -76,7 +68,7 @@ export const homeContent: Record<Locale, HomeContent> = {
     title: "Pay3Flow — compare currency and crypto exchange routes",
     description: "Compare currency and crypto exchange routes across P2P markets, exchangers and spot markets. See estimated amounts, exchange steps and provider conditions with Pay3Flow.",
     intro: "Don’t waste your time looking for an exchange.",
-    nojs: "Product information and answers are available without JavaScript. Enable JavaScript in your browser to load quotes and search for routes.",
+    nojs: "Product information is available without JavaScript. Enable JavaScript in your browser to load quotes and search for routes.",
     aboutTitle: "What is Pay3Flow?",
     about: "Pay3Flow is an experimental open source service for comparing exchange routes. It brings together public P2P advertisements, exchanger quotes and spot market prices. Compare a direct exchange with a route through an intermediate digital asset and see the estimated amount at each step.",
     howTitle: "How to find a route",
@@ -102,12 +94,6 @@ export const homeContent: Record<Locale, HomeContent> = {
       "Pay3Flow queries selected sources in parallel; some responses may be cached. Ordinary exchanges compare estimated destination amounts; cycles also compare estimated gains. Ordering considers verified payment method matches, use of one venue and user feedback when amounts are close. This compares estimates; it does not rate advertiser trustworthiness or guarantee execution.",
       "Estimates reflect fees returned in provider quotes and estimates described in route conditions. Spot steps may use an estimated trading fee. Not every cost is known: bank charges, cross-venue transfers, withdrawals, gas and account conditions can change the final amount. Check warnings, limits, networks and final amounts at each provider.",
     ],
-    faqTitle: "Frequently asked questions",
-    faq: [
-      { question: "Why is the amount an estimate?", answer: "Rates, available volume and limits may change before you create an order. A quote does not reserve an offer. Refresh the search and confirm conditions immediately before exchanging." },
-      { question: "Does Pay3Flow hold funds or create P2P orders?", answer: "Route search does not accept your money, create P2P orders or contact advertisers. If a separate feature offers an action through a connected wallet, review the parameters and signature request before confirming." },
-      { question: "Why are there no matching routes?", answer: "There may be no offers matching your amount, currencies, network or payment method within available limits. A source may also be temporarily unavailable. Try a different amount, provider selection or payment method and search again." },
-    ],
     projectTitle: "About the project and feedback",
     project: "Pay3Flow is developed as the open source Flow3Pay project on GitHub. Explore the code and calculation methods there, or report a bug through Issues. The project also has a Telegram community. The usage policy explains the service's features and limitations.",
     github: "Source code and bug reports",
@@ -118,7 +104,7 @@ export const homeContent: Record<Locale, HomeContent> = {
     title: "Pay3Flow — համեմատեք արժույթի և կրիպտոարժույթի փոխանակման ուղիները",
     description: "Համեմատեք արժույթի և կրիպտոարժույթի փոխանակման ուղիները P2P հարթակներում, փոխանակման ծառայություններում և սփոթ շուկաներում։ Տեսեք մոտավոր գումարներն ու քայլերը։",
     intro: "Մի՛ վատնեք ձեր ժամանակը փոխանակում փնտրելու վրա։",
-    nojs: "Ծառայության նկարագրությունն ու պատասխանները հասանելի են առանց JavaScript-ի։ Հաշվարկները բեռնելու և ուղիներ որոնելու համար միացրեք JavaScript-ը։",
+    nojs: "Ծառայության նկարագրությունը հասանելի է առանց JavaScript-ի։ Հաշվարկները բեռնելու և ուղիներ որոնելու համար միացրեք JavaScript-ը։",
     aboutTitle: "Ի՞նչ է Pay3Flow-ը",
     about: "Pay3Flow-ը բաց կոդով փորձարարական ծառայություն է փոխանակման ուղիները համեմատելու համար։ Այն համադրում է հրապարակային P2P հայտարարությունները, փոխանակման ծառայությունների առաջարկներն ու սփոթ գները։ Համեմատեք ուղղակի փոխանակումը միջանկյալ թվային ակտիվով ուղու հետ և տեսեք յուրաքանչյուր քայլի մոտավոր գումարը։",
     howTitle: "Ինչպես գտնել ուղին",
@@ -143,12 +129,6 @@ export const homeContent: Record<Locale, HomeContent> = {
     method: [
       "Pay3Flow-ը հարցումներ է ուղարկում ընտրված աղբյուրներին զուգահեռ։ Որոշ պատասխաններ կարող են լինել քեշից։ Համեմատվում է վերջնական մոտավոր գումարը, իսկ ցիկլերի համար՝ նաև մոտավոր աճը։ Դասավորումը հաշվի է առնում վճարման եղանակի հաստատված համապատասխանությունը, մեկ հարթակի օգտագործումը և մոտ գումարների դեպքում՝ օգտատերերի արձագանքները։ Սա վաճառողի հուսալիության գնահատական կամ կատարման երաշխիք չէ։",
       "Հաշվարկում արտացոլվում են աղբյուրի տրամադրած միջնորդավճարները և ուղու պայմաններում նշված գնահատականները։ Սփոթ քայլերում կարող է կիրառվել գնահատված առևտրային վճար։ Բանկի, փոխանցման, դուրսբերման, գազի կամ ձեր հաշվի ծախսերը կարող են փոխել արդյունքը։ Ստուգեք սահմանաչափերը, ցանցերն ու վերջնական գումարը հարթակներում։",
-    ],
-    faqTitle: "Հաճախ տրվող հարցեր",
-    faq: [
-      { question: "Ինչո՞ւ է գումարը մոտավոր", answer: "Փոխարժեքը, ծավալն ու սահմանաչափերը կարող են փոխվել մինչև պատվերի ստեղծումը։ Հաշվարկը առաջարկ չի ամրագրում։ Թարմացրեք որոնումը և հաստատեք պայմանները փոխանակումից առաջ։" },
-      { question: "Pay3Flow-ը պահո՞ւմ է գումարը կամ ստեղծո՞ւմ է P2P պատվեր", answer: "Ուղիների որոնումը գումար չի ընդունում, P2P պատվերներ չի ստեղծում և վաճառողի հետ չի կապվում։ Եթե առանձին գործառույթ առաջարկում է գործողություն միացված դրամապանակով, հաստատումից առաջ ստուգեք պարամետրերն ու ստորագրության հարցումը։" },
-      { question: "Ինչո՞ւ համապատասխան ուղի չկա", answer: "Ընտրված գումարի, արժույթի, ցանցի կամ վճարման եղանակի համար առաջարկ կարող է չլինել։ Աղբյուրը կարող է նաև ժամանակավորապես չպատասխանել։ Փորձեք այլ գումար, հարթակներ կամ վճարման եղանակ։" },
     ],
     projectTitle: "Նախագծի մասին և հետադարձ կապ",
     project: "Pay3Flow-ը զարգանում է որպես բաց կոդով Flow3Pay նախագիծ GitHub-ում։ Այնտեղ կարող եք ուսումնասիրել կոդն ու հաշվարկները և հաղորդել սխալի մասին Issues բաժնում։ Նախագիծն ունի նաև Telegram համայնք։ Օգտագործման կանոնները նկարագրում են ծառայության հնարավորություններն ու սահմանափակումները։",
