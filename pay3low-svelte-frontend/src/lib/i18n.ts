@@ -1,5 +1,6 @@
 import { get, writable } from "svelte/store";
 import { walletMessages } from "./wallet-messages";
+import { spotMessages } from "./guides/spot/messages";
 import { guideMessages } from "./guides/messages";
 
 export type Locale = "en" | "ru" | "hy";
@@ -18,6 +19,7 @@ const messages: Record<Locale, Record<string, string>> = {
   ru: {
     ...walletMessages.ru,
     ...guideMessages.ru,
+    ...spotMessages.ru,
     "Open the advertiser profile": "Откройте профиль контрагента",
     "The link opens the advertiser's {venue} profile. Check the nickname and scroll down to Ads and Reviews.": "Ссылка ведёт в профиль автора объявления на {venue}. Сверьте никнейм и прокрутите страницу вниз к Ads и Reviews.",
     "Read the reviews": "Посмотрите отзывы",
@@ -531,6 +533,7 @@ const messages: Record<Locale, Record<string, string>> = {
   hy: {
     ...walletMessages.hy,
     ...guideMessages.hy,
+    ...spotMessages.hy,
     "Open the advertiser profile": "Բացեք հայտարարատուի պրոֆիլը",
     "The link opens the advertiser's {venue} profile. Check the nickname and scroll down to Ads and Reviews.": "Հղումը բացում է հայտարարատուի {venue} պրոֆիլը։ Ստուգեք մականունը և ոլորեք ներքև՝ դեպի Ads և Reviews։",
     "Read the reviews": "Կարդացեք կարծիքները",

@@ -175,11 +175,11 @@
           <h1 bind:this={heading} tabindex="-1">{finished ? copy("Every step. Done.") : headingTitle ?? copy("A clear route. At your pace.")}{#if step}{" "}{#if !titleIncludesVenue}{copy("on")}{" "}{/if}<span class="headingVenue"><img src={venueIcon(step.provider)} alt="" />{step.venue}</span>{/if}</h1>
           <p class="lead">{finished ? copy("You have confirmed every step. Check the final balance in your bank, wallet or exchange account.") : walletSwap ? copy("Review this swap and confirm it in your connected wallet.") : walletProviderStep && route.execution ? copy("Follow the instructions on {venue}, or connect your wallet to swap here.", { venue: step.venue }) : step?.summary ?? copy("First, see how your exchange works. Then follow the animated walkthrough, one step at a time.")}</p>
           {#if !walletSwap}
-          <div class="chapterContent">
+          <div class="chapterContent" class:spotContent={Boolean(spot)}>
             <div class="visualColumn">
-              <div class="videoStage" class:paused={!playing} use:sceneVisibility>
+              <div class="videoStage" class:spotStage={Boolean(spot)} class:paused={!playing} use:sceneVisibility>
               <InstructionScene {route} {steps} {step} {frame} {finished} progress={elapsed === 0 && !playing ? 1 : elapsed / frameDuration} playing={playing && documentVisible && sceneVisible && !reducedMotion} />
-              {#if step && !spot}
+              {#if step}
                 <div class="sceneOverlay">
                   <button type="button" class="sceneArrow previous" on:click={() => selectFrame(Math.max(0, frame - 1))} disabled={frame === 0} aria-label={copy("Previous scene")}>‹</button>
                   <button type="button" class="centerPlayback" on:click={togglePlayback} aria-label={copy(playing ? "Pause walkthrough" : "Play walkthrough")} data-testid="center-playback">{#if playing}<img class="pauseIcon" src="/icons/ui/guide-pause.png" alt="" width="24" height="24" />{:else}<svg class="playIcon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 4.5v15L20 12 8 4.5Z" /></svg>{/if}</button>
@@ -189,12 +189,10 @@
               </div>
               {#if step}
                 <div class="playerControls">
-                  {#if spot}<button type="button" disabled={frame === 0} aria-label={copy("Previous scene")} on:click={() => selectFrame(Math.max(0, frame - 1))}>‹</button>{/if}
                   <button type="button" on:click={togglePlayback} aria-label={copy(playing ? "Pause walkthrough" : "Play walkthrough")} aria-pressed={playing} data-testid="playback-toggle">{#if playing}<img class="pauseIcon" src="/icons/ui/guide-pause.png" alt="" width="24" height="24" />{:else}<svg class="playIcon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 4.5v15L20 12 8 4.5Z" /></svg>{/if}</button>
                   <div class="playerTimeline" aria-label={copy("Walkthrough scenes")}>{#each step.frames as item, index}<button type="button" aria-label={copy("Scene {number}: {title}", { number: index + 1, title: item.title })} aria-pressed={index === frame} title={item.title} on:click={() => selectFrame(index)}><b>{String(index + 1).padStart(2, "0")}</b><span style={`transform:scaleX(${index < frame ? 1 : index === frame ? Math.max(.04, elapsed / frameDuration) : 0})`}></span></button>{/each}</div>
                   <span class="sceneCount">{String(frame + 1).padStart(2, "0")} / {String(step.frames.length).padStart(2, "0")}</span>
                   <button type="button" on:click={replay} aria-label={copy("Replay walkthrough")}>↻</button>
-                  {#if spot}<button type="button" disabled={frame === step.frames.length - 1} aria-label={copy("Next scene")} on:click={() => selectFrame(Math.min(step.frames.length - 1, frame + 1))}>›</button>{/if}
                 </div>
               {/if}
             </div>
@@ -293,6 +291,16 @@
   .reviewsTab { display: flex; align-items: center; gap: 12px; width: 100%; margin-top: 18px; padding: 13px 10px; border-radius: 10px; font-size: 12px; text-align: left; border: 1px solid var(--color-border); }.reviewsTab > span:first-child { font-size: 22px; }.reviewsTab > span:last-child { margin-left: auto; color: var(--color-text-soft); }.reviewsTab.current { background: var(--color-accent-soft); border-color: var(--color-accent-text); }
   .reviewSections { display: grid; gap: 36px; margin-top: 28px; } .pairArrow { flex: 0 0 auto; color: var(--color-text-soft); } .pauseIcon { object-fit: contain; filter: brightness(0) invert(1); } .playerControls .pauseIcon { filter: none; } :global(html[data-theme="dark"]) .playerControls .pauseIcon { filter: brightness(0) invert(1); } .reviewsEmpty { padding: 50px 24px; border: 1px solid var(--color-border); border-radius: 24px; background: var(--color-paper); }.reviewsEmpty > span { font-size: 80px; color: var(--color-accent-text); }.reviewsEmpty p { color: var(--color-text-soft); }.shareFallback { padding: 18px; }.shareFallback label { display: grid; gap: 8px; }.shareFallback input { width: 100%; padding: 12px; }
   @keyframes pageIn { from { opacity: 0;  } }@keyframes chapterIn { from { opacity: 0; transform: translateY(14px); } }
+  .chapterContent.spotContent { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .spotContent .frameList { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+  .spotContent .frameList button { flex-direction: column; gap: 8px; padding: 14px; border-color: var(--color-border); border-radius: 10px; }
+  .spotContent .frameList button.selected { border-color: var(--color-accent-text); }
+  .spotContent .frameIndicator { display: none; }
+  .spotStage .sceneOverlay { align-items: flex-end; padding: 0 12px 82px; }
+  .spotStage .sceneArrow { width: 32px; height: 36px; font-size: 25px; border-radius: 8px; }
+  .spotStage .centerPlayback { width: 44px; height: 44px; }
+  @media (max-width: 1100px) { .spotContent .frameList { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 760px) { .spotContent .frameList { grid-template-columns: minmax(0, 1fr); }.spotContent .frameList button { flex-direction: row; }.spotStage .sceneOverlay { padding-bottom: 84px; } }
   @media (min-width: 761px) { .guideLayout { min-height: calc(100dvh - 82px); } }
   @media (max-height: 820px) and (min-width: 901px) {.guideMain { padding-top: 25px; }h1 { font-size: 38px; margin-top: 12px; }.lead { margin-top: 10px; }.chapterContent { margin-top: 24px; } }
   @media (max-width: 1100px) { .guideLayout { grid-template-columns: 205px minmax(0,1fr); }.chapters { padding-left: 0; padding-right: 18px; }.guideMain { padding-left: 27px; padding-right: 0; }.chapterContent { gap: 20px; grid-template-columns: minmax(0,1fr) minmax(235px,.85fr); }.guideHeader { padding-left: 24px; padding-right: 24px; } }

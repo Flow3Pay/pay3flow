@@ -14,12 +14,12 @@
 <style>
   .panelToggle { display: grid; width: 32px; min-width: 32px; height: 42px; place-items: center; padding: 0; color: var(--color-text-soft); }
   .panelToggle:hover { color: var(--color-text); }
-  span { display: block; font-size: 21px; line-height: 1; -webkit-text-stroke: .55px currentColor; transform: rotate(0); transition: transform .26s ease; }
-  .expanded span { transform: rotate(180deg); }
-  .right span { transform: rotate(180deg); }
-  .right.expanded span { transform: rotate(0); }
+  span { display: block; font-size: 21px; line-height: 1; -webkit-text-stroke: .55px currentColor; transform: rotate(180deg); transition: transform .3s cubic-bezier(.22, 1, .36, 1); }
+  .expanded span { transform: rotate(0); }
+  .right span { transform: rotate(0); }
+  .right.expanded span { transform: rotate(180deg); }
   .vertical span { transform: rotate(90deg); }
   .vertical.expanded span { transform: rotate(-90deg); }
-  @media (max-width: 980px) { .panelToggle { width: 48px; } span, .right span { transform: rotate(90deg); } .expanded span, .right.expanded span { transform: rotate(-90deg); } }
+  @media (max-width: 980px) { .panelToggle { width: 48px; } span { transform: rotate(-90deg); } .expanded span { transform: rotate(90deg); } .right span { transform: rotate(90deg); } .right.expanded span { transform: rotate(-90deg); } }
   @media (prefers-reduced-motion: reduce) { span { transition: none; } }
 </style>

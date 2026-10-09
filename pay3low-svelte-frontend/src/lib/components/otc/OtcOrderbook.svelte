@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import { locale } from "$lib/i18n";
   import { otcCopy } from "$lib/otc/copy";
   import { formatPrice, formatAmount, type OtcMarket, type OtcSnapshot, type BookLevel, type OrderSide } from "$lib/otc/model";
@@ -8,6 +9,26 @@
   export let selectedPrice: number | null = null;
   let filter: "all" | "bids" | "asks" = "all";
   let grouping = 1;
+  let groupingOpen = false;
+  let groupingWrap: HTMLDivElement;
+  let groupingButton: HTMLButtonElement;
+  function closeGrouping() { groupingOpen = false; groupingButton?.focus(); }
+  async function toggleGrouping() {
+    groupingOpen = !groupingOpen;
+    if (groupingOpen) { await tick(); groupingWrap.querySelector<HTMLButtonElement>('[aria-pressed="true"]')?.focus(); }
+  }
+  function outsideClick(event: MouseEvent) { if (groupingOpen && !groupingWrap?.contains(event.target as Node)) groupingOpen = false; }
+  function groupingKeys(event: KeyboardEvent) {
+    if (!groupingOpen) return;
+    if (event.key === "Escape") { event.preventDefault(); event.stopImmediatePropagation(); closeGrouping(); }
+    else if (["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) {
+      event.preventDefault();
+      const options = [...groupingWrap.querySelectorAll<HTMLButtonElement>('.groupingMenu button')];
+      const index = options.indexOf(document.activeElement as HTMLButtonElement);
+      const next = event.key === "Home" ? 0 : event.key === "End" ? options.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + options.length) % options.length;
+      options[next]?.focus();
+    }
+  }
   $: copy = otcCopy($locale);
   $: asks = group(snapshot.asks, "sell", grouping);
   $: bids = group(snapshot.bids, "buy", grouping);
@@ -29,9 +50,10 @@
     return [...buckets.values()].map((level) => ({ ...level, depth: depth += level.total }));
   }
 </script>
+<svelte:window on:mousedown={outsideClick} on:keydown={groupingKeys} />
 <div class="bookTools"><div class="bookFilters" role="group" aria-label={copy.book}>
   {#each ["all", "bids", "asks"] as item}<button type="button" class:active={filter === item} aria-label={item === "all" ? copy.all : item === "bids" ? copy.bids : copy.asks} aria-pressed={filter === item} on:click={() => filter = item as typeof filter}><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M2 3h4M2 6h4M2 9h4M2 12h4" stroke={item === "asks" ? "var(--otc-sell)" : "var(--otc-buy)"} stroke-width="2.3" /><path d="M9 3h5M9 6h5M9 9h5M9 12h5" stroke={item === "bids" ? "var(--otc-buy)" : "var(--otc-sell)"} stroke-width="2.3" /></svg></button>{/each}
-</div><select aria-label={copy.grouping} bind:value={grouping}>{#each [1, 2, 5] as value}<option value={value}>{formatPrice(market.tickSize * value, market)}</option>{/each}</select></div>
+</div><div class="groupingWrap" bind:this={groupingWrap}><button type="button" class="groupingButton" bind:this={groupingButton} aria-label={copy.grouping} aria-haspopup="dialog" aria-expanded={groupingOpen} on:click={toggleGrouping}>{formatPrice(market.tickSize * grouping, market)}<svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg></button>{#if groupingOpen}<div class="groupingMenu" role="dialog" aria-label={copy.grouping} tabindex="-1">{#each [1, 2, 5] as value}<button type="button" class:active={grouping === value} aria-pressed={grouping === value} on:click={() => { grouping = value; closeGrouping(); }}><span>{formatPrice(market.tickSize * value, market)}</span>{#if grouping === value}<span aria-hidden="true">✓</span>{/if}</button>{/each}</div>{/if}</div></div>
 <div class="bookColumns"><span>{copy.price} <small>{market.quote}</small></span><span>{copy.amount} <small>{market.base}</small></span><span>{copy.total} <small>{market.quote}</small></span></div>
 <div class="levels" class:oneSide={filter !== "all"}>
   {#if filter !== "bids"}<div class="askLevels" aria-label={copy.asks}>{#each [...(filter === "all" ? asks.slice(0, 7) : asks)].reverse() as level}<button type="button" class="level ask" class:selected={selectedPrice === level.price} style:--depth={`${level.depth / maxDepth * 100}%`} aria-label={`${copy.buy} ${market.base} · ${formatPrice(level.price, market)} ${market.quote}`} on:click={() => onSelect("buy", level.price)}><span class="levelPrice">{formatPrice(level.price, market)}</span><span>{formatAmount(level.amount, market)}</span><span>{level.total.toLocaleString("en-US", { maximumFractionDigits: 0 })}</span></button>{/each}</div>{/if}
@@ -44,7 +66,14 @@
   .bookFilters { display: flex; gap: 3px; }
   .bookFilters button { display: grid; place-items: center; width: 26px; height: 25px; border-radius: 5px; opacity: .45; }
   .bookFilters button.active { opacity: 1; background: var(--color-panel); }
-  select { border: 1px solid var(--color-border); border-radius: 5px; background: var(--color-paper); padding: 4px 7px; font-family: var(--font-mono); font-size: 12px; max-width: 100px; }
+  .groupingWrap { position: relative; }
+  .groupingButton { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 4px 7px; border: 1px solid var(--color-border); border-radius: 5px; background: var(--color-paper); font-family: var(--font-mono); font-size: 12px; }
+  .groupingMenu { position: absolute; z-index: 80; top: calc(100% + 9px); right: 0; width: 160px; padding: 10px; border: 1px solid var(--color-border); border-radius: 20px; background: var(--color-paper); animation: groupingIn .18s ease-out; }
+  .groupingMenu button { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 40px; padding: 8px 10px; border-radius: 7px; font-family: var(--font-mono); font-size: 12px; text-align: left; transition: background .15s ease; }
+  .groupingMenu button:hover, .groupingMenu button.active { background: var(--color-accent-soft); }
+  @keyframes groupingIn { from { opacity: 0; transform: translateY(-5px); } }
+  @media (pointer: coarse) { .groupingButton { min-height: 44px; } .groupingMenu button { min-height: 44px; } }
+  @media (prefers-reduced-motion: reduce) { .groupingMenu { animation: none; } .groupingMenu button { transition: none; } }
   .bookColumns, .level { display: grid; grid-template-columns: 1.1fr 1fr 1fr; align-items: center; text-align: right; gap: 8px; }
   .bookColumns { padding: 0 16px 10px; font-size: 12px; color: var(--color-text-soft); }
   .bookColumns > span:first-child, .level > span:first-child { text-align: left; }

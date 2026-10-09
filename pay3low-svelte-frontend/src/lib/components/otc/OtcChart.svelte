@@ -94,7 +94,7 @@
 </div>
 <div class="chartFooter"><span><img src="/icons/assets/pay3flow_logo.svg" width="15" height="15" alt="" />Pay3Flow </span><div class="zoomTools"><button type="button" aria-label={copy.zoomOut} disabled={zoom === 1} on:click={() => { zoom = Math.max(1, zoom - .5); hovered = null; }}>−</button><button type="button" aria-label={copy.chartReset} on:click={() => { zoom = 1; hovered = null; }}>↺</button><button type="button" aria-label={copy.zoomIn} disabled={zoom === 3} on:click={() => { zoom = Math.min(3, zoom + .5); hovered = null; }}>+</button></div><span class="timezone">UTC</span></div>
 <style>
-  .chartTools { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 17px 8px; }
+  .chartTools { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 17px 8px; }
   .chartLegend { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--color-text-soft); }
   .buyDot, .sellDot { width: 6px; height: 6px; border-radius: 50%; background: var(--otc-buy); }
   .sellDot { background: var(--otc-sell); margin-left: 7px; }
@@ -127,7 +127,7 @@
   .zoomTools button:disabled { opacity: .35; cursor: default; }
   .timezone { font-family: var(--font-mono); font-size: 12px; }
   @media (max-width: 640px) {
-    .chartTools { padding: 12px 12px 4px; gap: 6px; }
+    .chartTools { padding: 4px 12px; gap: 6px; }
     .chartLegend { font-size: 12px; }
     .ranges button { padding: 6px; }
     .ohlc { padding: 5px 12px; font-size: 12px; gap: 6px; }

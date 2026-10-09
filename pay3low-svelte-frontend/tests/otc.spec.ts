@@ -50,9 +50,11 @@ test("panels collapse, chart controls update, and markets survive reload", async
     await expect(page.locator(`#${id}`)).toBeVisible();
   }
   const originalLevels = await page.locator(".askLevels .level").count();
-  await page.getByRole("combobox", { name: "Price grouping" }).selectOption("5");
+  await page.getByRole("button", { name: "Price grouping", exact: true }).click();
+  await page.getByRole("dialog", { name: "Price grouping" }).getByRole("button", { name: "50.00", exact: true }).click();
   await expect.poll(() => page.locator(".askLevels .level").count()).toBeLessThan(originalLevels);
-  await page.getByRole("combobox", { name: "Price grouping" }).selectOption("1");
+  await page.getByRole("button", { name: "Price grouping", exact: true }).click();
+  await page.getByRole("dialog", { name: "Price grouping" }).getByRole("button", { name: "10.00", exact: true }).click();
   const line = await page.locator(".buyLine").getAttribute("d");
   await page.getByRole("button", { name: "7D", exact: true }).click();
   await expect(page.locator(".buyLine")).not.toHaveAttribute("d", line!);
@@ -62,7 +64,7 @@ test("panels collapse, chart controls update, and markets survive reload", async
   await page.getByRole("button", { name: "Reset chart", exact: true }).click();
   await page.getByRole("combobox", { name: "Choose market" }).selectOption("ETH-USDT");
   await expect(page).toHaveURL(/#\/otc\?market=ETH-USDT$/);
-  await expect(page.locator("#otc-bridge").getByRole("button", { name: "Buy ETH", exact: true })).toBeVisible();
+  await expect(page.locator("#otc-bridge").getByRole("button", { name: "Buy", exact: true })).toBeVisible();
   await page.reload();
   await expect(page.getByRole("combobox", { name: "Choose market" })).toHaveValue("ETH-USDT");
   for (const width of [320, 393, 768, 1024, 1512]) {
@@ -144,12 +146,17 @@ test("inter-panel arrows reclaim space and preserve the layout", async ({ page }
   const bridge = page.locator("#otc-bridge-column");
   await expect(chart).toBeVisible();
   const panelsBounds = (await page.locator(".otcGrid").boundingBox())!;
-  expect((await page.locator(".marketStrip").boundingBox())!.y).toBeGreaterThan(panelsBounds.y + panelsBounds.height);
+  const stripBounds = (await page.locator(".marketStrip").boundingBox())!;
+  expect(stripBounds.y + stripBounds.height).toBeLessThanOrEqual(panelsBounds.y);
+  if (page.viewportSize()!.width <= 980) {
+    await expect(page.locator(".bridgeToggle span")).toHaveCSS("transform", "matrix(0, 1, -1, 0, 0, 0)");
+    await expect(page.locator(".bookToggle span")).toHaveCSS("transform", "matrix(0, -1, 1, 0, 0, 0)");
+  }
   const originalWidth = (await chart.boundingBox())!.width;
   await expect(page.getByRole("button", { name: /(?:Collapse|Expand) Chart/ })).toHaveCount(0);
   if (page.viewportSize()!.width > 980) {
-    await expect(page.locator(".bridgeToggle span")).toHaveCSS("transform", "matrix(-1, 0, 0, -1, 0, 0)");
-    await expect(page.locator(".bookToggle span")).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
+    await expect(page.locator(".bridgeToggle span")).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
+    await expect(page.locator(".bookToggle span")).toHaveCSS("transform", "matrix(-1, 0, 0, -1, 0, 0)");
   }
   await page.getByRole("button", { name: "Collapse Bridge", exact: true }).click();
   await expect(bridge).toBeHidden();
@@ -157,13 +164,13 @@ test("inter-panel arrows reclaim space and preserve the layout", async ({ page }
   await expect(page.getByRole("button", { name: "Expand Bridge", exact: true })).toHaveAttribute("aria-expanded", "false");
   if (page.viewportSize()!.width > 980) {
     await expect.poll(async () => (await chart.boundingBox())!.width).toBeGreaterThan(originalWidth + 50);
-    await expect(page.locator(".bridgeToggle span")).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
+    await expect(page.locator(".bridgeToggle span")).toHaveCSS("transform", "matrix(-1, 0, 0, -1, 0, 0)");
   }
   await page.getByRole("button", { name: "Collapse Orderbook", exact: true }).click();
   await expect(book).toBeHidden();
   await expect(chart).toBeVisible();
   if (page.viewportSize()!.width > 980) {
-    await expect(page.locator(".bookToggle span")).toHaveCSS("transform", "matrix(-1, 0, 0, -1, 0, 0)");
+    await expect(page.locator(".bookToggle span")).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
     await expect.poll(async () => chart.evaluate((element) => {
       const card = element.getBoundingClientRect();
       const workspace = element.closest(".otcWorkspace")!.getBoundingClientRect();
@@ -190,7 +197,84 @@ test("inter-panel arrows reclaim space and preserve the layout", async ({ page }
   await workspace.screenshot({ path: testInfo.outputPath("otc-panels.png") });
   await page.getByRole("button", { name: "Buy / Sell", exact: true }).click();
   await expect(page.locator(".bridgeIcon")).toHaveClass(/bridgeIconReversed/);
-  await expect(page.getByRole("button", { name: "Sell BTC", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Sell", exact: true })).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Buy / Sell", exact: true }).click();
   await expect(page.locator(".bridgeIcon")).not.toHaveClass(/bridgeIconReversed/);
+});
+
+
+test("asset and network pickers keep the bridge and order review consistent", async ({ page }) => {
+  await openOtc(page);
+  await page.getByRole("button", { name: /Select sending network: Ethereum/ }).click();
+  const network = page.getByRole("dialog", { name: "Choose network", exact: true });
+  await network.getByRole("option", { name: /TRON/ }).click();
+  await page.getByRole("textbox", { name: "You send", exact: true }).fill("2500");
+  await page.getByRole("button", { name: "Collapse Bridge", exact: true }).click();
+  await page.getByRole("button", { name: "Expand Bridge", exact: true }).click();
+  await expect(page.getByRole("textbox", { name: "You send", exact: true })).toHaveValue("2500");
+  await expect(page.getByRole("button", { name: /Select sending network: TRON/ })).toBeVisible();
+  await page.getByRole("button", { name: "Select recipient asset: BTC", exact: true }).click();
+  const assets = page.getByRole("dialog", { name: "Choose the asset you receive", exact: true });
+  await assets.getByRole("option", { name: /ETH/ }).click();
+  await assets.getByRole("option", { name: /Ethereum/ }).click();
+  await expect(page.getByRole("combobox", { name: "Choose market" })).toHaveValue("ETH-USDT");
+  await expect(page.getByRole("button", { name: "Buy", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Sell", exact: true }).click();
+  await expect(page.getByRole("button", { name: /Select recipient network: TRON/ })).toBeVisible();
+  await page.getByTestId("otc-review").click();
+  await expect(page.getByRole("dialog", { name: "One last look." })).toContainText(/TRON \(TRC-?20\)/);
+  await page.keyboard.press("Escape");
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Sell", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: /Select recipient network: TRON/ })).toBeVisible();
+});
+
+test("grouping menu supports keyboard selection and restores focus", async ({ page }) => {
+  await openOtc(page);
+  const trigger = page.getByRole("button", { name: "Price grouping", exact: true });
+  await trigger.click();
+  const menu = page.getByRole("dialog", { name: "Price grouping" });
+  await expect(menu.getByRole("button", { name: "10.00", exact: true })).toBeFocused();
+  await page.keyboard.press("End");
+  await page.keyboard.press("Enter");
+  await expect(trigger).toContainText("50.00");
+  await expect(trigger).toBeFocused();
+  await trigger.click();
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+});
+
+test("Armenian OTC keeps the brand heading and fits a narrow viewport", async ({ page }, testInfo) => {
+  await page.addInitScript(() => localStorage.setItem("pay3flow-locale", "hy"));
+  await page.route("**/api/**", route => route.fulfill({ status: 503, body: "{}" }));
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 320, height: 900 });
+  await page.goto("/?lang=hy#/otc");
+  const workspace = page.getByTestId("otc-workspace");
+  await expect(workspace.getByRole("heading", { level: 1 })).toHaveText("Առևտուր՝ ձեր պայմաններով։");
+  await expect(workspace.getByRole("button", { name: "Գնել", exact: true })).toBeVisible();
+  await expect(workspace.getByRole("button", { name: "Վաճառել", exact: true })).toBeVisible();
+  expect(await workspace.locator(".titleAccent").evaluate(el => getComputedStyle(el, "::after").content)).toBe('""');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+  await workspace.screenshot({ path: testInfo.outputPath("otc-armenian-mobile.png") });
+});
+
+
+test("OTC amount fields use the swap typography and control sizing", async ({ page }) => {
+  await openOtc(page);
+  const appearance = (element: Element) => {
+    const style = getComputedStyle(element);
+    return { font: style.fontFamily, size: style.fontSize, weight: style.fontWeight, line: style.lineHeight, spacing: style.letterSpacing };
+  };
+  const otc = await page.locator("#otc-send").evaluate(appearance);
+  const assetHeight = (await page.locator("#otc-bridge .methodTrigger").first().boundingBox())!.height;
+  await expect(page.locator("#otc-chart-column .panelHead")).not.toContainText("BTC/USDT");
+  const head = (await page.locator("#otc-chart-column .panelHead").boundingBox())!;
+  const tools = (await page.locator(".chartTools").boundingBox())!;
+  expect(tools.y - head.y - head.height).toBeLessThanOrEqual(4);
+  await page.getByRole("link", { name: "SWAP", exact: true }).click();
+  await expect(page.locator(".workspace")).toBeVisible();
+  expect(await page.getByLabel("Amount to send", { exact: true }).evaluate(appearance)).toEqual(otc);
+  expect((await page.locator(".moneyPanelSource .methodTrigger").boundingBox())!.height).toBe(assetHeight);
 });

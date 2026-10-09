@@ -622,7 +622,7 @@ async function chooseCrypto(page: Page, side: "sending" | "recipient", search: s
   return picker;
 }
 
-async function mockBackend(page: Page, options: { includeNewProviders?: boolean; routeCount?: number; spotCycle?: boolean; spotGuidance?: boolean; reviews?: boolean; usdtFiatNetwork?: string; mexc?: boolean; guideVenue?: string } = {}) {
+async function mockBackend(page: Page, options: { includeNewProviders?: boolean; routeCount?: number; spotCycle?: boolean; spotVenue?: string; spotGuidance?: boolean; reviews?: boolean; usdtFiatNetwork?: string; mexc?: boolean; guideVenue?: string } = {}) {
   await page.addInitScript(() => {
     if (!localStorage.getItem("pay3flow-locale")) localStorage.setItem("pay3flow-locale", "en");
   });
@@ -1054,9 +1054,9 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
       if (url.searchParams.get("source_fiat") === "USDT" && url.searchParams.get("target_fiat") === "USDT") {
         if (url.searchParams.get("source_network") === "ethereum" && url.searchParams.get("target_network") === "ethereum") {
           const cycleLegs = options.spotCycle ? [
-            { provider: "bybit", market_pair: "ETHUSDT", description: "Spot ETHUSDT", from_asset: "USDT@ethereum", to_asset: "ETH", input_amount: "100", output_amount: "1" },
-            { provider: "bybit", market_pair: "BTCETH", description: "Spot BTCETH", from_asset: "ETH", to_asset: "BTC", input_amount: "1", output_amount: "0.5" },
-            { provider: "bybit", market_pair: "BTCUSDT", description: "Spot BTCUSDT", from_asset: "BTC", to_asset: "USDT@ethereum", input_amount: "0.5", output_amount: "101" },
+            { provider: options.spotVenue ?? "bybit", market_pair: "ETHUSDT", description: "Spot ETHUSDT", from_asset: "USDT@ethereum", to_asset: "ETH", input_amount: "100", output_amount: "1" },
+            { provider: options.spotVenue ?? "bybit", market_pair: "BTCETH", description: "Spot BTCETH", from_asset: "ETH", to_asset: "BTC", input_amount: "1", output_amount: "0.5" },
+            { provider: options.spotVenue ?? "bybit", market_pair: "BTCUSDT", description: "Spot BTCUSDT", from_asset: "BTC", to_asset: "USDT@ethereum", input_amount: "0.5", output_amount: "101" },
           ] : [
             { provider: "cow-swap", from_asset: "USDT@ethereum", to_asset: "USDC@ethereum", input_amount: "100", output_amount: "99", source_url: "https://swap.cow.fi" },
             { provider: "near-intents", from_asset: "USDC@ethereum", to_asset: "USDT@ethereum", input_amount: "99", output_amount: "101", source_url: "https://1click.chaindefuser.com" },
@@ -2441,7 +2441,7 @@ test("Bybit P2P walkthrough reviews the profile and selects the route's buy or s
   await scene.scrollIntoViewIfNeeded();
   await expect(profile).toBeVisible();
   await expect(profile.getByTestId("bybit-advertiser")).toHaveText("bybit-merchant");
-  await expect(profile).toHaveAttribute("data-side", "buy");
+  await expect(profile).toHaveAttribute("data-order-side", "buy");
   await expect(profile.getByTestId("bybit-trade-action")).toHaveText("Buy USDC");
   await expect(profile.locator(".profileIcon")).toBeVisible();
   await expect(profile.locator(".bybitNav small, .adsBottom small")).toHaveCount(0);
@@ -2493,7 +2493,7 @@ test("Bybit P2P walkthrough reviews the profile and selects the route's buy or s
 
   await guide.getByTestId("confirm-instruction-step").click();
   await scene.scrollIntoViewIfNeeded();
-  await expect(profile).toHaveAttribute("data-side", "sell");
+  await expect(profile).toHaveAttribute("data-order-side", "sell");
   await expect(profile.locator(".adPrice")).toContainText("RUB");
   await guide.getByRole("button", { name: "Scene 3: Return to Ads", exact: true }).click();
   await expect(guide.locator(".frameList")).toContainText("sell USDC for RUB");
@@ -2522,7 +2522,7 @@ test("MEXC P2P walkthrough reviews the merchant and chooses the correct buy or s
   const profile = scene.getByTestId("mexc-profile-card");
   await scene.scrollIntoViewIfNeeded();
   await expect(profile).toBeVisible();
-  await expect(profile).toHaveAttribute("data-side", "buy");
+  await expect(profile).toHaveAttribute("data-order-side", "buy");
   await expect(profile.getByTestId("mexc-advertiser")).toHaveText("mexc-merchant");
   await expect(profile.locator(".wordmark")).toHaveAttribute("src", "/icons/venues/mexc-wordmark.svg");
   await expect.poll(() => profile.locator(".wordmark").evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
@@ -2550,7 +2550,7 @@ test("MEXC P2P walkthrough reviews the merchant and chooses the correct buy or s
   await guide.getByTestId("confirm-instruction-step").click();
   await guide.getByRole("button", { name: "Scene 3: Return to Ads", exact: true }).click();
   await scene.scrollIntoViewIfNeeded();
-  await expect(profile).toHaveAttribute("data-side", "sell");
+  await expect(profile).toHaveAttribute("data-order-side", "sell");
   await expect(profile.locator(".selected h3")).toHaveText("Sell to the User");
   await expect(profile.getByTestId("mexc-trade-action")).toBeInViewport();
   await expect(profile.locator(".selected .adPrice")).toContainText("RUB");
@@ -2707,7 +2707,7 @@ test("crypto route keeps distinct source and target networks", async ({ page }) 
   await expectNumberedTimeline(instructions, ["1"]);
   await instructions.getByTestId("start-guide").click();
   await expect(instructions.getByRole("heading", { name: "Convert ETH to USDT" })).toBeVisible();
-  await expect(instructions.getByTestId("binance-spot-card")).toHaveAttribute("data-side", "sell");
+  await expect(instructions.getByTestId("spot-terminal")).toHaveAttribute("data-order-side", "sell");
   await expect(instructions.getByTestId("spot-market-link")).toHaveAttribute("href", "https://www.binance.com/en/trade/ETH_USDT?type=spot");
   await expect(instructions.getByText(/select Sell: you spend ETH to receive USDT/)).toBeVisible();
 });
@@ -2725,20 +2725,21 @@ for (const venue of ["binance", "bybit", "mexc", "bitget", "whitebird"]) {
     await page.getByTestId("complete-route").locator(".routeAmount").click();
     const guide = page.getByTestId("route-guide");
     await guide.getByTestId("start-guide").click();
-    await expect(guide.getByTestId(`${venue}-spot-card`)).toHaveAttribute("data-side", "sell");
-    await expect(guide.getByTestId("spot-pair")).toHaveText("ETH / USDT");
-    await expect(guide.getByTestId("spot-input")).toHaveText("0.03 ETH");
+    await expect(guide.getByTestId("spot-terminal")).toHaveAttribute("data-order-side", "sell");
+    await expect(guide.getByTestId("spot-market-pair")).toContainText("ETH/USDT");
+
     await expect(guide.locator(".playerTimeline button")).toHaveCount(5);
     await expect(guide).not.toContainText("Open the P2P advertiser profile.");
     await expect(guide.locator('a[href*="p2p"], a[href*="fiat/trade"], a[href*="advertiser"]')).toHaveCount(0);
     const urls: Record<string, string> = { binance: "https://www.binance.com/en/trade/ETH_USDT?type=spot", bybit: "https://www.bybit.com/trade/spot/ETH/USDT", mexc: "https://www.mexc.com/exchange/ETH_USDT", bitget: "https://www.bitget.com/spot/ETHUSDT", whitebird: "https://whitebird.io/spot/ETH/USDT" };
     await expect(guide.getByTestId("spot-market-link")).toHaveAttribute("href", urls[venue]);
     await guide.getByRole("button", { name: /Scene 3:/ }).click();
-    await expect(guide.getByTestId(`${venue}-spot-card`)).toHaveAttribute("data-frame-kind", "review");
-    const cardBounds = await guide.getByTestId(`${venue}-spot-card`).boundingBox();
-    const captionBounds = await guide.locator(".sceneAnnotation").boundingBox();
-    expect(captionBounds!.y).toBeGreaterThanOrEqual(cardBounds!.y + cardBounds!.height);
-    const content = await guide.getByTestId(`${venue}-spot-card`).evaluate(element => ({ width: element.clientWidth, content: element.scrollWidth }));
+    await expect(guide.getByTestId("spot-terminal")).toHaveAttribute("data-frame-kind", "review");
+    const cardBounds = await guide.getByTestId("spot-terminal").boundingBox();
+    await expect(guide.getByTestId("spot-input-amount")).toContainText("0.03");
+    const stageBounds = await guide.getByTestId("instruction-scene").boundingBox();
+    expect(cardBounds!.y + cardBounds!.height).toBeLessThanOrEqual(stageBounds!.y + stageBounds!.height);
+    const content = await guide.getByTestId("spot-terminal").evaluate(element => ({ width: element.clientWidth, content: element.scrollWidth }));
     expect(content.content).toBeLessThanOrEqual(content.width + 1);
     await guide.getByTestId("instruction-scene").screenshot({ path: testInfo.outputPath(`${venue}-spot.png`) });
     await page.getByRole("button", { name: "Switch language" }).click();
@@ -2769,11 +2770,11 @@ test("bridged spot instructions split both market trades into separate steps", a
   await expectNumberedTimeline(instructions, ["1", "2"]);
   await instructions.getByTestId("start-guide").click();
   await expect(instructions.getByRole("heading", { name: "Convert BTC to USDC" })).toBeVisible();
-  await expect(instructions.getByTestId("spot-pair")).toHaveText("BTC / USDC");
+  await expect(instructions.getByTestId("spot-market-pair")).toContainText("BTC/USDC");
   await expect(instructions.getByTestId("spot-market-link")).toHaveAttribute("href", "https://www.binance.com/en/trade/BTC_USDC?type=spot");
   await instructions.getByTestId("confirm-instruction-step").click();
   await expect(instructions.getByRole("heading", { name: "Convert USDC to USDT" })).toBeVisible();
-  await expect(instructions.getByTestId("spot-pair")).toHaveText("USDC / USDT");
+  await expect(instructions.getByTestId("spot-market-pair")).toContainText("USDC/USDT");
   await expect(instructions.getByTestId("spot-market-link")).toHaveAttribute("href", "https://www.binance.com/en/trade/USDC_USDT?type=spot");
 });
 
@@ -2843,16 +2844,16 @@ test("spot crypto cycles show three trades and wallet deposit and withdrawal ins
   const instructions = page.getByTestId("route-guide");
   await expectNumberedTimeline(instructions, ["1", "2", "3"]);
   await instructions.getByTestId("start-guide").click();
-  await expect(instructions.getByTestId("spot-pair")).toHaveText("ETH / USDT");
-  await expect(instructions.getByTestId("bybit-spot-card")).toHaveAttribute("data-side", "buy");
+  await expect(instructions.getByTestId("spot-market-pair")).toContainText("ETH/USDT");
+  await expect(instructions.getByTestId("spot-terminal")).toHaveAttribute("data-order-side", "buy");
   await expect(instructions.getByTestId("spot-market-link")).toHaveAttribute("href", "https://www.bybit.com/trade/spot/ETH/USDT");
   await expect(instructions.locator(".realAction")).toHaveCount(0);
   await instructions.getByTestId("confirm-instruction-step").click();
-  await expect(instructions.getByTestId("spot-pair")).toHaveText("BTC / ETH");
-  await expect(instructions.getByTestId("bybit-spot-card")).toHaveAttribute("data-side", "buy");
+  await expect(instructions.getByTestId("spot-market-pair")).toContainText("BTC/ETH");
+  await expect(instructions.getByTestId("spot-terminal")).toHaveAttribute("data-order-side", "buy");
   await expect(instructions.getByTestId("spot-market-link")).toHaveAttribute("href", "https://www.bybit.com/trade/spot/BTC/ETH");
   await instructions.getByTestId("confirm-instruction-step").click();
-  await expect(instructions.getByTestId("bybit-spot-card")).toHaveAttribute("data-side", "sell");
+  await expect(instructions.getByTestId("spot-terminal")).toHaveAttribute("data-order-side", "sell");
   await expect(instructions.getByTestId("spot-market-link")).toHaveAttribute("href", "https://www.bybit.com/trade/spot/BTC/USDT");
   await expect(instructions.locator(".realAction")).toHaveCount(0);
   await expect(instructions).not.toContainText("Bybit P2P results");
@@ -3500,7 +3501,7 @@ test("Binance profile walkthrough opens More details, closes it and selects the 
   const guide = page.getByTestId("route-guide");
   await guide.getByTestId("start-guide").click();
   const profile = guide.getByTestId("binance-profile-card");
-  await expect(profile).toHaveAttribute("data-side", "buy");
+  await expect(profile).toHaveAttribute("data-order-side", "buy");
   await guide.getByRole("button", { name: "Scene 2: Open More details", exact: true }).click();
   await expect(profile.getByTestId("binance-details")).toContainText("Trade information");
   await expect(profile.getByTestId("binance-details")).toContainText("99%");
@@ -3631,3 +3632,81 @@ for (const provider of ["symbiosis", "cow-swap", "dzengi"]) {
     await guide.getByTestId("instruction-scene").screenshot({ style: ".sceneOverlay { visibility: hidden; }", path: testInfo.outputPath(`${provider}.png`) });
   });
 }
+
+for (const provider of ["binance", "bybit", "mexc", "whitebird", "bitget"]) {
+  test(`spot demonstration on ${provider} follows buy and sell sides and player controls`, async ({ page }, testInfo) => {
+    await mockBackend(page, { spotCycle: true, spotVenue: provider });
+    await openApp(page);
+    for (const side of ["sending", "recipient"] as const) {
+      const picker = await chooseCrypto(page, side, "USDT ERC20");
+      await picker.getByRole("option", { name: /Ethereum \(ERC-20\).*USDT/ }).click();
+    }
+    await page.getByLabel("Amount to send").fill("100");
+    await page.getByTestId("start-search").click();
+    await page.locator(".routeCard").first().locator(".workflow").click();
+    const guide = page.getByTestId("route-guide");
+    await guide.getByTestId("start-guide").click();
+    const terminal = guide.getByTestId("spot-terminal");
+    await expect(terminal).toHaveAttribute("data-provider", provider);
+    await expect(terminal).toHaveAttribute("data-order-side", "buy");
+    await expect(guide.getByTestId("spot-order-action")).toHaveText("Buy ETH");
+    await guide.getByRole("button", { name: "Scene 3: Choose the order type and amount", exact: true }).click();
+    await expect(terminal).toHaveAttribute("data-frame-kind", "review");
+    await expect(guide.getByTestId("spot-input-amount")).toContainText("100");
+    await expect(guide.getByTestId("spot-input-amount")).toContainText("USDT");
+    await expect(guide.getByTestId("playback-toggle")).toHaveAttribute("aria-pressed", "false");
+    await guide.getByRole("button", { name: "Next scene", exact: true }).click();
+    await expect(terminal).toHaveAttribute("data-frame-kind", "act");
+    await guide.getByRole("button", { name: "Previous scene", exact: true }).click();
+    await expect(terminal).toHaveAttribute("data-frame-kind", "review");
+    await guide.getByTestId("center-playback").click();
+    await expect(guide.getByTestId("playback-toggle")).toHaveAttribute("aria-pressed", "true");
+    await guide.getByTestId("center-playback").click();
+    await expect(guide.getByTestId("playback-toggle")).toHaveAttribute("aria-pressed", "false");
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+    expect(overflow).toBeLessThanOrEqual(1);
+    await guide.getByTestId("instruction-scene").screenshot({ style: ".sceneOverlay { visibility: hidden; }", path: testInfo.outputPath(`${provider}-spot.png`) });
+    await guide.getByRole("button", { name: "Scene 5: Check Trade History and balance", exact: true }).click();
+    await expect(guide.getByTestId("spot-order-history")).toHaveClass(/focus/);
+    await guide.getByTestId("confirm-instruction-step").click();
+    await expect(guide.getByTestId("spot-market-pair")).toContainText("BTC/ETH");
+    await guide.getByTestId("confirm-instruction-step").click();
+    await expect(terminal).toHaveAttribute("data-order-side", "sell");
+    await expect(guide.getByTestId("spot-order-action")).toHaveText("Sell BTC");
+    await expect(guide.getByTestId("spot-order-form").locator(".sideTabs .selected")).toHaveText("Sell");
+  });
+}
+
+test("Russian spot demonstration stays readable at 320px and respects reduced motion", async ({ page }, testInfo) => {
+  await mockBackend(page, { spotCycle: true, spotVenue: "bitget" });
+  await openApp(page);
+  for (const side of ["sending", "recipient"] as const) {
+    const picker = await chooseCrypto(page, side, "USDT ERC20");
+    await picker.getByRole("option", { name: /Ethereum \(ERC-20\).*USDT/ }).click();
+  }
+  await page.getByLabel("Amount to send").fill("100");
+  await page.getByTestId("start-search").click();
+  await page.locator(".routeCard").first().locator(".workflow").click();
+  await page.evaluate(() => {
+    localStorage.setItem("pay3flow-locale", "ru");
+    history.replaceState(null, "", location.href.replace(/([?&])lang=en\b/, "$1lang=ru"));
+  });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 320, height: 900 });
+  await page.reload();
+  const guide = page.getByTestId("route-guide");
+  await guide.getByTestId("start-guide").click();
+  await expect(guide.getByTestId("playback-toggle")).toHaveAttribute("aria-pressed", "false");
+  await expect(guide.getByTestId("spot-terminal").locator(".cursor")).toBeHidden();
+  await expect(guide.getByTestId("spot-order-action")).toHaveText("Купить ETH");
+  await guide.getByRole("button", { name: "Сцена 3: Выберите тип ордера и сумму", exact: true }).click();
+  await expect(guide.getByTestId("spot-input-amount")).toContainText("100");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+  const field = await guide.getByTestId("spot-input-amount").boundingBox();
+  const stage = await guide.getByTestId("instruction-scene").boundingBox();
+  expect(field!.x + field!.width).toBeLessThanOrEqual(stage!.x + stage!.width);
+  await guide.getByTestId("instruction-scene").screenshot({ style: ".sceneOverlay { visibility: hidden; }", path: testInfo.outputPath("spot-russian-320.png") });
+  const AxeBuilder = (await import("@axe-core/playwright")).default;
+  const accessibility = await new AxeBuilder({ page }).include('[data-testid="route-guide"]').analyze();
+  expect(accessibility.violations.map(item => ({ id: item.id, nodes: item.nodes.map(node => node.target) }))).toEqual([]);
+});

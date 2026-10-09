@@ -4,8 +4,9 @@
   import { locale, t } from "$lib/i18n";
   import type { RouteCandidate } from "$lib/exchange";
   import type { TutorialStep } from "$lib/route-tutorial";
-  import { guideP2pCards, guideSwapCards, guideSpotCards } from "$lib/guides";
-  import { spotTrade } from "$lib/guides/spot/frames";
+  import { guideP2pCards, guideSwapCards } from "$lib/guides";
+  import { isSpotStep } from "$lib/guides/spot/frames";
+  import SpotTerminal from "$lib/guides/spot/SpotTerminal.svelte";
   export let route: RouteCandidate;
   export let steps: TutorialStep[];
   export let step: TutorialStep | undefined = undefined;
@@ -16,10 +17,10 @@
   $: copy = (key: string, params: Record<string, string | number> = {}) => t(key, params, $locale);
   $: swapCard = step && step.kind !== "transfer" ? guideSwapCards[step.provider.toLowerCase()] : undefined;
   $: p2pCard = step?.offer && !step.direct && (step.kind === "buy" || step.kind === "sell") ? guideP2pCards[step.provider.toLowerCase()] : undefined;
-  $: spotCard = step?.kind === "swap" && spotTrade(step.pair, step.from, step.to) ? guideSpotCards[step.provider.toLowerCase()] : undefined;
+  $: spot = Boolean(step && isSpotStep(step));
 </script>
 
-<div class="scene" class:spot={Boolean(spotCard)} class:paused={!playing} class:overview={!step} class:finished aria-hidden="true" data-testid="instruction-scene">
+<div class="scene" class:spot class:paused={!playing} class:overview={!step} class:finished aria-hidden="true" data-testid="instruction-scene">
   <div class="sceneGrid"></div>
   {#if !step}
     <div class="orbit orbitOne"></div><div class="orbit orbitTwo"></div>
@@ -35,10 +36,10 @@
     </div>
     <div class="floatTag"><span>✓</span> {copy(finished ? "Confirmed by you" : "At your own pace")}</div>
   {:else}
-    {#if p2pCard}
+    {#if spot}
+      <SpotTerminal {route} {step} {frame} {playing} {progress} />
+    {:else if p2pCard}
       <svelte:component this={p2pCard} {route} {step} {frame} {playing} {progress} />
-    {:else if spotCard}
-      <svelte:component this={spotCard} {route} {step} {frame} {playing} {progress} />
     {:else if swapCard}
       <svelte:component this={swapCard} {route} {step} {frame} {playing} {...(step.provider.toLowerCase() === "whitebird" ? {} : { progress })} />
     {:else}
@@ -70,8 +71,8 @@
         <div class="phoneNote">{copy("Check in your bank")}</div>
       </div>
     {/if}
-    {#key frame}<div class="sceneAnnotation"><span>{String(frame + 1).padStart(2, "0")}</span><strong>{step.frames[frame]?.title}</strong></div>{/key}
-    <div class="sceneFootnote">{copy("Illustration · the platform interface may differ")}</div>
+    {#if !spot}{#key frame}<div class="sceneAnnotation"><span>{String(frame + 1).padStart(2, "0")}</span><strong>{step.frames[frame]?.title}</strong></div>{/key}
+    <div class="sceneFootnote">{copy("Illustration · the platform interface may differ")}</div>{/if}
   {/if}
 </div>
 
@@ -136,14 +137,17 @@
   @keyframes signal { 0%,100% { opacity: .2; transform: translateX(-3px); } 50% { opacity: 1; transform: translateX(3px); } }
   @keyframes cursorPulse { 0%,100% { scale: 1; } 50% { scale: .9; } }
   @media (max-height: 820px) and (min-width: 761px) {
-    .scene.spot { min-height: 460px; height: 460px; }
+
     .scene { min-height: 360px; height: 360px; }.browser { margin-top: 50px; scale: .7; transform-origin: top center; }.sceneAnnotation { bottom: 38px; }.sceneFootnote { bottom: 12px; }.paymentPreview { bottom: 65px; scale: .8; transform-origin: bottom left; }
     .journey { margin-top: 65px; }.journeyCoin img { width: 39px; height: 39px; }.journeyCard { margin-top: 18px; padding: 12px; }.journeyCardTop { padding-bottom: 8px; }.journeyChapters { max-height: 113px; gap: 4px; }.journeyChapters > div { padding: 7px; }.floatTag { bottom: 16px; padding: 8px 11px; }
   }
   @media (max-width: 760px) {
-    .scene.spot { min-height: 460px; height: 460px; }
+
     .scene { min-height: 340px; height: 340px; border-radius: 18px; }.browser { margin-top: 52px; scale: .65; transform-origin: top center; }.sceneAnnotation { bottom: 32px; right: 18px; padding: 8px 12px 8px 8px; }.sceneFootnote { bottom: 12px; font-size: 8px; }.paymentPreview { left: 10px; bottom: 54px; scale: .75; transform-origin: bottom left; }
     .journey { margin-top: 65px; gap: 20px; }.journeyCoin img { width: 39px; height: 39px; }.journeyCard { width: 260px; margin-top: 18px; padding: 12px; }.journeyCardTop { font-size: 10px; padding-bottom: 8px; }.journeyChapters { max-height: 113px; gap: 4px; }.journeyChapters > div { padding: 7px; font-size: 10px; }.journeyCardBottom { font-size: 8px; }.floatTag { bottom: 16px; right: 20px; padding: 8px 11px; font-size: 9px; }
   }
+  .scene.spot { container-type: inline-size; min-height: 490px; height: auto; border-radius: 16px; background: #0b0e11; color: #edf0f4; box-shadow: 0 16px 48px #00000020; }
+  .spot .sceneGrid { display: none; }
+  @media (max-width: 760px) { .scene.spot { min-height: 0; height: auto; border-radius: 12px; } }
   @media (prefers-reduced-motion: reduce) { *, *::before { animation: none !important; transition: none !important; } }
 </style>

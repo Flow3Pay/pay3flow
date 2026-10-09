@@ -1183,7 +1183,7 @@
       </div>
 
       <div class="intentLabel"><span>{t("Sell", {}, activeLocale)}</span></div>
-      <div class="moneyPanel moneyPanelSource">
+      <div class="moneyPanel moneyPanelSource exchangeMoneyPanel">
         <div class="panelCopy"><label for="exchange-amount">{t("You send", {}, activeLocale)}</label><input id="exchange-amount" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedSourceAmount} on:focus={(event) => event.currentTarget.select()} on:input={(event) => updateAmount(event.currentTarget.value)} aria-label={t("Amount to send", {}, activeLocale)} />{#if marketUsd.source !== null}<span class="marketValue" aria-label={t("Approximate USD market value", {}, activeLocale)}>{formatMarketUsd(marketUsd.source)}</span>{/if}</div>
         <div class="methodControls">
           <button type="button" class="methodTrigger" data-tooltip={sourceMethod?.kind === "wallet" ? `${sourceCurrencyChoice} · ${t(sourceMethod.name, {}, activeLocale)}` : t(methodTitle(sourceMethod), {}, activeLocale)} on:click={() => void openMethodPicker("source")} aria-label={`Select sending ${methodNoun(sourceMethod)}: ${sourceMethod ? methodTitle(sourceMethod) : "none"}`}>
@@ -1195,7 +1195,7 @@
       </div>
       <ExchangeFlowBridge reversed={directionReversed} onSwap={swapDirection} label={t("Swap sender and recipient", {}, activeLocale)}><button type="button" class="routesToggle" class:routesToggleOpen={routesExpanded} on:click={toggleRoutes} aria-label={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)} aria-expanded={routesExpanded} title={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)}><span aria-hidden="true">❯</span></button></ExchangeFlowBridge>
       <div class="intentLabel intentLabelBuy"><span>{t("Buy", {}, activeLocale)}</span></div>
-      <div class="moneyPanel moneyPanelTarget">
+      <div class="moneyPanel moneyPanelTarget exchangeMoneyPanel">
         <div class="panelCopy"><label for="exchange-output">{t("Recipient gets", {}, activeLocale)}</label><input id="exchange-output" class:amountOutputEmpty={!previewRoute && amountSide !== "target"} class="amountInput amountOutput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedTargetAmount} on:focus={(event) => event.currentTarget.select()} on:input={(event) => updateTargetAmount(event.currentTarget.value)} aria-label={t("Amount to receive", {}, activeLocale)} />{#if marketUsd.target !== null}<span class="marketValue" aria-label={t("Approximate USD market value", {}, activeLocale)}>{formatMarketUsd(marketUsd.target)}</span>{/if}</div>
         <div class="methodControls">
           <button type="button" class="methodTrigger" data-tooltip={targetMethod?.kind === "wallet" ? `${targetCurrencyChoice} · ${t(targetMethod.name, {}, activeLocale)}` : t(methodTitle(targetMethod), {}, activeLocale)} on:click={() => void openMethodPicker("target")} aria-label={`Select recipient ${methodNoun(targetMethod)}: ${targetMethod ? methodTitle(targetMethod) : "none"}`}>

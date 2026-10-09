@@ -6,6 +6,7 @@ export const spotGuideLinks: Record<string, { label: string; url: string } | und
   bybit: { label: "Bybit Spot", url: "https://www.bybit.com/en/help-center/article/How-to-Get-Started-with-Spot-Trading" },
   mexc: { label: "MEXC Spot", url: "https://www.mexc.com/support/article/how-to-use-market-orders-in-spot-trading-332255423024245760" },
   bitget: { label: "Bitget Spot", url: "https://www.bitget.com/support/articles/12560603820568" },
+  okx: { label: "OKX Spot", url: "https://www.okx.com/trade-spot/btc-usdt" },
   whitebird: { label: "Whitebird Spot", url: "https://whitebird.io/spot/BTC/USDT" },
 };
 export const spotProfiles: Record<string, { buyField: string; sellField: string; location: string; layout: "below-chart" | "right-panel"; history: string } | undefined> = {
@@ -13,6 +14,7 @@ export const spotProfiles: Record<string, { buyField: string; sellField: string;
   bybit: { buyField: "Order by Value", sellField: "Order by Qty", location: "Spot panel on the right", layout: "right-panel", history: "Trade History / Order History" },
   mexc: { buyField: "Total", sellField: "Amount", location: "Spot panel on the right", layout: "right-panel", history: "Trade History / Order History" },
   bitget: { buyField: "Total", sellField: "Quantity", location: "Spot panel on the right", layout: "right-panel", history: "Order History / Order details" },
+  okx: { buyField: "Total", sellField: "Amount", location: "Spot panel on the right", layout: "right-panel", history: "Order History / Trade History" },
   whitebird: { buyField: "Total", sellField: "Quantity", location: "Trading Panel on the right", layout: "right-panel", history: "Order History / Trade History" },
 };
 export interface SpotTrade { base: string; quote: string; side: "buy" | "sell"; label: string }
@@ -47,4 +49,16 @@ export function buildSpotFrames(step: Pick<TutorialStep, "provider" | "venue" | 
     { kind: "act", title: copy("Review and press {action}", { action }), text: copy("Check the pair, direction, available balance, minimum order, fees and expected slippage on {venue}. Press {action} only after reviewing the actual order details and any confirmation window.", { venue: step.venue, action }) },
     { kind: "receive", title: copy("Check Trade History and balance"), text: copy("Open {history} on {venue}. Check the filled quantity, average price and fee, then verify your actual {to} balance. Continue only with the amount received; the route estimate is not a completed trade.", { history: profile.history, venue: step.venue, to: step.to }) },
   ];
+}
+
+export const spotGuideVenues = ["binance", "bybit", "mexc", "whitebird", "bitget", "okx"];
+
+export function isSpotStep(step: Pick<TutorialStep, "kind" | "pair" | "provider" | "from" | "to">): boolean {
+  return step.kind === "swap" && Boolean(spotMarket(step)) && spotGuideVenues.includes(step.provider.toLowerCase());
+}
+
+/** The order side belongs to the market's base asset, not the route's input asset. */
+export function spotMarket(step: Pick<TutorialStep, "pair" | "from" | "to">) {
+  const trade = spotTrade(step.pair, step.from, step.to);
+  return trade ? { base: trade.base, quote: trade.quote, buying: trade.side === "buy" } : undefined;
 }
