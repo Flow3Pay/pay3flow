@@ -43,7 +43,7 @@
 <svelte:window on:click={outside} on:keydown={keydown} />
 <div class="walletMenu" bind:this={root}>
   <button class="walletToggle" type="button" bind:this={toggle} aria-label={count ? copy("Wallets ({count})", { count }) : copy("Connect wallet")} aria-expanded={open} aria-controls="wallet-connections" on:click={() => open = !open}>
-    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 5h14v3M4 5v14h17V8H4V5Zm12 7h5v4h-5v-4Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" /></svg>
+    <img src="/icons/ui/wallet-connect.png" width="18" height="18" alt="" aria-hidden="true" />
     <span>{count ? copy("Wallets ({count})", { count }) : copy("Connect wallet")}</span>
   </button>
   {#if open}
@@ -70,6 +70,8 @@
   button { min-height: 36px; border: 1px solid var(--color-border); border-radius: 9px; background: var(--color-panel); color: var(--color-text); font: inherit; cursor: pointer; }
   button:disabled { opacity: .6; cursor: wait; }
   .walletToggle { display: flex; align-items: center; gap: 7px; padding: 0 10px; white-space: nowrap; font-size: 12px; font-weight: 750; }
+  .walletToggle img { width: 18px; height: 18px; flex: 0 0 auto; object-fit: contain; filter: brightness(0); }
+  :global(html[data-theme="dark"]) .walletToggle img { filter: brightness(0) invert(1); }
   .walletConnections { position: absolute; top: calc(100% + 10px); right: 0; width: min(360px, calc(100vw - 32px)); padding: 14px; border: 1px solid var(--color-border); border-radius: 14px; background: var(--color-paper); box-shadow: 0 12px 40px #0002; }
   .walletChoice { display: grid; grid-template-columns: auto 1fr; gap: 8px; padding: 10px 0; align-items: center; }
   .walletChoice button { grid-column: 1 / -1; padding: 6px 10px; }

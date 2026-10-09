@@ -17,6 +17,11 @@ crypto -> crypto             USDC (ERC-20) -> ETH
 crypto -> crypto -> crypto   USDT (BEP-20) -> USDC -> USDT (BEP-20)
 ```
 
+Cash settlement is available in every supported country currency (USD, AMD,
+RUB, BYN, UAH, and KZT). Cash methods share the `cash` currency group, so the
+currency switch keeps a cash selection in cash. P2P venues are queried with the
+generic `Cash` payment method, and default corridors still start from a bank.
+
 Search results are public market estimates. Eligible crypto swaps can be
 executed in the app with Ethereum, NEAR, or TRON wallets. Wallets sign approvals,
 deposits, and swap transactions; Pay3Flow tracks their completion without

@@ -63,6 +63,14 @@
   --page-gutter: 24px;
   --border-highlight-width: 2px;
   --focus-ring-width: 3px;
+  --exchange-card-bg: rgba(255, 255, 255, .96);
+  --exchange-field-bg: #f9faf6;
+  --exchange-field-border: #d9ded4;
+  --exchange-asset-bg: #e7ebe2;
+  --exchange-asset-border: #d7dcd3;
+  --exchange-line: #d2ddd0;
+  --exchange-arrow-bg: #eff5eb;
+  --exchange-arrow-border: #cad8c6;
   --radius-card: 15px;
   --radius-panel: 12px;
   --radius-pill: 999px;
@@ -80,6 +88,14 @@
 
 html[data-theme="dark"] {
   color-scheme: dark;
+  --exchange-card-bg: rgba(25, 25, 25, .96);
+  --exchange-field-bg: #202020;
+  --exchange-field-border: #383838;
+  --exchange-asset-bg: #2a2a2a;
+  --exchange-asset-border: #3b3b3b;
+  --exchange-line: #404040;
+  --exchange-arrow-bg: #272727;
+  --exchange-arrow-border: #505050;
   --color-bg: #101010;
   --color-paper: #191919;
   --color-panel: #222222;

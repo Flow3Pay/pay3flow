@@ -550,7 +550,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO providers (slug, operation, source_url, name, currencies, currency_exceptions, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
-VALUES ('whitebird', 'buy', 'https://whitebird.io/', 'Whitebird Buy', ARRAY['BYN', 'EUR', 'RUB', 'USD']::TEXT[], ARRAY[]::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{"p2p":{"kind":"http_json","market":"direct_exchange","endpoint":"https://api.whitebird.io/api/v3/exchange/client/quote","method":"POST","headers":{"Accept":"application/json","Origin":"https://whitebird.io","Referer":"https://whitebird.io/exchanger"},"asset_codes":{"USDC":"USDC_ERC","USDT":"USDT_TRC"},"supported_assets":["TRX","USDT","ETH","USDC","BTC","BNB","GRAM","SOL"],"timeout_ms":5000,"max_results":null,"page_size":null,"fiat_probe_amount":1000.0,"asset_probe_amount":1.0,"default_min_fiat":1.0,"default_max_fiat":1000000000.0,"default_available_asset":1000000000.0,"auth":null,"buy":{"query":{},"request_json":"{\"input\":{\"asset\":\"{{fiat}}\",\"type\":\"FIAT_PROVIDER\",\"amount\":\"{{amount}}\"},\"output\":{\"asset\":\"{{asset}}\",\"type\":\"CRYPTO_TRANSFER\"},\"merchantId\":\"11111111-1111-1111-1111-111111111111\"}","amount_mode":"fiat_probe","items_pointer":null,"success_pointer":null,"success_value":null,"success_missing_allowed":false,"error_pointer":null,"offer":{"ad_id_pointer":null,"fiat_pointer":"/input/asset","asset_pointer":"/output/asset","price_pointer":null,"fiat_amount_pointer":"/input/amount","asset_amount_pointer":"/output/amount","price_inverted":false,"available_asset_pointer":null,"min_fiat_pointer":null,"max_fiat_pointer":null,"payment_methods_pointer":null,"payment_method_value_pointer":null,"payment_method_fallback_pointer":null,"pay_time_limit_pointer":null,"advertiser_id_pointer":null,"advertiser_nickname_pointer":null,"advertiser_user_type_pointer":null,"merchant_conditions":[],"verified_conditions":[],"merchant_default":true,"verified_default":true,"verified_from_merchant":false,"completed_orders_pointer":null,"completion_rate_pointer":null,"positive_rate_pointer":null,"source_url_template":"https://whitebird.io/exchanger","source_url_is_exact":false,"advertiser_profile_url_template":null}},"sell":{"query":{},"request_json":"{\"input\":{\"asset\":\"{{asset}}\",\"type\":\"CRYPTO_TRANSFER\",\"amount\":\"{{amount}}\"},\"output\":{\"asset\":\"{{fiat}}\",\"type\":\"FIAT_PROVIDER\"},\"merchantId\":\"11111111-1111-1111-1111-111111111111\"}","amount_mode":"asset_probe","items_pointer":null,"success_pointer":null,"success_value":null,"success_missing_allowed":false,"error_pointer":null,"offer":{"ad_id_pointer":null,"fiat_pointer":"/output/asset","asset_pointer":"/input/asset","price_pointer":null,"fiat_amount_pointer":"/output/amount","asset_amount_pointer":"/input/amount","price_inverted":false,"available_asset_pointer":null,"min_fiat_pointer":null,"max_fiat_pointer":null,"payment_methods_pointer":null,"payment_method_value_pointer":null,"payment_method_fallback_pointer":null,"pay_time_limit_pointer":null,"advertiser_id_pointer":null,"advertiser_nickname_pointer":null,"advertiser_user_type_pointer":null,"merchant_conditions":[],"verified_conditions":[],"merchant_default":true,"verified_default":true,"verified_from_merchant":false,"completed_orders_pointer":null,"completion_rate_pointer":null,"positive_rate_pointer":null,"source_url_template":"https://whitebird.io/exchanger","source_url_is_exact":false,"advertiser_profile_url_template":null}},"offer":null,"rate_table":null},"market":null,"bestchange":null}'::JSONB, '{}'::JSONB, '{"kind":"included_in_quote","description":"The effective Pay3Flow rate uses Whitebird''s final quoted input and output amounts, which already reflect the input and output fee amounts returned by the live quote API.","docs_url":"https://whitebird.io/exchanger"}'::JSONB, '{"description":"Open Whitebird and check the final exchange details before continuing.","steps":[],"buy_steps":[],"sell_steps":[],"links":[],"review_sources":[{"kind":"otzovik","url":"https://otzovik.com/reviews/whitebird_io-krupneyshaya_legalnaya_kriptoplatforma/"},{"kind":"forum","url":"https://forum.bits.media/index.php?/topic/175604-whitebirdio/"}]}'::JSONB, 'whitebird/Providerfile')
+VALUES ('whitebird', 'buy', 'https://whitebird.io/', 'Whitebird Buy', ARRAY['BYN', 'EUR', 'RUB', 'USD']::TEXT[], ARRAY[]::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{"p2p":{"kind":"http_json","market":"direct_exchange","endpoint":"https://api.whitebird.io/api/v3/exchange/client/quote","method":"POST","headers":{"Accept":"application/json","Origin":"https://whitebird.io","Referer":"https://whitebird.io/exchanger"},"asset_codes":{"USDC":"USDC_ERC","USDT":"USDT_TRC"},"supported_assets":["TRX","USDT","ETH","USDC","BTC","BNB","GRAM","SOL"],"timeout_ms":5000,"max_results":null,"page_size":null,"fiat_probe_amount":1000.0,"asset_probe_amount":1.0,"default_min_fiat":1.0,"default_max_fiat":1000000000.0,"default_available_asset":1000000000.0,"auth":null,"buy":{"query":{},"request_json":"{\"input\":{\"asset\":\"{{fiat}}\",\"type\":\"FIAT_PROVIDER\",\"amount\":\"{{amount}}\"},\"output\":{\"asset\":\"{{asset}}\",\"type\":\"CRYPTO_TRANSFER\"},\"merchantId\":\"11111111-1111-1111-1111-111111111111\"}","amount_mode":"fiat_probe","items_pointer":null,"success_pointer":null,"success_value":null,"success_missing_allowed":false,"error_pointer":null,"offer":{"ad_id_pointer":null,"fiat_pointer":"/input/asset","asset_pointer":"/output/asset","price_pointer":null,"fiat_amount_pointer":"/input/amount","asset_amount_pointer":"/output/amount","price_inverted":false,"available_asset_pointer":null,"min_fiat_pointer":null,"max_fiat_pointer":null,"payment_methods_pointer":null,"payment_method_value_pointer":null,"payment_method_fallback_pointer":null,"pay_time_limit_pointer":null,"advertiser_id_pointer":null,"advertiser_nickname_pointer":null,"advertiser_user_type_pointer":null,"merchant_conditions":[],"verified_conditions":[],"merchant_default":true,"verified_default":true,"verified_from_merchant":false,"completed_orders_pointer":null,"completion_rate_pointer":null,"positive_rate_pointer":null,"source_url_template":"https://whitebird.io/exchanger","source_url_is_exact":false,"advertiser_profile_url_template":null}},"sell":{"query":{},"request_json":"{\"input\":{\"asset\":\"{{asset}}\",\"type\":\"CRYPTO_TRANSFER\",\"amount\":\"{{amount}}\"},\"output\":{\"asset\":\"{{fiat}}\",\"type\":\"FIAT_PROVIDER\"},\"merchantId\":\"11111111-1111-1111-1111-111111111111\"}","amount_mode":"asset_probe","items_pointer":null,"success_pointer":null,"success_value":null,"success_missing_allowed":false,"error_pointer":null,"offer":{"ad_id_pointer":null,"fiat_pointer":"/output/asset","asset_pointer":"/input/asset","price_pointer":null,"fiat_amount_pointer":"/output/amount","asset_amount_pointer":"/input/amount","price_inverted":false,"available_asset_pointer":null,"min_fiat_pointer":null,"max_fiat_pointer":null,"payment_methods_pointer":null,"payment_method_value_pointer":null,"payment_method_fallback_pointer":null,"pay_time_limit_pointer":null,"advertiser_id_pointer":null,"advertiser_nickname_pointer":null,"advertiser_user_type_pointer":null,"merchant_conditions":[],"verified_conditions":[],"merchant_default":true,"verified_default":true,"verified_from_merchant":false,"completed_orders_pointer":null,"completion_rate_pointer":null,"positive_rate_pointer":null,"source_url_template":"https://whitebird.io/exchanger","source_url_is_exact":false,"advertiser_profile_url_template":null}},"offer":null,"rate_table":null},"market":{"kind":"http_json","endpoint":"https://market-data-service.whitebird.io/api/v1/market/orderbook","method":"GET","headers":{},"query":{"limit":"1","symbol":"{{asset}}"},"symbols":["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","TRXUSDT","LINKUSDT","UNIUSDT","AAVEUSDT","GRAMUSDT","PAXGUSDT","XAUTUSDT"],"request_json":null,"timeout_ms":10000,"items_pointer":"/result","symbol_pointer":"/symbol","bid_pointer":"/bids/0/0","ask_pointer":"/asks/0/0","symbol_remove":null,"success_pointer":"/retCode","success_value":"0","success_missing_allowed":false,"error_pointer":"/retMsg"},"bestchange":null}'::JSONB, '{}'::JSONB, '{"kind":"included_in_quote","description":"Fiat exchange estimates use Whitebird''s final quoted input and output amounts, including fees returned by its quote API. Spot estimates use live bid/ask prices; trading, deposit and withdrawal fees are not included and must be checked on Whitebird.","docs_url":"https://whitebird.io/exchanger"}'::JSONB, '{"description":"Open Whitebird and check the final exchange details before continuing.","steps":[],"buy_steps":[],"sell_steps":[],"links":[],"review_sources":[{"kind":"otzovik","url":"https://otzovik.com/reviews/whitebird_io-krupneyshaya_legalnaya_kriptoplatforma/"},{"kind":"forum","url":"https://forum.bits.media/index.php?/topic/175604-whitebirdio/"}]}'::JSONB, 'whitebird/Providerfile')
 ON CONFLICT (slug, operation) DO UPDATE SET
 source_url = EXCLUDED.source_url,
 name = EXCLUDED.name,
@@ -566,7 +566,7 @@ source_file = EXCLUDED.source_file,
 updated_at = now();
 
 INSERT INTO providers (slug, operation, source_url, name, currencies, currency_exceptions, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
-VALUES ('whitebird', 'sell', 'https://whitebird.io/', 'Whitebird Sell', ARRAY['BYN', 'EUR', 'RUB', 'USD']::TEXT[], ARRAY[]::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{"p2p":{"kind":"http_json","market":"direct_exchange","endpoint":"https://api.whitebird.io/api/v3/exchange/client/quote","method":"POST","headers":{"Accept":"application/json","Origin":"https://whitebird.io","Referer":"https://whitebird.io/exchanger"},"asset_codes":{"USDC":"USDC_ERC","USDT":"USDT_TRC"},"supported_assets":["TRX","USDT","ETH","USDC","BTC","BNB","GRAM","SOL"],"timeout_ms":5000,"max_results":null,"page_size":null,"fiat_probe_amount":1000.0,"asset_probe_amount":1.0,"default_min_fiat":1.0,"default_max_fiat":1000000000.0,"default_available_asset":1000000000.0,"auth":null,"buy":{"query":{},"request_json":"{\"input\":{\"asset\":\"{{fiat}}\",\"type\":\"FIAT_PROVIDER\",\"amount\":\"{{amount}}\"},\"output\":{\"asset\":\"{{asset}}\",\"type\":\"CRYPTO_TRANSFER\"},\"merchantId\":\"11111111-1111-1111-1111-111111111111\"}","amount_mode":"fiat_probe","items_pointer":null,"success_pointer":null,"success_value":null,"success_missing_allowed":false,"error_pointer":null,"offer":{"ad_id_pointer":null,"fiat_pointer":"/input/asset","asset_pointer":"/output/asset","price_pointer":null,"fiat_amount_pointer":"/input/amount","asset_amount_pointer":"/output/amount","price_inverted":false,"available_asset_pointer":null,"min_fiat_pointer":null,"max_fiat_pointer":null,"payment_methods_pointer":null,"payment_method_value_pointer":null,"payment_method_fallback_pointer":null,"pay_time_limit_pointer":null,"advertiser_id_pointer":null,"advertiser_nickname_pointer":null,"advertiser_user_type_pointer":null,"merchant_conditions":[],"verified_conditions":[],"merchant_default":true,"verified_default":true,"verified_from_merchant":false,"completed_orders_pointer":null,"completion_rate_pointer":null,"positive_rate_pointer":null,"source_url_template":"https://whitebird.io/exchanger","source_url_is_exact":false,"advertiser_profile_url_template":null}},"sell":{"query":{},"request_json":"{\"input\":{\"asset\":\"{{asset}}\",\"type\":\"CRYPTO_TRANSFER\",\"amount\":\"{{amount}}\"},\"output\":{\"asset\":\"{{fiat}}\",\"type\":\"FIAT_PROVIDER\"},\"merchantId\":\"11111111-1111-1111-1111-111111111111\"}","amount_mode":"asset_probe","items_pointer":null,"success_pointer":null,"success_value":null,"success_missing_allowed":false,"error_pointer":null,"offer":{"ad_id_pointer":null,"fiat_pointer":"/output/asset","asset_pointer":"/input/asset","price_pointer":null,"fiat_amount_pointer":"/output/amount","asset_amount_pointer":"/input/amount","price_inverted":false,"available_asset_pointer":null,"min_fiat_pointer":null,"max_fiat_pointer":null,"payment_methods_pointer":null,"payment_method_value_pointer":null,"payment_method_fallback_pointer":null,"pay_time_limit_pointer":null,"advertiser_id_pointer":null,"advertiser_nickname_pointer":null,"advertiser_user_type_pointer":null,"merchant_conditions":[],"verified_conditions":[],"merchant_default":true,"verified_default":true,"verified_from_merchant":false,"completed_orders_pointer":null,"completion_rate_pointer":null,"positive_rate_pointer":null,"source_url_template":"https://whitebird.io/exchanger","source_url_is_exact":false,"advertiser_profile_url_template":null}},"offer":null,"rate_table":null},"market":null,"bestchange":null}'::JSONB, '{}'::JSONB, '{"kind":"included_in_quote","description":"The effective Pay3Flow rate uses Whitebird''s final quoted input and output amounts, which already reflect the input and output fee amounts returned by the live quote API.","docs_url":"https://whitebird.io/exchanger"}'::JSONB, '{"description":"Open Whitebird and check the final exchange details before continuing.","steps":[],"buy_steps":[],"sell_steps":[],"links":[],"review_sources":[{"kind":"otzovik","url":"https://otzovik.com/reviews/whitebird_io-krupneyshaya_legalnaya_kriptoplatforma/"},{"kind":"forum","url":"https://forum.bits.media/index.php?/topic/175604-whitebirdio/"}]}'::JSONB, 'whitebird/Providerfile')
+VALUES ('whitebird', 'sell', 'https://whitebird.io/', 'Whitebird Sell', ARRAY['BYN', 'EUR', 'RUB', 'USD']::TEXT[], ARRAY[]::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{"p2p":{"kind":"http_json","market":"direct_exchange","endpoint":"https://api.whitebird.io/api/v3/exchange/client/quote","method":"POST","headers":{"Accept":"application/json","Origin":"https://whitebird.io","Referer":"https://whitebird.io/exchanger"},"asset_codes":{"USDC":"USDC_ERC","USDT":"USDT_TRC"},"supported_assets":["TRX","USDT","ETH","USDC","BTC","BNB","GRAM","SOL"],"timeout_ms":5000,"max_results":null,"page_size":null,"fiat_probe_amount":1000.0,"asset_probe_amount":1.0,"default_min_fiat":1.0,"default_max_fiat":1000000000.0,"default_available_asset":1000000000.0,"auth":null,"buy":{"query":{},"request_json":"{\"input\":{\"asset\":\"{{fiat}}\",\"type\":\"FIAT_PROVIDER\",\"amount\":\"{{amount}}\"},\"output\":{\"asset\":\"{{asset}}\",\"type\":\"CRYPTO_TRANSFER\"},\"merchantId\":\"11111111-1111-1111-1111-111111111111\"}","amount_mode":"fiat_probe","items_pointer":null,"success_pointer":null,"success_value":null,"success_missing_allowed":false,"error_pointer":null,"offer":{"ad_id_pointer":null,"fiat_pointer":"/input/asset","asset_pointer":"/output/asset","price_pointer":null,"fiat_amount_pointer":"/input/amount","asset_amount_pointer":"/output/amount","price_inverted":false,"available_asset_pointer":null,"min_fiat_pointer":null,"max_fiat_pointer":null,"payment_methods_pointer":null,"payment_method_value_pointer":null,"payment_method_fallback_pointer":null,"pay_time_limit_pointer":null,"advertiser_id_pointer":null,"advertiser_nickname_pointer":null,"advertiser_user_type_pointer":null,"merchant_conditions":[],"verified_conditions":[],"merchant_default":true,"verified_default":true,"verified_from_merchant":false,"completed_orders_pointer":null,"completion_rate_pointer":null,"positive_rate_pointer":null,"source_url_template":"https://whitebird.io/exchanger","source_url_is_exact":false,"advertiser_profile_url_template":null}},"sell":{"query":{},"request_json":"{\"input\":{\"asset\":\"{{asset}}\",\"type\":\"CRYPTO_TRANSFER\",\"amount\":\"{{amount}}\"},\"output\":{\"asset\":\"{{fiat}}\",\"type\":\"FIAT_PROVIDER\"},\"merchantId\":\"11111111-1111-1111-1111-111111111111\"}","amount_mode":"asset_probe","items_pointer":null,"success_pointer":null,"success_value":null,"success_missing_allowed":false,"error_pointer":null,"offer":{"ad_id_pointer":null,"fiat_pointer":"/output/asset","asset_pointer":"/input/asset","price_pointer":null,"fiat_amount_pointer":"/output/amount","asset_amount_pointer":"/input/amount","price_inverted":false,"available_asset_pointer":null,"min_fiat_pointer":null,"max_fiat_pointer":null,"payment_methods_pointer":null,"payment_method_value_pointer":null,"payment_method_fallback_pointer":null,"pay_time_limit_pointer":null,"advertiser_id_pointer":null,"advertiser_nickname_pointer":null,"advertiser_user_type_pointer":null,"merchant_conditions":[],"verified_conditions":[],"merchant_default":true,"verified_default":true,"verified_from_merchant":false,"completed_orders_pointer":null,"completion_rate_pointer":null,"positive_rate_pointer":null,"source_url_template":"https://whitebird.io/exchanger","source_url_is_exact":false,"advertiser_profile_url_template":null}},"offer":null,"rate_table":null},"market":{"kind":"http_json","endpoint":"https://market-data-service.whitebird.io/api/v1/market/orderbook","method":"GET","headers":{},"query":{"limit":"1","symbol":"{{asset}}"},"symbols":["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","TRXUSDT","LINKUSDT","UNIUSDT","AAVEUSDT","GRAMUSDT","PAXGUSDT","XAUTUSDT"],"request_json":null,"timeout_ms":10000,"items_pointer":"/result","symbol_pointer":"/symbol","bid_pointer":"/bids/0/0","ask_pointer":"/asks/0/0","symbol_remove":null,"success_pointer":"/retCode","success_value":"0","success_missing_allowed":false,"error_pointer":"/retMsg"},"bestchange":null}'::JSONB, '{}'::JSONB, '{"kind":"included_in_quote","description":"Fiat exchange estimates use Whitebird''s final quoted input and output amounts, including fees returned by its quote API. Spot estimates use live bid/ask prices; trading, deposit and withdrawal fees are not included and must be checked on Whitebird.","docs_url":"https://whitebird.io/exchanger"}'::JSONB, '{"description":"Open Whitebird and check the final exchange details before continuing.","steps":[],"buy_steps":[],"sell_steps":[],"links":[],"review_sources":[{"kind":"otzovik","url":"https://otzovik.com/reviews/whitebird_io-krupneyshaya_legalnaya_kriptoplatforma/"},{"kind":"forum","url":"https://forum.bits.media/index.php?/topic/175604-whitebirdio/"}]}'::JSONB, 'whitebird/Providerfile')
 ON CONFLICT (slug, operation) DO UPDATE SET
 source_url = EXCLUDED.source_url,
 name = EXCLUDED.name,
@@ -585,10 +585,120 @@ updated_at = now();
 DELETE FROM banks
  WHERE picker_visible
    AND source_file LIKE '%/Providerfile'
-   AND method_id NOT IN ('global-usd-cash', 'currency-amd', 'currency-rub', 'currency-usd', 'currency-byn', 'currency-uah', 'currency-kzt', 'am-ameriabank-usd-account', 'am-ameriabank', 'am-idbank-usd-account', 'am-idbank', 'am-acba-usd-account', 'am-acba', 'am-ardshinbank-usd-account', 'am-ardshinbank', 'am-inecobank-usd-account', 'am-inecobank', 'am-evocabank-usd-account', 'am-evocabank', 'am-vtb-usd-account', 'am-vtb', 'ru-sberbank', 'ru-tbank', 'ru-tbank-usd-account', 'ru-alfabank', 'ru-vtb', 'ru-gazprombank', 'ru-raiffeisen', 'ru-ozon', 'by-belarusbank', 'by-belagroprombank', 'by-priorbank', 'by-belinvestbank', 'by-alfabank', 'by-belgazprombank', 'by-sberbank', 'by-belveb', 'by-mtbank', 'by-vtb', 'by-dabrabyt', 'by-technobank', 'by-btk', 'by-bnb', 'by-bsb', 'by-paritetbank', 'by-bank-reshenie', 'by-statusbank', 'by-neobank', 'by-zepterbank', 'by-brrb', 'ua-privatbank', 'ua-monobank', 'ua-oschadbank', 'ua-pumb', 'ua-raiffeisen', 'ua-sense', 'ua-abank', 'ua-ukrsibbank', 'kz-kaspi', 'kz-halyk', 'kz-forte', 'kz-bcc', 'kz-freedom', 'kz-bereke', 'kz-jusan', 'kz-eurasian', 'global-usdt', 'global-usdc', 'global-btc', 'global-eth', 'global-bnb', 'global-sol', 'global-trx', 'global-ton', 'global-ever', 'global-doge', 'global-ltc', 'global-dai', 'global-fdusd', 'global-xrp', 'global-ada', 'global-dot', 'global-link', 'global-avax', 'global-matic', 'global-bch', 'global-near', 'global-apt', 'global-atom', 'global-uni', 'global-sui');
+   AND method_id NOT IN ('global-usd-cash', 'am-amd-cash', 'ru-rub-cash', 'by-byn-cash', 'ua-uah-cash', 'kz-kzt-cash', 'currency-amd', 'currency-rub', 'currency-usd', 'currency-byn', 'currency-uah', 'currency-kzt', 'am-ameriabank-usd-account', 'am-ameriabank', 'am-idbank-usd-account', 'am-idbank', 'am-acba-usd-account', 'am-acba', 'am-ardshinbank-usd-account', 'am-ardshinbank', 'am-inecobank-usd-account', 'am-inecobank', 'am-evocabank-usd-account', 'am-evocabank', 'am-vtb-usd-account', 'am-vtb', 'ru-sberbank', 'ru-tbank', 'ru-tbank-usd-account', 'ru-alfabank', 'ru-vtb', 'ru-gazprombank', 'ru-raiffeisen', 'ru-ozon', 'by-belarusbank', 'by-belagroprombank', 'by-priorbank', 'by-belinvestbank', 'by-alfabank', 'by-belgazprombank', 'by-sberbank', 'by-belveb', 'by-mtbank', 'by-vtb', 'by-dabrabyt', 'by-technobank', 'by-btk', 'by-bnb', 'by-bsb', 'by-paritetbank', 'by-bank-reshenie', 'by-statusbank', 'by-neobank', 'by-zepterbank', 'by-brrb', 'ua-privatbank', 'ua-monobank', 'ua-oschadbank', 'ua-pumb', 'ua-raiffeisen', 'ua-sense', 'ua-abank', 'ua-ukrsibbank', 'kz-kaspi', 'kz-halyk', 'kz-forte', 'kz-bcc', 'kz-freedom', 'kz-bereke', 'kz-jusan', 'kz-eurasian', 'global-usdt', 'global-usdc', 'global-btc', 'global-eth', 'global-bnb', 'global-sol', 'global-trx', 'global-ton', 'global-ever', 'global-doge', 'global-ltc', 'global-dai', 'global-fdusd', 'global-xrp', 'global-ada', 'global-dot', 'global-link', 'global-avax', 'global-matic', 'global-bch', 'global-near', 'global-apt', 'global-atom', 'global-uni', 'global-sui');
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
-VALUES ('global-usd-cash', 'global-usd-cash', 'Cash USD', 'both', 'GLOBAL', 'USD', '', '', '', 'enabled', 'cash', '#168451', '$', true, NULL, 'Cash', NULL, TRUE, 'payment-methods/Providerfile')
+VALUES ('global-usd-cash', 'global-usd-cash', 'Cash USD', 'both', 'GLOBAL', 'USD', '', '', '', 'enabled', 'cash', '#168451', '$', true, NULL, 'Cash', 'cash', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('am-amd-cash', 'am-amd-cash', 'Cash AMD', 'both', 'AM', 'AMD', '', '', '', 'enabled', 'cash', '#6d2c91', '֏', true, NULL, 'Cash', 'cash', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('ru-rub-cash', 'ru-rub-cash', 'Cash RUB', 'both', 'RU', 'RUB', '', '', '', 'enabled', 'cash', '#21a038', '₽', true, NULL, 'Cash', 'cash', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('by-byn-cash', 'by-byn-cash', 'Cash BYN', 'both', 'BY', 'BYN', '', '', '', 'enabled', 'cash', '#006b3f', 'Br', true, NULL, 'Cash', 'cash', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('ua-uah-cash', 'ua-uah-cash', 'Cash UAH', 'both', 'UA', 'UAH', '', '', '', 'enabled', 'cash', '#0057b7', '₴', true, NULL, 'Cash', 'cash', TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('kz-kzt-cash', 'kz-kzt-cash', 'Cash KZT', 'both', 'KZ', 'KZT', '', '', '', 'enabled', 'cash', '#00a3e0', '₸', true, NULL, 'Cash', 'cash', TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,

@@ -4,6 +4,7 @@ import { buildBinanceProfileFrames } from "./guides/binance/frames";
 import { buildBestchangeFrames } from "./guides/bestchange/frames";
 import { buildVenueSwapFrames, swapGuideVenues } from "./guides/exchangers/frames";
 import { buildP2pProfileFrames } from "./guides/p2p/frames";
+import { buildSpotFrames, spotGuideLinks } from "./guides/spot/frames";
 
 export type TutorialKind = "buy" | "sell" | "swap" | "transfer";
 export type TutorialFrameKind = "open" | "verify" | "review" | "act" | "receive";
@@ -47,9 +48,9 @@ export function spotTutorialUrl(venue: string, symbol: string, first: string, se
   const pair = normalized === `${a}${b}` ? [a, b] : normalized === `${b}${a}` ? [b, a] : null;
   const key = venue.toLowerCase();
   if (key === "cifra-broker") return "https://tradernet.by/authentication/signup";
-  if (!pair) return ({ binance: "https://www.binance.com/en/trade", bybit: "https://www.bybit.com/trade/spot/", okx: "https://www.okx.com/trade-spot/", bitget: "https://www.bitget.com/spot/", mexc: "https://www.mexc.com/exchange/" } as Record<string, string>)[key] ?? null;
+  if (!pair) return ({ binance: "https://www.binance.com/en/trade", bybit: "https://www.bybit.com/trade/spot/", okx: "https://www.okx.com/trade-spot/", bitget: "https://www.bitget.com/spot/", mexc: "https://www.mexc.com/exchange/", whitebird: "https://whitebird.io/spot/BTC/USDT" } as Record<string, string>)[key] ?? null;
   const [base, quote] = pair;
-  return ({ binance: `https://www.binance.com/en/trade/${base}_${quote}?type=spot`, bybit: `https://www.bybit.com/trade/spot/${base}/${quote}`, okx: `https://www.okx.com/trade-spot/${base.toLowerCase()}-${quote.toLowerCase()}`, bitget: `https://www.bitget.com/spot/${base}${quote}`, mexc: `https://www.mexc.com/exchange/${base}_${quote}` } as Record<string, string>)[key] ?? null;
+  return ({ binance: `https://www.binance.com/en/trade/${base}_${quote}?type=spot`, bybit: `https://www.bybit.com/trade/spot/${base}/${quote}`, okx: `https://www.okx.com/trade-spot/${base.toLowerCase()}-${quote.toLowerCase()}`, bitget: `https://www.bitget.com/spot/${base}${quote}`, mexc: `https://www.mexc.com/exchange/${base}_${quote}`, whitebird: `https://whitebird.io/spot/${base}/${quote}` } as Record<string, string>)[key] ?? null;
 }
 
 /** Compose chapters from route operations; rendering never depends on a particular corridor. */
@@ -68,15 +69,18 @@ export function buildRouteTutorial(route: RouteCandidate, names: Record<string, 
   const add = (data: Omit<TutorialStep, "guideSteps" | "guide" | "notes"> & { guide?: ProviderGuidance; guideSteps?: string[]; notes?: string[] }) => {
     const guide = data.guide ?? guidance[data.provider.toLowerCase()];
     const key = data.provider.toLowerCase();
-    const frames = data.kind === "transfer" ? data.frames
+    const spotGuide = data.kind === "swap" && data.pair ? spotGuideLinks[key] : undefined;
+    const spotFrames = data.kind === "swap" && data.pair ? buildSpotFrames(data, copy) : null;
+    const frames = spotFrames ?? (data.kind === "transfer" ? data.frames
       : key === "bestchange" ? buildBestchangeFrames(data.from, data.to, copy)
       : key === "whitebird" ? buildWhitebirdFrames(copy)
-      : swapGuideVenues.includes(key) ? buildVenueSwapFrames(data, copy) : data.frames;
+      : swapGuideVenues.includes(key) ? buildVenueSwapFrames(data, copy) : data.frames);
     if (key === "bestchange" && data.kind !== "transfer") {
       data.checkpoint = copy("Once you open the exchanger website, this guide step is complete. Continue with the exchanger's instructions there.");
       data.summary = copy("Read the exchanger's BestChange reviews, check your exchange direction and open its website.");
     }
-    steps.push({ ...data, frames, notes: data.notes ?? [], guide, guideSteps: data.guideSteps ?? guide?.steps ?? [] });
+    const spotUrl = data.kind === "swap" && data.pair ? spotTutorialUrl(data.provider, data.pair, data.from, data.to) : null;
+    steps.push({ ...data, url: spotUrl ?? data.url, frames, notes: data.notes ?? [], guide: spotGuide ? { ...guide, description: "", steps: [], links: [key === "whitebird" && spotUrl ? { ...spotGuide, url: spotUrl } : spotGuide] } : guide, guideSteps: spotGuide ? [] : data.guideSteps ?? guide?.steps ?? [] });
   };
   const swapFrames = (name: string, from: string, to: string) => [
     frame("open", "Open the exchange", copy("Open {venue}", { venue: name })),

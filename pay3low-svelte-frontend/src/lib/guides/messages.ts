@@ -1,5 +1,7 @@
+import { spotMessages } from "./spot/messages";
 export const guideMessages = {
   ru: {
+    ...spotMessages.ru,
     "Select currencies": "Выберите валюты",
     "Enter the amount you want to convert from {from} to {to}.": "Введите сумму для конвертации {from} в {to}.",
     "Open the Binance advertiser profile and check the nickname and trading statistics.": "Откройте профиль контрагента Binance, сверьте никнейм и статистику сделок.",
@@ -73,6 +75,7 @@ export const guideMessages = {
     "Fees and slippage": "Комиссии и проскальзывание",
   },
   hy: {
+    ...spotMessages.hy,
     "Select currencies": "Ընտրեք արժույթները",
     "Enter the amount you want to convert from {from} to {to}.": "Մուտքագրեք գումարը՝ {from}-ը {to}-ի փոխարկելու համար։",
     "Open the Binance advertiser profile and check the nickname and trading statistics.": "Բացեք Binance-ի հայտարարատուի պրոֆիլը և ստուգեք մականունն ու գործարքների վիճակագրությունը։",

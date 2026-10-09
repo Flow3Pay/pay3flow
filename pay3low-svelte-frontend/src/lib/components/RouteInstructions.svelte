@@ -12,6 +12,7 @@
   import { wallets } from "$lib/wallet-session";
   import { walletFamily } from "$lib/wallet-execution";
   import InstructionScene from "./InstructionScene.svelte";
+  import { spotTrade } from "$lib/guides/spot/frames";
 
   export let route: RouteCandidate;
   export let venueNames: Record<string, string> = {};
@@ -52,6 +53,7 @@
   $: copy = (key: string, params: Record<string, string | number> = {}) => t(key, params, language);
   $: steps = buildRouteTutorial(route, venueNames, providerGuidance, networkNames, copy);
   $: step = steps[chapter];
+  $: spot = step?.kind === "swap" ? spotTrade(step.pair, step.from, step.to) : null;
   $: sourceFamily = walletFamily(route.execution?.from_asset.split("@", 2)[1] ?? "");
   $: walletSwap = Boolean(step?.execution && route.execution && sourceFamily && $wallets[sourceFamily]);
   $: walletProviderStep = Boolean(step?.execution && ["symbiosis", "near-intents", "cow-swap"].includes(step.provider));
@@ -177,7 +179,7 @@
             <div class="visualColumn">
               <div class="videoStage" class:paused={!playing} use:sceneVisibility>
               <InstructionScene {route} {steps} {step} {frame} {finished} progress={elapsed === 0 && !playing ? 1 : elapsed / frameDuration} playing={playing && documentVisible && sceneVisible && !reducedMotion} />
-              {#if step}
+              {#if step && !spot}
                 <div class="sceneOverlay">
                   <button type="button" class="sceneArrow previous" on:click={() => selectFrame(Math.max(0, frame - 1))} disabled={frame === 0} aria-label={copy("Previous scene")}>‹</button>
                   <button type="button" class="centerPlayback" on:click={togglePlayback} aria-label={copy(playing ? "Pause walkthrough" : "Play walkthrough")} data-testid="center-playback">{#if playing}<img class="pauseIcon" src="/icons/ui/guide-pause.png" alt="" width="24" height="24" />{:else}<svg class="playIcon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 4.5v15L20 12 8 4.5Z" /></svg>{/if}</button>
@@ -187,10 +189,12 @@
               </div>
               {#if step}
                 <div class="playerControls">
+                  {#if spot}<button type="button" disabled={frame === 0} aria-label={copy("Previous scene")} on:click={() => selectFrame(Math.max(0, frame - 1))}>‹</button>{/if}
                   <button type="button" on:click={togglePlayback} aria-label={copy(playing ? "Pause walkthrough" : "Play walkthrough")} aria-pressed={playing} data-testid="playback-toggle">{#if playing}<img class="pauseIcon" src="/icons/ui/guide-pause.png" alt="" width="24" height="24" />{:else}<svg class="playIcon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 4.5v15L20 12 8 4.5Z" /></svg>{/if}</button>
                   <div class="playerTimeline" aria-label={copy("Walkthrough scenes")}>{#each step.frames as item, index}<button type="button" aria-label={copy("Scene {number}: {title}", { number: index + 1, title: item.title })} aria-pressed={index === frame} title={item.title} on:click={() => selectFrame(index)}><b>{String(index + 1).padStart(2, "0")}</b><span style={`transform:scaleX(${index < frame ? 1 : index === frame ? Math.max(.04, elapsed / frameDuration) : 0})`}></span></button>{/each}</div>
                   <span class="sceneCount">{String(frame + 1).padStart(2, "0")} / {String(step.frames.length).padStart(2, "0")}</span>
                   <button type="button" on:click={replay} aria-label={copy("Replay walkthrough")}>↻</button>
+                  {#if spot}<button type="button" disabled={frame === step.frames.length - 1} aria-label={copy("Next scene")} on:click={() => selectFrame(Math.min(step.frames.length - 1, frame + 1))}>›</button>{/if}
                 </div>
               {/if}
             </div>
@@ -200,6 +204,7 @@
                 <div class="frameList">{#each step.frames as item, index}<button type="button" class:selected={index === frame} aria-pressed={index === frame} on:click={() => selectFrame(index)}><span class="frameNumber">{String(index + 1).padStart(2, "0")}</span><span><strong>{item.title}</strong><span class="frameText">{item.text}</span></span>{#if index === frame}<span class="frameIndicator">←</span>{/if}</button>{/each}</div>
                 {#if step.guideSteps.length}<ul class="stepNotes">{#each step.guideSteps as note}<li>{note}</li>{/each}</ul>{/if}
                 {#if step.guide?.links.length}<div class="guideLinks">{#each step.guide.links as link}<a href={link.url} target="_blank" rel="noreferrer noopener">{link.label} ↗</a>{/each}</div>{/if}
+                {#if spot && step.notes.length}<ul class="stepNotes">{#each step.notes as note}<li>{note}</li>{/each}</ul>{/if}
               {:else if finished}
                 <span class="eyebrow">{copy("YOUR CHECKLIST")}</span>
                 <div class="finishChecklist">{#each steps as item}<div><span>✓</span><p>{item.title}</p></div>{/each}</div>
@@ -216,6 +221,9 @@
           {/if}
           {#if walletProviderStep && !walletSwap && walletProviderUrl && step}
             <a class="walletProviderLink" href={walletProviderUrl} target="_blank" rel="noreferrer noopener">{copy("Open {venue}", { venue: step.venue })} <span aria-hidden="true">↗</span></a>
+          {/if}
+          {#if spot && step?.url}
+            <a class="walletProviderLink" data-testid="spot-market-link" href={step.url} target="_blank" rel="noreferrer noopener">{copy("Open {venue} Spot", { venue: step.venue })} · {spot.label} <span aria-hidden="true">↗</span></a>
           {/if}
           {#if step?.execution && route.execution}
             <div class="swapExecution" class:connected={walletSwap}>{#key route.route_id}<RouteExecutionPanel {route} {networkNames} />{/key}</div>

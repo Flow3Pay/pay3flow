@@ -53,9 +53,26 @@ merchant_default = true
 verified_default = true
 source_url_template = "https://whitebird.io/exchanger"
 
+# Live public Spot snapshots. The instrument list was checked against
+# /api/v1/market/instruments?category=spot; disabled instruments are excluded.
+[adapter.market]
+kind = "http_json"
+endpoint = "https://market-data-service.whitebird.io/api/v1/market/orderbook"
+method = "GET"
+query = { symbol = "{{asset}}", limit = "1" }
+symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "TRXUSDT", "LINKUSDT", "UNIUSDT", "AAVEUSDT", "GRAMUSDT", "PAXGUSDT", "XAUTUSDT"]
+timeout_ms = 10000
+items_pointer = "/result"
+symbol_pointer = "/symbol"
+bid_pointer = "/bids/0/0"
+ask_pointer = "/asks/0/0"
+success_pointer = "/retCode"
+success_value = "0"
+error_pointer = "/retMsg"
+
 [fees]
 kind = "included_in_quote"
-description = "The effective Pay3Flow rate uses Whitebird's final quoted input and output amounts, which already reflect the input and output fee amounts returned by the live quote API."
+description = "Fiat exchange estimates use Whitebird's final quoted input and output amounts, including fees returned by its quote API. Spot estimates use live bid/ask prices; trading, deposit and withdrawal fees are not included and must be checked on Whitebird."
 docs_url = "https://whitebird.io/exchanger"
 
 [guidance]

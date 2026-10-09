@@ -98,3 +98,60 @@ page exposes Open Graph/Twitter metadata and a dynamic 1200×630 PNG inspired by
 the guide overview, then opens the corresponding hash guide. The image endpoint
 uses only bundled asset/venue icons, bounded parameters and a bounded cache;
 Sharp renders it on Node. The runtime image includes DejaVu fonts.
+
+## Spot exchange guides
+
+Crypto-to-crypto exchange guides select Spot chapters from `market_path` and
+`cycle_legs.market_pair`. Binance, Bybit, MEXC, Bitget and Whitebird have dedicated Spot
+illustrations and five scenes: funding, pair/direction, order type/amount,
+review, and actual fills. The market symbol determines Buy/Sell and the
+spending currency for every pair, including non-stablecoin pairs. These steps
+use canonical Spot market links and official Spot help, rather than the
+provider catalog's P2P profile instructions. P2P offer chapters continue to
+use the advertiser walkthroughs.
+
+## OTC frontend preview
+
+Open `/#/otc`, or share `/#/otc?market=ETH-USDT`. The header switches between
+SWAP and OTC, keeps the current swap corridor when navigating to OTC, and moves
+API Docs, Telegram and GitHub into a left drawer on all screen sizes. Exchange
+sharing sits after the theme button.
+
+The OTC workspace uses the existing theme variables, fonts, asset icons and
+bridge visual language. Bridge, chart, orderbook and market activity each have
+a collapse arrow. The preview includes BTC/USDT, ETH/USDT and SOL/USDT markets,
+buy/sell and limit/market modes, line/candle charts, range and zoom controls,
+price grouping, clickable book levels, review, cancellation and order history.
+Market orders simulate consuming available opposite offers and reject amounts
+that exceed the demo liquidity.
+
+All OTC prices, book levels, candles and trades are **demo data**, explicitly
+marked in the interface. Orders only live in tab-scoped `sessionStorage`, capped
+at 100, and never call an order API, sign a wallet request or move funds. A
+simulated market order is labelled `simulated`, not settled or filled.
+
+Integration boundaries for the backend implementation:
+
+- `src/lib/otc/model.ts` defines `OtcMarket`, `OtcSnapshot`, `BookLevel`,
+  `Candle`, `OtcTrade`, `OrderDraft` and `DemoOrder`, and holds the demo fixtures.
+- `OtcWorkspace.svelte` owns the selected market and demo order lifecycle;
+  replace `demoSnapshot`, storage, `confirmOrder` and `cancelOrder` with the
+  agreed API adapter. Request/response paths are intentionally not assumed.
+- `OtcChart.svelte` currently gets candles from `demoCandles`; provide server
+  candles per selected market and range. The buy/sell lines are illustrative
+  offsets around candle closes, not historical bid/ask measurements.
+- `OtcOrderbook.svelte` receives the snapshot and emits a side and selected
+  price; selecting a level fills a limit order and does not execute it.
+- `OtcBridge.svelte` produces a draft; `OtcOrderReview.svelte` reviews it.
+  Before live execution, obtain a server-validated quote and show actual fees,
+  settlement network, expiry, limits and funding requirements. Use server
+  order IDs, idempotency, authoritative statuses and authenticated ownership.
+
+The preview uses JavaScript numbers for illustrative calculations. The live
+money API should serialize exact prices and amounts as decimal strings or
+atomic units and perform precision, tick-size and liquidity validation on the
+server. Do not use `prepareDemoOrder` as authoritative matching logic.
+
+Run `npm run test:unit` for quote/amount validation and `npm run test:e2e --
+tests/otc.spec.ts` for desktop/mobile navigation, panels, chart/book controls,
+review, cancellation and history. No OTC backend is required for these tests.

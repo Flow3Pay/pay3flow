@@ -65,7 +65,6 @@ test("main exchange share copies settings and restores them in a fresh browser",
   await expect.poll(() => page.evaluate(() => localStorage.getItem("pay3flow.exchange.source-network"))).toBe("tron");
   await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text: string) => sessionStorage.setItem("test.exchange-share", text) } }));
   await expect(page.locator(".introOverlay")).toHaveCount(0, { timeout: 6000 });
-  if (isMobile) await page.locator(".menuToggle").click();
   const trigger = page.getByRole("button", { name: "Share exchange", exact: true });
   await trigger.click();
   const dialog = page.getByRole("dialog", { name: "Share exchange", exact: true });
@@ -89,7 +88,7 @@ test("main exchange share copies settings and restores them in a fresh browser",
   expect(previewParams.get("fromNetworkName")).toBe(params.get("fromNetworkName"));
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
-  await expect(isMobile ? page.locator(".menuToggle") : trigger).toBeFocused();
+  await expect(trigger).toBeFocused();
   expect(await page.locator(".appShell").evaluate((node) => (node as HTMLElement).inert)).toBe(false);
   const fresh = await browser.newPage();
   await mockBackend(fresh, { usdtFiatNetwork: "tron" });
@@ -110,7 +109,6 @@ test("exchange share selects its link when clipboard access is denied", async ({
   await mockBackend(page);
   await openApp(page);
   await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async () => { throw new Error("Denied"); } } }));
-  if (isMobile) await page.locator(".menuToggle").click();
   await page.getByRole("button", { name: "Share exchange", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Share exchange", exact: true });
   await dialog.getByRole("button", { name: "Copy link" }).click();
@@ -435,7 +433,7 @@ test("mobile sheets cover the viewport and the graph closes by dragging its hand
 
   await page.locator(".menuToggle").click();
   await expectFullViewport(".actionsBackdrop.menuOpen");
-  await expect(page.locator(".actions a, .actions button")).toHaveCount(4);
+  await expect(page.locator(".actions a, .actions button")).toHaveCount(3);
   await page.keyboard.press("Escape");
 
   await page.getByRole("button", { name: "Route refresh settings" }).click();
@@ -661,7 +659,7 @@ for (const side of ["sending", "recipient"] as const) test(`native EVER selects 
   await expect(page.getByLabel("Amount to send")).toHaveValue("1.25");
 });
 
-async function mockBackend(page: Page, options: { includeNewProviders?: boolean; includeEverscale?: boolean; routeCount?: number; spotCycle?: boolean; reviews?: boolean; usdtFiatNetwork?: string; mexc?: boolean; guideVenue?: string } = {}) {
+async function mockBackend(page: Page, options: { includeNewProviders?: boolean; includeEverscale?: boolean; routeCount?: number; spotCycle?: boolean; spotGuidance?: boolean; reviews?: boolean; usdtFiatNetwork?: string; mexc?: boolean; guideVenue?: string } = {}) {
   await page.addInitScript(() => {
     if (!localStorage.getItem("pay3flow-locale")) localStorage.setItem("pay3flow-locale", "en");
   });
@@ -728,6 +726,9 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
         currency("AMD", "Armenian dram", "֏", "#6d2c91"), currency("RUB", "Russian ruble", "₽", "#21a038"),
         currency("USD", "US dollar", "$", "#168451"), currency("BYN", "Belarusian ruble", "Br", "#006b3f"), currency("KZT", "Kazakhstani tenge", "₸", "#168451"),
         { ...method("global-usd-cash", "Cash USD", "GLOBAL", "USD", "", "cash", true), kind: "cash", initials: "$", p2p_query: "Cash" },
+        { ...method("am-amd-cash", "Cash AMD", "AM", "AMD", "", "cash", true), kind: "cash", initials: "֏", p2p_query: "Cash" },
+        { ...method("ru-rub-cash", "Cash RUB", "RU", "RUB", "", "cash", true), kind: "cash", initials: "₽", p2p_query: "Cash" },
+        { ...method("by-byn-cash", "Cash BYN", "BY", "BYN", "", "cash", true), kind: "cash", initials: "Br", p2p_query: "Cash" },
         method("am-ameriabank", "Ameriabank", "AM", "AMD", "/icons/assets/ameriabank-green.png", "ameriabank", true),
         method("am-ameriabank-usd-account", "Ameriabank", "AM", "USD", "/icons/assets/ameriabank-green.png", "ameriabank", true),
         method("am-idbank", "IDBank", "AM", "AMD", "/icons/assets/idbank.png", "idbank", true),
@@ -785,7 +786,10 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
           { slug: "symbiosis", name: "Symbiosis Buy", side: "buy", source_url: "https://api.symbiosis.finance", currencies: [], banks: [], searchable: true, search_mode: "selectable" },
         );
       }
-      if (options.guideVenue) providers.push({ slug: options.guideVenue, name: ({ "bitcoin-center": "Bitcoin Center", "cow-swap": "CoW Swap", bestchange: "BestChange", symbiosis: "Symbiosis", dzengi: "Dzengi", bncex: "bncex", binance: "Binance" } as Record<string, string>)[options.guideVenue], side: "sell", source_url: "https://example.com/", currencies: ["AMD", "RUB"], banks: [], searchable: true });
+      if (options.guideVenue) providers.push({ slug: options.guideVenue, name: ({ "bitcoin-center": "Bitcoin Center", "cow-swap": "CoW Swap", bestchange: "BestChange", symbiosis: "Symbiosis", dzengi: "Dzengi", bncex: "bncex", binance: "Binance", bybit: "Bybit", mexc: "MEXC", bitget: "Bitget", whitebird: "Whitebird" } as Record<string, string>)[options.guideVenue], side: "sell", source_url: "https://example.com/", currencies: ["AMD", "RUB"], banks: [], searchable: true });
+      if (options.spotGuidance) for (const provider of providers) {
+        if (["binance", "bybit", "mexc", "bitget", "whitebird"].includes(String(provider.slug))) provider.guidance = { description: "P2P only", steps: ["Open the P2P advertiser profile."], links: [{ label: "Open P2P", url: "https://p2p.binance.com" }] };
+      }
       if (options.mexc) providers.push({ slug: "mexc", name: "MEXC", side: "sell", source_url: "https://www.mexc.com/buy-crypto/p2p", currencies: ["AMD", "RUB"], banks: [], searchable: true });
       return json(providers);
     }
@@ -2162,6 +2166,33 @@ test("currency control only lists currencies supported by the selected payment m
   await expect(ameriaCurrencies.getByRole("option", { name: /^RUB\b/ })).toHaveCount(0);
 });
 
+test("cash is available in each country currency without replacing default banks", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page);
+
+  await expect(page.getByRole("button", { name: "Select sending bank: Ameriabank" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Select recipient bank: Sberbank" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
+  const targetMethodPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
+  await targetMethodPicker.getByRole("option", { name: /^RUB\b/ }).click();
+  await expect(targetMethodPicker.getByRole("option", { name: /^Cash RUB Cash settlement · RUB/ })).toHaveCount(1);
+  await targetMethodPicker.getByRole("option", { name: /Cash RUB/ }).click();
+  await expect(page.getByRole("button", { name: "Select recipient payment method: Cash RUB" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
+  const sourceMethodPicker = page.getByRole("dialog", { name: "Choose where you pay from" });
+  await sourceMethodPicker.getByRole("option", { name: /^AMD\b/ }).click();
+  await sourceMethodPicker.getByRole("option", { name: /Cash AMD/ }).click();
+  await expect(page.getByRole("button", { name: "Select sending payment method: Cash AMD" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Select sending currency: AMD" }).click();
+  const currencies = page.getByRole("dialog", { name: "Choose currency" });
+  for (const code of ["AMD", "BYN", "RUB", "USD"]) await expect(currencies.getByRole("option", { name: new RegExp(`^${code}\\b`) })).toBeVisible();
+  await currencies.getByRole("option", { name: /^BYN\b/ }).click();
+  await expect(page.getByRole("button", { name: "Select sending payment method: Cash BYN" })).toBeVisible();
+});
+
 test("USD supports cash and Armenian bank currencies", async ({ page }) => {
   await mockBackend(page);
   await openApp(page);
@@ -2175,6 +2206,7 @@ test("USD supports cash and Armenian bank currencies", async ({ page }) => {
   await expect(ameria).toBeVisible();
   await ameria.click();
   const methodPicker = page.getByRole("dialog", { name: "Choose where you pay from" });
+  await methodPicker.getByRole("option", { name: /^USD\b/ }).click();
   await expect(methodPicker.getByRole("option", { name: /Cash USD/ })).toBeVisible();
   await methodPicker.getByLabel("Search banks and payment methods").fill("Ameriabank");
   await expect(methodPicker.getByRole("option", { name: /^Ameriabank Bank transfer · USD/ })).toHaveCount(1);
@@ -2185,6 +2217,7 @@ test("USD supports cash and Armenian bank currencies", async ({ page }) => {
 
   await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
   const targetMethodPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
+  await targetMethodPicker.getByRole("option", { name: /^AMD\b/ }).click();
   await targetMethodPicker.getByLabel("Search banks and payment methods").fill("Ameriabank");
   await targetMethodPicker.getByRole("option", { name: /^Ameriabank Bank transfer · AMD/ }).click();
   await expect(page.getByRole("button", { name: "Select recipient bank: Ameriabank" })).toBeVisible();
@@ -2713,8 +2746,45 @@ test("crypto route keeps distinct source and target networks", async ({ page }) 
   await expectNumberedTimeline(instructions, ["1"]);
   await instructions.getByTestId("start-guide").click();
   await expect(instructions.getByRole("heading", { name: "Convert ETH to USDT" })).toBeVisible();
-  await expect(instructions.getByText("First check that the pair changes ETH into USDT.")).toBeVisible();
+  await expect(instructions.getByTestId("binance-spot-card")).toHaveAttribute("data-side", "sell");
+  await expect(instructions.getByTestId("spot-market-link")).toHaveAttribute("href", "https://www.binance.com/en/trade/ETH_USDT?type=spot");
+  await expect(instructions.getByText(/select Sell: you spend ETH to receive USDT/)).toBeVisible();
 });
+
+for (const venue of ["binance", "bybit", "mexc", "bitget", "whitebird"]) {
+  test(`${venue} crypto guide opens Spot and excludes P2P provider instructions`, async ({ page }, testInfo) => {
+    await mockBackend(page, { guideVenue: venue, spotGuidance: true });
+    await openApp(page);
+    const source = await chooseCrypto(page, "sending", "ETH Base");
+    await source.getByRole("option", { name: /Base.*ETH/ }).click();
+    const target = await chooseCrypto(page, "recipient", "USDT Polygon");
+    await target.getByRole("option", { name: /Polygon.*USDT/ }).click();
+    await page.getByLabel("Amount to send").fill("0.03");
+    await page.getByTestId("start-search").click();
+    await page.getByTestId("complete-route").locator(".routeAmount").click();
+    const guide = page.getByTestId("route-guide");
+    await guide.getByTestId("start-guide").click();
+    await expect(guide.getByTestId(`${venue}-spot-card`)).toHaveAttribute("data-side", "sell");
+    await expect(guide.getByTestId("spot-pair")).toHaveText("ETH / USDT");
+    await expect(guide.getByTestId("spot-input")).toHaveText("0.03 ETH");
+    await expect(guide.locator(".playerTimeline button")).toHaveCount(5);
+    await expect(guide).not.toContainText("Open the P2P advertiser profile.");
+    await expect(guide.locator('a[href*="p2p"], a[href*="fiat/trade"], a[href*="advertiser"]')).toHaveCount(0);
+    const urls: Record<string, string> = { binance: "https://www.binance.com/en/trade/ETH_USDT?type=spot", bybit: "https://www.bybit.com/trade/spot/ETH/USDT", mexc: "https://www.mexc.com/exchange/ETH_USDT", bitget: "https://www.bitget.com/spot/ETHUSDT", whitebird: "https://whitebird.io/spot/ETH/USDT" };
+    await expect(guide.getByTestId("spot-market-link")).toHaveAttribute("href", urls[venue]);
+    await guide.getByRole("button", { name: /Scene 3:/ }).click();
+    await expect(guide.getByTestId(`${venue}-spot-card`)).toHaveAttribute("data-frame-kind", "review");
+    const cardBounds = await guide.getByTestId(`${venue}-spot-card`).boundingBox();
+    const captionBounds = await guide.locator(".sceneAnnotation").boundingBox();
+    expect(captionBounds!.y).toBeGreaterThanOrEqual(cardBounds!.y + cardBounds!.height);
+    const content = await guide.getByTestId(`${venue}-spot-card`).evaluate(element => ({ width: element.clientWidth, content: element.scrollWidth }));
+    expect(content.content).toBeLessThanOrEqual(content.width + 1);
+    await guide.getByTestId("instruction-scene").screenshot({ path: testInfo.outputPath(`${venue}-spot.png`) });
+    await page.getByRole("button", { name: "Switch language" }).click();
+    await expect(guide.locator(".explanation").getByText("Выберите тип ордера и сумму", { exact: true })).toBeVisible();
+    await expect(guide.getByTestId("spot-market-link")).toHaveAttribute("href", urls[venue]);
+  });
+}
 
 test("bridged spot instructions split both market trades into separate steps", async ({ page }) => {
   await mockBackend(page);
@@ -2738,10 +2808,12 @@ test("bridged spot instructions split both market trades into separate steps", a
   await expectNumberedTimeline(instructions, ["1", "2"]);
   await instructions.getByTestId("start-guide").click();
   await expect(instructions.getByRole("heading", { name: "Convert BTC to USDC" })).toBeVisible();
-  await expect(instructions.locator(".offerIdentity strong")).toContainText("BTCUSDC");
+  await expect(instructions.getByTestId("spot-pair")).toHaveText("BTC / USDC");
+  await expect(instructions.getByTestId("spot-market-link")).toHaveAttribute("href", "https://www.binance.com/en/trade/BTC_USDC?type=spot");
   await instructions.getByTestId("confirm-instruction-step").click();
   await expect(instructions.getByRole("heading", { name: "Convert USDC to USDT" })).toBeVisible();
-  await expect(instructions.locator(".offerIdentity strong")).toContainText("USDCUSDT");
+  await expect(instructions.getByTestId("spot-pair")).toHaveText("USDC / USDT");
+  await expect(instructions.getByTestId("spot-market-link")).toHaveAttribute("href", "https://www.binance.com/en/trade/USDC_USDT?type=spot");
 });
 
 test("same asset on different networks reports unavailable bridge provider", async ({ page }) => {
@@ -2810,11 +2882,17 @@ test("spot crypto cycles show three trades and wallet deposit and withdrawal ins
   const instructions = page.getByTestId("route-guide");
   await expectNumberedTimeline(instructions, ["1", "2", "3"]);
   await instructions.getByTestId("start-guide").click();
-  await expect(instructions.locator(".offerIdentity strong")).toHaveText("ETHUSDT");
+  await expect(instructions.getByTestId("spot-pair")).toHaveText("ETH / USDT");
+  await expect(instructions.getByTestId("bybit-spot-card")).toHaveAttribute("data-side", "buy");
+  await expect(instructions.getByTestId("spot-market-link")).toHaveAttribute("href", "https://www.bybit.com/trade/spot/ETH/USDT");
   await expect(instructions.locator(".realAction")).toHaveCount(0);
   await instructions.getByTestId("confirm-instruction-step").click();
-  await expect(instructions.locator(".offerIdentity strong")).toHaveText("BTCETH");
+  await expect(instructions.getByTestId("spot-pair")).toHaveText("BTC / ETH");
+  await expect(instructions.getByTestId("bybit-spot-card")).toHaveAttribute("data-side", "buy");
+  await expect(instructions.getByTestId("spot-market-link")).toHaveAttribute("href", "https://www.bybit.com/trade/spot/BTC/ETH");
   await instructions.getByTestId("confirm-instruction-step").click();
+  await expect(instructions.getByTestId("bybit-spot-card")).toHaveAttribute("data-side", "sell");
+  await expect(instructions.getByTestId("spot-market-link")).toHaveAttribute("href", "https://www.bybit.com/trade/spot/BTC/USDT");
   await expect(instructions.locator(".realAction")).toHaveCount(0);
   await expect(instructions).not.toContainText("Bybit P2P results");
 });

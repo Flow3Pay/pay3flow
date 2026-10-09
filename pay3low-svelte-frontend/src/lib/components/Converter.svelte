@@ -5,7 +5,7 @@
   import { fly, slide } from "svelte/transition";
   import { fetchCorridors, fetchMarketPrices, fetchP2pRoutes, fetchProviders, recordInstructionOpen, recordServiceOpen, setRouteVote, streamP2pRoutes, type ExchangeCorridor, type P2pRouteSearchResponse, type ProviderDefinition, type ProviderGuidance, type RouteCandidate, type ServiceLink, type ServiceStats, type ServiceVote, type VenueSearchStatus } from "$lib/exchange";
   import { FALLBACK_NETWORK, fetchNetworks, type CryptoNetwork } from "$lib/networks";
-  import { assetIcon, networkIcon, swapIcon, venueIcon } from "$lib/icons";
+  import { assetIcon, networkIcon, venueIcon } from "$lib/icons";
   import { fetchPaymentMethods, paymentMethodFavicon, type PaymentMethod } from "$lib/payment-methods";
   import { getAnonymousUserId, registerAnonymousUser } from "$lib/anonymous-user";
   import { locale, t, setLocale } from "$lib/i18n";
@@ -16,6 +16,7 @@
   import { lockPageScroll } from "$lib/page-scroll-lock";
   import type { ExchangeShareState } from "$lib/exchange-share";
   import { parseExchangeHash, guideHash, guideRoutePath, sharedIdentifiers } from "$lib/guide-link";
+  import ExchangeFlowBridge from "./ExchangeFlowBridge.svelte";
   import SidePanel from "./SidePanel.svelte";
   import SearchActivityChart from "./SearchActivityChart.svelte";
   import SearchActivityModal from "./SearchActivityModal.svelte";
@@ -755,8 +756,10 @@
     const matchesCorridor = (method: PaymentMethod) => method.kind === "wallet"
       ? method.currency === currency
       : method.country === country && method.currency === currency;
-    return methods.find(matchesCorridor)
-      ?? (country ? methods.find((method) => method.country === country) : undefined)
+    // Cash is an explicit choice; default corridors to a bank transfer when one exists.
+    const preferred = [...methods.filter((method) => method.kind !== "cash"), ...methods.filter((method) => method.kind === "cash")];
+    return preferred.find(matchesCorridor)
+      ?? (country ? preferred.find((method) => method.country === country) : undefined)
       ?? methods[0]
       ?? null;
   }
@@ -830,6 +833,7 @@
     selectedIntermediaryAssets = sharedIdentifiers(shared.params, "assets");
   }
   function locationChanged(eventOrForce: Event | boolean = false) {
+    if (/^#\/otc(?:[/?]|$)/.test(location.hash)) return;
     if (eventOrForce !== true && lastLocationHash === location.hash) return;
     lastLocationHash = location.hash;
     const shared = readSharedExchange();
@@ -1189,7 +1193,7 @@
           <div class="networkControl"><button type="button" class="networkButton" on:click={() => sourceMethod?.kind === "wallet" ? openNetworkPicker("source") : openCurrencyPicker("source")} aria-haspopup="dialog" aria-label={sourceMethod?.kind === "wallet" ? `Select sending network: ${sourceNetwork?.name ?? "none"}` : `Select sending currency: ${sourceCurrencyChoice}`} title={sourceMethod?.kind === "wallet" ? sourceNetwork?.name ?? "Select network" : sourceCurrencyChoice}><span class:currencyDot={sourceMethod?.kind !== "wallet"} class:flagDot={Boolean(sourceCurrencyFlag)} class="networkDot" aria-hidden="true">{#if sourceMethod?.kind === "wallet" && sourceNetwork}<img src={networkIcon(sourceNetwork.name)} alt="" width="18" height="18" loading="lazy" decoding="async" />{:else if sourceCurrencyFlag}<img src={sourceCurrencyFlag} alt="" width="18" height="18" decoding="async" />{:else}{currencyMark(sourceCurrencyChoice)}{/if}</span>{#if sourceMethod?.kind !== "wallet"}<span class="networkCopy"><strong>{sourceCurrencyChoice}</strong></span>{/if}<svg class="networkChevron" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></button></div>
         </div>
       </div>
-      <div class="flowBridge"><span class="bridgeLine" aria-hidden="true"></span><button type="button" class:bridgeIconReversed={directionReversed} class="bridgeIcon" on:click={swapDirection} aria-label={t("Swap sender and recipient", {}, activeLocale)} title="Swap sender and recipient"><img src={swapIcon} alt="" width="18" height="18" aria-hidden="true" /></button><button type="button" class="routesToggle" class:routesToggleOpen={routesExpanded} on:click={toggleRoutes} aria-label={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)} aria-expanded={routesExpanded} title={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)}><span aria-hidden="true">❯</span></button></div>
+      <ExchangeFlowBridge reversed={directionReversed} onSwap={swapDirection} label={t("Swap sender and recipient", {}, activeLocale)}><button type="button" class="routesToggle" class:routesToggleOpen={routesExpanded} on:click={toggleRoutes} aria-label={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)} aria-expanded={routesExpanded} title={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)}><span aria-hidden="true">❯</span></button></ExchangeFlowBridge>
       <div class="intentLabel intentLabelBuy"><span>{t("Buy", {}, activeLocale)}</span></div>
       <div class="moneyPanel moneyPanelTarget">
         <div class="panelCopy"><label for="exchange-output">{t("Recipient gets", {}, activeLocale)}</label><input id="exchange-output" class:amountOutputEmpty={!previewRoute && amountSide !== "target"} class="amountInput amountOutput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedTargetAmount} on:focus={(event) => event.currentTarget.select()} on:input={(event) => updateTargetAmount(event.currentTarget.value)} aria-label={t("Amount to receive", {}, activeLocale)} />{#if marketUsd.target !== null}<span class="marketValue" aria-label={t("Approximate USD market value", {}, activeLocale)}>{formatMarketUsd(marketUsd.target)}</span>{/if}</div>
@@ -1905,61 +1909,6 @@
   font-weight: 800;
 }
 
-.flowBridge {
-  position: relative;
-  z-index: 4;
-  display: flex;
-  height: 14px;
-  align-items: center;
-  justify-content: center;
-}
-
-.bridgeLine {
-  position: absolute;
-  top: 50%;
-  right: 8%;
-  left: 8%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--color-border-strong), transparent);
-  pointer-events: none;
-}
-
-.bridgeIcon {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  width: 42px;
-  height: 42px;
-  place-items: center;
-  border: 5px solid rgba(255, 255, 255, 0.95);
-  border-radius: 14px;
-  background: var(--color-primary);
-  color: var(--color-accent);
-  cursor: pointer;
-  box-shadow: none;
-  transition: box-shadow 0.2s ease, transform 0.2s ease;
-}
-
-.bridgeIcon:hover {
-  box-shadow: none;
-  transform: translateY(-1px) scale(1.04);
-}
-
-.bridgeIcon:active {
-  transform: scale(0.96);
-}
-
-.bridgeIcon img {
-  width: 14px;
-  height: 14px;
-  filter: brightness(0) saturate(100%) invert(51%) sepia(23%) saturate(1100%) hue-rotate(37deg) brightness(88%) contrast(88%);
-  transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.bridgeIconReversed img {
-  transform: rotate(180deg);
-}
-
 .marketBar {
   justify-content: space-between;
   gap: 16px;
@@ -2479,7 +2428,7 @@
   padding: 19px;
   border: 1px solid var(--color-border-strong);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.96);
+  background: var(--exchange-card-bg);
   box-shadow: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -2562,15 +2511,15 @@
   flex-wrap: wrap;
   align-items: center;
   padding: 15px 15px 12px;
-  border: 1px solid #d9ded4;
+  border: 1px solid var(--exchange-field-border);
   border-radius: 7px;
-  background: #f9faf6;
+  background: var(--exchange-field-bg);
   box-shadow: none;
 }
 
 .moneyPanelSource,
 .moneyPanelTarget {
-  background: #f9faf6;
+  background: var(--exchange-field-bg);
 }
 
 .moneyPanel::after {
@@ -2615,9 +2564,9 @@
   min-height: 42px;
   gap: 7px;
   padding: 6px 8px 6px 6px;
-  border: 1px solid #d7dcd3;
+  border: 1px solid var(--exchange-asset-border);
   border-radius: 5px;
-  background: #e7ebe2;
+  background: var(--exchange-asset-bg);
   box-shadow: none;
 }
 
@@ -2652,31 +2601,6 @@
 .methodTextAsset strong {
   font-size: 14px;
   font-weight: 850;
-}
-
-.flowBridge {
-  height: 31px;
-}
-
-.bridgeLine {
-  right: 0;
-  left: 0;
-  background: #d2ddd0;
-}
-
-.bridgeIcon {
-  width: 27px;
-  height: 27px;
-  border: 1px solid #cad8c6;
-  border-radius: 50%;
-  background: #eff5eb;
-  color: var(--color-accent-text);
-  box-shadow: none;
-}
-
-.bridgeIcon:hover {
-  box-shadow: none;
-  transform: translateY(-1px) scale(1.04);
 }
 
 .marketBar {
@@ -2795,9 +2719,9 @@
   max-width: min(100%, 256px);
   gap: 0;
   overflow: hidden;
-  border: 1px solid #d7dcd3;
+  border: 1px solid var(--exchange-asset-border);
   border-radius: 5px;
-  background: #e7ebe2;
+  background: var(--exchange-asset-bg);
   transition: border-color 0.15s ease;
 }
 
@@ -2832,7 +2756,7 @@
 
 .methodControls .networkControl {
   margin-top: 0;
-  border-left: 1px solid #d7dcd3;
+  border-left: 1px solid var(--exchange-asset-border);
 }
 
 .methodControls .networkButton {
@@ -3026,7 +2950,7 @@
 /* Dark theme: graphite surfaces with the existing lime route accents. */
 :global(html[data-theme="dark"]) .card {
   border-color: var(--color-border-strong);
-  background: rgba(25, 25, 25, 0.96);
+  background: var(--exchange-card-bg);
   box-shadow: none;
 }
 
@@ -3071,20 +2995,6 @@
 :global(html[data-theme="dark"]) .methodControls .methodTrigger:hover,
 :global(html[data-theme="dark"]) .methodControls .networkButton:hover {
   background: #323232;
-}
-
-:global(html[data-theme="dark"]) .bridgeLine {
-  background: #404040;
-}
-
-:global(html[data-theme="dark"]) .bridgeIcon {
-  border-color: #505050;
-  background: #272727;
-  color: var(--color-accent);
-}
-
-:global(html[data-theme="dark"]) .bridgeIcon img {
-  filter: brightness(0) saturate(100%) invert(78%) sepia(39%) saturate(849%) hue-rotate(35deg) brightness(106%) contrast(102%);
 }
 
 :global(html[data-theme="dark"]) .networkButton,
