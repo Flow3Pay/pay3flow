@@ -332,3 +332,55 @@ html.introPlaying::-webkit-scrollbar, html.introPlaying body::-webkit-scrollbar 
 
 .appShell.guideActive .header { padding-bottom: 0; }
 .appShell.guideActive .header .inner { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+
+/* Swap and OTC share the amount field and asset/network controls. */
+.exchangeMoneyPanel {
+  position: relative; display: flex; min-height: 96px; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 18px; padding: 15px 15px 12px; border: 1px solid var(--exchange-field-border);
+  border-radius: 7px; background: var(--exchange-field-bg); overflow: visible;
+  transition: border-color .18s ease, background .18s ease;
+}
+.exchangeMoneyPanel:hover, .exchangeMoneyPanel:focus-within {
+  border-color: var(--color-border-strong); border-width: var(--border-highlight-width);
+  outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 2px;
+}
+.exchangeMoneyPanel .panelCopy { position: relative; display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 5px; }
+.exchangeMoneyPanel .panelCopy label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.exchangeMoneyPanel .amountInput {
+  display: block; width: 100%; overflow: hidden; border: 0; outline: 0; background: transparent; color: var(--color-text);
+  font-family: var(--font-mono); font-size: clamp(28px, 3.2vw, 38px); font-weight: 500; letter-spacing: -.05em;
+  line-height: 1.05; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.exchangeMoneyPanel .methodControls {
+  position: relative; z-index: 4; display: flex; min-width: 0; flex: 0 0 auto; align-items: center; justify-content: flex-end;
+  max-width: min(100%, 256px); gap: 0; overflow: hidden; border: 1px solid var(--exchange-asset-border);
+  border-radius: 5px; background: var(--exchange-asset-bg); transition: border-color .15s ease;
+}
+.exchangeMoneyPanel .methodTrigger {
+  position: relative; display: flex; min-width: 0; min-height: 44px; flex: 1 1 auto; align-items: center; gap: 7px;
+  padding: 6px 8px 6px 6px; overflow: hidden; border: 0; border-radius: 0; background: transparent;
+  color: var(--color-text); text-align: left; transition: background .15s ease;
+}
+.exchangeMoneyPanel .methodAvatar { position: relative; display: grid; width: 28px; height: 28px; flex: 0 0 auto; place-items: center; border-radius: 50%; }
+.exchangeMoneyPanel .methodAvatar img { position: absolute; inset: 4px; width: calc(100% - 8px); height: calc(100% - 8px); border-radius: 50%; object-fit: contain; }
+.exchangeMoneyPanel .methodText { display: flex; min-width: 0; flex: 1; }
+.exchangeMoneyPanel .methodText strong { overflow: hidden; font-size: 14px; font-weight: 850; text-overflow: ellipsis; white-space: nowrap; }
+.exchangeMoneyPanel .networkControl { border-left: 1px solid var(--exchange-asset-border); }
+.exchangeMoneyPanel .networkButton { display: inline-flex; min-height: 44px; align-items: center; gap: 7px; padding: 6px 8px; border: 0; border-radius: 0; background: transparent; color: var(--color-text-soft); transition: background .15s ease; }
+.exchangeMoneyPanel .networkDot { display: grid; width: 18px; height: 18px; flex: 0 0 auto; place-items: center; overflow: hidden; border-radius: 50%; background: var(--exchange-arrow-bg); }
+.exchangeMoneyPanel .networkDot img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.exchangeMoneyPanel .networkChevron { color: var(--color-text-faint); flex: 0 0 auto; }
+.exchangeMoneyPanel .methodTrigger:hover, .exchangeMoneyPanel .networkButton:hover { background: #edf2e8; }
+.exchangeMoneyPanel .methodTrigger:focus-visible, .exchangeMoneyPanel .networkButton:focus-visible { outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: calc(-1 * var(--focus-ring-width)); }
+html[data-theme="dark"] .exchangeMoneyPanel .methodTrigger:hover, html[data-theme="dark"] .exchangeMoneyPanel .networkButton:hover { background: #323232; }
+@media (max-width: 640px) {
+  .exchangeMoneyPanel { min-height: 116px; justify-content: flex-start; gap: 8px; padding-top: 13px; padding-bottom: 10px; }
+  .exchangeMoneyPanel .panelCopy { flex: none; width: 100%; }
+  .exchangeMoneyPanel .methodControls { width: 100%; max-width: none; }
+}
+@container exchange-bridge (max-width: 400px) {
+  .exchangeMoneyPanel { min-height: 116px; justify-content: flex-start; gap: 8px; padding-top: 13px; padding-bottom: 10px; }
+  .exchangeMoneyPanel .panelCopy { flex: none; width: 100%; }
+  .exchangeMoneyPanel .methodControls { width: 100%; max-width: none; }
+}
+@media (prefers-reduced-motion: reduce) { .exchangeMoneyPanel, .exchangeMoneyPanel .methodControls, .exchangeMoneyPanel .methodTrigger, .exchangeMoneyPanel .networkButton { transition: none; } }

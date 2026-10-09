@@ -1,4 +1,5 @@
 /** Frontend OTC contracts. Prices and liquidity here are explicitly demo data. */
+import type { CryptoNetwork } from "../networks";
 export type OrderSide = "buy" | "sell";
 export type OrderType = "limit" | "market";
 export type ChartRange = "1D" | "7D" | "1M" | "1Y";
@@ -34,7 +35,16 @@ export interface DemoOrder {
   amount: number;
   createdAt: number;
   status: "open" | "cancelled" | "simulated";
+  sendNetwork?: string;
+  receiveNetwork?: string;
 }
+export const otcFallbackNetworks: CryptoNetwork[] = [
+  { id: "everscale", name: "Everscale", currencies: ["EVER"] },
+  { id: "bitcoin", name: "Bitcoin", currencies: ["BTC"] },
+  { id: "ethereum", name: "Ethereum (ERC-20)", currencies: ["ETH", "USDT"] },
+  { id: "solana", name: "Solana", currencies: ["SOL", "USDT"] },
+  { id: "tron", name: "TRON (TRC-20)", currencies: ["USDT"] },
+];
 export const markets: OtcMarket[] = [
   { id: "EVER-USDT", base: "EVER", quote: "USDT", name: "Everscale", price: 0.01, priceDecimals: 5, amountDecimals: 6, tickSize: 0.00001, change: 2.84, volume: 12500, icon: "/icons/assets/ever.svg" },
   { id: "BTC-USDT", base: "BTC", quote: "USDT", name: "Bitcoin", price: 68240.5, priceDecimals: 2, amountDecimals: 6, tickSize: 10, change: 2.84, volume: 1248500, icon: "/icons/assets/btc.png" },
@@ -98,7 +108,7 @@ export function parsePositive(value: string): number | null {
   const number = Number(normalized);
   return Number.isFinite(number) && number > 0 ? number : null;
 }
-export type OrderDraft = Pick<DemoOrder, "marketId" | "side" | "type" | "price" | "amount"> & { total: number };
+export type OrderDraft = Pick<DemoOrder, "marketId" | "side" | "type" | "price" | "amount" | "sendNetwork" | "receiveNetwork"> & { total: number };
 export type DraftResult = { draft: OrderDraft; error: null } | { draft: null; error: "input" | "price" | "precision" | "liquidity" | "range" };
 /** Simulate the opposite book. Never submits transactions or contacts a wallet. */
 export function prepareDemoOrder(market: OtcMarket, snapshot: OtcSnapshot, side: OrderSide, type: OrderType, input: string, limitPrice: string): DraftResult {
