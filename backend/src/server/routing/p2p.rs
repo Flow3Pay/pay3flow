@@ -748,6 +748,42 @@ fn map_reputation_error(error: ReputationError) -> AppError {
 
 const ROUTE_RESULT_CACHE_TTL_SECS: u64 = 15;
 
+// Provider-leg amounts are private route metadata and are omitted from the
+// public response. Keep them separately so cached routes can be signed again.
+#[derive(Deserialize, Serialize)]
+struct CachedRouteResponse {
+    response: P2pRouteSearchResponse,
+    provider_input_amounts: HashMap<String, String>,
+}
+
+impl From<P2pRouteSearchResponse> for CachedRouteResponse {
+    fn from(response: P2pRouteSearchResponse) -> Self {
+        let provider_input_amounts = response
+            .routes
+            .iter()
+            .filter_map(|route| {
+                route
+                    .provider_input_amount
+                    .as_ref()
+                    .map(|amount| (route.route_id.clone(), amount.clone()))
+            })
+            .collect();
+        Self {
+            response,
+            provider_input_amounts,
+        }
+    }
+}
+
+impl CachedRouteResponse {
+    fn into_response(mut self) -> P2pRouteSearchResponse {
+        for route in &mut self.response.routes {
+            route.provider_input_amount = self.provider_input_amounts.remove(&route.route_id);
+        }
+        self.response
+    }
+}
+
 async fn cached_route_response(
     state: &AppState,
     query: &P2pRouteSearchQuery,
@@ -759,11 +795,11 @@ async fn cached_route_response(
     let key = route_result_cache_key(query)?;
     match tokio::time::timeout(
         Duration::from_millis(100),
-        crate::core::redis::get_json(redis, &key),
+        crate::core::redis::get_json::<CachedRouteResponse>(redis, &key),
     )
     .await
     {
-        Ok(Ok(Some(response))) => Some(response),
+        Ok(Ok(Some(response))) => Some(response.into_response()),
         Ok(Ok(None)) => None,
         Ok(Err(error)) => {
             tracing::warn!(%error, "failed to read route result cache");
@@ -798,7 +834,7 @@ fn cache_route_response(
     let (Some(redis), Some(key)) = (state.redis.clone(), route_result_cache_key(query)) else {
         return;
     };
-    let response = response.clone();
+    let response = CachedRouteResponse::from(response.clone());
     tokio::spawn(async move {
         if let Err(error) =
             crate::core::redis::set_json(&redis, &key, &response, ROUTE_RESULT_CACHE_TTL_SECS).await
@@ -870,7 +906,7 @@ fn route_result_cache_key(query: &P2pRouteSearchQuery) -> Option<String> {
         .map(|fee| (fee * 100.0).round() / 100.0);
     let encoded = serde_json::to_vec(&query).ok()?;
     let digest = Sha256::digest(encoded);
-    Some(format!("pay3flow:routes:v1:{digest:x}"))
+    Some(format!("pay3flow:routes:v2:{digest:x}"))
 }
 
 #[cfg(test)]
@@ -879,8 +915,76 @@ mod tests {
     use axum::http::Uri;
 
     use super::{
-        route_result_cache_key, P2pRouteSearchQuery, RouteHttpMetadata, VoteChoice, VoteRequest,
+        route_result_cache_key, CachedRouteResponse, P2pRouteSearchQuery, P2pRouteSearchResponse,
+        RouteHttpMetadata, VoteChoice, VoteRequest,
     };
+
+    fn provider_route_response() -> P2pRouteSearchResponse {
+        let mut response: P2pRouteSearchResponse = serde_json::from_value(serde_json::json!({
+            "search_id": "00000000-0000-4000-8000-000000000001", "routes_found": 1,
+            "routes_exhaustive": true, "searched_at": "2026-10-09T10:00:00Z",
+            "source_fiat": "AMD", "target_fiat": "RUB", "source_amount": "100000",
+            "assets_searched": ["USDT"], "can_exchange_to_target": true, "asset_statuses": [],
+            "source": "live", "stale": false,
+            "routes": [{
+                "route_id": "provider-route", "rank": 1, "asset": "USDT",
+                "source_fiat": "AMD", "source_amount": "100000", "acquired_asset_amount": "12.345678",
+                "target_fiat": "RUB", "target_amount": "1000", "effective_rate": "0.01",
+                "same_venue": false, "requires_asset_transfer": true, "transfer_fee_included": true,
+                "route_kind": "fiat_to_fiat", "payment_methods_verified": false, "warnings": [],
+                "route_provider": "near-intents", "route_path": ["USDT@tron", "USDC@ethereum"]
+            }]
+        })).unwrap();
+        response.routes[0].provider_input_amount = Some("12.345678".into());
+        response
+    }
+
+    #[test]
+    fn route_cache_preserves_private_provider_amount_without_exposing_it() {
+        let cached = CachedRouteResponse::from(provider_route_response());
+        let encoded = serde_json::to_vec(&cached).unwrap();
+        let decoded: CachedRouteResponse = serde_json::from_slice(&encoded).unwrap();
+        let restored = decoded.into_response();
+        assert_eq!(
+            restored.routes[0].provider_input_amount.as_deref(),
+            Some("12.345678")
+        );
+        assert_eq!(restored.routes[0].source_amount, "100000");
+        let public = serde_json::to_value(restored).unwrap();
+        assert!(public["routes"][0].get("provider_input_amount").is_none());
+        assert!(public.get("provider_input_amounts").is_none());
+    }
+
+    #[tokio::test]
+    async fn cached_provider_route_regains_a_signed_execution_descriptor() {
+        use crate::route_engine::{NearIntentsProvider, SymbiosisRouteProvider};
+        use crate::route_execution::RouteExecutionService;
+
+        let mut config = deadpool_postgres::Config::new();
+        config.url = Some("postgres://localhost/not-used".into());
+        let pool = config
+            .create_pool(
+                Some(deadpool_postgres::Runtime::Tokio1),
+                tokio_postgres::NoTls,
+            )
+            .unwrap();
+        let service = RouteExecutionService::new(
+            pool,
+            "test-secret",
+            true,
+            NearIntentsProvider::new("https://example.test", None).unwrap(),
+            None,
+            SymbiosisRouteProvider::new("https://example.test", None, "preview", 300).unwrap(),
+        );
+        let encoded =
+            serde_json::to_vec(&CachedRouteResponse::from(provider_route_response())).unwrap();
+        let decoded: CachedRouteResponse = serde_json::from_slice(&encoded).unwrap();
+        let mut restored = decoded.into_response();
+        service.attach_descriptor(&mut restored.routes[0]);
+        let execution = restored.routes[0].execution.as_ref().unwrap();
+        assert_eq!(execution.input_amount, "12.345678");
+        assert!(!execution.token.is_empty());
+    }
 
     #[test]
     fn route_http_query_parses_numeric_and_boolean_url_values() {
