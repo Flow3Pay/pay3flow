@@ -178,7 +178,7 @@
   <div class="inner">
     <button class="menuToggle" bind:this={menuToggle} type="button" aria-haspopup="dialog" aria-controls="header-menu" aria-expanded={menuOpen} aria-label={t("Open menu", {}, activeLocale)} on:click={openMenu}><img src={menuIcon} alt="" width="24" height="24" /></button>
     <a class="brand" href={swapHref} aria-label="Pay3Flow"><img class="logo" src="/icons/assets/pay3flow_logo.svg" alt="" width="34" height="34" /><span class="wordmark">Pay3Flow</span></a>
-    <nav class="productNav" aria-label={t("Exchange mode", {}, activeLocale)}><a href={swapHref} class:active={activePage === "swap"} aria-current={activePage === "swap" ? "page" : undefined}>SWAP</a><a href="/#/otc" on:click={onOtcNavigate} class:active={activePage === "otc"} aria-current={activePage === "otc" ? "page" : undefined}>OTC<span class="navDot" aria-hidden="true"></span></a></nav>
+    <nav class="productNav" aria-label={t("Exchange mode", {}, activeLocale)}><a href={swapHref} class:active={activePage === "swap"} aria-current={activePage === "swap" ? "page" : undefined}>SWAP</a><a href="/#/otc" on:click={onOtcNavigate} class:active={activePage === "otc"} aria-current={activePage === "otc" ? "page" : undefined}>OTC</a></nav>
     <div class="actionsBackdrop" class:menuOpen class:menuClosing use:portalActions={menuOpen} role="presentation" on:mousedown={closeOnBackdrop}>
       <div id="header-menu" class="actionsPanel" class:menuDragging style:--menu-drag={`${menuDrag}px`} bind:this={menuPanel} use:swipeMenu role={menuOpen ? "dialog" : undefined} aria-modal={menuOpen ? "true" : undefined} aria-label={menuOpen ? t("Menu", {}, activeLocale) : undefined}>
         <div class="actionsHeader"><strong>{t("Menu", {}, activeLocale)}</strong><button type="button" class="menuClose" aria-label={t("Close menu", {}, activeLocale)} on:click={closeMenu}><span aria-hidden="true">❯</span></button></div>
@@ -211,7 +211,6 @@
 .productNav a { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 10px 17px; border-radius: 8px; font-size: 12px; font-weight: 800; letter-spacing: .035em; color: var(--color-text-soft); transition: background .16s; }
 .productNav a:hover { background: var(--color-panel); }
 .productNav a.active { background: var(--color-accent-soft); color: var(--color-text); }
-.navDot { width: 5px; height: 5px; border-radius: 50%; background: var(--color-accent-strong); }
 .utilityActions { position: relative; display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .shareButton, .githubLink, .telegramLink, .themeToggle, .languageToggle, .apiDocsLink, .menuToggle { display: grid; width: 36px; height: 36px; flex: 0 0 auto; place-items: center; border: 1px solid var(--color-border); border-radius: 9px; background: var(--color-panel); transition: background .16s ease; }
 .shareButton:hover, .githubLink:hover, .telegramLink:hover, .themeToggle:hover, .languageToggle:hover, .apiDocsLink:hover, .menuToggle:hover { background: var(--color-accent-soft); }

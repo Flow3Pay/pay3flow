@@ -11,7 +11,7 @@
   import OtcOrderReview from "./OtcOrderReview.svelte";
   let market = markets[0];
   let marketId = market.id;
-  let bridgeOpen = true, chartOpen = true, bookOpen = true, activityOpen = true;
+  let bridgeOpen = true, bookOpen = true, activityOpen = true;
   let side: OrderSide = "buy";
   let orderType: OrderType = "limit";
   let price = String(market.price);
@@ -23,10 +23,10 @@
   const storageKey = "pay3flow.otc.demo-orders.v1";
   const layoutKey = "pay3flow.otc.panels.v1";
   let mounted = false;
-  let bridgeColumn: HTMLDivElement;
+  let chartColumn: HTMLDivElement;
   let toggleOffset = 310;
   $: if (mounted) {
-    try { localStorage.setItem(layoutKey, JSON.stringify({ bridgeOpen, chartOpen, bookOpen, activityOpen })); } catch { /* Layout still works without storage. */ }
+    try { localStorage.setItem(layoutKey, JSON.stringify({ bridgeOpen, bookOpen, activityOpen })); } catch { /* Layout still works without storage. */ }
   }
   $: copy = otcCopy($locale);
   $: snapshot = demoSnapshot(market);
@@ -86,18 +86,15 @@
       const saved = JSON.parse(localStorage.getItem(layoutKey) ?? "null");
       if (saved && typeof saved === "object") {
         if (typeof saved.bridgeOpen === "boolean") bridgeOpen = saved.bridgeOpen;
-        if (typeof saved.chartOpen === "boolean") chartOpen = saved.chartOpen;
         if (typeof saved.bookOpen === "boolean") bookOpen = saved.bookOpen;
         if (typeof saved.activityOpen === "boolean") activityOpen = saved.activityOpen;
       }
     } catch { /* Ignore damaged layout storage. */ }
     const positionToggles = () => {
-      const column = bridgeColumn.getBoundingClientRect();
-      const connector = bridgeColumn.querySelector(".flowBridge")?.getBoundingClientRect();
-      toggleOffset = bridgeOpen && connector ? connector.top + connector.height / 2 - column.top - 21 : Math.max(0, column.height / 2 - 21);
+      toggleOffset = Math.max(0, chartColumn.getBoundingClientRect().height / 2 - 21);
     };
     const observer = new ResizeObserver(positionToggles);
-    observer.observe(bridgeColumn);
+    observer.observe(chartColumn);
     positionToggles();
     mounted = true;
     try { const stored: unknown = JSON.parse(sessionStorage.getItem(storageKey) ?? "[]"); if (Array.isArray(stored)) orders = stored.filter(validOrder).slice(0, 100); } catch { /* Ignore damaged demo storage. */ }
@@ -108,6 +105,13 @@
 </script>
 <section class="otcWorkspace" data-testid="otc-workspace">
   <div class="pageIntro"><div><h1>{copy.title}</h1><p>{copy.subtitle}</p></div></div>
+  <div class="otcGrid" class:bridgeClosed={!bridgeOpen} class:bookClosed={!bookOpen} style:--panel-toggle-offset={`${toggleOffset}px`}>
+    <div class="bridgeColumn" id="otc-bridge-column" hidden={!bridgeOpen}><OtcPanel id="otc-bridge" title={copy.bridge} collapsible={false}><span slot="actions" class="panelMeta">OTC</span>{#key market.id}<OtcBridge {market} {snapshot} bind:side bind:type={orderType} bind:price onReview={(draft) => reviewDraft = draft} />{/key}</OtcPanel></div>
+    <div class="bridgeToggle"><OtcPanelToggle title={copy.bridge} controls="otc-bridge-column" bind:expanded={bridgeOpen} /></div>
+    <div class="chartColumn" id="otc-chart-column" bind:this={chartColumn}><OtcPanel id="otc-chart" title={copy.chart} collapsible={false}><span slot="actions" class="panelMeta">{market.base}/{market.quote}</span>{#key market.id}<OtcChart {market} />{/key}</OtcPanel></div>
+    <div class="bookToggle"><OtcPanelToggle title={copy.book} controls="otc-book-column" bind:expanded={bookOpen} direction="right" /></div>
+    <div class="bookColumn" id="otc-book-column" hidden={!bookOpen}><OtcPanel id="otc-book" title={copy.book} collapsible={false}>{#key market.id}<OtcOrderbook {market} {snapshot} selectedPrice={orderType === "limit" ? Number(price) : null} onSelect={selectPrice} />{/key}</OtcPanel></div>
+  </div>
   <div class="marketStrip">
     <div class="marketSelector"><img src={market.icon} width="38" height="38" alt="" /><div><div class="pairSelect"><select aria-label={copy.marketPicker} bind:value={marketId} on:change={selectMarket}>{#each markets as item}<option value={item.id}>{item.base} / {item.quote}</option>{/each}</select><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg></div><span>{market.name} <span class="marketTag">OTC</span></span></div></div>
     <div class="marketStat last"><span>{copy.lastPrice}</span><strong>{formatPrice(market.price, market)} <small>{market.quote}</small></strong></div>
@@ -115,13 +119,6 @@
     <div class="marketStat secondaryStat"><span>{copy.high}</span><strong>{formatPrice(high, market)}</strong></div>
     <div class="marketStat secondaryStat"><span>{copy.low}</span><strong>{formatPrice(low, market)}</strong></div>
     <div class="marketStat volumeStat"><span>{copy.volume}</span><strong>{market.volume.toLocaleString("en-US")} <small>{market.quote}</small></strong></div>
-  </div>
-  <div class="otcGrid" class:chartClosed={!chartOpen} class:bookClosed={!bookOpen} style:--panel-toggle-offset={`${toggleOffset}px`}>
-    <div class="bridgeColumn" bind:this={bridgeColumn}><OtcPanel id="otc-bridge" title={copy.bridge} bind:expanded={bridgeOpen}><span slot="actions" class="panelMeta">OTC</span>{#key market.id}<OtcBridge {market} {snapshot} bind:side bind:type={orderType} bind:price onReview={(draft) => reviewDraft = draft} />{/key}</OtcPanel></div>
-    <div class="chartToggle"><OtcPanelToggle title={copy.chart} controls="otc-chart-column" bind:expanded={chartOpen} /></div>
-    <div class="chartColumn" id="otc-chart-column" hidden={!chartOpen}><OtcPanel id="otc-chart" title={copy.chart} collapsible={false}><span slot="actions" class="panelMeta">{market.base}/{market.quote}</span>{#key market.id}<OtcChart {market} />{/key}</OtcPanel></div>
-    <div class="bookToggle"><OtcPanelToggle title={copy.book} controls="otc-book-column" bind:expanded={bookOpen} /></div>
-    <div class="bookColumn" id="otc-book-column" hidden={!bookOpen}><OtcPanel id="otc-book" title={copy.book} collapsible={false}>{#key market.id}<OtcOrderbook {market} {snapshot} selectedPrice={orderType === "limit" ? Number(price) : null} onSelect={selectPrice} />{/key}</OtcPanel></div>
   </div>
   <div class="activityToggle"><OtcPanelToggle title={copy.activity} controls="otc-activity-section" bind:expanded={activityOpen} vertical /></div>
   <div class="activitySection" id="otc-activity-section" hidden={!activityOpen}><OtcPanel id="otc-activity" title={copy.activity} collapsible={false}><span slot="actions" class="panelMeta">{market.base}/{market.quote}</span>
@@ -140,11 +137,11 @@
 {#if notification}<div class="orderNotification" role="status"><span aria-hidden="true">✓</span>{notification}<button type="button" aria-label={copy.close} on:click={() => notification = ""}>×</button></div>{/if}
 {#if reviewDraft}<OtcOrderReview draft={reviewDraft} {market} onClose={() => reviewDraft = null} onConfirm={confirmOrder} />{/if}
 <style>
-  .otcWorkspace { --otc-buy: var(--color-accent-text); --otc-sell: var(--color-danger); --otc-buy-soft: var(--color-accent-soft); --otc-sell-soft: color-mix(in srgb, var(--color-danger) 9%, transparent); width: min(var(--layout-width), calc(100% - 2 * var(--page-gutter))); margin: 0 auto; padding: 34px 0 20px; }
+  .otcWorkspace { --otc-buy: var(--color-good); --otc-sell: var(--color-danger); --otc-buy-soft: color-mix(in srgb, var(--color-good) 13%, transparent); --otc-sell-soft: color-mix(in srgb, var(--color-danger) 9%, transparent); width: min(var(--layout-width), calc(100% - 2 * var(--page-gutter))); margin: 0 auto; padding: 34px 0 20px; }
   .pageIntro { position: relative; display: grid; justify-items: center; gap: 14px; margin: 0 auto 26px; text-align: center; }
   h1 { margin: 0 auto; max-width: 1000px; text-wrap: balance; font-size: clamp(44px, 5.5vw, 72px); font-weight: 800; letter-spacing: -.065em; line-height: 1.2; }
   .pageIntro p { max-width: 560px; margin: 12px auto 0; font-size: 16px; line-height: 1.55; color: var(--color-text-soft); }
-  .marketStrip { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 88px; padding: 17px 22px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-paper); margin-bottom: 24px; }
+  .marketStrip { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 88px; padding: 17px 22px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-paper); margin-top: 24px; }
   .marketSelector { display: flex; align-items: center; gap: 12px; padding-right: 25px; border-right: 1px solid var(--color-border); }
   .marketSelector > img { border-radius: 50%; }
   .pairSelect { display: flex; align-items: center; gap: 3px; }
@@ -164,12 +161,12 @@
   .chartColumn { grid-column: 3; grid-row: 1; }
   .bookColumn { grid-column: 5; grid-row: 1; }
   .bridgeColumn, .chartColumn, .bookColumn { min-width: 0; }
-  .chartToggle, .bookToggle { display: grid; justify-items: center; grid-row: 1; padding-top: var(--panel-toggle-offset); }
-  .chartToggle { grid-column: 2; }
+  .bridgeToggle, .bookToggle { display: grid; justify-items: center; grid-row: 1; padding-top: var(--panel-toggle-offset); }
+  .bridgeToggle { grid-column: 2; }
   .bookToggle { grid-column: 4; }
-  .otcGrid.chartClosed { grid-template-columns: minmax(0, 1fr) 32px 0 32px minmax(0, 1fr); }
+  .otcGrid.bridgeClosed { grid-template-columns: 0 32px minmax(0, 1.3fr) 32px minmax(0, .85fr); }
   .otcGrid.bookClosed { grid-template-columns: minmax(0, 1fr) 32px minmax(0, 1.3fr) 32px 0; }
-  .otcGrid.chartClosed.bookClosed { grid-template-columns: minmax(0, 1fr) 32px 0 32px 0; width: min(614px, 100%); margin-inline: auto; transform: translateX(32px); }
+  .otcGrid.bridgeClosed.bookClosed { grid-template-columns: 0 32px minmax(0, 1fr) 32px 0; }
   .activityToggle { display: grid; height: 42px; place-items: center; }
   .panelMeta { color: var(--color-text-faint); font-family: var(--font-mono); font-size: 12px; }
   .activitySection { min-width: 0; }
@@ -208,9 +205,9 @@
   [hidden] { display: none !important; }
   @media (max-width: 1200px) and (min-width: 981px) { .otcGrid { grid-template-columns: minmax(0, 1fr) 32px minmax(0, 1.25fr) 32px minmax(0, .9fr); } .marketStrip { padding: 16px; gap: 15px; } .marketSelector { padding-right: 15px; } .secondaryStat { display: none; } }
   @media (max-width: 980px) {
-    .otcGrid, .otcGrid.chartClosed, .otcGrid.bookClosed, .otcGrid.chartClosed.bookClosed { display: flex; width: 100%; flex-direction: column; transform: none; }
+    .otcGrid, .otcGrid.bridgeClosed, .otcGrid.bookClosed, .otcGrid.bridgeClosed.bookClosed { display: flex; width: 100%; flex-direction: column; transform: none; }
     .bridgeColumn, .chartColumn, .bookColumn { width: 100%; }
-    .chartToggle, .bookToggle { width: 100%; height: 42px; padding: 0; align-items: center; }
+    .bridgeToggle, .bookToggle { width: 100%; height: 42px; padding: 0; align-items: center; }
     .marketStrip { flex-wrap: wrap; justify-content: flex-start; gap: 16px 28px; }
     .marketSelector { border-right: 0; flex: 1; }
     .last { flex: 1; }

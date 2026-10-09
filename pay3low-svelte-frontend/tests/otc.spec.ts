@@ -43,7 +43,7 @@ test("OTC navigation, drawer and share work at every screen size", async ({ page
 
 test("panels collapse, chart controls update, and markets survive reload", async ({ page }) => {
   await openOtc(page);
-  for (const [title, id] of [["Bridge", "otc-bridge"], ["Chart", "otc-chart"], ["Orderbook", "otc-book"], ["Market activity", "otc-activity"]]) {
+  for (const [title, id] of [["Bridge", "otc-bridge"], ["Orderbook", "otc-book"], ["Market activity", "otc-activity"]]) {
     await page.getByRole("button", { name: `Collapse ${title}`, exact: true }).click();
     await expect(page.locator(`#${id}`)).toBeHidden();
     await page.getByRole("button", { name: `Expand ${title}`, exact: true }).click();
@@ -132,43 +132,62 @@ test("SWAP retains its selected corridor and amount across OTC navigation", asyn
   await expect(page).toHaveURL(/#\/swap\/USDT\/BTC\?amount=1000$/);
 });
 
-test("inter-panel arrows reclaim space and preserve the layout", async ({ page }) => {
+test("inter-panel arrows reclaim space and preserve the layout", async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    if (!localStorage.getItem("pay3flow.otc.panels.v1")) localStorage.setItem("pay3flow.otc.panels.v1", JSON.stringify({ chartOpen: false }));
+  });
   await openOtc(page);
   const workspace = page.getByTestId("otc-workspace");
   await expect(workspace.locator(".marketFootnote, .bookHint, .previewBadge, .eyebrow, .workspaceFooter")).toHaveCount(0);
   const chart = page.locator("#otc-chart-column");
   const book = page.locator("#otc-book-column");
-  const bridge = page.locator(".bridgeColumn");
-  const originalWidth = (await bridge.boundingBox())!.width;
-  await page.getByRole("button", { name: "Collapse Chart", exact: true }).click();
-  await expect(chart).toBeHidden();
-  await expect(page.getByRole("button", { name: "Expand Chart", exact: true })).toHaveAttribute("aria-expanded", "false");
+  const bridge = page.locator("#otc-bridge-column");
+  await expect(chart).toBeVisible();
+  const panelsBounds = (await page.locator(".otcGrid").boundingBox())!;
+  expect((await page.locator(".marketStrip").boundingBox())!.y).toBeGreaterThan(panelsBounds.y + panelsBounds.height);
+  const originalWidth = (await chart.boundingBox())!.width;
+  await expect(page.getByRole("button", { name: /(?:Collapse|Expand) Chart/ })).toHaveCount(0);
   if (page.viewportSize()!.width > 980) {
-    await expect.poll(async () => (await bridge.boundingBox())!.width).toBeGreaterThan(originalWidth + 50);
+    await expect(page.locator(".bridgeToggle span")).toHaveCSS("transform", "matrix(-1, 0, 0, -1, 0, 0)");
+    await expect(page.locator(".bookToggle span")).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
+  }
+  await page.getByRole("button", { name: "Collapse Bridge", exact: true }).click();
+  await expect(bridge).toBeHidden();
+  await expect(chart).toBeVisible();
+  await expect(page.getByRole("button", { name: "Expand Bridge", exact: true })).toHaveAttribute("aria-expanded", "false");
+  if (page.viewportSize()!.width > 980) {
+    await expect.poll(async () => (await chart.boundingBox())!.width).toBeGreaterThan(originalWidth + 50);
+    await expect(page.locator(".bridgeToggle span")).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
   }
   await page.getByRole("button", { name: "Collapse Orderbook", exact: true }).click();
   await expect(book).toBeHidden();
+  await expect(chart).toBeVisible();
   if (page.viewportSize()!.width > 980) {
-    await expect.poll(async () => bridge.evaluate((element) => {
+    await expect(page.locator(".bookToggle span")).toHaveCSS("transform", "matrix(-1, 0, 0, -1, 0, 0)");
+    await expect.poll(async () => chart.evaluate((element) => {
       const card = element.getBoundingClientRect();
       const workspace = element.closest(".otcWorkspace")!.getBoundingClientRect();
       return Math.abs(card.left + card.width / 2 - workspace.left - workspace.width / 2);
     })).toBeLessThan(1);
+    await expect.poll(async () => (await chart.boundingBox())!.width).toBeGreaterThan((await workspace.boundingBox())!.width - 65);
   }
   await page.getByRole("button", { name: "Collapse Market activity", exact: true }).click();
   await expect(page.locator("#otc-activity-section")).toBeHidden();
   await page.reload();
-  await expect(chart).toBeHidden();
+  await expect(bridge).toBeHidden();
+  await expect(chart).toBeVisible();
   await expect(book).toBeHidden();
   await expect(page.locator("#otc-activity-section")).toBeHidden();
-  for (const title of ["Chart", "Orderbook", "Market activity"]) {
+  for (const title of ["Bridge", "Orderbook", "Market activity"]) {
     const toggle = page.getByRole("button", { name: `Expand ${title}`, exact: true });
     await toggle.focus();
     await page.keyboard.press("Enter");
   }
   await expect(chart).toBeVisible();
+  await expect(bridge).toBeVisible();
   await expect(book).toBeVisible();
   await expect(page.locator("#otc-activity-section")).toBeVisible();
+  await workspace.screenshot({ path: testInfo.outputPath("otc-panels.png") });
   await page.getByRole("button", { name: "Buy / Sell", exact: true }).click();
   await expect(page.locator(".bridgeIcon")).toHaveClass(/bridgeIconReversed/);
   await expect(page.getByRole("button", { name: "Sell BTC", exact: true })).toHaveAttribute("aria-pressed", "true");
