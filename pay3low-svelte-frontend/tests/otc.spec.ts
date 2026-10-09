@@ -41,6 +41,33 @@ test("OTC navigation, drawer and share work at every screen size", async ({ page
   expect(errors).toEqual([]);
 });
 
+test("EVER/USDT is the default and shared market with native icons and buy/sell amounts", async ({ page }) => {
+  await openOtc(page);
+  const market = page.getByRole("combobox", { name: "Choose market" });
+  await expect(market).toHaveValue("EVER-USDT");
+  await expect(page.locator(".marketSelector")).toContainText("Everscale");
+  const icon = page.locator('.marketSelector img[src="/icons/assets/ever.svg"]');
+  await expect.poll(() => icon.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(0);
+  const bridge = page.locator("#otc-bridge");
+  await expect(bridge.getByRole("button", { name: "Buy EVER", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(bridge.locator(".moneyPanel:not(.target) .asset")).toHaveText("USDT");
+  await expect(bridge.locator(".target .asset")).toHaveText("EVER");
+  await bridge.getByRole("textbox", { name: "Price", exact: true }).fill("0.01234");
+  await bridge.getByRole("textbox", { name: "You send", exact: true }).fill("1");
+  await expect(bridge.getByRole("status", { name: "You receive" })).toHaveText("81.037277");
+  await bridge.getByRole("button", { name: "Sell EVER", exact: true }).click();
+  await expect(bridge.locator(".moneyPanel:not(.target) .asset")).toHaveText("EVER");
+  await expect(bridge.locator(".target .asset")).toHaveText("USDT");
+  await bridge.getByRole("textbox", { name: "You send", exact: true }).fill("100.25");
+  await expect(bridge.getByRole("status", { name: "You receive" })).toHaveText("1.23709");
+  await market.selectOption("BTC-USDT");
+  await market.selectOption("EVER-USDT");
+  await expect(page).toHaveURL(/#\/otc\?market=EVER-USDT$/);
+  await page.reload();
+  await expect(market).toHaveValue("EVER-USDT");
+  await expect(bridge.getByRole("button", { name: "Buy EVER", exact: true })).toBeVisible();
+});
+
 test("panels collapse, chart controls update, and markets survive reload", async ({ page }) => {
   await openOtc(page);
   for (const [title, id] of [["Bridge", "otc-bridge"], ["Orderbook", "otc-book"], ["Market activity", "otc-activity"]]) {
@@ -87,7 +114,7 @@ test("book selection creates, retains and cancels a demo limit order", async ({ 
   await expect(review).toHaveCount(0);
   await expect(page.getByRole("tab", { name: /My orders/ })).toHaveAttribute("aria-selected", "true");
   await expect(page.locator("#otc-orders-content tbody tr")).toHaveCount(1);
-  await expect(page.locator("#otc-orders-content")).toContainText(Number(chosenPrice).toLocaleString("en-US", { minimumFractionDigits: 2 }));
+  await expect(page.locator("#otc-orders-content")).toContainText(Number(chosenPrice).toLocaleString("en-US", { minimumFractionDigits: 5, maximumFractionDigits: 5 }));
   await page.reload();
   await page.getByRole("tab", { name: /My orders/ }).click();
   await expect(page.locator("#otc-orders-content tbody tr")).toHaveCount(1);
@@ -101,7 +128,7 @@ test("book selection creates, retains and cancels a demo limit order", async ({ 
 test("invalid amounts and exhausted liquidity cannot create orders", async ({ page }) => {
   await openOtc(page);
   const input = page.getByRole("textbox", { name: "You send", exact: true });
-  for (const amount of ["", "-1", "1e10", "abc", "0.00000001"]) {
+  for (const amount of ["", "-1", "1e10", "abc", "0.000000000001"]) {
     await input.fill(amount);
     await expect(page.getByTestId("otc-review")).toBeDisabled();
   }
@@ -190,7 +217,7 @@ test("inter-panel arrows reclaim space and preserve the layout", async ({ page }
   await workspace.screenshot({ path: testInfo.outputPath("otc-panels.png") });
   await page.getByRole("button", { name: "Buy / Sell", exact: true }).click();
   await expect(page.locator(".bridgeIcon")).toHaveClass(/bridgeIconReversed/);
-  await expect(page.getByRole("button", { name: "Sell BTC", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Sell EVER", exact: true })).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Buy / Sell", exact: true }).click();
   await expect(page.locator(".bridgeIcon")).not.toHaveClass(/bridgeIconReversed/);
 });

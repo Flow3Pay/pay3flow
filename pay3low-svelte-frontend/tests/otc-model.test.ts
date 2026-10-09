@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { demoSnapshot, marketFromHash, markets, prepareDemoOrder } from "../src/lib/otc/model.ts";
-const market = markets[0];
+import { demoSnapshot, formatPrice, marketFromHash, markets, prepareDemoOrder } from "../src/lib/otc/model.ts";
+const market = markets.find((item) => item.id === "BTC-USDT")!;
 const snapshot = demoSnapshot(market);
 
 test("limit orders respect source amounts and base precision in both directions", () => {
@@ -36,6 +36,23 @@ test("malformed, tiny and unbounded values never produce an order", () => {
 });
 
 test("shared market selection validates IDs and falls back safely", () => {
+  assert.equal(marketFromHash("#/otc").id, "EVER-USDT");
+  assert.equal(marketFromHash("#/otc?market=EVER-USDT").base, "EVER");
   assert.equal(marketFromHash("#/otc?market=ETH-USDT").base, "ETH");
-  assert.equal(marketFromHash("#/otc?market=missing").base, "BTC");
+  assert.equal(marketFromHash("#/otc?market=BTC-USDT").base, "BTC");
+  assert.equal(marketFromHash("#/otc?market=missing").base, "EVER");
+});
+
+test("EVER orders retain small quote prices and base amounts in both directions", () => {
+  const ever = marketFromHash("#/otc");
+  const book = demoSnapshot(ever);
+  assert.equal(formatPrice(book.asks[0].price, ever), "0.01001");
+  assert.equal(formatPrice(book.bids[0].price, ever), "0.00999");
+  const buy = prepareDemoOrder(ever, book, "buy", "limit", "1", "0.01234").draft!;
+  assert.equal(buy.marketId, "EVER-USDT");
+  assert.equal(buy.amount, 81.037277);
+  assert.ok(buy.total <= 1);
+  const sell = prepareDemoOrder(ever, book, "sell", "limit", "100.25", "0.01234").draft!;
+  assert.equal(sell.amount, 100.25);
+  assert.ok(Math.abs(sell.total - 1.237085) < 1e-10);
 });

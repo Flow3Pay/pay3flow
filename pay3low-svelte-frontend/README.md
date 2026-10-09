@@ -112,18 +112,21 @@ use the advertiser walkthroughs.
 
 ## OTC frontend preview
 
-Open `/#/otc`, or share `/#/otc?market=ETH-USDT`. The header switches between
-SWAP and OTC, keeps the current swap corridor when navigating to OTC, and moves
+Open `/#/otc` for the default EVER/USDT market, or share `/#/otc?market=EVER-USDT`.
+The header switches between SWAP and OTC, keeps the current swap corridor when navigating to OTC, and moves
 API Docs, Telegram and GitHub into a left drawer on all screen sizes. Exchange
 sharing sits after the theme button.
 
 The OTC workspace uses the existing theme variables, fonts, asset icons and
 bridge visual language. Bridge, chart, orderbook and market activity each have
-a collapse arrow. The preview includes BTC/USDT, ETH/USDT and SOL/USDT markets,
-buy/sell and limit/market modes, line/candle charts, range and zoom controls,
+a collapse arrow. The preview includes EVER/USDT, BTC/USDT, ETH/USDT and SOL/USDT
+markets, buy/sell and limit/market modes, line/candle charts, range and zoom controls,
 price grouping, clickable book levels, review, cancellation and order history.
 Market orders simulate consuming available opposite offers and reject amounts
 that exceed the demo liquidity.
+
+EVER uses five decimal places for quote prices and six for order amounts; its
+0.01 USDT starting price is a synthetic fixture, not a live exchange quote.
 
 All OTC prices, book levels, candles and trades are **demo data**, explicitly
 marked in the interface. Orders only live in tab-scoped `sessionStorage`, capped
