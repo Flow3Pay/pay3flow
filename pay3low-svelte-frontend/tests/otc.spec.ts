@@ -78,10 +78,10 @@ test("panels collapse, chart controls update, and markets survive reload", async
   }
   const originalLevels = await page.locator(".askLevels .level").count();
   await page.getByRole("button", { name: "Price grouping", exact: true }).click();
-  await page.getByRole("dialog", { name: "Price grouping" }).getByRole("button", { name: "50.00", exact: true }).click();
+  await page.getByRole("dialog", { name: "Price grouping" }).getByRole("button", { name: "0.00005", exact: true }).click();
   await expect.poll(() => page.locator(".askLevels .level").count()).toBeLessThan(originalLevels);
   await page.getByRole("button", { name: "Price grouping", exact: true }).click();
-  await page.getByRole("dialog", { name: "Price grouping" }).getByRole("button", { name: "10.00", exact: true }).click();
+  await page.getByRole("dialog", { name: "Price grouping" }).getByRole("button", { name: "0.00001", exact: true }).click();
   const line = await page.locator(".buyLine").getAttribute("d");
   await page.getByRole("button", { name: "7D", exact: true }).click();
   await expect(page.locator(".buyLine")).not.toHaveAttribute("d", line!);
@@ -261,10 +261,10 @@ test("grouping menu supports keyboard selection and restores focus", async ({ pa
   const trigger = page.getByRole("button", { name: "Price grouping", exact: true });
   await trigger.click();
   const menu = page.getByRole("dialog", { name: "Price grouping" });
-  await expect(menu.getByRole("button", { name: "10.00", exact: true })).toBeFocused();
+  await expect(menu.getByRole("button", { name: "0.00001", exact: true })).toBeFocused();
   await page.keyboard.press("End");
   await page.keyboard.press("Enter");
-  await expect(trigger).toContainText("50.00");
+  await expect(trigger).toContainText("0.00005");
   await expect(trigger).toBeFocused();
   await trigger.click();
   await page.keyboard.press("Escape");

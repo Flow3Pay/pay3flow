@@ -2391,7 +2391,7 @@
   }
 
   .workspace:not(.routesCollapsed) .amountInput {
-    font-size: clamp(28px, calc(2.9vw - (var(--amount-digits) - 10) * 1px), 38px);
+    font-size: clamp(28px, calc(3.2vw - (var(--amount-digits) - 10) * 1px), 38px);
   }
 }
 
