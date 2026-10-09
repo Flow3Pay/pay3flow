@@ -65,7 +65,6 @@ test("main exchange share copies settings and restores them in a fresh browser",
   await expect.poll(() => page.evaluate(() => localStorage.getItem("pay3flow.exchange.source-network"))).toBe("tron");
   await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text: string) => sessionStorage.setItem("test.exchange-share", text) } }));
   await expect(page.locator(".introOverlay")).toHaveCount(0, { timeout: 6000 });
-  if (isMobile) await page.locator(".menuToggle").click();
   const trigger = page.getByRole("button", { name: "Share exchange", exact: true });
   await trigger.click();
   const dialog = page.getByRole("dialog", { name: "Share exchange", exact: true });
@@ -89,7 +88,7 @@ test("main exchange share copies settings and restores them in a fresh browser",
   expect(previewParams.get("fromNetworkName")).toBe(params.get("fromNetworkName"));
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
-  await expect(isMobile ? page.locator(".menuToggle") : trigger).toBeFocused();
+  await expect(trigger).toBeFocused();
   expect(await page.locator(".appShell").evaluate((node) => (node as HTMLElement).inert)).toBe(false);
   const fresh = await browser.newPage();
   await mockBackend(fresh, { usdtFiatNetwork: "tron" });
@@ -110,7 +109,6 @@ test("exchange share selects its link when clipboard access is denied", async ({
   await mockBackend(page);
   await openApp(page);
   await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async () => { throw new Error("Denied"); } } }));
-  if (isMobile) await page.locator(".menuToggle").click();
   await page.getByRole("button", { name: "Share exchange", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Share exchange", exact: true });
   await dialog.getByRole("button", { name: "Copy link" }).click();
@@ -435,7 +433,7 @@ test("mobile sheets cover the viewport and the graph closes by dragging its hand
 
   await page.locator(".menuToggle").click();
   await expectFullViewport(".actionsBackdrop.menuOpen");
-  await expect(page.locator(".actions a, .actions button")).toHaveCount(4);
+  await expect(page.locator(".actions a, .actions button")).toHaveCount(3);
   await page.keyboard.press("Escape");
 
   await page.getByRole("button", { name: "Route refresh settings" }).click();

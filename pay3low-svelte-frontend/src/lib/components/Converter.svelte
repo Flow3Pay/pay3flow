@@ -830,6 +830,7 @@
     selectedIntermediaryAssets = sharedIdentifiers(shared.params, "assets");
   }
   function locationChanged(eventOrForce: Event | boolean = false) {
+    if (/^#\/otc(?:[/?]|$)/.test(location.hash)) return;
     if (eventOrForce !== true && lastLocationHash === location.hash) return;
     lastLocationHash = location.hash;
     const shared = readSharedExchange();
