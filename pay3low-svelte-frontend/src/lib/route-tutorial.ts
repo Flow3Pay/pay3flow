@@ -1,7 +1,8 @@
 import type { P2pOffer, ProviderGuidance, RouteCandidate, ServiceLink } from "./exchange";
+import { buildWhitebirdFrames } from "./guides/whitebird/frames";
 
 export type TutorialKind = "buy" | "sell" | "swap" | "transfer";
-export type TutorialFrameKind = "open" | "verify" | "act" | "receive";
+export type TutorialFrameKind = "open" | "verify" | "review" | "act" | "receive";
 export interface TutorialFrame { kind: TutorialFrameKind; title: string; text: string }
 export interface TutorialStep {
   id: string;
@@ -61,7 +62,8 @@ export function buildRouteTutorial(route: RouteCandidate, names: Record<string, 
   const steps: TutorialStep[] = [];
   const add = (data: Omit<TutorialStep, "guideSteps" | "guide" | "notes"> & { guide?: ProviderGuidance; guideSteps?: string[]; notes?: string[] }) => {
     const guide = data.guide ?? guidance[data.provider.toLowerCase()];
-    steps.push({ ...data, notes: data.notes ?? [], guide, guideSteps: data.guideSteps ?? guide?.steps ?? [] });
+    const frames = data.provider.toLowerCase() === "whitebird" && data.kind !== "transfer" ? buildWhitebirdFrames(copy) : data.frames;
+    steps.push({ ...data, frames, notes: data.notes ?? [], guide, guideSteps: data.guideSteps ?? guide?.steps ?? [] });
   };
   const swapFrames = (name: string, from: string, to: string) => [
     frame("open", "Open the exchange", copy("Open {venue}", { venue: name })),

@@ -2379,10 +2379,23 @@ test("direct Whitebird exchange uses its swap card, provider wording and local v
   await page.mouse.move(0, 0);
   await scene.screenshot({ animations: "disabled", path: testInfo.outputPath("whitebird-swap.png") });
   await instructions.getByRole("button", { name: "Next scene", exact: true }).click();
-  await expect(swap.locator(".exchangeAction")).toHaveClass(/actionHighlight/);
-  await instructions.getByRole("button", { name: "Next scene", exact: true }).click();
+  await expect(swap).toHaveAttribute("data-frame", "2");
+  await expect(swap).toHaveAttribute("data-frame-kind", "review");
+  await expect(instructions.getByRole("button", { name: "Scene 3: Check the amount you receive", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(scene.locator(".sceneAnnotation strong")).toHaveText("Check the amount you receive");
   await expect(swap.locator('[data-side="receive"] .fieldControl')).toHaveClass(/highlight/);
   await expect(swap.locator('[data-side="send"] .fieldControl')).not.toHaveClass(/highlight/);
+  await expect(swap.locator(".exchangeAction")).not.toHaveClass(/actionHighlight/);
+  await instructions.getByRole("button", { name: "Next scene", exact: true }).click();
+  await expect(swap).toHaveAttribute("data-frame", "3");
+  await expect(swap).toHaveAttribute("data-frame-kind", "act");
+  await expect(instructions.getByRole("button", { name: "Scene 4: Press Exchange", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(scene.locator(".sceneAnnotation strong")).toHaveText("Press Exchange");
+  await expect(swap.locator(".exchangeAction")).toHaveClass(/actionHighlight/);
+  await expect(swap.locator(".fieldControl.highlight")).toHaveCount(0);
+  await instructions.getByRole("button", { name: "Previous scene", exact: true }).click();
+  await expect(swap).toHaveAttribute("data-frame-kind", "review");
+  await expect(swap.locator(".exchangeAction")).not.toHaveClass(/actionHighlight/);
 });
 
 test("Armenian bank picker uses the downloaded local icons", async ({ page }) => {

@@ -35,12 +35,13 @@
   $: quote = step.offer && Number.isFinite(rate) && rate > 0
     ? `1 ${step.offer.asset} ≈ ${rate.toLocaleString(numberLocale, { maximumFractionDigits: 6 })} ${step.offer.fiat}`
     : `${step.from} → ${step.to}`;
-  $: cursorX = frame === 0 ? "37%" : frame === 1 ? "18%" : frame === 2 ? "85%" : "66%";
-  $: cursorY = frame < 2 || frame === 3 ? "42%" : "85%";
+  $: frameKind = step.frames[frame]?.kind;
+  $: cursorX = frameKind === "open" ? "37%" : frameKind === "verify" ? "18%" : frameKind === "act" ? "85%" : "66%";
+  $: cursorY = frameKind === "act" ? "85%" : "42%";
 </script>
 
 <!-- Based on the public swap card at https://whitebird.io/exchanger. -->
-<div class="swapCard" class:paused={!playing} data-testid="whitebird-swap-card" data-frame={frame} style={`--cursor-x:${cursorX};--cursor-y:${cursorY}`}>
+<div class="swapCard" class:paused={!playing} data-testid="whitebird-swap-card" data-frame={frame} data-frame-kind={frameKind} style={`--cursor-x:${cursorX};--cursor-y:${cursorY}`}>
   <div class="quote">{quote}</div>
   <div class="fields">
     {#each fields as field, index (field.side)}
@@ -51,9 +52,9 @@
       {/if}
       <div class="field" data-side={field.side}>
         <small class="fieldLabel">{field.label}</small>
-        <div class="fieldControl" class:highlight={frame === 1 || (frame === 3 && index === 1)}>
+        <div class="fieldControl" class:highlight={frameKind === "verify" || (frameKind === "review" && index === 1)}>
           <strong class="amount" data-testid={`whitebird-${field.side}-amount`}>{field.value}</strong>
-          <div class="currency" class:selectHighlight={frame === 0}>
+          <div class="currency" class:selectHighlight={frameKind === "open"}>
             <img src={currencyIcon(field.currency)} alt="" />
             <div class="currencyText"><strong>{field.currency}</strong>{#if field.subtitle}<small title={field.subtitle}>{field.subtitle}</small>{/if}</div>
             <svg class="chevron" viewBox="0 0 14 8" fill="none"><path d="m1 1 6 6 6-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
@@ -62,13 +63,13 @@
       </div>
     {/each}
   </div>
-  <div class="fees" class:highlight={frame === 1}>
+  <div class="fees" class:highlight={frameKind === "verify"}>
     <span>{copy("Service commission")} <span class="info">i</span></span>
     <strong>{copy("Check on Whitebird")}</strong>
   </div>
   <div class="cardFooter">
     <span>{copy("Whitebird verification required")}</span>
-    <div class="exchangeAction" class:actionHighlight={frame === 2}>{copy("Whitebird exchange")}</div>
+    <div class="exchangeAction" class:actionHighlight={frameKind === "act"}>{copy("Whitebird exchange")}</div>
   </div>
   <svg class="cursor" viewBox="0 0 32 38" fill="none"><path d="M3 2L27 22L15 24L9 35L3 2Z" fill="#0169ff" stroke="white" stroke-width="2.5" stroke-linejoin="round" /></svg>
 </div>
