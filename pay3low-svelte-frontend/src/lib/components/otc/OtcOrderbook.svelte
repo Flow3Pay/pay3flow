@@ -39,18 +39,17 @@
   {#if filter !== "asks"}<div class="bidLevels" aria-label={copy.bids}>{#each (filter === "all" ? bids.slice(0, 7) : bids) as level}<button type="button" class="level bid" class:selected={selectedPrice === level.price} style:--depth={`${level.depth / maxDepth * 100}%`} aria-label={`${copy.sell} ${market.base} · ${formatPrice(level.price, market)} ${market.quote}`} on:click={() => onSelect("sell", level.price)}><span class="levelPrice">{formatPrice(level.price, market)}</span><span>{formatAmount(level.amount, market)}</span><span>{level.total.toLocaleString("en-US", { maximumFractionDigits: 0 })}</span></button>{/each}</div>{/if}
 </div>
 <div class="pressure"><div class="pressureLabels"><span>{copy.buyPressure} {buyRatio}%</span><span>{100 - buyRatio}% {copy.sellPressure}</span></div><div class="pressureBar"><span style:width={`${buyRatio}%`}></span></div></div>
-<p class="bookHint">{copy.bookHint}</p>
 <style>
   .bookTools { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px 9px; }
   .bookFilters { display: flex; gap: 3px; }
   .bookFilters button { display: grid; place-items: center; width: 26px; height: 25px; border-radius: 5px; opacity: .45; }
   .bookFilters button.active { opacity: 1; background: var(--color-panel); }
-  select { border: 1px solid var(--color-border); border-radius: 5px; background: var(--color-paper); padding: 4px 7px; font-family: var(--font-mono); font-size: 9px; max-width: 100px; }
+  select { border: 1px solid var(--color-border); border-radius: 5px; background: var(--color-paper); padding: 4px 7px; font-family: var(--font-mono); font-size: 12px; max-width: 100px; }
   .bookColumns, .level { display: grid; grid-template-columns: 1.1fr 1fr 1fr; align-items: center; text-align: right; gap: 8px; }
-  .bookColumns { padding: 0 16px 10px; font-size: 9px; color: var(--color-text-soft); }
+  .bookColumns { padding: 0 16px 10px; font-size: 12px; color: var(--color-text-soft); }
   .bookColumns > span:first-child, .level > span:first-child { text-align: left; }
-  .bookColumns small { display: block; font-family: var(--font-mono); font-size: 8px; opacity: .7; margin-top: 3px; }
-  .level { position: relative; isolation: isolate; width: 100%; height: 28px; min-height: 28px; padding: 0 16px; font-family: var(--font-mono); font-size: 10px; font-variant-numeric: tabular-nums; }
+  .bookColumns small { display: block; font-family: var(--font-mono); font-size: 12px; opacity: .7; margin-top: 3px; }
+  .level { position: relative; isolation: isolate; width: 100%; height: 28px; min-height: 28px; padding: 0 16px; font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
   .level::before { content: ""; position: absolute; z-index: -1; inset: 1px 0 1px auto; width: var(--depth); background: var(--otc-buy-soft); }
   .ask::before { background: var(--otc-sell-soft); }
   .bid .levelPrice { color: var(--otc-buy); }
@@ -59,15 +58,14 @@
   .spread { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 4px; margin: 7px 0; padding: 9px 16px; border-block: 1px solid var(--color-border); }
   .spread strong { color: var(--otc-buy); font-family: var(--font-mono); font-size: 16px; font-weight: 500; }
   .spread strong > span { padding-left: 6px; font-family: var(--font-sans); font-size: 12px; }
-  .spread > span { font-size: 9px; color: var(--color-text-soft); }
-  .spread small { font-size: 8px; }
-  .pressure { padding: 13px 16px 0; }
-  .pressureLabels { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 9px; margin-bottom: 6px; color: var(--otc-buy); }
+  .spread > span { font-size: 12px; color: var(--color-text-soft); }
+  .spread small { font-size: 12px; }
+  .pressure { padding: 13px 16px 16px; }
+  .pressureLabels { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 12px; margin-bottom: 6px; color: var(--otc-buy); }
   .pressureLabels > span:last-child { color: var(--otc-sell); }
   .pressureBar { height: 3px; border-radius: 3px; overflow: hidden; background: var(--otc-sell); }
   .pressureBar > span { display: block; height: 100%; background: var(--otc-buy); border-right: 3px solid var(--color-paper); }
-  .bookHint { padding: 10px 16px 13px; text-align: center; font-size: 9px; color: var(--color-text-faint); }
   .oneSide .level { height: 39px; }
-  @media (max-width: 1100px) { .level { font-size: 10px; height: 24px; } }
+  @media (max-width: 1100px) { .level { font-size: 12px; height: 24px; } }
   @media (pointer: coarse) { .level { min-height: 44px; } .bookFilters button { width: 33px; height: 30px; } }
 </style>

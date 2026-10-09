@@ -34,7 +34,7 @@ export const homeContent: Record<Locale, HomeContent> = {
     intro: "Не тратьте своё время на поиск обмена.",
     nojs: "Описание сервиса доступно без JavaScript. Для загрузки котировок и поиска маршрутов включите JavaScript в браузере.",
     aboutTitle: "Что такое Pay3Flow",
-    about: "Pay3Flow — экспериментальный сервис с открытым исходным кодом для сравнения маршрутов обмена. Он сопоставляет публичные P2P-объявления, предложения обменников и цены спотовых рынков. Вы можете сравнить прямой обмен с маршрутом через промежуточный цифровой актив и увидеть, сколько примерно получите на каждом шаге.",
+    about: "Pay3Flow — экспериментальный сервис с открытым исходным кодом для сравнения маршрутов обмена. Он сопоставляет публичные P2P-объявления, предложения обменников, цены спотовых рынков и OTC-предложения (beta). Вы можете сравнить прямой обмен с маршрутом через промежуточный цифровой актив и увидеть, сколько примерно получите на каждом шаге.",
     howTitle: "Как найти маршрут",
     steps: [
       "Укажите исходную и конечную валюту или цифровой актив, способ оплаты и сумму. Для криптовалют выберите сеть.",
@@ -70,7 +70,7 @@ export const homeContent: Record<Locale, HomeContent> = {
     intro: "Don’t waste your time looking for an exchange.",
     nojs: "Product information is available without JavaScript. Enable JavaScript in your browser to load quotes and search for routes.",
     aboutTitle: "What is Pay3Flow?",
-    about: "Pay3Flow is an experimental open source service for comparing exchange routes. It brings together public P2P advertisements, exchanger quotes and spot market prices. Compare a direct exchange with a route through an intermediate digital asset and see the estimated amount at each step.",
+    about: "Pay3Flow is an experimental open source service for comparing exchange routes. It brings together public P2P advertisements, exchanger quotes, spot market prices and OTC offers (beta). Compare a direct exchange with a route through an intermediate digital asset and see the estimated amount at each step.",
     howTitle: "How to find a route",
     steps: [
       "Choose your source and destination currency or digital asset, payment method and amount. Select a network for crypto assets.",
@@ -106,7 +106,7 @@ export const homeContent: Record<Locale, HomeContent> = {
     intro: "Մի՛ վատնեք ձեր ժամանակը փոխանակում փնտրելու վրա։",
     nojs: "Ծառայության նկարագրությունը հասանելի է առանց JavaScript-ի։ Հաշվարկները բեռնելու և ուղիներ որոնելու համար միացրեք JavaScript-ը։",
     aboutTitle: "Ի՞նչ է Pay3Flow-ը",
-    about: "Pay3Flow-ը բաց կոդով փորձարարական ծառայություն է փոխանակման ուղիները համեմատելու համար։ Այն համադրում է հրապարակային P2P հայտարարությունները, փոխանակման ծառայությունների առաջարկներն ու սփոթ գները։ Համեմատեք ուղղակի փոխանակումը միջանկյալ թվային ակտիվով ուղու հետ և տեսեք յուրաքանչյուր քայլի մոտավոր գումարը։",
+    about: "Pay3Flow-ը բաց կոդով փորձարարական ծառայություն է փոխանակման ուղիները համեմատելու համար։ Այն համադրում է հրապարակային P2P հայտարարությունները, փոխանակման ծառայությունների առաջարկները, սփոթ գներն ու OTC առաջարկները (beta)։ Համեմատեք ուղղակի փոխանակումը միջանկյալ թվային ակտիվով ուղու հետ և տեսեք յուրաքանչյուր քայլի մոտավոր գումարը։",
     howTitle: "Ինչպես գտնել ուղին",
     steps: [
       "Ընտրեք սկզբնական և վերջնական արժույթը կամ թվային ակտիվը, վճարման եղանակն ու գումարը։ Կրիպտոարժույթի համար ընտրեք ցանցը։",

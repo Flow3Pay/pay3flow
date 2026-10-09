@@ -31,7 +31,7 @@
   .reviewDialog::backdrop { background: #0a100b99; backdrop-filter: blur(5px); }
   .reviewContent { padding: 24px; }
   .dialogTop { display: flex; justify-content: space-between; align-items: center; }
-  .dialogTop > span { padding: 5px 8px; border: 1px solid var(--color-border); border-radius: 6px; font-family: var(--font-mono); font-size: 10px; color: var(--color-text-soft); }
+  .dialogTop > span { padding: 5px 8px; border: 1px solid var(--color-border); border-radius: 6px; font-family: var(--font-mono); font-size: 12px; color: var(--color-text-soft); }
   .dialogTop button { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 7px; background: var(--color-panel); }
   h2 { margin-top: 20px; font-size: 25px; letter-spacing: -.05em; }
   .subtitle { margin: 7px 0 22px; font-size: 12px; color: var(--color-text-soft); }
@@ -39,13 +39,13 @@
   .orderSummary img { border-radius: 50%; }
   .orderSummary > div { display: grid; gap: 5px; }
   .orderSummary strong { font-size: 14px; }
-  .orderSummary div > span { font-size: 10px; color: var(--color-text-soft); }
+  .orderSummary div > span { font-size: 12px; color: var(--color-text-soft); }
   .sideArrow { margin-left: auto; font-size: 28px; color: var(--color-accent-text); }
   dl { display: grid; gap: 14px; padding: 23px 0; }
-  dl > div { display: flex; justify-content: space-between; gap: 12px; font-size: 11px; }
+  dl > div { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; }
   dt { color: var(--color-text-soft); }
   dd { font-family: var(--font-mono); text-align: right; }
-  .demoNote { border: 1px solid var(--color-border); border-radius: 9px; padding: 12px; color: var(--color-text-soft); font-size: 10px; line-height: 1.6; }
+  .demoNote { border: 1px solid var(--color-border); border-radius: 9px; padding: 12px; color: var(--color-text-soft); font-size: 12px; line-height: 1.6; }
   .confirm { display: flex; justify-content: space-between; gap: 12px; width: 100%; margin-top: 18px; padding: 15px; border-radius: 9px; background: var(--color-accent); color: #152016; font-size: 12px; font-weight: 800; }
   .confirm:hover { background: var(--color-accent-strong); }
   .back { display: block; width: 100%; margin-top: 9px; padding: 10px; color: var(--color-text-soft); font-size: 12px; }

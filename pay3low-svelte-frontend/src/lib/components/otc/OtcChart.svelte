@@ -92,49 +92,47 @@
     {/if}
   </svg>
 </div>
-<div class="chartFooter"><span><img src="/icons/assets/pay3flow_logo.svg" width="15" height="15" alt="" />Pay3Flow <span class="footerDemo">/ {copy.demo}</span></span><div class="zoomTools"><button type="button" aria-label={copy.zoomOut} disabled={zoom === 1} on:click={() => { zoom = Math.max(1, zoom - .5); hovered = null; }}>−</button><button type="button" aria-label={copy.chartReset} on:click={() => { zoom = 1; hovered = null; }}>↺</button><button type="button" aria-label={copy.zoomIn} disabled={zoom === 3} on:click={() => { zoom = Math.min(3, zoom + .5); hovered = null; }}>+</button></div><span class="timezone">UTC</span></div>
+<div class="chartFooter"><span><img src="/icons/assets/pay3flow_logo.svg" width="15" height="15" alt="" />Pay3Flow </span><div class="zoomTools"><button type="button" aria-label={copy.zoomOut} disabled={zoom === 1} on:click={() => { zoom = Math.max(1, zoom - .5); hovered = null; }}>−</button><button type="button" aria-label={copy.chartReset} on:click={() => { zoom = 1; hovered = null; }}>↺</button><button type="button" aria-label={copy.zoomIn} disabled={zoom === 3} on:click={() => { zoom = Math.min(3, zoom + .5); hovered = null; }}>+</button></div><span class="timezone">UTC</span></div>
 <style>
   .chartTools { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 17px 8px; }
-  .chartLegend { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--color-text-soft); }
+  .chartLegend { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--color-text-soft); }
   .buyDot, .sellDot { width: 6px; height: 6px; border-radius: 50%; background: var(--otc-buy); }
   .sellDot { background: var(--otc-sell); margin-left: 7px; }
   .chartButtons, .ranges { display: flex; align-items: center; gap: 4px; }
-  .ranges button { padding: 5px 8px; border-radius: 5px; font-family: var(--font-mono); font-size: 10px; color: var(--color-text-soft); }
+  .ranges button { padding: 5px 8px; border-radius: 5px; font-family: var(--font-mono); font-size: 12px; color: var(--color-text-soft); }
   .ranges button:hover, .ranges button.active { background: var(--color-panel); color: var(--color-text); }
   .ranges button.active { font-weight: 500; }
   .divider { height: 15px; width: 1px; background: var(--color-border); margin: 0 5px; }
   .chartMode { display: grid; width: 26px; height: 26px; place-items: center; color: var(--color-text-soft); }
-  .ohlc { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; min-height: 36px; padding: 0 17px; font-family: var(--font-mono); font-size: 9px; color: var(--color-text-soft); }
-  .ohlc strong { color: var(--color-text); font-size: 10px; }
+  .ohlc { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; min-height: 36px; padding: 0 17px; font-family: var(--font-mono); font-size: 12px; color: var(--color-text-soft); }
+  .ohlc strong { color: var(--color-text); font-size: 12px; }
   .ohlc b { font-weight: 400; color: var(--otc-sell); }
   .ohlc .positive b { color: var(--otc-buy); }
   .chartPlot { min-height: 290px; display: flex; align-items: stretch; }
   .priceChart { display: block; width: 100%; min-height: 290px; overflow: visible; font-family: var(--font-mono); }
   .gridLine { stroke: var(--color-border); stroke-width: .7; }
   .vertical { opacity: .5; }
-  .axisLabel, .volumeLabel { font-size: 10px; fill: var(--color-text-faint); }
-  .volumeLabel { font-size: 9px; }
+  .axisLabel, .volumeLabel { font-size: 12px; fill: var(--color-text-faint); }
+  .volumeLabel { font-size: 12px; }
   .buyLine, .sellLine { fill: none; stroke: var(--otc-buy); stroke-width: 1.9; stroke-linejoin: round; stroke-linecap: round; }
   .sellLine { stroke: var(--otc-sell); stroke-width: 1.9; }
   .lastPriceLine { stroke: var(--otc-buy); stroke-width: .8; stroke-dasharray: 3 4; opacity: .7; }
-  .lastPriceLabel { font-size: 10px; fill: #fff; }
+  .lastPriceLabel { font-size: 12px; fill: #fff; }
   .crosshair { stroke: var(--color-text-soft); stroke-width: .7; stroke-dasharray: 3 3; }
-  .chartFooter { display: flex; align-items: center; justify-content: space-between; padding: 3px 17px 13px; font-size: 10px; color: var(--color-text-soft); }
+  .chartFooter { display: flex; align-items: center; justify-content: space-between; padding: 3px 17px 13px; font-size: 12px; color: var(--color-text-soft); }
   .chartFooter > span { display: flex; align-items: center; gap: 6px; }
-  .footerDemo { color: var(--color-text-faint); font-size: 9px; }
   .zoomTools { display: flex; gap: 3px; border: 1px solid var(--color-border); border-radius: 6px; padding: 2px; }
   .zoomTools button { width: 25px; height: 22px; color: var(--color-text-soft); font-size: 14px; }
   .zoomTools button:hover { background: var(--color-panel); border-radius: 3px; }
   .zoomTools button:disabled { opacity: .35; cursor: default; }
-  .timezone { font-family: var(--font-mono); font-size: 9px; }
+  .timezone { font-family: var(--font-mono); font-size: 12px; }
   @media (max-width: 640px) {
     .chartTools { padding: 12px 12px 4px; gap: 6px; }
-    .chartLegend { font-size: 9px; }
+    .chartLegend { font-size: 12px; }
     .ranges button { padding: 6px; }
-    .ohlc { padding: 5px 12px; font-size: 8px; gap: 6px; }
+    .ohlc { padding: 5px 12px; font-size: 12px; gap: 6px; }
     .ohlc > span:nth-child(4), .ohlc > span:nth-child(5) { display: none; }
     .chartPlot, .priceChart { min-height: 235px; }
     .chartFooter { padding: 0 12px 12px; }
-    .footerDemo { display: none; }
   }
 </style>

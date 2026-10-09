@@ -100,7 +100,7 @@
       <div class="brandLine"><img class="brandMark" src="/icons/assets/pay3flow_logo.svg" alt="" aria-hidden="true" width="36" height="36" loading="lazy" decoding="async" /><span>Pay3Flow</span></div>
       <h2 id="about-heading">{copy.aboutTitle}</h2>
       <p>{copy.about}</p>
-      <div class="marketTags"><span>P2P</span><span>{t("Exchangers", {}, $locale)}</span><span>SPOT</span></div>
+      <div class="marketTags"><span>P2P</span><span>{t("Exchangers", {}, $locale)}</span><span>SPOT</span><span>OTC (beta)</span></div>
     </section>
   </div>
 
