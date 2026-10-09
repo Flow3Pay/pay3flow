@@ -2420,7 +2420,7 @@ test("Bybit P2P walkthrough reviews the profile and selects the route's buy or s
   await expect(profile.getByTestId("bybit-trade-action")).toHaveText("Buy USDC");
   await expect(profile.locator(".profileIcon")).toBeVisible();
   await expect(profile.locator(".bybitNav small, .adsBottom small")).toHaveCount(0);
-  await expect(profile.locator(".adPrice")).toContainText("AMD");
+  await expect(profile.locator(".selected .adPrice")).toContainText("AMD");
   await expect(guide.locator(".playerTimeline button")).toHaveCount(4);
 
   // Sample rendered positions to catch the original 10 fps cursor stutter.
@@ -2469,7 +2469,7 @@ test("Bybit P2P walkthrough reviews the profile and selects the route's buy or s
   await guide.getByTestId("confirm-instruction-step").click();
   await scene.scrollIntoViewIfNeeded();
   await expect(profile).toHaveAttribute("data-side", "sell");
-  await expect(profile.locator(".adPrice")).toContainText("RUB");
+  await expect(profile.locator(".selected .adPrice")).toContainText("RUB");
   await guide.getByRole("button", { name: "Scene 3: Return to Ads", exact: true }).click();
   await expect(guide.locator(".frameList")).toContainText("sell USDC for RUB");
   await guide.getByRole("button", { name: "Scene 4: Press Sell USDC", exact: true }).click();
@@ -2514,7 +2514,7 @@ test("MEXC P2P walkthrough reviews the merchant and chooses the correct buy or s
 
   await guide.getByRole("button", { name: "Scene 3: Return to Ads", exact: true }).click();
   await expect(profile.locator(".selected h3")).toHaveText("Buy from the User");
-  await expect(profile.locator(".adPrice")).toContainText("AMD");
+  await expect(profile.locator(".selected .adPrice")).toContainText("AMD");
   await expect(guide.locator(".frameList")).toContainText('use “Buy from the User” to buy USDT with AMD');
   await guide.getByRole("button", { name: "Scene 4: Press Buy USDT", exact: true }).click();
   await expect(profile.getByTestId("mexc-trade-action")).toHaveText("Buy USDT");
@@ -2528,7 +2528,7 @@ test("MEXC P2P walkthrough reviews the merchant and chooses the correct buy or s
   await expect(profile).toHaveAttribute("data-side", "sell");
   await expect(profile.locator(".selected h3")).toHaveText("Sell to the User");
   await expect(profile.getByTestId("mexc-trade-action")).toBeInViewport();
-  await expect(profile.locator(".adPrice")).toContainText("RUB");
+  await expect(profile.locator(".selected .adPrice")).toContainText("RUB");
   await expect(guide.locator(".frameList")).toContainText('use “Sell to the User” to sell USDT for RUB');
   await guide.getByRole("button", { name: "Scene 4: Press Sell USDT", exact: true }).click();
   await expect(profile.getByTestId("mexc-trade-action")).toHaveText("Sell USDT");
@@ -2560,9 +2560,20 @@ test("MEXC profile walkthrough localizes route actions and supports reduced moti
   await expect(profile).toHaveClass(/paused/);
   await expect(guide.locator(".frameList")).toContainText("на MEXC");
   await expect(profile.getByTestId("mexc-trade-action")).toHaveText("Купить USDT");
+  // Both advertisements exist and fit the first scene, before opening Reviews.
+  await expect(profile.locator(".tradeAction")).toHaveText(["Купить USDT", "Продать USDT"]);
+  for (const action of await profile.locator(".tradeAction").all()) await expect(action).toBeInViewport();
+  const initialBuyAds = await profile.getByTestId("mexc-ads-panel").innerText();
+  await guide.getByRole("button", { name: "Сцена 3: Вернитесь к Ads", exact: true }).click();
+  await expect(profile.getByTestId("mexc-ads-panel")).toHaveText(initialBuyAds, { useInnerText: true });
   await guide.getByRole("button", { name: "Сцена 2: Посмотрите отзывы", exact: true }).click();
   await expect(profile.getByTestId("mexc-review-panel")).toContainText("Пример отзывов");
   await guide.getByTestId("confirm-instruction-step").click();
+  await expect(profile.locator(".tradeAction")).toHaveText(["Купить USDT", "Продать USDT"]);
+  for (const action of await profile.locator(".tradeAction").all()) await expect(action).toBeInViewport();
+  const initialSellAds = await profile.getByTestId("mexc-ads-panel").innerText();
+  await guide.getByRole("button", { name: "Сцена 3: Вернитесь к Ads", exact: true }).click();
+  await expect(profile.getByTestId("mexc-ads-panel")).toHaveText(initialSellAds, { useInnerText: true });
   await guide.getByRole("button", { name: "Сцена 4: Нажмите «Продать USDT»", exact: true }).click();
   await expect(profile.getByTestId("mexc-trade-action")).toHaveText("Продать USDT");
 });
