@@ -819,8 +819,9 @@
     amount = shared.amount ?? "0";
     sourceMethodId = sharedMethod(paymentMethods, shared.sourceCurrency, "sender", shared.params.get("from") ?? "")?.id ?? sourceMethodId;
     targetMethodId = sharedMethod(paymentMethods, shared.targetCurrency, "recipient", shared.params.get("to") ?? "")?.id ?? targetMethodId;
-    sourceNetworkId = shared.params.get("fromNetwork") ?? FALLBACK_NETWORK.id;
-    targetNetworkId = shared.params.get("toNetwork") ?? FALLBACK_NETWORK.id;
+    // A plain swap hash omits networks; retain the saved selections on reload.
+    sourceNetworkId = shared.params.get("fromNetwork") ?? sourceNetworkId;
+    targetNetworkId = shared.params.get("toNetwork") ?? targetNetworkId;
     const sources = sharedIdentifiers(shared.params, "sources");
     if (sources.length) selectedSources = sources;
     const methods = sharedIdentifiers(shared.params, "methods").filter((item): item is ExchangeMethod => EXCHANGE_METHODS.includes(item as ExchangeMethod));

@@ -624,7 +624,7 @@ async function chooseCrypto(page: Page, side: "sending" | "recipient", search: s
   return picker;
 }
 
-async function mockBackend(page: Page, options: { includeNewProviders?: boolean; routeCount?: number; spotCycle?: boolean; reviews?: boolean; usdtFiatNetwork?: string; mexc?: boolean } = {}) {
+async function mockBackend(page: Page, options: { includeNewProviders?: boolean; routeCount?: number; spotCycle?: boolean; reviews?: boolean; usdtFiatNetwork?: string; mexc?: boolean; guideVenue?: string } = {}) {
   await page.addInitScript(() => {
     if (!localStorage.getItem("pay3flow-locale")) localStorage.setItem("pay3flow-locale", "en");
   });
@@ -716,6 +716,7 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
         { id: "ton", name: "TON", currencies: ["TON", "USDT"] },
         { id: "bitcoin", name: "Bitcoin", currencies: ["BTC"] },
         { id: "near", name: "NEAR", currencies: ["BTC", "USDT"] },
+        ...(options.guideVenue ? [{ id: "solana", name: "Solana", currencies: ["USDT", "USDC", "SOL"] }, { id: "polygon", name: "Polygon", currencies: ["USDT", "USDC"] }] : []),
       ]);
     }
     if (url.pathname === "/api/providers") {
@@ -745,6 +746,7 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
           { slug: "symbiosis", name: "Symbiosis Buy", side: "buy", source_url: "https://api.symbiosis.finance", currencies: [], banks: [], searchable: true, search_mode: "selectable" },
         );
       }
+      if (options.guideVenue) providers.push({ slug: options.guideVenue, name: ({ "bitcoin-center": "Bitcoin Center", "cow-swap": "CoW Swap", bestchange: "BestChange", symbiosis: "Symbiosis", dzengi: "Dzengi", bncex: "bncex", binance: "Binance" } as Record<string, string>)[options.guideVenue], side: "sell", source_url: "https://example.com/", currencies: ["AMD", "RUB"], banks: [], searchable: true });
       if (options.mexc) providers.push({ slug: "mexc", name: "MEXC", side: "sell", source_url: "https://www.mexc.com/buy-crypto/p2p", currencies: ["AMD", "RUB"], banks: [], searchable: true });
       return json(providers);
     }
@@ -765,6 +767,7 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
         ad_id: adId,
         fiat,
         asset,
+        network: source === "bitcoin-center" ? "solana" : source === "bncex" ? "tron" : null,
         price: "1",
         available_asset: "1000000",
         min_fiat: "1000",
@@ -773,15 +776,15 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
         pay_time_limit_minutes: 15,
         advertiser: {
           id: source === "bybit" ? `masked-${adId}` : null,
-          nickname: `${source}-merchant`,
-          user_type: "merchant" as string | null,
+          nickname: source === "bestchange" ? "ChangerBiz" : `${source}-merchant`,
+          user_type: (["bncex", "bitcoin-center", "dzengi", "bestchange"].includes(source) ? "service" : "merchant") as string | null,
           is_merchant: true,
           is_verified: true,
           completed_orders_30d: 300 as number | null,
           completion_rate_30d: 0.99 as number | null,
         },
         source_url: `https://example.com/${adId}`,
-        advertiser_profile_url: source === "mexc" ? "https://www.mexc.com/buy-crypto/merchant/af2545ef4b6c470ebd516aa794bb7a03" : options.reviews ? `https://c2c.binance.com/en/advertiserDetail?advertiserNo=${adId}` : null,
+        advertiser_profile_url: source === "bestchange" ? "https://www.bestchange.pro/changerbiz-exchanger.html#pay3flow-id=125" : source === "binance" && options.guideVenue ? "https://c2c.binance.com/ru/advertiserDetail?advertiserNo=s6b4151aab3223e9a87d491ca4256411b" : source === "mexc" ? "https://www.mexc.com/buy-crypto/merchant/af2545ef4b6c470ebd516aa794bb7a03" : options.reviews ? `https://c2c.binance.com/en/advertiserDetail?advertiserNo=${adId}` : null,
       });
       if (url.searchParams.get("source_fiat") === "AMD" && url.searchParams.get("target_fiat") === "AMD") {
         expect(url.searchParams.get("source_payment_method")).toBe("Ameriabank");
@@ -1117,7 +1120,7 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
       }
       if (url.searchParams.get("source_fiat") === "ETH") {
         expect(url.searchParams.get("source_network")).toBe("base");
-        expect(url.searchParams.get("target_network")).toBe("ton");
+        expect(url.searchParams.get("target_network")).toBe(options.guideVenue ? "polygon" : "ton");
         return json({
           search_id: "00000000-0000-4000-8000-000000000102",
           routes_found: 1,
@@ -1133,7 +1136,7 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
             asset: "USDT",
             entry_network: "base",
             source_network: "base",
-            target_network: "ton",
+            target_network: options.guideVenue ? "polygon" : "ton",
             source_fiat: "ETH",
             source_amount: "0.030000000000",
             acquired_asset_amount: "80.100000000000",
@@ -1145,8 +1148,10 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
             transfer_fee_included: false,
             route_kind: "crypto_to_crypto",
             bridge_currency: null,
-            market_path: {
-              venue: "binance",
+            route_provider: ["symbiosis", "cow-swap"].includes(options.guideVenue ?? "") ? options.guideVenue : null,
+            route_provider_url: options.guideVenue === "symbiosis" ? "https://app.symbiosis.finance/swap" : "https://swap.cow.fi/",
+            market_path: ["symbiosis", "cow-swap"].includes(options.guideVenue ?? "") ? null : {
+              venue: options.guideVenue ?? "binance",
               source_pair: "ETHUSDT",
               target_pair: "ETHUSDT",
               source_rate: "2670.000000000000",
@@ -1310,8 +1315,8 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
       const routes = Array.from({ length: options.routeCount ?? 12 }, (_, index) => {
         const best = index === 0;
         const asset = index % 2 === 0 ? "USDT" : "USDC";
-        const venue = options.mexc ? "mexc" : index % 2 === 0 ? "binance" : "bybit";
-        const exitVenue = index === 2 ? "bybit" : venue;
+        const venue = options.guideVenue ?? (options.mexc ? "mexc" : index % 2 === 0 ? "binance" : "bybit");
+        const exitVenue = ["bncex", "bitcoin-center", "dzengi"].includes(venue) || index === 2 ? "bybit" : venue;
         return {
           route_id: `route-${index + 1}`,
           rank: index + 1,
@@ -1492,15 +1497,10 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await expectNumberedTimeline(instructions, ["1", "2"]);
   await instructions.getByTestId("start-guide").click();
   await expect(instructions.getByRole("heading", { name: "Buy USDT for 100,000 AMD" })).toBeVisible();
-  await expect(instructions.locator(".frameList").getByText("Before creating the order, compare the nickname and advertisement ID.")).toBeVisible();
+  await expect(instructions.locator(".frameList")).toContainText("Open More details");
   await instructions.getByTestId("confirm-instruction-step").click();
-  await expect(instructions.locator(".frameList").getByText("Release the asset only after you personally see the payment in your bank or payment account.").first()).toBeVisible();
-  const offerLinks = instructions.getByRole("link", { name: /Open Binance P2P and find binance-merchant/ });
-  await expect(offerLinks.first()).toHaveAttribute(
-    "href",
-    "https://example.com/exit-1",
-  );
-  await expect(offerLinks).toHaveCount(1);
+  await expect(instructions.locator(".frameList")).toContainText("find an active advertisement to sell USDT");
+  await expect(instructions.locator(".realAction")).toHaveCount(0);
   await instructions.locator(".guideToolbar").getByRole("button", { name: /Back to routes/ }).click();
   await expect(instructions).toBeHidden();
   await page.getByTestId("start-search").click();
@@ -1576,9 +1576,9 @@ test("RUB to RUB bank routes require checking the order payment method", async (
   await expectNumberedTimeline(instructions, ["1", "2"]);
   await instructions.getByTestId("start-guide").click();
   await expect(instructions.getByRole("heading", { name: "Buy USDT for 10,000 RUB" })).toBeVisible();
-  await expect(instructions.getByText("Check the current rate, order limits, and payment method on Binance.")).toBeVisible();
+  await expect(instructions.locator(".frameList")).toContainText("find an active advertisement to buy USDT");
   await instructions.getByTestId("confirm-instruction-step").click();
-  await expect(instructions.locator(".frameList").getByText("Release the asset only after you personally see the payment in your bank or payment account.").first()).toBeVisible();
+  await expect(instructions.locator(".frameList")).toContainText("find an active advertisement to sell USDT");
 });
 
 test("AMD cycle keeps the best route visible when profit is unconfirmed", async ({ page }) => {
@@ -1772,6 +1772,7 @@ test("search venues only show providers with matching routes", async ({ page }) 
         ad_id: adId,
         fiat,
         asset: "USDT",
+        network: source === "bitcoin-center" ? "solana" : source === "bncex" ? "tron" : null,
         price: "1",
         available_asset: "1000000",
         min_fiat: "1000",
@@ -1780,7 +1781,7 @@ test("search venues only show providers with matching routes", async ({ page }) 
         pay_time_limit_minutes: 15,
         advertiser: {
           id: `masked-${adId}`,
-          nickname: `${source}-merchant`,
+          nickname: source === "bestchange" ? "ChangerBiz" : `${source}-merchant`,
           user_type: "merchant",
           is_merchant: true,
           is_verified: true,
@@ -1946,6 +1947,7 @@ test("reordered progressive snapshots do not restart card rendering at 100", asy
         ad_id: adId,
         fiat: "AMD",
         asset: "USDT",
+        network: source === "bitcoin-center" ? "solana" : source === "bncex" ? "tron" : null,
         price: "1",
         available_asset: "1000000",
         min_fiat: "1000",
@@ -2267,13 +2269,13 @@ test("direct provider quotes keep their API names and independent prices", async
   await cards.nth(0).locator(".routeAmount").click();
   let instructions = page.getByTestId("route-guide");
   await instructions.getByTestId("start-guide").click();
-  await expect(instructions.getByTestId("route-wallet-execution")).toBeVisible();
-  await expect(instructions.getByRole("button", { name: "Connect ethereum wallet" })).toBeVisible();
+  await expect(instructions.getByTestId("route-wallet-execution")).toHaveCount(0);
+  await expect(instructions.getByRole("button", { name: "Connect ethereum wallet" })).toHaveCount(0);
   await instructions.locator(".guideToolbar").getByRole("button", { name: /Back to routes/ }).click();
   await cards.nth(1).locator(".routeAmount").click();
   instructions = page.getByTestId("route-guide");
   await instructions.getByTestId("start-guide").click();
-  await expect(instructions.getByTestId("route-wallet-execution")).toBeVisible();
+  await expect(instructions.getByTestId("route-wallet-execution")).toHaveCount(0);
 });
 
 test("ID Pay provides a direct AMD to RUB route with its API name", async ({ page }) => {
@@ -2296,7 +2298,7 @@ test("ID Pay provides a direct AMD to RUB route with its API name", async ({ pag
   const instructions = page.getByTestId("route-guide");
   await instructions.getByTestId("start-guide").click();
   await expect(instructions.getByRole("heading", { name: "Transfer AMD to RUB via ID Pay Live" })).toBeVisible();
-  await expect(instructions.getByRole("link", { name: "Open ID Pay Live exchange" })).toHaveAttribute("href", "https://id-pay.ru/");
+  await expect(instructions.locator(".realAction")).toHaveCount(0);
 });
 
 test("small AMD to BTC@near routes keep crypto precision", async ({ page }) => {
@@ -2323,7 +2325,7 @@ test("small AMD to BTC@near routes keep crypto precision", async ({ page }) => {
   await expect(instructions.getByRole("heading", { name: "Buy USDT for 10,000 AMD" })).toBeVisible();
   await instructions.getByTestId("confirm-instruction-step").click();
   await expect(instructions.getByRole("heading", { name: "Swap USDT for BTC via NEAR 1Click" })).toBeVisible();
-  await expect(instructions.getByRole("button", { name: "Connect optimism wallet" })).toBeVisible();
+  await expect(instructions.getByRole("button", { name: "Connect optimism wallet" })).toHaveCount(0);
 });
 
 test("direct Whitebird exchange uses its swap card, provider wording and local venue icons", async ({ page }, testInfo) => {
@@ -2349,17 +2351,7 @@ test("direct Whitebird exchange uses its swap card, provider wording and local v
   await route.locator(".routeAmount").click();
   const instructions = page.getByTestId("route-guide");
   await instructions.getByTestId("start-guide").click();
-  await expect(instructions.getByText("Direct exchange on Whitebird", { exact: true })).toBeVisible();
-  await expect(instructions.getByRole("link", { name: "Open Whitebird exchange" })).toHaveAttribute(
-    "href",
-    "https://whitebird.io/",
-  );
-  await expect(instructions.getByText("Find by nickname", { exact: true })).toHaveCount(0);
-  await expect(instructions.locator(".adHint")).toHaveCount(0);
-  await expect(instructions.locator(".counterpartyAvatar .avatarLogo")).toHaveAttribute(
-    "src",
-    "/icons/venues/whitebird.png",
-  );
+  await expect(instructions.locator(".realAction, .adHint, .counterpartyAvatar")).toHaveCount(0);
   const scene = instructions.getByTestId("instruction-scene");
   const swap = scene.getByTestId("whitebird-swap-card");
   await expect(swap).toBeVisible();
@@ -2420,7 +2412,7 @@ test("Bybit P2P walkthrough reviews the profile and selects the route's buy or s
   await expect(profile.getByTestId("bybit-trade-action")).toHaveText("Buy USDC");
   await expect(profile.locator(".profileIcon")).toBeVisible();
   await expect(profile.locator(".bybitNav small, .adsBottom small")).toHaveCount(0);
-  await expect(profile.locator(".selected .adPrice")).toContainText("AMD");
+  await expect(profile.locator(".adPrice")).toContainText("AMD");
   await expect(guide.locator(".playerTimeline button")).toHaveCount(4);
 
   // Sample rendered positions to catch the original 10 fps cursor stutter.
@@ -2469,7 +2461,7 @@ test("Bybit P2P walkthrough reviews the profile and selects the route's buy or s
   await guide.getByTestId("confirm-instruction-step").click();
   await scene.scrollIntoViewIfNeeded();
   await expect(profile).toHaveAttribute("data-side", "sell");
-  await expect(profile.locator(".selected .adPrice")).toContainText("RUB");
+  await expect(profile.locator(".adPrice")).toContainText("RUB");
   await guide.getByRole("button", { name: "Scene 3: Return to Ads", exact: true }).click();
   await expect(guide.locator(".frameList")).toContainText("sell USDC for RUB");
   await guide.getByRole("button", { name: "Scene 4: Press Sell USDC", exact: true }).click();
@@ -2502,7 +2494,7 @@ test("MEXC P2P walkthrough reviews the merchant and chooses the correct buy or s
   await expect(profile.locator(".wordmark")).toHaveAttribute("src", "/icons/venues/mexc-wordmark.svg");
   await expect.poll(() => profile.locator(".wordmark").evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
   await expect(profile.locator(".selected h3")).toHaveText("Buy from the User");
-  await expect(guide.getByRole("link", { name: "Open MEXC profile" })).toHaveAttribute("href", "https://www.mexc.com/buy-crypto/merchant/af2545ef4b6c470ebd516aa794bb7a03");
+  await expect(guide.locator(".realAction")).toHaveCount(0);
   // The accelerated first scene advances automatically, then clicks Reviews.
   await expect(profile).toHaveAttribute("data-frame", "1", { timeout: 6000 });
   await expect(profile.getByTestId("mexc-review-panel")).toBeVisible({ timeout: 2000 });
@@ -2707,10 +2699,10 @@ test("bridged spot instructions split both market trades into separate steps", a
   await expectNumberedTimeline(instructions, ["1", "2"]);
   await instructions.getByTestId("start-guide").click();
   await expect(instructions.getByRole("heading", { name: "Convert BTC to USDC" })).toBeVisible();
-  await expect(instructions.locator(".marketInfo")).toContainText("BTCUSDC");
+  await expect(instructions.locator(".offerIdentity strong")).toContainText("BTCUSDC");
   await instructions.getByTestId("confirm-instruction-step").click();
   await expect(instructions.getByRole("heading", { name: "Convert USDC to USDT" })).toBeVisible();
-  await expect(instructions.locator(".marketInfo")).toContainText("USDCUSDT");
+  await expect(instructions.locator(".offerIdentity strong")).toContainText("USDCUSDT");
 });
 
 test("same asset on different networks reports unavailable bridge provider", async ({ page }) => {
@@ -2755,10 +2747,10 @@ test("same asset on the same network searches a cycle and displays both swap ste
   await expectNumberedTimeline(instructions, ["1", "2"]);
   await instructions.getByTestId("start-guide").click();
   await expect(instructions.getByRole("heading", { name: "Convert USDT in Ethereum (ERC-20) to USDC in Ethereum (ERC-20)" })).toBeVisible();
-  await expect(instructions.getByRole("link", { name: /Open CoW/ })).toBeVisible();
+  await expect(instructions.getByTestId("cow-swap-swap-card")).toBeVisible();
   await instructions.getByTestId("confirm-instruction-step").click();
   await expect(instructions.getByRole("heading", { name: "Convert USDC in Ethereum (ERC-20) to USDT in Ethereum (ERC-20)" })).toBeVisible();
-  await expect(instructions.getByRole("link", { name: /Open NEAR/ })).toBeVisible();
+  await expect(instructions.locator(".realAction")).toHaveCount(0);
 });
 
 test("spot crypto cycles show three trades and wallet deposit and withdrawal instructions", async ({ page }) => {
@@ -2779,12 +2771,12 @@ test("spot crypto cycles show three trades and wallet deposit and withdrawal ins
   const instructions = page.getByTestId("route-guide");
   await expectNumberedTimeline(instructions, ["1", "2", "3"]);
   await instructions.getByTestId("start-guide").click();
-  await expect(instructions.getByText("Spot · ETHUSDT", { exact: true })).toBeVisible();
-  await expect(instructions.getByText(/Deposit the source asset to this exchange/)).toBeVisible();
+  await expect(instructions.locator(".offerIdentity strong")).toHaveText("ETHUSDT");
+  await expect(instructions.locator(".realAction")).toHaveCount(0);
   await instructions.getByTestId("confirm-instruction-step").click();
-  await expect(instructions.getByRole("link", { name: /Open Bybit/, exact: true })).toHaveAttribute("href", "https://www.bybit.com/trade/spot/BTC/ETH");
+  await expect(instructions.locator(".offerIdentity strong")).toHaveText("BTCETH");
   await instructions.getByTestId("confirm-instruction-step").click();
-  await expect(instructions.getByText(/withdraw the original asset to your wallet/)).toBeVisible();
+  await expect(instructions.locator(".realAction")).toHaveCount(0);
   await expect(instructions).not.toContainText("Bybit P2P results");
 });
 
@@ -3129,7 +3121,7 @@ test("animated guide has inline actions, scene controls and fresh progress on ev
   await expect(guide.locator(".sceneCount")).toHaveText("02 / 04");
   await guide.getByRole("button", { name: "Previous scene", exact: true }).click();
   await expect(guide.locator(".sceneCount")).toHaveText("01 / 04");
-  await guide.getByRole("button", { name: "Scene 3: Make the payment" }).click();
+  await guide.getByRole("button", { name: "Scene 3: Close details and find the advertisement" }).click();
   await expect(guide.locator(".sceneCount")).toHaveText("03 / 04");
   await expect(chapters.nth(1)).toBeDisabled();
   await guide.getByRole("button", { name: "Replay walkthrough" }).click();
@@ -3180,7 +3172,7 @@ test("Russian guide supports reduced motion and accessible controls", async ({ p
   await expect(guide.locator("h1")).toHaveText("Понятный маршрут. В вашем темпе.");
   await guide.getByTestId("start-guide").click();
   await expect(guide.getByTestId("center-playback")).toHaveAccessibleName("Продолжить демонстрацию");
-  await guide.getByRole("button", { name: "Сцена 2: Проверьте условия" }).click();
+  await guide.getByRole("button", { name: "Сцена 2: Откройте «Подробнее»" }).click();
   await expect(guide.locator(".sceneCount")).toHaveText("02 / 04");
   await expect(guide.getByTestId("confirm-instruction-step")).toHaveText("Сделал, дальше →");
   const overflow = await guide.evaluate((element) => element.scrollWidth > element.clientWidth);
@@ -3222,8 +3214,8 @@ test("guide URL restores banks and selected operations in a fresh browser", asyn
   await expect(guide.locator("h1")).toHaveText("A clear route. At your pace.");
   await guide.getByTestId("start-guide").click();
   await expect(guide.locator(".headingVenue")).toContainText("Binance");
-  await guide.getByRole("button", { name: "Scene 3: Make the payment", exact: true }).click();
-  await expect(guide.locator(".paymentPreview")).toContainText("IDBank");
+  await guide.getByRole("button", { name: "Scene 3: Close details and find the advertisement", exact: true }).click();
+  await expect(guide.getByTestId("binance-profile-card").locator(".adSection.highlight .payment")).toHaveText("Bank transfer");
   await fresh.reload();
   await expect(guide.locator("h1")).toHaveText("A clear route. At your pace.");
   await expect(guide.locator(".chapterProgress strong")).toHaveText("0/2");
@@ -3232,6 +3224,8 @@ test("guide URL restores banks and selected operations in a fresh browser", asyn
   await guide.locator(".guideToolbar").getByRole("button", { name: /Back to routes/ }).click();
   await expect(fresh).toHaveURL(/#\/swap\/AMD\/RUB/);
   await expect(fresh.locator(".workspace")).toBeVisible();
+  await expect(fresh.getByRole("button", { name: /Select sending bank: IDBank/ })).toBeVisible();
+  await expect(fresh.getByRole("button", { name: /Select recipient bank: Alfa-Bank/ })).toBeVisible();
   await context.close();
   await page.goBack();
   await expect(page.getByTestId("route-guide")).toHaveCount(0);
@@ -3413,3 +3407,148 @@ test("guide suspends offscreen animation while scrolling", async ({ page, isMobi
   await expect(guide.locator(".checkpoint")).toHaveCount(0);
   await expect(page.locator(".appShell")).toHaveClass(/guideActive/);
 });
+
+
+test("Binance profile walkthrough opens More details, closes it and selects the route side", async ({ page }, testInfo) => {
+  await mockBackend(page, { guideVenue: "binance" });
+  await page.addInitScript(() => {
+    localStorage.setItem("pay3flow.exchange.source-method", "am-idbank");
+    localStorage.setItem("pay3flow.exchange.target-method", "ru-alfabank");
+  });
+  await openApp(page);
+  await page.getByLabel("Amount to send").fill("100000");
+  await page.getByTestId("complete-route").first().locator(".routeAmount").click();
+  const guide = page.getByTestId("route-guide");
+  await guide.getByTestId("start-guide").click();
+  const profile = guide.getByTestId("binance-profile-card");
+  await expect(profile).toHaveAttribute("data-side", "buy");
+  await guide.getByRole("button", { name: "Scene 2: Open More details", exact: true }).click();
+  await expect(profile.getByTestId("binance-details")).toContainText("Trade information");
+  await expect(profile.getByTestId("binance-details")).toContainText("99%");
+  await expect(profile).not.toContainText("Illustrative reviews");
+  const frozen = await profile.getAttribute("style");
+  await page.waitForTimeout(200);
+  await expect(profile).toHaveAttribute("style", frozen!);
+  await guide.getByTestId("instruction-scene").screenshot({ style: ".sceneOverlay { visibility: hidden; }", path: testInfo.outputPath("binance-details.png") });
+  await guide.getByRole("button", { name: "Scene 3: Close details and find the advertisement", exact: true }).click();
+  await expect(profile.getByTestId("binance-details")).toHaveCount(0);
+  await expect(profile.getByTestId("binance-trade-action")).toBeInViewport();
+  await expect(profile.locator(".tradeAction")).toHaveText(["Buy USDT", "Sell USDT"]);
+  await guide.getByRole("button", { name: "Scene 4: Press Buy USDT", exact: true }).click();
+  await expect(profile.getByTestId("binance-trade-action")).toHaveClass(/clicked/);
+  await guide.getByTestId("instruction-scene").screenshot({ style: ".sceneOverlay { visibility: hidden; }", path: testInfo.outputPath("binance-buy.png") });
+  await guide.getByTestId("confirm-instruction-step").click();
+  await guide.getByRole("button", { name: "Scene 4: Press Sell USDT", exact: true }).click();
+  await expect(profile.getByTestId("binance-trade-action")).toHaveText("Sell USDT");
+  await expect(profile.getByTestId("binance-trade-action")).toBeInViewport();
+  await expect(guide.locator(".paymentPreview, .realAction")).toHaveCount(0);
+});
+
+test("BestChange walkthrough reads reviews and ends at the contextual exchanger handoff", async ({ page }, testInfo) => {
+  await mockBackend(page, { guideVenue: "bestchange" });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.addInitScript(() => {
+    localStorage.setItem("pay3flow-locale", "ru");
+    localStorage.setItem("pay3flow.exchange.source-method", "am-idbank");
+    localStorage.setItem("pay3flow.exchange.target-method", "ru-alfabank");
+  });
+  await openApp(page);
+  await page.locator("#exchange-amount").fill("100000");
+  await page.getByTestId("complete-route").first().locator(".routeAmount").click();
+  const guide = page.getByTestId("route-guide");
+  await guide.getByTestId("start-guide").click();
+  const card = guide.getByTestId("bestchange-exchanger-card");
+  await expect(card).toContainText("ChangerBiz");
+  await expect(card.getByTestId("bestchange-direction")).toHaveText("AMDUSDT");
+  await guide.getByRole("button", { name: "Сцена 2: Посмотрите отзывы", exact: true }).click();
+  await expect(card.getByTestId("bestchange-reviews")).toBeInViewport();
+  await expect(card).toContainText("Прочитайте претензии и ответы обменника");
+  await guide.getByTestId("instruction-scene").screenshot({ style: ".sceneOverlay { visibility: hidden; }", path: testInfo.outputPath("bestchange-reviews.png") });
+  await guide.getByRole("button", { name: "Сцена 3: Вернитесь к обменнику", exact: true }).click();
+  await expect(card.getByTestId("bestchange-website-link")).toBeInViewport();
+  await guide.getByRole("button", { name: "Сцена 4: Перейдите на сайт обменника", exact: true }).click();
+  await expect(card).toHaveAttribute("data-handoff", "true");
+  await expect(card.getByTestId("bestchange-website-link")).toHaveText("Перейти на сайт ChangerBiz ↗");
+  await expect(guide.locator(".frameList")).toContainText("На этом переходе инструкция заканчивается");
+  await expect(guide.locator(".frameList")).not.toContainText("После продажи");
+  await expect(guide.locator(".paymentPreview, .realAction")).toHaveCount(0);
+  await guide.getByTestId("instruction-scene").screenshot({ style: ".sceneOverlay { visibility: hidden; }", path: testInfo.outputPath("bestchange-handoff.png") });
+});
+
+for (const provider of ["bncex", "bitcoin-center"]) {
+  test(`${provider} venue walkthrough selects the fiat buy direction and correct network`, async ({ page }, testInfo) => {
+    await mockBackend(page, { guideVenue: provider });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.addInitScript(() => {
+      localStorage.setItem("pay3flow.exchange.source-method", "am-idbank");
+      localStorage.setItem("pay3flow.exchange.target-method", "ru-alfabank");
+    });
+    await openApp(page);
+    await page.getByLabel("Amount to send").fill("100000");
+    await page.getByTestId("complete-route").first().locator(".routeAmount").click();
+    const guide = page.getByTestId("route-guide");
+    await guide.getByTestId("start-guide").click();
+    const card = guide.getByTestId(`${provider}-swap-card`);
+    await expect(card).toBeVisible();
+    await expect(card.getByTestId(`${provider}-send-amount`)).toHaveText("100,000");
+    await expect(card.locator('[data-side="send"]')).toContainText("AMD");
+    await expect(card.locator('[data-side="receive"]')).toContainText("USDT");
+    if (provider === "bitcoin-center") await expect(card.getByTestId(`${provider}-receive-network`)).toHaveText("Solana");
+    else await expect(card.locator(".buySell .active")).toHaveText("Buy");
+    await guide.getByRole("button", { name: "Scene 3: Check the amount you receive", exact: true }).click();
+    await expect(card.locator('[data-side="receive"]')).toHaveClass(/amountHighlight/);
+    await expect(card.getByTestId(`${provider}-receive-amount`)).toHaveText("—");
+    const action = provider === "bncex" ? "Continue" : "Sign in to continue";
+    await guide.getByRole("button", { name: `Scene 4: Press ${action}`, exact: true }).click();
+    await expect(card.getByTestId(`${provider}-exchange-action`)).toHaveText(action);
+    await expect(card.getByTestId(`${provider}-exchange-action`)).toHaveClass(/clicked/);
+    const size = await card.evaluate(element => ({ width: element.clientWidth, content: element.scrollWidth }));
+    expect(size.content).toBeLessThanOrEqual(size.width + 1);
+    const receive = await card.locator('[data-side="receive"]').boundingBox();
+    const actionBounds = await card.getByTestId(`${provider}-exchange-action`).boundingBox();
+    expect(receive!.y + receive!.height).toBeLessThan(actionBounds!.y);
+    await expect(guide.locator(".paymentPreview, .realAction")).toHaveCount(0);
+    await guide.getByTestId("instruction-scene").screenshot({ style: ".sceneOverlay { visibility: hidden; }", path: testInfo.outputPath(`${provider}.png`) });
+  });
+}
+
+for (const provider of ["symbiosis", "cow-swap", "dzengi"]) {
+  test(`${provider} venue walkthrough preserves crypto amounts and source and destination context`, async ({ page }, testInfo) => {
+    await mockBackend(page, { guideVenue: provider });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openApp(page);
+    const source = await chooseCrypto(page, "sending", "ETH Base");
+    await source.getByRole("option", { name: /Base.*ETH/ }).click();
+    const target = await chooseCrypto(page, "recipient", "USDT Polygon");
+    await target.getByRole("option", { name: /Polygon.*USDT/ }).click();
+    await page.getByLabel("Amount to send").fill("0.03");
+    await page.getByTestId("start-search").click();
+    await page.getByTestId("complete-route").first().locator(".routeAmount").click();
+    const guide = page.getByTestId("route-guide");
+    await guide.getByTestId("start-guide").click();
+    const card = guide.getByTestId(`${provider}-swap-card`);
+    await expect(card).toBeVisible();
+    await expect(card.getByTestId(`${provider}-send-amount`)).toHaveText("0.03");
+    await expect(card.getByTestId(`${provider}-receive-amount`)).toHaveText("80.1");
+    if (provider !== "dzengi") {
+      await expect(card.getByTestId(`${provider}-send-network`)).toHaveText("Base");
+      await expect(card.getByTestId(`${provider}-receive-network`)).toHaveText("Polygon");
+    } else {
+      await expect(card.locator('[data-side="send"]')).toContainText("ETH");
+      await expect(card.locator('[data-side="receive"]')).toContainText("USDT");
+    }
+    await guide.getByRole("button", { name: "Scene 3: Check the amount you receive", exact: true }).click();
+    await expect(card.locator('[data-side="receive"]')).toHaveClass(/amountHighlight/);
+    if (provider === "dzengi") await expect(guide.locator(".frameList")).toContainText("indicative quote");
+    const action = provider === "symbiosis" ? "Swap" : provider === "cow-swap" ? "Review swap" : "Convert";
+    await guide.getByRole("button", { name: `Scene 4: Press ${action}`, exact: true }).click();
+    await expect(card.getByTestId(`${provider}-exchange-action`)).toHaveText(action);
+    await expect(card.getByTestId(`${provider}-exchange-action`)).toHaveClass(/clicked/);
+    await expect(guide.locator(".realAction")).toHaveCount(0);
+    await expect(guide.getByTestId("route-wallet-execution")).toHaveCount(0);
+    await expect(guide.locator(".walletButton")).toHaveCount(0);
+    const size = await card.evaluate(element => ({ width: element.clientWidth, content: element.scrollWidth }));
+    expect(size.content).toBeLessThanOrEqual(size.width + 1);
+    await guide.getByTestId("instruction-scene").screenshot({ style: ".sceneOverlay { visibility: hidden; }", path: testInfo.outputPath(`${provider}.png`) });
+  });
+}

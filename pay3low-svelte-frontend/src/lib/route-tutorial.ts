@@ -1,5 +1,8 @@
 import type { P2pOffer, ProviderGuidance, RouteCandidate, ServiceLink } from "./exchange";
 import { buildWhitebirdFrames } from "./guides/whitebird/frames";
+import { buildBinanceProfileFrames } from "./guides/binance/frames";
+import { buildBestchangeFrames } from "./guides/bestchange/frames";
+import { buildVenueSwapFrames, swapGuideVenues } from "./guides/exchangers/frames";
 import { buildP2pProfileFrames } from "./guides/p2p/frames";
 
 export type TutorialKind = "buy" | "sell" | "swap" | "transfer";
@@ -17,6 +20,7 @@ export interface TutorialStep {
   amount?: string;
   output?: string;
   network?: string;
+  targetNetwork?: string;
   pair?: string;
   rate?: string;
   frames: TutorialFrame[];
@@ -63,7 +67,15 @@ export function buildRouteTutorial(route: RouteCandidate, names: Record<string, 
   const steps: TutorialStep[] = [];
   const add = (data: Omit<TutorialStep, "guideSteps" | "guide" | "notes"> & { guide?: ProviderGuidance; guideSteps?: string[]; notes?: string[] }) => {
     const guide = data.guide ?? guidance[data.provider.toLowerCase()];
-    const frames = data.provider.toLowerCase() === "whitebird" && data.kind !== "transfer" ? buildWhitebirdFrames(copy) : data.frames;
+    const key = data.provider.toLowerCase();
+    const frames = data.kind === "transfer" ? data.frames
+      : key === "bestchange" ? buildBestchangeFrames(data.from, data.to, copy)
+      : key === "whitebird" ? buildWhitebirdFrames(copy)
+      : swapGuideVenues.includes(key) ? buildVenueSwapFrames(data, copy) : data.frames;
+    if (key === "bestchange" && data.kind !== "transfer") {
+      data.checkpoint = copy("Once you open the exchanger website, this guide step is complete. Continue with the exchanger's instructions there.");
+      data.summary = copy("Read the exchanger's BestChange reviews, check your exchange direction and open its website.");
+    }
     steps.push({ ...data, frames, notes: data.notes ?? [], guide, guideSteps: data.guideSteps ?? guide?.steps ?? [] });
   };
   const swapFrames = (name: string, from: string, to: string) => [
@@ -86,7 +98,7 @@ export function buildRouteTutorial(route: RouteCandidate, names: Record<string, 
       add({ id: `cycle-${index}`, kind: "swap", provider: leg.provider, venue: name, from, to,
         title: copy("Convert {from} to {to}", { from: pathAsset(leg.from_asset), to: pathAsset(leg.to_asset) }),
         summary: copy("Route through {venue}", { venue: leg.description ? `${name} · ${leg.description}` : name }),
-        amount: `${leg.input_amount} ${from}`, output: `${leg.output_amount} ${to}`, network: network(leg.from_asset.split("@")[1]), pair: leg.market_pair ?? undefined,
+        amount: `${leg.input_amount} ${from}`, output: `${leg.output_amount} ${to}`, network: network(leg.from_asset.split("@")[1]), targetNetwork: network(leg.to_asset.split("@")[1]), pair: leg.market_pair ?? undefined,
         frames: swapFrames(name, pathAsset(leg.from_asset), pathAsset(leg.to_asset)), notes, checkpoint: receive,
         url: leg.source_url ?? (leg.market_pair ? spotTutorialUrl(leg.provider, leg.market_pair, from, to) : null), direct: true,
       });
@@ -104,7 +116,8 @@ export function buildRouteTutorial(route: RouteCandidate, names: Record<string, 
       summary: copy("Open the direct exchange on {venue}, check the final amount, and follow the provider's instructions.", { venue: name }),
       amount: !route.entry_offer_snapshot ? tutorialMoney(route.source_amount_minor, route.source_currency, route.source_amount) : undefined,
       output: !route.exit_offer_snapshot ? tutorialMoney(route.target_amount_minor, route.target_currency, route.target_amount) : undefined,
-      network: network(route.source_network ?? route.entry_network),
+      network: network(route.entry_offer_snapshot?.network ?? route.source_network ?? route.entry_network),
+      targetNetwork: network(route.exit_offer_snapshot?.network ?? route.target_network ?? route.entry_network),
       frames: [frame("open", "Open the exchange", copy("Open {venue}", { venue: name })),
         frame("verify", "Check the exchange", copy("Check which asset and network you send, and which asset and network you receive.")),
         frame("act", "Confirm on the platform", copy("Check the current rate, provider fee, quote expiry, and any address, memo, or tag requirement.")),
@@ -119,6 +132,9 @@ export function buildRouteTutorial(route: RouteCandidate, names: Record<string, 
     const market = route.market_path, name = venue(market.venue);
     const addMarket = (id: "market_source" | "market_target", from: string, to: string, pair: string, rate: string) => add({
       id, kind: "swap", provider: market.venue, venue: name, from, to, pair, rate,
+      amount: id === "market_source" ? tutorialMoney(route.source_amount_minor, from, route.source_amount) : market.intermediary_amount ? `${market.intermediary_amount} ${from}` : undefined,
+      output: id === "market_source" && route.bridge_currency ? market.intermediary_amount ? `${market.intermediary_amount} ${to}` : undefined : tutorialMoney(route.target_amount_minor, to, route.target_amount),
+      network: network(route.source_network ?? route.entry_network), targetNetwork: network(route.target_network ?? route.entry_network),
       title: copy("Convert {from} to {to}", { from, to }), summary: copy("This is a normal exchange on {venue}. There is no separate person to message.", { venue: name }),
       frames: swapFrames(name, from, to), checkpoint: receive,
       serviceLink: route.service_links?.find((link) => link.kind === id), url: spotTutorialUrl(market.venue, pair, from, to),
@@ -137,17 +153,18 @@ export function buildRouteTutorial(route: RouteCandidate, names: Record<string, 
     const to = directFiat ? route.target_currency ?? offer.fiat : side === "entry" ? crypto ? route.bridge_currency ?? route.entry_asset : offer.asset : route.target_currency ?? offer.fiat;
     const checkpoint = direct ? copy(buying || directFiat ? "After the exchange, check that the new balance is available before continuing." : "After the sale, check that the money has arrived in your account before considering the exchange finished.") : buying ? copy("After the exchange, check that the new balance is available before continuing.") : copy("Release the asset only after you personally see the payment in your bank or payment account.");
     const guide = guidance[provider.toLowerCase()];
+    const binanceP2p = provider.toLowerCase() === "binance" && !direct;
     const profileP2p = ["bybit", "mexc"].includes(provider.toLowerCase()) && !direct;
     const profileVenue = provider.toLowerCase() === "mexc" ? "MEXC" : "Bybit";
     add({ id: side, kind: buying ? "buy" : "sell", provider, venue: name, from, to, offer, direct, guide,
       title: directFiat ? copy("Transfer {from} to {to} via {venue}", { from: route.source_currency, to: route.target_currency ?? "", venue: name })
         : side === "entry" ? (crypto ? copy("Sell {asset} for {amount}", { asset: route.source_currency, amount: route.bridge_currency ?? route.entry_asset }) : copy("Buy {asset} for {amount}", { asset: offer.asset, amount: tutorialMoney(route.source_amount_minor, route.source_currency, route.source_amount) }))
         : crypto ? copy("Buy {asset} with {bridge}", { asset: route.target_currency ?? "", bridge: route.bridge_currency ?? route.entry_asset }) : copy("Sell {asset} for {amount}", { asset: offer.asset, amount: tutorialMoney(route.target_amount_minor, route.target_currency, route.target_amount) }),
-      summary: profileP2p ? copy("Open the advertiser's {venue} profile, read the reviews and choose the advertisement for your exchange.", { venue: profileVenue }) : direct ? copy("Open the direct exchange on {venue}, check the final amount, and follow the provider's instructions.", { venue: name }) : copy("Open the P2P listing on {venue}. Check the offer inside the platform before placing an order.", { venue: name }),
+      summary: binanceP2p ? copy("Open the Binance advertiser profile, inspect More details and choose the advertisement for your exchange.") : profileP2p ? copy("Open the advertiser's {venue} profile, read the reviews and choose the advertisement for your exchange.", { venue: profileVenue }) : direct ? copy("Open the direct exchange on {venue}, check the final amount, and follow the provider's instructions.", { venue: name }) : copy("Open the P2P listing on {venue}. Check the offer inside the platform before placing an order.", { venue: name }),
       amount: side === "entry" ? tutorialMoney(route.source_amount_minor, route.source_currency, route.source_amount) : undefined,
       output: side === "exit" || directFiat ? tutorialMoney(route.target_amount_minor, route.target_currency, route.target_amount) : undefined,
-      network: network(side === "entry" ? route.source_network ?? route.entry_network : route.target_network ?? route.entry_network),
-      frames: profileP2p ? buildP2pProfileFrames(profileVenue, buying, offer.asset, offer.fiat, copy) : [frame("open", direct ? "Open the exchange" : "Find the offer", direct ? copy("Check the currencies, amount, current rate, fee, and limits before continuing.") : copy("Before creating the order, compare the nickname and advertisement ID.")),
+      network: network(offer.network ?? (side === "entry" ? route.source_network ?? route.entry_network : route.target_network ?? route.entry_network)),
+      frames: binanceP2p ? buildBinanceProfileFrames(buying, offer.asset, offer.fiat, copy) : profileP2p ? buildP2pProfileFrames(profileVenue, buying, offer.asset, offer.fiat, copy) : [frame("open", direct ? "Open the exchange" : "Find the offer", direct ? copy("Check the currencies, amount, current rate, fee, and limits before continuing.") : copy("Before creating the order, compare the nickname and advertisement ID.")),
         frame("verify", "Check the exchange", copy("Check the current rate, order limits, and payment method on {venue}.", { venue: name })),
         frame("act", buying ? "Make the payment" : "Wait for the payment", direct ? copy("Sign in or complete verification on {venue}, if it asks you to, then follow the payment instructions shown there.", { venue: name }) : buying ? copy("Use only the payment details shown inside the order. After sending, mark the order as paid.") : checkpoint),
         frame("receive", "Check your balance", direct && !buying ? copy("After the sale, check that the money has arrived in your account before considering the exchange finished.") : checkpoint)],

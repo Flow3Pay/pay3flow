@@ -6,9 +6,9 @@
   import { fiatFlagUrl } from "$lib/currency-flags";
   import { assetIcon, venueIcon } from "$lib/icons";
   import { guideSharePath } from "$lib/guide-link";
-  import AdvertiserCard from "./AdvertiserCard.svelte";
+  // import AdvertiserCard from "./AdvertiserCard.svelte";
   import ExternalReviews from "./ExternalReviews.svelte";
-  import RouteExecutionPanel from "./RouteExecutionPanel.svelte";
+  // import RouteExecutionPanel from "./RouteExecutionPanel.svelte";
   import InstructionScene from "./InstructionScene.svelte";
 
   export let route: RouteCandidate;
@@ -16,6 +16,7 @@
   export let providerGuidance: Record<string, ProviderGuidance> = {};
   export let networkNames: Record<string, string> = {};
   export let onClose: () => void;
+  // svelte-ignore export_let_unused
   export let onOpenService: (link: ServiceLink) => void = () => {};
 
   let tab: "guide" | "reviews" = "guide";
@@ -43,7 +44,7 @@
     observer.observe(node);
     return { destroy() { observer.disconnect(); } };
   }
-  $: frameDuration = step?.offer && !step.direct && ["bybit", "mexc"].includes(step.provider.toLowerCase()) ? 5200 : 6500;
+  $: frameDuration = step?.offer && !step.direct && ["bybit", "mexc", "binance"].includes(step.provider.toLowerCase()) ? 5200 : 6500;
   $: language = $locale;
   $: copy = (key: string, params: Record<string, string | number> = {}) => t(key, params, language);
   $: steps = buildRouteTutorial(route, venueNames, providerGuidance, networkNames, copy);
@@ -204,6 +205,7 @@
               {/if}
             </section>
           </div>
+          <!-- Actual platform actions are paused for now.
           {#if step}
             <section class="realAction" aria-label={copy("On the actual platform")}>
               {#if step.offer}<AdvertiserCard offer={step.offer} label={step.direct ? copy("Direct exchange on {venue}", { venue: step.venue }) : `${copy(step.kind === "buy" ? "Seller" : "Buyer")} ${copy("on {venue}", { venue: step.venue })}`} serviceLink={step.serviceLink} {venueNames} {onOpenService} />
@@ -215,6 +217,7 @@
 
             </section>
           {/if}
+          -->
           {#if chapter === -1}
             <div class="routeNotice"><img class="beforeIcon" src="/icons/ui/guide-before.svg" alt="" width="24" height="24" /><div><strong>{copy("Before you begin")}</strong><p>{copy("Rates, limits, and offers can change. Check the provider, payment details, and network before sending money. Pay3Flow does not create orders or move money.")}</p>{#if route.source_bank_fee_percent != null}<p>{copy("Bank fees:")} {route.source_payment_method ?? route.source_currency}: {route.source_bank_fee_percent}%</p>{/if}{#if route.target_bank_fee_percent != null}<p>{copy("Bank fees:")} {route.target_payment_method ?? route.target_currency}: {route.target_bank_fee_percent}%</p>{/if}{#each route.warnings ?? [] as warning}<p>{warn(warning)}</p>{/each}</div></div>
           {/if}
@@ -251,7 +254,7 @@
   .frameList { display: grid; gap: 7px; margin-top: 15px; }.frameList button { display: flex; align-items: flex-start; width: 100%; gap: 11px; text-align: left; padding: 13px 12px; border: 1px solid transparent; border-radius: 11px; transition: background .3s, border-color .3s; }.frameList button.selected { border-color: var(--color-border); background: var(--color-paper); }.frameNumber { flex: 0 0 22px; margin-top: 2px; font: 10px var(--font-mono); color: var(--color-text-faint); }.selected .frameNumber { color: var(--color-accent-text); }.frameList strong { font-size: 12px; font-weight: 750; line-height: 1.5; }.frameText { display: block; color: var(--color-text-soft); font-size: 11px; line-height: 1.8; margin-top: 5px; }.frameIndicator { font-size: 15px; color: var(--color-accent-text); margin-left: auto; }
   .checkpoint { display: flex; gap: 10px; padding: 17px; background: var(--color-accent-soft); border: 1px solid var(--color-border); border-radius: 11px; margin-top: 19px; }.checkpoint > span { color: var(--color-accent-text); font-size: 18px; }.checkpoint strong { font-size: 11px; }.checkpoint p { font-size: 11px; line-height: 1.8; margin-top: 5px; color: var(--color-text-soft); }
   .playerControls { display: flex; align-items: center; gap: 10px; padding: 8px 4px; margin-top: 5px; }.playerControls > button { display: grid; place-items: center; font-size: 17px; color: var(--color-text-soft); width: 32px; height: 32px; }.playerTimeline { display: flex; gap: 4px; flex: 1; }.playerTimeline button { position: relative; flex: 1; min-width: 0; height: 32px; background: transparent; }.playerTimeline button::before { content: ""; position: absolute; left: 0; right: 0; height: 3px; top: 15px; border-radius: 3px; background: var(--color-border); }.playerTimeline button > span { position: absolute; top: 15px; left: 0; height: 3px; border-radius: 3px; background: var(--color-accent-text); transition: width .1s linear; }.sceneCount { white-space: nowrap; font: 9px var(--font-mono); color: var(--color-text-soft); }
-  .realAction { padding: 22px; margin-top: 28px; border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-paper); }.platformLink { display: flex; align-items: center; justify-content: space-between; gap: 18px; width: fit-content; min-height: 44px; padding: 0 16px; background: var(--color-accent); color: #152016; border-radius: 10px; font-size: 12px; font-weight: 750; }.platformLink:hover { background: #c3ff22; }.platformLink > span { font-size: 19px; }.marketInfo { margin-top: 14px; font-size: 12px; font-family: var(--font-mono); }.marketInfo > span { display: block; font-family: var(--font-sans); margin-top: 5px; color: var(--color-text-soft); }
+  /* .realAction { padding: 22px; margin-top: 28px; border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-paper); }.platformLink { display: flex; align-items: center; justify-content: space-between; gap: 18px; width: fit-content; min-height: 44px; padding: 0 16px; background: var(--color-accent); color: #152016; border-radius: 10px; font-size: 12px; font-weight: 750; }.platformLink:hover { background: #c3ff22; }.platformLink > span { font-size: 19px; }.marketInfo { margin-top: 14px; font-size: 12px; font-family: var(--font-mono); }.marketInfo > span { display: block; font-family: var(--font-sans); margin-top: 5px; color: var(--color-text-soft); } */
   .guideLinks { display: flex; flex-wrap: wrap; gap: 15px; margin-top: 13px; }.guideLinks a { text-decoration: underline; text-underline-offset: 3px; }
   .routeNotice { display: flex; align-items: flex-start; gap: 12px; margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--color-border); color: var(--color-text-soft); font-size: 11px; line-height: 1.9; }.routeNotice > span { font-size: 18px; }.routeNotice strong { color: var(--color-text); font-size: 11px; }.routeNotice p { margin-top: 5px; }.finishChecklist { margin-top: 22px; display: grid; gap: 17px; }.finishChecklist > div { display: flex; gap: 11px; font-size: 12px; line-height: 1.7; }.finishChecklist > div > span { color: var(--color-accent-text); }
   .guideActions { margin-top: 32px; display: flex; justify-content: flex-end; align-items: center; padding: 20px 0; border-top: 1px solid var(--color-border); }.footerActions { display: flex; align-items: center; gap: 24px; }.backButton { font-size: 12px; color: var(--color-text-soft); }.continueButton { display: flex; align-items: center; justify-content: space-between; gap: 35px; min-height: 47px; padding: 0 21px; border-radius: 10px; background: var(--color-accent); color: #152016; font-size: 13px; font-weight: 800; }.continueButton > span { font-size: 22px; font-weight: 400; }.continueButton:hover { background: #c3ff22; }.continueButton:disabled { opacity: .5; cursor: default; }
@@ -270,7 +273,7 @@
   @media (max-width: 1100px) { .guideLayout { grid-template-columns: 205px minmax(0,1fr); }.chapters { padding-left: 0; padding-right: 18px; }.guideMain { padding-left: 27px; padding-right: 0; }.chapterContent { gap: 20px; grid-template-columns: minmax(0,1fr) minmax(235px,.85fr); }.guideHeader { padding-left: 24px; padding-right: 24px; } }
   @media (max-width: 900px) and (min-width: 761px) { .guideLayout { grid-template-columns: 170px minmax(0,1fr); }.chapters { padding-left: 0; padding-right: 12px; }.chapterContent { grid-template-columns: minmax(0,1fr); }.guideMain { padding-left: 25px; padding-right: 0; }.frameList { grid-template-columns: 1fr 1fr; } }
   @media (max-width: 760px) {
-    .guideLayout { display: block; padding-inline: 0; }.guideToolbar { padding: 8px 18px; }.reviewsTab { width: auto; flex: 0 0 auto; margin: 0; min-height: 44px; white-space: nowrap; }.reviewsTab > span:last-child { display: none; }.chapters { padding: 15px 18px; border-right: 0; border-bottom: 1px solid var(--color-border); }.chapters > .eyebrow, .routePair, .chapterCopy { display: none; }.chapters { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px; }.chapterProgress, .reviewsTab { grid-column: 1 / -1; }.chapterProgress { margin-top: 4px; padding-top: 14px; }.chapterProgress p { display: none; }.reviewsTab { width: 100%; }.overviewButton { flex: 0 0 auto; width: auto; margin: 0; padding: 7px 10px; font-size: 11px; }.chapters ol { display: flex; gap: 8px; margin: 0; overflow-x: auto; }.chapters li:not(:last-child)::after { display: none; }.chapters li button { padding: 5px; min-width: 44px; min-height: 44px; display: grid; place-items: center; }.stepNumber { width: 29px; height: 29px; }.guideMain { padding: 26px 18px 32px; }h1 { margin-top: 13px; font-size: 33px; }.lead { font-size: 12px; line-height: 1.85; margin-top: 11px; }.chapterContent { grid-template-columns: minmax(0,1fr); gap: 25px; margin-top: 23px; }.planItem { margin-top: 21px; }.estimate { margin-top: 24px; }.frameList button { padding: 12px 10px; }.frameText { font-size: 12px; }.frameList strong { font-size: 13px; }.checkpoint p { font-size: 12px; }.realAction { padding: 17px; margin-top: 24px; }.routeNotice { font-size: 11px; }
+    .guideLayout { display: block; padding-inline: 0; }.guideToolbar { padding: 8px 18px; }.reviewsTab { width: auto; flex: 0 0 auto; margin: 0; min-height: 44px; white-space: nowrap; }.reviewsTab > span:last-child { display: none; }.chapters { padding: 15px 18px; border-right: 0; border-bottom: 1px solid var(--color-border); }.chapters > .eyebrow, .routePair, .chapterCopy { display: none; }.chapters { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px; }.chapterProgress, .reviewsTab { grid-column: 1 / -1; }.chapterProgress { margin-top: 4px; padding-top: 14px; }.chapterProgress p { display: none; }.reviewsTab { width: 100%; }.overviewButton { flex: 0 0 auto; width: auto; margin: 0; padding: 7px 10px; font-size: 11px; }.chapters ol { display: flex; gap: 8px; margin: 0; overflow-x: auto; }.chapters li:not(:last-child)::after { display: none; }.chapters li button { padding: 5px; min-width: 44px; min-height: 44px; display: grid; place-items: center; }.stepNumber { width: 29px; height: 29px; }.guideMain { padding: 26px 18px 32px; }h1 { margin-top: 13px; font-size: 33px; }.lead { font-size: 12px; line-height: 1.85; margin-top: 11px; }.chapterContent { grid-template-columns: minmax(0,1fr); gap: 25px; margin-top: 23px; }.planItem { margin-top: 21px; }.estimate { margin-top: 24px; }.frameList button { padding: 12px 10px; }.frameText { font-size: 12px; }.frameList strong { font-size: 13px; }.checkpoint p { font-size: 12px; }/* .realAction { padding: 17px; margin-top: 24px; } */.routeNotice { font-size: 11px; }
     .guideActions { padding: 18px 0 max(18px, env(safe-area-inset-bottom)); gap: 12px; }.footerActions { justify-content: space-between; width: 100%; gap: 14px; }.continueButton { min-height: 48px; flex: 1; justify-content: center; gap: 23px; }.backButton { flex: 0 0 auto; font-size: 11px; }.playerControls > button { min-width: 44px; min-height: 44px; }.playerTimeline button { min-width: 0; }
   }
   @media (prefers-reduced-motion: reduce) { .guidePage, .chapterEntrance { animation: none; } }

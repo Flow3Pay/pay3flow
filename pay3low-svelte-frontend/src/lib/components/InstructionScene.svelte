@@ -36,7 +36,7 @@
     {#if p2pCard}
       <svelte:component this={p2pCard} {route} {step} {frame} {playing} {progress} />
     {:else if swapCard}
-      <svelte:component this={swapCard} {route} {step} {frame} {playing} />
+      <svelte:component this={swapCard} {route} {step} {frame} {playing} {...(step.provider.toLowerCase() === "whitebird" ? {} : { progress })} />
     {:else}
     <div class="browser" class:transfer={step.kind === "transfer"}>
       <div class="browserChrome"><div><i></i><i></i><i></i></div><span>{step.venue}</span><span>↗</span></div>
