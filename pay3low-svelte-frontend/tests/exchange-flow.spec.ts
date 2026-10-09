@@ -2417,8 +2417,29 @@ test("Bybit P2P walkthrough reviews the profile and selects the route's buy or s
   await expect(profile.getByTestId("bybit-advertiser")).toHaveText("bybit-merchant");
   await expect(profile).toHaveAttribute("data-side", "buy");
   await expect(profile.getByTestId("bybit-trade-action")).toHaveText("Buy USDC");
-  await expect(profile.locator(".bybitNav small")).toHaveText("USDC / AMD");
+  await expect(profile.locator(".profileIcon")).toBeVisible();
+  await expect(profile.locator(".bybitNav small, .adsBottom small")).toHaveCount(0);
+  await expect(profile.locator(".adPrice")).toContainText("AMD");
   await expect(guide.locator(".playerTimeline button")).toHaveCount(4);
+
+  // Sample rendered positions to catch the original 10 fps cursor stutter.
+  const cursorMotion = await profile.locator(".cursorTrack").evaluate(async element => {
+    const positions = new Set<string>();
+    const start = performance.now();
+    let samples = 0;
+    await new Promise<void>(resolve => {
+      function sample(now: number) {
+        positions.add(getComputedStyle(element).transform);
+        samples += 1;
+        if (now - start >= 600) resolve();
+        else requestAnimationFrame(sample);
+      }
+      requestAnimationFrame(sample);
+    });
+    return { changes: positions.size, samples };
+  });
+  expect(cursorMotion.changes).toBeGreaterThan(10);
+  expect(cursorMotion.changes / cursorMotion.samples).toBeGreaterThan(.6);
 
   // The first scene really scrolls the profile, and pausing freezes its clock.
   await expect.poll(() => profile.evaluate(element => Number.parseFloat(getComputedStyle(element).getPropertyValue("--scroll")))).toBeGreaterThan(.05);
@@ -2430,7 +2451,7 @@ test("Bybit P2P walkthrough reviews the profile and selects the route's buy or s
   await guide.getByRole("button", { name: "Scene 2: Read the reviews", exact: true }).click();
   await expect(profile.getByTestId("bybit-review-panel")).toBeVisible();
   await expect(profile.getByTestId("bybit-ads-panel")).toHaveCount(0);
-  await expect(profile.locator(".profileTabs > .active")).toHaveText("Review(538)");
+  await expect(profile.locator(".profileTabs > .active")).toHaveText("Reviews");
   await expect(profile.getByTestId("bybit-review-panel")).toContainText("Illustrative reviews");
   await page.mouse.move(0, 0);
   await scene.screenshot({ style: ".sceneOverlay { visibility: hidden; }", path: testInfo.outputPath("bybit-reviews.png") });
@@ -2447,7 +2468,7 @@ test("Bybit P2P walkthrough reviews the profile and selects the route's buy or s
   await guide.getByTestId("confirm-instruction-step").click();
   await scene.scrollIntoViewIfNeeded();
   await expect(profile).toHaveAttribute("data-side", "sell");
-  await expect(profile.locator(".bybitNav small")).toHaveText("USDC / RUB");
+  await expect(profile.locator(".adPrice")).toContainText("RUB");
   await guide.getByRole("button", { name: "Scene 3: Return to Ads", exact: true }).click();
   await expect(guide.locator(".frameList")).toContainText("sell USDC for RUB");
   await guide.getByRole("button", { name: "Scene 4: Press Sell USDC", exact: true }).click();

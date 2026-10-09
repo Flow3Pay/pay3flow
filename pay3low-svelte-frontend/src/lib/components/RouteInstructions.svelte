@@ -96,10 +96,11 @@
     return exchanger ? copy("Quoted exchanger: {description}.", { description: exchanger[1] }) : copy(warning);
   }
   onMount(() => {
+    let previousTick: number | undefined;
     const media = matchMedia("(prefers-reduced-motion: reduce)");
     const motionChanged = () => { reducedMotion = media.matches; if (reducedMotion) playing = false; };
     motionChanged(); media.addEventListener("change", motionChanged);
-    const visibilityChanged = () => documentVisible = !document.hidden;
+    const visibilityChanged = () => { documentVisible = !document.hidden; previousTick = undefined; };
     visibilityChanged(); document.addEventListener("visibilitychange", visibilityChanged);
     const keyboard = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !document.querySelector('[aria-modal="true"]')) { event.preventDefault(); onClose(); }
@@ -107,18 +108,21 @@
     };
     document.addEventListener("keydown", keyboard);
     heading?.focus({ preventScroll: true });
-    let previousTick = performance.now();
-    const timer = setInterval(() => {
-      const now = performance.now(), delta = Math.min(now - previousTick, 500); previousTick = now;
-      if (!playing || !documentVisible || !sceneVisible || !step) return;
+    let animationId: number;
+    const advance = (now: number) => {
+      animationId = requestAnimationFrame(advance);
+      if (!playing || !documentVisible || !sceneVisible || !step) { previousTick = undefined; return; }
+      const delta = previousTick === undefined ? 0 : Math.min(now - previousTick, 100);
+      previousTick = now;
       elapsed = Math.min(FRAME_DURATION, elapsed + delta);
       if (elapsed >= FRAME_DURATION) {
         if (frame < step.frames.length - 1) { frame += 1; elapsed = 0; }
         else playing = false;
       }
-    }, 100);
+    };
+    animationId = requestAnimationFrame(advance);
     return () => {
-      clearInterval(timer);
+      cancelAnimationFrame(animationId);
       document.removeEventListener("keydown", keyboard);
       document.removeEventListener("visibilitychange", visibilityChanged);
       media.removeEventListener("change", motionChanged);

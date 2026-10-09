@@ -14,9 +14,9 @@ const messages: Record<Locale, Record<string, string>> = {
   },
   ru: {
     "Open the advertiser profile": "Откройте профиль контрагента",
-    "The link opens the advertiser's Bybit profile. Check the nickname and scroll down to Ads and Review.": "Ссылка ведёт в профиль автора объявления на Bybit. Сверьте никнейм и прокрутите страницу вниз к Ads и Review.",
+    "The link opens the advertiser's Bybit profile. Check the nickname and scroll down to Ads and Reviews.": "Ссылка ведёт в профиль автора объявления на Bybit. Сверьте никнейм и прокрутите страницу вниз к Ads и Reviews.",
     "Read the reviews": "Посмотрите отзывы",
-    "Open Review and read the counterparty's feedback before choosing an advertisement.": "Откройте Review и прочитайте отзывы о контрагенте перед выбором объявления.",
+    "Open Reviews and read the counterparty's feedback before choosing an advertisement.": "Откройте Reviews и прочитайте отзывы о контрагенте перед выбором объявления.",
     "Return to Ads": "Вернитесь к Ads",
     "Return to Ads and find the offer to buy {asset} with {fiat}. Compare the price, limits and payment method with your route.": "Вернитесь к Ads и найдите покупку {asset} за {fiat}. Сверьте курс, лимиты и способ оплаты с вашим маршрутом.",
     "Return to Ads and find the offer to sell {asset} for {fiat}. Compare the price, limits and payment method with your route.": "Вернитесь к Ads и найдите продажу {asset} за {fiat}. Сверьте курс, лимиты и способ оплаты с вашим маршрутом.",
@@ -514,9 +514,9 @@ const messages: Record<Locale, Record<string, string>> = {
   },
   hy: {
     "Open the advertiser profile": "Բացեք հայտարարատուի պրոֆիլը",
-    "The link opens the advertiser's Bybit profile. Check the nickname and scroll down to Ads and Review.": "Հղումը բացում է հայտարարատուի Bybit պրոֆիլը։ Ստուգեք մականունը և ոլորեք ներքև՝ դեպի Ads և Review։",
+    "The link opens the advertiser's Bybit profile. Check the nickname and scroll down to Ads and Reviews.": "Հղումը բացում է հայտարարատուի Bybit պրոֆիլը։ Ստուգեք մականունը և ոլորեք ներքև՝ դեպի Ads և Reviews։",
     "Read the reviews": "Կարդացեք կարծիքները",
-    "Open Review and read the counterparty's feedback before choosing an advertisement.": "Բացեք Review և կարդացեք գործարքի մյուս կողմի մասին կարծիքները՝ նախքան հայտարարություն ընտրելը։",
+    "Open Reviews and read the counterparty's feedback before choosing an advertisement.": "Բացեք Reviews և կարդացեք գործարքի մյուս կողմի մասին կարծիքները՝ նախքան հայտարարություն ընտրելը։",
     "Return to Ads": "Վերադարձեք Ads",
     "Return to Ads and find the offer to buy {asset} with {fiat}. Compare the price, limits and payment method with your route.": "Վերադարձեք Ads և գտեք {asset} գնելու առաջարկը {fiat}-ով։ Համեմատեք գինը, սահմանաչափերը և վճարման եղանակը ձեր երթուղու հետ։",
     "Return to Ads and find the offer to sell {asset} for {fiat}. Compare the price, limits and payment method with your route.": "Վերադարձեք Ads և գտեք {asset} վաճառելու առաջարկը {fiat}-ով։ Համեմատեք գինը, սահմանաչափերը և վճարման եղանակը ձեր երթուղու հետ։",
