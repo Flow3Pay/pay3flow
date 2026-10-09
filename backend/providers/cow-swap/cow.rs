@@ -473,6 +473,8 @@ impl CowRouteProvider {
             sell_token,
             buy_token,
             sell_amount,
+            sell_token_decimals: sell.decimals,
+            buy_token_decimals: buy.decimals,
             expected_output,
             expected_fee: fee_amount,
             quote,

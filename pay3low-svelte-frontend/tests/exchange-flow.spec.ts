@@ -2269,13 +2269,13 @@ test("direct provider quotes keep their API names and independent prices", async
   await cards.nth(0).locator(".routeAmount").click();
   let instructions = page.getByTestId("route-guide");
   await instructions.getByTestId("start-guide").click();
-  await expect(instructions.getByTestId("route-wallet-execution")).toHaveCount(0);
-  await expect(instructions.getByRole("button", { name: "Connect ethereum wallet" })).toHaveCount(0);
+  await expect(instructions.getByTestId("route-wallet-execution")).toBeVisible();
+  await expect(instructions.getByRole("button", { name: "Connect ethereum wallet" })).toBeVisible();
   await instructions.locator(".guideToolbar").getByRole("button", { name: /Back to routes/ }).click();
   await cards.nth(1).locator(".routeAmount").click();
   instructions = page.getByTestId("route-guide");
   await instructions.getByTestId("start-guide").click();
-  await expect(instructions.getByTestId("route-wallet-execution")).toHaveCount(0);
+  await expect(instructions.getByTestId("route-wallet-execution")).toBeVisible();
 });
 
 test("ID Pay provides a direct AMD to RUB route with its API name", async ({ page }) => {
@@ -2325,7 +2325,7 @@ test("small AMD to BTC@near routes keep crypto precision", async ({ page }) => {
   await expect(instructions.getByRole("heading", { name: "Buy USDT for 10,000 AMD" })).toBeVisible();
   await instructions.getByTestId("confirm-instruction-step").click();
   await expect(instructions.getByRole("heading", { name: "Swap USDT for BTC via NEAR 1Click" })).toBeVisible();
-  await expect(instructions.getByRole("button", { name: "Connect optimism wallet" })).toHaveCount(0);
+  await expect(instructions.getByRole("button", { name: "Connect optimism wallet" })).toBeVisible();
 });
 
 test("direct Whitebird exchange uses its swap card, provider wording and local venue icons", async ({ page }, testInfo) => {
@@ -2789,12 +2789,13 @@ test("header and footer align with the workspace and mobile controls remain reac
     const layout = await page.evaluate(() => {
       const rect = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
       const header = rect(".header .inner"), workspace = rect(".workspace"), footer = rect(".siteFooter");
-      return { headerLeft: header.left, headerRight: header.right, workspaceLeft: workspace.left, workspaceRight: workspace.right, footerLeft: footer.left, footerRight: footer.right };
+      return { headerLeft: header.left, headerRight: header.right, workspaceLeft: workspace.left, workspaceRight: workspace.right, footerLeft: footer.left, footerRight: footer.right, brandRight: rect(".wordmark").right, walletLeft: rect(".walletToggle").left };
     });
     expect(Math.abs(layout.headerLeft - layout.workspaceLeft)).toBeLessThan(1);
     expect(Math.abs(layout.headerRight - layout.workspaceRight)).toBeLessThan(1);
     expect(Math.abs(layout.footerLeft - layout.workspaceLeft)).toBeLessThan(1);
     expect(Math.abs(layout.footerRight - layout.workspaceRight)).toBeLessThan(1);
+    expect(layout.brandRight).toBeLessThanOrEqual(layout.walletLeft);
     await expect(page.locator(".header .inner")).toHaveCSS("box-shadow", "none");
     await expect(page.locator(".card")).toHaveCSS("box-shadow", "none");
     if (isMobile) {

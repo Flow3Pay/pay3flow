@@ -199,7 +199,7 @@ export interface RouteExecutionDescriptor {
 
 export type RouteExecutionAction =
   | { kind: "near_deposit"; network: string; asset: string; amount: string; deposit_address: string; deposit_memo?: string; asset_id: string; decimals?: number; token_contract?: string; expected_output?: string }
-  | { kind: "cow_order"; chain: string; chain_id: number; api_url: string; sell_token: string; buy_token: string; sell_amount: string; expected_output?: string; quote: Record<string, unknown> }
+  | { kind: "cow_order"; chain: string; chain_id: number; api_url: string; sell_token: string; buy_token: string; sell_amount: string; sell_token_decimals?: number | null; buy_token_decimals?: number | null; expected_output?: string; quote: Record<string, unknown> }
   | { kind: "symbiosis_transaction"; chain_id: number; source_token: string; input_amount: string; expected_output?: string; approval_spender?: string; transaction: Record<string, unknown> };
 
 export interface RouteExecution {

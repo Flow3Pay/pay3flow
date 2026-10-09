@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "start": "node server.mjs",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "test:unit": "node --test --experimental-strip-types tests/response-metrics.test.ts",
+    "test:unit": "node --test --experimental-strip-types tests/response-metrics.test.ts tests/wallet-amount.test.ts",
     "test:e2e": "playwright test"
   },
   "devDependencies": {

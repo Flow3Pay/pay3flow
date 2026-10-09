@@ -26,9 +26,9 @@ description = "Symbiosis returns route and network fees with each live cross-cha
 docs_url = "https://api.symbiosis.finance/crosschain/docs/"
 
 [guidance]
-description = "Cross-chain swap estimate. Pay3Flow does not connect your wallet or submit the transaction: open Symbiosis, verify the route, and approve the swap in your wallet."
+description = "Cross-chain swap estimate. Eligible routes can be signed with your connected wallet in Pay3Flow; otherwise open Symbiosis to execute the selected pair."
 steps = [
-  "Open Symbiosis and connect the wallet that holds the source asset.",
+  "Connect the wallet that holds the source asset in the swap step, or open Symbiosis for routes without wallet execution.",
   "Select the exact source and destination assets and networks shown in this route.",
   "Check the amount received, slippage, provider fee, network fee, quote expiry, and the destination wallet address.",
   "Submit the swap only after checking the network one more time, then wait for the destination transaction to complete.",

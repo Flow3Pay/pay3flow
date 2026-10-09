@@ -47,6 +47,12 @@ cow_quote_address = "0x0000000000000000000000000000000000000001"
 symbiosis_url = "https://api.symbiosis.finance/crosschain"
 symbiosis_quote_address = "0x0000000000000000000000000000000000000001"
 symbiosis_slippage_bps = 300
+
+wallet_execution_enabled = true
+# Only explicitly configured Symbiosis routers and approval gateways may execute.
+symbiosis_execution_contracts = [
+  "728126428=0x0863786bbf4561f4a2a8be5a9ddf152afd8ae25c,0x49e1816a2cf475515e7c80c9f0f0e16ae499198b",
+]
 ```
 
 The TOML schema rejects unknown keys. This intentionally prevents credentials
@@ -81,9 +87,29 @@ deployment that handles real users or funds.
 | `route_*` | Fiat, asset, withdrawal, and route-depth capabilities |
 | `cow_*` | Optional CoW same-chain quote endpoints and token metadata |
 | `symbiosis_*` | Symbiosis cross-chain quote endpoint, preview address, and slippage |
+| `wallet_execution_enabled` | Attach executable descriptors to supported wallet routes; set false to disable new execution quotes |
 
 Use TOML arrays for lists; the old comma-separated environment variables are no
 longer configuration inputs.
+
+## Wallet swaps
+
+The frontend connects injected Ethereum wallets, NEAR Wallet Selector wallets,
+and TronLink on mainnet. Connections are shared between the header and route
+instructions. The optional frontend `PUBLIC_REOWN_PROJECT_ID` enables the Reown
+wallet picker; injected Ethereum wallets work without it.
+
+NEAR Intents execution supports deposits from the supported EVM networks, NEAR,
+and TRON. CoW execution is limited to supported same-chain ERC20 pairs.
+Symbiosis execution requires a source-chain entry in
+`symbiosis_execution_contracts`, formatted as `chain-id=router,gateway`; NEAR
+origins and destinations use NEAR Intents. The repository configuration includes
+the TRON and supported EVM Symbiosis contracts. Other routes continue to use provider instructions.
+
+Quotes use live token precision and expire. Source and recipient addresses are
+validated for their respective networks. Wallet account or network changes
+invalidate prepared signing actions. After broadcast, the browser retains the
+reference so tracking can resume without signing again.
 
 ## Production rules
 

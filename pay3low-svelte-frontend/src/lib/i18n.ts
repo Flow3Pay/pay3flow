@@ -1,4 +1,5 @@
 import { get, writable } from "svelte/store";
+import { walletMessages } from "./wallet-messages";
 import { guideMessages } from "./guides/messages";
 
 export type Locale = "en" | "ru" | "hy";
@@ -8,12 +9,14 @@ const supportedLocales: Locale[] = ["en", "ru", "hy"];
 
 const messages: Record<Locale, Record<string, string>> = {
   en: {
+    ...walletMessages.en,
     "Whitebird sell": "Sell",
     "Whitebird receive": "Receive",
     "Whitebird exchange": "Exchange",
     "Whitebird verification required": "Exchange is available to verified users",
   },
   ru: {
+    ...walletMessages.ru,
     ...guideMessages.ru,
     "Open the advertiser profile": "Откройте профиль контрагента",
     "The link opens the advertiser's {venue} profile. Check the nickname and scroll down to Ads and Reviews.": "Ссылка ведёт в профиль автора объявления на {venue}. Сверьте никнейм и прокрутите страницу вниз к Ads и Reviews.",
@@ -521,6 +524,7 @@ const messages: Record<Locale, Record<string, string>> = {
     "Approval confirmed. Review and sign the refreshed swap transaction.": "Разрешение подтверждено. Проверьте и подпишите обновлённую транзакцию обмена.",
   },
   hy: {
+    ...walletMessages.hy,
     ...guideMessages.hy,
     "Open the advertiser profile": "Բացեք հայտարարատուի պրոֆիլը",
     "The link opens the advertiser's {venue} profile. Check the nickname and scroll down to Ads and Reviews.": "Հղումը բացում է հայտարարատուի {venue} պրոֆիլը։ Ստուգեք մականունը և ոլորեք ներքև՝ դեպի Ads և Reviews։",

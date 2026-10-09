@@ -2,6 +2,7 @@ use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -27,6 +28,8 @@ pub enum RouteExecutionError {
     InvalidToken,
     #[error("unsupported executable route")]
     UnsupportedRoute,
+    #[error("invalid wallet address for the selected network")]
+    InvalidAddress,
     #[error("invalid execution amount")]
     InvalidAmount,
     #[error("route execution was not found")]
@@ -120,6 +123,10 @@ pub enum ExecutionAction {
         buy_token: String,
         sell_amount: String,
         #[serde(default)]
+        sell_token_decimals: Option<u8>,
+        #[serde(default)]
+        buy_token_decimals: Option<u8>,
+        #[serde(default)]
         expected_output: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         expected_fee: Option<ExecutionFee>,
@@ -202,10 +209,9 @@ impl RouteExecutionService {
         let Some(provider) = route.route_provider.as_deref() else {
             return;
         };
-        // Symbiosis remains discoverable as a quote provider, but production
-        // execution requires deployment-owned contract allowlists that are not
-        // currently configured.
-        if !matches!(provider, "near-intents") && !(provider == "cow-swap" && self.cow.is_some()) {
+        if !matches!(provider, "near-intents" | "symbiosis")
+            && !(provider == "cow-swap" && self.cow.is_some())
+        {
             return;
         }
         let assets = route
@@ -221,6 +227,18 @@ impl RouteExecutionService {
             return;
         };
         if from_asset == to_asset {
+            return;
+        }
+        let Some((from, to)) = Asset::parse(from_asset)
+            .ok()
+            .zip(Asset::parse(to_asset).ok())
+        else {
+            return;
+        };
+        if !supported_wallet_network(from.location.as_deref().unwrap_or_default())
+            || !supported_wallet_network(to.location.as_deref().unwrap_or_default())
+            || (provider == "symbiosis" && !self.symbiosis.supports_wallet_execution(&from, &to))
+        {
             return;
         }
         // Bridge and native-asset orders use CoW Swap's execution flow.
@@ -291,6 +309,17 @@ impl RouteExecutionService {
         let from =
             Asset::parse(&claims.from_asset).map_err(|_| RouteExecutionError::InvalidToken)?;
         let to = Asset::parse(&claims.to_asset).map_err(|_| RouteExecutionError::InvalidToken)?;
+        validate_wallet_address(
+            from.location.as_deref().unwrap_or_default(),
+            &request.source_address,
+        )?;
+        validate_wallet_address(
+            to.location.as_deref().unwrap_or_default(),
+            &request.recipient,
+        )?;
+        if let Some(refund) = &request.refund_to {
+            validate_wallet_address(from.location.as_deref().unwrap_or_default(), refund)?;
+        }
         let amount = Amount::new(input_amount.clone(), from.clone())
             .map_err(|_| RouteExecutionError::InvalidAmount)?;
         let (action, provider_reference, quote_expires_at) = match claims.provider.as_str() {
@@ -362,6 +391,8 @@ impl RouteExecutionService {
                         sell_token: quote.sell_token,
                         buy_token: quote.buy_token,
                         sell_amount: quote.sell_amount,
+                        sell_token_decimals: Some(quote.sell_token_decimals),
+                        buy_token_decimals: Some(quote.buy_token_decimals),
                         expected_output: quote.expected_output,
                         expected_fee: quote.expected_fee.map(|amount| ExecutionFee {
                             asset: fee_asset,
@@ -454,27 +485,42 @@ VALUES ($1, $2, $3, $4, $5, 'awaiting_signature', $6, $7, $8, $9, $10, $11, $12,
                     SubmissionKind::TransactionHash
                 )
         );
-        if !valid_kind || current.status != "awaiting_signature" {
+        if !valid_kind {
+            return Err(RouteExecutionError::InvalidSubmission);
+        }
+        if current.submitted_reference.as_deref() == Some(reference) {
+            return self.get(id, request.anonymous_id).await;
+        }
+        if current.status != "awaiting_signature" {
             return Err(RouteExecutionError::InvalidSubmission);
         }
         let client = self.pool.get().await?;
-        client
+        let updated = client
             .execute(
                 r#"
 UPDATE route_executions
 SET status = 'submitted', submitted_reference = $3, updated_at = now()
-WHERE id = $1 AND anonymous_id = $2
+WHERE id = $1 AND anonymous_id = $2 AND status = 'awaiting_signature'
 "#,
                 &[&id, &request.anonymous_id, &reference],
             )
             .await?;
+        if updated == 0 {
+            let stored = self.get_stored(id, request.anonymous_id).await?;
+            if stored.submitted_reference.as_deref() == Some(reference) {
+                return self.get(id, request.anonymous_id).await;
+            }
+            return Err(RouteExecutionError::InvalidSubmission);
+        }
         if let ExecutionAction::NearDeposit {
-            deposit_address, ..
+            deposit_address,
+            deposit_memo,
+            ..
         } = &current.action
         {
             if let Err(error) = self
                 .near
-                .submit_deposit_tx(reference, deposit_address)
+                .submit_deposit_tx_with_memo(reference, deposit_address, deposit_memo.as_deref())
                 .await
             {
                 tracing::warn!(
@@ -659,6 +705,51 @@ fn canonical_decimal(value: &str) -> Option<String> {
     })
 }
 
+fn supported_wallet_network(network: &str) -> bool {
+    matches!(
+        network,
+        "ethereum"
+            | "gnosis"
+            | "arbitrum-one"
+            | "base"
+            | "polygon-pos"
+            | "avalanche-c"
+            | "bnb-smart-chain"
+            | "optimism"
+            | "near"
+            | "tron"
+    )
+}
+
+fn validate_wallet_address(network: &str, address: &str) -> Result<(), RouteExecutionError> {
+    let valid = match network {
+        "near" => {
+            (2..=64).contains(&address.len())
+                && address.bytes().all(|byte| {
+                    byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"._-".contains(&byte)
+                })
+                && address.split(['.', '_', '-']).all(|part| !part.is_empty())
+        }
+        "tron" => bs58::decode(address).into_vec().is_ok_and(|bytes| {
+            bytes.len() == 25
+                && bytes[0] == 0x41
+                && Sha256::digest(Sha256::digest(&bytes[..21]))[..4] == bytes[21..]
+        }),
+        evm if supported_wallet_network(evm) => {
+            address.len() == 42
+                && address.starts_with("0x")
+                && address[2..].bytes().all(|byte| byte.is_ascii_hexdigit())
+                && address[2..].bytes().any(|byte| byte != b'0')
+        }
+        _ => false,
+    };
+    if valid {
+        Ok(())
+    } else {
+        Err(RouteExecutionError::InvalidAddress)
+    }
+}
+
 fn first_string(value: &Value, keys: &[&str]) -> Option<String> {
     keys.iter().find_map(|key| {
         value
@@ -710,6 +801,83 @@ fn raw_status(status: &str) -> &'static str {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn wallet_addresses_are_checked_against_the_actual_chain() {
+        for (network, address, valid) in [
+            (
+                "ethereum",
+                "0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+                true,
+            ),
+            (
+                "ethereum",
+                "0x0000000000000000000000000000000000000000",
+                false,
+            ),
+            ("ethereum", "alice.near", false),
+            ("near", "alice.near", true),
+            ("near", "alice..near", false),
+            ("near", "-alice.near", false),
+            ("near", "ALICE.near", false),
+            ("tron", "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", true),
+            ("tron", "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6u", false),
+            ("tron", "0x8ba1f109551bD432803012645Ac136ddd64DBA72", false),
+            ("unsupported", "alice.near", false),
+        ] {
+            assert_eq!(
+                validate_wallet_address(network, address).is_ok(),
+                valid,
+                "{network}: {address}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn execution_descriptors_require_supported_wallets_and_symbiosis_contracts() {
+        let mut config = deadpool_postgres::Config::new();
+        config.url = Some("postgres://localhost/not-used".into());
+        let pool = config
+            .create_pool(
+                Some(deadpool_postgres::Runtime::Tokio1),
+                tokio_postgres::NoTls,
+            )
+            .unwrap();
+        let symbiosis = SymbiosisRouteProvider::new("https://example.test", None, "preview", 300).unwrap()
+            .with_execution_contracts(&["728126428=0x0863786bbf4561f4a2a8be5a9ddf152afd8ae25c,0x49e1816a2cf475515e7c80c9f0f0e16ae499198b".into()]).unwrap();
+        let service = RouteExecutionService::new(
+            pool,
+            "test-secret",
+            true,
+            NearIntentsProvider::new("https://example.test", None).unwrap(),
+            None,
+            symbiosis,
+        );
+        for (provider, from, to, executable) in [
+            ("near-intents", "USDT@tron", "USDC@near", true),
+            ("near-intents", "USDT@near", "USDC@ethereum", true),
+            ("near-intents", "USDT@solana", "USDC@ethereum", false),
+            ("symbiosis", "USDT@tron", "USDC@ethereum", true),
+            ("symbiosis", "USDT@ethereum", "TRX@tron", false),
+            ("symbiosis", "USDT@tron", "USDC@near", false),
+            ("cow-swap", "USDT@ethereum", "USDC@ethereum", false),
+        ] {
+            let mut route: P2pRoute = serde_json::from_value(json!({
+                "route_id": "test-route", "rank": 1, "asset": "USDT", "source_fiat": "USDT", "source_amount": "10",
+                "acquired_asset_amount": "10", "target_fiat": "USDC", "target_amount": "9", "effective_rate": "0.9",
+                "same_venue": true, "requires_asset_transfer": true, "transfer_fee_included": true,
+                "route_kind": "crypto_to_crypto", "payment_methods_verified": false, "warnings": [],
+                "route_provider": provider, "route_path": [from, to],
+            })).unwrap();
+            route.provider_input_amount = Some("10".into());
+            service.attach_descriptor(&mut route);
+            assert_eq!(
+                route.execution.is_some(),
+                executable,
+                "{provider}: {from} -> {to}"
+            );
+        }
+    }
 
     #[test]
     fn provider_statuses_map_to_terminal_execution_states() {

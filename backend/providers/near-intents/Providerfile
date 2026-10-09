@@ -229,13 +229,18 @@ impl NearIntentsProvider {
     }
 
     pub async fn submit_deposit_tx(&self, tx_hash: &str, deposit_address: &str) -> Result<()> {
+        self.submit_deposit_tx_with_memo(tx_hash, deposit_address, None).await
+    }
+
+    pub async fn submit_deposit_tx_with_memo(&self, tx_hash: &str, deposit_address: &str, deposit_memo: Option<&str>) -> Result<()> {
+        let mut body = json!({ "txHash": tx_hash, "depositAddress": deposit_address });
+        if let Some(memo) = deposit_memo {
+            body["depositMemo"] = json!(memo);
+        }
         let mut request = self
             .client
             .post(self.endpoint("deposit/submit"))
-            .json(&json!({
-                "txHash": tx_hash,
-                "depositAddress": deposit_address,
-            }));
+            .json(&body);
         if let Some(jwt) = &self.jwt {
             request = request.bearer_auth(jwt);
         }
@@ -491,7 +496,7 @@ description = "Fees and the guaranteed output are returned by each live NEAR Int
 docs_url = "https://docs.near-intents.org/near-intents"
 
 [guidance]
-description = "Check the current NEAR Intents quote and destination before sending funds."
+description = "Eligible swaps can be funded in Pay3Flow from Ethereum, NEAR, or TRON wallets. Check the fresh NEAR Intents quote and destination before confirming the deposit in your wallet."
 
 [[guidance.review_sources]]
 kind = "trustpilot"

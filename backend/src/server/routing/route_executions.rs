@@ -80,6 +80,7 @@ fn map_error(error: RouteExecutionError) -> AppError {
         RouteExecutionError::Disabled => AppError::NotImplemented(error.to_string()),
         RouteExecutionError::InvalidToken
         | RouteExecutionError::UnsupportedRoute
+        | RouteExecutionError::InvalidAddress
         | RouteExecutionError::InvalidAmount
         | RouteExecutionError::InvalidSubmission => AppError::BadRequest(error.to_string()),
         RouteExecutionError::Internal(error) => AppError::Internal(error),

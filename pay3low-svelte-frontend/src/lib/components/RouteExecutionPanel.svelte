@@ -4,10 +4,10 @@
   import { getAnonymousUserId } from "$lib/anonymous-user";
   import { createRouteExecution, fetchRouteExecution, submitRouteExecution, type RouteCandidate, type RouteExecution } from "$lib/exchange";
   import { locale, t } from "$lib/i18n";
-  import { connectForNetwork, hasExecutionFunds, prepareWalletAction, walletFamily, type ConnectedWallet, type PreparedWalletAction } from "$lib/wallet-execution";
+  import { hasExecutionFunds, prepareWalletAction, validateRecipient, walletFamily, type ConnectedWallet, type PreparedWalletAction } from "$lib/wallet-execution";
+  import { wallets, connectWallet, restoreWallets } from "$lib/wallet-session";
 
   export let route: RouteCandidate;
-
   let sourceWallet: ConnectedWallet | null = null;
   let recipientWallet: ConnectedWallet | null = null;
   let recipientMode: "connected" | "manual" | null = null;
@@ -21,271 +21,271 @@
   let notice = "";
   let fundTimer: ReturnType<typeof setInterval> | null = null;
   let statusTimer: ReturnType<typeof setInterval> | null = null;
+  let checkingFunds = false;
+  let checkingStatus = false;
   let ownerId = "";
+  let revision = 0;
+  let mounted = false;
+  let disposed = false;
+  let previousIdentity = "";
+  let pendingSubmission: { reference: string; kind: "transaction_hash" | "order_uid" } | null = null;
+  let quoteRequestKey: string | null = null;
   const STORAGE_PREFIX = "pay3flow.route-execution.";
 
   $: descriptor = route.execution;
   $: sourceNetwork = descriptor?.from_asset.split("@", 2)[1]?.toLowerCase() ?? "";
   $: destinationNetwork = descriptor?.to_asset.split("@", 2)[1]?.toLowerCase() ?? "";
-  $: sourceSupported = Boolean(walletFamily(sourceNetwork));
+  $: sourceFamily = walletFamily(sourceNetwork);
+  $: destinationFamily = walletFamily(destinationNetwork);
+  $: sourceSupported = Boolean(sourceFamily);
+  $: sourceWallet = sourceFamily ? $wallets[sourceFamily] ?? null : null;
+  $: recipientWallet = recipientMode === "connected" && destinationFamily ? $wallets[destinationFamily] ?? null : null;
   $: recipient = recipientMode === "connected" ? recipientWallet?.address ?? "" : manualRecipient.trim();
   $: copy = (key: string, params: Record<string, string | number> = {}) => t(key, params, $locale);
+  $: identity = `${route.route_id}:${sourceWallet?.address ?? ""}:${sourceWallet?.family === "evm" ? sourceWallet.chainId : ""}:${recipient}`;
+  $: if (mounted && identity !== previousIdentity) {
+    previousIdentity = identity;
+    revision += 1;
+    autoPrompt = false;
+    fundsReady = false;
+    preparedAction = null;
+    quoteRequestKey = null;
+    if (fundTimer) clearInterval(fundTimer);
+    fundTimer = null;
+
+  }
 
   function shortAddress(value: string) {
     return value.length > 18 ? `${value.slice(0, 8)}…${value.slice(-6)}` : value;
   }
-
   function quoteExpiry(value: string) {
     return new Date(value).toLocaleTimeString($locale, { hour: "2-digit", minute: "2-digit" });
   }
-
   function executionOwner(): string {
     if (!ownerId) ownerId = getAnonymousUserId() ?? crypto.randomUUID();
     return ownerId;
   }
-
-  function storageKey(): string {
-    return `${STORAGE_PREFIX}${route.route_id}`;
-  }
-
+  function storageKey(): string { return `${STORAGE_PREFIX}${route.route_id}`; }
   function rememberExecution(value: RouteExecution) {
-    try {
-      localStorage.setItem(storageKey(), JSON.stringify({ id: value.id, owner: executionOwner() }));
-    } catch {
-      // Persistence is optional in private browsing mode.
-    }
+    try { localStorage.setItem(storageKey(), JSON.stringify({ id: value.id, owner: executionOwner(), submission: pendingSubmission })); } catch { /* Optional persistence. */ }
   }
-
   function forgetExecution() {
-    try {
-      localStorage.removeItem(storageKey());
-    } catch {
-      // Persistence is optional in private browsing mode.
-    }
+    try { localStorage.removeItem(storageKey()); } catch { /* Optional persistence. */ }
   }
-
   function startStatusPolling() {
     if (statusTimer) clearInterval(statusTimer);
-    statusTimer = setInterval(() => void updateStatus(), 4_000);
+    if (!disposed) statusTimer = setInterval(() => void updateStatus(), 4_000);
   }
+  function message(cause: unknown) { return cause instanceof Error ? cause.message : "Wallet operation failed"; }
 
   async function connectSource() {
-    if (!descriptor || !sourceSupported) return;
+    if (!descriptor || !sourceSupported || busy || pendingSubmission || execution?.status === "submitted") return;
     busy = true;
     error = "";
-    notice = "";
     try {
-      const connected = await connectForNetwork(sourceNetwork);
-      const retained = execution && execution.source_address.toLowerCase() === connected.address.toLowerCase();
+      const connected = await connectWallet(sourceNetwork);
+      if (disposed) return;
       sourceWallet = connected;
-      if (retained) {
-        await updateFunds();
-        autoPrompt = true;
-        if (fundsReady) {
-          autoPrompt = false;
-          await signAndSubmit();
-        } else if (!fundTimer) {
-          fundTimer = setInterval(() => void updateFunds(), 5_000);
-        }
-      } else {
-        execution = null;
-        preparedAction = null;
-        fundsReady = false;
-        forgetExecution();
-        const recipientFamily = walletFamily(destinationNetwork);
-        if (recipientFamily === connected.family) {
-          recipientWallet = connected;
-          recipientMode = "connected";
-          await beginAutomaticSwap();
-        } else {
-          recipientWallet = null;
-          recipientMode = "manual";
-        }
-      }
-    } catch (cause) {
-      error = cause instanceof Error ? cause.message : "Wallet connection failed";
-    } finally {
-      busy = false;
-    }
+      if (destinationFamily === connected.family || (destinationFamily && $wallets[destinationFamily])) recipientMode = "connected";
+      else recipientMode = "manual";
+      // Let shared session and recipient changes invalidate the old preparation.
+      const { tick } = await import("svelte");
+      await tick();
+    } catch (cause) { error = message(cause); }
+    finally { busy = false; }
+    if (sourceWallet && recipient && !error && !disposed) await beginAutomaticSwap();
   }
 
   async function chooseConnectedRecipient() {
-    recipientMode = "connected";
+    if (busy || !destinationFamily || pendingSubmission || execution?.status === "submitted") return;
     busy = true;
     error = "";
-    notice = "";
     try {
-      if (sourceWallet && walletFamily(destinationNetwork) === sourceWallet.family) {
-        recipientWallet = sourceWallet;
-      } else {
-        recipientWallet = await connectForNetwork(destinationNetwork);
-      }
-      execution = null;
-      preparedAction = null;
-      forgetExecution();
-      await beginAutomaticSwap();
-    } catch (cause) {
-      recipientWallet = null;
-      error = cause instanceof Error ? cause.message : "Recipient wallet connection failed";
-    } finally {
-      busy = false;
-    }
+      // Connecting a destination EVM wallet must not switch the source chain.
+      if (!$wallets[destinationFamily]) await connectWallet(destinationNetwork);
+      recipientMode = "connected";
+      const { tick } = await import("svelte");
+      await tick();
+    } catch (cause) { error = message(cause); }
+    finally { busy = false; }
+    if (!error && !disposed) await beginAutomaticSwap();
   }
-
   function chooseManualRecipient() {
+    if (busy || pendingSubmission || execution?.status === "submitted") return;
     recipientMode = "manual";
-    recipientWallet = null;
     manualRecipient = "";
     execution = null;
     preparedAction = null;
+    autoPrompt = false;
     forgetExecution();
     error = "";
     notice = "";
   }
-
   function recipientChanged() {
-    execution = null;
-    preparedAction = null;
-    forgetExecution();
-    if (sourceWallet && recipient) void beginAutomaticSwap();
+    if (sourceWallet && recipient && !busy) void beginAutomaticSwap();
+  }
+
+  async function prepareQuote(version: number): Promise<boolean> {
+    if (!descriptor || !sourceWallet || !recipient || pendingSubmission || execution?.status === "submitted") return false;
+    const wallet = sourceWallet;
+    await validateRecipient(sourceNetwork, wallet.address);
+    await validateRecipient(destinationNetwork, recipient);
+    quoteRequestKey ??= crypto.randomUUID();
+    const value = await createRouteExecution({
+      anonymousId: executionOwner(), routeToken: descriptor.token,
+      sourceAddress: wallet.address, recipient, refundTo: wallet.address,
+      amount: descriptor.input_amount, slippageBps: 100, idempotencyKey: quoteRequestKey,
+    });
+    if (version !== revision || disposed) return false;
+    execution = value;
+    rememberExecution(value);
+    const prepared = await prepareWalletAction(value, wallet);
+    if (version !== revision || disposed) return false;
+    preparedAction = prepared;
+    if (prepared.expectedOutput) value.expected_output = prepared.expectedOutput;
+    if (prepared.expectedFee) value.expected_fee = prepared.expectedFee;
+    if (prepared.expiresAt) value.quote_expires_at = prepared.expiresAt;
+    fundsReady = await hasExecutionFunds(value, wallet);
+    return version === revision && !disposed;
   }
 
   async function beginAutomaticSwap() {
-    if (!descriptor || !sourceWallet || !recipient) return;
-    autoPrompt = true;
-    await prepare();
-    if (execution && fundsReady) {
-      autoPrompt = false;
-      await signAndSubmit();
-    }
-  }
-
-  async function prepare() {
-    if (!descriptor || !sourceWallet || !recipient) return;
+    if (busy || pendingSubmission || execution?.status === "submitted" || !sourceWallet || !recipient || disposed) return;
+    const { tick } = await import("svelte");
+    await tick();
+    if (busy || disposed) return;
     busy = true;
     error = "";
     notice = "";
-    stopTimers();
+    quoteRequestKey = null;
+    autoPrompt = true;
+    const version = revision;
     try {
-      execution = await createRouteExecution({
-        anonymousId: executionOwner(),
-        routeToken: descriptor.token,
-        sourceAddress: sourceWallet.address,
-        recipient,
-        refundTo: sourceWallet.address,
-        amount: descriptor.input_amount,
-        slippageBps: 100,
-        idempotencyKey: crypto.randomUUID(),
-      });
-      rememberExecution(execution);
-      preparedAction = await prepareWalletAction(execution, sourceWallet);
-      if (preparedAction.expectedOutput) execution.expected_output = preparedAction.expectedOutput;
-      execution.expected_fee = preparedAction.expectedFee;
-      if (preparedAction.expiresAt) execution.quote_expires_at = preparedAction.expiresAt;
-      await updateFunds();
-      if (!fundsReady) fundTimer = setInterval(() => void updateFunds(), 5_000);
-    } catch (cause) {
-      error = cause instanceof Error ? cause.message : "Executable quote failed";
-    } finally {
-      busy = false;
-    }
+      if (fundTimer) clearInterval(fundTimer);
+      fundTimer = null;
+      if (!await prepareQuote(version)) { autoPrompt = false; return; }
+      if (fundsReady) await signPrepared(version);
+      else fundTimer = setInterval(() => void updateFunds(), 5_000);
+    } catch (cause) { error = message(cause); autoPrompt = false; }
+    finally { busy = false; }
   }
 
   async function updateFunds() {
-    if (!execution || !sourceWallet) return;
+    if (!execution || !sourceWallet || checkingFunds || busy || disposed || execution.status !== "awaiting_signature") return;
+    checkingFunds = true;
+    const version = revision;
     try {
-      fundsReady = await hasExecutionFunds(execution, sourceWallet);
-      if (fundsReady && fundTimer) {
-        clearInterval(fundTimer);
-        fundTimer = null;
+      const ready = await hasExecutionFunds(execution, sourceWallet);
+      if (version !== revision || disposed) return;
+      fundsReady = ready;
+      if (ready && fundTimer) { clearInterval(fundTimer); fundTimer = null; }
+      if (ready && autoPrompt) await signAndSubmit();
+    } catch (cause) { error = message(cause); autoPrompt = false; }
+    finally { checkingFunds = false; }
+  }
+
+  async function recordSubmission() {
+    if (!execution || !pendingSubmission) return;
+    execution = await submitRouteExecution(execution.id, executionOwner(), pendingSubmission.reference, pendingSubmission.kind);
+    pendingSubmission = null;
+    rememberExecution(execution);
+    startStatusPolling();
+  }
+
+  async function signPrepared(version: number) {
+    autoPrompt = false;
+    for (let approvals = 0; approvals < 4; approvals += 1) {
+      if (!execution || !sourceWallet || version !== revision || disposed) return;
+      if (Date.parse(execution.quote_expires_at) <= Date.now() + 5_000) {
+        quoteRequestKey = null;
+        if (!await prepareQuote(version) || !fundsReady) return;
       }
-      if (fundsReady && autoPrompt && !busy) {
-        autoPrompt = false;
-        void signAndSubmit();
+      if (!preparedAction) preparedAction = await prepareWalletAction(execution, sourceWallet);
+      if (version !== revision || disposed) return;
+      const signingExecution = execution;
+      // The callback is already signed, even if the account changes meanwhile.
+      const submitted = await preparedAction.submit();
+      if (submitted.kind === "approval_confirmed") {
+        quoteRequestKey = null;
+        preparedAction = null;
+        notice = copy("Approval confirmed. Review and sign the refreshed swap transaction.");
+        if (version !== revision || disposed || !await prepareQuote(version) || !fundsReady) return;
+        continue;
       }
-    } catch (cause) {
-      error = cause instanceof Error ? cause.message : "Balance check failed";
+      execution = signingExecution;
+      pendingSubmission = submitted;
+      preparedAction = null;
+      rememberExecution(signingExecution);
+      await recordSubmission();
+      return;
     }
+    throw new Error("Approval did not make the token available. Retry the swap.");
   }
 
   async function signAndSubmit() {
-    if (!execution || !sourceWallet || !descriptor) return;
+    if (busy || disposed) return;
     busy = true;
     error = "";
-    notice = "";
     try {
-      const refreshBuffer = execution.provider === "symbiosis" ? 25_000 : 30_000;
-      if (Date.parse(execution.quote_expires_at) <= Date.now() + refreshBuffer) {
-        await prepare();
-        if (!execution || !fundsReady) return;
-      }
-      if (!preparedAction) {
-        preparedAction = await prepareWalletAction(execution, sourceWallet);
-        if (preparedAction.expectedOutput) execution.expected_output = preparedAction.expectedOutput;
-        execution.expected_fee = preparedAction.expectedFee;
-        if (preparedAction.expiresAt) execution.quote_expires_at = preparedAction.expiresAt;
-      }
-      const submitted = await preparedAction.submit();
-      if (submitted.kind === "approval_confirmed") {
-        await prepare();
-        notice = copy("Approval confirmed. Review and sign the refreshed swap transaction.");
-        return;
-      }
-      execution = await submitRouteExecution(execution.id, executionOwner(), submitted.reference, submitted.kind);
-      preparedAction = null;
-      rememberExecution(execution);
-      startStatusPolling();
-    } catch (cause) {
-      error = cause instanceof Error ? cause.message : "Wallet rejected or failed to submit the operation";
-    } finally {
-      busy = false;
-    }
+      if (pendingSubmission) await recordSubmission();
+      else await signPrepared(revision);
+    } catch (cause) { error = message(cause); autoPrompt = false; }
+    finally { busy = false; }
   }
 
   async function updateStatus() {
-    if (!execution || execution.status !== "submitted") return;
+    if (!execution || execution.status !== "submitted" || checkingStatus || disposed) return;
+    checkingStatus = true;
     try {
       execution = await fetchRouteExecution(execution.id, executionOwner());
       rememberExecution(execution);
-      if (["completed", "failed", "cancelled", "expired", "refunded", "stuck"].includes(execution.status) && statusTimer) {
-        clearInterval(statusTimer);
-        statusTimer = null;
-      }
-    } catch (cause) {
-      error = cause instanceof Error ? cause.message : "Unable to refresh execution status";
-    }
+      if (execution.status !== "submitted" && statusTimer) { clearInterval(statusTimer); statusTimer = null; }
+    } catch (cause) { error = message(cause); }
+    finally { checkingStatus = false; }
   }
 
   onMount(() => {
-    try {
-      const raw = localStorage.getItem(storageKey());
-      if (!raw) return;
-      const saved = JSON.parse(raw) as { id?: string; owner?: string };
-      if (!saved.id || !saved.owner) return;
-      ownerId = saved.owner;
-      void fetchRouteExecution(saved.id, ownerId)
-        .then((restored) => {
-          if (restored.route_id !== route.route_id) return;
-          execution = restored;
-          preparedAction = null;
-          recipientMode = "manual";
-          manualRecipient = restored.recipient;
-          if (restored.status === "submitted") startStatusPolling();
-        })
-        .catch(() => forgetExecution());
-    } catch {
-      forgetExecution();
-    }
+    mounted = true;
+    previousIdentity = identity;
+    void restoreWallets();
+    void (async () => {
+      try {
+        const raw = localStorage.getItem(storageKey());
+        if (!raw) return;
+        const saved = JSON.parse(raw) as { id?: string; owner?: string; submission?: typeof pendingSubmission };
+        if (!saved.id || !saved.owner) return;
+        busy = true;
+        ownerId = saved.owner;
+        const restored = await fetchRouteExecution(saved.id, ownerId);
+        if (disposed || restored.route_id !== route.route_id) return;
+        execution = restored;
+        manualRecipient = restored.recipient;
+        recipientMode = "manual";
+        pendingSubmission = saved.submission ?? null;
+        const callback = new URL(window.location.href);
+        const redirectExecution = callback.searchParams.get("pay3flow_execution");
+        const hash = callback.searchParams.get("transactionHashes");
+        if (redirectExecution === restored.id && hash && /^[1-9A-HJ-NP-Za-km-z]{32,64}$/.test(hash)) {
+          pendingSubmission = { reference: hash, kind: "transaction_hash" };
+          rememberExecution(restored);
+        }
+        if (redirectExecution === restored.id) {
+          if (callback.searchParams.has("errorCode")) error = callback.searchParams.get("errorMessage") ?? "NEAR wallet cancelled the transaction";
+          for (const key of ["pay3flow_execution", "transactionHashes", "errorCode", "errorMessage"]) callback.searchParams.delete(key);
+          history.replaceState(history.state, "", callback);
+        }
+        if (restored.status === "submitted") { pendingSubmission = null; startStatusPolling(); }
+        else if (pendingSubmission) await recordSubmission();
+      } catch (cause) { error = message(cause); }
+      finally { busy = false; }
+    })();
   });
-
-  function stopTimers() {
+  onDestroy(() => {
+    disposed = true;
+    revision += 1;
     if (fundTimer) clearInterval(fundTimer);
     if (statusTimer) clearInterval(statusTimer);
-    fundTimer = null;
-    statusTimer = null;
-  }
-
-  onDestroy(stopTimers);
+  });
 </script>
 
 {#if descriptor}
@@ -295,23 +295,23 @@
       <p class="muted">{copy("Embedded execution does not yet support a wallet for {network}. Open the provider manually for this route.", { network: sourceNetwork })}</p>
     {:else}
       <div class="walletRow">
-        <button type="button" class="walletButton" disabled={busy} on:click={connectSource}>
-          {sourceWallet ? copy("Source: {address}", { address: shortAddress(sourceWallet.address) }) : copy("Connect {network} wallet", { network: sourceNetwork })}
+        <button type="button" class="walletButton" disabled={busy || Boolean(pendingSubmission) || execution?.status === "submitted"} on:click={connectSource}>
+          {sourceWallet ? copy("Swap from {address}", { address: shortAddress(sourceWallet.address) }) : copy("Connect {network} wallet", { network: sourceNetwork })}
         </button>
       </div>
       {#if sourceWallet}
         <fieldset>
           <legend>{copy("Send swap output to")}</legend>
           <div class="choiceRow">
-            <button type="button" class:active={recipientMode === "connected"} disabled={busy || !walletFamily(destinationNetwork)} on:click={chooseConnectedRecipient}>{copy("Connected wallet")}</button>
-            <button type="button" class:active={recipientMode === "manual"} disabled={busy} on:click={chooseManualRecipient}>{copy("Another address")}</button>
+            <button type="button" class:active={recipientMode === "connected"} disabled={busy || Boolean(pendingSubmission) || execution?.status === "submitted" || !walletFamily(destinationNetwork)} on:click={chooseConnectedRecipient}>{copy("Connected wallet")}</button>
+            <button type="button" class:active={recipientMode === "manual"} disabled={busy || Boolean(pendingSubmission) || execution?.status === "submitted"} on:click={chooseManualRecipient}>{copy("Another address")}</button>
           </div>
           {#if recipientMode === "connected" && recipientWallet}<p class="address">{shortAddress(recipientWallet.address)} · {destinationNetwork}</p>{/if}
-          {#if recipientMode === "manual"}<input bind:value={manualRecipient} on:change={recipientChanged} autocomplete="off" spellcheck="false" placeholder={copy("Recipient on {network}", { network: destinationNetwork })} aria-label={copy("Swap recipient address")} />{/if}
+          {#if recipientMode === "manual"}<input disabled={busy || Boolean(pendingSubmission) || execution?.status === "submitted"} bind:value={manualRecipient} on:change={recipientChanged} autocomplete="off" spellcheck="false" placeholder={copy("Recipient on {network}", { network: destinationNetwork })} aria-label={copy("Swap recipient address")} />{/if}
         </fieldset>
       {/if}
       {#if sourceWallet && recipient && !execution}
-        <button type="button" class="primary" disabled={busy} on:click={prepare}>{busy ? copy("Preparing…") : copy("Prepare live transaction")}</button>
+        <button type="button" class="primary" disabled={busy} on:click={beginAutomaticSwap}>{busy ? copy("Preparing…") : copy("Prepare live transaction")}</button>
       {/if}
       {#if execution}
         <div class="review">
@@ -322,7 +322,10 @@
           <span><small>{copy("Recipient")}</small><strong>{shortAddress(execution.recipient)}</strong></span>
           <span><small>{copy("Status")}</small><strong>{execution.status.replaceAll("_", " ")}</strong></span>
         </div>
-        {#if execution.status === "awaiting_signature"}
+        {#if pendingSubmission}
+          <p class="ready">{copy("Transaction sent. Retry tracking without signing again.")}</p>
+          <button type="button" class="primary" disabled={busy} on:click={signAndSubmit}>{copy("Retry tracking")}</button>
+        {:else if execution.status === "awaiting_signature"}
           {#if !sourceWallet}
             <p class="muted">{copy("Reconnect the source wallet to continue this prepared swap.")}</p>
           {:else if fundsReady}
@@ -330,7 +333,7 @@
             <button type="button" class="primary" disabled={busy} on:click={signAndSubmit}>{busy ? copy("Waiting for wallet…") : copy("Review and sign")}</button>
           {:else}
             <p class="muted">{copy("Waiting until the wallet contains at least {amount} {asset}. Balance is checked automatically.", { amount: execution.input_amount, asset: execution.from_asset })}</p>
-            <button type="button" class="secondary" disabled={busy || !sourceWallet} on:click={updateFunds}>{copy("Check now")}</button>
+            <button type="button" class="secondary" disabled={busy || !sourceWallet} on:click={beginAutomaticSwap}>{copy("Retry swap")}</button>
           {/if}
         {:else if execution.status === "submitted"}
           <p class="ready">{copy("Submitted. Pay3Flow is tracking provider completion automatically.")}</p>

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { exchangeShareUrl, type ExchangeShareState } from "$lib/exchange-share";
+  import WalletMenu from "./WalletMenu.svelte";
   import { tick } from "svelte";
   import { API_BASE_URL, apiUrl } from "$lib/api";
   import { cycleLocale, locale, localeLabel, setLocale, t } from "$lib/i18n";
@@ -188,6 +189,7 @@
       </div>
     </div>
     <div class="utilityActions">
+      <WalletMenu />
       <button class="languageToggle" type="button" on:click={() => setLocale(cycleLocale(activeLocale))} aria-label={t("Switch language", {}, activeLocale)}><span>{localeLabel(activeLocale)}</span></button>
       <button class="themeToggle" type="button" on:click={toggleTheme} aria-label={t("Switch theme", {}, activeLocale)}><img class="moonIcon" src={moonIcon} alt="" width="20" height="20" /><img class="sunIcon" src={sunIcon} alt="" width="20" height="20" /></button>
     </div>
@@ -244,4 +246,5 @@
   .mobileActionLabel { display: inline; }
 }
 @media (prefers-reduced-motion: reduce) { .actionsPanel, .actionsBackdrop { transition: none; } }
+@media (max-width: 360px) { .logo { display: none; } }
 </style>

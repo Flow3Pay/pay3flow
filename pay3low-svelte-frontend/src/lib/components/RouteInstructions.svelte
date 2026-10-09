@@ -8,7 +8,7 @@
   import { guideSharePath } from "$lib/guide-link";
   // import AdvertiserCard from "./AdvertiserCard.svelte";
   import ExternalReviews from "./ExternalReviews.svelte";
-  // import RouteExecutionPanel from "./RouteExecutionPanel.svelte";
+  import RouteExecutionPanel from "./RouteExecutionPanel.svelte";
   import InstructionScene from "./InstructionScene.svelte";
 
   export let route: RouteCandidate;
@@ -205,6 +205,9 @@
               {/if}
             </section>
           </div>
+          {#if step?.execution && route.execution}
+            {#key route.route_id}<RouteExecutionPanel {route} />{/key}
+          {/if}
           <!-- Actual platform actions are paused for now.
           {#if step}
             <section class="realAction" aria-label={copy("On the actual platform")}>
@@ -219,7 +222,7 @@
           {/if}
           -->
           {#if chapter === -1}
-            <div class="routeNotice"><img class="beforeIcon" src="/icons/ui/guide-before.svg" alt="" width="24" height="24" /><div><strong>{copy("Before you begin")}</strong><p>{copy("Rates, limits, and offers can change. Check the provider, payment details, and network before sending money. Pay3Flow does not create orders or move money.")}</p>{#if route.source_bank_fee_percent != null}<p>{copy("Bank fees:")} {route.source_payment_method ?? route.source_currency}: {route.source_bank_fee_percent}%</p>{/if}{#if route.target_bank_fee_percent != null}<p>{copy("Bank fees:")} {route.target_payment_method ?? route.target_currency}: {route.target_bank_fee_percent}%</p>{/if}{#each route.warnings ?? [] as warning}<p>{warn(warning)}</p>{/each}</div></div>
+            <div class="routeNotice"><img class="beforeIcon" src="/icons/ui/guide-before.svg" alt="" width="24" height="24" /><div><strong>{copy("Before you begin")}</strong><p>{copy("Rates, limits, and offers can change. Check the provider, payment details, and network before sending money. Executable swaps are signed in your wallet. Other route steps are completed on the provider platform.")}</p>{#if route.source_bank_fee_percent != null}<p>{copy("Bank fees:")} {route.source_payment_method ?? route.source_currency}: {route.source_bank_fee_percent}%</p>{/if}{#if route.target_bank_fee_percent != null}<p>{copy("Bank fees:")} {route.target_payment_method ?? route.target_currency}: {route.target_bank_fee_percent}%</p>{/if}{#each route.warnings ?? [] as warning}<p>{warn(warning)}</p>{/each}</div></div>
           {/if}
         </div>
       {/key}

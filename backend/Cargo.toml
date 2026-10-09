@@ -11,6 +11,7 @@ aes-gcm = "0.10"
 async-trait = "0.1"
 axum = { version = "0.7", features = ["ws", "macros"] }
 base64 = "0.22"
+bs58 = "0.5"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 deadpool-postgres = "0.12"
 deadpool-redis = "0.10"

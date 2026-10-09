@@ -120,6 +120,17 @@ impl SymbiosisRouteProvider {
         Ok(self)
     }
 
+    /// Wallet execution needs an explicitly configured router on the origin.
+    pub fn supports_wallet_execution(&self, from: &Asset, to: &Asset) -> bool {
+        from != to
+            && from
+                .location
+                .as_deref()
+                .and_then(chain_for_network)
+                .is_some_and(|id| self.execution_contracts.contains_key(&id))
+            && to.location.as_deref().and_then(chain_for_network).is_some()
+    }
+
     async fn load_tokens(&self) -> Result<Vec<SymbiosisToken>> {
         if let Some(tokens) = self.tokens.read().await.clone() {
             return Ok(tokens);
@@ -244,6 +255,9 @@ impl SymbiosisRouteProvider {
         if from == to || amount.asset != from {
             bail!("invalid Symbiosis execution pair or amount");
         }
+        if !self.supports_wallet_execution(&from, &to) {
+            bail!("Symbiosis wallet execution is not configured for this route");
+        }
         let tokens = self.load_tokens().await?;
         let from_token = Self::token_for(&tokens, &from)?.clone();
         let to_token = Self::token_for(&tokens, &to)?.clone();
@@ -251,8 +265,8 @@ impl SymbiosisRouteProvider {
         let body = json!({
             "tokenAmountIn": Self::token_payload(&from_token, Some(atomic_amount.clone())),
             "tokenOut": Self::token_payload(&to_token, None),
-            "from": owner,
-            "to": recipient,
+            "from": api_wallet_address(from_token.chain_id, owner)?,
+            "to": api_wallet_address(to_token.chain_id, recipient)?,
             "slippage": self.slippage_bps,
         });
         let mut request = self.client.post(self.endpoint("v1/swap")).json(&body);
@@ -275,6 +289,38 @@ impl SymbiosisRouteProvider {
             .get("tx")
             .cloned()
             .context("Symbiosis executable quote has no transaction")?;
+        if transaction.get("chainId").and_then(Value::as_u64) != Some(from_token.chain_id) {
+            bail!("Symbiosis transaction chain does not match the source network");
+        }
+        let data = transaction
+            .get("data")
+            .and_then(Value::as_str)
+            .context("Symbiosis transaction has no calldata")?;
+        let hex = data.strip_prefix("0x").unwrap_or(data);
+        if hex.is_empty() || hex.len() % 2 != 0 || !hex.bytes().all(|byte| byte.is_ascii_hexdigit())
+        {
+            bail!("Symbiosis transaction has invalid calldata");
+        }
+        if from_token.chain_id == 728126428 {
+            let sender = transaction
+                .get("from")
+                .and_then(Value::as_str)
+                .context("Symbiosis TRON transaction has no sender")?;
+            if !sender.eq_ignore_ascii_case(&api_wallet_address(from_token.chain_id, owner)?)
+                || transaction
+                    .get("feeLimit")
+                    .and_then(Value::as_u64)
+                    .filter(|limit| *limit > 0 && *limit <= 1_000_000_000)
+                    .is_none()
+                || transaction
+                    .get("functionSelector")
+                    .and_then(Value::as_str)
+                    .filter(|selector| !selector.is_empty())
+                    .is_none()
+            {
+                bail!("Symbiosis TRON transaction has invalid sender or call options");
+            }
+        }
         let output = raw
             .get("tokenAmountOut")
             .context("Symbiosis executable quote has no output amount")?;
@@ -463,6 +509,43 @@ impl PublicRouteProvider for SymbiosisRouteProvider {
     }
 }
 
+fn chain_for_network(network: &str) -> Option<u64> {
+    Some(match network {
+        "ethereum" => 1,
+        "bnb-smart-chain" => 56,
+        "polygon-pos" => 137,
+        "avalanche-c" => 43114,
+        "optimism" => 10,
+        "arbitrum-one" => 42161,
+        "base" => 8453,
+        "tron" => 728126428,
+        _ => return None,
+    })
+}
+
+fn api_wallet_address(chain_id: u64, address: &str) -> Result<String> {
+    if chain_id != 728126428 || address.starts_with("0x") {
+        return checked_evm_address(address, "wallet");
+    }
+    use sha2::{Digest, Sha256};
+    let bytes = bs58::decode(address)
+        .into_vec()
+        .context("invalid TRON wallet address")?;
+    if bytes.len() != 25
+        || bytes[0] != 0x41
+        || Sha256::digest(Sha256::digest(&bytes[..21]))[..4] != bytes[21..]
+    {
+        bail!("invalid TRON wallet checksum");
+    }
+    Ok(format!(
+        "0x{}",
+        bytes[1..21]
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    ))
+}
+
 fn checked_evm_address(value: &str, label: &str) -> Result<String> {
     let value = value.trim();
     if value.len() != 42
@@ -475,7 +558,8 @@ fn checked_evm_address(value: &str, label: &str) -> Result<String> {
 }
 
 fn is_evm_native_token(address: &str) -> bool {
-    address.eq_ignore_ascii_case("0x0000000000000000000000000000000000000000")
+    address.is_empty()
+        || address.eq_ignore_ascii_case("0x0000000000000000000000000000000000000000")
         || address.eq_ignore_ascii_case("0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
 }
 
@@ -604,6 +688,67 @@ mod tests {
             }
         }
         server.abort();
+    }
+
+    #[tokio::test]
+    async fn tron_execution_normalizes_wallets_and_rejects_untrusted_calldata() {
+        const ROUTER: &str = "0x0863786bbf4561f4a2a8be5a9ddf152afd8ae25c";
+        const GATEWAY: &str = "0x49e1816a2cf475515e7c80c9f0f0e16ae499198b";
+        const OWNER: &str = "0xa614f803b6fd780986a42c78ec9c7f77e6ded13c";
+        for violation in ["none", "router", "spender", "network", "sender", "calldata"] {
+            let app = axum::Router::new()
+                .route("/v2/tokens", axum::routing::get(|| async {
+                    axum::Json(json!([
+                        {"symbol":"USDT", "address":OWNER, "chainId":728126428, "decimals":6},
+                        {"symbol":"USDC", "address":"0x0000000000000000000000000000000000000001", "chainId":1, "decimals":6}
+                    ]))
+                }))
+                .route("/v1/swap", axum::routing::post(move |axum::Json(body): axum::Json<Value>| async move {
+                    assert_eq!(body["from"], OWNER);
+                    assert_eq!(body["tokenAmountIn"]["amount"], "12345678");
+                    let mut response = json!({
+                        "tokenAmountOut": {"amount":"12000000", "decimals":6}, "approveTo":GATEWAY,
+                        "tx": {"chainId":728126428, "from":OWNER, "to":ROUTER, "data":"00112233", "functionSelector":"swap(bytes)", "feeLimit":200000000, "value":"0"}
+                    });
+                    match violation {
+                        "router" => response["tx"]["to"] = json!(GATEWAY),
+                        "spender" => response["approveTo"] = json!(ROUTER),
+                        "network" => response["tx"]["chainId"] = json!(1),
+                        "sender" => response["tx"]["from"] = json!(ROUTER),
+                        "calldata" => response["tx"]["data"] = json!("not-hex"),
+                        _ => {}
+                    }
+                    axum::Json(response)
+                }));
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+            let provider =
+                SymbiosisRouteProvider::new(format!("http://{address}"), None, OWNER, 300)
+                    .unwrap()
+                    .with_execution_contracts(&[format!("728126428={ROUTER},{GATEWAY}")])
+                    .unwrap();
+            let from = Asset::parse("USDT@tron").unwrap();
+            let result = provider
+                .execution_quote(
+                    from.clone(),
+                    Asset::parse("USDC@ethereum").unwrap(),
+                    Amount::new("12.345678", from).unwrap(),
+                    "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+                    "0x0000000000000000000000000000000000000001",
+                )
+                .await;
+            assert_eq!(
+                result.is_ok(),
+                violation == "none",
+                "violation: {violation}, result: {result:?}"
+            );
+            if let Ok(quote) = result {
+                assert_eq!(quote.expected_output, "12");
+                assert_eq!(quote.source_chain_id, 728126428);
+            }
+            server.abort();
+        }
     }
 
     #[test]

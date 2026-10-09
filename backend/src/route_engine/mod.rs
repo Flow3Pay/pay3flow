@@ -501,6 +501,8 @@ pub struct CowExecutionQuote {
     pub sell_token: String,
     pub buy_token: String,
     pub sell_amount: String,
+    pub sell_token_decimals: u8,
+    pub buy_token_decimals: u8,
     pub expected_output: String,
     pub expected_fee: Option<String>,
     pub quote: Value,

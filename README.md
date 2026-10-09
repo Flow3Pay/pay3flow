@@ -17,9 +17,10 @@ crypto -> crypto             USDC (ERC-20) -> ETH
 crypto -> crypto -> crypto   USDT (BEP-20) -> USDC -> USDT (BEP-20)
 ```
 
-Search results are public market estimates. Pay3Flow does not place an order,
-contact an advertiser, hold funds, or guarantee that a displayed offer will
-still be available when the venue is opened.
+Search results are public market estimates. Eligible crypto swaps can be
+executed in the app with Ethereum, NEAR, or TRON wallets. Wallets sign approvals,
+deposits, and swap transactions; Pay3Flow tracks their completion without
+holding funds. Other offers open at their venue and may change before execution.
 
 ## Current search sources
 
@@ -51,6 +52,11 @@ Bridge destinations and intermediate tokens are discovered at runtime. Quotes
 combine CoW execution on the origin network with a dry NEAR Intents bridge
 quote; the selected pair opens in CoW Swap for a fresh quote and execution.
 Embedded CoW wallet execution supports same-chain ERC20 orders on EVM networks.
+The header and swap instructions share wallet connections. Connecting in the
+header does not initiate a swap. Starting a swap connects its source wallet,
+validates the recipient, obtains a fresh quote, and opens the wallet's signing
+prompt when funds are available. Approvals are confirmed before refreshing the
+swap quote. Submitted transactions survive reloads and notification retries.
 
 CoW Swap fees are quote-dependent rather than a universal fixed percentage.
 The live quote accounts for execution costs, while liquidity, gas, and optional
@@ -60,8 +66,10 @@ model and links to the [CoW Protocol documentation](https://docs.cow.fi/cow-prot
 CoW Swap, NEAR Intents, and Symbiosis are separate selectable exchanges. When selected,
 their quoted outputs are independent and can differ because each provider uses
 its own liquidity, execution costs, and fee model. Symbiosis uses a read-only
-preview address for route discovery; execution must be re-quoted with the
-user's wallet addresses. BestChange requires
+preview address for route discovery; eligible EVM and TRON swaps are re-quoted
+with the user's wallet addresses and signed in the app. NEAR Intents supports
+deposits from Ethereum, NEAR, and TRON, including token transfers.
+Routes without an execution descriptor retain provider instructions. BestChange requires
 `BESTCHANGE_API_KEY` from the referral-program dashboard; the numeric referral
 ID used in public links is not an API key. The other listed
 public-data adapters make anonymous read-only requests.
@@ -314,6 +322,9 @@ curl -G 'http://localhost:8080/api/p2p/search' \
 | `GET` | `/api/p2p/routes` | Build a final ranked route snapshot |
 | `WS` | `/ws/p2p/routes` | Stream progressive ranked snapshots |
 | `POST` | `/api/service-executions/open` | Record that a route service link was opened |
+| `POST` | `/api/p2p/route-executions` | Prepare a wallet-bound quote from a signed route token |
+| `GET` | `/api/p2p/route-executions/{id}` | Read execution status for its anonymous owner |
+| `POST` | `/api/p2p/route-executions/{id}/submissions` | Record a broadcast transaction hash or CoW order UID |
 | `PUT` | `/api/services/{id}/vote` | Add or change anonymous feedback |
 | `PUT` | `/api/routes/{route_id}/vote` | Add or change anonymous feedback for one concrete route |
 

@@ -25,7 +25,7 @@ description = "No universal fixed protocol percentage: market-order costs are in
 docs_url = "https://docs.cow.fi/cow-protocol"
 
 [guidance]
-description = "Check the current CoW Swap quote and transaction details in the official app."
+description = "Eligible same-chain ERC20 swaps can be signed in Pay3Flow with your Ethereum wallet. Check the fresh quote and approval details in your wallet; other routes open in CoW Swap."
 
 [[guidance.review_sources]]
 kind = "trustscores"

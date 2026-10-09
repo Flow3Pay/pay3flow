@@ -68,6 +68,7 @@ symbiosis_slippage_bps = 300
 # Audited `chain_id=MetaRouter,MetaRouterGateway` pairs from the official
 # Symbiosis mainnet SDK configuration. Update them together with that source.
 symbiosis_execution_contracts = [
+  "728126428=0x0863786bbf4561f4a2a8be5a9ddf152afd8ae25c,0x49e1816a2cf475515e7c80c9f0f0e16ae499198b",
   "1=0xf621Fb08BBE51aF70e7E0F4EA63496894166Ff7F,0xfCEF2Fe72413b65d3F393d278A714caD87512bcd",
   "56=0x44487a445a7595446309464A82244B4bD4e325D5,0x5c97D726bf5130AE15408cE32bc764e458320D2f",
   "137=0xa260E3732593E4EcF9DdC144fD6C4c5fe7077978,0xAb83653fd41511D638b69229afBf998Eb9B0F30c",
@@ -77,12 +78,12 @@ symbiosis_execution_contracts = [
   "8453=0x691df9C4561d95a4a726313089c8536dd682b946,0x41Ae964d0F61Bb5F5e253141A462aD6F3b625B92",
 ]
 
-# Non-custodial wallet execution remains opt-in until provider mainnet smoke
-# tests are complete. Route search and external provider links still work.
-wallet_execution_enabled = false
+# Non-custodial swaps require confirmation in the connected wallet.
+# Set false to keep this deployment limited to read-only route discovery.
+wallet_execution_enabled = true
 
-# Read-only NEAR Intents quote addresses for the configured Avalanche -> Solana
-# preview. Replace with wallet addresses before enabling executable swaps.
+# Public NEAR Intents addresses for the Avalanche -> Solana preview.
+# Executable quotes always use the connected wallet and chosen recipient.
 near_intents_quote_recipient = "So11111111111111111111111111111111111111112"
 near_intents_quote_refund_to = "0x8ba1f109551bD432803012645Ac136ddd64DBA72"
 # Per-network public preview addresses. These are used only for dry quotes;
