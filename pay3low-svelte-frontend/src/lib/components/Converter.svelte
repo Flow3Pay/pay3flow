@@ -756,8 +756,10 @@
     const matchesCorridor = (method: PaymentMethod) => method.kind === "wallet"
       ? method.currency === currency
       : method.country === country && method.currency === currency;
-    return methods.find(matchesCorridor)
-      ?? (country ? methods.find((method) => method.country === country) : undefined)
+    // Cash is an explicit choice; default corridors to a bank transfer when one exists.
+    const preferred = [...methods.filter((method) => method.kind !== "cash"), ...methods.filter((method) => method.kind === "cash")];
+    return preferred.find(matchesCorridor)
+      ?? (country ? preferred.find((method) => method.country === country) : undefined)
       ?? methods[0]
       ?? null;
   }
