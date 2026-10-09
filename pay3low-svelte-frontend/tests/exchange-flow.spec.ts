@@ -635,7 +635,10 @@ for (const side of ["sending", "recipient"] as const) test(`native EVER selects 
       entry_sources: [], exit_sources: [],
     } });
   });
-  await openApp(page);
+  await page.goto("/");
+  await expect.poll(() => page.locator(".appShell").evaluate((element) => (element as HTMLElement).style.getPropertyValue("--puzzle-pattern"))).not.toBe("");
+  await expect(page.locator(".workspace")).toBeVisible();
+  await expect(page.locator(".introOverlay")).toHaveCount(0, { timeout: 6000 });
   const otherSide = side === "sending" ? "recipient" : "sending";
   const usdtPicker = await chooseCrypto(page, otherSide, "USDT Ethereum");
   await usdtPicker.getByRole("option", { name: /Ethereum.*USDT/ }).click();
