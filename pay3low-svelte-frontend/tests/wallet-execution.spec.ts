@@ -154,7 +154,7 @@ for (const mode of ["connect", "existing", "switch"]) test(`Symbiosis AVAX guide
   await page.evaluate(async ({ path, value }) => {
     const harness = await import(/* @vite-ignore */ path);
     await harness.mountGuide({
-      route_id: value.route_id, route_kind: "crypto_to_crypto", route_provider: "symbiosis", route_provider_url: "https://app.symbiosis.finance/",
+      route_id: value.route_id, route_kind: "crypto_to_crypto", route_provider: "symbiosis",
       source_currency: "AVAX", target_currency: "USDT", source_network: "avalanche-c", target_network: "avalanche-c", entry_asset: "AVAX",
       source_amount: "0.25", target_amount: "10", legs: [], route_path: [value.from_asset, value.to_asset],
       execution: { from_asset: value.from_asset, to_asset: value.to_asset, input_amount: value.input_amount, token: "signed-test-token", provider: value.provider },
