@@ -83,6 +83,7 @@
   let refreshSeconds: RefreshSeconds = 15;
   let p2pSources: P2pSourceOption[] = [];
   let venueNames: Record<string, string> = {};
+  let venueUrls: Record<string, string> = {};
   let providerGuidance: Record<string, ProviderGuidance> = {};
   let selectedSources: P2pSource[] = [];
   let selectedExchangeMethods: ExchangeMethod[] = [...EXCHANGE_METHODS];
@@ -1070,6 +1071,7 @@
       onProvidersLoaded(providers);
       foundVenues = foundVenueOptions();
       venueNames = Object.fromEntries(p2pSources.map((provider) => [provider.id.toLowerCase(), provider.label]));
+      venueUrls = Object.fromEntries(providers.map((provider) => [provider.slug.toLowerCase(), provider.source_url]));
       providerGuidance = Object.fromEntries(
         providers
           .filter((provider) => provider.guidance)
@@ -1229,7 +1231,7 @@
 {#if guideRequested}
   {#if routeInstructionsComponent && instructionsRoute}
     {#key instructionsRoute.route_id}
-      <svelte:component this={routeInstructionsComponent} route={instructionsRoute} {venueNames} {providerGuidance} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} onOpenService={openService} onClose={closeGuide} />
+      <svelte:component this={routeInstructionsComponent} route={instructionsRoute} {venueNames} {venueUrls} {providerGuidance} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} onOpenService={openService} onClose={closeGuide} />
     {/key}
   {:else}
     <section class="guideLoading" aria-live="polite"><span class="loadingMark">↗</span><h1>{t(guideUnavailable ? "This route is no longer available" : error ? "Could not load this guide" : "Preparing your guide", {}, activeLocale)}</h1><p>{t(guideUnavailable ? "Quotes have changed. Choose a current route to continue." : error ? "Try again or choose a current route." : "Checking the selected banks, networks and platforms for a fresh quote.", {}, activeLocale)}</p><button type="button" on:click={() => locationChanged(true)}>{t("Try again", {}, activeLocale)}</button><button type="button" on:click={closeGuide}>← {t("Back to routes", {}, activeLocale)}</button></section>

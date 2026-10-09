@@ -15,6 +15,7 @@
 
   export let route: RouteCandidate;
   export let venueNames: Record<string, string> = {};
+  export let venueUrls: Record<string, string> = {};
   export let providerGuidance: Record<string, ProviderGuidance> = {};
   export let networkNames: Record<string, string> = {};
   export let onClose: () => void;
@@ -54,6 +55,7 @@
   $: sourceFamily = walletFamily(route.execution?.from_asset.split("@", 2)[1] ?? "");
   $: walletSwap = Boolean(step?.execution && route.execution && sourceFamily && $wallets[sourceFamily]);
   $: walletProviderStep = Boolean(step?.execution && ["symbiosis", "near-intents", "cow-swap"].includes(step.provider));
+  $: walletProviderUrl = step?.url ?? step?.guide?.links.find(link => /^Open\b/i.test(link.label))?.url ?? (step && venueUrls[step.provider.toLowerCase()]);
   $: finished = steps.length > 0 && chapter === steps.length;
   $: titleIncludesVenue = Boolean(step && step.title.endsWith(step.venue));
   $: headingTitle = titleIncludesVenue && step ? step.title.slice(0, -step.venue.length).trimEnd() : step?.title;
@@ -212,8 +214,8 @@
             </section>
           </div>
           {/if}
-          {#if walletProviderStep && !walletSwap && step?.url}
-            <a class="walletProviderLink" href={step.url} target="_blank" rel="noreferrer noopener">{copy("Open {venue}", { venue: step.venue })} <span aria-hidden="true">↗</span></a>
+          {#if walletProviderStep && !walletSwap && walletProviderUrl && step}
+            <a class="walletProviderLink" href={walletProviderUrl} target="_blank" rel="noreferrer noopener">{copy("Open {venue}", { venue: step.venue })} <span aria-hidden="true">↗</span></a>
           {/if}
           {#if step?.execution && route.execution}
             <div class="swapExecution" class:connected={walletSwap}>{#key route.route_id}<RouteExecutionPanel {route} {networkNames} />{/key}</div>
