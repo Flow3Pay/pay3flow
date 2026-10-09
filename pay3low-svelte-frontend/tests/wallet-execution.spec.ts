@@ -119,6 +119,10 @@ async function panel(page: Page, value = execution(), failSubmission = false, ex
 test("header connects and restores TRON without starting a swap, then disconnects", async ({ page }) => {
   await wallets(page);
   await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
+  const menu = await page.locator(".walletConnections").boundingBox();
+  expect(menu).not.toBeNull();
+  expect(menu!.x).toBeGreaterThanOrEqual(0);
+  expect(menu!.x + menu!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
   await page.getByRole("button", { name: "Connect TRON wallet", exact: true }).click();
   await expect(page.getByRole("button", { name: "Wallets (1)", exact: true })).toBeVisible();
   expect(await page.evaluate(() => (window as any).transfers)).toBe(0);

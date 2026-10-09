@@ -78,6 +78,7 @@
     button { min-height: 44px; }
   }
   @media (max-width: 640px) {
+    .walletConnections { position: fixed; top: 80px; right: 16px; }
     .walletToggle span { display: none; }
     .walletToggle { width: 44px; justify-content: center; }
   }
