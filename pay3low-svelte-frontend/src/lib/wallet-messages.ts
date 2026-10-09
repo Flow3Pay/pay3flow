@@ -1,6 +1,13 @@
 export const walletMessages = {
   en: {},
   ru: {
+    "You pay": "Вы отправляете",
+    "Estimated output": "Ожидаемая сумма",
+    "Swap amount": "Сумма обмена",
+    "From wallet": "Из кошелька",
+    "Swap {from} for {to}": "Обменять {from} на {to}",
+    "Review this swap and confirm it in your connected wallet.": "Проверьте обмен и подтвердите его в подключённом кошельке.",
+    "Follow the instructions on {venue}, or connect your wallet to swap here.": "Следуйте инструкции на {venue} или подключите кошелёк для обмена здесь.",
     "Connect wallet": "Подключить кошелёк",
     "Wallets ({count})": "Кошельки ({count})",
     "Wallet connections": "Подключённые кошельки",
@@ -18,6 +25,13 @@ export const walletMessages = {
     "Rates, limits, and offers can change. Check the provider, payment details, and network before sending money. Executable swaps are signed in your wallet. Other route steps are completed on the provider platform.": "Курсы, лимиты и предложения могут измениться. Перед отправкой проверьте поставщика, реквизиты и сеть. Доступные обмены подписываются в вашем кошельке. Остальные шаги выполняются на площадке поставщика.",
   },
   hy: {
+    "You pay": "Դուք ուղարկում եք",
+    "Estimated output": "Սպասվող գումար",
+    "Swap amount": "Փոխանակման գումար",
+    "From wallet": "Դրամապանակից",
+    "Swap {from} for {to}": "Փոխանակել {from}-ը {to}-ի",
+    "Review this swap and confirm it in your connected wallet.": "Ստուգեք փոխանակումը և հաստատեք այն միացված դրամապանակում։",
+    "Follow the instructions on {venue}, or connect your wallet to swap here.": "Հետևեք {venue}-ի հրահանգներին կամ միացրեք դրամապանակը՝ այստեղ փոխանակելու համար։",
     "Connect wallet": "Միացնել դրամապանակը",
     "Wallets ({count})": "Դրամապանակներ ({count})",
     "Wallet connections": "Միացված դրամապանակներ",

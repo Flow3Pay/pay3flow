@@ -111,19 +111,16 @@ export function buildRouteTutorial(route: RouteCandidate, names: Record<string, 
   const addProvider = () => {
     const provider = route.route_provider!, name = venue(provider);
     const from = route.entry_offer_snapshot?.asset ?? route.source_currency, to = route.exit_offer_snapshot?.asset ?? route.target_currency ?? route.entry_asset;
-    const executable = Boolean(route.execution);
     add({ id: "provider", kind: "swap", provider, venue: name, from, to,
-      title: providerSwap ? copy("Swap {from} for {to} via {venue}", { from, to, venue: name }) : copy("Route through {venue}", { venue: name }),
-      summary: executable ? copy("Pay3Flow prepares a fresh quote and opens your wallet for approval and signing when funds and recipient are ready.") : copy("Open the direct exchange on {venue}, check the final amount, and follow the provider's instructions.", { venue: name }),
+      title: providerSwap || crypto ? copy("Swap {from} for {to} via {venue}", { from, to, venue: name }) : copy("Route through {venue}", { venue: name }),
+      summary: copy("Open the direct exchange on {venue}, check the final amount, and follow the provider's instructions.", { venue: name }),
       amount: !route.entry_offer_snapshot ? tutorialMoney(route.source_amount_minor, route.source_currency, route.source_amount) : undefined,
       output: !route.exit_offer_snapshot ? tutorialMoney(route.target_amount_minor, route.target_currency, route.target_amount) : undefined,
       network: network(route.entry_offer_snapshot?.network ?? route.source_network ?? route.entry_network),
       targetNetwork: network(route.exit_offer_snapshot?.network ?? route.target_network ?? route.entry_network),
-      frames: [executable
-        ? frame("open", "Connect your wallet", copy("Connect the wallet that holds {asset} on {network}.", { asset: route.execution!.from_asset.split("@")[0] ?? "", network: network(route.execution!.from_asset.split("@")[1]) ?? "" }))
-        : frame("open", "Open the exchange", copy("Open {venue}", { venue: name })),
+      frames: [frame("open", "Open the exchange", copy("Open {venue}", { venue: name })),
         frame("verify", "Check the exchange", copy("Check which asset and network you send, and which asset and network you receive.")),
-        frame("act", executable ? "Confirm the swap in your wallet" : "Confirm on the platform", copy("Check the current rate, provider fee, quote expiry, and any address, memo, or tag requirement.")),
+        frame("act", "Confirm on the platform", copy("Check the current rate, provider fee, quote expiry, and any address, memo, or tag requirement.")),
         frame("receive", "Check your balance", receive)],
       notes: [quote, ...(route.route_path?.length ? [route.route_path.map(pathAsset).join(" → ")] : [])], checkpoint: receive,
       url: route.route_provider_url, direct: true, execution: true,

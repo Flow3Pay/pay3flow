@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { encodeAbiParameters } from "viem";
 
 const TRON = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
 const EVM = "0x0000000000000000000000000000000000000001";
@@ -50,11 +51,20 @@ async function wallets(page: Page) {
       removeListener: (event: string, callback: unknown) => listeners.set(event, (listeners.get(event) ?? []).filter(item => item !== callback)),
     };
     state.changeTron = (address: string) => { web.defaultAddress.base58 = address; for (const listener of listeners.get("accountsChanged") ?? []) listener([address]); };
+    const evmListeners = new Map<string, Array<(value: unknown) => void>>();
+    state.chainSwitches = 0;
     state.ethereum = {
-      on: () => {}, removeListener: () => {},
+      on: (event: string, callback: (value: unknown) => void) => evmListeners.set(event, [...(evmListeners.get(event) ?? []), callback]),
+      removeListener: (event: string, callback: unknown) => evmListeners.set(event, (evmListeners.get(event) ?? []).filter(item => item !== callback)),
       request: async ({ method, params }: { method: string; params: any[] }) => {
         if (method === "eth_accounts" || method === "eth_requestAccounts") return [evm];
-        if (method === "eth_chainId") return "0x1";
+        if (method === "eth_chainId") return state.evmChainId ?? "0x1";
+        if (method === "wallet_switchEthereumChain") {
+          state.evmChainId = params[0].chainId;
+          state.chainSwitches += 1;
+          for (const listener of evmListeners.get("chainChanged") ?? []) listener(state.evmChainId);
+          return null;
+        }
         if (method === "eth_getBalance") return "0xde0b6b3a7640000";
         if (method === "eth_call") return "0x" + (state.evmAllowance ?? 1000000000n).toString(16).padStart(64, "0");
         if (method === "eth_sendTransaction") { if (state.rejectWallet) throw Object.assign(new Error("User cancelled signing"), { code: 4001 }); state.walletCalls.push(params[0]); state.transfers += 1; return "0x" + tx; }
@@ -88,7 +98,7 @@ function execution(provider = "near-intents", network = "tron", symbol = "USDT",
   };
 }
 
-async function panel(page: Page, value = execution(), failSubmission = false, expireFirstQuote = false) {
+async function quoteApi(page: Page, value = execution(), failSubmission = false, expireFirstQuote = false) {
   let created = 0;
   let submissions = 0;
   let status = "awaiting_signature";
@@ -104,17 +114,82 @@ async function panel(page: Page, value = execution(), failSubmission = false, ex
     if (request.url().endsWith("/submissions")) {
       submissions += 1;
       if (failSubmission && submissions === 1) return route.fulfill({ status: 503, json: { error: "Temporary notification failure" } });
-      expect(request.postDataJSON().reference).toBe(TX);
+      expect(request.postDataJSON().reference).toBe(value.from_asset.endsWith("@tron") ? TX : "0x" + TX);
       status = "submitted";
     }
     return route.fulfill({ json: { ...value, status } });
   });
+  return { counts: () => ({ created, submissions }) };
+}
+
+async function panel(page: Page, value = execution(), failSubmission = false, expireFirstQuote = false) {
+  const mock = await quoteApi(page, value, failSubmission, expireFirstQuote);
   await page.evaluate(async ({ path, value }) => {
     const harness = await import(/* @vite-ignore */ path);
     await harness.mountPanel({ route_id: value.route_id, execution: { from_asset: value.from_asset, to_asset: value.to_asset, input_amount: value.input_amount, token: "signed-test-token", provider: value.provider } }, value.from_asset.split("@")[1]);
   }, { path: harnessPath, value });
-  return { counts: () => ({ created, submissions }) };
+  return mock;
 }
+
+for (const mode of ["connect", "existing", "switch"]) test(`Symbiosis AVAX guide ${mode} and preserves submitted tracking on disconnect`, async ({ page }, testInfo) => {
+  const preconnected = mode !== "connect";
+  await wallets(page);
+  await page.evaluate(mode => { (window as any).evmChainId = mode === "switch" ? "0x1" : "0xa86a"; }, mode);
+  await page.route("https://api.avax.network/**", async route => {
+    const balance = "0x" + (1000000000000000000n).toString(16).padStart(64, "0") as `0x${string}`;
+    const aggregate = encodeAbiParameters([{ type: "tuple[]", components: [{ name: "success", type: "bool" }, { name: "returnData", type: "bytes" }] }], [[{ success: true, returnData: balance }]]);
+    const respond = (request: { id: number; method: string; params?: Array<{ data?: string }> }) => ({ jsonrpc: "2.0", id: request.id, result: request.method === "eth_chainId" ? "0xa86a" : request.method === "eth_call" && request.params?.[0]?.data?.startsWith("0x82ad56cb") ? aggregate : balance });
+    const requests = route.request().postDataJSON();
+    await route.fulfill({ json: Array.isArray(requests) ? requests.map(respond) : respond(requests) });
+  });
+  const value = execution("symbiosis", "avalanche-c", "AVAX", "avalanche-c");
+  value.input_amount = "0.25";
+  value.expected_output = "10";
+  value.action = {
+    kind: "symbiosis_transaction", chain_id: 43114, source_token: "0x0000000000000000000000000000000000000000", input_amount: "250000000000000000",
+    transaction: { chainId: 43114, to: "0x6F0f6393e45fE0E7215906B6f9cfeFf53EA139cf", data: "0x12345678", value: "250000000000000000" },
+  } as any;
+  const mock = await quoteApi(page, value);
+  if (preconnected) await page.evaluate(async path => (await import(/* @vite-ignore */ path)).setEvmConnected(true), harnessPath);
+  await page.evaluate(async ({ path, value }) => {
+    const harness = await import(/* @vite-ignore */ path);
+    await harness.mountGuide({
+      route_id: value.route_id, route_kind: "crypto_to_crypto", route_provider: "symbiosis", route_provider_url: "https://app.symbiosis.finance/",
+      source_currency: "AVAX", target_currency: "USDT", source_network: "avalanche-c", target_network: "avalanche-c", entry_asset: "AVAX",
+      source_amount: "0.25", target_amount: "10", legs: [], route_path: [value.from_asset, value.to_asset],
+      execution: { from_asset: value.from_asset, to_asset: value.to_asset, input_amount: value.input_amount, token: "signed-test-token", provider: value.provider },
+    });
+  }, { path: harnessPath, value });
+  const guide = page.getByTestId("route-guide");
+  await guide.getByTestId("start-guide").click();
+  await expect(guide.getByRole("heading", { level: 1 })).toHaveText("Swap AVAX for USDT via Symbiosis");
+  if (!preconnected) {
+    await expect(guide.getByRole("region", { name: "Step instructions" })).toBeVisible();
+    await expect(guide.getByRole("link", { name: "Open Symbiosis", exact: true })).toHaveAttribute("href", "https://app.symbiosis.finance/");
+    await expect(guide.getByTestId("wallet-swap-form")).toHaveCount(0);
+    await page.evaluate(async path => (await import(/* @vite-ignore */ path)).setEvmConnected(true), harnessPath);
+  }
+  await expect(guide.getByTestId("wallet-swap-form")).toBeVisible();
+  await expect(guide.getByRole("region", { name: "Step instructions" })).toHaveCount(0);
+  await expect(guide.getByLabel("Swap amount")).toHaveValue("0.25");
+  await expect(guide.getByTestId("wallet-swap-form")).toContainText("Avalanche C-Chain");
+  expect(mock.counts()).toEqual({ created: 0, submissions: 0 });
+  expect(await page.evaluate(() => (window as any).transfers)).toBe(0);
+  const form = guide.getByTestId("wallet-swap-form");
+  expect(await form.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  await guide.screenshot({ path: testInfo.outputPath("avax-swap.png") });
+  await guide.getByRole("button", { name: "Swap AVAX for USDT", exact: true }).click();
+  await expect(guide.getByTestId("route-wallet-execution")).toContainText("Submitted.");
+  expect(mock.counts()).toEqual({ created: 1, submissions: 1 });
+  expect(await page.evaluate(() => (window as any).chainSwitches)).toBe(mode === "switch" ? 1 : 0);
+  const calls = await page.evaluate(() => (window as any).walletCalls);
+  expect(BigInt(calls[0].value)).toBe(250000000000000000n);
+  await page.evaluate(async path => (await import(/* @vite-ignore */ path)).setEvmConnected(false), harnessPath);
+  await expect(guide.getByRole("region", { name: "Step instructions" })).toBeVisible();
+  await expect(guide.getByTestId("wallet-swap-form")).toHaveCount(0);
+  await expect(guide.getByTestId("route-wallet-execution")).toContainText("Submitted.");
+  expect(await page.evaluate(() => (window as any).transfers)).toBe(1);
+});
 
 test("header connects and restores TRON without starting a swap, then disconnects", async ({ page }) => {
   await wallets(page);
@@ -200,7 +275,7 @@ test("account changes invalidate a funded preparation without prompting again", 
     (window as any).changeTron("T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb");
     (window as any).tronBalance = "1000000000";
   });
-  await expect(page.locator("#wallet-test-panel").getByRole("button", { name: /Swap from T9yD14/ })).toBeVisible();
+  await expect(page.locator("#wallet-test-panel").getByTestId("swap-source-wallet")).toContainText("T9yD14");
   expect(mock.counts()).toEqual({ created: 1, submissions: 0 });
   expect(await page.evaluate(() => (window as any).transfers)).toBe(0);
 });

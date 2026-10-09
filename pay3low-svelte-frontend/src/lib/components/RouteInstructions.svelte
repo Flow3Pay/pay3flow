@@ -9,6 +9,8 @@
   // import AdvertiserCard from "./AdvertiserCard.svelte";
   import ExternalReviews from "./ExternalReviews.svelte";
   import RouteExecutionPanel from "./RouteExecutionPanel.svelte";
+  import { wallets } from "$lib/wallet-session";
+  import { walletFamily } from "$lib/wallet-execution";
   import InstructionScene from "./InstructionScene.svelte";
 
   export let route: RouteCandidate;
@@ -49,6 +51,9 @@
   $: copy = (key: string, params: Record<string, string | number> = {}) => t(key, params, language);
   $: steps = buildRouteTutorial(route, venueNames, providerGuidance, networkNames, copy);
   $: step = steps[chapter];
+  $: sourceFamily = walletFamily(route.execution?.from_asset.split("@", 2)[1] ?? "");
+  $: walletSwap = Boolean(step?.execution && route.execution && sourceFamily && $wallets[sourceFamily]);
+  $: walletProviderStep = Boolean(step?.execution && ["symbiosis", "near-intents", "cow-swap"].includes(step.provider));
   $: finished = steps.length > 0 && chapter === steps.length;
   $: titleIncludesVenue = Boolean(step && step.title.endsWith(step.venue));
   $: headingTitle = titleIncludesVenue && step ? step.title.slice(0, -step.venue.length).trimEnd() : step?.title;
@@ -112,7 +117,7 @@
     let animationId: number;
     const advance = (now: number) => {
       animationId = requestAnimationFrame(advance);
-      if (!playing || !documentVisible || !sceneVisible || !step) { previousTick = undefined; return; }
+      if (!playing || !documentVisible || !sceneVisible || !step || walletSwap) { previousTick = undefined; return; }
       const delta = previousTick === undefined ? 0 : Math.min(now - previousTick, 100);
       previousTick = now;
       elapsed = Math.min(frameDuration, elapsed + delta);
@@ -164,7 +169,8 @@
         <div class="chapterEntrance">
           <div class="chapterHeading"><span class="eyebrow">{finished ? copy("GUIDE COMPLETED") : chapter === -1 ? copy("LET’S GET YOU THERE") : copy("STEP {current} OF {total}", { current: chapter + 1, total: steps.length })}</span></div>
           <h1 bind:this={heading} tabindex="-1">{finished ? copy("Every step. Done.") : headingTitle ?? copy("A clear route. At your pace.")}{#if step}{" "}{#if !titleIncludesVenue}{copy("on")}{" "}{/if}<span class="headingVenue"><img src={venueIcon(step.provider)} alt="" />{step.venue}</span>{/if}</h1>
-          <p class="lead">{finished ? copy("You have confirmed every step. Check the final balance in your bank, wallet or exchange account.") : step?.summary ?? copy("First, see how your exchange works. Then follow the animated walkthrough, one step at a time.")}</p>
+          <p class="lead">{finished ? copy("You have confirmed every step. Check the final balance in your bank, wallet or exchange account.") : walletSwap ? copy("Review this swap and confirm it in your connected wallet.") : walletProviderStep && route.execution ? copy("Follow the instructions on {venue}, or connect your wallet to swap here.", { venue: step.venue }) : step?.summary ?? copy("First, see how your exchange works. Then follow the animated walkthrough, one step at a time.")}</p>
+          {#if !walletSwap}
           <div class="chapterContent">
             <div class="visualColumn">
               <div class="videoStage" class:paused={!playing} use:sceneVisibility>
@@ -205,8 +211,12 @@
               {/if}
             </section>
           </div>
+          {/if}
+          {#if walletProviderStep && !walletSwap && step?.url}
+            <a class="walletProviderLink" href={step.url} target="_blank" rel="noreferrer noopener">{copy("Open {venue}", { venue: step.venue })} <span aria-hidden="true">↗</span></a>
+          {/if}
           {#if step?.execution && route.execution}
-            {#key route.route_id}<RouteExecutionPanel {route} />{/key}
+            <div class="swapExecution" class:connected={walletSwap}>{#key route.route_id}<RouteExecutionPanel {route} {networkNames} />{/key}</div>
           {/if}
           <!-- Actual platform actions are paused for now.
           {#if step}
@@ -251,6 +261,8 @@
   .chapterProgress { margin-top: 36px; padding-top: 24px; border-top: 1px solid var(--color-border); }.chapterProgress > div:first-child { display: flex; justify-content: space-between; font-size: 10px; color: var(--color-text-soft); }.chapterProgress strong { font: 11px var(--font-mono); color: var(--color-text); }.progressTrack { margin-top: 12px; height: 3px; border-radius: 3px; background: var(--color-border); overflow: hidden; }.progressTrack > span { display: block; height: 100%; background: var(--color-accent-strong); transition: width .6s ease; }.chapterProgress p { margin-top: 12px; color: var(--color-text-soft); font-size: 10px; line-height: 1.8; }
   .guideMain { min-width: 0; padding: 26px 0 48px 34px; }.chapterEntrance { animation: chapterIn .5s cubic-bezier(.22,1,.36,1) both; }.chapterHeading { display: flex; align-items: center; justify-content: space-between; gap: 15px; }
   h1 { font-size: clamp(30px, 3.3vw, 49px); line-height: 1.15; font-weight: 750; letter-spacing: -.055em; margin-top: 17px; max-width: 960px; }h1:focus { outline: none; }.lead { max-width: 710px; color: var(--color-text-soft); font-size: 13px; line-height: 1.8; margin-top: 14px; }
+  .swapExecution.connected { max-width: 560px; margin: 24px auto 0; }
+  .walletProviderLink { display: inline-flex; align-items: center; min-height: 44px; margin-top: 20px; padding: 0 16px; border-radius: 10px; background: var(--color-accent); color: #152016; font-size: 13px; font-weight: 750; }
   .chapterContent { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(260px, .85fr); gap: 33px; margin-top: 31px; align-items: start; }.visualColumn { min-width: 0; }.explanation { padding-top: 7px; min-width: 0; }
   .planItem { display: flex; align-items: flex-start; gap: 14px; margin-top: 25px; }.planItem > span { padding-top: 2px; color: var(--color-text-faint); font: 11px var(--font-mono); }.planItem strong { font-size: 14px; font-weight: 750; letter-spacing: -.02em; }.planItem p { color: var(--color-text-soft); font-size: 12px; line-height: 1.85; margin-top: 7px; }
   .estimate { display: grid; gap: 10px; margin-top: 31px; padding: 20px; border: 1px solid var(--color-border); border-radius: 13px; background: var(--color-paper); }.estimate > span { color: var(--color-text-soft); font-size: 11px; }.estimate strong { font-size: 27px; font-weight: 750; letter-spacing: -.04em; overflow-wrap: anywhere; }.estimate .continueButton { width: 100%; margin-top: 6px; }.estimate small { font-size: 10px; color: var(--color-text-soft); line-height: 1.7; }

@@ -4,10 +4,12 @@
   import { getAnonymousUserId } from "$lib/anonymous-user";
   import { createRouteExecution, fetchRouteExecution, submitRouteExecution, type RouteCandidate, type RouteExecution } from "$lib/exchange";
   import { locale, t } from "$lib/i18n";
-  import { hasExecutionFunds, prepareWalletAction, validateRecipient, walletFamily, type ConnectedWallet, type PreparedWalletAction } from "$lib/wallet-execution";
+  import { assetIcon } from "$lib/icons";
+  import { chainIdForNetwork, hasExecutionFunds, prepareWalletAction, validateRecipient, walletFamily, type ConnectedWallet, type PreparedWalletAction } from "$lib/wallet-execution";
   import { wallets, connectWallet, restoreWallets } from "$lib/wallet-session";
 
   export let route: RouteCandidate;
+  export let networkNames: Record<string, string> = {};
   let sourceWallet: ConnectedWallet | null = null;
   let recipientWallet: ConnectedWallet | null = null;
   let recipientMode: "connected" | "manual" | null = null;
@@ -39,8 +41,12 @@
   $: destinationFamily = walletFamily(destinationNetwork);
   $: sourceSupported = Boolean(sourceFamily);
   $: sourceWallet = sourceFamily ? $wallets[sourceFamily] ?? null : null;
+  $: if (sourceWallet && recipientMode === null) recipientMode = destinationFamily === sourceWallet.family || (destinationFamily && $wallets[destinationFamily]) ? "connected" : "manual";
   $: recipientWallet = recipientMode === "connected" && destinationFamily ? $wallets[destinationFamily] ?? null : null;
   $: recipient = recipientMode === "connected" ? recipientWallet?.address ?? "" : manualRecipient.trim();
+  $: fromSymbol = descriptor?.from_asset.split("@", 2)[0] ?? "";
+  $: toSymbol = descriptor?.to_asset.split("@", 2)[0] ?? "";
+  $: estimatedOutput = execution?.expected_output ?? (!route.exit_offer_snapshot && route.target_currency === toSymbol ? route.target_amount : null);
   $: copy = (key: string, params: Record<string, string | number> = {}) => t(key, params, $locale);
   $: identity = `${route.route_id}:${sourceWallet?.address ?? ""}:${sourceWallet?.family === "evm" ? sourceWallet.chainId : ""}:${recipient}`;
   $: if (mounted && identity !== previousIdentity) {
@@ -83,11 +89,10 @@
     busy = true;
     error = "";
     try {
-      const connected = await connectWallet(sourceNetwork);
+      const connected = sourceWallet && (sourceWallet.family !== "evm" || sourceWallet.chainId === chainIdForNetwork(sourceNetwork)) ? sourceWallet : await connectWallet(sourceNetwork);
       if (disposed) return;
       sourceWallet = connected;
-      if (destinationFamily === connected.family || (destinationFamily && $wallets[destinationFamily])) recipientMode = "connected";
-      else recipientMode = "manual";
+      if (recipientMode === null) recipientMode = destinationFamily === connected.family || (destinationFamily && $wallets[destinationFamily]) ? "connected" : "manual";
       // Let shared session and recipient changes invalidate the old preparation.
       const { tick } = await import("svelte");
       await tick();
@@ -108,7 +113,7 @@
       await tick();
     } catch (cause) { error = message(cause); }
     finally { busy = false; }
-    if (!error && !disposed) await beginAutomaticSwap();
+    if (!error && !disposed) await connectSource();
   }
   function chooseManualRecipient() {
     if (busy || pendingSubmission || execution?.status === "submitted") return;
@@ -122,7 +127,7 @@
     notice = "";
   }
   function recipientChanged() {
-    if (sourceWallet && recipient && !busy) void beginAutomaticSwap();
+    if (sourceWallet && recipient && !busy) void connectSource();
   }
 
   async function prepareQuote(version: number): Promise<boolean> {
@@ -145,6 +150,7 @@
     if (prepared.expectedOutput) value.expected_output = prepared.expectedOutput;
     if (prepared.expectedFee) value.expected_fee = prepared.expectedFee;
     if (prepared.expiresAt) value.quote_expires_at = prepared.expiresAt;
+    execution = value;
     fundsReady = await hasExecutionFunds(value, wallet);
     return version === revision && !disposed;
   }
@@ -294,24 +300,37 @@
     {#if !sourceSupported}
       <p class="muted">{copy("Embedded execution does not yet support a wallet for {network}. Open the provider manually for this route.", { network: sourceNetwork })}</p>
     {:else}
-      <div class="walletRow">
-        <button type="button" class="walletButton" disabled={busy || Boolean(pendingSubmission) || execution?.status === "submitted"} on:click={connectSource}>
-          {sourceWallet ? copy("Swap from {address}", { address: shortAddress(sourceWallet.address) }) : copy("Connect {network} wallet", { network: sourceNetwork })}
-        </button>
-      </div>
       {#if sourceWallet}
-        <fieldset>
-          <legend>{copy("Send swap output to")}</legend>
-          <div class="choiceRow">
-            <button type="button" class:active={recipientMode === "connected"} disabled={busy || Boolean(pendingSubmission) || execution?.status === "submitted" || !walletFamily(destinationNetwork)} on:click={chooseConnectedRecipient}>{copy("Connected wallet")}</button>
-            <button type="button" class:active={recipientMode === "manual"} disabled={busy || Boolean(pendingSubmission) || execution?.status === "submitted"} on:click={chooseManualRecipient}>{copy("Another address")}</button>
+        <div class="swapForm" data-testid="wallet-swap-form">
+          <div class="assetCard">
+            <label for="swap-amount">{copy("You pay")}</label>
+            <div class="assetAmount"><input id="swap-amount" aria-label={copy("Swap amount")} readonly value={descriptor.input_amount} /><span><img src={assetIcon(fromSymbol)} alt="" />{fromSymbol}</span></div>
+            <small>{networkNames[sourceNetwork] ?? sourceNetwork}</small>
           </div>
-          {#if recipientMode === "connected" && recipientWallet}<p class="address">{shortAddress(recipientWallet.address)} · {destinationNetwork}</p>{/if}
-          {#if recipientMode === "manual"}<input disabled={busy || Boolean(pendingSubmission) || execution?.status === "submitted"} bind:value={manualRecipient} on:change={recipientChanged} autocomplete="off" spellcheck="false" placeholder={copy("Recipient on {network}", { network: destinationNetwork })} aria-label={copy("Swap recipient address")} />{/if}
-        </fieldset>
-      {/if}
-      {#if sourceWallet && recipient && !execution}
-        <button type="button" class="primary" disabled={busy} on:click={beginAutomaticSwap}>{busy ? copy("Preparing…") : copy("Prepare live transaction")}</button>
+          <div class="swapArrow" aria-hidden="true">↓</div>
+          <div class="assetCard">
+            <small>{copy("Estimated output")}</small>
+            <div class="assetAmount"><strong>{estimatedOutput ?? "—"}</strong><span><img src={assetIcon(toSymbol)} alt="" />{toSymbol}</span></div>
+            <small>{networkNames[destinationNetwork] ?? destinationNetwork}</small>
+          </div>
+          <p class="address" data-testid="swap-source-wallet">{copy("From wallet")} · {shortAddress(sourceWallet.address)}</p>
+          <fieldset>
+            <legend>{copy("Send swap output to")}</legend>
+            <div class="choiceRow">
+              <button type="button" class:active={recipientMode === "connected"} disabled={busy || Boolean(pendingSubmission) || execution?.status === "submitted" || !walletFamily(destinationNetwork)} on:click={chooseConnectedRecipient}>{copy("Connected wallet")}</button>
+              <button type="button" class:active={recipientMode === "manual"} disabled={busy || Boolean(pendingSubmission) || execution?.status === "submitted"} on:click={chooseManualRecipient}>{copy("Another address")}</button>
+            </div>
+            {#if recipientMode === "connected" && recipientWallet}<p class="address">{shortAddress(recipientWallet.address)} · {networkNames[destinationNetwork] ?? destinationNetwork}</p>{/if}
+            {#if recipientMode === "manual"}<input disabled={busy || Boolean(pendingSubmission) || execution?.status === "submitted"} bind:value={manualRecipient} on:change={recipientChanged} autocomplete="off" spellcheck="false" placeholder={copy("Recipient on {network}", { network: networkNames[destinationNetwork] ?? destinationNetwork })} aria-label={copy("Swap recipient address")} />{/if}
+          </fieldset>
+          {#if !execution}
+            <button type="button" class="primary" disabled={busy || !recipient} on:click={connectSource}>{busy ? copy("Preparing…") : copy("Swap {from} for {to}", { from: fromSymbol, to: toSymbol })}</button>
+          {/if}
+        </div>
+      {:else}
+        <div class="walletRow">
+          <button type="button" class="walletButton" disabled={busy || Boolean(pendingSubmission) || execution?.status === "submitted"} on:click={connectSource}>{copy("Connect {network} wallet", { network: sourceNetwork })}</button>
+        </div>
       {/if}
       {#if execution}
         <div class="review">
@@ -333,7 +352,7 @@
             <button type="button" class="primary" disabled={busy} on:click={signAndSubmit}>{busy ? copy("Waiting for wallet…") : copy("Review and sign")}</button>
           {:else}
             <p class="muted">{copy("Waiting until the wallet contains at least {amount} {asset}. Balance is checked automatically.", { amount: execution.input_amount, asset: execution.from_asset })}</p>
-            <button type="button" class="secondary" disabled={busy || !sourceWallet} on:click={beginAutomaticSwap}>{copy("Retry swap")}</button>
+            <button type="button" class="secondary" disabled={busy || !sourceWallet} on:click={connectSource}>{copy("Retry swap")}</button>
           {/if}
         {:else if execution.status === "submitted"}
           <p class="ready">{copy("Submitted. Pay3Flow is tracking provider completion automatically.")}</p>
@@ -366,6 +385,14 @@
   .choiceRow button { flex: 1; }
   .choiceRow button.active { border-color: var(--color-accent-text); border-width: var(--border-highlight-width); background: var(--color-accent-soft); }
   input { width: 100%; padding: 0 11px; background: transparent; color: inherit; }
+  .swapForm { display: grid; gap: 12px; }
+  .assetCard { display: grid; gap: 9px; padding: 16px; border: 1px solid var(--color-border); border-radius: 14px; background: var(--color-panel-soft); }
+  .assetCard label { color: var(--color-text-soft); font-size: 12px; }
+  .assetAmount { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-width: 0; }
+  .assetAmount input, .assetAmount strong { min-width: 0; width: 100%; padding: 0; border: 0; font-size: clamp(22px, 4vw, 30px); font-weight: 750; overflow-wrap: anywhere; }
+  .assetAmount span { display: flex; align-items: center; gap: 8px; font-weight: 750; }
+  .assetAmount img { width: 28px; height: 28px; }
+  .swapArrow { text-align: center; color: var(--color-text-soft); line-height: 1; }
   .review { display: grid; gap: 7px; padding: 10px; border-radius: 12px; background: rgba(127,127,127,.08); }
   .review span { display: flex; justify-content: space-between; gap: 12px; }
   .review strong { overflow-wrap: anywhere; text-align: right; font-size: 12px; }
