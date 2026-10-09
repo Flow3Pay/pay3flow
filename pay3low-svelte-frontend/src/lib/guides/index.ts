@@ -3,6 +3,7 @@ import type { RouteCandidate } from "$lib/exchange";
 import type { TutorialStep } from "$lib/route-tutorial";
 import WhitebirdSwapCard from "./whitebird/SwapCard.svelte";
 import BybitProfileCard from "./bybit/ProfileCard.svelte";
+import MexcProfileCard from "./mexc/ProfileCard.svelte";
 
 export interface GuideSwapCardProps {
   route: RouteCandidate;
@@ -22,4 +23,5 @@ export interface GuideP2pCardProps extends GuideSwapCardProps {
 
 export const guideP2pCards: Record<string, ComponentType<SvelteComponent<GuideP2pCardProps>> | undefined> = {
   bybit: BybitProfileCard,
+  mexc: MexcProfileCard,
 };

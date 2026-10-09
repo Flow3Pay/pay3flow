@@ -1,6 +1,6 @@
 import type { P2pOffer, ProviderGuidance, RouteCandidate, ServiceLink } from "./exchange";
 import { buildWhitebirdFrames } from "./guides/whitebird/frames";
-import { buildBybitP2pFrames } from "./guides/bybit/frames";
+import { buildP2pProfileFrames } from "./guides/p2p/frames";
 
 export type TutorialKind = "buy" | "sell" | "swap" | "transfer";
 export type TutorialFrameKind = "open" | "verify" | "review" | "act" | "receive";
@@ -137,16 +137,17 @@ export function buildRouteTutorial(route: RouteCandidate, names: Record<string, 
     const to = directFiat ? route.target_currency ?? offer.fiat : side === "entry" ? crypto ? route.bridge_currency ?? route.entry_asset : offer.asset : route.target_currency ?? offer.fiat;
     const checkpoint = direct ? copy(buying || directFiat ? "After the exchange, check that the new balance is available before continuing." : "After the sale, check that the money has arrived in your account before considering the exchange finished.") : buying ? copy("After the exchange, check that the new balance is available before continuing.") : copy("Release the asset only after you personally see the payment in your bank or payment account.");
     const guide = guidance[provider.toLowerCase()];
-    const bybitP2p = provider.toLowerCase() === "bybit" && !direct;
+    const profileP2p = ["bybit", "mexc"].includes(provider.toLowerCase()) && !direct;
+    const profileVenue = provider.toLowerCase() === "mexc" ? "MEXC" : "Bybit";
     add({ id: side, kind: buying ? "buy" : "sell", provider, venue: name, from, to, offer, direct, guide,
       title: directFiat ? copy("Transfer {from} to {to} via {venue}", { from: route.source_currency, to: route.target_currency ?? "", venue: name })
         : side === "entry" ? (crypto ? copy("Sell {asset} for {amount}", { asset: route.source_currency, amount: route.bridge_currency ?? route.entry_asset }) : copy("Buy {asset} for {amount}", { asset: offer.asset, amount: tutorialMoney(route.source_amount_minor, route.source_currency, route.source_amount) }))
         : crypto ? copy("Buy {asset} with {bridge}", { asset: route.target_currency ?? "", bridge: route.bridge_currency ?? route.entry_asset }) : copy("Sell {asset} for {amount}", { asset: offer.asset, amount: tutorialMoney(route.target_amount_minor, route.target_currency, route.target_amount) }),
-      summary: bybitP2p ? copy("Open the advertiser's Bybit profile, read the reviews and choose the advertisement for your exchange.") : direct ? copy("Open the direct exchange on {venue}, check the final amount, and follow the provider's instructions.", { venue: name }) : copy("Open the P2P listing on {venue}. Check the offer inside the platform before placing an order.", { venue: name }),
+      summary: profileP2p ? copy("Open the advertiser's {venue} profile, read the reviews and choose the advertisement for your exchange.", { venue: profileVenue }) : direct ? copy("Open the direct exchange on {venue}, check the final amount, and follow the provider's instructions.", { venue: name }) : copy("Open the P2P listing on {venue}. Check the offer inside the platform before placing an order.", { venue: name }),
       amount: side === "entry" ? tutorialMoney(route.source_amount_minor, route.source_currency, route.source_amount) : undefined,
       output: side === "exit" || directFiat ? tutorialMoney(route.target_amount_minor, route.target_currency, route.target_amount) : undefined,
       network: network(side === "entry" ? route.source_network ?? route.entry_network : route.target_network ?? route.entry_network),
-      frames: bybitP2p ? buildBybitP2pFrames(buying, offer.asset, offer.fiat, copy) : [frame("open", direct ? "Open the exchange" : "Find the offer", direct ? copy("Check the currencies, amount, current rate, fee, and limits before continuing.") : copy("Before creating the order, compare the nickname and advertisement ID.")),
+      frames: profileP2p ? buildP2pProfileFrames(profileVenue, buying, offer.asset, offer.fiat, copy) : [frame("open", direct ? "Open the exchange" : "Find the offer", direct ? copy("Check the currencies, amount, current rate, fee, and limits before continuing.") : copy("Before creating the order, compare the nickname and advertisement ID.")),
         frame("verify", "Check the exchange", copy("Check the current rate, order limits, and payment method on {venue}.", { venue: name })),
         frame("act", buying ? "Make the payment" : "Wait for the payment", direct ? copy("Sign in or complete verification on {venue}, if it asks you to, then follow the payment instructions shown there.", { venue: name }) : buying ? copy("Use only the payment details shown inside the order. After sending, mark the order as paid.") : checkpoint),
         frame("receive", "Check your balance", direct && !buying ? copy("After the sale, check that the money has arrived in your account before considering the exchange finished.") : checkpoint)],

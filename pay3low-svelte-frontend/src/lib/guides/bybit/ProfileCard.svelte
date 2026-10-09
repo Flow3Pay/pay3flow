@@ -3,6 +3,7 @@
   import { locale, t } from "$lib/i18n";
   import type { RouteCandidate } from "$lib/exchange";
   import type { TutorialStep } from "$lib/route-tutorial";
+  import { profileMotion } from "../p2p/profile-motion";
 
   export let route: RouteCandidate;
   export let step: TutorialStep;
@@ -15,30 +16,14 @@
   $: buying = step.kind === "buy";
   $: action = copy(buying ? "Buy {asset}" : "Sell {asset}", { asset: offer?.asset ?? step.from });
   $: frameKind = step.frames[frame]?.kind;
-  $: reviews = frameKind === "review" ? progress >= .18 : frameKind === "verify" && progress < .22;
+  $: motion = profileMotion(frameKind, progress);
+  $: ({ reviews, scroll, cursorX, cursorY, tabClick, clicked } = motion);
   $: numberLocale = $locale === "ru" ? "ru-RU" : $locale === "hy" ? "hy-AM" : "en-US";
-  const portion = (value: number, start: number, end: number) => Math.max(0, Math.min(1, (value - start) / (end - start)));
-  const ease = (value: number) => value * value * (3 - 2 * value);
-  const horizontal = (percent: number, pixels = 0) => `calc(${percent}cqw + ${pixels}px)`;
   function number(value?: string | number | null, decimals = 2) {
     if (value == null || value === "") return "—";
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed.toLocaleString(numberLocale, { maximumFractionDigits: decimals }) : "—";
   }
-  // Use the player's clock so pause, replay, seeking and offscreen suspension stay in sync.
-  $: scroll = frameKind === "open" ? ease(portion(progress, .48, .9)) : 1;
-  $: approach = ease(portion(progress, 0, .45));
-  $: reviewTravel = ease(portion(progress, .35, .8));
-  $: adsApproach = ease(portion(progress, 0, .22));
-  $: tradeApproach = ease(portion(progress, .35, .85));
-  $: cursorX = frameKind === "open" ? horizontal(87 * (1 - approach), 80 * approach)
-    : frameKind === "review" ? horizontal(40 * reviewTravel, 80 * (1 - reviewTravel))
-    : frameKind === "verify" ? horizontal(40 * (1 - adsApproach) + 88 * tradeApproach, 20 * (adsApproach - tradeApproach)) : "88cqw";
-  $: cursorY = frameKind === "open" ? 30 + 120 * approach - 132 * scroll
-    : frameKind === "review" ? 18 + 124 * ease(portion(progress, .35, .8))
-    : frameKind === "verify" ? 142 - 124 * ease(portion(progress, 0, .22)) + 88 * ease(portion(progress, .35, .7)) : 106;
-  $: tabClick = frameKind === "review" ? progress >= .18 && progress < .34 : frameKind === "verify" && progress >= .22 && progress < .38;
-  $: clicked = frameKind === "act" && progress >= .5;
   $: requested = buying ? route.source_payment_method : route.target_payment_method;
   $: selectedPayment = offer?.payment_methods.find(method => method === requested) ?? offer?.payment_methods[0] ?? copy("Check on the platform");
 </script>

@@ -624,7 +624,7 @@ async function chooseCrypto(page: Page, side: "sending" | "recipient", search: s
   return picker;
 }
 
-async function mockBackend(page: Page, options: { includeNewProviders?: boolean; routeCount?: number; spotCycle?: boolean; reviews?: boolean; usdtFiatNetwork?: string } = {}) {
+async function mockBackend(page: Page, options: { includeNewProviders?: boolean; routeCount?: number; spotCycle?: boolean; reviews?: boolean; usdtFiatNetwork?: string; mexc?: boolean } = {}) {
   await page.addInitScript(() => {
     if (!localStorage.getItem("pay3flow-locale")) localStorage.setItem("pay3flow-locale", "en");
   });
@@ -745,6 +745,7 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
           { slug: "symbiosis", name: "Symbiosis Buy", side: "buy", source_url: "https://api.symbiosis.finance", currencies: [], banks: [], searchable: true, search_mode: "selectable" },
         );
       }
+      if (options.mexc) providers.push({ slug: "mexc", name: "MEXC", side: "sell", source_url: "https://www.mexc.com/buy-crypto/p2p", currencies: ["AMD", "RUB"], banks: [], searchable: true });
       return json(providers);
     }
     if (url.pathname === "/api/service-executions/open" && method === "POST") {
@@ -780,7 +781,7 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
           completion_rate_30d: 0.99 as number | null,
         },
         source_url: `https://example.com/${adId}`,
-        advertiser_profile_url: options.reviews ? `https://c2c.binance.com/en/advertiserDetail?advertiserNo=${adId}` : null,
+        advertiser_profile_url: source === "mexc" ? "https://www.mexc.com/buy-crypto/merchant/af2545ef4b6c470ebd516aa794bb7a03" : options.reviews ? `https://c2c.binance.com/en/advertiserDetail?advertiserNo=${adId}` : null,
       });
       if (url.searchParams.get("source_fiat") === "AMD" && url.searchParams.get("target_fiat") === "AMD") {
         expect(url.searchParams.get("source_payment_method")).toBe("Ameriabank");
@@ -1309,7 +1310,7 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
       const routes = Array.from({ length: options.routeCount ?? 12 }, (_, index) => {
         const best = index === 0;
         const asset = index % 2 === 0 ? "USDT" : "USDC";
-        const venue = index % 2 === 0 ? "binance" : "bybit";
+        const venue = options.mexc ? "mexc" : index % 2 === 0 ? "binance" : "bybit";
         const exitVenue = index === 2 ? "bybit" : venue;
         return {
           route_id: `route-${index + 1}`,
@@ -1329,7 +1330,7 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
           entry_offer: offer(venue, `entry-${index + 1}`, "AMD", asset),
           exit_offer: offer(exitVenue, `exit-${index + 1}`, "RUB", asset),
           warnings: ["Search estimate only."],
-          services: [{ id: venue === "binance" ? "00000000-0000-4000-8000-000000000201" : "00000000-0000-4000-8000-000000000202", slug: venue, display_name: venue === "binance" ? "Binance" : "Bybit", executions_total: best ? 12400 : 6200, likes_total: best ? 1800 : 850, dislikes_total: best ? 74 : 40 }],
+          services: [{ id: venue === "binance" ? "00000000-0000-4000-8000-000000000201" : "00000000-0000-4000-8000-000000000202", slug: venue, display_name: venue === "mexc" ? "MEXC" : venue === "binance" ? "Binance" : "Bybit", executions_total: best ? 12400 : 6200, likes_total: best ? 1800 : 850, dislikes_total: best ? 74 : 40 }],
           reputation: { executions_average: best ? 12400 : 6200, likes_average: best ? 1800 : 850, dislikes_average: best ? 74 : 40 },
           service_links: index === 1 ? [
             { service_id: "00000000-0000-4000-8000-000000000202", service_slug: "bybit", kind: "entry", tracking_token: "entry-token" },
@@ -2478,6 +2479,92 @@ test("Bybit P2P walkthrough reviews the profile and selects the route's buy or s
   expect(dimensions.content).toBeLessThanOrEqual(dimensions.width + 1);
   await page.mouse.move(0, 0);
   await scene.screenshot({ style: ".sceneOverlay { visibility: hidden; }", path: testInfo.outputPath("bybit-sell.png") });
+});
+
+test("MEXC P2P walkthrough reviews the merchant and chooses the correct buy or sell section", async ({ page }, testInfo) => {
+  await mockBackend(page, { mexc: true });
+  await page.addInitScript(() => {
+    localStorage.setItem("pay3flow.exchange.source-method", "am-idbank");
+    localStorage.setItem("pay3flow.exchange.target-method", "ru-alfabank");
+  });
+  await openApp(page);
+  await page.getByLabel("Amount to send").fill("100000");
+  await expect(page.getByTestId("complete-route").first()).toBeVisible();
+  await page.getByTestId("complete-route").first().locator(".routeAmount").click();
+  const guide = page.getByTestId("route-guide");
+  await guide.getByTestId("start-guide").click();
+  const scene = guide.getByTestId("instruction-scene");
+  const profile = scene.getByTestId("mexc-profile-card");
+  await scene.scrollIntoViewIfNeeded();
+  await expect(profile).toBeVisible();
+  await expect(profile).toHaveAttribute("data-side", "buy");
+  await expect(profile.getByTestId("mexc-advertiser")).toHaveText("mexc-merchant");
+  await expect(profile.locator(".wordmark")).toHaveAttribute("src", "/icons/venues/mexc-wordmark.svg");
+  await expect.poll(() => profile.locator(".wordmark").evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
+  await expect(profile.locator(".selected h3")).toHaveText("Buy from the User");
+  await expect(guide.getByRole("link", { name: "Open MEXC profile" })).toHaveAttribute("href", "https://www.mexc.com/buy-crypto/merchant/af2545ef4b6c470ebd516aa794bb7a03");
+  // The accelerated first scene advances automatically, then clicks Reviews.
+  await expect(profile).toHaveAttribute("data-frame", "1", { timeout: 6000 });
+  await expect(profile.getByTestId("mexc-review-panel")).toBeVisible({ timeout: 2000 });
+  await guide.getByTestId("playback-toggle").click();
+  const pausedStyle = await profile.getAttribute("style");
+  await page.waitForTimeout(250);
+  await expect(profile).toHaveAttribute("style", pausedStyle!);
+  await expect(profile.locator(".profileTabs > .active")).toHaveText("Reviews");
+
+  await guide.getByRole("button", { name: "Scene 3: Return to Ads", exact: true }).click();
+  await expect(profile.locator(".selected h3")).toHaveText("Buy from the User");
+  await expect(profile.locator(".adPrice")).toContainText("AMD");
+  await expect(guide.locator(".frameList")).toContainText('use “Buy from the User” to buy USDT with AMD');
+  await guide.getByRole("button", { name: "Scene 4: Press Buy USDT", exact: true }).click();
+  await expect(profile.getByTestId("mexc-trade-action")).toHaveText("Buy USDT");
+  await expect(profile.getByTestId("mexc-trade-action")).toHaveClass(/clicked/);
+  await scene.scrollIntoViewIfNeeded();
+  await scene.screenshot({ style: ".sceneOverlay { visibility: hidden; }", path: testInfo.outputPath("mexc-buy.png") });
+
+  await guide.getByTestId("confirm-instruction-step").click();
+  await guide.getByRole("button", { name: "Scene 3: Return to Ads", exact: true }).click();
+  await scene.scrollIntoViewIfNeeded();
+  await expect(profile).toHaveAttribute("data-side", "sell");
+  await expect(profile.locator(".selected h3")).toHaveText("Sell to the User");
+  await expect(profile.getByTestId("mexc-trade-action")).toBeInViewport();
+  await expect(profile.locator(".adPrice")).toContainText("RUB");
+  await expect(guide.locator(".frameList")).toContainText('use “Sell to the User” to sell USDT for RUB');
+  await guide.getByRole("button", { name: "Scene 4: Press Sell USDT", exact: true }).click();
+  await expect(profile.getByTestId("mexc-trade-action")).toHaveText("Sell USDT");
+  await expect(profile.getByTestId("mexc-trade-action")).toHaveClass(/sellAction.*clicked/);
+  await expect(scene.locator(".paymentPreview")).toHaveCount(0);
+  const dimensions = await profile.evaluate(element => ({ width: element.clientWidth, content: element.scrollWidth }));
+  expect(dimensions.content).toBeLessThanOrEqual(dimensions.width + 1);
+  await scene.screenshot({ style: ".sceneOverlay { visibility: hidden; }", path: testInfo.outputPath("mexc-sell.png") });
+  await guide.getByRole("button", { name: "Scene 2: Read the reviews", exact: true }).click();
+  await expect(profile.getByTestId("mexc-review-panel")).toBeVisible();
+  await scene.screenshot({ style: ".sceneOverlay { visibility: hidden; }", path: testInfo.outputPath("mexc-reviews.png") });
+});
+
+test("MEXC profile walkthrough localizes route actions and supports reduced motion", async ({ page }) => {
+  await mockBackend(page, { mexc: true });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.addInitScript(() => {
+    localStorage.setItem("pay3flow-locale", "ru");
+    localStorage.setItem("pay3flow.exchange.source-method", "am-idbank");
+    localStorage.setItem("pay3flow.exchange.target-method", "ru-alfabank");
+  });
+  await openApp(page);
+  await page.locator("#exchange-amount").fill("100000");
+  await expect(page.getByTestId("complete-route").first()).toBeVisible();
+  await page.getByTestId("complete-route").first().locator(".routeAmount").click();
+  const guide = page.getByTestId("route-guide");
+  await guide.getByTestId("start-guide").click();
+  const profile = guide.getByTestId("mexc-profile-card");
+  await expect(profile).toHaveClass(/paused/);
+  await expect(guide.locator(".frameList")).toContainText("на MEXC");
+  await expect(profile.getByTestId("mexc-trade-action")).toHaveText("Купить USDT");
+  await guide.getByRole("button", { name: "Сцена 2: Посмотрите отзывы", exact: true }).click();
+  await expect(profile.getByTestId("mexc-review-panel")).toContainText("Пример отзывов");
+  await guide.getByTestId("confirm-instruction-step").click();
+  await guide.getByRole("button", { name: "Сцена 4: Нажмите «Продать USDT»", exact: true }).click();
+  await expect(profile.getByTestId("mexc-trade-action")).toHaveText("Продать USDT");
 });
 
 test("Bybit profile walkthrough localizes route actions and supports reduced motion", async ({ page }) => {

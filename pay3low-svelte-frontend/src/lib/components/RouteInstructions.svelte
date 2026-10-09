@@ -43,7 +43,7 @@
     observer.observe(node);
     return { destroy() { observer.disconnect(); } };
   }
-  const FRAME_DURATION = 6500;
+  $: frameDuration = step?.offer && !step.direct && ["bybit", "mexc"].includes(step.provider.toLowerCase()) ? 5200 : 6500;
   $: language = $locale;
   $: copy = (key: string, params: Record<string, string | number> = {}) => t(key, params, language);
   $: steps = buildRouteTutorial(route, venueNames, providerGuidance, networkNames, copy);
@@ -83,7 +83,7 @@
   }
   function replay() { frame = 0; elapsed = 0; playing = !reducedMotion; }
   function togglePlayback() {
-    if (!playing && frame === (step?.frames.length ?? 0) - 1 && elapsed >= FRAME_DURATION) replay();
+    if (!playing && frame === (step?.frames.length ?? 0) - 1 && elapsed >= frameDuration) replay();
     else playing = !playing;
   }
   function reviewSource(kind: string) {
@@ -114,8 +114,8 @@
       if (!playing || !documentVisible || !sceneVisible || !step) { previousTick = undefined; return; }
       const delta = previousTick === undefined ? 0 : Math.min(now - previousTick, 100);
       previousTick = now;
-      elapsed = Math.min(FRAME_DURATION, elapsed + delta);
-      if (elapsed >= FRAME_DURATION) {
+      elapsed = Math.min(frameDuration, elapsed + delta);
+      if (elapsed >= frameDuration) {
         if (frame < step.frames.length - 1) { frame += 1; elapsed = 0; }
         else playing = false;
       }
@@ -167,7 +167,7 @@
           <div class="chapterContent">
             <div class="visualColumn">
               <div class="videoStage" class:paused={!playing} use:sceneVisibility>
-              <InstructionScene {route} {steps} {step} {frame} {finished} progress={elapsed === 0 && !playing ? 1 : elapsed / FRAME_DURATION} playing={playing && documentVisible && sceneVisible && !reducedMotion} />
+              <InstructionScene {route} {steps} {step} {frame} {finished} progress={elapsed === 0 && !playing ? 1 : elapsed / frameDuration} playing={playing && documentVisible && sceneVisible && !reducedMotion} />
               {#if step}
                 <div class="sceneOverlay">
                   <button type="button" class="sceneArrow previous" on:click={() => selectFrame(Math.max(0, frame - 1))} disabled={frame === 0} aria-label={copy("Previous scene")}>‹</button>
@@ -179,7 +179,7 @@
               {#if step}
                 <div class="playerControls">
                   <button type="button" on:click={togglePlayback} aria-label={copy(playing ? "Pause walkthrough" : "Play walkthrough")} aria-pressed={playing} data-testid="playback-toggle">{#if playing}<img class="pauseIcon" src="/icons/ui/guide-pause.png" alt="" width="24" height="24" />{:else}<svg class="playIcon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 4.5v15L20 12 8 4.5Z" /></svg>{/if}</button>
-                  <div class="playerTimeline" aria-label={copy("Walkthrough scenes")}>{#each step.frames as item, index}<button type="button" aria-label={copy("Scene {number}: {title}", { number: index + 1, title: item.title })} aria-pressed={index === frame} title={item.title} on:click={() => selectFrame(index)}><b>{String(index + 1).padStart(2, "0")}</b><span style={`transform:scaleX(${index < frame ? 1 : index === frame ? Math.max(.04, elapsed / FRAME_DURATION) : 0})`}></span></button>{/each}</div>
+                  <div class="playerTimeline" aria-label={copy("Walkthrough scenes")}>{#each step.frames as item, index}<button type="button" aria-label={copy("Scene {number}: {title}", { number: index + 1, title: item.title })} aria-pressed={index === frame} title={item.title} on:click={() => selectFrame(index)}><b>{String(index + 1).padStart(2, "0")}</b><span style={`transform:scaleX(${index < frame ? 1 : index === frame ? Math.max(.04, elapsed / frameDuration) : 0})`}></span></button>{/each}</div>
                   <span class="sceneCount">{String(frame + 1).padStart(2, "0")} / {String(step.frames.length).padStart(2, "0")}</span>
                   <button type="button" on:click={replay} aria-label={copy("Replay walkthrough")}>↻</button>
                 </div>
