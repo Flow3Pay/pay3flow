@@ -21,7 +21,9 @@ async function retain(wallet: ConnectedWallet, generation: number) {
   const unsubscribe = await observeWallet(wallet, value => {
     if (generations.get(family) !== generation) return;
     const current = get(wallets)[family];
-    if (current && value && sameWalletAddress(family, current.address, value.address) && (current.family !== "evm" || (value.family === "evm" && current.chainId === value.chainId))) return;
+    if (current && value && sameWalletAddress(family, current.address, value.address)
+      && (current.family !== "evm" || (value.family === "evm" && current.chainId === value.chainId))
+      && (current.family !== "everscale" || (value.family === "everscale" && current.networkId === value.networkId))) return;
     wallets.update(state => {
       const next = { ...state };
       if (value) next[family] = value;
@@ -67,7 +69,7 @@ export function restoreWallets(): Promise<void> {
     let families: unknown;
     try { families = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]"); } catch { return; }
     if (!Array.isArray(families)) return;
-    await Promise.all(families.filter((family): family is WalletFamily => ["evm", "near", "tron"].includes(family)).map(async family => {
+    await Promise.all(families.filter((family): family is WalletFamily => ["evm", "near", "tron", "everscale"].includes(family)).map(async family => {
       const generation = generations.get(family) ?? 0;
       generations.set(family, generation);
       try {

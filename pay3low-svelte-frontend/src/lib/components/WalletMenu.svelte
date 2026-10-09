@@ -9,6 +9,7 @@
     { family: "evm", network: "ethereum", label: "Ethereum" },
     { family: "near", network: "near", label: "NEAR" },
     { family: "tron", network: "tron", label: "TRON" },
+    { family: "everscale", network: "everscale", label: "Everscale" },
   ];
   let open = false;
   let busy: WalletFamily | null = null;
@@ -24,7 +25,7 @@
     busy = family;
     error = "";
     try { await connectWallet(network); }
-    catch (cause) { error = cause instanceof Error ? cause.message : copy("Wallet connection failed"); }
+    catch (cause) { error = cause instanceof Error ? copy(cause.message) : copy("Wallet connection failed"); }
     finally { busy = null; }
   }
   async function disconnect(family: WalletFamily) {

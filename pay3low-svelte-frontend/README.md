@@ -51,6 +51,14 @@ need separate pages. Demonstrations are illustrative, while platform links,
 advertiser details, reviews, and wallet execution belong to the active chapter.
 The guide supports keyboard navigation, reduced motion, and mobile layouts.
 
+The wallet menu connects Ethereum/EVM, NEAR, TRON, and Everscale accounts.
+Everscale uses the injected EVER Wallet provider on Everscale mainnet, including
+the wallet's mobile browser. Authorized accounts are restored without prompts;
+account changes, network changes, logout, and permission revocation update the
+session. Disconnecting Everscale revokes the site's wallet permissions. Everscale
+connection support does not enable swaps: the current execution providers expose
+only EVM, NEAR, and TRON actions.
+
 ## Verification and production build
 
 ```bash

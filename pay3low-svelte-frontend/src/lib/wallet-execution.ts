@@ -4,11 +4,12 @@ import type { AppKitNetwork } from "@reown/appkit/networks";
 import type { EIP1193Provider } from "viem";
 import { decimalToAtomic, atomicToDecimal, sameWalletAddress } from "./wallet-amount";
 import { TRON_CHAIN_ID, connectTronProvider, ensureTronMainnet, tronProvider, tronAddress, broadcastTron, type TronProvider } from "./tron-wallet";
+import { connectEverscale, restoreEverscale, observeEverscale, isEverscaleAddress, type EverscaleConnection } from "./everscale-wallet";
 
 type Hex = `0x${string}`;
 type Address = `0x${string}`;
 
-export type ConnectedWallet = EvmConnection | NearConnection | TronConnection;
+export type ConnectedWallet = EvmConnection | NearConnection | TronConnection | EverscaleConnection;
 export type WalletFamily = ConnectedWallet["family"];
 
 export interface EvmConnection {
@@ -101,6 +102,7 @@ function networkOf(asset: string): string {
 export function walletFamily(network: string): ConnectedWallet["family"] | null {
   if (network.toLowerCase() === "near") return "near";
   if (network.toLowerCase() === "tron") return "tron";
+  if (network.toLowerCase() === "everscale") return "everscale";
   return CHAIN_NAMES[network.toLowerCase()] ? "evm" : null;
 }
 
@@ -254,6 +256,7 @@ export async function connectForNetwork(network: string): Promise<ConnectedWalle
     return { family: "tron", address: web.defaultAddress.base58, chainId: TRON_CHAIN_ID, provider };
   }
   if (family === "near") return connectNear();
+  if (family === "everscale") return connectEverscale();
   if (family === "evm") return connectEvm(network);
   throw new Error(`Wallet execution is not available for ${network}`);
 }
@@ -548,12 +551,15 @@ export async function validateRecipient(network: string, address: string): Promi
   } else if (network === "tron") {
     const { isTronAddress } = await import("./wallet-address");
     if (!await isTronAddress(address)) throw new Error("Invalid TRON recipient address");
+  } else if (network === "everscale") {
+    if (!isEverscaleAddress(address)) throw new Error("Invalid Everscale recipient address");
   } else {
     throw new Error(`Recipient validation is unavailable for ${network}`);
   }
 }
 
 async function assertExecutionWallet(execution: RouteExecution, wallet: ConnectedWallet) {
+  if (wallet.family === "everscale") throw new Error("Everscale swap execution is not available for this provider.");
   const network = sourceNetwork(execution);
   if (walletFamily(network) !== wallet.family || !sameWalletAddress(wallet.family, wallet.address, execution.source_address)) throw new Error("Reconnect the source wallet used for this swap");
   if (wallet.family === "evm") {
@@ -627,6 +633,7 @@ async function executeTronSymbiosis(action: Extract<RouteExecutionAction, { kind
 
 /** Restore only sessions authorized in a previous visit, without wallet prompts. */
 export async function restoreWallet(family: WalletFamily): Promise<ConnectedWallet | null> {
+  if (family === "everscale") return restoreEverscale();
   if (family === "near") {
     const selector = await nearSelector();
     const account = selector.store.getState().accounts.find(item => item.active);
@@ -646,6 +653,7 @@ export async function restoreWallet(family: WalletFamily): Promise<ConnectedWall
 }
 
 export async function observeWallet(wallet: ConnectedWallet, changed: (value: ConnectedWallet | null) => void): Promise<() => void> {
+  if (wallet.family === "everscale") return observeEverscale(wallet, changed);
   if (wallet.family === "near") {
     const subscription = wallet.selector.store.observable.subscribe(state => {
       const account = state.accounts.find(item => item.active);
@@ -681,6 +689,7 @@ export async function observeWallet(wallet: ConnectedWallet, changed: (value: Co
 }
 
 export async function disconnectWallet(wallet: ConnectedWallet): Promise<void> {
+  if (wallet.family === "everscale") await wallet.provider.request({ method: "disconnect" });
   if (wallet.family === "near") await (await wallet.selector.wallet()).signOut();
   if (wallet.family === "evm") {
     const { disconnect } = await import("@wagmi/core");
