@@ -16,6 +16,11 @@ crypto -> fiat               USDC (ERC-20) -> RUB
 crypto -> crypto             USDC (ERC-20) -> ETH
 ```
 
+Cash settlement is available in every supported country currency (USD, AMD,
+RUB, BYN, UAH, and KZT). Cash methods share the `cash` currency group, so the
+currency switch keeps a cash selection in cash. P2P venues are queried with the
+generic `Cash` payment method, and default corridors still start from a bank.
+
 Search results are public market estimates. Pay3Flow does not place an order,
 contact an advertiser, hold funds, or guarantee that a displayed offer will
 still be available when the venue is opened.
