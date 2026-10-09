@@ -36,7 +36,8 @@ pub(in crate::p2p) fn normalize_query(
         .map(|asset| asset.trim().to_ascii_uppercase())
         .filter(|asset| !asset.is_empty())
         .collect::<Vec<_>>();
-    if assets.is_empty() || assets.len() > 24 {
+    // Bound caller-supplied search lists without limiting the backend catalog.
+    if assets.is_empty() || (assets_explicit && assets.len() > 24) {
         bail!("assets must contain between 1 and 24 comma-separated codes");
     }
     if assets.iter().any(|asset| {

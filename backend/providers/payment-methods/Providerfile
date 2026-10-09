@@ -93,6 +93,7 @@ payment_methods = [
   { id = "global-sol", name = "Solana", country = "GLOBAL", currency = "SOL", kind = "wallet", color = "#14f195", initials = "SOL", icon_url = "/icons/assets/sol.webp", p2p_query = "SOL" },
   { id = "global-trx", name = "TRON", country = "GLOBAL", currency = "TRX", kind = "wallet", color = "#ef0027", initials = "TRX", icon_url = "/icons/assets/trx.webp", p2p_query = "TRX" },
   { id = "global-ton", name = "Toncoin", country = "GLOBAL", currency = "TON", kind = "wallet", color = "#0098ea", initials = "TON", icon_url = "/icons/assets/ton.webp", p2p_query = "TON" },
+  { id = "global-ever", name = "Everscale", country = "GLOBAL", currency = "EVER", kind = "wallet", color = "#121739", initials = "EVER", icon_url = "/icons/assets/ever.svg", p2p_query = "EVER" },
   { id = "global-doge", name = "Dogecoin", country = "GLOBAL", currency = "DOGE", kind = "wallet", color = "#c2a633", initials = "DOGE", icon_url = "/icons/assets/doge.webp", p2p_query = "DOGE" },
   { id = "global-ltc", name = "Litecoin", country = "GLOBAL", currency = "LTC", kind = "wallet", color = "#345d9d", initials = "LTC", icon_url = "/icons/assets/ltc.webp", p2p_query = "LTC" },
   { id = "global-dai", name = "Dai", country = "GLOBAL", currency = "DAI", kind = "wallet", color = "#f5ac37", initials = "DAI", icon_url = "/icons/assets/dai.webp", p2p_query = "DAI" },

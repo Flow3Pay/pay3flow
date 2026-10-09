@@ -448,6 +448,7 @@ pub fn canonical_network_id(value: &str) -> String {
         "doge" => "dogecoin".into(),
         "btc" => "bitcoin".into(),
         "ltc" => "litecoin".into(),
+        "ever" => "everscale".into(),
         "near" => "near".into(),
         other => other.to_string(),
     }
