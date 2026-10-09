@@ -17,7 +17,7 @@ export function atomicToDecimal(value: string, decimals: number): string {
   return fraction ? `${whole}.${fraction}` : whole;
 }
 
-/** EVM addresses are case-insensitive; NEAR and TRON identities are not. */
-export function sameWalletAddress(family: "evm" | "near" | "tron", a: string, b: string): boolean {
-  return family === "evm" ? a.toLowerCase() === b.toLowerCase() : a === b;
+/** Hex addresses are case-insensitive; NEAR and TRON identities are not. */
+export function sameWalletAddress(family: "evm" | "near" | "tron" | "everscale", a: string, b: string): boolean {
+  return family === "evm" || family === "everscale" ? a.toLowerCase() === b.toLowerCase() : a === b;
 }
