@@ -69,8 +69,8 @@
   let selected: RouteCandidate | null = null;
   let selectionPinnedByUser = false;
   let instructionsRoute: RouteCandidate | null = null;
-  let sourceMethodId = "am-ameriabank";
-  let targetMethodId = "ru-sberbank";
+  let sourceMethodId = "am-ameriabank-usd-account";
+  let targetMethodId = "am-ameriabank";
   let directionReversed = false;
   let methodPicker: PickerSide = null;
   let currencyPicker: PickerSide = null;

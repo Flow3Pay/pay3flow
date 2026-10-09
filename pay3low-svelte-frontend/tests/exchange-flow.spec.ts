@@ -15,8 +15,8 @@ async function expectNumberedTimeline(instructions: Locator, numbers: string[]) 
 async function openApp(page: Page) {
   await page.goto("/");
   await expect
-    .poll(() => page.locator(".appShell").evaluate((element) => getComputedStyle(element, "::before").backgroundImage))
-    .not.toBe("none");
+    .poll(() => page.locator(".appShell").evaluate((element) => (element as HTMLElement).style.getPropertyValue("--puzzle-pattern")))
+    .not.toBe("");
   await expect(page.locator(".workspace")).toBeVisible();
   await expect(page.locator(".introOverlay")).toHaveCount(0, { timeout: 6000 });
 }
@@ -665,6 +665,9 @@ for (const side of ["sending", "recipient"] as const) test(`native EVER selects 
 async function mockBackend(page: Page, options: { includeNewProviders?: boolean; includeEverscale?: boolean; routeCount?: number; spotCycle?: boolean; spotGuidance?: boolean; reviews?: boolean; usdtFiatNetwork?: string; mexc?: boolean; guideVenue?: string } = {}) {
   await page.addInitScript(() => {
     if (!localStorage.getItem("pay3flow-locale")) localStorage.setItem("pay3flow-locale", "en");
+    // These route fixtures use a saved AMD/RUB corridor independently of app defaults.
+    if (!localStorage.getItem("pay3flow.exchange.source-method")) localStorage.setItem("pay3flow.exchange.source-method", "am-ameriabank");
+    if (!localStorage.getItem("pay3flow.exchange.target-method")) localStorage.setItem("pay3flow.exchange.target-method", "ru-sberbank");
   });
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());

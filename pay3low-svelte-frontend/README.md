@@ -4,6 +4,9 @@ The frontend is a SvelteKit application for creating exchange orders, viewing
 quotes, confirming funding instructions, and following settlement status.
 The default development port is `3000`.
 
+A fresh SWAP session starts with USD → AMD using Ameriabank's USD and AMD
+accounts. Saved payment methods and shared swap links override this default.
+
 ## Local development
 
 ```bash
