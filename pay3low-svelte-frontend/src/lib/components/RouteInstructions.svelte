@@ -163,7 +163,7 @@
           <div class="chapterContent">
             <div class="visualColumn">
               <div class="videoStage" class:paused={!playing} use:sceneVisibility>
-              <InstructionScene {route} {steps} {step} {frame} {finished} playing={playing && documentVisible && sceneVisible && !reducedMotion} />
+              <InstructionScene {route} {steps} {step} {frame} {finished} progress={elapsed === 0 && !playing ? 1 : elapsed / FRAME_DURATION} playing={playing && documentVisible && sceneVisible && !reducedMotion} />
               {#if step}
                 <div class="sceneOverlay">
                   <button type="button" class="sceneArrow previous" on:click={() => selectFrame(Math.max(0, frame - 1))} disabled={frame === 0} aria-label={copy("Previous scene")}>‹</button>

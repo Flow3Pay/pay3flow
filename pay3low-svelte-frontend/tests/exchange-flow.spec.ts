@@ -2398,6 +2398,91 @@ test("direct Whitebird exchange uses its swap card, provider wording and local v
   await expect(swap.locator(".exchangeAction")).not.toHaveClass(/actionHighlight/);
 });
 
+test("Bybit P2P walkthrough reviews the profile and selects the route's buy or sell advertisement", async ({ page }, testInfo) => {
+  await mockBackend(page);
+  await page.addInitScript(() => {
+    localStorage.setItem("pay3flow.exchange.source-method", "am-idbank");
+    localStorage.setItem("pay3flow.exchange.target-method", "ru-alfabank");
+  });
+  await openApp(page);
+  await page.getByLabel("Amount to send").fill("100000");
+  await expect(page.getByTestId("complete-route")).toHaveCount(12);
+  await page.getByTestId("complete-route").nth(1).locator(".routeAmount").click();
+  const guide = page.getByTestId("route-guide");
+  await guide.getByTestId("start-guide").click();
+  const scene = guide.getByTestId("instruction-scene");
+  const profile = scene.getByTestId("bybit-profile-card");
+  await scene.scrollIntoViewIfNeeded();
+  await expect(profile).toBeVisible();
+  await expect(profile.getByTestId("bybit-advertiser")).toHaveText("bybit-merchant");
+  await expect(profile).toHaveAttribute("data-side", "buy");
+  await expect(profile.getByTestId("bybit-trade-action")).toHaveText("Buy USDC");
+  await expect(profile.locator(".bybitNav small")).toHaveText("USDC / AMD");
+  await expect(guide.locator(".playerTimeline button")).toHaveCount(4);
+
+  // The first scene really scrolls the profile, and pausing freezes its clock.
+  await expect.poll(() => profile.evaluate(element => Number.parseFloat(getComputedStyle(element).getPropertyValue("--scroll")))).toBeGreaterThan(.05);
+  await guide.getByTestId("playback-toggle").click();
+  const pausedStyle = await profile.getAttribute("style");
+  await page.waitForTimeout(300);
+  await expect(profile).toHaveAttribute("style", pausedStyle!);
+
+  await guide.getByRole("button", { name: "Scene 2: Read the reviews", exact: true }).click();
+  await expect(profile.getByTestId("bybit-review-panel")).toBeVisible();
+  await expect(profile.getByTestId("bybit-ads-panel")).toHaveCount(0);
+  await expect(profile.locator(".profileTabs > .active")).toHaveText("Review(538)");
+  await expect(profile.getByTestId("bybit-review-panel")).toContainText("Illustrative reviews");
+  await page.mouse.move(0, 0);
+  await scene.screenshot({ style: ".sceneOverlay { visibility: hidden; }", path: testInfo.outputPath("bybit-reviews.png") });
+
+  await guide.getByRole("button", { name: "Scene 3: Return to Ads", exact: true }).click();
+  await expect(profile.getByTestId("bybit-ads-panel")).toBeVisible();
+  await expect(profile.locator(".profileTabs > .active")).toHaveText("Ads");
+  await expect(guide.locator(".frameList")).toContainText("buy USDC with AMD");
+  await guide.getByRole("button", { name: "Scene 4: Press Buy USDC", exact: true }).click();
+  await expect(profile.getByTestId("bybit-trade-action")).toHaveClass(/clicked/);
+  await expect(scene.locator(".paymentPreview")).toHaveCount(0);
+  await scene.screenshot({ style: ".sceneOverlay { visibility: hidden; }", path: testInfo.outputPath("bybit-buy.png") });
+
+  await guide.getByTestId("confirm-instruction-step").click();
+  await scene.scrollIntoViewIfNeeded();
+  await expect(profile).toHaveAttribute("data-side", "sell");
+  await expect(profile.locator(".bybitNav small")).toHaveText("USDC / RUB");
+  await guide.getByRole("button", { name: "Scene 3: Return to Ads", exact: true }).click();
+  await expect(guide.locator(".frameList")).toContainText("sell USDC for RUB");
+  await guide.getByRole("button", { name: "Scene 4: Press Sell USDC", exact: true }).click();
+  await expect(profile.getByTestId("bybit-trade-action")).toHaveText("Sell USDC");
+  await expect(profile.getByTestId("bybit-trade-action")).toHaveClass(/sellAction.*clicked/);
+  const dimensions = await profile.evaluate(element => ({ width: element.clientWidth, content: element.scrollWidth }));
+  expect(dimensions.content).toBeLessThanOrEqual(dimensions.width + 1);
+  await page.mouse.move(0, 0);
+  await scene.screenshot({ style: ".sceneOverlay { visibility: hidden; }", path: testInfo.outputPath("bybit-sell.png") });
+});
+
+test("Bybit profile walkthrough localizes route actions and supports reduced motion", async ({ page }) => {
+  await mockBackend(page);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.addInitScript(() => {
+    localStorage.setItem("pay3flow-locale", "ru");
+    localStorage.setItem("pay3flow.exchange.source-method", "am-idbank");
+    localStorage.setItem("pay3flow.exchange.target-method", "ru-alfabank");
+  });
+  await openApp(page);
+  await page.locator("#exchange-amount").fill("100000");
+  await expect(page.getByTestId("complete-route")).toHaveCount(12);
+  await page.getByTestId("complete-route").nth(1).locator(".routeAmount").click();
+  const guide = page.getByTestId("route-guide");
+  await guide.getByTestId("start-guide").click();
+  const profile = guide.getByTestId("bybit-profile-card");
+  await expect(profile).toHaveClass(/paused/);
+  await expect(profile.getByTestId("bybit-trade-action")).toHaveText("Купить USDC");
+  await guide.getByRole("button", { name: "Сцена 2: Посмотрите отзывы", exact: true }).click();
+  await expect(profile.getByTestId("bybit-review-panel")).toContainText("Пример отзывов");
+  await guide.getByTestId("confirm-instruction-step").click();
+  await guide.getByRole("button", { name: "Сцена 4: Нажмите «Продать USDC»", exact: true }).click();
+  await expect(profile.getByTestId("bybit-trade-action")).toHaveText("Продать USDC");
+});
+
 test("Armenian bank picker uses the downloaded local icons", async ({ page }) => {
   await mockBackend(page);
   await openApp(page);
