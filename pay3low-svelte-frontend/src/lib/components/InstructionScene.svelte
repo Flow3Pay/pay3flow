@@ -4,6 +4,7 @@
   import { locale, t } from "$lib/i18n";
   import type { RouteCandidate } from "$lib/exchange";
   import type { TutorialStep } from "$lib/route-tutorial";
+  import { guideSwapCards } from "$lib/guides";
   export let route: RouteCandidate;
   export let steps: TutorialStep[];
   export let step: TutorialStep | undefined = undefined;
@@ -11,6 +12,7 @@
   export let playing = true;
   export let finished = false;
   $: copy = (key: string, params: Record<string, string | number> = {}) => t(key, params, $locale);
+  $: swapCard = step && step.kind !== "transfer" ? guideSwapCards[step.provider.toLowerCase()] : undefined;
 </script>
 
 <div class="scene" class:paused={!playing} class:overview={!step} class:finished aria-hidden="true" data-testid="instruction-scene">
@@ -29,6 +31,9 @@
     </div>
     <div class="floatTag"><span>✓</span> {copy(finished ? "Confirmed by you" : "At your own pace")}</div>
   {:else}
+    {#if swapCard}
+      <svelte:component this={swapCard} {route} {step} {frame} {playing} />
+    {:else}
     <div class="browser" class:transfer={step.kind === "transfer"}>
       <div class="browserChrome"><div><i></i><i></i><i></i></div><span>{step.venue}</span><span>↗</span></div>
       <div class="browserContent">
@@ -47,6 +52,7 @@
       </div>
       <svg class="demoCursor" class:cursorVerify={frame === 1} class:cursorAct={frame === 2} class:cursorReceive={frame === 3} viewBox="0 0 32 38" fill="none"><path d="M3 2L27 22L15 24L9 35L3 2Z" fill="#b5f500" stroke="#132015" stroke-width="2.5" /></svg>
     </div>
+    {/if}
     {#if step.offer && !step.direct && frame >= 2}
       <div class="paymentPreview">
         <div class="phoneSpeaker"></div><span class="paymentIcon">{step.kind === "sell" ? "↓" : "↗"}</span>

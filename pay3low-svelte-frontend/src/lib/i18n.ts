@@ -6,7 +6,12 @@ const STORAGE_KEY = "pay3flow-locale";
 const supportedLocales: Locale[] = ["en", "ru", "hy"];
 
 const messages: Record<Locale, Record<string, string>> = {
-  en: {},
+  en: {
+    "Whitebird sell": "Sell",
+    "Whitebird receive": "Receive",
+    "Whitebird exchange": "Exchange",
+    "Whitebird verification required": "Exchange is available to verified users",
+  },
   ru: {
     "Share exchange": "Поделиться обменом",
     "Close share dialog": "Закрыть окно ссылки",
@@ -86,6 +91,12 @@ const messages: Record<Locale, Record<string, string>> = {
     "Deposit": "Пополнение",
     "P2P exchange": "P2P-обмен",
     "Exchange": "Обмен",
+    "Whitebird sell": "Продаю",
+    "Whitebird receive": "Получаю",
+    "Whitebird exchange": "Обменять",
+    "Service commission": "Комиссия сервиса",
+    "Check on Whitebird": "Уточните на Whitebird",
+    "Whitebird verification required": "Обмен доступен верифицированным пользователям",
     "You receive": "Вы получаете",
     "Check on the platform": "Уточните на площадке",
     "Check your actual balance": "Проверьте реальный баланс",
@@ -548,6 +559,12 @@ const messages: Record<Locale, Record<string, string>> = {
     "Deposit": "Համալրում",
     "P2P exchange": "P2P փոխանակում",
     "Exchange": "Փոխանակում",
+    "Whitebird sell": "Վաճառում եմ",
+    "Whitebird receive": "Ստանում եմ",
+    "Whitebird exchange": "Փոխանակել",
+    "Service commission": "Ծառայության միջնորդավճար",
+    "Check on Whitebird": "Ստուգեք Whitebird-ում",
+    "Whitebird verification required": "Փոխանակումը հասանելի է հաստատված օգտատերերին",
     "You receive": "Դուք ստանում եք",
     "Check on the platform": "Ստուգեք հարթակում",
     "Check your actual balance": "Ստուգեք իրական մնացորդը",

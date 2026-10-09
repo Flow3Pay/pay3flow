@@ -2325,7 +2325,7 @@ test("small AMD to BTC@near routes keep crypto precision", async ({ page }) => {
   await expect(instructions.getByRole("button", { name: "Connect optimism wallet" })).toBeVisible();
 });
 
-test("direct Whitebird exchange uses provider wording and local venue icons", async ({ page }) => {
+test("direct Whitebird exchange uses its swap card, provider wording and local venue icons", async ({ page }, testInfo) => {
   await mockBackend(page);
   await openApp(page);
 
@@ -2359,6 +2359,30 @@ test("direct Whitebird exchange uses provider wording and local venue icons", as
     "src",
     "/icons/venues/whitebird.png",
   );
+  const scene = instructions.getByTestId("instruction-scene");
+  const swap = scene.getByTestId("whitebird-swap-card");
+  await expect(swap).toBeVisible();
+  await expect(scene.locator(".browserChrome, .platform, .offerIdentity")).toHaveCount(0);
+  await expect(swap.getByTestId("whitebird-send-amount")).toHaveText("100");
+  await expect(swap.getByTestId("whitebird-receive-amount")).toHaveText("8,342.95");
+  await expect(swap.locator('[data-side="send"] .currencyText')).toContainText("USDC");
+  await expect(swap.locator('[data-side="receive"] .currencyText')).toContainText("RUB");
+  await expect(swap.locator(".exchangeAction")).toHaveText("Exchange");
+  await expect(swap.locator(".fees")).toContainText("Check on Whitebird");
+  await scene.scrollIntoViewIfNeeded();
+  await instructions.getByRole("button", { name: "Scene 2: Check the exchange", exact: true }).click();
+  await expect(swap).toHaveAttribute("data-frame", "1");
+  await expect(swap.locator(".fieldControl.highlight")).toHaveCount(2);
+  await expect(swap).toHaveClass(/paused/);
+  const dimensions = await swap.evaluate(element => ({ width: element.clientWidth, contentWidth: element.scrollWidth }));
+  expect(dimensions.contentWidth).toBeLessThanOrEqual(dimensions.width + 2);
+  await page.mouse.move(0, 0);
+  await scene.screenshot({ animations: "disabled", path: testInfo.outputPath("whitebird-swap.png") });
+  await instructions.getByRole("button", { name: "Next scene", exact: true }).click();
+  await expect(swap.locator(".exchangeAction")).toHaveClass(/actionHighlight/);
+  await instructions.getByRole("button", { name: "Next scene", exact: true }).click();
+  await expect(swap.locator('[data-side="receive"] .fieldControl')).toHaveClass(/highlight/);
+  await expect(swap.locator('[data-side="send"] .fieldControl')).not.toHaveClass(/highlight/);
 });
 
 test("Armenian bank picker uses the downloaded local icons", async ({ page }) => {
