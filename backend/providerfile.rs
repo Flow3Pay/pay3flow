@@ -1166,6 +1166,19 @@ price_pointer = "/price"
     }
 
     #[test]
+    fn per_symbol_market_requests_require_bounded_codes_and_a_placeholder() {
+        let whitebird = include_str!("providers/whitebird/Providerfile");
+        assert!(parse(whitebird, "whitebird", "whitebird/Providerfile").is_ok());
+        for invalid in [
+            whitebird.replace("symbol = \"{{asset}}\"", "symbol = \"BTCUSDT\""),
+            whitebird.replace("\"BTCUSDT\", \"ETHUSDT\"", "\"\", \"ETHUSDT\""),
+            whitebird.replace("\"BTCUSDT\", \"ETHUSDT\"", "\"BTC USDT\", \"ETHUSDT\""),
+        ] {
+            assert!(parse(&invalid, "whitebird", "whitebird/Providerfile").is_err());
+        }
+    }
+
+    #[test]
     fn rejects_unknown_fields_instead_of_ignoring_typos() {
         let invalid = EXAMPLE.replace("source_url", "sorce_url");
         assert!(parse(&invalid, "example", "Providerfile").is_err());

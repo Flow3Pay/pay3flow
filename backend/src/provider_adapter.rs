@@ -338,6 +338,9 @@ pub struct MarketAdapterConfig {
     pub headers: BTreeMap<String, String>,
     #[serde(default)]
     pub query: BTreeMap<String, String>,
+    /// Optional per-symbol snapshots. Each symbol fills the `asset` placeholder.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub symbols: Vec<String>,
     pub request_json: Option<String>,
     #[serde(default = "default_timeout_ms")]
     pub timeout_ms: u64,
@@ -961,6 +964,30 @@ impl ValueCondition {
 
 impl MarketAdapterConfig {
     fn validate(&self, context: &str) -> Result<(), String> {
+        if self.symbols.len() > 64
+            || self.symbols.iter().any(|symbol| {
+                symbol.is_empty()
+                    || symbol.len() > 32
+                    || !symbol
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || b"/_-".contains(&byte))
+            })
+        {
+            return Err(format!(
+                "{context}: market symbols must contain at most 64 nonempty market codes"
+            ));
+        }
+        if !self.symbols.is_empty()
+            && !self.query.values().any(|value| value.contains("{{asset}}"))
+            && !self
+                .request_json
+                .as_deref()
+                .is_some_and(|value| value.contains("{{asset}}"))
+        {
+            return Err(format!(
+                "{context}: per-symbol market requests must use the asset placeholder"
+            ));
+        }
         validate_http(
             &self.kind,
             &self.endpoint,

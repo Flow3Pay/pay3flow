@@ -242,7 +242,7 @@
 @media (max-width: 640px) {
   .header { padding-top: 12px; }
   .inner { gap: 8px; padding: 6px; flex-wrap: wrap; }
-  .brand { gap: 6px; }
+  .brand { gap: 6px; min-width: 44px; min-height: 44px; justify-content: center; }
   .logo { width: 28px; height: 28px; }
   .wordmark { display: none; }
   .utilityActions { gap: 6px; }
@@ -251,5 +251,5 @@
   .productNav a { flex: 1; padding: 8px; }
 }
 @media (prefers-reduced-motion: reduce) { .actionsPanel, .actionsBackdrop { transition: none; } }
-@media (max-width: 360px) { .logo { width: 24px; height: 24px; } .inner { gap: 5px; } .utilityActions { gap: 4px; } }
+@media (max-width: 360px) { .logo { width: 24px; height: 24px; } .inner { gap: 3px; } .utilityActions { gap: 3px; } }
 </style>

@@ -706,6 +706,7 @@ fn spot_url(venue: &str, symbol: &str, first_asset: &str, second_asset: &str) ->
         )),
         "bitget" => Some(format!("https://www.bitget.com/spot/{base}{quote}")),
         "mexc" => Some(format!("https://www.mexc.com/exchange/{base}_{quote}")),
+        "whitebird" => Some(format!("https://whitebird.io/spot/{base}/{quote}")),
         "cifra-broker" => Some("https://tradernet.by/authentication/signup".into()),
         _ => None,
     }
@@ -915,8 +916,8 @@ mod tests {
     use axum::http::Uri;
 
     use super::{
-        route_result_cache_key, CachedRouteResponse, P2pRouteSearchQuery, P2pRouteSearchResponse,
-        RouteHttpMetadata, VoteChoice, VoteRequest,
+        route_result_cache_key, spot_url, CachedRouteResponse, P2pRouteSearchQuery,
+        P2pRouteSearchResponse, RouteHttpMetadata, VoteChoice, VoteRequest,
     };
 
     fn provider_route_response() -> P2pRouteSearchResponse {
@@ -1054,6 +1055,36 @@ mod tests {
             route_result_cache_key(&query).is_none(),
             "crypto cycles require fresh quotes for both swaps"
         );
+    }
+
+    #[test]
+    fn spot_links_preserve_market_orientation_for_both_directions() {
+        for (venue, expected) in [
+            (
+                "binance",
+                "https://www.binance.com/en/trade/ETH_BTC?type=spot",
+            ),
+            ("bybit", "https://www.bybit.com/trade/spot/ETH/BTC"),
+            ("mexc", "https://www.mexc.com/exchange/ETH_BTC"),
+            ("bitget", "https://www.bitget.com/spot/ETHBTC"),
+            ("whitebird", "https://whitebird.io/spot/ETH/BTC"),
+        ] {
+            assert_eq!(
+                spot_url(venue, "ETHBTC", "ETH", "BTC").as_deref(),
+                Some(expected),
+                "{venue} sell"
+            );
+            assert_eq!(
+                spot_url(venue, "ETHBTC", "BTC", "ETH").as_deref(),
+                Some(expected),
+                "{venue} buy"
+            );
+            assert_eq!(
+                spot_url(venue, "SOLUSDT", "ETH", "BTC"),
+                None,
+                "{venue} mismatched market"
+            );
+        }
     }
 
     #[test]

@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
+use futures::{stream, StreamExt};
 use hmac::{Hmac, Mac};
 use reqwest::{Client, Method};
 use serde_json::{Number, Value};
@@ -487,9 +488,50 @@ impl CryptoMarketSource for DeclarativeMarketSource {
     }
 
     async fn tickers(&self) -> Result<Vec<CryptoTicker>> {
+        if self.config.symbols.is_empty() {
+            return self.fetch_tickers("").await;
+        }
+        // Dropping this stream cancels all HTTP requests; no detached tasks survive
+        // the source timeout. Divide its budget across bounded batches.
+        let batches = self.config.symbols.len().div_ceil(4) as u64;
+        let request_timeout = Duration::from_millis(self.config.timeout_ms / (batches + 1));
+        let requests = self
+            .config
+            .symbols
+            .iter()
+            .map(|symbol| async move {
+                tokio::time::timeout(request_timeout, self.fetch_tickers(symbol))
+                    .await
+                    .with_context(|| format!("{} market {symbol} timed out", self.slug))?
+            })
+            .collect::<Vec<_>>();
+        let results = stream::iter(requests)
+            .buffer_unordered(4)
+            .collect::<Vec<_>>()
+            .await;
+        let mut tickers = Vec::new();
+        let mut failures = 0;
+        for result in results {
+            match result {
+                Ok(quotes) => tickers.extend(quotes),
+                Err(error) => {
+                    failures += 1;
+                    tracing::warn!(provider = %self.slug, error = %error, "spot snapshot unavailable");
+                }
+            }
+        }
+        if failures == self.config.symbols.len() {
+            bail!("{}: all market snapshots failed", self.slug);
+        }
+        Ok(tickers)
+    }
+}
+
+impl DeclarativeMarketSource {
+    async fn fetch_tickers(&self, requested_symbol: &str) -> Result<Vec<CryptoTicker>> {
         let values = TemplateValues {
             fiat: "",
-            asset: "",
+            asset: requested_symbol,
             amount: None,
             limit: 100,
             page: 1,
@@ -524,7 +566,10 @@ impl CryptoMarketSource for DeclarativeMarketSource {
                 }
                 let bid = required_number(item, &self.config.bid_pointer, "bid").ok()?;
                 let ask = required_number(item, &self.config.ask_pointer, "ask").ok()?;
-                (bid > 0.0 && ask > 0.0).then_some(CryptoTicker { symbol, bid, ask })
+                (bid > 0.0
+                    && ask >= bid
+                    && (requested_symbol.is_empty() || symbol == requested_symbol))
+                    .then_some(CryptoTicker { symbol, bid, ask })
             })
             .collect::<Vec<_>>();
         Ok(tickers)
@@ -987,6 +1032,154 @@ mod tests {
     use super::*;
     use crate::p2p::service::PaymentMethodMatch;
     use crate::provider_adapter::ProviderAdapters;
+
+    fn whitebird_market_source() -> DeclarativeMarketSource {
+        let document: toml::Value =
+            toml::from_str(include_str!("../../providers/whitebird/Providerfile")).unwrap();
+        let adapters: ProviderAdapters =
+            document.get("adapter").unwrap().clone().try_into().unwrap();
+        DeclarativeMarketSource {
+            client: Client::new(),
+            slug: "whitebird".into(),
+            config: adapters.market.unwrap(),
+        }
+    }
+
+    #[tokio::test]
+    async fn market_snapshots_bound_concurrency_and_keep_valid_quotes() {
+        use axum::{
+            extract::{Query, State},
+            routing::get,
+            Json, Router,
+        };
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
+        use tokio::sync::{Notify, Semaphore};
+
+        #[derive(Clone)]
+        struct SnapshotState {
+            active: Arc<AtomicUsize>,
+            maximum: Arc<AtomicUsize>,
+            four_started: Arc<Notify>,
+            gate: Arc<Semaphore>,
+        }
+        async fn snapshot(
+            State(state): State<SnapshotState>,
+            Query(query): Query<BTreeMap<String, String>>,
+        ) -> (axum::http::StatusCode, Json<Value>) {
+            let active = state.active.fetch_add(1, Ordering::SeqCst) + 1;
+            state.maximum.fetch_max(active, Ordering::SeqCst);
+            if active == 4 {
+                state.four_started.notify_one();
+            }
+            let _permit = state.gate.acquire().await.unwrap();
+            let symbol = query
+                .get("symbol")
+                .filter(|symbol| !symbol.is_empty())
+                .map_or("BTCUSDT", String::as_str);
+            let (status, response) = match symbol {
+                "BADUSDT" => (
+                    axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                    serde_json::json!({}),
+                ),
+                "EMPTYUSDT" => (
+                    axum::http::StatusCode::OK,
+                    serde_json::json!({"retCode":0, "result":{"symbol":symbol, "bids":[], "asks":[]}}),
+                ),
+                _ => (
+                    axum::http::StatusCode::OK,
+                    serde_json::json!({
+                        "retCode":0, "result":{
+                            "symbol": if symbol == "OTHERUSDT" { "SOLUSDT" } else { symbol },
+                            "bids":[[if symbol == "CROSSUSDT" { "11" } else { "9" },"2"]], "asks":[["10","3"]]
+                        }
+                    }),
+                ),
+            };
+            state.active.fetch_sub(1, Ordering::SeqCst);
+            (status, Json(response))
+        }
+        let state = SnapshotState {
+            active: Arc::new(AtomicUsize::new(0)),
+            maximum: Arc::new(AtomicUsize::new(0)),
+            four_started: Arc::new(Notify::new()),
+            gate: Arc::new(Semaphore::new(0)),
+        };
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint = format!("http://{}/snapshot", listener.local_addr().unwrap());
+        let app = Router::new()
+            .route("/snapshot", get(snapshot))
+            .with_state(state.clone());
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let mut source = whitebird_market_source();
+        source.config.endpoint = endpoint;
+        source.config.symbols = [
+            "BTCUSDT",
+            "ETHUSDT",
+            "BADUSDT",
+            "EMPTYUSDT",
+            "CROSSUSDT",
+            "OTHERUSDT",
+        ]
+        .map(String::from)
+        .to_vec();
+        let quotes = async {
+            let (quotes, ()) = tokio::join!(source.tickers(), async {
+                state.four_started.notified().await;
+                assert_eq!(
+                    state.active.load(Ordering::SeqCst),
+                    4,
+                    "exactly four snapshots may be in flight"
+                );
+                state.gate.add_permits(4);
+            });
+            quotes.unwrap()
+        };
+        let mut quotes = tokio::time::timeout(Duration::from_secs(5), quotes)
+            .await
+            .expect("bounded requests should finish without detached tasks");
+        quotes.sort_by(|a, b| a.symbol.cmp(&b.symbol));
+        assert_eq!(state.maximum.load(Ordering::SeqCst), 4);
+        assert_eq!(
+            quotes.len(),
+            2,
+            "failed, empty, crossed and mismatched books must be excluded"
+        );
+        assert_eq!(quotes[0].symbol, "BTCUSDT");
+        assert_eq!(quotes[1].symbol, "ETHUSDT");
+        assert_eq!((quotes[0].bid, quotes[0].ask), (9.0, 10.0));
+        source.config.symbols = vec!["BADUSDT".into()];
+        assert!(
+            source.tickers().await.is_err(),
+            "a total HTTP failure must remain visible"
+        );
+        source.config.symbols.clear();
+        assert_eq!(
+            source.tickers().await.unwrap()[0].symbol,
+            "BTCUSDT",
+            "aggregate ticker adapters must continue to work"
+        );
+        server.abort();
+    }
+
+    #[tokio::test]
+    #[ignore = "reads live Whitebird public orderbooks"]
+    async fn live_whitebird_spot_returns_valid_bid_ask_snapshots() {
+        let source = whitebird_market_source();
+        let quotes = source.tickers().await.unwrap();
+        assert!(quotes.iter().any(|quote| quote.symbol == "BTCUSDT"));
+        assert!(quotes.iter().any(|quote| quote.symbol == "ETHUSDT"));
+        assert!(quotes.iter().all(|quote| quote.bid.is_finite()
+            && quote.ask.is_finite()
+            && quote.bid > 0.0
+            && quote.ask >= quote.bid
+            && source.config.symbols.contains(&quote.symbol)));
+        println!("Whitebird returned {} valid live Spot books", quotes.len());
+    }
 
     fn cifra_source() -> DeclarativeP2pSource {
         let document: toml::Value =

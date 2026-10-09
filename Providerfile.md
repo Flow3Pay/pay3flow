@@ -618,8 +618,19 @@ occurrence of `symbol_remove` is removed from the symbol. Headers, query,
 as the P2P adapter. POST requires `request_json`. Market requests are normally
 static: `fiat`, `asset`, and `amount` render empty, while `limit` renders `100`.
 
+For an API that returns one orderbook per request, set `symbols` to a verified
+list of up to 64 market codes and use `{{asset}}` in `query` or `request_json`.
+Each code fills that placeholder. Requests run with at most four in flight,
+within the adapter's overall timeout; unavailable books are skipped without
+discarding successful quotes. Responses must match the requested symbol and
+contain finite positive bid/ask prices with bid no greater than ask. An empty
+book never becomes a last-price quote. When `symbol_remove` is set, list the
+normalized symbol codes. Recheck the provider's enabled instrument catalog
+when changing this list. Whitebird demonstrates this mode with live public
+orderbook snapshots; its existing fiat quote adapter remains separate.
+
 Complete examples are the `[adapter.market]` sections in Binance, Bybit,
-Bitget, OKX, Cifra Markets, and Dzengi Providerfiles.
+Bitget, OKX, Cifra Markets, Dzengi, and Whitebird Providerfiles.
 
 ## Browser workflow
 
@@ -1009,6 +1020,7 @@ requirements described earlier.
 | `endpoint` | Yes; HTTP/HTTPS | — |
 | `method` | No | `GET` |
 | `headers`, `query` | No | `{}` |
+| `symbols` | No; at most 64 nonempty market codes | `[]` (one aggregate request) |
 | `request_json` | For POST | — |
 | `timeout_ms` | No; 250–30000 | `10000` |
 | `items_pointer` | No | response root |

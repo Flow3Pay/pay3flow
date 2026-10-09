@@ -94,6 +94,17 @@ the guide overview, then opens the corresponding hash guide. The image endpoint
 uses only bundled asset/venue icons, bounded parameters and a bounded cache;
 Sharp renders it on Node. The runtime image includes DejaVu fonts.
 
+## Spot exchange guides
+
+Crypto-to-crypto exchange guides select Spot chapters from `market_path` and
+`cycle_legs.market_pair`. Binance, Bybit, MEXC, Bitget and Whitebird have dedicated Spot
+illustrations and five scenes: funding, pair/direction, order type/amount,
+review, and actual fills. The market symbol determines Buy/Sell and the
+spending currency for every pair, including non-stablecoin pairs. These steps
+use canonical Spot market links and official Spot help, rather than the
+provider catalog's P2P profile instructions. P2P offer chapters continue to
+use the advertiser walkthroughs.
+
 ## OTC frontend preview
 
 Open `/#/otc`, or share `/#/otc?market=ETH-USDT`. The header switches between
