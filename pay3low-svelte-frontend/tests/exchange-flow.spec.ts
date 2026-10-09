@@ -2167,6 +2167,7 @@ test("USD supports cash and Armenian bank currencies", async ({ page }) => {
   await expect(ameria).toBeVisible();
   await ameria.click();
   const methodPicker = page.getByRole("dialog", { name: "Choose where you pay from" });
+  await methodPicker.getByRole("option", { name: /^USD\b/ }).click();
   await expect(methodPicker.getByRole("option", { name: /Cash USD/ })).toBeVisible();
   await methodPicker.getByLabel("Search banks and payment methods").fill("Ameriabank");
   await expect(methodPicker.getByRole("option", { name: /^Ameriabank Bank transfer · USD/ })).toHaveCount(1);
@@ -2177,6 +2178,7 @@ test("USD supports cash and Armenian bank currencies", async ({ page }) => {
 
   await page.getByRole("button", { name: "Select recipient bank: Sberbank" }).click();
   const targetMethodPicker = page.getByRole("dialog", { name: "Choose where the recipient gets paid" });
+  await targetMethodPicker.getByRole("option", { name: /^AMD\b/ }).click();
   await targetMethodPicker.getByLabel("Search banks and payment methods").fill("Ameriabank");
   await targetMethodPicker.getByRole("option", { name: /^Ameriabank Bank transfer · AMD/ }).click();
   await expect(page.getByRole("button", { name: "Select recipient bank: Ameriabank" })).toBeVisible();
