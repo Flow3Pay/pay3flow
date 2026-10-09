@@ -48,6 +48,7 @@ fn context() -> Value {
             "inputShape": {"@id": "fep:inputShape", "@type": "@id"},
             "outputShape": {"@id": "fep:outputShape", "@type": "@id"},
             "shape": {"@id": "fep:shape", "@type": "@id"}
+            ,"ui": "https://lefine.pro/ns/ui#"
         }
     ])
 }
@@ -89,6 +90,7 @@ pub fn exchange_proposal(origin: &str, actor_id: &str, audience: &str) -> Value 
         "purpose": "offer",
         "attributedTo": actor_id,
         "name": "Pay3Flow cross-border exchange",
+        "url": origin,
         "content": "Exchange a source asset and amount for a target asset through a discovered route. Quotes are previews; funding requires explicit user consent.",
         "interface": interface,
         "publishes": {
@@ -141,7 +143,7 @@ pub fn interface_collection(origin: &str) -> Value {
             {"type": "Object", "name": "Target asset", "bind": TARGET_ASSET, "shape": format!("{input_shape}#targetAsset")},
             {"type": "Object", "name": "Target country", "bind": TARGET_COUNTRY, "shape": format!("{input_shape}#targetCountry")},
             {"type": "Object", "name": "Target method", "bind": TARGET_METHOD, "shape": format!("{input_shape}#targetMethod")},
-            {"type": "Link", "name": "Preview exchange route", "href": preview, "rel": [PREVIEW], "mediaType": "application/ld+json"},
+            {"type": "Link", "name": "Preview exchange route", "href": preview, "rel": [PREVIEW], "mediaType": "application/ld+json", "ui:method": "POST"},
             {"type": "Object", "name": "Target amount", "bind": TARGET_AMOUNT},
             {"type": "Object", "name": "Fee", "bind": FEE},
             {"type": "Object", "name": "Selected route", "bind": ROUTE},
@@ -161,7 +163,7 @@ pub fn input_shape(origin: &str) -> Value {
         "@type": "sh:NodeShape",
         "sh:property": [
             property_shape(&format!("{id}#sourceAsset"), SOURCE_ASSET, "Source asset", "xsd:string", 1, 1, 1),
-            property_shape(&format!("{id}#sourceAmount"), SOURCE_AMOUNT, "Source amount", "xsd:decimal", 1, 1, 2),
+            positive_amount_shape(&id),
             property_shape(&format!("{id}#sourceCountry"), SOURCE_COUNTRY, "Source country", "xsd:string", 0, 1, 3),
             property_shape(&format!("{id}#sourceMethod"), SOURCE_METHOD, "Source method", "xsd:string", 1, 1, 4),
             property_shape(&format!("{id}#targetAsset"), TARGET_ASSET, "Target asset", "xsd:string", 1, 1, 5),
@@ -206,6 +208,20 @@ fn property_shape(
         "sh:maxCount": max_count,
         "sh:order": order
     })
+}
+
+fn positive_amount_shape(id: &str) -> Value {
+    let mut shape = property_shape(
+        &format!("{id}#sourceAmount"),
+        SOURCE_AMOUNT,
+        "Source amount",
+        "xsd:decimal",
+        1,
+        1,
+        2,
+    );
+    shape["sh:minExclusive"] = json!(0);
+    shape
 }
 
 fn output_property(path: &str, name: &str, datatype: &str) -> Value {
@@ -304,6 +320,7 @@ mod tests {
         assert_eq!(proposal["interface"], interface);
         assert_eq!(proposal["publishes"]["interface"], interface);
         assert_eq!(proposal["publishes"]["action"], "deliverService");
+        assert_eq!(proposal["url"], "https://pay3flow.lefine.pro");
     }
 
     #[test]
@@ -327,6 +344,11 @@ mod tests {
             })
             .expect("invoke link");
         assert!(preview < invoke);
+        assert_eq!(items[preview]["ui:method"], "POST");
+        assert_eq!(
+            input_shape("https://pay3flow.lefine.pro")["sh:property"][1]["sh:minExclusive"],
+            0
+        );
         assert_eq!(
             interface["inputShape"],
             "https://pay3flow.lefine.pro/marketplace/shapes/exchange-input"
