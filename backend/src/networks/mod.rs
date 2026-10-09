@@ -85,6 +85,11 @@ impl NetworkCatalog {
                 currencies: vec!["TON".into(), "USDT".into()],
             },
             CryptoNetwork {
+                id: "everscale".into(),
+                name: "Everscale".into(),
+                currencies: vec!["EVER".into()],
+            },
+            CryptoNetwork {
                 id: "cardano".into(),
                 name: "Cardano".into(),
                 currencies: vec!["ADA".into()],

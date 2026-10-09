@@ -1,0 +1,2 @@
+Everscale network mark from the official Broxus wallet network registry:
+https://github.com/broxus/sparx-networks/blob/master/icons/ever/network.svg

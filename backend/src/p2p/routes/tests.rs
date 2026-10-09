@@ -795,7 +795,7 @@ fn exchange_mode_selects_p2p_exchangers_or_both() {
 #[test]
 fn recognizes_assets_present_in_the_network_catalog_as_crypto() {
     let networks = crate::networks::NetworkCatalog::test_default();
-    for asset in ["BTC", "ETH", "USDT", "USDC", "TRX", "TON"] {
+    for asset in ["BTC", "ETH", "USDT", "USDC", "TRX", "TON", "EVER"] {
         assert!(
             networks.is_supported_asset(asset),
             "asset should use crypto routing: {asset}"
@@ -814,6 +814,10 @@ fn network_validation_rejects_incompatible_assets() {
         ("bitcoin", "ETH", false),
         ("tron", "USDT", true),
         ("tron", "USDC", false),
+        ("everscale", "EVER", true),
+        ("everscale", "TON", false),
+        ("ton", "EVER", false),
+        ("ethereum", "EVER", false),
         ("unknown", "ETH", false),
     ];
 
@@ -833,6 +837,73 @@ fn canonicalizes_common_network_aliases() {
     assert_eq!(canonical_network_id("sol"), "solana");
     assert_eq!(canonical_network_id("TRC20"), "tron");
     assert_eq!(canonical_network_id("ethereum"), "ethereum");
+    assert_eq!(canonical_network_id("EVER"), "everscale");
+    assert_eq!(canonical_network_id("Everscale"), "everscale");
+    assert_eq!(canonical_network_id("ton"), "ton");
+}
+
+#[test]
+fn everscale_native_asset_can_be_sent_or_received_without_provider_metadata() {
+    let networks = crate::networks::NetworkCatalog::test_default();
+    for (source, source_network, target, target_network) in [
+        ("EVER", "EVER", "USDT", "ethereum"),
+        ("USDT", "ethereum", "EVER", "everscale"),
+    ] {
+        let mut request = crypto_cycle_request(1.0);
+        request.source_fiat = source.into();
+        request.target_fiat = target.into();
+        request.source_network = Some(source_network.into());
+        request.target_network = Some(target_network.into());
+        let query = normalize_query(request, &["USDT".into()], &networks, &[])
+            .expect("native EVER should be recognized independently of provider coverage");
+        assert_eq!(
+            query.source_network.as_deref(),
+            Some(if source == "EVER" {
+                "everscale"
+            } else {
+                "ethereum"
+            })
+        );
+        assert_eq!(
+            query.target_network.as_deref(),
+            Some(if target == "EVER" {
+                "everscale"
+            } else {
+                "ethereum"
+            })
+        );
+    }
+}
+
+#[test]
+fn expanded_default_catalog_is_valid_while_explicit_search_lists_remain_bounded() {
+    let defaults = [
+        "USDT", "USDC", "BTC", "ETH", "BNB", "SOL", "TRX", "TON", "DOGE", "LTC", "DAI", "FDUSD",
+        "XRP", "ADA", "DOT", "LINK", "AVAX", "MATIC", "BCH", "NEAR", "APT", "ATOM", "UNI", "SUI",
+        "EVER",
+    ]
+    .map(str::to_owned);
+    let networks = crate::networks::NetworkCatalog::test_default();
+    for explicit in [false, true] {
+        let mut request = crypto_cycle_request(1.0);
+        request.source_network = Some("ethereum".into());
+        request.target_network = Some("ethereum".into());
+        request.intermediary_assets = explicit.then(|| defaults.join(","));
+        let query = normalize_query(request, &defaults, &networks, &[]);
+        if explicit {
+            assert!(
+                query.is_err(),
+                "caller lists must retain their 24-asset limit"
+            );
+        } else {
+            assert_eq!(
+                query
+                    .expect("catalog growth must not invalidate searches")
+                    .assets,
+                defaults
+            );
+        }
+    }
 }
 
 #[test]

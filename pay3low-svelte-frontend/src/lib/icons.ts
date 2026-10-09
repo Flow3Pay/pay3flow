@@ -22,6 +22,7 @@ const NETWORK_ASSETS: Array<[RegExp, string]> = [
   [/(?:bnb|binance)[- ]smart[- ]chain|\bbsc\b|\bbep[- ]?20\b/i, "bnb"],
   [/solana/i, "sol"],
   [/tron|trc-20/i, "trx"],
+  [/everscale|^ever$/i, "ever"],
   [/ton/i, "ton"],
   [/dogecoin/i, "doge"],
   [/litecoin/i, "ltc"],
@@ -51,6 +52,7 @@ export function venueIcon(venue: string): string {
 /** Returns a static asset served by this frontend. */
 export function assetIcon(asset: string): string {
   const key = asset.toLowerCase();
+  if (key === "ever") return "/icons/assets/ever.svg";
   if (LOCAL_FIAT_ICONS.has(key)) return `/icons/assets/${key}.svg`;
   return LOCAL_ASSET_ICONS.has(key)
     ? `/icons/assets/${key}.webp`

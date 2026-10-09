@@ -11,6 +11,7 @@ INSERT INTO crypto_networks (slug, name, currencies, status) VALUES
     ('solana', 'Solana', ARRAY['SOL', 'USDT', 'USDC']::TEXT[], 'enabled'),
     ('tron', 'TRON (TRC-20)', ARRAY['TRX', 'USDT']::TEXT[], 'enabled'),
     ('ton', 'TON', ARRAY['TON', 'USDT']::TEXT[], 'enabled'),
+    ('everscale', 'Everscale', ARRAY['EVER']::TEXT[], 'enabled'),
     ('dogecoin', 'Dogecoin', ARRAY['DOGE']::TEXT[], 'enabled'),
     ('litecoin', 'Litecoin', ARRAY['LTC']::TEXT[], 'enabled'),
     ('xrpl', 'XRP Ledger', ARRAY['XRP']::TEXT[], 'enabled'),

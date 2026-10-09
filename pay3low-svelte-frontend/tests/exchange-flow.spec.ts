@@ -624,7 +624,44 @@ async function chooseCrypto(page: Page, side: "sending" | "recipient", search: s
   return picker;
 }
 
-async function mockBackend(page: Page, options: { includeNewProviders?: boolean; routeCount?: number; spotCycle?: boolean; reviews?: boolean; usdtFiatNetwork?: string; mexc?: boolean; guideVenue?: string } = {}) {
+for (const side of ["sending", "recipient"] as const) test(`native EVER selects Everscale for ${side} and survives reload`, async ({ page }) => {
+  await mockBackend(page, { includeEverscale: true });
+  const searches: Record<string, string>[] = [];
+  await page.route("**/api/p2p/routes**", async route => {
+    const params = Object.fromEntries(new URL(route.request().url()).searchParams);
+    searches.push(params);
+    await route.fulfill({ json: {
+      search_id: "00000000-0000-4000-8000-000000000109", searched_at: new Date().toISOString(),
+      source_fiat: params.source_fiat, target_fiat: params.target_fiat, source_amount: params.source_amount,
+      assets_searched: [], routes_found: 0, routes: [], can_exchange_to_target: false,
+      entry_sources: [], exit_sources: [],
+    } });
+  });
+  await openApp(page);
+  const otherSide = side === "sending" ? "recipient" : "sending";
+  const usdtPicker = await chooseCrypto(page, otherSide, "USDT Ethereum");
+  await usdtPicker.getByRole("option", { name: /Ethereum.*USDT/ }).click();
+  const everPicker = await chooseCrypto(page, side, "EVER Everscale");
+  const native = everPicker.getByRole("option", { name: /Everscale.*EVER/ });
+  await expect(native).toHaveCount(1);
+  await expect.poll(() => native.locator('img[src="/icons/assets/ever.svg"]').first().evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
+  await expect(everPicker.getByRole("option", { name: /TON.*EVER/ })).toHaveCount(0);
+  await native.click();
+  const storageSide = side === "sending" ? "source" : "target";
+  await expect.poll(() => page.evaluate(key => localStorage.getItem(key), `pay3flow.exchange.${storageSide}-method`)).toBe("global-ever");
+  await expect(page.getByRole("button", { name: `Select ${side} network: Everscale`, exact: true })).toBeVisible();
+  await page.getByLabel("Amount to send").fill("1.25");
+  await expect.poll(() => searches.some(params => params.source_fiat === (side === "sending" ? "EVER" : "USDT")
+    && params.target_fiat === (side === "recipient" ? "EVER" : "USDT")
+    && params[`${storageSide}_network`] === "everscale" && params.source_amount === "1.25")).toBe(true);
+  await expect(page.getByText("No routes found", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("wallet-swap-form")).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole("button", { name: `Select ${side} network: Everscale`, exact: true })).toBeVisible();
+  await expect(page.getByLabel("Amount to send")).toHaveValue("1.25");
+});
+
+async function mockBackend(page: Page, options: { includeNewProviders?: boolean; includeEverscale?: boolean; routeCount?: number; spotCycle?: boolean; reviews?: boolean; usdtFiatNetwork?: string; mexc?: boolean; guideVenue?: string } = {}) {
   await page.addInitScript(() => {
     if (!localStorage.getItem("pay3flow-locale")) localStorage.setItem("pay3flow-locale", "en");
   });
@@ -705,6 +742,7 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
         method("ru-alfabank", "Alfa-Bank", "RU", "RUB", "/icons/assets/alfabank.webp", "alfabank", true),
         method("kz-kaspi", "Kaspi.kz", "KZ", "KZT", "/icons/assets/kz-kaspi.png", "kaspi", true),
         wallet("USDT", "Tether"), wallet("USDC", "USD Coin"), wallet("BTC", "Bitcoin"), wallet("ETH", "Ethereum"),
+        ...(options.includeEverscale ? [{ ...wallet("EVER", "Everscale"), icon_url: "/icons/assets/ever.svg" }] : []),
       ];
       return json({ items, total: items.length, limit: 100, offset: 0 });
     }
@@ -714,6 +752,7 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
         { id: "base", name: "Base", currencies: ["ETH", "USDC"] },
         { id: "tron", name: "TRON (TRC-20)", currencies: ["TRX", "USDT"] },
         { id: "ton", name: "TON", currencies: ["TON", "USDT"] },
+        ...(options.includeEverscale ? [{ id: "everscale", name: "Everscale", currencies: ["EVER"] }] : []),
         { id: "bitcoin", name: "Bitcoin", currencies: ["BTC"] },
         { id: "near", name: "NEAR", currencies: ["BTC", "USDT"] },
         ...(options.guideVenue ? [{ id: "solana", name: "Solana", currencies: ["USDT", "USDC", "SOL"] }, { id: "polygon", name: "Polygon", currencies: ["USDT", "USDC"] }] : []),

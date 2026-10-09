@@ -59,6 +59,11 @@ session. Disconnecting Everscale revokes the site's wallet permissions. Everscal
 connection support does not enable swaps: the current execution providers expose
 only EVM, NEAR, and TRON actions.
 
+Native EVER is listed under the Everscale blockchain in both asset selectors.
+Its backend catalog identity is `EVER@everscale`; TON remains a separate network.
+Searches use the selected blockchain and return only routes actually supported
+by the selected providers. Catalog presence does not imply provider liquidity.
+
 ## Verification and production build
 
 ```bash
