@@ -97,6 +97,19 @@ CREATE INDEX IF NOT EXISTS route_searches_pair_created_idx
 CREATE INDEX IF NOT EXISTS route_searches_created_idx
     ON route_searches (created_at DESC);
 
+-- One final observation per venue and explicit user search. Rank refers to
+-- the displayed, bounded route list; NULL means no returned route used it.
+CREATE TABLE IF NOT EXISTS provider_search_observations (
+    search_id UUID NOT NULL REFERENCES route_searches(id) ON DELETE CASCADE,
+    provider_slug TEXT NOT NULL,
+    best_rank INTEGER CHECK (best_rank > 0),
+    response_ok BOOLEAN,
+    latency_ms DOUBLE PRECISION CHECK (latency_ms >= 0),
+    PRIMARY KEY (search_id, provider_slug)
+);
+CREATE INDEX IF NOT EXISTS provider_search_observations_slug_idx
+    ON provider_search_observations (provider_slug, search_id);
+
 CREATE TABLE IF NOT EXISTS service_executions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     service_id UUID NOT NULL REFERENCES services(id) ON DELETE CASCADE,

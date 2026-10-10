@@ -13,7 +13,7 @@
 
 
   export let shareState: ExchangeShareState | null = null;
-  export let activePage: "swap" | "otc" | "about" = "swap";
+  export let activePage: "swap" | "otc" | "about" | "providers" = "swap";
   export let swapHref = "/#/swap";
   export let otcHref = "/#/otc";
   export let onOtcNavigate: () => void = () => {};
@@ -172,7 +172,7 @@
       {/if}
     </div>
     <a class="brand" href={swapHref} aria-label="Pay3Flow"><img class="logo" src="/icons/assets/pay3flow-mark.svg" alt="" width="34" height="34" /><span class="wordmark">Pay3Flow</span></a>
-    <nav class="productNav" aria-label={t("Exchange mode", {}, activeLocale)}><a href={swapHref} class:active={activePage === "swap"} aria-current={activePage === "swap" ? "page" : undefined}>SWAP</a><a href={otcHref} on:click={onOtcNavigate} class:active={activePage === "otc"} aria-current={activePage === "otc" ? "page" : undefined}>OTC</a></nav>
+    <nav class="productNav" aria-label={t("Exchange mode", {}, activeLocale)}><a href={swapHref} class:active={activePage === "swap"} aria-current={activePage === "swap" ? "page" : undefined}>SWAP</a><a href={otcHref} on:click={onOtcNavigate} class:active={activePage === "otc"} aria-current={activePage === "otc" ? "page" : undefined}>OTC</a><a href="/providers" class:active={activePage === "providers"} aria-current={activePage === "providers" ? "page" : undefined}>{t("Platforms", {}, activeLocale)}</a></nav>
     <div class="utilityActions">
       <WalletMenu />
       <div class="languageWrap" bind:this={languageWrap} on:focusout={languageFocus}>

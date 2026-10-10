@@ -19,6 +19,7 @@ pub mod p2p;
 pub mod pairs;
 pub mod payments;
 pub mod provider_adapter;
+pub mod provider_profile;
 pub mod providers;
 pub mod quotes;
 pub mod referrals;

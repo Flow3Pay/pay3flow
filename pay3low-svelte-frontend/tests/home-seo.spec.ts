@@ -137,7 +137,7 @@ test("about page moves the overview off swap and preserves the shared header and
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Что такое Pay3Flow");
   await expect(page.getByTestId("home-overview")).toBeVisible();
   await expect(page.locator(".workspace")).toHaveCount(0);
-  await expect(page.locator(".header .productNav a")).toHaveText(["SWAP", "OTC"]);
+  await expect(page.locator(".header .productNav a")).toHaveText(["SWAP", "OTC", "Площадки"]);
   await expect.poll(() => page.locator(".appShell").evaluate(node => getComputedStyle(node, "::before").backgroundImage)).not.toBe("none");
   expect(await page.locator(".appShell").evaluate(node => getComputedStyle(node).backgroundImage)).toBe(background);
   for (const width of [1280, 393, 320]) {

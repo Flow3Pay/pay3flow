@@ -159,7 +159,7 @@
     <div class="panelTop">
       <div class="panelHeading">
         {#if hasAmount}
-          <strong>Send {sourceCurrency} → {targetCurrency}</strong>
+          <strong class="sendDirection"><span>{t("Send", {}, $locale)}</span><span class="sendCurrency"><img src={assetIcon(sourceCurrency)} alt="" width="22" height="22" />{sourceCurrency}</span><span class="sendArrow" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 12h16m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span><span class="sendCurrency"><img src={assetIcon(targetCurrency)} alt="" width="22" height="22" />{targetCurrency}</span></strong>
         {:else}
           <strong>{t("Awaiting your intent", {}, $locale)}</strong>
         {/if}
@@ -176,7 +176,7 @@
                       <img src={venue.iconUrl || venueIcon(venue.id)} alt="" width="18" height="18" decoding="async" on:error={fallbackFoundVenueIcon} />
                       <span class="foundVenueFallback" aria-hidden="true" hidden>{venue.label.slice(0, 1).toUpperCase()}</span>
                     </button>
-                    <div class="foundVenuePopover" role="tooltip">
+                    <div class="foundVenuePopover" role="group" aria-label={venue.label}>
                       <div class="foundVenuePopoverTitle">
                         <img src={venue.iconUrl || venueIcon(venue.id)} alt="" width="20" height="20" decoding="async" on:error={(event) => fallbackVenueIcon(event, venue.id)} />
                         <strong>{venue.label}</strong>
@@ -190,6 +190,10 @@
                         {#if status?.cache_hits}<div><dt>Cache hits</dt><dd>{status.cache_hits}</dd></div>{/if}
                       </dl>
                       {#if status?.error}<small>{status.error}</small>{/if}
+                      <a class="foundVenueProfile" href={`/providers/${encodeURIComponent(venue.id.toLowerCase())}`} aria-label={t("Open {venue} profile", { venue: venue.label }, $locale)}>
+                        {t("Open platform profile", {}, $locale)}
+                        <span aria-hidden="true">→</span>
+                      </a>
                     </div>
                   </div>
                 {/each}
@@ -354,6 +358,11 @@
   gap: 3px;
 }
 
+.sendDirection { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.sendCurrency { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.sendCurrency img { display: block; flex: 0 0 auto; border-radius: 50%; object-fit: contain; }
+.sendArrow { display: inline-flex; align-items: center; color: var(--color-text-soft); }
+
 .panelActions {
   display: flex;
   align-items: flex-start;
@@ -488,6 +497,7 @@
   color: var(--color-text);
   font-size: 12px;
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
   transform: translate(-50%, -4px);
   transition: opacity 0.16s ease, transform 0.16s ease;
@@ -496,6 +506,7 @@
 .foundVenue:hover .foundVenuePopover,
 .foundVenue:focus-within .foundVenuePopover {
   opacity: 1;
+  visibility: visible;
   pointer-events: auto;
   transform: translate(-50%, 0);
 }
@@ -523,6 +534,31 @@
 .foundVenuePopover dt { color: var(--color-text-soft); }
 .foundVenuePopover dd { margin: 0; font-weight: 800; }
 .foundVenuePopover small { color: var(--color-danger); line-height: 1.35; }
+
+.foundVenueProfile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 36px;
+  margin-top: 3px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-accent-text);
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.foundVenueProfile:hover,
+.foundVenueProfile:focus-visible {
+  background: var(--color-accent-soft);
+}
+
+.foundVenueProfile:focus-visible {
+  outline: 2px solid var(--color-accent-text);
+  outline-offset: 2px;
+}
 
 .foundVenuePopover strong {
   color: #1c2419;

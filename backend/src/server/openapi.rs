@@ -694,6 +694,15 @@ const OPERATIONS: &[Operation] = &[
         false,
     ),
     (
+        "/api/providers/{slug}/statistics",
+        "get",
+        "Provider statistics",
+        "Return final displayed rankings, daily buckets and popular currency directions for completed user searches. period accepts 7d, 30d (default), or 90d; calendar days use UTC. Top-10 is counted once per participating venue per search. Website opens are not completed exchanges.",
+        "Catalogs",
+        false,
+        false,
+    ),
+    (
         "/api/providers",
         "get",
         "List providers",

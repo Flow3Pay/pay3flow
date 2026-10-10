@@ -17,6 +17,8 @@ const messages: Record<Locale, Record<string, string>> = {
     "Whitebird verification required": "Exchange is available to verified users",
   },
   ru: {
+    "Platforms": "Площадки",
+    "Send": "Отправить",
     ...walletMessages.ru,
     ...guideMessages.ru,
     ...spotMessages.ru,
@@ -388,6 +390,7 @@ const messages: Record<Locale, Record<string, string>> = {
     rate: "курс",
     "Open {venue} exchange": "Открыть обмен {venue}",
     "Open {venue} profile": "Открыть профиль {venue}",
+    "Open platform profile": "Открыть профиль",
     "Open {venue} P2P and find {nickname}": "Открыть P2P {venue} и найти {nickname}",
     "Match the nickname and ad ID {id} before opening an order.": "Перед открытием ордера сверьте никнейм и ID объявления {id}.",
     "Search {label}": "Искать на {label}",
@@ -535,6 +538,8 @@ const messages: Record<Locale, Record<string, string>> = {
     "Approval confirmed. Review and sign the refreshed swap transaction.": "Разрешение подтверждено. Проверьте и подпишите обновлённую транзакцию обмена.",
   },
   hy: {
+    "Platforms": "Հարթակներ",
+    "Send": "Ուղարկել",
     ...walletMessages.hy,
     ...guideMessages.hy,
     ...spotMessages.hy,
@@ -906,6 +911,7 @@ const messages: Record<Locale, Record<string, string>> = {
     rate: "փոխարժեք",
     "Open {venue} exchange": "Բացել {venue}-ի փոխանակումը",
     "Open {venue} profile": "Բացել {venue}-ի պրոֆիլը",
+    "Open platform profile": "Բացել պրոֆիլը",
     "Open {venue} P2P and find {nickname}": "Բացել {venue}-ի P2P-ն և գտնել {nickname}-ին",
     "Match the nickname and ad ID {id} before opening an order.": "Պատվեր բացելուց առաջ համեմատեք մականունը և հայտարարության ID-ն՝ {id}։",
     "Search {label}": "Փնտրել {label}-ում",

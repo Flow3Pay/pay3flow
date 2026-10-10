@@ -167,6 +167,7 @@ pub async fn routes(
         .update_search(search_id, response.routes_found, "finished")
         .await
         .map_err(map_reputation_error)?;
+    crate::provider_profile::observe_search(&state, &response).await;
     Ok(Json(response))
 }
 
@@ -247,6 +248,7 @@ async fn route_socket(state: AppState, mut socket: WebSocket) {
         {
             return;
         }
+        crate::provider_profile::observe_search(&state, &response).await;
         if send_search_response(&mut socket, "routes_updated", response.clone())
             .await
             .is_ok()
@@ -328,6 +330,7 @@ async fn route_socket(state: AppState, mut socket: WebSocket) {
                 .await
                 .is_ok()
             {
+                crate::provider_profile::observe_search(&state, &response).await;
                 let _ = send_search_response(&mut socket, "search_finished", response).await;
             }
         }

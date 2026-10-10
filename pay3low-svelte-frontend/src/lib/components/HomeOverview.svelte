@@ -108,7 +108,7 @@
     <div class="sectionHead"><h2 id="coverage-heading">{copy.coverageTitle}</h2></div>
     <div class="coverageGrid">
       <div class="coverageItem"><div class="assetTags">{#each assets as asset}{@const flag = fiatFlagUrl(asset)}<span><img src={flag ?? assetIcon(asset)} class:fiatFlag={Boolean(flag)} alt="" width="20" height="20" loading="lazy" decoding="async" />{asset}</span>{/each}</div><p>{copy.currencies}</p><h3>{copy.examplesTitle}</h3>{@render exampleCards(0)}</div>
-      <div class="coverageItem"><div class="providerTags">{#each providers as provider}<span><img src={venueIcon(provider.id)} alt="" width="20" height="20" loading="lazy" decoding="async" />{provider.name}</span>{/each}</div><h3 class="bankHeading">{t("Banks", {}, $locale)}</h3><div class="providerTags bankTags">{#each banks as bank}<span><img src={bank.iconUrl} alt="" width="20" height="20" loading="lazy" decoding="async" />{bank.name}</span>{/each}</div><p>{copy.sources}</p></div>
+      <div class="coverageItem"><div class="providerTags">{#each providers as provider}<a href={`/providers/${provider.id}`}><img src={venueIcon(provider.id)} alt="" width="20" height="20" loading="lazy" decoding="async" />{provider.name}</a>{/each}</div><h3 class="bankHeading">{t("Banks", {}, $locale)}</h3><div class="providerTags bankTags">{#each banks as bank}<span><img src={bank.iconUrl} alt="" width="20" height="20" loading="lazy" decoding="async" />{bank.name}</span>{/each}</div><p>{copy.sources}</p></div>
     </div>
     {@render exampleCards(3)}
   </section>
@@ -145,7 +145,10 @@
   .coverageGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
   .coverageItem { min-width: 0; }
   .assetTags, .providerTags { display: flex; flex-wrap: wrap; align-content: start; gap: 8px; min-height: 80px; margin-bottom: 16px; }
-  .assetTags span, .providerTags span { display: flex; align-items: center; gap: 7px; min-height: 34px; padding: 6px 10px; border: 1px solid var(--color-border); border-radius: 7px; background: var(--color-panel); font-size: 12px; font-weight: 750; }
+  .assetTags span, .providerTags span, .providerTags a { display: flex; align-items: center; gap: 7px; min-height: 34px; padding: 6px 10px; border: 1px solid var(--color-border); border-radius: 7px; background: var(--color-panel); font-size: 12px; font-weight: 750; }
+  .providerTags a { color: var(--color-text); text-decoration: none; transition: color 0.16s ease, border-color 0.16s ease, background-color 0.16s ease; }
+  .providerTags a:hover, .providerTags a:focus-visible { border-color: var(--color-accent-text); background: var(--color-accent-soft); color: var(--color-accent-text); }
+  .providerTags a:focus-visible { outline: 2px solid var(--color-accent-text); outline-offset: 2px; }
   .assetTags img, .providerTags img { object-fit: contain; border-radius: 50%; }
   .assetTags img.fiatFlag { object-fit: cover; }
   .examples.stacked { grid-template-columns: 1fr; margin-top: 0; }.examples { margin-top: 24px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }

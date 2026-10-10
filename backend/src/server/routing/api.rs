@@ -172,6 +172,10 @@ pub fn router(state: AppState) -> Router {
             post(banks::admin_set_status),
         )
         .route("/api/providers", get(providers::list))
+        .route(
+            "/api/providers/:slug/statistics",
+            get(crate::provider_profile::statistics),
+        )
         .route("/api/providers/:provider/webhooks", post(payments::webhook))
         .route("/api/debug/quote", post(rates::debug_quote))
         .route("/routing/fallback", post(matcher::fallback))
