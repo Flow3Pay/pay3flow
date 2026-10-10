@@ -840,7 +840,7 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
           completion_rate_30d: 0.99 as number | null,
         },
         source_url: `https://example.com/${adId}`,
-        advertiser_profile_url: source === "bestchange" ? "https://www.bestchange.pro/changerbiz-exchanger.html#pay3flow-id=125" : source === "binance" && options.guideVenue ? "https://c2c.binance.com/ru/advertiserDetail?advertiserNo=s6b4151aab3223e9a87d491ca4256411b" : source === "mexc" ? "https://www.mexc.com/buy-crypto/merchant/af2545ef4b6c470ebd516aa794bb7a03" : options.reviews ? `https://c2c.binance.com/en/advertiserDetail?advertiserNo=${adId}` : null,
+        advertiser_profile_url: source === "bybit" ? `https://www.bybit.com/en/p2p/profile/masked-${adId}/${asset}/${fiat}/item` : source === "bestchange" ? "https://www.bestchange.pro/changerbiz-exchanger.html#pay3flow-id=125" : source === "binance" && options.guideVenue ? "https://c2c.binance.com/ru/advertiserDetail?advertiserNo=s6b4151aab3223e9a87d491ca4256411b" : source === "mexc" ? "https://www.mexc.com/buy-crypto/merchant/af2545ef4b6c470ebd516aa794bb7a03" : options.reviews ? `https://c2c.binance.com/en/advertiserDetail?advertiserNo=${adId}` : null,
       });
       if (url.searchParams.get("source_fiat") === "AMD" && url.searchParams.get("target_fiat") === "AMD") {
         expect(url.searchParams.get("source_payment_method")).toBe("Ameriabank");
@@ -1657,8 +1657,10 @@ test("AMD cycle keeps the best route visible when profit is unconfirmed", async 
   await expect(page.getByTestId("no-profitable-routes")).toHaveCount(0);
 });
 
-test("cross-venue instructions include a numbered transfer step", async ({ page }) => {
-  await mockBackend(page);
+for (const source of ["binance", "bitcoin-center", "bestchange"] as const) {
+test(`cross-venue instructions animate a contextual transfer from ${source}`, async ({ page }, testInfo) => {
+  await mockBackend(page, { guideVenue: source });
+  if (source === "bestchange") await page.emulateMedia({ reducedMotion: "reduce" });
   await openApp(page);
 
   await page.getByRole("button", { name: "Select sending bank: Ameriabank" }).click();
@@ -1683,7 +1685,39 @@ test("cross-venue instructions include a numbered transfer step", async ({ page 
   await expect(instructions.getByRole("heading", { name: "Transfer USDT to Bybit" })).toBeVisible();
   await expect(instructions.getByText("Choose the exact Ethereum (ERC-20) network on both platforms", { exact: false })).toBeVisible();
   await expect(instructions.locator(".frameList").getByText("Wait until Bybit shows the deposit as received before continuing.")).toBeVisible();
+  const animation = instructions.getByTestId("transfer-animation");
+  await expect(animation).toBeVisible();
+  await expect(animation.getByTestId("transfer-source")).toContainText(({ binance: "Binance", "bitcoin-center": "Bitcoin Center", bestchange: "ChangerBiz" })[source]);
+  await expect(animation.getByTestId("transfer-destination")).toContainText("Bybit");
+  await expect(animation.getByTestId("transfer-source").locator("img")).toHaveAttribute("src", source === "bestchange" ? "/icons/venues/generic.svg" : source === "binance" ? "/icons/venues/binance.png" : "/icons/venues/bitcoin-center.svg");
+  await expect(animation.getByTestId("transfer-destination").locator("img")).toHaveAttribute("src", "/icons/venues/bybit.png");
+  await expect(animation).toContainText("Ethereum (ERC-20)");
+  await expect(instructions.locator(".browser, [data-testid=spot-terminal]")).toHaveCount(0);
+  await expect(instructions.getByTestId("p2p-profile-link")).toHaveCount(0);
+  await instructions.getByRole("button", { name: "Scene 2: Check the network", exact: true }).click();
+  await expect(animation).toHaveAttribute("data-phase", "verify");
+  await instructions.getByRole("button", { name: "Scene 3: Confirm the transfer", exact: true }).click();
+  await expect(animation).toHaveAttribute("data-phase", "act");
+  const token = animation.getByTestId("transfer-token");
+  await expect(token).toBeVisible();
+  if (source === "binance") {
+    await instructions.getByTestId("instruction-scene").scrollIntoViewIfNeeded();
+    await instructions.getByTestId("playback-toggle").click();
+    await expect.poll(() => token.evaluate(element => parseFloat(element.style.left))).toBeGreaterThan(8);
+    await instructions.getByTestId("playback-toggle").click();
+    const frozen = await token.getAttribute("style");
+    await page.waitForTimeout(250);
+    await expect(token).toHaveAttribute("style", frozen!);
+  }
+  await instructions.getByRole("button", { name: "Scene 4: Wait for the deposit", exact: true }).click();
+  await expect(animation).toHaveAttribute("data-phase", "receive");
+  await expect.poll(() => token.evaluate(element => element.style.left)).toBe("72%");
+  await instructions.getByTestId("instruction-scene").screenshot({ style: ".sceneOverlay { visibility: hidden; }", path: testInfo.outputPath(`transfer-${source}.png`) });
+  await instructions.getByTestId("confirm-instruction-step").click();
+  await expect(instructions.getByTestId("transfer-animation")).toHaveCount(0);
+  await expect(instructions.getByTestId("p2p-profile-link")).toHaveAttribute("href", "https://www.bybit.com/en/p2p/profile/masked-exit-3/USDT/RUB/item");
 });
+}
 
 test("selected bank currencies override the reversed corridor", async ({ page }) => {
   await mockBackend(page);
@@ -2494,7 +2528,10 @@ test("Bybit P2P walkthrough reviews the profile and selects the route's buy or s
   await scene.scrollIntoViewIfNeeded();
   await expect(profile).toBeVisible();
   await expect(profile.getByTestId("bybit-advertiser")).toHaveText("bybit-merchant");
-  await expect(profile).toHaveAttribute("data-order-side", "buy");
+  await expect(guide.getByTestId("p2p-profile-link")).toHaveAttribute("href", "https://www.bybit.com/en/p2p/profile/masked-entry-2/USDC/AMD/item");
+  await expect(guide.getByTestId("p2p-profile-link")).toContainText("Open bybit-merchant profile");
+  await expect(guide.getByTestId("p2p-profile-link")).toHaveAttribute("target", "_blank");
+  await expect(profile).toHaveAttribute("data-side", "buy");
   await expect(profile.getByTestId("bybit-trade-action")).toHaveText("Buy USDC");
   await expect(profile.locator(".profileIcon")).toBeVisible();
   await expect(profile.locator(".bybitNav small, .adsBottom small")).toHaveCount(0);
@@ -2546,7 +2583,8 @@ test("Bybit P2P walkthrough reviews the profile and selects the route's buy or s
 
   await guide.getByTestId("confirm-instruction-step").click();
   await scene.scrollIntoViewIfNeeded();
-  await expect(profile).toHaveAttribute("data-order-side", "sell");
+  await expect(profile).toHaveAttribute("data-side", "sell");
+  await expect(guide.getByTestId("p2p-profile-link")).toHaveAttribute("href", "https://www.bybit.com/en/p2p/profile/masked-exit-2/USDC/RUB/item");
   await expect(profile.locator(".adPrice")).toContainText("RUB");
   await guide.getByRole("button", { name: "Scene 3: Return to Ads", exact: true }).click();
   await expect(guide.locator(".frameList")).toContainText("sell USDC for RUB");
@@ -2575,7 +2613,7 @@ test("MEXC P2P walkthrough reviews the merchant and chooses the correct buy or s
   const profile = scene.getByTestId("mexc-profile-card");
   await scene.scrollIntoViewIfNeeded();
   await expect(profile).toBeVisible();
-  await expect(profile).toHaveAttribute("data-order-side", "buy");
+  await expect(profile).toHaveAttribute("data-side", "buy");
   await expect(profile.getByTestId("mexc-advertiser")).toHaveText("mexc-merchant");
   await expect(profile.locator(".wordmark")).toHaveAttribute("src", "/icons/venues/mexc-wordmark.svg");
   await expect.poll(() => profile.locator(".wordmark").evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
@@ -2603,7 +2641,7 @@ test("MEXC P2P walkthrough reviews the merchant and chooses the correct buy or s
   await guide.getByTestId("confirm-instruction-step").click();
   await guide.getByRole("button", { name: "Scene 3: Return to Ads", exact: true }).click();
   await scene.scrollIntoViewIfNeeded();
-  await expect(profile).toHaveAttribute("data-order-side", "sell");
+  await expect(profile).toHaveAttribute("data-side", "sell");
   await expect(profile.locator(".selected h3")).toHaveText("Sell to the User");
   await expect(profile.getByTestId("mexc-trade-action")).toBeInViewport();
   await expect(profile.locator(".selected .adPrice")).toContainText("RUB");
@@ -3563,7 +3601,9 @@ test("Binance profile walkthrough opens More details, closes it and selects the 
   const guide = page.getByTestId("route-guide");
   await guide.getByTestId("start-guide").click();
   const profile = guide.getByTestId("binance-profile-card");
-  await expect(profile).toHaveAttribute("data-order-side", "buy");
+  await expect(profile).toHaveAttribute("data-side", "buy");
+  await expect(guide.getByTestId("p2p-profile-link")).toHaveAttribute("href", "https://c2c.binance.com/ru/advertiserDetail?advertiserNo=s6b4151aab3223e9a87d491ca4256411b");
+  await expect(guide.getByTestId("p2p-profile-link")).toHaveAttribute("target", "_blank");
   await guide.getByRole("button", { name: "Scene 2: Open More details", exact: true }).click();
   await expect(profile.getByTestId("binance-details")).toContainText("Trade information");
   await expect(profile.getByTestId("binance-details")).toContainText("99%");

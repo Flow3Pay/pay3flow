@@ -223,6 +223,9 @@
           {#if spot && step?.url}
             <a class="walletProviderLink" data-testid="spot-market-link" href={step.url} target="_blank" rel="noreferrer noopener">{copy("Open {venue} Spot", { venue: step.venue })} · {spot.label} <span aria-hidden="true">↗</span></a>
           {/if}
+          {#if step?.offer && !step.direct && (step.kind === "buy" || step.kind === "sell") && step.url}
+            <a class="walletProviderLink" data-testid="p2p-profile-link" href={step.url} target="_blank" rel="noreferrer noopener">{copy(step.offer.advertiser_profile_url ? "Open {venue} profile" : "Open {venue}", { venue: step.offer.advertiser_profile_url ? step.offer.advertiser.nickname : step.venue })} <span aria-hidden="true">↗</span></a>
+          {/if}
           {#if step?.execution && route.execution}
             <div class="swapExecution" class:connected={walletSwap}>{#key route.route_id}<RouteExecutionPanel {route} {networkNames} />{/key}</div>
           {/if}
