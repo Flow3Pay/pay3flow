@@ -2,13 +2,14 @@
   import { onMount } from "svelte";
   import { locale } from "$lib/i18n";
   import { otcCopy } from "$lib/otc/copy";
-  import { demoCandles, formatPrice, type OtcMarket, type ChartRange } from "$lib/otc/model";
+  import { demoCandles, formatAmount, formatPrice, type OtcMarket, type ChartRange } from "$lib/otc/model";
   export let market: OtcMarket;
   let range: ChartRange = "1D";
   let mode: "lines" | "candles" = "lines";
   let zoom = 1;
   let hovered: number | null = null;
   let plot: HTMLDivElement;
+  let tooltipX = 8;
   let width = 680, height = 375;
   const left = 12, top = 24;
   $: right = width - 82;
@@ -32,6 +33,8 @@
   $: maximumVolume = Math.max(...candles.map((candle) => candle.volume));
   $: step = (right - left) / candles.length;
   $: active = candles[hovered === null ? candles.length - 1 : Math.min(hovered, candles.length - 1)];
+  $: buyPrice = active.close - market.price * .0015;
+  $: sellPrice = active.close + market.price * .0015;
   $: buyLine = line(-market.price * .0015);
   $: sellLine = line(market.price * .0015);
   $: lastY = y(market.price);
@@ -42,10 +45,14 @@
     const rect = event.currentTarget instanceof Element ? event.currentTarget.getBoundingClientRect() : null;
     if (!rect) return;
     const svgX = (event.clientX - rect.left) / rect.width * width;
+    tooltipX = Math.max(8, Math.min(rect.width - 236, event.clientX - rect.left + 12));
     hovered = Math.max(0, Math.min(candles.length - 1, Math.floor((svgX - left) / step)));
   }
   function dateLabel(time: number) {
     return new Date(time).toLocaleString($locale === "ru" ? "ru-RU" : "en-GB", range === "1D" ? { hour: "2-digit", minute: "2-digit", timeZone: "UTC" } : { day: "numeric", month: "short", timeZone: "UTC" });
+  }
+  function fullDateLabel(time: number) {
+    return new Date(time).toLocaleString({ en: "en-GB", ru: "ru-RU", hy: "hy-AM" }[$locale], { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: "UTC" });
   }
   function changeRange(value: ChartRange) { range = value; hovered = null; zoom = 1; }
 </script>
@@ -87,10 +94,21 @@
     {#if hovered !== null}
       <line class="crosshair" x1={x(hovered)} x2={x(hovered)} y1={top} y2={volumeBottom} />
       <line class="crosshair" x1={left} x2={right} y1={y(active.close)} y2={y(active.close)} />
-      <circle cx={x(hovered)} cy={y(active.close)} r="4" fill="var(--otc-buy)" stroke="var(--color-paper)" stroke-width="2" />
+      {#if mode === "lines"}
+        <circle class="buyPoint" cx={x(hovered)} cy={y(buyPrice)} r="4" fill="var(--otc-buy)" stroke="var(--color-paper)" stroke-width="2" />
+        <circle class="sellPoint" cx={x(hovered)} cy={y(sellPrice)} r="4" fill="var(--otc-sell)" stroke="var(--color-paper)" stroke-width="2" />
+      {:else}
+        <circle cx={x(hovered)} cy={y(active.close)} r="4" fill={active.close >= active.open ? "var(--otc-buy)" : "var(--otc-sell)"} stroke="var(--color-paper)" stroke-width="2" />
+      {/if}
       <rect x={Math.min(right - 84, Math.max(left, x(hovered) - 42))} y={height - 32} width="84" height="24" rx="4" fill="var(--color-text)" /><text x={Math.min(right - 42, Math.max(left + 42, x(hovered)))} y={height - 16} text-anchor="middle" fill="var(--color-paper)" font-size="10">{dateLabel(active.time)}</text>
     {/if}
   </svg>
+  {#if hovered !== null}
+    <div class="chartTooltip" role="tooltip" style:left={`${tooltipX}px`}>
+      <strong class="tooltipDate">{fullDateLabel(active.time)} <small>UTC</small></strong>
+      <dl><div class="buyValue"><dt>{copy.buyPrice}</dt><dd>{formatPrice(buyPrice, market)} <small>{market.quote}</small></dd></div><div class="sellValue"><dt>{copy.sellPrice}</dt><dd>{formatPrice(sellPrice, market)} <small>{market.quote}</small></dd></div><div class="buyValue"><dt>{copy.buyVolume}</dt><dd>{formatAmount(active.buyVolume, market)} <small>{market.base}</small></dd></div><div class="sellValue"><dt>{copy.sellVolume}</dt><dd>{formatAmount(active.sellVolume, market)} <small>{market.base}</small></dd></div></dl>
+    </div>
+  {/if}
 </div>
 <div class="chartFooter"><span><img src="/icons/assets/pay3flow_logo.svg" width="15" height="15" alt="" />Pay3Flow </span><div class="zoomTools"><button type="button" aria-label={copy.zoomOut} disabled={zoom === 1} on:click={() => { zoom = Math.max(1, zoom - .5); hovered = null; }}>−</button><button type="button" aria-label={copy.chartReset} on:click={() => { zoom = 1; hovered = null; }}>↺</button><button type="button" aria-label={copy.zoomIn} disabled={zoom === 3} on:click={() => { zoom = Math.min(3, zoom + .5); hovered = null; }}>+</button></div><span class="timezone">UTC</span></div>
 <style>
@@ -108,7 +126,7 @@
   .ohlc strong { color: var(--color-text); font-size: 12px; }
   .ohlc b { font-weight: 400; color: var(--otc-sell); }
   .ohlc .positive b { color: var(--otc-buy); }
-  .chartPlot { min-height: 290px; display: flex; align-items: stretch; }
+  .chartPlot { position: relative; min-height: 290px; display: flex; align-items: stretch; }
   .priceChart { display: block; width: 100%; min-height: 290px; overflow: visible; font-family: var(--font-mono); }
   .gridLine { stroke: var(--color-border); stroke-width: .7; }
   .vertical { opacity: .5; }
@@ -119,6 +137,14 @@
   .lastPriceLine { stroke: var(--otc-buy); stroke-width: .8; stroke-dasharray: 3 4; opacity: .7; }
   .lastPriceLabel { font-size: 12px; fill: #fff; }
   .crosshair { stroke: var(--color-text-soft); stroke-width: .7; stroke-dasharray: 3 3; }
+  .chartTooltip { position: absolute; top: 8px; z-index: 5; width: 228px; max-width: calc(100% - 16px); padding: 12px; border: 1px solid var(--color-border-strong); border-radius: 7px; background: var(--color-paper); color: var(--color-text); pointer-events: none; font-family: var(--font-sans); font-size: 12px; box-shadow: 0 4px 16px #0001; }
+  .tooltipDate { display: block; font-size: 12px; font-weight: 650; margin-bottom: 10px; }
+  .chartTooltip dl { display: grid; gap: 8px; margin: 0; }
+  .chartTooltip dl > div { display: flex; justify-content: space-between; gap: 8px; }
+  .chartTooltip dt { color: var(--color-text-soft); }
+  .chartTooltip dd { margin: 0; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .chartTooltip small { font-size: 10px; color: var(--color-text-soft); }
+  .buyValue dd { color: var(--otc-buy); } .sellValue dd { color: var(--otc-sell); }
   .chartFooter { display: flex; align-items: center; justify-content: space-between; padding: 3px 17px 13px; font-size: 12px; color: var(--color-text-soft); }
   .chartFooter > span { display: flex; align-items: center; gap: 6px; }
   .zoomTools { display: flex; gap: 3px; border: 1px solid var(--color-border); border-radius: 6px; padding: 2px; }

@@ -6,6 +6,7 @@ async function openOtc(page: Page, hash = "#/otc") {
   await page.goto(`/${hash}`);
   await expect(page.getByTestId("otc-workspace")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Trade on your terms." })).toBeVisible();
+  await expect(page.locator(".introOverlay")).toHaveCount(0, { timeout: 6000 });
 }
 
 test("OTC navigation, drawer and share work at every screen size", async ({ page }) => {
@@ -76,10 +77,10 @@ test("panels collapse, chart controls update, and markets survive reload", async
     await page.getByRole("button", { name: `Expand ${title}`, exact: true }).click();
     await expect(page.locator(`#${id}`)).toBeVisible();
   }
-  const originalLevels = await page.locator(".askLevels .level").count();
+  const originalLevels = await page.locator("#otc-book .askLevels .level").count();
   await page.getByRole("button", { name: "Price grouping", exact: true }).click();
   await page.getByRole("dialog", { name: "Price grouping" }).getByRole("button", { name: "0.00005", exact: true }).click();
-  await expect.poll(() => page.locator(".askLevels .level").count()).toBeLessThan(originalLevels);
+  await expect.poll(() => page.locator("#otc-book .askLevels .level").count()).toBeLessThan(originalLevels);
   await page.getByRole("button", { name: "Price grouping", exact: true }).click();
   await page.getByRole("dialog", { name: "Price grouping" }).getByRole("button", { name: "0.00001", exact: true }).click();
   const line = await page.locator(".buyLine").getAttribute("d");
@@ -104,9 +105,9 @@ test("panels collapse, chart controls update, and markets survive reload", async
 
 test("book selection creates, retains and cancels a demo limit order", async ({ page }) => {
   await openOtc(page);
-  await page.locator(".askLevels .level").last().click();
+  await page.locator("#otc-book .askLevels .level").last().click();
   const chosenPrice = await page.getByRole("textbox", { name: "Price", exact: true }).inputValue();
-  await expect(page.locator(".askLevels .level").last()).toHaveClass(/selected/);
+  await expect(page.locator("#otc-book .askLevels .level").last()).toHaveClass(/selected/);
   await page.getByRole("textbox", { name: "You send", exact: true }).fill("1500");
   await page.getByTestId("otc-review").click();
   const review = page.getByRole("dialog", { name: "One last look." });
@@ -295,7 +296,7 @@ test("OTC amount fields use the swap typography and control sizing", async ({ pa
     return { font: style.fontFamily, size: style.fontSize, weight: style.fontWeight, line: style.lineHeight, spacing: style.letterSpacing };
   };
   const otc = await page.locator("#otc-send").evaluate(appearance);
-  const assetHeight = (await page.locator("#otc-bridge .methodTrigger").first().boundingBox())!.height;
+  const assetHeight = await page.locator("#otc-bridge .methodTrigger").first().evaluate(el => (el as HTMLElement).offsetHeight);
   await expect(page.locator("#otc-chart-column .panelHead")).not.toContainText("BTC/USDT");
   const head = (await page.locator("#otc-chart-column .panelHead").boundingBox())!;
   const tools = (await page.locator(".chartTools").boundingBox())!;
@@ -303,5 +304,74 @@ test("OTC amount fields use the swap typography and control sizing", async ({ pa
   await page.getByRole("link", { name: "SWAP", exact: true }).click();
   await expect(page.locator(".workspace")).toBeVisible();
   expect(await page.getByLabel("Amount to send", { exact: true }).evaluate(appearance)).toEqual(otc);
-  expect((await page.locator(".moneyPanelSource .methodTrigger").boundingBox())!.height).toBe(assetHeight);
+  expect(await page.locator(".moneyPanelSource .methodTrigger").evaluate(el => (el as HTMLElement).offsetHeight)).toBe(assetHeight);
+});
+
+
+test("market activity has green bids on the left and red asks on the right", async ({ page }, testInfo) => {
+  await openOtc(page);
+  const buy = page.getByTestId("otc-buy-book"), sell = page.getByTestId("otc-sell-book");
+  await expect(buy.locator(".bidLevels .level")).toHaveCount(9);
+  await expect(buy.locator(".askLevels")).toHaveCount(0);
+  await expect(sell.locator(".askLevels .level")).toHaveCount(9);
+  await expect(sell.locator(".bidLevels")).toHaveCount(0);
+  const left = (await buy.boundingBox())!, right = (await sell.boundingBox())!;
+  expect(left.x + left.width).toBeLessThanOrEqual(right.x);
+  for (const [theme, green, red] of [["light", "rgb(36, 115, 56)", "rgb(212, 61, 53)"], ["dark", "rgb(98, 206, 121)", "rgb(255, 119, 112)"]]) {
+    await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
+    await expect(buy.locator(".level").first()).toHaveCSS("color", green);
+    await expect(sell.locator(".level").first()).toHaveCSS("color", red);
+    await expect(buy.locator(".level").first()).toHaveCSS("font-style", "normal");
+    await expect(buy.locator(".level").first()).toHaveCSS("font-family", await page.locator(".panelHead h2").first().evaluate(el => getComputedStyle(el).fontFamily));
+  }
+  await sell.locator(".level").first().click();
+  await expect(page.getByRole("button", { name: "Buy", exact: true })).toHaveAttribute("aria-pressed", "true");
+  const price = (await sell.locator(".levelPrice").first().innerText()).replaceAll(",", "");
+  await expect(page.getByRole("textbox", { name: "Price", exact: true })).toHaveValue(price);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+  await page.locator(".splitBooks").screenshot({ path: testInfo.outputPath("split-orderbooks.png") });
+});
+
+test("chart hover shows both line points, the full date and side volumes", async ({ page }) => {
+  await openOtc(page);
+  const plot = page.locator(".priceChart");
+  const box = (await plot.boundingBox())!;
+  await plot.hover({ position: { x: box.width * .4, y: box.height * .4 } });
+  const tooltip = page.getByRole("tooltip");
+  await expect(tooltip).toContainText(/2026.*UTC/);
+  for (const label of ["Buy price", "Sell price", "Buy volume", "Sell volume"]) await expect(tooltip.getByText(label, { exact: true })).toBeVisible();
+  await expect(plot.locator(".buyPoint")).toHaveCount(1);
+  await expect(plot.locator(".sellPoint")).toHaveCount(1);
+  expect(Number(await plot.locator(".sellPoint").getAttribute("cy"))).toBeLessThan(Number(await plot.locator(".buyPoint").getAttribute("cy")));
+  const popup = (await tooltip.boundingBox())!;
+  expect(popup.x).toBeGreaterThanOrEqual(box.x);
+  expect(popup.x + popup.width).toBeLessThanOrEqual(box.x + box.width);
+  await page.getByRole("heading", { name: "Trade on your terms." }).hover();
+  await expect(tooltip).toHaveCount(0);
+});
+
+test("chart width changes with dragging and keyboard and survives reload", async ({ page, isMobile }) => {
+  test.skip(isMobile, "Column resizing applies to the horizontal desktop layout.");
+  await openOtc(page);
+  const chart = page.locator("#otc-chart-column");
+  const handle = page.getByRole("separator", { name: "Resize chart · Bridge", exact: true });
+  const initial = (await chart.boundingBox())!.width;
+  const box = (await handle.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 - 90, box.y + 20, { steps: 10 });
+  await page.mouse.up();
+  await expect.poll(async () => (await chart.boundingBox())!.width).toBeGreaterThan(initial + 70);
+  await handle.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(async () => (await chart.boundingBox())!.width).toBeLessThan(initial + 85);
+  await chart.evaluate(async el => { await Promise.all(el.parentElement!.getAnimations().map(animation => animation.finished)); });
+  const changed = (await chart.boundingBox())!.width;
+  await page.reload();
+  await expect(chart).toBeVisible();
+  await expect(page.locator(".introOverlay")).toHaveCount(0, { timeout: 6000 });
+  await expect.poll(async () => (await chart.boundingBox())!.width).toBeCloseTo(changed, 0);
+  await handle.focus();
+  await page.keyboard.press("Home");
+  await expect.poll(async () => (await chart.boundingBox())!.width).toBeCloseTo(initial, 0);
 });

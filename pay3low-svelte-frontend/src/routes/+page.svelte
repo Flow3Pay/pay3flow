@@ -5,6 +5,8 @@
   import type { ExchangeShareState } from "$lib/exchange-share";
   import Header from "$lib/components/Header.svelte";
   import type OtcWorkspaceType from "$lib/components/otc/OtcWorkspace.svelte";
+  import StartupAnimation from "$lib/components/StartupAnimation.svelte";
+  import { parseExchangeHash } from "$lib/guide-link";
   import Converter from "$lib/components/Converter.svelte";
   import HomeOverview from "$lib/components/HomeOverview.svelte";
   import { COMMUNITY_URL, PROJECT_URL, SITE_URL, homeContent } from "$lib/home-content";
@@ -13,6 +15,10 @@
   import { localize, locale, t } from "$lib/i18n";
   let guideActive = false;
   let otcActive = false;
+  let startupPlaying = false;
+  let startupCompleted = false;
+  let startupMode: "swap" | "otc" = "swap";
+  function finishStartup() { startupPlaying = false; startupCompleted = true; }
   let OtcWorkspace: typeof OtcWorkspaceType | null = null;
   let swapHref = "/#/swap";
   let otcShareUrl = "/#/otc";
@@ -22,6 +28,7 @@
   }
   async function syncProductPage() {
     const nextOtc = /^#\/otc(?:[/?]|$)/.test(window.location.hash);
+    if (startupPlaying && (nextOtc !== (startupMode === "otc") || parseExchangeHash(window.location.hash)?.guide)) finishStartup();
     if (!nextOtc && /^#\/(?:swap|guide)(?:[/?]|$)/.test(window.location.hash)) rememberSwap();
     otcActive = nextOtc;
     if (nextOtc) {
@@ -32,6 +39,9 @@
     }
   }
   onMount(() => {
+    startupMode = /^#\/otc(?:[/?]|$)/.test(window.location.hash) ? "otc" : "swap";
+    startupCompleted = Boolean(parseExchangeHash(window.location.hash)?.guide) || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    startupPlaying = !startupCompleted;
     void syncProductPage();
     window.addEventListener("hashchange", syncProductPage);
     window.addEventListener("popstate", syncProductPage);
@@ -94,12 +104,13 @@
     {#if otcActive}
       {#if OtcWorkspace}<svelte:component this={OtcWorkspace} />{:else}<div class="otcLoading" aria-busy="true">OTC<span>…</span></div>{/if}
     {:else}
-    <Converter onShareStateChange={(state) => shareState = state} onGuideChange={(active) => guideActive = active} onPaymentMethodsLoaded={(items) => paymentMethods = items} onProvidersLoaded={(items) => providerCatalog = items} onBelarusP2pWarningChange={(show) => showBelarusP2pWarning = show} onOpenBelarusP2pWarning={() => belarusP2pWarningOpen = true} />
+    <Converter introCompleted={startupCompleted} onDismissStartup={finishStartup} onShareStateChange={(state) => shareState = state} onGuideChange={(active) => guideActive = active} onPaymentMethodsLoaded={(items) => paymentMethods = items} onProvidersLoaded={(items) => providerCatalog = items} onBelarusP2pWarningChange={(show) => showBelarusP2pWarning = show} onOpenBelarusP2pWarning={() => belarusP2pWarningOpen = true} />
     {#if !guideActive}<HomeOverview {paymentMethods} {providerCatalog} />{/if}
     {/if}
   </main>
   {#if !guideActive && !otcActive}<footer class="siteFooter"><span>Pay3Flow</span><span>{t("Live routing infrastructure · Public market estimates", {}, $locale)}</span><a href="/terms">{t("Usage policy", {}, $locale)}</a></footer>{/if}
 </div>
+{#if startupPlaying}<StartupAnimation mode={startupMode} onComplete={finishStartup} />{/if}
 <BelarusP2pWarning open={!otcActive && belarusP2pWarningOpen} onClose={() => belarusP2pWarningOpen = false} />
 
 <style>

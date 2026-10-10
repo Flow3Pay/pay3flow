@@ -17,7 +17,7 @@ export interface OtcMarket {
   icon: string;
 }
 export interface BookLevel { price: number; amount: number; total: number; depth: number }
-export interface Candle { time: number; open: number; high: number; low: number; close: number; volume: number }
+export interface Candle { time: number; open: number; high: number; low: number; close: number; volume: number; buyVolume: number; sellVolume: number }
 export interface OtcTrade { id: string; time: number; side: OrderSide; price: number; amount: number }
 export interface OtcSnapshot {
   marketId: string;
@@ -86,11 +86,13 @@ export function demoCandles(market: OtcMarket, range: ChartRange): Candle[] {
     const close = market.price * (.968 + trend * .032 + wave + (trend > .65 ? Math.sin((trend - .65) * 14) * .012 : 0));
     const open = previous;
     previous = close;
+    const volume = 1800 + (Math.sin(index * 2.13) + 1) * 1600 + (index % 11 === 0 ? 3400 : 0);
+    const buyVolume = volume * (close >= open ? .64 : .36);
     return {
       time: anchorTime - days * 86400000 * (1 - trend), open, close,
       high: Math.max(open, close) + market.price * (.0015 + (index % 5) * .00035),
       low: Math.min(open, close) - market.price * (.0013 + (index % 4) * .00042),
-      volume: 1800 + (Math.sin(index * 2.13) + 1) * 1600 + (index % 11 === 0 ? 3400 : 0),
+      volume, buyVolume, sellVolume: volume - buyVolume,
     };
   });
   const offset = market.price - samples[count - 1].close;
