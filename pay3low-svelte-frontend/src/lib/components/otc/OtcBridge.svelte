@@ -19,6 +19,7 @@
   export let side: OrderSide = "buy";
   export let type: OrderType = "limit";
   export let price: string;
+  export let onPriceInput: () => void = () => {};
   export let onReview: (draft: OrderDraft) => void;
   export let amount: string;
   let assetPicker: "send" | "receive" | null = null;
@@ -78,7 +79,7 @@
 <form class="bridgeForm" on:submit|preventDefault={review}>
   <div class="sideTabs" class:selling={side === "sell"} role="group" aria-label={copy.side}><button type="button" class:active={side === "buy"} aria-pressed={side === "buy"} on:click={() => onSideChange("buy")}>{copy.buy}</button><button type="button" class:active={side === "sell"} aria-pressed={side === "sell"} on:click={() => onSideChange("sell")}>{copy.sell}</button></div>
   <div class="orderTypes" class:marketOrder={type === "market"} role="group" aria-label={copy.execution}><button type="button" class:active={type === "limit"} aria-pressed={type === "limit"} on:click={() => type = "limit"}>{copy.limit}</button><button type="button" class:active={type === "market"} aria-pressed={type === "market"} on:click={() => type = "market"}>{copy.marketOrder}</button></div>
-  <label class="priceField"><span>{copy.price}</span><div><input aria-label={copy.price} inputmode="decimal" autocomplete="off" bind:value={price} disabled={type === "market"} /><span>{market.quote}</span></div></label>
+  <label class="priceField"><span>{copy.price}</span><div><input aria-label={copy.price} inputmode="decimal" autocomplete="off" bind:value={price} on:input={onPriceInput} disabled={type === "market"} /><span>{market.quote}</span></div></label>
   <p class="priceHint">{type === "limit" ? copy.priceHint : copy.marketHint}</p>
   <div class="intentLabel"><span>{copy.send}</span></div>
   <div class="moneyPanel exchangeMoneyPanel"><div class="panelCopy"><label for="otc-send">{copy.send}</label><input id="otc-send" class="amountInput" type="text" aria-label={copy.send} inputmode="decimal" autocomplete="off" spellcheck="false" bind:value={amount} on:focus={(event) => event.currentTarget.select()} /></div>{@render assetControls("send", sendMethod, sendNetwork)}</div>

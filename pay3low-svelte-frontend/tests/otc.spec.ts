@@ -19,7 +19,7 @@ test("OTC navigation, context menu and share work at every screen size", async (
   await openOtc(page);
   await expect(page.getByRole("link", { name: "OTC", exact: true })).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("link", { name: "Open API documentation" })).toBeHidden();
-  const share = page.getByRole("button", { name: "Share exchange", exact: true });
+  const share = page.getByRole("button", { name: "Share OTC", exact: true });
   const theme = await page.getByRole("button", { name: "Switch theme" }).boundingBox();
   const shareBox = await share.boundingBox();
   expect(shareBox!.x).toBeGreaterThan(theme!.x);
@@ -35,7 +35,12 @@ test("OTC navigation, context menu and share work at every screen size", async (
   await expect(page.getByRole("button", { name: "Open menu" })).toBeFocused();
   await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text: string) => sessionStorage.setItem("test.otc-share", text) } }));
   await share.click();
-  expect(await page.evaluate(() => sessionStorage.getItem("test.otc-share"))).toContain("/#/otc");
+  const dialog = page.getByRole("dialog", { name: "Share OTC", exact: true });
+  await expect(dialog.locator(".sharePreview")).toHaveAttribute("src", /\/otc\/[A-Za-z0-9_-]{16}\/preview\.png$/);
+  await expect.poll(() => dialog.locator(".sharePreview").evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(1200);
+  await dialog.getByRole("button", { name: "Copy link", exact: true }).click();
+  await page.keyboard.press("Escape");
+  expect(await page.evaluate(() => sessionStorage.getItem("test.otc-share"))).toMatch(/\/otc\/[A-Za-z0-9_-]{16}$/);
   await page.getByRole("link", { name: "SWAP", exact: true }).click();
   await expect(page.locator(".workspace")).toBeVisible();
   await expect(page.getByTestId("otc-workspace")).toHaveCount(0);
@@ -67,10 +72,85 @@ test("EVER/USDT is the default and shared market with native icons and buy/sell 
   await expect(bridge.getByRole("textbox", { name: "You receive", exact: true })).toHaveValue("1.23709");
   await market.selectOption("BTC-USDT");
   await market.selectOption("EVER-USDT");
-  await expect(page).toHaveURL(/#\/otc\?market=EVER-USDT$/);
+  await expect(page).toHaveURL(/#\/otc\?market=EVER-USDT(?:&|$)/);
   await page.reload();
   await expect(market).toHaveValue("EVER-USDT");
   await expect(bridge.getByRole("button", { name: "Buy", exact: true })).toBeVisible();
+});
+
+test("OTC share restores edited prices, amounts, direction and networks in a fresh browser", async ({ page, browser }) => {
+  await openOtc(page);
+  const bridge = page.locator("#otc-bridge");
+  await bridge.getByRole("button", { name: "Sell", exact: true }).click();
+  await bridge.getByRole("textbox", { name: "Price", exact: true }).fill("0.012340");
+  await bridge.getByRole("textbox", { name: "You send", exact: true }).fill("100.250000");
+  await bridge.getByRole("button", { name: /Select recipient network: Ethereum/ }).click();
+  await page.getByRole("dialog", { name: "Choose network", exact: true }).getByRole("option", { name: /TRON/ }).click();
+  const params = () => page.evaluate(() => Object.fromEntries(new URLSearchParams(location.hash.split("?")[1])));
+  await expect.poll(params).toMatchObject({ market: "EVER-USDT", side: "sell", type: "limit", amount: "100.250000", price: "0.012340", sendNetwork: "everscale", receiveNetwork: "tron" });
+  await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text: string) => sessionStorage.setItem("test.otc-share", text) } }));
+  await page.getByRole("button", { name: "Share OTC", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Share OTC", exact: true });
+  await dialog.getByRole("button", { name: "Copy link", exact: true }).click();
+  const link = await page.evaluate(() => sessionStorage.getItem("test.otc-share"));
+  expect(link).toMatch(/\/otc\/[A-Za-z0-9_-]{16}$/);
+  const shared = await page.request.get(link!, { headers: { "User-Agent": "TelegramBot" } });
+  const html = await shared.text();
+  expect(shared.ok()).toBe(true);
+  expect(html).toContain('property="og:image"');
+  expect(html).toContain('name="twitter:card" content="summary_large_image"');
+  expect(html).toContain('Bridge · Chart · Orderbook');
+  const image = await page.request.get(`${link}/preview.png`);
+  expect(image.headers()["content-type"]).toBe("image/png");
+  const bytes = await image.body();
+  expect(bytes.readUInt32BE(16)).toBe(1200);
+  expect(bytes.readUInt32BE(20)).toBe(630);
+  const fresh = await browser.newPage();
+  try {
+    await mockOtcSocket(fresh);
+    await fresh.addInitScript(() => {
+      localStorage.setItem("pay3flow-locale", "en");
+      localStorage.setItem("pay3flow.otc.settlement.v1", JSON.stringify({ marketId: "EVER-USDT", side: "buy", sendNetworkId: "solana", receiveNetworkId: "everscale" }));
+    });
+    await fresh.route("**/api/**", route => route.fulfill({ status: 503, body: "{}" }));
+    await fresh.goto(link!);
+    await expect(fresh.getByTestId("otc-connection")).toHaveAttribute("data-state", "connected");
+    await expect(fresh.getByRole("combobox", { name: "Choose market" })).toHaveValue("EVER-USDT");
+    const restored = fresh.locator("#otc-bridge");
+    await expect(restored.getByRole("button", { name: "Sell", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(restored.getByRole("textbox", { name: "Price", exact: true })).toHaveValue("0.012340");
+    await expect(restored.getByRole("textbox", { name: "You send", exact: true })).toHaveValue("100.250000");
+    await expect(restored.getByRole("textbox", { name: "You receive", exact: true })).toHaveValue("1.23709");
+    await expect(restored.getByRole("button", { name: /Select recipient network: TRON/ })).toBeVisible();
+    await expect(fresh.getByRole("dialog", { name: "One last look." })).toHaveCount(0);
+    await fresh.reload();
+    await expect(restored.getByRole("textbox", { name: "Price", exact: true })).toHaveValue("0.012340");
+    await expect(restored.getByRole("textbox", { name: "You send", exact: true })).toHaveValue("100.250000");
+  } finally { await fresh.close(); }
+});
+
+test("OTC hash changes and navigation retain market order drafts and empty fields", async ({ page }) => {
+  await openOtc(page, "#/otc?market=ETH-USDT&side=sell&type=market&amount=0.25&price=2600&sendNetwork=ethereum&receiveNetwork=tron");
+  const bridge = page.locator("#otc-bridge");
+  await expect(bridge.getByRole("button", { name: "Sell", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(bridge.getByRole("button", { name: "Market", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(bridge.getByRole("textbox", { name: "You send", exact: true })).toHaveValue("0.25");
+  await expect(bridge.getByRole("textbox", { name: "Price", exact: true })).toHaveValue("2600");
+  await page.getByRole("link", { name: "SWAP", exact: true }).click();
+  await page.getByRole("link", { name: "OTC", exact: true }).click();
+  await expect(bridge.getByRole("textbox", { name: "You send", exact: true })).toHaveValue("0.25");
+  await expect(bridge.getByRole("button", { name: "Market", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.evaluate(() => location.hash = "/otc?market=ETH-USDT&side=buy&type=limit&amount=&price=&sendNetwork=solana&receiveNetwork=ethereum");
+  await expect(bridge.getByRole("button", { name: "Buy", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(bridge.getByRole("textbox", { name: "You send", exact: true })).toHaveValue("");
+  await expect(bridge.getByRole("textbox", { name: "Price", exact: true })).toHaveValue("");
+  await expect(page.getByTestId("otc-review")).toBeDisabled();
+  await page.reload();
+  await expect(bridge.getByRole("textbox", { name: "You send", exact: true })).toHaveValue("");
+  await expect(bridge.getByRole("textbox", { name: "Price", exact: true })).toHaveValue("");
+  await page.goBack();
+  await expect(bridge.getByRole("textbox", { name: "You send", exact: true })).toHaveValue("0.25");
+  await expect(bridge.getByRole("button", { name: "Sell", exact: true })).toHaveAttribute("aria-pressed", "true");
 });
 
 test("panels collapse, chart controls update, and markets survive reload", async ({ page }) => {
@@ -95,7 +175,7 @@ test("panels collapse, chart controls update, and markets survive reload", async
   await page.getByRole("button", { name: "Zoom in", exact: true }).click();
   await page.getByRole("button", { name: "Reset chart", exact: true }).click();
   await page.getByRole("combobox", { name: "Choose market" }).selectOption("ETH-USDT");
-  await expect(page).toHaveURL(/#\/otc\?market=ETH-USDT$/);
+  await expect(page).toHaveURL(/#\/otc\?market=ETH-USDT(?:&|$)/);
   await expect(page.locator("#otc-bridge").getByRole("button", { name: "Buy", exact: true })).toBeVisible();
   await page.reload();
   await expect(page.getByRole("combobox", { name: "Choose market" })).toHaveValue("ETH-USDT");

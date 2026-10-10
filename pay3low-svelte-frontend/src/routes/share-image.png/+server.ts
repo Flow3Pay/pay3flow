@@ -66,14 +66,14 @@ async function homepageImage(): Promise<Buffer> {
   let logo: Buffer | null = null;
   for (const directory of ["build/client/icons/assets", "static/icons/assets"]) {
     try {
-      logo = await readFile(join(process.cwd(), directory, "pay3flow_logo.png"));
+      logo = await readFile(join(process.cwd(), directory, "pay3flow-mark.png"));
       break;
     } catch {
       // The other directory covers local development and the packaged server.
     }
   }
   if (!logo) throw new Error("Pay3Flow logo is missing");
-  const mark = await sharp(logo).resize(260, 260).png().toBuffer();
+  const mark = await sharp(logo).trim().resize(260, 260, { fit: "contain", background: "transparent" }).png().toBuffer();
   return sharp({ create: { width: 1200, height: 630, channels: 4, background: "#101110" } })
     .composite([{ input: mark, left: 470, top: 185 }])
     .png()

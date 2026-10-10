@@ -5,6 +5,8 @@
   import { wsUrl } from "$lib/api";
   import { OtcClient, type Connection } from "$lib/otc/client";
   import { locale } from "$lib/i18n";
+  import type { OtcPreview } from "$lib/share-links";
+  import { otcHash, parseOtcHash, type OtcLinkState } from "$lib/otc/link";
   import { otcCopy } from "$lib/otc/copy";
   import { formatAmount, formatPrice, marketFromHash, markets, otcFallbackNetworks, type OtcMarket, type OtcSnapshot, type Candle, type ChartRange, type DemoOrder, type OrderDraft, type OrderSide, type OrderType } from "$lib/otc/model";
   import OtcPanel from "./OtcPanel.svelte";
@@ -13,6 +15,9 @@
   import OtcOrderbook from "./OtcOrderbook.svelte";
   import OtcBridge from "./OtcBridge.svelte";
   import OtcOrderReview from "./OtcOrderReview.svelte";
+  export let onPreviewChange: (preview: OtcPreview) => void = () => {};
+  export let onShareUrlChange: (url: string) => void = () => {};
+  let useLiveDefaultPrice = true;
   let market = markets[0];
   let marketId = market.id;
   let bridgeOpen = true, bookOpen = true, activityOpen = true;
@@ -23,10 +28,7 @@
   let orderType: OrderType = "limit";
   let price = String(market.price);
   let amount = "1000";
-  let previousSide: OrderSide = side;
-  let previousMarket = market.id;
-  $: if (side !== previousSide || market.id !== previousMarket) {
-    previousSide = side; previousMarket = market.id;
+  function resetAmount() {
     amount = side === "buy" ? "1000" : (1000 / market.price).toFixed(market.amountDecimals);
   }
   function panelTransition(node: Element, options: { duration: number }) {
@@ -60,6 +62,28 @@
     try { localStorage.setItem(layoutKey, JSON.stringify({ bridgeOpen, bookOpen, activityOpen })); } catch { /* Layout still works without storage. */ }
     try { localStorage.setItem(settlementKey, JSON.stringify({ marketId: market.id, side, sendNetworkId, receiveNetworkId })); } catch { /* Selection still works without storage. */ }
   }
+  $: if (mounted) syncLink(market.id, side, orderType, amount, price, sendNetworkId, receiveNetworkId);
+  function syncLink(marketId: string, side: OrderSide, type: OrderType, amount: string, price: string, sendNetworkId: string, receiveNetworkId: string) {
+    if (!/^#\/otc(?:[/?]|$)/.test(location.hash)) return;
+    const hash = otcHash({ marketId, side, type, amount, price, sendNetworkId, receiveNetworkId });
+    if (location.hash !== hash) window.history.replaceState(window.history.state, "", `${location.pathname}${location.search}${hash}`);
+    onShareUrlChange(`/${hash}`);
+  }
+  function restoreLink(hash: string, saved: Partial<OtcLinkState> = {}) {
+    const shared = parseOtcHash(hash);
+    const state = { ...saved, ...shared };
+    setMarket(marketFromHash(hash), false);
+    side = state.side ?? "buy";
+    orderType = state.type ?? "limit";
+    resetAmount();
+    amount = state.amount ?? amount;
+    price = state.price ?? String(market.price);
+    useLiveDefaultPrice = state.price === undefined;
+    sendNetworkId = state.sendNetworkId ?? "";
+    receiveNetworkId = state.receiveNetworkId ?? "";
+    reviewDraft = null;
+  }
+  $: if (mounted) onPreviewChange({ closes: candles["1D"].slice(-64).map(candle => candle.close), bids: snapshot.bids.slice(0, 6).map(({ price, amount }) => ({ price, amount })), asks: snapshot.asks.slice(0, 6).map(({ price, amount }) => ({ price, amount })), capturedAt: Date.now() });
   $: copy = otcCopy($locale);
   $: ready = connection === "connected" && snapshot.marketId === market.id;
   $: marketOrders = orders.filter((order) => order.marketId === market.id);
@@ -69,20 +93,16 @@
   $: low = market.low ?? market.price;
   function setMarket(next: OtcMarket, resetSide = true) {
     if (next.id === market.id) return;
-    market = next; marketId = next.id; price = String(next.price);
+    market = next; marketId = next.id; price = String(next.price); useLiveDefaultPrice = true;
     snapshot = { marketId: next.id, mode: "test", bids: [], asks: [], trades: [] };
     candles = { "1D": [], "7D": [], "1M": [], "1Y": [] };
-    client?.subscribe(next.id); if (resetSide) chooseSide("buy"); orderType = "limit"; reviewDraft = null;
+    client?.subscribe(next.id); if (resetSide) chooseSide("buy"); resetAmount(); orderType = "limit"; reviewDraft = null;
   }
   function selectMarket() {
     const next = markets.find((item) => item.id === marketId);
     if (!next) return;
     setMarket(next);
-    const url = new URL(location.href);
-    url.hash = `/otc?market=${next.id}`;
-    historyReplace(url);
   }
-  function historyReplace(url: URL) { window.history.replaceState(window.history.state, "", url); window.dispatchEvent(new HashChangeEvent("hashchange")); }
   function selectBridgeAsset(asset: string, field: "send" | "receive", network: (typeof networks)[number]) {
     const next = asset === "USDT" ? market : markets.find((item) => item.base === asset);
     if (!next) return;
@@ -90,13 +110,9 @@
     chooseSide(field === "send" ? asset === "USDT" ? "buy" : "sell" : asset === "USDT" ? "sell" : "buy");
     if (field === "send") sendNetworkId = network.id;
     else receiveNetworkId = network.id;
-    const url = new URL(location.href);
-    url.hash = `/otc?market=${next.id}`;
-    // This selection already set the side and network; no hash event is needed.
-    window.history.replaceState(window.history.state, "", url);
   }
-  function chooseSide(next: OrderSide) { if (next !== side) { [sendNetworkId, receiveNetworkId] = [receiveNetworkId, sendNetworkId]; side = next; } }
-  function selectPrice(nextSide: OrderSide, nextPrice: number) { chooseSide(nextSide); price = nextPrice.toFixed(market.priceDecimals); orderType = "limit"; bridgeOpen = true; }
+  function chooseSide(next: OrderSide) { if (next !== side) { [sendNetworkId, receiveNetworkId] = [receiveNetworkId, sendNetworkId]; side = next; resetAmount(); } }
+  function selectPrice(nextSide: OrderSide, nextPrice: number) { chooseSide(nextSide); price = nextPrice.toFixed(market.priceDecimals); useLiveDefaultPrice = false; orderType = "limit"; bridgeOpen = true; }
   function notify(message: string) {
     notification = message;
     clearTimeout(notificationTimer);
@@ -138,15 +154,17 @@
     const media = matchMedia("(prefers-reduced-motion: reduce)");
     const motionChanged = () => motionDuration = media.matches ? 0 : 320;
     motionChanged(); media.addEventListener("change", motionChanged);
-    setMarket(marketFromHash(location.hash));
+    let savedSettlement: Partial<OtcLinkState> = {};
+    const selectedMarket = marketFromHash(location.hash);
     try {
       const saved = JSON.parse(localStorage.getItem(settlementKey) ?? "null");
-      if (saved?.marketId === market.id) {
-        if (["buy", "sell"].includes(saved.side)) side = saved.side;
-        if (typeof saved.sendNetworkId === "string") sendNetworkId = saved.sendNetworkId;
-        if (typeof saved.receiveNetworkId === "string") receiveNetworkId = saved.receiveNetworkId;
+      if (saved?.marketId === selectedMarket.id) {
+        if (saved.side === "buy" || saved.side === "sell") savedSettlement.side = saved.side;
+        if (typeof saved.sendNetworkId === "string") savedSettlement.sendNetworkId = saved.sendNetworkId;
+        if (typeof saved.receiveNetworkId === "string") savedSettlement.receiveNetworkId = saved.receiveNetworkId;
       }
     } catch { /* Ignore damaged selection storage. */ }
+    restoreLink(location.hash, savedSettlement);
     try {
       const saved = JSON.parse(localStorage.getItem(layoutKey) ?? "null");
       if (saved && typeof saved === "object") {
@@ -175,13 +193,14 @@
         const first = snapshot.bids.length === 0;
         market = state.market; snapshot = state.snapshot; candles = state.candles;
         orders = state.orders; networks = state.networks;
-        if (first) price = String(state.market.price);
+        if (first && useLiveDefaultPrice) { price = String(state.market.price); useLiveDefaultPrice = false; }
       },
       error: () => notify(copy.requestFailed),
     });
-    const hashChanged = () => setMarket(marketFromHash(location.hash));
+    const hashChanged = () => { if (/^#\/otc(?:[/?]|$)/.test(location.hash)) restoreLink(location.hash); };
     window.addEventListener("hashchange", hashChanged);
-    return () => { client?.close(); client = null; media.removeEventListener("change", motionChanged); observer.disconnect(); clearTimeout(notificationTimer); window.removeEventListener("hashchange", hashChanged); };
+    window.addEventListener("popstate", hashChanged);
+    return () => { client?.close(); client = null; media.removeEventListener("change", motionChanged); observer.disconnect(); clearTimeout(notificationTimer); window.removeEventListener("hashchange", hashChanged); window.removeEventListener("popstate", hashChanged); };
   });
 </script>
 <section class="otcWorkspace" data-testid="otc-workspace">
@@ -196,7 +215,7 @@
     <div class="marketStat volumeStat"><span>{copy.volume}</span><strong>{market.volume.toLocaleString("en-US")} <small>{market.quote}</small></strong></div>
   </div>
   <div class="otcGrid" class:bridgeClosed={!bridgeOpen} class:bookClosed={!bookOpen} style:--panel-toggle-offset={`${toggleOffset}px`}>
-    {#if bridgeOpen}<div class="bridgeColumn" id="otc-bridge-column" transition:panelTransition={{ duration: motionDuration }}><OtcPanel id="otc-bridge" title={copy.bridge} collapsible={false}><span slot="actions" class="panelMeta">OTC</span><OtcBridge disabled={!ready || pending} {market} {snapshot} {networks} bind:sendNetworkId bind:receiveNetworkId onSelectAsset={selectBridgeAsset} onSideChange={chooseSide} bind:amount bind:side bind:type={orderType} bind:price onReview={(draft) => reviewDraft = draft} /></OtcPanel></div>{/if}
+    {#if bridgeOpen}<div class="bridgeColumn" id="otc-bridge-column" transition:panelTransition={{ duration: motionDuration }}><OtcPanel id="otc-bridge" title={copy.bridge} collapsible={false}><span slot="actions" class="panelMeta">OTC</span><OtcBridge disabled={!ready || pending} {market} {snapshot} {networks} bind:sendNetworkId bind:receiveNetworkId onSelectAsset={selectBridgeAsset} onSideChange={chooseSide} bind:amount bind:side bind:type={orderType} bind:price onPriceInput={() => useLiveDefaultPrice = false} onReview={(draft) => reviewDraft = draft} /></OtcPanel></div>{/if}
     <div class="bridgeToggle"><OtcPanelToggle title={copy.bridge} controls="otc-bridge-column" bind:expanded={bridgeOpen} /></div>
     <div class="chartColumn" id="otc-chart-column" bind:this={chartColumn}><OtcPanel id="otc-chart" title={copy.chart} collapsible={false}>{#key market.id}<OtcChart {market} candleSets={candles} />{/key}</OtcPanel></div>
     <div class="bookToggle"><OtcPanelToggle title={copy.book} controls="otc-book-column" bind:expanded={bookOpen} direction="right" /></div>

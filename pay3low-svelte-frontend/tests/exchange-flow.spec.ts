@@ -83,8 +83,10 @@ test("main exchange share copies settings and restores them in a fresh browser",
   await dialog.getByRole("button", { name: "Copy link" }).click();
   await expect(dialog.getByRole("button", { name: "Link copied" })).toBeVisible();
   const link = await page.evaluate(() => sessionStorage.getItem("test.exchange-share"));
-  expect(link).toContain("/swap/USDT/KZT?");
-  const params = new URL(link!).searchParams;
+  expect(link).toMatch(/\/s\/[A-Za-z0-9_-]{16}$/);
+  const sharedHtml = await (await page.request.get(link!)).text();
+  const target = sharedHtml.match(/href="(\/#\/swap\/USDT\/KZT\?[^"]+)"/)![1].replaceAll("&amp;", "&");
+  const params = new URLSearchParams(target.split("?")[1]);
   expect(Object.fromEntries(params)).toMatchObject({ amount: "287.0062069", from: "global-usdt", to: "kz-kaspi", fromNetwork: "tron", sources: "bybit", methods: "p2p", assets: "USDC" });
   expect(params.get("toName")).toContain("Kaspi");
   expect(params.get("fromNetworkName")).toMatch(/tron/i);
@@ -3380,6 +3382,8 @@ test("guide URL restores banks and selected operations in a fresh browser", asyn
   });
   await mockBackend(page);
   await openApp(page);
+  await expect(page.getByRole("button", { name: "Select sending bank: IDBank", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Select recipient bank: Alfa-Bank", exact: true })).toBeVisible();
   await page.getByLabel("Amount to send").fill("100000");
   await expect(page.getByTestId("complete-route").first()).toBeVisible();
   await page.getByTestId("complete-route").first().locator(".routeAmount").click();
@@ -3389,7 +3393,7 @@ test("guide URL restores banks and selected operations in a fresh browser", asyn
   await page.getByTestId("route-guide").getByRole("button", { name: /Share guide/ }).click();
   await expect(page.getByTestId("route-guide").getByRole("button", { name: /Link copied/ })).toBeVisible();
   const share = await page.evaluate(() => sessionStorage.getItem("test.share-url"));
-  expect(share).toContain("/share/guide/AMD/RUB?");
+  expect(share).toMatch(/\/s\/[A-Za-z0-9_-]{16}$/);
   expect(url).toContain("from=am-idbank");
   expect(url).toContain("to=ru-alfabank");
   expect(url).not.toMatch(/tracking_token|execution_token/);

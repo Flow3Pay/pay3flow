@@ -1,5 +1,24 @@
 # OTC test WebSocket
 
+## Share settings and messenger previews
+
+The browser keeps market, side, order type, decimal amount/price and settlement
+networks in `/#/otc?...`. Opening this URL restores the form without creating an
+order. Share OTC stores the settings and the current public chart/book snapshot
+in PostgreSQL and copies a short `/otc/{id}` URL. Its server-rendered metadata
+points to `/otc/{id}/preview.png`, a 1200×630 Bridge, Chart and Orderbook image.
+Browsers expand the short link into the form URL; crawlers receive metadata
+without JavaScript. The preview records prices at sharing time.
+
+SWAP and instruction shares use `/s/{id}` with the same persistent storage.
+`POST /api/share-links` accepts `{target, preview?}`; `GET /api/share-links/{id}`
+reads it. Targets are restricted to internal exchange/settings paths; snapshots
+contain public prices only. The additive `share_links` table is applied at
+backend startup. Frontend server requests use `SHARE_API_URL` (Docker Compose:
+`http://backend:8080`, k3s default: `http://pay3flow-backend:8080`).
+
+## Market transport
+
 The OTC workspace uses `GET /ws/otc` for its book, trades, chart ranges, network
 catalog, orders and mutations. It resolves the backend through `PUBLIC_API_URL`,
 like the existing frontend WS clients. HTTPS deployments use WSS. Existing

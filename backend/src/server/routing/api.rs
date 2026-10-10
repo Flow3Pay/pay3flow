@@ -19,7 +19,7 @@ use crate::market_prices;
 use crate::server::openapi;
 use crate::server::routing::{
     activitypub, anonymous, auth, banks, exchange, matcher, networks, oauth, p2p, pairs, payments,
-    payments_ws, providers, rates, referrals, route_executions, solver, ws,
+    payments_ws, providers, rates, referrals, route_executions, share_links, solver, ws,
 };
 
 pub fn router(state: AppState) -> Router {
@@ -54,6 +54,8 @@ pub fn router(state: AppState) -> Router {
         .route("/openapi.json", get(openapi::document))
         .route("/health", get(health))
         .route("/metrics", get(metrics))
+        .route("/api/share-links", post(share_links::create))
+        .route("/api/share-links/:id", get(share_links::get))
         .route("/api/anonymous/register", post(anonymous::register))
         .route("/api/auth/register", post(auth::register))
         .route("/api/auth/login", post(auth::login))

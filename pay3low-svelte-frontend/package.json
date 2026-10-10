@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "start": "node server.mjs",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "test:unit": "node --test --experimental-strip-types tests/response-metrics.test.ts tests/wallet-amount.test.ts tests/otc-model.test.ts tests/otc-client.test.ts tests/spot-guide.test.ts tests/spot-market.test.ts tests/cifra-guide.test.ts",
+    "test:unit": "node --test --experimental-strip-types tests/response-metrics.test.ts tests/wallet-amount.test.ts tests/otc-model.test.ts tests/otc-link.test.ts tests/otc-client.test.ts tests/spot-guide.test.ts tests/spot-market.test.ts tests/cifra-guide.test.ts",
     "test:e2e": "playwright test"
   },
   "devDependencies": {

@@ -131,6 +131,7 @@ services:
       - "3000:3000"
     environment:
       PUBLIC_API_URL: http://localhost:8080
+      SHARE_API_URL: http://backend:8080
       HOST: 0.0.0.0
       PORT: "3000"
     depends_on:

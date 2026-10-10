@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { exchangeShareUrl, type ExchangeShareState } from "$lib/exchange-share";
+  import { createShortShare, type OtcPreview } from "$lib/share-links";
+  import { exchangeShareImage, exchangeShareUrl, type ExchangeShareState } from "$lib/exchange-share";
   import WalletMenu from "./WalletMenu.svelte";
   import { tick, onDestroy } from "svelte";
   import { API_BASE_URL, apiUrl } from "$lib/api";
@@ -14,34 +15,51 @@
   export let shareState: ExchangeShareState | null = null;
   export let activePage: "swap" | "otc" | "about" = "swap";
   export let swapHref = "/#/swap";
+  export let otcHref = "/#/otc";
   export let onOtcNavigate: () => void = () => {};
+  export let otcPreview: OtcPreview | null = null;
   export let shareUrl: string | null = null;
   let shareMessage = "";
   let shareMessageTimer: ReturnType<typeof setTimeout> | undefined;
   let ShareDialog: typeof import("./ExchangeShareDialog.svelte").default | null = null;
   let sharedState: ExchangeShareState | null = null;
   let shareLink = "";
+  let shareImage: string | null = null;
+  let sharingOtc = false;
   let shareOpen = false;
   let shareLoading = false;
   async function openShare() {
     if (shareLoading) return;
-    if (!shareState && shareUrl) {
-      try {
-        await navigator.clipboard.writeText(new URL(shareUrl, location.origin).toString());
-        shareMessage = t("Link copied", {}, activeLocale);
-      } catch { shareMessage = t("Could not copy link", {}, activeLocale); }
+    sharingOtc = activePage === "otc" && Boolean(shareUrl);
+    if (!shareState && shareUrl && !sharingOtc) {
+      try { await navigator.clipboard.writeText(new URL(shareUrl, location.origin).toString()); shareMessage = t("Link copied", {}, activeLocale); }
+      catch { shareMessage = t("Could not copy link", {}, activeLocale); }
       clearTimeout(shareMessageTimer);
       shareMessageTimer = setTimeout(() => shareMessage = "", 3000);
       return;
     }
-    if (!shareState) return;
-    sharedState = { ...shareState, sources: [...shareState.sources], methods: [...shareState.methods], assets: [...shareState.assets] };
-    shareLink = exchangeShareUrl(location.origin, sharedState, activeLocale);
+    if (!shareState && !sharingOtc) return;
     shareLoading = true;
     try {
       if (menuOpen) await closeMenu();
+      if (sharingOtc) {
+        sharedState = null;
+        const target = `${shareUrl}&lang=${activeLocale}`;
+        shareLink = await createShortShare(target, otcPreview);
+        shareImage = `${shareLink}/preview.png`;
+      } else if (shareState) {
+        sharedState = { ...shareState, sources: [...shareState.sources], methods: [...shareState.methods], assets: [...shareState.assets] };
+        const fullUrl = exchangeShareUrl(location.origin, sharedState, activeLocale);
+        const parsed = new URL(fullUrl);
+        shareImage = exchangeShareImage(location.origin, sharedState.source, sharedState.target, parsed.searchParams);
+        shareLink = await createShortShare(`${parsed.pathname}${parsed.search}`);
+      }
       ShareDialog ??= (await import("./ExchangeShareDialog.svelte")).default;
       shareOpen = true;
+    } catch {
+      shareMessage = t("Could not create share link. Try again.", {}, activeLocale);
+      clearTimeout(shareMessageTimer);
+      shareMessageTimer = setTimeout(() => shareMessage = "", 5000);
     } finally { shareLoading = false; }
   }
   const apiDocsHref = API_BASE_URL ? apiUrl("/scalar").toString() : "/scalar";
@@ -145,7 +163,7 @@
         <div id="header-menu" class="actionsPanel" bind:this={menuPanel} role="menu" aria-label={t("Menu", {}, activeLocale)} in:fly={{ y: -6, duration: menuDuration }} out:fly={{ y: -4, duration: menuDuration * 2 / 3 }}>
         <div class="actions">
 
-          <a role="menuitem" tabindex="-1" class="aboutLink" href="/about" aria-current={activePage === "about" ? "page" : undefined} on:click={() => closeMenu()}><img src="/icons/assets/pay3flow_logo.svg" alt="" width="20" height="20" /><span>{homeContent[activeLocale].aboutTitle}</span></a>
+          <a role="menuitem" tabindex="-1" class="aboutLink" href="/about" aria-current={activePage === "about" ? "page" : undefined} on:click={() => closeMenu()}><img src="/icons/assets/pay3flow-mark.svg" alt="" width="20" height="20" /><span>{homeContent[activeLocale].aboutTitle}</span></a>
           <a role="menuitem" tabindex="-1" class="apiDocsLink" href={apiDocsHref} target="_blank" rel="noreferrer noopener" aria-label={t("Open API documentation", {}, activeLocale)} on:click={() => closeMenu()}>API DOCS</a>
           <a role="menuitem" tabindex="-1" class="telegramLink" href="https://t.me/pay3flow" target="_blank" rel="noreferrer noopener" aria-label={t("Open Pay3Flow Telegram channel", {}, activeLocale)} on:click={() => closeMenu()}><img src="/icons/assets/telegram-messenger.png" alt="" width="20" height="20" /><span class="mobileActionLabel">Telegram</span></a>
           <a role="menuitem" tabindex="-1" class="githubLink" href="https://github.com/Flow3Pay/pay3flow" target="_blank" rel="noreferrer noopener" aria-label={t("Open Pay3Flow on GitHub", {}, activeLocale)} on:click={() => closeMenu()}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .7a11.3 11.3 0 0 0-3.58 22.02c.57.1.78-.25.78-.55v-2.16c-3.18.7-3.85-1.34-3.85-1.34-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.68 1.24 3.34.95.1-.74.4-1.24.73-1.53-2.54-.29-5.2-1.27-5.2-5.65 0-1.25.45-2.26 1.18-3.06-.12-.29-.51-1.45.11-3.02 0 0 .96-.31 3.12 1.17a10.8 10.8 0 0 1 5.68 0c2.16-1.48 3.12-1.17 3.12-1.17.62 1.57.23 2.73.11 3.02.73.8 1.18 1.81 1.18 3.06 0 4.39-2.67 5.35-5.21 5.64.41.36.78 1.08.78 2.18v3.23c0 .3.2.65.79.54A11.3 11.3 0 0 0 12 .7Z" /></svg><span class="mobileActionLabel">GitHub</span></a>
@@ -153,8 +171,8 @@
         </div>
       {/if}
     </div>
-    <a class="brand" href={swapHref} aria-label="Pay3Flow"><img class="logo" src="/icons/assets/pay3flow_logo.svg" alt="" width="34" height="34" /><span class="wordmark">Pay3Flow</span></a>
-    <nav class="productNav" aria-label={t("Exchange mode", {}, activeLocale)}><a href={swapHref} class:active={activePage === "swap"} aria-current={activePage === "swap" ? "page" : undefined}>SWAP</a><a href="/#/otc" on:click={onOtcNavigate} class:active={activePage === "otc"} aria-current={activePage === "otc" ? "page" : undefined}>OTC</a></nav>
+    <a class="brand" href={swapHref} aria-label="Pay3Flow"><img class="logo" src="/icons/assets/pay3flow-mark.svg" alt="" width="34" height="34" /><span class="wordmark">Pay3Flow</span></a>
+    <nav class="productNav" aria-label={t("Exchange mode", {}, activeLocale)}><a href={swapHref} class:active={activePage === "swap"} aria-current={activePage === "swap" ? "page" : undefined}>SWAP</a><a href={otcHref} on:click={onOtcNavigate} class:active={activePage === "otc"} aria-current={activePage === "otc" ? "page" : undefined}>OTC</a></nav>
     <div class="utilityActions">
       <WalletMenu />
       <div class="languageWrap" bind:this={languageWrap} on:focusout={languageFocus}>
@@ -162,18 +180,18 @@
         {#if languageOpen}<div class="languageMenu" id="header-language-menu" role="listbox" aria-label={t("Switch language", {}, activeLocale)}>{#each languages as language}<button type="button" role="option" tabindex="-1" aria-selected={activeLocale === language.locale} on:click={() => selectLanguage(language.locale)}><img class="languageFlag" src={`/icons/flags/${language.flag}.svg`} alt="" width="22" height="22" /><span lang={language.locale}>{language.name}</span>{#if activeLocale === language.locale}<span class="languageCheck" aria-hidden="true">✓</span>{/if}</button>{/each}</div>{/if}
       </div>
       <button class="themeToggle" type="button" on:click={toggleTheme} aria-label={t("Switch theme", {}, activeLocale)}><img class="moonIcon" src={moonIcon} alt="" width="20" height="20" /><img class="sunIcon" src={sunIcon} alt="" width="20" height="20" /></button>
-      {#if shareState || shareUrl}<button type="button" class="shareButton" aria-label={t("Share exchange", {}, activeLocale)} title={t("Share exchange", {}, activeLocale)} aria-haspopup={shareState ? "dialog" : undefined} aria-expanded={shareState ? shareOpen : undefined} aria-busy={shareLoading} on:click={openShare}><img src="/icons/ui/share.png" alt="" width="20" height="20" /></button>{/if}
+      {#if shareState || shareUrl}<button type="button" class="shareButton" aria-label={t(activePage === "otc" ? "Share OTC" : "Share exchange", {}, activeLocale)} title={t(activePage === "otc" ? "Share OTC" : "Share exchange", {}, activeLocale)} aria-haspopup={shareState || activePage === "otc" ? "dialog" : undefined} aria-expanded={shareState || activePage === "otc" ? shareOpen : undefined} aria-busy={shareLoading} on:click={openShare}><img src="/icons/ui/share.png" alt="" width="20" height="20" /></button>{/if}
       {#if shareMessage}<span class="shareMessage" role="status">{shareMessage}</span>{/if}
     </div>
   </div>
 </header>
-{#if shareOpen && ShareDialog && sharedState}<svelte:component this={ShareDialog} state={sharedState} url={shareLink} onClose={() => shareOpen = false} />{/if}
+{#if shareOpen && ShareDialog}<svelte:component this={ShareDialog} state={sharedState} url={shareLink} imageUrl={shareImage} shareTitle={sharingOtc ? "Share OTC" : "Share exchange"} shareDescription={sharingOtc ? "Send this link to open the same OTC settings." : "Send this link to open the same exchange settings."} linkLabel={sharingOtc ? "OTC link" : "Exchange link"} previewAlt={sharingOtc ? "Pay3Flow OTC · Bridge · Chart · Orderbook" : ""} onClose={() => shareOpen = false} />{/if}
 
 <style>
 .header { position: relative; z-index: 50; padding: 16px var(--page-gutter) 8px; }
 .inner { display: flex; width: min(var(--layout-width), 100%); min-height: 58px; align-items: center; gap: 14px; margin: 0 auto; padding: 6px 8px; border: 1px solid var(--color-border); border-radius: 13px; background: var(--color-paper); }
 .brand { display: flex; min-width: 0; align-items: center; gap: 9px; }
-.logo { display: block; flex: 0 0 auto; border-radius: 9px; }
+.logo { display: block; flex: 0 0 auto; }
 .wordmark { font-size: 17px; font-weight: 800; letter-spacing: -.045em; }
 .productNav { display: flex; gap: 4px; margin-left: 14px; }
 .productNav a { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 10px 17px; border-radius: 8px; font-size: 12px; font-weight: 800; letter-spacing: .035em; color: var(--color-text-soft); transition: background .16s; }

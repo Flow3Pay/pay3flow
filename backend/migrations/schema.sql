@@ -815,3 +815,11 @@ CREATE TABLE IF NOT EXISTS external_review_cache (
     reviews JSONB NOT NULL DEFAULT '[]'::JSONB,
     fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Stable public links retain exchange settings across application releases.
+CREATE TABLE IF NOT EXISTS share_links (
+    id TEXT PRIMARY KEY CHECK (length(id) = 16),
+    target TEXT NOT NULL CHECK (length(target) <= 4096),
+    preview JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

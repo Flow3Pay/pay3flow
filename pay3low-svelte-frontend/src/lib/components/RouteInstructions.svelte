@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createShortShare } from "$lib/share-links";
   import { onMount, tick } from "svelte";
   import type { ProviderGuidance, RouteCandidate, ServiceLink } from "$lib/exchange";
   import { locale, t } from "$lib/i18n";
@@ -63,8 +64,8 @@
   $: headingTitle = titleIncludesVenue && step ? step.title.slice(0, -step.venue.length).trimEnd() : step?.title;
 
   async function shareGuide() {
-    const url = new URL(guideSharePath(location.hash), location.origin).href;
-    try { await navigator.clipboard.writeText(url); shareCopied = true; setTimeout(() => shareCopied = false, 2500); }
+    let url = new URL(guideSharePath(location.hash), location.origin).href;
+    try { const target = new URL(url); url = await createShortShare(`${target.pathname}${target.search}`); await navigator.clipboard.writeText(url); shareCopied = true; setTimeout(() => shareCopied = false, 2500); }
     catch { shareFallback = url; }
   }
   async function selectTab(next: "guide" | "reviews") {
