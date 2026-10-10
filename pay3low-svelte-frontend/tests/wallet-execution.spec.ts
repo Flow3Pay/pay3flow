@@ -126,7 +126,9 @@ async function panel(page: Page, value = execution(), failSubmission = false, ex
   const mock = await quoteApi(page, value, failSubmission, expireFirstQuote);
   await page.evaluate(async ({ path, value }) => {
     const harness = await import(/* @vite-ignore */ path);
-    await harness.mountPanel({ route_id: value.route_id, execution: { from_asset: value.from_asset, to_asset: value.to_asset, input_amount: value.input_amount, token: "signed-test-token", provider: value.provider } }, value.from_asset.split("@")[1]);
+    const network = value.from_asset.split("@")[1];
+    const family = network === "tron" || network === "near" ? network : "evm";
+    await harness.mountPanel({ route_id: value.route_id, execution: { from_asset: value.from_asset, to_asset: value.to_asset, input_amount: value.input_amount, token: "signed-test-token", provider: value.provider } }, family);
   }, { path: harnessPath, value });
   return mock;
 }
@@ -176,6 +178,14 @@ for (const mode of ["connect", "existing", "switch"]) test(`Symbiosis AVAX guide
   expect(mock.counts()).toEqual({ created: 0, submissions: 0 });
   expect(await page.evaluate(() => (window as any).transfers)).toBe(0);
   const form = guide.getByTestId("wallet-swap-form");
+  await expect(form).toHaveAttribute("data-provider", "symbiosis");
+  await expect(form.getByLabel("Swap amount")).toHaveAttribute("readonly", "");
+  await expect(form.locator("select, input[type=search]")).toHaveCount(0);
+  const widget = form.getByTestId("symbiosis-widget");
+  await expect(widget).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await page.getByRole("button", { name: "Switch theme" }).click();
+  await expect(widget).toHaveCSS("background-color", "rgb(34, 36, 48)");
+  await page.getByRole("button", { name: "Switch theme" }).click();
   expect(await form.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
   await guide.screenshot({ path: testInfo.outputPath("avax-swap.png") });
   await guide.getByRole("button", { name: "Swap AVAX for USDT", exact: true }).click();
@@ -189,6 +199,33 @@ for (const mode of ["connect", "existing", "switch"]) test(`Symbiosis AVAX guide
   await expect(guide.getByTestId("wallet-swap-form")).toHaveCount(0);
   await expect(guide.getByTestId("route-wallet-execution")).toContainText("Submitted.");
   expect(await page.evaluate(() => (window as any).transfers)).toBe(1);
+});
+
+for (const provider of ["cow-swap", "near-intents"]) test(`${provider} uses its wallet widget or the default without preparing a swap`, async ({ page }, testInfo) => {
+  await wallets(page);
+  await expect(page.locator(".introOverlay")).toHaveCount(0, { timeout: 6000 });
+  const mock = await panel(page, execution(provider, "ethereum", "ETH", "ethereum"));
+  const form = page.getByTestId("wallet-swap-form");
+  await expect(form).toHaveAttribute("data-provider", provider === "cow-swap" ? provider : "default");
+  await expect(form.getByLabel("Swap amount")).toHaveValue("12.345678");
+  await expect(form.getByLabel("Swap amount")).toHaveAttribute("readonly", "");
+  await expect(form).toContainText("ETH");
+  await expect(form).toContainText("USDT");
+  await expect(form.locator("select, input[type=search]")).toHaveCount(0);
+  await expect(form.getByRole("button", { name: "Swap ETH for USDT", exact: true })).toBeVisible();
+  expect(await form.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  if (provider === "cow-swap") {
+    const widget = form.getByTestId("cow-swap-widget");
+    await expect(widget).toHaveCSS("background-color", "rgb(255, 255, 255)");
+    await page.getByRole("button", { name: "Switch theme" }).click();
+    await expect(widget).toHaveCSS("background-color", "rgb(24, 24, 52)");
+    await form.screenshot({ path: testInfo.outputPath("cow-wallet-dark.png") });
+  } else {
+    await expect(form.locator(".assetCard")).toHaveCount(2);
+    await expect(form.locator("[data-provider]")).toHaveCount(0);
+  }
+  expect(mock.counts()).toEqual({ created: 0, submissions: 0 });
+  expect(await page.evaluate(() => (window as any).transfers)).toBe(0);
 });
 
 test("header connects and restores TRON without starting a swap, then disconnects", async ({ page }) => {

@@ -5,6 +5,7 @@ import { buildBestchangeFrames } from "./guides/bestchange/frames";
 import { buildVenueSwapFrames, swapGuideVenues } from "./guides/exchangers/frames";
 import { buildP2pProfileFrames } from "./guides/p2p/frames";
 import { buildSpotFrames, spotGuideLinks } from "./guides/spot/frames";
+import { buildCifraFrames, cifraGuideUrl, cifraTerminalUrl } from "./guides/cifra/frames";
 
 export type TutorialKind = "buy" | "sell" | "swap" | "transfer";
 export type TutorialFrameKind = "open" | "verify" | "review" | "act" | "receive";
@@ -22,6 +23,10 @@ export interface TutorialStep {
   output?: string;
   network?: string;
   targetNetwork?: string;
+  transfer?: {
+    from: { provider: string; venue: string };
+    to: { provider: string; venue: string };
+  };
   pair?: string;
   rate?: string;
   frames: TutorialFrame[];
@@ -72,6 +77,7 @@ export function buildRouteTutorial(route: RouteCandidate, names: Record<string, 
     const spotGuide = data.kind === "swap" && data.pair ? spotGuideLinks[key] : undefined;
     const spotFrames = data.kind === "swap" && data.pair ? buildSpotFrames(data, copy) : null;
     const frames = spotFrames ?? (data.kind === "transfer" ? data.frames
+      : key === "cifra-broker" ? buildCifraFrames(data, copy)
       : key === "bestchange" ? buildBestchangeFrames(data.from, data.to, copy)
       : key === "whitebird" ? buildWhitebirdFrames(copy)
       : swapGuideVenues.includes(key) ? buildVenueSwapFrames(data, copy) : data.frames);
@@ -79,8 +85,15 @@ export function buildRouteTutorial(route: RouteCandidate, names: Record<string, 
       data.checkpoint = copy("Once you open the exchanger website, this guide step is complete. Continue with the exchanger's instructions there.");
       data.summary = copy("Read the exchanger's BestChange reviews, check your exchange direction and open its website.");
     }
+    if (key === "cifra-broker" && data.kind !== "transfer") {
+      data.url = cifraTerminalUrl;
+      data.summary = copy("Use Cifra Markets in Tradernet: prepare your balance, find the market and place the order for your route.");
+      data.checkpoint = copy("Check execution and the balance");
+      data.guideSteps = [];
+    }
     const spotUrl = data.kind === "swap" && data.pair ? spotTutorialUrl(data.provider, data.pair, data.from, data.to) : null;
-    steps.push({ ...data, url: spotUrl ?? data.url, frames, notes: data.notes ?? [], guide: spotGuide ? { ...guide, description: "", steps: [], links: [key === "whitebird" && spotUrl ? { ...spotGuide, url: spotUrl } : spotGuide] } : guide, guideSteps: spotGuide ? [] : data.guideSteps ?? guide?.steps ?? [] });
+    const cifraGuide = key === "cifra-broker" && data.kind !== "transfer" ? { ...guide, description: "", steps: [], links: [{ label: copy("Cifra official video guides"), url: cifraGuideUrl }] } : undefined;
+    steps.push({ ...data, url: cifraGuide ? cifraTerminalUrl : spotUrl ?? data.url, frames, notes: data.notes ?? [], guide: cifraGuide ?? (spotGuide ? { ...guide, description: "", steps: [], links: [key === "whitebird" && spotUrl ? { ...spotGuide, url: spotUrl } : spotGuide] } : guide), guideSteps: spotGuide ? [] : data.guideSteps ?? guide?.steps ?? [] });
   };
   const swapFrames = (name: string, from: string, to: string) => [
     frame("open", "Open the exchange", copy("Open {venue}", { venue: name })),
@@ -183,10 +196,17 @@ export function buildRouteTutorial(route: RouteCandidate, names: Record<string, 
 
   const entry = route.legs.find((leg) => leg.kind === "entry"), exit = route.legs.find((leg) => leg.kind === "exit");
   if (entry && exit && !route.route_provider && entry.provider !== exit.provider) {
-    const name = venue(exit.provider), chain = network(route.entry_network);
+    const chain = network(route.entry_network);
+    const endpoint = (provider: string, offer?: P2pOffer) => ({
+      provider: provider.toLowerCase() === "bestchange" ? "generic" : provider,
+      venue: provider.toLowerCase() === "bestchange" ? offer?.advertiser.nickname ?? copy("Selected exchanger") : venue(provider),
+    });
+    const transfer = { from: endpoint(entry.provider, route.entry_offer_snapshot), to: endpoint(exit.provider, route.exit_offer_snapshot) };
+    const name = transfer.to.venue;
     const checkpoint = copy("Wait until {venue} shows the deposit as received before continuing.", { venue: name });
     add({ id: "transfer", kind: "transfer", provider: exit.provider, venue: name, from: route.entry_asset, to: route.entry_asset, network: chain,
-      title: copy("Transfer {asset} to {venue}", { asset: route.entry_asset, venue: name }), summary: copy("Send the purchased asset from {from} to the deposit address on {to} before opening the next order.", { from: venue(entry.provider), to: name }),
+      transfer,
+      title: copy("Transfer {asset} to {venue}", { asset: route.entry_asset, venue: name }), summary: copy("Send the purchased asset from {from} to the deposit address on {to} before opening the next order.", { from: transfer.from.venue, to: name }),
       frames: [frame("open", "Get the deposit address", chain ? copy("Copy the deposit address from {venue}. Choose the exact {network} network on both platforms.", { venue: name, network: chain }) : copy("First check that both platforms support the same asset and network. Then copy the deposit address from {venue}.", { venue: name })),
         frame("verify", "Check the network", copy("Check the complete address, memo or tag if required, and the withdrawal fee before confirming.")),
         frame("act", "Confirm the transfer", copy("Before sending, check the asset, the receiving asset, and the exact network.")),

@@ -7,7 +7,9 @@ import MexcProfileCard from "./mexc/ProfileCard.svelte";
 import BinanceProfileCard from "./binance/ProfileCard.svelte";
 import BestchangeExchangerCard from "./bestchange/ExchangerCard.svelte";
 import VenueSwapCard from "./exchangers/SwapCard.svelte";
+import WalletSwapCard from "./exchangers/WalletSwapCard.svelte";
 import SpotCard from "./spot/SpotCard.svelte";
+import CifraTradernetCard from "./cifra/TradernetCard.svelte";
 
 export interface GuideSwapCardProps {
   route: RouteCandidate;
@@ -24,8 +26,9 @@ export const guideSwapCards: Record<string, ComponentType<SvelteComponent<GuideS
   bncex: VenueSwapCard,
   "bitcoin-center": VenueSwapCard,
   dzengi: VenueSwapCard,
-  symbiosis: VenueSwapCard,
-  "cow-swap": VenueSwapCard,
+  symbiosis: WalletSwapCard,
+  "cow-swap": WalletSwapCard,
+  "cifra-broker": CifraTradernetCard,
 };
 
 export type GuideP2pCardProps = GuideSwapCardProps;

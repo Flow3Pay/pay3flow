@@ -7,6 +7,7 @@
   import { assetIcon } from "$lib/icons";
   import { chainIdForNetwork, hasExecutionFunds, prepareWalletAction, validateRecipient, walletFamily, type ConnectedWallet, type PreparedWalletAction } from "$lib/wallet-execution";
   import { wallets, connectWallet, restoreWallets } from "$lib/wallet-session";
+  import ProviderSwapWidget from "./ProviderSwapWidget.svelte";
 
   export let route: RouteCandidate;
   export let networkNames: Record<string, string> = {};
@@ -35,6 +36,7 @@
   const STORAGE_PREFIX = "pay3flow.route-execution.";
 
   $: descriptor = route.execution;
+  $: widgetProvider = descriptor?.provider === "cow-swap" || descriptor?.provider === "symbiosis" ? descriptor.provider : null;
   $: sourceNetwork = descriptor?.from_asset.split("@", 2)[1]?.toLowerCase() ?? "";
   $: destinationNetwork = descriptor?.to_asset.split("@", 2)[1]?.toLowerCase() ?? "";
   $: sourceFamily = walletFamily(sourceNetwork);
@@ -295,25 +297,14 @@
 </script>
 
 {#if descriptor}
-  <section class="execution" data-testid="route-wallet-execution">
+  <section class="execution" class:branded={Boolean(widgetProvider)} class:cow={widgetProvider === "cow-swap"} class:symbiosis={widgetProvider === "symbiosis"} data-testid="route-wallet-execution">
     <div class="executionTitle"><strong>{copy("Execute with wallet")}</strong><span>{copy("Non-custodial")}</span></div>
     {#if !sourceSupported}
       <p class="muted">{copy("Embedded execution does not yet support a wallet for {network}. Open the provider manually for this route.", { network: sourceNetwork })}</p>
     {:else}
       {#if sourceWallet}
-        <div class="swapForm" data-testid="wallet-swap-form">
-          <div class="assetCard">
-            <label for="swap-amount">{copy("You pay")}</label>
-            <div class="assetAmount"><input id="swap-amount" aria-label={copy("Swap amount")} readonly value={descriptor.input_amount} /><span><img src={assetIcon(fromSymbol)} alt="" />{fromSymbol}</span></div>
-            <small>{networkNames[sourceNetwork] ?? sourceNetwork}</small>
-          </div>
-          <div class="swapArrow" aria-hidden="true">↓</div>
-          <div class="assetCard">
-            <small>{copy("Estimated output")}</small>
-            <div class="assetAmount"><strong>{estimatedOutput ?? "—"}</strong><span><img src={assetIcon(toSymbol)} alt="" />{toSymbol}</span></div>
-            <small>{networkNames[destinationNetwork] ?? destinationNetwork}</small>
-          </div>
-          <p class="address" data-testid="swap-source-wallet">{copy("From wallet")} · {shortAddress(sourceWallet.address)}</p>
+        {#snippet recipientControls()}
+          <p class="address" data-testid="swap-source-wallet">{copy("From wallet")} · {shortAddress(sourceWallet!.address)}</p>
           <fieldset>
             <legend>{copy("Send swap output to")}</legend>
             <div class="choiceRow">
@@ -323,8 +314,32 @@
             {#if recipientMode === "connected" && recipientWallet}<p class="address">{shortAddress(recipientWallet.address)} · {networkNames[destinationNetwork] ?? destinationNetwork}</p>{/if}
             {#if recipientMode === "manual"}<input disabled={busy || Boolean(pendingSubmission) || execution?.status === "submitted"} bind:value={manualRecipient} on:change={recipientChanged} autocomplete="off" spellcheck="false" placeholder={copy("Recipient on {network}", { network: networkNames[destinationNetwork] ?? destinationNetwork })} aria-label={copy("Swap recipient address")} />{/if}
           </fieldset>
+        {/snippet}
+        {#snippet swapAction()}
           {#if !execution}
             <button type="button" class="primary" disabled={busy || !recipient} on:click={connectSource}>{busy ? copy("Preparing…") : copy("Swap {from} for {to}", { from: fromSymbol, to: toSymbol })}</button>
+          {/if}
+        {/snippet}
+        <div class="swapForm" data-testid="wallet-swap-form" data-provider={widgetProvider ?? "default"}>
+          {#if widgetProvider}
+            <ProviderSwapWidget provider={widgetProvider} from={fromSymbol} to={toSymbol} input={descriptor.input_amount} output={estimatedOutput ?? "—"} sourceNetwork={networkNames[sourceNetwork] ?? sourceNetwork} targetNetwork={networkNames[destinationNetwork] ?? destinationNetwork}>
+              <div class="recipientControls">{@render recipientControls()}</div>
+              <svelte:fragment slot="action">{@render swapAction()}</svelte:fragment>
+            </ProviderSwapWidget>
+          {:else}
+            <div class="assetCard">
+              <label for="swap-amount">{copy("You pay")}</label>
+              <div class="assetAmount"><input id="swap-amount" aria-label={copy("Swap amount")} readonly value={descriptor.input_amount} /><span><img src={assetIcon(fromSymbol)} alt="" />{fromSymbol}</span></div>
+              <small>{networkNames[sourceNetwork] ?? sourceNetwork}</small>
+            </div>
+            <div class="swapArrow" aria-hidden="true">↓</div>
+            <div class="assetCard">
+              <small>{copy("Estimated output")}</small>
+              <div class="assetAmount"><strong>{estimatedOutput ?? "—"}</strong><span><img src={assetIcon(toSymbol)} alt="" />{toSymbol}</span></div>
+              <small>{networkNames[destinationNetwork] ?? destinationNetwork}</small>
+            </div>
+            {@render recipientControls()}
+            {@render swapAction()}
           {/if}
         </div>
       {:else}
@@ -402,6 +417,13 @@
   .success { color: var(--color-good); font-weight: 700; }
   .errorText { color: var(--color-danger); font-size: 12px; }
   .safety { padding-top: 4px; border-top: 1px solid var(--color-border); }
+  .recipientControls { display: grid; gap: 12px; color: var(--widget-text, var(--color-text)); }
+  .branded { --color-text-soft: #506784; --color-border: #e6e8ed; --color-accent-text: #004591; --color-accent-soft: #65d9ff26; --color-primary: #004591; --color-text-invert: #65d9ff; background: #fff; color: #00234e; }
+  .branded .executionTitle { font-size: 12px; }
+  .branded legend { margin-bottom: 8px; }
+  .symbiosis { --color-text-soft: #929bad; --color-primary: #111218; --color-text-invert: #fff; --color-accent-text: #111218; --color-accent-soft: #a2ff3d26; color: #111218; }
+  :global(html[data-theme="dark"]) .cow { --color-text-soft: #a6a9b6; --color-border: #292944; --color-accent-text: #65d9ff; --color-primary: #65d9ff; --color-text-invert: #0d0e21; background: #181834; color: #dee3e6; }
+  :global(html[data-theme="dark"]) .symbiosis { --color-text-soft: #9a9fac; --color-border: #353643; --color-accent-text: #a2ff3d; --color-primary: #a2ff3d; --color-text-invert: #111218; background: #222430; color: #fff; }
 
   @media (max-width: 980px), (pointer: coarse) { button, input { min-height: 44px; } input { font-size: 16px; } }
 </style>

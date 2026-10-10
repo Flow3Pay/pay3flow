@@ -7,6 +7,7 @@
   import { guideP2pCards, guideSwapCards } from "$lib/guides";
   import { isSpotStep } from "$lib/guides/spot/frames";
   import SpotTerminal from "$lib/guides/spot/SpotTerminal.svelte";
+  import TransferCard from "$lib/guides/transfer/TransferCard.svelte";
   export let route: RouteCandidate;
   export let steps: TutorialStep[];
   export let step: TutorialStep | undefined = undefined;
@@ -30,34 +31,36 @@
       <div class="journeyCoin targetCoin"><img src={fiatFlagUrl(route.target_currency ?? route.entry_asset) ?? assetIcon(route.target_currency ?? route.entry_asset)} class:fiatFlag={Boolean(fiatFlagUrl(route.target_currency ?? route.entry_asset))} alt="" /><span>{route.target_currency ?? route.entry_asset}</span></div>
     </div>
     <div class="journeyCard">
-      <div class="journeyCardTop"><img class="smallLogo" src="/icons/assets/pay3flow_logo.svg" alt="" width="23" height="23" /><span>{copy(finished ? "All steps confirmed" : "One route. One step at a time.")}</span><span class="cardCheck">{finished ? "✓" : "↗"}</span></div>
+      <div class="journeyCardTop"><img class="smallLogo" src="/icons/assets/pay3flow-mark.svg" alt="" width="23" height="23" /><span>{copy(finished ? "All steps confirmed" : "One route. One step at a time.")}</span><span class="cardCheck">{finished ? "✓" : "↗"}</span></div>
       <div class="journeyChapters">{#each steps as item, index}<div style={`--order:${index}`}><span class="miniNumber">{finished ? "✓" : String(index + 1).padStart(2, "0")}</span><img src={venueIcon(item.provider)} alt="" /><span>{item.venue}</span><b>{item.kind === "transfer" ? "↗" : "⇄"}</b></div>{/each}</div>
       <div class="journeyCardBottom"><span>{copy("You control every step")}</span></div>
     </div>
     <div class="floatTag"><span>✓</span> {copy(finished ? "Confirmed by you" : "At your own pace")}</div>
   {:else}
-    {#if spot}
+    {#if step.kind === "transfer"}
+      <TransferCard {route} {step} {frame} {playing} {progress} />
+    {:else if spot}
       <SpotTerminal {route} {step} {frame} {playing} {progress} />
     {:else if p2pCard}
       <svelte:component this={p2pCard} {route} {step} {frame} {playing} {progress} />
     {:else if swapCard}
       <svelte:component this={swapCard} {route} {step} {frame} {playing} {...(step.provider.toLowerCase() === "whitebird" ? {} : { progress })} />
     {:else}
-    <div class="browser" class:transfer={step.kind === "transfer"}>
+    <div class="browser">
       <div class="browserChrome"><div><i></i><i></i><i></i></div><span>{step.venue}</span><span>↗</span></div>
       <div class="browserContent">
-        <div class="platform"><img src={venueIcon(step.provider)} alt="" /><strong>{step.venue}</strong><span>{copy(step.kind === "transfer" ? "Deposit" : step.offer && !step.direct ? "P2P exchange" : "Exchange")}</span></div>
+        <div class="platform"><img src={venueIcon(step.provider)} alt="" /><strong>{step.venue}</strong><span>{copy(step.offer && !step.direct ? "P2P exchange" : "Exchange")}</span></div>
         <div class="offerIdentity" class:highlight={frame === 0}>
-          <span class="identityIcon">{step.kind === "transfer" ? "↗" : "⇄"}</span>
+          <span class="identityIcon">⇄</span>
           <div><small>{copy(step.offer && !step.direct ? "Advertiser" : "Selected route")}</small><strong>{step.offer && !step.direct ? step.offer.advertiser.nickname : step.pair ?? `${step.from} → ${step.to}`}</strong>{#if step.offer && !step.direct}<small>ID {step.offer.ad_id}</small>{/if}</div><span class="verified">✓</span>
         </div>
         <div class="assetFields" class:highlight={frame === 1}>
           <div><small>{copy("You send")}</small><strong>{step.amount ?? step.from}</strong><img src={fiatFlagUrl(step.from) ?? assetIcon(step.from)} class:fiatFlag={Boolean(fiatFlagUrl(step.from))} alt="" /></div>
           <span class="fieldArrow">↓</span>
-          <div><small>{copy(step.kind === "transfer" ? "Deposit address" : "You receive")}</small><strong>{step.kind === "transfer" ? "•••• •••• ••••" : step.output ?? step.to}</strong>{#if step.kind === "transfer"}<span class="copyAddress">⧉</span>{:else}<img src={fiatFlagUrl(step.to) ?? assetIcon(step.to)} class:fiatFlag={Boolean(fiatFlagUrl(step.to))} alt="" />{/if}</div>
+          <div><small>{copy("You receive")}</small><strong>{step.output ?? step.to}</strong><img src={fiatFlagUrl(step.to) ?? assetIcon(step.to)} class:fiatFlag={Boolean(fiatFlagUrl(step.to))} alt="" /></div>
         </div>
-        <div class="networkLine" class:highlight={frame === 1 && step.kind === "transfer"}><span>{copy(step.kind === "transfer" || step.network ? "Network" : "Payment methods")}</span><strong>{step.network ?? step.offer?.payment_methods.join(", ") ?? copy("Check on the platform")}</strong></div>
-        <div class="demoAction" class:highlight={frame === 2} class:received={frame === 3}>{frame === 3 ? "✓" : "↗"} {copy(frame === 3 ? "Check your actual balance" : step.kind === "transfer" ? "Confirm the transfer" : step.kind === "sell" && !step.direct ? "Wait for the payment" : "Confirm on the platform")}</div>
+        <div class="networkLine"><span>{copy(step.network ? "Network" : "Payment methods")}</span><strong>{step.network ?? step.offer?.payment_methods.join(", ") ?? copy("Check on the platform")}</strong></div>
+        <div class="demoAction" class:highlight={frame === 2} class:received={frame === 3}>{frame === 3 ? "✓" : "↗"} {copy(frame === 3 ? "Check your actual balance" : step.kind === "sell" && !step.direct ? "Wait for the payment" : "Confirm on the platform")}</div>
       </div>
       <svg class="demoCursor" class:cursorVerify={frame === 1} class:cursorAct={frame === 2} class:cursorReceive={frame === 3} viewBox="0 0 32 38" fill="none"><path d="M3 2L27 22L15 24L9 35L3 2Z" fill="#b5f500" stroke="#132015" stroke-width="2.5" /></svg>
     </div>
@@ -99,7 +102,6 @@
   .assetFields small { grid-column: 1; }
   .assetFields strong { font-size: 16px; font-weight: 700; max-width: 220px; overflow-wrap: anywhere; }
   .assetFields img { width: 23px; height: 23px; grid-column: 2; grid-row: 1 / 3; align-self: center; }
-  .copyAddress { font-size: 23px; grid-column: 2; grid-row: 1 / 3; align-self: center; }
   .fieldArrow { position: absolute; z-index: 1; left: calc(50% - 11px); margin-top: 58px; width: 22px; height: 22px; display: grid; place-items: center; border: 3px solid #f8faf6; border-radius: 50%; background: #dfe5d8; font-size: 11px; }
   .networkLine { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 7px; margin: 4px 0 8px; font-size: 9px; border: 1px solid transparent; border-radius: 8px; transition: .5s ease; }
   .networkLine > span { color: #4a5746; }
@@ -123,7 +125,7 @@
   .sourceCoin { animation: float 6s ease-in-out infinite; }.targetCoin { animation: float 6s ease-in-out -3s infinite; }
   .journeyLine { display: flex; gap: 10px; margin-top: -20px; }.journeyLine span { width: 5px; height: 5px; border-radius: 50%; background: var(--color-accent-text); animation: signal 2.8s ease-in-out infinite; }.journeyLine span:nth-child(2) { animation-delay: .35s; }.journeyLine span:nth-child(3) { animation-delay: .7s; }
   .journeyCard { position: relative; width: 318px; margin: 29px auto 68px; padding: 17px; background: var(--scene-card); color: #182414; border-radius: 14px; box-shadow: 0 18px 60px var(--scene-shadow); transform: rotate(-4deg); animation: cardIn 1s cubic-bezier(.22,1,.36,1) both; }
-  .journeyCardTop { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 800; padding-bottom: 14px; }.smallLogo { display: block; flex: 0 0 23px; width: 23px; height: 23px; border-radius: 7px; object-fit: contain; }.cardCheck { margin-left: auto; }
+  .journeyCardTop { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 800; padding-bottom: 14px; }.smallLogo { display: block; flex: 0 0 23px; width: 23px; height: 23px; object-fit: contain; }.cardCheck { margin-left: auto; }
   .journeyChapters { display: grid; gap: 6px; max-height: 200px; overflow: auto; }.journeyChapters > div { display: flex; align-items: center; gap: 9px; padding: 9px; background: #e9eddf; border-radius: 7px; font-size: 11px; animation: rowIn .65s calc(var(--order) * .1s + .3s) both; }.miniNumber { font: 9px var(--font-mono); color: #5d6d4b; }.journeyChapters img { width: 18px; height: 18px; border-radius: 50%; }.journeyChapters b { margin-left: auto; font-size: 17px; font-weight: 400; }
   .journeyCardBottom { display: flex; justify-content: space-between; margin-top: 13px; font-size: 9px; color: #60704f; }
   .floatTag { position: absolute; bottom: 46px; right: 35px; display: flex; align-items: center; gap: 8px; padding: 12px 15px; border: 1px solid var(--color-border); border-radius: 9px; background: var(--scene-tag); font-size: 11px; transform: rotate(3deg); animation: float 6s ease-in-out -2s infinite; }.floatTag > span { color: var(--color-accent-text); }

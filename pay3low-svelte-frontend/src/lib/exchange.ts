@@ -39,6 +39,7 @@ export interface ProviderDefinition {
   currency_exceptions: string[];
   banks: string[];
   exchange_methods: Array<"p2p" | "exchanger">;
+  market_types?: Array<"p2p" | "spot" | "exchanger">;
   fee_model?: ProviderFeeModel | null;
   guidance?: ProviderGuidance | null;
   searchable: boolean;
@@ -494,8 +495,8 @@ export function fetchCorridors(): Promise<CorridorsResponse> {
   return request("/api/exchange/corridors");
 }
 
-export function fetchProviders(): Promise<ProviderDefinition[]> {
-  return request("/api/providers");
+export function fetchProviders(signal?: AbortSignal): Promise<ProviderDefinition[]> {
+  return request("/api/providers", { signal });
 }
 
 export function createRouteExecution(input: {

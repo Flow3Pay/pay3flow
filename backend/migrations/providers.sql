@@ -585,7 +585,7 @@ updated_at = now();
 DELETE FROM banks
  WHERE picker_visible
    AND source_file LIKE '%/Providerfile'
-   AND method_id NOT IN ('global-usd-cash', 'am-amd-cash', 'ru-rub-cash', 'by-byn-cash', 'ua-uah-cash', 'kz-kzt-cash', 'currency-amd', 'currency-rub', 'currency-usd', 'currency-byn', 'currency-uah', 'currency-kzt', 'am-ameriabank-usd-account', 'am-ameriabank', 'am-idbank-usd-account', 'am-idbank', 'am-acba-usd-account', 'am-acba', 'am-ardshinbank-usd-account', 'am-ardshinbank', 'am-inecobank-usd-account', 'am-inecobank', 'am-evocabank-usd-account', 'am-evocabank', 'am-vtb-usd-account', 'am-vtb', 'ru-sberbank', 'ru-tbank', 'ru-tbank-usd-account', 'ru-alfabank', 'ru-vtb', 'ru-gazprombank', 'ru-raiffeisen', 'ru-ozon', 'by-belarusbank', 'by-belagroprombank', 'by-priorbank', 'by-belinvestbank', 'by-alfabank', 'by-belgazprombank', 'by-sberbank', 'by-belveb', 'by-mtbank', 'by-vtb', 'by-dabrabyt', 'by-technobank', 'by-btk', 'by-bnb', 'by-bsb', 'by-paritetbank', 'by-bank-reshenie', 'by-statusbank', 'by-neobank', 'by-zepterbank', 'by-brrb', 'ua-privatbank', 'ua-monobank', 'ua-oschadbank', 'ua-pumb', 'ua-raiffeisen', 'ua-sense', 'ua-abank', 'ua-ukrsibbank', 'kz-kaspi', 'kz-halyk', 'kz-forte', 'kz-bcc', 'kz-freedom', 'kz-bereke', 'kz-jusan', 'kz-eurasian', 'global-usdt', 'global-usdc', 'global-btc', 'global-eth', 'global-bnb', 'global-sol', 'global-trx', 'global-ton', 'global-ever', 'global-doge', 'global-ltc', 'global-dai', 'global-fdusd', 'global-xrp', 'global-ada', 'global-dot', 'global-link', 'global-avax', 'global-matic', 'global-bch', 'global-near', 'global-apt', 'global-atom', 'global-uni', 'global-sui');
+   AND method_id NOT IN ('global-usd-cash', 'am-amd-cash', 'ru-rub-cash', 'by-byn-cash', 'ua-uah-cash', 'kz-kzt-cash', 'currency-amd', 'currency-rub', 'currency-usd', 'currency-byn', 'currency-uah', 'currency-kzt', 'am-ameriabank-usd-account', 'am-ameriabank', 'am-idbank-usd-account', 'am-idbank', 'am-acba-usd-account', 'am-acba', 'am-ardshinbank-usd-account', 'am-ardshinbank', 'am-inecobank-usd-account', 'am-inecobank', 'am-evocabank-usd-account', 'am-evocabank', 'am-vtb-usd-account', 'am-vtb', 'ru-sberbank', 'ru-tbank', 'ru-tbank-usd-account', 'ru-alfabank', 'ru-vtb', 'ru-gazprombank', 'ru-raiffeisen', 'ru-ozon', 'by-belarusbank', 'by-belagroprombank', 'by-priorbank', 'by-belinvestbank', 'by-alfabank', 'by-belgazprombank', 'by-sberbank', 'by-belveb', 'by-mtbank', 'by-vtb', 'by-dabrabyt', 'by-technobank', 'by-btk', 'by-bnb', 'by-bsb', 'by-paritetbank', 'by-bank-reshenie', 'by-statusbank', 'by-neobank', 'by-zepterbank', 'by-brrb', 'ua-privatbank', 'ua-monobank', 'ua-oschadbank', 'ua-pumb', 'ua-raiffeisen', 'ua-sense', 'ua-abank', 'ua-ukrsibbank', 'kz-kaspi', 'kz-halyk', 'kz-forte', 'kz-bcc', 'kz-freedom', 'kz-bereke', 'kz-jusan', 'kz-eurasian', 'global-usdt', 'global-usdc', 'global-btc', 'global-eth', 'global-bnb', 'global-sol', 'global-trx', 'global-ton', 'global-aave', 'global-aixbt', 'global-aevo', 'global-ab', 'global-ever', 'global-doge', 'global-ltc', 'global-dai', 'global-fdusd', 'global-xrp', 'global-ada', 'global-dot', 'global-link', 'global-avax', 'global-matic', 'global-bch', 'global-near', 'global-apt', 'global-atom', 'global-uni', 'global-sui');
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
 VALUES ('global-usd-cash', 'global-usd-cash', 'Cash USD', 'both', 'GLOBAL', 'USD', '', '', '', 'enabled', 'cash', '#168451', '$', true, NULL, 'Cash', 'cash', TRUE, 'payment-methods/Providerfile')
@@ -2305,6 +2305,94 @@ updated_at = now();
 
 INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
 VALUES ('global-ton', 'global-ton', 'Toncoin', 'both', 'GLOBAL', 'TON', '', '/icons/assets/ton.webp', '', 'enabled', 'wallet', '#0098ea', 'TON', false, NULL, 'TON', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('global-aave', 'global-aave', 'Aave', 'both', 'GLOBAL', 'AAVE', '', '/icons/assets/aave.png', '', 'enabled', 'wallet', '#9391f7', 'AAVE', false, NULL, 'AAVE', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('global-aixbt', 'global-aixbt', 'aixbt', 'both', 'GLOBAL', 'AIXBT', '', '/icons/assets/aixbt.png', '', 'enabled', 'wallet', '#deef83', 'AIXBT', false, NULL, 'AIXBT', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('global-aevo', 'global-aevo', 'Aevo', 'both', 'GLOBAL', 'AEVO', '', '/icons/assets/aevo.png', '', 'enabled', 'wallet', '#a98fe9', 'AEVO', false, NULL, 'AEVO', NULL, TRUE, 'payment-methods/Providerfile')
+ON CONFLICT (name) DO UPDATE SET
+method_id = EXCLUDED.method_id,
+display_name = EXCLUDED.display_name,
+role = EXCLUDED.role,
+country = EXCLUDED.country,
+currency = EXCLUDED.currency,
+domain = EXCLUDED.domain,
+icon_url = EXCLUDED.icon_url,
+status = EXCLUDED.status,
+kind = EXCLUDED.kind,
+color = EXCLUDED.color,
+initials = EXCLUDED.initials,
+popular = EXCLUDED.popular,
+bank_fee_percent = EXCLUDED.bank_fee_percent,
+p2p_query = EXCLUDED.p2p_query,
+currency_group = EXCLUDED.currency_group,
+picker_visible = TRUE,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO banks (name, method_id, display_name, role, country, currency, domain, icon_url, schemes, status, kind, color, initials, popular, bank_fee_percent, p2p_query, currency_group, picker_visible, source_file)
+VALUES ('global-ab', 'global-ab', 'AB', 'both', 'GLOBAL', 'AB', '', '/icons/assets/ab.png', '', 'enabled', 'wallet', '#237eb6', 'AB', false, NULL, 'AB', NULL, TRUE, 'payment-methods/Providerfile')
 ON CONFLICT (name) DO UPDATE SET
 method_id = EXCLUDED.method_id,
 display_name = EXCLUDED.display_name,

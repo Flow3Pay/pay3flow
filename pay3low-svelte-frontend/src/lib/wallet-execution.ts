@@ -130,7 +130,7 @@ async function appKit() {
         name: "Pay3Flow",
         description: "Non-custodial route execution",
         url: window.location.origin,
-        icons: [`${window.location.origin}/icons/assets/pay3flow_logo.svg`],
+        icons: [`${window.location.origin}/icons/assets/pay3flow-mark.svg`],
       },
       features: { analytics: false, email: false, socials: false },
     });

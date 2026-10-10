@@ -29,6 +29,7 @@
   export let onOpenBelarusP2pWarning: () => void = () => {};
   export let onOpenSearchActivity: () => void = () => {};
   let selectedVenueId: string | null = null;
+  let openVenueId: string | null = null;
   let lastPair = "";
 
   const ASSET_NAMES: Record<string, string> = { BTC: "Bitcoin", ETH: "Ether", USDC: "USD Coin", USDT: "Tether" };
@@ -81,11 +82,26 @@
   $: if (`${sourceCurrency}:${targetCurrency}` !== lastPair) {
     lastPair = `${sourceCurrency}:${targetCurrency}`;
     selectedVenueId = null;
+    openVenueId = null;
   }
   $: visibleRoutes = selectedVenueId
     ? routes.filter((route) => route.legs.some((leg) => leg.provider.toLowerCase() === selectedVenueId) || route.route_provider?.toLowerCase() === selectedVenueId || route.market_path?.venue.toLowerCase() === selectedVenueId)
     : routes;
   $: selectedVenueName = foundVenues.find((venue) => venue.id.toLowerCase() === selectedVenueId)?.label ?? selectedVenueId;
+
+  function openVenuePopover(venue: HTMLDivElement, id: string) {
+    const popover = venue.querySelector<HTMLElement>(".foundVenuePopover");
+    if (!popover) return;
+    const bounds = venue.getBoundingClientRect();
+    const centeredLeft = bounds.left + bounds.width / 2 - popover.offsetWidth / 2;
+    const left = Math.max(16, Math.min(centeredLeft, window.innerWidth - popover.offsetWidth - 16));
+    venue.style.setProperty("--popover-shift", `${left - centeredLeft}px`);
+    openVenueId = id;
+  }
+
+  function closeVenuePopover(venue: HTMLDivElement, id: string) {
+    if (openVenueId === id && !venue.contains(document.activeElement) && !venue.matches(":hover")) openVenueId = null;
+  }
 
   function pathStepProvider(route: RouteCandidate, index: number, lastIndex: number) {
     if (index === 0) return undefined;
@@ -159,7 +175,7 @@
     <div class="panelTop">
       <div class="panelHeading">
         {#if hasAmount}
-          <strong>Send {sourceCurrency} → {targetCurrency}</strong>
+          <strong class="sendDirection"><span>{t("Send", {}, $locale)}</span><span class="sendCurrency"><img src={assetIcon(sourceCurrency)} alt="" width="22" height="22" />{sourceCurrency}</span><span class="sendArrow" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 12h16m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span><span class="sendCurrency"><img src={assetIcon(targetCurrency)} alt="" width="22" height="22" />{targetCurrency}</span></strong>
         {:else}
           <strong>{t("Awaiting your intent", {}, $locale)}</strong>
         {/if}
@@ -171,17 +187,21 @@
                 {#each routeVenues as venue, index (venue.id)}
                   {@const status = venueStats[venue.id.toLowerCase()]}
                   {@const hasRoute = (status?.routes_found ?? 0) > 0}
-                  <div class:foundVenueActive={selectedVenueId === venue.id.toLowerCase()} class="foundVenue" data-testid="found-venue" title={`Found on ${venue.label}`} style:animation-delay={`${index * 70}ms`}>
+                  <div class:foundVenueActive={selectedVenueId === venue.id.toLowerCase()} class:foundVenueOpen={openVenueId === venue.id} class="foundVenue" role="group" aria-label={venue.label} data-testid="found-venue" title={`Found on ${venue.label}`} style:animation-delay={`${index * 70}ms`} on:pointerenter={(event) => openVenuePopover(event.currentTarget, venue.id)} on:pointerleave={(event) => closeVenuePopover(event.currentTarget, venue.id)} on:focusin={(event) => openVenuePopover(event.currentTarget, venue.id)} on:focusout={(event) => closeVenuePopover(event.currentTarget, venue.id)}>
                     <button type="button" class="foundVenueButton" aria-label={`Show ${venue.label} routes`} aria-pressed={selectedVenueId === venue.id.toLowerCase()} disabled={!hasRoute} on:click={() => selectedVenueId = selectedVenueId === venue.id.toLowerCase() ? null : venue.id.toLowerCase()}>
                       <img src={venue.iconUrl || venueIcon(venue.id)} alt="" width="18" height="18" decoding="async" on:error={fallbackFoundVenueIcon} />
                       <span class="foundVenueFallback" aria-hidden="true" hidden>{venue.label.slice(0, 1).toUpperCase()}</span>
                     </button>
-                    <div class="foundVenuePopover" role="tooltip">
+                    <div class="foundVenuePopover" role="group" aria-label={venue.label}>
                       <div class="foundVenuePopoverTitle">
                         <img src={venue.iconUrl || venueIcon(venue.id)} alt="" width="20" height="20" decoding="async" on:error={(event) => fallbackVenueIcon(event, venue.id)} />
                         <strong>{venue.label}</strong>
                       </div>
-                      {#if !hasRoute || status?.ok === false}<span class:venueOk={status?.ok} class:venueError={status && !status.ok}>{status?.ok === false ? (status.offers_found > 0 ? "Some quotes unavailable" : "Response error") : (status?.offers_found ?? 0) > 0 ? "Offers received · no matching route" : "No matching route"}</span>{/if}
+                      <a class="foundVenueProfile" href={`/providers/${encodeURIComponent(venue.id.toLowerCase())}`} aria-label={t("Open {venue} profile", { venue: venue.label }, $locale)}>
+                        {t("Open platform profile", {}, $locale)}
+                        <span aria-hidden="true">→</span>
+                      </a>
+                      {#if !hasRoute || status?.ok === false}<span class:venueOk={status?.ok} class:venueError={status && !status.ok}>{status?.ok === false ? t("Error", {}, $locale) : (status?.offers_found ?? 0) > 0 ? "Offers received · no matching route" : "No matching route"}</span>{/if}
                       <dl>
                         <div><dt>Routes found</dt><dd>{status?.routes_found ?? 0}</dd></div>
                         <div><dt>Quotes / markets received</dt><dd>{status?.offers_found ?? 0}</dd></div>
@@ -354,6 +374,11 @@
   gap: 3px;
 }
 
+.sendDirection { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.sendCurrency { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.sendCurrency img { display: block; flex: 0 0 auto; border-radius: 50%; object-fit: contain; }
+.sendArrow { display: inline-flex; align-items: center; color: var(--color-text-soft); }
+
 .panelActions {
   display: flex;
   align-items: flex-start;
@@ -466,15 +491,14 @@
   font-size: 12px;
 }
 
-.foundVenue:hover,
-.foundVenue:focus-within {
+.foundVenue.foundVenueOpen {
   z-index: 50;
 }
 
 .foundVenuePopover {
   position: absolute;
   top: calc(100% + 10px);
-  left: 50%;
+  left: calc(50% + var(--popover-shift, 0px));
   z-index: 100;
   display: grid;
   width: min(240px, calc(100vw - 32px));
@@ -488,14 +512,15 @@
   color: var(--color-text);
   font-size: 12px;
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
   transform: translate(-50%, -4px);
   transition: opacity 0.16s ease, transform 0.16s ease;
 }
 
-.foundVenue:hover .foundVenuePopover,
-.foundVenue:focus-within .foundVenuePopover {
+.foundVenue.foundVenueOpen .foundVenuePopover {
   opacity: 1;
+  visibility: visible;
   pointer-events: auto;
   transform: translate(-50%, 0);
 }
@@ -523,6 +548,33 @@
 .foundVenuePopover dt { color: var(--color-text-soft); }
 .foundVenuePopover dd { margin: 0; font-weight: 800; }
 .foundVenuePopover small { color: var(--color-danger); line-height: 1.35; }
+
+.foundVenueProfile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 40px;
+  margin: 3px 0;
+  padding: 6px 10px;
+  border: 1px solid var(--color-accent-text);
+  border-radius: 6px;
+  background: var(--color-accent-soft);
+  color: var(--color-accent-text);
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.foundVenueProfile:hover,
+.foundVenueProfile:focus-visible {
+  background: var(--color-accent);
+  color: #172110;
+}
+
+.foundVenueProfile:focus-visible {
+  outline: 2px solid var(--color-accent-text);
+  outline-offset: 2px;
+}
 
 .foundVenuePopover strong {
   color: #1c2419;

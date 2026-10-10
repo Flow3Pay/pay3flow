@@ -694,6 +694,15 @@ const OPERATIONS: &[Operation] = &[
         false,
     ),
     (
+        "/api/providers/{slug}/statistics",
+        "get",
+        "Provider statistics",
+        "Return final displayed rankings, daily buckets and popular currency directions for completed user searches. period accepts 7d, 30d (default), or 90d; calendar days use UTC. Top-10 is counted once per participating venue per search. Website opens are not completed exchanges.",
+        "Catalogs",
+        false,
+        false,
+    ),
+    (
         "/api/providers",
         "get",
         "List providers",
@@ -905,6 +914,15 @@ const OPERATIONS: &[Operation] = &[
         "get",
         "Echo WebSocket",
         "WebSocket echo endpoint.",
+        "WebSockets",
+        false,
+        false,
+    ),
+    (
+        "/ws/otc",
+        "get",
+        "Test OTC WebSocket",
+        "Test OTC snapshots, charts, session orders, create and cancel commands. See docs/otc-websocket.md. No settlement or real trading.",
         "WebSockets",
         false,
         false,
@@ -1186,6 +1204,7 @@ fn success_response(path: &str, method: &str) -> Value {
         }),
         ("/api/exchange/orders/{id}/live", "get")
         | ("/ws", "get")
+        | ("/ws/otc", "get")
         | ("/ws/rates", "get")
         | ("/ws/payments", "get")
         | ("/ws/p2p/routes", "get") => json!({

@@ -1,37 +1,39 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import { locale } from "$lib/i18n";
   import { otcCopy } from "$lib/otc/copy";
-  import { demoCandles, formatPrice, type OtcMarket, type ChartRange } from "$lib/otc/model";
+  import { formatAmount, formatPrice, type OtcMarket, type Candle, type ChartRange } from "$lib/otc/model";
   export let market: OtcMarket;
+  export let candleSets: Record<ChartRange, Candle[]>;
   let range: ChartRange = "1D";
   let mode: "lines" | "candles" = "lines";
   let zoom = 1;
   let hovered: number | null = null;
-  let plot: HTMLDivElement;
+  let tooltipX = 8;
   let width = 680, height = 375;
   const left = 12, top = 24;
   $: right = width - 82;
   $: bottom = height - 107;
   $: volumeBottom = height - 40;
-  onMount(() => {
+  function observePlot(node: HTMLDivElement) {
     const observer = new ResizeObserver(([entry]) => {
       width = Math.max(280, entry.contentRect.width);
       height = width < 500 ? 290 : 375;
       hovered = null;
     });
-    observer.observe(plot);
-    return () => observer.disconnect();
-  });
+    observer.observe(node);
+    return { destroy() { observer.disconnect(); } };
+  }
   const ranges: ChartRange[] = ["1D", "7D", "1M", "1Y"];
   $: copy = otcCopy($locale);
-  $: allCandles = demoCandles(market, range);
+  $: allCandles = candleSets[range];
   $: candles = allCandles.slice(-Math.round(allCandles.length / zoom));
   $: minimum = Math.min(...candles.map((candle) => candle.low)) - market.price * .004;
   $: maximum = Math.max(...candles.map((candle) => candle.high)) + market.price * .004;
   $: maximumVolume = Math.max(...candles.map((candle) => candle.volume));
   $: step = (right - left) / candles.length;
   $: active = candles[hovered === null ? candles.length - 1 : Math.min(hovered, candles.length - 1)];
+  $: buyPrice = (active?.close ?? market.price) - market.price * .0015;
+  $: sellPrice = (active?.close ?? market.price) + market.price * .0015;
   $: buyLine = line(-market.price * .0015);
   $: sellLine = line(market.price * .0015);
   $: lastY = y(market.price);
@@ -42,10 +44,14 @@
     const rect = event.currentTarget instanceof Element ? event.currentTarget.getBoundingClientRect() : null;
     if (!rect) return;
     const svgX = (event.clientX - rect.left) / rect.width * width;
+    tooltipX = Math.max(8, Math.min(rect.width - 236, event.clientX - rect.left + 12));
     hovered = Math.max(0, Math.min(candles.length - 1, Math.floor((svgX - left) / step)));
   }
   function dateLabel(time: number) {
     return new Date(time).toLocaleString($locale === "ru" ? "ru-RU" : "en-GB", range === "1D" ? { hour: "2-digit", minute: "2-digit", timeZone: "UTC" } : { day: "numeric", month: "short", timeZone: "UTC" });
+  }
+  function fullDateLabel(time: number) {
+    return new Date(time).toLocaleString({ en: "en-GB", ru: "ru-RU", hy: "hy-AM" }[$locale], { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: "UTC" });
   }
   function changeRange(value: ChartRange) { range = value; hovered = null; zoom = 1; }
 </script>
@@ -53,8 +59,9 @@
   <div class="chartLegend"><span class="buyDot"></span>{copy.buy}<span class="sellDot"></span>{copy.sell}</div>
   <div class="chartButtons"><div class="ranges" role="group" aria-label={copy.chartRange}>{#each ranges as item}<button type="button" class:active={range === item} aria-pressed={range === item} on:click={() => changeRange(item)}>{item}</button>{/each}</div><span class="divider"></span><button type="button" class="chartMode" aria-label={mode === "lines" ? copy.candles : copy.lines} title={mode === "lines" ? copy.candles : copy.lines} on:click={() => mode = mode === "lines" ? "candles" : "lines"}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">{#if mode === "lines"}<path d="M6 3v18m-3-6h6V8H3v7Zm15-4h-6v6h6v-6ZM18 3v18" stroke="currentColor" stroke-width="1.5" />{:else}<path d="m3 17 5-6 5 3 8-10" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />{/if}</svg></button></div>
 </div>
+{#if active}
 <div class="ohlc"><strong>{market.base}/{market.quote}</strong><span>{range === "1D" ? "15m" : range === "7D" ? "2h" : range === "1M" ? "12h" : "6d"}</span><span>O <b>{formatPrice(active.open, market)}</b></span><span>H <b>{formatPrice(active.high, market)}</b></span><span>L <b>{formatPrice(active.low, market)}</b></span><span class:positive={active.close >= active.open}>C <b>{formatPrice(active.close, market)}</b></span></div>
-<div class="chartPlot" bind:this={plot}>
+<div class="chartPlot" use:observePlot>
   <svg class="priceChart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={copy.chartDescription} on:pointermove={hover} on:pointerleave={() => hovered = null}>
     <title>{copy.chartDescription} · {market.base}/{market.quote} · {copy.demo}</title>
     <defs><linearGradient id="otc-price-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--otc-buy)" stop-opacity=".14" /><stop offset="100%" stop-color="var(--otc-buy)" stop-opacity="0" /></linearGradient></defs>
@@ -74,7 +81,7 @@
       {#each candles as candle, index}
         {@const color = candle.close >= candle.open ? "var(--otc-buy)" : "var(--otc-sell)"}
         <line x1={x(index)} x2={x(index)} y1={y(candle.high)} y2={y(candle.low)} stroke={color} stroke-width="1.3" />
-        <rect x={x(index) - step * .29} y={Math.min(y(candle.open), y(candle.close))} width={step * .58} height={Math.max(1.5, Math.abs(y(candle.open) - y(candle.close)))} rx=".8" fill={color} />
+        <rect x={x(index) - step * .42} y={Math.min(y(candle.open), y(candle.close))} width={step * .84} height={Math.max(1.5, Math.abs(y(candle.open) - y(candle.close)))} rx=".8" fill={color} />
       {/each}
     {/if}
     <line class="lastPriceLine" x1={left} x2={right} y1={lastY} y2={lastY} />
@@ -82,17 +89,29 @@
     <text class="volumeLabel" x={left + 4} y={height - 82}>VOL · {Math.round(active.volume).toLocaleString("en-US")}</text>
     {#each candles as candle, index}
       {@const barHeight = candle.volume / maximumVolume * 33}
-      <rect x={x(index) - step * .32} y={volumeBottom - barHeight} width={step * .64} height={barHeight} rx="1" fill={candle.close >= candle.open ? "var(--otc-buy)" : "var(--otc-sell)"} opacity=".35" />
+      <rect x={x(index) - step * .42} y={volumeBottom - barHeight} width={step * .84} height={barHeight} rx="1" fill={candle.close >= candle.open ? "var(--otc-buy)" : "var(--otc-sell)"} opacity=".35" />
     {/each}
     {#if hovered !== null}
       <line class="crosshair" x1={x(hovered)} x2={x(hovered)} y1={top} y2={volumeBottom} />
       <line class="crosshair" x1={left} x2={right} y1={y(active.close)} y2={y(active.close)} />
-      <circle cx={x(hovered)} cy={y(active.close)} r="4" fill="var(--otc-buy)" stroke="var(--color-paper)" stroke-width="2" />
+      {#if mode === "lines"}
+        <circle class="buyPoint" cx={x(hovered)} cy={y(buyPrice)} r="4" fill="var(--otc-buy)" stroke="var(--color-paper)" stroke-width="2" />
+        <circle class="sellPoint" cx={x(hovered)} cy={y(sellPrice)} r="4" fill="var(--otc-sell)" stroke="var(--color-paper)" stroke-width="2" />
+      {:else}
+        <circle cx={x(hovered)} cy={y(active.close)} r="4" fill={active.close >= active.open ? "var(--otc-buy)" : "var(--otc-sell)"} stroke="var(--color-paper)" stroke-width="2" />
+      {/if}
       <rect x={Math.min(right - 84, Math.max(left, x(hovered) - 42))} y={height - 32} width="84" height="24" rx="4" fill="var(--color-text)" /><text x={Math.min(right - 42, Math.max(left + 42, x(hovered)))} y={height - 16} text-anchor="middle" fill="var(--color-paper)" font-size="10">{dateLabel(active.time)}</text>
     {/if}
   </svg>
+  {#if hovered !== null}
+    <div class="chartTooltip" role="tooltip" style:left={`${tooltipX}px`}>
+      <strong class="tooltipDate">{fullDateLabel(active.time)} <small>UTC</small></strong>
+      <dl><div class="buyValue"><dt>{copy.buyPrice}</dt><dd>{formatPrice(buyPrice, market)} <small>{market.quote}</small></dd></div><div class="sellValue"><dt>{copy.sellPrice}</dt><dd>{formatPrice(sellPrice, market)} <small>{market.quote}</small></dd></div><div class="buyValue"><dt>{copy.buyVolume}</dt><dd>{formatAmount(active.buyVolume, market)} <small>{market.base}</small></dd></div><div class="sellValue"><dt>{copy.sellVolume}</dt><dd>{formatAmount(active.sellVolume, market)} <small>{market.base}</small></dd></div></dl>
+    </div>
+  {/if}
 </div>
-<div class="chartFooter"><span><img src="/icons/assets/pay3flow_logo.svg" width="15" height="15" alt="" />Pay3Flow </span><div class="zoomTools"><button type="button" aria-label={copy.zoomOut} disabled={zoom === 1} on:click={() => { zoom = Math.max(1, zoom - .5); hovered = null; }}>−</button><button type="button" aria-label={copy.chartReset} on:click={() => { zoom = 1; hovered = null; }}>↺</button><button type="button" aria-label={copy.zoomIn} disabled={zoom === 3} on:click={() => { zoom = Math.min(3, zoom + .5); hovered = null; }}>+</button></div><span class="timezone">UTC</span></div>
+{:else}<div class="chartPlot" aria-busy="true" use:observePlot></div>{/if}
+<div class="chartFooter"><span><img src="/icons/assets/pay3flow-mark.svg" width="15" height="15" alt="" />Pay3Flow </span><div class="zoomTools"><button type="button" aria-label={copy.zoomOut} disabled={zoom === 1} on:click={() => { zoom = Math.max(1, zoom - .5); hovered = null; }}>−</button><button type="button" aria-label={copy.chartReset} on:click={() => { zoom = 1; hovered = null; }}>↺</button><button type="button" aria-label={copy.zoomIn} disabled={zoom === 3} on:click={() => { zoom = Math.min(3, zoom + .5); hovered = null; }}>+</button></div><span class="timezone">UTC</span></div>
 <style>
   .chartTools { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 17px 8px; }
   .chartLegend { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--color-text-soft); }
@@ -108,7 +127,7 @@
   .ohlc strong { color: var(--color-text); font-size: 12px; }
   .ohlc b { font-weight: 400; color: var(--otc-sell); }
   .ohlc .positive b { color: var(--otc-buy); }
-  .chartPlot { min-height: 290px; display: flex; align-items: stretch; }
+  .chartPlot { position: relative; min-height: 290px; display: flex; align-items: stretch; }
   .priceChart { display: block; width: 100%; min-height: 290px; overflow: visible; font-family: var(--font-mono); }
   .gridLine { stroke: var(--color-border); stroke-width: .7; }
   .vertical { opacity: .5; }
@@ -119,6 +138,14 @@
   .lastPriceLine { stroke: var(--otc-buy); stroke-width: .8; stroke-dasharray: 3 4; opacity: .7; }
   .lastPriceLabel { font-size: 12px; fill: #fff; }
   .crosshair { stroke: var(--color-text-soft); stroke-width: .7; stroke-dasharray: 3 3; }
+  .chartTooltip { position: absolute; top: 8px; z-index: 5; width: 228px; max-width: calc(100% - 16px); padding: 12px; border: 1px solid var(--color-border-strong); border-radius: 7px; background: var(--color-paper); color: var(--color-text); pointer-events: none; font-family: var(--font-sans); font-size: 12px; box-shadow: 0 4px 16px #0001; }
+  .tooltipDate { display: block; font-size: 12px; font-weight: 650; margin-bottom: 10px; }
+  .chartTooltip dl { display: grid; gap: 8px; margin: 0; }
+  .chartTooltip dl > div { display: flex; justify-content: space-between; gap: 8px; }
+  .chartTooltip dt { color: var(--color-text-soft); }
+  .chartTooltip dd { margin: 0; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .chartTooltip small { font-size: 10px; color: var(--color-text-soft); }
+  .buyValue dd { color: var(--otc-buy); } .sellValue dd { color: var(--otc-sell); }
   .chartFooter { display: flex; align-items: center; justify-content: space-between; padding: 3px 17px 13px; font-size: 12px; color: var(--color-text-soft); }
   .chartFooter > span { display: flex; align-items: center; gap: 6px; }
   .zoomTools { display: flex; gap: 3px; border: 1px solid var(--color-border); border-radius: 6px; padding: 2px; }

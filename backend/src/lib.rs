@@ -14,10 +14,12 @@ pub mod external_reviews;
 pub mod market_prices;
 pub mod networks;
 pub mod observability;
+pub mod otc;
 pub mod p2p;
 pub mod pairs;
 pub mod payments;
 pub mod provider_adapter;
+pub mod provider_profile;
 pub mod providers;
 pub mod quotes;
 pub mod referrals;
@@ -28,4 +30,4 @@ pub mod server;
 pub mod service;
 pub mod service_reputation;
 
-pub mod otc;
+pub(crate) mod otc_preview;
