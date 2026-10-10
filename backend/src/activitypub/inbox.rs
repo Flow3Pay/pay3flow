@@ -1,5 +1,5 @@
 use axum::extract::{Path, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::{HeaderMap, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde_json::{json, Value};
@@ -13,27 +13,29 @@ use crate::route_engine::{Amount, Asset};
 const DEFAULT_HANDLE: &str = "pay3flow";
 
 /// Shared inbox entry-point: `POST /inbox`
-pub async fn handle(State(state): State<AppState>, headers: HeaderMap, body: String) -> Response {
-    handle_inner(&state, DEFAULT_HANDLE, &headers, body).await
+pub async fn handle(State(state): State<AppState>, uri: Uri, headers: HeaderMap, body: String) -> Response {
+    handle_inner(&state, DEFAULT_HANDLE, &uri, &headers, body).await
 }
 
 /// Per-handle inbox entry-point: `POST /inbox/:handle`
 pub async fn handle_named(
     State(state): State<AppState>,
     Path(handle): Path<String>,
+    uri: Uri,
     headers: HeaderMap,
     body: String,
 ) -> Response {
-    handle_inner(&state, &handle, &headers, body).await
+    handle_inner(&state, &handle, &uri, &headers, body).await
 }
 
 async fn handle_inner(
     state: &AppState,
     handle_str: &str,
+    uri: &Uri,
     headers: &HeaderMap,
     body: String,
 ) -> Response {
-    match inner(state, handle_str, headers, body.into_bytes()).await {
+    match inner(state, handle_str, uri, headers, body.into_bytes()).await {
         Ok(resp) => resp,
         Err(status) => {
             tracing::warn!(code = %status, "inbox inner failed");
@@ -45,17 +47,16 @@ async fn handle_inner(
 async fn inner(
     state: &AppState,
     handle: &str,
+    uri: &Uri,
     headers: &HeaderMap,
     raw_body: Vec<u8>,
 ) -> Result<Response, StatusCode> {
-    if state.ap.require_signatures {
-        verify_inbound_signature(state, headers, raw_body.as_slice()).await?;
-    }
-
     let activity: Value = serde_json::from_slice(&raw_body).map_err(|e| {
         tracing::warn!(error = %e, "inbox: body is not valid JSON");
         StatusCode::BAD_REQUEST
     })?;
+
+    if state.ap.require_signatures { verify_inbound_signature(state, uri, headers, &raw_body, &activity).await?; }
 
     if let Some(id) = activity.get("id").and_then(Value::as_str) {
         match was_received(&state.pool, id).await {
@@ -213,38 +214,15 @@ fn quote_amount_fields(
 }
 
 async fn verify_inbound_signature(
-    state: &AppState,
-    headers: &HeaderMap,
-    body: &[u8],
+    state: &AppState, uri: &Uri, headers: &HeaderMap, body: &[u8], activity: &Value,
 ) -> Result<(), StatusCode> {
-    let sig_header = headers
-        .get("signature")
-        .and_then(|v| v.to_str().ok())
-        .ok_or(StatusCode::UNAUTHORIZED)?;
-    let date_header = headers
-        .get("date")
-        .and_then(|v| v.to_str().ok())
-        .ok_or(StatusCode::UNAUTHORIZED)?;
-
-    let key_id = crate::activitypub::signature::verify(
-        &[("date", date_header), ("signature", sig_header)],
-        "POST",
-        "/inbox",
-        body,
-        state.ap.identity.public_key_pem(),
-        chrono::Utc::now(),
-    )
-    .map_err(|_| StatusCode::UNAUTHORIZED)?;
-
-    if !state.ap.is_local_activitypub_actor(&key_id) {
-        let _pubkey = state
-            .ap
-            .delivery
-            .fetch_public_key_for_verify(&state.ap.identity, &key_id)
-            .await
-            .map_err(|_| StatusCode::UNAUTHORIZED)?;
-    }
-
+    let signature=headers.get("signature").and_then(|v|v.to_str().ok()).ok_or(StatusCode::UNAUTHORIZED)?;
+    let key_id=signature.split(',').find_map(|part|part.trim().strip_prefix("keyId=").map(|v|v.trim_matches('"'))).ok_or(StatusCode::UNAUTHORIZED)?;
+    let author=activity.get(if activity["type"]=="Proposal" {"attributedTo"}else{"actor"}).and_then(Value::as_str).ok_or(StatusCode::UNAUTHORIZED)?;
+    if key_id.split('#').next()!=Some(author) {return Err(StatusCode::UNAUTHORIZED);}
+    let pem=state.ap.delivery.fetch_public_key_for_verify(&state.ap.identity,key_id).await.map_err(|_|StatusCode::UNAUTHORIZED)?;
+    let actual:Vec<(&str,&str)>=headers.iter().filter_map(|(key,value)|value.to_str().ok().map(|v|(key.as_str(),v))).collect();
+    crate::activitypub::signature::verify(&actual,"POST",uri.path_and_query().map(|p|p.as_str()).unwrap_or("/"),body,&pem,chrono::Utc::now()).map_err(|_|StatusCode::UNAUTHORIZED)?;
     Ok(())
 }
 
