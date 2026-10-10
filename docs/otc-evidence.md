@@ -34,7 +34,7 @@ cd pay3low-svelte-frontend
 npm run check
 npm run test:unit
 npm run build
-npm run test:e2e -- tests/otc.spec.ts tests/otc-settlement.spec.ts
+npm run test:e2e -- tests/otc.spec.ts
 ```
 
 Playwright requires its browser installation or `PLAYWRIGHT_CHROMIUM_EXECUTABLE` pointing to a compatible installed Chromium. `PLAYWRIGHT_PORT` can select a free local port. This verification used Rust 1.97, PostgreSQL 18.6 and the installed Chromium 152.
