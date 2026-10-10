@@ -6,6 +6,7 @@ const LOCAL_ASSET_ICONS = new Set([
   "ada", "apt", "atom", "avax", "bch", "bnb", "btc", "dai", "doge", "dot", "eth", "fdusd",
   "link", "ltc", "matic", "near", "sol", "sui", "ton", "trx", "uni", "usdc", "usdt", "xrp",
 ]);
+const PNG_ASSET_ICONS = new Set(["ab", "ai", "aave", "aixbt", "aevo"]);
 const LOCAL_FIAT_ICONS = new Set(["amd", "byn", "kzt", "rub", "uah", "usd"]);
 
 export const likeIcon = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAABa0lEQVR4AcyUv0tDMRDHfc5OLq6CiuDg4j9gF0dXUVBRBHEUxLXPuaCrKIJ0cXJwdLD+Wh1cbcFRBwdxFIf4SeCF6zVtU9pAy32Su3uX+yaBZnQk8W/4BIwxZWNMDtMxh+/pBDS9oWkOZWgQjzN3tGgBmi3RaRmkzcgg5EcJ0HyCxbeg7UsndOwFaDIHx3AB57AuiivCL9y/LMvei6Dd7AUouIJ92IYdqCJSglV8KUbo7M2NXQYpMB+onSI3CyEbCyV1Tgrob93iSU73AveKCrHfbD8CdgMLDIuKA+JrcNavgGsSGH6LXCqBp9QCdykFvmleA2cprqjGH9CKJBPw12MVkpzANi4YtMAz19P0hEiB10JVzA38E/iAGGu6HrtACqyQsK/mGfMprLGbR/jB34A6dLIqtUe6wAvwsQ6HsAt7YF9XV49vd2afBNvggaRmi5pN8i3mBVq+qAQNPiGHUoBLVe7DaAG/okfnHwAA//+PLiGuAAAABklEQVQDAFHSdTFISG9+AAAAAElFTkSuQmCC";
@@ -53,6 +54,7 @@ export function venueIcon(venue: string): string {
 export function assetIcon(asset: string): string {
   const key = asset.toLowerCase();
   if (key === "ever") return "/icons/assets/ever.svg";
+  if (PNG_ASSET_ICONS.has(key)) return `/icons/assets/${key}.png`;
   if (LOCAL_FIAT_ICONS.has(key)) return `/icons/assets/${key}.svg`;
   return LOCAL_ASSET_ICONS.has(key)
     ? `/icons/assets/${key}.webp`
