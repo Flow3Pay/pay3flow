@@ -11,7 +11,7 @@
 
   // Keep the page available during SSR and API outages; the about page
   // refreshes these catalogs after hydration.
-  const defaultAssets = ["AMD", "RUB", "USD", "BYN", "KZT", "UAH", "USDT", "USDC", "BTC", "ETH", "ADA", "APT", "ATOM", "AVAX", "BCH", "BNB", "DAI", "DOGE", "DOT", "FDUSD", "LINK", "LTC", "MATIC", "NEAR", "SOL", "SUI", "TON", "TRX", "UNI", "XRP"];
+  const defaultAssets = ["AMD", "RUB", "USD", "BYN", "KZT", "UAH", "USDT", "USDC", "BTC", "ETH", "AAVE", "AEVO", "AIXBT", "AB", "ADA", "APT", "ATOM", "AVAX", "BCH", "BNB", "DAI", "DOGE", "DOT", "FDUSD", "LINK", "LTC", "MATIC", "NEAR", "SOL", "SUI", "TON", "TRX", "UNI", "XRP"];
   const defaultProviders = [
     { id: "bestchange", name: "BestChange" },
     { id: "binance", name: "Binance" },

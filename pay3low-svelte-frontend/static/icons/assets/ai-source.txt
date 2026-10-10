@@ -1,0 +1,2 @@
+Token icon supplied by the project owner:
+https://asset-metadata-service-production.s3.amazonaws.com/asset_icons/ebdeae7e1aa7342355c7f6bd4917202d70e77dd19fe2c7ba387dcfbbff00827b.png
