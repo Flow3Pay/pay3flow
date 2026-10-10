@@ -64,7 +64,7 @@ The static compatibility context and both directions are checked in at `backend/
 | Incidents | Stable owned incidents, unknown payout/observer/fee detection, restoration versus financial closure and participant update evidence. | Full lost-acceptance/lost-payout/stale-observer/fee-mismatch drills with named operators, actual acknowledgement/containment/customer update and financial disposition. |
 | Handover | [Setup and recovery contract](otc-service.md), disabled example configuration, repeatable fixtures/tests, and `/otc-runbook`. | Complete all Day 1 configuration and live-pilot gate entries; record reviewers and evidence. |
 
-The table deliberately does not mark unperformed deployment/financial drills complete. A successful simulation does not authorize live deposits. No deployment or live route activation was performed as part of this change.
+The Pay3Flow application was deployed on 2026-10-10 to the configured Lefine production k3s target from revision `e4339598b129395336227e5cb12658d2e7e15361` (image tag `live-20261010-e433959`). Both backend and frontend Deployments reached 1/1 Ready; the deploy script public root, `/health`, and provider checks passed. A post-rollout public `GET /api/otc/config` returned `enabled: false` and `available: false`; no OTC configuration, wallet signing or deposits were enabled. The coordinated fmatch source changes were not deployed to the hosted matcher. The table deliberately does not mark unperformed peer, wallet, inventory or financial drills complete. A successful simulation or dormant application deployment does not authorize live deposits.
 
 ## Existing fmatch line-limit failures
 
