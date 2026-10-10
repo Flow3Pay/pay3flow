@@ -91,3 +91,5 @@ Recorded verification (all funds/desk/chain responses in browser tests are simul
 - Browser screenshots of the integrated quote view were visually inspected; terminal hero, three columns, card style and panel toggles are preserved.
 
 Backend financial/protocol code is unchanged by this integration. Production live-route configuration and real-money gate remain separate.
+
+Live deployment verified: `cc83ef1a50f2d241ff871f36dd6af738f45c79a6` (`live-20261010-cc83ef1`) at https://pay3flow.lefine.pro/#/otc. The release includes the preceding live wallet-picker changes from `cc67b50`. Backend/frontend each reported 1 ready replica and root/health/provider route checks passed. Real-browser checks at 1440px and 320px confirmed the single Russian OTC terminal, real `/api/otc/config` and `/api/otc/listings` requests, no test-market WebSocket, no settlement section, no generated chart points/output, no page errors and no horizontal overflow. Anonymous trade/dashboard reads returned 401. The real service still reports `enabled:false`, `available:false`; quote requests are disabled. No live route or deposit gate was enabled.

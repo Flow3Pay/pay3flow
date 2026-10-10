@@ -1,5 +1,7 @@
 # OTC test WebSocket
 
+Legacy simulation endpoint: the current `/#/otc` terminal uses `/api/otc` directly and does not connect to this WebSocket. See [OTC service](otc-service.md) for the active workflow.
+
 ## Share settings and messenger previews
 
 The browser keeps market, side, order type, decimal amount/price and settlement
