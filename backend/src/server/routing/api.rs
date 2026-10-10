@@ -19,7 +19,7 @@ use crate::market_prices;
 use crate::server::openapi;
 use crate::server::routing::{
     activitypub, anonymous, auth, banks, exchange, matcher, networks, oauth, p2p, pairs, payments,
-    payments_ws, providers, rates, referrals, route_executions, solver, ws,
+    payments_ws, providers, rates, referrals, route_executions, share_links, solver, ws,
 };
 
 pub fn router(state: AppState) -> Router {
@@ -44,11 +44,19 @@ pub fn router(state: AppState) -> Router {
         )
         .with_state(());
 
+    let test_otc = crate::otc::TestOtc::default();
     Router::new()
+        .route(
+            "/ws/otc",
+            get(move |ws| crate::server::routing::otc::ws(ws, test_otc.clone())),
+        )
         .merge(scalar_routes)
+        .merge(crate::otc::http::router())
         .route("/openapi.json", get(openapi::document))
         .route("/health", get(health))
         .route("/metrics", get(metrics))
+        .route("/api/share-links", post(share_links::create))
+        .route("/api/share-links/:id", get(share_links::get))
         .route("/api/anonymous/register", post(anonymous::register))
         .route("/api/auth/register", post(auth::register))
         .route("/api/auth/login", post(auth::login))
@@ -165,6 +173,10 @@ pub fn router(state: AppState) -> Router {
             post(banks::admin_set_status),
         )
         .route("/api/providers", get(providers::list))
+        .route(
+            "/api/providers/:slug/statistics",
+            get(crate::provider_profile::statistics),
+        )
         .route("/api/providers/:provider/webhooks", post(payments::webhook))
         .route("/api/debug/quote", post(rates::debug_quote))
         .route("/routing/fallback", post(matcher::fallback))

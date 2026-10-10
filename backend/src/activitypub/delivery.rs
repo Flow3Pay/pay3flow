@@ -201,9 +201,12 @@ impl DeliveryClient {
             return Ok(identity.public_key_pem().to_string());
         }
         let doc = identity.fetch_remote_actor(&self.http, actor_iri).await?;
-        doc.public_key.map(|pk| pk.public_key_pem).ok_or_else(|| {
-            ActivityPubError::Signature(format!("actor {actor_iri} has no publicKey"))
-        })
+        doc.public_key
+            .filter(|pk| pk.id == key_id && pk.owner == actor_iri)
+            .map(|pk| pk.public_key_pem)
+            .ok_or_else(|| {
+                ActivityPubError::Signature(format!("actor {actor_iri} has no publicKey"))
+            })
     }
 
     async fn was_delivered(

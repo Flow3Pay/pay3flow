@@ -120,6 +120,7 @@ public API.
 
 ```text
 GET /ws
+GET /ws/otc
 GET /ws/rates
 GET /ws/payments
 GET /api/exchange/orders/:id/live
@@ -128,3 +129,39 @@ GET /api/exchange/orders/:id/live
 The exchange live endpoint emits route and status updates while an order is
 discovering or being quoted. Clients must tolerate reconnects and duplicate
 events; the durable order endpoint remains authoritative.
+
+The OTC test workspace uses `/ws/otc` for data and order commands. See [OTC WebSocket protocol](otc-websocket.md).
+
+## Provider profiles
+
+The frontend directory at `/providers` links to universal profiles at
+`/providers/{slug}`. Profiles use the provider catalog's `market_types`
+(`p2p`, `spot`, `exchanger`), local venue avatars, and the existing provider
+review API. `market_types` describes integrations available in Pay3Flow.
+
+`GET /api/providers/{slug}/statistics?period=30d` accepts `7d`, `30d` (default),
+or `90d`. It returns `searches`, `top10`, `top1`, `average_rank`,
+`response_samples`, `successful_responses`, `average_response_ms`, `site_opens`,
+`first_seen`, `updated_at`, daily `days` and up to eight `directions`. Unknown
+providers return 404; unsupported periods return 400. Periods use UTC calendar
+days, including today. Every day is returned, including zero-search days.
+
+Each explicitly counted, completed user search stores one final observation per
+participating provider in `provider_search_observations`. Both REST and WebSocket
+searches, including cached final results, record the final displayed ranking.
+Progressive snapshots, auto-refreshes, failed and cancelled searches are excluded.
+Multiple routes from a provider count as one appearance at its best displayed
+rank. A provider without a displayed route remains in the denominator when its
+source status was observed. Top-10 share is `top10 / searches`; it is unknown
+when there are no observations. Average rank includes displayed routes only.
+Cached source statuses do not contribute latency samples. Source response success
+is calculated per observed search; it is not API uptime or completed-trade success.
+
+`site_opens` counts service opens from route links in the selected period,
+after spam rows are removed by the existing reputation rollback; it does not
+measure completed trades. Historical ranking data starts when the feature is
+deployed: older searches cannot be reconstructed from aggregate counters.
+The profile shows explicit empty/error states instead of illustrative statistics.
+
+Profile review ratings and filters use only the collected external-review sample.
+Sharing copies the profile URL and period.

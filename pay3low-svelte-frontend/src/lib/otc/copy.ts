@@ -1,8 +1,9 @@
 import type { Locale } from "$lib/i18n";
 const en = {
+  connecting: "Connecting to OTC…", reconnecting: "Connection lost. Reconnecting…", testConnected: "Test market · connected", requestFailed: "The server has not confirmed the operation. Check order history after reconnecting.",
   buyPrice: "Buy price", sellPrice: "Sell price", buyVolume: "Buy volume", sellVolume: "Sell volume",
   titleLead: "Trade on ", titleAccent: "your terms.", selectSendAsset: "Select sending asset", selectReceiveAsset: "Select recipient asset", selectSendNetwork: "Select sending network", selectReceiveNetwork: "Select recipient network", chooseSendAsset: "Choose the asset you send", chooseReceiveAsset: "Choose the asset you receive", sendNetwork: "Sending network", receiveNetwork: "Receiving network",
-  title: "Trade on your terms.", subtitle: "Your price. Your amount. A direct exchange.", demo: "Demo market", demoNote: "Preview with sample prices. Orders stay in this browser; no funds move.",
+  title: "Trade on your terms.", subtitle: "Your price. Your amount. A direct exchange.", demo: "Demo market", demoNote: "Preview with sample prices. Orders are stored on the test server; no funds move.",
   market: "Market", lastPrice: "Last price", change: "24h change", high: "24h high", low: "24h low", volume: "24h volume",
   bridge: "Bridge", chart: "Chart", book: "Orderbook", activity: "Market activity", collapse: "Collapse", expand: "Expand",
   buy: "Buy", sell: "Sell", limit: "Limit", marketOrder: "Market", send: "You send", receive: "You receive", price: "Price", amount: "Amount", total: "Total", spread: "Spread",
@@ -13,9 +14,10 @@ const en = {
 };
 type Copy = Record<keyof typeof en, string>;
 const ru: Copy = {
+  connecting: "Подключение к OTC…", reconnecting: "Связь потеряна. Переподключение…", testConnected: "Тестовый рынок · подключено", requestFailed: "Сервер не подтвердил операцию. Проверьте историю ордеров после переподключения.",
   buyPrice: "Цена покупки", sellPrice: "Цена продажи", buyVolume: "Объём покупок", sellVolume: "Объём продаж",
   titleLead: "Сделки на ", titleAccent: "ваших условиях.", selectSendAsset: "Выбрать отправляемый актив", selectReceiveAsset: "Выбрать получаемый актив", selectSendNetwork: "Выбрать сеть отправки", selectReceiveNetwork: "Выбрать сеть получения", chooseSendAsset: "Выберите отправляемый актив", chooseReceiveAsset: "Выберите получаемый актив", sendNetwork: "Сеть отправки", receiveNetwork: "Сеть получения",
-  title: "Сделки на ваших условиях.", subtitle: "Ваша цена. Ваш объём. Прямой обмен.", demo: "Демо-рынок", demoNote: "Цены для примера. Ордера остаются в этом браузере, средства не переводятся.",
+  title: "Сделки на ваших условиях.", subtitle: "Ваша цена. Ваш объём. Прямой обмен.", demo: "Демо-рынок", demoNote: "Цены для примера. Ордера хранятся на тестовом сервере, средства не переводятся.",
   market: "Рынок", lastPrice: "Последняя цена", change: "Изменение за 24ч", high: "Макс. за 24ч", low: "Мин. за 24ч", volume: "Объём за 24ч",
   bridge: "Bridge", chart: "График", book: "Стакан", activity: "Активность рынка", collapse: "Свернуть", expand: "Развернуть",
   buy: "Купить", sell: "Продать", limit: "Лимитный", marketOrder: "Рыночный", send: "Вы отправляете", receive: "Вы получаете", price: "Цена", amount: "Объём", total: "Всего", spread: "Спред",
@@ -25,10 +27,11 @@ const ru: Copy = {
   trades: "Последние сделки", myOrders: "Мои ордера", history: "История ордеров", time: "Время", side: "Сторона", status: "Статус", action: "Действие", cancel: "Отменить", open: "Открыт", cancelled: "Отменён", simulated: "Симуляция", noOrders: "Первый ордер начинается здесь.", noOrdersHint: "Задайте цену в bridge и создайте демо-ордер.", noHistory: "История пока пуста.", noHistoryHint: "Здесь появятся отменённые ордера и симуляции рыночных сделок.", create: "Создать ордер", reviewTitle: "Последняя проверка.", reviewSubtitle: "Проверьте демо-ордер перед созданием.", confirm: "Создать демо-ордер", simulate: "Симулировать рыночный ордер", close: "Закрыть", back: "Назад", orderCreated: "Демо-ордер добавлен в «Мои ордера».", orderSimulated: "Рыночный ордер симулирован. Откройте историю.", orderCancelled: "Демо-ордер отменён.", demoOnly: "Демо-ордер · без подписи кошелька и перевода", filled: "Исполнено", network: "Актив расчёта", direct: "Прямой OTC", marketPicker: "Выбрать рынок", preview: "OTC-превью", available: "Доступно в демо", buyPressure: "Покупка", sellPressure: "Продажа",
 };
 const hy: Copy = {
+  connecting: "Միացում OTC-ին…", reconnecting: "Կապն ընդհատվել է։ Վերամիացում…", testConnected: "Փորձնական շուկա · միացված", requestFailed: "Սերվերը չի հաստատել գործողությունը։ Վերամիացումից հետո ստուգեք պատվերների պատմությունը։",
   buyPrice: "Գնման գին", sellPrice: "Վաճառքի գին", buyVolume: "Գնումների ծավալ", sellVolume: "Վաճառքների ծավալ",
   titleLead: "Առևտուր՝ ", titleAccent: "ձեր պայմաններով։", title: "Առևտուր՝ ձեր պայմաններով։", subtitle: "Ձեր գինը։ Ձեր ծավալը։ Ուղղակի փոխանակում։",
   selectSendAsset: "Ընտրել ուղարկվող ակտիվը", selectReceiveAsset: "Ընտրել ստացվող ակտիվը", selectSendNetwork: "Ընտրել ուղարկման ցանցը", selectReceiveNetwork: "Ընտրել ստացման ցանցը", chooseSendAsset: "Ընտրեք ուղարկվող ակտիվը", chooseReceiveAsset: "Ընտրեք ստացվող ակտիվը", sendNetwork: "Ուղարկման ցանց", receiveNetwork: "Ստացման ցանց",
-  demo: "Փորձնական շուկա", demoNote: "Օրինակային գներ։ Պատվերները պահվում են այս զննարկիչում․ միջոցներ չեն փոխանցվում։",
+  demo: "Փորձնական շուկա", demoNote: "Օրինակային գներ։ Պատվերները պահվում են փորձնական սերվերում․ միջոցներ չեն փոխանցվում։",
   market: "Շուկա", lastPrice: "Վերջին գին", change: "Փոփոխություն՝ 24 ժ", high: "Առավելագույնը՝ 24 ժ", low: "Նվազագույնը՝ 24 ժ", volume: "Ծավալը՝ 24 ժ",
   bridge: "Կամուրջ", chart: "Գրաֆիկ", book: "Պատվերների գիրք", activity: "Շուկայի ակտիվություն", collapse: "Ծալել", expand: "Բացել",
   buy: "Գնել", sell: "Վաճառել", limit: "Լիմիտային", marketOrder: "Շուկայական", send: "Դուք ուղարկում եք", receive: "Դուք ստանում եք", price: "Գին", amount: "Քանակ", total: "Ընդամենը", spread: "Գների տարբերություն",

@@ -1,352 +1,156 @@
-import { expect, test, type Page } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
 
-async function openOtc(page: Page, hash = "#/otc") {
-  await page.addInitScript(() => localStorage.setItem("pay3flow-locale", "en"));
-  await page.route("**/api/**", (route) => route.fulfill({ status: 503, contentType: "application/json", body: "{}" }));
-  await page.goto(`/${hash}`);
-  await expect(page.getByTestId("otc-workspace")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Trade on your terms." })).toBeVisible();
-  await expect(page.locator(".introOverlay")).toHaveCount(0, { timeout: 6000 });
+// All chain and desk responses here are simulations; no wallet signs or sends funds.
+const desk = "https://relay.example/actors/desk", customer = "https://relay.example/actors/customer";
+const ever = "https://assets.example/ever", usdt = "https://assets.example/usdt";
+function makeTrade(state = "quoted", direction = "buy", id = "booking-fixture") {
+  return { id, created_at: new Date().toISOString(), rfq_id: "rfq-fixture", state, offer: {}, decision: {}, terms: {
+    demo: false, direction, input: "100", output: "200", input_units: direction === "buy" ? "100000000" : "100000000000", output_units: direction === "buy" ? "200000000000" : "200000000",
+    customer_actor: customer, desk_actor: desk, quote_by: "2099-10-10T00:02:00Z", pay_by: "2099-10-10T00:07:00Z", payout_by: "2099-10-10T00:17:00Z",
+    network_costs: "Sender pays gas separately", ever_receiving_cost_units: "1000000", refund_policy: "Refund to proved booked wallet after reconciliation",
+    fee_policy: { basis_units: direction === "buy" ? "100000000" : "200000000", fee_units: "5000000" }, proposal: { id: `${desk}/quotes/${id}`, publishes: { resourceConformsTo: direction === "buy" ? ever : usdt }, reciprocal: { resourceConformsTo: direction === "buy" ? usdt : ever } }
+  }};
 }
-
-test("OTC navigation, context menu and share work at every screen size", async ({ page }) => {
-  const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(error.message));
-  await openOtc(page);
-  await expect(page.getByRole("link", { name: "OTC", exact: true })).toHaveAttribute("aria-current", "page");
-  await expect(page.getByRole("link", { name: "Open API documentation" })).toBeHidden();
-  const share = page.getByRole("button", { name: "Share exchange", exact: true });
-  const theme = await page.getByRole("button", { name: "Switch theme" }).boundingBox();
-  const shareBox = await share.boundingBox();
-  expect(shareBox!.x).toBeGreaterThan(theme!.x);
-  await page.getByRole("button", { name: "Open menu" }).click();
-  const menu = page.getByRole("menu", { name: "Menu", exact: true });
-  await expect(menu).toBeVisible();
-  await expect(menu.getByRole("menuitem")).toHaveCount(4);
-  await expect(page.locator(".appShell")).not.toHaveAttribute("inert", "");
-  await page.keyboard.press("End");
-  await expect(menu.getByRole("menuitem", { name: "Open Pay3Flow on GitHub" })).toBeFocused();
-  await page.keyboard.press("Escape");
-  await expect(menu).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Open menu" })).toBeFocused();
-  await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text: string) => sessionStorage.setItem("test.otc-share", text) } }));
-  await share.click();
-  expect(await page.evaluate(() => sessionStorage.getItem("test.otc-share"))).toContain("/#/otc");
-  await page.getByRole("link", { name: "SWAP", exact: true }).click();
-  await expect(page.locator(".workspace")).toBeVisible();
-  await expect(page.getByTestId("otc-workspace")).toHaveCount(0);
-  await page.getByRole("link", { name: "OTC", exact: true }).click();
-  await expect(page.getByTestId("otc-workspace")).toBeVisible();
-  await page.goBack();
-  await expect(page.locator(".workspace")).toBeVisible();
-  expect(errors).toEqual([]);
-});
-
-test("EVER/USDT is the default and shared market with native icons and buy/sell amounts", async ({ page }) => {
-  await openOtc(page);
-  const market = page.getByRole("combobox", { name: "Choose market" });
-  await expect(market).toHaveValue("EVER-USDT");
-  await expect(page.locator(".marketSelector")).toContainText("Everscale");
-  const icon = page.locator('.marketSelector img[src="/icons/assets/ever.svg"]');
-  await expect.poll(() => icon.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(0);
-  const bridge = page.locator("#otc-bridge");
-  await expect(bridge.getByRole("button", { name: "Buy", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await expect(bridge.getByRole("button", { name: /Select sending asset:/ })).toContainText("USDT");
-  await expect(bridge.getByRole("button", { name: /Select recipient asset:/ })).toContainText("EVER");
-  await bridge.getByRole("textbox", { name: "Price", exact: true }).fill("0.01234");
-  await bridge.getByRole("textbox", { name: "You send", exact: true }).fill("1");
-  await expect(bridge.getByRole("textbox", { name: "You receive", exact: true })).toHaveValue("81.037277");
-  await bridge.getByRole("button", { name: "Sell", exact: true }).click();
-  await expect(bridge.getByRole("button", { name: /Select sending asset:/ })).toContainText("EVER");
-  await expect(bridge.getByRole("button", { name: /Select recipient asset:/ })).toContainText("USDT");
-  await bridge.getByRole("textbox", { name: "You send", exact: true }).fill("100.25");
-  await expect(bridge.getByRole("textbox", { name: "You receive", exact: true })).toHaveValue("1.23709");
-  await market.selectOption("BTC-USDT");
-  await market.selectOption("EVER-USDT");
-  await expect(page).toHaveURL(/#\/otc\?market=EVER-USDT$/);
-  await page.reload();
-  await expect(market).toHaveValue("EVER-USDT");
-  await expect(bridge.getByRole("button", { name: "Buy", exact: true })).toBeVisible();
-});
-
-test("panels collapse, chart controls update, and markets survive reload", async ({ page }) => {
-  await openOtc(page);
-  for (const [title, id] of [["Bridge", "otc-bridge"], ["Orderbook", "otc-book"], ["Market activity", "otc-activity"]]) {
-    await page.getByRole("button", { name: `Collapse ${title}`, exact: true }).click();
-    await expect(page.locator(`#${id}`)).toBeHidden();
-    await page.getByRole("button", { name: `Expand ${title}`, exact: true }).click();
-    await expect(page.locator(`#${id}`)).toBeVisible();
-  }
-  const originalLevels = await page.locator("#otc-book .askLevels .level").count();
-  await page.getByRole("button", { name: "Price grouping", exact: true }).click();
-  await page.getByRole("dialog", { name: "Price grouping" }).getByRole("button", { name: "0.00005", exact: true }).click();
-  await expect.poll(() => page.locator("#otc-book .askLevels .level").count()).toBeLessThan(originalLevels);
-  await page.getByRole("button", { name: "Price grouping", exact: true }).click();
-  await page.getByRole("dialog", { name: "Price grouping" }).getByRole("button", { name: "0.00001", exact: true }).click();
-  const line = await page.locator(".buyLine").getAttribute("d");
-  await page.getByRole("button", { name: "7D", exact: true }).click();
-  await expect(page.locator(".buyLine")).not.toHaveAttribute("d", line!);
-  await page.getByRole("button", { name: "Candlesticks", exact: true }).click();
-  await expect(page.locator(".buyLine")).toHaveCount(0);
-  await page.getByRole("button", { name: "Zoom in", exact: true }).click();
-  await page.getByRole("button", { name: "Reset chart", exact: true }).click();
-  await page.getByRole("combobox", { name: "Choose market" }).selectOption("ETH-USDT");
-  await expect(page).toHaveURL(/#\/otc\?market=ETH-USDT$/);
-  await expect(page.locator("#otc-bridge").getByRole("button", { name: "Buy", exact: true })).toBeVisible();
-  await page.reload();
-  await expect(page.getByRole("combobox", { name: "Choose market" })).toHaveValue("ETH-USDT");
-  for (const width of [320, 393, 768, 1024, 1512]) {
-    await page.setViewportSize({ width, height: 900 });
-    await expect(page.locator(".marketStrip")).toBeVisible();
-    expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBe(true);
-    expect(await page.locator("header .inner").evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
-  }
-});
-
-test("book selection creates, retains and cancels a demo limit order", async ({ page }) => {
-  await openOtc(page);
-  await page.locator("#otc-book .askLevels .level").last().click();
-  const chosenPrice = await page.getByRole("textbox", { name: "Price", exact: true }).inputValue();
-  await expect(page.locator("#otc-book .askLevels .level").last()).toHaveClass(/selected/);
-  await page.getByRole("textbox", { name: "You send", exact: true }).fill("1500");
-  await page.getByTestId("otc-review").click();
-  const review = page.getByRole("dialog", { name: "One last look." });
-  await expect(review).toBeVisible();
-  await expect(review).toContainText("no funds move");
-  await review.getByRole("button", { name: "Create demo order", exact: true }).click();
-  await expect(review).toHaveCount(0);
-  await expect(page.getByRole("tab", { name: /My orders/ })).toHaveAttribute("aria-selected", "true");
-  await expect(page.locator("#otc-orders-content tbody tr")).toHaveCount(1);
-  await expect(page.locator("#otc-orders-content")).toContainText(Number(chosenPrice).toLocaleString("en-US", { minimumFractionDigits: 5, maximumFractionDigits: 5 }));
-  await page.reload();
-  await page.getByRole("tab", { name: /My orders/ }).click();
-  await expect(page.locator("#otc-orders-content tbody tr")).toHaveCount(1);
-  await page.getByRole("button", { name: "Cancel", exact: true }).click();
-  await expect(page.locator("#otc-orders-content")).toContainText("Your first order starts here.");
-  await page.getByRole("tab", { name: "Order history", exact: true }).click();
-  await expect(page.locator("#otc-history-content")).toContainText("Cancelled");
-  expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem("pay3flow.otc.demo-orders.v1")!)[0].status)).toBe("cancelled");
-});
-
-test("invalid amounts and exhausted liquidity cannot create orders", async ({ page }) => {
-  await openOtc(page);
-  const input = page.getByRole("textbox", { name: "You send", exact: true });
-  for (const amount of ["", "-1", "1e10", "abc", "0.000000000001"]) {
-    await input.fill(amount);
-    await expect(page.getByTestId("otc-review")).toBeDisabled();
-  }
-  await page.locator("#otc-bridge").getByRole("button", { name: "Market", exact: true }).click();
-  await input.fill("999999999");
-  await expect(page.locator("#otc-bridge")).toContainText("Not enough demo liquidity");
-  await expect(page.getByTestId("otc-review")).toBeDisabled();
-  await input.fill("1000");
-  await page.getByTestId("otc-review").click();
-  const review = page.getByRole("dialog", { name: "One last look." });
-  await page.keyboard.press("Escape");
-  await expect(review).toHaveCount(0);
-  await expect(page.getByTestId("otc-review")).toBeFocused();
-  await page.getByTestId("otc-review").click();
-  await review.getByRole("button", { name: "Simulate market order", exact: true }).click();
-  await expect(page.locator("#otc-history-content")).toContainText("Simulated");
-});
-
-test("SWAP retains its selected corridor and amount across OTC navigation", async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem("pay3flow-locale", "en"));
-  await page.route("**/api/**", (route) => route.fulfill({ status: 503, contentType: "application/json", body: "{}" }));
-  await page.goto("/#/swap/USDT/BTC?amount=1000");
-  await expect(page.locator(".workspace")).toBeVisible();
-  await expect(page.getByRole("link", { name: "SWAP", exact: true })).toHaveAttribute("href", "/#/swap/USDT/BTC?amount=1000");
-  await page.getByRole("link", { name: "OTC", exact: true }).click();
-  await expect(page.getByTestId("otc-workspace")).toBeVisible();
-  await page.getByRole("link", { name: "SWAP", exact: true }).click();
-  await expect(page).toHaveURL(/#\/swap\/USDT\/BTC\?amount=1000$/);
-});
-
-test("inter-panel arrows reclaim space and preserve the layout", async ({ page }, testInfo) => {
-  await page.addInitScript(() => {
-    if (!localStorage.getItem("pay3flow.otc.panels.v1")) localStorage.setItem("pay3flow.otc.panels.v1", JSON.stringify({ chartOpen: false }));
-  });
-  await openOtc(page);
-  const workspace = page.getByTestId("otc-workspace");
-  await expect(workspace.locator(".marketFootnote, .bookHint, .previewBadge, .eyebrow, .workspaceFooter")).toHaveCount(0);
-  const chart = page.locator("#otc-chart-column");
-  const book = page.locator("#otc-book-column");
-  const bridge = page.locator("#otc-bridge-column");
-  await expect(chart).toBeVisible();
-  const panelsBounds = (await page.locator(".otcGrid").boundingBox())!;
-  const stripBounds = (await page.locator(".marketStrip").boundingBox())!;
-  expect(stripBounds.y + stripBounds.height).toBeLessThanOrEqual(panelsBounds.y);
-  if (page.viewportSize()!.width <= 980) {
-    await expect(page.locator(".bridgeToggle span")).toHaveCSS("transform", "matrix(0, 1, -1, 0, 0, 0)");
-    await expect(page.locator(".bookToggle span")).toHaveCSS("transform", "matrix(0, -1, 1, 0, 0, 0)");
-  }
-  const originalWidth = (await chart.boundingBox())!.width;
-  await expect(page.getByRole("button", { name: /(?:Collapse|Expand) Chart/ })).toHaveCount(0);
-  if (page.viewportSize()!.width > 980) {
-    await expect(page.locator(".bridgeToggle span")).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
-    await expect(page.locator(".bookToggle span")).toHaveCSS("transform", "matrix(-1, 0, 0, -1, 0, 0)");
-  }
-  await page.getByRole("button", { name: "Collapse Bridge", exact: true }).click();
-  await expect(bridge).toBeHidden();
-  await expect(chart).toBeVisible();
-  await expect(page.getByRole("button", { name: "Expand Bridge", exact: true })).toHaveAttribute("aria-expanded", "false");
-  if (page.viewportSize()!.width > 980) {
-    await expect.poll(async () => (await chart.boundingBox())!.width).toBeGreaterThan(originalWidth + 50);
-    await expect(page.locator(".bridgeToggle span")).toHaveCSS("transform", "matrix(-1, 0, 0, -1, 0, 0)");
-  }
-  await page.getByRole("button", { name: "Collapse Orderbook", exact: true }).click();
-  await expect(book).toBeHidden();
-  await expect(chart).toBeVisible();
-  if (page.viewportSize()!.width > 980) {
-    await expect(page.locator(".bookToggle span")).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
-    await expect.poll(async () => chart.evaluate((element) => {
-      const card = element.getBoundingClientRect();
-      const workspace = element.closest(".otcWorkspace")!.getBoundingClientRect();
-      return Math.abs(card.left + card.width / 2 - workspace.left - workspace.width / 2);
-    })).toBeLessThan(1);
-    await expect.poll(async () => (await chart.boundingBox())!.width).toBeGreaterThan((await workspace.boundingBox())!.width - 65);
-  }
-  await page.getByRole("button", { name: "Collapse Market activity", exact: true }).click();
-  await expect(page.locator("#otc-activity-section")).toBeHidden();
-  await page.reload();
-  await expect(bridge).toBeHidden();
-  await expect(chart).toBeVisible();
-  await expect(book).toBeHidden();
-  await expect(page.locator("#otc-activity-section")).toBeHidden();
-  for (const title of ["Bridge", "Orderbook", "Market activity"]) {
-    const toggle = page.getByRole("button", { name: `Expand ${title}`, exact: true });
-    await toggle.focus();
-    await page.keyboard.press("Enter");
-  }
-  await expect(chart).toBeVisible();
-  await expect(bridge).toBeVisible();
-  await expect(book).toBeVisible();
-  await expect(page.locator("#otc-activity-section")).toBeVisible();
-  await workspace.screenshot({ path: testInfo.outputPath("otc-panels.png") });
-  await page.getByRole("button", { name: "Buy / Sell", exact: true }).click();
-  await expect(page.locator(".bridgeIcon")).toHaveClass(/bridgeIconReversed/);
-  await expect(page.getByRole("button", { name: "Sell", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await page.getByRole("button", { name: "Buy / Sell", exact: true }).click();
-  await expect(page.locator(".bridgeIcon")).not.toHaveClass(/bridgeIconReversed/);
-});
-
-
-test("asset and network pickers keep the bridge and order review consistent", async ({ page }) => {
-  await openOtc(page);
-  await page.getByRole("button", { name: /Select sending network: Ethereum/ }).click();
-  const network = page.getByRole("dialog", { name: "Choose network", exact: true });
-  await network.getByRole("option", { name: /TRON/ }).click();
-  await page.getByRole("textbox", { name: "You send", exact: true }).fill("2500");
-  await page.getByRole("button", { name: "Collapse Bridge", exact: true }).click();
-  await page.getByRole("button", { name: "Expand Bridge", exact: true }).click();
-  await expect(page.getByRole("textbox", { name: "You send", exact: true })).toHaveValue("2500");
-  await expect(page.getByRole("button", { name: /Select sending network: TRON/ })).toBeVisible();
-  await page.getByRole("button", { name: "Select recipient asset: EVER", exact: true }).click();
-  const assets = page.getByRole("dialog", { name: "Choose the asset you receive", exact: true });
-  await assets.getByRole("option", { name: /ETH/ }).click();
-  await assets.getByRole("option", { name: /Ethereum/ }).click();
-  await expect(page.getByRole("combobox", { name: "Choose market" })).toHaveValue("ETH-USDT");
-  await expect(page.getByRole("button", { name: "Buy", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await page.getByRole("button", { name: "Sell", exact: true }).click();
-  await expect(page.getByRole("button", { name: /Select recipient network: TRON/ })).toBeVisible();
-  await page.getByTestId("otc-review").click();
-  await expect(page.getByRole("dialog", { name: "One last look." })).toContainText(/TRON \(TRC-?20\)/);
-  await page.keyboard.press("Escape");
-  await page.reload();
-  await expect(page.getByRole("button", { name: "Sell", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("button", { name: /Select recipient network: TRON/ })).toBeVisible();
-});
-
-test("grouping menu supports keyboard selection and restores focus", async ({ page }) => {
-  await openOtc(page);
-  const trigger = page.getByRole("button", { name: "Price grouping", exact: true });
-  await trigger.click();
-  const menu = page.getByRole("dialog", { name: "Price grouping" });
-  await expect(menu.getByRole("button", { name: "0.00001", exact: true })).toBeFocused();
-  await page.keyboard.press("End");
-  await page.keyboard.press("Enter");
-  await expect(trigger).toContainText("0.00005");
-  await expect(trigger).toBeFocused();
-  await trigger.click();
-  await page.keyboard.press("Escape");
-  await expect(menu).toHaveCount(0);
-  await expect(trigger).toBeFocused();
-});
-
-test("Armenian OTC keeps the brand heading and fits a narrow viewport", async ({ page }, testInfo) => {
-  await page.addInitScript(() => localStorage.setItem("pay3flow-locale", "hy"));
-  await page.route("**/api/**", route => route.fulfill({ status: 503, body: "{}" }));
+async function fixtures(page: Page, options: { signedIn?: boolean; available?: boolean; state?: string; direction?: string; operator?: boolean; demo?: boolean; extra?: ReturnType<typeof makeTrade>[]; lostPrepare?: boolean; lostBooking?: boolean } = {}) {
+  const trades = options.state ? [makeTrade(options.state, options.direction), ...(options.extra || [])] : options.extra || [];
+  const attempts: any[] = [], rfqs: any[] = [], requests: { path: string; method: string; body: any; key?: string }[] = [];
+  const control = { holdPrivate: false, releasePrivate: null as null | (() => void), available: options.available ?? true, outage: false };
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.setViewportSize({ width: 320, height: 900 });
-  await page.goto("/?lang=hy#/otc");
-  const workspace = page.getByTestId("otc-workspace");
-  await expect(workspace.getByRole("heading", { level: 1 })).toHaveText("Առևտուր՝ ձեր պայմաններով։");
-  await expect(workspace.getByRole("button", { name: "Գնել", exact: true })).toBeVisible();
-  await expect(workspace.getByRole("button", { name: "Վաճառել", exact: true })).toBeVisible();
-  expect(await workspace.locator(".titleAccent").evaluate(el => getComputedStyle(el, "::after").content)).toBe('""');
-  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
-  await workspace.screenshot({ path: testInfo.outputPath("otc-armenian-mobile.png") });
+  await page.addInitScript(({ customer, desk, signedIn, operator }) => {
+    localStorage.setItem("pay3flow-locale", "en");
+    if (signedIn) {
+      const actor = operator ? desk : customer;
+      sessionStorage.setItem("pay3flow.otc.session.v1", JSON.stringify({ token: "simulation-token", actor, desk: !!operator }));
+      sessionStorage.setItem("pay3flow.otc.wallets", JSON.stringify({ actor, bound: ["ethereum: 0xfixture", "everscale: 0:fixture"] }));
+    }
+  }, { customer, desk, signedIn: options.signedIn, operator: options.operator });
+  await page.route("**/api/otc/**", async route => {
+    const req = route.request(), path = new URL(req.url()).pathname.replace("/api/otc", "");
+    const body = req.method() === "POST" ? req.postDataJSON() : null;
+    requests.push({ path, method: req.method(), body, key: req.headers()["idempotency-key"] });
+    let response: unknown = {}, status = 200;
+    if (path === "/config") { if (control.outage) status = 503; response = { enabled: true, available: control.available, demo: !!options.demo, desk, desk_name: "Fixture desk", ever_resource: ever, usdt_resource: usdt, counterparty_risk: "Two separate transfers" }; }
+    else if (path === "/listings") response = ["buy", "sell"].map(direction => ({ id: `${desk}/listings/${direction}`, name: `${direction} EVER`, publishes: { resourceConformsTo: direction === "buy" ? ever : usdt }, reciprocal: { resourceConformsTo: direction === "buy" ? usdt : ever } }));
+    else if (path === "/trades") { response = structuredClone({ trades, rfqs }); if (control.holdPrivate) { control.holdPrivate = false; await new Promise<void>(resolve => control.releasePrivate = resolve); } }
+    else if (path === "/rfqs") { rfqs.push({ id: "rfq-fixture", state: "waiting", actor: customer, ...body }); response = { id: "rfq-fixture" }; }
+    else if (path.endsWith("/apply")) { trades[0].state = options.lostBooking ? "quoted" : "booking_pending"; if (options.lostBooking) { status = 503; response = { error: "Lost booking response" }; } }
+    else if (path.endsWith("/decision")) trades[0].state = body.accept ? "accepted" : "rejected";
+    else if (path.endsWith("/prepare")) {
+      trades[0].state = body.kind === "payment" ? "payment_confirming" : "payout_pending";
+      const attempt = { id: "attempt-fixture", kind: body.kind, state: "unknown", reference: null, instructions: { leg: { chain: "ethereum", amount: "100000000", transfer_amount: "100000000", sender: `0x${"b".repeat(40)}`, recipient: `0x${"a".repeat(40)}` }, call: { family: "evm", nonce: "0x3" } } };
+      attempts.push(attempt); response = options.lostPrepare ? { error: "Lost prepare response" } : attempt; if (options.lostPrepare) status = 503;
+    } else if (path.startsWith("/trades/")) response = { trade: trades.find(t => path === `/trades/${t.id}`), attempts, evidence: [], customer_updates: [] };
+    else if (path === "/desk/dashboard") response = { quote_coverage: { numerator: 0, denominator: 0, rate: null }, on_time_payout: { numerator: 0, denominator: 0, rate: null }, open_funded_cases: [], economics: { collected_usdt_units: "0", unpaid_usdt_units: "0" }, observers: [], incidents: [] };
+    await route.fulfill({ status, json: response });
+  });
+  return { trades, attempts, rfqs, requests, control };
+}
+async function open(page: Page) { await page.goto("/#/otc"); await expect(page.getByTestId("otc-connection")).toHaveAttribute("data-state", "connected"); }
+async function select(page: Page, state: string, direction = "buy") { await page.getByRole("button", { name: new RegExp(`${direction === "buy" ? "Buy" : "Sell"} EVER 100 → 200 ${state}`) }).click(); }
+
+test("one real terminal, scoped networks, no demo feed, accessible at 320 pixels", async ({ page }) => {
+  const sockets: string[] = []; page.on("websocket", socket => sockets.push(socket.url()));
+  await page.setViewportSize({ width: 320, height: 780 }); await fixtures(page, { available: false }); await open(page);
+  await expect(page.locator(".settlementSection")).toHaveCount(0);
+  await expect(page.getByText("EVER / USDT · OTC desk settlement", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Request exact quote" })).toBeDisabled();
+  await expect(page.getByText("No quote history yet", { exact: true })).toBeVisible();
+  await page.locator("#otc-bridge").getByRole("button", { name: "Sell EVER", exact: true }).click();
+  await expect(page.getByLabel("You send · EVER on Everscale", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("You receive · USDT on Ethereum", { exact: true })).toBeVisible();
+  await expect(page.locator("#otc-receive")).toHaveValue("");
+  expect(sockets.some(url => url.includes("/ws/otc"))).toBe(false);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+  expect((await new AxeBuilder({ page }).include(".otcWorkspace").withTags(["wcag2a", "wcag2aa"]).analyze()).violations).toEqual([]);
 });
 
-
-test("OTC amount fields use the swap typography and control sizing", async ({ page }) => {
-  await openOtc(page);
-  const appearance = (element: Element) => {
-    const style = getComputedStyle(element);
-    return { font: style.fontFamily, size: style.fontSize, weight: style.fontWeight, line: style.lineHeight, spacing: style.letterSpacing };
-  };
-  const otc = await page.locator("#otc-send").evaluate(appearance);
-  const assetHeight = await page.locator("#otc-bridge .methodTrigger").first().evaluate(el => (el as HTMLElement).offsetHeight);
-  await expect(page.locator("#otc-chart-column .panelHead")).not.toContainText("BTC/USDT");
-  await expect(page.locator(".resizeHandle")).toHaveCount(0);
-  const head = (await page.locator("#otc-chart-column .panelHead").boundingBox())!;
-  const tools = (await page.locator(".chartTools").boundingBox())!;
-  expect(tools.y - head.y - head.height).toBeLessThanOrEqual(4);
-  await page.getByRole("link", { name: "SWAP", exact: true }).click();
-  await expect(page.locator(".workspace")).toBeVisible();
-  expect(await page.getByLabel("Amount to send", { exact: true }).evaluate(appearance)).toEqual(otc);
-  expect(await page.locator(".moneyPanelSource .methodTrigger").evaluate(el => (el as HTMLElement).offsetHeight)).toBe(assetHeight);
+for (const direction of ["buy", "sell"]) test(`exact ${direction} RFQ uses the original structured Proposal and stable retry key`, async ({ page }) => {
+  const f = await fixtures(page, { signedIn: true }); await open(page);
+  await page.locator("#otc-bridge").getByRole("button", { name: direction === "buy" ? "Buy EVER" : "Sell EVER", exact: true }).click();
+  await page.locator("#otc-input").fill("00100.000000"); await page.getByRole("button", { name: "Request exact quote" }).click();
+  await expect(page.getByText(/Quote requested\. Reference/)).toBeVisible();
+  await page.getByRole("button", { name: "Request exact quote" }).click(); await expect.poll(() => f.requests.filter(r => r.path === "/rfqs").length).toBe(2);
+  const sent = f.requests.filter(r => r.path === "/rfqs"); expect(sent[0].body).toEqual({ direction, input: "100", listing_id: `${desk}/listings/${direction}` }); expect(sent[0].key).toBeTruthy(); expect(sent[1].key).toBe(sent[0].key);
+  expect(new URL(page.url()).hash).not.toMatch(/amount|price|booking|rfq/);
 });
 
-
-test("market activity has green bids on the left and red asks on the right", async ({ page }, testInfo) => {
-  await openOtc(page);
-  const buy = page.getByTestId("otc-buy-book"), sell = page.getByTestId("otc-sell-book");
-  await expect(buy.locator(".bidLevels .level")).toHaveCount(9);
-  await expect(buy.locator(".askLevels")).toHaveCount(0);
-  await expect(sell.locator(".askLevels .level")).toHaveCount(9);
-  await expect(sell.locator(".bidLevels")).toHaveCount(0);
-  const left = (await buy.boundingBox())!, right = (await sell.boundingBox())!;
-  expect(left.x + left.width).toBeLessThanOrEqual(right.x);
-  for (const [theme, green, red] of [["light", "rgb(36, 115, 56)", "rgb(212, 61, 53)"], ["dark", "rgb(98, 206, 121)", "rgb(255, 119, 112)"]]) {
-    await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
-    await expect(buy.locator(".level").first()).toHaveCSS("color", green);
-    await expect(sell.locator(".level").first()).toHaveCSS("color", red);
-    await expect(buy.locator(".level").first()).toHaveCSS("font-style", "normal");
-    await expect(buy.locator(".level").first()).toHaveCSS("font-family", await page.locator(".panelHead h2").first().evaluate(el => getComputedStyle(el).fontFamily));
-  }
-  await sell.locator(".level").first().click();
-  await expect(page.getByRole("button", { name: "Buy", exact: true })).toHaveAttribute("aria-pressed", "true");
-  const price = (await sell.locator(".levelPrice").first().innerText()).replaceAll(",", "");
-  await expect(page.getByRole("textbox", { name: "Price", exact: true })).toHaveValue(price);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
-  await page.locator(".splitBooks").screenshot({ path: testInfo.outputPath("split-orderbooks.png") });
+test("private fixed quote invalidates on edit; accepted terms stay fixed and restore", async ({ page }) => {
+  const f = await fixtures(page, { signedIn: true, state: "quoted" }); await open(page); await select(page, "quoted");
+  await expect(page.locator("#otc-receive")).toHaveValue("200"); await expect(page.locator(".detail")).toContainText("0.5 USDT per EVER");
+  await page.locator("#otc-input").fill("101"); await expect(page.locator("#otc-receive")).toHaveValue(""); await expect(page.getByRole("button", { name: "Accept fixed quote" })).toHaveCount(0);
+  await select(page, "quoted"); await page.getByRole("button", { name: "Accept fixed quote" }).click();
+  await expect(page.getByRole("heading", { name: "Buy EVER · booking pending" })).toBeVisible();
+  expect(f.requests.find(r => r.path.endsWith("/apply"))?.body).toEqual({});
+  f.trades[0].state = "accepted"; await page.reload(); await expect(page.getByRole("heading", { name: "Buy EVER · accepted" })).toBeVisible();
+  await page.locator("#otc-bridge").getByRole("button", { name: "Sell EVER", exact: true }).click(); await page.locator("#otc-input").fill("999");
+  await expect(page.locator(".detail")).toContainText("100 USDT · Ethereum"); await expect(page.locator(".detail")).toContainText("200 EVER · Everscale");
+  await expect(page.getByText("5 USDT · paid by desk", { exact: true })).toBeVisible();
+  for (const deadline of ["Quote expires", "Payment inclusion deadline", "Payout deadline"]) await expect(page.locator(".detail").getByText(deadline, { exact: true })).toBeVisible();
 });
 
-test("chart hover shows both line points, the full date and side volumes", async ({ page }) => {
-  await openOtc(page);
-  const plot = page.locator(".priceChart");
-  const box = (await plot.boundingBox())!;
-  await plot.hover({ position: { x: box.width * .4, y: box.height * .4 } });
-  const tooltip = page.getByRole("tooltip");
-  await expect(tooltip).toContainText(/2026.*UTC/);
-  for (const label of ["Buy price", "Sell price", "Buy volume", "Sell volume"]) await expect(tooltip.getByText(label, { exact: true })).toBeVisible();
-  await expect(plot.locator(".buyPoint")).toHaveCount(1);
-  await expect(plot.locator(".sellPoint")).toHaveCount(1);
-  expect(Number(await plot.locator(".sellPoint").getAttribute("cy"))).toBeLessThan(Number(await plot.locator(".buyPoint").getAttribute("cy")));
-  const popup = (await tooltip.boundingBox())!;
-  expect(popup.x).toBeGreaterThanOrEqual(box.x);
-  expect(popup.x + popup.width).toBeLessThanOrEqual(box.x + box.width);
-  await page.getByRole("heading", { name: "Trade on your terms." }).hover();
-  await expect(tooltip).toHaveCount(0);
+for (const lostPrepare of [false, true]) test(`persisted payment handoff blocks resend after reload (${lostPrepare ? "lost" : "received"} response)`, async ({ page }) => {
+  const f = await fixtures(page, { signedIn: true, state: "accepted", lostPrepare }); await open(page); await select(page, "accepted");
+  await page.getByRole("button", { name: "Review and send customer payment" }).click();
+  if (!lostPrepare) { const review = page.getByRole("dialog", { name: "Review transfer" }); await expect(review).toContainText("100 USDT"); await expect(review.getByRole("button", { name: "Confirm in wallet" })).toBeEnabled(); await review.getByRole("button", { name: "Close and track saved transfer" }).click(); }
+  await expect(page.getByText("Original result unknown. Another send is blocked.", { exact: true })).toBeVisible();
+  await page.reload(); await expect(page.getByText("Original result unknown. Another send is blocked.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Review and send customer payment" })).toHaveCount(0); await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(f.requests.filter(r => r.path.endsWith("/prepare"))).toHaveLength(1);
+});
+
+test("unknown booking blocks another selection and reconciles the original offer", async ({ page }) => {
+  const f = await fixtures(page, { signedIn: true, state: "quoted", lostBooking: true }); await open(page); await select(page, "quoted"); await page.getByRole("button", { name: "Accept fixed quote" }).click();
+  await expect(page.getByText(/The original booking is awaiting/)).toBeVisible(); await expect(page.getByRole("button", { name: "Accept fixed quote" })).toBeDisabled();
+  await page.reload(); await expect(page.getByRole("button", { name: "Review fixed quote" })).toBeDisabled(); await page.getByRole("button", { name: "Reconcile original booking" }).click();
+  await expect.poll(() => f.requests.filter(r => r.path.endsWith("/apply")).length).toBe(2); expect(f.requests.filter(r => r.path.endsWith("/apply")).every(r => r.path === "/trades/booking-fixture/apply" && JSON.stringify(r.body) === "{}")).toBe(true);
+});
+
+test("expired and rejected quotes cannot enable payment; no customer desk controls", async ({ page }) => {
+  const f = await fixtures(page, { signedIn: true, state: "quoted" }); f.trades[0].terms.quote_by = "2000-01-01T00:00:00Z"; await open(page); await select(page, "quoted");
+  await expect(page.getByRole("button", { name: "Accept fixed quote" })).toBeDisabled(); await expect(page.getByRole("button", { name: "Review and send customer payment" })).toHaveCount(0); await expect(page.getByRole("heading", { name: "Desk console" })).toHaveCount(0);
+  f.trades[0].state = "rejected"; await page.reload(); await expect(page.getByRole("heading", { name: "Buy EVER · rejected" })).toBeVisible(); await expect(page.getByRole("button", { name: "Accept fixed quote" })).toHaveCount(0);
+});
+
+test("desk console decisions reserve first and unknown payout blocks refund", async ({ page }) => {
+  const f = await fixtures(page, { signedIn: true, operator: true, state: "booking_pending" }); await open(page); await select(page, "booking pending");
+  await expect(page.getByRole("heading", { name: "Desk console" })).toBeVisible(); await expect(page.getByText("0/0 · N/A").first()).toBeVisible();
+  await page.getByRole("button", { name: "Reserve and accept" }).click(); await expect(page.getByRole("heading", { name: "Buy EVER · accepted" })).toBeVisible();
+  expect(f.requests.find(r => r.path.endsWith("/decision"))?.body).toEqual({ accept: true });
+  f.trades[0].state = "funded"; await page.reload(); await page.getByRole("button", { name: "Review and send desk payout" }).click(); await page.getByRole("button", { name: "Close and track saved transfer" }).click();
+  await expect(page.getByRole("button", { name: "Review validated refund" })).toHaveCount(0); await expect(page.getByRole("button", { name: "Review and send desk payout" })).toHaveCount(0); expect(f.attempts[0].kind).toBe("payout");
+});
+
+test("server history and volume count completed USDT legs once, refunds stay visible", async ({ page }) => {
+  await fixtures(page, { signedIn: true, extra: [makeTrade("completed", "buy", "done-buy"), makeTrade("completed", "sell", "done-sell"), makeTrade("refunded", "buy", "refund")] }); await open(page);
+  await expect(page.locator(".volumeStat")).toContainText("300 USDT"); await expect(page.locator("#otc-chart circle")).toHaveCount(3);
+  await page.getByRole("tab", { name: "History" }).click(); await expect(page.locator(".tradeList button")).toHaveCount(3); await expect(page.locator(".tradeList")).toContainText("refunded");
+  await page.getByRole("tab", { name: "History" }).press("Home"); await expect(page.getByRole("tab", { name: "Desk offers" })).toHaveAttribute("aria-selected", "true");
+});
+
+test("logout discards a delayed participant response", async ({ page }) => {
+  const f = await fixtures(page, { signedIn: true, state: "accepted" }); await open(page); await select(page, "accepted"); f.control.holdPrivate = true;
+  await expect.poll(() => !!f.control.releasePrivate, { timeout: 12000 }).toBe(true);
+  await page.getByRole("button", { name: "Actor and wallets", exact: true }).click(); await page.getByRole("button", { name: "Revoke session and relay access" }).click();
+  await expect(page.getByRole("heading", { name: "Buy EVER · accepted" })).toHaveCount(0); f.control.releasePrivate!();
+  await page.waitForTimeout(250); await expect(page.locator(".tradeList button")).toHaveCount(0); await expect(page.locator("#otc-chart circle")).toHaveCount(0);
+});
+
+test("backend outage pauses new RFQs; panel layout survives reload", async ({ page }) => {
+  const f = await fixtures(page, { signedIn: true }); await open(page); await page.getByRole("button", { name: "Collapse Exchange", exact: true }).click(); await page.reload();
+  await expect(page.getByRole("button", { name: "Expand Exchange", exact: true })).toBeVisible(); await page.getByRole("button", { name: "Expand Exchange", exact: true }).click();
+  f.control.outage = true; await expect(page.getByTestId("otc-connection")).toHaveAttribute("data-state", "unavailable", { timeout: 12000 }); await expect(page.getByRole("button", { name: "Request exact quote" })).toBeDisabled();
+});
+
+test("navigation and public sharing retain the terminal without exposing private terms", async ({ page }, testInfo) => {
+  const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
+  await fixtures(page, { signedIn: true, state: "quoted" }); await open(page); await select(page, "quoted");
+  const sent = page.waitForRequest(request => new URL(request.url()).pathname === "/share-links" && request.method() === "POST");
+  await page.getByRole("button", { name: "Share OTC", exact: true }).click();
+  const payload = (await sent).postDataJSON(); expect(payload).toEqual({ target: "/#/otc?market=EVER-USDT&side=buy&lang=en" });
+  await expect(page.getByRole("dialog", { name: "Share OTC", exact: true })).toBeVisible(); await page.keyboard.press("Escape");
+  await page.screenshot({ path: testInfo.outputPath("real-otc-terminal-simulation.png"), fullPage: true });
+  await page.getByRole("link", { name: "SWAP", exact: true }).click(); await expect(page.getByTestId("otc-workspace")).toHaveCount(0);
+  await page.getByRole("link", { name: "OTC", exact: true }).click(); await expect(page.getByRole("heading", { name: "Buy EVER · quoted" })).toBeVisible();
+  expect(errors).toEqual([]);
 });

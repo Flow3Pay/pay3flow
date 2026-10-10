@@ -21,6 +21,9 @@ pub async fn apply_schema(pool: &DbPool) -> Result<()> {
         .batch_execute(include_str!("../../migrations/schema.sql"))
         .await?;
     client
+        .batch_execute(include_str!("../../migrations/otc.sql"))
+        .await?;
+    client
         .batch_execute(include_str!("../../migrations/catalogs.sql"))
         .await?;
     client

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import type { OtcPreview } from "$lib/share-links";
   import type { ExchangeShareState } from "$lib/exchange-share";
   import Header from "$lib/components/Header.svelte";
   import type OtcWorkspaceType from "$lib/components/otc/OtcWorkspace.svelte";
@@ -18,6 +19,7 @@
   function finishStartup() { startupPlaying = false; startupCompleted = true; }
   let OtcWorkspace: typeof OtcWorkspaceType | null = null;
   let swapHref = "/#/swap";
+  let otcPreview: OtcPreview | null = null;
   let otcShareUrl = "/#/otc";
   function rememberSwap() {
     if (/^#\/(?:swap|guide)(?:[/?]|$)/.test(window.location.hash)) swapHref = `/${window.location.hash.replace(/^#\/guide/, "#/swap")}`;
@@ -94,10 +96,10 @@
 </svelte:head>
 
 <div class="appShell" class:guideActive bind:this={shell} use:localize>
-  <Header shareState={guideActive || otcActive ? null : shareState} activePage={otcActive ? "otc" : "swap"} {swapHref} onOtcNavigate={rememberSwap} shareUrl={otcActive ? otcShareUrl : null} />
+  <Header shareState={guideActive || otcActive ? null : shareState} activePage={otcActive ? "otc" : "swap"} {swapHref} otcHref={otcShareUrl} {otcPreview} onOtcNavigate={rememberSwap} shareUrl={otcActive ? otcShareUrl : null} />
   <main>
     {#if otcActive}
-      {#if OtcWorkspace}<svelte:component this={OtcWorkspace} />{:else}<div class="otcLoading" aria-busy="true">OTC<span>…</span></div>{/if}
+      {#if OtcWorkspace}<svelte:component this={OtcWorkspace} onShareUrlChange={(url) => otcShareUrl = url} onPreviewChange={(preview) => otcPreview = preview} />{:else}<div class="otcLoading" aria-busy="true">OTC<span>…</span></div>{/if}
     {:else}
     <Converter introCompleted={startupCompleted} onDismissStartup={finishStartup} onShareStateChange={(state) => shareState = state} onGuideChange={(active) => guideActive = active} onBelarusP2pWarningChange={(show) => showBelarusP2pWarning = show} onOpenBelarusP2pWarning={() => belarusP2pWarningOpen = true} />
     {/if}

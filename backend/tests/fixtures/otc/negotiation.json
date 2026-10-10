@@ -1,0 +1,404 @@
+[
+  {
+    "direction": "buy",
+    "proposal": {
+      "@context": [
+        "https://www.w3.org/ns/activitystreams",
+        "https://w3id.org/fep/0837",
+        {
+          "as": "https://www.w3.org/ns/activitystreams#",
+          "vf": "https://w3id.org/valueflows/ont/vf#",
+          "om2": "http://www.ontology-of-units-of-measure.org/resource/om-2/",
+          "Proposal": "vf:Proposal",
+          "Intent": "vf:Intent",
+          "Agreement": "vf:Agreement",
+          "Commitment": "vf:Commitment",
+          "OfferAgreement": "as:Offer",
+          "AcceptAgreement": "as:Accept",
+          "RejectAgreement": "as:Reject",
+          "action": "vf:action",
+          "purpose": "vf:purpose",
+          "publishes": "vf:publishes",
+          "reciprocal": "vf:reciprocal",
+          "unitBased": "vf:unitBased",
+          "stipulates": "vf:stipulates",
+          "stipulatesReciprocal": "vf:stipulatesReciprocal",
+          "satisfies": {
+            "@id": "vf:satisfies",
+            "@type": "@id"
+          },
+          "resourceConformsTo": {
+            "@id": "vf:resourceConformsTo",
+            "@type": "@id"
+          },
+          "resourceQuantity": "vf:resourceQuantity",
+          "hasUnit": "om2:hasUnit",
+          "hasNumericalValue": "om2:hasNumericalValue"
+        }
+      ],
+      "id": "https://desk.example/actors/desk/quotes/buy",
+      "type": "Proposal",
+      "purpose": "offer",
+      "attributedTo": "https://desk.example/actors/desk",
+      "to": [
+        "https://customer.example/actors/customer"
+      ],
+      "unitBased": false,
+      "endTime": "2099-10-10T00:02:00Z",
+      "publishes": {
+        "id": "https://desk.example/actors/desk/quotes/buy#primary",
+        "type": "Intent",
+        "action": "transfer",
+        "resourceConformsTo": "https://assets.example/native-ever-everscale-42",
+        "resourceQuantity": {
+          "hasUnit": "one",
+          "hasNumericalValue": "200"
+        },
+        "endTime": "2099-10-10T00:17:00Z"
+      },
+      "reciprocal": {
+        "id": "https://desk.example/actors/desk/quotes/buy#reciprocal",
+        "type": "Intent",
+        "action": "transfer",
+        "resourceConformsTo": "https://assets.example/usdt-ethereum-1-dac17f958d2ee523a2206206994597c13d831ec7",
+        "resourceQuantity": {
+          "hasUnit": "one",
+          "hasNumericalValue": "100"
+        },
+        "endTime": "2099-10-10T00:07:00Z"
+      }
+    },
+    "offer": {
+      "@context": [
+        "https://www.w3.org/ns/activitystreams",
+        "https://w3id.org/fep/0837",
+        {
+          "as": "https://www.w3.org/ns/activitystreams#",
+          "vf": "https://w3id.org/valueflows/ont/vf#",
+          "om2": "http://www.ontology-of-units-of-measure.org/resource/om-2/",
+          "Proposal": "vf:Proposal",
+          "Intent": "vf:Intent",
+          "Agreement": "vf:Agreement",
+          "Commitment": "vf:Commitment",
+          "OfferAgreement": "as:Offer",
+          "AcceptAgreement": "as:Accept",
+          "RejectAgreement": "as:Reject",
+          "action": "vf:action",
+          "purpose": "vf:purpose",
+          "publishes": "vf:publishes",
+          "reciprocal": "vf:reciprocal",
+          "unitBased": "vf:unitBased",
+          "stipulates": "vf:stipulates",
+          "stipulatesReciprocal": "vf:stipulatesReciprocal",
+          "satisfies": {
+            "@id": "vf:satisfies",
+            "@type": "@id"
+          },
+          "resourceConformsTo": {
+            "@id": "vf:resourceConformsTo",
+            "@type": "@id"
+          },
+          "resourceQuantity": "vf:resourceQuantity",
+          "hasUnit": "om2:hasUnit",
+          "hasNumericalValue": "om2:hasNumericalValue"
+        }
+      ],
+      "id": "https://customer.example/actors/customer/offers/buy",
+      "type": "OfferAgreement",
+      "actor": "https://customer.example/actors/customer",
+      "to": [
+        "https://desk.example/actors/desk"
+      ],
+      "object": {
+        "type": "Agreement",
+        "stipulates": {
+          "type": "Commitment",
+          "satisfies": "https://desk.example/actors/desk/quotes/buy#primary",
+          "resourceQuantity": {
+            "hasUnit": "one",
+            "hasNumericalValue": "200"
+          },
+          "endTime": "2099-10-10T00:17:00Z"
+        },
+        "stipulatesReciprocal": {
+          "type": "Commitment",
+          "satisfies": "https://desk.example/actors/desk/quotes/buy#reciprocal",
+          "resourceQuantity": {
+            "hasUnit": "one",
+            "hasNumericalValue": "100"
+          },
+          "endTime": "2099-10-10T00:07:00Z"
+        }
+      }
+    },
+    "acceptance": {
+      "@context": [
+        "https://www.w3.org/ns/activitystreams",
+        "https://w3id.org/fep/0837",
+        {
+          "as": "https://www.w3.org/ns/activitystreams#",
+          "vf": "https://w3id.org/valueflows/ont/vf#",
+          "om2": "http://www.ontology-of-units-of-measure.org/resource/om-2/",
+          "Proposal": "vf:Proposal",
+          "Intent": "vf:Intent",
+          "Agreement": "vf:Agreement",
+          "Commitment": "vf:Commitment",
+          "OfferAgreement": "as:Offer",
+          "AcceptAgreement": "as:Accept",
+          "RejectAgreement": "as:Reject",
+          "action": "vf:action",
+          "purpose": "vf:purpose",
+          "publishes": "vf:publishes",
+          "reciprocal": "vf:reciprocal",
+          "unitBased": "vf:unitBased",
+          "stipulates": "vf:stipulates",
+          "stipulatesReciprocal": "vf:stipulatesReciprocal",
+          "satisfies": {
+            "@id": "vf:satisfies",
+            "@type": "@id"
+          },
+          "resourceConformsTo": {
+            "@id": "vf:resourceConformsTo",
+            "@type": "@id"
+          },
+          "resourceQuantity": "vf:resourceQuantity",
+          "hasUnit": "om2:hasUnit",
+          "hasNumericalValue": "om2:hasNumericalValue"
+        }
+      ],
+      "id": "https://desk.example/actors/desk/decisions/buy",
+      "type": "AcceptAgreement",
+      "actor": "https://desk.example/actors/desk",
+      "to": [
+        "https://customer.example/actors/customer"
+      ],
+      "object": "https://customer.example/actors/customer/offers/buy",
+      "result": {
+        "type": "Agreement",
+        "stipulates": {
+          "type": "Commitment",
+          "satisfies": "https://desk.example/actors/desk/quotes/buy#primary",
+          "resourceQuantity": {
+            "hasUnit": "one",
+            "hasNumericalValue": "200"
+          },
+          "endTime": "2099-10-10T00:17:00Z",
+          "id": "https://desk.example/actors/desk/decisions/buy/agreement#primary"
+        },
+        "stipulatesReciprocal": {
+          "type": "Commitment",
+          "satisfies": "https://desk.example/actors/desk/quotes/buy#reciprocal",
+          "resourceQuantity": {
+            "hasUnit": "one",
+            "hasNumericalValue": "100"
+          },
+          "endTime": "2099-10-10T00:07:00Z",
+          "id": "https://desk.example/actors/desk/decisions/buy/agreement#reciprocal"
+        },
+        "id": "https://desk.example/actors/desk/decisions/buy/agreement",
+        "attributedTo": "https://desk.example/actors/desk"
+      }
+    }
+  },
+  {
+    "direction": "sell",
+    "proposal": {
+      "@context": [
+        "https://www.w3.org/ns/activitystreams",
+        "https://w3id.org/fep/0837",
+        {
+          "as": "https://www.w3.org/ns/activitystreams#",
+          "vf": "https://w3id.org/valueflows/ont/vf#",
+          "om2": "http://www.ontology-of-units-of-measure.org/resource/om-2/",
+          "Proposal": "vf:Proposal",
+          "Intent": "vf:Intent",
+          "Agreement": "vf:Agreement",
+          "Commitment": "vf:Commitment",
+          "OfferAgreement": "as:Offer",
+          "AcceptAgreement": "as:Accept",
+          "RejectAgreement": "as:Reject",
+          "action": "vf:action",
+          "purpose": "vf:purpose",
+          "publishes": "vf:publishes",
+          "reciprocal": "vf:reciprocal",
+          "unitBased": "vf:unitBased",
+          "stipulates": "vf:stipulates",
+          "stipulatesReciprocal": "vf:stipulatesReciprocal",
+          "satisfies": {
+            "@id": "vf:satisfies",
+            "@type": "@id"
+          },
+          "resourceConformsTo": {
+            "@id": "vf:resourceConformsTo",
+            "@type": "@id"
+          },
+          "resourceQuantity": "vf:resourceQuantity",
+          "hasUnit": "om2:hasUnit",
+          "hasNumericalValue": "om2:hasNumericalValue"
+        }
+      ],
+      "id": "https://desk.example/actors/desk/quotes/sell",
+      "type": "Proposal",
+      "purpose": "offer",
+      "attributedTo": "https://desk.example/actors/desk",
+      "to": [
+        "https://customer.example/actors/customer"
+      ],
+      "unitBased": false,
+      "endTime": "2099-10-10T00:02:00Z",
+      "publishes": {
+        "id": "https://desk.example/actors/desk/quotes/sell#primary",
+        "type": "Intent",
+        "action": "transfer",
+        "resourceConformsTo": "https://assets.example/usdt-ethereum-1-dac17f958d2ee523a2206206994597c13d831ec7",
+        "resourceQuantity": {
+          "hasUnit": "one",
+          "hasNumericalValue": "100"
+        },
+        "endTime": "2099-10-10T00:17:00Z"
+      },
+      "reciprocal": {
+        "id": "https://desk.example/actors/desk/quotes/sell#reciprocal",
+        "type": "Intent",
+        "action": "transfer",
+        "resourceConformsTo": "https://assets.example/native-ever-everscale-42",
+        "resourceQuantity": {
+          "hasUnit": "one",
+          "hasNumericalValue": "200"
+        },
+        "endTime": "2099-10-10T00:07:00Z"
+      }
+    },
+    "offer": {
+      "@context": [
+        "https://www.w3.org/ns/activitystreams",
+        "https://w3id.org/fep/0837",
+        {
+          "as": "https://www.w3.org/ns/activitystreams#",
+          "vf": "https://w3id.org/valueflows/ont/vf#",
+          "om2": "http://www.ontology-of-units-of-measure.org/resource/om-2/",
+          "Proposal": "vf:Proposal",
+          "Intent": "vf:Intent",
+          "Agreement": "vf:Agreement",
+          "Commitment": "vf:Commitment",
+          "OfferAgreement": "as:Offer",
+          "AcceptAgreement": "as:Accept",
+          "RejectAgreement": "as:Reject",
+          "action": "vf:action",
+          "purpose": "vf:purpose",
+          "publishes": "vf:publishes",
+          "reciprocal": "vf:reciprocal",
+          "unitBased": "vf:unitBased",
+          "stipulates": "vf:stipulates",
+          "stipulatesReciprocal": "vf:stipulatesReciprocal",
+          "satisfies": {
+            "@id": "vf:satisfies",
+            "@type": "@id"
+          },
+          "resourceConformsTo": {
+            "@id": "vf:resourceConformsTo",
+            "@type": "@id"
+          },
+          "resourceQuantity": "vf:resourceQuantity",
+          "hasUnit": "om2:hasUnit",
+          "hasNumericalValue": "om2:hasNumericalValue"
+        }
+      ],
+      "id": "https://customer.example/actors/customer/offers/sell",
+      "type": "OfferAgreement",
+      "actor": "https://customer.example/actors/customer",
+      "to": [
+        "https://desk.example/actors/desk"
+      ],
+      "object": {
+        "type": "Agreement",
+        "stipulates": {
+          "type": "Commitment",
+          "satisfies": "https://desk.example/actors/desk/quotes/sell#primary",
+          "resourceQuantity": {
+            "hasUnit": "one",
+            "hasNumericalValue": "100"
+          },
+          "endTime": "2099-10-10T00:17:00Z"
+        },
+        "stipulatesReciprocal": {
+          "type": "Commitment",
+          "satisfies": "https://desk.example/actors/desk/quotes/sell#reciprocal",
+          "resourceQuantity": {
+            "hasUnit": "one",
+            "hasNumericalValue": "200"
+          },
+          "endTime": "2099-10-10T00:07:00Z"
+        }
+      }
+    },
+    "acceptance": {
+      "@context": [
+        "https://www.w3.org/ns/activitystreams",
+        "https://w3id.org/fep/0837",
+        {
+          "as": "https://www.w3.org/ns/activitystreams#",
+          "vf": "https://w3id.org/valueflows/ont/vf#",
+          "om2": "http://www.ontology-of-units-of-measure.org/resource/om-2/",
+          "Proposal": "vf:Proposal",
+          "Intent": "vf:Intent",
+          "Agreement": "vf:Agreement",
+          "Commitment": "vf:Commitment",
+          "OfferAgreement": "as:Offer",
+          "AcceptAgreement": "as:Accept",
+          "RejectAgreement": "as:Reject",
+          "action": "vf:action",
+          "purpose": "vf:purpose",
+          "publishes": "vf:publishes",
+          "reciprocal": "vf:reciprocal",
+          "unitBased": "vf:unitBased",
+          "stipulates": "vf:stipulates",
+          "stipulatesReciprocal": "vf:stipulatesReciprocal",
+          "satisfies": {
+            "@id": "vf:satisfies",
+            "@type": "@id"
+          },
+          "resourceConformsTo": {
+            "@id": "vf:resourceConformsTo",
+            "@type": "@id"
+          },
+          "resourceQuantity": "vf:resourceQuantity",
+          "hasUnit": "om2:hasUnit",
+          "hasNumericalValue": "om2:hasNumericalValue"
+        }
+      ],
+      "id": "https://desk.example/actors/desk/decisions/sell",
+      "type": "AcceptAgreement",
+      "actor": "https://desk.example/actors/desk",
+      "to": [
+        "https://customer.example/actors/customer"
+      ],
+      "object": "https://customer.example/actors/customer/offers/sell",
+      "result": {
+        "type": "Agreement",
+        "stipulates": {
+          "type": "Commitment",
+          "satisfies": "https://desk.example/actors/desk/quotes/sell#primary",
+          "resourceQuantity": {
+            "hasUnit": "one",
+            "hasNumericalValue": "100"
+          },
+          "endTime": "2099-10-10T00:17:00Z",
+          "id": "https://desk.example/actors/desk/decisions/sell/agreement#primary"
+        },
+        "stipulatesReciprocal": {
+          "type": "Commitment",
+          "satisfies": "https://desk.example/actors/desk/quotes/sell#reciprocal",
+          "resourceQuantity": {
+            "hasUnit": "one",
+            "hasNumericalValue": "200"
+          },
+          "endTime": "2099-10-10T00:07:00Z",
+          "id": "https://desk.example/actors/desk/decisions/sell/agreement#reciprocal"
+        },
+        "id": "https://desk.example/actors/desk/decisions/sell/agreement",
+        "attributedTo": "https://desk.example/actors/desk"
+      }
+    }
+  }
+]

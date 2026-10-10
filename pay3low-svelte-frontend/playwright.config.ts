@@ -2,6 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 const port = process.env.PLAYWRIGHT_PORT ?? "3000";
 const baseURL = `http://127.0.0.1:${port}`;
+const sharePort = process.env.PLAYWRIGHT_SHARE_PORT ?? "8091";
 const chromiumExecutable = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
 
 export default defineConfig({
@@ -18,10 +19,16 @@ export default defineConfig({
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
     { name: "mobile", use: { ...devices["Pixel 7"] } },
   ],
-  webServer: {
+  webServer: [{
+    command: "node tests/share-backend-fixture.mjs",
+    url: `http://127.0.0.1:${sharePort}/health`,
+    reuseExistingServer: !process.env.CI,
+    timeout: 30_000,
+  }, {
+    env: { SHARE_API_URL: `http://127.0.0.1:${sharePort}` },
     command: `npm run dev -- --host 127.0.0.1 --port ${port}`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
-  },
+  }],
 });

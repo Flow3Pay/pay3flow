@@ -168,6 +168,13 @@ async fn main() -> anyhow::Result<()> {
 
     let market_prices = pay3flow_backend::market_prices::MarketPriceService::new()?;
     market_prices.initialize().await;
+    let otc = pay3flow_backend::otc::Service::build(
+        pool.clone(),
+        &cfg.ap_origin,
+        &cfg.secrets_key,
+        &cfg.jwt_secret,
+    )?;
+    otc.start();
     let state = AppState::new(
         pool,
         Jwt::new(&cfg.jwt_secret),
@@ -186,6 +193,7 @@ async fn main() -> anyhow::Result<()> {
         reputation,
         route_executions,
         market_prices,
+        otc,
     );
 
     // Provider refresh work is paced independently from interactive searches:

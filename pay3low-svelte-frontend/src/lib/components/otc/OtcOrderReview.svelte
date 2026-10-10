@@ -4,6 +4,7 @@
   import { lockPageScroll } from "$lib/page-scroll-lock";
   import { otcCopy } from "$lib/otc/copy";
   import { formatPrice, formatAmount, type OrderDraft, type OtcMarket } from "$lib/otc/model";
+  export let disabled = false;
   export let draft: OrderDraft;
   export let market: OtcMarket;
   export let onClose: () => void;
@@ -23,7 +24,7 @@
   <div class="orderSummary"><img src={market.icon} width="42" height="42" alt="" /><div><strong>{draft.side === "buy" ? copy.buy : copy.sell} {market.base}</strong><span>{draft.type === "limit" ? copy.limit : copy.marketOrder} · {market.base}/{market.quote}</span></div><span class="sideArrow" aria-hidden="true">↗</span></div>
   <dl><div><dt>{copy.price}</dt><dd>{formatPrice(draft.price, market)} {market.quote}</dd></div><div><dt>{copy.amount}</dt><dd>{formatAmount(draft.amount, market)} {market.base}</dd></div><div><dt>{copy.total}</dt><dd>{formatPrice(draft.total, market)} {market.quote}</dd></div>{#if draft.sendNetwork}<div><dt>{copy.sendNetwork}</dt><dd>{draft.sendNetwork}</dd></div>{/if}{#if draft.receiveNetwork}<div><dt>{copy.receiveNetwork}</dt><dd>{draft.receiveNetwork}</dd></div>{/if}<div><dt>{copy.fees}</dt><dd>{copy.feesValue}</dd></div></dl>
   <p class="demoNote">{copy.demoNote}</p>
-  <button type="button" class="confirm" on:click={onConfirm}>{draft.type === "limit" ? copy.confirm : copy.simulate}<span aria-hidden="true">↗</span></button><button type="button" class="back" on:click={onClose}>{copy.back}</button>
+  <button type="button" class="confirm" {disabled} on:click={onConfirm}>{draft.type === "limit" ? copy.confirm : copy.simulate}<span aria-hidden="true">↗</span></button><button type="button" class="back" on:click={onClose}>{copy.back}</button>
   </div>
 </dialog>
 <style>

@@ -95,6 +95,8 @@ pub struct Provider {
     pub currency_exceptions: Vec<String>,
     pub banks: Vec<String>,
     pub exchange_methods: Vec<ProviderExchangeMethod>,
+    /// Market integrations available in Pay3Flow, including spot pricing.
+    pub market_types: Vec<String>,
     pub fee_model: Option<ProviderFeeModel>,
     pub guidance: Option<ProviderGuidance>,
     pub searchable: bool,
@@ -133,7 +135,7 @@ pub async fn list(pool: &DbPool, filters: ProviderFilters) -> Result<Vec<Provide
     let statement = client
         .prepare_cached(
             r#"
-SELECT id, slug, operation, source_url, name, currencies, currency_exceptions, banks, exchange_methods, fee_model, guidance
+SELECT id, slug, operation, source_url, name, currencies, currency_exceptions, banks, exchange_methods, fee_model, guidance, adapter
 FROM providers
 WHERE status = 'enabled'
   AND ($1::TEXT IS NULL OR operation = $1)
@@ -160,12 +162,25 @@ ORDER BY name, operation, slug
             .then(|| serde_json::from_value(guidance_value))
             .transpose()
             .with_context(|| "invalid Providerfile guidance stored in providers")?;
-            let exchange_methods = row
+            let exchange_methods: Vec<ProviderExchangeMethod> = row
                 .get::<_, Vec<String>>("exchange_methods")
                 .into_iter()
                 .map(|method| serde_json::from_value(serde_json::Value::String(method)))
                 .collect::<std::result::Result<Vec<_>, _>>()
                 .with_context(|| "invalid Providerfile exchange method stored in providers")?;
+            let adapter: serde_json::Value = row.get("adapter");
+            let mut market_types = Vec::new();
+            if exchange_methods.contains(&ProviderExchangeMethod::P2p) {
+                market_types.push("p2p".into());
+            }
+            if adapter.get("market").is_some() {
+                market_types.push("spot".into());
+            }
+            if exchange_methods.contains(&ProviderExchangeMethod::Exchanger)
+                && !exchange_methods.contains(&ProviderExchangeMethod::P2p)
+            {
+                market_types.push("exchanger".into());
+            }
             Ok(Provider {
                 id: row.get("id"),
                 slug: row.get("slug"),
@@ -176,6 +191,7 @@ ORDER BY name, operation, slug
                 currency_exceptions: row.get("currency_exceptions"),
                 banks: row.get("banks"),
                 exchange_methods,
+                market_types,
                 fee_model,
                 guidance,
                 searchable: false,

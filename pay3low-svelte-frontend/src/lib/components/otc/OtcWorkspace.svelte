@@ -2,198 +2,193 @@
   import { onMount } from "svelte";
   import { fade, slide } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
-  import { fetchNetworks } from "$lib/networks";
   import { locale } from "$lib/i18n";
   import { otcCopy } from "$lib/otc/copy";
-  import { demoSnapshot, formatAmount, formatPrice, marketFromHash, markets, otcFallbackNetworks, type OtcMarket, type DemoOrder, type OrderDraft, type OrderSide, type OrderType } from "$lib/otc/model";
+  import type { OtcPreview } from "$lib/share-links";
+  import { parseOtcHash } from "$lib/otc/link";
+  import { request, bindWallet, sendAttempt, decimal, rate, type Config, type Session, type Proposal, type Trade, type Rfq, type Attempt, type Direction } from "$lib/otc/service";
+  import { exactInput, proposalDirection, terminalStates, completedVolume } from "$lib/otc/terminal";
+  import "$lib/otc/terminal.css";
   import OtcPanel from "./OtcPanel.svelte";
   import OtcPanelToggle from "./OtcPanelToggle.svelte";
-  import OtcChart from "./OtcChart.svelte";
-  import OtcOrderbook from "./OtcOrderbook.svelte";
-  import OtcBridge from "./OtcBridge.svelte";
-  import OtcOrderReview from "./OtcOrderReview.svelte";
-  let market = markets[0];
-  let marketId = market.id;
-  let bridgeOpen = true, bookOpen = true, activityOpen = true;
-  let networks = otcFallbackNetworks;
-  let sendNetworkId = "ethereum", receiveNetworkId = "bitcoin";
-  let motionDuration = 320;
-  let side: OrderSide = "buy";
-  let orderType: OrderType = "limit";
-  let price = String(market.price);
-  let amount = "1000";
-  let previousSide: OrderSide = side;
-  let previousMarket = market.id;
-  $: if (side !== previousSide || market.id !== previousMarket) {
-    previousSide = side; previousMarket = market.id;
-    amount = side === "buy" ? "1000" : (1000 / market.price).toFixed(market.amountDecimals);
-  }
-  function panelTransition(node: Element, options: { duration: number }) {
-    const transition = window.matchMedia("(max-width: 980px)").matches ? slide : fade;
-    return transition(node, { ...options, easing: cubicOut });
-  }
-  let tab: "trades" | "orders" | "history" = "trades";
-  let activityHeight = 237;
-  function measureActivity(node: HTMLDivElement) {
-    const measure = () => { if (node.id === `otc-${tab}-content`) activityHeight = node.getBoundingClientRect().height; };
-    const observer = new ResizeObserver(measure);
-    observer.observe(node);
-    return { destroy() { observer.disconnect(); } };
-  }
-  let orders: DemoOrder[] = [];
-  let reviewDraft: OrderDraft | null = null;
-  let notification = "";
-  let notificationTimer: ReturnType<typeof setTimeout> | undefined;
-  const storageKey = "pay3flow.otc.demo-orders.v1";
-  const layoutKey = "pay3flow.otc.panels.v1";
-  const settlementKey = "pay3flow.otc.settlement.v1";
-  let mounted = false;
-  let chartColumn: HTMLDivElement;
-  let toggleOffset = 310;
-  $: if (mounted) {
-    try { localStorage.setItem(layoutKey, JSON.stringify({ bridgeOpen, bookOpen, activityOpen })); } catch { /* Layout still works without storage. */ }
-    try { localStorage.setItem(settlementKey, JSON.stringify({ marketId: market.id, side, sendNetworkId, receiveNetworkId })); } catch { /* Selection still works without storage. */ }
-  }
+  import OtcTicket from "./OtcTicket.svelte";
+  import OtcDeskBook from "./OtcDeskBook.svelte";
+  import OtcQuoteChart from "./OtcQuoteChart.svelte";
+  import OtcTradeDetails from "./OtcTradeDetails.svelte";
+  import OtcDeskConsole from "./OtcDeskConsole.svelte";
+  import OtcIdentity from "./OtcIdentity.svelte";
+  import OtcTransferReview from "./OtcTransferReview.svelte";
+  export let onPreviewChange: (preview: OtcPreview | null) => void = () => {};
+  export let onShareUrlChange: (url: string) => void = () => {};
+  let config: Config | null = null, session: Session | null = null;
+  let input = "100", direction: Direction = "buy", listings: Proposal[] = [], trades: Trade[] = [], rfqs: Rfq[] = [];
+  let selected: Trade | null = null, attempts: Attempt[] = [], receipts: { chain: string; leg: { amount: string }; included_at: string }[] = [], updates: { message: string; at: string }[] = [];
+  let dashboard: Record<string, any> | null = null, busy = false, loaded = false, healthy = false, error = "", notice = "", bound: string[] = [];
+  let rfqKey = "", listingId = "", bookingUnknown = "", identityOpen = false;
+  let transferReview: { attempt: Attempt; trade: Trade; kind: string } | null = null;
+  let handoff: { tradeId: string; kind: string; key: string; phase: string; attemptId?: string } | null = null;
+  let bridgeOpen = true, bookOpen = true, activityOpen = true, motionDuration = 320, mounted = false, chartColumn: HTMLDivElement, toggleOffset = 250;
+  let selectionVersion = 0;
+  let tab: "trades" | "orders" | "history" = "orders", now = Date.now();
+  const sessionKey = "pay3flow.otc.session.v1", layoutKey = "pay3flow.otc.panels.v1";
   $: copy = otcCopy($locale);
-  $: snapshot = demoSnapshot(market);
-  $: marketOrders = orders.filter((order) => order.marketId === market.id);
-  $: openOrders = marketOrders.filter((order) => order.status === "open");
-  $: history = marketOrders.filter((order) => order.status !== "open");
-  $: high = market.price * 1.014;
-  $: low = market.price * .959;
-  function setMarket(next: OtcMarket, resetSide = true) {
-    if (next.id === market.id) return;
-    market = next; marketId = next.id; price = String(next.price); if (resetSide) chooseSide("buy"); orderType = "limit"; reviewDraft = null;
+  $: say = (en: string, ru: string) => $locale === "ru" ? ru : en;
+  $: listing = listings.find(p => p.id === listingId && proposalDirection(p, config) === direction) || listings.find(p => proposalDirection(p, config) === direction);
+  $: unresolvedBooking = !!bookingUnknown || trades.some(t => t.state === "booking_pending");
+  $: handoffUnknown = !!handoff && handoff.tradeId === selected?.id;
+  $: quote = selected?.state === "quoted" && selected.terms.direction === direction && exactInput(input, direction) === exactInput(selected.terms.input, direction) ? selected : null;
+  $: activeTrades = trades.filter(t => !terminalStates.has(t.state));
+  $: history = trades.filter(t => terminalStates.has(t.state));
+  $: if (mounted) {
+    try { localStorage.setItem(layoutKey, JSON.stringify({ bridgeOpen, bookOpen, activityOpen })); } catch { /* Layout remains usable. */ }
   }
-  function selectMarket() {
-    const next = markets.find((item) => item.id === marketId);
-    if (!next) return;
-    setMarket(next);
-    const url = new URL(location.href);
-    url.hash = `/otc?market=${next.id}`;
-    historyReplace(url);
+  function panelTransition(node: Element, options: { duration: number }) { return (window.matchMedia("(max-width: 980px)").matches ? slide : fade)(node, { ...options, easing: cubicOut }); }
+  function syncLink() {
+    // Only the public pair/direction are shared; participant terms never enter previews or URLs.
+    const hash = `#/otc?market=EVER-USDT&side=${direction}`;
+    if (/^#\/otc(?:[/?]|$)/.test(location.hash)) historyReplace(hash);
+    onShareUrlChange(`/${hash}`); onPreviewChange(null);
   }
-  function historyReplace(url: URL) { window.history.replaceState(window.history.state, "", url); window.dispatchEvent(new HashChangeEvent("hashchange")); }
-  function selectBridgeAsset(asset: string, field: "send" | "receive", network: (typeof networks)[number]) {
-    const next = asset === "USDT" ? market : markets.find((item) => item.base === asset);
-    if (!next) return;
-    setMarket(next, false);
-    chooseSide(field === "send" ? asset === "USDT" ? "buy" : "sell" : asset === "USDT" ? "sell" : "buy");
-    if (field === "send") sendNetworkId = network.id;
-    else receiveNetworkId = network.id;
-    const url = new URL(location.href);
-    url.hash = `/otc?market=${next.id}`;
-    // This selection already set the side and network; no hash event is needed.
-    window.history.replaceState(window.history.state, "", url);
+  function historyReplace(hash: string) { window.history.replaceState(window.history.state, "", `${location.pathname}${location.search}${hash}`); }
+  async function run(action: () => Promise<void>) {
+    if (busy) return; busy = true; error = ""; notice = "";
+    try { await action(); } catch (e) { error = e instanceof Error ? e.message : "Request failed"; } finally { busy = false; }
   }
-  function chooseSide(next: OrderSide) { if (next !== side) { [sendNetworkId, receiveNetworkId] = [receiveNetworkId, sendNetworkId]; side = next; } }
-  function selectPrice(nextSide: OrderSide, nextPrice: number) { chooseSide(nextSide); price = nextPrice.toFixed(market.priceDecimals); orderType = "limit"; bridgeOpen = true; }
-  function notify(message: string) {
-    notification = message;
-    clearTimeout(notificationTimer);
-    notificationTimer = setTimeout(() => notification = "", 4500);
+  async function refresh() {
+    try {
+      const [route, proposals] = await Promise.all([request<Config>("/config"), request<Proposal[]>("/listings")]);
+      config = route; listings = proposals; healthy = true; loaded = true;
+      if (!session) return;
+      const owner = session, previousSelection = selected?.id, previousVersion = selectionVersion;
+      const page = await request<{ trades: Trade[]; rfqs: Rfq[] }>("/trades", owner.token);
+      if (session?.token !== owner.token) return;
+      trades = page.trades; rfqs = page.rfqs;
+      if (bookingUnknown && trades.some(t => t.id === bookingUnknown && t.state !== "quoted")) { bookingUnknown = ""; sessionStorage.removeItem("pay3flow.otc.booking"); }
+      if (previousSelection && selected?.id === previousSelection && selectionVersion === previousVersion) await selectTrade(previousSelection);
+      if (owner.desk && session?.token === owner.token) { const data = await request<Record<string, any>>("/desk/dashboard", owner.token); if (session?.token === owner.token) dashboard = data; }
+    } catch (e) { healthy = false; loaded = true; throw e; }
   }
-  function persistOrders() {
-    try { sessionStorage.setItem(storageKey, JSON.stringify(orders.slice(0, 100))); } catch { /* Orders still work within the current page. */ }
+  async function selectTrade(id: string, editTicket = false) {
+    if (!session) return;
+    const owner = session, version = ++selectionVersion;
+    const details = await request<{ trade: Trade; attempts: Attempt[]; customer_updates?: typeof updates[]; evidence?: typeof receipts }>(`/trades/${id}`, owner.token);
+    if (session?.token !== owner.token || version !== selectionVersion) return;
+    selected = details.trade; attempts = details.attempts; updates = details.customer_updates?.flat() || []; receipts = details.evidence || [];
+    sessionStorage.setItem("pay3flow.otc.selected", id);
+    if (editTicket && selected.state === "quoted") { direction = selected.terms.direction; input = selected.terms.input; rfqKey = ""; syncLink(); }
+    if (handoff?.tradeId === id && (terminalStates.has(selected.state) || attempts.some(a => a.kind === handoff?.kind && (!handoff?.attemptId || a.id === handoff.attemptId) && ["failed", "verified"].includes(a.state)) && !attempts.some(a => a.kind === handoff?.kind && !["failed", "verified"].includes(a.state)))) { handoff = null; sessionStorage.removeItem("pay3flow.otc.handoff"); }
   }
-  function confirmOrder() {
-    if (!reviewDraft) return;
-    const draft = reviewDraft;
-    const order: DemoOrder = { id: crypto.randomUUID(), marketId: draft.marketId, side: draft.side, type: draft.type, amount: draft.amount, price: draft.price, sendNetwork: draft.sendNetwork, receiveNetwork: draft.receiveNetwork, createdAt: Date.now(), status: draft.type === "market" ? "simulated" : "open" };
-    orders = [order, ...orders].slice(0, 100); persistOrders(); reviewDraft = null; activityOpen = true;
-    tab = order.type === "market" ? "history" : "orders";
-    notify(order.type === "market" ? copy.orderSimulated : copy.orderCreated);
+  function edited() { selectionVersion++; rfqKey = ""; if (selected?.state === "quoted") { selected = null; attempts = []; receipts = []; updates = []; sessionStorage.removeItem("pay3flow.otc.selected"); } }
+  function chooseSide(next: Direction) { if (next !== direction) { direction = next; listingId = ""; edited(); syncLink(); } }
+  function selectListing(proposal: Proposal, side: Direction) { chooseSide(side); if (listingId !== proposal.id) edited(); listingId = proposal.id; bridgeOpen = true; document.getElementById("otc-input")?.focus(); }
+  async function link(actor: string, credential: string) {
+    session = await request<Session>("/session", "", { actor, credential }); bound = []; selected = null; attempts = []; receipts = []; updates = []; trades = []; rfqs = []; dashboard = null;
+    sessionStorage.setItem(sessionKey, JSON.stringify(session)); sessionStorage.removeItem("pay3flow.otc.wallets"); sessionStorage.removeItem("pay3flow.otc.selected"); await refresh();
   }
-  function cancelOrder(id: string) { orders = orders.map((order) => order.id === id ? { ...order, status: "cancelled" } : order); persistOrders(); notify(copy.orderCancelled); }
+  async function verify(chain: "ethereum" | "everscale") {
+    if (!session) return;
+    const proof = await bindWallet(session.token, chain); bound = [...bound.filter(b => !b.startsWith(`${chain}:`)), `${chain}: ${proof.address}`];
+    sessionStorage.setItem("pay3flow.otc.wallets", JSON.stringify({ actor: session.actor, bound })); notice = `${chain} wallet ownership verified.`;
+  }
+  async function rfq() {
+    if (!session || bound.length !== 2) { identityOpen = true; return; }
+    if (!listing || !healthy || !config?.available || unresolvedBooking) return;
+    const amount = exactInput(input, direction); if (!amount) throw new Error("Enter a positive exact amount with the asset precision.");
+    rfqKey ||= crypto.randomUUID();
+    const result = await request<{ id: string }>("/rfqs", session.token, { direction, input: amount, listing_id: listing.id }, rfqKey);
+    notice = `Quote requested. Reference: ${result.id}`; tab = "orders"; activityOpen = true; await refresh();
+  }
+  async function apply() {
+    if (!session || !selected || selected.state !== "quoted" || unresolvedBooking || now > Date.parse(selected.terms.quote_by)) return;
+    bookingUnknown = selected.id; sessionStorage.setItem("pay3flow.otc.booking", bookingUnknown);
+    try { await request(`/trades/${selected.id}/apply`, session.token, {}); } finally { await refresh(); }
+  }
+  async function reconcileBooking() {
+    if (!session || !bookingUnknown) return;
+    const id = bookingUnknown; await selectTrade(id);
+    if (selected?.id === id && selected.state === "quoted") await request(`/trades/${id}/apply`, session.token, {});
+    await refresh();
+  }
+  async function decide(accept: boolean) { if (!session || !selected) return; await request(`/desk/trades/${selected.id}/decision`, session.token, { accept }); await refresh(); }
+  async function prepareReview(kind: string) {
+    if (!session || !selected || handoffUnknown || attempts.some(a => a.kind === kind && a.state !== "failed")) return;
+    const trade = selected; handoff = { tradeId: trade.id, kind, key: crypto.randomUUID(), phase: "preparing" };
+    sessionStorage.setItem("pay3flow.otc.handoff", JSON.stringify(handoff));
+    try {
+      const attempt = await request<Attempt>(`/trades/${trade.id}/prepare`, session.token, { kind }, handoff.key);
+      handoff = { ...handoff, phase: "review", attemptId: attempt.id }; sessionStorage.setItem("pay3flow.otc.handoff", JSON.stringify(handoff));
+      await selectTrade(trade.id); transferReview = { attempt, trade, kind };
+    } finally { await refresh(); }
+  }
+  async function confirmTransfer() {
+    if (!session || !transferReview || !healthy || config?.demo || transferReview.trade.terms.demo || handoff?.phase !== "review" || (transferReview.kind === "payment" && Date.now() > Date.parse(transferReview.trade.terms.pay_by))) return;
+    const review = transferReview; transferReview = null;
+    handoff = { ...handoff, phase: "signing" }; sessionStorage.setItem("pay3flow.otc.handoff", JSON.stringify(handoff));
+    try { await sendAttempt(session.token, review.attempt); notice = "Transfer submitted. Waiting for independently verified receipt."; }
+    catch (e) { notice = "The saved attempt remains unresolved. Track its original reference; do not send again."; throw e; }
+    finally { await refresh(); }
+  }
+  async function track(attempt: Attempt, reference: string) {
+    if (!session) return; const original = reference || sessionStorage.getItem(`pay3flow.otc.reference.${attempt.id}`);
+    if (!original) throw new Error("Enter the original transaction reference.");
+    await request(`/attempts/${attempt.id}/reference`, session.token, { reference: original }); await refresh();
+  }
+  async function disconnect() {
+    if (session) await request("/session/revoke", session.token, {});
+    selectionVersion++; session = null; selected = null; attempts = []; trades = []; rfqs = []; receipts = []; updates = []; bound = []; dashboard = null; transferReview = null; identityOpen = false;
+    for (const key of [sessionKey, "pay3flow.otc.selected", "pay3flow.otc.wallets"]) sessionStorage.removeItem(key);
+  }
   function navigateTab(event: KeyboardEvent) {
-    const tabs = ["trades", "orders", "history"] as const;
-    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-    event.preventDefault();
-    const next = event.key === "Home" ? 0 : event.key === "End" ? 2 : (tabs.indexOf(tab) + (event.key === "ArrowRight" ? 1 : -1) + 3) % 3;
-    tab = tabs[next];
-    document.getElementById(`otc-${tab}-tab`)?.focus();
-  }
-  function timeLabel(time: number) { return new Date(time).toLocaleTimeString("en-GB", { hour12: false, timeZone: "UTC" }); }
-  function validOrder(value: unknown): value is DemoOrder {
-    if (!value || typeof value !== "object") return false;
-    const order = value as DemoOrder;
-    return typeof order.id === "string" && markets.some((item) => item.id === order.marketId) && ["buy", "sell"].includes(order.side) && ["limit", "market"].includes(order.type) && ["open", "cancelled", "simulated"].includes(order.status) && [order.price, order.amount, order.createdAt].every((number) => typeof number === "number" && Number.isFinite(number) && number > 0);
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return; event.preventDefault(); const tabs = ["trades", "orders", "history"] as const;
+    tab = tabs[event.key === "Home" ? 0 : event.key === "End" ? 2 : (tabs.indexOf(tab) + (event.key === "ArrowRight" ? 1 : -1) + 3) % 3]; document.getElementById(`otc-${tab}-tab`)?.focus();
   }
   onMount(() => {
-    let disposed = false;
-    const media = matchMedia("(prefers-reduced-motion: reduce)");
-    const motionChanged = () => motionDuration = media.matches ? 0 : 320;
-    motionChanged(); media.addEventListener("change", motionChanged);
-    fetchNetworks().then((items) => { if (!disposed && items.length) networks = items; }).catch(() => {});
-    setMarket(marketFromHash(location.hash));
-    try {
-      const saved = JSON.parse(localStorage.getItem(settlementKey) ?? "null");
-      if (saved?.marketId === market.id) {
-        if (["buy", "sell"].includes(saved.side)) side = saved.side;
-        if (typeof saved.sendNetworkId === "string") sendNetworkId = saved.sendNetworkId;
-        if (typeof saved.receiveNetworkId === "string") receiveNetworkId = saved.receiveNetworkId;
-      }
-    } catch { /* Ignore damaged selection storage. */ }
-    try {
-      const saved = JSON.parse(localStorage.getItem(layoutKey) ?? "null");
-      if (saved && typeof saved === "object") {
-        if (typeof saved.bridgeOpen === "boolean") bridgeOpen = saved.bridgeOpen;
-        if (typeof saved.bookOpen === "boolean") bookOpen = saved.bookOpen;
-        if (typeof saved.activityOpen === "boolean") activityOpen = saved.activityOpen;
-      }
-    } catch { /* Ignore damaged layout storage. */ }
-    const positionToggles = () => {
-      const bounds = chartColumn.getBoundingClientRect();
-      toggleOffset = Math.max(0, bounds.height / 2 - 21);
-    };
-    const observer = new ResizeObserver(positionToggles);
-    observer.observe(chartColumn);
-    positionToggles();
-    mounted = true;
-    try { const stored: unknown = JSON.parse(sessionStorage.getItem(storageKey) ?? "[]"); if (Array.isArray(stored)) orders = stored.filter(validOrder).slice(0, 100); } catch { /* Ignore damaged demo storage. */ }
-    const hashChanged = () => setMarket(marketFromHash(location.hash));
-    window.addEventListener("hashchange", hashChanged);
-    return () => { disposed = true; media.removeEventListener("change", motionChanged); observer.disconnect(); clearTimeout(notificationTimer); window.removeEventListener("hashchange", hashChanged); };
+    const media = matchMedia("(prefers-reduced-motion: reduce)"); const motionChanged = () => motionDuration = media.matches ? 0 : 320; motionChanged(); media.addEventListener("change", motionChanged);
+    const restoreDirection = () => { const shared = parseOtcHash(location.hash); if (shared.side) direction = shared.side; edited(); syncLink(); };
+    const shared = parseOtcHash(location.hash); direction = shared.side || "buy"; if (shared.amount && exactInput(shared.amount, direction)) input = shared.amount;
+    try { const saved = JSON.parse(localStorage.getItem(layoutKey) || "null"); if (saved) for (const name of ["bridgeOpen", "bookOpen", "activityOpen"] as const) { if (typeof saved[name] === "boolean") { if (name === "bridgeOpen") bridgeOpen = saved[name]; if (name === "bookOpen") bookOpen = saved[name]; if (name === "activityOpen") activityOpen = saved[name]; } } } catch { /* Ignore invalid layout storage. */ }
+    try { session = JSON.parse(sessionStorage.getItem(sessionKey) || "null"); handoff = JSON.parse(sessionStorage.getItem("pay3flow.otc.handoff") || "null"); bookingUnknown = sessionStorage.getItem("pay3flow.otc.booking") || ""; const wallets = JSON.parse(sessionStorage.getItem("pay3flow.otc.wallets") || "null"); if (wallets?.actor === session?.actor && Array.isArray(wallets?.bound)) bound = wallets.bound.filter((v: unknown) => typeof v === "string"); } catch { session = null; }
+    const observer = new ResizeObserver(() => toggleOffset = Math.max(0, chartColumn.getBoundingClientRect().height / 2 - 21)); observer.observe(chartColumn);
+    mounted = true; syncLink(); let stopped = false, polling = false;
+    void run(async () => { await refresh(); const id = sessionStorage.getItem("pay3flow.otc.selected"); if (id && session) await selectTrade(id, true); });
+    const timer = setInterval(async () => { if (stopped || busy || polling) return; polling = true; try { await refresh(); } catch (e) { error = e instanceof Error ? e.message : "Status unavailable"; } finally { polling = false; } }, 5000);
+    const clock = setInterval(() => now = Date.now(), 1000);
+    window.addEventListener("hashchange", restoreDirection); window.addEventListener("popstate", restoreDirection);
+    return () => { stopped = true; mounted = false; clearInterval(timer); clearInterval(clock); observer.disconnect(); media.removeEventListener("change", motionChanged); window.removeEventListener("hashchange", restoreDirection); window.removeEventListener("popstate", restoreDirection); };
   });
 </script>
 <section class="otcWorkspace" data-testid="otc-workspace">
-  <div class="pageIntro"><div><h1>{copy.titleLead}<span class="titleAccent">{copy.titleAccent}</span></h1><p>{copy.subtitle}</p></div></div>
-  <div class="marketStrip">
-    <div class="marketSelector"><img src={market.icon} width="38" height="38" alt="" /><div><div class="pairSelect"><select aria-label={copy.marketPicker} bind:value={marketId} on:change={selectMarket}>{#each markets as item}<option value={item.id}>{item.base} / {item.quote}</option>{/each}</select><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg></div><span>{market.name} <span class="marketTag">OTC</span></span></div></div>
-    <div class="marketStat last"><span>{copy.lastPrice}</span><strong>{formatPrice(market.price, market)} <small>{market.quote}</small></strong></div>
-    <div class="marketStat"><span>{copy.change}</span><strong class="positive">+{market.change.toFixed(2)}% <span aria-hidden="true">↗</span></strong></div>
-    <div class="marketStat secondaryStat"><span>{copy.high}</span><strong>{formatPrice(high, market)}</strong></div>
-    <div class="marketStat secondaryStat"><span>{copy.low}</span><strong>{formatPrice(low, market)}</strong></div>
-    <div class="marketStat volumeStat"><span>{copy.volume}</span><strong>{market.volume.toLocaleString("en-US")} <small>{market.quote}</small></strong></div>
-  </div>
+  <div class="pageIntro"><div><h1>{copy.titleLead}<span class="titleAccent">{copy.titleAccent}</span></h1><p>{say("Native EVER on Everscale. USDT on Ethereum. Direct desk settlement.", "Нативный EVER в Everscale. USDT в Ethereum. Прямой обмен с деском.")}</p></div></div>
+  <div class="connectionBar"><p class="connectionStatus" role="status" data-testid="otc-connection" data-state={!loaded ? "connecting" : !healthy ? "unavailable" : "connected"}>{!loaded ? copy.connecting : !healthy ? say("OTC service unavailable", "OTC-сервис недоступен") : config?.demo ? say("Simulation", "Симуляция") : config?.available ? say("Desk available", "Деск доступен") : say("Route paused", "Маршрут приостановлен")}</p><button on:click={() => identityOpen = true}>{session ? say("Actor and wallets", "Аккаунт и кошельки") : say("Link actor", "Подключить аккаунт")}</button></div>
+  <div class="marketStrip"><div class="marketSelector"><img src="/icons/assets/ever.svg" width="38" height="38" alt="" /><div><div class="pairSelect"><strong>EVER / USDT</strong></div><span>Everscale ↔ Ethereum <span class="marketTag">OTC</span></span></div></div><div class="marketStat last"><span>{say("Your selected rate", "Выбранный курс")}</span><strong>{selected ? rate(selected.terms) : "—"} <small>USDT / EVER</small></strong></div><div class="marketStat"><span>{say("Desk", "Деск")}</span><strong>{config?.desk_name || "—"}</strong></div><div class="marketStat secondaryStat"><span>{say("Desk offers", "Предложения деска")}</span><strong>{listings.length}</strong></div><div class="marketStat secondaryStat"><span>{say("Your open trades", "Ваши открытые сделки")}</span><strong>{session ? activeTrades.length : "—"}</strong></div><div class="marketStat volumeStat"><span>{say("Your completed volume", "Ваш завершённый объём")}</span><strong>{session ? decimal(completedVolume(trades), 6) : "—"} <small>USDT</small></strong></div></div>
+  <div class="serviceControls">{#if error}<p class="message error" role="alert">{error}</p>{/if}{#if notice}<p class="message" role="status">{notice}</p>{/if}{#if unresolvedBooking}<p class="message" role="status">{say("The original booking is awaiting its decision. Another selection is blocked.", "Ожидается решение по исходной сделке. Другое бронирование заблокировано.")}</p><button disabled={busy || !healthy || !bookingUnknown} on:click={() => run(reconcileBooking)}>{say("Reconcile original booking", "Проверить исходное бронирование")}</button>{/if}</div>
   <div class="otcGrid" class:bridgeClosed={!bridgeOpen} class:bookClosed={!bookOpen} style:--panel-toggle-offset={`${toggleOffset}px`}>
-    {#if bridgeOpen}<div class="bridgeColumn" id="otc-bridge-column" transition:panelTransition={{ duration: motionDuration }}><OtcPanel id="otc-bridge" title={copy.bridge} collapsible={false}><span slot="actions" class="panelMeta">OTC</span><OtcBridge {market} {snapshot} {networks} bind:sendNetworkId bind:receiveNetworkId onSelectAsset={selectBridgeAsset} onSideChange={chooseSide} bind:amount bind:side bind:type={orderType} bind:price onReview={(draft) => reviewDraft = draft} /></OtcPanel></div>{/if}
-    <div class="bridgeToggle"><OtcPanelToggle title={copy.bridge} controls="otc-bridge-column" bind:expanded={bridgeOpen} /></div>
-    <div class="chartColumn" id="otc-chart-column" bind:this={chartColumn}><OtcPanel id="otc-chart" title={copy.chart} collapsible={false}>{#key market.id}<OtcChart {market} />{/key}</OtcPanel></div>
-    <div class="bookToggle"><OtcPanelToggle title={copy.book} controls="otc-book-column" bind:expanded={bookOpen} direction="right" /></div>
-    {#if bookOpen}<div class="bookColumn" id="otc-book-column" transition:panelTransition={{ duration: motionDuration }}><OtcPanel id="otc-book" title={copy.book} collapsible={false}>{#key market.id}<OtcOrderbook {market} {snapshot} selectedPrice={orderType === "limit" ? Number(price) : null} onSelect={selectPrice} />{/key}</OtcPanel></div>{/if}
+    {#if bridgeOpen}<div class="bridgeColumn" id="otc-bridge-column" transition:panelTransition={{ duration: motionDuration }}><OtcPanel id="otc-bridge" title={say("Exchange", "Обмен")} collapsible={false}><span slot="actions" class="panelMeta">OTC</span><OtcTicket {direction} bind:input {quote} {busy} disabled={!healthy || !config?.available || !listing || !exactInput(input, direction) || unresolvedBooking || (!!quote && now > Date.parse(quote.terms.quote_by))} desk={config?.desk_name || ""} accountLabel={session ? `${say("Wallets verified", "Кошельки подтверждены")}: ${bound.length}/2` : say("Link actor and verify wallets", "Подключить аккаунт и подтвердить кошельки")} onDirection={chooseSide} onEdit={edited} onRequest={() => run(rfq)} onReview={() => { tab = "orders"; activityOpen = true; document.getElementById("otc-activity-section")?.scrollIntoView({ block: "start", behavior: motionDuration ? "smooth" : "instant" }); }} onAccount={() => identityOpen = true} /></OtcPanel></div>{/if}
+    <div class="bridgeToggle"><OtcPanelToggle title={say("Exchange", "Обмен")} controls="otc-bridge-column" bind:expanded={bridgeOpen} /></div>
+    <div class="chartColumn" id="otc-chart-column" bind:this={chartColumn}><OtcPanel id="otc-chart" title={copy.chart} collapsible={false}><OtcQuoteChart {trades} /></OtcPanel></div>
+    <div class="bookToggle"><OtcPanelToggle title={say("Desk offers", "Предложения деска")} controls="otc-book-column" bind:expanded={bookOpen} direction="right" /></div>
+    {#if bookOpen}<div class="bookColumn" id="otc-book-column" transition:panelTransition={{ duration: motionDuration }}><OtcPanel id="otc-book" title={say("Desk offers", "Предложения деска")} collapsible={false}><OtcDeskBook {config} {listings} selectedId={listing?.id || ""} onSelect={selectListing} /></OtcPanel></div>{/if}
   </div>
-  <div class="activityToggle"><OtcPanelToggle title={copy.activity} controls="otc-activity-section" bind:expanded={activityOpen} vertical /></div>
-  {#if activityOpen}<div class="activitySection" id="otc-activity-section" transition:slide={{ duration: motionDuration, easing: cubicOut }}><OtcPanel id="otc-activity" title={copy.activity} collapsible={false}><span slot="actions" class="panelMeta">{market.base}/{market.quote}</span>
-    <div class="activityTabs" role="tablist" aria-label={copy.activity}><button type="button" role="tab" id="otc-trades-tab" aria-selected={tab === "trades"} tabindex={tab === "trades" ? 0 : -1} on:keydown={navigateTab} aria-controls="otc-trades-content" class:active={tab === "trades"} on:click={() => tab = "trades"}>{copy.book}</button><button type="button" role="tab" id="otc-orders-tab" aria-selected={tab === "orders"} tabindex={tab === "orders" ? 0 : -1} on:keydown={navigateTab} aria-controls="otc-orders-content" class:active={tab === "orders"} on:click={() => tab = "orders"}>{copy.myOrders}{#if openOrders.length}<span class="orderCount">{openOrders.length}</span>{/if}</button><button type="button" role="tab" id="otc-history-tab" aria-selected={tab === "history"} tabindex={tab === "history" ? 0 : -1} on:keydown={navigateTab} aria-controls="otc-history-content" class:active={tab === "history"} on:click={() => tab = "history"}>{copy.history}</button></div>
-    <div class="activityViewport" style:height={`${activityHeight}px`} style:--activity-motion={`${motionDuration}ms`}>
-    {#key tab}<div class="activityContent" use:measureActivity in:fade={{ duration: motionDuration * .65, easing: cubicOut }} out:fade={{ duration: motionDuration * .4 }} on:introstart={(event) => { event.currentTarget.inert = false; event.currentTarget.removeAttribute("aria-hidden"); if (event.currentTarget.id === `otc-${tab}-content`) activityHeight = event.currentTarget.getBoundingClientRect().height; }} on:outrostart={(event) => { event.currentTarget.inert = true; event.currentTarget.setAttribute("aria-hidden", "true"); }} role="tabpanel" id={`otc-${tab}-content`} aria-labelledby={`otc-${tab}-tab`} tabindex="0">
-      {#if tab === "trades"}
-        <div class="splitBooks">
-          <div class="buyBook" data-testid="otc-buy-book"><OtcPanel id="otc-buy-book" title={copy.bids} collapsible={false}>{#key market.id}<OtcOrderbook {market} {snapshot} sideOnly="buy" showTools={false} selectedPrice={orderType === "limit" ? Number(price) : null} onSelect={selectPrice} />{/key}</OtcPanel></div>
-          <div class="sellBook" data-testid="otc-sell-book"><OtcPanel id="otc-sell-book" title={copy.asks} collapsible={false}>{#key market.id}<OtcOrderbook {market} {snapshot} sideOnly="sell" showTools={false} selectedPrice={orderType === "limit" ? Number(price) : null} onSelect={selectPrice} />{/key}</OtcPanel></div>
-        </div>
-      {:else if (tab === "orders" ? openOrders : history).length}
-        <div class="tableScroll"><table><thead><tr><th>{copy.time} <small>UTC</small></th><th>{copy.side}</th><th>{copy.price} <small>{market.quote}</small></th><th>{copy.amount} <small>{market.base}</small></th><th>{copy.status}</th>{#if tab === "orders"}<th>{copy.action}</th>{/if}</tr></thead><tbody>{#each (tab === "orders" ? openOrders : history) as order}<tr><td class="muted">{timeLabel(order.createdAt)}</td><td><span class="sidePill" class:sell={order.side === "sell"}>{order.side === "buy" ? copy.buy : copy.sell}</span></td><td>{formatPrice(order.price, market)}</td><td>{formatAmount(order.amount, market)}</td><td><span class="statusPill" class:isOpen={order.status === "open"}>{order.status === "open" ? copy.open : order.status === "cancelled" ? copy.cancelled : copy.simulated}</span></td>{#if tab === "orders"}<td><button type="button" class="cancelOrder" on:click={() => cancelOrder(order.id)}>{copy.cancel}</button></td>{/if}</tr>{/each}</tbody></table></div>
+  <p class="risk">{say("Two separate transfers: the customer pays first; the desk delivers or refunds. No atomic swap or automatic rollback.", "Два отдельных перевода: клиент платит первым, деск выполняет выплату или возврат. Атомарного обмена и автоматического отката нет.")}</p>
+  <div class="activityToggle"><OtcPanelToggle title={say("Trade activity", "Активность сделок")} controls="otc-activity-section" bind:expanded={activityOpen} vertical /></div>
+  {#if activityOpen}<div class="activitySection" id="otc-activity-section" transition:slide={{ duration: motionDuration, easing: cubicOut }}><OtcPanel id="otc-activity" title={say("Trade activity", "Активность сделок")} collapsible={false}><span slot="actions" class="panelMeta">EVER/USDT</span>
+    <div class="activityTabs" role="tablist" aria-label={say("Trade activity", "Активность сделок")}>{#each ["trades", "orders", "history"] as item}<button type="button" role="tab" id={`otc-${item}-tab`} aria-selected={tab === item} tabindex={tab === item ? 0 : -1} aria-controls={`otc-${item}-content`} class:active={tab === item} on:keydown={navigateTab} on:click={() => tab = item as typeof tab}>{item === "trades" ? say("Desk offers", "Предложения деска") : item === "orders" ? say("My trades", "Мои сделки") : say("History", "История")}{#if item === "orders" && activeTrades.length}<span class="orderCount">{activeTrades.length}</span>{/if}</button>{/each}</div>
+    <div class="activityContent" role="tabpanel" id={`otc-${tab}-content`} aria-labelledby={`otc-${tab}-tab`} tabindex="0">
+      {#if tab === "trades"}<OtcDeskBook {config} {listings} selectedId={listing?.id || ""} onSelect={selectListing} />
       {:else}
-        <div class="emptyState"><div class="emptyIcon"><svg width="27" height="27" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 4h14v16H5V4Zm4 5h6m-6 4h6m-6 4h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" /></svg></div><h3>{tab === "orders" ? copy.noOrders : copy.noHistory}</h3><p>{tab === "orders" ? copy.noOrdersHint : copy.noHistoryHint}</p>{#if tab === "orders"}<button type="button" on:click={() => { bridgeOpen = true; document.getElementById("otc-send")?.focus(); }}>{copy.create}<span aria-hidden="true">↗</span></button>{/if}</div>
+        <div class="tradeList">{#each tab === "orders" ? activeTrades : history as trade}<button class:selected={selected?.id === trade.id} on:click={() => run(() => selectTrade(trade.id, true))}><strong>{trade.terms.direction === "buy" ? say("Buy", "Купить") : say("Sell", "Продать")} EVER</strong><span>{trade.terms.input} → {trade.terms.output}</span><span>{trade.state.replaceAll("_", " ")}</span></button>{:else}<div class="emptyState"><div class="emptyIcon" aria-hidden="true">≡</div><h3>{say("No trades yet", "Сделок пока нет")}</h3><p>{session ? say("Quotes and accepted trades appear here.", "Здесь появятся котировки и принятые сделки.") : say("Link your actor to see private quotes and trades.", "Подключите аккаунт для доступа к приватным котировкам и сделкам.")}</p></div>{/each}</div>
+        {#if tab === "orders"}{#each rfqs.filter(r => r.state === "waiting") as r}<p class="waiting">{say("Waiting for desk quote", "Ожидается котировка деска")} · {r.direction} · {r.input} · {r.id}</p>{/each}{/if}
+        {#if selected}<div class="tradeDetail">{#if handoffUnknown}<p class="waiting">{say("Saved outgoing attempt is unresolved. Another send is blocked.", "Сохранённая попытка перевода не завершена. Повторная отправка заблокирована.")}</p>{/if}<OtcTradeDetails {selected} {session} {config} {attempts} {receipts} {updates} busy={busy || !healthy} {unresolvedBooking} {handoffUnknown} {now} onApply={() => run(apply)} onDecide={accept => run(() => decide(accept))} onTransfer={kind => run(() => prepareReview(kind))} onTrack={(attempt, reference) => run(() => track(attempt, reference))} onRetry={(attempt, evidence) => run(async () => { await request(`/attempts/${attempt.id}/retry`, session!.token, { evidence: { note: evidence } }); await refresh(); })} /></div>{/if}
       {/if}
-    </div>{/key}</div>
+    </div>
   </OtcPanel></div>{/if}
+  {#if session?.desk}<div class="console"><OtcDeskConsole {session} {config} {selected} {rfqs} {dashboard} {busy} {run} onRefresh={refresh} onSelect={selectTrade} /></div>{/if}
 </section>
-{#if notification}<div class="orderNotification" role="status"><span aria-hidden="true">✓</span>{notification}<button type="button" aria-label={copy.close} on:click={() => notification = ""}>×</button></div>{/if}
-{#if reviewDraft}<OtcOrderReview draft={reviewDraft} {market} onClose={() => reviewDraft = null} onConfirm={confirmOrder} />{/if}
+{#if identityOpen}<OtcIdentity {session} enabled={!!config?.enabled} {busy} {bound} {error} onClose={() => identityOpen = false} onLink={(actor, credential) => run(() => link(actor, credential))} onVerify={chain => run(() => verify(chain))} onDisconnect={() => run(disconnect)} />{/if}
+{#if transferReview}<OtcTransferReview trade={transferReview.trade} kind={transferReview.kind} instructions={transferReview.attempt.instructions} disabled={busy || !!config?.demo || transferReview.trade.terms.demo || (transferReview.kind === "payment" && now > Date.parse(transferReview.trade.terms.pay_by))} onClose={() => transferReview = null} onConfirm={() => run(confirmTransfer)} />{/if}
+
 <style>
+  .connectionStatus { margin: 0 0 12px; color: var(--color-text-soft); font-size: 12px; }
   .otcWorkspace { --otc-buy: var(--color-good); --otc-sell: var(--color-danger); --otc-buy-soft: color-mix(in srgb, var(--color-good) 13%, transparent); --otc-sell-soft: color-mix(in srgb, var(--color-danger) 9%, transparent); width: min(var(--layout-width), calc(100% - 2 * var(--page-gutter))); margin: 0 auto; padding: 34px 0 20px; }
   .pageIntro { position: relative; display: grid; justify-items: center; gap: 14px; margin: 0 auto 26px; text-align: center; }
   h1 { margin: 0 auto; max-width: 1000px; text-wrap: balance; font-size: clamp(44px, 5.5vw, 72px); font-weight: 650; letter-spacing: -.065em; line-height: .96; }
@@ -240,7 +235,7 @@
   .activityTabs button.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; border-radius: 2px; background: var(--color-accent-strong); }
   .orderCount { display: grid; place-items: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 4px; background: var(--color-accent-soft); font-family: var(--font-mono); font-size: 12px; }
   .activityViewport { position: relative; overflow: hidden; min-height: 237px; transition: height var(--activity-motion) cubic-bezier(.22, 1, .36, 1); }
-  .activityContent { position: absolute; top: 0; left: 0; width: 100%; min-height: 237px; }
+  .activityContent { min-height: 237px; }
   .tableScroll { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; text-align: right; font-family: var(--font-sans); font-variant-numeric: tabular-nums; font-size: 12px; white-space: nowrap; }
   th { font-family: var(--font-sans); font-size: 12px; font-weight: 500; color: var(--color-text-soft); padding: 13px 22px; border-bottom: 1px solid var(--color-border); }
@@ -279,7 +274,8 @@
     .marketStat:not(.last) { flex: 1; border-top: 1px solid var(--color-border); padding-top: 12px; }
   }
   @media (max-width: 640px) {
-    .otcWorkspace { padding-top: 20px; }
+    .connectionStatus { margin: 0 0 12px; color: var(--color-text-soft); font-size: 12px; }
+  .otcWorkspace { padding-top: 20px; }
     h1 { font-size: clamp(36px, 9vw, 48px); }
     .pageIntro p { font-size: 14px; }
     .secondaryStat { display: none; }
@@ -288,4 +284,6 @@
     th, td { padding-inline: 14px; }
   }
   @media (prefers-reduced-motion: reduce) { .otcGrid { transition: none; } }
+
+.connectionBar { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 12px; } .connectionBar .connectionStatus { margin: 0; } .connectionBar > button { min-height: 44px; font-size: 12px; color: var(--color-text-soft); } .marketStat strong { overflow-wrap: anywhere; white-space: normal; } .risk { margin: 18px 0 0; font-size: 12px; color: var(--color-text-soft); line-height: 1.6; } .tradeList { display: grid; gap: 7px; padding: 18px; } .tradeList button { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; min-height: 44px; padding: 12px; border: 1px solid var(--color-border); border-radius: 7px; text-align: left; font-size: 12px; } .tradeList button.selected { border-color: var(--color-accent-strong); } .tradeDetail { padding: 0 19px 22px; } .waiting { padding: 12px 19px; overflow-wrap: anywhere; font-size: 12px; color: var(--color-text-soft); } .console { display: grid; gap: 18px; margin-top: 24px; }
 </style>

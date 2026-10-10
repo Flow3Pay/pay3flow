@@ -466,3 +466,5 @@ The optional legacy fmatch services use `7277`, `5433`, and `8108`.
 
 Pay3Flow is licensed under the GNU Affero General Public License, version 3 or
 any later version (`AGPL-3.0-or-later`). See [`LICENSE`](LICENSE).
+
+The EVER/USDT OTC desk service and connected `/#/otc` interface are documented in [OTC setup and operations](docs/otc-service.md). It is disabled by default; [simulation evidence](docs/otc-evidence.md) does not authorize live deposits.
