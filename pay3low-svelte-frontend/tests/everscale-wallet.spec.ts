@@ -57,12 +57,12 @@ test("wallet dialog has avatars, contains keyboard focus and closes from every p
     await expect(dialog.locator(".walletIdentity strong")).toHaveText(["Ethereum", "NEAR", "TRON", "Everscale"]);
     await expect.poll(() => dialog.locator(".walletAvatar").evaluateAll(images => images.length === 4 && images.every(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0))).toBe(true);
     await expect(page.locator(".appShell")).toHaveAttribute("inert", "");
-    const close = dialog.getByRole("button", { name: "Close wallet dialog" });
-    await expect(close).toBeFocused();
+    const search = dialog.getByRole("searchbox", { name: "Search wallets" });
+    await expect(search).toBeFocused();
     await page.keyboard.press("Shift+Tab");
     await expect(dialog.getByRole("button", { name: "Connect Everscale wallet" })).toBeFocused();
     await page.keyboard.press("Tab");
-    await expect(close).toBeFocused();
+    await expect(search).toBeFocused();
     const bounds = await dialog.boundingBox();
     expect(bounds!.x).toBeGreaterThanOrEqual(0);
     expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
@@ -89,6 +89,53 @@ test("wallet dialog has avatars, contains keyboard focus and closes from every p
   expect(closeBounds!.x + closeBounds!.width).toBeLessThanOrEqual(bounds!.x + bounds!.width);
   await dialog.locator(".closeButton").click();
   await expect(dialog).toHaveCount(0);
+});
+
+test("wallet search filters network names and tickers, handles empty results and resets on reopening", async ({ page }) => {
+  await setup(page, "missing");
+  const dialog = page.getByRole("dialog", { name: "Wallet connections", exact: true });
+  const search = dialog.getByRole("searchbox", { name: "Search wallets" });
+  await expect(search).toBeFocused();
+  for (const [query, expected] of [["  tRx  ", "TRON"], ["ETH evm", "Ethereum"], ["NeAr", "NEAR"], ["эверскейл", "Everscale"]]) {
+    await search.fill(query);
+    await expect(dialog.locator(".walletIdentity strong")).toHaveText([expected]);
+    await page.keyboard.press("ArrowDown");
+    await expect(dialog.locator(".connectionButton")).toBeFocused();
+    await page.keyboard.press("ArrowUp");
+    await expect(search).toBeFocused();
+  }
+  await search.fill("unknown-wallet");
+  await expect(dialog.locator(".walletChoice")).toHaveCount(0);
+  await expect(dialog.getByRole("status")).toContainText("No wallets found");
+  await page.keyboard.press("Shift+Tab");
+  await expect(dialog.getByRole("button", { name: "Close wallet dialog" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(search).toBeFocused();
+  await dialog.getByRole("button", { name: "Clear wallet search" }).click();
+  await expect(search).toHaveValue("");
+  await expect(search).toBeFocused();
+  await expect(dialog.locator(".walletChoice")).toHaveCount(4);
+  await search.fill("TRX");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
+  await expect(search).toHaveValue("");
+  await expect(dialog.locator(".walletChoice")).toHaveCount(4);
+});
+
+test("wallet search finds connected addresses and keeps focus when disconnecting removes a result", async ({ page }) => {
+  await setup(page);
+  const dialog = page.getByRole("dialog", { name: "Wallet connections", exact: true });
+  const search = dialog.getByRole("searchbox", { name: "Search wallets" });
+  await search.fill("EVER");
+  await connect(page);
+  await search.fill(ADDRESS.toUpperCase());
+  await expect(dialog.locator(".walletIdentity strong")).toHaveText(["Everscale"]);
+  await dialog.getByRole("button", { name: "Disconnect Everscale wallet" }).click();
+  await expect(dialog.getByRole("status")).toContainText("No wallets found");
+  await expect(search).toBeFocused();
+  await dialog.getByRole("button", { name: "Clear wallet search" }).click();
+  await expect(dialog.getByRole("button", { name: "Connect Everscale wallet", exact: true })).toBeVisible();
 });
 
 test("wallet dialog yields to the NEAR selector and returns after cancellation", async ({ page }) => {
