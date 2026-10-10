@@ -77,3 +77,17 @@ Restored the terminal, navigation, chart, orderbook, panel controls and activity
 Validation: backend `cargo check` passed; Svelte check reported zero errors/warnings; 27 frontend unit tests passed; production frontend build passed. The 38-scenario browser run passed 36 cases and found two panel-layout scope failures caused by nesting the settlement section inside the terminal. After separating the sections, all 8 targeted desktop/mobile panel and settlement checks passed. The 320px fixture screenshot had no horizontal overflow. No real signing or live deposits were enabled.
 
 Deployment: `abfeb06b844cb6a2fe75fa47dded1299140ffb4c` (`live-20261010-abfeb06`) is live at https://pay3flow.lefine.pro/#/otc. Backend/frontend each reported 1 ready replica; public route checks passed. The live browser showed the restored Russian heading, connected test-market WebSocket and rendered chart, no page errors, and no overflow at 320px. The separate settlement section reported `enabled:false`, `available:false` and disabled quote requests. Backend, wallet picker and provider profile sources match preceding live release `6598486`; no live-deposit gate was opened.
+
+## Direct terminal integration — 2026-10-10
+
+This supersedes the separate settlement section in the preceding restoration entry. The restored terminal now calls the durable `/api/otc` service directly. No test-market WebSocket is opened by this UI. Public desk offers retain their Proposal identity and resource-based direction; exact participant quotes supply displayed output/rates. Quote history and completed USDT volume come from participant trade records, with no generated liquidity or candle fallback. The Exchange card, My trades/details and restricted desk console cover the workflow together. Wallet handoff review follows durable preparation; reload never repeats signing.
+
+Recorded verification (all funds/desk/chain responses in browser tests are simulations):
+
+- `npm run check`: 0 errors, 0 warnings.
+- `npm run test:unit`: 30 passed, including exact chain precision/u128 input validation, structured Proposal direction and completed-volume arithmetic beyond Number precision.
+- Playwright `tests/otc.spec.ts`: 24 desktop/mobile workflow cases passed, then 2 additional public-sharing/navigation cases passed. This covers both directions, canonical exact RFQs and stable retry keys, quote editing, accepted terms/deadlines/fee, lost booking/prepare responses, restart blocking, expired/rejected quotes, restricted desk controls, unresolved payout/refund exclusion, zero-traffic metrics, refunds in history, backend outage, layout restoration, delayed private-response discard after logout and 320px accessibility/overflow. Public sharing excludes participant terms and quote observations.
+- `npm run build` in the release worktree: passed. Existing dependency bundling warnings remain; Svelte diagnostics are clean.
+- Browser screenshots of the integrated quote view were visually inspected; terminal hero, three columns, card style and panel toggles are preserved.
+
+Backend financial/protocol code is unchanged by this integration. Production live-route configuration and real-money gate remain separate.

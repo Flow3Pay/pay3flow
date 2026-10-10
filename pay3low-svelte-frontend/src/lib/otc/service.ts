@@ -5,14 +5,15 @@ export type Direction = "buy" | "sell";
 export interface Proposal { id: string; name?: string; publishes: { resourceConformsTo: string }; reciprocal: { resourceConformsTo: string } }
 export interface Terms {
   demo: boolean;
+  customer_ever?: string; customer_usdt?: string; desk_ever?: string; desk_usdt?: string;
   direction: Direction; input: string; output: string; input_units: string; output_units: string;
   customer_actor: string; desk_actor: string; quote_by: string; pay_by: string; payout_by: string;
   network_costs: string; ever_receiving_cost_units: string; refund_policy: string;
   fee_policy: { fee_units: string; basis_units: string };
   proposal: Proposal;
 }
-export interface Trade { id: string; rfq_id: string; state: string; terms: Terms; offer: unknown; decision: unknown }
-export interface Rfq { id: string; direction: Direction; input: string; actor: string; state: string }
+export interface Trade { created_at?: string; id: string; rfq_id: string; state: string; terms: Terms; offer: unknown; decision: unknown }
+export interface Rfq { created_at?: string; id: string; direction: Direction; input: string; actor: string; state: string }
 export interface Attempt { id: string; kind: string; state: string; instructions: Instructions; reference: string | null }
 interface Instructions {
   leg: { chain: string; sender: string; recipient: string; amount: string; transfer_amount: string };
