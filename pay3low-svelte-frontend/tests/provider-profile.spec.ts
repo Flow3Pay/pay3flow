@@ -28,26 +28,31 @@ async function mock(page: Page) {
   });
 }
 
-test('profile changes periods, filters reviews and persists favorites', async ({ page }) => {
+test('profile changes periods, restores the period and filters reviews', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   await mock(page); await page.goto('/providers/bybit');
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Bybit');
   await expect(page.locator('.venueAvatar img')).toHaveAttribute('src', '/icons/venues/bybit.png');
   await expect(page.locator('.identityMeta')).toContainText('P2P'); await expect(page.locator('.identityMeta')).toContainText('Spot');
   await expect(page.locator('.metric').nth(2).locator('strong')).toHaveText(/3\s?000/);
+  await expect(page.locator('.directionPanel, .reviewSection, .aboutGrid')).toHaveCount(0);
   const initial = await page.locator('.line10').getAttribute('d');
   await page.getByRole('button', { name: '7 дней', exact: true }).click();
   await expect(page).toHaveURL(/period=7d/); await expect(page.locator('.metric').nth(2).locator('strong')).toHaveText('700');
   await expect(page.locator('.line10')).not.toHaveAttribute('d', initial!);
   await page.locator('.dayTarget').last().focus(); await expect(page.locator('.tooltip')).toContainText('UTC');
-  await page.getByRole('button', { name: 'В избранное', exact: true }).click(); await page.reload();
-  await expect(page.getByRole('button', { name: 'В избранном', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await page.reload();
   await expect(page.getByRole('button', { name: '7 дней', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: 'Отзывы', exact: true }).click(); await page.getByRole('button', { name: 'Критические', exact: true }).click();
   await expect(page.locator('.review')).toHaveCount(1); await expect(page.locator('.review')).toContainText('Мария');
+  await expect(page.locator('.metrics, .analyticsGrid, .directionPanel, .aboutGrid')).toHaveCount(0);
   await page.getByRole('button', { name: 'Положительные', exact: true }).click(); await expect(page.locator('.review')).toHaveCount(1); await expect(page.locator('.review')).toContainText('Алексей');
   await page.getByRole('button', { name: 'Направления', exact: true }).click();
   await expect(page.getByRole('link', { name: 'Обменять USDT → BTC' })).toHaveAttribute('href', '/#/swap/USDT/BTC?sources=bybit');
+  await expect(page.locator('.metrics, .reviewSection, .aboutGrid')).toHaveCount(0);
+  await page.getByRole('button', { name: 'О площадке', exact: true }).click();
+  await expect(page.locator('.aboutGrid')).toBeVisible();
+  await expect(page.locator('.metrics, .reviewSection, .directionPanel')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 
@@ -82,4 +87,21 @@ test('profile remains responsive and accessible in both themes', async ({ page }
   }
   await page.evaluate(() => document.documentElement.dataset.theme = 'light');
   await page.screenshot({ path: testInfo.outputPath('provider-profile.png'), fullPage: true });
+});
+
+
+test('one day of history uses bars without inventing previous rankings', async ({ page }) => {
+  await mock(page);
+  await page.route('**/api/providers/*/statistics?*', route => {
+    const summary = statistics('30d');
+    summary.days = summary.days.map((day, index) => ({ ...day, searches: index === 29 ? 5 : 0, top10: index === 29 ? 4 : 0, top1: 0 }));
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ...summary, searches: 5, top10: 4, top1: 0 }) });
+  });
+  await page.goto('/providers/bybit');
+  await expect(page.locator('.dayBar')).toHaveCount(2);
+  await expect(page.locator('.barValue')).toHaveText(['80%', '0%']);
+  await expect(page.locator('.line10, .line1')).toHaveCount(0);
+  await expect(page.locator('.singleDayNote')).toContainText('один день');
+  await page.locator('.dayTarget').focus();
+  await expect(page.locator('.tooltip')).toContainText('Поисков: 5');
 });

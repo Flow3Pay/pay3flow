@@ -164,4 +164,4 @@ deployed: older searches cannot be reconstructed from aggregate counters.
 The profile shows explicit empty/error states instead of illustrative statistics.
 
 Profile review ratings and filters use only the collected external-review sample.
-Favorites stay in browser local storage. Sharing copies the profile URL and period.
+Sharing copies the profile URL and period.

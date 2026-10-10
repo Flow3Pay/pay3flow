@@ -19,6 +19,7 @@ const messages: Record<Locale, Record<string, string>> = {
   ru: {
     "Platforms": "Площадки",
     "Send": "Отправить",
+    "Error": "Ошибка",
     ...walletMessages.ru,
     ...guideMessages.ru,
     ...spotMessages.ru,
@@ -540,6 +541,7 @@ const messages: Record<Locale, Record<string, string>> = {
   hy: {
     "Platforms": "Հարթակներ",
     "Send": "Ուղարկել",
+    "Error": "Սխալ",
     ...walletMessages.hy,
     ...guideMessages.hy,
     ...spotMessages.hy,
