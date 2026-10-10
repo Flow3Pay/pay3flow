@@ -5,12 +5,13 @@
   import { env } from "$env/dynamic/public";
   import { lockPageScroll } from "$lib/page-scroll-lock";
   import { locale, t } from "$lib/i18n";
+  import { assetIcon } from "$lib/icons";
   import { wallets, connectWallet, disconnectFamily, restoreWallets } from "$lib/wallet-session";
   import type { WalletFamily } from "$lib/wallet-execution";
 
   const choices: { family: WalletFamily; network: string; label: string; icon: string; keywords: string }[] = [
     { family: "evm", network: "ethereum", label: "Ethereum", icon: "/icons/assets/eth.webp", keywords: "ETH EVM эфир этериум" },
-    { family: "near", network: "near", label: "NEAR", icon: "/icons/assets/near.webp", keywords: "NEAR Protocol нир" },
+    { family: "near", network: "near", label: "NEAR", icon: assetIcon("near"), keywords: "NEAR Protocol нир" },
     { family: "tron", network: "tron", label: "TRON", icon: "/icons/assets/trx.webp", keywords: "TRX трон" },
     { family: "everscale", network: "everscale", label: "Everscale", icon: "/icons/assets/ever.svg", keywords: "EVER эверскейл" },
   ];

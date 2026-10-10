@@ -42,7 +42,7 @@ const NETWORK_ASSETS: Array<[RegExp, string]> = [
 export function venueIcon(venue: string): string {
   const rawKey = venue.toLowerCase();
   const key = VENUE_ICON_ALIASES[rawKey] ?? rawKey;
-  if (key === "near-intents") return "/icons/assets/near.webp";
+  if (key === "near-intents") return assetIcon("near");
   const extension = PNG_VENUE_ICONS.has(key) ? "png" : JPG_VENUE_ICONS.has(key) ? "jpg" : "svg";
   const filename = key === "cow-swap" ? "cow-swap-favicon.svg" : `${key}.${extension}`;
   return LOCAL_VENUE_ICONS.has(key)
@@ -53,6 +53,7 @@ export function venueIcon(venue: string): string {
 /** Returns a static asset served by this frontend. */
 export function assetIcon(asset: string): string {
   const key = asset.toLowerCase();
+  if (key === "near") return "/icons/assets/near-investx.png";
   if (key === "ever") return "/icons/assets/ever.svg";
   if (PNG_ASSET_ICONS.has(key)) return `/icons/assets/${key}.png`;
   if (LOCAL_FIAT_ICONS.has(key)) return `/icons/assets/${key}.svg`;

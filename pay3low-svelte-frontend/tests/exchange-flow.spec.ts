@@ -1782,7 +1782,7 @@ test("catalog and direct quote providers are separately selectable", async ({ pa
   await expect(cow.locator("img")).toHaveAttribute("src", "/icons/venues/cow-swap-favicon.svg");
   await expect(near).toBeEnabled();
   await expect(near).toHaveAttribute("aria-pressed", "true");
-  await expect(near.locator("img")).toHaveAttribute("src", "/icons/assets/near.webp");
+  await expect(near.locator("img")).toHaveAttribute("src", "/icons/assets/near-investx.png");
   await expect(idPay).toBeEnabled();
   await expect(idPay).toHaveAttribute("aria-pressed", "true");
   await expect(idPay.locator("img")).toHaveAttribute("src", "/icons/venues/id-pay.svg");
