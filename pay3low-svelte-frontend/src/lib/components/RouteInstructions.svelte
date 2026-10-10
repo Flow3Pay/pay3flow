@@ -12,7 +12,7 @@
   import { wallets } from "$lib/wallet-session";
   import { walletFamily } from "$lib/wallet-execution";
   import InstructionScene from "./InstructionScene.svelte";
-  import { spotTrade } from "$lib/guides/spot/frames";
+  import { isSpotStep, spotTrade } from "$lib/guides/spot/frames";
 
   export let route: RouteCandidate;
   export let venueNames: Record<string, string> = {};
@@ -53,7 +53,7 @@
   $: copy = (key: string, params: Record<string, string | number> = {}) => t(key, params, language);
   $: steps = buildRouteTutorial(route, venueNames, providerGuidance, networkNames, copy);
   $: step = steps[chapter];
-  $: spot = step?.kind === "swap" ? spotTrade(step.pair, step.from, step.to) : null;
+  $: spot = step && isSpotStep(step) ? spotTrade(step.pair, step.from, step.to) : null;
   $: sourceFamily = walletFamily(route.execution?.from_asset.split("@", 2)[1] ?? "");
   $: walletSwap = Boolean(step?.execution && route.execution && sourceFamily && $wallets[sourceFamily]);
   $: walletProviderStep = Boolean(step?.execution && ["symbiosis", "near-intents", "cow-swap"].includes(step.provider));
@@ -222,6 +222,9 @@
           {/if}
           {#if spot && step?.url}
             <a class="walletProviderLink" data-testid="spot-market-link" href={step.url} target="_blank" rel="noreferrer noopener">{copy("Open {venue} Spot", { venue: step.venue })} · {spot.label} <span aria-hidden="true">↗</span></a>
+          {/if}
+          {#if step?.provider.toLowerCase() === "cifra-broker" && step.kind !== "transfer" && step.url}
+            <a class="walletProviderLink" data-testid="cifra-terminal-link" href={step.url} target="_blank" rel="noreferrer noopener">{copy("Open Cifra Tradernet")} <span aria-hidden="true">↗</span></a>
           {/if}
           {#if step?.offer && !step.direct && (step.kind === "buy" || step.kind === "sell") && step.url}
             <a class="walletProviderLink" data-testid="p2p-profile-link" href={step.url} target="_blank" rel="noreferrer noopener">{copy(step.offer.advertiser_profile_url ? "Open {venue} profile" : "Open {venue}", { venue: step.offer.advertiser_profile_url ? step.offer.advertiser.nickname : step.venue })} <span aria-hidden="true">↗</span></a>

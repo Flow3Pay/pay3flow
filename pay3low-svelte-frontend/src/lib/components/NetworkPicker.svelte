@@ -6,6 +6,7 @@
   import { fiatFlagUrl } from "$lib/currency-flags";
   import { lockPageScroll } from "$lib/page-scroll-lock";
   import PickerOptionCard from "./PickerOptionCard.svelte";
+  import { navigatePicker } from "$lib/picker-keyboard";
 
   type CurrencyChoice = {
     id: string;
@@ -29,7 +30,13 @@
   let dragging = false;
   let dragStartY = 0;
   let dragDistance = 0;
-  const onKeyDown = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+  let query = "";
+  let input: HTMLInputElement;
+  let focusTimer: number | undefined;
+  const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); else navigatePicker(event, dialog); };
+  const matches = (text: string, search: string) => search.normalize("NFKC").toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim().split(" ").filter(Boolean).every(term => text.normalize("NFKC").toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, "").includes(term));
+  $: visibleCurrencies = currencies.filter(currency => matches(`${currency.id} ${currency.name}`, query));
+  $: visibleNetworks = networks.filter(network => matches(`${network.id} ${network.name}`, query));
 
   function startSheetDrag(event: PointerEvent) {
     dragging = true;
@@ -59,9 +66,12 @@
     if (open === wasOpen) return;
     wasOpen = open;
     if (open) {
+      query = "";
+      focusTimer = window.setTimeout(() => input?.focus(), 80);
       unlockPage = lockPageScroll();
       window.addEventListener("keydown", onKeyDown);
     } else {
+      if (focusTimer) window.clearTimeout(focusTimer);
       unlockPage?.();
       unlockPage = undefined;
       window.removeEventListener("keydown", onKeyDown);
@@ -70,6 +80,7 @@
   onDestroy(() => {
     unlockPage?.();
     if (typeof window !== "undefined") window.removeEventListener("keydown", onKeyDown);
+    if (typeof window !== "undefined" && focusTimer) window.clearTimeout(focusTimer);
   });
 </script>
 
@@ -79,21 +90,22 @@
       <button type="button" class="sheetHandle" aria-label={t(mode === "currency" ? "Close currency picker by dragging down" : "Close network picker by dragging down", {}, $locale)} on:pointerdown={startSheetDrag} on:pointermove={moveSheetDrag} on:pointerup={endSheetDrag} on:pointercancel={endSheetDrag}>
         <span aria-hidden="true"></span>
       </button>
+      <div class="searchRow"><label class="searchBox"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.7" /><path d="m20 20-4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg><input bind:this={input} bind:value={query} placeholder={t(mode === "currency" ? "Currency or digital asset" : "Search blockchains", {}, $locale)} aria-label={t(mode === "currency" ? "Currencies and digital assets" : "Blockchains", {}, $locale)} /></label><button type="button" class="backButton" on:click={onClose} aria-label={t(mode === "currency" ? "Close currency picker" : "Close network picker", {}, $locale)}><kbd>esc</kbd><svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg></button></div>
       <div class="titleBar"><div class="titleGroup">
         <h2 class="title">{t(mode === "currency" ? "Choose currency" : "Choose network", {}, $locale)}</h2>
-      </div><button type="button" class="backButton" on:click={onClose} aria-label={t(mode === "currency" ? "Close currency picker" : "Close network picker", {}, $locale)}><svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button></div>
+      </div></div>
       <div class="body"><div class="methods" role="listbox" aria-label={t(mode === "currency" ? "Currencies" : "Crypto networks", {}, $locale)}><section class="section">
         <h3>{t(mode === "currency" ? "Available currencies" : "Available networks", {}, $locale)}</h3>
         {#if mode === "currency"}
-          {#each currencies as currency (currency.id)}
+          {#each visibleCurrencies as currency (currency.id)}
             {@const isSelected = currency.id === selectedCurrency}
-            <PickerOptionCard name={currency.id} meta={currency.name} iconUrl={fiatFlagUrl(currency.id)} initials={currency.mark} color={currency.color} selected={isSelected} onSelect={() => onSelectCurrency(currency.id)} />
-          {/each}
+            <PickerOptionCard name={currency.id} meta={currency.name} category={t("Currencies", {}, $locale)} iconUrl={fiatFlagUrl(currency.id)} initials={currency.mark} color={currency.color} selected={isSelected} onSelect={() => onSelectCurrency(currency.id)} />
+          {:else}<div class="empty">{t("Try a different search.", {}, $locale)}</div>{/each}
         {:else}
-          {#each networks as network (network.id)}
+          {#each visibleNetworks as network (network.id)}
             {@const isSelected = network.id === selected?.id}
-            <PickerOptionCard name={network.name} iconUrl={networkIcon(network.name)} initials={network.name.slice(0, 2).toUpperCase()} color="#eef2ea" selected={isSelected} onSelect={() => onSelect(network)} />
-          {/each}
+            <PickerOptionCard name={network.name} category={t("Network", {}, $locale)} iconUrl={networkIcon(network.name)} initials={network.name.slice(0, 2).toUpperCase()} color="#eef2ea" selected={isSelected} onSelect={() => onSelect(network)} />
+          {:else}<div class="empty">{t("No compatible blockchains found", {}, $locale)}</div>{/each}
         {/if}
       </section></div></div>
     </div>
@@ -101,742 +113,16 @@
 {/if}
 
 <style>
-.backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1100;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: rgba(15, 17, 14, 0.66);
-  backdrop-filter: blur(18px) saturate(120%);
-  -webkit-backdrop-filter: blur(18px) saturate(120%);
-  animation: backdropIn 0.2s ease-out;
-  touch-action: none;
-}
-
-.dialog {
-  width: min(100%, 860px);
-  max-height: min(720px, 92vh);
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.72);
-  border-radius: 30px;
-  background: rgba(250, 250, 246, 0.98);
-  box-shadow: none;
-  animation: dialogIn 0.28s cubic-bezier(0.22, 1, 0.36, 1);
-  touch-action: auto;
-  overscroll-behavior: contain;
-}
-
-.titleBar,
-.titleGroup,
-.searchBox,
-.countryButton,
-.methodRow {
-  display: flex;
-  align-items: center;
-}
-
-.titleBar {
-  min-height: 78px;
-  justify-content: space-between;
-  padding: 15px 21px;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.titleGroup {
-  gap: 10px;
-}
-
-.title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 750;
-  letter-spacing: -0.035em;
-}
-
-.backButton {
-  display: grid;
-  width: 42px;
-  height: 42px;
-  place-items: center;
-  border-radius: 13px;
-  color: var(--color-text-soft);
-  transition: background 0.14s ease, transform 0.14s ease;
-}
-
-.backButton:hover {
-  background: var(--color-panel);
-  transform: translateX(-1px);
-}
-
-.sheetHandle {
-  display: none;
-}
-
-.searchRow {
-  padding: 15px 20px;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.searchBox {
-  height: 52px;
-  gap: 11px;
-  padding: 0 16px;
-  border: 1px solid transparent;
-  border-radius: 16px;
-  background: #efefe9;
-  color: var(--color-text-faint);
-  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
-}
-
-.searchBox:focus-within {
-  border-color: var(--color-violet);
-  border-width: var(--border-highlight-width);
-  background: #fff;
-  box-shadow: none; outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 2px;
-}
-
-.searchBox input {
-  width: 100%;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 650;
-}
-
-.searchBox input::placeholder {
-  color: var(--color-text-faint);
-}
-
-.body {
-  display: grid;
-  height: min(530px, calc(92vh - 160px));
-  min-height: 360px;
-  grid-template-columns: minmax(0, 1fr) 255px;
-}
-
-.methods,
-.countries {
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-}
-
-.methods {
-  padding: 13px 17px 26px;
-}
-
-.section + .section {
-  margin-top: 14px;
-}
-
-.section h3 {
-  margin: 0;
-  padding: 10px 11px 8px;
-  color: var(--color-text-faint);
-  font-size: 12px;
-  font-weight: 850;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-}
-
-.methodRow {
-  width: 100%;
-  gap: 13px;
-  padding: 10px;
-  border: 1px solid transparent;
-  border-radius: 17px;
-  text-align: left;
-  transition: background 0.14s ease, border-color 0.14s ease, transform 0.14s ease;
-}
-
-.methodRow:hover {
-  background: #fff;
-  border-color: var(--color-border);
-  border-width: var(--border-highlight-width);
-  transform: translateX(2px);
-}
-
-.methodRow[data-selected] {
-  border-color: rgba(117, 88, 246, 0.16);
-  border-width: var(--border-highlight-width);
-  background: var(--color-violet-soft);
-}
-
-.methodLogo {
-  position: relative;
-  display: grid;
-  width: 46px;
-  height: 46px;
-  flex: 0 0 auto;
-  place-items: center;
-  border: 2px solid rgba(255, 255, 255, 0.72);
-  border-radius: 15px;
-  color: #fff;
-  box-shadow: none;
-  font-size: 12px;
-  font-weight: 850;
-  letter-spacing: 0.03em;
-}
-
-.methodLogo img {
-  position: absolute;
-  inset: 5px;
-  width: calc(100% - 10px);
-  height: calc(100% - 10px);
-  border-radius: 10px;
-  object-fit: contain;
-}
-
-.currencyLogo {
-  color: #fff;
-  font-size: 22px;
-  font-weight: 800;
-}
-
-.methodCopy,
-.countryCopy,
-.empty {
-  display: flex;
-  flex-direction: column;
-}
-
-.methodCopy {
-  min-width: 0;
-  flex: 1;
-  gap: 3px;
-}
-
-.methodName {
-  overflow: hidden;
-  font-size: 13px;
-  font-weight: 780;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.methodMeta {
-  color: var(--color-text-faint);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.check,
-.countryCheck {
-  flex: 0 0 auto;
-  color: var(--color-violet);
-}
-
-.countries {
-  padding: 19px 14px;
-  border-left: 1px solid var(--color-border);
-  background: #efefe9;
-}
-
-.countryHead {
-  padding: 0 9px 14px;
-}
-
-.countryHead h3 {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.countryHead span {
-  display: block;
-  margin-top: 4px;
-  color: var(--color-text-faint);
-  font-size: 12px;
-}
-
-.countryList {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.countryButton {
-  width: 100%;
-  gap: 10px;
-  padding: 10px;
-  border: 1px solid transparent;
-  border-radius: 15px;
-  text-align: left;
-  transition: background 0.14s ease, border-color 0.14s ease;
-}
-
-.countryButton:hover,
-.countryButton[aria-pressed="true"] {
-  border-color: var(--color-border);
-  border-width: var(--border-highlight-width);
-  background: #fff;
-}
-
-.countryMark {
-  display: grid;
-  width: 38px;
-  height: 38px;
-  flex: 0 0 auto;
-  place-items: center;
-  border-radius: 12px;
-  background: var(--color-primary);
-  color: var(--color-accent);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.countryCopy {
-  min-width: 0;
-  flex: 1;
-  gap: 2px;
-}
-
-.countryCopy strong {
-  overflow: hidden;
-  font-size: 12px;
-  font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.countryCopy span {
-  color: var(--color-text-faint);
-  font-size: 12px;
-}
-
-.empty {
-  min-height: 250px;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  color: var(--color-text-faint);
-  text-align: center;
-}
-
-.empty strong {
-  color: var(--color-text);
-  font-size: 14px;
-}
-
-.empty span {
-  font-size: 12px;
-}
-
-@media (max-width: 700px) {
-  .backdrop {
-    align-items: end;
-    padding: 0;
-  }
-
-  .dialog {
-    max-height: 94vh;
-    border-right: 0;
-    border-bottom: 0;
-    border-left: 0;
-    border-radius: 26px 26px 0 0;
-  }
-
-  .body {
-    display: flex;
-    height: min(650px, calc(94vh - 160px));
-    flex-direction: column-reverse;
-  }
-
-  .countries {
-    flex: 0 0 auto;
-    overflow-x: auto;
-    overflow-y: hidden;
-    border-bottom: 1px solid var(--color-border);
-    border-left: 0;
-    padding: 12px 14px;
-  }
-
-  .countryHead {
-    display: none;
-  }
-
-  .countryList {
-    flex-direction: row;
-  }
-
-  .countryButton {
-    width: auto;
-    min-width: 160px;
-  }
-
-  .methods {
-    flex: 1;
-  }
-
-}
-
-:global(html[data-theme="dark"]) .dialog {
-  border-color: var(--color-border-strong);
-  background: rgba(25, 25, 25, 0.99);
-  box-shadow: none;
-}
-
-:global(html[data-theme="dark"]) .titleBar {
-  background: #202020;
-}
-
-:global(html[data-theme="dark"]) .backButton,
-:global(html[data-theme="dark"]) .searchBox,
-:global(html[data-theme="dark"]) .countryHead,
-:global(html[data-theme="dark"]) .countryMark {
-  border-color: #3b3b3b;
-  background: #2a2a2a;
-}
-
-:global(html[data-theme="dark"]) .searchBox:focus-within {
-  border-color: var(--color-accent-strong);
-  border-width: var(--border-highlight-width);
-  background: #202020;
-}
-
-:global(html[data-theme="dark"]) .methodRow:hover,
-:global(html[data-theme="dark"]) .countryButton:hover,
-:global(html[data-theme="dark"]) .countryButton[aria-pressed="true"] {
-  border-color: #4b4b4b;
-  border-width: var(--border-highlight-width);
-  background: #2d2d2d;
-}
-
-:global(html[data-theme="dark"]) .methodRow[data-selected] {
-  border-color: rgba(181, 245, 0, 0.32);
-  border-width: var(--border-highlight-width);
-  background: rgba(181, 245, 0, 0.09);
-}
-
-:global(html[data-theme="dark"]) .methodLogo {
-  border-color: rgba(255, 255, 255, 0.12);
-}
-
-@keyframes backdropIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes dialogIn {
-  from { opacity: 0; transform: translateY(16px) scale(0.975); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-/* Paper dialog variant: same interaction model, lighter surfaces and lime state accents. */
-.backdrop {
-  background: rgba(38, 57, 37, 0.28);
-  backdrop-filter: blur(9px);
-  -webkit-backdrop-filter: blur(9px);
-}
-
-.dialog {
-  border-color: var(--color-border-strong);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.98);
-  box-shadow: none;
-}
-
-.titleBar {
-  min-height: 68px;
-  padding: 12px 16px;
-  background: #fbfcfa;
-}
-
-.backButton {
-  width: 36px;
-  height: 36px;
-  border-radius: 9px;
-}
-
-.searchRow {
-  padding: 12px 16px;
-}
-
-.searchBox {
-  height: 44px;
-  border-color: var(--color-border);
-  border-radius: 9px;
-  background: #f4f8f1;
-}
-
-.searchBox:focus-within {
-  border-color: var(--color-accent-strong);
-  border-width: var(--border-highlight-width);
-  box-shadow: none; outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 2px;
-}
-
-.methods {
-  padding: 12px 16px 22px;
-}
-
-.methodRow {
-  border-radius: 10px;
-  transition: background 0.14s ease, border-color 0.14s ease, transform 0.14s ease, box-shadow 0.14s ease;
-}
-
-.methodRow:hover {
-  border-color: #b7cead;
-  border-width: var(--border-highlight-width);
-  background: #fbfcfa;
-  box-shadow: none;
-}
-
-.methodRow[data-selected] {
-  border-color: #cce29a;
-  border-width: var(--border-highlight-width);
-  background: #f1f8df;
-}
-
-.check,
-.countryCheck {
-  color: #6d9800;
-}
-
-.countries {
-  padding: 16px 12px;
-  background: #f4f8f1;
-}
-
-.countryButton {
-  border-radius: 10px;
-}
-
-.countryButton:hover,
-.countryButton[aria-pressed="true"] {
-  border-color: #b7cead;
-  border-width: var(--border-highlight-width);
-  background: #fff;
-}
-
-.countryMark {
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
-}
-
-/* Compact asset-picker treatment, while retaining the bank and country lists. */
-.backdrop {
-  background: rgba(8, 11, 8, 0.52);
-  /* Keep the overlay cheap while the list scrolls underneath it. */
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-
-.dialog {
-  width: min(100%, 760px);
-  max-height: min(680px, 92vh);
-  border-radius: 14px;
-  background: #fff;
-  box-shadow: none;
-}
-
-.titleBar {
-  min-height: 62px;
-  padding: 12px 18px 11px;
-  background: #fff;
-}
-
-.title {
-  font-size: 14px;
-  letter-spacing: -0.02em;
-}
-
-.searchRow {
-  padding: 12px 18px;
-}
-
-.searchBox {
-  height: 44px;
-  border-color: #dae2d2;
-  border-radius: 8px;
-  background: #f3f7ec;
-}
-
-.searchBox:focus-within {
-  border-color: #c5e092;
-  border-width: var(--border-highlight-width);
-  background: #fff;
-  box-shadow: none; outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 2px;
-}
-
-.methods {
-  padding: 10px 12px 20px;
-}
-
-.methodRow {
-  gap: 11px;
-  padding: 9px 10px;
-  border-radius: 8px;
-  transition: background 0.13s ease, border-color 0.13s ease, transform 0.13s ease, box-shadow 0.13s ease;
-}
-
-.methodRow:hover {
-  border-color: #dae2d2;
-  border-width: var(--border-highlight-width);
-  background: #f3f7ec;
-  box-shadow: none;
-}
-
-.methodRow[data-selected] {
-  border-color: #c5e092;
-  border-width: var(--border-highlight-width);
-  background: #eef7dc;
-}
-
-.methodMeta {
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-
-.check,
-.countryCheck {
-  color: #5c8c13;
-}
-
-.countries {
-  padding: 16px 12px;
-  background: #f0f3eb;
-}
-
-.countryButton {
-  border-radius: 8px;
-  transition: background 0.13s ease, border-color 0.13s ease, transform 0.13s ease;
-}
-
-.countryButton:hover,
-.countryButton[aria-pressed="true"] {
-  border-color: #dae2d2;
-  border-width: var(--border-highlight-width);
-  background: #fff;
-}
-
-/* Asset-style modal: one compact list; the country rail is intentionally not rendered. */
-.dialog {
-  width: min(100%, 430px);
-  max-height: min(680px, 88vh);
-  border-radius: 14px;
-  background: #fff;
-  box-shadow: none;
-  contain: layout paint;
-  isolation: isolate;
-}
-
-.titleBar {
-  min-height: 58px;
-  padding: 16px 18px 15px;
-  background: #fff;
-}
-
-.backButton {
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
-}
-
-.title {
-  font-size: 14px;
-  letter-spacing: -0.02em;
-}
-
-.body {
-  display: flex;
-  height: min(560px, calc(88vh - 120px));
-  min-height: 300px;
-  flex-direction: column;
-}
-
-.methods {
-  order: 1;
-  min-height: 0;
-  padding: 4px 12px 20px;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-gutter: stable;
-}
-
-.section h3 {
-  padding: 14px 10px 5px;
-  color: var(--color-text-faint);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 400;
-  letter-spacing: 0.09em;
-}
-
-.methodRow {
-  gap: 11px;
-  padding: 9px 10px;
-  border-radius: 8px;
-  contain: layout paint;
-  transition: background 0.13s ease, border-color 0.13s ease, box-shadow 0.13s ease;
-}
-
-.methodRow:hover {
-  border-color: #dae2d2;
-  border-width: var(--border-highlight-width);
-  background: #f3f7ec;
-  box-shadow: none;
-  transform: none;
-}
-
-.methodRow[data-selected] {
-  border-color: #c5e092;
-  border-width: var(--border-highlight-width);
-  background: #eef7dc;
-}
-
-@media (max-width: 700px) {
-  .sheetHandle {
-    display: flex;
-    width: 100%;
-    height: 30px;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    color: var(--color-text-faint);
-    cursor: grab;
-    touch-action: none;
-    user-select: none;
-  }
-
-  .sheetHandle:active {
-    cursor: grabbing;
-  }
-
-  .sheetHandle span {
-    display: block;
-    width: 38px;
-    height: 5px;
-    border-radius: 999px;
-    background: currentColor;
-  }
-
-  .backButton {
-    display: none;
-  }
-
-  .dialog {
-    max-height: 94vh;
-    border-radius: 14px 14px 0 0;
-    transform: translateY(var(--sheet-drag, 0px));
-    transition: transform 0.24s ease;
-  }
-
-  .dialog.dragging {
-    transition: none;
-  }
-
-  .body {
-    height: min(650px, calc(94vh - 140px));
-  }
-}
-
-
-.searchBox input { font-size: 16px; }
-.body { border-bottom: 1px solid var(--color-border); }
+  .backdrop { position: fixed; inset: 0; z-index: 1100; display: grid; place-items: center; padding: 24px; background: #11172255; backdrop-filter: blur(5px); touch-action: none; }
+  .dialog { display: flex; flex-direction: column; width: min(100%, 480px); max-height: min(620px, 88dvh); overflow: hidden; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-paper); box-shadow: 0 24px 90px #11172224, 0 3px 12px #11172212; touch-action: auto; }
+  .searchRow { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; min-height: 58px; padding: 6px 10px 6px 16px; border-bottom: 1px solid var(--color-border); }
+  .searchBox { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; min-height: 44px; color: var(--color-text-faint); }
+  .searchBox svg { flex: 0 0 auto; }.searchBox input { width: 100%; min-width: 0; border: 0; padding: 0; outline: 0; background: transparent; color: var(--color-text); font: inherit; font-size: 14px; font-weight: 450; }.searchBox input::placeholder { color: var(--color-text-faint); opacity: 1; }
+  .searchRow:focus-within { box-shadow: inset 0 -2px var(--color-focus); }
+  .titleBar { display: flex; align-items: center; gap: 8px; justify-content: space-between; padding: 10px 16px 2px; }.titleGroup { min-width: 0; }.title { margin: 0; font-size: 11px; font-weight: 500; color: var(--color-text-soft); }
+  .backButton { display: grid; place-items: center; flex: 0 0 44px; min-height: 44px; padding: 0; border-radius: 6px; color: var(--color-text-faint); }.backButton:hover { background: var(--color-panel-soft); }.backButton svg { display: none; }kbd { font: 10px var(--font-mono); border: 1px solid var(--color-border); padding: 3px 5px; border-radius: 4px; color: var(--color-text-faint); }
+  .body { display: flex; flex-direction: column; min-height: 0; overflow: hidden; flex: 1; }.methods { min-height: 0; max-height: min(480px, calc(88dvh - 106px)); overflow-y: auto; overscroll-behavior: contain; padding: 4px 8px 12px; scrollbar-gutter: stable; }.section { padding: 0 0 8px; }.section + .section { border-top: 1px solid var(--color-border); margin-top: 4px; padding-top: 7px; }.section h3 { margin: 0; padding: 7px 8px; color: var(--color-text-faint); font-size: 10px; font-weight: 500; }.empty { display: grid; gap: 6px; padding: 28px 12px; color: var(--color-text-soft); text-align: center; font-size: 12px; }.empty strong { font-size: 13px; font-weight: 600; }.empty span { color: var(--color-text-faint); }
+  .sheetHandle { display: none; }
+  @media (max-width: 700px) { .backdrop { align-items: end; padding: 0; }.dialog { width: 100%; max-height: 86dvh; border-radius: 16px 16px 0 0; transform: translateY(var(--sheet-drag, 0)); transition: transform .24s ease; padding-bottom: env(safe-area-inset-bottom); }.dialog.dragging { transition: none; }.sheetHandle { display: flex; min-height: 30px; align-items: center; justify-content: center; width: 100%; padding: 0; color: var(--color-text-faint); }.sheetHandle span { width: 36px; height: 4px; background: currentColor; border-radius: 99px; }.searchRow { min-height: 56px; padding-left: 14px; }.searchBox input { font-size: 16px; }.methods { max-height: calc(86dvh - 135px); padding-bottom: 18px; }.backButton kbd { display: none; }.backButton svg { display: block; } }
+  @media (prefers-reduced-motion: reduce) { .dialog { transition: none; } }
 </style>

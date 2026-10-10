@@ -5,6 +5,7 @@ import { buildBestchangeFrames } from "./guides/bestchange/frames";
 import { buildVenueSwapFrames, swapGuideVenues } from "./guides/exchangers/frames";
 import { buildP2pProfileFrames } from "./guides/p2p/frames";
 import { buildSpotFrames, spotGuideLinks } from "./guides/spot/frames";
+import { buildCifraFrames, cifraGuideUrl, cifraTerminalUrl } from "./guides/cifra/frames";
 
 export type TutorialKind = "buy" | "sell" | "swap" | "transfer";
 export type TutorialFrameKind = "open" | "verify" | "review" | "act" | "receive";
@@ -76,6 +77,7 @@ export function buildRouteTutorial(route: RouteCandidate, names: Record<string, 
     const spotGuide = data.kind === "swap" && data.pair ? spotGuideLinks[key] : undefined;
     const spotFrames = data.kind === "swap" && data.pair ? buildSpotFrames(data, copy) : null;
     const frames = spotFrames ?? (data.kind === "transfer" ? data.frames
+      : key === "cifra-broker" ? buildCifraFrames(data, copy)
       : key === "bestchange" ? buildBestchangeFrames(data.from, data.to, copy)
       : key === "whitebird" ? buildWhitebirdFrames(copy)
       : swapGuideVenues.includes(key) ? buildVenueSwapFrames(data, copy) : data.frames);
@@ -83,8 +85,15 @@ export function buildRouteTutorial(route: RouteCandidate, names: Record<string, 
       data.checkpoint = copy("Once you open the exchanger website, this guide step is complete. Continue with the exchanger's instructions there.");
       data.summary = copy("Read the exchanger's BestChange reviews, check your exchange direction and open its website.");
     }
+    if (key === "cifra-broker" && data.kind !== "transfer") {
+      data.url = cifraTerminalUrl;
+      data.summary = copy("Use Cifra Markets in Tradernet: prepare your balance, find the market and place the order for your route.");
+      data.checkpoint = copy("Check execution and the balance");
+      data.guideSteps = [];
+    }
     const spotUrl = data.kind === "swap" && data.pair ? spotTutorialUrl(data.provider, data.pair, data.from, data.to) : null;
-    steps.push({ ...data, url: spotUrl ?? data.url, frames, notes: data.notes ?? [], guide: spotGuide ? { ...guide, description: "", steps: [], links: [key === "whitebird" && spotUrl ? { ...spotGuide, url: spotUrl } : spotGuide] } : guide, guideSteps: spotGuide ? [] : data.guideSteps ?? guide?.steps ?? [] });
+    const cifraGuide = key === "cifra-broker" && data.kind !== "transfer" ? { ...guide, description: "", steps: [], links: [{ label: copy("Cifra official video guides"), url: cifraGuideUrl }] } : undefined;
+    steps.push({ ...data, url: cifraGuide ? cifraTerminalUrl : spotUrl ?? data.url, frames, notes: data.notes ?? [], guide: cifraGuide ?? (spotGuide ? { ...guide, description: "", steps: [], links: [key === "whitebird" && spotUrl ? { ...spotGuide, url: spotUrl } : spotGuide] } : guide), guideSteps: spotGuide ? [] : data.guideSteps ?? guide?.steps ?? [] });
   };
   const swapFrames = (name: string, from: string, to: string) => [
     frame("open", "Open the exchange", copy("Open {venue}", { venue: name })),
