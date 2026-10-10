@@ -20,7 +20,7 @@ export async function sharedPage(id: string, origin: string, otc: boolean) {
     const query = new URLSearchParams(record.target.split('?')[1]);
     const russian = query.get('lang') === 'ru';
     const description = russian ? `OTC ${from} → ${to}. Сумма: ${state.amount || '—'}. Цена: ${state.type === 'market' ? 'рыночная' : state.price || '—'} ${market.quote}. Bridge, Chart и Orderbook.` : `OTC ${from} → ${to}. Amount: ${state.amount || '—'}. Price: ${state.type === 'market' ? 'market' : state.price || '—'} ${market.quote}. Bridge, Chart and Orderbook.`;
-    return { title: `${from} → ${to} · Pay3Flow OTC`, description, shareUrl, imageUrl: `${shareUrl}/preview.png`, exchangeUrl: record.target, russian, otc, imageAlt: 'Pay3Flow OTC · Bridge · Chart · Orderbook' };
+    return { title: `${from} → ${to} · Pay3Flow OTC`, description, shareUrl, imageUrl: `${shareUrl}/preview.png?v=2`, exchangeUrl: record.target, russian, otc, imageAlt: 'Pay3Flow OTC · Bridge · Chart · Orderbook' };
   }
   const target = new URL(record.target, origin);
   const guide = target.pathname.startsWith('/share/guide/');
@@ -29,7 +29,7 @@ export async function sharedPage(id: string, origin: string, otc: boolean) {
   if (!source || !destination) error(404, 'Unknown exchange pair');
   const query = guide ? guideParameters(target.searchParams) : exchangeShareParameters(target.searchParams);
   const russian = query.get('lang') === 'ru';
-  const imageUrl = guide ? `${origin}${target.pathname}/preview.png?${query}` : exchangeShareImage(origin, source, destination, query);
+  const imageUrl = guide ? `${origin}${target.pathname}/preview.png?${query}&v=2` : exchangeShareImage(origin, source, destination, query);
   const title = `${query.get('amount') ? `${query.get('amount')} ` : ''}${source} → ${destination} · Pay3Flow`;
   const description = russian ? `Откройте обмен ${source} на ${destination} с выбранными активами, банками, сетями и настройками.` : `Open ${source} to ${destination} with the selected assets, banks, networks and settings.`;
   query.delete('receive');
