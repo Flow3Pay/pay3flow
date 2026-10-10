@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { writeFile } from 'node:fs/promises';
 
 const providers = [
   { id: 'bybit-buy', slug: 'bybit', operation: 'buy', name: 'Bybit Buy', source_url: 'https://www.bybit.com', currencies: ['RUB', 'USDT', 'AMD'], currency_exceptions: [], banks: [], exchange_methods: ['p2p', 'exchanger'], market_types: ['p2p', 'spot'], searchable: true },
@@ -104,4 +105,61 @@ test('one day of history uses bars without inventing previous rankings', async (
   await expect(page.locator('.singleDayNote')).toContainText('один день');
   await page.locator('.dayTarget').focus();
   await expect(page.locator('.tooltip')).toContainText('Поисков: 5');
+});
+
+test('profiles provide server-rendered messenger metadata and distinct platform PNGs', async ({ request }, testInfo) => {
+  const response = await request.get('/providers/bybit', { headers: { 'User-Agent': 'TelegramBot (like TwitterBot)' } });
+  expect(response.status()).toBe(200);
+  const html = await response.text();
+  expect(html).toMatch(/property="og:title" content="Bybit[^"\n]+Pay3Flow"/);
+  expect(html).toContain('property="og:image:width" content="1200"');
+  expect(html).toContain('property="og:image:height" content="630"');
+  expect(html).toContain('name="twitter:card" content="summary_large_image"');
+  const imageUrl = new URL(html.match(/property="og:image" content="([^"]+)"/)![1].replaceAll('&amp;', '&'));
+  expect(imageUrl.protocol).toBe('https:');
+  const image = await request.get(imageUrl.pathname + imageUrl.search);
+  expect(image.status()).toBe(200);
+  expect(image.headers()['content-type']).toBe('image/png');
+  const bytes = await image.body();
+  expect(bytes.subarray(1, 4).toString()).toBe('PNG');
+  expect(bytes.readUInt32BE(16)).toBe(1200);
+  expect(bytes.readUInt32BE(20)).toBe(630);
+  await writeFile(testInfo.outputPath('provider-messenger-preview.png'), bytes);
+  const other = await request.get('/providers/near-intents/preview.png?lang=en');
+  expect(other.status()).toBe(200);
+  expect(await other.body()).not.toEqual(bytes);
+  expect((await request.get('/providers/unknown/preview.png')).status()).toBe(404);
+});
+
+test('active tabs have a green underline and the existing share dialog previews the profile', async ({ page }) => {
+  await mock(page);
+  await page.goto('/providers/bybit?period=7d');
+  await expect(page.locator('.metric').nth(2).locator('strong')).toHaveText('700');
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(value => document.documentElement.dataset.theme = value, theme);
+    for (const name of ['Обзор', 'Направления', 'Отзывы', 'О площадке']) {
+      await page.locator('.profileTabs').getByRole('button', { name, exact: true }).click();
+      const selected = page.locator('.profileTabs button[aria-pressed="true"]');
+      await expect(selected).toHaveText(name);
+      await expect(selected).toHaveCSS('border-bottom-color', 'rgb(181, 245, 0)');
+      await expect(selected).toHaveCSS('border-bottom-width', '3px');
+      for (const button of await page.locator('.profileTabs button[aria-pressed="false"]').all()) {
+        await expect(button).toHaveCSS('border-bottom-color', 'rgba(0, 0, 0, 0)');
+      }
+    }
+  }
+  const share = page.getByRole('button', { name: 'Поделиться профилем', exact: true });
+  await expect(share.locator('img')).toHaveAttribute('src', '/icons/ui/share.png');
+  await share.click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator('input')).toHaveValue(page.url());
+  const preview = dialog.locator('.sharePreview');
+  await expect.poll(() => preview.evaluate(image => (image as HTMLImageElement).naturalWidth)).toBe(1200);
+  await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (value: string) => { document.documentElement.dataset.copiedProfile = value; } } }));
+  await dialog.getByRole('button', { name: 'Скопировать ссылку', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.copiedProfile)).toBe(page.url());
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(share).toBeFocused();
 });
