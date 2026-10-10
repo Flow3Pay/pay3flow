@@ -7,6 +7,7 @@ pub mod exchange;
 pub mod matcher;
 pub mod networks;
 pub mod oauth;
+pub mod otc;
 pub mod p2p;
 pub mod pairs;
 pub mod payments;

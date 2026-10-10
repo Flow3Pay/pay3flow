@@ -1,4 +1,4 @@
-/** Frontend OTC contracts. Prices and liquidity here are explicitly demo data. */
+/** OTC contracts. Demo generators below are fixtures; the workspace uses server WS data. */
 import type { CryptoNetwork } from "../networks";
 export type OrderSide = "buy" | "sell";
 export type OrderType = "limit" | "market";
@@ -14,6 +14,8 @@ export interface OtcMarket {
   tickSize: number;
   change: number;
   volume: number;
+  high?: number;
+  low?: number;
   icon: string;
 }
 export interface BookLevel { price: number; amount: number; total: number; depth: number }
@@ -21,7 +23,7 @@ export interface Candle { time: number; open: number; high: number; low: number;
 export interface OtcTrade { id: string; time: number; side: OrderSide; price: number; amount: number }
 export interface OtcSnapshot {
   marketId: string;
-  mode: "demo";
+  mode: "demo" | "test";
   bids: BookLevel[];
   asks: BookLevel[];
   trades: OtcTrade[];

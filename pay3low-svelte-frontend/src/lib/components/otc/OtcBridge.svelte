@@ -8,6 +8,7 @@
   import type { CryptoNetwork } from "$lib/networks";
   import type { PaymentMethod } from "$lib/payment-methods";
   import { markets, formatAmount, formatPrice, prepareDemoOrder, type OtcMarket, type OtcSnapshot, type OrderSide, type OrderType, type OrderDraft } from "$lib/otc/model";
+  export let disabled = false;
   export let market: OtcMarket;
   export let snapshot: OtcSnapshot;
   export let networks: CryptoNetwork[];
@@ -46,7 +47,7 @@
   $: receive = draft ? side === "buy" ? formatAmount(draft.amount, market) : formatPrice(draft.total, market) : "";
   $: message = result.error === "liquidity" ? copy.liquidity : result.error === "precision" ? copy.minimum : result.error === "range" ? copy.tooLarge : "";
   function review() {
-    if (draft && sendNetwork && receiveNetwork) onReview({ ...draft, sendNetwork: sendNetwork.name, receiveNetwork: receiveNetwork.name });
+    if (!disabled && draft && sendNetwork && receiveNetwork) onReview({ ...draft, sendNetwork: sendNetwork.name, receiveNetwork: receiveNetwork.name });
   }
   function selectAsset(method: PaymentMethod, network?: CryptoNetwork) {
     if (!assetPicker || !network) return;
@@ -86,7 +87,7 @@
   <div class="moneyPanel exchangeMoneyPanel"><div class="panelCopy"><label for="otc-receive">{copy.receive}</label><input id="otc-receive" class="amountInput amountOutput" type="text" readonly value={receive} aria-label={copy.receive} /><small>{type === "market" ? copy.estimated : copy.atPrice}</small></div>{@render assetControls("receive", receiveMethod, receiveNetwork)}</div>
   <div class="orderDetails"><div><span>{copy.orderValue}</span><strong>{draft ? formatPrice(draft.total, market) : "—"} <small>{market.quote}</small></strong></div><div><span>{copy.execution}</span><strong>{type === "limit" ? copy.atPrice : copy.bestPrice}</strong></div><div><span>{copy.fees}</span><strong>{copy.feesValue}</strong></div></div>
   {#if message}<p class="validation" role="status">{message}</p>{/if}
-  <button class="cta" type="submit" disabled={!draft || !sendNetwork || !receiveNetwork} data-testid="otc-review">{draft ? copy.review : copy.enterAmount}<span aria-hidden="true">↗</span></button>
+  <button class="cta" type="submit" disabled={disabled || !draft || !sendNetwork || !receiveNetwork} data-testid="otc-review">{draft ? copy.review : copy.enterAmount}<span aria-hidden="true">↗</span></button>
 </form>
 {#if assetPicker}
   <PaymentMethodPicker open title={assetPicker === "send" ? copy.chooseSendAsset : copy.chooseReceiveAsset} role={assetPicker === "send" ? "sender" : "recipient"} {networks} paymentMethods={assetMethods} selected={assetPicker === "send" ? sendMethod : receiveMethod} selectedNetwork={assetPicker === "send" ? sendNetwork : receiveNetwork} onClose={() => assetPicker = null} onSelect={selectAsset} />

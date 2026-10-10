@@ -1,4 +1,8 @@
+import { markets, type DemoOrder } from "../src/lib/otc/model";
+import { mockOtcSocket, testOtcSnapshot } from "./otc-ws-fixture";
 import { expect, test, type Page } from "@playwright/test";
+
+test.beforeEach(async ({ page }) => { await mockOtcSocket(page); });
 
 async function openOtc(page: Page, hash = "#/otc") {
   await page.addInitScript(() => localStorage.setItem("pay3flow-locale", "en"));
@@ -125,7 +129,10 @@ test("book selection creates, retains and cancels a demo limit order", async ({ 
   await expect(page.locator("#otc-orders-content")).toContainText("Your first order starts here.");
   await page.getByRole("tab", { name: "Order history", exact: true }).click();
   await expect(page.locator("#otc-history-content")).toContainText("Cancelled");
-  expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem("pay3flow.otc.demo-orders.v1")!)[0].status)).toBe("cancelled");
+  await page.reload();
+  await page.getByRole("tab", { name: "Order history", exact: true }).click();
+  await expect(page.locator("#otc-history-content")).toContainText("Cancelled");
+  expect(await page.evaluate(() => sessionStorage.getItem("pay3flow.otc.demo-orders.v1"))).toBeNull();
 });
 
 test("invalid amounts and exhausted liquidity cannot create orders", async ({ page }) => {
@@ -349,4 +356,43 @@ test("chart hover shows both line points, the full date and side volumes", async
   expect(popup.x + popup.width).toBeLessThanOrEqual(box.x + box.width);
   await page.getByRole("heading", { name: "Trade on your terms." }).hover();
   await expect(tooltip).toHaveCount(0);
+});
+
+
+test("OTC uses server data, waits for acknowledgments and recovers without replaying orders", async ({ page }) => {
+  let acknowledge: (() => void) | undefined;
+  let disconnect: (() => void) | undefined;
+  let creates = 0;
+  let orders: DemoOrder[] = [];
+  await page.routeWebSocket("**/ws/otc", socket => {
+    disconnect = () => socket.close();
+    socket.onMessage(raw => {
+      const message = JSON.parse(String(raw));
+      if (message.type === "subscribe") socket.send(JSON.stringify(testOtcSnapshot({ ...markets[0], price: 0.02 }, orders)));
+      else if (message.type === "create") {
+        creates++;
+        const order: DemoOrder = { ...message.order, id: message.id, createdAt: Date.now(), status: "open" };
+        acknowledge = () => { orders = [order]; socket.send(JSON.stringify({ type: "order", id: message.id, order })); };
+      } else if (message.type === "cancel") socket.send(JSON.stringify({ type: "error", id: message.id, code: "order_not_open" }));
+    });
+  });
+  await openOtc(page);
+  await expect(page.getByTestId("otc-connection")).toHaveAttribute("data-state", "connected");
+  await expect(page.locator(".marketStat.last")).toContainText("0.02000");
+  await page.getByTestId("otc-review").click();
+  const confirm = page.getByRole("button", { name: "Create demo order", exact: true });
+  await confirm.click();
+  await expect(confirm).toBeDisabled();
+  await expect.poll(() => creates).toBe(1);
+  await expect(page.locator("#otc-orders-content tbody tr")).toHaveCount(0);
+  acknowledge!();
+  await expect(page.locator("#otc-orders-content tbody tr")).toHaveCount(1);
+  disconnect!();
+  await expect(page.getByTestId("otc-connection")).toHaveAttribute("data-state", "reconnecting");
+  await expect(page.getByTestId("otc-review")).toBeDisabled();
+  await expect(page.getByTestId("otc-connection")).toHaveAttribute("data-state", "connected");
+  expect(creates).toBe(1);
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page.locator(".orderNotification")).toContainText("The server has not confirmed");
+  await expect(page.locator("#otc-orders-content tbody tr")).toHaveCount(1);
 });

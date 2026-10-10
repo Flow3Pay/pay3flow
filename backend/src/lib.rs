@@ -14,6 +14,7 @@ pub mod external_reviews;
 pub mod market_prices;
 pub mod networks;
 pub mod observability;
+pub mod otc;
 pub mod p2p;
 pub mod pairs;
 pub mod payments;

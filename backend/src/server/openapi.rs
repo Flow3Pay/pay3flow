@@ -910,6 +910,15 @@ const OPERATIONS: &[Operation] = &[
         false,
     ),
     (
+        "/ws/otc",
+        "get",
+        "Test OTC WebSocket",
+        "Test OTC snapshots, charts, session orders, create and cancel commands. See docs/otc-websocket.md. No settlement or real trading.",
+        "WebSockets",
+        false,
+        false,
+    ),
+    (
         "/ws/rates",
         "get",
         "Live rates WebSocket",
@@ -1186,6 +1195,7 @@ fn success_response(path: &str, method: &str) -> Value {
         }),
         ("/api/exchange/orders/{id}/live", "get")
         | ("/ws", "get")
+        | ("/ws/otc", "get")
         | ("/ws/rates", "get")
         | ("/ws/payments", "get")
         | ("/ws/p2p/routes", "get") => json!({

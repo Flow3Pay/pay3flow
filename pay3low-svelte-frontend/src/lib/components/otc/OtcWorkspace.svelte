@@ -2,10 +2,11 @@
   import { onMount } from "svelte";
   import { fade, slide } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
-  import { fetchNetworks } from "$lib/networks";
+  import { wsUrl } from "$lib/api";
+  import { OtcClient, type Connection } from "$lib/otc/client";
   import { locale } from "$lib/i18n";
   import { otcCopy } from "$lib/otc/copy";
-  import { demoSnapshot, formatAmount, formatPrice, marketFromHash, markets, otcFallbackNetworks, type OtcMarket, type DemoOrder, type OrderDraft, type OrderSide, type OrderType } from "$lib/otc/model";
+  import { formatAmount, formatPrice, marketFromHash, markets, otcFallbackNetworks, type OtcMarket, type OtcSnapshot, type Candle, type ChartRange, type DemoOrder, type OrderDraft, type OrderSide, type OrderType } from "$lib/otc/model";
   import OtcPanel from "./OtcPanel.svelte";
   import OtcPanelToggle from "./OtcPanelToggle.svelte";
   import OtcChart from "./OtcChart.svelte";
@@ -40,11 +41,16 @@
     observer.observe(node);
     return { destroy() { observer.disconnect(); } };
   }
+  let client: OtcClient | null = null;
+  let connection: Connection = "connecting";
+  let pending = false;
+  let snapshot: OtcSnapshot = { marketId: market.id, mode: "test", bids: [], asks: [], trades: [] };
+  let candles: Record<ChartRange, Candle[]> = { "1D": [], "7D": [], "1M": [], "1Y": [] };
   let orders: DemoOrder[] = [];
   let reviewDraft: OrderDraft | null = null;
   let notification = "";
   let notificationTimer: ReturnType<typeof setTimeout> | undefined;
-  const storageKey = "pay3flow.otc.demo-orders.v1";
+  const sessionKey = "pay3flow.otc.test-session.v1";
   const layoutKey = "pay3flow.otc.panels.v1";
   const settlementKey = "pay3flow.otc.settlement.v1";
   let mounted = false;
@@ -55,15 +61,18 @@
     try { localStorage.setItem(settlementKey, JSON.stringify({ marketId: market.id, side, sendNetworkId, receiveNetworkId })); } catch { /* Selection still works without storage. */ }
   }
   $: copy = otcCopy($locale);
-  $: snapshot = demoSnapshot(market);
+  $: ready = connection === "connected" && snapshot.marketId === market.id;
   $: marketOrders = orders.filter((order) => order.marketId === market.id);
   $: openOrders = marketOrders.filter((order) => order.status === "open");
   $: history = marketOrders.filter((order) => order.status !== "open");
-  $: high = market.price * 1.014;
-  $: low = market.price * .959;
+  $: high = market.high ?? market.price;
+  $: low = market.low ?? market.price;
   function setMarket(next: OtcMarket, resetSide = true) {
     if (next.id === market.id) return;
-    market = next; marketId = next.id; price = String(next.price); if (resetSide) chooseSide("buy"); orderType = "limit"; reviewDraft = null;
+    market = next; marketId = next.id; price = String(next.price);
+    snapshot = { marketId: next.id, mode: "test", bids: [], asks: [], trades: [] };
+    candles = { "1D": [], "7D": [], "1M": [], "1Y": [] };
+    client?.subscribe(next.id); if (resetSide) chooseSide("buy"); orderType = "limit"; reviewDraft = null;
   }
   function selectMarket() {
     const next = markets.find((item) => item.id === marketId);
@@ -93,18 +102,29 @@
     clearTimeout(notificationTimer);
     notificationTimer = setTimeout(() => notification = "", 4500);
   }
-  function persistOrders() {
-    try { sessionStorage.setItem(storageKey, JSON.stringify(orders.slice(0, 100))); } catch { /* Orders still work within the current page. */ }
-  }
-  function confirmOrder() {
-    if (!reviewDraft) return;
+  async function confirmOrder() {
+    if (!reviewDraft || !client || !ready || pending) return;
     const draft = reviewDraft;
-    const order: DemoOrder = { id: crypto.randomUUID(), marketId: draft.marketId, side: draft.side, type: draft.type, amount: draft.amount, price: draft.price, sendNetwork: draft.sendNetwork, receiveNetwork: draft.receiveNetwork, createdAt: Date.now(), status: draft.type === "market" ? "simulated" : "open" };
-    orders = [order, ...orders].slice(0, 100); persistOrders(); reviewDraft = null; activityOpen = true;
-    tab = order.type === "market" ? "history" : "orders";
-    notify(order.type === "market" ? copy.orderSimulated : copy.orderCreated);
+    pending = true;
+    try {
+      const order = await client.createOrder(draft);
+      orders = [order, ...orders.filter((item) => item.id !== order.id)];
+      reviewDraft = null; activityOpen = true;
+      tab = order.type === "market" ? "history" : "orders";
+      notify(order.type === "market" ? copy.orderSimulated : copy.orderCreated);
+    } catch { notify(copy.requestFailed); }
+    finally { pending = false; }
   }
-  function cancelOrder(id: string) { orders = orders.map((order) => order.id === id ? { ...order, status: "cancelled" } : order); persistOrders(); notify(copy.orderCancelled); }
+  async function cancelOrder(id: string) {
+    if (!client || !ready || pending) return;
+    pending = true;
+    try {
+      const order = await client.cancelOrder(id);
+      orders = orders.map((item) => item.id === order.id ? order : item);
+      notify(copy.orderCancelled);
+    } catch { notify(copy.requestFailed); }
+    finally { pending = false; }
+  }
   function navigateTab(event: KeyboardEvent) {
     const tabs = ["trades", "orders", "history"] as const;
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
@@ -114,17 +134,10 @@
     document.getElementById(`otc-${tab}-tab`)?.focus();
   }
   function timeLabel(time: number) { return new Date(time).toLocaleTimeString("en-GB", { hour12: false, timeZone: "UTC" }); }
-  function validOrder(value: unknown): value is DemoOrder {
-    if (!value || typeof value !== "object") return false;
-    const order = value as DemoOrder;
-    return typeof order.id === "string" && markets.some((item) => item.id === order.marketId) && ["buy", "sell"].includes(order.side) && ["limit", "market"].includes(order.type) && ["open", "cancelled", "simulated"].includes(order.status) && [order.price, order.amount, order.createdAt].every((number) => typeof number === "number" && Number.isFinite(number) && number > 0);
-  }
   onMount(() => {
-    let disposed = false;
     const media = matchMedia("(prefers-reduced-motion: reduce)");
     const motionChanged = () => motionDuration = media.matches ? 0 : 320;
     motionChanged(); media.addEventListener("change", motionChanged);
-    fetchNetworks().then((items) => { if (!disposed && items.length) networks = items; }).catch(() => {});
     setMarket(marketFromHash(location.hash));
     try {
       const saved = JSON.parse(localStorage.getItem(settlementKey) ?? "null");
@@ -150,14 +163,30 @@
     observer.observe(chartColumn);
     positionToggles();
     mounted = true;
-    try { const stored: unknown = JSON.parse(sessionStorage.getItem(storageKey) ?? "[]"); if (Array.isArray(stored)) orders = stored.filter(validOrder).slice(0, 100); } catch { /* Ignore damaged demo storage. */ }
+    let sessionId = crypto.randomUUID();
+    try {
+      const saved = sessionStorage.getItem(sessionKey);
+      if (saved && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(saved)) sessionId = saved as `${string}-${string}-${string}-${string}-${string}`;
+      sessionStorage.setItem(sessionKey, sessionId);
+    } catch { /* A temporary session still works without browser storage. */ }
+    client = new OtcClient(wsUrl("/ws/otc"), sessionId, market.id, {
+      connection: (value) => connection = value,
+      state: (state) => {
+        const first = snapshot.bids.length === 0;
+        market = state.market; snapshot = state.snapshot; candles = state.candles;
+        orders = state.orders; networks = state.networks;
+        if (first) price = String(state.market.price);
+      },
+      error: () => notify(copy.requestFailed),
+    });
     const hashChanged = () => setMarket(marketFromHash(location.hash));
     window.addEventListener("hashchange", hashChanged);
-    return () => { disposed = true; media.removeEventListener("change", motionChanged); observer.disconnect(); clearTimeout(notificationTimer); window.removeEventListener("hashchange", hashChanged); };
+    return () => { client?.close(); client = null; media.removeEventListener("change", motionChanged); observer.disconnect(); clearTimeout(notificationTimer); window.removeEventListener("hashchange", hashChanged); };
   });
 </script>
 <section class="otcWorkspace" data-testid="otc-workspace">
   <div class="pageIntro"><div><h1>{copy.titleLead}<span class="titleAccent">{copy.titleAccent}</span></h1><p>{copy.subtitle}</p></div></div>
+  <p class="connectionStatus" role="status" data-testid="otc-connection" data-state={connection}>{ready ? copy.testConnected : connection === "reconnecting" ? copy.reconnecting : copy.connecting}</p>
   <div class="marketStrip">
     <div class="marketSelector"><img src={market.icon} width="38" height="38" alt="" /><div><div class="pairSelect"><select aria-label={copy.marketPicker} bind:value={marketId} on:change={selectMarket}>{#each markets as item}<option value={item.id}>{item.base} / {item.quote}</option>{/each}</select><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg></div><span>{market.name} <span class="marketTag">OTC</span></span></div></div>
     <div class="marketStat last"><span>{copy.lastPrice}</span><strong>{formatPrice(market.price, market)} <small>{market.quote}</small></strong></div>
@@ -167,11 +196,11 @@
     <div class="marketStat volumeStat"><span>{copy.volume}</span><strong>{market.volume.toLocaleString("en-US")} <small>{market.quote}</small></strong></div>
   </div>
   <div class="otcGrid" class:bridgeClosed={!bridgeOpen} class:bookClosed={!bookOpen} style:--panel-toggle-offset={`${toggleOffset}px`}>
-    {#if bridgeOpen}<div class="bridgeColumn" id="otc-bridge-column" transition:panelTransition={{ duration: motionDuration }}><OtcPanel id="otc-bridge" title={copy.bridge} collapsible={false}><span slot="actions" class="panelMeta">OTC</span><OtcBridge {market} {snapshot} {networks} bind:sendNetworkId bind:receiveNetworkId onSelectAsset={selectBridgeAsset} onSideChange={chooseSide} bind:amount bind:side bind:type={orderType} bind:price onReview={(draft) => reviewDraft = draft} /></OtcPanel></div>{/if}
+    {#if bridgeOpen}<div class="bridgeColumn" id="otc-bridge-column" transition:panelTransition={{ duration: motionDuration }}><OtcPanel id="otc-bridge" title={copy.bridge} collapsible={false}><span slot="actions" class="panelMeta">OTC</span><OtcBridge disabled={!ready || pending} {market} {snapshot} {networks} bind:sendNetworkId bind:receiveNetworkId onSelectAsset={selectBridgeAsset} onSideChange={chooseSide} bind:amount bind:side bind:type={orderType} bind:price onReview={(draft) => reviewDraft = draft} /></OtcPanel></div>{/if}
     <div class="bridgeToggle"><OtcPanelToggle title={copy.bridge} controls="otc-bridge-column" bind:expanded={bridgeOpen} /></div>
-    <div class="chartColumn" id="otc-chart-column" bind:this={chartColumn}><OtcPanel id="otc-chart" title={copy.chart} collapsible={false}>{#key market.id}<OtcChart {market} />{/key}</OtcPanel></div>
+    <div class="chartColumn" id="otc-chart-column" bind:this={chartColumn}><OtcPanel id="otc-chart" title={copy.chart} collapsible={false}>{#key market.id}<OtcChart {market} candleSets={candles} />{/key}</OtcPanel></div>
     <div class="bookToggle"><OtcPanelToggle title={copy.book} controls="otc-book-column" bind:expanded={bookOpen} direction="right" /></div>
-    {#if bookOpen}<div class="bookColumn" id="otc-book-column" transition:panelTransition={{ duration: motionDuration }}><OtcPanel id="otc-book" title={copy.book} collapsible={false}>{#key market.id}<OtcOrderbook {market} {snapshot} selectedPrice={orderType === "limit" ? Number(price) : null} onSelect={selectPrice} />{/key}</OtcPanel></div>{/if}
+    {#if bookOpen}<div class="bookColumn" id="otc-book-column" transition:panelTransition={{ duration: motionDuration }}><OtcPanel id="otc-book" title={copy.book} collapsible={false}>{#key market.id}{#if snapshot.bids.length && snapshot.asks.length}<OtcOrderbook {market} {snapshot} selectedPrice={orderType === "limit" ? Number(price) : null} onSelect={selectPrice} />{/if}{/key}</OtcPanel></div>{/if}
   </div>
   <div class="activityToggle"><OtcPanelToggle title={copy.activity} controls="otc-activity-section" bind:expanded={activityOpen} vertical /></div>
   {#if activityOpen}<div class="activitySection" id="otc-activity-section" transition:slide={{ duration: motionDuration, easing: cubicOut }}><OtcPanel id="otc-activity" title={copy.activity} collapsible={false}><span slot="actions" class="panelMeta">{market.base}/{market.quote}</span>
@@ -180,11 +209,11 @@
     {#key tab}<div class="activityContent" use:measureActivity in:fade={{ duration: motionDuration * .65, easing: cubicOut }} out:fade={{ duration: motionDuration * .4 }} on:introstart={(event) => { event.currentTarget.inert = false; event.currentTarget.removeAttribute("aria-hidden"); if (event.currentTarget.id === `otc-${tab}-content`) activityHeight = event.currentTarget.getBoundingClientRect().height; }} on:outrostart={(event) => { event.currentTarget.inert = true; event.currentTarget.setAttribute("aria-hidden", "true"); }} role="tabpanel" id={`otc-${tab}-content`} aria-labelledby={`otc-${tab}-tab`} tabindex="0">
       {#if tab === "trades"}
         <div class="splitBooks">
-          <div class="buyBook" data-testid="otc-buy-book"><OtcPanel id="otc-buy-book" title={copy.bids} collapsible={false}>{#key market.id}<OtcOrderbook {market} {snapshot} sideOnly="buy" showTools={false} selectedPrice={orderType === "limit" ? Number(price) : null} onSelect={selectPrice} />{/key}</OtcPanel></div>
-          <div class="sellBook" data-testid="otc-sell-book"><OtcPanel id="otc-sell-book" title={copy.asks} collapsible={false}>{#key market.id}<OtcOrderbook {market} {snapshot} sideOnly="sell" showTools={false} selectedPrice={orderType === "limit" ? Number(price) : null} onSelect={selectPrice} />{/key}</OtcPanel></div>
+          <div class="buyBook" data-testid="otc-buy-book"><OtcPanel id="otc-buy-book" title={copy.bids} collapsible={false}>{#key market.id}{#if snapshot.bids.length && snapshot.asks.length}<OtcOrderbook {market} {snapshot} sideOnly="buy" showTools={false} selectedPrice={orderType === "limit" ? Number(price) : null} onSelect={selectPrice} />{/if}{/key}</OtcPanel></div>
+          <div class="sellBook" data-testid="otc-sell-book"><OtcPanel id="otc-sell-book" title={copy.asks} collapsible={false}>{#key market.id}{#if snapshot.bids.length && snapshot.asks.length}<OtcOrderbook {market} {snapshot} sideOnly="sell" showTools={false} selectedPrice={orderType === "limit" ? Number(price) : null} onSelect={selectPrice} />{/if}{/key}</OtcPanel></div>
         </div>
       {:else if (tab === "orders" ? openOrders : history).length}
-        <div class="tableScroll"><table><thead><tr><th>{copy.time} <small>UTC</small></th><th>{copy.side}</th><th>{copy.price} <small>{market.quote}</small></th><th>{copy.amount} <small>{market.base}</small></th><th>{copy.status}</th>{#if tab === "orders"}<th>{copy.action}</th>{/if}</tr></thead><tbody>{#each (tab === "orders" ? openOrders : history) as order}<tr><td class="muted">{timeLabel(order.createdAt)}</td><td><span class="sidePill" class:sell={order.side === "sell"}>{order.side === "buy" ? copy.buy : copy.sell}</span></td><td>{formatPrice(order.price, market)}</td><td>{formatAmount(order.amount, market)}</td><td><span class="statusPill" class:isOpen={order.status === "open"}>{order.status === "open" ? copy.open : order.status === "cancelled" ? copy.cancelled : copy.simulated}</span></td>{#if tab === "orders"}<td><button type="button" class="cancelOrder" on:click={() => cancelOrder(order.id)}>{copy.cancel}</button></td>{/if}</tr>{/each}</tbody></table></div>
+        <div class="tableScroll"><table><thead><tr><th>{copy.time} <small>UTC</small></th><th>{copy.side}</th><th>{copy.price} <small>{market.quote}</small></th><th>{copy.amount} <small>{market.base}</small></th><th>{copy.status}</th>{#if tab === "orders"}<th>{copy.action}</th>{/if}</tr></thead><tbody>{#each (tab === "orders" ? openOrders : history) as order}<tr><td class="muted">{timeLabel(order.createdAt)}</td><td><span class="sidePill" class:sell={order.side === "sell"}>{order.side === "buy" ? copy.buy : copy.sell}</span></td><td>{formatPrice(order.price, market)}</td><td>{formatAmount(order.amount, market)}</td><td><span class="statusPill" class:isOpen={order.status === "open"}>{order.status === "open" ? copy.open : order.status === "cancelled" ? copy.cancelled : copy.simulated}</span></td>{#if tab === "orders"}<td><button type="button" class="cancelOrder" disabled={!ready || pending} on:click={() => cancelOrder(order.id)}>{copy.cancel}</button></td>{/if}</tr>{/each}</tbody></table></div>
       {:else}
         <div class="emptyState"><div class="emptyIcon"><svg width="27" height="27" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 4h14v16H5V4Zm4 5h6m-6 4h6m-6 4h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" /></svg></div><h3>{tab === "orders" ? copy.noOrders : copy.noHistory}</h3><p>{tab === "orders" ? copy.noOrdersHint : copy.noHistoryHint}</p>{#if tab === "orders"}<button type="button" on:click={() => { bridgeOpen = true; document.getElementById("otc-send")?.focus(); }}>{copy.create}<span aria-hidden="true">↗</span></button>{/if}</div>
       {/if}
@@ -192,8 +221,9 @@
   </OtcPanel></div>{/if}
 </section>
 {#if notification}<div class="orderNotification" role="status"><span aria-hidden="true">✓</span>{notification}<button type="button" aria-label={copy.close} on:click={() => notification = ""}>×</button></div>{/if}
-{#if reviewDraft}<OtcOrderReview draft={reviewDraft} {market} onClose={() => reviewDraft = null} onConfirm={confirmOrder} />{/if}
+{#if reviewDraft}<OtcOrderReview disabled={!ready || pending} draft={reviewDraft} {market} onClose={() => reviewDraft = null} onConfirm={confirmOrder} />{/if}
 <style>
+  .connectionStatus { margin: 0 0 12px; color: var(--color-text-soft); font-size: 12px; }
   .otcWorkspace { --otc-buy: var(--color-good); --otc-sell: var(--color-danger); --otc-buy-soft: color-mix(in srgb, var(--color-good) 13%, transparent); --otc-sell-soft: color-mix(in srgb, var(--color-danger) 9%, transparent); width: min(var(--layout-width), calc(100% - 2 * var(--page-gutter))); margin: 0 auto; padding: 34px 0 20px; }
   .pageIntro { position: relative; display: grid; justify-items: center; gap: 14px; margin: 0 auto 26px; text-align: center; }
   h1 { margin: 0 auto; max-width: 1000px; text-wrap: balance; font-size: clamp(44px, 5.5vw, 72px); font-weight: 650; letter-spacing: -.065em; line-height: .96; }
@@ -279,7 +309,8 @@
     .marketStat:not(.last) { flex: 1; border-top: 1px solid var(--color-border); padding-top: 12px; }
   }
   @media (max-width: 640px) {
-    .otcWorkspace { padding-top: 20px; }
+    .connectionStatus { margin: 0 0 12px; color: var(--color-text-soft); font-size: 12px; }
+  .otcWorkspace { padding-top: 20px; }
     h1 { font-size: clamp(36px, 9vw, 48px); }
     .pageIntro p { font-size: 14px; }
     .secondaryStat { display: none; }

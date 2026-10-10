@@ -120,6 +120,7 @@ public API.
 
 ```text
 GET /ws
+GET /ws/otc
 GET /ws/rates
 GET /ws/payments
 GET /api/exchange/orders/:id/live
@@ -128,3 +129,5 @@ GET /api/exchange/orders/:id/live
 The exchange live endpoint emits route and status updates while an order is
 discovering or being quoted. Clients must tolerate reconnects and duplicate
 events; the durable order endpoint remains authoritative.
+
+The OTC test workspace uses `/ws/otc` for data and order commands. See [OTC WebSocket protocol](otc-websocket.md).
