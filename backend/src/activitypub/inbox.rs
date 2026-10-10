@@ -13,7 +13,12 @@ use crate::route_engine::{Amount, Asset};
 const DEFAULT_HANDLE: &str = "pay3flow";
 
 /// Shared inbox entry-point: `POST /inbox`
-pub async fn handle(State(state): State<AppState>, uri: Uri, headers: HeaderMap, body: String) -> Response {
+pub async fn handle(
+    State(state): State<AppState>,
+    uri: Uri,
+    headers: HeaderMap,
+    body: String,
+) -> Response {
     handle_inner(&state, DEFAULT_HANDLE, &uri, &headers, body).await
 }
 
@@ -56,7 +61,9 @@ async fn inner(
         StatusCode::BAD_REQUEST
     })?;
 
-    if state.ap.require_signatures { verify_inbound_signature(state, uri, headers, &raw_body, &activity).await?; }
+    if state.ap.require_signatures {
+        verify_inbound_signature(state, uri, headers, &raw_body, &activity).await?;
+    }
 
     if let Some(id) = activity.get("id").and_then(Value::as_str) {
         match was_received(&state.pool, id).await {
@@ -214,15 +221,54 @@ fn quote_amount_fields(
 }
 
 async fn verify_inbound_signature(
-    state: &AppState, uri: &Uri, headers: &HeaderMap, body: &[u8], activity: &Value,
+    state: &AppState,
+    uri: &Uri,
+    headers: &HeaderMap,
+    body: &[u8],
+    activity: &Value,
 ) -> Result<(), StatusCode> {
-    let signature=headers.get("signature").and_then(|v|v.to_str().ok()).ok_or(StatusCode::UNAUTHORIZED)?;
-    let key_id=signature.split(',').find_map(|part|part.trim().strip_prefix("keyId=").map(|v|v.trim_matches('"'))).ok_or(StatusCode::UNAUTHORIZED)?;
-    let author=activity.get(if activity["type"]=="Proposal" {"attributedTo"}else{"actor"}).and_then(Value::as_str).ok_or(StatusCode::UNAUTHORIZED)?;
-    if key_id.split('#').next()!=Some(author) {return Err(StatusCode::UNAUTHORIZED);}
-    let pem=state.ap.delivery.fetch_public_key_for_verify(&state.ap.identity,key_id).await.map_err(|_|StatusCode::UNAUTHORIZED)?;
-    let actual:Vec<(&str,&str)>=headers.iter().filter_map(|(key,value)|value.to_str().ok().map(|v|(key.as_str(),v))).collect();
-    crate::activitypub::signature::verify(&actual,"POST",uri.path_and_query().map(|p|p.as_str()).unwrap_or("/"),body,&pem,chrono::Utc::now()).map_err(|_|StatusCode::UNAUTHORIZED)?;
+    let signature = headers
+        .get("signature")
+        .and_then(|v| v.to_str().ok())
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+    let key_id = signature
+        .split(',')
+        .find_map(|part| {
+            part.trim()
+                .strip_prefix("keyId=")
+                .map(|v| v.trim_matches('"'))
+        })
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+    let author = activity
+        .get(if activity["type"] == "Proposal" {
+            "attributedTo"
+        } else {
+            "actor"
+        })
+        .and_then(Value::as_str)
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+    if key_id.split('#').next() != Some(author) {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+    let pem = state
+        .ap
+        .delivery
+        .fetch_public_key_for_verify(&state.ap.identity, key_id)
+        .await
+        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+    let actual: Vec<(&str, &str)> = headers
+        .iter()
+        .filter_map(|(key, value)| value.to_str().ok().map(|v| (key.as_str(), v)))
+        .collect();
+    crate::activitypub::signature::verify(
+        &actual,
+        "POST",
+        uri.path_and_query().map(|p| p.as_str()).unwrap_or("/"),
+        body,
+        &pem,
+        chrono::Utc::now(),
+    )
+    .map_err(|_| StatusCode::UNAUTHORIZED)?;
     Ok(())
 }
 

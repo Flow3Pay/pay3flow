@@ -8,6 +8,7 @@ use serde_json::{json, Value};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
+#[path = "market.rs"]
 mod market;
 
 #[derive(Clone, Default)]

@@ -169,7 +169,10 @@ async fn main() -> anyhow::Result<()> {
     let market_prices = pay3flow_backend::market_prices::MarketPriceService::new()?;
     market_prices.initialize().await;
     let otc = pay3flow_backend::otc::Service::build(
-        pool.clone(), &cfg.ap_origin, &cfg.secrets_key, &cfg.jwt_secret,
+        pool.clone(),
+        &cfg.ap_origin,
+        &cfg.secrets_key,
+        &cfg.jwt_secret,
     )?;
     otc.start();
     let state = AppState::new(

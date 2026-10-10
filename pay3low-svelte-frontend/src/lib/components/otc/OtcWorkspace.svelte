@@ -239,12 +239,12 @@
       {/if}
     </div>{/key}</div>
   </OtcPanel></div>{/if}
-  <details class="settlementSection"><summary>EVER / USDT · {$locale === "ru" ? "Сделки с OTC-деском" : "OTC desk settlement"}</summary><OtcSettlement /></details>
 </section>
+<details class="settlementSection"><summary>EVER / USDT · {$locale === "ru" ? "Сделки с OTC-деском" : "OTC desk settlement"}</summary><OtcSettlement /></details>
 {#if notification}<div class="orderNotification" role="status"><span aria-hidden="true">✓</span>{notification}<button type="button" aria-label={copy.close} on:click={() => notification = ""}>×</button></div>{/if}
 {#if reviewDraft}<OtcOrderReview disabled={!ready || pending} draft={reviewDraft} {market} onClose={() => reviewDraft = null} onConfirm={confirmOrder} />{/if}
 <style>
-  .settlementSection { margin-top: 24px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--exchange-card-bg); }
+  .settlementSection { width: min(var(--layout-width), calc(100% - 2 * var(--page-gutter))); margin: 4px auto 20px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--exchange-card-bg); }
   .settlementSection > summary { padding: 18px 22px; cursor: pointer; font-size: 14px; font-weight: 600; }
   .connectionStatus { margin: 0 0 12px; color: var(--color-text-soft); font-size: 12px; }
   .otcWorkspace { --otc-buy: var(--color-good); --otc-sell: var(--color-danger); --otc-buy-soft: color-mix(in srgb, var(--color-good) 13%, transparent); --otc-sell-soft: color-mix(in srgb, var(--color-danger) 9%, transparent); width: min(var(--layout-width), calc(100% - 2 * var(--page-gutter))); margin: 0 auto; padding: 34px 0 20px; }

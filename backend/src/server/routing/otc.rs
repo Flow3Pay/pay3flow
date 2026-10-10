@@ -1,5 +1,5 @@
 //! WebSocket transport for the test OTC workspace.
-use crate::otc_preview::{Draft, TestOtc};
+use crate::otc::{Draft, TestOtc};
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::response::Response;
 use serde::Deserialize;

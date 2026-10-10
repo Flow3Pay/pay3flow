@@ -69,3 +69,9 @@ The Pay3Flow application was deployed on 2026-10-10 to the configured Lefine pro
 ## Existing fmatch line-limit failures
 
 The repository checker reports `routing/validation_helpers.rs`, `routing/entry.rs`, `routing/validation.rs`, `routing/openrouter_route_test.rs`, `routing/activity_protocol.rs`, `routing/delivery.rs`, `typesense/search.rs`, `activitypub/mod.rs` and `db.rs` above 300 lines. They were already oversized at the checkout base. This remains a release-review item; the targeted compilation and tests above do not imply that every repository-wide check passed.
+
+## Released interface restoration — 2026-10-10
+
+Restored the terminal, navigation, chart, orderbook, panel controls and activity UI from `c5b0fb1`, retaining subsequent provider/share changes from the live release. The original test market remains explicitly labeled and cannot submit settlement transfers. The EVER/USDT desk workflow is preserved in a separate expandable section below the terminal.
+
+Validation: backend `cargo check` passed; Svelte check reported zero errors/warnings; 27 frontend unit tests passed; production frontend build passed. The 38-scenario browser run passed 36 cases and found two panel-layout scope failures caused by nesting the settlement section inside the terminal. After separating the sections, all 8 targeted desktop/mobile panel and settlement checks passed. The 320px fixture screenshot had no horizontal overflow. No real signing or live deposits were enabled.

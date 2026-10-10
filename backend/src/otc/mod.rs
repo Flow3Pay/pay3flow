@@ -1,4 +1,7 @@
 //! Customer-first, non-custodial EVER/USDT OTC settlement.
+mod test_workspace;
+pub use test_workspace::{Draft, OrderType, Side, TestOtc};
+
 mod accounting;
 mod amount;
 mod booking;

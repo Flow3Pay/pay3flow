@@ -44,7 +44,7 @@ pub fn router(state: AppState) -> Router {
         )
         .with_state(());
 
-    let test_otc = crate::otc_preview::TestOtc::default();
+    let test_otc = crate::otc::TestOtc::default();
     Router::new()
         .route(
             "/ws/otc",
