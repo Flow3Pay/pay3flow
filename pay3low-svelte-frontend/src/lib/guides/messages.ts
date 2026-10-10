@@ -4,6 +4,8 @@ export const guideMessages = {
   ru: {
     ...spotMessages.ru,
     ...cifraMessages.ru,
+    "Check tokens and networks": "Сверьте токены и сети",
+    "Check the fixed tokens and networks for {from} → {to}. Connect your wallet on {venue}.": "Сверьте заданные токены и сети для {from} → {to}. Подключите кошелёк на {venue}.",
     "Select currencies": "Выберите валюты",
     "Enter the amount you want to convert from {from} to {to}.": "Введите сумму для конвертации {from} в {to}.",
     "Open the Binance advertiser profile and check the nickname and trading statistics.": "Откройте профиль контрагента Binance, сверьте никнейм и статистику сделок.",
@@ -79,6 +81,8 @@ export const guideMessages = {
   hy: {
     ...spotMessages.hy,
     ...cifraMessages.hy,
+    "Check tokens and networks": "Ստուգեք տոկեններն ու ցանցերը",
+    "Check the fixed tokens and networks for {from} → {to}. Connect your wallet on {venue}.": "Ստուգեք {from} → {to} փոխանակման սահմանված տոկեններն ու ցանցերը։ Միացրեք ձեր դրամապանակը {venue}-ում։",
     "Select currencies": "Ընտրեք արժույթները",
     "Enter the amount you want to convert from {from} to {to}.": "Մուտքագրեք գումարը՝ {from}-ը {to}-ի փոխարկելու համար։",
     "Open the Binance advertiser profile and check the nickname and trading statistics.": "Բացեք Binance-ի հայտարարատուի պրոֆիլը և ստուգեք մականունն ու գործարքների վիճակագրությունը։",

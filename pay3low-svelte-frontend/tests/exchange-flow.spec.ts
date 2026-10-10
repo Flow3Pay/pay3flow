@@ -3722,6 +3722,16 @@ for (const provider of ["symbiosis", "cow-swap", "dzengi"]) {
     if (provider !== "dzengi") {
       await expect(card.getByTestId(`${provider}-send-network`)).toHaveText("Base");
       await expect(card.getByTestId(`${provider}-receive-network`)).toHaveText("Polygon");
+      const widget = card.getByTestId(`${provider}-widget`);
+      await expect(widget).toHaveAttribute("data-provider", provider);
+      await expect(card.locator("button, select, input")).toHaveCount(0);
+      await expect(card).not.toContainText("⌄");
+      await expect(guide.locator(".frameList")).toContainText("Check the fixed tokens and networks for ETH → USDT");
+      await expect(widget).toHaveCSS("background-color", "rgb(255, 255, 255)");
+      await page.getByRole("button", { name: "Switch theme" }).click();
+      await expect(widget).toHaveCSS("background-color", provider === "cow-swap" ? "rgb(24, 24, 52)" : "rgb(34, 36, 48)");
+      await guide.getByTestId("instruction-scene").screenshot({ style: ".sceneOverlay { visibility: hidden; }", path: testInfo.outputPath(`${provider}-dark.png`) });
+      await page.getByRole("button", { name: "Switch theme" }).click();
     } else {
       await expect(card.locator('[data-side="send"]')).toContainText("ETH");
       await expect(card.locator('[data-side="receive"]')).toContainText("USDT");
@@ -3738,6 +3748,9 @@ for (const provider of ["symbiosis", "cow-swap", "dzengi"]) {
     await expect(guide.locator(".walletButton")).toHaveCount(0);
     const size = await card.evaluate(element => ({ width: element.clientWidth, content: element.scrollWidth }));
     expect(size.content).toBeLessThanOrEqual(size.width + 1);
+    const cardBounds = await card.boundingBox();
+    const actionBounds = await card.getByTestId(`${provider}-exchange-action`).boundingBox();
+    expect(actionBounds!.y + actionBounds!.height).toBeLessThanOrEqual(cardBounds!.y + cardBounds!.height);
     await guide.getByTestId("instruction-scene").screenshot({ style: ".sceneOverlay { visibility: hidden; }", path: testInfo.outputPath(`${provider}.png`) });
   });
 }
