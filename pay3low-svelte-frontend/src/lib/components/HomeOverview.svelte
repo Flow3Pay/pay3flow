@@ -9,8 +9,8 @@
   export let providerCatalog: ProviderDefinition[] = [];
   $: copy = homeContent[$locale];
 
-  // Complete selectable catalog for SSR and API outages. Live catalogs are
-  // shared with the converter after hydration, without additional requests.
+  // Keep the page available during SSR and API outages; the about page
+  // refreshes these catalogs after hydration.
   const defaultAssets = ["AMD", "RUB", "USD", "BYN", "KZT", "UAH", "USDT", "USDC", "BTC", "ETH", "ADA", "APT", "ATOM", "AVAX", "BCH", "BNB", "DAI", "DOGE", "DOT", "FDUSD", "LINK", "LTC", "MATIC", "NEAR", "SOL", "SUI", "TON", "TRX", "UNI", "XRP"];
   const defaultProviders = [
     { id: "bestchange", name: "BestChange" },
@@ -98,7 +98,7 @@
   <div class="introduction">
     <section id="about" class="aboutCard" aria-labelledby="about-heading">
       <div class="brandLine"><img class="brandMark" src="/icons/assets/pay3flow_logo.svg" alt="" aria-hidden="true" width="36" height="36" loading="lazy" decoding="async" /><span>Pay3Flow</span></div>
-      <h2 id="about-heading">{copy.aboutTitle}</h2>
+      <h1 id="about-heading">{copy.aboutTitle}</h1>
       <p>{copy.about}</p>
       <div class="marketTags"><span>P2P</span><span>{t("Exchangers", {}, $locale)}</span><span>SPOT</span><span>OTC (beta)</span></div>
     </section>
@@ -125,21 +125,21 @@
 </div>
 
 <style>
-  .overview { display: grid; gap: 24px; width: min(var(--layout-width), calc(100% - 2 * var(--page-gutter))); margin: 64px auto 0; color: var(--color-text); }
+  .overview { display: grid; gap: 24px; width: min(var(--layout-width), calc(100% - 2 * var(--page-gutter))); margin: 32px auto 48px; color: var(--color-text); }
   section { min-width: 0; padding: 32px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-card); background: var(--color-paper); scroll-margin-top: 24px; }
   .introduction { display: grid; grid-template-columns: 1fr; gap: 24px; }
   .sectionHead, .brandLine { display: flex; align-items: start; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
   .sectionHead h2 { margin: 0; max-width: 30ch; }
-  h2 { margin: 0 0 20px; font-size: clamp(24px, 2.3vw, 30px); font-weight: 750; line-height: 1.2; letter-spacing: -.045em; text-wrap: balance; }
+  h1, h2 { margin: 0 0 20px; font-size: clamp(24px, 2.3vw, 30px); font-weight: 750; line-height: 1.2; letter-spacing: -.045em; text-wrap: balance; }
   h3 { margin: 32px 0 16px; font-size: 16px; font-weight: 750; letter-spacing: -.02em; }
-  p, h2, h3, h4, a { min-width: 0; overflow-wrap: anywhere; }
+  p, h1, h2, h3, h4, a { min-width: 0; overflow-wrap: anywhere; }
   .projectCopy { min-width: 0; }
   p { margin: 0; font-size: 16px; line-height: 1.65; color: var(--color-text-soft); }
   .aboutCard { display: flex; flex-direction: column; background: var(--color-panel); }
   .brandLine { align-items: center; justify-content: start; margin-bottom: 32px; font-size: 16px; font-weight: 800; letter-spacing: -.04em; }
   .brandMark { display: block; width: 36px; height: 36px; flex: 0 0 auto; border-radius: 9px; object-fit: contain; }
   .aboutCard p { max-width: 90ch; }
-  .aboutCard h2 { font-size: clamp(30px, 3.3vw, 44px); max-width: 25ch; }
+  .aboutCard h1 { font-size: clamp(30px, 3.3vw, 44px); max-width: 25ch; }
   .marketTags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
   .marketTags span { padding: 5px 10px; border: 1px solid var(--color-border-strong); border-radius: 6px; color: var(--color-text-soft); font: 12px/1.5 var(--font-mono); }
   .coverageGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
@@ -174,7 +174,7 @@
   a.primaryLink { border-color: var(--color-accent-strong); border-width: var(--border-highlight-width); background: var(--color-accent); color: #132015; }
   a.primaryLink:hover { background: var(--color-accent-strong); }
   @media (max-width: 980px) {
-    .overview { margin-top: 44px; gap: 16px; }
+    .overview { margin-top: 24px; gap: 16px; }
     .introduction { grid-template-columns: 1fr; gap: 16px; }
     section { padding: 24px; }
     .coverageGrid { gap: 16px; }
@@ -189,7 +189,7 @@
     section { padding: 22px 18px; border-radius: 12px; }
     .sectionHead { gap: 12px; }
     .brandLine { margin-bottom: 24px; }
-    .aboutCard h2 { max-width: none; }
+    .aboutCard h1 { max-width: none; }
     .coverageGrid { gap: 24px; }
     .assetTags, .providerTags { min-height: 0; }
     article { grid-template-columns: 24px 1fr; padding: 18px; gap: 12px; }

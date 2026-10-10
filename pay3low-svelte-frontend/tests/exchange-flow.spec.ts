@@ -1,5 +1,10 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
+async function selectLanguage(page: Page, language: "en" | "ru" | "hy") {
+  await page.locator(".languageToggle").click();
+  await page.getByRole("listbox").getByRole("option", { name: { en: "English", ru: "Русский", hy: "Հայերեն" }[language], exact: true }).click();
+}
+
 async function expectNumberedTimeline(instructions: Locator, numbers: string[]) {
   const steps = instructions.getByTestId("instruction-step");
   await expect(steps).toHaveCount(numbers.length);
@@ -12,8 +17,8 @@ async function expectNumberedTimeline(instructions: Locator, numbers: string[]) 
   expect(markerShape.radius).toBe("50%");
 }
 
-async function openApp(page: Page) {
-  await page.goto("/");
+async function openApp(page: Page, path = "/") {
+  await page.goto(path);
   await expect
     .poll(() => page.locator(".appShell").evaluate((element) => (element as HTMLElement).style.getPropertyValue("--puzzle-pattern")))
     .not.toBe("");
@@ -433,7 +438,7 @@ test("mobile sheets cover the viewport and the graph closes by dragging its hand
 
   await page.locator(".menuToggle").click();
   await expectFullViewport(".actionsBackdrop.menuOpen");
-  await expect(page.locator(".actions a, .actions button")).toHaveCount(3);
+  await expect(page.locator(".actions a, .actions button")).toHaveCount(4);
   await page.keyboard.press("Escape");
 
   await page.getByRole("button", { name: "Route refresh settings" }).click();
@@ -1410,7 +1415,8 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
 
 test("public P2P route search → open step-by-step instructions", async ({ page, isMobile }) => {
   await mockBackend(page, { routeCount: 101 });
-  await openApp(page);
+  const fixturePath = "/#/swap/AMD/RUB?from=am-ameriabank&to=ru-sberbank";
+  await openApp(page, fixturePath);
 
   const backgroundPattern = await expect
     .poll(() => page.locator(".appShell").evaluate((element) => getComputedStyle(element, "::before").backgroundImage))
@@ -1418,6 +1424,7 @@ test("public P2P route search → open step-by-step instructions", async ({ page
     .then(() =>
       page.locator(".appShell").evaluate((element) => getComputedStyle(element, "::before").backgroundImage),
     );
+  await page.evaluate(path => history.replaceState(history.state, "", path), fixturePath);
   await page.reload();
   await expect
     .poll(async () => {
@@ -1488,9 +1495,9 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await expect(page.getByTestId("start-search")).toHaveAttribute("aria-label", "Open route instructions");
   await expect(page.getByText("101 routes found")).toBeVisible();
   const routeCounter = page.locator(".resultSummary small[aria-live='polite']");
-  const languageToggle = page.locator(".languageToggle");
   const toggleLanguage = async () => {
-    await languageToggle.click();
+    const current = await page.locator("html").getAttribute("lang") as "en" | "ru" | "hy";
+    await selectLanguage(page, ({ en: "ru", ru: "hy", hy: "en" } as const)[current]);
   };
   await toggleLanguage();
   await expect(routeCounter).toHaveText("101 маршрут найден");
@@ -2147,9 +2154,8 @@ test("currency control only lists currencies supported by the selected payment m
   const networkPicker = page.getByRole("dialog", { name: "Choose network" });
   await expect(networkPicker.locator(".optionMeta")).toHaveCount(0);
   await networkPicker.getByRole("option", { name: "Ethereum (ERC-20)" }).click();
-  const languageToggle = page.locator(".languageToggle");
-  for (let index = 0; index < 3; index += 1) {
-    await languageToggle.click();
+  for (const language of ["ru", "hy", "en"] as const) {
+    await selectLanguage(page, language);
     await expect(page.locator(".moneyPanelSource .methodTrigger .methodText")).toHaveText("USDT");
   }
 
@@ -2787,7 +2793,7 @@ for (const venue of ["binance", "bybit", "mexc", "bitget", "whitebird"]) {
     const content = await guide.getByTestId("spot-terminal").evaluate(element => ({ width: element.clientWidth, content: element.scrollWidth }));
     expect(content.content).toBeLessThanOrEqual(content.width + 1);
     await guide.getByTestId("instruction-scene").screenshot({ path: testInfo.outputPath(`${venue}-spot.png`) });
-    await page.getByRole("button", { name: "Switch language" }).click();
+    await selectLanguage(page, "ru");
     await expect(guide.locator(".explanation").getByText("Выберите тип ордера и сумму", { exact: true })).toBeVisible();
     await expect(guide.getByTestId("spot-market-link")).toHaveAttribute("href", urls[venue]);
   });
@@ -2945,7 +2951,7 @@ test("mobile navigation opens on the left and traps and restores keyboard focus"
   await toggle.click();
   const menu = page.getByRole("dialog", { name: "Menu", exact: true });
   await expect(menu).toBeVisible();
-  await expect(menu.getByRole("link")).toHaveCount(3);
+  await expect(menu.getByRole("link")).toHaveCount(4);
   await expect(menu.getByRole("button", { name: "Close menu" })).toBeFocused();
   await expect.poll(async () => (await menu.boundingBox())!.x).toBe(0);
   await page.keyboard.press("Shift+Tab");

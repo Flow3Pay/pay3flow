@@ -81,7 +81,7 @@
       {#each candles as candle, index}
         {@const color = candle.close >= candle.open ? "var(--otc-buy)" : "var(--otc-sell)"}
         <line x1={x(index)} x2={x(index)} y1={y(candle.high)} y2={y(candle.low)} stroke={color} stroke-width="1.3" />
-        <rect x={x(index) - step * .29} y={Math.min(y(candle.open), y(candle.close))} width={step * .58} height={Math.max(1.5, Math.abs(y(candle.open) - y(candle.close)))} rx=".8" fill={color} />
+        <rect x={x(index) - step * .42} y={Math.min(y(candle.open), y(candle.close))} width={step * .84} height={Math.max(1.5, Math.abs(y(candle.open) - y(candle.close)))} rx=".8" fill={color} />
       {/each}
     {/if}
     <line class="lastPriceLine" x1={left} x2={right} y1={lastY} y2={lastY} />
@@ -89,7 +89,7 @@
     <text class="volumeLabel" x={left + 4} y={height - 82}>VOL · {Math.round(active.volume).toLocaleString("en-US")}</text>
     {#each candles as candle, index}
       {@const barHeight = candle.volume / maximumVolume * 33}
-      <rect x={x(index) - step * .32} y={volumeBottom - barHeight} width={step * .64} height={barHeight} rx="1" fill={candle.close >= candle.open ? "var(--otc-buy)" : "var(--otc-sell)"} opacity=".35" />
+      <rect x={x(index) - step * .42} y={volumeBottom - barHeight} width={step * .84} height={barHeight} rx="1" fill={candle.close >= candle.open ? "var(--otc-buy)" : "var(--otc-sell)"} opacity=".35" />
     {/each}
     {#if hovered !== null}
       <line class="crosshair" x1={x(hovered)} x2={x(hovered)} y1={top} y2={volumeBottom} />

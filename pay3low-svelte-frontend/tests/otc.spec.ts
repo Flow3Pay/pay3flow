@@ -22,7 +22,7 @@ test("OTC navigation, drawer and share work at every screen size", async ({ page
   await page.getByRole("button", { name: "Open menu" }).click();
   const menu = page.getByRole("dialog", { name: "Menu", exact: true });
   await expect(menu).toBeVisible();
-  await expect(menu.getByRole("link")).toHaveCount(3);
+  await expect(menu.getByRole("link")).toHaveCount(4);
   await expect(page.locator(".appShell")).toHaveAttribute("inert", "");
   await page.keyboard.press("Shift+Tab");
   await expect(menu.getByRole("link", { name: "Open Pay3Flow on GitHub" })).toBeFocused();

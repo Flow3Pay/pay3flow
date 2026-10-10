@@ -1,14 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import type { PaymentMethod } from "$lib/payment-methods";
-  import type { ProviderDefinition } from "$lib/exchange";
   import type { ExchangeShareState } from "$lib/exchange-share";
   import Header from "$lib/components/Header.svelte";
   import type OtcWorkspaceType from "$lib/components/otc/OtcWorkspace.svelte";
   import StartupAnimation from "$lib/components/StartupAnimation.svelte";
   import { parseExchangeHash } from "$lib/guide-link";
   import Converter from "$lib/components/Converter.svelte";
-  import HomeOverview from "$lib/components/HomeOverview.svelte";
   import { COMMUNITY_URL, PROJECT_URL, SITE_URL, homeContent } from "$lib/home-content";
   import BelarusP2pWarning from "$lib/components/BelarusP2pWarning.svelte";
   import { generatePuzzleBackground } from "$lib/puzzle-background";
@@ -49,8 +46,6 @@
   });
   let shareState: ExchangeShareState | null = null;
   let shell: HTMLDivElement;
-  let paymentMethods: PaymentMethod[] = [];
-  let providerCatalog: ProviderDefinition[] = [];
   let showBelarusP2pWarning = false;
   let belarusP2pWarningOpen = false;
   $: copy = homeContent[$locale];
@@ -104,8 +99,7 @@
     {#if otcActive}
       {#if OtcWorkspace}<svelte:component this={OtcWorkspace} />{:else}<div class="otcLoading" aria-busy="true">OTC<span>…</span></div>{/if}
     {:else}
-    <Converter introCompleted={startupCompleted} onDismissStartup={finishStartup} onShareStateChange={(state) => shareState = state} onGuideChange={(active) => guideActive = active} onPaymentMethodsLoaded={(items) => paymentMethods = items} onProvidersLoaded={(items) => providerCatalog = items} onBelarusP2pWarningChange={(show) => showBelarusP2pWarning = show} onOpenBelarusP2pWarning={() => belarusP2pWarningOpen = true} />
-    {#if !guideActive}<HomeOverview {paymentMethods} {providerCatalog} />{/if}
+    <Converter introCompleted={startupCompleted} onDismissStartup={finishStartup} onShareStateChange={(state) => shareState = state} onGuideChange={(active) => guideActive = active} onBelarusP2pWarningChange={(show) => showBelarusP2pWarning = show} onOpenBelarusP2pWarning={() => belarusP2pWarningOpen = true} />
     {/if}
   </main>
   {#if !guideActive && !otcActive}<footer class="siteFooter"><span>Pay3Flow</span><span>{t("Live routing infrastructure · Public market estimates", {}, $locale)}</span><a href="/terms">{t("Usage policy", {}, $locale)}</a></footer>{/if}

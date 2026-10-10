@@ -33,6 +33,13 @@
     return transition(node, { ...options, easing: cubicOut });
   }
   let tab: "trades" | "orders" | "history" = "trades";
+  let activityHeight = 237;
+  function measureActivity(node: HTMLDivElement) {
+    const measure = () => { if (node.id === `otc-${tab}-content`) activityHeight = node.getBoundingClientRect().height; };
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return { destroy() { observer.disconnect(); } };
+  }
   let orders: DemoOrder[] = [];
   let reviewDraft: OrderDraft | null = null;
   let notification = "";
@@ -169,7 +176,8 @@
   <div class="activityToggle"><OtcPanelToggle title={copy.activity} controls="otc-activity-section" bind:expanded={activityOpen} vertical /></div>
   {#if activityOpen}<div class="activitySection" id="otc-activity-section" transition:slide={{ duration: motionDuration, easing: cubicOut }}><OtcPanel id="otc-activity" title={copy.activity} collapsible={false}><span slot="actions" class="panelMeta">{market.base}/{market.quote}</span>
     <div class="activityTabs" role="tablist" aria-label={copy.activity}><button type="button" role="tab" id="otc-trades-tab" aria-selected={tab === "trades"} tabindex={tab === "trades" ? 0 : -1} on:keydown={navigateTab} aria-controls="otc-trades-content" class:active={tab === "trades"} on:click={() => tab = "trades"}>{copy.book}</button><button type="button" role="tab" id="otc-orders-tab" aria-selected={tab === "orders"} tabindex={tab === "orders" ? 0 : -1} on:keydown={navigateTab} aria-controls="otc-orders-content" class:active={tab === "orders"} on:click={() => tab = "orders"}>{copy.myOrders}{#if openOrders.length}<span class="orderCount">{openOrders.length}</span>{/if}</button><button type="button" role="tab" id="otc-history-tab" aria-selected={tab === "history"} tabindex={tab === "history" ? 0 : -1} on:keydown={navigateTab} aria-controls="otc-history-content" class:active={tab === "history"} on:click={() => tab = "history"}>{copy.history}</button></div>
-    <div class="activityContent" role="tabpanel" id={`otc-${tab === "trades" ? "trades" : tab === "orders" ? "orders" : "history"}-content`} aria-labelledby={`otc-${tab === "trades" ? "trades" : tab === "orders" ? "orders" : "history"}-tab`} tabindex="0">
+    <div class="activityViewport" style:height={`${activityHeight}px`} style:--activity-motion={`${motionDuration}ms`}>
+    {#key tab}<div class="activityContent" use:measureActivity in:fade={{ duration: motionDuration * .65, easing: cubicOut }} out:fade={{ duration: motionDuration * .4 }} on:introstart={(event) => { event.currentTarget.inert = false; event.currentTarget.removeAttribute("aria-hidden"); if (event.currentTarget.id === `otc-${tab}-content`) activityHeight = event.currentTarget.getBoundingClientRect().height; }} on:outrostart={(event) => { event.currentTarget.inert = true; event.currentTarget.setAttribute("aria-hidden", "true"); }} role="tabpanel" id={`otc-${tab}-content`} aria-labelledby={`otc-${tab}-tab`} tabindex="0">
       {#if tab === "trades"}
         <div class="splitBooks">
           <div class="buyBook" data-testid="otc-buy-book"><OtcPanel id="otc-buy-book" title={copy.bids} collapsible={false}>{#key market.id}<OtcOrderbook {market} {snapshot} sideOnly="buy" showTools={false} selectedPrice={orderType === "limit" ? Number(price) : null} onSelect={selectPrice} />{/key}</OtcPanel></div>
@@ -180,7 +188,7 @@
       {:else}
         <div class="emptyState"><div class="emptyIcon"><svg width="27" height="27" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 4h14v16H5V4Zm4 5h6m-6 4h6m-6 4h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" /></svg></div><h3>{tab === "orders" ? copy.noOrders : copy.noHistory}</h3><p>{tab === "orders" ? copy.noOrdersHint : copy.noHistoryHint}</p>{#if tab === "orders"}<button type="button" on:click={() => { bridgeOpen = true; document.getElementById("otc-send")?.focus(); }}>{copy.create}<span aria-hidden="true">↗</span></button>{/if}</div>
       {/if}
-    </div>
+    </div>{/key}</div>
   </OtcPanel></div>{/if}
 </section>
 {#if notification}<div class="orderNotification" role="status"><span aria-hidden="true">✓</span>{notification}<button type="button" aria-label={copy.close} on:click={() => notification = ""}>×</button></div>{/if}
@@ -231,7 +239,8 @@
   .activityTabs button.active { font-weight: 800; color: var(--color-text); }
   .activityTabs button.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; border-radius: 2px; background: var(--color-accent-strong); }
   .orderCount { display: grid; place-items: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 4px; background: var(--color-accent-soft); font-family: var(--font-mono); font-size: 12px; }
-  .activityContent { min-height: 237px; }
+  .activityViewport { position: relative; overflow: hidden; min-height: 237px; transition: height var(--activity-motion) cubic-bezier(.22, 1, .36, 1); }
+  .activityContent { position: absolute; top: 0; left: 0; width: 100%; min-height: 237px; }
   .tableScroll { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; text-align: right; font-family: var(--font-sans); font-variant-numeric: tabular-nums; font-size: 12px; white-space: nowrap; }
   th { font-family: var(--font-sans); font-size: 12px; font-weight: 500; color: var(--color-text-soft); padding: 13px 22px; border-bottom: 1px solid var(--color-border); }
