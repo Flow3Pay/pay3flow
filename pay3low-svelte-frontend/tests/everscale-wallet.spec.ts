@@ -44,6 +44,69 @@ async function setup(page: Page, mode = "normal") {
   await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
 }
 
+test("wallet dialog has avatars, contains keyboard focus and closes from every product page", async ({ page }) => {
+  await setup(page, "missing");
+  for (const path of [null, "/about", "/#/otc"]) {
+    if (path) {
+      await page.goto(path);
+      await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
+    }
+    const dialog = page.getByRole("dialog", { name: "Wallet connections", exact: true });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveAttribute("aria-modal", "true");
+    await expect(dialog.locator(".walletIdentity strong")).toHaveText(["Ethereum", "NEAR", "TRON", "Everscale"]);
+    await expect.poll(() => dialog.locator(".walletAvatar").evaluateAll(images => images.length === 4 && images.every(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0))).toBe(true);
+    await expect(page.locator(".appShell")).toHaveAttribute("inert", "");
+    const close = dialog.getByRole("button", { name: "Close wallet dialog" });
+    await expect(close).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(dialog.getByRole("button", { name: "Connect Everscale wallet" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(close).toBeFocused();
+    const bounds = await dialog.boundingBox();
+    expect(bounds!.x).toBeGreaterThanOrEqual(0);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(page.locator(".appShell")).not.toHaveAttribute("inert", "");
+    await expect(page.getByRole("button", { name: "Connect wallet", exact: true })).toBeFocused();
+    await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
+    await dialog.getByRole("button", { name: "Close wallet dialog" }).click();
+    await expect(dialog).toHaveCount(0);
+    await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
+    await page.mouse.click(2, 2);
+    await expect(dialog).toHaveCount(0);
+    expect(await page.evaluate(() => document.body.style.position)).toBe("");
+  }
+  await page.setViewportSize({ width: 320, height: 900 });
+  await page.locator(".languageToggle").click();
+  await page.getByRole("option", { name: "Հայերեն", exact: true }).click();
+  await page.locator(".walletToggle").click();
+  const dialog = page.locator("#wallet-connections");
+  await expect(dialog.locator("h2")).toHaveText("Դրամապանակների միացում");
+  expect(await dialog.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+  const bounds = await dialog.boundingBox(), closeBounds = await dialog.locator(".closeButton").boundingBox();
+  expect(closeBounds!.x + closeBounds!.width).toBeLessThanOrEqual(bounds!.x + bounds!.width);
+  await dialog.locator(".closeButton").click();
+  await expect(dialog).toHaveCount(0);
+});
+
+test("wallet dialog yields to the NEAR selector and returns after cancellation", async ({ page }) => {
+  await setup(page, "missing");
+  await page.getByRole("button", { name: "Connect NEAR wallet", exact: true }).click();
+  const selector = page.locator("#near-wallet-selector-modal .nws-modal-wrapper.open");
+  await expect(selector).toBeVisible({ timeout: 15000 });
+  await expect(page.locator(".walletBackdrop")).toBeHidden();
+  await selector.locator(".close-button").click();
+  const dialog = page.getByRole("dialog", { name: "Wallet connections", exact: true });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("alert")).toHaveText("NEAR wallet connection was cancelled");
+  await expect(dialog.getByRole("button", { name: "Connect NEAR wallet", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(page.locator(".appShell")).not.toHaveAttribute("inert", "");
+});
+
 async function connect(page: Page) {
   await page.getByRole("button", { name: "Connect Everscale wallet", exact: true }).click();
   await expect(page.getByRole("button", { name: "Disconnect Everscale wallet" })).toBeVisible();
@@ -105,7 +168,7 @@ for (const [mode, error] of [
 ]) test(`Everscale handles ${mode} without retaining a session`, async ({ page }) => {
   await setup(page, mode);
   await page.getByRole("button", { name: "Connect Everscale wallet", exact: true }).click();
-  await expect(page.getByRole("group", { name: "Wallet connections" }).getByRole("alert")).toHaveText(error);
+  await expect(page.getByRole("dialog", { name: "Wallet connections" }).getByRole("alert")).toHaveText(error);
   await expect(page.getByRole("button", { name: "Connect wallet", exact: true })).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem("pay3flow.wallet-families"))).toBeNull();
   if (mode === "network") expect(await page.evaluate(() => (window as any).everCalls.some((call: any) => call.method === "requestPermissions"))).toBe(false);
