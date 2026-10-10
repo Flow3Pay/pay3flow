@@ -51,6 +51,7 @@ pub fn router(state: AppState) -> Router {
             get(move |ws| crate::server::routing::otc::ws(ws, test_otc.clone())),
         )
         .merge(scalar_routes)
+        .merge(crate::otc::http::router())
         .route("/openapi.json", get(openapi::document))
         .route("/health", get(health))
         .route("/metrics", get(metrics))
