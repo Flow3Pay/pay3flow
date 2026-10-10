@@ -1,6 +1,6 @@
 import type { Locale } from "$lib/i18n";
 const en = {
-  resizeChart: "Resize chart", buyPrice: "Buy price", sellPrice: "Sell price", buyVolume: "Buy volume", sellVolume: "Sell volume",
+  buyPrice: "Buy price", sellPrice: "Sell price", buyVolume: "Buy volume", sellVolume: "Sell volume",
   titleLead: "Trade on ", titleAccent: "your terms.", selectSendAsset: "Select sending asset", selectReceiveAsset: "Select recipient asset", selectSendNetwork: "Select sending network", selectReceiveNetwork: "Select recipient network", chooseSendAsset: "Choose the asset you send", chooseReceiveAsset: "Choose the asset you receive", sendNetwork: "Sending network", receiveNetwork: "Receiving network",
   title: "Trade on your terms.", subtitle: "Your price. Your amount. A direct exchange.", demo: "Demo market", demoNote: "Preview with sample prices. Orders stay in this browser; no funds move.",
   market: "Market", lastPrice: "Last price", change: "24h change", high: "24h high", low: "24h low", volume: "24h volume",
@@ -13,7 +13,7 @@ const en = {
 };
 type Copy = Record<keyof typeof en, string>;
 const ru: Copy = {
-  resizeChart: "Изменить ширину графика", buyPrice: "Цена покупки", sellPrice: "Цена продажи", buyVolume: "Объём покупок", sellVolume: "Объём продаж",
+  buyPrice: "Цена покупки", sellPrice: "Цена продажи", buyVolume: "Объём покупок", sellVolume: "Объём продаж",
   titleLead: "Сделки на ", titleAccent: "ваших условиях.", selectSendAsset: "Выбрать отправляемый актив", selectReceiveAsset: "Выбрать получаемый актив", selectSendNetwork: "Выбрать сеть отправки", selectReceiveNetwork: "Выбрать сеть получения", chooseSendAsset: "Выберите отправляемый актив", chooseReceiveAsset: "Выберите получаемый актив", sendNetwork: "Сеть отправки", receiveNetwork: "Сеть получения",
   title: "Сделки на ваших условиях.", subtitle: "Ваша цена. Ваш объём. Прямой обмен.", demo: "Демо-рынок", demoNote: "Цены для примера. Ордера остаются в этом браузере, средства не переводятся.",
   market: "Рынок", lastPrice: "Последняя цена", change: "Изменение за 24ч", high: "Макс. за 24ч", low: "Мин. за 24ч", volume: "Объём за 24ч",
@@ -25,7 +25,7 @@ const ru: Copy = {
   trades: "Последние сделки", myOrders: "Мои ордера", history: "История ордеров", time: "Время", side: "Сторона", status: "Статус", action: "Действие", cancel: "Отменить", open: "Открыт", cancelled: "Отменён", simulated: "Симуляция", noOrders: "Первый ордер начинается здесь.", noOrdersHint: "Задайте цену в bridge и создайте демо-ордер.", noHistory: "История пока пуста.", noHistoryHint: "Здесь появятся отменённые ордера и симуляции рыночных сделок.", create: "Создать ордер", reviewTitle: "Последняя проверка.", reviewSubtitle: "Проверьте демо-ордер перед созданием.", confirm: "Создать демо-ордер", simulate: "Симулировать рыночный ордер", close: "Закрыть", back: "Назад", orderCreated: "Демо-ордер добавлен в «Мои ордера».", orderSimulated: "Рыночный ордер симулирован. Откройте историю.", orderCancelled: "Демо-ордер отменён.", demoOnly: "Демо-ордер · без подписи кошелька и перевода", filled: "Исполнено", network: "Актив расчёта", direct: "Прямой OTC", marketPicker: "Выбрать рынок", preview: "OTC-превью", available: "Доступно в демо", buyPressure: "Покупка", sellPressure: "Продажа",
 };
 const hy: Copy = {
-  resizeChart: "Փոխել գրաֆիկի լայնությունը", buyPrice: "Գնման գին", sellPrice: "Վաճառքի գին", buyVolume: "Գնումների ծավալ", sellVolume: "Վաճառքների ծավալ",
+  buyPrice: "Գնման գին", sellPrice: "Վաճառքի գին", buyVolume: "Գնումների ծավալ", sellVolume: "Վաճառքների ծավալ",
   titleLead: "Առևտուր՝ ", titleAccent: "ձեր պայմաններով։", title: "Առևտուր՝ ձեր պայմաններով։", subtitle: "Ձեր գինը։ Ձեր ծավալը։ Ուղղակի փոխանակում։",
   selectSendAsset: "Ընտրել ուղարկվող ակտիվը", selectReceiveAsset: "Ընտրել ստացվող ակտիվը", selectSendNetwork: "Ընտրել ուղարկման ցանցը", selectReceiveNetwork: "Ընտրել ստացման ցանցը", chooseSendAsset: "Ընտրեք ուղարկվող ակտիվը", chooseReceiveAsset: "Ընտրեք ստացվող ակտիվը", sendNetwork: "Ուղարկման ցանց", receiveNetwork: "Ստացման ցանց",
   demo: "Փորձնական շուկա", demoNote: "Օրինակային գներ։ Պատվերները պահվում են այս զննարկիչում․ միջոցներ չեն փոխանցվում։",

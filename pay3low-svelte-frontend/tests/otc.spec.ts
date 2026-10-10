@@ -298,6 +298,7 @@ test("OTC amount fields use the swap typography and control sizing", async ({ pa
   const otc = await page.locator("#otc-send").evaluate(appearance);
   const assetHeight = await page.locator("#otc-bridge .methodTrigger").first().evaluate(el => (el as HTMLElement).offsetHeight);
   await expect(page.locator("#otc-chart-column .panelHead")).not.toContainText("BTC/USDT");
+  await expect(page.locator(".resizeHandle")).toHaveCount(0);
   const head = (await page.locator("#otc-chart-column .panelHead").boundingBox())!;
   const tools = (await page.locator(".chartTools").boundingBox())!;
   expect(tools.y - head.y - head.height).toBeLessThanOrEqual(4);
@@ -348,30 +349,4 @@ test("chart hover shows both line points, the full date and side volumes", async
   expect(popup.x + popup.width).toBeLessThanOrEqual(box.x + box.width);
   await page.getByRole("heading", { name: "Trade on your terms." }).hover();
   await expect(tooltip).toHaveCount(0);
-});
-
-test("chart width changes with dragging and keyboard and survives reload", async ({ page, isMobile }) => {
-  test.skip(isMobile, "Column resizing applies to the horizontal desktop layout.");
-  await openOtc(page);
-  const chart = page.locator("#otc-chart-column");
-  const handle = page.getByRole("separator", { name: "Resize chart · Bridge", exact: true });
-  const initial = (await chart.boundingBox())!.width;
-  const box = (await handle.boundingBox())!;
-  await page.mouse.move(box.x + box.width / 2, box.y + 20);
-  await page.mouse.down();
-  await page.mouse.move(box.x + box.width / 2 - 90, box.y + 20, { steps: 10 });
-  await page.mouse.up();
-  await expect.poll(async () => (await chart.boundingBox())!.width).toBeGreaterThan(initial + 70);
-  await handle.focus();
-  await page.keyboard.press("ArrowRight");
-  await expect.poll(async () => (await chart.boundingBox())!.width).toBeLessThan(initial + 85);
-  await chart.evaluate(async el => { await Promise.all(el.parentElement!.getAnimations().map(animation => animation.finished)); });
-  const changed = (await chart.boundingBox())!.width;
-  await page.reload();
-  await expect(chart).toBeVisible();
-  await expect(page.locator(".introOverlay")).toHaveCount(0, { timeout: 6000 });
-  await expect.poll(async () => (await chart.boundingBox())!.width).toBeCloseTo(changed, 0);
-  await handle.focus();
-  await page.keyboard.press("Home");
-  await expect.poll(async () => (await chart.boundingBox())!.width).toBeCloseTo(initial, 0);
 });

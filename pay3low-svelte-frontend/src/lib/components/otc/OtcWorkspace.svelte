@@ -42,43 +42,9 @@
   const settlementKey = "pay3flow.otc.settlement.v1";
   let mounted = false;
   let chartColumn: HTMLDivElement;
-  let toggleOffset = 310, chartHeight = 500, chartWidth = 480, chartMaxWidth = 10000;
-  let bridgeWeight = 1, chartWeight = 1.3, bookWeight = .85;
-  let resizing = false;
-  let resizeState: { edge: "bridge" | "book"; x: number; bridge: number; chart: number; book: number } | null = null;
-  function panelSizes() {
-    const chart = chartColumn.getBoundingClientRect().width;
-    const scale = chart / chartWeight;
-    return { bridge: document.getElementById("otc-bridge-column")?.getBoundingClientRect().width || bridgeWeight * scale, chart, book: document.getElementById("otc-book-column")?.getBoundingClientRect().width || bookWeight * scale };
-  }
-  function resetPanelWidths() { bridgeWeight = 1; chartWeight = 1.3; bookWeight = .85; }
-  function resizePanels(edge: "bridge" | "book", delta: number, sizes = panelSizes()) {
-    const pair = sizes.chart + sizes[edge];
-    const minSide = edge === "bridge" ? 260 : 220;
-    const sideWidth = Math.max(Math.min(minSide, pair - 280), Math.min(pair - 280, sizes[edge] + (edge === "bridge" ? delta : -delta)));
-    const nextChart = pair - sideWidth;
-    if (edge === "bridge") bridgeWeight = sideWidth;
-    else bookWeight = sideWidth;
-    chartWeight = nextChart;
-    if (edge !== "bridge" && sizes.bridge > 0) bridgeWeight = sizes.bridge;
-    if (edge !== "book" && sizes.book > 0) bookWeight = sizes.book;
-  }
-  function startResize(event: PointerEvent, edge: "bridge" | "book") {
-    if (event.button !== 0 || window.innerWidth <= 980) return;
-    event.preventDefault();
-    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-    resizeState = { edge, x: event.clientX, ...panelSizes() }; resizing = true;
-  }
-  function moveResize(event: PointerEvent) { if (resizeState) resizePanels(resizeState.edge, event.clientX - resizeState.x, resizeState); }
-  function endResize() { resizeState = null; resizing = false; }
-  function resizeKeys(event: KeyboardEvent, edge: "bridge" | "book") {
-    if (!["ArrowLeft", "ArrowRight", "Home"].includes(event.key)) return;
-    event.preventDefault();
-    if (event.key === "Home") resetPanelWidths();
-    else resizePanels(edge, (event.key === "ArrowLeft" ? -1 : 1) * (event.shiftKey ? 64 : 24));
-  }
-  $: if (mounted && !resizing) {
-    try { localStorage.setItem(layoutKey, JSON.stringify({ bridgeOpen, bookOpen, activityOpen, bridgeWeight, chartWeight, bookWeight })); } catch { /* Layout still works without storage. */ }
+  let toggleOffset = 310;
+  $: if (mounted) {
+    try { localStorage.setItem(layoutKey, JSON.stringify({ bridgeOpen, bookOpen, activityOpen })); } catch { /* Layout still works without storage. */ }
     try { localStorage.setItem(settlementKey, JSON.stringify({ marketId: market.id, side, sendNetworkId, receiveNetworkId })); } catch { /* Selection still works without storage. */ }
   }
   $: copy = otcCopy($locale);
@@ -167,15 +133,10 @@
         if (typeof saved.bridgeOpen === "boolean") bridgeOpen = saved.bridgeOpen;
         if (typeof saved.bookOpen === "boolean") bookOpen = saved.bookOpen;
         if (typeof saved.activityOpen === "boolean") activityOpen = saved.activityOpen;
-        if ([saved.bridgeWeight, saved.chartWeight, saved.bookWeight].every(value => typeof value === "number" && Number.isFinite(value) && value > 0 && value < 10000)) {
-          bridgeWeight = saved.bridgeWeight; chartWeight = saved.chartWeight; bookWeight = saved.bookWeight;
-        }
       }
     } catch { /* Ignore damaged layout storage. */ }
     const positionToggles = () => {
       const bounds = chartColumn.getBoundingClientRect();
-      chartHeight = bounds.height; chartWidth = bounds.width;
-      chartMaxWidth = Math.max(280, chartColumn.parentElement!.clientWidth - 64 - (bridgeOpen ? 260 : 0) - (bookOpen ? 220 : 0));
       toggleOffset = Math.max(0, bounds.height / 2 - 21);
     };
     const observer = new ResizeObserver(positionToggles);
@@ -198,15 +159,11 @@
     <div class="marketStat secondaryStat"><span>{copy.low}</span><strong>{formatPrice(low, market)}</strong></div>
     <div class="marketStat volumeStat"><span>{copy.volume}</span><strong>{market.volume.toLocaleString("en-US")} <small>{market.quote}</small></strong></div>
   </div>
-  <div class="otcGrid" class:bridgeClosed={!bridgeOpen} class:bookClosed={!bookOpen} class:resizing style:--bridge-track={`${bridgeWeight}fr`} style:--chart-track={`${chartWeight}fr`} style:--book-track={`${bookWeight}fr`} style:--chart-column-height={`${chartHeight}px`} style:--panel-toggle-offset={`${toggleOffset}px`}>
+  <div class="otcGrid" class:bridgeClosed={!bridgeOpen} class:bookClosed={!bookOpen} style:--panel-toggle-offset={`${toggleOffset}px`}>
     {#if bridgeOpen}<div class="bridgeColumn" id="otc-bridge-column" transition:panelTransition={{ duration: motionDuration }}><OtcPanel id="otc-bridge" title={copy.bridge} collapsible={false}><span slot="actions" class="panelMeta">OTC</span><OtcBridge {market} {snapshot} {networks} bind:sendNetworkId bind:receiveNetworkId onSelectAsset={selectBridgeAsset} onSideChange={chooseSide} bind:amount bind:side bind:type={orderType} bind:price onReview={(draft) => reviewDraft = draft} /></OtcPanel></div>{/if}
-    <div class="bridgeToggle">{#if bridgeOpen}
-      <!-- svelte-ignore a11y_no_noninteractive_tabindex a11y_no_noninteractive_element_interactions (Focusable separators support pointer and keyboard resizing.) -->
-      <div class="resizeHandle" role="separator" aria-orientation="vertical" aria-label={`${copy.resizeChart} · ${copy.bridge}`} aria-valuenow={Math.round(chartWidth)} aria-valuemin="280" aria-valuemax={Math.round(chartMaxWidth)} aria-controls="otc-chart-column" tabindex="0" on:pointerdown={(event) => startResize(event, "bridge")} on:pointermove={moveResize} on:pointerup={endResize} on:pointercancel={endResize} on:lostpointercapture={endResize} on:keydown={(event) => resizeKeys(event, "bridge")} on:dblclick={resetPanelWidths}></div>{/if}<OtcPanelToggle title={copy.bridge} controls="otc-bridge-column" bind:expanded={bridgeOpen} /></div>
+    <div class="bridgeToggle"><OtcPanelToggle title={copy.bridge} controls="otc-bridge-column" bind:expanded={bridgeOpen} /></div>
     <div class="chartColumn" id="otc-chart-column" bind:this={chartColumn}><OtcPanel id="otc-chart" title={copy.chart} collapsible={false}>{#key market.id}<OtcChart {market} />{/key}</OtcPanel></div>
-    <div class="bookToggle">{#if bookOpen}
-      <!-- svelte-ignore a11y_no_noninteractive_tabindex a11y_no_noninteractive_element_interactions (Focusable separators support pointer and keyboard resizing.) -->
-      <div class="resizeHandle" role="separator" aria-orientation="vertical" aria-label={`${copy.resizeChart} · ${copy.book}`} aria-valuenow={Math.round(chartWidth)} aria-valuemin="280" aria-valuemax={Math.round(chartMaxWidth)} aria-controls="otc-chart-column" tabindex="0" on:pointerdown={(event) => startResize(event, "book")} on:pointermove={moveResize} on:pointerup={endResize} on:pointercancel={endResize} on:lostpointercapture={endResize} on:keydown={(event) => resizeKeys(event, "book")} on:dblclick={resetPanelWidths}></div>{/if}<OtcPanelToggle title={copy.book} controls="otc-book-column" bind:expanded={bookOpen} direction="right" /></div>
+    <div class="bookToggle"><OtcPanelToggle title={copy.book} controls="otc-book-column" bind:expanded={bookOpen} direction="right" /></div>
     {#if bookOpen}<div class="bookColumn" id="otc-book-column" transition:panelTransition={{ duration: motionDuration }}><OtcPanel id="otc-book" title={copy.book} collapsible={false}>{#key market.id}<OtcOrderbook {market} {snapshot} selectedPrice={orderType === "limit" ? Number(price) : null} onSelect={selectPrice} />{/key}</OtcPanel></div>{/if}
   </div>
   <div class="activityToggle"><OtcPanelToggle title={copy.activity} controls="otc-activity-section" bind:expanded={activityOpen} vertical /></div>
@@ -250,22 +207,18 @@
   .marketStat strong small { font-size: 12px; color: var(--color-text-soft); }
   .marketStat.last strong { font-size: 18px; letter-spacing: -.05em; }
   .marketStat strong.positive { color: var(--otc-buy); }
-  .otcGrid { display: grid; grid-template-columns: minmax(0, var(--bridge-track)) 32px minmax(0, var(--chart-track)) 32px minmax(0, var(--book-track)); align-items: start; transition: grid-template-columns .38s cubic-bezier(.22, 1, .36, 1), transform .38s cubic-bezier(.22, 1, .36, 1); }
+  .otcGrid { display: grid; grid-template-columns: minmax(0, 1fr) 32px minmax(0, 1.3fr) 32px minmax(0, .85fr); align-items: start; transition: grid-template-columns .38s cubic-bezier(.22, 1, .36, 1), transform .38s cubic-bezier(.22, 1, .36, 1); }
   .bridgeColumn { grid-column: 1; grid-row: 1; }
   .chartColumn { grid-column: 3; grid-row: 1; }
   .bookColumn { grid-column: 5; grid-row: 1; }
   .bridgeColumn, .chartColumn, .bookColumn { min-width: 0; }
   .bridgeColumn, .bookColumn { overflow: clip; }
-  .bridgeToggle, .bookToggle { position: relative; height: var(--chart-column-height); display: grid; justify-items: center; grid-row: 1; padding-top: var(--panel-toggle-offset); }
+  .bridgeToggle, .bookToggle { display: grid; justify-items: center; grid-row: 1; padding-top: var(--panel-toggle-offset); }
   .bridgeToggle { grid-column: 2; }
   .bookToggle { grid-column: 4; }
-  .otcGrid.bridgeClosed { grid-template-columns: minmax(0, 0fr) 32px minmax(0, var(--chart-track)) 32px minmax(0, var(--book-track)); }
-  .otcGrid.bookClosed { grid-template-columns: minmax(0, var(--bridge-track)) 32px minmax(0, var(--chart-track)) 32px minmax(0, 0fr); }
+  .otcGrid.bridgeClosed { grid-template-columns: minmax(0, 0fr) 32px minmax(0, 1.3fr) 32px minmax(0, .85fr); }
+  .otcGrid.bookClosed { grid-template-columns: minmax(0, 1fr) 32px minmax(0, 1.3fr) 32px minmax(0, 0fr); }
   .otcGrid.bridgeClosed.bookClosed { grid-template-columns: minmax(0, 0fr) 32px minmax(0, 1fr) 32px minmax(0, 0fr); }
-  .otcGrid.resizing { transition: none; user-select: none; }
-  .resizeHandle { position: absolute; top: 8px; bottom: 8px; left: 2px; width: 7px; cursor: col-resize; touch-action: none; outline-offset: 2px; }
-  .resizeHandle::after { position: absolute; top: 0; bottom: 0; left: 2px; width: 2px; border-radius: 2px; background: var(--color-border-strong); content: ""; transition: background .18s ease; }
-  .resizeHandle:hover::after, .resizeHandle:focus-visible::after { background: var(--color-accent-text); }
   .splitBooks { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; padding: 16px; }
   .buyBook, .sellBook { min-width: 0; }
   .buyBook :global(.panelTitle h2) { color: var(--otc-buy); }
@@ -306,11 +259,10 @@
   .orderNotification > span { color: var(--color-accent-text); }
   .orderNotification button { margin-left: 8px; font-size: 18px; }
   [hidden] { display: none !important; }
-  @media (max-width: 1200px) and (min-width: 981px) { .otcGrid { grid-template-columns: minmax(0, var(--bridge-track)) 32px minmax(0, var(--chart-track)) 32px minmax(0, var(--book-track)); } .marketStrip { padding: 16px; gap: 15px; } .marketSelector { padding-right: 15px; } .secondaryStat { display: none; } }
+  @media (max-width: 1200px) and (min-width: 981px) { .otcGrid { grid-template-columns: minmax(0, 1fr) 32px minmax(0, 1.25fr) 32px minmax(0, .9fr); } .marketStrip { padding: 16px; gap: 15px; } .marketSelector { padding-right: 15px; } .secondaryStat { display: none; } }
   @media (max-width: 980px) {
     .otcGrid, .otcGrid.bridgeClosed, .otcGrid.bookClosed, .otcGrid.bridgeClosed.bookClosed { display: flex; width: 100%; flex-direction: column; transform: none; }
     .bridgeColumn, .chartColumn, .bookColumn { width: 100%; }
-    .resizeHandle { display: none; }
     .bridgeToggle, .bookToggle { width: 100%; height: 42px; padding: 0; align-items: center; }
     .marketStrip { flex-wrap: wrap; justify-content: flex-start; gap: 16px 28px; }
     .marketSelector { border-right: 0; flex: 1; }
