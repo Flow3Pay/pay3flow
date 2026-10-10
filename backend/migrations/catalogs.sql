@@ -3,12 +3,12 @@
 
 INSERT INTO crypto_networks (slug, name, currencies, status) VALUES
     ('bitcoin', 'Bitcoin', ARRAY['BTC']::TEXT[], 'enabled'),
-    ('ethereum', 'Ethereum (ERC-20)', ARRAY['ETH', 'USDT', 'USDC', 'BNB', 'DAI', 'FDUSD', 'LINK', 'MATIC', 'UNI', 'AAVE', 'AIXBT', 'AEVO']::TEXT[], 'enabled'),
+    ('ethereum', 'Ethereum (ERC-20)', ARRAY['ETH', 'USDT', 'USDC', 'BNB', 'DAI', 'FDUSD', 'LINK', 'MATIC', 'UNI']::TEXT[], 'enabled'),
     ('arbitrum-one', 'Arbitrum One', ARRAY['ETH', 'USDT', 'USDC', 'DAI', 'LINK', 'UNI']::TEXT[], 'enabled'),
     ('optimism', 'Optimism', ARRAY['ETH', 'USDT', 'USDC', 'DAI', 'LINK', 'UNI']::TEXT[], 'enabled'),
-    ('base', 'Base', ARRAY['ETH', 'USDC', 'DAI', 'LINK', 'UNI', 'AIXBT']::TEXT[], 'enabled'),
-    ('bnb-smart-chain', 'BNB Smart Chain (BEP-20)', ARRAY['BNB', 'USDT', 'USDC', 'BTC', 'ETH', 'DAI', 'FDUSD', 'XRP', 'ADA', 'DOT', 'LINK', 'DOGE', 'LTC', 'BCH', 'UNI', 'AB']::TEXT[], 'enabled'),
-    ('solana', 'Solana', ARRAY['SOL', 'USDT', 'USDC', 'AIXBT']::TEXT[], 'enabled'),
+    ('base', 'Base', ARRAY['ETH', 'USDC', 'DAI', 'LINK', 'UNI']::TEXT[], 'enabled'),
+    ('bnb-smart-chain', 'BNB Smart Chain (BEP-20)', ARRAY['BNB', 'USDT', 'USDC', 'BTC', 'ETH', 'DAI', 'FDUSD', 'XRP', 'ADA', 'DOT', 'LINK', 'DOGE', 'LTC', 'BCH', 'UNI']::TEXT[], 'enabled'),
+    ('solana', 'Solana', ARRAY['SOL', 'USDT', 'USDC']::TEXT[], 'enabled'),
     ('tron', 'TRON (TRC-20)', ARRAY['TRX', 'USDT']::TEXT[], 'enabled'),
     ('ton', 'TON', ARRAY['TON', 'USDT']::TEXT[], 'enabled'),
     ('everscale', 'Everscale', ARRAY['EVER']::TEXT[], 'enabled'),
