@@ -46,7 +46,7 @@
         sharedState = null;
         const target = `${shareUrl}&lang=${activeLocale}`;
         shareLink = await createShortShare(target, otcPreview);
-        shareImage = `${shareLink}/preview.png?v=2`;
+        shareImage = `${shareLink}/preview.png?v=3`;
       } else if (shareState) {
         sharedState = { ...shareState, sources: [...shareState.sources], methods: [...shareState.methods], assets: [...shareState.assets] };
         const fullUrl = exchangeShareUrl(location.origin, sharedState, activeLocale);

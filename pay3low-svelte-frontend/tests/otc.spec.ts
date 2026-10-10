@@ -36,7 +36,7 @@ test("OTC navigation, context menu and share work at every screen size", async (
   await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text: string) => sessionStorage.setItem("test.otc-share", text) } }));
   await share.click();
   const dialog = page.getByRole("dialog", { name: "Share OTC", exact: true });
-  await expect(dialog.locator(".sharePreview")).toHaveAttribute("src", /\/otc\/[A-Za-z0-9_-]{16}\/preview\.png\?v=2$/);
+  await expect(dialog.locator(".sharePreview")).toHaveAttribute("src", /\/otc\/[A-Za-z0-9_-]{16}\/preview\.png\?v=3$/);
   await expect.poll(() => dialog.locator(".sharePreview").evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(1200);
   await dialog.getByRole("button", { name: "Copy link", exact: true }).click();
   await page.keyboard.press("Escape");

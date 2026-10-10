@@ -29,9 +29,13 @@ export async function renderOtcPreview(target: string, preview: OtcPreview | nul
   const amountSize = (value: string) => value.length > 13 ? 14 : value.length > 10 ? 17 : 22;
   const network = (id?: string) => otcFallbackNetworks.find(network => network.id === id)?.name ?? '';
   const closes = preview?.closes.filter(Number.isFinite) ?? [];
-  const minimum = closes.length ? Math.min(...closes) : 0, maximum = closes.length ? Math.max(...closes) : 0;
+  // Match the Buy/Sell offsets used by OtcChart, with a shared scale for both lines.
+  const offset = market.price * .0015, padding = market.price * .004;
+  const minimum = closes.length ? Math.min(...closes) - offset - padding : 0;
+  const maximum = closes.length ? Math.max(...closes) + offset + padding : 0;
   const spread = maximum - minimum || maximum * .02 || 1;
-  const points = closes.map((close, index) => `${404 + index / Math.max(1, closes.length - 1) * 424},${435 - (close - minimum) / spread * 208}`).join(' ');
+  const points = (offset: number) => closes.map((close, index) => `${404 + index / Math.max(1, closes.length - 1) * 424},${478 - (close + offset - minimum) / spread * 250}`).join(' ');
+  const buyPoints = points(-offset), sellPoints = points(offset);
   const rows = (levels: NonNullable<OtcPreview>['bids'], y: number, color: string) => levels.map((level, index) => {
     const maxAmount = Math.max(...levels.map(item => item.amount), 1);
     return `<rect x="914" y="${y + index * 30 - 20}" width="${Math.max(4, level.amount / maxAmount * 222)}" height="27" fill="${color}" opacity=".10"/>${text(924, y + index * 30, 14, level.price.toFixed(market.priceDecimals), color)}${text(1044, y + index * 30, 14, level.amount.toLocaleString('en-US', { maximumFractionDigits: 3 }), '#cccccc')}`;
@@ -46,6 +50,7 @@ export async function renderOtcPreview(target: string, preview: OtcPreview | nul
     <rect x="362" y="143" width="510" height="416" rx="16" fill="#292929" stroke="#494949"/>
     <rect x="892" y="143" width="278" height="416" rx="16" fill="#292929" stroke="#494949"/>
     ${text(51, 181, 20, 'Bridge', '#f2f2f2', 700)}${text(384, 181, 20, 'Chart', '#f2f2f2', 700)}${text(914, 181, 20, 'Orderbook', '#f2f2f2', 700)}
+    <circle cx="718" cy="175" r="3" fill="#a1ff2b"/>${text(728, 180, 12, 'Buy', '#b8b8b8')}<circle cx="782" cy="175" r="3" fill="#f17484"/>${text(792, 180, 12, 'Sell', '#b8b8b8')}
     ${text(50, 218, 14, `${selling ? 'Sell' : 'Buy'} · ${marketOrder ? 'Market' : 'Limit'}`, selling ? '#f17484' : '#a1ff2b', 700)}
     <rect x="48" y="232" width="276" height="55" rx="10" fill="#383838" stroke="#494949"/>${text(62, 252, 11, `Price · ${market.quote}`, '#b8b8b8')}${text(62, 275, 20, marketOrder ? 'Market price' : fieldNumber(price), '#f2f2f2', 700)}
     <rect x="48" y="299" width="276" height="94" rx="10" fill="#383838" stroke="#494949"/>
@@ -56,7 +61,7 @@ export async function renderOtcPreview(target: string, preview: OtcPreview | nul
     ${text(385, 214, 14, `${market.base} / ${market.quote}`, '#b8b8b8')}
     ${[242, 300, 358, 416, 474].map(y => `<path d="M386 ${y}H850" stroke="#404040"/>`).join('')}
     ${[404, 510, 616, 722, 828].map(x => `<path d="M${x} 228V478" stroke="#404040"/>`).join('')}
-    ${closes.length > 1 ? `<polygon points="404,478 ${points} 828,478" fill="url(#chartFill)"/><polyline points="${points}" fill="none" stroke="#a1ff2b" stroke-width="3" stroke-linejoin="round"/>` : text(470, 352, 17, 'Open OTC to load market data', '#b8b8b8')}
+    ${closes.length > 1 ? `<polygon points="404,478 ${buyPoints} 828,478" fill="url(#chartFill)"/><polyline points="${buyPoints}" fill="none" stroke="#a1ff2b" stroke-width="2.5" stroke-linejoin="round"/><polyline points="${sellPoints}" fill="none" stroke="#f17484" stroke-width="2.5" stroke-linejoin="round"/>` : text(470, 352, 17, 'Open OTC to load market data', '#b8b8b8')}
     ${text(386, 517, 12, 'Market snapshot · 1D', '#b8b8b8')}
     ${text(916, 214, 12, `Price (${market.quote})`, '#b8b8b8')}${text(1044, 214, 12, market.base, '#b8b8b8')}
     ${rows(preview?.asks ?? [], 244, '#f17484')}
