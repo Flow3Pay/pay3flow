@@ -1,12 +1,14 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { locale, t } from "$lib/i18n";
+  import { otcCopy } from "$lib/otc/copy";
   export let mode: "swap" | "otc";
   export let onComplete: () => void;
   let overlay: HTMLDivElement;
   let introStarted = false;
   $: firstHeadline = headlineWords(t("Move money.", {}, $locale));
   $: secondHeadline = headlineWords(t("Keep more.", {}, $locale));
+  $: otcHeadline = otcCopy($locale);
   function headlineWords(value: string) {
     const match = value.match(/^(\S+)\s+(.+?)([.!։。؟]+)$/u);
     return match ? { first: match[1], second: match[2], punctuation: match[3] } : { first: value, second: "", punctuation: "" };
@@ -52,7 +54,7 @@
 <div class="introOverlay" class:introStarted class:localeLong={$locale !== "en"} class:otcIntro={mode === "otc"} bind:this={overlay} aria-hidden="true" data-startup-mode={mode}>
   <p class="introTitle" on:animationend={animationFinished}>
     {#if mode === "otc"}
-      <span class="introEmphasis"><span class="introClip"><span class="introWord introWordOtc">OTC</span></span><img class="introMarker" src="/icons/ui/marker-down-right.svg" alt="" width="512" height="512" aria-hidden="true" /></span>
+      <span class="introClip"><span class="introWord introWordOtcLead">{otcHeadline.titleLead.trimEnd()}</span></span>{' '}<span class="introEmphasis"><span class="introClip"><span class="introWord introWordOtcAccent">{otcHeadline.titleAccent}</span></span><img class="introMarker" src="/icons/ui/marker-down-right.svg" alt="" width="512" height="512" aria-hidden="true" /></span>
     {:else}
       <span class="introClip"><span class="introWord introWordMove">{firstHeadline.first}</span></span>{' '}<span class="introSecondWithDot"><span class="introClip"><span class="introWord introWordMoney">{firstHeadline.second}</span></span><span class="introPunctuation introFirstPunctuation">{firstHeadline.punctuation}</span></span>{' '}<span class="introEmphasis"><span class="introClip"><span class="introWord introWordKeep">{secondHeadline.first}</span></span>{' '}<span class="introSecondWithDot"><span class="introClip"><span class="introWord introWordMore">{secondHeadline.second}</span></span><span class="introPunctuation introLastPunctuation">{secondHeadline.punctuation}</span></span><img class="introMarker" src="/icons/ui/marker-down-right.svg" alt="" width="512" height="512" aria-hidden="true" /></span>
     {/if}
@@ -87,10 +89,12 @@
 @keyframes introMarkerDraw { 0% { left: -.04em; opacity: 0; } 8%, 88% { opacity: 1; } 100% { left: calc(100% + .05em); opacity: 0; } }
 @keyframes introDock { to { transform: translate(calc(-50% + var(--intro-x)), calc(-50% + var(--intro-y))) scale(1); } }
 
-.introStarted.otcIntro .introTitle { animation: introOtcOut .68s 1.8s cubic-bezier(.22, 1, .36, 1) both; }
-.introStarted .introWordOtc { animation: introRise .48s .2s cubic-bezier(.22, 1, .36, 1) forwards; }
-.introStarted.otcIntro .introEmphasis::after { animation-delay: .85s; }
-.introStarted.otcIntro .introMarker { animation-delay: .85s; }
+.introStarted.otcIntro .introTitle { animation: introOtcOut .68s 2.2s cubic-bezier(.22, 1, .36, 1) both; }
+.introStarted .introWordOtcLead { animation: introRise .48s .2s cubic-bezier(.22, 1, .36, 1) forwards; }
+.introStarted .introWordOtcAccent { animation: introRise .48s .7s cubic-bezier(.22, 1, .36, 1) forwards; }
+.introStarted.otcIntro .introEmphasis::after { animation-delay: 1.25s; }
+.introStarted.otcIntro .introMarker { animation-delay: 1.25s; }
+@media (max-width: 640px) { .otcIntro .introTitle { font-size: clamp(30px, 8vw, 44px); } }
 @keyframes introOtcOut { to { opacity: 0; transform: translate(-50%, -50%) scale(1); } }
 @media (prefers-reduced-motion: reduce) { .introOverlay { display: none; } }
 

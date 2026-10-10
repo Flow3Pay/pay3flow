@@ -37,13 +37,13 @@ test("switching SWAP and OTC never repeats the startup animation", async ({ page
   expect(await startupModes(page)).toEqual(["swap"]);
 });
 
-test("loading and reloading OTC shows only OTC and keeps the requested market", async ({ page }) => {
+test("loading and reloading OTC shows its slogan and keeps the requested market", async ({ page }) => {
   await prepare(page);
   await page.goto("/#/otc?market=SOL-USDT");
   const intro = page.locator(".introOverlay");
   for (let load = 0; load < 2; load++) {
     await expect(intro).toHaveAttribute("data-startup-mode", "otc");
-    await expect(intro.locator(".introTitle")).toHaveText("OTC");
+    await expect(intro.locator(".introTitle")).toHaveText("Trade on your terms.");
     await expect(page.getByRole("link", { name: "OTC", exact: true })).toHaveAttribute("aria-current", "page");
     await expect(intro).toHaveCount(0, { timeout: 6000 });
     await expect(page.getByTestId("otc-workspace")).toBeVisible();
