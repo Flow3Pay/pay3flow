@@ -437,7 +437,9 @@ test("mobile sheets cover the viewport and the graph closes by dragging its hand
   };
 
   await page.locator(".menuToggle").click();
-  await expectFullViewport(".actionsBackdrop.menuOpen");
+  const menuBounds = await page.locator("#header-menu").boundingBox();
+  expect(menuBounds!.width).toBeLessThan(page.viewportSize()!.width);
+  expect(menuBounds!.height).toBeLessThan(page.viewportSize()!.height);
   await expect(page.locator(".actions a, .actions button")).toHaveCount(4);
   await page.keyboard.press("Escape");
 
@@ -492,7 +494,7 @@ test("dialogs keep the page still and restore its scroll position", async ({ pag
   await openApp(page);
 
   await page.getByRole("button", { name: "Open menu" }).click();
-  const telegram = page.getByRole("link", { name: "Open Pay3Flow Telegram channel" });
+  const telegram = page.getByRole("menuitem", { name: "Open Pay3Flow Telegram channel" });
   await expect(telegram).toHaveAttribute("href", "https://t.me/+-lq4m5E_aT4xM2Y6");
   await expect(telegram.locator("img")).toHaveJSProperty("naturalWidth", 1024);
   await page.keyboard.press("Escape");
@@ -2938,30 +2940,51 @@ test("header and footer align with the workspace and mobile controls remain reac
   }
 });
 
-test("mobile navigation opens on the left and traps and restores keyboard focus", async ({ page, isMobile }) => {
-  test.skip(!isMobile, "Mobile navigation only");
+test("header context menu stays by its button and supports keyboard navigation", async ({ page }) => {
   await mockBackend(page);
   await openApp(page);
   await settleEntrance(page);
   const toggle = page.getByRole("button", { name: "Open menu" });
-  await expect(page.getByRole("button", { name: "Switch language" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Switch theme" })).toBeVisible();
-  const toggleBox = await toggle.boundingBox(), logoBox = await page.locator(".brand").boundingBox();
-  expect(toggleBox!.x + toggleBox!.width).toBeLessThanOrEqual(logoBox!.x);
-  await toggle.click();
-  const menu = page.getByRole("dialog", { name: "Menu", exact: true });
-  await expect(menu).toBeVisible();
-  await expect(menu.getByRole("link")).toHaveCount(4);
-  await expect(menu.getByRole("button", { name: "Close menu" })).toBeFocused();
-  await expect.poll(async () => (await menu.boundingBox())!.x).toBe(0);
-  await page.keyboard.press("Shift+Tab");
-  await expect(menu.getByRole("link", { name: "Open Pay3Flow on GitHub" })).toBeFocused();
-  await page.keyboard.press("Tab");
-  await expect(menu.getByRole("button", { name: "Close menu" })).toBeFocused();
-  await page.keyboard.press("Escape");
-  await expect(menu).toHaveCount(0);
-  await expect(toggle).toBeFocused();
-  await expect(page.locator(".appShell")).not.toHaveAttribute("inert", "");
+  const menu = page.getByRole("menu", { name: "Menu", exact: true });
+  for (const width of [1280, 393, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    const before = await page.locator(".brand").boundingBox();
+    await toggle.click();
+    await expect(menu).toBeVisible();
+    await menu.evaluate(async node => {
+      await Promise.all(node.getAnimations().map(animation => animation.finished));
+    });
+    const toggleBox = await toggle.boundingBox(), menuBox = await menu.boundingBox();
+    expect(menuBox!.x).toBeCloseTo(toggleBox!.x, 0);
+    expect(menuBox!.y).toBeGreaterThan(toggleBox!.y + toggleBox!.height);
+    expect(menuBox!.x + menuBox!.width).toBeLessThanOrEqual(width);
+    expect(menuBox!.height).toBeLessThan(300);
+    expect(await page.locator(".brand").boundingBox()).toEqual(before);
+    await expect(menu.getByRole("menuitem")).toHaveCount(4);
+    await expect(menu.getByRole("menuitem").first()).toBeFocused();
+    await expect(page.locator(".appShell")).not.toHaveAttribute("inert", "");
+    await expect(page.locator(".actionsBackdrop")).toHaveCount(0);
+    await page.keyboard.press("ArrowUp");
+    await expect(menu.getByRole("menuitem", { name: "Open Pay3Flow on GitHub" })).toBeFocused();
+    await page.keyboard.press("Home");
+    await expect(menu.getByRole("menuitem").first()).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+    await expect(toggle).toBeFocused();
+    await toggle.click();
+    await toggle.click();
+    await expect(menu).toHaveCount(0);
+    await toggle.click();
+    await page.getByRole("button", { name: "Switch theme" }).click();
+    await expect(menu).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Switch theme" })).toBeFocused();
+    await toggle.focus();
+    await page.keyboard.press("ArrowUp");
+    await expect(menu.getByRole("menuitem").last()).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(menu).toHaveCount(0);
+    await expect(page.locator(".brand")).toBeFocused();
+  }
 });
 
 test("icon tooltips work on hover and keyboard focus without clipping", async ({ page, isMobile }) => {
@@ -3094,40 +3117,28 @@ test("route panel slides in both directions and respects reduced motion", async 
 });
 
 
-test("mobile menu animates closed with its inward arrow and a leftward touch swipe", async ({ page, isMobile }) => {
-  test.skip(!isMobile, "Mobile drawer only");
+test("header context menu animates and respects reduced motion", async ({ page }) => {
   await mockBackend(page);
   await openApp(page);
   await settleEntrance(page);
   const toggle = page.getByRole("button", { name: "Open menu" });
-  const menu = page.getByRole("dialog", { name: "Menu", exact: true });
+  const menu = page.getByRole("menu", { name: "Menu", exact: true });
   await toggle.click();
-  await expect.poll(async () => (await menu.boundingBox())!.x).toBe(0);
-  await expect(menu.locator(".menuClose span")).toHaveText("❯");
-  await expect(menu.locator(".menuClose span")).toHaveCSS("transform", "matrix(-1, 0, 0, -1, 0, 0)");
-  const closing = await menu.evaluate(async (element) => {
-    (element.querySelector(".menuClose") as HTMLButtonElement).click();
-    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+  const closing = await menu.evaluate(async element => {
+    (document.querySelector(".menuToggle") as HTMLButtonElement).click();
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     return { present: element.isConnected, animations: element.getAnimations().length };
   });
   expect(closing.present).toBe(true);
   expect(closing.animations).toBeGreaterThan(0);
   await expect(menu).toHaveCount(0);
-  await expect(toggle).toBeFocused();
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await toggle.click();
-  await expect.poll(async () => (await menu.boundingBox())!.x).toBe(0);
-  const touch = await page.context().newCDPSession(page);
-  await touch.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: 270, y: 300 }] });
-  for (const x of [240, 210, 170, 130]) {
-    await touch.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x, y: 302 }] });
-  }
-  await expect.poll(async () => (await menu.boundingBox())!.x).toBeLessThan(-50);
-  await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await expect(menu).toBeVisible();
+  expect(await menu.evaluate(node => node.getAnimations().filter(animation => animation.playState === "running").length)).toBe(0);
+  await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);
-  await expect(toggle).toBeFocused();
-  await expect(page.locator(".appShell")).not.toHaveAttribute("inert", "");
 });
-
 
 test("route instructions load provider reviews for every cycle step", async ({ page }) => {
   await mockBackend(page, { reviews: true });

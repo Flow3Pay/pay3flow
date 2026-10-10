@@ -127,6 +127,7 @@ test("about page moves the overview off swap and preserves the shared header and
   expect(html).toContain('data-testid="home-overview"');
   await page.route("**/api/**", route => route.fulfill({ status: 503, contentType: "application/json", body: "{}" }));
   await page.goto("/");
+  await expect.poll(() => page.locator(".appShell").evaluate(node => (node as HTMLElement).style.getPropertyValue("--puzzle-pattern"))).not.toBe("");
   await expect(page.locator(".introOverlay")).toHaveCount(0, { timeout: 7000 });
   await expect(page.getByTestId("home-overview")).toHaveCount(0);
   const background = await page.locator(".appShell").evaluate(node => getComputedStyle(node).backgroundImage);

@@ -9,7 +9,7 @@ async function openOtc(page: Page, hash = "#/otc") {
   await expect(page.locator(".introOverlay")).toHaveCount(0, { timeout: 6000 });
 }
 
-test("OTC navigation, drawer and share work at every screen size", async ({ page }) => {
+test("OTC navigation, context menu and share work at every screen size", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await openOtc(page);
@@ -20,12 +20,12 @@ test("OTC navigation, drawer and share work at every screen size", async ({ page
   const shareBox = await share.boundingBox();
   expect(shareBox!.x).toBeGreaterThan(theme!.x);
   await page.getByRole("button", { name: "Open menu" }).click();
-  const menu = page.getByRole("dialog", { name: "Menu", exact: true });
+  const menu = page.getByRole("menu", { name: "Menu", exact: true });
   await expect(menu).toBeVisible();
-  await expect(menu.getByRole("link")).toHaveCount(4);
-  await expect(page.locator(".appShell")).toHaveAttribute("inert", "");
-  await page.keyboard.press("Shift+Tab");
-  await expect(menu.getByRole("link", { name: "Open Pay3Flow on GitHub" })).toBeFocused();
+  await expect(menu.getByRole("menuitem")).toHaveCount(4);
+  await expect(page.locator(".appShell")).not.toHaveAttribute("inert", "");
+  await page.keyboard.press("End");
+  await expect(menu.getByRole("menuitem", { name: "Open Pay3Flow on GitHub" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Open menu" })).toBeFocused();
