@@ -1,0 +1,277 @@
+{
+  "status": "deployed",
+  "revision": "4afb9a908634e92dbc1ce47353e7cb3e995e6efe",
+  "base_revision": "42051394be8ed574c91dd0a0d79cc1bc63edf100",
+  "source_state": "production-safe-otc-multisig+spot-cycles+provider-coverage",
+  "tag": "providers-20261012T175432Z-4afb9a90",
+  "source_sha256": "34ec21b77ab7f6ba199929c17cf301f9680460f25803c8b1d535cd98a00a0a56",
+  "source_hash_method": "sha256(relative path + NUL + file bytes + NUL in sorted tree traversal; generated directories, symlinks, .env files and source revision markers excluded)",
+  "source_composition": "Preserved source of the deployed spot-cycles release, with this revision's provider changes applied. Existing production exchange-method selection, startup navigation, OTC and spot-cycle changes retained; overlapping files merged before testing.",
+  "images": {
+    "backend": {
+      "image": "localhost/pay3flow/backend:providers-20261012T175432Z-4afb9a90",
+      "id": "a8cc071346bb17551623dea5da8234d670b931cff576b02c649d58cfed176fd4",
+      "build_log": "/tmp/pay3flow-backend-providers-20261012T175432Z-4afb9a90.log"
+    },
+    "frontend": {
+      "image": "localhost/pay3flow/frontend:providers-20261012T175432Z-4afb9a90",
+      "id": "d047b4d3bbb4d0d4df708ad3ec7b69907208e184e0494779f9dc8e7528f6c5ac",
+      "build_log": "/tmp/pay3flow-frontend-providers-20261012T175432Z-4afb9a90.log"
+    }
+  },
+  "url": "https://pay3flow.lefine.pro",
+  "deployed_at": "2026-10-12T18:02:04.175772+00:00",
+  "verified_at": "2026-10-12T18:04:02.399419+00:00",
+  "targets": [
+    {
+      "name": "original",
+      "remote": "xila@82.118.18.183",
+      "release_dir": "/home/xila/pay3flow-release-providers-20261012T175432Z-4afb9a90",
+      "backup_dir": "/home/xila/pay3flow-backups/providers-20261012T175432Z-4afb9a90",
+      "previous_images": {
+        "pay3flow-backend": "localhost/pay3flow/backend:spot-cycles-20261012T163307Z-42051394",
+        "pay3flow-frontend": "localhost/pay3flow/frontend:otc-safe-20261012T131150Z-571a4227"
+      },
+      "runtime_config_sha256": "f61b3bfd9220b53abe56db8dc775b2b030c1ae6503301be4e09483b85a230d97"
+    },
+    {
+      "name": "lefine-next",
+      "remote": "root@195.123.218.200",
+      "release_dir": "/var/lib/pay3flow/releases/providers-20261012T175432Z-4afb9a90",
+      "backup_dir": "/var/lib/pay3flow/backups/providers-20261012T175432Z-4afb9a90",
+      "previous_images": {
+        "pay3flow-backend": "localhost/pay3flow/backend:spot-cycles-20261012T163307Z-42051394",
+        "pay3flow-frontend": "localhost/pay3flow/frontend:otc-safe-20261012T131150Z-571a4227"
+      },
+      "runtime_config_sha256": "f61b3bfd9220b53abe56db8dc775b2b030c1ae6503301be4e09483b85a230d97"
+    }
+  ],
+  "verification": {
+    "health": "ok",
+    "providers": {
+      "gate": {
+        "entries": 2,
+        "searchable": true
+      },
+      "0x": {
+        "entries": 2,
+        "searchable": true
+      },
+      "barter": {
+        "entries": 2,
+        "searchable": false
+      },
+      "near-intents": {
+        "entries": 2,
+        "searchable": true
+      },
+      "symbiosis": {
+        "entries": 2,
+        "searchable": true
+      },
+      "bncex": {
+        "entries": 2,
+        "searchable": true
+      }
+    },
+    "icons": {
+      "gate": {
+        "sha256": "3ea8084b8fbb170cdbb12fe5254e134b01ad3db97e15a668f7be5dedbd7aaa05",
+        "profile_preview": 200
+      },
+      "barter": {
+        "sha256": "549770a210651dc30dfdc3f6e33fe45a17b0772b574ebda2f58cf4b547b74ed4",
+        "profile_preview": 200
+      },
+      "0x": {
+        "sha256": "09c04265f29ffbfe713e602589689a4b733208a3307dcf3e6a69aebdad1b9992",
+        "profile_preview": 200
+      },
+      "near-intents": {
+        "sha256": "b18cf51f85b32ab76f3b7d8ee75468fedbff34538201cf28489e411063f7ba9b",
+        "profile_preview": 200
+      }
+    },
+    "otc_configuration_preserved": true,
+    "live_routes": {
+      "0x": {
+        "routes_found": 1,
+        "routes_exhaustive": true,
+        "routes": [
+          {
+            "provider": "0x",
+            "output": "2506.205045",
+            "path": [
+              "ETH@ethereum",
+              "USDC@ethereum"
+            ],
+            "market_path": null
+          }
+        ]
+      },
+      "gate": {
+        "routes_found": 10,
+        "routes_exhaustive": true,
+        "routes": [
+          {
+            "provider": null,
+            "output": "0.001212277442",
+            "path": null,
+            "market_path": {
+              "venue": "gate",
+              "source_pair": "DOTUSDT",
+              "target_pair": "DOTBTC",
+              "source_rate": "0.828020203693",
+              "target_rate": "0.000014670000",
+              "intermediary_amount": "82.719218348928"
+            }
+          },
+          {
+            "provider": null,
+            "output": "0.001210210836",
+            "path": null,
+            "market_path": {
+              "venue": "gate",
+              "source_pair": "BTCUSDT",
+              "target_pair": "BTCUSDT",
+              "source_rate": "0.000012114223",
+              "target_rate": "1.000000000000",
+              "intermediary_amount": "0.001210210836"
+            }
+          },
+          {
+            "provider": null,
+            "output": "0.001209683691",
+            "path": null,
+            "market_path": {
+              "venue": "gate",
+              "source_pair": "LTCUSDT",
+              "target_pair": "LTCBTC",
+              "source_rate": "0.015971889475",
+              "target_rate": "0.000758900000",
+              "intermediary_amount": "1.595591758505"
+            }
+          }
+        ]
+      }
+    },
+    "browser": {
+      "checks": [
+        {
+          "slug": "gate",
+          "width": 1440,
+          "src": "/icons/venues/gate.png"
+        },
+        {
+          "slug": "barter",
+          "width": 1440,
+          "src": "/icons/venues/barter.svg"
+        },
+        {
+          "slug": "0x",
+          "width": 1440,
+          "src": "/icons/venues/0x.png"
+        },
+        {
+          "slug": "near-intents",
+          "width": 1440,
+          "src": "/icons/venues/near-intents.png"
+        },
+        {
+          "slug": "gate",
+          "width": 390,
+          "src": "/icons/venues/gate.png"
+        },
+        {
+          "slug": "barter",
+          "width": 390,
+          "src": "/icons/venues/barter.svg"
+        },
+        {
+          "slug": "0x",
+          "width": 390,
+          "src": "/icons/venues/0x.png"
+        },
+        {
+          "slug": "near-intents",
+          "width": 390,
+          "src": "/icons/venues/near-intents.png"
+        }
+      ],
+      "page_errors": []
+    },
+    "rust_tests_passed": 367,
+    "rust_tests_ignored": 38,
+    "frontend_unit_tests_passed": 58,
+    "svelte_errors": 0,
+    "svelte_warnings": 0,
+    "frontend_build": "passed",
+    "cargo_fmt": "passed for repository changes",
+    "cargo_clippy_all_targets_all_features": "passed with existing warnings",
+    "secret_audit": "passed; configured 0x key absent from tracked files",
+    "runtime_configuration_preserved": true,
+    "imported_image_ids_verified": true,
+    "pods": {
+      "original": [
+        {
+          "name": "pay3flow-backend-857f657f6c-29gg4",
+          "phase": "Running",
+          "containers": [
+            {
+              "name": "backend",
+              "ready": true,
+              "restarts": 0,
+              "image": "localhost/pay3flow/backend:providers-20261012T175432Z-4afb9a90",
+              "image_id": "sha256:a8cc071346bb17551623dea5da8234d670b931cff576b02c649d58cfed176fd4"
+            }
+          ]
+        },
+        {
+          "name": "pay3flow-frontend-dcd4f9f66-tjqf4",
+          "phase": "Running",
+          "containers": [
+            {
+              "name": "frontend",
+              "ready": true,
+              "restarts": 0,
+              "image": "localhost/pay3flow/frontend:providers-20261012T175432Z-4afb9a90",
+              "image_id": "sha256:d047b4d3bbb4d0d4df708ad3ec7b69907208e184e0494779f9dc8e7528f6c5ac"
+            }
+          ]
+        }
+      ],
+      "lefine-next": [
+        {
+          "name": "pay3flow-backend-858b8b9d86-ccbkr",
+          "phase": "Running",
+          "containers": [
+            {
+              "name": "backend",
+              "ready": true,
+              "restarts": 0,
+              "image": "localhost/pay3flow/backend:providers-20261012T175432Z-4afb9a90",
+              "image_id": "sha256:a8cc071346bb17551623dea5da8234d670b931cff576b02c649d58cfed176fd4"
+            }
+          ]
+        },
+        {
+          "name": "pay3flow-frontend-5bb467b964-ls95j",
+          "phase": "Running",
+          "containers": [
+            {
+              "name": "frontend",
+              "ready": true,
+              "restarts": 0,
+              "image": "localhost/pay3flow/frontend:providers-20261012T175432Z-4afb9a90",
+              "image_id": "sha256:d047b4d3bbb4d0d4df708ad3ec7b69907208e184e0494779f9dc8e7528f6c5ac"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "zerox_credential_location": "pay3flow-secrets / ZEROX_API_KEY; configured on both targets",
+  "barter_live_quotes_enabled": false,
+  "orders_created": false,
+  "funds_moved": false
+}
