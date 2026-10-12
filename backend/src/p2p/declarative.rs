@@ -53,27 +53,12 @@ impl DeclarativeP2pSource {
     }
 
     fn supports_fiat(&self, fiat: &str) -> bool {
-        !self
-            .config
-            .excluded_fiats
-            .iter()
-            .any(|excluded| excluded.eq_ignore_ascii_case(fiat))
-            && (self.config.supported_fiats.is_empty()
-                || self
-                    .config
-                    .supported_fiats
-                    .iter()
-                    .any(|supported| supported.eq_ignore_ascii_case(fiat)))
+        self.config.supports_fiat(fiat)
     }
 
     pub(crate) fn supports_query(&self, query: &P2pSearchQuery) -> bool {
         self.supports_fiat(&query.fiat)
-            && (self.config.supported_assets.is_empty()
-                || self
-                    .config
-                    .supported_assets
-                    .iter()
-                    .any(|asset| asset.eq_ignore_ascii_case(&query.asset)))
+            && self.config.supports_asset(&query.asset)
             && !query.amount.is_some_and(|amount| {
                 self.config
                     .default_min_fiat
@@ -569,7 +554,16 @@ impl DeclarativeMarketSource {
                 (bid > 0.0
                     && ask >= bid
                     && (requested_symbol.is_empty() || symbol == requested_symbol))
-                    .then_some(CryptoTicker { symbol, bid, ask })
+                    .then(|| CryptoTicker {
+                        symbol: self
+                            .config
+                            .symbol_aliases
+                            .get(&symbol)
+                            .cloned()
+                            .unwrap_or(symbol),
+                        bid,
+                        ask,
+                    })
             })
             .collect::<Vec<_>>();
         Ok(tickers)
@@ -1032,6 +1026,7 @@ mod tests {
     use super::*;
     use crate::p2p::service::PaymentMethodMatch;
     use crate::provider_adapter::ProviderAdapters;
+    use serde_json::json;
 
     fn whitebird_market_source() -> DeclarativeMarketSource {
         let document: toml::Value =
@@ -1043,6 +1038,27 @@ mod tests {
             slug: "whitebird".into(),
             config: adapters.market.unwrap(),
         }
+    }
+
+    #[tokio::test]
+    async fn whitebird_gram_orderbook_is_returned_as_ton_market() {
+        let app = axum::Router::new().route("/orderbook", axum::routing::get(
+            |axum::extract::Query(query): axum::extract::Query<BTreeMap<String, String>>| async move {
+                assert_eq!(query["symbol"], "GRAMUSDT");
+                axum::Json(json!({"retCode": 0, "result": {"symbol": "GRAMUSDT", "bids": [["1.45", "100"]], "asks": [["1.46", "100"]]}}))
+            },
+        ));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let mut source = whitebird_market_source();
+        source.config.endpoint = format!("http://{address}/orderbook");
+        source.config.symbols = vec!["GRAMUSDT".into()];
+        let quotes = source.tickers().await.unwrap();
+        assert_eq!(quotes.len(), 1);
+        assert_eq!(quotes[0].symbol, "TONUSDT");
+        assert_eq!((quotes[0].bid, quotes[0].ask), (1.45, 1.46));
+        server.abort();
     }
 
     #[tokio::test]
@@ -1538,6 +1554,116 @@ mod tests {
             "https://tradernet.by/authentication/signup"
         );
         assert!(offer.advertiser.is_verified);
+    }
+
+    #[test]
+    fn all_currency_lists_allow_unlisted_tokens_but_keep_fiat_exclusions_and_limits() {
+        let mut source = whitebird_source();
+        source.config.all = false;
+        source.config.supported_assets = vec!["all".into()];
+        source.config.supported_fiats = vec!["ALL".into()];
+        source.config.excluded_fiats = vec!["USD".into()];
+        let mut query = P2pSearchQuery {
+            fiat: "BYN".into(),
+            asset: "NEWCOIN".into(),
+            side: P2pSide::BuyCrypto,
+            amount: Some(1000.0),
+            asset_amount: None,
+            payment_method: None,
+            merchant_only: None,
+            min_orders: None,
+            min_completion_rate: None,
+            limit: Some(1),
+            sources: None,
+        };
+        assert!(
+            source.supports_query(&query),
+            "ALL must allow an unlisted token"
+        );
+        let operation = source.operation(query.side).unwrap();
+        assert_eq!(
+            source.template_values(&query, operation).unwrap().asset,
+            "NEWCOIN"
+        );
+        query.asset = "TON".into();
+        assert_eq!(
+            source.template_values(&query, operation).unwrap().asset,
+            "GRAM"
+        );
+        query.fiat = "USD".into();
+        assert!(
+            !source.supports_query(&query),
+            "explicit fiat exclusions still apply"
+        );
+        query.fiat = "BYN".into();
+        query.amount = Some(0.5);
+        assert!(
+            !source.supports_query(&query),
+            "minimum amounts still apply"
+        );
+        query.amount = Some(1000.0);
+        source.config.supported_assets = vec!["BTC".into()];
+        assert!(
+            !source.supports_query(&query),
+            "explicit asset lists still restrict queries"
+        );
+        source.config.all = true;
+        assert!(
+            source.supports_query(&query),
+            "all=true overrides explicit asset lists"
+        );
+        source.config.supported_fiats = vec!["EUR".into()];
+        assert!(
+            source.supports_query(&query),
+            "all=true overrides explicit fiat lists"
+        );
+        query.fiat = "USD".into();
+        assert!(
+            !source.supports_query(&query),
+            "all=true preserves explicit exclusions"
+        );
+    }
+
+    #[test]
+    fn whitebird_ton_quotes_use_gram_and_return_canonical_ton() {
+        let source = whitebird_source();
+        for fiat in ["BYN", "RUB"] {
+            for side in [P2pSide::BuyCrypto, P2pSide::SellCrypto] {
+                let query = P2pSearchQuery {
+                    fiat: fiat.into(),
+                    asset: "TON".into(),
+                    side,
+                    amount: Some(1000.0),
+                    asset_amount: None,
+                    payment_method: None,
+                    merchant_only: None,
+                    min_orders: None,
+                    min_completion_rate: None,
+                    limit: Some(1),
+                    sources: Some("whitebird".into()),
+                };
+                assert!(source.supports_query(&query), "{fiat}, {side:?}");
+                let operation = source.operation(side).unwrap();
+                let values = source.template_values(&query, operation).unwrap();
+                let mut body: Value =
+                    serde_json::from_str(operation.request_json.as_ref().unwrap()).unwrap();
+                render_request_json(&mut body, &values).unwrap();
+                let response = if side == P2pSide::BuyCrypto {
+                    assert_eq!(body["output"]["asset"], "GRAM");
+                    json!({"input": {"asset": fiat, "amount": "1000"}, "output": {"asset": "GRAM", "amount": "200"}})
+                } else {
+                    assert_eq!(body["input"]["asset"], "GRAM");
+                    json!({"input": {"asset": "GRAM", "amount": "1"}, "output": {"asset": fiat, "amount": "5"}})
+                };
+                let offer = source
+                    .into_offer(&response, &query, operation.offer.as_ref().unwrap())
+                    .unwrap();
+                assert_eq!(offer.asset, "TON");
+                assert_eq!(offer.network.as_deref(), Some("ton"));
+                assert_eq!(offer.fiat, fiat);
+                assert_eq!(offer.price, "5");
+            }
+        }
     }
 
     #[test]

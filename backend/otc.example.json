@@ -32,5 +32,6 @@
   "operating_requirements_evidence": "",
   "alert_webhook": null,
   "heartbeat_url": null,
-  "live_gate_evidence": null
+  "live_gate_evidence": null,
+  "escrow": null
 }

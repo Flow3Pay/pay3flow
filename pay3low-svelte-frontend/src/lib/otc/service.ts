@@ -4,6 +4,7 @@ import { connectWallet } from "$lib/wallet-session";
 export type Direction = "buy" | "sell";
 export interface Proposal { id: string; name?: string; publishes: { resourceConformsTo: string }; reciprocal: { resourceConformsTo: string } }
 export interface Terms {
+  escrow?: import("./escrow").EscrowPolicy;
   demo: boolean;
   customer_ever?: string; customer_usdt?: string; desk_ever?: string; desk_usdt?: string;
   direction: Direction; input: string; output: string; input_units: string; output_units: string;
@@ -16,11 +17,17 @@ export interface Trade { created_at?: string; id: string; rfq_id: string; state:
 export interface Rfq { created_at?: string; id: string; direction: Direction; input: string; actor: string; state: string }
 export interface Attempt { id: string; kind: string; state: string; instructions: Instructions; reference: string | null }
 interface Instructions {
+  escrow?: boolean; expires_at?: string; trade_id?: string;
   leg: { chain: string; sender: string; recipient: string; amount: string; transfer_amount: string };
   call: { family: string; from?: string; to?: string; data?: string; value?: string; nonce?: string; sender?: string; recipient?: string; amount?: string; bounce?: boolean };
 }
-export interface Config { enabled: boolean; available: boolean; demo: boolean; desk: string; desk_name: string; ever_resource: string; usdt_resource: string; counterparty_risk: string; support_owner: string }
-export interface Session { token: string; actor: string; desk: boolean }
+export interface Config { escrow?: import("./escrow").EscrowPolicy | null; enabled: boolean; wallet_login_available?: boolean; wallet_login_chains?: ("ethereum" | "everscale")[]; available: boolean; demo: boolean; desk: string; desk_name: string; ever_resource: string; usdt_resource: string; counterparty_risk: string; support_owner: string }
+export type LoginChain = "ethereum" | "everscale";
+export interface VerifiedWallet { chain: LoginChain; address: string; verified_at: string }
+export interface Session { token: string; actor: string; desk: boolean; expires_at: string; signing_wallet: { chain: LoginChain; address: string } | null; wallets: VerifiedWallet[] }
+export class OtcRequestError extends Error {
+  constructor(message: string, readonly status: number) { super(message); this.name = "OtcRequestError"; }
+}
 export async function request<T>(path: string, token = "", body?: unknown, key?: string): Promise<T> {
   const response = await fetch(apiUrl(`/api/otc${path}`), {
     method: body === undefined ? "GET" : "POST",
@@ -28,7 +35,7 @@ export async function request<T>(path: string, token = "", body?: unknown, key?:
     body: body === undefined ? undefined : JSON.stringify(body), cache: "no-store"
   });
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error || `OTC request failed (${response.status})`);
+  if (!response.ok) throw new OtcRequestError(result.error || `OTC request failed (${response.status})`, response.status);
   return result;
 }
 export function decimal(units: string, precision: number): string {
@@ -41,9 +48,8 @@ export function rate(terms: Terms): string {
   const usdt = BigInt(terms.fee_policy.basis_units);
   return decimal((usdt * 1_000_000_000n / ever).toString(), 6);
 }
-export async function bindWallet(token: string, chain: "ethereum" | "everscale") {
-  const wallet = await connectWallet(chain);
-  const challenge = await request<{ id: string; message: string; everscale_data: string }>("/wallet/challenge", token, { chain, address: wallet.address });
+interface WalletChallenge { id: string; message: string; everscale_data: string }
+async function walletProof(wallet: Awaited<ReturnType<typeof connectWallet>>, challenge: WalletChallenge) {
   let signature: string, public_key: string | undefined;
   if (wallet.family === "evm") {
     if (wallet.chainId !== 1) throw new Error("Switch to Ethereum mainnet.");
@@ -52,15 +58,39 @@ export async function bindWallet(token: string, chain: "ethereum" | "everscale")
     signature = await client.signMessage({ account: wallet.address, message: challenge.message });
   } else if (wallet.family === "everscale") {
     const state = await wallet.provider.request({ method: "getProviderState" });
+    if (state.selectedConnection !== "mainnet" || state.permissions.accountInteraction?.address.toLowerCase() !== wallet.address.toLowerCase()) throw new Error("Wallet account or network changed. Please connect again.");
     public_key = state.permissions.accountInteraction?.publicKey;
     if (!public_key) throw new Error("EVER Wallet did not expose the account public key.");
     const signed = await wallet.provider.request({ method: "signData", params: { publicKey: public_key, data: challenge.everscale_data, withSignatureId: false } });
     signature = signed.signature;
   } else throw new Error("Unsupported wallet.");
-  return request<{ address: string }>("/wallet/proof", token, { challenge_id: challenge.id, signature, public_key });
+  return { challenge_id: challenge.id, signature, public_key };
+}
+export async function signInWallet(chain: LoginChain, progress: (message: string) => void = () => {}) {
+  progress("Connecting wallet…");
+  const wallet = await connectWallet(chain);
+  const challenge = await request<WalletChallenge>("/session/challenge", "", { chain, address: wallet.address });
+  progress("Confirm sign-in in your wallet…");
+  const proof = await walletProof(wallet, challenge);
+  progress("Signing in…");
+  return request<Session>("/session/proof", "", proof);
+}
+export async function bindWallet(token: string, chain: LoginChain, progress: (message: string) => void = () => {}) {
+  progress("Connecting wallet…");
+  const wallet = await connectWallet(chain);
+  const challenge = await request<WalletChallenge>("/wallet/challenge", token, { chain, address: wallet.address });
+  progress("Confirm wallet ownership…");
+  const proof = await walletProof(wallet, challenge);
+  progress("Verifying wallet…");
+  return request<{ address: string }>("/wallet/proof", token, proof);
 }
 /** Called once after a durable handoff; an exception leaves the attempt unknown. */
 export async function sendAttempt(token: string, attempt: Attempt): Promise<void> {
+  if (attempt.instructions.escrow) {
+    const { everSigningAvailable } = await import("./escrow");
+    const current = await request<import("./escrow").Escrow>(`/trades/${attempt.instructions.trade_id}/escrow`, token);
+    if (!everSigningAvailable(current)) throw new Error("USDT escrow is unavailable or the final 30-minute settlement window has started.");
+  }
   const leg = attempt.instructions.leg;
   const wallet = await connectWallet(leg.chain);
   if (wallet.address.toLowerCase() !== leg.sender) throw new Error("Connected wallet differs from the booked sender. Reconcile this saved attempt before sending.");
@@ -75,6 +105,11 @@ export async function sendAttempt(token: string, attempt: Attempt): Promise<void
   } else if (wallet.family === "everscale") {
     const state = await wallet.provider.request({ method: "getProviderState" });
     if (state.selectedConnection !== "mainnet") throw new Error("Switch EVER Wallet to Everscale mainnet.");
+    if (attempt.instructions.escrow) {
+      const { everSigningAvailable } = await import("./escrow");
+      const current = await request<import("./escrow").Escrow>(`/trades/${attempt.instructions.trade_id}/escrow`, token);
+      if (!everSigningAvailable(current)) throw new Error("USDT escrow is unavailable or the final 30-minute settlement window has started.");
+    }
     const result = await wallet.provider.request({ method: "sendMessage", params: { sender: leg.sender, recipient: leg.recipient, amount: leg.transfer_amount, bounce: true } });
     reference = result.transaction.id.hash;
   } else throw new Error("Unsupported wallet.");

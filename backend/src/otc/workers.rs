@@ -31,6 +31,9 @@ impl Service {
             tracing::warn!(error=%error,"otc.relay.tick_failed");
         }
         if !self.cfg.demo {
+            if let Err(error) = self.escrow_tick().await {
+                tracing::warn!(error=%error,"otc.escrow.tick_failed");
+            }
             if let Err(error) = self.transfer_tick().await {
                 tracing::warn!(error=%error,"otc.transfers.tick_failed");
             }
@@ -68,6 +71,7 @@ impl Service {
                     };
                     tx.execute("INSERT INTO otc_inventory(chain,balance,gas_reserve,observed_at,snapshot) VALUES($1,$2::text::numeric,$3::text::numeric,now(),$4) ON CONFLICT(chain) DO UPDATE SET balance=$2::text::numeric,gas_reserve=$3::text::numeric,observed_at=now(),snapshot=$4",&[&chain,&balance,&gas,&checkpoint]).await?;
                     tx.execute("UPDATE otc_reservations r SET status='released' WHERE chain=$1 AND status='debit' AND EXISTS(SELECT 1 FROM otc_evidence e WHERE e.trade_id=r.trade_id AND e.kind IN ('payout','refund') AND e.valid AND e.included_at<=$2)",&[&chain,&at]).await?;
+                    tx.execute("UPDATE otc_reservations r SET status='released' WHERE chain='ethereum' AND $1='ethereum' AND status='debit' AND EXISTS(SELECT 1 FROM otc_escrow_evidence e WHERE e.trade_id=r.trade_id AND e.kind='funding' AND e.valid AND e.included_at<=$2)", &[&chain,&at]).await?;
                     tx.execute("UPDATE otc_observers SET checkpoint=$2,last_scan=now(),failures=0,lag=$3,paused=FALSE,last_error=NULL WHERE chain=$1",&[&chain,&checkpoint,&(lag as i64)]).await?;
                 }
                 Err(error) => {
@@ -168,7 +172,7 @@ impl Service {
     }
     pub(crate) async fn alert_tick(&self) -> Result<()> {
         let client = self.pool.get().await?;
-        let rows=client.query("SELECT id FROM otc_trades WHERE state NOT IN ('completed','refunded','rejected','expired') AND (terms->>'payout_by')::timestamptz<now() AND EXISTS(SELECT 1 FROM otc_evidence e WHERE e.trade_id=otc_trades.id AND e.kind IN ('payment','review_payment'))",&[]).await?;
+        let rows=client.query("SELECT id FROM otc_trades WHERE state NOT IN ('completed','refunded','rejected','expired') AND terms->'escrow' IS NULL AND (terms->>'payout_by')::timestamptz<now() AND EXISTS(SELECT 1 FROM otc_evidence e WHERE e.trade_id=otc_trades.id AND e.kind IN ('payment','review_payment'))",&[]).await?;
         for row in rows {
             let id: Uuid = row.get(0);
             self.incident(
@@ -182,13 +186,13 @@ impl Service {
         }
         for row in client.query("SELECT trade_id,id FROM otc_attempts WHERE kind IN ('payout','refund') AND state='unknown'",&[]).await?{let id:Uuid=row.get(0);let attempt:Uuid=row.get(1);self.incident(&format!("unknown-outgoing:{attempt}"),"P1",Some(id),"payout",json!({"attempt":attempt})).await?;}
         for row in client.query("SELECT chain FROM otc_observers WHERE paused OR failures>=3 OR last_scan IS NULL OR last_scan<now()-interval '60 seconds'",&[]).await?{
-            let chain:String=row.get(0);let count:i64=client.query_one("SELECT count(*) FROM otc_trades t WHERE state NOT IN ('completed','refunded','rejected','expired') AND EXISTS(SELECT 1 FROM otc_evidence e WHERE e.trade_id=t.id AND e.kind IN ('payment','review_payment'))",&[]).await?.get(0);
+            let chain:String=row.get(0);let count:i64=client.query_one("SELECT count(*) FROM otc_trades t WHERE state NOT IN ('completed','refunded','rejected','expired') AND (EXISTS(SELECT 1 FROM otc_evidence e WHERE e.trade_id=t.id AND e.kind IN ('payment','review_payment')) OR EXISTS(SELECT 1 FROM otc_escrow_evidence e WHERE e.trade_id=t.id AND e.kind='funding' AND valid))",&[]).await?.get(0);
             self.incident(&format!("observer:{chain}"),if count>0{"P1"}else{"P2"},None,"observer",json!({"chain":chain})).await?;
         }
         for row in client.query("SELECT activity_id FROM otc_outbox WHERE delivered_at IS NULL AND created_at<now()-interval '60 seconds'",&[]).await?{let id:String=row.get(0);self.incident(&format!("delivery:{id}"),"P2",None,"federation",json!({"activity":id})).await?;}
         for row in client.query("SELECT id FROM otc_trades WHERE state='booking_pending' AND updated_at<now()-interval '60 seconds'",&[]).await?{let id:Uuid=row.get(0);self.incident(&format!("booking:{id}"),"P2",Some(id),"federation",json!({})).await?;}
         for row in client.query("SELECT r.trade_id FROM otc_reservations r JOIN otc_inventory i ON i.chain=r.chain WHERE r.status!='released' AND i.balance-i.gas_reserve<(SELECT COALESCE(sum(amount),0) FROM otc_reservations WHERE chain=i.chain AND status!='released')",&[]).await? {
-            let id:Uuid=row.get(0);let funded=client.query_opt("SELECT identity FROM otc_evidence WHERE trade_id=$1 AND kind IN ('payment','review_payment') AND valid",&[&id]).await?.is_some();
+            let id:Uuid=row.get(0);let funded=client.query_opt("SELECT identity FROM otc_evidence WHERE trade_id=$1 AND kind IN ('payment','review_payment') AND valid UNION ALL SELECT identity FROM otc_escrow_evidence WHERE trade_id=$1 AND kind='funding' AND valid LIMIT 1",&[&id]).await?.is_some();
             self.incident(&format!("inventory:{id}"),if funded {"P1"}else{"P2"},Some(id),"payout",json!({"shortfall":true})).await?;
         }
         for row in client.query("SELECT trade_id,incident_key FROM otc_incidents WHERE closed_at IS NULL AND trade_id IS NOT NULL AND next_update_at<now()",&[]).await? {

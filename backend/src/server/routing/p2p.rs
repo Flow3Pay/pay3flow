@@ -621,7 +621,10 @@ fn route_links(
         if let Some(url) = spot_url(
             &market.venue,
             &market.source_pair,
-            &route.source_fiat,
+            route
+                .entry_offer
+                .as_ref()
+                .map_or(route.source_fiat.as_str(), |offer| offer.asset.as_str()),
             first_target,
         ) {
             push_link(

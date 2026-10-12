@@ -189,6 +189,7 @@ impl Service {
         let payout_by = pay_by + Duration::seconds(i64::from(self.cfg.payout_seconds));
         let id = Uuid::new_v4();
         let mut terms = Terms {
+            escrow: self.cfg.escrow.clone(),
             demo: self.cfg.demo,
             direction,
             input,
@@ -220,6 +221,9 @@ impl Service {
         };
         terms.leg("payment")?;
         terms.leg("payout")?;
+        if terms.escrow.is_some() {
+            super::escrow::Deployment::from_terms(id, &terms)?;
+        }
         terms.proposal = protocol::proposal(&format!("{actor}/quotes/{id}"), &terms, &self.cfg);
         let serialized = serde_json::to_value(&terms)?;
         tx.execute("INSERT INTO otc_trades(id,rfq_id,customer_actor,desk_actor,terms,state) VALUES($1,$2,$3,$4,$5,'quoted')",&[&id,&request.rfq_id,&terms.customer_actor,&actor,&serialized]).await?;

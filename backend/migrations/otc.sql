@@ -116,3 +116,25 @@ ALTER TABLE otc_evidence ADD COLUMN IF NOT EXISTS last_checked_at TIMESTAMPTZ;
 
 ALTER TABLE otc_attempts DROP CONSTRAINT IF EXISTS otc_attempts_state_check;
 ALTER TABLE otc_attempts ADD CONSTRAINT otc_attempts_state_check CHECK(state IN ('prepared','unknown','submitted','confirming','verified','failed','review'));
+
+-- Login identities survive session expiry and transfer-wallet re-verification.
+CREATE TABLE IF NOT EXISTS otc_login_wallets (
+ chain TEXT NOT NULL CHECK(chain IN ('ethereum','everscale')), address TEXT NOT NULL,
+ actor TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+ PRIMARY KEY(chain,address)
+);
+INSERT INTO otc_login_wallets(chain,address,actor)
+ SELECT chain,lower(address),min(actor) FROM otc_wallets
+ GROUP BY chain,lower(address) HAVING count(DISTINCT actor)=1
+ ON CONFLICT DO NOTHING;
+CREATE TABLE IF NOT EXISTS otc_login_challenges (
+ id UUID PRIMARY KEY, chain TEXT NOT NULL CHECK(chain IN ('ethereum','everscale')),
+ address TEXT NOT NULL, message TEXT NOT NULL, expires_at TIMESTAMPTZ NOT NULL,
+ consumed_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS otc_login_challenge_requests
+ ON otc_login_challenges(chain,address,expires_at);
+ALTER TABLE otc_actor_links ADD COLUMN IF NOT EXISTS managed BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE otc_actor_links ADD COLUMN IF NOT EXISTS provisioned BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE otc_sessions ADD COLUMN IF NOT EXISTS login_chain TEXT;
+ALTER TABLE otc_sessions ADD COLUMN IF NOT EXISTS login_address TEXT;

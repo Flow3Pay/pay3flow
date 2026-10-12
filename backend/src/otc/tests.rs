@@ -13,7 +13,7 @@ use uuid::Uuid;
 fn config() -> Config {
     Config { enabled:true, demo:true, origin:"https://app.example".into(), relay_origin:"https://relay.example".into(),matcher_actor:"https://relay.example/actors/matcher".into(),desk_actor:"https://relay.example/actors/desk".into(),desk_name:"Fixture desk".into(),ever_resource:"https://assets.example/native-ever-everscale-42".into(),usdt_resource:"https://assets.example/usdt-ethereum-1-dac17f958d2ee523a2206206994597c13d831ec7".into(),ever_wallet:format!("0:{}","a".repeat(64)),usdt_wallet:format!("0x{}","a".repeat(40)),ever_gas_reserve:"1".into(),eth_gas_reserve:"0.01".into(),min_usdt:"1".into(),max_usdt:"100000".into(),quote_seconds:120,payment_seconds:300,payout_seconds:600,staffed_utc_start:0,staffed_utc_end:24,support_owner:"support".into(),incident_owner:"engineer".into(),incident_backup:"backup".into(),refund_policy:"Return verified payment to the booked proved customer wallet after original payout is resolved.".into(),net_delivery_policy:"Verify exact balance increase; quoted receiving allowance covers recipient transaction cost.".into(),..Config::default() }
 }
-fn terms(direction: Direction) -> Terms {
+pub(super) fn terms(direction: Direction) -> Terms {
     let cfg = config();
     let now = Utc::now();
     let (input, output) = if direction == Direction::Buy {
@@ -26,6 +26,7 @@ fn terms(direction: Direction) -> Terms {
     let output_units =
         amount::units(output, if direction == Direction::Buy { 9 } else { 6 }).unwrap();
     let mut terms = Terms {
+        escrow: None,
         demo: true,
         direction,
         input: input.into(),
@@ -193,7 +194,7 @@ fn wallet_signature_cannot_be_reused_for_another_actor_or_nonce() {
     assert!(super::wallet::verify_evm("other actor or nonce", &signature, &address).is_err());
 }
 
-async fn fixture() -> (Service, tokio::task::JoinHandle<()>, String) {
+pub(super) async fn fixture() -> (Service, tokio::task::JoinHandle<()>, String) {
     let url = std::env::var("OTC_TEST_DATABASE_URL")
         .expect("set OTC_TEST_DATABASE_URL to an isolated PostgreSQL database");
     let root = crate::db::build_pool(&url).await.unwrap();
@@ -211,7 +212,7 @@ async fn fixture() -> (Service, tokio::task::JoinHandle<()>, String) {
     pool.get()
         .await
         .unwrap()
-        .batch_execute(include_str!("../../migrations/otc.sql"))
+        .batch_execute(&format!("{}\n{}", include_str!("../../migrations/otc.sql"), include_str!("../../migrations/otc_escrow.sql")))
         .await
         .unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -370,7 +371,7 @@ async fn accept(service: &Service, actor: &str, id: Uuid) {
         .unwrap();
     service.ingest(actor, &decision, 4).await.unwrap();
 }
-async fn cleanup(service: Service, task: tokio::task::JoinHandle<()>) {
+pub(super) async fn cleanup(service: Service, task: tokio::task::JoinHandle<()>) {
     task.abort();
     let schema: String = service
         .pool

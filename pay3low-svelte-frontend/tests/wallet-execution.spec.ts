@@ -349,6 +349,41 @@ test("invalid cross-chain recipient cannot create a quote or transfer", async ({
   expect(mock.counts()).toEqual({ created: 0, submissions: 0 });
 });
 
+for (const symbol of ["NEAR", "wNEAR"]) test(`${symbol} deposit uses the correct balance and wraps native NEAR before transferring`, async ({ page }) => {
+  await wallets(page);
+  const native = symbol === "NEAR";
+  const atomicAmount = "12345678000000000000000000";
+  await page.route("https://rpc.mainnet.near.org/", route => {
+    const query = route.request().postDataJSON().params;
+    expect(query.request_type).toBe(native ? "view_account" : "call_function");
+    expect(query.account_id).toBe(native ? "alice.near" : "wrap.near");
+    return route.fulfill({ json: { result: native
+      ? { amount: "20000000000000000000000000" }
+      : { result: [...new TextEncoder().encode('"20000000000000000000000000"')] }
+    } });
+  });
+  const value = execution("near-intents", "near", symbol, "near");
+  value.action = { ...value.action, asset_id: "nep141:wrap.near", token_contract: "wrap.near", decimals: 24, deposit_memo: "swap-memo" } as any;
+  const result = await page.evaluate(async ({ path, value }) => (await import(/* @vite-ignore */ path)).perform(value, "near"), { path: harnessPath, value });
+  expect(result.reference).toBe("7".repeat(44));
+  const transaction = await page.evaluate(() => {
+    const call = (window as any).walletCalls[0];
+    return {
+      receiverId: call.receiverId,
+      actions: call.actions.map((action: any) => ({
+        method: action.functionCall.methodName,
+        args: JSON.parse(new TextDecoder().decode(action.functionCall.args)),
+        deposit: action.functionCall.deposit.toString(),
+      })),
+    };
+  });
+  expect(transaction.receiverId).toBe("wrap.near");
+  expect(transaction.actions).toEqual([
+    ...(native ? [{ method: "near_deposit", args: {}, deposit: atomicAmount }] : []),
+    { method: "ft_transfer", args: { receiver_id: "deposit.near", amount: atomicAmount, memo: "swap-memo" }, deposit: "1" },
+  ]);
+});
+
 test("NEAR token deposit preserves precision, memo and redirect execution identifier", async ({ page }) => {
   await wallets(page);
   await page.route("https://rpc.mainnet.near.org/", route => route.fulfill({ json: { result: { result: [...new TextEncoder().encode('"1000000000"')] } } }));

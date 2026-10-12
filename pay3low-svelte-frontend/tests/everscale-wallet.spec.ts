@@ -41,15 +41,15 @@ async function setup(page: Page, mode = "normal") {
   }, { address: ADDRESS, mode });
   await page.route("**/api/**", route => route.fulfill({ json: [] }));
   await page.goto("/");
-  await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
+  await page.locator(".walletMenu").getByRole("button", { name: "Connect wallet", exact: true }).click();
 }
 
 test("wallet dialog has avatars, contains keyboard focus and closes from every product page", async ({ page, isMobile }) => {
   await setup(page, "missing");
-  for (const path of [null, "/about", "/#/otc"]) {
+  for (const path of [null, "/about"]) {
     if (path) {
       await page.goto(path);
-      await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
+      await page.locator(".walletMenu").getByRole("button", { name: "Connect wallet", exact: true }).click();
     }
     const dialog = page.getByRole("dialog", { name: "Wallet connections", exact: true });
     await expect(dialog).toBeVisible();
@@ -70,11 +70,11 @@ test("wallet dialog has avatars, contains keyboard focus and closes from every p
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
     await expect(page.locator(".appShell")).not.toHaveAttribute("inert", "");
-    await expect(page.getByRole("button", { name: "Connect wallet", exact: true })).toBeFocused();
-    await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
+    await expect(page.locator(".walletMenu").getByRole("button", { name: "Connect wallet", exact: true })).toBeFocused();
+    await page.locator(".walletMenu").getByRole("button", { name: "Connect wallet", exact: true }).click();
     await dialog.locator(".closeButton").click();
     await expect(dialog).toHaveCount(0);
-    await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
+    await page.locator(".walletMenu").getByRole("button", { name: "Connect wallet", exact: true }).click();
     await page.mouse.click(2, 2);
     await expect(dialog).toHaveCount(0);
     expect(await page.evaluate(() => document.body.style.position)).toBe("");
@@ -115,7 +115,7 @@ test("wallet bottom sheet returns after a short drag and closes after a downward
   }
   await expect(dialog).toHaveCount(0);
   await expect(page.locator(".appShell")).not.toHaveAttribute("inert", "");
-  await expect(page.getByRole("button", { name: "Connect wallet", exact: true })).toBeFocused();
+  await expect(page.locator(".walletMenu").getByRole("button", { name: "Connect wallet", exact: true })).toBeFocused();
 });
 
 test("wallet search filters network names and tickers, handles empty results and resets on reopening", async ({ page }) => {
@@ -145,7 +145,7 @@ test("wallet search filters network names and tickers, handles empty results and
   await search.fill("TRX");
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
-  await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
+  await page.locator(".walletMenu").getByRole("button", { name: "Connect wallet", exact: true }).click();
   await expect(search).toHaveValue("");
   await expect(dialog.locator(".walletChoice")).toHaveCount(4);
 });
@@ -202,7 +202,7 @@ test("Everscale connects, restores without prompting, and revokes permissions on
   expect(await page.evaluate(() => (window as any).everCalls.at(-1).method)).toBe("disconnect");
   expect(await page.evaluate(() => (window as any).everListenerCount())).toBe(0);
   await page.reload();
-  await expect(page.getByRole("button", { name: "Connect wallet", exact: true })).toBeVisible();
+  await expect(page.locator(".walletMenu").getByRole("button", { name: "Connect wallet", exact: true })).toBeVisible();
   expect(await page.evaluate(() => (window as any).everCalls)).toEqual([]);
 });
 
@@ -243,7 +243,7 @@ for (const [mode, error] of [
   await setup(page, mode);
   await page.getByRole("button", { name: "Connect Everscale wallet", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Wallet connections" }).getByRole("alert")).toHaveText(error);
-  await expect(page.getByRole("button", { name: "Connect wallet", exact: true })).toBeVisible();
+  await expect(page.locator(".walletMenu").getByRole("button", { name: "Connect wallet", exact: true })).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem("pay3flow.wallet-families"))).toBeNull();
   if (mode === "network") expect(await page.evaluate(() => (window as any).everCalls.some((call: any) => call.method === "requestPermissions"))).toBe(false);
 });

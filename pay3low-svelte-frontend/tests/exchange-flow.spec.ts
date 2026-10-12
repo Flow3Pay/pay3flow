@@ -156,6 +156,60 @@ test("system theme follows the browser until the user chooses a theme", async ({
   await expect(root).toHaveAttribute("data-theme", "dark");
 });
 
+test("search activity inspects time buckets with hover, touch and keyboard", async ({ page, isMobile }) => {
+  await mockBackend(page);
+  await page.route("**/api/p2p/routes**", async (route) => {
+    const params = Object.fromEntries(new URL(route.request().url()).searchParams);
+    await route.fulfill({ json: {
+      search_id: "00000000-0000-4000-8000-000000000109", searched_at: new Date().toISOString(),
+      source_fiat: params.source_fiat, target_fiat: params.target_fiat, source_amount: params.source_amount,
+      assets_searched: [], routes_found: 0, routes: [], can_exchange_to_target: false,
+      entry_sources: [], exit_sources: [],
+    } });
+  });
+  await openApp(page, "/#/swap/BYN/USDT?amount=300&from=by-byn-cash&to=global-usdt");
+  await expect(page.locator(".sendCurrency img").first()).toHaveAttribute("src", "/icons/flags/by.svg");
+  await expect(page.locator(".sendCurrency img").last()).toHaveAttribute("src", "/icons/assets/usdt.webp");
+  await page.getByRole("button", { name: isMobile ? "Open search activity graph" : "Show search activity" }).click();
+  const chart = page.getByTestId("search-activity");
+  const interaction = chart.getByRole("slider", { name: "Searches for this exchange" });
+  await expect(interaction).toBeVisible();
+  await chart.evaluate(async (node) => {
+    await document.fonts.ready;
+    const container = node.closest(".dialog, .activityReveal");
+    if (container) await Promise.all(container.getAnimations().map((animation) => animation.finished.catch(() => {})));
+  });
+  await expect(chart.locator(".activityLine")).toHaveCSS("stroke", "rgb(181, 245, 0)");
+  const tooltip = chart.getByRole("tooltip");
+  for (const [atEnd, count] of [[false, "2"], [true, "0"]] as const) {
+    const box = (await interaction.boundingBox())!;
+    const x = box.x + (atEnd ? box.width - .25 : .25);
+    const y = box.y + box.height / 2;
+    if (isMobile) await page.touchscreen.tap(x, y);
+    else await interaction.hover({ position: { x: atEnd ? box.width - .25 : .25, y: box.height / 2 } });
+    await expect(tooltip).toBeVisible();
+    await expect(tooltip.locator("strong")).toHaveText(count);
+    await expect(chart.locator(".hoverPoint")).toHaveCount(1);
+    const card = (await tooltip.boundingBox())!;
+    const plot = (await chart.locator(".mainPlot").boundingBox())!;
+    expect(card.x).toBeGreaterThanOrEqual(plot.x);
+    expect(card.x + card.width).toBeLessThanOrEqual(plot.x + plot.width);
+  }
+  await expect(tooltip).toContainText("Oct 4");
+  if (isMobile) await chart.locator(".activityStats").tap();
+  else await chart.locator(".activityStats").hover();
+  await expect(tooltip).toHaveCount(0);
+  await interaction.focus();
+  await page.keyboard.press("Home");
+  await expect(tooltip.locator("strong")).toHaveText("2");
+  await page.keyboard.press("ArrowRight");
+  await expect(tooltip.locator("strong")).toHaveText("0");
+  await expect(interaction).toHaveAttribute("aria-valuenow", "1");
+  await page.keyboard.press("Escape");
+  await expect(tooltip).toHaveCount(0);
+  await expect(chart).toBeVisible();
+});
+
 test("search activity uses hourly counts and fits beside routes or opens in a mobile modal", async ({ page, isMobile }) => {
   await page.emulateMedia({ colorScheme: "dark" });
   const activityRequests: string[] = [];
@@ -419,7 +473,8 @@ test("search activity range menu filters and remembers the selected period", asy
   await restoredChart.getByRole("button", { name: "Chart time range" }).click();
   const restoredMenu = page.getByRole("dialog", { name: "Chart time range", exact: true });
   await expect(restoredMenu.getByRole("button", { name: "1 hour", pressed: true })).toHaveCSS("background-color", accent);
-  await restoredMenu.getByRole("button", { name: "Close chart time range" }).click();
+  await expect(restoredMenu.getByRole("button", { name: "Close chart time range" })).toHaveCount(0);
+  await page.mouse.click(4, 4);
   await expect(restoredMenu).toHaveCount(0);
   await expect(restoredChart.getByRole("button", { name: "Chart time range" })).toBeFocused();
 });
@@ -3651,6 +3706,12 @@ test("BestChange walkthrough reads reviews and ends at the contextual exchanger 
   const guide = page.getByTestId("route-guide");
   await guide.getByTestId("start-guide").click();
   const card = guide.getByTestId("bestchange-exchanger-card");
+  await expect(guide.getByTestId("bestchange-exchanger-link")).toHaveAttribute("href", "https://www.bestchange.pro/changerbiz-exchanger.html#pay3flow-id=125");
+  await expect(guide.getByTestId("bestchange-exchanger-link")).toHaveAttribute("target", "_blank");
+  await expect(guide.getByTestId("bestchange-exchanger-link")).toBeVisible();
+  await expect(guide.getByTestId("bestchange-exchanger-website")).toHaveAttribute("href", "https://www.bestchange.com/click.php?id=125");
+  await expect(guide.getByTestId("bestchange-exchanger-website")).toHaveAttribute("target", "_blank");
+  await expect(guide.getByTestId("bestchange-exchanger-website")).toBeVisible();
   await expect(card).toContainText("ChangerBiz");
   await expect(card.getByTestId("bestchange-direction")).toHaveText("AMDUSDT");
   await guide.getByRole("button", { name: "Сцена 2: Посмотрите отзывы", exact: true }).click();

@@ -224,7 +224,10 @@ impl Service {
             }
         }
         let actors = client
-            .query("SELECT actor FROM otc_actor_links WHERE NOT revoked", &[])
+            .query(
+                "SELECT actor FROM otc_actor_links WHERE NOT revoked AND provisioned",
+                &[],
+            )
             .await?;
         for row in actors {
             let actor: String = row.get(0);

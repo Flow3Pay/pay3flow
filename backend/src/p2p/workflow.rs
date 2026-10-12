@@ -193,13 +193,7 @@ impl P2pSource for WorkflowP2pSource {
     }
 
     async fn search(&self, query: &P2pSearchQuery) -> Result<Vec<P2pOffer>> {
-        if !self.config.supported_assets.is_empty()
-            && !self
-                .config
-                .supported_assets
-                .iter()
-                .any(|asset| asset == &query.asset)
-        {
+        if !self.config.supports_asset(&query.asset) {
             return Ok(Vec::new());
         }
         if query.amount.is_some_and(|amount| {

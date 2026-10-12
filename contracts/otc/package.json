@@ -1,0 +1,20 @@
+{
+  "name": "pay3flow-otc-escrow",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "scripts": {
+    "build": "node scripts/foundry.mjs forge build",
+    "test": "node scripts/foundry.mjs forge test --no-match-contract UsdtForkTest",
+    "test:fork": "node scripts/foundry.mjs forge test --match-contract UsdtForkTest --fork-url $ETHEREUM_FORK_RPC",
+    "export": "node scripts/export-abi.mjs",
+    "test:integration": "node scripts/integration.mjs"
+  },
+  "devDependencies": {
+    "@foundry-rs/anvil": "1.7.1",
+    "@foundry-rs/cast": "1.7.1",
+    "@foundry-rs/forge": "1.7.1",
+    "@openzeppelin/contracts": "5.4.0",
+    "@safe-global/safe-contracts": "1.4.1",
+    "viem": "2.57.2"
+  }
+}

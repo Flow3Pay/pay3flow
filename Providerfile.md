@@ -632,6 +632,33 @@ orderbook snapshots; its existing fiat quote adapter remains separate.
 Complete examples are the `[adapter.market]` sections in Binance, Bybit,
 Bitget, OKX, Cifra Markets, Dzengi, and Whitebird Providerfiles.
 
+### Trying currencies without an allowlist
+
+Set `all = true` in `[adapter.p2p]` to try each requested crypto asset and fiat
+against the live provider instead of maintaining `supported_assets` and
+`supported_fiats` lists:
+
+```toml
+[adapter.p2p]
+kind = "http_json"
+endpoint = "https://provider.example/quote"
+all = true
+asset_codes = { USDT = "USDT_TRC", USDC = "USDC_ERC", TON = "GRAM" }
+```
+
+`asset_codes` is a translation map, not an allowlist. An unmapped ticker is
+sent unchanged. Keep aliases such as `TON = "GRAM"` when the provider uses a
+different code. Only valid live responses become offers; `all` does not imply
+that the provider supports every pair. Explicit `excluded_fiats`, amount limits,
+and configured buy/sell operations still apply.
+
+Alternatively, use `supported_assets = ["ALL"]` or
+`supported_fiats = ["all"]` to disable just that filter. The wildcard is
+case-insensitive; an empty list keeps the same unrestricted behavior.
+`[workflow]` also accepts `all = true` and `supported_assets = ["ALL"]`.
+These settings apply to requested currencies; catalog discovery still belongs
+to the provider's token or instrument API.
+
 ## Browser workflow
 
 Use `[workflow]` for a calculator that has no suitable JSON API. It requires
@@ -922,8 +949,9 @@ or loaded by the running backend.
 | `method` | No | `GET` | `GET` or `POST`. |
 | `headers` | No | `{}` | Static headers or whole-value environment references. |
 | `asset_codes` | No | `{}` | Canonical-to-provider asset codes. |
-| `supported_assets` | No | `[]` | Empty means no adapter-level asset filter. |
-| `supported_fiats` | No | `[]` | Empty means no adapter-level fiat filter. Use this when an endpoint is fixed to specific fiat currencies. |
+| `all` | No | `false` | Try every requested asset and fiat, overriding supported lists; explicit exclusions and amount limits still apply. |
+| `supported_assets` | No | `[]` | Empty or `ALL` means no adapter-level asset filter. |
+| `supported_fiats` | No | `[]` | Empty or `ALL` means no adapter-level fiat filter. Use a specific list when an endpoint is fixed to specific fiat currencies. |
 | `payment_method_aliases` | No | `{}` | Canonical method label to provider-returned aliases. |
 | `timeout_ms` | No | `10000` | 250–30000 ms. |
 | `max_results` | No | request limit | 1–100, or `"infinite"` to remove the provider-specific cap. The API search limit and provider response still bound results. |
@@ -1021,6 +1049,7 @@ requirements described earlier.
 | `method` | No | `GET` |
 | `headers`, `query` | No | `{}` |
 | `symbols` | No; at most 64 nonempty market codes | `[]` (one aggregate request) |
+| `symbol_aliases` | No; provider-to-canonical market codes, e.g. `{ GRAMUSDT = "TONUSDT" }`; applied after matching the requested book | `{}` |
 | `request_json` | For POST | — |
 | `timeout_ms` | No; 250–30000 | `10000` |
 | `items_pointer` | No | response root |
@@ -1039,7 +1068,8 @@ requirements described earlier.
 | `navigation_retries` | No; 0–3 | `0` |
 | `navigation_retry_delay_ms` | No; 100–5000 | `500` |
 | `asset_codes` | No | `{}` |
-| `supported_assets` | No | `[]` |
+| `all` | No; try every requested asset | `false` |
+| `supported_assets` | No; empty or `ALL` disables the asset filter | `[]` |
 | `fiat_probe_amount`, `asset_probe_amount` | By amount mode | — |
 | `default_min_fiat`, `default_max_fiat`, `default_available_asset` | Yes; positive | — |
 | `is_merchant`, `is_verified` | No | `false` |

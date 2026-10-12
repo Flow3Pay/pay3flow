@@ -3,6 +3,16 @@ import type { RouteCandidate } from "$lib/exchange";
 
 type Copy = (key: string, params?: Record<string, string | number>) => string;
 
+/** BestChange's documented click endpoint opens the selected exchanger's site. */
+export function bestchangeWebsiteUrl(step: Pick<TutorialStep, "offer" | "url">): string | null {
+  let id = step.offer?.advertiser.id;
+  if (!id && step.url) {
+    try { id = new URLSearchParams(new URL(step.url).hash.slice(1)).get("pay3flow-id"); }
+    catch { return null; }
+  }
+  return id && /^\d+$/.test(id) ? `https://www.bestchange.com/click.php?id=${id}` : null;
+}
+
 export function bestchangeExchanger(route: RouteCandidate, step: TutorialStep, copy: Copy): string {
   return step.offer?.advertiser.nickname
     ?? route.cycle_legs?.find((leg, index) => step.id === `cycle-${index}`)?.description

@@ -132,7 +132,7 @@ impl Service {
         let encrypted = self.secrets.encrypt(&request.credential)?;
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
-        tx.execute("INSERT INTO otc_actor_links(actor,credential) VALUES($1,$2) ON CONFLICT(actor) DO UPDATE SET credential=$2,revoked=FALSE,updated_at=now()",&[&request.actor,&encrypted]).await?;
+        tx.execute("INSERT INTO otc_actor_links(actor,credential) VALUES($1,$2) ON CONFLICT(actor) DO UPDATE SET credential=$2,revoked=FALSE,provisioned=TRUE,updated_at=now()",&[&request.actor,&encrypted]).await?;
         tx.execute(
             "INSERT INTO otc_sessions(id,actor,credential,expires_at) VALUES($1,$2,$3,$4)",
             &[&id, &request.actor, &encrypted, &expires],
@@ -170,8 +170,29 @@ impl Service {
         let chain: String = row.get(0);
         let address: String = row.get(1);
         let message: String = row.get(2);
+        drop(client);
+        self.verify_wallet_signature(&chain, &address, &message, &request)
+            .await?;
+        let mut client = self.pool.get().await?;
+        let tx = client.transaction().await?;
+        if tx.execute("UPDATE otc_wallet_challenges SET consumed_at=now() WHERE id=$1 AND session_id=$2 AND consumed_at IS NULL AND expires_at>now()",&[&request.challenge_id,&session]).await?!=1 {return Err(Error::Unauthorized);}
+        if tx.query_opt("SELECT id FROM otc_sessions WHERE id=$1 AND NOT revoked AND expires_at>now() FOR SHARE", &[&session]).await?.is_none() {
+            return Err(Error::Unauthorized);
+        }
+        super::login::attach_wallet(&tx, actor, &chain, &address).await?;
+        tx.execute("INSERT INTO otc_wallets(actor,chain,address,verified_at) VALUES($1,$2,$3,now()) ON CONFLICT(actor,chain) DO UPDATE SET address=$3,verified_at=now()",&[&actor,&chain,&address]).await?;
+        tx.commit().await?;
+        Ok(json!({"chain":chain,"address":address,"verified":true}))
+    }
+    pub(crate) async fn verify_wallet_signature(
+        &self,
+        chain: &str,
+        address: &str,
+        message: &str,
+        request: &ProofRequest,
+    ) -> Result<()> {
         if chain == "ethereum" {
-            verify_evm(&message, &request.signature, &address)?;
+            verify_evm(message, &request.signature, address)?;
             let code = self
                 .evm_agree("eth_getCode", json!([address, "finalized"]))
                 .await?;
@@ -181,7 +202,7 @@ impl Service {
         } else {
             let public = unhex(request.public_key.as_deref().ok_or(Error::Unauthorized)?)?;
             let public: [u8; 32] = public.try_into().map_err(|_| Error::Unauthorized)?;
-            self.verify_ever_key(&address, &public).await?;
+            self.verify_ever_key(address, &public).await?;
             let signature = STANDARD
                 .decode(&request.signature)
                 .map_err(|_| Error::Unauthorized)?;
@@ -191,12 +212,7 @@ impl Service {
                 .verify_strict(&sha2::Sha256::digest(message.as_bytes()), &signature)
                 .map_err(|_| Error::Unauthorized)?;
         }
-        let mut client = self.pool.get().await?;
-        let tx = client.transaction().await?;
-        if tx.execute("UPDATE otc_wallet_challenges SET consumed_at=now() WHERE id=$1 AND session_id=$2 AND consumed_at IS NULL AND expires_at>now()",&[&request.challenge_id,&session]).await?!=1 {return Err(Error::Unauthorized);}
-        tx.execute("INSERT INTO otc_wallets(actor,chain,address,verified_at) VALUES($1,$2,$3,now()) ON CONFLICT(actor,chain) DO UPDATE SET address=$3,verified_at=now()",&[&actor,&chain,&address]).await?;
-        tx.commit().await?;
-        Ok(json!({"chain":chain,"address":address,"verified":true}))
+        Ok(())
     }
     async fn verify_ever_key(&self, address: &str, key: &[u8; 32]) -> Result<()> {
         let query="query($address:String!){accounts(filter:{id:{eq:$address}},limit:1){id acc_type code_hash code data}}";
@@ -238,6 +254,7 @@ impl Service {
         Ok(())
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -244,8 +244,11 @@ pub(super) fn apply_fiat_to_crypto(
     let mut discovered = Vec::new();
     compose_fiat_to_crypto_routes(&mut discovered, query, asset, &offers);
     let routes_built = discovered.len();
-    routes
-        .retain(|_, route| route.route_kind != "fiat_to_crypto" || route.route_provider.is_some());
+    routes.retain(|_, route| {
+        route.route_kind != "fiat_to_crypto"
+            || route.route_provider.is_some()
+            || route.market_path.is_some()
+    });
     merge_routes(routes, discovered);
     upsert_asset_status(
         statuses,

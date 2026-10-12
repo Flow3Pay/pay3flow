@@ -26,6 +26,54 @@ use crate::route_engine::{
     DEFAULT_QUOTE_WAITING_TIME_MS, DEFAULT_SLIPPAGE_BPS,
 };
 
+impl NearToken {
+    pub fn matches(&self, asset: &Asset) -> bool {
+        asset.location.as_deref().is_some_and(|location| {
+            self.asset_symbol().eq_ignore_ascii_case(&asset.symbol)
+                && canonical_network_id(location) == canonical_network_id(&self.blockchain)
+        })
+    }
+
+    pub fn asset(&self) -> Result<Asset> {
+        Asset::new(
+            self.asset_symbol(),
+            Some(&canonical_network_id(&self.blockchain)),
+        )
+    }
+
+    fn asset_symbol(&self) -> &str {
+        // The native TON entry is still named GRAM by the HOT bridge catalog.
+        if self.asset_id == "nep245:v2_1.omni.hot.tg:1117_"
+            && canonical_network_id(&self.blockchain) == "ton"
+            && self.symbol.eq_ignore_ascii_case("GRAM")
+        {
+            return "TON";
+        }
+        // 1Click accepts NEAR deposits through the canonical wrap.near token.
+        // Keep its API identifier and precision, but advertise the native ticker
+        // used by our network catalog and wallet route queries.
+        if self.asset_id == "nep141:wrap.near"
+            && canonical_network_id(&self.blockchain) == "near"
+            && self.symbol.eq_ignore_ascii_case("wNEAR")
+        {
+            return "NEAR";
+        }
+        // Native-coin entries can include the bridge's name in their display
+        // ticker (e.g. BTC(OMNI)); the asset remains the network's native coin.
+        if self.asset_id.starts_with("1cs_v1:")
+            && self.asset_id.contains(":native:")
+            && self
+                .contract_address
+                .as_deref()
+                .is_none_or(|address| address == "coin")
+        {
+            self.symbol.split('(').next().unwrap_or(&self.symbol).trim()
+        } else {
+            &self.symbol
+        }
+    }
+}
+
 /// NEAR Intents 1-Click provider.  The provider is read-only by default:
 /// `quote` requests a dry quote, while `executable_quote` must be called
 /// explicitly by the later execution flow.
@@ -149,6 +197,11 @@ impl NearIntentsProvider {
                     })
             }
             "near" => address.ends_with(".near"),
+            "sui" => {
+                address.len() == 66
+                    && address.starts_with("0x")
+                    && address[2..].bytes().all(|byte| byte.is_ascii_hexdigit())
+            }
             "bitcoin" => {
                 address.starts_with("bc1") || address.starts_with('1') || address.starts_with('3')
             }
@@ -160,8 +213,10 @@ impl NearIntentsProvider {
         // Syntax-valid placeholders for dry quotes only. Execution requests
         // always carry the user's own recipient and refund wallet addresses.
         match network {
+            "near" => Some("intents.near"),
             "tron" => Some("T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb"),
-            "aptos" => Some("0x0000000000000000000000000000000000000000000000000000000000000001"),
+            "ton" => Some("EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c"),
+            "aptos" | "sui" => Some("0x0000000000000000000000000000000000000000000000000000000000000001"),
             "cardano" => Some("addr1vyqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqkdl5mw"),
             _ => None,
         }

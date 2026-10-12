@@ -41,6 +41,7 @@ pub(crate) struct Config {
     pub alert_webhook: Option<String>,
     pub heartbeat_url: Option<String>,
     pub live_gate_evidence: Option<String>,
+    pub escrow: Option<super::escrow::EscrowPolicy>,
 }
 impl Config {
     pub fn load(origin: &str) -> anyhow::Result<Self> {
@@ -55,6 +56,9 @@ impl Config {
         Ok(cfg)
     }
     pub fn validate(&self) -> Result<()> {
+        if let Some(policy) = &self.escrow {
+            policy.validate()?;
+        }
         for value in [
             &self.relay_origin,
             &self.matcher_actor,

@@ -2,10 +2,12 @@ use std::cmp::Ordering;
 
 mod cycle;
 mod diversity;
+mod fiat_spot;
 mod market_cycle;
 mod top_k;
 
 pub(in crate::p2p) use cycle::{crypto_cycle_from_quotes, crypto_cycle_route};
+pub(in crate::p2p) use fiat_spot::compose_fiat_spot_routes;
 pub(in crate::p2p) use market_cycle::compose_crypto_market_cycles;
 pub(in crate::p2p) use top_k::compose_fiat_routes;
 
@@ -14,6 +16,8 @@ use crate::p2p::service::{P2pOffer, PaymentMethodMatch, SourceStatus};
 use crate::p2p::spot::CryptoTicker;
 use crate::p2p::P2pOfferMarket;
 use crate::route_engine::canonical_network_id;
+
+const SPOT_FEE_RATE: f64 = 0.001;
 
 pub(in crate::p2p) fn matching_offers(
     offers: &[P2pOffer],
@@ -335,7 +339,6 @@ pub(in crate::p2p) fn compose_crypto_market_routes(
     target_asset: &str,
     tickers: &[CryptoTicker],
 ) {
-    const SPOT_FEE_RATE: f64 = 0.001;
     let intermediaries = std::iter::once(None).chain(
         query
             .assets

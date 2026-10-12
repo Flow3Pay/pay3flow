@@ -60,6 +60,9 @@ pub struct PapaChangeAdapterConfig {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WorkflowConfig {
+    /// Try every requested asset and let the provider determine pair availability.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub all: bool,
     pub source_url: String,
     pub get_exchange: String,
     #[serde(default = "default_timeout_ms")]
@@ -141,6 +144,9 @@ pub struct WorkflowRead {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct P2pAdapterConfig {
+    /// Try every requested asset and fiat; explicit exclusions still apply.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub all: bool,
     pub kind: String,
     #[serde(default, skip_serializing_if = "P2pAdapterMarket::is_p2p")]
     pub market: P2pAdapterMarket,
@@ -341,6 +347,9 @@ pub struct MarketAdapterConfig {
     /// Optional per-symbol snapshots. Each symbol fills the `asset` placeholder.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub symbols: Vec<String>,
+    /// Provider market codes mapped to the tickers used by route searches.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub symbol_aliases: BTreeMap<String, String>,
     pub request_json: Option<String>,
     #[serde(default = "default_timeout_ms")]
     pub timeout_ms: u64,
@@ -459,6 +468,10 @@ impl PapaChangeAdapterConfig {
 }
 
 impl WorkflowConfig {
+    pub(crate) fn supports_asset(&self, asset: &str) -> bool {
+        self.all || supports_currency(&self.supported_assets, asset)
+    }
+
     pub fn validate(&self, has_buy: bool, has_sell: bool, context: &str) -> Result<(), String> {
         for (field, url) in [
             ("source_url", self.source_url.as_str()),
@@ -633,6 +646,18 @@ impl WorkflowRead {
 }
 
 impl P2pAdapterConfig {
+    pub(crate) fn supports_asset(&self, asset: &str) -> bool {
+        self.all || supports_currency(&self.supported_assets, asset)
+    }
+
+    pub(crate) fn supports_fiat(&self, fiat: &str) -> bool {
+        !self
+            .excluded_fiats
+            .iter()
+            .any(|excluded| excluded.eq_ignore_ascii_case(fiat))
+            && (self.all || supports_currency(&self.supported_fiats, fiat))
+    }
+
     fn validate(&self, has_buy: bool, has_sell: bool, context: &str) -> Result<(), String> {
         validate_http(
             &self.kind,
@@ -964,6 +989,19 @@ impl ValueCondition {
 
 impl MarketAdapterConfig {
     fn validate(&self, context: &str) -> Result<(), String> {
+        if self.symbol_aliases.iter().any(|(remote, canonical)| {
+            [remote, canonical].into_iter().any(|symbol| {
+                symbol.is_empty()
+                    || symbol.len() > 32
+                    || !symbol
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || b"/_-".contains(&byte))
+            })
+        }) {
+            return Err(format!(
+                "{context}: market symbol aliases contain an invalid market code"
+            ));
+        }
         if self.symbols.len() > 64
             || self.symbols.iter().any(|symbol| {
                 symbol.is_empty()
@@ -1221,6 +1259,17 @@ impl HmacAuthConfig {
         }
         Ok(())
     }
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
+fn supports_currency(codes: &[String], requested: &str) -> bool {
+    codes.is_empty()
+        || codes
+            .iter()
+            .any(|code| code.eq_ignore_ascii_case("all") || code.eq_ignore_ascii_case(requested))
 }
 
 fn default_method() -> String {

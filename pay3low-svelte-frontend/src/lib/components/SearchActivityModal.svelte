@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from "svelte";
+  import { fade, fly } from "svelte/transition";
+  import { cubicOut } from "svelte/easing";
   import { locale, t } from "$lib/i18n";
   import { lockPageScroll } from "$lib/page-scroll-lock";
   import type { RouteSearchActivityHour, SearchActivityPeriod } from "$lib/route-activity";
@@ -23,6 +25,12 @@
   let dragStartY = 0;
   let dragDistance = 0;
   let dragDialog: HTMLDivElement;
+  function periodBackdropTransition(node: Element) {
+    return fade(node, { duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 220 });
+  }
+  function periodSheetTransition(node: Element) {
+    return fly(node, { y: node.getBoundingClientRect().height, opacity: 1, duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 220, easing: cubicOut });
+  }
   function keydown(event: KeyboardEvent) {
     if (event.key !== "Escape") return;
     if (periodPickerOpen) closePeriodPicker();
@@ -37,6 +45,9 @@
   function closePeriodPicker() {
     periodPickerOpen = false;
     void tick().then(() => dialog?.querySelector<HTMLButtonElement>(".periodButton")?.focus());
+  }
+  function periodBackdropClick(event: MouseEvent) {
+    if (event.target === event.currentTarget) closePeriodPicker();
   }
   function choosePeriod(value: SearchActivityPeriod) {
     onPeriodChange(value);
@@ -84,9 +95,9 @@
     </SearchActivityChart>
   </div>
   {#if periodPickerOpen}
-    <div class="periodBackdrop" role="presentation" on:mousedown={closePeriodPicker}>
-      <div class="periodDialog" bind:this={periodDialog} role="dialog" aria-modal="true" aria-label={t("Chart time range", {}, $locale)} tabindex="-1" on:mousedown|stopPropagation>
-        <ChartPeriodOptions {period} onSelect={choosePeriod} onClose={closePeriodPicker}>
+    <div class="periodBackdrop" role="presentation" on:click={periodBackdropClick} transition:periodBackdropTransition>
+      <div class="periodDialog" bind:this={periodDialog} role="dialog" aria-modal="true" aria-label={t("Chart time range", {}, $locale)} tabindex="-1" on:mousedown|stopPropagation transition:periodSheetTransition>
+        <ChartPeriodOptions {period} onSelect={choosePeriod}>
           {#snippet sheetHandle()}<button type="button" class="periodHandle" aria-label={t("Chart time range", {}, $locale)} on:pointerdown={startDrag} on:pointermove={moveDrag} on:pointerup={endDrag} on:pointercancel={cancelDrag} on:keydown={(event) => { if (event.key === "Enter" || event.key === " ") closePeriodPicker(); }}><span aria-hidden="true"></span></button>{/snippet}
         </ChartPeriodOptions>
       </div>
@@ -99,8 +110,8 @@
   .dialog { position: relative; width: min(100%, 560px); max-height: calc(100dvh - 32px); overflow: auto; outline: none; }
   .sheetHandle { display: none; }
   .close { position: absolute; z-index: 2; top: 12px; right: 12px; display: grid; width: 30px; height: 30px; place-items: center; border: 0; border-radius: 7px; background: #e9eee2; color: #283125; cursor: pointer; }
-  .periodBackdrop { position: fixed; inset: 0; z-index: 3; display: grid; place-items: end center; background: rgba(8, 11, 8, .52); animation: fadeIn .2s ease-out; touch-action: none; }
-  .periodDialog { width: 100%; max-height: calc(100dvh - 16px); overflow-y: auto; padding: 10px 16px calc(18px + env(safe-area-inset-bottom)); border: 1px solid var(--color-border); border-radius: 14px 14px 0 0; background: rgba(255, 255, 255, .98); box-shadow: none; touch-action: auto; transform: translateY(var(--sheet-drag, 0px)); transition: transform .24s ease; animation: sheetIn .24s cubic-bezier(.22, 1, .36, 1); }
+  .periodBackdrop { position: fixed; inset: 0; z-index: 3; display: grid; place-items: end center; background: rgba(8, 11, 8, .52); touch-action: none; }
+  .periodDialog { width: 100%; max-height: calc(100dvh - 16px); overflow-y: auto; padding: 10px 16px calc(18px + env(safe-area-inset-bottom)); border: 1px solid var(--color-border); border-radius: 14px 14px 0 0; background: rgba(255, 255, 255, .98); box-shadow: none; touch-action: auto; transform: translateY(var(--sheet-drag, 0px)); transition: transform .24s ease; }
   .periodHandle { display: flex; width: 100%; height: 30px; align-items: center; justify-content: center; touch-action: none; }
   .periodHandle span { width: 38px; height: 5px; border-radius: 999px; background: var(--color-border-strong); }
   :global(html[data-theme="dark"]) .periodDialog { border-color: var(--color-border-strong); background: rgba(25, 25, 25, .98); }
@@ -119,6 +130,5 @@
     :global(.dialog .mainPlot) { height: 155px; }
   }
   @keyframes sheetIn { from { transform: translateY(100%); } to { transform: translateY(0); } }
-  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
   @media (prefers-reduced-motion: reduce) { .dialog { animation: none; transition: none; } }
 </style>

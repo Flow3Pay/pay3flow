@@ -27,6 +27,8 @@ impl Direction {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Terms {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub escrow: Option<super::escrow::EscrowPolicy>,
     pub demo: bool,
     pub direction: Direction,
     pub input: String,

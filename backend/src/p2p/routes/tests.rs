@@ -1,5 +1,7 @@
 use super::*;
 
+mod fiat_spot;
+
 use chrono::DateTime;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;

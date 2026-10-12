@@ -1,0 +1,41 @@
+{
+  "revision": "571a42276334e159c30d0318136dbebdbc4ca072",
+  "tag": "otc-safe-20261012T131150Z-571a4227",
+  "source_sha256": "b9bf53488b81c18c895c8be3b7bc6d57b20d07444887a7bce712fcb25ce61906",
+  "release_dir": "/home/xila/pay3flow-release-otc-safe-20261012T131150Z-571a4227",
+  "backup_dir": "/home/xila/pay3flow-backups/otc-multisig-20261012T130230Z-cda76e18",
+  "status": "deployed",
+  "images": {
+    "backend": "localhost/pay3flow/backend:otc-safe-20261012T131150Z-571a4227",
+    "frontend": "localhost/pay3flow/frontend:otc-safe-20261012T131150Z-571a4227"
+  },
+  "image_ids": {
+    "backend": "f0c8f897b9a8fb83a59e3b8309bff5ade126e61615f833b5f7bb23f082812745",
+    "frontend": "f197a8c46e301b78b25160298e9cd34cc7331dd801be1f719eafee0893eb357f"
+  },
+  "deployed_at": "2026-10-12T13:18:47.550194Z",
+  "url": "https://pay3flow.lefine.pro/#/otc",
+  "verified_at": "2026-10-12T13:20:46.069195+00:00",
+  "desk_trading_enabled": false,
+  "custom_escrow_enabled": false,
+  "custom_contracts_deployed": false,
+  "safe_version": "1.4.1",
+  "safe_chain_id": 1,
+  "safe_threshold": "2 of 3",
+  "checks": {
+    "backend_health": "ok",
+    "escrow_without_auth": 401,
+    "production_safe_browser_widths": [
+      1440,
+      390
+    ],
+    "unit_tests": 58,
+    "new_browser_tests": 16,
+    "current_otc_regression_tests": 46,
+    "backend_otc_tests": 31,
+    "svelte_errors": 0,
+    "svelte_warnings": 0,
+    "local_official_safe_creation": "passed",
+    "mainnet_safe_runtime_hashes": "verified"
+  }
+}

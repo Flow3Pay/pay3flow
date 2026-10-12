@@ -19,7 +19,9 @@ use uuid::Uuid;
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route("/api/otc/config", get(config))
-        .route("/api/otc/session", post(link))
+        .route("/api/otc/session", get(session_info).post(link))
+        .route("/api/otc/session/challenge", post(login_challenge))
+        .route("/api/otc/session/proof", post(login_prove))
         .route("/api/otc/session/revoke", post(revoke))
         .route("/api/otc/wallet/challenge", post(challenge))
         .route("/api/otc/wallet/proof", post(prove))
@@ -29,6 +31,12 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/api/otc/trades/:id", get(details))
         .route("/api/otc/trades/:id/apply", post(apply))
         .route("/api/otc/trades/:id/prepare", post(prepare))
+        .route("/api/otc/trades/:id/escrow", get(escrow_details))
+        .route("/api/otc/trades/:id/escrow/consent", post(escrow_consent))
+        .route("/api/otc/trades/:id/escrow/proposals", post(escrow_propose))
+        .route("/api/otc/trades/:id/escrow/approvals", post(escrow_approve))
+        .route("/api/otc/trades/:id/escrow/prepare", post(escrow_prepare))
+        .route("/api/otc/trades/:id/escrow/reference", post(escrow_reference))
         .route("/api/otc/attempts/:id/reference", post(submit))
         .route("/api/otc/attempts/:id/retry", post(retry))
         .route("/api/otc/desk/listings", post(publish))
@@ -58,8 +66,16 @@ fn key(headers: &HeaderMap) -> Result<&str> {
 async fn config(State(state): State<AppState>) -> Json<Value> {
     let cfg = &state.otc.cfg;
     let available = state.otc.ready().await.is_ok();
+    let wallet_login_chains: Vec<_> = [
+        (cfg.ethereum_rpc.len() >= 2).then_some("ethereum"),
+        (cfg.everscale_graphql.len() >= 2 && !cfg.everwallet_code_hashes.is_empty())
+            .then_some("everscale"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
     Json(
-        json!({"enabled":cfg.enabled,"available":available,"demo":cfg.demo,"desk":cfg.desk_actor,"desk_name":cfg.desk_name,"ever_resource":cfg.ever_resource,"usdt_resource":cfg.usdt_resource,"support_owner":cfg.support_owner,"ever_network":"Everscale","usdt_network":"Ethereum","usdt_contract":super::config::USDT,"profile":super::protocol::profile(),"fee":{"payer":"desk","rate":"0.0025","floor":"5","currency":"USDT"},"counterparty_risk":"Two separate transfers. The desk must deliver or refund; there is no atomic swap or automatic rollback."}),
+        json!({"enabled":cfg.enabled,"available":available,"wallet_login_available":state.otc.wallet_login_available(),"wallet_login_chains":wallet_login_chains,"escrow":cfg.escrow,"escrow_lifetime_seconds":14400,"escrow_max_ever":"100000","demo":cfg.demo,"desk":cfg.desk_actor,"desk_name":cfg.desk_name,"ever_resource":cfg.ever_resource,"usdt_resource":cfg.usdt_resource,"support_owner":cfg.support_owner,"ever_network":"Everscale","usdt_network":"Ethereum","usdt_contract":super::config::USDT,"profile":super::protocol::profile(),"fee":{"payer":"desk","rate":"0.0025","floor":"5","currency":"USDT"},"counterparty_risk":if cfg.escrow.is_some(){"USDT funds a 2-of-3 Safe escrow before native EVER delivery. Expiry permits a USDT refund; it cannot reverse EVER delivery."}else{"Two separate transfers. The desk must deliver or refund; there is no atomic swap or automatic rollback."}}),
     )
 }
 async fn link(
@@ -68,19 +84,28 @@ async fn link(
 ) -> Result<Json<Value>> {
     Ok(Json(state.otc.link(request).await?))
 }
+async fn session_info(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Value>> {
+    Ok(Json(state.otc.session_info(bearer(&headers)?).await?))
+}
+async fn login_challenge(
+    State(state): State<AppState>,
+    Json(request): Json<ChallengeRequest>,
+) -> Result<Json<Value>> {
+    Ok(Json(state.otc.login_challenge(request).await?))
+}
+async fn login_prove(
+    State(state): State<AppState>,
+    Json(request): Json<ProofRequest>,
+) -> Result<Json<Value>> {
+    Ok(Json(state.otc.login_prove(request).await?))
+}
 async fn revoke(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Value>> {
-    let (session, actor) = state.otc.session(bearer(&headers)?).await?;
+    let (session, _) = state.otc.session(bearer(&headers)?).await?;
     let client = state.pool.get().await?;
     client
         .execute(
             "UPDATE otc_sessions SET revoked=TRUE WHERE id=$1",
             &[&session],
-        )
-        .await?;
-    client
-        .execute(
-            "UPDATE otc_actor_links SET revoked=TRUE WHERE actor=$1",
-            &[&actor],
         )
         .await?;
     Ok(Json(json!({"revoked":true})))
@@ -260,4 +285,31 @@ async fn no_store(
         axum::http::HeaderValue::from_static("private, no-store"),
     );
     response
+}
+
+async fn escrow_details(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<Uuid>) -> Result<Json<Value>> {
+    let (_,actor)=state.otc.session(bearer(&headers)?).await?;
+    Ok(Json(state.otc.escrow_details(&actor,id).await?))
+}
+async fn escrow_consent(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<Uuid>, Json(request): Json<super::escrow::ConsentRequest>) -> Result<Json<Value>> {
+    let (_,actor)=state.otc.session(bearer(&headers)?).await?;
+    Ok(Json(state.otc.escrow_consent(&actor,id,key(&headers)?,request).await?))
+}
+async fn escrow_propose(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<Uuid>, Json(request): Json<super::escrow::ProposalRequest>) -> Result<Json<Value>> {
+    let (_,actor)=state.otc.session(bearer(&headers)?).await?;
+    Ok(Json(state.otc.escrow_propose(&actor,id,key(&headers)?,request).await?))
+}
+async fn escrow_approve(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<Uuid>, Json(request): Json<super::escrow::ApprovalRequest>) -> Result<Json<Value>> {
+    let (_,actor)=state.otc.session(bearer(&headers)?).await?;
+    key(&headers)?;
+    Ok(Json(state.otc.escrow_approve(&actor,id,request).await?))
+}
+async fn escrow_prepare(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<Uuid>, Json(request): Json<super::escrow::CallRequest>) -> Result<Json<Value>> {
+    let (_,actor)=state.otc.session(bearer(&headers)?).await?;
+    Ok(Json(state.otc.escrow_prepare(&actor,id,key(&headers)?,request).await?))
+}
+async fn escrow_reference(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<Uuid>, Json(request): Json<super::escrow::ReferenceRequest>) -> Result<Json<Value>> {
+    let (_,actor)=state.otc.session(bearer(&headers)?).await?;
+    key(&headers)?;
+    Ok(Json(state.otc.escrow_reference(&actor,id,request).await?))
 }

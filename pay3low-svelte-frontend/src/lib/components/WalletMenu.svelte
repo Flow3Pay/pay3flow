@@ -8,6 +8,7 @@
   import { assetIcon } from "$lib/icons";
   import { wallets, connectWallet, disconnectFamily, restoreWallets } from "$lib/wallet-session";
   import type { WalletFamily } from "$lib/wallet-execution";
+  import { walletDialogMode, otcWalletDialog, openWalletDialog, closeWalletDialog } from "$lib/wallet-dialog";
   import PickerOptionCard from "./PickerOptionCard.svelte";
 
   const choices: { family: WalletFamily; network: string; label: string; icon: string; keywords: string }[] = [
@@ -16,13 +17,18 @@
     { family: "tron", network: "tron", label: "TRON", icon: "/icons/assets/trx.webp", keywords: "TRX трон" },
     { family: "everscale", network: "everscale", label: "Everscale", icon: "/icons/assets/ever.svg", keywords: "EVER эверскейл" },
   ];
-  let open = false;
+  $: open = $walletDialogMode !== null;
+  $: account = $walletDialogMode === "otc" ? $otcWalletDialog : null;
   let query = "";
+  $: if (!open) { query = ""; error = ""; }
   let searchInput: HTMLInputElement;
   let busy: WalletFamily | null = null;
   let error = "";
   let dialog: HTMLDivElement;
-  let handoff = false;
+  let providerHandoff = false;
+  let activeChain: "ethereum" | "everscale" | null = null;
+  $: handoff = providerHandoff || (activeChain === "ethereum" && Boolean(env.PUBLIC_REOWN_PROJECT_ID?.trim()) && account?.progress === "Connecting wallet…");
+  $: working = Boolean(busy || account?.busy);
   let motionDuration = 160;
   let toggle: HTMLButtonElement;
   let dragging = false;
@@ -74,7 +80,7 @@
     if (!dragging) return;
     const shouldClose = dragDistance > 96 || dragDistance > dialog.clientHeight * .24;
     dragging = false;
-    if (shouldClose) open = false;
+    if (shouldClose) closeWalletDialog();
     else dialog?.style.removeProperty("--sheet-drag");
   }
   function cancelSheetDrag() {
@@ -83,7 +89,7 @@
   }
   function keydown(event: KeyboardEvent) {
     if (!open || handoff) return;
-    if (event.key === "Escape") { event.preventDefault(); event.stopImmediatePropagation(); open = false; return; }
+    if (event.key === "Escape") { event.preventDefault(); event.stopImmediatePropagation(); closeWalletDialog(); return; }
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       const results = [...dialog.querySelectorAll<HTMLButtonElement>(".optionCard:not(:disabled)")];
       const index = results.findIndex(button => button === document.activeElement);
@@ -102,16 +108,30 @@
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
   }
 
+  async function selectChoice(family: WalletFamily, network: string) {
+    if (working) return;
+    const context = account;
+    if (context && (network === "ethereum" || network === "everscale")) {
+      busy = family; activeChain = network; error = "";
+      try {
+        if (context.session) await context.onVerify(network);
+        else await context.onConnect(network);
+      } finally { busy = null; void focusChoice(family); }
+      return;
+    }
+    if ($wallets[family]) await disconnect(family);
+    else await connect(family, network);
+  }
   async function connect(family: WalletFamily, network: string) {
     if (busy) return;
     busy = family;
     error = "";
     // Selector UIs mount outside our dialog. Let them receive focus and input
     // while keeping the underlying application locked until they return.
-    handoff = family === "near" || (family === "evm" && Boolean(env.PUBLIC_REOWN_PROJECT_ID?.trim()));
+    providerHandoff = family === "near" || (family === "evm" && Boolean(env.PUBLIC_REOWN_PROJECT_ID?.trim()));
     try { await connectWallet(network); }
     catch (cause) { error = cause instanceof Error ? copy(cause.message) : copy("Wallet connection failed"); }
-    finally { busy = null; handoff = false; void focusChoice(family); }
+    finally { busy = null; providerHandoff = false; void focusChoice(family); }
   }
   async function disconnect(family: WalletFamily) {
     if (busy) return;
@@ -125,19 +145,19 @@
 
 <svelte:window on:keydown={keydown} />
 <div class="walletMenu">
-  <button class="walletToggle" type="button" bind:this={toggle} aria-label={count ? copy("Wallets ({count})", { count }) : copy("Connect wallet")} aria-haspopup="dialog" aria-expanded={open} aria-controls="wallet-connections" on:click={() => { error = ""; query = ""; open = true; }}>
+  <button class="walletToggle" type="button" bind:this={toggle} aria-label={count ? copy("Wallets ({count})", { count }) : copy("Connect wallet")} aria-haspopup="dialog" aria-expanded={open} aria-controls="wallet-connections" on:click={() => { error = ""; query = ""; openWalletDialog($otcWalletDialog ? "otc" : "wallets"); }}>
     <img src="/icons/ui/wallet-connect.png" width="18" height="18" alt="" aria-hidden="true" />
     <span>{count ? copy("Wallets ({count})", { count }) : copy("Connect wallet")}</span>
   </button>
 </div>
 {#if open}
-  <div class="walletBackdrop" class:handoff aria-hidden={handoff ? "true" : undefined} use:portal transition:fade={{ duration: motionDuration }} role="presentation" on:mousedown={(event) => { if (event.target === event.currentTarget) open = false; }}>
+  <div class="walletBackdrop" class:handoff aria-hidden={handoff ? "true" : undefined} use:portal transition:fade={{ duration: motionDuration }} role="presentation" on:mousedown={(event) => { if (event.target === event.currentTarget) closeWalletDialog(); }}>
     <div class="walletConnections" class:dragging id="wallet-connections" bind:this={dialog} role="dialog" aria-modal="true" aria-labelledby="wallet-connections-title" transition:fly={{ y: 8, duration: motionDuration }}>
-      <button type="button" class="sheetHandle" tabindex="-1" aria-label={copy("Close wallet dialog")} on:pointerdown={startSheetDrag} on:pointermove={moveSheetDrag} on:pointerup={endSheetDrag} on:pointercancel={cancelSheetDrag} on:click={(event) => { if (event.detail === 0 || dragDistance === 0) open = false; }}><span aria-hidden="true"></span></button>
+      <button type="button" class="sheetHandle" tabindex="-1" aria-label={copy("Close wallet dialog")} on:pointerdown={startSheetDrag} on:pointermove={moveSheetDrag} on:pointerup={endSheetDrag} on:pointercancel={cancelSheetDrag} on:click={(event) => { if (event.detail === 0 || dragDistance === 0) closeWalletDialog(); }}><span aria-hidden="true"></span></button>
       <div class="walletHeading">
-        <label class="walletSearch"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.7" /><path d="m20 20-4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg><input type="search" bind:this={searchInput} bind:value={query} disabled={Boolean(busy)} placeholder={copy("Search networks or currencies")} aria-label={copy("Search wallets")} aria-controls="wallet-search-results" autocomplete="off" spellcheck="false" on:input={() => error = ""} /></label>
-        {#if query}<button class="clearSearch" type="button" disabled={Boolean(busy)} aria-label={copy("Clear wallet search")} on:click={clearSearch}>×</button>{/if}
-        <button class="closeButton" type="button" aria-label={copy("Close wallet dialog")} on:click={() => open = false}><kbd>esc</kbd><svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg></button>
+        <label class="walletSearch"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.7" /><path d="m20 20-4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg><input type="search" bind:this={searchInput} bind:value={query} disabled={working} placeholder={copy("Search networks or currencies")} aria-label={copy("Search wallets")} aria-controls="wallet-search-results" autocomplete="off" spellcheck="false" on:input={() => error = ""} /></label>
+        {#if query}<button class="clearSearch" type="button" disabled={working} aria-label={copy("Clear wallet search")} on:click={clearSearch}>×</button>{/if}
+        <button class="closeButton" type="button" aria-label={copy("Close wallet dialog")} on:click={() => closeWalletDialog()}><kbd>esc</kbd><svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg></button>
       </div>
       <div class="titleBar"><h2 id="wallet-connections-title">{copy("Wallet connections")}</h2></div>
       <div class="resultPanel">
@@ -145,27 +165,34 @@
           <section class="section"><h3>{copy("Available networks")}</h3>
             {#each visibleChoices as choice (choice.family)}
               {@const wallet = $wallets[choice.family]}
-              {@const action = wallet ? copy("Disconnect") : busy === choice.family ? copy("Connecting…") : copy("Connect")}
-              {@const address = wallet?.address}
+              {@const otcChain = account && (choice.network === "ethereum" || choice.network === "everscale") ? choice.network : null}
+              {@const proof = otcChain ? account?.bound.find(value => value.startsWith(`${otcChain}:`))?.slice(otcChain.length + 1).trim() : undefined}
+              {@const action = busy === choice.family ? copy("Connecting…") : otcChain ? proof ? copy("Verified") : account?.session ? copy("Verify") : copy("Connect") : wallet ? copy("Disconnect") : copy("Connect")}
+              {@const address = proof || wallet?.address}
               <div class="walletChoice" data-family={choice.family} aria-busy={busy === choice.family}>
                 <PickerOptionCard
                   role="button"
                   name={choice.label}
                   iconUrl={choice.icon}
                   initials={choice.label.slice(0, 2).toUpperCase()}
-                  selected={Boolean(wallet)}
+                  selected={otcChain ? Boolean(proof) : Boolean(wallet)}
                   category={action}
                   meta={address && address.length > 20 ? `${address.slice(0, 7)}…${address.slice(-6)}` : address}
                   metaTitle={address}
-                  disabled={Boolean(busy)}
-                  ariaLabel={wallet ? copy("Disconnect {network} wallet", { network: choice.label }) : busy === choice.family ? copy("Connecting…") : copy("Connect {network} wallet", { network: choice.label })}
-                  onSelect={() => wallet ? disconnect(choice.family) : connect(choice.family, choice.network)}
+                  disabled={working || !!(otcChain && (!account?.enabled || !account.chains.includes(otcChain)))}
+                  ariaLabel={otcChain ? copy(account?.session ? "Verify {network} wallet" : "Connect {network} wallet", { network: choice.label }) : wallet ? copy("Disconnect {network} wallet", { network: choice.label }) : busy === choice.family ? copy("Connecting…") : copy("Connect {network} wallet", { network: choice.label })}
+                  onSelect={() => selectChoice(choice.family, choice.network)}
                 />
               </div>
             {/each}
             {#if !visibleChoices.length}<div class="emptySearch" role="status"><strong>{copy("No wallets found")}</strong><span>{copy("Try a different search.")}</span></div>{/if}
           </section>
-          {#if error}<p role="alert">{error}</p>{/if}
+          {#if error || account?.error}<p role="alert">{error || account?.error}</p>{/if}
+          {#if account?.progress}<p class="walletStatus" role="status">{copy(account.progress)}</p>{/if}
+          {#if account?.session}<button class="accountAction" type="button" disabled={account.disconnectDisabled || !!account.progress || Boolean(busy)} on:click={account.onDisconnect}>{copy("Disconnect")}</button>{/if}
+          {#if account?.requestingQuote}
+            <button class="quoteAction" type="button" disabled={working || !account.quoteReady} on:click={account.onRequest}>{copy("Request exact quote")}</button>
+          {/if}
         </div>
       </div>
     </div>
@@ -204,6 +231,9 @@
   .emptySearch strong { font-size: 13px; font-weight: 600; }
   .emptySearch span { color: var(--color-text-faint); }
   p { margin: 0; padding: 8px; color: var(--color-danger); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+  .walletStatus { color: var(--color-text-soft); }
+  .accountAction, .quoteAction { display: block; width: calc(100% - 16px); margin: 8px; min-height: 44px; font: inherit; font-size: 12px; }
+  .quoteAction { background: var(--color-accent); color: #152016; }
   .sheetHandle { display: none; }
   @media (max-width: 640px), (pointer: coarse) { button { min-height: 44px; } }
   @media (max-width: 640px) {

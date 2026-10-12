@@ -12,6 +12,7 @@
   import { homeContent } from "$lib/home-content";
   import { SearchResponseMetrics } from "$lib/response-metrics";
   import { fetchRouteSearchActivity, SEARCH_ACTIVITY_PERIODS, type RouteSearchActivityHour, type SearchActivityPeriod } from "$lib/route-activity";
+  import { recordTrendSearch } from "$lib/trends/activity";
   import { fiatFlagUrl } from "$lib/currency-flags";
   import { lockPageScroll } from "$lib/page-scroll-lock";
   import type { ExchangeShareState } from "$lib/exchange-share";
@@ -328,8 +329,9 @@
     return source.feeDescription ? `${action}. Fee model: ${source.feeDescription}` : action;
   };
 
-  function mapRoutes(response: Awaited<ReturnType<typeof fetchP2pRoutes>>): RouteCandidate[] {
+  function mapRoutes(response: Awaited<ReturnType<typeof fetchP2pRoutes>>, displayNetworks = true): RouteCandidate[] {
     const bestTarget = Number(response.routes[0]?.target_amount ?? 0);
+    const routeNetwork = (value?: string | null) => displayNetworks ? networkName(value) : value ?? "";
     return response.routes.map((route, index) => {
     const entryOffer = route.entry_offer, exitOffer = route.exit_offer, targetAmount = Number(route.target_amount);
       const legs = route.cycle_legs?.length
@@ -346,20 +348,22 @@
                 : []),
           ]
         : route.market_path
-          ? [{ kind: "entry" as const, from: route.source_fiat, to: route.bridge_currency ?? route.target_fiat, provider: route.market_path.venue, status: "found" as const }, ...(route.bridge_currency ? [{ kind: "exit" as const, from: route.bridge_currency, to: route.target_fiat, provider: route.market_path.venue, status: "found" as const }] : [])]
+          ? entryOffer
+            ? [{ kind: "entry" as const, from: route.source_fiat, to: entryOffer.asset, provider: entryOffer.source, status: "found" as const }, { kind: "exit" as const, from: entryOffer.asset, to: route.target_fiat, provider: route.market_path.venue, status: "found" as const }]
+            : [{ kind: "entry" as const, from: route.source_fiat, to: route.bridge_currency ?? route.target_fiat, provider: route.market_path.venue, status: "found" as const }, ...(route.bridge_currency ? [{ kind: "exit" as const, from: route.bridge_currency, to: route.target_fiat, provider: route.market_path.venue, status: "found" as const }] : [])]
           : [...(entryOffer ? [{ kind: "entry" as const, from: route.source_fiat, to: route.bridge_currency ?? route.asset, provider: entryOffer.source, status: "found" as const }] : []), ...(exitOffer ? [{ kind: "exit" as const, from: route.bridge_currency ?? route.asset, to: route.target_fiat, provider: exitOffer.source, status: "found" as const }] : [])];
       const fallbackRouteId = route.market_path
         ? `spot:${route.market_path.venue}:${route.market_path.source_pair}:${route.market_path.target_pair}`
         : `live:${entryOffer?.source ?? "direct"}:${entryOffer?.ad_id ?? "none"}:${exitOffer?.source ?? "direct"}:${exitOffer?.ad_id ?? "none"}:${route.route_path?.join(",") ?? ""}`;
       return {
         route_id: route.route_id?.trim() || fallbackRouteId,
-        status: "complete", source_amount_minor: Math.round(Number(route.source_amount) * 100), source_amount: route.source_amount, source_currency: route.source_fiat,
+        status: "complete", source_amount_minor: Math.round(Number(route.source_amount) * 100), source_amount: route.source_amount, acquired_asset_amount: route.acquired_asset_amount, source_currency: route.source_fiat,
         source_payment_method: sourceMethod?.kind !== "wallet" ? sourceMethod?.name : undefined,
         target_payment_method: targetMethod?.kind !== "wallet" ? targetMethod?.name : undefined,
         source_bank_fee_percent: sourceMethod?.kind === "bank" ? sourceMethod.bankFeePercent : undefined,
         target_bank_fee_percent: targetMethod?.kind === "bank" ? targetMethod.bankFeePercent : undefined,
         source_method_icon_url: sourceMethod?.kind !== "wallet" ? paymentMethodFavicon(sourceMethod) ?? undefined : undefined,
-        entry_asset: route.asset, entry_network: networkName(route.entry_network), source_network: route.source_network ? networkName(route.source_network) : undefined, target_network: route.target_network ? networkName(route.target_network) : undefined,
+        entry_asset: route.asset, entry_network: routeNetwork(route.entry_network), source_network: route.source_network ? routeNetwork(route.source_network) : undefined, target_network: route.target_network ? routeNetwork(route.target_network) : undefined,
         target_amount_minor: Math.round(targetAmount * 100), target_amount: route.target_amount, target_currency: route.target_fiat,
         target_method_icon_url: targetMethod?.kind !== "wallet" ? paymentMethodFavicon(targetMethod) ?? undefined : undefined,
         route_kind: route.route_kind, profitability: route.profitability, cycle_legs: route.cycle_legs, profitability_decimals: route.profitability_decimals, bridge_currency: route.bridge_currency, market_path: route.market_path,
@@ -552,8 +556,8 @@
   $: selectedTargetCurrency = targetMethod?.currency || targetCurrency;
   $: sourceNetworks = sourceMethod?.kind === "wallet" ? networks.filter((network) => network.currencies.includes(sourceMethod!.currency)) : [];
   $: targetNetworks = targetMethod?.kind === "wallet" ? networks.filter((network) => network.currencies.includes(targetMethod!.currency)) : [];
-  $: sourceNetwork = sourceNetworks.find((network) => network.id === sourceNetworkId) ?? sourceNetworks[0];
-  $: targetNetwork = targetNetworks.find((network) => network.id === targetNetworkId) ?? targetNetworks[0];
+  $: sourceNetwork = sourceNetworks.find((network) => network.id === sourceNetworkId) ?? (sourceMethod?.kind === "wallet" ? preferredNetwork(sourceMethod.currency) : undefined);
+  $: targetNetwork = targetNetworks.find((network) => network.id === targetNetworkId) ?? (targetMethod?.kind === "wallet" ? preferredNetwork(targetMethod.currency) : undefined);
   $: sourceCurrencyChoices = currencyChoicesFor(sourceMethod, "sender");
   $: targetCurrencyChoices = currencyChoicesFor(targetMethod, "recipient");
   $: showBelarusP2pWarning = selectedExchangeMethods.includes("p2p") && [sourceMethod, targetMethod].some((method) => method?.kind === "bank" && method.country === "BY" && method.currency === "BYN");
@@ -739,8 +743,12 @@
     currencyPicker = null;
     resetResults();
   }
-  function chooseSource(method: PaymentMethod, network?: CryptoNetwork) { initialSearchReady = true; sourceMethodId = method.id; if (method.kind === "wallet") sourceNetworkId = network?.id ?? networks.find((item) => item.currencies.includes(method.currency))?.id ?? FALLBACK_NETWORK.id; methodPicker = null; resetResults(); }
-  function chooseTarget(method: PaymentMethod, network?: CryptoNetwork) { initialSearchReady = true; targetMethodId = method.id; if (method.kind === "wallet") targetNetworkId = network?.id ?? networks.find((item) => item.currencies.includes(method.currency))?.id ?? FALLBACK_NETWORK.id; methodPicker = null; resetResults(); }
+  function preferredNetwork(currency: string) {
+    const compatible = networks.filter((network) => network.currencies.includes(currency));
+    return compatible.find((network) => network.id.toLowerCase() === currency.toLowerCase()) ?? compatible[0];
+  }
+  function chooseSource(method: PaymentMethod, network?: CryptoNetwork) { initialSearchReady = true; sourceMethodId = method.id; if (method.kind === "wallet") sourceNetworkId = network?.id ?? preferredNetwork(method.currency)?.id ?? FALLBACK_NETWORK.id; methodPicker = null; resetResults(); }
+  function chooseTarget(method: PaymentMethod, network?: CryptoNetwork) { initialSearchReady = true; targetMethodId = method.id; if (method.kind === "wallet") targetNetworkId = network?.id ?? preferredNetwork(method.currency)?.id ?? FALLBACK_NETWORK.id; methodPicker = null; resetResults(); }
   function selectNetwork(network: CryptoNetwork) { initialSearchReady = true; if (networkPicker === "source") sourceNetworkId = network.id; else targetNetworkId = network.id; networkPicker = null; resetResults(); }
   function openCurrencyPicker(side: Exclude<PickerSide, null>) { currencyPicker = side; }
   async function openMethodPicker(side: Exclude<PickerSide, null>) {
@@ -865,6 +873,7 @@
         response = await fetchP2pRoutes({ ...liveQuery, signal, anonymousId });
       }
       if (currentRequest !== requestId) return;
+      if (countActivity) recordTrendSearch(mapRoutes(response, false));
       if (targetDriven) {
         const responseRoutes = mapRoutes(response);
         const quotedRoute = responseRoutes.find((route) => routeFamilyKey(route) === targetQuoteRouteKey) ?? responseRoutes[0];

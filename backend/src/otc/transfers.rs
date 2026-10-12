@@ -27,6 +27,9 @@ impl Service {
         kind: &str,
     ) -> Result<Value> {
         let owned = self.owned_trade(actor, id).await?;
+        if owned.terms.escrow.is_some() {
+            return self.prepare_escrow_ever(actor, &owned, key, kind).await;
+        }
         {
             let client = self.pool.get().await?;
             if let Some(row)=client.query_opt("SELECT id,instructions,state FROM otc_attempts WHERE trade_id=$1 AND kind=$2 AND idempotency_key=$3",&[&id,&kind,&key]).await? { let expected=if kind=="payment" {&owned.terms.customer_actor}else{&owned.terms.desk_actor}; if actor!=expected {return Err(Error::Unauthorized);} return Ok(json!({"id":row.get::<_,Uuid>(0),"instructions":row.get::<_,Value>(1),"state":row.get::<_,String>(2)})); }
@@ -121,6 +124,9 @@ impl Service {
         )
         .await?;
         if tx.query_opt("SELECT id FROM otc_attempts WHERE state IN ('prepared','unknown','submitted','confirming') AND instructions->'leg'->>'chain'=$1 AND instructions->'leg'->>'sender'=$2",&[&leg.chain,&leg.sender]).await?.is_some(){return Err(Error::Conflict("wallet handoff already pending".into()));}
+        if leg.chain == "ethereum" && tx.query_opt("SELECT id FROM otc_escrow_calls WHERE sender=$1 AND state IN ('unknown','submitted') LIMIT 1", &[&leg.sender]).await?.is_some() {
+            return Err(Error::Conflict("this wallet has an unresolved escrow handoff".into()));
+        }
         if kind == "refund" {
             let inventory=tx.query_opt("SELECT balance::text,gas_reserve::text FROM otc_inventory WHERE chain=$1 AND observed_at>now()-interval '60 seconds' FOR UPDATE",&[&leg.chain]).await?.ok_or(Error::Disabled)?;
             let reserved:String=tx.query_one("SELECT COALESCE(sum(amount),0)::text FROM otc_reservations WHERE chain=$1 AND status!='released' AND trade_id!=$2",&[&leg.chain,&id]).await?.get(0);
@@ -194,6 +200,11 @@ impl Service {
         Ok(json!({"tracked":true}))
     }
     pub(crate) async fn credit(&self, id: Uuid, kind: &str, evidence: &Evidence) -> Result<()> {
+        let row = self.pool.get().await?.query_one("SELECT terms FROM otc_trades WHERE id=$1", &[&id]).await?;
+        let terms: super::model::Terms = serde_json::from_value(row.get(0))?;
+        if terms.escrow.is_some() {
+            return self.credit_escrow_ever(id, kind, evidence).await;
+        }
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
         let row = tx
@@ -392,7 +403,7 @@ impl Service {
                             .await?;
                         continue;
                     }
-                    if evidence.finalized {
+                    if evidence.finalized && instructions["escrow"] != true {
                         let mut other_kind = if kind != "payment" {
                             "payment"
                         } else {

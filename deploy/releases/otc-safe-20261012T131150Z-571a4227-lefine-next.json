@@ -1,0 +1,44 @@
+{
+  "target_host": "195.123.218.200",
+  "target_user": "root",
+  "profile": "lefine-next",
+  "status": "deployed",
+  "revision": "571a42276334e159c30d0318136dbebdbc4ca072",
+  "tag": "otc-safe-20261012T131150Z-571a4227",
+  "source_sha256": "b9bf53488b81c18c895c8be3b7bc6d57b20d07444887a7bce712fcb25ce61906",
+  "images": {
+    "backend": "localhost/pay3flow/backend:otc-safe-20261012T131150Z-571a4227",
+    "frontend": "localhost/pay3flow/frontend:otc-safe-20261012T131150Z-571a4227"
+  },
+  "image_ids": {
+    "backend": "f0c8f897b9a8fb83a59e3b8309bff5ade126e61615f833b5f7bb23f082812745",
+    "frontend": "f197a8c46e301b78b25160298e9cd34cc7331dd801be1f719eafee0893eb357f"
+  },
+  "migration_started_at": "2026-10-12T13:39:15.626947+00:00",
+  "verified_at": "2026-10-12T13:55:45.501774+00:00",
+  "target_dir": "/var/lib/pay3flow/migrations/otc-safe-20261012T131150Z-571a4227",
+  "source_migration_backup": "/home/xila/pay3flow-backups/new-profile-otc-safe-20261012T131150Z-571a4227",
+  "restored_public_tables": 68,
+  "restored_redis_keys": 299,
+  "verification": {
+    "https_health": "ok",
+    "http_ip_health": "ok",
+    "providers_api": "valid JSON",
+    "browser_widths": [
+      1440,
+      390
+    ],
+    "browser_target_ip": "195.123.218.200",
+    "safe_mainnet_bytecode_review": "passed",
+    "backend_replicas_ready": 1,
+    "frontend_replicas_ready": 1,
+    "postgres_ready": true,
+    "redis_ready": true,
+    "custom_contracts_deployed": false
+  },
+  "namespace": "pay3flow",
+  "dns_changes_applied": false,
+  "domain": "pay3flow.lefine.pro",
+  "desk_trading_enabled": false,
+  "custom_escrow_enabled": false
+}

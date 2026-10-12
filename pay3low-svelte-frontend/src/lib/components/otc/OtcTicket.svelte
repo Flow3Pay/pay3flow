@@ -12,8 +12,6 @@
   export let onEdit: () => void;
   export let onRequest: () => void;
   export let onReview: () => void;
-  export let onAccount: () => void;
-  export let accountLabel: string;
   $: copy = otcCopy($locale);
   $: say = (en: string, ru: string) => $locale === "ru" ? ru : en;
   $: sendAsset = direction === "buy" ? "USDT" : "EVER";
@@ -35,7 +33,6 @@
   <div class="orderDetails"><div><span>{say("Desk", "Деск")}</span><strong>{desk || "—"}</strong></div><div><span>{copy.fees}</span><strong>{quote ? `${decimal(quote.terms.fee_policy.fee_units, 6)} USDT` : "max(0.25%, 5 USDT)"}</strong></div><small>{say("Completion fee paid by the desk. Network costs are separate.", "Комиссию за завершение платит деск. Сетевые расходы отдельно.")}</small></div>
   {#if quote}<p class="priceHint">{say("Quote expires", "Котировка истекает")}: {quote.terms.quote_by}</p>{/if}
   <button class="cta" type="submit" disabled={busy || disabled} data-testid="otc-review">{quote ? say("Review fixed quote", "Проверить котировку") : say("Request exact quote", "Запросить котировку")}<span aria-hidden="true">↗</span></button>
-  <button class="accountButton" type="button" on:click={onAccount}>{accountLabel}</button>
 </form>
 
 <style>
@@ -80,5 +77,5 @@
   @media (prefers-reduced-motion: reduce) { .sideTabs::before, .sideTabs button, .priceField > div, .cta { transition: none; } }
 
 
-.assetIdentity { display: flex; align-items: center; gap: 9px; padding: 12px; border: 1px solid var(--exchange-field-border); border-radius: 6px; background: var(--color-panel); font-size: 12px; } .assetIdentity span { margin-left: auto; color: var(--color-text-soft); } .quoteMode { display: flex; justify-content: space-between; padding: 17px 0 15px; font-size: 12px; } .quoteMode span { color: var(--color-text-soft); } .accountButton { display: block; width: 100%; min-height: 44px; margin-top: 8px; color: var(--color-text-soft); font-size: 12px; } .orderDetails > small { color: var(--color-text-soft); line-height: 1.5; }
+.assetIdentity { display: flex; align-items: center; gap: 9px; padding: 12px; border: 1px solid var(--exchange-field-border); border-radius: 6px; background: var(--color-panel); font-size: 12px; } .assetIdentity span { margin-left: auto; color: var(--color-text-soft); } .quoteMode { display: flex; justify-content: space-between; padding: 17px 0 15px; font-size: 12px; } .quoteMode span { color: var(--color-text-soft); } .orderDetails > small { color: var(--color-text-soft); line-height: 1.5; }
 </style>

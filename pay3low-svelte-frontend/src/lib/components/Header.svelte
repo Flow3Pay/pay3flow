@@ -13,7 +13,7 @@
 
 
   export let shareState: ExchangeShareState | null = null;
-  export let activePage: "swap" | "otc" | "about" | "providers" = "swap";
+  export let activePage: "swap" | "otc" | "about" | "providers" | "trends" = "swap";
   export let swapHref = "/#/swap";
   export let otcHref = "/#/otc";
   export let onOtcNavigate: () => void = () => {};
@@ -26,23 +26,33 @@
   let shareLink = "";
   let shareImage: string | null = null;
   let sharingOtc = false;
+  let sharingTrends = false;
+  $: shareTitle = activePage === "trends" ? "Share trends" : activePage === "otc" ? "Share OTC" : "Share exchange";
+  $: shareHasDialog = Boolean(shareState) || activePage === "otc" || activePage === "trends";
   let shareOpen = false;
   let shareLoading = false;
   async function openShare() {
     if (shareLoading) return;
     sharingOtc = activePage === "otc" && Boolean(shareUrl);
-    if (!shareState && shareUrl && !sharingOtc) {
+    sharingTrends = activePage === "trends" && Boolean(shareUrl);
+    if (!shareState && shareUrl && !sharingOtc && !sharingTrends) {
       try { await navigator.clipboard.writeText(new URL(shareUrl, location.origin).toString()); shareMessage = t("Link copied", {}, activeLocale); }
       catch { shareMessage = t("Could not copy link", {}, activeLocale); }
       clearTimeout(shareMessageTimer);
       shareMessageTimer = setTimeout(() => shareMessage = "", 3000);
       return;
     }
-    if (!shareState && !sharingOtc) return;
+    if (!shareState && !sharingOtc && !sharingTrends) return;
     shareLoading = true;
     try {
       if (menuOpen) await closeMenu();
-      if (sharingOtc) {
+      if (sharingTrends) {
+        sharedState = null;
+        const target = new URL(shareUrl!, location.origin);
+        target.searchParams.set("lang", activeLocale);
+        shareLink = target.toString();
+        shareImage = `${target.origin}/trends/preview.png?lang=${activeLocale}&v=1`;
+      } else if (sharingOtc) {
         sharedState = null;
         const target = `${shareUrl}&lang=${activeLocale}`;
         shareLink = await createShortShare(target, otcPreview);
@@ -172,7 +182,7 @@
       {/if}
     </div>
     <a class="brand" href={swapHref} aria-label="Pay3Flow"><img class="logo" src="/icons/assets/pay3flow-mark.svg" alt="" width="34" height="34" /><span class="wordmark">Pay3Flow</span></a>
-    <nav class="productNav" aria-label={t("Exchange mode", {}, activeLocale)}><a href={swapHref} class:active={activePage === "swap"} aria-current={activePage === "swap" ? "page" : undefined}>SWAP</a><a href={otcHref} on:click={onOtcNavigate} class:active={activePage === "otc"} aria-current={activePage === "otc" ? "page" : undefined}>OTC</a><a href="/providers" class:active={activePage === "providers"} aria-current={activePage === "providers" ? "page" : undefined}>{t("Platforms", {}, activeLocale)}</a></nav>
+    <nav class="productNav" aria-label={t("Exchange mode", {}, activeLocale)}><a href={swapHref} class:active={activePage === "swap"} aria-current={activePage === "swap" ? "page" : undefined}>SWAP</a><a href={otcHref} on:click={onOtcNavigate} class:active={activePage === "otc"} aria-current={activePage === "otc" ? "page" : undefined}>OTC</a><a href="/trends" class:active={activePage === "trends"} aria-current={activePage === "trends" ? "page" : undefined}>{t("TRENDS", {}, activeLocale)}</a><a href="/providers" class:active={activePage === "providers"} aria-current={activePage === "providers" ? "page" : undefined}>{t("Platforms", {}, activeLocale).toLocaleUpperCase(activeLocale)}</a></nav>
     <div class="utilityActions">
       <WalletMenu />
       <div class="languageWrap" bind:this={languageWrap} on:focusout={languageFocus}>
@@ -180,12 +190,12 @@
         {#if languageOpen}<div class="languageMenu" id="header-language-menu" role="listbox" aria-label={t("Switch language", {}, activeLocale)}>{#each languages as language}<button type="button" role="option" tabindex="-1" aria-selected={activeLocale === language.locale} on:click={() => selectLanguage(language.locale)}><img class="languageFlag" src={`/icons/flags/${language.flag}.svg`} alt="" width="22" height="22" /><span lang={language.locale}>{language.name}</span>{#if activeLocale === language.locale}<span class="languageCheck" aria-hidden="true">✓</span>{/if}</button>{/each}</div>{/if}
       </div>
       <button class="themeToggle" type="button" on:click={toggleTheme} aria-label={t("Switch theme", {}, activeLocale)}><img class="moonIcon" src={moonIcon} alt="" width="20" height="20" /><img class="sunIcon" src={sunIcon} alt="" width="20" height="20" /></button>
-      {#if shareState || shareUrl}<button type="button" class="shareButton" aria-label={t(activePage === "otc" ? "Share OTC" : "Share exchange", {}, activeLocale)} title={t(activePage === "otc" ? "Share OTC" : "Share exchange", {}, activeLocale)} aria-haspopup={shareState || activePage === "otc" ? "dialog" : undefined} aria-expanded={shareState || activePage === "otc" ? shareOpen : undefined} aria-busy={shareLoading} on:click={openShare}><img src="/icons/ui/share.png" alt="" width="20" height="20" /></button>{/if}
+      {#if shareState || shareUrl}<button type="button" class="shareButton" aria-label={t(shareTitle, {}, activeLocale)} title={t(shareTitle, {}, activeLocale)} aria-haspopup={shareHasDialog ? "dialog" : undefined} aria-expanded={shareHasDialog ? shareOpen : undefined} aria-busy={shareLoading} on:click={openShare}><img src="/icons/ui/share.png" alt="" width="20" height="20" /></button>{/if}
       {#if shareMessage}<span class="shareMessage" role="status">{shareMessage}</span>{/if}
     </div>
   </div>
 </header>
-{#if shareOpen && ShareDialog}<svelte:component this={ShareDialog} state={sharedState} url={shareLink} imageUrl={shareImage} shareTitle={sharingOtc ? "Share OTC" : "Share exchange"} shareDescription={sharingOtc ? "Send this link to open the same OTC settings." : "Send this link to open the same exchange settings."} linkLabel={sharingOtc ? "OTC link" : "Exchange link"} previewAlt={sharingOtc ? "Pay3Flow OTC · Bridge · Chart · Orderbook" : ""} onClose={() => shareOpen = false} />{/if}
+{#if shareOpen && ShareDialog}<svelte:component this={ShareDialog} state={sharedState} url={shareLink} imageUrl={shareImage} shareTitle={sharingTrends ? "Share trends" : sharingOtc ? "Share OTC" : "Share exchange"} shareDescription={sharingTrends ? "Send this link to open the exchange trend wall." : sharingOtc ? "Send this link to open the same OTC settings." : "Send this link to open the same exchange settings."} linkLabel={sharingTrends ? "Trends link" : sharingOtc ? "OTC link" : "Exchange link"} previewAlt={sharingTrends ? t("Exchange trend wall", {}, activeLocale) : sharingOtc ? "Pay3Flow OTC · Bridge · Chart · Orderbook" : ""} onClose={() => shareOpen = false} />{/if}
 
 <style>
 .header { position: relative; z-index: 50; padding: 16px var(--page-gutter) 8px; }
@@ -227,6 +237,11 @@
 .aboutLink, .githubLink, .telegramLink, .apiDocsLink { display: flex; width: 100%; min-height: 44px; height: auto; align-items: center; gap: 10px; padding: 10px 12px; border: 0; border-radius: 7px; background: transparent; font-size: 13px; text-align: left; }
 .actions a:hover, .actions a:focus-visible { background: var(--color-accent-soft); }
 .aboutLink img { flex: 0 0 auto; }
+@media (min-width: 641px) and (max-width: 1000px) {
+  .inner { flex-wrap: wrap; }
+  .productNav { order: 3; width: 100%; margin: 0; padding-top: 6px; border-top: 1px solid var(--color-border); }
+  .productNav a { flex: 1; padding: 8px; }
+}
 @media (max-width: 640px) {
   .header { padding-top: 12px; }
   .inner { gap: 8px; padding: 6px; flex-wrap: wrap; }

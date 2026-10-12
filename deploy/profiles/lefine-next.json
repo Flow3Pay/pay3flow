@@ -1,0 +1,18 @@
+{
+  "name": "lefine-next",
+  "ssh_host": "195.123.218.200",
+  "ssh_user": "root",
+  "namespace": "pay3flow",
+  "kubectl_command": [
+    "k3s",
+    "kubectl"
+  ],
+  "backend_node_port": 30281,
+  "frontend_node_port": 30280,
+  "domain": "pay3flow.lefine.pro",
+  "direct_http_url": "http://195.123.218.200",
+  "caddy_route": "/var/lib/lefine-app-host/routes/pay3flow.caddy",
+  "release_record": "deploy/releases/otc-safe-20261012T131150Z-571a4227-lefine-next.json",
+  "release_directory": "/var/lib/pay3flow/migrations/otc-safe-20261012T131150Z-571a4227",
+  "source_revision": "571a42276334e159c30d0318136dbebdbc4ca072"
+}

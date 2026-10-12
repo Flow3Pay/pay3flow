@@ -14,6 +14,7 @@
   import { walletFamily } from "$lib/wallet-execution";
   import InstructionScene from "./InstructionScene.svelte";
   import { isSpotStep, spotTrade } from "$lib/guides/spot/frames";
+  import { bestchangeExchanger, bestchangeWebsiteUrl } from "$lib/guides/bestchange/frames";
 
   export let route: RouteCandidate;
   export let venueNames: Record<string, string> = {};
@@ -59,6 +60,7 @@
   $: walletSwap = Boolean(step?.execution && route.execution && sourceFamily && $wallets[sourceFamily]);
   $: walletProviderStep = Boolean(step?.execution && ["symbiosis", "near-intents", "cow-swap"].includes(step.provider));
   $: walletProviderUrl = step?.url ?? step?.guide?.links.find(link => /^Open\b/i.test(link.label))?.url ?? (step && venueUrls[step.provider.toLowerCase()]);
+  $: exchangerWebsiteUrl = step?.provider.toLowerCase() === "bestchange" ? bestchangeWebsiteUrl(step) : null;
   $: finished = steps.length > 0 && chapter === steps.length;
   $: titleIncludesVenue = Boolean(step && step.title.endsWith(step.venue));
   $: headingTitle = titleIncludesVenue && step ? step.title.slice(0, -step.venue.length).trimEnd() : step?.title;
@@ -227,7 +229,11 @@
           {#if step?.provider.toLowerCase() === "cifra-broker" && step.kind !== "transfer" && step.url}
             <a class="walletProviderLink" data-testid="cifra-terminal-link" href={step.url} target="_blank" rel="noreferrer noopener">{copy("Open Cifra Tradernet")} <span aria-hidden="true">↗</span></a>
           {/if}
-          {#if step?.offer && !step.direct && (step.kind === "buy" || step.kind === "sell") && step.url}
+          {#if step?.provider.toLowerCase() === "bestchange" && step.kind !== "transfer" && step.url}
+            <a class="walletProviderLink" data-testid="bestchange-exchanger-link" href={step.url} target="_blank" rel="noreferrer noopener">{copy("Open {venue} profile", { venue: bestchangeExchanger(route, step, copy) })} <span aria-hidden="true">↗</span></a>
+            {#if exchangerWebsiteUrl}<a class="walletProviderLink" data-testid="bestchange-exchanger-website" href={exchangerWebsiteUrl} target="_blank" rel="noreferrer noopener">{copy("Go to {exchanger} website", { exchanger: bestchangeExchanger(route, step, copy) })} <span aria-hidden="true">↗</span></a>{/if}
+          {/if}
+          {#if step?.offer && step.provider.toLowerCase() !== "bestchange" && !step.direct && (step.kind === "buy" || step.kind === "sell") && step.url}
             <a class="walletProviderLink" data-testid="p2p-profile-link" href={step.url} target="_blank" rel="noreferrer noopener">{copy(step.offer.advertiser_profile_url ? "Open {venue} profile" : "Open {venue}", { venue: step.offer.advertiser_profile_url ? step.offer.advertiser.nickname : step.venue })} <span aria-hidden="true">↗</span></a>
           {/if}
           {#if step?.execution && route.execution}

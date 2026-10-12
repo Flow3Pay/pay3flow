@@ -297,7 +297,7 @@ export async function hasExecutionFunds(execution: RouteExecution, wallet: Conne
   }
   if (action.kind === "near_deposit" && action.network === "near") {
     const amount = requiredAtomic(action);
-    const balance = await nearBalance(asNear(wallet), action.token_contract);
+    const balance = await nearBalance(asNear(wallet), wrapsNativeNear(action) ? undefined : action.token_contract);
     return balance >= amount;
   }
   const evm = asEvm(wallet);
@@ -422,6 +422,11 @@ async function executeEvmDeposit(action: Extract<RouteExecutionAction, { kind: "
   return { reference, kind: "transaction_hash" as const };
 }
 
+function wrapsNativeNear(action: Extract<RouteExecutionAction, { kind: "near_deposit" }>): boolean {
+  return action.network === "near" && action.asset.toUpperCase() === "NEAR@NEAR"
+    && action.asset_id === "nep141:wrap.near" && action.token_contract === "wrap.near";
+}
+
 async function executeNearDeposit(action: Extract<RouteExecutionAction, { kind: "near_deposit" }>, wallet: NearConnection, executionId: string) {
   const selected = await wallet.selector.wallet();
   const { actionCreators } = await import("@near-js/transactions");
@@ -432,7 +437,10 @@ async function executeNearDeposit(action: Extract<RouteExecutionAction, { kind: 
     ? await selected.signAndSendTransaction({
         receiverId: action.token_contract,
         callbackUrl: callback.toString(),
-        actions: [actionCreators.functionCall("ft_transfer", new TextEncoder().encode(JSON.stringify({ receiver_id: action.deposit_address, amount, memo: action.deposit_memo })), 30_000_000_000_000n, 1n)],
+        actions: [
+          ...(wrapsNativeNear(action) ? [actionCreators.functionCall("near_deposit", new TextEncoder().encode("{}"), 30_000_000_000_000n, BigInt(amount))] : []),
+          actionCreators.functionCall("ft_transfer", new TextEncoder().encode(JSON.stringify({ receiver_id: action.deposit_address, amount, memo: action.deposit_memo })), 30_000_000_000_000n, 1n),
+        ],
       })
     : await selected.signAndSendTransaction({
         receiverId: action.deposit_address,

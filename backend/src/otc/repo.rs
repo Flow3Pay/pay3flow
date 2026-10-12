@@ -74,10 +74,11 @@ impl Service {
         Ok((id, row.get(0)))
     }
     pub(crate) async fn credential(&self, actor: &str) -> Result<String> {
+        self.provision_login_actor(actor).await?;
         let client = self.pool.get().await?;
         let row = client
             .query_opt(
-                "SELECT credential FROM otc_actor_links WHERE actor=$1 AND NOT revoked",
+                "SELECT credential FROM otc_actor_links WHERE actor=$1 AND NOT revoked AND provisioned",
                 &[&actor],
             )
             .await?
@@ -109,12 +110,12 @@ impl Service {
     }
     pub(crate) async fn trades(&self, actor: &str) -> Result<Value> {
         let client = self.pool.get().await?;
-        let trades = client.query("SELECT * FROM otc_trades WHERE customer_actor=$1 OR desk_actor=$1 ORDER BY created_at DESC LIMIT 100",&[&actor]).await?.iter().map(trade).collect::<Result<Vec<_>>>()?;
+        let trades = client.query("SELECT * FROM otc_trades t WHERE customer_actor=$1 OR desk_actor=$1 OR (state NOT IN ('quoted','booking_pending','rejected') AND EXISTS(SELECT 1 FROM otc_login_wallets w WHERE w.actor=$1 AND w.chain='ethereum' AND w.address=t.terms->'escrow'->>'arbitrator')) ORDER BY created_at DESC LIMIT 100",&[&actor]).await?.iter().map(trade).collect::<Result<Vec<_>>>()?;
         let rfqs: Vec<Value> = client.query("SELECT id,actor,direction,input,state,created_at FROM otc_rfq WHERE actor=$1 OR $1=$2 ORDER BY created_at DESC LIMIT 100",&[&actor,&self.cfg.desk_actor]).await?.iter().map(|r| json!({"id":r.get::<_,Uuid>(0),"actor":r.get::<_,String>(1),"direction":r.get::<_,String>(2),"input":r.get::<_,String>(3),"state":r.get::<_,String>(4),"created_at":r.get::<_,DateTime<Utc>>(5)})).collect();
         Ok(json!({"trades":trades,"rfqs":rfqs}))
     }
     pub(crate) async fn details(&self, actor: &str, id: Uuid) -> Result<Value> {
-        let trade = self.owned_trade(actor, id).await?;
+        let trade = self.escrow_trade(actor, id).await?;
         let client = self.pool.get().await?;
         let attempts: Vec<Value> = client.query("SELECT id,kind,state,instructions,reference FROM otc_attempts WHERE trade_id=$1 ORDER BY created_at",&[&id]).await?.iter().map(|r|json!({"id":r.get::<_,Uuid>(0),"kind":r.get::<_,String>(1),"state":r.get::<_,String>(2),"instructions":r.get::<_,Value>(3),"reference":r.get::<_,Option<String>>(4)})).collect();
         let evidence: Vec<Value> = client

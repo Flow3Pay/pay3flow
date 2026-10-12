@@ -145,11 +145,12 @@ export function buildRouteTutorial(route: RouteCandidate, names: Record<string, 
   };
   if (route.route_provider && !providerSwap) addProvider();
 
-  if (crypto && route.market_path) {
+  const addMarketRoute = () => {
+    if (!route.market_path) return;
     const market = route.market_path, name = venue(market.venue);
     const addMarket = (id: "market_source" | "market_target", from: string, to: string, pair: string, rate: string) => add({
       id, kind: "swap", provider: market.venue, venue: name, from, to, pair, rate,
-      amount: id === "market_source" ? tutorialMoney(route.source_amount_minor, from, route.source_amount) : market.intermediary_amount ? `${market.intermediary_amount} ${from}` : undefined,
+      amount: id === "market_source" ? route.route_kind === "fiat_to_crypto" && route.acquired_asset_amount ? `${route.acquired_asset_amount} ${from}` : tutorialMoney(route.source_amount_minor, from, route.source_amount) : market.intermediary_amount ? `${market.intermediary_amount} ${from}` : undefined,
       output: id === "market_source" && route.bridge_currency ? market.intermediary_amount ? `${market.intermediary_amount} ${to}` : undefined : tutorialMoney(route.target_amount_minor, to, route.target_amount),
       network: network(route.source_network ?? route.entry_network), targetNetwork: network(route.target_network ?? route.entry_network),
       title: copy("Convert {from} to {to}", { from, to }), summary: copy("This is a normal exchange on {venue}. There is no separate person to message.", { venue: name }),
@@ -157,9 +158,10 @@ export function buildRouteTutorial(route: RouteCandidate, names: Record<string, 
       serviceLink: route.service_links?.find((link) => link.kind === id), url: spotTutorialUrl(market.venue, pair, from, to),
       notes: [copy("Before withdrawing, check the receiving asset and the network one more time.")],
     });
-    addMarket("market_source", route.source_currency, route.bridge_currency ?? route.target_currency ?? route.entry_asset, market.source_pair, market.source_rate);
+    addMarket("market_source", route.entry_offer_snapshot?.asset ?? route.source_currency, route.bridge_currency ?? route.target_currency ?? route.entry_asset, market.source_pair, market.source_rate);
     if (route.bridge_currency) addMarket("market_target", route.bridge_currency, route.target_currency ?? route.entry_asset, market.target_pair, market.target_rate);
-  }
+  };
+  if (crypto) addMarketRoute();
 
   const addOffer = (side: "entry" | "exit", offer: P2pOffer) => {
     const buying = side === "entry" ? !crypto : crypto;
@@ -192,6 +194,7 @@ export function buildRouteTutorial(route: RouteCandidate, names: Record<string, 
     });
   };
   if (route.entry_offer_snapshot) addOffer("entry", route.entry_offer_snapshot);
+  if (route.route_kind === "fiat_to_crypto") addMarketRoute();
   if (providerSwap) addProvider();
 
   const entry = route.legs.find((leg) => leg.kind === "entry"), exit = route.legs.find((leg) => leg.kind === "exit");
