@@ -188,6 +188,9 @@ impl SymbiosisRouteProvider {
             "bitcoin" => Ok("bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"),
             "tron" => Ok("T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb"),
             "solana" => Ok("So11111111111111111111111111111111111111112"),
+            network if EXTRA_EVM_NETWORKS.iter().any(|(_, name)| *name == network) => {
+                Ok(&self.quote_address)
+            }
             _ => bail!("Symbiosis preview wallet is not configured for {network}"),
         }
     }
@@ -582,6 +585,49 @@ fn is_evm_native_token(address: &str) -> bool {
         || address.eq_ignore_ascii_case("0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
 }
 
+// Audited against the official /v1/chains and /v1/tokens catalogs.
+// These additions enable read-only discovery; execution retains its separate registry.
+const EXTRA_EVM_NETWORKS: &[(u64, &str)] = &[
+    (288, "boba-ethereum"),
+    (13863860, "symbiosis"),
+    (40, "telos"),
+    (324, "zksync-era"),
+    (1101, "polygon-zkevm"),
+    (59144, "linea"),
+    (5000, "mantle"),
+    (534352, "scroll"),
+    (169, "manta-pacific"),
+    (1088, "metis"),
+    (34443, "mode"),
+    (30, "rootstock"),
+    (4200, "merlin"),
+    (810180, "zklink-nova"),
+    (167000, "taiko"),
+    (1329, "sei"),
+    (25, "cronos"),
+    (252, "fraxtal"),
+    (223, "bsquared"),
+    (388, "cronos-zkevm"),
+    (2345, "goat"),
+    (146, "sonic"),
+    (2741, "abstract"),
+    (100, "gnosis"),
+    (80094, "berachain"),
+    (130, "unichain"),
+    (1868, "soneium"),
+    (204, "opbnb"),
+    (999, "hyperevm"),
+    (747474, "katana"),
+    (33139, "apechain"),
+    (9745, "plasma"),
+    (143, "monad"),
+    (4114, "citrea"),
+    (4217, "tempo"),
+    (4663, "robinhood"),
+    (988, "stable"),
+    (5042, "arc"),
+];
+
 fn network_for_chain(chain_id: u64) -> Option<&'static str> {
     Some(match chain_id {
         1 => "ethereum",
@@ -599,7 +645,12 @@ fn network_for_chain(chain_id: u64) -> Option<&'static str> {
         300003 => "dogecoin",
         200002 => "litecoin",
         14500145 => "bitcoin-cash",
-        _ => return None,
+        other => {
+            return EXTRA_EVM_NETWORKS
+                .iter()
+                .find(|(id, _)| *id == other)
+                .map(|(_, network)| *network)
+        }
     })
 }
 
@@ -921,5 +972,37 @@ mod tests {
             .unwrap();
         assert!(quote.output.value.parse::<f64>().unwrap() > 0.0);
         assert!(!quote.fees.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod network_coverage_tests {
+    use super::*;
+
+    #[test]
+    fn public_catalog_networks_have_compatible_quote_previews() {
+        let provider = SymbiosisRouteProvider::new(
+            DEFAULT_API_URL,
+            None,
+            "0x0000000000000000000000000000000000000001",
+            300,
+        )
+        .unwrap();
+        for (id, network) in EXTRA_EVM_NETWORKS {
+            assert_eq!(network_for_chain(*id), Some(*network), "chain {id}");
+            let asset = Asset::new("USDC", Some(network)).unwrap();
+            assert_eq!(
+                provider.quote_wallet_address(&asset).unwrap(),
+                provider.quote_address,
+                "{network}"
+            );
+            assert!(
+                !provider.supports_wallet_execution(
+                    &asset,
+                    &Asset::new("USDC", Some("ethereum")).unwrap()
+                ),
+                "new quote networks require explicit execution configuration"
+            );
+        }
     }
 }

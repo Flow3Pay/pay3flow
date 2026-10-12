@@ -21,7 +21,7 @@ market = "direct_exchange"
 endpoint = "https://www.bncex.com/api/exchange/quote"
 method = "POST"
 headers = { Origin = "https://www.bncex.com", Referer = "https://www.bncex.com/en", Accept = "application/json" }
-supported_assets = ["ALL"]
+supported_assets = ["USDT", "USDC"]
 supported_fiats = ["AMD"]
 fiat_probe_amount = 100000
 asset_probe_amount = 100
@@ -32,16 +32,16 @@ timeout_ms = 5000
 
 [adapter.p2p.buy]
 amount_mode = "fiat_probe"
-request_json = '''{"type":"BUY_{{asset}}","network":"TRC20","paymentMethod":"NON_CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}'''
+request_json = '''{"type":"BUY_{{asset}}","network":"TRC20","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountAmd":"{{amount_number}}"}'''
 request_json_variants = [
-    '''{"type":"BUY_{{asset}}","network":"ETH","paymentMethod":"NON_CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
-    '''{"type":"BUY_{{asset}}","network":"BSC","paymentMethod":"NON_CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
-    '''{"type":"BUY_{{asset}}","network":"POLYGON","paymentMethod":"NON_CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
-    '''{"type":"BUY_{{asset}}","network":"ARBITRUM","paymentMethod":"NON_CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
-    '''{"type":"BUY_{{asset}}","network":"OPTIMISM","paymentMethod":"NON_CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
-    '''{"type":"BUY_{{asset}}","network":"BASE","paymentMethod":"NON_CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
-    '''{"type":"BUY_{{asset}}","network":"AVALANCHE","paymentMethod":"NON_CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
-    '''{"type":"BUY_{{asset}}","network":"SOLANA","paymentMethod":"NON_CASH","token":"{{asset}}","amountAmd":"{{amount_number}}"}'''
+    '''{"type":"BUY_{{asset}}","network":"ETH","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
+    '''{"type":"BUY_{{asset}}","network":"BSC","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
+    '''{"type":"BUY_{{asset}}","network":"POLYGON","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
+    '''{"type":"BUY_{{asset}}","network":"ARBITRUM","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
+    '''{"type":"BUY_{{asset}}","network":"OPTIMISM","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
+    '''{"type":"BUY_{{asset}}","network":"BASE","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
+    '''{"type":"BUY_{{asset}}","network":"AVALANCHE","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountAmd":"{{amount_number}}"}''',
+    '''{"type":"BUY_{{asset}}","network":"SOLANA","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountAmd":"{{amount_number}}"}'''
 ]
 
 [adapter.p2p.buy.offer]
@@ -55,16 +55,16 @@ source_url_template = "https://www.bncex.com/en"
 
 [adapter.p2p.sell]
 amount_mode = "asset_probe"
-request_json = '''{"type":"SELL_{{asset}}","network":"TRC20","paymentMethod":"NON_CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}'''
+request_json = '''{"type":"SELL_{{asset}}","network":"TRC20","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountUsdt":"{{amount_number}}"}'''
 request_json_variants = [
-    '''{"type":"SELL_{{asset}}","network":"ETH","paymentMethod":"NON_CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
-    '''{"type":"SELL_{{asset}}","network":"BSC","paymentMethod":"NON_CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
-    '''{"type":"SELL_{{asset}}","network":"POLYGON","paymentMethod":"NON_CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
-    '''{"type":"SELL_{{asset}}","network":"ARBITRUM","paymentMethod":"NON_CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
-    '''{"type":"SELL_{{asset}}","network":"OPTIMISM","paymentMethod":"NON_CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
-    '''{"type":"SELL_{{asset}}","network":"BASE","paymentMethod":"NON_CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
-    '''{"type":"SELL_{{asset}}","network":"AVALANCHE","paymentMethod":"NON_CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
-    '''{"type":"SELL_{{asset}}","network":"SOLANA","paymentMethod":"NON_CASH","token":"{{asset}}","amountUsdt":"{{amount_number}}"}'''
+    '''{"type":"SELL_{{asset}}","network":"ETH","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
+    '''{"type":"SELL_{{asset}}","network":"BSC","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
+    '''{"type":"SELL_{{asset}}","network":"POLYGON","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
+    '''{"type":"SELL_{{asset}}","network":"ARBITRUM","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
+    '''{"type":"SELL_{{asset}}","network":"OPTIMISM","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
+    '''{"type":"SELL_{{asset}}","network":"BASE","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
+    '''{"type":"SELL_{{asset}}","network":"AVALANCHE","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountUsdt":"{{amount_number}}"}''',
+    '''{"type":"SELL_{{asset}}","network":"SOLANA","paymentMethod":"NON_CASH","fiatDestination":"ACCOUNT","token":"{{asset}}","amountUsdt":"{{amount_number}}"}'''
 ]
 
 [adapter.p2p.sell.offer]

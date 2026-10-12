@@ -45,8 +45,9 @@ route_withdrawals = []
 
 # Optional CoW Protocol and public DEX quote adapters. Each CoW endpoint is
 # "chain=url"; token addresses are shared by CoW, LI.FI, KyberSwap, Nordstern,
-# and Velora in "chain:SYMBOL=address" form. CoW loads token precision from
-# live catalogs; legacy adapters infer it from the configured symbol.
+# Velora, 0x and Barter in "chain:SYMBOL=address" form. CoW loads token precision from
+# live catalogs; 0x/Barter load the shared token list at startup.
+# ZEROX_API_KEY / BARTER_API_KEY enable their read-only quote adapters.
 cow_api_urls = ["ethereum=https://api.cow.fi/mainnet"]
 cow_token_list_url = "https://files.cow.fi/tokens/CowSwap.json"
 cow_tokens = [

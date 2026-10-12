@@ -13,7 +13,11 @@ impl P2pSearchService {
     pub(in crate::p2p) async fn provider_assets(&self) -> Vec<Asset> {
         if self.has_fmatch_backend() {
             self.warm_provider_capabilities();
-            return self.cached_provider_assets();
+            let assets = self.cached_provider_assets();
+            if !assets.is_empty() {
+                return assets;
+            }
+            return Self::provider_assets_for(&self.route_providers).await;
         }
         Self::provider_assets_for(&self.route_providers).await
     }
@@ -132,7 +136,8 @@ impl P2pSearchService {
             .ok()
             .and_then(|cache| cache.clone());
         let Some(snapshot) = snapshot else {
-            return Vec::new().into();
+            // A cold deployment must not omit every provider from its first search.
+            return Self::provider_capabilities(&providers).await;
         };
         let mut capabilities = providers
             .iter()
@@ -219,7 +224,18 @@ impl P2pSearchService {
                 .then_with(|| left.to_string().cmp(&right.to_string()))
         });
         assets.dedup();
-        assets.truncate(MAX_PROVIDER_ASSETS);
+        // Bound symbols, keeping every supported network for each chosen symbol.
+        let symbols = assets
+            .iter()
+            .map(|asset| asset.symbol.clone())
+            .collect::<Vec<_>>();
+        let mut seen = HashSet::new();
+        let allowed = symbols
+            .into_iter()
+            .filter(|symbol| seen.insert(symbol.clone()))
+            .take(MAX_PROVIDER_ASSETS)
+            .collect::<HashSet<_>>();
+        assets.retain(|asset| allowed.contains(&asset.symbol));
         assets
     }
 

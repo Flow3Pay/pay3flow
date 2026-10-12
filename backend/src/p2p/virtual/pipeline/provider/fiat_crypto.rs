@@ -65,6 +65,7 @@ impl P2pSearchService {
                     .offers
                     .iter()
                     .filter(|offer| query.accepts_offer(offer))
+                    .filter(|offer| offer_matches_network(offer, intermediary.location.as_deref()))
                     .take(MAX_PROVIDER_OFFERS_PER_LEG)
                 {
                     if !offer_matches_network(offer, intermediary.location.as_deref()) {

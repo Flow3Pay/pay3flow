@@ -191,3 +191,8 @@ kubectl -n pay3flow-monitoring rollout status deployment/pay3flow-grafana
 The backend creates its schema on startup. Back up external or persistent data
 before changing image revisions, and do not use the development secret values
 for real users or funds.
+
+Optional DEX quotes use `PAY3FLOW_ZEROX_API_KEY` and `PAY3FLOW_BARTER_API_KEY`
+in the rendered Secret. Existing deployments may add `ZEROX_API_KEY` and
+`BARTER_API_KEY` to `pay3flow-secrets`; both references are optional. Empty keys
+keep these providers visible as catalog entries without advertising live quotes.

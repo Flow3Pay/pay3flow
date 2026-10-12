@@ -1,0 +1,28 @@
+# Public Gate API v4 spot tickers; no undocumented P2P coverage advertised.
+exchange_methods = ["exchanger"]
+
+[buy]
+source_url = "https://www.gate.io/"
+name = "Gate.io Buy"
+currency = ["all"]
+banks = []
+
+[sell]
+source_url = "https://www.gate.io/"
+name = "Gate.io Sell"
+currency = ["all"]
+banks = []
+
+[adapter.market]
+kind = "http_json"
+endpoint = "https://api.gateio.ws/api/v4/spot/tickers"
+method = "GET"
+timeout_ms = 10000
+symbol_pointer = "/currency_pair"
+symbol_remove = "_"
+bid_pointer = "/highest_bid"
+ask_pointer = "/lowest_ask"
+
+[guidance]
+description = "Spot market estimate from Gate.io's public API. Deposit, trade, and withdrawal require your Gate account."
+steps = ["Open the indicated Gate spot market and check the order book and account trading fee.", "Confirm deposit and withdrawal availability for the selected network before transferring crypto."]

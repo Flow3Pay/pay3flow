@@ -85,7 +85,7 @@ impl DeclarativeP2pSource {
         let amount = match operation.amount_mode.as_str() {
             "query_or_empty" => query.amount,
             "fiat_probe" => query.amount.or(self.config.fiat_probe_amount),
-            "asset_probe" => self.config.asset_probe_amount,
+            "asset_probe" => query.asset_amount.or(self.config.asset_probe_amount),
             mode => bail!("unsupported amount mode `{mode}`"),
         };
         Ok(TemplateValues {
@@ -1783,6 +1783,7 @@ mod tests {
         assert_eq!(body["token"], "USDC");
         assert_eq!(body["network"], "TRC20");
         assert_eq!(body["paymentMethod"], "NON_CASH");
+        assert_eq!(body["fiatDestination"], "ACCOUNT");
         assert_eq!(body["amountAmd"].as_f64(), Some(250_000.0));
 
         assert_eq!(operation.request_json_variants.len(), 8);
@@ -1795,6 +1796,7 @@ mod tests {
         render_request_json(&mut solana_body, &values).unwrap();
         assert_eq!(solana_body["type"], "BUY_USDC");
         assert_eq!(solana_body["network"], "SOLANA");
+        assert_eq!(solana_body["fiatDestination"], "ACCOUNT");
         assert_eq!(solana_body["amountAmd"].as_f64(), Some(250_000.0));
 
         let networks = operation
@@ -1803,6 +1805,7 @@ mod tests {
             .map(|template| {
                 let mut body: Value = serde_json::from_str(template).unwrap();
                 render_request_json(&mut body, &values).unwrap();
+                assert_eq!(body["fiatDestination"], "ACCOUNT");
                 body["network"].as_str().unwrap().to_string()
             })
             .collect::<Vec<_>>();
@@ -1974,7 +1977,16 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(offers.len(), 1);
+            assert_eq!(offers.len(), 9);
+            assert!(offers
+                .iter()
+                .any(|offer| offer.network.as_deref() == Some("solana")));
+            assert!(offers
+                .iter()
+                .any(|offer| offer.network.as_deref() == Some("ethereum")));
+            assert!(offers
+                .iter()
+                .any(|offer| offer.network.as_deref() == Some("tron")));
             assert_eq!(offers[0].market, P2pOfferMarket::DirectExchange);
             assert_eq!(offers[0].side, side);
             assert!(offers[0].price.parse::<f64>().unwrap() > 0.0);

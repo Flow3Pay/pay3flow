@@ -181,16 +181,11 @@ impl P2pSearchService {
                         }
                     };
                     if changed {
-                        publish_snapshot(
-                            updates.as_ref(),
-                            response_snapshot(
-                                search_id,
-                                &query,
-                                &routes,
-                                &asset_statuses,
-                                &provider_statuses,
-                            ),
-                        ).await;
+                        let mut snapshot = response_snapshot(
+                            search_id, &query, &routes, &asset_statuses, &provider_statuses,
+                        );
+                        snapshot.routes_exhaustive &= routes_exhaustive;
+                        publish_snapshot(updates.as_ref(), snapshot).await;
                     }
                 }
                 result = producers.next(), if !producers.is_empty() => {

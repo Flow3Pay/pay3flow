@@ -1,0 +1,26 @@
+# Live Swap API v2 quotes are enabled with ZEROX_API_KEY.
+exchange_methods = ["exchanger"]
+
+[sell]
+source_url = "https://matcha.xyz/"
+name = "0x Sell"
+currency = ["eth", "usdc", "usdt"]
+banks = []
+
+[buy]
+source_url = "https://matcha.xyz/"
+name = "0x Buy"
+currency = ["eth", "usdc", "usdt"]
+banks = []
+
+[guidance]
+description = "0x Swap API v2 token quotes, enabled when the server has ZEROX_API_KEY. Token and network availability depends on the selected route."
+steps = [
+  "Open Matcha and select the source and destination tokens and networks.",
+  "Review the quoted output, network fees, and slippage in Matcha.",
+  "Connect your wallet and confirm the transaction only after checking the network and token addresses.",
+]
+
+[[guidance.links]]
+label = "Open Matcha by 0x"
+url = "https://matcha.xyz/"

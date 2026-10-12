@@ -119,6 +119,29 @@ async fn main() -> anyhow::Result<()> {
     )?
     .with_execution_contracts(&cfg.symbiosis_execution_contracts)?;
     public_route_providers.push(Arc::new(symbiosis.clone()));
+    for (name, variable) in [("0x", "ZEROX_API_KEY"), ("barter", "BARTER_API_KEY")] {
+        let Some(key) = std::env::var(variable)
+            .ok()
+            .filter(|key| !key.trim().is_empty())
+        else {
+            continue;
+        };
+        if let Some(provider) =
+            pay3flow_backend::providers::dex_aggregator::DexAggregatorRouteProvider::from_config(
+                name,
+                &cfg.cow_tokens,
+                cfg.cow_quote_address
+                    .as_deref()
+                    .unwrap_or(&cfg.symbiosis_quote_address),
+            )?
+        {
+            let provider = provider
+                .with_api_key(key)
+                .with_token_catalog(&cfg.cow_token_list_url)
+                .await;
+            public_route_providers.push(Arc::new(provider));
+        }
+    }
     let public_fiat_route_providers: Vec<Arc<dyn PublicFiatRouteProvider>> =
         vec![Arc::new(IdPayRouteProvider::new()?)];
     let network_catalog = pay3flow_backend::networks::NetworkCatalog::load(&pool).await?;

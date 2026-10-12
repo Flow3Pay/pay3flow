@@ -1,0 +1,23 @@
+# Official read-only /route API. Server registration requires BARTER_API_KEY.
+exchange_methods = ["exchanger"]
+
+[buy]
+source_url = "https://app.barterswap.xyz/"
+name = "Barter Buy"
+currency = ["all"]
+banks = []
+
+[sell]
+source_url = "https://app.barterswap.xyz/"
+name = "Barter Sell"
+currency = ["all"]
+banks = []
+
+[fees]
+kind = "quote_dependent"
+description = "Live Ethereum route output; wallet gas and approvals must be checked separately."
+docs_url = "https://api2.eth.barterswap.xyz/openapi"
+
+[guidance]
+description = "Ethereum token swap through Barter. Quotes require the deployment's Barter API credential."
+steps = ["Open Barter and select the exact Ethereum tokens shown in the route.", "Refresh the quote and check fees and minimum received before signing in your wallet."]

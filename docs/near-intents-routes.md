@@ -115,3 +115,13 @@ validated against Pay3Flow’s private registry before any edge is priced.
 Pay3Flow validates the route ID against its private registry, prices each edge,
 and returns a short-lived `RouteQuote`. No route graph or route-search result
 is exposed through a public HTTP API.
+
+Fiat workflow discovery now reserves quote work for every selected provider,
+regardless of the result display limit. Token limits count symbols and retain
+all matching networks. Entry and exit offers must match the quote's networks.
+A missing quote no longer creates a 1:1 token estimate; successful live quotes
+stream immediately and exact cached quotes honor their expiry.
+
+The 2026-10-12 provider audit also extends Symbiosis read-only discovery to 38
+identified EVM networks. Execution still uses its separate configured-contract
+registry. bncex non-cash requests include the required `fiatDestination=ACCOUNT`.

@@ -23,7 +23,7 @@ endpoint = "https://www.bitcoincenter.am/service/api/v1/public/exchanger/route/g
 method = "GET"
 headers = { Accept = "application/json", Lang = "en", Origin = "https://www.bitcoincenter.am", Referer = "https://www.bitcoincenter.am/en/" }
 asset_codes = { USDT = "USDTSOL" }
-supported_assets = ["ALL"]
+supported_assets = ["USDT"]
 supported_fiats = ["AMD"]
 fiat_probe_amount = 100000
 asset_probe_amount = 100

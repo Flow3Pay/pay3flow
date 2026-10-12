@@ -7,10 +7,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::redis::{get_json, set_json};
 use crate::p2p::routes::{
-    fiat_quote_key, provider_coefficient_key, FiatProviderQuoteJob, FIAT_COEFFICIENT_CACHE_TTL,
-    PROVIDER_QUOTE_CACHE_TTL,
+    fiat_quote_key, provider_coefficient_key, FIAT_COEFFICIENT_CACHE_TTL, PROVIDER_QUOTE_CACHE_TTL,
 };
-use crate::p2p::service::{CachedFiatQuote, CachedProviderCoefficient, CachedProviderQuote};
+use crate::p2p::service::{CachedFiatQuote, CachedProviderCoefficient};
 use crate::p2p::P2pSearchService;
 use crate::route_engine::{Amount, Asset, PublicRouteProvider, PublicRouteQuote};
 
@@ -301,60 +300,6 @@ impl P2pSearchService {
                         .is_none_or(|expires_at| expires_at > Utc::now())
             })
             .map(|cached| cached.quote.clone())
-    }
-
-    pub(in crate::p2p) fn refresh_provider_quote(&self, key: String, job: &FiatProviderQuoteJob) {
-        let refresh_key = key.clone();
-        let Ok(mut refreshes) = self.quote_refreshes.lock() else {
-            return;
-        };
-        if !refreshes.insert(refresh_key.clone()) {
-            return;
-        }
-        drop(refreshes);
-
-        let Some(background_permit) = self.try_start_background_pipeline() else {
-            if let Ok(mut refreshes) = self.quote_refreshes.lock() {
-                refreshes.remove(&refresh_key);
-            }
-            return;
-        };
-
-        let provider = job.provider.clone();
-        let from = job.from.clone();
-        let to = job.to.clone();
-        let amount = job.amount.clone();
-        let cache = self.provider_quote_cache.clone();
-        let active_refreshes = self.quote_refreshes.clone();
-        tokio::spawn(async move {
-            let _background_permit = background_permit;
-            let provider_name = provider.name().to_string();
-            let result =
-                tokio::time::timeout(Duration::from_secs(12), provider.quote(from, to, amount))
-                    .await;
-            match result {
-                Ok(Ok(quote)) => {
-                    if let Ok(mut cache) = cache.write() {
-                        cache.insert(
-                            key,
-                            CachedProviderQuote {
-                                inserted_at: Instant::now(),
-                                quote,
-                            },
-                        );
-                    }
-                }
-                Ok(Err(error)) => {
-                    tracing::debug!(%error, provider = %provider_name, "background provider quote failed");
-                }
-                Err(_) => {
-                    tracing::debug!(provider = %provider_name, "background provider quote timed out");
-                }
-            }
-            if let Ok(mut refreshes) = active_refreshes.lock() {
-                refreshes.remove(&refresh_key);
-            }
-        });
     }
 
     pub(in crate::p2p) async fn cached_fiat_quote(

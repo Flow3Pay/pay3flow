@@ -157,3 +157,113 @@ Later adapter order:
 Final choice: for MVP, use local fake solvers plus `MockRouteQuoteSource`.
 External aggregators are research-backed future adapters; they do not replace
 `fmatch`, and they do not own Pay3Flow order lifecycle.
+
+## Provider coverage audit — 2026-10-12
+
+This audit covers every active exchange Providerfile and the optional templates.
+Coverage means either an advertised capability or a successfully observed quote;
+it does not mean every pair, amount, bank, or account is executable. No orders
+were created and no funds were moved.
+
+### Findings and changes
+
+- Fiat workflow jobs were cut off by the **display** limit, with one common
+  queue for all swap providers. Each provider now has an independent bounded
+  quote budget; completed quotes stream immediately. A one-slot result limit
+  no longer prevents discovery from the other providers.
+- Fiat entry/exit discovery repeated identical requests for every token pair.
+  Each symbol and side is now discovered once and searches run concurrently.
+- Workflow joins did not match the networks of fiat offers to quote endpoints.
+  Both sides now match before a quote job is created. This enables valid bncex
+  and Bitcoin Center combinations without mixing incompatible networks.
+- Offer selection reserves one offer per venue before filling remaining slots.
+  Network filtering happens before truncation. Intermediate limits count
+  **symbols**, retaining all catalog networks for the selected symbols.
+- The Fmatch-backed fiat workflow used a fabricated 1:1 token conversion when
+  no price was available. Such output is removed. A route needs an exact cached
+  or live quote. Amount-specific quotes are cached for their existing short TTL.
+- Cold capability snapshots no longer suppress every provider in the first
+  search. Provider quote failures and search-budget exhaustion are reported;
+  progressive snapshots retain `routes_exhaustive=false` when bounded.
+- bncex's current non-cash API requires `fiatDestination=ACCOUNT`. Missing it
+  caused HTTP 400 for all nine network variants. Live requests with this field
+  returned quotes. Its request amount is numeric after template rendering.
+  Exact crypto inputs now take precedence over the generic asset probe amount.
+- bncex only advertises USDT/USDC; the current Bitcoin Center adapter only
+  advertises its verified USDT/Solana corridor. Unsupported tokens no longer
+  trigger requests for these fixed calculators.
+- Symbiosis's `/v2/tokens` returned **7469 entries across 96 chain IDs**. The
+  adapter's previous network mapping covered only 15 IDs. The audit adds 38
+  identified EVM networks for read-only discovery, using EVM preview addresses.
+  Unknown chain IDs remain excluded. Wallet execution retains its separate
+  configured-contract registry.
+- Abstract, Berachain, Robinhood, Bitcoin Cash, and Zcash aliases now agree
+  across catalogs, allowing supported entries to join by canonical network.
+- Gate spot tickers and authenticated 0x/Barter quotes are registered. 0x and
+  Barter load token precision from the shared public token list at startup,
+  with configured metadata as fallback. Native ETH and WETH retain distinct
+  identities. Empty API keys leave those two providers as catalog entries.
+
+### Active providers
+
+| Provider | Actual integrated surface | Coverage and audit decision |
+| --- | --- | --- |
+| Binance | Public P2P + spot | Fiat/crypto ads, crypto spot paths and cycles. RUB remains explicitly excluded from its P2P adapter. Public spot probe returned 3727 ticker entries. |
+| Bybit | Public P2P + spot | Runtime fiat/asset ads; crypto spot paths. Public spot response succeeded. Opaque bank IDs remain unverified. |
+| OKX | Public P2P + spot | Runtime fiat/asset ads; crypto spot paths. Spot probe returned 1160 entries. |
+| Bitget | Public P2P + spot | Runtime fiat/asset ads; crypto spot paths. Spot probe returned 3389 entries. |
+| MEXC | Public P2P + spot | Runtime fiat/asset ads; crypto spot paths. Spot probe returned 1882 entries. |
+| Rapira | Public P2P | RUB legs only, with runtime asset availability and paged ads. No other fiat corridor is claimed without evidence. |
+| Whitebird | Anonymous exchanger quote + spot order books | BYN/USD/EUR/RUB calculator coverage and configured live spot instruments. Crypto network aliases are retained; exact sell amount now reaches its calculator. |
+| Cifra Markets | Public calculator + IMEX markets | Live calculator confirms BYN/RUR/USD and crypto arrays. RUB maps to RUR. Crypto spot routing uses IMEX. |
+| SkyLabs | Rate API + method commissions + withdrawal fees | Existing AMD/USD routes retain method and network fee adjustments. Its general rate matrix also contains RUB/EUR/GEL/UAH/CZK/KES, but a reference rate does not establish settlement availability; these fiats are not enabled solely from that matrix. |
+| bncex | Public amount-specific quote calculator | AMD ↔ USDT/USDC on nine declared networks. ACCOUNT added to all non-cash requests. Independently available as entry or exit around a swap provider. |
+| Bitcoin Center | Public fixed route calculator | AMD bank transfer ↔ USDT/Solana, including output fee. Existing adapter does not discover the provider's other route IDs, so no unsupported token is advertised. |
+| BestChange | Authenticated official rates/catalog | Runtime exchanger and payment/network directions, direct fiat legs and crypto quotes. Requires BESTCHANGE_API_KEY; reserves and limits still apply. |
+| Dzengi | Public market data | Probe returned 518 ticker entries. Integrated coverage is crypto spot; catalog fiat names do not create bank payout quotes. |
+| CoW Swap | Quote APIs + live token catalog + NEAR bridge | Token-list probe returned 278 entries. Same-chain and composed bridge capabilities remain quote-dependent. Fiat participation uses independent entry/exit venues. |
+| NEAR Intents | 1Click token and dry quote APIs | Token probe returned 204 entries. Same-chain/cross-chain crypto and fiat compositions, subject to valid preview addresses and amount minimums. No direct bank fiat settlement is inferred. |
+| Symbiosis | Cross-chain token and swap quote APIs | v1 list had 220 entries; the adapter actually uses v2 (7469 entries). Added identified EVM networks; unsupported non-EVM preview formats remain excluded. Fiat participation uses separate entry/exit providers. |
+| ID Pay | Server-rendered calculator | Direct AMD/RUB and RUB/AMD transfer estimates and fiat cycles. No crypto swap capability is inferred. |
+| Papa Change | Public directions + exchange rates | Dynamic fiat/crypto directions, payment methods, network aliases, commissions and amount tiers; route feasibility comes from its current catalog and reserves. |
+| Gate.io | Public API v4 spot tickers | Live probe returned 2204 entries. Added crypto spot paths/cycles and market links. No undocumented Gate P2P or bank settlement adapter is advertised. |
+| 0x | Swap API v2 `/swap/allowance-holder/price` | Same-chain EVM quotes, native ETH handling, liquidity rejection and exact atomic amounts. Requires ZEROX_API_KEY. Public token metadata broadens discovery; a supported token still requires a successful quote. Cross-chain, Solana and Gasless products are not integrated by this adapter. |
+| Barter | Official Ethereum `/route` API | Source/target addresses and exact sellAmount; bearer credential BARTER_API_KEY; only Normal routes accepted. Ethereum/WETH coverage. Other Barter deployments are not inferred from its schema's chain enum. |
+
+### Optional templates
+
+1inch, Bebop, Enso, LI.FI, KyberSwap, Nordstern and Velora remain optional
+`Providerfile.example` integrations. They are not compiled or advertised as live
+sources. The shared DEX helper is not registration by itself. Activating them
+requires a reviewed Providerfile, its current API/auth contract, and startup
+registration; no provider is added to results merely because it has an example.
+
+### Evidence and remaining limits
+
+All public probe counts above were observed from this workspace on the audit
+date; catalogs and quotes change. Individual pairs are validated at quote time.
+The 0x and Barter request/response contracts were checked against official
+documentation. After configuring the local 0x credential, authenticated read-only
+price requests for 1 WETH → USDC on Ethereum and Base both returned HTTP 200,
+liquidityAvailable=true, and positive buyAmount. Barter authenticated live quotes
+remain untested without its credential. Local configuration is not a deployment.
+The complete provider audit does not mean an exhaustive Cartesian search of all
+token pairs.
+
+The fiat workflow uses at most 32 amount-specific jobs per provider and a
+45-second provider search budget; the overall workflow quote stage is capped at
+60 seconds and cancels pending work while retaining streamed routes. Provider limits and incomplete searches remain
+visible. Same-chain token swaps and cross-chain swaps can sit between fiat
+providers, but arbitrary chains of several independent swap providers are not
+implemented. Fiat quote prices remain estimates: bank availability, withdrawal
+fees, order-book depth, account fees and final re-quoting must still be checked.
+
+Primary references:
+
+- [Gate API v4](https://www.gate.com/docs/developers/apiv4/en/)
+- [0x Swap API quickstart](https://docs.0x.org/docs/introduction/quickstart/swap-tokens-with-0x-swap-api)
+- [Barter integration documentation](https://barterdefi-1.gitbook.io/barter/barter-router-system/router-integrations.md)
+- [Barter OpenAPI](https://api2.eth.barterswap.xyz/openapi)
+- [Symbiosis chain catalog](https://api.symbiosis.finance/crosschain/v1/chains)
+- [Symbiosis v2 tokens](https://api.symbiosis.finance/crosschain/v2/tokens)
+- [NEAR Intents tokens](https://1click.chaindefuser.com/v0/tokens)

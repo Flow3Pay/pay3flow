@@ -3055,3 +3055,170 @@ fn crypto_market_cycles_reject_large_price_outliers_and_fiat_intermediaries() {
         "unverified 100% spreads and bank-money transfers must not be offered as crypto arbitrage"
     );
 }
+
+struct NamedFiatSwapProvider(&'static str);
+
+#[async_trait]
+impl PublicRouteProvider for NamedFiatSwapProvider {
+    fn name(&self) -> &str {
+        self.0
+    }
+    async fn supported_assets(&self) -> Vec<Asset> {
+        [("USDT", "tron"), ("USDC", "solana")]
+            .into_iter()
+            .map(|(symbol, network)| Asset::new(symbol, Some(network)).unwrap())
+            .collect()
+    }
+    async fn quote(&self, from: Asset, to: Asset, amount: Amount) -> Result<PublicRouteQuote> {
+        let mut quote = FixedIntentProvider.quote(from, to, amount).await?;
+        quote.provider = self.0.into();
+        Ok(quote)
+    }
+}
+
+struct NetworkFiatSource;
+
+#[async_trait]
+impl P2pSource for NetworkFiatSource {
+    fn name(&self) -> &str {
+        "bncex"
+    }
+    async fn search(&self, request: &P2pSearchQuery) -> Result<Vec<P2pOffer>> {
+        let network = match (request.side, request.asset.as_str()) {
+            (P2pSide::BuyCrypto, "USDT") => "tron",
+            (P2pSide::SellCrypto, "USDC") => "solana",
+            _ => return Ok(Vec::new()),
+        };
+        let mut offer = offer("bncex", request.side, "400", "1", "1000000");
+        offer.asset = request.asset.clone();
+        offer.fiat = request.fiat.clone();
+        offer.network = Some(network.into());
+        Ok(vec![offer])
+    }
+}
+
+#[tokio::test]
+async fn fiat_search_keeps_every_swap_provider_even_with_one_display_slot() {
+    let service =
+        P2pSearchService::with_sources(vec![Arc::new(NetworkFiatSource)], Duration::from_secs(1))
+            .with_route_providers(vec![
+                Arc::new(NamedFiatSwapProvider("symbiosis")),
+                Arc::new(NamedFiatSwapProvider("near-intents")),
+                Arc::new(NamedFiatSwapProvider("cow-swap")),
+            ]);
+    let mut query = query(true);
+    query.assets = vec!["USDT".into(), "USDC".into()];
+    query.assets_explicit = true;
+    query.limit = 1;
+    let (routes, _) = service.search_fiat_provider_routes(&query, None).await;
+    for provider in ["symbiosis", "near-intents", "cow-swap"] {
+        let route = routes
+            .iter()
+            .find(|route| route.route_provider.as_deref() == Some(provider))
+            .unwrap_or_else(|| panic!("missing {provider} from fiat route discovery"));
+        assert_eq!(route.route_path, ["AMD", "USDT@tron", "USDC@solana", "RUB"]);
+        assert_eq!(route.exit_offer.as_ref().unwrap().source, "bncex");
+        assert_eq!(route.target_amount, "98000.00");
+    }
+}
+
+#[tokio::test]
+async fn fiat_provider_routes_do_not_attach_an_exit_on_the_wrong_network() {
+    let service =
+        P2pSearchService::with_sources(vec![Arc::new(NetworkFiatSource)], Duration::from_secs(1))
+            .with_route_providers(vec![Arc::new(NamedFiatSwapProvider("near-intents"))]);
+    let mut query = query(true);
+    query.assets = vec!["USDT".into(), "USDC".into()];
+    query.assets_explicit = true;
+    let (routes, _) = service.search_fiat_provider_routes(&query, None).await;
+    assert!(!routes.is_empty());
+    for route in routes {
+        assert_eq!(
+            route.entry_offer.as_ref().unwrap().network,
+            route.source_network
+        );
+        assert_eq!(
+            route.exit_offer.as_ref().unwrap().network,
+            route.target_network
+        );
+    }
+}
+
+struct LargeNetworkCatalog;
+
+#[async_trait]
+impl PublicRouteProvider for LargeNetworkCatalog {
+    fn name(&self) -> &str {
+        "large-catalog"
+    }
+    async fn supported_assets(&self) -> Vec<Asset> {
+        (0..20)
+            .map(|index| Asset::new("USDT", Some(&format!("network-{index}"))).unwrap())
+            .chain([Asset::new("USDC", Some("solana")).unwrap()])
+            .collect()
+    }
+    async fn quote(&self, from: Asset, to: Asset, amount: Amount) -> Result<PublicRouteQuote> {
+        FixedIntentProvider.quote(from, to, amount).await
+    }
+}
+
+#[tokio::test]
+async fn regression_intermediate_budget_retains_symbols_after_many_networks() {
+    let service = P2pSearchService::with_sources(Vec::new(), Duration::from_secs(1))
+        .with_route_providers(vec![Arc::new(LargeNetworkCatalog)]);
+    let mut query = query(true);
+    query.assets_explicit = false;
+    let assets = service.intermediary_assets(&query).await;
+    assert!(
+        assets.contains(&Asset::new("USDC", Some("solana")).unwrap()),
+        "many USDT networks must not exclude the USDC fiat bridge"
+    );
+    assert_eq!(
+        assets.iter().filter(|asset| asset.symbol == "USDT").count(),
+        20
+    );
+}
+
+struct CrowdedNetworkSource;
+
+#[async_trait]
+impl P2pSource for CrowdedNetworkSource {
+    fn name(&self) -> &str {
+        "bncex"
+    }
+    async fn search(&self, request: &P2pSearchQuery) -> Result<Vec<P2pOffer>> {
+        let mut offers = NetworkFiatSource.search(request).await?;
+        if request.side == P2pSide::BuyCrypto && request.asset == "USDT" {
+            let mut incompatible = offers[0].clone();
+            incompatible.network = Some("ethereum".into());
+            let mut crowded = vec![incompatible; 9];
+            crowded.append(&mut offers);
+            return Ok(crowded);
+        }
+        Ok(offers)
+    }
+}
+
+#[tokio::test]
+async fn regression_fiat_crypto_filters_networks_before_limiting_offers() {
+    let service = P2pSearchService::with_sources(
+        vec![Arc::new(CrowdedNetworkSource)],
+        Duration::from_secs(1),
+    )
+    .with_route_providers(vec![Arc::new(NamedFiatSwapProvider("near-intents"))]);
+    let mut query = query(true);
+    query.target_currency = "USDC".into();
+    query.target_network = Some("solana".into());
+    query.assets = vec!["USDT".into()];
+    query.assets_explicit = true;
+    let routes = service
+        .search_fiat_to_crypto_provider_routes(&query, None)
+        .await;
+    assert!(
+        !routes.is_empty(),
+        "a valid ninth network offer must reach NEAR Intents"
+    );
+    assert!(routes
+        .iter()
+        .all(|route| route.source_network.as_deref() == Some("tron")));
+}

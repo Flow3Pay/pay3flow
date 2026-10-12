@@ -35,6 +35,9 @@ const identities: Array<[string, string, string, MarketType[]]> = [
   ['cow-swap', 'CoW Swap', 'https://swap.cow.fi', ['exchanger']],
   ['near-intents', 'NEAR Intents', 'https://app.near-intents.org', ['exchanger']],
   ['symbiosis', 'Symbiosis', 'https://app.symbiosis.finance', ['exchanger']],
+  ['gate', 'Gate.io', 'https://www.gate.io', ['spot']],
+  ['0x', '0x', 'https://matcha.xyz', ['exchanger']],
+  ['barter', 'Barter', 'https://app.barterswap.xyz', ['exchanger']],
   ['id-pay', 'ID Pay', 'https://id-pay.ru', ['exchanger']],
   ['papa-change', 'Papa Change', 'https://papa-change.biz', ['exchanger']],
 ];

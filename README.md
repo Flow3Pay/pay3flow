@@ -48,6 +48,9 @@ holding funds. Other offers open at their venue and may change before execution.
 | NEAR Intents | 1Click quote API | Selectable cross-chain and same-chain crypto swap quotes from the live token catalog |
 | Symbiosis | Official cross-chain swap API | Selectable cross-chain crypto quotes from the live Symbiosis token catalog |
 | ID Pay | Public server-rendered calculator rate | Selectable direct AMD/RUB and RUB/AMD transfer estimates |
+| Gate.io | Public API v4 spot tickers | Crypto spot paths and cycles |
+| 0x | Swap API v2 price endpoint | Same-chain EVM swaps and fiat compositions; requires `ZEROX_API_KEY` |
+| Barter | Official Ethereum route API | Ethereum swaps and fiat compositions; requires `BARTER_API_KEY` |
 
 CoW Swap loads token addresses and per-network precision from its live token
 list and the bridge catalog. The protocol network registry supplies public API
@@ -77,7 +80,12 @@ deposits from Ethereum, NEAR, and TRON, including token transfers.
 Routes without an execution descriptor retain provider instructions. BestChange requires
 `BESTCHANGE_API_KEY` from the referral-program dashboard; the numeric referral
 ID used in public links is not an API key. The other listed
-public-data adapters make anonymous read-only requests.
+public-data adapters make anonymous read-only requests, except 0x and Barter
+which use the optional server credentials above. Both load addresses and token
+precision from the shared token list at startup.
+
+The [provider coverage audit](docs/route-aggregation-research.md#provider-coverage-audit--2026-10-12)
+records supported surfaces, live checks, corrected restrictions, and remaining limits.
 
 Provider capabilities live in
 [`backend/providers/*/Providerfile`](backend/providers/). They are compiled

@@ -103,6 +103,8 @@ stringData:
   NEAR_INTENTS_JWT: "$PAY3FLOW_NEAR_INTENTS_JWT"
   BESTCHANGE_API_KEY: "$PAY3FLOW_BESTCHANGE_API_KEY"
   SYMBIOSIS_PARTNER_ID: "$PAY3FLOW_SYMBIOSIS_PARTNER_ID"
+  ZEROX_API_KEY: "$PAY3FLOW_ZEROX_API_KEY"
+  BARTER_API_KEY: "$PAY3FLOW_BARTER_API_KEY"
 ---
 apiVersion: batch/v1
 kind: Job
@@ -319,6 +321,18 @@ spec:
                 secretKeyRef:
                   name: pay3flow-secrets
                   key: SYMBIOSIS_PARTNER_ID
+            - name: ZEROX_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: pay3flow-secrets
+                  key: ZEROX_API_KEY
+                  optional: true
+            - name: BARTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: pay3flow-secrets
+                  key: BARTER_API_KEY
+                  optional: true
           readinessProbe:
             httpGet:
               path: /health

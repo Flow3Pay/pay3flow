@@ -32,33 +32,43 @@ pub(super) async fn produce_workflow_routes(
     if !query.includes_exchangers() {
         return Ok(());
     }
-    let (_routes, exhaustive) = match (source_is_crypto, target_is_crypto) {
-        (false, false) => {
-            service
-                .search_fiat_provider_routes(query, Some(&batches))
-                .await
-        }
-        (false, true) => (
-            service
-                .search_fiat_to_crypto_provider_routes(query, Some(&batches))
-                .await,
-            true,
-        ),
-        (true, false) => (
-            service
-                .search_crypto_to_fiat_provider_routes(query, Some(&batches))
-                .await,
-            true,
-        ),
-        (true, true) if query.is_crypto_cycle() => {
-            service.search_crypto_cycles(query, &batches).await?;
-            (Vec::new(), false)
-        }
-        (true, true) => (
-            service.search_provider_routes(query, Some(&batches)).await,
-            true,
-        ),
+    // Larger catalogs retain all supported networks, but a search must stay bounded.
+    // Dropping this future cancels pending quote jobs; completed batches are retained.
+    let search = async {
+        let result = match (source_is_crypto, target_is_crypto) {
+            (false, false) => {
+                service
+                    .search_fiat_provider_routes(query, Some(&batches))
+                    .await
+            }
+            (false, true) => (
+                service
+                    .search_fiat_to_crypto_provider_routes(query, Some(&batches))
+                    .await,
+                true,
+            ),
+            (true, false) => (
+                service
+                    .search_crypto_to_fiat_provider_routes(query, Some(&batches))
+                    .await,
+                true,
+            ),
+            (true, true) if query.is_crypto_cycle() => {
+                service.search_crypto_cycles(query, &batches).await?;
+                (Vec::new(), false)
+            }
+            (true, true) => (
+                service.search_provider_routes(query, Some(&batches)).await,
+                true,
+            ),
+        };
+        Ok::<_, anyhow::Error>(result)
     };
+    let (_routes, exhaustive) =
+        match tokio::time::timeout(std::time::Duration::from_secs(60), search).await {
+            Ok(result) => result?,
+            Err(_) => (Vec::new(), false),
+        };
     if !exhaustive {
         send_batch(
             &batches,
