@@ -200,7 +200,12 @@ impl Service {
         Ok(json!({"tracked":true}))
     }
     pub(crate) async fn credit(&self, id: Uuid, kind: &str, evidence: &Evidence) -> Result<()> {
-        let row = self.pool.get().await?.query_one("SELECT terms FROM otc_trades WHERE id=$1", &[&id]).await?;
+        let row = self
+            .pool
+            .get()
+            .await?
+            .query_one("SELECT terms FROM otc_trades WHERE id=$1", &[&id])
+            .await?;
         let terms: super::model::Terms = serde_json::from_value(row.get(0))?;
         if terms.escrow.is_some() {
             return self.credit_escrow_ever(id, kind, evidence).await;

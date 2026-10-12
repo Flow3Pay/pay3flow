@@ -212,7 +212,11 @@ pub(super) async fn fixture() -> (Service, tokio::task::JoinHandle<()>, String) 
     pool.get()
         .await
         .unwrap()
-        .batch_execute(&format!("{}\n{}", include_str!("../../migrations/otc.sql"), include_str!("../../migrations/otc_escrow.sql")))
+        .batch_execute(&format!(
+            "{}\n{}",
+            include_str!("../../migrations/otc.sql"),
+            include_str!("../../migrations/otc_escrow.sql")
+        ))
         .await
         .unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

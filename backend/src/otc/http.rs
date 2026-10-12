@@ -36,7 +36,10 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/api/otc/trades/:id/escrow/proposals", post(escrow_propose))
         .route("/api/otc/trades/:id/escrow/approvals", post(escrow_approve))
         .route("/api/otc/trades/:id/escrow/prepare", post(escrow_prepare))
-        .route("/api/otc/trades/:id/escrow/reference", post(escrow_reference))
+        .route(
+            "/api/otc/trades/:id/escrow/reference",
+            post(escrow_reference),
+        )
         .route("/api/otc/attempts/:id/reference", post(submit))
         .route("/api/otc/attempts/:id/retry", post(retry))
         .route("/api/otc/desk/listings", post(publish))
@@ -287,29 +290,73 @@ async fn no_store(
     response
 }
 
-async fn escrow_details(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<Uuid>) -> Result<Json<Value>> {
-    let (_,actor)=state.otc.session(bearer(&headers)?).await?;
-    Ok(Json(state.otc.escrow_details(&actor,id).await?))
+async fn escrow_details(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Value>> {
+    let (_, actor) = state.otc.session(bearer(&headers)?).await?;
+    Ok(Json(state.otc.escrow_details(&actor, id).await?))
 }
-async fn escrow_consent(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<Uuid>, Json(request): Json<super::escrow::ConsentRequest>) -> Result<Json<Value>> {
-    let (_,actor)=state.otc.session(bearer(&headers)?).await?;
-    Ok(Json(state.otc.escrow_consent(&actor,id,key(&headers)?,request).await?))
+async fn escrow_consent(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(request): Json<super::escrow::ConsentRequest>,
+) -> Result<Json<Value>> {
+    let (_, actor) = state.otc.session(bearer(&headers)?).await?;
+    Ok(Json(
+        state
+            .otc
+            .escrow_consent(&actor, id, key(&headers)?, request)
+            .await?,
+    ))
 }
-async fn escrow_propose(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<Uuid>, Json(request): Json<super::escrow::ProposalRequest>) -> Result<Json<Value>> {
-    let (_,actor)=state.otc.session(bearer(&headers)?).await?;
-    Ok(Json(state.otc.escrow_propose(&actor,id,key(&headers)?,request).await?))
+async fn escrow_propose(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(request): Json<super::escrow::ProposalRequest>,
+) -> Result<Json<Value>> {
+    let (_, actor) = state.otc.session(bearer(&headers)?).await?;
+    Ok(Json(
+        state
+            .otc
+            .escrow_propose(&actor, id, key(&headers)?, request)
+            .await?,
+    ))
 }
-async fn escrow_approve(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<Uuid>, Json(request): Json<super::escrow::ApprovalRequest>) -> Result<Json<Value>> {
-    let (_,actor)=state.otc.session(bearer(&headers)?).await?;
+async fn escrow_approve(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(request): Json<super::escrow::ApprovalRequest>,
+) -> Result<Json<Value>> {
+    let (_, actor) = state.otc.session(bearer(&headers)?).await?;
     key(&headers)?;
-    Ok(Json(state.otc.escrow_approve(&actor,id,request).await?))
+    Ok(Json(state.otc.escrow_approve(&actor, id, request).await?))
 }
-async fn escrow_prepare(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<Uuid>, Json(request): Json<super::escrow::CallRequest>) -> Result<Json<Value>> {
-    let (_,actor)=state.otc.session(bearer(&headers)?).await?;
-    Ok(Json(state.otc.escrow_prepare(&actor,id,key(&headers)?,request).await?))
+async fn escrow_prepare(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(request): Json<super::escrow::CallRequest>,
+) -> Result<Json<Value>> {
+    let (_, actor) = state.otc.session(bearer(&headers)?).await?;
+    Ok(Json(
+        state
+            .otc
+            .escrow_prepare(&actor, id, key(&headers)?, request)
+            .await?,
+    ))
 }
-async fn escrow_reference(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<Uuid>, Json(request): Json<super::escrow::ReferenceRequest>) -> Result<Json<Value>> {
-    let (_,actor)=state.otc.session(bearer(&headers)?).await?;
+async fn escrow_reference(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(request): Json<super::escrow::ReferenceRequest>,
+) -> Result<Json<Value>> {
+    let (_, actor) = state.otc.session(bearer(&headers)?).await?;
     key(&headers)?;
-    Ok(Json(state.otc.escrow_reference(&actor,id,request).await?))
+    Ok(Json(state.otc.escrow_reference(&actor, id, request).await?))
 }
