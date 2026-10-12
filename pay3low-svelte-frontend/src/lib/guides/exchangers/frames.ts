@@ -13,7 +13,7 @@ export function buildVenueSwapFrames(step: Pick<TutorialStep, "provider" | "venu
   const open = provider === "bncex" ? "On bncex, choose Buy or Sell for your direction, then select the payment method and crypto network."
     : provider === "bitcoin-center" ? "On Bitcoin Center, choose the asset or payment method in You send and You receive. Match the crypto network to your route."
     : provider === "dzengi" ? "On Dzengi, select the currencies in the converter. Its calculator gives an indicative quote; the actual conversion takes place on the trading platform."
-    : "Select the token and network you send, then the token and network you receive. Connect your wallet on {venue}.";
+    : "Check the fixed tokens and networks for {from} → {to}. Connect your wallet on {venue}.";
   const review = provider === "bncex" ? "Review the received amount and the calculator's fee breakdown. Refresh the quote if its timer expires."
     : provider === "bitcoin-center" ? "Review the amount in You receive and the exchange terms before opening Order setup."
     : provider === "dzengi" ? "Review the estimated received amount. Check the actual trading price and fees after signing in to Dzengi."
@@ -24,7 +24,7 @@ export function buildVenueSwapFrames(step: Pick<TutorialStep, "provider" | "venu
     : provider === "dzengi" ? "Press Convert to open Dzengi's trading platform. Sign in and check the actual trading terms there."
     : "Press Continue on bncex. Sign in or complete verification if requested and follow the provider's instructions.";
   return [
-    { kind: "open", title: copy(provider === "dzengi" ? "Select currencies" : "Select currencies and networks"), text: copy(open, { venue: step.venue }) },
+    { kind: "open", title: copy(wallet ? "Check tokens and networks" : provider === "dzengi" ? "Select currencies" : "Select currencies and networks"), text: copy(open, { venue: step.venue, from: step.from, to: step.to }) },
     { kind: "verify", title: copy("Enter the amount"), text: copy(provider === "dzengi" ? "Enter the amount you want to convert from {from} to {to}." : "Enter the amount you send for {from} → {to}. Check the selected payment method or network.", { from: step.from, to: step.to }) },
     { kind: "review", title: copy("Check the amount you receive"), text: copy(review, { venue: step.venue }) },
     { kind: "act", title: copy("Press {action}", { action: copy(swapGuideAction(provider)) }), text: copy(act) },

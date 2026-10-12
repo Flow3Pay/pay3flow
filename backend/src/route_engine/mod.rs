@@ -396,42 +396,6 @@ pub struct NearToken {
     pub contract_address: Option<String>,
 }
 
-impl NearToken {
-    pub fn matches(&self, asset: &Asset) -> bool {
-        asset.location.as_deref().is_some_and(|location| {
-            self.asset_symbol().eq_ignore_ascii_case(&asset.symbol)
-                && same_chain(location, &self.blockchain)
-        })
-    }
-
-    pub fn asset(&self) -> Result<Asset> {
-        Asset::new(
-            self.asset_symbol(),
-            Some(&canonical_network_id(&self.blockchain)),
-        )
-    }
-
-    fn asset_symbol(&self) -> &str {
-        // Native-coin entries can include the bridge's name in their display
-        // ticker (e.g. BTC(OMNI)); the asset remains the network's native coin.
-        if self.asset_id.starts_with("1cs_v1:")
-            && self.asset_id.contains(":native:")
-            && self
-                .contract_address
-                .as_deref()
-                .is_none_or(|address| address == "coin")
-        {
-            self.symbol.split('(').next().unwrap_or(&self.symbol).trim()
-        } else {
-            &self.symbol
-        }
-    }
-}
-
-fn same_chain(asset_location: &str, provider_chain: &str) -> bool {
-    canonical_network_id(asset_location) == canonical_network_id(provider_chain)
-}
-
 pub fn canonical_network_id(value: &str) -> String {
     match value.trim().to_ascii_lowercase().as_str() {
         "xrp" => "xrpl".into(),
@@ -1338,6 +1302,61 @@ mod tests {
     }
 
     #[test]
+    fn near_wrap_token_is_advertised_and_matched_as_near_only_on_near() {
+        let token: NearToken = serde_json::from_value(json!({
+            "assetId": "nep141:wrap.near",
+            "blockchain": "near",
+            "symbol": "wNEAR",
+            "decimals": 24,
+            "contractAddress": "wrap.near"
+        }))
+        .unwrap();
+        assert_eq!(token.asset().unwrap(), asset("NEAR@near"));
+        assert!(token.matches(&asset("NEAR@near")));
+        assert!(!token.matches(&asset("NEAR@ethereum")));
+        assert_eq!(token.decimals, Some(24));
+
+        for (asset_id, blockchain, symbol) in [
+            ("nep141:meta-pool.near", "near", "stNEAR"),
+            ("nep141:other.near", "near", "wNEAR"),
+            ("nep141:wrap.near", "eth", "wNEAR"),
+        ] {
+            let other = NearToken {
+                asset_id: asset_id.into(),
+                blockchain: blockchain.into(),
+                symbol: symbol.into(),
+                ..token.clone()
+            };
+            assert!(
+                !other.matches(&asset("NEAR@near")),
+                "{asset_id}@{blockchain}"
+            );
+            assert_eq!(other.asset().unwrap().symbol, symbol.to_ascii_uppercase());
+        }
+    }
+
+    #[test]
+    fn near_ton_catalog_uses_ton_for_the_native_gram_entry() {
+        let token: NearToken = serde_json::from_value(json!({
+            "assetId": "nep245:v2_1.omni.hot.tg:1117_", "blockchain": "ton",
+            "symbol": "GRAM", "decimals": 9
+        }))
+        .unwrap();
+        assert_eq!(token.asset().unwrap(), asset("TON@ton"));
+        assert!(token.matches(&asset("TON@ton")));
+        assert!(!token.matches(&asset("TON@ethereum")));
+        let other = NearToken {
+            asset_id: "nep245:another-gram-token".into(),
+            ..token
+        };
+        assert_eq!(other.asset().unwrap(), asset("GRAM@ton"));
+        assert!(!other.matches(&asset("TON@ton")));
+        let provider = NearIntentsProvider::new("https://example.test", None).unwrap();
+        assert!(provider.supports_pair(&asset("TON@ton"), &asset("USDT@tron")));
+        assert!(provider.supports_pair(&asset("USDT@tron"), &asset("TON@ton")));
+    }
+
+    #[test]
     fn near_token_accepts_the_official_address_field() {
         let token: NearToken = serde_json::from_value(json!({
             "assetId": "nep141:usdt.tron",
@@ -1359,6 +1378,79 @@ mod tests {
         );
         let provider = NearIntentsProvider::new("https://example.test/v0/", None).unwrap();
         assert_eq!(provider.endpoint("quote"), "https://example.test/v0/quote");
+    }
+
+    #[tokio::test]
+    async fn near_wrap_catalog_produces_near_to_stablecoin_search_routes() {
+        let app = axum::Router::new().route(
+            "/v0/quote",
+            axum::routing::post(|axum::Json(body): axum::Json<Value>| async move {
+                assert_eq!(body["dry"], true);
+                assert_eq!(body["originAsset"], "nep141:wrap.near");
+                assert!(matches!(
+                    body["destinationAsset"].as_str(),
+                    Some("nep141:usdc.near" | "nep141:usdt.near")
+                ));
+                assert_eq!(body["amount"], "1250000000000000000000000");
+                assert_eq!(body["refundTo"], "intents.near");
+                assert_eq!(body["recipient"], "intents.near");
+                axum::Json(json!({"quote": {"amountOut": "6687500"}}))
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let provider = NearIntentsProvider::new(format!("http://{address}"), None)
+            .unwrap()
+            .with_quote_addresses(
+                "0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+                "0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+            )
+            .unwrap();
+        provider.set_supported_tokens(
+            serde_json::from_value(json!([
+                {"assetId": "nep141:wrap.near", "blockchain": "near", "symbol": "wNEAR", "decimals": 24, "contractAddress": "wrap.near"},
+                {"assetId": "nep141:usdc.near", "blockchain": "near", "symbol": "USDC", "decimals": 6},
+                {"assetId": "nep141:usdt.near", "blockchain": "near", "symbol": "USDT", "decimals": 6}
+            ]))
+            .unwrap(),
+        );
+        let service =
+            crate::p2p::P2pSearchService::with_sources(Vec::new(), Duration::from_secs(1))
+                .with_route_providers(vec![Arc::new(provider)]);
+        // Cover both an explicitly selected source network and automatic discovery.
+        for (target, source_network) in [
+            ("USDC", Some("near")),
+            ("USDC", None),
+            ("USDT", Some("near")),
+            ("USDT", None),
+        ] {
+            let response = service
+                .search_routes(
+                    serde_json::from_value(json!({
+                        "source_fiat": "NEAR", "target_fiat": target, "source_amount": 1.25,
+                        "source_network": source_network, "target_network": "near",
+                        "sources": "near-intents", "exchange_mode": "exchanger"
+                    }))
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                response.routes.len(),
+                1,
+                "source network: {source_network:?}"
+            );
+            let route = &response.routes[0];
+            assert_eq!(route.route_provider.as_deref(), Some("near-intents"));
+            assert_eq!(
+                route.route_path,
+                ["NEAR@near".to_owned(), format!("{target}@near")]
+            );
+            assert_eq!(route.source_amount, "1.25");
+            assert_eq!(route.target_amount, "6.6875");
+        }
+        server.abort();
     }
 
     #[tokio::test]
@@ -1416,7 +1508,13 @@ mod tests {
         let fallback = Some(evm_address);
         let addresses = HashMap::new();
         for (network, expected) in [
+            ("near", "intents.near"),
             ("tron", "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb"),
+            ("ton", "EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c"),
+            (
+                "sui",
+                "0x0000000000000000000000000000000000000000000000000000000000000001",
+            ),
             (
                 "aptos",
                 "0x0000000000000000000000000000000000000000000000000000000000000001",

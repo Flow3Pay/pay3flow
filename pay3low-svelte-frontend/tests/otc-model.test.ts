@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { demoSnapshot, formatPrice, marketFromHash, markets, prepareDemoOrder } from "../src/lib/otc/model.ts";
+import { demoCandles, demoSnapshot, formatPrice, marketFromHash, markets, prepareDemoOrder } from "../src/lib/otc/model.ts";
 const market = markets.find((item) => item.id === "BTC-USDT")!;
 const snapshot = demoSnapshot(market);
 
@@ -55,4 +55,14 @@ test("EVER orders retain small quote prices and base amounts in both directions"
   const sell = prepareDemoOrder(ever, book, "sell", "limit", "100.25", "0.01234").draft!;
   assert.equal(sell.amount, 100.25);
   assert.ok(Math.abs(sell.total - 1.237085) < 1e-10);
+});
+
+
+test("buy and sell candle volume stay positive and sum to the total", () => {
+  for (const market of markets) for (const range of ["1D", "7D", "1M", "1Y"] as const) {
+    for (const candle of demoCandles(market, range)) {
+      assert.ok(candle.buyVolume > 0 && candle.sellVolume > 0);
+      assert.ok(Math.abs(candle.buyVolume + candle.sellVolume - candle.volume) < 1e-8);
+    }
+  }
 });

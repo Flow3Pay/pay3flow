@@ -4,12 +4,17 @@
   import { lockPageScroll } from '$lib/page-scroll-lock';
   import { exchangeShareImage, type ExchangeShareState } from '$lib/exchange-share';
 
-  export let state: ExchangeShareState;
+  export let state: ExchangeShareState | null = null;
+  export let imageUrl: string | null = null;
+  export let shareTitle = "Share exchange";
+  export let shareDescription = "Send this link to open the same exchange settings.";
+  export let linkLabel = "Exchange link";
+  export let previewAlt = "";
   export let url: string;
   export let onClose: () => void;
   let dialog: HTMLDivElement;
   let linkInput: HTMLInputElement;
-  $: previewImage = exchangeShareImage(new URL(url).origin, state.source, state.target, new URL(url).searchParams);
+  $: previewImage = imageUrl ?? (state ? exchangeShareImage(new URL(url).origin, state.source, state.target, new URL(url).searchParams) : "");
   let copied = false;
   let copyFailed = false;
 
@@ -48,10 +53,10 @@
 <svelte:window on:keydown={keydown} />
 <div class="shareBackdrop" use:portal role="presentation" on:mousedown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
   <div class="shareDialog" bind:this={dialog} role="dialog" aria-modal="true" aria-labelledby="exchange-share-title" aria-describedby="exchange-share-description">
-    <div class="shareHeading"><h2 id="exchange-share-title">{t('Share exchange', {}, $locale)}</h2><button type="button" class="closeButton" aria-label={t('Close share dialog', {}, $locale)} on:click={onClose}>×</button></div>
-    <p id="exchange-share-description">{t('Send this link to open the same exchange settings.', {}, $locale)}</p>
-    <img class="sharePreview" src={previewImage} alt={`${state.source} → ${state.target} · Pay3Flow Bridge`} width="1200" height="630" />
-    <label for="exchange-share-link">{t('Exchange link', {}, $locale)}</label>
+    <div class="shareHeading"><h2 id="exchange-share-title">{t(shareTitle, {}, $locale)}</h2><button type="button" class="closeButton" aria-label={t('Close share dialog', {}, $locale)} on:click={onClose}>×</button></div>
+    <p id="exchange-share-description">{t(shareDescription, {}, $locale)}</p>
+    <img class="sharePreview" src={previewImage} alt={previewAlt || `${state?.source} → ${state?.target} · Pay3Flow Bridge`} width="1200" height="630" />
+    <label for="exchange-share-link">{t(linkLabel, {}, $locale)}</label>
     <div class="shareLinkRow"><input id="exchange-share-link" bind:this={linkInput} readonly value={url} on:focus={(event) => event.currentTarget.select()} /><button type="button" class="copyButton" on:click={copyLink}>{t(copied ? 'Link copied' : 'Copy link', {}, $locale)}</button></div>
     <p class="copyStatus" aria-live="polite">{copyFailed ? t('Select and copy the link manually.', {}, $locale) : copied ? t('Link copied', {}, $locale) : ''}</p>
   </div>

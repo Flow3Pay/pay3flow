@@ -119,3 +119,7 @@ reference so tracking can resume without signing again.
   the network is not fully trusted.
 - Disable mock FX, mock settlement, and unreviewed external adapters before
   enabling real-money behavior.
+
+## OTC route
+
+`OTC_CONFIG_FILE` selects a private JSON configuration file; the route is disabled when absent. See [OTC setup](otc-service.md) and `backend/otc.example.json`. Initial booking state is paused. Record the independent RPCs, deployed wallet profile, desk/operator policies, tested alert routes and live-gate evidence before enabling it. Demo and live deployments require separate databases; the database mode and each quote are bound to their original environment.

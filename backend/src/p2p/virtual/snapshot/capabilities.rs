@@ -150,7 +150,7 @@ impl P2pSearchService {
         capabilities.into()
     }
 
-    pub(in crate::p2p) async fn provider_assets_for(
+    pub(crate) async fn provider_assets_for(
         providers: &[Arc<dyn PublicRouteProvider>],
     ) -> Vec<Asset> {
         let mut loads = providers

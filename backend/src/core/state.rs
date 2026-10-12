@@ -46,6 +46,8 @@ pub struct AppState {
     pub route_executions: RouteExecutionService,
     /// Cached indicative USD prices for the converter.
     pub market_prices: MarketPriceService,
+    /// Durable customer-first OTC settlement.
+    pub otc: crate::otc::Service,
 }
 
 impl AppState {
@@ -68,6 +70,7 @@ impl AppState {
         reputation: ServiceReputation,
         route_executions: RouteExecutionService,
         market_prices: MarketPriceService,
+        otc: crate::otc::Service,
     ) -> Self {
         Self {
             pool,
@@ -87,6 +90,7 @@ impl AppState {
             reputation,
             route_executions,
             market_prices,
+            otc,
         }
     }
 }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createShortShare } from "$lib/share-links";
   import { onMount, tick } from "svelte";
   import type { ProviderGuidance, RouteCandidate, ServiceLink } from "$lib/exchange";
   import { locale, t } from "$lib/i18n";
@@ -12,7 +13,8 @@
   import { wallets } from "$lib/wallet-session";
   import { walletFamily } from "$lib/wallet-execution";
   import InstructionScene from "./InstructionScene.svelte";
-  import { spotTrade } from "$lib/guides/spot/frames";
+  import { isSpotStep, spotTrade } from "$lib/guides/spot/frames";
+  import { bestchangeExchanger, bestchangeWebsiteUrl } from "$lib/guides/bestchange/frames";
 
   export let route: RouteCandidate;
   export let venueNames: Record<string, string> = {};
@@ -53,18 +55,19 @@
   $: copy = (key: string, params: Record<string, string | number> = {}) => t(key, params, language);
   $: steps = buildRouteTutorial(route, venueNames, providerGuidance, networkNames, copy);
   $: step = steps[chapter];
-  $: spot = step?.kind === "swap" ? spotTrade(step.pair, step.from, step.to) : null;
+  $: spot = step && isSpotStep(step) ? spotTrade(step.pair, step.from, step.to) : null;
   $: sourceFamily = walletFamily(route.execution?.from_asset.split("@", 2)[1] ?? "");
   $: walletSwap = Boolean(step?.execution && route.execution && sourceFamily && $wallets[sourceFamily]);
   $: walletProviderStep = Boolean(step?.execution && ["symbiosis", "near-intents", "cow-swap"].includes(step.provider));
   $: walletProviderUrl = step?.url ?? step?.guide?.links.find(link => /^Open\b/i.test(link.label))?.url ?? (step && venueUrls[step.provider.toLowerCase()]);
+  $: exchangerWebsiteUrl = step?.provider.toLowerCase() === "bestchange" ? bestchangeWebsiteUrl(step) : null;
   $: finished = steps.length > 0 && chapter === steps.length;
   $: titleIncludesVenue = Boolean(step && step.title.endsWith(step.venue));
   $: headingTitle = titleIncludesVenue && step ? step.title.slice(0, -step.venue.length).trimEnd() : step?.title;
 
   async function shareGuide() {
-    const url = new URL(guideSharePath(location.hash), location.origin).href;
-    try { await navigator.clipboard.writeText(url); shareCopied = true; setTimeout(() => shareCopied = false, 2500); }
+    let url = new URL(guideSharePath(location.hash), location.origin).href;
+    try { const target = new URL(url); url = await createShortShare(`${target.pathname}${target.search}`); await navigator.clipboard.writeText(url); shareCopied = true; setTimeout(() => shareCopied = false, 2500); }
     catch { shareFallback = url; }
   }
   async function selectTab(next: "guide" | "reviews") {
@@ -222,6 +225,16 @@
           {/if}
           {#if spot && step?.url}
             <a class="walletProviderLink" data-testid="spot-market-link" href={step.url} target="_blank" rel="noreferrer noopener">{copy("Open {venue} Spot", { venue: step.venue })} · {spot.label} <span aria-hidden="true">↗</span></a>
+          {/if}
+          {#if step?.provider.toLowerCase() === "cifra-broker" && step.kind !== "transfer" && step.url}
+            <a class="walletProviderLink" data-testid="cifra-terminal-link" href={step.url} target="_blank" rel="noreferrer noopener">{copy("Open Cifra Tradernet")} <span aria-hidden="true">↗</span></a>
+          {/if}
+          {#if step?.provider.toLowerCase() === "bestchange" && step.kind !== "transfer" && step.url}
+            <a class="walletProviderLink" data-testid="bestchange-exchanger-link" href={step.url} target="_blank" rel="noreferrer noopener">{copy("Open {venue} profile", { venue: bestchangeExchanger(route, step, copy) })} <span aria-hidden="true">↗</span></a>
+            {#if exchangerWebsiteUrl}<a class="walletProviderLink" data-testid="bestchange-exchanger-website" href={exchangerWebsiteUrl} target="_blank" rel="noreferrer noopener">{copy("Go to {exchanger} website", { exchanger: bestchangeExchanger(route, step, copy) })} <span aria-hidden="true">↗</span></a>{/if}
+          {/if}
+          {#if step?.offer && step.provider.toLowerCase() !== "bestchange" && !step.direct && (step.kind === "buy" || step.kind === "sell") && step.url}
+            <a class="walletProviderLink" data-testid="p2p-profile-link" href={step.url} target="_blank" rel="noreferrer noopener">{copy(step.offer.advertiser_profile_url ? "Open {venue} profile" : "Open {venue}", { venue: step.offer.advertiser_profile_url ? step.offer.advertiser.nickname : step.venue })} <span aria-hidden="true">↗</span></a>
           {/if}
           {#if step?.execution && route.execution}
             <div class="swapExecution" class:connected={walletSwap}>{#key route.route_id}<RouteExecutionPanel {route} {networkNames} />{/key}</div>

@@ -31,7 +31,7 @@ headers = { Origin = "https://www.binance.com", Referer = "https://www.binance.c
 timeout_ms = 10000
 max_results = 100
 page_size = 20
-supported_assets = ["USDT", "USDC", "BTC", "ETH", "BNB"]
+supported_assets = ["ALL"]
 
 [adapter.p2p.payment_method_aliases]
 "T-Bank" = ["Tinkoff", "Tinkoff Bank"]

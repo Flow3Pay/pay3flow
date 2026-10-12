@@ -1,0 +1,10 @@
+[
+ "https://www.w3.org/ns/activitystreams",
+ "https://w3id.org/fep/0837",
+ {"as":"https://www.w3.org/ns/activitystreams#","vf":"https://w3id.org/valueflows/ont/vf#","om2":"http://www.ontology-of-units-of-measure.org/resource/om-2/",
+ "Proposal":"vf:Proposal","Intent":"vf:Intent","Agreement":"vf:Agreement","Commitment":"vf:Commitment",
+ "OfferAgreement":"as:Offer","AcceptAgreement":"as:Accept","RejectAgreement":"as:Reject",
+ "action":"vf:action","purpose":"vf:purpose","publishes":"vf:publishes","reciprocal":"vf:reciprocal","unitBased":"vf:unitBased",
+ "stipulates":"vf:stipulates","stipulatesReciprocal":"vf:stipulatesReciprocal","satisfies":{"@id":"vf:satisfies","@type":"@id"},
+ "resourceConformsTo":{"@id":"vf:resourceConformsTo","@type":"@id"},"resourceQuantity":"vf:resourceQuantity","hasUnit":"om2:hasUnit","hasNumericalValue":"om2:hasNumericalValue"}
+]

@@ -57,6 +57,14 @@ pub fn verify(
     now: DateTime<Utc>,
 ) -> Result<String, ActivityPubError> {
     let sig = parse_signature_header(headers)?;
+    if HEADER_ORDER
+        .iter()
+        .any(|required| !sig.headers.iter().any(|covered| covered == required))
+    {
+        return Err(ActivityPubError::Signature(
+            "signature must cover request-target, host, date and digest".into(),
+        ));
+    }
 
     // digest verification is independent of the signature headers order
     if let Some((dname, dvalue)) = headers
@@ -259,6 +267,38 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.to_string().contains("digest"));
+        std::fs::remove_file(key_path).unwrap();
+    }
+    #[test]
+    fn signed_date_alone_cannot_authorize_a_changed_body_or_target() {
+        let key_path = temp_key("signature-coverage");
+        let identity =
+            ActorIdentity::load_or_create(&key_path, "https://pay3flow.local", "pay3flow").unwrap();
+        let now = Utc::now();
+        let date = now.format("%a, %d %b %Y %H:%M:%S GMT").to_string();
+        let signed = base64::engine::general_purpose::STANDARD
+            .encode(identity.sign_bytes(format!("date: {date}").as_bytes()));
+        let signature = format!(
+            "keyId=\"{}\",algorithm=\"rsa-sha256\",headers=\"date\",signature=\"{signed}\"",
+            identity.public_key_id()
+        );
+        let body = b"changed body";
+        let digest = format!("SHA-256={}", sha256_b64(body));
+        let error = verify(
+            &[
+                ("date", &date),
+                ("signature", &signature),
+                ("host", "host"),
+                ("digest", &digest),
+            ],
+            "POST",
+            "/changed-target",
+            body,
+            identity.public_key_pem(),
+            now,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("cover"));
         std::fs::remove_file(key_path).unwrap();
     }
 }

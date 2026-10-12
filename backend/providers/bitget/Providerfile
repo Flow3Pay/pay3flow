@@ -28,7 +28,7 @@ endpoint = "https://www.bitget.com/v1/p2p/pub/adv/queryAdvList"
 method = "POST"
 headers = { Origin = "https://www.bitget.com", Referer = "https://www.bitget.com/p2p-trade" }
 timeout_ms = 4000
-supported_assets = ["USDT", "USDC", "BTC", "ETH"]
+supported_assets = ["ALL"]
 
 [adapter.p2p.buy]
 request_json = '''{"side":1,"pageNo":1,"pageSize":"{{limit_number}}","coinCode":"{{asset}}","fiatCode":"{{fiat}}"}'''

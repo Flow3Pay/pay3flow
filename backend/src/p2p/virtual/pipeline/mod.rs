@@ -1,5 +1,6 @@
 mod crypto;
 mod fiat;
+mod fiat_spot;
 mod provider;
 
 use std::collections::HashMap;
@@ -70,11 +71,20 @@ impl P2pSearchService {
                 &query,
                 batch_sender.clone(),
             ))),
-            (false, true) => producers.push(Box::pin(fiat::produce_fiat_to_crypto(
-                self,
-                &query,
-                batch_sender.clone(),
-            ))),
+            (false, true) => {
+                producers.push(Box::pin(fiat::produce_fiat_to_crypto(
+                    self,
+                    &query,
+                    batch_sender.clone(),
+                )));
+                if query.includes_exchangers() {
+                    producers.push(Box::pin(fiat_spot::produce_fiat_spot_routes(
+                        self,
+                        &query,
+                        batch_sender.clone(),
+                    )));
+                }
+            }
             (true, false) => producers.push(Box::pin(fiat::produce_crypto_to_fiat(
                 self,
                 &query,

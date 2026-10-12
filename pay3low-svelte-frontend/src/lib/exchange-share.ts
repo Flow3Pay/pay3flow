@@ -73,7 +73,7 @@ export function exchangeShareParameters(input: URLSearchParams) {
 }
 export function exchangeShareImage(origin: string, source: string, target: string, params: URLSearchParams) {
   const image = new URL('/share-image.png', origin);
-  image.searchParams.set('v', 'bridge-5');
+  image.searchParams.set('v', 'bridge-6');
   image.searchParams.set('from', source); image.searchParams.set('to', target);
   for (const key of ['amount', 'receive']) {
     const value = shareAmount(params.get(key));

@@ -29,7 +29,7 @@ endpoint = "https://api2.bybit.com/fiat/otc/item/online"
 method = "POST"
 headers = { Origin = "https://www.bybit.com", Referer = "https://www.bybit.com/" }
 timeout_ms = 4000
-supported_assets = ["USDT", "USDC", "BTC", "ETH"]
+supported_assets = ["ALL"]
 
 [adapter.p2p.payment_method_aliases]
 "T-Bank" = ["Tinkoff", "Tinkoff Bank"]

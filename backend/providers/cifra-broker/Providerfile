@@ -22,7 +22,7 @@ endpoint = "https://api.cifra-broker.by/api/site/ticker-calculator"
 method = "GET"
 headers = { Origin = "https://cifra.by", Referer = "https://cifra.by/", Accept-Language = "ru-RU,ru;q=0.9", User-Agent = "Mozilla/5.0 (compatible; Pay3Flow/0.1)" }
 timeout_ms = 5000
-supported_assets = ["USDT", "USDC", "BTC", "BNB", "SOL", "TRX", "DOGE", "LTC", "DAI", "XRP", "ADA", "DOT", "LINK", "AVAX", "BCH", "NEAR", "APT", "ATOM", "UNI", "SUI"]
+supported_assets = ["ALL"]
 default_min_fiat = 1
 default_max_fiat = 1000000000
 default_available_asset = 1000000000

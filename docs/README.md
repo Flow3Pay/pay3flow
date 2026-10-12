@@ -14,6 +14,9 @@ explicitly say `planned`, `research`, or `legacy`.
 
 ## Domain and protocol references
 
+- [`otc-service.md`](otc-service.md) — EVER/USDT service setup, settlement, operations and live gate.
+- [`otc-evidence.md`](otc-evidence.md) — repeatable simulation tests and recorded validation.
+
 - [`exchange-domain.md`](exchange-domain.md) — exchange tables, invariants, and status machines.
 - [`exchange-risk-compliance.md`](exchange-risk-compliance.md) — MVP safety controls and production gates.
 - [`glossary.md`](glossary.md) — shared vocabulary.

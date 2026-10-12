@@ -7,6 +7,7 @@ RUN mkdir -p backend/src && echo "fn main(){}" > backend/src/main.rs \
     && cargo build --release --manifest-path backend/Cargo.toml 2>/dev/null \
     && rm -rf backend/src
 COPY backend/src backend/src
+COPY backend/tests/fixtures backend/tests/fixtures
 COPY backend/migrations backend/migrations
 COPY backend/build.rs backend/build.rs
 COPY backend/providerfile_code.rs backend/providerfile_code.rs

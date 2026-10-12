@@ -6,7 +6,20 @@ exchange_methods = ["exchanger"]
 
 [code]
 language = "rust"
-source = path["symbiosis.rs"]
+source = '''
+// Catalog identity is determined by chain and contract, independently of the
+// provider's display ticker. Keep these provider-specific rules here.
+const ASSET_ALIASES: &[(u64, &str, &str)] = &[
+    (1, "0x582d872A1B094FC48F5DE31D3B73F2D9bE47def1", "TON"),
+    (56, "0x76A797A59Ba2C17726896976B7B3747BfD1d220f", "TON"),
+    (85918, "", "TON"),
+];
+// Other catalog entries named TON are different assets (e.g. Tokamak Network).
+// Do not expose them under the same route identity as the verified bridge coin.
+const RESERVED_ASSET_SYMBOLS: &[&str] = &["TON"];
+
+include!(concat!(env!("CARGO_MANIFEST_DIR"), "/providers/symbiosis/symbiosis.rs"));
+'''
 
 [sell]
 source_url = "https://api.symbiosis.finance/crosschain/docs/"

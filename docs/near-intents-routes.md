@@ -28,9 +28,17 @@ The provider uses the documented 1-Click API surfaces:
 The normal `QuoteProvider::quote` implementation always uses `dry=true`.
 1Click validates addresses even for dry quotes. Network-specific preview
 addresses take precedence; a legacy global address is used only on networks
-with a compatible address format. TRON, Aptos, and Cardano have built-in
+with a compatible address format. NEAR, TON, TRON, Aptos, Sui, and Cardano have built-in
 preview addresses used only for dry quotes. Paths without an address for both
-chains are excluded before requesting prices. Executable quotes always use
+chains are excluded before requesting prices. NEAR previews use `intents.near`;
+`wrap.near` is the token contract and is rejected as a quote recipient by 1Click.
+The canonical `nep141:wrap.near` entry is exposed as `NEAR@near`, and
+the HOT bridge's native TON entry (`nep245:v2_1.omni.hot.tg:1117_`, named `GRAM`)
+is exposed as `TON@ton`; quote requests retain their original API asset IDs and
+token decimals. Catalog aliases and preview-address rules live in
+`backend/providers/near-intents/Providerfile`. NEAR wallet funding wraps native
+NEAR before transferring wNEAR.
+Executable quotes always use
 the wallet addresses supplied by the user. Credentials are read from
 `NEAR_INTENTS_JWT` and are not included in route capabilities or logs.
 

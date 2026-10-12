@@ -1,32 +1,137 @@
 <script lang="ts">
   import "@near-wallet-selector/modal-ui/styles.css";
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
+  import { fade, fly } from "svelte/transition";
+  import { env } from "$env/dynamic/public";
+  import { lockPageScroll } from "$lib/page-scroll-lock";
   import { locale, t } from "$lib/i18n";
+  import { assetIcon } from "$lib/icons";
   import { wallets, connectWallet, disconnectFamily, restoreWallets } from "$lib/wallet-session";
   import type { WalletFamily } from "$lib/wallet-execution";
+  import { walletDialogMode, otcWalletDialog, openWalletDialog, closeWalletDialog } from "$lib/wallet-dialog";
+  import PickerOptionCard from "./PickerOptionCard.svelte";
 
-  const choices: { family: WalletFamily; network: string; label: string }[] = [
-    { family: "evm", network: "ethereum", label: "Ethereum" },
-    { family: "near", network: "near", label: "NEAR" },
-    { family: "tron", network: "tron", label: "TRON" },
-    { family: "everscale", network: "everscale", label: "Everscale" },
+  const choices: { family: WalletFamily; network: string; label: string; icon: string; keywords: string }[] = [
+    { family: "evm", network: "ethereum", label: "Ethereum", icon: "/icons/assets/eth.webp", keywords: "ETH EVM эфир этериум" },
+    { family: "near", network: "near", label: "NEAR", icon: assetIcon("near"), keywords: "NEAR Protocol нир" },
+    { family: "tron", network: "tron", label: "TRON", icon: "/icons/assets/trx.webp", keywords: "TRX трон" },
+    { family: "everscale", network: "everscale", label: "Everscale", icon: "/icons/assets/ever.svg", keywords: "EVER эверскейл" },
   ];
-  let open = false;
+  $: open = $walletDialogMode !== null;
+  $: account = $walletDialogMode === "otc" ? $otcWalletDialog : null;
+  let query = "";
+  $: if (!open) { query = ""; error = ""; }
+  let searchInput: HTMLInputElement;
   let busy: WalletFamily | null = null;
   let error = "";
-  let root: HTMLDivElement;
+  let dialog: HTMLDivElement;
+  let providerHandoff = false;
+  let activeChain: "ethereum" | "everscale" | null = null;
+  $: handoff = providerHandoff || (activeChain === "ethereum" && Boolean(env.PUBLIC_REOWN_PROJECT_ID?.trim()) && account?.progress === "Connecting wallet…");
+  $: working = Boolean(busy || account?.busy);
+  let motionDuration = 160;
   let toggle: HTMLButtonElement;
+  let dragging = false;
+  let dragStartY = 0;
+  let dragDistance = 0;
   $: count = Object.keys($wallets).length;
+  $: terms = query.normalize("NFKC").toLowerCase().trim().split(/\s+/).filter(Boolean);
+  $: visibleChoices = choices.filter(choice => {
+    const text = `${choice.label} ${choice.network} ${choice.family} ${choice.keywords} ${$wallets[choice.family]?.address ?? ''}`.toLowerCase();
+    return terms.every(term => text.includes(term));
+  });
   $: copy = (key: string, params: Record<string, string | number> = {}) => t(key, params, $locale);
-  onMount(() => { void restoreWallets(); });
+  onMount(() => {
+    void restoreWallets();
+    const media = matchMedia("(prefers-reduced-motion: reduce)");
+    const updateMotion = () => motionDuration = media.matches ? 0 : 160;
+    updateMotion(); media.addEventListener("change", updateMotion);
+    return () => media.removeEventListener("change", updateMotion);
+  });
 
+  function portal(node: HTMLDivElement) {
+    const previousFocus = document.activeElement as HTMLElement | null;
+    document.body.appendChild(node);
+    const shell = document.querySelector<HTMLElement>(".appShell");
+    const wasInert = shell?.inert ?? false;
+    if (shell) shell.inert = true;
+    const unlock = lockPageScroll();
+    void tick().then(() => searchInput?.focus());
+    return { destroy() {
+      if (shell) shell.inert = wasInert;
+      unlock(); node.remove(); previousFocus?.focus();
+    } };
+  }
+  async function focusChoice(family: WalletFamily) {
+    await tick();
+    if (open) (dialog.querySelector<HTMLButtonElement>(`[data-family="${family}"] button`) ?? searchInput)?.focus();
+  }
+  function clearSearch() { query = ""; searchInput?.focus(); }
+  function startSheetDrag(event: PointerEvent) {
+    dragging = true; dragStartY = event.clientY; dragDistance = 0;
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  }
+  function moveSheetDrag(event: PointerEvent) {
+    if (!dragging) return;
+    dragDistance = Math.max(0, event.clientY - dragStartY);
+    dialog?.style.setProperty("--sheet-drag", `${dragDistance}px`);
+  }
+  function endSheetDrag() {
+    if (!dragging) return;
+    const shouldClose = dragDistance > 96 || dragDistance > dialog.clientHeight * .24;
+    dragging = false;
+    if (shouldClose) closeWalletDialog();
+    else dialog?.style.removeProperty("--sheet-drag");
+  }
+  function cancelSheetDrag() {
+    dragging = false;
+    dialog?.style.removeProperty("--sheet-drag");
+  }
+  function keydown(event: KeyboardEvent) {
+    if (!open || handoff) return;
+    if (event.key === "Escape") { event.preventDefault(); event.stopImmediatePropagation(); closeWalletDialog(); return; }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      const results = [...dialog.querySelectorAll<HTMLButtonElement>(".optionCard:not(:disabled)")];
+      const index = results.findIndex(button => button === document.activeElement);
+      if (document.activeElement === searchInput && event.key === "ArrowDown" && results.length) {
+        event.preventDefault(); results[0].focus();
+      } else if (index >= 0) {
+        event.preventDefault();
+        (event.key === "ArrowUp" ? results[index - 1] ?? searchInput : results[index + 1] ?? results[index]).focus();
+      }
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const items = [...dialog.querySelectorAll<HTMLElement>("input:not(:disabled), button:not(:disabled)")].filter(node => node.tabIndex >= 0 && node.checkVisibility());
+    const first = items[0], last = items.at(-1);
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+  }
+
+  async function selectChoice(family: WalletFamily, network: string) {
+    if (working) return;
+    const context = account;
+    if (context && (network === "ethereum" || network === "everscale")) {
+      busy = family; activeChain = network; error = "";
+      try {
+        if (context.session) await context.onVerify(network);
+        else await context.onConnect(network);
+      } finally { busy = null; void focusChoice(family); }
+      return;
+    }
+    if ($wallets[family]) await disconnect(family);
+    else await connect(family, network);
+  }
   async function connect(family: WalletFamily, network: string) {
     if (busy) return;
     busy = family;
     error = "";
+    // Selector UIs mount outside our dialog. Let them receive focus and input
+    // while keeping the underlying application locked until they return.
+    providerHandoff = family === "near" || (family === "evm" && Boolean(env.PUBLIC_REOWN_PROJECT_ID?.trim()));
     try { await connectWallet(network); }
     catch (cause) { error = cause instanceof Error ? copy(cause.message) : copy("Wallet connection failed"); }
-    finally { busy = null; }
+    finally { busy = null; providerHandoff = false; void focusChoice(family); }
   }
   async function disconnect(family: WalletFamily) {
     if (busy) return;
@@ -34,55 +139,118 @@
     error = "";
     try { await disconnectFamily(family); }
     catch (cause) { error = cause instanceof Error ? cause.message : copy("Wallet disconnect failed"); }
-    finally { busy = null; }
+    finally { busy = null; void focusChoice(family); }
   }
-  function outside(event: MouseEvent) { if (open && !event.composedPath().includes(root)) open = false; }
-  function keydown(event: KeyboardEvent) { if (open && event.key === "Escape") { open = false; toggle.focus(); } }
 </script>
 
-<svelte:window on:click={outside} on:keydown={keydown} />
-<div class="walletMenu" bind:this={root}>
-  <button class="walletToggle" type="button" bind:this={toggle} aria-label={count ? copy("Wallets ({count})", { count }) : copy("Connect wallet")} aria-expanded={open} aria-controls="wallet-connections" on:click={() => open = !open}>
+<svelte:window on:keydown={keydown} />
+<div class="walletMenu">
+  <button class="walletToggle" type="button" bind:this={toggle} aria-label={count ? copy("Wallets ({count})", { count }) : copy("Connect wallet")} aria-haspopup="dialog" aria-expanded={open} aria-controls="wallet-connections" on:click={() => { error = ""; query = ""; openWalletDialog($otcWalletDialog ? "otc" : "wallets"); }}>
     <img src="/icons/ui/wallet-connect.png" width="18" height="18" alt="" aria-hidden="true" />
     <span>{count ? copy("Wallets ({count})", { count }) : copy("Connect wallet")}</span>
   </button>
-  {#if open}
-    <div class="walletConnections" id="wallet-connections" role="group" aria-label={copy("Wallet connections")}>
-      {#each choices as choice}
-        {@const wallet = $wallets[choice.family]}
-        <div class="walletChoice">
-          <strong>{choice.label}</strong>
-          {#if wallet}
-            <span class="address" title={wallet.address}>{wallet.address.length > 20 ? `${wallet.address.slice(0, 7)}…${wallet.address.slice(-6)}` : wallet.address}</span>
-            <button type="button" disabled={Boolean(busy)} aria-label={copy("Disconnect {network} wallet", { network: choice.label })} on:click={() => disconnect(choice.family)}>{copy("Disconnect")}</button>
-          {:else}
-            <button type="button" disabled={Boolean(busy)} on:click={() => connect(choice.family, choice.network)}>{busy === choice.family ? copy("Connecting…") : copy("Connect {network} wallet", { network: choice.label })}</button>
+</div>
+{#if open}
+  <div class="walletBackdrop" class:handoff aria-hidden={handoff ? "true" : undefined} use:portal transition:fade={{ duration: motionDuration }} role="presentation" on:mousedown={(event) => { if (event.target === event.currentTarget) closeWalletDialog(); }}>
+    <div class="walletConnections" class:dragging id="wallet-connections" bind:this={dialog} role="dialog" aria-modal="true" aria-labelledby="wallet-connections-title" transition:fly={{ y: 8, duration: motionDuration }}>
+      <button type="button" class="sheetHandle" tabindex="-1" aria-label={copy("Close wallet dialog")} on:pointerdown={startSheetDrag} on:pointermove={moveSheetDrag} on:pointerup={endSheetDrag} on:pointercancel={cancelSheetDrag} on:click={(event) => { if (event.detail === 0 || dragDistance === 0) closeWalletDialog(); }}><span aria-hidden="true"></span></button>
+      <div class="walletHeading">
+        <label class="walletSearch"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.7" /><path d="m20 20-4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg><input type="search" bind:this={searchInput} bind:value={query} disabled={working} placeholder={copy("Search networks or currencies")} aria-label={copy("Search wallets")} aria-controls="wallet-search-results" autocomplete="off" spellcheck="false" on:input={() => error = ""} /></label>
+        {#if query}<button class="clearSearch" type="button" disabled={working} aria-label={copy("Clear wallet search")} on:click={clearSearch}>×</button>{/if}
+        <button class="closeButton" type="button" aria-label={copy("Close wallet dialog")} on:click={() => closeWalletDialog()}><kbd>esc</kbd><svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg></button>
+      </div>
+      <div class="titleBar"><h2 id="wallet-connections-title">{copy("Wallet connections")}</h2></div>
+      <div class="resultPanel">
+        <div class="walletList" id="wallet-search-results">
+          <section class="section"><h3>{copy("Available networks")}</h3>
+            {#each visibleChoices as choice (choice.family)}
+              {@const wallet = $wallets[choice.family]}
+              {@const otcChain = account && (choice.network === "ethereum" || choice.network === "everscale") ? choice.network : null}
+              {@const proof = otcChain ? account?.bound.find(value => value.startsWith(`${otcChain}:`))?.slice(otcChain.length + 1).trim() : undefined}
+              {@const action = busy === choice.family ? copy("Connecting…") : otcChain ? proof ? copy("Verified") : account?.session ? copy("Verify") : copy("Connect") : wallet ? copy("Disconnect") : copy("Connect")}
+              {@const address = proof || wallet?.address}
+              <div class="walletChoice" data-family={choice.family} aria-busy={busy === choice.family}>
+                <PickerOptionCard
+                  role="button"
+                  name={choice.label}
+                  iconUrl={choice.icon}
+                  initials={choice.label.slice(0, 2).toUpperCase()}
+                  selected={otcChain ? Boolean(proof) : Boolean(wallet)}
+                  category={action}
+                  meta={address && address.length > 20 ? `${address.slice(0, 7)}…${address.slice(-6)}` : address}
+                  metaTitle={address}
+                  disabled={working || !!(otcChain && (!account?.enabled || !account.chains.includes(otcChain)))}
+                  ariaLabel={otcChain ? copy(account?.session ? "Verify {network} wallet" : "Connect {network} wallet", { network: choice.label }) : wallet ? copy("Disconnect {network} wallet", { network: choice.label }) : busy === choice.family ? copy("Connecting…") : copy("Connect {network} wallet", { network: choice.label })}
+                  onSelect={() => selectChoice(choice.family, choice.network)}
+                />
+              </div>
+            {/each}
+            {#if !visibleChoices.length}<div class="emptySearch" role="status"><strong>{copy("No wallets found")}</strong><span>{copy("Try a different search.")}</span></div>{/if}
+          </section>
+          {#if error || account?.error}<p role="alert">{error || account?.error}</p>{/if}
+          {#if account?.progress}<p class="walletStatus" role="status">{copy(account.progress)}</p>{/if}
+          {#if account?.session}<button class="accountAction" type="button" disabled={account.disconnectDisabled || !!account.progress || Boolean(busy)} on:click={account.onDisconnect}>{copy("Disconnect")}</button>{/if}
+          {#if account?.requestingQuote}
+            <button class="quoteAction" type="button" disabled={working || !account.quoteReady} on:click={account.onRequest}>{copy("Request exact quote")}</button>
           {/if}
         </div>
-      {/each}
-      {#if error}<p role="alert">{error}</p>{/if}
+      </div>
     </div>
-  {/if}
-</div>
+  </div>
+{/if}
 
 <style>
   .walletMenu { position: relative; }
-  button { min-height: 36px; border: 1px solid var(--color-border); border-radius: 9px; background: var(--color-panel); color: var(--color-text); font: inherit; cursor: pointer; }
+  button { min-height: 36px; border: 1px solid var(--color-border); border-radius: 9px; background: var(--color-panel); color: var(--color-text); font: inherit; cursor: pointer; transition: background .16s ease; }
+  button:hover { background: var(--color-accent-soft); }
   button:disabled { opacity: .6; cursor: wait; }
   .walletToggle { display: flex; align-items: center; gap: 7px; padding: 0 10px; white-space: nowrap; font-size: 12px; font-weight: 750; }
   .walletToggle img { width: 18px; height: 18px; flex: 0 0 auto; object-fit: contain; filter: brightness(0); }
   :global(html[data-theme="dark"]) .walletToggle img { filter: brightness(0) invert(1); }
-  .walletConnections { position: absolute; top: calc(100% + 10px); right: 0; width: min(360px, calc(100vw - 32px)); padding: 14px; border: 1px solid var(--color-border); border-radius: 14px; background: var(--color-paper); box-shadow: 0 12px 40px #0002; }
-  .walletChoice { display: grid; grid-template-columns: auto 1fr; gap: 8px; padding: 10px 0; align-items: center; }
-  .walletChoice button { grid-column: 1 / -1; padding: 6px 10px; }
-  .address { justify-self: end; font-size: 12px; color: var(--color-text-soft); overflow-wrap: anywhere; }
-  p { color: var(--color-danger); font-size: 12px; overflow-wrap: anywhere; }
-  @media (max-width: 640px), (pointer: coarse) {
-    button { min-height: 44px; }
-  }
+  .walletBackdrop { position: fixed; inset: 0; z-index: 2000; display: grid; place-items: center; padding: 24px; background: #11172255; backdrop-filter: blur(5px); touch-action: none; }
+  .walletBackdrop.handoff { visibility: hidden; pointer-events: none; }
+  .walletConnections { display: flex; flex-direction: column; width: min(100%, 480px); max-height: min(620px, 88dvh); overflow: hidden; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-paper); color: var(--color-text); box-shadow: 0 24px 90px #11172224, 0 3px 12px #11172212; touch-action: auto; }
+  .walletHeading { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; min-height: 58px; padding: 6px 10px 6px 16px; border-bottom: 1px solid var(--color-border); }
+  .walletSearch { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; min-height: 44px; color: var(--color-text-faint); }
+  .walletSearch svg { flex: 0 0 auto; }
+  .walletSearch input { width: 100%; min-width: 0; border: 0; padding: 0; outline: 0; background: transparent; color: var(--color-text); font: inherit; font-size: 14px; font-weight: 450; }
+  .walletSearch input::placeholder { color: var(--color-text-faint); opacity: 1; }
+  .walletSearch input::-webkit-search-cancel-button { display: none; }
+  .clearSearch { display: grid; place-items: center; flex: 0 0 32px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--color-text-faint); font-size: 22px; }
+  .titleBar { display: flex; align-items: center; gap: 8px; justify-content: space-between; padding: 10px 16px 2px; }
+  h2 { min-width: 0; overflow-wrap: anywhere; margin: 0; font-size: 11px; font-weight: 500; color: var(--color-text-soft); }
+  .closeButton { display: grid; place-items: center; flex: 0 0 44px; min-height: 44px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--color-text-faint); }
+  .clearSearch:hover, .closeButton:hover { background: var(--color-panel-soft); }
+  .closeButton svg { display: none; }
+  kbd { font: 10px var(--font-mono); border: 1px solid var(--color-border); padding: 3px 5px; border-radius: 4px; color: var(--color-text-faint); }
+  .resultPanel { display: flex; flex-direction: column; min-height: 0; overflow: hidden; flex: 1; }
+  .walletList { min-height: 0; max-height: min(480px, calc(88dvh - 106px)); overflow-y: auto; overscroll-behavior: contain; padding: 4px 8px 12px; scrollbar-gutter: stable; }
+  .section { padding: 0 0 8px; }
+  .section h3 { margin: 0; padding: 7px 8px; color: var(--color-text-faint); font-size: 10px; font-weight: 500; }
+  .emptySearch { display: grid; gap: 6px; padding: 28px 12px; color: var(--color-text-soft); text-align: center; font-size: 12px; }
+  .emptySearch strong { font-size: 13px; font-weight: 600; }
+  .emptySearch span { color: var(--color-text-faint); }
+  p { margin: 0; padding: 8px; color: var(--color-danger); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+  .walletStatus { color: var(--color-text-soft); }
+  .accountAction, .quoteAction { display: block; width: calc(100% - 16px); margin: 8px; min-height: 44px; font: inherit; font-size: 12px; }
+  .quoteAction { background: var(--color-accent); color: #152016; }
+  .sheetHandle { display: none; }
+  @media (max-width: 640px), (pointer: coarse) { button { min-height: 44px; } }
   @media (max-width: 640px) {
-    .walletConnections { position: fixed; top: 80px; right: 16px; }
     .walletToggle span { display: none; }
     .walletToggle { width: 44px; justify-content: center; }
   }
+  @media (max-width: 700px) {
+    .walletBackdrop { align-items: end; padding: 0; }
+    .walletConnections { width: 100%; max-height: 86dvh; border-radius: 16px 16px 0 0; transform: translateY(var(--sheet-drag, 0)); transition: transform .24s ease; padding-bottom: env(safe-area-inset-bottom); }
+    .walletConnections.dragging { transition: none; }
+    .sheetHandle { display: flex; min-height: 30px; align-items: center; justify-content: center; width: 100%; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--color-text-faint); }
+    .sheetHandle span { width: 36px; height: 4px; background: currentColor; border-radius: 99px; }
+    .walletHeading { min-height: 56px; padding-left: 14px; }
+    .walletSearch input { font-size: 16px; }
+    .walletList { max-height: calc(86dvh - 135px); padding-bottom: 18px; }
+    .closeButton kbd { display: none; }
+    .closeButton svg { display: block; }
+  }
+  @media (prefers-reduced-motion: reduce) { button, .walletConnections { transition: none; } }
 </style>

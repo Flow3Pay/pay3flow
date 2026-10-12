@@ -21,7 +21,7 @@ market = "direct_exchange"
 endpoint = "https://www.bncex.com/api/exchange/quote"
 method = "POST"
 headers = { Origin = "https://www.bncex.com", Referer = "https://www.bncex.com/en", Accept = "application/json" }
-supported_assets = ["USDT", "USDC"]
+supported_assets = ["ALL"]
 supported_fiats = ["AMD"]
 fiat_probe_amount = 100000
 asset_probe_amount = 100

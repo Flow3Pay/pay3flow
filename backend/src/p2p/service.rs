@@ -723,7 +723,13 @@ impl P2pSearchService {
                 .as_ref()
                 .and_then(|adapters| adapters.p2p.as_ref())
                 .into_iter()
-                .flat_map(|adapter| adapter.supported_fiats.iter().cloned())
+                .flat_map(|adapter| {
+                    adapter
+                        .supported_fiats
+                        .iter()
+                        .filter(|fiat| !fiat.eq_ignore_ascii_case("all"))
+                        .cloned()
+                })
         }));
         fiat_intermediaries.iter_mut().for_each(|fiat| {
             *fiat = fiat.trim().to_ascii_uppercase();
@@ -823,6 +829,12 @@ impl P2pSearchService {
     #[cfg(test)]
     fn with_cache_ttl(mut self, cache_ttl: Duration) -> Self {
         self.cache_ttl = cache_ttl;
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_market_sources(mut self, sources: Vec<Arc<dyn CryptoMarketSource>>) -> Self {
+        self.market_sources = sources.into();
         self
     }
 

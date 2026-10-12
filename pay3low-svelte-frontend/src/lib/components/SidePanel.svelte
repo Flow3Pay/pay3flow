@@ -4,9 +4,11 @@
   import { fly } from "svelte/transition";
   import type { RouteCandidate, ServiceVote, VenueSearchStatus } from "$lib/exchange";
   import { formatRouteCount, locale, t, type Locale } from "$lib/i18n";
-  import { assetIcon, dislikeIcon, likeIcon, networkIcon, venueIcon, warningIcon } from "$lib/icons";
-  import { fiatFlagUrl } from "$lib/currency-flags";
+  import { assetIcon, dislikeIcon, likeIcon, venueIcon, warningIcon } from "$lib/icons";
+  import WorkflowControl from "$lib/components/WorkflowControl.svelte";
+  import { routeWorkflowSteps } from "$lib/workflow-steps";
   import { routeScrollColor } from "$lib/route-scroll-color";
+  import { fiatFlagUrl } from "$lib/currency-flags";
 
   export let routes: RouteCandidate[];
   export let routesFound = 0;
@@ -29,11 +31,10 @@
   export let onOpenBelarusP2pWarning: () => void = () => {};
   export let onOpenSearchActivity: () => void = () => {};
   let selectedVenueId: string | null = null;
+  let openVenueId: string | null = null;
   let lastPair = "";
 
   const ASSET_NAMES: Record<string, string> = { BTC: "Bitcoin", ETH: "Ether", USDC: "USD Coin", USDT: "Tether" };
-  const FIAT_CURRENCIES = new Set(["AMD", "BYN", "KZT", "RUB", "UAH", "USD"]);
-  type Step = { currency: string; network?: string; networkLabel?: string; provider?: string; iconUrl?: string; paymentMethod?: string; paymentMethodIcon?: string };
 
   const venueName = (value?: string) => value ? venueNames[value.toLowerCase()] ?? value : "Searching";
   const readableNetwork = (value?: string) => value ? networkNames[value.toLowerCase()] ?? value.replace(/-/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) : "";
@@ -81,57 +82,28 @@
   $: if (`${sourceCurrency}:${targetCurrency}` !== lastPair) {
     lastPair = `${sourceCurrency}:${targetCurrency}`;
     selectedVenueId = null;
+    openVenueId = null;
   }
   $: visibleRoutes = selectedVenueId
     ? routes.filter((route) => route.legs.some((leg) => leg.provider.toLowerCase() === selectedVenueId) || route.route_provider?.toLowerCase() === selectedVenueId || route.market_path?.venue.toLowerCase() === selectedVenueId)
     : routes;
   $: selectedVenueName = foundVenues.find((venue) => venue.id.toLowerCase() === selectedVenueId)?.label ?? selectedVenueId;
 
-  function pathStepProvider(route: RouteCandidate, index: number, lastIndex: number) {
-    if (index === 0) return undefined;
-    if (route.cycle_legs?.length) return route.cycle_legs.find((leg) => leg.to_asset === route.route_path?.[index])?.provider;
-    if (route.route_kind === "fiat_to_fiat" || route.route_kind === "fiat_cycle" || route.route_kind === "crypto_cycle") {
-      if (index === 1 && route.entry_offer_snapshot) return route.entry_offer_snapshot.source;
-      if (index === lastIndex && route.exit_offer_snapshot) return route.exit_offer_snapshot.source;
-      return route.route_provider ?? undefined;
-    }
-    if (route.route_kind === "fiat_to_crypto") {
-      if (index === 1 && route.entry_offer_snapshot) return route.entry_offer_snapshot.source;
-      return route.route_provider ?? undefined;
-    }
-    if (route.route_kind === "crypto_to_fiat") {
-      if (index === lastIndex && route.exit_offer_snapshot) return route.exit_offer_snapshot.source;
-      return route.route_provider ?? undefined;
-    }
-    return route.route_provider ?? undefined;
+  function openVenuePopover(venue: HTMLDivElement, id: string) {
+    const popover = venue.querySelector<HTMLElement>(".foundVenuePopover");
+    if (!popover) return;
+    const bounds = venue.getBoundingClientRect();
+    const centeredLeft = bounds.left + bounds.width / 2 - popover.offsetWidth / 2;
+    const left = Math.max(16, Math.min(centeredLeft, window.innerWidth - popover.offsetWidth - 16));
+    venue.style.setProperty("--popover-shift", `${left - centeredLeft}px`);
+    openVenueId = id;
   }
 
-  function currencySteps(route: RouteCandidate): Step[] {
-    const entry = route.legs.find((leg) => leg.kind === "entry");
-    const exit = route.legs.find((leg) => leg.kind === "exit");
-    const source = route.source_currency ?? "—";
-    const target = route.target_currency ?? "—";
-    if (route.route_path?.length) {
-      return route.route_path.map((qualified, index) => {
-        const [currency, network] = qualified.split("@", 2);
-        return { currency, network, networkLabel: compactNetwork(network), provider: pathStepProvider(route, index, route.route_path!.length - 1) };
-      });
-    }
-    if (!entry && exit) return [{ currency: source, network: route.source_network, provider: exit.provider, iconUrl: route.source_method_icon_url }, { currency: target, iconUrl: route.target_method_icon_url }];
-    if (entry && !exit) return [{ currency: source, network: route.source_network, iconUrl: route.source_method_icon_url }, { currency: target, network: route.target_network, provider: entry.provider, iconUrl: route.target_method_icon_url }];
-    if (route.bridge_currency) return [{ currency: source, network: route.source_network, provider: entry?.provider, iconUrl: route.source_method_icon_url }, { currency: route.bridge_currency }, { currency: target, network: route.target_network, provider: exit?.provider, iconUrl: route.target_method_icon_url }];
-    return [{ currency: source, iconUrl: route.source_method_icon_url }, { currency: route.entry_asset ?? "—", network: route.entry_network !== "internal" ? route.entry_network : undefined, provider: entry?.provider }, { currency: target, provider: exit?.provider, iconUrl: route.target_method_icon_url }];
+  function closeVenuePopover(venue: HTMLDivElement, id: string) {
+    if (openVenueId === id && !venue.contains(document.activeElement) && !venue.matches(":hover")) openVenueId = null;
   }
 
-  function workflowSteps(route: RouteCandidate): Step[] {
-    const steps = currencySteps(route);
-    return steps.map((step, index) => {
-      if (!FIAT_CURRENCIES.has(step.currency.toUpperCase())) return step;
-      if (index === 0) return { ...step, paymentMethod: route.source_payment_method, paymentMethodIcon: route.source_method_icon_url };
-      if (index === steps.length - 1) return { ...step, paymentMethod: route.target_payment_method, paymentMethodIcon: route.target_method_icon_url };
-      return step;
-    });
-  }
+  const workflowSteps = (route: RouteCandidate) => routeWorkflowSteps(route).map((step) => ({ ...step, networkLabel: compactNetwork(step.network) }));
 
   const workflowLabel = (route: RouteCandidate) => workflowSteps(route).map((step) => `${assetLabel(step.currency)}${step.paymentMethod ? ` · ${step.paymentMethod}` : ""}${step.network ? ` · ${step.networkLabel ?? compactNetwork(step.network)}` : ""}${step.provider ? ` (${venueName(step.provider)})` : ""}`).join(" → ");
 
@@ -159,7 +131,7 @@
     <div class="panelTop">
       <div class="panelHeading">
         {#if hasAmount}
-          <strong>Send {sourceCurrency} → {targetCurrency}</strong>
+          <strong class="sendDirection"><span>{t("Send", {}, $locale)}</span><span class="sendCurrency"><img src={fiatFlagUrl(sourceCurrency) ?? assetIcon(sourceCurrency)} alt="" width="22" height="22" />{sourceCurrency}</span><span class="sendArrow" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 12h16m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span><span class="sendCurrency"><img src={fiatFlagUrl(targetCurrency) ?? assetIcon(targetCurrency)} alt="" width="22" height="22" />{targetCurrency}</span></strong>
         {:else}
           <strong>{t("Awaiting your intent", {}, $locale)}</strong>
         {/if}
@@ -171,17 +143,21 @@
                 {#each routeVenues as venue, index (venue.id)}
                   {@const status = venueStats[venue.id.toLowerCase()]}
                   {@const hasRoute = (status?.routes_found ?? 0) > 0}
-                  <div class:foundVenueActive={selectedVenueId === venue.id.toLowerCase()} class="foundVenue" data-testid="found-venue" title={`Found on ${venue.label}`} style:animation-delay={`${index * 70}ms`}>
+                  <div class:foundVenueActive={selectedVenueId === venue.id.toLowerCase()} class:foundVenueOpen={openVenueId === venue.id} class="foundVenue" role="group" aria-label={venue.label} data-testid="found-venue" title={`Found on ${venue.label}`} style:animation-delay={`${index * 70}ms`} on:pointerenter={(event) => openVenuePopover(event.currentTarget, venue.id)} on:pointerleave={(event) => closeVenuePopover(event.currentTarget, venue.id)} on:focusin={(event) => openVenuePopover(event.currentTarget, venue.id)} on:focusout={(event) => closeVenuePopover(event.currentTarget, venue.id)}>
                     <button type="button" class="foundVenueButton" aria-label={`Show ${venue.label} routes`} aria-pressed={selectedVenueId === venue.id.toLowerCase()} disabled={!hasRoute} on:click={() => selectedVenueId = selectedVenueId === venue.id.toLowerCase() ? null : venue.id.toLowerCase()}>
                       <img src={venue.iconUrl || venueIcon(venue.id)} alt="" width="18" height="18" decoding="async" on:error={fallbackFoundVenueIcon} />
                       <span class="foundVenueFallback" aria-hidden="true" hidden>{venue.label.slice(0, 1).toUpperCase()}</span>
                     </button>
-                    <div class="foundVenuePopover" role="tooltip">
+                    <div class="foundVenuePopover" role="group" aria-label={venue.label}>
                       <div class="foundVenuePopoverTitle">
                         <img src={venue.iconUrl || venueIcon(venue.id)} alt="" width="20" height="20" decoding="async" on:error={(event) => fallbackVenueIcon(event, venue.id)} />
                         <strong>{venue.label}</strong>
                       </div>
-                      {#if !hasRoute || status?.ok === false}<span class:venueOk={status?.ok} class:venueError={status && !status.ok}>{status?.ok === false ? (status.offers_found > 0 ? "Some quotes unavailable" : "Response error") : (status?.offers_found ?? 0) > 0 ? "Offers received · no matching route" : "No matching route"}</span>{/if}
+                      <a class="foundVenueProfile" href={`/providers/${encodeURIComponent(venue.id.toLowerCase())}`} aria-label={t("Open {venue} profile", { venue: venue.label }, $locale)}>
+                        {t("Open platform profile", {}, $locale)}
+                        <span aria-hidden="true">→</span>
+                      </a>
+                      {#if !hasRoute || status?.ok === false}<span class:venueOk={status?.ok} class:venueError={status && !status.ok}>{status?.ok === false ? t("Error", {}, $locale) : (status?.offers_found ?? 0) > 0 ? "Offers received · no matching route" : "No matching route"}</span>{/if}
                       <dl>
                         <div><dt>Routes found</dt><dd>{status?.routes_found ?? 0}</dd></div>
                         <div><dt>Quotes / markets received</dt><dd>{status?.offers_found ?? 0}</dd></div>
@@ -241,25 +217,7 @@
                   {#each workflowSteps(route) as step, stepIndex}
                     <span class="workflowPart">
                       {#if stepIndex > 0}<span class="workflowArrow" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 12h16m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span>{/if}
-                      <span class="workflowControl">
-                        <span class="workflowAsset">
-                          <span class="workflowIcon" aria-hidden="true"><img class:fiatFlag={Boolean(fiatFlagUrl(step.currency))} src={fiatFlagUrl(step.currency) ?? (FIAT_CURRENCIES.has(step.currency.toUpperCase()) ? assetIcon(step.currency) : step.iconUrl ?? assetIcon(step.currency))} alt="" width="18" height="18" loading="lazy" decoding="async" /></span>
-                          <strong>{step.currency.toUpperCase()}</strong>
-                        </span>
-                        {#if step.network}
-                          <span class="workflowNetwork" aria-label={t("Network: {network}", { network: readableNetwork(step.network) }, $locale)} title={readableNetwork(step.network)}>
-                            <span class="workflowNetworkIcon" aria-hidden="true"><img src={networkIcon(step.network)} alt="" width="18" height="18" loading="lazy" decoding="async" /></span>
-                          </span>
-                        {/if}
-                        {#if step.paymentMethod}
-                          <span class="workflowNetwork workflowPayment" aria-label={t("Payment method: {method}", { method: step.paymentMethod }, $locale)} title={step.paymentMethod}>
-                            <span class="workflowNetworkIcon" aria-hidden="true">{#if step.paymentMethodIcon}<img src={step.paymentMethodIcon} alt="" width="18" height="18" loading="lazy" decoding="async" />{:else}<span class="paymentInitials">{step.paymentMethod.slice(0, 2).toUpperCase()}</span>{/if}</span>
-                          </span>
-                        {/if}
-                        {#if step.provider}
-                          <span class="workflowVenue" title={venueName(step.provider)}><span class="workflowVenueIcon" aria-hidden="true"><img src={venueIcon(step.provider)} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackVenueIcon(event, step.provider ?? "")} /></span><strong>{venueName(step.provider)}</strong></span>
-                        {/if}
-                      </span>
+                      <WorkflowControl asset={step.currency} network={step.network ?? ""} networkLabel={readableNetwork(step.network)} provider={step.provider ?? ""} providerLabel={venueName(step.provider)} iconUrl={step.iconUrl} paymentMethod={step.paymentMethod ?? ""} paymentMethodIcon={step.paymentMethodIcon ?? ""} />
                     </span>
                   {/each}
                   </span>
@@ -353,6 +311,11 @@
   flex-direction: column;
   gap: 3px;
 }
+
+.sendDirection { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.sendCurrency { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.sendCurrency img { display: block; flex: 0 0 auto; border-radius: 50%; object-fit: contain; }
+.sendArrow { display: inline-flex; align-items: center; color: var(--color-text-soft); }
 
 .panelActions {
   display: flex;
@@ -466,15 +429,14 @@
   font-size: 12px;
 }
 
-.foundVenue:hover,
-.foundVenue:focus-within {
+.foundVenue.foundVenueOpen {
   z-index: 50;
 }
 
 .foundVenuePopover {
   position: absolute;
   top: calc(100% + 10px);
-  left: 50%;
+  left: calc(50% + var(--popover-shift, 0px));
   z-index: 100;
   display: grid;
   width: min(240px, calc(100vw - 32px));
@@ -488,14 +450,15 @@
   color: var(--color-text);
   font-size: 12px;
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
   transform: translate(-50%, -4px);
   transition: opacity 0.16s ease, transform 0.16s ease;
 }
 
-.foundVenue:hover .foundVenuePopover,
-.foundVenue:focus-within .foundVenuePopover {
+.foundVenue.foundVenueOpen .foundVenuePopover {
   opacity: 1;
+  visibility: visible;
   pointer-events: auto;
   transform: translate(-50%, 0);
 }
@@ -523,6 +486,33 @@
 .foundVenuePopover dt { color: var(--color-text-soft); }
 .foundVenuePopover dd { margin: 0; font-weight: 800; }
 .foundVenuePopover small { color: var(--color-danger); line-height: 1.35; }
+
+.foundVenueProfile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 40px;
+  margin: 3px 0;
+  padding: 6px 10px;
+  border: 1px solid var(--color-accent-text);
+  border-radius: 6px;
+  background: var(--color-accent-soft);
+  color: var(--color-accent-text);
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.foundVenueProfile:hover,
+.foundVenueProfile:focus-visible {
+  background: var(--color-accent);
+  color: #172110;
+}
+
+.foundVenueProfile:focus-visible {
+  outline: 2px solid var(--color-accent-text);
+  outline-offset: 2px;
+}
 
 .foundVenuePopover strong {
   color: #1c2419;
@@ -882,9 +872,7 @@
   white-space: nowrap;
 }
 
-.workflowPart,
-.workflowAsset,
-.workflowVenue {
+.workflowPart {
   display: inline-flex;
   min-width: 0;
   align-items: center;
@@ -895,105 +883,10 @@
   gap: 6px;
 }
 
-.workflowControl {
-  display: inline-flex;
-  min-width: 0;
-  max-width: 100%;
-  align-items: stretch;
-  overflow: hidden;
-  border: 1px solid #d7dcd3;
-  border-radius: 5px;
-  background: #e7ebe2;
-}
 
-.workflowAsset {
-  flex: 0 0 auto;
-  gap: 6px;
-  padding: 5px 8px 5px 6px;
-  color: var(--color-text);
-}
-
-.workflowAsset strong {
-  font-size: 12px;
-  font-weight: 850;
-}
-
-.workflowNetwork {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  padding: 5px 7px;
-  border-left: 1px solid #d7dcd3;
-}
-
-.workflowNetworkIcon {
-  display: inline-grid;
-  width: 18px;
-  height: 18px;
-  flex: 0 0 auto;
-  place-items: center;
-  overflow: hidden;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.workflowNetworkIcon img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.workflowIcon,
-.workflowVenueIcon {
-  display: inline-grid;
-  flex: 0 0 auto;
-  place-items: center;
-  overflow: hidden;
-  border-radius: 50%;
-}
-
-.workflowIcon {
-  width: 18px;
-  height: 18px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.workflowVenueIcon {
-  width: 18px;
-  height: 18px;
-}
-
-.workflowIcon img,
-.workflowVenueIcon img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.workflowIcon img.fiatFlag { object-fit: cover; }
 .routeGroups::-webkit-scrollbar { width: 8px; }
 .routeGroups::-webkit-scrollbar-track { background: var(--color-panel); }
 .routeGroups::-webkit-scrollbar-thumb { background: var(--route-scroll-color, #b5f500); border-radius: 8px; }
-
-.workflowVenue {
-  flex: 0 1 auto;
-  gap: 6px;
-  padding: 5px 8px 5px 7px;
-  border-left: 1px solid #d7dcd3;
-  color: var(--color-text);
-}
-
-.workflowVenue strong {
-  overflow: hidden;
-  line-height: 1.5;
-  padding-block: 1px;
-  font-size: 12px;
-  font-weight: 850;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 .workflowArrow {
   display: inline-grid;
@@ -1004,11 +897,6 @@
   color: var(--color-text);
 }
 
-.paymentInitials {
-  font-size: 9px;
-  font-weight: 800;
-  line-height: 1;
-}
 
 .workflowArrow svg {
   display: block;
@@ -1314,10 +1202,6 @@
   color: var(--color-text-faint);
 }
 
-.workflowVenue {
-  color: var(--color-text);
-  font-weight: 750;
-}
 
 .bestBadge {
   background: var(--color-accent);
@@ -1416,31 +1300,6 @@
     gap: 2px;
   }
 
-  .workflowAsset {
-    gap: 3px;
-    padding: 4px 5px 4px 4px;
-  }
-
-  .workflowNetwork {
-    padding: 4px 3px;
-  }
-
-  .workflowVenue {
-    gap: 3px;
-    padding: 4px 5px 4px 4px;
-  }
-
-  .workflowAsset strong,
-  .workflowVenue strong {
-    font-size: 12px;
-  }
-
-  .workflowIcon,
-  .workflowNetworkIcon,
-  .workflowVenueIcon {
-    width: 12px;
-    height: 12px;
-  }
 
   .workflowArrow {
     width: 13px;
@@ -1545,20 +1404,8 @@
 }
 
 :global(html[data-theme="dark"]) .workflow,
-:global(html[data-theme="dark"]) .workflowPart,
-:global(html[data-theme="dark"]) .workflowAsset,
-:global(html[data-theme="dark"]) .workflowVenue {
+:global(html[data-theme="dark"]) .workflowPart {
   background: transparent;
-}
-
-:global(html[data-theme="dark"]) .workflowControl {
-  border-color: #3b3b3b;
-  background: #2a2a2a;
-}
-
-:global(html[data-theme="dark"]) .workflowNetwork,
-:global(html[data-theme="dark"]) .workflowVenue {
-  border-color: #3b3b3b;
 }
 
 :global(html[data-theme="dark"]) .skeletonShort,
@@ -1592,14 +1439,10 @@
   .routeFeedback { justify-content: flex-end; padding-top: 8px; border-top: 1px solid var(--color-border); }
   .routeVote { gap: 8px; padding: 0; border: 0; background: transparent; }
   .workflowPart { width: 100%; gap: 8px; }
-  .workflowControl { flex: 1; }
   .workflowPart:first-child { padding-left: 28px; }
   .workflowArrow { width: 20px; flex: 0 0 20px; }
-  .workflowVenue { min-width: 0; margin-left: auto; }
-  .workflowVenue strong { max-width: 110px; }
   .workflow { flex-wrap: wrap; gap: 8px; }
   .workflow:has(> .workflowPart:nth-child(2):last-child) { flex-wrap: wrap; }
-  .workflowIcon, .workflowNetworkIcon, .workflowVenueIcon { width: 16px; height: 16px; }
   .panelTop { gap: 12px; }
   .panelHeading { flex: 1; }
   .resultSummary { gap: 8px; }

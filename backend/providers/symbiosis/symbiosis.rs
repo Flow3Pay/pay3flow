@@ -36,6 +36,23 @@ struct SymbiosisToken {
     attributes: Option<HashMap<String, String>>,
 }
 
+impl SymbiosisToken {
+    fn route_symbol(&self) -> Option<&str> {
+        if let Some((_, _, symbol)) = ASSET_ALIASES.iter().find(|(chain, address, _)| {
+            *chain == self.chain_id && address.eq_ignore_ascii_case(&self.address)
+        }) {
+            return Some(symbol);
+        }
+        if RESERVED_ASSET_SYMBOLS
+            .iter()
+            .any(|symbol| symbol.eq_ignore_ascii_case(&self.symbol))
+        {
+            return None;
+        }
+        Some(&self.symbol)
+    }
+}
+
 /// Read-only Symbiosis cross-chain quote provider.
 ///
 /// Token metadata is loaded lazily from the provider's public catalog. Quotes
@@ -184,7 +201,9 @@ impl SymbiosisRouteProvider {
         tokens
             .iter()
             .find(|token| {
-                token.symbol.eq_ignore_ascii_case(&asset.symbol)
+                token
+                    .route_symbol()
+                    .is_some_and(|symbol| symbol.eq_ignore_ascii_case(&asset.symbol))
                     && network_for_chain(token.chain_id) == Some(network.as_str())
             })
             .with_context(|| format!("Symbiosis does not support {asset}"))
@@ -410,7 +429,7 @@ impl PublicRouteProvider for SymbiosisRouteProvider {
             .iter()
             .filter_map(|token| {
                 network_for_chain(token.chain_id)
-                    .and_then(|network| Asset::new(&token.symbol, Some(network)).ok())
+                    .and_then(|network| Asset::new(token.route_symbol()?, Some(network)).ok())
             })
             .collect::<Vec<_>>();
         assets.sort_by_key(|asset| asset.to_string());
@@ -587,6 +606,47 @@ fn network_for_chain(chain_id: u64) -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wrapped_ton_catalog_resolves_the_bridge_contract_instead_of_unrelated_ton_tickers() {
+        let tokens: Vec<SymbiosisToken> = serde_json::from_value(json!([
+            {"symbol": "TON", "chainId": 1, "address": "0x2be5e8c109e2197D077D13A82dAead6a9b3433C5", "decimals": 18},
+            {"symbol": "TON", "chainId": 1, "address": "0x6a6c2adA3Ce053561C2FbC3eE211F23d9b8C520a", "decimals": 18},
+            {"symbol": "TONCOIN", "chainId": 1, "address": "0x582d872A1B094FC48F5DE31D3B73F2D9bE47def1", "decimals": 9},
+            {"symbol": "WTON", "chainId": 56, "address": "0x76A797A59Ba2C17726896976B7B3747BfD1d220f", "decimals": 9},
+            {"symbol": "GRAM", "chainId": 85918, "address": "", "decimals": 9}
+        ])).unwrap();
+        let ethereum =
+            SymbiosisRouteProvider::token_for(&tokens, &Asset::parse("TON@ethereum").unwrap())
+                .unwrap();
+        assert_eq!(
+            ethereum.address,
+            "0x582d872A1B094FC48F5DE31D3B73F2D9bE47def1"
+        );
+        let payload = SymbiosisRouteProvider::token_payload(ethereum, Some("1000000000".into()));
+        assert_eq!(payload["symbol"], "TONCOIN");
+        assert_eq!(payload["decimals"], 9);
+        assert_eq!(
+            SymbiosisRouteProvider::token_for(
+                &tokens,
+                &Asset::parse("TON@bnb-smart-chain").unwrap()
+            )
+            .unwrap()
+            .symbol,
+            "WTON"
+        );
+        assert_eq!(
+            SymbiosisRouteProvider::token_for(&tokens, &Asset::parse("TON@ton").unwrap())
+                .unwrap()
+                .symbol,
+            "GRAM"
+        );
+        assert!(SymbiosisRouteProvider::token_for(
+            &tokens[..2],
+            &Asset::parse("TON@ethereum").unwrap()
+        )
+        .is_err());
+    }
 
     #[test]
     fn maps_supported_chain_ids_to_pay3flow_networks() {

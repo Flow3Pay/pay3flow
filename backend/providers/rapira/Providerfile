@@ -30,7 +30,7 @@ headers = { Origin = "https://rapira.net", Referer = "https://rapira.net/ru/p2p/
 timeout_ms = 10000
 max_results = "infinite"
 page_size = 20
-supported_assets = ["USDT"]
+supported_assets = ["ALL"]
 supported_fiats = ["RUB"]
 
 [adapter.p2p.buy]

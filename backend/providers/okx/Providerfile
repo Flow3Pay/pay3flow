@@ -28,7 +28,7 @@ endpoint = "https://www.okx.com/v3/c2c/tradingOrders/books"
 method = "GET"
 headers = { Origin = "https://www.okx.com", Referer = "https://www.okx.com/p2p-markets/" }
 timeout_ms = 10000
-supported_assets = ["USDT", "USDC", "BTC", "ETH"]
+supported_assets = ["ALL"]
 
 [adapter.p2p.payment_method_aliases]
 "T-Bank" = ["Tinkoff", "Tinkoff Bank"]

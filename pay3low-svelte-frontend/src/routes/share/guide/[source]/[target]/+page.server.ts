@@ -10,5 +10,5 @@ export const load: PageServerLoad = ({ params, url }) => {
   const title = `${source} → ${target} · Pay3Flow`;
   const description = russian ? `Пошаговая анимированная инструкция по обмену ${source} на ${target}${venues ? ` через ${venues}` : ''}.` : `An animated, step-by-step guide to exchanging ${source} for ${target}${venues ? ` through ${venues}` : ''}.`;
   const path = `/share/guide/${source}/${target}`;
-  return { source, target, title, description, guideUrl: `/${guideHash(source, target, query)}`, shareUrl: `${url.origin}${path}?${query}`, imageUrl: `${url.origin}${path}/preview.png?${query}`, russian };
+  return { source, target, title, description, guideUrl: `/${guideHash(source, target, query)}`, shareUrl: `${url.origin}${path}?${query}`, imageUrl: `${url.origin}${path}/preview.png?${query}&v=2`, russian };
 };
