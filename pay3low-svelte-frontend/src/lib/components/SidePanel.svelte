@@ -91,6 +91,7 @@
 
     function observeVisibleCards() {
       resizeObserver.disconnect();
+      resizeObserver.observe(node);
       resizeObserver.observe(list);
       Array.from(list.children).slice(0, 4).forEach((card) => resizeObserver.observe(card));
     }
@@ -101,11 +102,12 @@
         const cards = Array.from(list.children).slice(0, 4) as HTMLElement[];
         const gap = Number.parseFloat(getComputedStyle(list).rowGap) || 0;
         const listStyle = getComputedStyle(list);
-        const height = cards.reduce((total, card) => total + card.getBoundingClientRect().height, 0)
-          + Math.max(0, cards.length - 1) * gap
-          + (Number.parseFloat(listStyle.paddingTop) || 0)
+        const listPadding = (Number.parseFloat(listStyle.paddingTop) || 0)
           + (Number.parseFloat(listStyle.paddingBottom) || 0);
-        node.style.setProperty("--route-viewport-height", `${height}px`);
+        const rowHeight = cards.length === 4
+          ? Math.max(0, (node.clientHeight - 3 * gap - listPadding) / 4)
+          : 0;
+        node.style.setProperty("--route-row-min-height", `${rowHeight}px`);
       });
     }
 
@@ -653,8 +655,7 @@
 .routeGroups {
   scrollbar-color: var(--route-scroll-color, #b5f500) var(--color-panel);
   min-height: 0;
-  flex: 0 1 auto;
-  max-height: var(--route-viewport-height, none);
+  flex: 1 1 auto;
   margin-top: 14px;
   padding-right: 6px;
   overflow-y: auto;
@@ -681,6 +682,8 @@
 }
 
 .routeList > li {
+  display: flex;
+  min-height: var(--route-row-min-height, 0px);
   content-visibility: auto;
   contain-intrinsic-size: 0 132px;
   will-change: transform, opacity;
@@ -689,6 +692,7 @@
 .routeCardShell {
   display: flex;
   position: relative;
+  flex: 1;
   width: 100%;
   min-width: 0;
   flex-direction: column;
@@ -698,6 +702,7 @@
 .routeCard {
   position: relative;
   display: flex;
+  flex: 1;
   width: 100%;
   box-sizing: border-box;
   flex-direction: column;
