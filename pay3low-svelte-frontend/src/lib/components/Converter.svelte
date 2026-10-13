@@ -3117,7 +3117,11 @@
   background: #292929;
 }
 
-:global(html[data-theme="dark"]) .settingsMenu,
+:global(html[data-theme="dark"]) .settingsMenu {
+  border-color: var(--color-border-strong);
+  background: var(--color-paper);
+}
+
 :global(html[data-theme="dark"]) .authBox {
   border-color: var(--color-border-strong);
   background: rgba(25, 25, 25, 0.98);
