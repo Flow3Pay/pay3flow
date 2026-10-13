@@ -72,6 +72,50 @@
   const reduceMotion = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const routeFlipDuration = (distance: number) => reduceMotion() || routes.length > 12 ? 0 : Math.min(680, 260 + distance * 0.65);
   const routeEnterDuration = () => reduceMotion() || routes.length > 12 ? 0 : 380;
+
+  function routeViewport(node: HTMLDivElement) {
+    const list = node.querySelector<HTMLElement>(".routeList");
+    if (!list) return;
+
+    let frame = 0;
+    const resizeObserver = new ResizeObserver(scheduleMeasure);
+    const mutationObserver = new MutationObserver(() => {
+      observeVisibleCards();
+      scheduleMeasure();
+    });
+
+    function observeVisibleCards() {
+      resizeObserver.disconnect();
+      resizeObserver.observe(list);
+      Array.from(list.children).slice(0, 4).forEach((card) => resizeObserver.observe(card));
+    }
+
+    function scheduleMeasure() {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const cards = Array.from(list.children).slice(0, 4) as HTMLElement[];
+        const gap = Number.parseFloat(getComputedStyle(list).rowGap) || 0;
+        const listStyle = getComputedStyle(list);
+        const height = cards.reduce((total, card) => total + card.getBoundingClientRect().height, 0)
+          + Math.max(0, cards.length - 1) * gap
+          + (Number.parseFloat(listStyle.paddingTop) || 0)
+          + (Number.parseFloat(listStyle.paddingBottom) || 0);
+        node.style.setProperty("--route-viewport-height", `${height}px`);
+      });
+    }
+
+    observeVisibleCards();
+    scheduleMeasure();
+    mutationObserver.observe(list, { childList: true });
+
+    return {
+      destroy() {
+        cancelAnimationFrame(frame);
+        resizeObserver.disconnect();
+        mutationObserver.disconnect();
+      }
+    };
+  }
   $: pendingVenues = searchingVenues.filter((venue) => !foundVenues.some((found) => found.id === venue.id));
   $: routeVenues = foundVenues.filter((venue) => (venueStats[venue.id.toLowerCase()]?.routes_found ?? 0) > 0);
   $: visiblePendingVenues = pendingVenues.slice(0, 5);
@@ -201,15 +245,14 @@
     -->
     {#if routes.length > 0}
       <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-      <div class="routeGroups" use:routeScrollColor data-testid="route-groups" role="region" tabindex="0" aria-label="Found routes">
+      <div class="routeGroups" use:routeScrollColor use:routeViewport data-testid="route-groups" role="region" tabindex="0" aria-label="Found routes">
         <ul class="routeList">
           {#each visibleRoutes as route, index (route.route_id)}
             {@const complete = route.status === "complete"}
             <li animate:flip={{ duration: routeFlipDuration, easing: quintOut }} in:fly={{ y: 18, duration: routeEnterDuration(), easing: quintOut }}><div class="routeCardShell">
               <div class:routeBest={route.is_current_best} class:selected={route.route_id === selectedRouteId} class="routeCard" data-testid={complete ? "complete-route" : "partial-route"}>
               <button type="button" class="routeCardMain" disabled={!complete} aria-pressed={route.route_id === selectedRouteId} aria-label={`Select route ${index + 1}: ${money(route.target_amount_minor, route.target_currency, route.target_amount)}`} on:click={(event) => cardClick(event, route)}>
-                <span class="routeTopline"><span class="routeBadges">{#if route.is_current_best}<span class="bestBadge" data-testid="best-route-badge">{t("Best router", {}, $locale)}</span>{/if}{#if route.profitability}<span class={route.is_current_best ? "bestBadge" : "deltaBadge"}>{profitLabel(route)}</span>{:else if !route.is_current_best}<span class="deltaBadge">{spreadLabel(route.spread_bps, $locale)}</span>{/if}</span></span>
-                <span class="routeAmount">{money(route.target_amount_minor, route.target_currency, route.target_amount)}</span>
+                <span class="routeTopline"><span class="routeBadges">{#if route.is_current_best}<span class="bestBadge" data-testid="best-route-badge">{t("Best router", {}, $locale)}</span>{/if}{#if route.profitability}<span class={route.is_current_best ? "bestBadge" : "deltaBadge"}>{profitLabel(route)}</span>{:else if !route.is_current_best}<span class="deltaBadge">{spreadLabel(route.spread_bps, $locale)}</span>{/if}</span><span class="routeAmount">{money(route.target_amount_minor, route.target_currency, route.target_amount)}</span></span>
               </button>
               <div class="routeActionRow">
                 <button type="button" class="routeWorkflowButton" disabled={!complete} aria-label={workflowLabel(route)} on:click={(event) => cardClick(event, route)}>
@@ -605,7 +648,8 @@
 .routeGroups {
   scrollbar-color: var(--route-scroll-color, #b5f500) var(--color-panel);
   min-height: 0;
-  flex: 1;
+  flex: 0 1 auto;
+  max-height: var(--route-viewport-height, none);
   margin-top: 14px;
   padding-right: 6px;
   overflow-y: auto;
@@ -790,7 +834,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 5px;
 }
 
