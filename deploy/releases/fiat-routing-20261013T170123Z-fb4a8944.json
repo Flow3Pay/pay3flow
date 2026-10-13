@@ -1,0 +1,169 @@
+{
+  "status": "deployed",
+  "fix_revision": "fb4a89445198de28aca452e33334b7c210c0d1be",
+  "deployed_source_revision": "ff37e65e5e1ad46b2ffe9f841e65cd36f676f6a7",
+  "tag": "live-20261013-ff37e65",
+  "url": "https://pay3flow.lefine.pro",
+  "verified_at": "2026-10-13T17:17:38.810042+00:00",
+  "target": "root@195.123.218.200",
+  "backup_dir": "/var/lib/pay3flow/backups/fiat-routing-20261013T170123Z-fb4a8944",
+  "previous_images": {
+    "pay3flow-backend": "localhost/pay3flow/backend:live-20261013-e066a14",
+    "pay3flow-frontend": "localhost/pay3flow/frontend:live-20261013-e066a14"
+  },
+  "images": {
+    "backend": {
+      "image": "localhost/pay3flow/backend:live-20261013-ff37e65",
+      "id": "sha256:812da1ade0b2b3ad3c85f0cd83fb08964063402222bf85f840e7314e8f4ec98f"
+    },
+    "frontend": {
+      "image": "localhost/pay3flow/frontend:live-20261013-ff37e65",
+      "id": "sha256:c15a897c75520e033c71024ec3f91b6dbb48afa255467cbc5f8d085fb3dddfb1"
+    }
+  },
+  "runtime_config_sha256": "20108582b01f0f4ab42b249b4c7ec580ad8abaf9a32ac894d00f8910c3f5aaf9",
+  "verification": {
+    "runtime_configuration_preserved": true,
+    "pod_environment_and_mounts_preserved": true,
+    "imported_image_ids_verified": true,
+    "rust_tests_passed": 364,
+    "rust_tests_ignored": 38,
+    "frontend_unit_tests_passed": 61,
+    "cargo_fmt": "passed",
+    "cargo_clippy_all_targets_all_features": "passed with existing warnings",
+    "svelte_errors": 0,
+    "svelte_warnings": 5,
+    "frontend_build": "passed",
+    "live_routes": {
+      "health": "ok",
+      "queries": [
+        {
+          "source": "AMD",
+          "target": "RUB",
+          "amount": "100000.00",
+          "routes_found": 310,
+          "exhaustive": false,
+          "route_kind": "fiat_to_fiat",
+          "returned_routes_checked": 8
+        },
+        {
+          "source": "RUB",
+          "target": "AMD",
+          "amount": "10000.00",
+          "routes_found": 217,
+          "exhaustive": false,
+          "route_kind": "fiat_to_fiat",
+          "returned_routes_checked": 8
+        },
+        {
+          "source": "RUB",
+          "target": "USDT",
+          "amount": "10000.00",
+          "routes_found": 407,
+          "exhaustive": true,
+          "route_kind": "fiat_to_crypto",
+          "returned_routes_checked": 8
+        },
+        {
+          "source": "USD",
+          "target": "USDT",
+          "amount": "1000.00",
+          "routes_found": 525,
+          "exhaustive": true,
+          "route_kind": "fiat_to_crypto",
+          "returned_routes_checked": 8
+        },
+        {
+          "source": "USDT",
+          "target": "USD",
+          "amount": "100.00",
+          "routes_found": 254,
+          "exhaustive": false,
+          "route_kind": "crypto_to_fiat",
+          "returned_routes_checked": 8
+        },
+        {
+          "source": "USD",
+          "target": "AMD",
+          "amount": "1000.00",
+          "routes_found": 48,
+          "exhaustive": false,
+          "route_kind": "fiat_to_fiat",
+          "returned_routes_checked": 8
+        }
+      ],
+      "symbiosis_without_fiat_entry_returns_no_routes": true
+    },
+    "pods": [
+      {
+        "name": "pay3flow-backend-754dbdbbb8-m2lkv",
+        "phase": "Running",
+        "containers": [
+          {
+            "name": "backend",
+            "ready": true,
+            "restarts": 0,
+            "image": "localhost/pay3flow/backend:fiat-routing-20261013T170123Z-fb4a8944",
+            "image_id": "sha256:812da1ade0b2b3ad3c85f0cd83fb08964063402222bf85f840e7314e8f4ec98f"
+          }
+        ]
+      },
+      {
+        "name": "pay3flow-frontend-7bb8df9969-b82cf",
+        "phase": "Running",
+        "containers": [
+          {
+            "name": "frontend",
+            "ready": true,
+            "restarts": 0,
+            "image": "localhost/pay3flow/frontend:live-20261013-ff37e65",
+            "image_id": "sha256:c15a897c75520e033c71024ec3f91b6dbb48afa255467cbc5f8d085fb3dddfb1"
+          }
+        ]
+      }
+    ],
+    "browser": {
+      "mode": "rendering verified live API response via intercepted websocket",
+      "checks": [
+        {
+          "width": 1440,
+          "steps": [
+            {
+              "asset": "USD",
+              "provider": null
+            },
+            {
+              "asset": "USDT",
+              "provider": "MEXC"
+            },
+            {
+              "asset": "USDT",
+              "provider": "Symbiosis"
+            }
+          ],
+          "horizontal_overflow": false
+        },
+        {
+          "width": 390,
+          "steps": [
+            {
+              "asset": "USD",
+              "provider": null
+            },
+            {
+              "asset": "USDT",
+              "provider": "MEXC"
+            },
+            {
+              "asset": "USDT",
+              "provider": "Symbiosis"
+            }
+          ],
+          "horizontal_overflow": false
+        }
+      ],
+      "page_errors": []
+    }
+  },
+  "deployment_note": "Deployed source includes the fiat routing fix and the concurrent route panel UI update. The newer frontend revision was retained."
+}
