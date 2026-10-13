@@ -58,10 +58,18 @@ impl P2pSearchService {
             &self.networks,
             &provider_assets,
         )?;
-        let source_is_crypto =
-            is_crypto_currency(&query.source_currency, &self.networks, &provider_assets);
-        let target_is_crypto =
-            is_crypto_currency(&query.target_currency, &self.networks, &provider_assets);
+        let source_is_crypto = is_crypto_currency(
+            &query.source_currency,
+            query.source_network.as_deref(),
+            &self.networks,
+            &provider_assets,
+        );
+        let target_is_crypto = is_crypto_currency(
+            &query.target_currency,
+            query.target_network.as_deref(),
+            &self.networks,
+            &provider_assets,
+        );
         let (batch_sender, mut batches) = route_batch_channel();
         let mut producers = FuturesUnordered::<Producer<'_>>::new();
 

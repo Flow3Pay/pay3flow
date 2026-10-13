@@ -79,8 +79,9 @@
   const routeEnterDuration = () => reduceMotion() || routes.length > 12 ? 0 : 380;
 
   function routeViewport(node: HTMLDivElement) {
-    const list = node.querySelector<HTMLElement>(".routeList");
-    if (!list) return;
+    const candidateList = node.querySelector<HTMLElement>(".routeList");
+    if (!candidateList) return;
+    const list = candidateList;
 
     let frame = 0;
     const resizeObserver = new ResizeObserver(scheduleMeasure);

@@ -151,13 +151,39 @@ pub(in crate::p2p) fn validate_network(
 
 pub(in crate::p2p) fn is_crypto_currency(
     currency: &str,
+    network: Option<&str>,
     networks: &crate::networks::NetworkCatalog,
     provider_assets: &[Asset],
 ) -> bool {
+    // A token catalog must not redefine a user's fiat selection. An explicit,
+    // validated blockchain network disambiguates a token with the same ticker.
+    if network.is_none() && is_fiat_currency(currency) {
+        return false;
+    }
     networks.is_supported_asset(currency)
         || provider_assets
             .iter()
             .any(|asset| asset.symbol.eq_ignore_ascii_case(currency))
+}
+
+fn is_fiat_currency(currency: &str) -> bool {
+    // ISO 4217 money codes, including legacy codes still used by some venues.
+    const CODES: &[&str] = &[
+        "AED", "AFN", "ALL", "AMD", "ANG", "AOA", "ARS", "AUD", "AWG", "AZN", "BAM", "BBD", "BDT",
+        "BGN", "BHD", "BIF", "BMD", "BND", "BOB", "BRL", "BSD", "BTN", "BWP", "BYN", "BYR", "BZD",
+        "CAD", "CDF", "CHF", "CLP", "CNY", "COP", "CRC", "CUC", "CUP", "CVE", "CZK", "DJF", "DKK",
+        "DOP", "DZD", "EGP", "ERN", "ETB", "EUR", "FJD", "FKP", "GBP", "GEL", "GHS", "GIP", "GMD",
+        "GNF", "GTQ", "GYD", "HKD", "HNL", "HRK", "HTG", "HUF", "IDR", "ILS", "INR", "IQD", "IRR",
+        "ISK", "JMD", "JOD", "JPY", "KES", "KGS", "KHR", "KMF", "KPW", "KRW", "KWD", "KYD", "KZT",
+        "LAK", "LBP", "LKR", "LRD", "LSL", "LYD", "MAD", "MDL", "MGA", "MKD", "MMK", "MNT", "MOP",
+        "MRU", "MUR", "MVR", "MWK", "MXN", "MYR", "MZN", "NAD", "NGN", "NIO", "NOK", "NPR", "NZD",
+        "OMR", "PAB", "PEN", "PGK", "PHP", "PKR", "PLN", "PYG", "QAR", "RON", "RSD", "RUB", "RUR",
+        "RWF", "SAR", "SBD", "SCR", "SDG", "SEK", "SGD", "SHP", "SLE", "SLL", "SOS", "SRD", "SSP",
+        "STN", "SVC", "SYP", "SZL", "THB", "TJS", "TMT", "TND", "TOP", "TRY", "TTD", "TWD", "TZS",
+        "UAH", "UGX", "USD", "UYU", "UZS", "VES", "VND", "VUV", "WST", "XAF", "XCD", "XCG", "XOF",
+        "XPF", "YER", "ZAR", "ZMW", "ZWG", "ZWL",
+    ];
+    CODES.contains(&currency)
 }
 
 pub(in crate::p2p) fn trimmed(value: Option<String>) -> Option<String> {

@@ -128,7 +128,7 @@ export interface ExchangeQuote {
 }
 
 export interface RouteLeg {
-  kind: "entry" | "exit";
+  kind: "entry" | "swap" | "exit";
   from: string;
   to: string;
   provider: string;

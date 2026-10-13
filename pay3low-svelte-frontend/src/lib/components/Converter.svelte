@@ -11,6 +11,7 @@
   import { locale, t, setLocale } from "$lib/i18n";
   import { homeContent } from "$lib/home-content";
   import { SearchResponseMetrics } from "$lib/response-metrics";
+  import { providerRouteLegs } from "$lib/provider-route-legs";
   import { fetchRouteSearchActivity, SEARCH_ACTIVITY_PERIODS, type RouteSearchActivityHour, type SearchActivityPeriod } from "$lib/route-activity";
   import { recordTrendSearch } from "$lib/trends/activity";
   import { fiatFlagUrl } from "$lib/currency-flags";
@@ -342,16 +343,7 @@
       const legs = route.cycle_legs?.length
         ? route.cycle_legs.map((leg, index) => ({ kind: index === 0 ? "entry" as const : "exit" as const, from: leg.from_asset, to: leg.to_asset, provider: leg.provider, status: "found" as const }))
         : route.route_provider
-        ? [
-            ...(entryOffer
-              ? [{ kind: "entry" as const, from: route.source_fiat, to: entryOffer.asset, provider: entryOffer.source, status: "found" as const }]
-              : [{ kind: "entry" as const, from: route.source_fiat, to: route.asset, provider: route.route_provider, status: "found" as const }]),
-            ...(exitOffer
-              ? [{ kind: "exit" as const, from: exitOffer.asset, to: route.target_fiat, provider: exitOffer.source, status: "found" as const }]
-              : entryOffer
-                ? [{ kind: "exit" as const, from: entryOffer.asset, to: route.target_fiat, provider: route.route_provider, status: "found" as const }]
-                : []),
-          ]
+        ? providerRouteLegs(route)
         : route.market_path
           ? entryOffer
             ? [{ kind: "entry" as const, from: route.source_fiat, to: entryOffer.asset, provider: entryOffer.source, status: "found" as const }, { kind: "exit" as const, from: entryOffer.asset, to: route.target_fiat, provider: route.market_path.venue, status: "found" as const }]

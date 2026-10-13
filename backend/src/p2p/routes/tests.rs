@@ -30,6 +30,116 @@ struct DelayedRouteSource {
 
 struct FixedIntentProvider;
 
+#[test]
+fn fiat_codes_require_an_explicit_network_to_select_a_colliding_token() {
+    let networks = crate::networks::NetworkCatalog::test_default();
+    for symbol in ["AMD", "RUB", "USD", "GEL", "EUR", "BYN", "UAH", "KZT"] {
+        let catalog = [Asset::new(symbol, Some("ethereum")).unwrap()];
+        assert!(
+            !is_crypto_currency(symbol, None, &networks, &catalog),
+            "{symbol} is fiat without a network"
+        );
+        assert!(
+            is_crypto_currency(symbol, Some("ethereum"), &networks, &catalog),
+            "{symbol}@ethereum is an explicitly selected token"
+        );
+    }
+    for symbol in ["USDT", "USDC", "ETH", "NEWCOIN"] {
+        let catalog = [Asset::new(symbol, Some("ethereum")).unwrap()];
+        assert!(
+            is_crypto_currency(symbol, None, &networks, &catalog),
+            "crypto discovery must retain {symbol}"
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn explicitly_selected_fiat_named_tokens_keep_crypto_routes() {
+    let service = P2pSearchService::with_sources(Vec::new(), Duration::from_secs(1))
+        .with_route_providers(vec![Arc::new(RecordingRouteProvider {
+            name: "symbiosis",
+            assets: ["AMD", "USDT"]
+                .into_iter()
+                .map(|symbol| Asset::new(symbol, Some("ethereum")).unwrap())
+                .collect(),
+            unsupported_calls: Arc::new(AtomicUsize::new(0)),
+        })]);
+    let mut request = crypto_cycle_request(100.0);
+    request.source_fiat = "AMD".into();
+    request.source_network = Some("ethereum".into());
+    request.target_network = Some("ethereum".into());
+    let response = service.search_routes(request).await.unwrap();
+    assert_eq!(response.routes_found, 1);
+    let route = &response.routes[0];
+    assert_eq!(route.route_kind, "crypto_to_crypto");
+    assert!(route.entry_offer.is_none());
+    assert!(route.exit_offer.is_none());
+    assert_eq!(route.route_path, ["AMD@ethereum", "USDT@ethereum"]);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn fiat_token_ticker_collisions_preserve_fiat_entry_and_exit() {
+    for (source, target, expected_kind) in [
+        ("AMD", "RUB", "fiat_to_fiat"),
+        ("RUB", "USDT", "fiat_to_crypto"),
+        ("USDT", "USD", "crypto_to_fiat"),
+    ] {
+        let service = P2pSearchService::with_sources(
+            vec![Arc::new(ProgressiveSource)],
+            Duration::from_secs(1),
+        )
+        .with_fiat_route_providers(vec![Arc::new(FixedFiatRouteProvider)])
+        .with_route_providers(vec![Arc::new(RecordingRouteProvider {
+            name: "symbiosis",
+            assets: ["AMD", "RUB", "USD", "USDT", "USDC"]
+                .into_iter()
+                .map(|symbol| Asset::new(symbol, Some("ethereum")).unwrap())
+                .collect(),
+            unsupported_calls: Arc::new(AtomicUsize::new(0)),
+        })]);
+        let mut request = crypto_cycle_request(if source == "USDT" { 100.0 } else { 10_000.0 });
+        request.source_fiat = source.into();
+        request.target_fiat = target.into();
+        request.source_network = (source == "USDT").then(|| "ethereum".into());
+        request.target_network = (target == "USDT").then(|| "ethereum".into());
+        request.intermediary_assets = Some("USDT,USDC".into());
+        request.exchange_mode = ExchangeMode::All;
+        let response = service.search_routes(request).await.unwrap();
+        assert!(
+            response.routes_found > 0,
+            "missing fiat routes: {source} → {target}"
+        );
+        for route in &response.routes {
+            assert_eq!(route.route_kind, expected_kind, "{source} → {target}");
+            if route.route_provider.as_deref() == Some("symbiosis") {
+                if source != "USDT" {
+                    assert!(
+                        route.entry_offer.is_some(),
+                        "Symbiosis cannot provide fiat entry"
+                    );
+                }
+                if target != "USDT" {
+                    assert!(
+                        route.exit_offer.is_some(),
+                        "Symbiosis cannot provide fiat exit"
+                    );
+                }
+            }
+        }
+        if source == "AMD" {
+            assert!(
+                response.routes.iter().any(|route| {
+                    route
+                        .entry_offer
+                        .as_ref()
+                        .is_some_and(|offer| offer.source == "id-pay")
+                }),
+                "token catalog must not disable direct fiat providers"
+            );
+        }
+    }
+}
+
 fn crypto_cycle_request(amount: f64) -> P2pRouteSearchQuery {
     P2pRouteSearchQuery {
         source_fiat: "USDT".into(),
