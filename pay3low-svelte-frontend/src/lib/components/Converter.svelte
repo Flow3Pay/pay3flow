@@ -1111,7 +1111,7 @@
             <div class="settingsBackdrop" use:portalSettingsBackdrop on:mousedown={closeSettings} role="presentation">
               <div class:settingsDragging class="settingsMenu settingsModal" bind:this={settingsDialog} role="dialog" aria-modal="true" aria-label="Settings" tabindex="-1" on:mousedown|stopPropagation>
                 <div class="settingsModalHeader"><span class="settingsSheetHandle" aria-hidden="true" on:pointerdown={startSettingsDrag} on:pointermove={moveSettingsDrag} on:pointerup={endSettingsDrag} on:pointercancel={endSettingsDrag}></span></div>
-                <div class="searchRow"><label class="searchBox"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.7"/><path d="m20 20-4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><input bind:this={settingsSearchInput} type="search" bind:value={settingsQuery} placeholder="Search settings" aria-label="Search settings" /></label><kbd>esc</kbd></div>
+                <div class="searchRow"><label class="searchBox"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.7"/><path d="m20 20-4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><input bind:this={settingsSearchInput} type="search" bind:value={settingsQuery} placeholder="Search settings" aria-label="Search settings" /></label><button type="button" class="closeButton" title="Close settings (Esc)" aria-label="Close settings" on:click={closeSettings}><kbd>esc</kbd></button></div>
                 <div class="titleBar"><h2 class="title">Settings</h2></div>
                 <div class="settingsModalContent">
                   {#if showRefreshSettings}
@@ -1137,17 +1137,17 @@
             <div class="settingsBackdrop" use:portalSettingsBackdrop on:mousedown={closeSettings} role="presentation">
               <div class:settingsDragging class="settingsMenu settingsModal" bind:this={settingsDialog} role="dialog" aria-modal="true" aria-label="Exchange selection" tabindex="-1" on:mousedown|stopPropagation>
                 <div class="settingsModalHeader"><span class="settingsSheetHandle" aria-hidden="true" on:pointerdown={startSettingsDrag} on:pointermove={moveSettingsDrag} on:pointerup={endSettingsDrag} on:pointercancel={endSettingsDrag}></span></div>
-                <div class="searchRow"><label class="searchBox"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.7"/><path d="m20 20-4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><input bind:this={exchangesSearchInput} type="search" bind:value={exchangesQuery} placeholder="Search exchanges and crypto" aria-label="Search exchanges and crypto" /></label><kbd>esc</kbd></div>
+                <div class="searchRow"><label class="searchBox"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.7"/><path d="m20 20-4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><input bind:this={exchangesSearchInput} type="search" bind:value={exchangesQuery} placeholder="Search exchanges and crypto" aria-label="Search exchanges and crypto" /></label><button type="button" class="closeButton" title="Close exchanges (Esc)" aria-label="Close exchanges" on:click={closeSettings}><kbd>esc</kbd></button></div>
                 <div class="titleBar"><h2 class="title">Choose exchanges</h2></div>
                 <div class="settingsModalContent">
                   <section class="settingsSection"><div class="settingsSectionHeading"><strong>Exchanges</strong><span>Switch providers on or off</span></div>
-                    <div class="settingsToggleGrid" aria-label="Exchanges to search">{#each filteredExchangeChoices as source}{@const enabled = selectedSources.includes(source.id)}<button type="button" class="settingsToggleOption" aria-pressed={enabled} title={sourceTitle(source)} on:click={() => toggleSource(source.id)}><span class="settingsToggleLabel"><span class="sourceOptionIcon" aria-hidden="true"><img src={source.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackSourceIcon(event, source.id)} /></span>{source.label}</span><span class="iosSwitch" class:iosSwitchOn={enabled} aria-hidden="true"><i></i></span></button>{/each}</div>
-                    {#if filteredAlwaysOnProviders.length}<div class="alwaysOnProviders"><div class="alwaysOnHeading"><strong>Direct quote providers</strong><span>Compared automatically</span></div><div class="settingsToggleGrid">{#each filteredAlwaysOnProviders as provider}<div class="settingsToggleOption alwaysOnProvider" title={sourceTitle(provider)}><span class="settingsToggleLabel"><span class="sourceOptionIcon" aria-hidden="true"><img src={provider.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackSourceIcon(event, provider.id)} /></span>{provider.label}</span><small>Always on</small></div>{/each}</div></div>{/if}
+                    <div class="settingsToggleGrid exchangeChoiceList" aria-label="Exchanges to search">{#each filteredExchangeChoices as source}{@const enabled = selectedSources.includes(source.id)}<button type="button" class="settingsToggleOption" aria-pressed={enabled} title={sourceTitle(source)} on:click={() => toggleSource(source.id)}><span class="settingsToggleLabel"><span class="sourceOptionIcon" aria-hidden="true"><img src={source.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackSourceIcon(event, source.id)} /></span>{source.label}</span><span class="iosSwitch" class:iosSwitchOn={enabled} aria-hidden="true"><i></i></span></button>{/each}</div>
+                    {#if filteredAlwaysOnProviders.length}<div class="alwaysOnProviders"><div class="alwaysOnHeading"><strong>Direct quote providers</strong><span>Compared automatically</span></div><div class="settingsToggleGrid exchangeChoiceList">{#each filteredAlwaysOnProviders as provider}<div class="settingsToggleOption alwaysOnProvider" title={sourceTitle(provider)}><span class="settingsToggleLabel"><span class="sourceOptionIcon" aria-hidden="true"><img src={provider.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackSourceIcon(event, provider.id)} /></span>{provider.label}</span><small>Always on</small></div>{/each}</div></div>{/if}
                     {#if !exchangesQuery || "cryptocurrency intermediary crypto currency all available".includes(exchangesQuery.trim().toLowerCase()) || filteredIntermediaryAssets.length}
                       <div class="settingsSection"><div class="settingsSectionHeading"><strong>Cryptocurrency intermediary</strong><span>Select assets used between currencies</span></div>
-                        <div class="settingsToggleGrid" aria-label="Cryptocurrency intermediaries">
+                        <div class="settingsToggleGrid exchangeChoiceList" aria-label="Cryptocurrency intermediaries">
                           {#if !exchangesQuery || "all available".includes(exchangesQuery.trim().toLowerCase())}<button type="button" class="settingsToggleOption" aria-pressed={selectedIntermediaryAssets.length === 0} on:click={() => { selectedIntermediaryAssets = []; resetResults(); }}><span>All available</span><span class="iosSwitch" class:iosSwitchOn={selectedIntermediaryAssets.length === 0} aria-hidden="true"><i></i></span></button>{/if}
-                          {#each filteredIntermediaryAssets as asset}{@const enabled = selectedIntermediaryAssets.includes(asset)}<button type="button" class="settingsToggleOption" aria-pressed={enabled} on:click={() => toggleAsset(asset)}><span class="settingsToggleLabel"><span class="intermediaryAssetIcon" aria-hidden="true"><img src={intermediaryIcon(asset)} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={fallbackAssetIcon} /></span>{asset}</span><span class="iosSwitch" class:iosSwitchOn={enabled} aria-hidden="true"><i></i></span></button>{/each}
+                          {#each filteredIntermediaryAssets as asset}{@const enabled = selectedIntermediaryAssets.length === 0 || selectedIntermediaryAssets.includes(asset)}<button type="button" class="settingsToggleOption" aria-pressed={enabled} on:click={() => toggleAsset(asset)}><span class="settingsToggleLabel"><span class="intermediaryAssetIcon" aria-hidden="true"><img src={intermediaryIcon(asset)} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={fallbackAssetIcon} /></span>{asset}</span><span class="iosSwitch" class:iosSwitchOn={enabled} aria-hidden="true"><i></i></span></button>{/each}
                         </div>
                       </div>
                     {/if}
@@ -1512,6 +1512,23 @@
   font: 10px var(--font-mono);
 }
 
+.closeButton {
+  display: grid;
+  min-width: 44px;
+  min-height: 44px;
+  flex: 0 0 44px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-faint);
+  cursor: pointer;
+}
+
+.closeButton:hover,
+.closeButton:focus-visible { background: var(--color-panel-soft); }
+
 .titleBar {
   display: flex;
   align-items: center;
@@ -1599,6 +1616,29 @@
   gap: 8px;
 }
 
+.settingsToggleGrid.exchangeChoiceList { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+.exchangeChoiceList .settingsToggleOption {
+  min-height: 48px;
+  padding: 7px 8px;
+  border-color: transparent;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+}
+.exchangeChoiceList .settingsToggleOption:hover,
+.exchangeChoiceList .settingsToggleOption:focus-visible { background: var(--color-panel-soft); }
+.exchangeChoiceList .sourceOptionIcon,
+.exchangeChoiceList .intermediaryAssetIcon {
+  width: 32px;
+  height: 32px;
+  flex-basis: 32px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+.exchangeChoiceList .sourceOptionIcon img,
+.exchangeChoiceList .intermediaryAssetIcon img { width: 24px; height: 24px; }
+
 .settingsToggleOption {
   display: flex;
   min-width: 0;
@@ -1641,7 +1681,7 @@
   transition: transform 180ms ease;
 }
 
-.iosSwitchOn { background: #34c759; }
+.iosSwitchOn { background: var(--color-accent); }
 .iosSwitchOn i { transform: translateX(14px); }
 .alwaysOnProvider { color: var(--color-text-faint); }
 .alwaysOnProvider small { color: var(--color-good); font-size: 10px; font-weight: 800; white-space: nowrap; }
