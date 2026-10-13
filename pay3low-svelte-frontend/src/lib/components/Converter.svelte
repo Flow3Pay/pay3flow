@@ -62,6 +62,8 @@
   let amount = "0";
   let targetAmount = "0";
   let amountSide: AmountSide = "source";
+  let sourceAmountFocused = false;
+  let targetAmountFocused = false;
   let targetAmountNeedsRate = false;
   let targetProbeAmount: number | null = null;
   let targetRefinementAttempts = 0;
@@ -565,6 +567,8 @@
   $: previewRoute = selected ?? routes.find((route) => route.status === "complete" && route.is_current_best) ?? routes.find((route) => route.status === "complete") ?? null;
   $: displayedSourceAmount = amountSide === "target" && targetAmountNeedsRate && amountNumber(amount) <= 0 ? "" : amount;
   $: displayedTargetAmount = amountSide === "target" && !previewRoute ? targetAmount : amountFromRoute(previewRoute);
+  $: displayedSourceInput = sourceAmountFocused ? displayedSourceAmount : compactInputAmount(displayedSourceAmount);
+  $: displayedTargetInput = targetAmountFocused ? displayedTargetAmount : compactInputAmount(displayedTargetAmount);
   $: onShareStateChange(urlReady && sourceMethod && targetMethod ? {
     source: selectedSourceCurrency, target: selectedTargetCurrency,
     amount: displayedSourceAmount, receive: displayedTargetAmount,
@@ -663,6 +667,17 @@
     targetQuoteRouteKey = null;
     amount = normalizeAmount(value);
     resetResults();
+  }
+  const compactInputAmount = (value: string) => value.length > 10 ? `${value.slice(0, 7)}…` : value;
+  function focusAmountInput(event: FocusEvent, side: AmountSide) {
+    sourceAmountFocused = side === "source";
+    targetAmountFocused = side === "target";
+    const input = event.currentTarget as HTMLInputElement;
+    void tick().then(() => input.select());
+  }
+  function blurAmountInput(side: AmountSide) {
+    if (side === "source") sourceAmountFocused = false;
+    else targetAmountFocused = false;
   }
   function updateTargetAmount(value: string) {
     initialSearchReady = true;
@@ -1154,7 +1169,7 @@
 
       <div class="intentLabel"><span>{t("Sell", {}, activeLocale)}</span></div>
       <div class="moneyPanel moneyPanelSource exchangeMoneyPanel">
-        <div class="panelCopy"><label for="exchange-amount">{t("You send", {}, activeLocale)}</label><input id="exchange-amount" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedSourceAmount} on:focus={(event) => event.currentTarget.select()} on:input={(event) => updateAmount(event.currentTarget.value)} aria-label={t("Amount to send", {}, activeLocale)} />{#if marketUsd.source !== null}<span class="marketValue" aria-label={t("Approximate USD market value", {}, activeLocale)}>{formatMarketUsd(marketUsd.source)}</span>{/if}</div>
+        <div class="panelCopy"><label for="exchange-amount">{t("You send", {}, activeLocale)}</label><input id="exchange-amount" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedSourceInput} on:focus={(event) => focusAmountInput(event, "source")} on:blur={() => blurAmountInput("source")} on:input={(event) => updateAmount(event.currentTarget.value)} aria-label={t("Amount to send", {}, activeLocale)} />{#if marketUsd.source !== null}<span class="marketValue" aria-label={t("Approximate USD market value", {}, activeLocale)}>{formatMarketUsd(marketUsd.source)}</span>{/if}</div>
         <div class="methodControls">
           <button type="button" class="methodTrigger" data-tooltip={sourceMethod?.kind === "wallet" ? `${sourceCurrencyChoice} · ${t(sourceMethod.name, {}, activeLocale)}` : t(methodTitle(sourceMethod), {}, activeLocale)} on:click={() => void openMethodPicker("source")} aria-label={`Select sending ${methodNoun(sourceMethod)}: ${sourceMethod ? methodTitle(sourceMethod) : "none"}`}>
             <span class="methodAvatar" style:background-color={paymentMethodFavicon(sourceMethod) ? "transparent" : sourceMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(sourceMethod)}<img src={paymentMethodFavicon(sourceMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{:else}<span>{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{/if}</span>
@@ -1166,7 +1181,7 @@
       <ExchangeFlowBridge reversed={directionReversed} onSwap={swapDirection} label={t("Swap sender and recipient", {}, activeLocale)}><button type="button" class="routesToggle" class:routesToggleOpen={routesExpanded} on:click={toggleRoutes} aria-label={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)} aria-expanded={routesExpanded} title={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)}><span aria-hidden="true">❯</span></button></ExchangeFlowBridge>
       <div class="intentLabel intentLabelBuy"><span>{t("Buy", {}, activeLocale)}</span></div>
       <div class="moneyPanel moneyPanelTarget exchangeMoneyPanel">
-        <div class="panelCopy"><label for="exchange-output">{t("Recipient gets", {}, activeLocale)}</label><input id="exchange-output" class:amountOutputEmpty={!previewRoute && amountSide !== "target"} class="amountInput amountOutput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedTargetAmount} on:focus={(event) => event.currentTarget.select()} on:input={(event) => updateTargetAmount(event.currentTarget.value)} aria-label={t("Amount to receive", {}, activeLocale)} />{#if marketUsd.target !== null}<span class="marketValue" aria-label={t("Approximate USD market value", {}, activeLocale)}>{formatMarketUsd(marketUsd.target)}</span>{/if}</div>
+        <div class="panelCopy"><label for="exchange-output">{t("Recipient gets", {}, activeLocale)}</label><input id="exchange-output" class:amountOutputEmpty={!previewRoute && amountSide !== "target"} class="amountInput amountOutput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedTargetInput} on:focus={(event) => focusAmountInput(event, "target")} on:blur={() => blurAmountInput("target")} on:input={(event) => updateTargetAmount(event.currentTarget.value)} aria-label={t("Amount to receive", {}, activeLocale)} />{#if marketUsd.target !== null}<span class="marketValue" aria-label={t("Approximate USD market value", {}, activeLocale)}>{formatMarketUsd(marketUsd.target)}</span>{/if}</div>
         <div class="methodControls">
           <button type="button" class="methodTrigger" data-tooltip={targetMethod?.kind === "wallet" ? `${targetCurrencyChoice} · ${t(targetMethod.name, {}, activeLocale)}` : t(methodTitle(targetMethod), {}, activeLocale)} on:click={() => void openMethodPicker("target")} aria-label={`Select recipient ${methodNoun(targetMethod)}: ${targetMethod ? methodTitle(targetMethod) : "none"}`}>
             <span class="methodAvatar" style:background-color={paymentMethodFavicon(targetMethod) ? "transparent" : targetMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(targetMethod)}<img src={paymentMethodFavicon(targetMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{:else}<span>{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{/if}</span>
@@ -2546,9 +2561,6 @@
 .routesReveal { display: flex; min-width: 0; align-self: start; }
 .routesReveal :global(.side) { width: 100%; }
 .workspace.activityExpanded:not(.routesCollapsed) .converterStack { align-self: stretch; }
-.workspace.activityExpanded .routesReveal { min-height: 690px; align-self: stretch; contain: size; }
-.workspace.activityExpanded .routesReveal :global(.side) { height: 100%; }
-.workspace.activityExpanded .routesReveal :global(.side .panel) { height: 100%; min-height: 0; }
 .panelToggles { position: relative; display: flex; height: 42px; flex: 0 0 auto; align-items: center; justify-content: center; padding: 8px 0 4px; }
 .chartToggle, .routesToggle, .mobileRoutesToggle { z-index: 3; display: grid; width: 48px; height: 30px; flex: 0 0 auto; place-items: center; padding: 0; border: 0; background: transparent; box-shadow: none; color: var(--color-text-soft); opacity: 1; cursor: pointer; transition: opacity .2s ease; -webkit-tap-highlight-color: transparent; }
 .routesToggle { position: absolute; top: 50%; right: calc(-1 * (var(--workspace-gap) + 20px)); width: var(--workspace-gap); transform: translateY(-50%); }

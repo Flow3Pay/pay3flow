@@ -55,11 +55,6 @@
     const value = exact ? Number(exact) : minor == null ? null : minor / 100;
     return value == null || !Number.isFinite(value) ? "—" : `${value.toLocaleString("en-US", { maximumFractionDigits: exact ? 20 : 2, useGrouping: false })} ${currency ?? ""}`;
   };
-  const compactRouteAmount = (minor?: number, currency?: string, exact?: string) => {
-    const full = money(minor, currency, exact);
-    const match = full.match(/^(\S+)(\s+.*)$/);
-    return match && match[1].length > 10 ? `${match[1].slice(0, 7)}…${match[2]}` : full;
-  };
   const spreadLabel = (bps: number, language: Locale) => Math.abs(bps / 100) < 0.005
     ? t("Same output", {}, language)
     : t("{percent}% less", { percent: Math.abs(bps / 100).toFixed(2) }, language);
@@ -105,10 +100,14 @@
         const listStyle = getComputedStyle(list);
         const listPadding = (Number.parseFloat(listStyle.paddingTop) || 0)
           + (Number.parseFloat(listStyle.paddingBottom) || 0);
-        const rowHeight = cards.length === 4
-          ? Math.max(0, (node.clientHeight - 3 * gap - listPadding) / 4)
-          : 0;
-        node.style.setProperty("--route-row-min-height", `${rowHeight}px`);
+        const viewportStyle = getComputedStyle(node);
+        const viewportPadding = (Number.parseFloat(viewportStyle.paddingTop) || 0)
+          + (Number.parseFloat(viewportStyle.paddingBottom) || 0)
+          + (Number.parseFloat(viewportStyle.borderTopWidth) || 0)
+          + (Number.parseFloat(viewportStyle.borderBottomWidth) || 0);
+        const height = cards.reduce((total, card) => total + card.getBoundingClientRect().height, 0)
+          + Math.max(0, cards.length - 1) * gap + listPadding + viewportPadding;
+        node.style.setProperty("--route-viewport-height", `${height}px`);
       });
     }
 
@@ -177,7 +176,7 @@
 </script>
 
 <aside class="side active" aria-label="Found routes" aria-busy={searching} id="routes">
-  <div class="panel">
+  <div class="panel" class:panelRoutes={routes.length > 0}>
     <!-- Temporarily hidden: developer diagnostics for direction, result count, and venues.
     <div class="panelTop">
       <div class="panelHeading">
@@ -260,7 +259,7 @@
             <li animate:flip={{ duration: routeFlipDuration, easing: quintOut }} in:fly={{ y: 18, duration: routeEnterDuration(), easing: quintOut }}><div class="routeCardShell">
               <div class:routeBest={route.is_current_best} class:selected={route.route_id === selectedRouteId} class="routeCard" data-testid={complete ? "complete-route" : "partial-route"}>
               <button type="button" class="routeCardMain" disabled={!complete} aria-pressed={route.route_id === selectedRouteId} aria-label={`Select route ${index + 1}: ${money(route.target_amount_minor, route.target_currency, route.target_amount)}`} on:click={(event) => cardClick(event, route)}>
-                <span class="routeTopline"><span class="routeAmount">{compactRouteAmount(route.target_amount_minor, route.target_currency, route.target_amount)}</span><span class="routeBadges">{#if route.is_current_best}<span class="bestBadge" data-testid="best-route-badge">{t("Best router", {}, $locale)}</span>{/if}{#if route.profitability}<span class={route.is_current_best ? "bestBadge" : "deltaBadge"}>{profitLabel(route)}</span>{:else if !route.is_current_best}<span class="deltaBadge">{spreadLabel(route.spread_bps, $locale)}</span>{/if}</span></span>
+                <span class="routeTopline"><span class="routeAmount">{money(route.target_amount_minor, route.target_currency, route.target_amount)}</span><span class="routeBadges">{#if route.is_current_best}<span class="bestBadge" data-testid="best-route-badge">{t("Best router", {}, $locale)}</span>{/if}{#if route.profitability}<span class={route.is_current_best ? "bestBadge" : "deltaBadge"}>{profitLabel(route)}</span>{:else if !route.is_current_best}<span class="deltaBadge">{spreadLabel(route.spread_bps, $locale)}</span>{/if}</span></span>
               </button>
               <div class="routeActionRow">
                 <button type="button" class="routeWorkflowButton" disabled={!complete} aria-label={workflowLabel(route)} on:click={(event) => cardClick(event, route)}>
@@ -655,8 +654,10 @@
 
 .routeGroups {
   scrollbar-color: var(--route-scroll-color, #b5f500) var(--color-panel);
+  box-sizing: border-box;
   min-height: 0;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
+  max-height: var(--route-viewport-height, none);
   margin-top: 14px;
   padding-right: 6px;
   overflow-y: auto;
@@ -683,17 +684,18 @@
 }
 
 .routeList > li {
-  display: flex;
-  min-height: var(--route-row-min-height, 0px);
   content-visibility: auto;
   contain-intrinsic-size: 0 132px;
   will-change: transform, opacity;
 }
 
+.routeList > li:nth-child(-n + 4) {
+  content-visibility: visible;
+}
+
 .routeCardShell {
   display: flex;
   position: relative;
-  flex: 1;
   width: 100%;
   min-width: 0;
   flex-direction: column;
@@ -703,7 +705,6 @@
 .routeCard {
   position: relative;
   display: flex;
-  flex: 1;
   width: 100%;
   box-sizing: border-box;
   flex-direction: column;
@@ -1444,7 +1445,8 @@
 
 .panelTop { transform: none; padding-bottom: 16px; border-bottom: 1px solid var(--color-border); }
 .panel { padding-top: 19px; }
-.routeGroups { margin-top: 0; padding: 0 6px 12px 0; border-bottom: 1px solid var(--color-border); }
+.panel.panelRoutes { height: auto; }
+.routeGroups { margin-top: 0; padding: 0 6px 0 0; border-bottom: 1px solid var(--color-border); }
 .emptyState p { font-size: 14px; }
 .foundVenuePopover::before { position: absolute; height: 12px; left: 0; right: 0; bottom: 100%; content: ""; }
 :global(html[data-theme="dark"]) .venueFilterClear,
