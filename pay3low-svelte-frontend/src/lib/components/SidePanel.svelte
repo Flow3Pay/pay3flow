@@ -128,6 +128,7 @@
 
 <aside class="side active" aria-label="Found routes" aria-busy={searching} id="routes">
   <div class="panel">
+    <!-- Temporarily hidden: developer diagnostics for direction, result count, and venues.
     <div class="panelTop">
       <div class="panelHeading">
         {#if hasAmount}
@@ -199,6 +200,7 @@
         {/if}
       </div>
     </div>
+    -->
     {#if routes.length > 0}
       <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
       <div class="routeGroups" use:routeScrollColor data-testid="route-groups" role="region" tabindex="0" aria-label="Found routes">

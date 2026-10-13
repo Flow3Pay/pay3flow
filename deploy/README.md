@@ -61,19 +61,21 @@ Kubernetes Secret environment variables.
 
 ## One-command production deploy
 
-The Flake's production Fish app builds immutable images on the host and imports
-them into k3s, so deploying the current committed revision is one command:
+The Flake's production Fish app builds immutable images directly in the new
+host's k3s containerd namespace, so deploying the current committed revision
+is one command:
 
 ```sh
 nix run .#deploy
 ```
 
 The command requires a clean Git worktree and existing SSH access to the
-production host. It stages a credential-free release, builds the backend and
-frontend in parallel, imports and verifies both images, rolls out the two
-Deployments, rolls back their images if readiness fails, and checks the public
-home, health, and provider endpoints. See `nix run .#deploy -- --help` for
-host, identity, namespace, URL, and image-tag overrides.
+production host. It connects to `root@195.123.218.200` by default. It stages a
+credential-free release, builds and verifies both images in parallel, rolls
+out the two Deployments, rolls back their
+images if readiness fails, and checks the public home, health, and provider
+endpoints. See `nix run .#deploy -- --help` for host, identity, namespace, URL,
+and image-tag overrides.
 
 Application Pods use `ndots:1` and `single-request-reopen` so external provider
 API names resolve before cluster search suffixes and A/AAAA lookups do not

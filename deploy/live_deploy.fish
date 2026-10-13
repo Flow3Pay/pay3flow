@@ -12,8 +12,8 @@ function usage
     echo '  nix run .#deploy'
     echo ''
     echo 'Optional environment variables:'
-    echo '  PAY3FLOW_DEPLOY_HOST           SSH host (default: 82.118.18.183)'
-    echo '  PAY3FLOW_DEPLOY_USER           SSH user (default: xila)'
+    echo '  PAY3FLOW_DEPLOY_HOST           SSH host (default: 195.123.218.200)'
+    echo '  PAY3FLOW_DEPLOY_USER           SSH user (default: root)'
     echo '  PAY3FLOW_DEPLOY_IDENTITY_FILE  SSH private key (default: SSH configuration)'
     echo '  PAY3FLOW_NAMESPACE             Kubernetes namespace (default: pay3flow)'
     echo '  PAY3FLOW_PUBLIC_URL            URL verified after rollout'
@@ -52,9 +52,9 @@ if test -z "$image_tag"
     set image_tag live-(date -u +%Y%m%d)-$short_revision
 end
 set deploy_host $PAY3FLOW_DEPLOY_HOST
-test -n "$deploy_host"; or set deploy_host 82.118.18.183
+test -n "$deploy_host"; or set deploy_host 195.123.218.200
 set deploy_user $PAY3FLOW_DEPLOY_USER
-test -n "$deploy_user"; or set deploy_user xila
+test -n "$deploy_user"; or set deploy_user root
 set namespace $PAY3FLOW_NAMESPACE
 test -n "$namespace"; or set namespace pay3flow
 set public_url $PAY3FLOW_PUBLIC_URL
@@ -75,9 +75,11 @@ function remote
     ssh $ssh_options $remote $argv
 end
 
-set kubectl /usr/local/bin/kubectl
-set k3s /usr/local/bin/k3s
-set podman /usr/bin/podman
+# The production host is NixOS and provides kubectl through the k3s wrapper.
+set kubectl /run/current-system/sw/bin/k3s
+set k3s /run/current-system/sw/bin/k3s
+set nerdctl /run/current-system/sw/bin/nerdctl
+set containerd_socket /run/k3s/containerd/containerd.sock
 set backend_image localhost/pay3flow/backend:$image_tag
 set frontend_image localhost/pay3flow/frontend:$image_tag
 set remote_home (remote 'printf %s "$HOME"' | string collect)
@@ -89,15 +91,15 @@ set frontend_log /tmp/pay3flow-frontend-$short_revision.log
 echo "Deploying Pay3Flow revision $revision with image tag $image_tag"
 echo "Target: $remote, namespace: $namespace"
 
-for executable in $kubectl $k3s $podman
+for executable in $kubectl $k3s $nerdctl
     remote "test -x '$executable'"; or die "Required executable is missing on the server: $executable"
 end
 remote 'sudo -n true'; or die 'Passwordless sudo is required on the deployment host.'
-remote "sudo '$kubectl' get namespace '$namespace' >/dev/null"; or die "Kubernetes namespace is unavailable: $namespace"
-remote "sudo '$kubectl' -n '$namespace' get deployment/pay3flow-backend deployment/pay3flow-frontend configmap/pay3flow-config secret/pay3flow-secrets >/dev/null"; or die 'Pay3Flow Kubernetes resources are not bootstrapped.'
+remote "sudo '$kubectl' kubectl get namespace '$namespace' >/dev/null"; or die "Kubernetes namespace is unavailable: $namespace"
+remote "sudo '$kubectl' kubectl -n '$namespace' get deployment/pay3flow-backend deployment/pay3flow-frontend configmap/pay3flow-config secret/pay3flow-secrets >/dev/null"; or die 'Pay3Flow Kubernetes resources are not bootstrapped.'
 
 for key in DATABASE_URL REDIS_URL JWT_SECRET SECRETS_KEY ADMIN_TOKEN NEAR_INTENTS_JWT BESTCHANGE_API_KEY
-    remote "sudo '$kubectl' -n '$namespace' get secret pay3flow-secrets -o jsonpath='{.data.$key}' | grep -q ."; or die "Secret pay3flow-secrets is missing key: $key"
+    remote "sudo '$kubectl' kubectl -n '$namespace' get secret pay3flow-secrets -o jsonpath='{.data.$key}' | grep -q ."; or die "Secret pay3flow-secrets is missing key: $key"
 end
 
 remote "test -d $release_dir || mkdir -m 0750 $release_dir"; or die 'Could not prepare the remote release directory.'
@@ -112,8 +114,8 @@ rsync -az --delete \
     -e "$rsync_ssh" \
     "$repo_root/" "$remote:$release_dir/"; or die 'Could not synchronize the release source.'
 
-set backend_log_command "cd $release_dir && '$podman' build --tag '$backend_image' --file backend/Dockerfile . >'$backend_log' 2>&1"
-set frontend_log_command "cd $release_dir && '$podman' build --tag '$frontend_image' --file pay3low-svelte-frontend/Dockerfile pay3low-svelte-frontend >'$frontend_log' 2>&1"
+set backend_log_command "cd $release_dir && '$nerdctl' --address '$containerd_socket' --namespace k8s.io build --tag '$backend_image' --file backend/Dockerfile . >'$backend_log' 2>&1"
+set frontend_log_command "cd $release_dir && '$nerdctl' --address '$containerd_socket' --namespace k8s.io build --tag '$frontend_image' --file pay3low-svelte-frontend/Dockerfile pay3low-svelte-frontend >'$frontend_log' 2>&1"
 remote "rm -f '$backend_log' '$frontend_log'"; or die 'Could not clear remote build logs.'
 echo 'Building backend and frontend images in parallel...'
 remote $backend_log_command &
@@ -134,33 +136,26 @@ end
 remote "tail -8 '$backend_log'"
 remote "tail -8 '$frontend_log'"
 
-echo 'Importing images into k3s...'
-set backend_archive /tmp/pay3flow-backend-image-$short_revision.tar
-set frontend_archive /tmp/pay3flow-frontend-image-$short_revision.tar
-remote "rm -f '$backend_archive' '$frontend_archive'"; or die 'Could not clear image archives.'
-remote "'$podman' save --output '$backend_archive' '$backend_image' && '$podman' save --output '$frontend_archive' '$frontend_image'"; or die 'Could not save built images.'
-remote "sudo '$k3s' ctr images import '$backend_archive' >/dev/null && sudo '$k3s' ctr images import '$frontend_archive' >/dev/null"; or die 'Could not import images into k3s.'
-remote "rm -f '$backend_archive' '$frontend_archive'"
-
-set source_backend_id (remote "'$podman' image inspect --format '{{.Id}}' '$backend_image'" | string replace --regex '^sha256:' '' | string trim)
-set source_frontend_id (remote "'$podman' image inspect --format '{{.Id}}' '$frontend_image'" | string replace --regex '^sha256:' '' | string trim)
+echo 'Verifying images in the k3s containerd namespace...'
+set source_backend_id (remote "'$nerdctl' --address '$containerd_socket' --namespace k8s.io image inspect --format '{{.Id}}' '$backend_image'" | string replace --regex '^sha256:' '' | string trim)
+set source_frontend_id (remote "'$nerdctl' --address '$containerd_socket' --namespace k8s.io image inspect --format '{{.Id}}' '$frontend_image'" | string replace --regex '^sha256:' '' | string trim)
 set runtime_backend_id (remote "sudo '$k3s' crictl images | grep -E '^localhost/pay3flow/backend[[:space:]]+$image_tag' | head -1 | tr -s ' ' | cut -d ' ' -f3" | string trim)
 set runtime_frontend_id (remote "sudo '$k3s' crictl images | grep -E '^localhost/pay3flow/frontend[[:space:]]+$image_tag' | head -1 | tr -s ' ' | cut -d ' ' -f3" | string trim)
 test (string sub --start 1 --length 12 -- $source_backend_id) = (string sub --start 1 --length 12 -- $runtime_backend_id); or die 'Imported backend image ID does not match the build output.'
 test (string sub --start 1 --length 12 -- $source_frontend_id) = (string sub --start 1 --length 12 -- $runtime_frontend_id); or die 'Imported frontend image ID does not match the build output.'
 test (string sub --start 1 --length 12 -- $runtime_backend_id) != (string sub --start 1 --length 12 -- $runtime_frontend_id); or die 'Backend and frontend unexpectedly resolve to the same image ID.'
 
-set old_backend_image (remote "sudo '$kubectl' -n '$namespace' get deployment pay3flow-backend -o jsonpath='{.spec.template.spec.containers[0].image}'" | string trim)
-set old_frontend_image (remote "sudo '$kubectl' -n '$namespace' get deployment pay3flow-frontend -o jsonpath='{.spec.template.spec.containers[0].image}'" | string trim)
+set old_backend_image (remote "sudo '$kubectl' kubectl -n '$namespace' get deployment pay3flow-backend -o jsonpath='{.spec.template.spec.containers[0].image}'" | string trim)
+set old_frontend_image (remote "sudo '$kubectl' kubectl -n '$namespace' get deployment pay3flow-frontend -o jsonpath='{.spec.template.spec.containers[0].image}'" | string trim)
 set rollout_started 0
 
 function rollback_images
     if test $rollout_started -eq 1
         echo 'Rollout failed; restoring the previous images.' >&2
-        remote "sudo '$kubectl' -n '$namespace' set image deployment/pay3flow-backend backend='$old_backend_image'" >/dev/null 2>&1; or true
-        remote "sudo '$kubectl' -n '$namespace' set image deployment/pay3flow-frontend frontend='$old_frontend_image'" >/dev/null 2>&1; or true
-        remote "sudo '$kubectl' -n '$namespace' rollout status --timeout=5m deployment/pay3flow-backend" >/dev/null 2>&1; or true
-        remote "sudo '$kubectl' -n '$namespace' rollout status --timeout=5m deployment/pay3flow-frontend" >/dev/null 2>&1; or true
+        remote "sudo '$kubectl' kubectl -n '$namespace' set image deployment/pay3flow-backend backend='$old_backend_image'" >/dev/null 2>&1; or true
+        remote "sudo '$kubectl' kubectl -n '$namespace' set image deployment/pay3flow-frontend frontend='$old_frontend_image'" >/dev/null 2>&1; or true
+        remote "sudo '$kubectl' kubectl -n '$namespace' rollout status --timeout=5m deployment/pay3flow-backend" >/dev/null 2>&1; or true
+        remote "sudo '$kubectl' kubectl -n '$namespace' rollout status --timeout=5m deployment/pay3flow-frontend" >/dev/null 2>&1; or true
     end
 end
 
@@ -170,33 +165,33 @@ set backend_patch "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"pay
 # Resolve public API names before Kubernetes search suffixes, and use separate
 # sockets for A/AAAA lookups to avoid five-second resolver stalls.
 set backend_patch (string replace '"containers":' '"dnsConfig":{"options":[{"name":"ndots","value":"1"},{"name":"single-request-reopen"}]},"containers":' -- $backend_patch)
-printf '%s' $backend_patch | remote "sudo '$kubectl' -n '$namespace' patch deployment pay3flow-backend --type=strategic --patch-file=/dev/stdin"; or begin
+printf '%s' $backend_patch | remote "sudo '$kubectl' kubectl -n '$namespace' patch deployment pay3flow-backend --type=strategic --patch-file=/dev/stdin"; or begin
     rollback_images
     exit 1
 end
 
 set frontend_patch "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"pay3flow.io/deployed-at\":\"$deployed_at\",\"pay3flow.io/source-revision\":\"$revision\"}},\"spec\":{\"containers\":[{\"name\":\"frontend\",\"image\":\"$frontend_image\",\"imagePullPolicy\":\"IfNotPresent\"}]}}}}"
 set frontend_patch (string replace '"containers":' '"dnsConfig":{"options":[{"name":"ndots","value":"1"},{"name":"single-request-reopen"}]},"containers":' -- $frontend_patch)
-printf '%s' $frontend_patch | remote "sudo '$kubectl' -n '$namespace' patch deployment pay3flow-frontend --type=strategic --patch-file=/dev/stdin"; or begin
+printf '%s' $frontend_patch | remote "sudo '$kubectl' kubectl -n '$namespace' patch deployment pay3flow-frontend --type=strategic --patch-file=/dev/stdin"; or begin
     rollback_images
     exit 1
 end
 set config_patch "{\"data\":{\"IMAGE_TAG\":\"$image_tag\",\"SOURCE_REVISION\":\"$revision\"}}"
-printf '%s' $config_patch | remote "sudo '$kubectl' -n '$namespace' patch configmap pay3flow-config --type=merge --patch-file=/dev/stdin" >/dev/null; or begin
+printf '%s' $config_patch | remote "sudo '$kubectl' kubectl -n '$namespace' patch configmap pay3flow-config --type=merge --patch-file=/dev/stdin" >/dev/null; or begin
     rollback_images
     exit 1
 end
 
-remote "sudo '$kubectl' -n '$namespace' rollout status --timeout=10m deployment/pay3flow-backend"; or begin
+remote "sudo '$kubectl' kubectl -n '$namespace' rollout status --timeout=10m deployment/pay3flow-backend"; or begin
     rollback_images
     exit 1
 end
-remote "sudo '$kubectl' -n '$namespace' rollout status --timeout=10m deployment/pay3flow-frontend"; or begin
+remote "sudo '$kubectl' kubectl -n '$namespace' rollout status --timeout=10m deployment/pay3flow-frontend"; or begin
     rollback_images
     exit 1
 end
 set rollout_started 0
-remote "sudo '$kubectl' -n '$namespace' get deployment pay3flow-backend pay3flow-frontend -o custom-columns=NAME:.metadata.name,READY:.status.readyReplicas,IMAGE:.spec.template.spec.containers[0].image"
+remote "sudo '$kubectl' kubectl -n '$namespace' get deployment pay3flow-backend pay3flow-frontend -o custom-columns=NAME:.metadata.name,READY:.status.readyReplicas,IMAGE:.spec.template.spec.containers[0].image"
 
 echo 'Checking the public route...'
 curl --fail --silent --show-error --max-time 30 "$public_url/" >/dev/null; or die 'Public root route check failed.'

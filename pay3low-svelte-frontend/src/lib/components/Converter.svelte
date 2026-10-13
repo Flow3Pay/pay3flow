@@ -39,7 +39,7 @@
   export let onBelarusP2pWarningChange: (show: boolean) => void = () => {};
   export let onOpenBelarusP2pWarning: () => void = () => {};
 
-  type RefreshSeconds = 0 | 5 | 15 | 30 | 60 | 300;
+  type RefreshSeconds = number;
   type PickerSide = "source" | "target" | null;
   type AmountSide = "source" | "target";
   const REFRESH_OPTIONS: RefreshSeconds[] = [0, 5, 15, 30, 60, 300];
@@ -80,9 +80,10 @@
   let sourceNetworkId = FALLBACK_NETWORK.id;
   let targetNetworkId = FALLBACK_NETWORK.id;
   let settingsOpen = false;
-  let exchangesOpen = false;
   let showBelarusP2pWarning = false;
   let refreshSeconds: RefreshSeconds = 15;
+  let customRefreshInput = "";
+  let settingsQuery = "";
   let p2pSources: P2pSourceOption[] = [];
   let venueNames: Record<string, string> = {};
   let venueUrls: Record<string, string> = {};
@@ -112,6 +113,7 @@
   export let onDismissStartup: () => void = () => {};
   let settingsElement: HTMLDivElement;
   let settingsDialog: HTMLDivElement;
+  let settingsSearchInput: HTMLInputElement;
   let settingsDragging = false;
   let settingsDragStartY = 0;
   let settingsDragDistance = 0;
@@ -151,7 +153,7 @@
   let foundVenueIds: string[] = [];
   $: activeLocale = $locale;
   $: home = homeContent[activeLocale];
-  $: modalOpen = settingsOpen || exchangesOpen;
+  $: modalOpen = settingsOpen;
 
   async function refreshActivity(source: string, target: string, period: SearchActivityPeriod, refreshedAt: number | null, interval: number) {
     const displayKey = `${source}|${target}|${period}`;
@@ -589,6 +591,11 @@
   $: refreshProgress = secondsUntilRefresh !== null && refreshSeconds ? ((refreshSeconds - secondsUntilRefresh) / refreshSeconds) * 100 : 0;
   $: exchangeChoices = p2pSources.filter((source) => source.searchMode !== "always_on");
   $: alwaysOnProviders = p2pSources.filter((source) => source.searchMode === "always_on");
+  $: filteredExchangeChoices = exchangeChoices.filter((source) => `${source.label} ${source.id}`.toLowerCase().includes(settingsQuery.trim().toLowerCase()));
+  $: filteredAlwaysOnProviders = alwaysOnProviders.filter((source) => `${source.label} ${source.id}`.toLowerCase().includes(settingsQuery.trim().toLowerCase()));
+  $: filteredIntermediaryAssets = INTERMEDIARY_ASSETS.filter((asset) => asset.toLowerCase().includes(settingsQuery.trim().toLowerCase()));
+  $: showRefreshSettings = !settingsQuery || "auto-refresh refresh interval time обновление время custom seconds sec off".includes(settingsQuery.trim().toLowerCase()) || REFRESH_OPTIONS.some((seconds) => refreshOptionLabel(seconds).toLowerCase().includes(settingsQuery.trim().toLowerCase()));
+  $: showExchangeMethods = !settingsQuery || "exchange methods p2p exchangers".includes(settingsQuery.trim().toLowerCase()) || "обмен методы".includes(settingsQuery.trim().toLowerCase());
   $: searchingVenues = [...new Set([...selectedSources, ...alwaysOnProviders.map((provider) => provider.id)])].map((source) => p2pSources.find((item) => item.id === source) ?? { id: source, label: source, iconUrl: venueIcon(source), searchable: true, searchMode: "selectable" as const });
   $: exchangeMode = selectedExchangeMethods.length === EXCHANGE_METHODS.length ? "all" as const : selectedExchangeMethods[0];
   $: searchSignature = `${corridor?.id ?? ""}:${sourceMethod?.id ?? ""}:${sourceNetwork?.id ?? ""}:${targetMethod?.id ?? ""}:${targetNetwork?.id ?? ""}:${amountSide}:${amount}:${targetAmount}:${selectedSources.join(",")}:${selectedExchangeMethods.join(",")}:${selectedIntermediaryAssets.join(",")}:${directionReversed}`;
@@ -914,30 +921,26 @@
   function toggleExchangeMethod(method: ExchangeMethod) { initialSearchReady = true; selectedExchangeMethods = selectedExchangeMethods.includes(method) ? (selectedExchangeMethods.length === 1 ? selectedExchangeMethods : selectedExchangeMethods.filter((item) => item !== method)) : EXCHANGE_METHODS.filter((item) => item === method || selectedExchangeMethods.includes(item)); resetResults(); }
   function toggleAsset(asset: string) { initialSearchReady = true; selectedIntermediaryAssets = selectedIntermediaryAssets.includes(asset) ? selectedIntermediaryAssets.filter((item) => item !== asset) : [...selectedIntermediaryAssets, asset]; resetResults(); }
   function onDocumentMouseDown(event: MouseEvent) { if (modalOpen && settingsElement && !settingsElement.contains(event.target as Node)) closeSettings(); }
-  function closeSettings() { settingsOpen = false; exchangesOpen = false; }
+  function closeSettings() { settingsOpen = false; settingsQuery = ""; }
+  function openSettings() { settingsQuery = ""; settingsOpen = true; }
+  function setRefreshSeconds(seconds: RefreshSeconds) {
+    refreshSeconds = seconds;
+    customRefreshInput = REFRESH_OPTIONS.includes(seconds) ? "" : String(seconds);
+  }
+  function updateCustomRefresh(value: string) {
+    customRefreshInput = value.replace(/\D/g, "").slice(0, 5);
+    const seconds = Number(customRefreshInput);
+    if (seconds >= 1 && seconds <= 86400) refreshSeconds = seconds;
+  }
   function onSettingsKeyDown(event: KeyboardEvent) { if (event.key === "Escape") closeSettings(); }
   function portalSettingsBackdrop(node: HTMLDivElement) {
     const anchor = document.createComment("settings backdrop");
     node.before(anchor);
-    const mobile = window.matchMedia("(max-width: 640px)");
     let unlockPage: (() => void) | undefined;
-
-    const place = () => {
-      if (mobile.matches) {
-        document.body.appendChild(node);
-        unlockPage ??= lockPageScroll();
-      } else {
-        anchor.after(node);
-        unlockPage?.();
-        unlockPage = undefined;
-      }
-    };
-
-    place();
-    mobile.addEventListener("change", place);
+    document.body.appendChild(node);
+    unlockPage = lockPageScroll();
     return {
       destroy() {
-        mobile.removeEventListener("change", place);
         unlockPage?.();
         node.remove();
         anchor.remove();
@@ -1005,7 +1008,7 @@
       const savedMethods = localStorage.getItem(STORAGE.methods)?.split(",").filter((method): method is ExchangeMethod => EXCHANGE_METHODS.includes(method as ExchangeMethod)) ?? [];
       if (savedMethods.length) selectedExchangeMethods = EXCHANGE_METHODS.filter((method) => savedMethods.includes(method));
       const savedAssets = localStorage.getItem(STORAGE.assets); if (savedAssets != null) selectedIntermediaryAssets = [...new Set(savedAssets.split(",").map((asset) => asset.trim().toUpperCase()).filter(Boolean))];
-      const savedRefresh = Number(localStorage.getItem(STORAGE.refresh)); if (REFRESH_OPTIONS.includes(savedRefresh as RefreshSeconds)) refreshSeconds = savedRefresh as RefreshSeconds;
+      const savedRefresh = Number(localStorage.getItem(STORAGE.refresh)); if (Number.isInteger(savedRefresh) && savedRefresh >= 0 && savedRefresh <= 86400) setRefreshSeconds(savedRefresh);
       const savedActivityPeriod = localStorage.getItem(STORAGE.activityPeriod); if (SEARCH_ACTIVITY_PERIODS.includes(savedActivityPeriod as SearchActivityPeriod)) activityPeriod = savedActivityPeriod as SearchActivityPeriod;
       routesExpanded = localStorage.getItem(STORAGE.routesVisible) !== "false";
       const savedActivityVisible = localStorage.getItem(STORAGE.activityVisible);
@@ -1061,6 +1064,7 @@
     settingsWasOpen = modalOpen;
     if (modalOpen) {
       window.addEventListener("keydown", onSettingsKeyDown);
+      void tick().then(() => settingsSearchInput?.focus());
     } else {
       window.removeEventListener("keydown", onSettingsKeyDown);
     }
@@ -1094,42 +1098,51 @@
           <button type="button" class="helpButton" disabled={!paymentMethods.some(method => method.kind === "bank" && (method.role === "sender" || method.role === "both")) || !paymentMethods.some(method => method.kind === "bank" && (method.role === "recipient" || method.role === "both"))} on:click={() => void openWalkthrough()} aria-label={t("How to find a route", {}, activeLocale)} title={t("How to find a route", {}, activeLocale)} data-testid="start-converter-walkthrough">?</button>
           <button type="button" class="refreshButton" on:click={() => void startSearch()} disabled={!hasAmount || searching} aria-label={t("Refresh routes now", {}, activeLocale)}><img class:refreshSpin={awaitingFirstRoute} src="/icons/ui/route-refresh.png" alt="" width="18" height="18" aria-hidden="true" /></button>
           <div class="settingsWrap">
-            <button type="button" class="exchangesButton" on:click={() => { settingsOpen = false; exchangesOpen = !exchangesOpen; }} aria-haspopup="dialog" aria-expanded={exchangesOpen} aria-label={t("Choose exchanges", {}, activeLocale)}><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAACn0lEQVR4AbSVy0sVURzHZ9q0KcigiIyKrgUZRBS0SSgXLUKMIjAkEIKICHrgQqFF6tJFFEgXiqJNUemi6AGCyBVU0JWuBFHxgS8QUfAPuH6+xznHGe8493pF+X3O7/x+5/c4c+aecZ+3x38FN8hms/vhPnyCL3CrkL3lbUChCnhDsRH4ASm4B1/xX0QnSmwDEs9APfSSLe6gf0KZ7/uV6NtwGCogUSINKHgFtEvt9jWZk1Dt+34KXsEEtofukYajkCiuAYW1q06iD8ILUNE6iv1jXrS4BlR4AhkKVsEHWMbetZgG7L6MSvpVdDH/A5OQKMRLmkJBylGufgRaM5gGzE6A5CNDNQxASx46WP8MNk45yh2n6Un8RmwDYwTDcY6nFprzUMP6I7BxteTXgCStQdgGx2RAmoQFdFFCrp6qnuQqnuI02tvaYExOQUAjTEMmBvkbFRfDUOCLNAh8xSk2kII0rFDhF0huarBP8E0GWK3L1Mojn4LKGORvJd6jqG70MHP9zFFGVhmfsVZqGlBgCXycR3A+Ru9E6gg+AO+oUSKY3wVd2LOmAYZ2Uo7+Dy9pciPEOXxJYj4fBFyGHHENWOkHvZjz6EyIUZrJxpUr7PgvXv3yrhO3IrD1HtbQY+EG13BMBeiLadFF0hNdYm070ZG0hRYPMW+j+Vy4AT6vgaGBhR4Ltv1yKgkzV4gdhOdQwuoDkOjJ3D2Q4z3DU4J0WZg6mWVmGqILkatBkE4j0iDwbyrOsxlLl89dfextJYhvIuAtG11ERxp8x6GzJm5DsBWM8trx6F9nOTruZss3Q6Di5ymuzwWmF2nQjkcvSy/VYo9rhKQ+1pOkm8UW4krRTtxLZmEVfoP9Oup4dFs78F1QBlqN4m62fA9ZV45CHesAAAD//3Y7g4QAAAAGSURBVAMAao5eF665v54AAAAASUVORK5CYII=" alt="" width="18" height="18" aria-hidden="true" /></button>
-            {#if exchangesOpen}
-              <div class="settingsBackdrop" use:portalSettingsBackdrop on:mousedown={closeSettings} role="presentation">
-                <div class:settingsDragging class="settingsMenu exchangesMenu" bind:this={settingsDialog} role="dialog" aria-label="Exchange settings" tabindex="-1" on:mousedown|stopPropagation>
-                  <div class="settingsModalHeader"><span class="settingsSheetHandle" aria-hidden="true" on:pointerdown={startSettingsDrag} on:pointermove={moveSettingsDrag} on:pointerup={endSettingsDrag} on:pointercancel={endSettingsDrag}></span><button type="button" class="settingsClose" on:click={closeSettings} aria-label="Close exchange settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button></div>
-                  <div class="settingsHead"><div><strong>Search exchanges</strong></div></div>
-                  <div class="sourceOptions exchangeOptions exchangeModalOptions" aria-label="Exchanges to search">{#each exchangeChoices as source}{@const enabled = selectedSources.includes(source.id)}<button type="button" class:sourceOptionActive={enabled} class="sourceOption" aria-pressed={enabled} title={sourceTitle(source)} on:click={() => toggleSource(source.id)}><span class="sourceOptionIcon" aria-hidden="true"><img src={source.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackSourceIcon(event, source.id)} /></span>{source.label}</button>{/each}</div>
-                  {#if alwaysOnProviders.length}
-                    <div class="alwaysOnProviders" aria-label="Direct quote providers">
-                      <div class="alwaysOnHeading"><strong>Direct quote providers</strong><span>Compared automatically</span></div>
-                      <div class="sourceOptions exchangeOptions">{#each alwaysOnProviders as provider}<div class="sourceOption alwaysOnProvider" title={sourceTitle(provider)}><span class="sourceOptionIcon" aria-hidden="true"><img src={provider.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackSourceIcon(event, provider.id)} /></span><span>{provider.label}</span><small>Always on</small></div>{/each}</div>
-                    </div>
-                  {/if}
-                </div>
-              </div>
-            {/if}
+            <button type="button" class="exchangesButton" on:click={() => settingsOpen ? closeSettings() : openSettings()} aria-haspopup="dialog" aria-expanded={settingsOpen} aria-label={t("Choose exchanges", {}, activeLocale)}><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAACn0lEQVR4AbSVy0sVURzHZ9q0KcigiIyKrgUZRBS0SSgXLUKMIjAkEIKICHrgQqFF6tJFFEgXiqJNUemi6AGCyBVU0JWuBFHxgS8QUfAPuH6+xznHGe8493pF+X3O7/x+5/c4c+aecZ+3x38FN8hms/vhPnyCL3CrkL3lbUChCnhDsRH4ASm4B1/xX0QnSmwDEs9APfSSLe6gf0KZ7/uV6NtwGCogUSINKHgFtEvt9jWZk1Dt+34KXsEEtofukYajkCiuAYW1q06iD8ILUNE6iv1jXrS4BlR4AhkKVsEHWMbetZgG7L6MSvpVdDH/A5OQKMRLmkJBylGufgRaM5gGzE6A5CNDNQxASx46WP8MNk45yh2n6Un8RmwDYwTDcY6nFprzUMP6I7BxteTXgCStQdgGx2RAmoQFdFFCrp6qnuQqnuI02tvaYExOQUAjTEMmBvkbFRfDUOCLNAh8xSk2kII0rFDhF0huarBP8E0GWK3L1Mojn4LKGORvJd6jqG70MHP9zFFGVhmfsVZqGlBgCXycR3A+Ru9E6gg+AO+oUSKY3wVd2LOmAYZ2Uo7+Dy9pciPEOXxJYj4fBFyGHHENWOkHvZjz6EyIUZrJxpUr7PgvXv3yrhO3IrD1HtbQY+EG13BMBeiLadFF0hNdYm070ZG0hRYPMW+j+Vy4AT6vgaGBhR4Ltv1yKgkzV4gdhOdQwuoDkOjJ3D2Q4z3DU4J0WZg6mWVmGqILkatBkE4j0iDwbyrOsxlLl89dfextJYhvIuAtG11ERxp8x6GzJm5DsBWM8trx6F9nOTruZss3Q6Di5ymuzwWmF2nQjkcvSy/VYo9rhKQ+1pOkm8UW4krRTtxLZmEVfoP9Oup4dFs78F1QBlqN4m62fA9ZV45CHesAAAD//3Y7g4QAAAAGSURBVAMAao5eF665v54AAAAASUVORK5CYII=" alt="" width="18" height="18" aria-hidden="true" /></button>
           </div>
           <div class="settingsWrap">
-            <button type="button" class="settingsButton" on:click={() => { exchangesOpen = false; settingsOpen = !settingsOpen; }} aria-haspopup="dialog" aria-expanded={settingsOpen} aria-label={t("Route refresh settings", {}, activeLocale)}><img src="/icons/ui/route-settings.png" alt="" width="18" height="18" aria-hidden="true" /></button>
-            {#if settingsOpen}
-              <div class="settingsBackdrop" use:portalSettingsBackdrop on:mousedown={closeSettings} role="presentation">
-                <div class:settingsDragging class="settingsMenu" bind:this={settingsDialog} role="dialog" aria-label="Refresh settings" tabindex="-1" on:mousedown|stopPropagation>
-                <div class="settingsModalHeader"><span class="settingsSheetHandle" aria-hidden="true" on:pointerdown={startSettingsDrag} on:pointermove={moveSettingsDrag} on:pointerup={endSettingsDrag} on:pointercancel={endSettingsDrag}></span><button type="button" class="settingsClose" on:click={closeSettings} aria-label="Close route settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10m0-10L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></button></div>
-                <div class="settingsHead"><div><strong>Auto-refresh</strong></div></div>
-                <div class="refreshOptions">{#each REFRESH_OPTIONS as seconds}<button type="button" aria-pressed={refreshSeconds === seconds} on:click={() => { refreshSeconds = seconds; settingsOpen = false; }}>{refreshOptionLabel(seconds)}</button>{/each}</div>
-                <div class="sourceSettings exchangeMethodSettings"><div class="intermediarySettingsHead"><strong class="sourceSettingsLabel">{t("Exchange methods", {}, activeLocale)}</strong></div><div class="sourceOptions exchangeMethodOptions" aria-label={t("Exchange methods", {}, activeLocale)}>
-                  {#each EXCHANGE_METHODS as method}{@const enabled = selectedExchangeMethods.includes(method)}<button type="button" class:sourceOptionActive={enabled} class="sourceOption" aria-pressed={enabled} on:click={() => toggleExchangeMethod(method)}>{method === "p2p" ? "P2P" : t("Exchangers", {}, activeLocale)}</button>{/each}
-                </div></div>
-                <div class="sourceSettings"><div class="intermediarySettingsHead"><strong class="sourceSettingsLabel">Cryptocurrency intermediary</strong></div><div class="sourceOptions intermediaryOptions" aria-label="Cryptocurrency intermediaries">
-                  <button type="button" class:sourceOptionActive={selectedIntermediaryAssets.length === 0} class="sourceOption" aria-pressed={selectedIntermediaryAssets.length === 0} on:click={() => { selectedIntermediaryAssets = []; resetResults(); }}>All available</button>
-                  {#each INTERMEDIARY_ASSETS as asset}{@const enabled = selectedIntermediaryAssets.includes(asset)}<button type="button" class:sourceOptionActive={enabled} class="sourceOption" aria-pressed={enabled} on:click={() => toggleAsset(asset)}><span class="intermediaryAssetIcon" aria-hidden="true"><img src={intermediaryIcon(asset)} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={fallbackAssetIcon} /></span>{asset}</button>{/each}
-                </div></div>
+            <button type="button" class="settingsButton" on:click={() => settingsOpen ? closeSettings() : openSettings()} aria-haspopup="dialog" aria-expanded={settingsOpen} aria-label={t("Route refresh settings", {}, activeLocale)}><img src="/icons/ui/route-settings.png" alt="" width="18" height="18" aria-hidden="true" /></button>
+          </div>
+          {#if settingsOpen}
+            <div class="settingsBackdrop" use:portalSettingsBackdrop on:mousedown={closeSettings} role="presentation">
+              <div class:settingsDragging class="settingsMenu settingsModal" bind:this={settingsDialog} role="dialog" aria-modal="true" aria-label="Settings and exchanges" tabindex="-1" on:mousedown|stopPropagation>
+                <div class="settingsModalHeader"><span class="settingsSheetHandle" aria-hidden="true" on:pointerdown={startSettingsDrag} on:pointermove={moveSettingsDrag} on:pointerup={endSettingsDrag} on:pointercancel={endSettingsDrag}></span></div>
+                <div class="settingsHead"><div><strong>Settings and exchanges</strong><span>Search and choose what to include in route search</span></div></div>
+                <label class="settingsSearch"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 4.2 4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><input bind:this={settingsSearchInput} type="search" bind:value={settingsQuery} placeholder="Search settings and exchanges" aria-label="Search settings and exchanges" /><kbd>ESC</kbd></label>
+                <div class="settingsModalContent">
+                  {#if showRefreshSettings}
+                    <section class="settingsSection"><div class="settingsSectionHeading"><strong>Auto-refresh</strong><span>Refresh routes automatically</span></div>
+                      <div class="refreshChoice" style={`--refresh-shift: ${(!REFRESH_OPTIONS.includes(refreshSeconds) ? REFRESH_OPTIONS.length : REFRESH_OPTIONS.indexOf(refreshSeconds)) * 100}%`}>
+                        <span class="refreshChoiceSlider" aria-hidden="true"></span>
+                        {#each REFRESH_OPTIONS as seconds}<button type="button" aria-pressed={refreshSeconds === seconds} on:click={() => setRefreshSeconds(seconds)}>{refreshOptionLabel(seconds)}</button>{/each}
+                        <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" placeholder="sec" title="1–86400 seconds" aria-label="Custom refresh interval in seconds" value={customRefreshInput} on:input={(event) => updateCustomRefresh(event.currentTarget.value)} />
+                      </div>
+                    </section>
+                  {/if}
+                  {#if showExchangeMethods}
+                    <section class="settingsSection"><div class="settingsSectionHeading"><strong>{t("Exchange methods", {}, activeLocale)}</strong><span>Choose one or both</span></div>
+                      <div class="settingsToggleGrid" aria-label={t("Exchange methods", {}, activeLocale)}>{#each EXCHANGE_METHODS as method}{@const enabled = selectedExchangeMethods.includes(method)}<button type="button" class="settingsToggleOption" aria-pressed={enabled} on:click={() => toggleExchangeMethod(method)}><span>{method === "p2p" ? "P2P" : t("Exchangers", {}, activeLocale)}</span><span class="iosSwitch" class:iosSwitchOn={enabled} aria-hidden="true"><i></i></span></button>{/each}</div>
+                    </section>
+                  {/if}
+                  {#if !settingsQuery || "cryptocurrency intermediary crypto currency all available".includes(settingsQuery.trim().toLowerCase()) || filteredIntermediaryAssets.length}
+                    <section class="settingsSection"><div class="settingsSectionHeading"><strong>Cryptocurrency intermediary</strong><span>Select assets to use between currencies</span></div>
+                      <div class="settingsToggleGrid" aria-label="Cryptocurrency intermediaries">
+                        {#if !settingsQuery || "all available".includes(settingsQuery.trim().toLowerCase())}<button type="button" class="settingsToggleOption" aria-pressed={selectedIntermediaryAssets.length === 0} on:click={() => { selectedIntermediaryAssets = []; resetResults(); }}><span>All available</span><span class="iosSwitch" class:iosSwitchOn={selectedIntermediaryAssets.length === 0} aria-hidden="true"><i></i></span></button>{/if}
+                        {#each filteredIntermediaryAssets as asset}{@const enabled = selectedIntermediaryAssets.includes(asset)}<button type="button" class="settingsToggleOption" aria-pressed={enabled} on:click={() => toggleAsset(asset)}><span class="settingsToggleLabel"><span class="intermediaryAssetIcon" aria-hidden="true"><img src={intermediaryIcon(asset)} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={fallbackAssetIcon} /></span>{asset}</span><span class="iosSwitch" class:iosSwitchOn={enabled} aria-hidden="true"><i></i></span></button>{/each}
+                      </div>
+                    </section>
+                  {/if}
+                  {#if !settingsQuery || "exchanges exchange биржи".includes(settingsQuery.trim().toLowerCase()) || filteredExchangeChoices.length || filteredAlwaysOnProviders.length}
+                    <section class="settingsSection"><div class="settingsSectionHeading"><strong>Exchanges</strong><span>Choose providers to search</span></div>
+                      <div class="settingsToggleGrid" aria-label="Exchanges to search">{#each filteredExchangeChoices as source}{@const enabled = selectedSources.includes(source.id)}<button type="button" class="settingsToggleOption" aria-pressed={enabled} title={sourceTitle(source)} on:click={() => toggleSource(source.id)}><span class="settingsToggleLabel"><span class="sourceOptionIcon" aria-hidden="true"><img src={source.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackSourceIcon(event, source.id)} /></span>{source.label}</span><span class="iosSwitch" class:iosSwitchOn={enabled} aria-hidden="true"><i></i></span></button>{/each}</div>
+                      {#if filteredAlwaysOnProviders.length}<div class="alwaysOnProviders"><div class="alwaysOnHeading"><strong>Direct quote providers</strong><span>Compared automatically</span></div><div class="settingsToggleGrid">{#each filteredAlwaysOnProviders as provider}<div class="settingsToggleOption alwaysOnProvider" title={sourceTitle(provider)}><span class="settingsToggleLabel"><span class="sourceOptionIcon" aria-hidden="true"><img src={provider.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackSourceIcon(event, provider.id)} /></span>{provider.label}</span><small>Always on</small></div>{/each}</div></div>{/if}
+                    </section>
+                  {/if}
+                  {#if settingsQuery && !filteredExchangeChoices.length && !filteredAlwaysOnProviders.length && !filteredIntermediaryAssets.length && !showRefreshSettings && !showExchangeMethods}<p class="settingsNoResults">No matching settings or exchanges</p>{/if}
                 </div>
               </div>
-            {/if}
-          </div>
+            </div>
+          {/if}
         </div>
       </div>
 
@@ -1406,20 +1419,24 @@
 }
 
 .settingsBackdrop {
-  position: static;
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(8, 11, 8, 0.52);
+  animation: fadeIn 0.2s ease-out;
 }
 
 .settingsMenu {
-  position: absolute;
-  top: calc(100% + 9px);
-  right: 0;
-  z-index: 80;
-  width: 310px;
-  max-height: min(680px, calc(100vh - 32px));
+  position: relative;
+  width: min(760px, calc(100vw - 48px));
+  max-height: min(760px, calc(100dvh - 48px));
   overflow-y: auto;
-  padding: 17px;
+  padding: 22px;
   border: 1px solid var(--color-border);
-  border-radius: 20px;
+  border-radius: 22px;
   background: rgba(255, 255, 255, 0.97);
   box-shadow: none;
   backdrop-filter: blur(24px);
@@ -1461,6 +1478,158 @@
   font-size: 12px;
   line-height: 1.5;
 }
+
+.settingsSearch {
+  display: flex;
+  height: 46px;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0 4px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 13px;
+  background: var(--color-panel);
+  color: var(--color-text-faint);
+}
+
+.settingsSearch:focus-within {
+  border-color: var(--color-accent);
+}
+
+.settingsSearch input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 14px;
+}
+
+.settingsSearch input::placeholder { color: var(--color-text-faint); }
+.settingsSearch kbd { color: var(--color-text-faint); font-size: 10px; }
+
+.settingsModalContent {
+  display: grid;
+  gap: 4px;
+}
+
+.settingsSection {
+  padding: 18px 0 4px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.settingsSection:last-child { border-bottom: 0; }
+
+.settingsSectionHeading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 11px;
+}
+
+.settingsSectionHeading strong { font-size: 13px; font-weight: 800; }
+.settingsSectionHeading span { color: var(--color-text-faint); font-size: 11px; }
+
+.refreshChoice {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0;
+  padding: 4px;
+  border-radius: 14px;
+  background: var(--color-panel);
+}
+
+.refreshChoiceSlider {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc((100% - 8px) / 7);
+  border-radius: 10px;
+  background: var(--color-accent);
+  transition: transform 300ms ease-in-out;
+  transform: translateX(var(--refresh-shift));
+}
+
+.refreshChoice button,
+.refreshChoice input {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--color-text-soft);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  text-align: center;
+}
+
+.refreshChoice button[aria-pressed="true"] { color: #171717; }
+.refreshChoice input { outline: 0; }
+.refreshChoice input::placeholder { color: var(--color-text-faint); }
+.refreshChoice input:focus { box-shadow: inset 0 0 0 1px var(--color-accent); }
+
+.settingsToggleGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.settingsToggleOption {
+  display: flex;
+  min-width: 0;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 13px;
+  background: var(--color-panel);
+  color: var(--color-text-soft);
+  font-size: 12px;
+  font-weight: 750;
+  text-align: left;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.settingsToggleOption:hover { border-color: var(--color-border-strong); }
+.settingsToggleLabel { display: flex; min-width: 0; align-items: center; gap: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.iosSwitch {
+  display: inline-flex;
+  width: 34px;
+  height: 20px;
+  flex: 0 0 34px;
+  align-items: center;
+  padding: 2px;
+  border-radius: 999px;
+  background: #a5a5a5;
+  transition: background 180ms ease;
+}
+
+.iosSwitch i {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+  transition: transform 180ms ease;
+}
+
+.iosSwitchOn { background: #34c759; }
+.iosSwitchOn i { transform: translateX(14px); }
+.alwaysOnProvider { color: var(--color-text-faint); }
+.alwaysOnProvider small { color: var(--color-good); font-size: 10px; font-weight: 800; white-space: nowrap; }
+.settingsNoResults { padding: 22px 0; color: var(--color-text-faint); font-size: 13px; text-align: center; }
 
 .refreshOptions {
   display: grid;
@@ -2781,6 +2950,10 @@
     touch-action: auto;
     transform: translateY(var(--settings-sheet-drag, 0px));
     transition: transform 0.24s ease;
+  }
+
+  .settingsToggleGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .exchangesMenu {

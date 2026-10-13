@@ -122,10 +122,10 @@ html[data-theme="dark"] {
   --shadow-card: none;
   --shadow-pop: none;
   --page-bg: #101010;
-  --shell-glow: rgba(255, 255, 255, 0.035);
-  --shell-accent-glow: rgba(255, 255, 255, 0.025);
-  --shell-gradient: linear-gradient(180deg, #181818 0%, #111111 55%, #0b0b0b 100%);
-  --puzzle-opacity: 0.035;
+  --shell-glow: transparent;
+  --shell-accent-glow: transparent;
+  --shell-gradient: #101010;
+  --puzzle-opacity: 0;
 }
 
 html {
