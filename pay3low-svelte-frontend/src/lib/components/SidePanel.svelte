@@ -224,12 +224,6 @@
                 </button>
                 {#if complete && route.feedback}<div class="routeFeedback" aria-label="Route feedback"><span class="serviceVote routeVote"><button type="button" class:active={route.feedback.viewer_vote === "like"} aria-label="Like this route" aria-pressed={route.feedback.viewer_vote === "like"} title="Like this route" on:click={() => onVote(route, "like")}><img src={likeIcon} alt="" aria-hidden="true" />{#if route.feedback.viewer_vote}<span aria-label={`${compact(route.feedback.likes_total)} likes`}>{compact(route.feedback.likes_total)}</span>{/if}</button><button type="button" class:active={route.feedback.viewer_vote === "dislike"} aria-label="Dislike this route" aria-pressed={route.feedback.viewer_vote === "dislike"} title="Dislike this route" on:click={() => onVote(route, "dislike")}><img src={dislikeIcon} alt="" aria-hidden="true" />{#if route.feedback.viewer_vote}<span aria-label={`${compact(route.feedback.dislikes_total)} dislikes`}>{compact(route.feedback.dislikes_total)}</span>{/if}</button></span></div>{/if}
               </div>
-              {#if route.route_fees?.length || route.quote_expires_at}
-                <span class="routeQuoteMeta">
-                  {#if route.route_fees?.length}Fee {route.route_fees.map((fee) => `${fee.amount} ${fee.asset}`).join(" + ")}{/if}
-                  {#if route.quote_expires_at} · Quote expires {new Date(route.quote_expires_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{/if}
-                </span>
-              {/if}
               </div>
             </div></li>
           {/each}
@@ -853,17 +847,6 @@
   line-height: 1;
 }
 
-.routeQuoteMeta {
-  position: relative;
-  z-index: 1;
-  overflow: hidden;
-  color: rgba(255, 255, 255, 0.42);
-  font-size: 12px;
-  line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .workflowPart {
   display: inline-flex;
   min-width: 0;
@@ -1408,7 +1391,6 @@
 .panel { padding-top: 19px; }
 .routeGroups { margin-top: 0; padding: 0 6px 12px 0; border-bottom: 1px solid var(--color-border); }
 .emptyState p { font-size: 14px; }
-.routeQuoteMeta { overflow-wrap: anywhere; }
 .foundVenuePopover::before { position: absolute; height: 12px; left: 0; right: 0; bottom: 100%; content: ""; }
 :global(html[data-theme="dark"]) .venueFilterClear,
 :global(html[data-theme="dark"]) .foundVenuePopover .venueOk { color: var(--color-accent-text); }
