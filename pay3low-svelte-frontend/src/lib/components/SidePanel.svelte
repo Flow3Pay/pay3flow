@@ -55,6 +55,11 @@
     const value = exact ? Number(exact) : minor == null ? null : minor / 100;
     return value == null || !Number.isFinite(value) ? "—" : `${value.toLocaleString("en-US", { maximumFractionDigits: exact ? 20 : 2, useGrouping: false })} ${currency ?? ""}`;
   };
+  const compactRouteAmount = (minor?: number, currency?: string, exact?: string) => {
+    const full = money(minor, currency, exact);
+    const match = full.match(/^(\S+)(\s+.*)$/);
+    return match && match[1].length > 10 ? `${match[1].slice(0, 7)}…${match[2]}` : full;
+  };
   const spreadLabel = (bps: number, language: Locale) => Math.abs(bps / 100) < 0.005
     ? t("Same output", {}, language)
     : t("{percent}% less", { percent: Math.abs(bps / 100).toFixed(2) }, language);
@@ -252,7 +257,7 @@
             <li animate:flip={{ duration: routeFlipDuration, easing: quintOut }} in:fly={{ y: 18, duration: routeEnterDuration(), easing: quintOut }}><div class="routeCardShell">
               <div class:routeBest={route.is_current_best} class:selected={route.route_id === selectedRouteId} class="routeCard" data-testid={complete ? "complete-route" : "partial-route"}>
               <button type="button" class="routeCardMain" disabled={!complete} aria-pressed={route.route_id === selectedRouteId} aria-label={`Select route ${index + 1}: ${money(route.target_amount_minor, route.target_currency, route.target_amount)}`} on:click={(event) => cardClick(event, route)}>
-                <span class="routeTopline"><span class="routeBadges">{#if route.is_current_best}<span class="bestBadge" data-testid="best-route-badge">{t("Best router", {}, $locale)}</span>{/if}{#if route.profitability}<span class={route.is_current_best ? "bestBadge" : "deltaBadge"}>{profitLabel(route)}</span>{:else if !route.is_current_best}<span class="deltaBadge">{spreadLabel(route.spread_bps, $locale)}</span>{/if}</span><span class="routeAmount">{money(route.target_amount_minor, route.target_currency, route.target_amount)}</span></span>
+                <span class="routeTopline"><span class="routeAmount">{compactRouteAmount(route.target_amount_minor, route.target_currency, route.target_amount)}</span><span class="routeBadges">{#if route.is_current_best}<span class="bestBadge" data-testid="best-route-badge">{t("Best router", {}, $locale)}</span>{/if}{#if route.profitability}<span class={route.is_current_best ? "bestBadge" : "deltaBadge"}>{profitLabel(route)}</span>{:else if !route.is_current_best}<span class="deltaBadge">{spreadLabel(route.spread_bps, $locale)}</span>{/if}</span></span>
               </button>
               <div class="routeActionRow">
                 <button type="button" class="routeWorkflowButton" disabled={!complete} aria-label={workflowLabel(route)} on:click={(event) => cardClick(event, route)}>
