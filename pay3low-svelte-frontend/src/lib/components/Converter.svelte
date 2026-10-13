@@ -80,10 +80,12 @@
   let sourceNetworkId = FALLBACK_NETWORK.id;
   let targetNetworkId = FALLBACK_NETWORK.id;
   let settingsOpen = false;
+  let exchangesOpen = false;
   let showBelarusP2pWarning = false;
   let refreshSeconds: RefreshSeconds = 15;
   let customRefreshInput = "";
   let settingsQuery = "";
+  let exchangesQuery = "";
   let p2pSources: P2pSourceOption[] = [];
   let venueNames: Record<string, string> = {};
   let venueUrls: Record<string, string> = {};
@@ -114,6 +116,7 @@
   let settingsElement: HTMLDivElement;
   let settingsDialog: HTMLDivElement;
   let settingsSearchInput: HTMLInputElement;
+  let exchangesSearchInput: HTMLInputElement;
   let settingsDragging = false;
   let settingsDragStartY = 0;
   let settingsDragDistance = 0;
@@ -153,7 +156,7 @@
   let foundVenueIds: string[] = [];
   $: activeLocale = $locale;
   $: home = homeContent[activeLocale];
-  $: modalOpen = settingsOpen;
+  $: modalOpen = settingsOpen || exchangesOpen;
 
   async function refreshActivity(source: string, target: string, period: SearchActivityPeriod, refreshedAt: number | null, interval: number) {
     const displayKey = `${source}|${target}|${period}`;
@@ -260,8 +263,8 @@
   const refreshOptionLabel = (seconds: RefreshSeconds) => seconds === 0 ? "Off" : seconds < 60 ? `${seconds}s` : `${seconds / 60}m`;
   const amountFromRoute = (route?: RouteCandidate | null) => {
     if (!route) return "0";
-    if (route.target_amount && CRYPTO_CURRENCIES.has(route.target_currency?.toUpperCase() ?? "")) {
-      return Number(route.target_amount).toLocaleString("en-US", { maximumFractionDigits: 8, useGrouping: false });
+    if (route.target_amount) {
+      return Number(route.target_amount).toLocaleString("en-US", { maximumFractionDigits: 20, useGrouping: false });
     }
     return amountFromMinor(route.target_amount_minor);
   };
@@ -591,9 +594,9 @@
   $: refreshProgress = secondsUntilRefresh !== null && refreshSeconds ? ((refreshSeconds - secondsUntilRefresh) / refreshSeconds) * 100 : 0;
   $: exchangeChoices = p2pSources.filter((source) => source.searchMode !== "always_on");
   $: alwaysOnProviders = p2pSources.filter((source) => source.searchMode === "always_on");
-  $: filteredExchangeChoices = exchangeChoices.filter((source) => `${source.label} ${source.id}`.toLowerCase().includes(settingsQuery.trim().toLowerCase()));
-  $: filteredAlwaysOnProviders = alwaysOnProviders.filter((source) => `${source.label} ${source.id}`.toLowerCase().includes(settingsQuery.trim().toLowerCase()));
-  $: filteredIntermediaryAssets = INTERMEDIARY_ASSETS.filter((asset) => asset.toLowerCase().includes(settingsQuery.trim().toLowerCase()));
+  $: filteredExchangeChoices = exchangeChoices.filter((source) => `${source.label} ${source.id}`.toLowerCase().includes(exchangesQuery.trim().toLowerCase()));
+  $: filteredAlwaysOnProviders = alwaysOnProviders.filter((source) => `${source.label} ${source.id}`.toLowerCase().includes(exchangesQuery.trim().toLowerCase()));
+  $: filteredIntermediaryAssets = INTERMEDIARY_ASSETS.filter((asset) => asset.toLowerCase().includes(exchangesQuery.trim().toLowerCase()));
   $: showRefreshSettings = !settingsQuery || "auto-refresh refresh interval time обновление время custom seconds sec off".includes(settingsQuery.trim().toLowerCase()) || REFRESH_OPTIONS.some((seconds) => refreshOptionLabel(seconds).toLowerCase().includes(settingsQuery.trim().toLowerCase()));
   $: showExchangeMethods = !settingsQuery || "exchange methods p2p exchangers".includes(settingsQuery.trim().toLowerCase()) || "обмен методы".includes(settingsQuery.trim().toLowerCase());
   $: searchingVenues = [...new Set([...selectedSources, ...alwaysOnProviders.map((provider) => provider.id)])].map((source) => p2pSources.find((item) => item.id === source) ?? { id: source, label: source, iconUrl: venueIcon(source), searchable: true, searchMode: "selectable" as const });
@@ -921,8 +924,9 @@
   function toggleExchangeMethod(method: ExchangeMethod) { initialSearchReady = true; selectedExchangeMethods = selectedExchangeMethods.includes(method) ? (selectedExchangeMethods.length === 1 ? selectedExchangeMethods : selectedExchangeMethods.filter((item) => item !== method)) : EXCHANGE_METHODS.filter((item) => item === method || selectedExchangeMethods.includes(item)); resetResults(); }
   function toggleAsset(asset: string) { initialSearchReady = true; selectedIntermediaryAssets = selectedIntermediaryAssets.includes(asset) ? selectedIntermediaryAssets.filter((item) => item !== asset) : [...selectedIntermediaryAssets, asset]; resetResults(); }
   function onDocumentMouseDown(event: MouseEvent) { if (modalOpen && settingsElement && !settingsElement.contains(event.target as Node)) closeSettings(); }
-  function closeSettings() { settingsOpen = false; settingsQuery = ""; }
-  function openSettings() { settingsQuery = ""; settingsOpen = true; }
+  function closeSettings() { settingsOpen = false; exchangesOpen = false; settingsQuery = ""; exchangesQuery = ""; }
+  function openSettings() { closeSettings(); settingsOpen = true; }
+  function openExchanges() { closeSettings(); exchangesOpen = true; }
   function setRefreshSeconds(seconds: RefreshSeconds) {
     refreshSeconds = seconds;
     customRefreshInput = REFRESH_OPTIONS.includes(seconds) ? "" : String(seconds);
@@ -957,7 +961,7 @@
   function moveSettingsDrag(event: PointerEvent) {
     if (!settingsDragging) return;
     settingsDragDistance = Math.max(0, event.clientY - settingsDragStartY);
-    settingsDialog?.style.setProperty("--settings-sheet-drag", `${settingsDragDistance}px`);
+    settingsDialog?.style.setProperty("--sheet-drag", `${settingsDragDistance}px`);
   }
   function endSettingsDrag() {
     if (!settingsDragging) return;
@@ -966,7 +970,7 @@
     if (shouldClose) {
       closeSettings();
     } else {
-      settingsDialog?.style.removeProperty("--settings-sheet-drag");
+      settingsDialog?.style.removeProperty("--sheet-drag");
     }
   }
   function hideBrokenImage(event: Event) {
@@ -1064,7 +1068,7 @@
     settingsWasOpen = modalOpen;
     if (modalOpen) {
       window.addEventListener("keydown", onSettingsKeyDown);
-      void tick().then(() => settingsSearchInput?.focus());
+      void tick().then(() => (settingsOpen ? settingsSearchInput : exchangesSearchInput)?.focus());
     } else {
       window.removeEventListener("keydown", onSettingsKeyDown);
     }
@@ -1098,17 +1102,17 @@
           <button type="button" class="helpButton" disabled={!paymentMethods.some(method => method.kind === "bank" && (method.role === "sender" || method.role === "both")) || !paymentMethods.some(method => method.kind === "bank" && (method.role === "recipient" || method.role === "both"))} on:click={() => void openWalkthrough()} aria-label={t("How to find a route", {}, activeLocale)} title={t("How to find a route", {}, activeLocale)} data-testid="start-converter-walkthrough">?</button>
           <button type="button" class="refreshButton" on:click={() => void startSearch()} disabled={!hasAmount || searching} aria-label={t("Refresh routes now", {}, activeLocale)}><img class:refreshSpin={awaitingFirstRoute} src="/icons/ui/route-refresh.png" alt="" width="18" height="18" aria-hidden="true" /></button>
           <div class="settingsWrap">
-            <button type="button" class="exchangesButton" on:click={() => settingsOpen ? closeSettings() : openSettings()} aria-haspopup="dialog" aria-expanded={settingsOpen} aria-label={t("Choose exchanges", {}, activeLocale)}><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAACn0lEQVR4AbSVy0sVURzHZ9q0KcigiIyKrgUZRBS0SSgXLUKMIjAkEIKICHrgQqFF6tJFFEgXiqJNUemi6AGCyBVU0JWuBFHxgS8QUfAPuH6+xznHGe8493pF+X3O7/x+5/c4c+aecZ+3x38FN8hms/vhPnyCL3CrkL3lbUChCnhDsRH4ASm4B1/xX0QnSmwDEs9APfSSLe6gf0KZ7/uV6NtwGCogUSINKHgFtEvt9jWZk1Dt+34KXsEEtofukYajkCiuAYW1q06iD8ILUNE6iv1jXrS4BlR4AhkKVsEHWMbetZgG7L6MSvpVdDH/A5OQKMRLmkJBylGufgRaM5gGzE6A5CNDNQxASx46WP8MNk45yh2n6Un8RmwDYwTDcY6nFprzUMP6I7BxteTXgCStQdgGx2RAmoQFdFFCrp6qnuQqnuI02tvaYExOQUAjTEMmBvkbFRfDUOCLNAh8xSk2kII0rFDhF0huarBP8E0GWK3L1Mojn4LKGORvJd6jqG70MHP9zFFGVhmfsVZqGlBgCXycR3A+Ru9E6gg+AO+oUSKY3wVd2LOmAYZ2Uo7+Dy9pciPEOXxJYj4fBFyGHHENWOkHvZjz6EyIUZrJxpUr7PgvXv3yrhO3IrD1HtbQY+EG13BMBeiLadFF0hNdYm070ZG0hRYPMW+j+Vy4AT6vgaGBhR4Ltv1yKgkzV4gdhOdQwuoDkOjJ3D2Q4z3DU4J0WZg6mWVmGqILkatBkE4j0iDwbyrOsxlLl89dfextJYhvIuAtG11ERxp8x6GzJm5DsBWM8trx6F9nOTruZss3Q6Di5ymuzwWmF2nQjkcvSy/VYo9rhKQ+1pOkm8UW4krRTtxLZmEVfoP9Oup4dFs78F1QBlqN4m62fA9ZV45CHesAAAD//3Y7g4QAAAAGSURBVAMAao5eF665v54AAAAASUVORK5CYII=" alt="" width="18" height="18" aria-hidden="true" /></button>
+            <button type="button" class="exchangesButton" on:click={() => exchangesOpen ? closeSettings() : openExchanges()} aria-haspopup="dialog" aria-expanded={exchangesOpen} aria-label={t("Choose exchanges", {}, activeLocale)}><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAACn0lEQVR4AbSVy0sVURzHZ9q0KcigiIyKrgUZRBS0SSgXLUKMIjAkEIKICHrgQqFF6tJFFEgXiqJNUemi6AGCyBVU0JWuBFHxgS8QUfAPuH6+xznHGe8493pF+X3O7/x+5/c4c+aecZ+3x38FN8hms/vhPnyCL3CrkL3lbUChCnhDsRH4ASm4B1/xX0QnSmwDEs9APfSSLe6gf0KZ7/uV6NtwGCogUSINKHgFtEvt9jWZk1Dt+34KXsEEtofukYajkCiuAYW1q06iD8ILUNE6iv1jXrS4BlR4AhkKVsEHWMbetZgG7L6MSvpVdDH/A5OQKMRLmkJBylGufgRaM5gGzE6A5CNDNQxASx46WP8MNk45yh2n6Un8RmwDYwTDcY6nFprzUMP6I7BxteTXgCStQdgGx2RAmoQFdFFCrp6qnuQqnuI02tvaYExOQUAjTEMmBvkbFRfDUOCLNAh8xSk2kII0rFDhF0huarBP8E0GWK3L1Mojn4LKGORvJd6jqG70MHP9zFFGVhmfsVZqGlBgCXycR3A+Ru9E6gg+AO+oUSKY3wVd2LOmAYZ2Uo7+Dy9pciPEOXxJYj4fBFyGHHENWOkHvZjz6EyIUZrJxpUr7PgvXv3yrhO3IrD1HtbQY+EG13BMBeiLadFF0hNdYm070ZG0hRYPMW+j+Vy4AT6vgaGBhR4Ltv1yKgkzV4gdhOdQwuoDkOjJ3D2Q4z3DU4J0WZg6mWVmGqILkatBkE4j0iDwbyrOsxlLl89dfextJYhvIuAtG11ERxp8x6GzJm5DsBWM8trx6F9nOTruZss3Q6Di5ymuzwWmF2nQjkcvSy/VYo9rhKQ+1pOkm8UW4krRTtxLZmEVfoP9Oup4dFs78F1QBlqN4m62fA9ZV45CHesAAAD//3Y7g4QAAAAGSURBVAMAao5eF665v54AAAAASUVORK5CYII=" alt="" width="18" height="18" aria-hidden="true" /></button>
           </div>
           <div class="settingsWrap">
             <button type="button" class="settingsButton" on:click={() => settingsOpen ? closeSettings() : openSettings()} aria-haspopup="dialog" aria-expanded={settingsOpen} aria-label={t("Route refresh settings", {}, activeLocale)}><img src="/icons/ui/route-settings.png" alt="" width="18" height="18" aria-hidden="true" /></button>
           </div>
           {#if settingsOpen}
             <div class="settingsBackdrop" use:portalSettingsBackdrop on:mousedown={closeSettings} role="presentation">
-              <div class:settingsDragging class="settingsMenu settingsModal" bind:this={settingsDialog} role="dialog" aria-modal="true" aria-label="Settings and exchanges" tabindex="-1" on:mousedown|stopPropagation>
+              <div class:settingsDragging class="settingsMenu settingsModal" bind:this={settingsDialog} role="dialog" aria-modal="true" aria-label="Settings" tabindex="-1" on:mousedown|stopPropagation>
                 <div class="settingsModalHeader"><span class="settingsSheetHandle" aria-hidden="true" on:pointerdown={startSettingsDrag} on:pointermove={moveSettingsDrag} on:pointerup={endSettingsDrag} on:pointercancel={endSettingsDrag}></span></div>
-                <div class="settingsHead"><div><strong>Settings and exchanges</strong><span>Search and choose what to include in route search</span></div></div>
-                <label class="settingsSearch"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 4.2 4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><input bind:this={settingsSearchInput} type="search" bind:value={settingsQuery} placeholder="Search settings and exchanges" aria-label="Search settings and exchanges" /><kbd>ESC</kbd></label>
+                <div class="searchRow"><label class="searchBox"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.7"/><path d="m20 20-4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><input bind:this={settingsSearchInput} type="search" bind:value={settingsQuery} placeholder="Search settings" aria-label="Search settings" /></label><kbd>esc</kbd></div>
+                <div class="titleBar"><h2 class="title">Settings</h2></div>
                 <div class="settingsModalContent">
                   {#if showRefreshSettings}
                     <section class="settingsSection"><div class="settingsSectionHeading"><strong>Auto-refresh</strong><span>Refresh routes automatically</span></div>
@@ -1124,21 +1128,31 @@
                       <div class="settingsToggleGrid" aria-label={t("Exchange methods", {}, activeLocale)}>{#each EXCHANGE_METHODS as method}{@const enabled = selectedExchangeMethods.includes(method)}<button type="button" class="settingsToggleOption" aria-pressed={enabled} on:click={() => toggleExchangeMethod(method)}><span>{method === "p2p" ? "P2P" : t("Exchangers", {}, activeLocale)}</span><span class="iosSwitch" class:iosSwitchOn={enabled} aria-hidden="true"><i></i></span></button>{/each}</div>
                     </section>
                   {/if}
-                  {#if !settingsQuery || "cryptocurrency intermediary crypto currency all available".includes(settingsQuery.trim().toLowerCase()) || filteredIntermediaryAssets.length}
-                    <section class="settingsSection"><div class="settingsSectionHeading"><strong>Cryptocurrency intermediary</strong><span>Select assets to use between currencies</span></div>
-                      <div class="settingsToggleGrid" aria-label="Cryptocurrency intermediaries">
-                        {#if !settingsQuery || "all available".includes(settingsQuery.trim().toLowerCase())}<button type="button" class="settingsToggleOption" aria-pressed={selectedIntermediaryAssets.length === 0} on:click={() => { selectedIntermediaryAssets = []; resetResults(); }}><span>All available</span><span class="iosSwitch" class:iosSwitchOn={selectedIntermediaryAssets.length === 0} aria-hidden="true"><i></i></span></button>{/if}
-                        {#each filteredIntermediaryAssets as asset}{@const enabled = selectedIntermediaryAssets.includes(asset)}<button type="button" class="settingsToggleOption" aria-pressed={enabled} on:click={() => toggleAsset(asset)}><span class="settingsToggleLabel"><span class="intermediaryAssetIcon" aria-hidden="true"><img src={intermediaryIcon(asset)} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={fallbackAssetIcon} /></span>{asset}</span><span class="iosSwitch" class:iosSwitchOn={enabled} aria-hidden="true"><i></i></span></button>{/each}
+                  {#if settingsQuery && !showRefreshSettings && !showExchangeMethods}<p class="settingsNoResults">No matching settings</p>{/if}
+                </div>
+              </div>
+            </div>
+          {/if}
+          {#if exchangesOpen}
+            <div class="settingsBackdrop" use:portalSettingsBackdrop on:mousedown={closeSettings} role="presentation">
+              <div class:settingsDragging class="settingsMenu settingsModal" bind:this={settingsDialog} role="dialog" aria-modal="true" aria-label="Exchange selection" tabindex="-1" on:mousedown|stopPropagation>
+                <div class="settingsModalHeader"><span class="settingsSheetHandle" aria-hidden="true" on:pointerdown={startSettingsDrag} on:pointermove={moveSettingsDrag} on:pointerup={endSettingsDrag} on:pointercancel={endSettingsDrag}></span></div>
+                <div class="searchRow"><label class="searchBox"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.7"/><path d="m20 20-4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><input bind:this={exchangesSearchInput} type="search" bind:value={exchangesQuery} placeholder="Search exchanges and crypto" aria-label="Search exchanges and crypto" /></label><kbd>esc</kbd></div>
+                <div class="titleBar"><h2 class="title">Choose exchanges</h2></div>
+                <div class="settingsModalContent">
+                  <section class="settingsSection"><div class="settingsSectionHeading"><strong>Exchanges</strong><span>Switch providers on or off</span></div>
+                    <div class="settingsToggleGrid" aria-label="Exchanges to search">{#each filteredExchangeChoices as source}{@const enabled = selectedSources.includes(source.id)}<button type="button" class="settingsToggleOption" aria-pressed={enabled} title={sourceTitle(source)} on:click={() => toggleSource(source.id)}><span class="settingsToggleLabel"><span class="sourceOptionIcon" aria-hidden="true"><img src={source.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackSourceIcon(event, source.id)} /></span>{source.label}</span><span class="iosSwitch" class:iosSwitchOn={enabled} aria-hidden="true"><i></i></span></button>{/each}</div>
+                    {#if filteredAlwaysOnProviders.length}<div class="alwaysOnProviders"><div class="alwaysOnHeading"><strong>Direct quote providers</strong><span>Compared automatically</span></div><div class="settingsToggleGrid">{#each filteredAlwaysOnProviders as provider}<div class="settingsToggleOption alwaysOnProvider" title={sourceTitle(provider)}><span class="settingsToggleLabel"><span class="sourceOptionIcon" aria-hidden="true"><img src={provider.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackSourceIcon(event, provider.id)} /></span>{provider.label}</span><small>Always on</small></div>{/each}</div></div>{/if}
+                    {#if !exchangesQuery || "cryptocurrency intermediary crypto currency all available".includes(exchangesQuery.trim().toLowerCase()) || filteredIntermediaryAssets.length}
+                      <div class="settingsSection"><div class="settingsSectionHeading"><strong>Cryptocurrency intermediary</strong><span>Select assets used between currencies</span></div>
+                        <div class="settingsToggleGrid" aria-label="Cryptocurrency intermediaries">
+                          {#if !exchangesQuery || "all available".includes(exchangesQuery.trim().toLowerCase())}<button type="button" class="settingsToggleOption" aria-pressed={selectedIntermediaryAssets.length === 0} on:click={() => { selectedIntermediaryAssets = []; resetResults(); }}><span>All available</span><span class="iosSwitch" class:iosSwitchOn={selectedIntermediaryAssets.length === 0} aria-hidden="true"><i></i></span></button>{/if}
+                          {#each filteredIntermediaryAssets as asset}{@const enabled = selectedIntermediaryAssets.includes(asset)}<button type="button" class="settingsToggleOption" aria-pressed={enabled} on:click={() => toggleAsset(asset)}><span class="settingsToggleLabel"><span class="intermediaryAssetIcon" aria-hidden="true"><img src={intermediaryIcon(asset)} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={fallbackAssetIcon} /></span>{asset}</span><span class="iosSwitch" class:iosSwitchOn={enabled} aria-hidden="true"><i></i></span></button>{/each}
+                        </div>
                       </div>
-                    </section>
-                  {/if}
-                  {#if !settingsQuery || "exchanges exchange биржи".includes(settingsQuery.trim().toLowerCase()) || filteredExchangeChoices.length || filteredAlwaysOnProviders.length}
-                    <section class="settingsSection"><div class="settingsSectionHeading"><strong>Exchanges</strong><span>Choose providers to search</span></div>
-                      <div class="settingsToggleGrid" aria-label="Exchanges to search">{#each filteredExchangeChoices as source}{@const enabled = selectedSources.includes(source.id)}<button type="button" class="settingsToggleOption" aria-pressed={enabled} title={sourceTitle(source)} on:click={() => toggleSource(source.id)}><span class="settingsToggleLabel"><span class="sourceOptionIcon" aria-hidden="true"><img src={source.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackSourceIcon(event, source.id)} /></span>{source.label}</span><span class="iosSwitch" class:iosSwitchOn={enabled} aria-hidden="true"><i></i></span></button>{/each}</div>
-                      {#if filteredAlwaysOnProviders.length}<div class="alwaysOnProviders"><div class="alwaysOnHeading"><strong>Direct quote providers</strong><span>Compared automatically</span></div><div class="settingsToggleGrid">{#each filteredAlwaysOnProviders as provider}<div class="settingsToggleOption alwaysOnProvider" title={sourceTitle(provider)}><span class="settingsToggleLabel"><span class="sourceOptionIcon" aria-hidden="true"><img src={provider.iconUrl} alt="" width="18" height="18" loading="lazy" decoding="async" on:error={(event) => fallbackSourceIcon(event, provider.id)} /></span>{provider.label}</span><small>Always on</small></div>{/each}</div></div>{/if}
-                    </section>
-                  {/if}
-                  {#if settingsQuery && !filteredExchangeChoices.length && !filteredAlwaysOnProviders.length && !filteredIntermediaryAssets.length && !showRefreshSettings && !showExchangeMethods}<p class="settingsNoResults">No matching settings or exchanges</p>{/if}
+                    {/if}
+                    {#if exchangesQuery && !filteredExchangeChoices.length && !filteredAlwaysOnProviders.length && !filteredIntermediaryAssets.length && !"cryptocurrency intermediary crypto currency all available".includes(exchangesQuery.trim().toLowerCase())}<p class="settingsNoResults">No matching exchanges or crypto</p>{/if}
+                  </section>
                 </div>
               </div>
             </div>
@@ -1425,22 +1439,22 @@
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(8, 11, 8, 0.52);
-  animation: fadeIn 0.2s ease-out;
+  background: #11172255;
+  backdrop-filter: blur(5px);
+  touch-action: none;
 }
 
 .settingsMenu {
-  position: relative;
-  width: min(760px, calc(100vw - 48px));
-  max-height: min(760px, calc(100dvh - 48px));
-  overflow-y: auto;
-  padding: 22px;
+  display: flex;
+  width: min(100%, 480px);
+  max-height: min(620px, 88dvh);
+  flex-direction: column;
+  overflow: hidden;
   border: 1px solid var(--color-border);
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.97);
-  box-shadow: none;
-  backdrop-filter: blur(24px);
-  animation: popIn 0.18s ease;
+  border-radius: 12px;
+  background: var(--color-paper);
+  box-shadow: 0 24px 90px #11172224, 0 3px 12px #11172212;
+  touch-action: auto;
 }
 
 .settingsModalHeader {
@@ -1455,83 +1469,85 @@
   display: none;
 }
 
-.settingsHead {
+.searchRow {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
+  min-height: 58px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 6px 16px;
+  border-bottom: 1px solid var(--color-border);
 }
 
-.settingsHead > div {
+.searchBox {
   display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.settingsHead strong {
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.settingsHead span {
-  color: var(--color-text-faint);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.settingsSearch {
-  display: flex;
-  height: 46px;
+  min-width: 0;
+  min-height: 44px;
+  flex: 1;
   align-items: center;
   gap: 10px;
-  margin: 18px 0 4px;
-  padding: 0 12px;
-  border: 1px solid var(--color-border);
-  border-radius: 13px;
-  background: var(--color-panel);
   color: var(--color-text-faint);
 }
 
-.settingsSearch:focus-within {
-  border-color: var(--color-accent);
-}
-
-.settingsSearch input {
+.searchBox svg { flex: 0 0 auto; }
+.searchBox input {
   width: 100%;
   min-width: 0;
+  padding: 0;
   border: 0;
   outline: 0;
   background: transparent;
   color: var(--color-text);
   font: inherit;
   font-size: 14px;
+  font-weight: 450;
 }
 
-.settingsSearch input::placeholder { color: var(--color-text-faint); }
-.settingsSearch kbd { color: var(--color-text-faint); font-size: 10px; }
+.searchBox input::placeholder { color: var(--color-text-faint); opacity: 1; }
+.searchRow kbd {
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 3px 5px;
+  color: var(--color-text-faint);
+  font: 10px var(--font-mono);
+}
+
+.titleBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 16px 2px;
+}
+
+.titleBar h2 { margin: 0; color: var(--color-text-soft); font-size: 11px; font-weight: 500; }
 
 .settingsModalContent {
-  display: grid;
-  gap: 4px;
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 8px 12px;
+  scrollbar-gutter: stable;
 }
 
 .settingsSection {
-  padding: 18px 0 4px;
-  border-bottom: 1px solid var(--color-border);
+  padding: 0 0 8px;
 }
 
-.settingsSection:last-child { border-bottom: 0; }
+.settingsSection + .settingsSection { margin-top: 4px; padding-top: 7px; border-top: 1px solid var(--color-border); }
 
 .settingsSectionHeading {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 11px;
+  gap: 8px;
+  padding: 7px 8px;
+  margin: 0;
 }
 
-.settingsSectionHeading strong { font-size: 13px; font-weight: 800; }
-.settingsSectionHeading span { color: var(--color-text-faint); font-size: 11px; }
+.settingsSectionHeading strong { color: var(--color-text-faint); font-size: 10px; font-weight: 500; }
+.settingsSectionHeading span { color: var(--color-text-faint); font-size: 9px; text-align: right; }
 
 .refreshChoice {
   position: relative;
@@ -2925,30 +2941,22 @@
     display: grid;
     place-items: end center;
     padding: 0;
-    background: rgba(8, 11, 8, 0.52);
+    background: #11172255;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
-    animation: fadeIn 0.2s ease-out;
     touch-action: none;
   }
 
   .settingsMenu {
-    position: relative;
-    top: auto;
-    right: auto;
     width: 100%;
-    height: auto;
-    max-height: calc(100dvh - 16px);
+    max-height: 86dvh;
     box-sizing: border-box;
-    pointer-events: auto;
-    padding: 10px 16px calc(18px + env(safe-area-inset-bottom));
-    border-radius: 14px 14px 0 0;
-    animation: settingsSheetIn 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+    padding-bottom: env(safe-area-inset-bottom);
+    border-radius: 16px 16px 0 0;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     overscroll-behavior: contain;
-    touch-action: auto;
-    transform: translateY(var(--settings-sheet-drag, 0px));
+    transform: translateY(var(--sheet-drag, 0px));
     transition: transform 0.24s ease;
   }
 
@@ -2975,7 +2983,7 @@
   .settingsModalHeader {
     display: flex;
     min-height: 30px;
-    justify-content: space-between;
+    justify-content: center;
   }
 
   .settingsSheetHandle {
@@ -2997,12 +3005,16 @@
   }
 
   .settingsSheetHandle::after {
-    width: 38px;
-    height: 5px;
+    width: 36px;
+    height: 4px;
     border-radius: var(--radius-pill);
     background: var(--color-border-strong);
     content: "";
   }
+
+  .searchRow { min-height: 56px; padding-left: 14px; }
+  .searchBox input { font-size: 16px; }
+  .settingsModalContent { max-height: calc(86dvh - 116px); padding-bottom: 18px; }
 
   .settingsClose {
     display: none;
@@ -3062,7 +3074,6 @@
 :global(html[data-theme="dark"]) .authBox {
   border-color: var(--color-border-strong);
   background: rgba(25, 25, 25, 0.98);
-  box-shadow: none;
 }
 
 :global(html[data-theme="dark"]) .intentLabel {

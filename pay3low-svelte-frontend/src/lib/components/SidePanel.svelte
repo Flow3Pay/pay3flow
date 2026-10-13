@@ -52,10 +52,8 @@
   };
   const assetLabel = (currency?: string) => !currency ? "—" : currency.toUpperCase() === "USDT" ? currency : ASSET_NAMES[currency.toUpperCase()] ? `${currency} ${ASSET_NAMES[currency.toUpperCase()]}` : currency;
   const money = (minor?: number, currency?: string, exact?: string) => {
-    if (exact && ["BTC", "ETH", "USDC", "USDT", "SOL", "TRX", "TON", "XRP", "ADA", "AVAX", "DOT", "LINK", "LTC", "BCH", "BNB", "DOGE", "MATIC", "NEAR", "SUI", "APT", "ATOM", "UNI", "DAI", "FDUSD"].includes(currency?.toUpperCase() ?? "")) {
-      return `${Number(exact).toLocaleString("en-US", { maximumFractionDigits: 8, useGrouping: false })} ${currency ?? ""}`;
-    }
-    return minor == null ? "—" : `${(minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2, useGrouping: false })} ${currency ?? ""}`;
+    const value = exact ? Number(exact) : minor == null ? null : minor / 100;
+    return value == null || !Number.isFinite(value) ? "—" : `${value.toLocaleString("en-US", { maximumFractionDigits: exact ? 20 : 2, useGrouping: false })} ${currency ?? ""}`;
   };
   const spreadLabel = (bps: number, language: Locale) => Math.abs(bps / 100) < 0.005
     ? t("Same output", {}, language)
@@ -832,8 +830,6 @@
   position: relative;
   z-index: 1;
   overflow: hidden;
-  padding-bottom: 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   cursor: pointer;
   font-family: var(--font-sans);
   font-size: 22px;
@@ -1217,7 +1213,6 @@
 
 .routeAmount {
   color: var(--color-text);
-  border-bottom-color: var(--color-border);
 }
 
 .skeletonCard {
@@ -1418,7 +1413,8 @@
 
 
 .panelTop { transform: none; padding-bottom: 16px; border-bottom: 1px solid var(--color-border); }
-.routeGroups { padding: 12px 6px 12px 0; border-bottom: 1px solid var(--color-border); }
+.panel { padding-top: 12px; }
+.routeGroups { margin-top: 0; padding: 0 6px 12px 0; border-bottom: 1px solid var(--color-border); }
 .emptyState p { font-size: 14px; }
 .routeQuoteMeta { overflow-wrap: anywhere; }
 .foundVenuePopover::before { position: absolute; height: 12px; left: 0; right: 0; bottom: 100%; content: ""; }
