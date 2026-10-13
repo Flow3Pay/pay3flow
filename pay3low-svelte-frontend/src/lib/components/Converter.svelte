@@ -2560,6 +2560,9 @@
 .workspace.routesCollapsed .converterStack { transform: translateX(calc(50% + var(--workspace-gap) / 2)); }
 .routesReveal { display: flex; min-width: 0; align-self: start; }
 .routesReveal :global(.side) { width: 100%; }
+.workspace.activityExpanded .routesReveal { min-height: 690px; align-self: stretch; contain: size; }
+.workspace.activityExpanded .routesReveal :global(.side) { height: 100%; }
+.workspace.activityExpanded .routesReveal :global(.side .panel) { height: 100%; min-height: 0; }
 .workspace.activityExpanded:not(.routesCollapsed) .converterStack { align-self: stretch; }
 .panelToggles { position: relative; display: flex; height: 42px; flex: 0 0 auto; align-items: center; justify-content: center; padding: 8px 0 4px; }
 .chartToggle, .routesToggle, .mobileRoutesToggle { z-index: 3; display: grid; width: 48px; height: 30px; flex: 0 0 auto; place-items: center; padding: 0; border: 0; background: transparent; box-shadow: none; color: var(--color-text-soft); opacity: 1; cursor: pointer; transition: opacity .2s ease; -webkit-tap-highlight-color: transparent; }

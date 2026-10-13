@@ -72,57 +72,6 @@
   const reduceMotion = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const routeFlipDuration = (distance: number) => reduceMotion() || routes.length > 12 ? 0 : Math.min(680, 260 + distance * 0.65);
   const routeEnterDuration = () => reduceMotion() || routes.length > 12 ? 0 : 380;
-
-  function routeViewport(node: HTMLDivElement) {
-    const candidateList = node.querySelector<HTMLElement>(".routeList");
-    if (!candidateList) return;
-    const list = candidateList;
-
-    let frame = 0;
-    const resizeObserver = new ResizeObserver(scheduleMeasure);
-    const mutationObserver = new MutationObserver(() => {
-      observeVisibleCards();
-      scheduleMeasure();
-    });
-
-    function observeVisibleCards() {
-      resizeObserver.disconnect();
-      resizeObserver.observe(node);
-      resizeObserver.observe(list);
-      Array.from(list.children).slice(0, 4).forEach((card) => resizeObserver.observe(card));
-    }
-
-    function scheduleMeasure() {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        const cards = Array.from(list.children).slice(0, 4) as HTMLElement[];
-        const gap = Number.parseFloat(getComputedStyle(list).rowGap) || 0;
-        const listStyle = getComputedStyle(list);
-        const listPadding = (Number.parseFloat(listStyle.paddingTop) || 0)
-          + (Number.parseFloat(listStyle.paddingBottom) || 0);
-        const viewportStyle = getComputedStyle(node);
-        const viewportPadding = (Number.parseFloat(viewportStyle.paddingTop) || 0)
-          + (Number.parseFloat(viewportStyle.paddingBottom) || 0)
-          + (Number.parseFloat(viewportStyle.borderTopWidth) || 0)
-          + (Number.parseFloat(viewportStyle.borderBottomWidth) || 0);
-        const height = cards.reduce((total, card) => total + card.getBoundingClientRect().height, 0)
-          + Math.max(0, cards.length - 1) * gap + listPadding + viewportPadding;
-        node.style.setProperty("--route-viewport-height", `${height}px`);
-      });
-    }
-
-    observeVisibleCards();
-    scheduleMeasure();
-    mutationObserver.observe(list, { childList: true });
-
-    return {
-      destroy() {
-        cancelAnimationFrame(frame);
-        resizeObserver.disconnect();
-        mutationObserver.disconnect();
-      }
-    };
-  }
   $: pendingVenues = searchingVenues.filter((venue) => !foundVenues.some((found) => found.id === venue.id));
   $: routeVenues = foundVenues.filter((venue) => (venueStats[venue.id.toLowerCase()]?.routes_found ?? 0) > 0);
   $: visiblePendingVenues = pendingVenues.slice(0, 5);
@@ -176,7 +125,7 @@
 </script>
 
 <aside class="side active" aria-label="Found routes" aria-busy={searching} id="routes">
-  <div class="panel" class:panelRoutes={routes.length > 0}>
+  <div class="panel">
     <!-- Temporarily hidden: developer diagnostics for direction, result count, and venues.
     <div class="panelTop">
       <div class="panelHeading">
@@ -252,14 +201,15 @@
     -->
     {#if routes.length > 0}
       <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-      <div class="routeGroups" use:routeScrollColor use:routeViewport data-testid="route-groups" role="region" tabindex="0" aria-label="Found routes">
+      <div class="routeGroups" use:routeScrollColor data-testid="route-groups" role="region" tabindex="0" aria-label="Found routes">
         <ul class="routeList">
           {#each visibleRoutes as route, index (route.route_id)}
             {@const complete = route.status === "complete"}
             <li animate:flip={{ duration: routeFlipDuration, easing: quintOut }} in:fly={{ y: 18, duration: routeEnterDuration(), easing: quintOut }}><div class="routeCardShell">
               <div class:routeBest={route.is_current_best} class:selected={route.route_id === selectedRouteId} class="routeCard" data-testid={complete ? "complete-route" : "partial-route"}>
               <button type="button" class="routeCardMain" disabled={!complete} aria-pressed={route.route_id === selectedRouteId} aria-label={`Select route ${index + 1}: ${money(route.target_amount_minor, route.target_currency, route.target_amount)}`} on:click={(event) => cardClick(event, route)}>
-                <span class="routeTopline"><span class="routeAmount">{money(route.target_amount_minor, route.target_currency, route.target_amount)}</span><span class="routeBadges">{#if route.is_current_best}<span class="bestBadge" data-testid="best-route-badge">{t("Best router", {}, $locale)}</span>{/if}{#if route.profitability}<span class={route.is_current_best ? "bestBadge" : "deltaBadge"}>{profitLabel(route)}</span>{:else if !route.is_current_best}<span class="deltaBadge">{spreadLabel(route.spread_bps, $locale)}</span>{/if}</span></span>
+                <span class="routeTopline"><span class="routeBadges">{#if route.is_current_best}<span class="bestBadge" data-testid="best-route-badge">{t("Best router", {}, $locale)}</span>{/if}{#if route.profitability}<span class={route.is_current_best ? "bestBadge" : "deltaBadge"}>{profitLabel(route)}</span>{:else if !route.is_current_best}<span class="deltaBadge">{spreadLabel(route.spread_bps, $locale)}</span>{/if}</span></span>
+                <span class="routeAmount">{money(route.target_amount_minor, route.target_currency, route.target_amount)}</span>
               </button>
               <div class="routeActionRow">
                 <button type="button" class="routeWorkflowButton" disabled={!complete} aria-label={workflowLabel(route)} on:click={(event) => cardClick(event, route)}>
@@ -274,6 +224,12 @@
                 </button>
                 {#if complete && route.feedback}<div class="routeFeedback" aria-label="Route feedback"><span class="serviceVote routeVote"><button type="button" class:active={route.feedback.viewer_vote === "like"} aria-label="Like this route" aria-pressed={route.feedback.viewer_vote === "like"} title="Like this route" on:click={() => onVote(route, "like")}><img src={likeIcon} alt="" aria-hidden="true" />{#if route.feedback.viewer_vote}<span aria-label={`${compact(route.feedback.likes_total)} likes`}>{compact(route.feedback.likes_total)}</span>{/if}</button><button type="button" class:active={route.feedback.viewer_vote === "dislike"} aria-label="Dislike this route" aria-pressed={route.feedback.viewer_vote === "dislike"} title="Dislike this route" on:click={() => onVote(route, "dislike")}><img src={dislikeIcon} alt="" aria-hidden="true" />{#if route.feedback.viewer_vote}<span aria-label={`${compact(route.feedback.dislikes_total)} dislikes`}>{compact(route.feedback.dislikes_total)}</span>{/if}</button></span></div>{/if}
               </div>
+              {#if route.route_fees?.length || route.quote_expires_at}
+                <span class="routeQuoteMeta">
+                  {#if route.route_fees?.length}Fee {route.route_fees.map((fee) => `${fee.amount} ${fee.asset}`).join(" + ")}{/if}
+                  {#if route.quote_expires_at} · Quote expires {new Date(route.quote_expires_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{/if}
+                </span>
+              {/if}
               </div>
             </div></li>
           {/each}
@@ -654,10 +610,8 @@
 
 .routeGroups {
   scrollbar-color: var(--route-scroll-color, #b5f500) var(--color-panel);
-  box-sizing: border-box;
   min-height: 0;
-  flex: 0 1 auto;
-  max-height: var(--route-viewport-height, none);
+  flex: 1;
   margin-top: 14px;
   padding-right: 6px;
   overflow-y: auto;
@@ -687,10 +641,6 @@
   content-visibility: auto;
   contain-intrinsic-size: 0 132px;
   will-change: transform, opacity;
-}
-
-.routeList > li:nth-child(-n + 4) {
-  content-visibility: visible;
 }
 
 .routeCardShell {
@@ -846,7 +796,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: flex-end;
   gap: 5px;
 }
 
@@ -901,6 +851,17 @@
   color: rgba(255, 255, 255, 0.55);
   font-size: 12px;
   line-height: 1;
+}
+
+.routeQuoteMeta {
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 12px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .workflowPart {
@@ -1445,9 +1406,9 @@
 
 .panelTop { transform: none; padding-bottom: 16px; border-bottom: 1px solid var(--color-border); }
 .panel { padding-top: 19px; }
-.panel.panelRoutes { height: auto; }
-.routeGroups { margin-top: 0; padding: 0 6px 0 0; border-bottom: 1px solid var(--color-border); }
+.routeGroups { margin-top: 0; padding: 0 6px 12px 0; border-bottom: 1px solid var(--color-border); }
 .emptyState p { font-size: 14px; }
+.routeQuoteMeta { overflow-wrap: anywhere; }
 .foundVenuePopover::before { position: absolute; height: 12px; left: 0; right: 0; bottom: 100%; content: ""; }
 :global(html[data-theme="dark"]) .venueFilterClear,
 :global(html[data-theme="dark"]) .foundVenuePopover .venueOk { color: var(--color-accent-text); }
