@@ -355,6 +355,9 @@ and the earlier `/api/exchange/orders` workflow. Those APIs are secondary to
 the current live-routing UI; see
 [`docs/api-overview.md`](docs/api-overview.md) for their route families.
 
+See [FEDERATION.md](FEDERATION.md) for supported federation protocols, FEPs,
+and interoperability details.
+
 ## Local development
 
 ### Backend

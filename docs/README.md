@@ -14,6 +14,7 @@ explicitly say `planned`, `research`, or `legacy`.
 
 ## Domain and protocol references
 
+- [`../FEDERATION.md`](../FEDERATION.md) — supported federation protocols, FEPs, and interoperability limits.
 - [`otc-service.md`](otc-service.md) — EVER/USDT service setup, settlement, operations and live gate.
 - [`otc-evidence.md`](otc-evidence.md) — repeatable simulation tests and recorded validation.
 
