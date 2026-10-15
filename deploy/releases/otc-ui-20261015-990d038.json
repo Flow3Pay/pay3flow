@@ -1,0 +1,214 @@
+{
+  "status": "deployed",
+  "target_host": "195.123.218.200",
+  "target_user": "root",
+  "profile": "lefine-next",
+  "namespace": "pay3flow",
+  "domain": "pay3flow.lefine.pro",
+  "revision": "990d038abfa988bd6801a4bb95f39b0ad4dda82e",
+  "tag": "otc-ui-20261015-990d038",
+  "source_sha256": "7af31c4d61854caea2dfaa72f25628147cde68c888cfbe359d4a73addb329086",
+  "release_directory": "/root/pay3flow-release-990d038",
+  "verified_at": "2026-10-15T16:52:56.404Z",
+  "images": {
+    "frontend": "localhost/pay3flow/frontend:otc-ui-20261015-990d038",
+    "backend": "localhost/pay3flow/backend:live-20261014-874b509"
+  },
+  "image_ids": {
+    "frontend": "sha256:5bd60ca431bcef6e96b4201e46abe084f02e9162ec5fc7bf73b9d40b8ad6530f"
+  },
+  "previous_frontend_image": "localhost/pay3flow/frontend:live-20261014-874b509",
+  "backup": {
+    "directory": "/var/lib/pay3flow/backups/otc-sepolia-20261015-1393b16",
+    "database_archive_sha256": "5918f3fc7444040eecb02044405c3212598b3b0662c1bf76d36d8ddbfba2d99a",
+    "pg_restore_list": "passed",
+    "frontend_restore_patch": "frontend-restore.json"
+  },
+  "verification": {
+    "frontend_unit_tests_passed": 71,
+    "browser_scenarios_verified": 168,
+    "browser_initial_passed": 162,
+    "browser_corrected_selector_rechecks_passed": 6,
+    "svelte_check_errors": 0,
+    "svelte_check_warnings": 0,
+    "frontend_build": "passed",
+    "secret_audit": "passed",
+    "source_archive_checksum": "passed",
+    "cri_image_matches_build": true,
+    "frontend_rollout": "passed",
+    "public_root": "passed",
+    "health": "ok",
+    "providers_api": "valid JSON",
+    "public_browser": [
+      {
+        "width": 1440,
+        "theme": "light",
+        "remote_ip": "195.123.218.200",
+        "state": "connected",
+        "safe_block_absent": true,
+        "wallet_network_heading_absent": true,
+        "tabs_and_motion": "passed",
+        "geometry": {
+          "overflow": false,
+          "panels": [
+            {
+              "y": 360.21875,
+              "bottom": 1156.59375
+            },
+            {
+              "y": 360.21875,
+              "bottom": 1156.59375
+            },
+            {
+              "y": 360.21875,
+              "bottom": 1156.59375
+            }
+          ],
+          "headHeights": [
+            56,
+            56,
+            56
+          ],
+          "amountSizes": [
+            {
+              "width": 324.375,
+              "height": 38
+            },
+            {
+              "width": 324.375,
+              "height": 38
+            }
+          ]
+        },
+        "errors": []
+      },
+      {
+        "width": 1024,
+        "theme": "dark",
+        "remote_ip": "195.123.218.200",
+        "state": "connected",
+        "safe_block_absent": true,
+        "wallet_network_heading_absent": true,
+        "tabs_and_motion": "passed",
+        "geometry": {
+          "overflow": false,
+          "panels": [
+            {
+              "y": 346.65625,
+              "bottom": 1181.40625
+            },
+            {
+              "y": 346.65625,
+              "bottom": 1181.40625
+            },
+            {
+              "y": 346.65625,
+              "bottom": 1181.40625
+            }
+          ],
+          "headHeights": [
+            56,
+            56,
+            56
+          ],
+          "amountSizes": [
+            {
+              "width": 221.515625,
+              "height": 38
+            },
+            {
+              "width": 221.515625,
+              "height": 38
+            }
+          ]
+        },
+        "errors": []
+      },
+      {
+        "width": 390,
+        "theme": "light",
+        "remote_ip": "195.123.218.200",
+        "state": "connected",
+        "safe_block_absent": true,
+        "wallet_network_heading_absent": true,
+        "tabs_and_motion": "passed",
+        "geometry": {
+          "overflow": false,
+          "panels": [
+            {
+              "y": 522.484375,
+              "bottom": 1365.046875
+            },
+            {
+              "y": 1409.046875,
+              "bottom": 1895.046875
+            },
+            {
+              "y": 1939.046875,
+              "bottom": 2333.046875
+            }
+          ],
+          "headHeights": [
+            56,
+            56,
+            56
+          ],
+          "amountSizes": [
+            {
+              "width": 306,
+              "height": 38
+            },
+            {
+              "width": 306,
+              "height": 38
+            }
+          ]
+        },
+        "errors": []
+      },
+      {
+        "width": 320,
+        "theme": "dark",
+        "remote_ip": "195.123.218.200",
+        "state": "connected",
+        "safe_block_absent": true,
+        "wallet_network_heading_absent": true,
+        "tabs_and_motion": "passed",
+        "geometry": {
+          "overflow": false,
+          "panels": [
+            {
+              "y": 553.03125,
+              "bottom": 1414.78125
+            },
+            {
+              "y": 1458.78125,
+              "bottom": 1944.78125
+            },
+            {
+              "y": 1988.78125,
+              "bottom": 2382.78125
+            }
+          ],
+          "headHeights": [
+            56,
+            56,
+            56
+          ],
+          "amountSizes": [
+            {
+              "width": 236,
+              "height": 38
+            },
+            {
+              "width": 236,
+              "height": 38
+            }
+          ]
+        },
+        "errors": []
+      }
+    ]
+  },
+  "deployment_note": "Frontend-only rollout from master. Standalone Safe block removed from OTC; Available networks removed only from wallet connections. Shared grid, typography and responsive controls aligned; activity indicator and content height animate with reduced-motion support. Backend image and financial configuration retained. No financial signature or broadcast performed."
+}
