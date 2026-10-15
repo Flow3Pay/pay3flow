@@ -1,0 +1,132 @@
+{
+  "status": "deployed",
+  "source_revision": "11abf49f5253172323d7627129aa9eb1073630c3",
+  "source_tree": "519cc40e5e981b0d0423da637196d31dd6adc358",
+  "deployed_at": "2026-10-15T19:09:43Z",
+  "verified_at": "2026-10-15T19:11:29.588268+00:00",
+  "target": "root@195.123.218.200",
+  "url": "https://pay3flow.lefine.pro/providers/crypto-office",
+  "image_tag": "crypto-office-keys-20261015-11abf49",
+  "images": {
+    "pay3flow-backend": "localhost/pay3flow/backend:crypto-office-keys-20261015-11abf49",
+    "pay3flow-frontend": "localhost/pay3flow/frontend:crypto-office-keys-20261015-11abf49"
+  },
+  "previous_images": {
+    "pay3flow-backend": "localhost/pay3flow/backend:crypto-office-20261015-88d769e",
+    "pay3flow-frontend": "localhost/pay3flow/frontend:crypto-office-20261015-88d769e"
+  },
+  "backup_directory": "/var/lib/pay3flow/backups/crypto-office-keys-20261015",
+  "change": "Generate fresh IP-bound Crypto Office External tokens from public/secret API keys using BLAKE2b-256 and XSalsa20, compatible with the official PHP example. Read-only pair discovery and indicative swap quotes.",
+  "activation": {
+    "environment_variables": [
+      "CRYPTO_OFFICE_PUBLIC_KEY",
+      "CRYPTO_OFFICE_SECRET_KEY"
+    ],
+    "credentials_configured": true,
+    "storage": "existing pay3flow-secrets Kubernetes Secret",
+    "public_egress_ip": "195.123.218.200",
+    "live_authenticated_quotes": "verified through public Pay3Flow API in both TRX/USDT directions on Tron",
+    "current_mode": "selectable",
+    "order_creation": false
+  },
+  "verification": {
+    "verified_at": "2026-10-15T19:10:32.461281+00:00",
+    "health": "ok",
+    "provider_rows": [
+      {
+        "slug": "crypto-office",
+        "operation": "buy",
+        "searchable": true,
+        "search_mode": "selectable"
+      },
+      {
+        "slug": "crypto-office",
+        "operation": "sell",
+        "searchable": true,
+        "search_mode": "selectable"
+      }
+    ],
+    "live_quotes": [
+      {
+        "source": "TRX",
+        "target": "USDT",
+        "amount": 5000,
+        "routes": 1,
+        "quote": {
+          "route_provider": "crypto-office",
+          "source_amount": "5000",
+          "target_amount": "1655.538",
+          "route_path": [
+            "TRX@tron",
+            "USDT@tron"
+          ],
+          "provider_quote_id": "5556",
+          "execution": null,
+          "fees": null
+        }
+      },
+      {
+        "source": "USDT",
+        "target": "TRX",
+        "amount": 100,
+        "routes": 1,
+        "quote": {
+          "route_provider": "crypto-office",
+          "source_amount": "100",
+          "target_amount": "295.65112781955",
+          "route_path": [
+            "USDT@tron",
+            "TRX@tron"
+          ],
+          "provider_quote_id": "5559",
+          "execution": null,
+          "fees": null
+        }
+      }
+    ],
+    "runtime_image_alias_note": "Frontend content is unchanged; CRI reports the previous tag for the identical image ID. The new Pod spec references the current release tag.",
+    "rust_tests_passed": 379,
+    "rust_tests_ignored": 38,
+    "adapter_tests_passed": 13,
+    "php_libsodium_golden_vector": "passed",
+    "cargo_fmt": "passed, including external provider files",
+    "cargo_clippy_all_targets": "passed with existing warnings",
+    "providerfile_sql_check": "passed",
+    "optional_key_manifest_render": "passed",
+    "live_deploy_fish_syntax": "passed",
+    "secret_audit": "passed; production key values absent from tracked files",
+    "database_backup_gzip_check": "passed",
+    "build_and_cri_image_ids": "verified by deployment script",
+    "runtime_config_preserved": true,
+    "pods": [
+      {
+        "name": "pay3flow-backend-856c96cd77-fnbgs",
+        "phase": "Running",
+        "containers": [
+          {
+            "name": "backend",
+            "ready": true,
+            "restarts": 0,
+            "image": "localhost/pay3flow/backend:crypto-office-keys-20261015-11abf49",
+            "runtime_image": "localhost/pay3flow/backend:crypto-office-keys-20261015-11abf49",
+            "image_id": "sha256:4fbc8be8f331d4e85635cec2daaebd847bd85873c83155f9ac593a4d16cb7a62"
+          }
+        ]
+      },
+      {
+        "name": "pay3flow-frontend-7f96b6cd97-cflxk",
+        "phase": "Running",
+        "containers": [
+          {
+            "name": "frontend",
+            "ready": true,
+            "restarts": 0,
+            "image": "localhost/pay3flow/frontend:crypto-office-keys-20261015-11abf49",
+            "runtime_image": "localhost/pay3flow/frontend:crypto-office-20261015-88d769e",
+            "image_id": "sha256:7789129fc012b1eda37938b56637e4fb3ec79853d8795f3f358f76bdbc30e678"
+          }
+        ]
+      }
+    ]
+  }
+}
