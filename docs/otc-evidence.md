@@ -272,3 +272,13 @@ A PostgreSQL custom archive and deployment/configuration snapshots are saved wit
 Public HTTPS checks passed for the root page, health and provider JSON. Browser checks against the actual target IP passed at widths 1440/light, 1024/dark, 390/light and 320/dark. The standalone Safe block and wallet-dialog network heading were absent; header wallet connection remained usable. Desktop panels had identical top/bottom edges, panel headings were 56px, and send/receive fields matched. Tab content, moving underline, keyboard navigation and reduced-motion behavior passed with no page overflow or browser exceptions. No wallet signature, Safe creation or financial transfer was requested.
 
 Durable release metadata: `deploy/releases/otc-ui-20261015-990d038.json`.
+
+### Quote availability after Ethereum sign-in — 2026-10-15
+
+The public production config reports `enabled:false`, `available:false`, `wallet_login_available:true`, and `wallet_login_chains:["ethereum"]`. Ethereum authentication and trading availability are independent: successful Ethereum sign-in cannot request a live quote while the desk is paused, and the required Everscale wallet cannot currently be verified on this deployment. This is a blocked route, not evidence of a pending quote request.
+
+The ticket and shared wallet dialog now explain quote blockers in English/Russian, including a paused route, unavailable wallet network, missing wallet proof, unavailable offers, invalid amount, and unresolved booking. Disabled wallet controls use a blocked cursor instead of a waiting cursor. The empty receive field says “No quote yet” rather than suggesting a quote is loading. Existing quote, booking and transfer gates remain intact; backend configuration is unchanged.
+
+A simulated browser regression reproduces the production Ethereum-only paused config, signs into the mocked Ethereum wallet, verifies that busy/progress clear and the quote button explains the blocker, then exercises server recovery and Everscale verification without a second Ethereum signature. No real signature or funds transfer is performed.
+
+Validation: 71 frontend unit tests passed; Svelte check reported zero errors/warnings; all 126 OTC, Everscale connection and wallet execution browser scenarios passed across desktop/mobile, including the new production-config regression; tracked-file secret audit passed.

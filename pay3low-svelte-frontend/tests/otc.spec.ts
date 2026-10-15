@@ -309,6 +309,36 @@ test("wallet sign-in remains available when new trading is disabled", async ({ p
   expect(f.requests.filter(request => request.path === "/rfqs")).toHaveLength(0);
 });
 
+test("Ethereum-only paused deployment explains quote blocking after successful sign-in", async ({ page }) => {
+  const f = await walletLoginFixtures(page);
+  f.control.enabled = false; f.control.available = false; f.control.walletChains = ["ethereum"];
+  await open(page);
+  const ticket = page.locator("#otc-bridge");
+  const paused = "OTC quotes are currently paused. Connecting a wallet does not enable trading.";
+  await expect(ticket.getByText(paused, { exact: true })).toBeVisible();
+  await ticket.getByRole("button", { name: "Request exact quote", exact: true }).click();
+  const dialog = page.locator("#wallet-connections");
+  await dialog.getByRole("button", { name: "Connect Ethereum wallet", exact: true }).click();
+  await expect(dialog.getByText("Verified", { exact: true })).toHaveCount(1);
+  await expect(dialog.getByTestId("otc-quote-status")).toHaveText(paused);
+  await expect(dialog.locator('[aria-busy="true"]')).toHaveCount(0);
+  await expect(dialog.getByRole("searchbox")).toBeEnabled();
+  const request = dialog.getByRole("button", { name: "Request exact quote", exact: true });
+  await expect(request).toBeDisabled();
+  await expect(request).toHaveAccessibleDescription(paused);
+  expect(await request.evaluate(node => getComputedStyle(node).cursor)).toBe("not-allowed");
+  await expect(dialog.getByText(/Signing in|Connecting…|Confirm sign-in/)).toHaveCount(0);
+  // Server recovery must replace the reason without requiring another Ethereum signature.
+  f.control.available = true; f.control.enabled = true;
+  await expect(dialog.getByTestId("otc-quote-status")).toContainText("required wallet network is unavailable", { timeout: 12000 });
+  f.control.walletChains = ["ethereum", "everscale"];
+  await expect(dialog.getByTestId("otc-quote-status")).toHaveText("Verify Everscale wallet ownership to request a quote.", { timeout: 12000 });
+  await dialog.getByRole("button", { name: "Verify Everscale wallet", exact: true }).click();
+  await expect(request).toBeEnabled();
+  await expect(dialog.getByTestId("otc-quote-status")).toHaveCount(0);
+  expect(f.requests.filter(request => request.path === "/rfqs")).toHaveLength(0);
+});
+
 test("wallet dialog disables chains unavailable on this deployment", async ({ page }) => {
   const f = await walletLoginFixtures(page);
   f.control.walletChains = ["ethereum"]; await open(page);

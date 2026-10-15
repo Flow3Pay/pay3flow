@@ -7,7 +7,7 @@
   export let input = "100";
   export let quote: Trade | null = null;
   export let disabled = false, busy = false;
-  export let desk = "";
+  export let desk = "", status = "";
   export let onDirection: (direction: Direction) => void;
   export let onEdit: () => void;
   export let onRequest: () => void;
@@ -29,10 +29,11 @@
   <div class="moneyPanel exchangeMoneyPanel"><div class="panelCopy"><label for="otc-input">{say(`You send · ${sendAsset} on ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы отправляете · ${sendAsset} · ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><input id="otc-input" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" bind:value={input} on:input={onEdit} on:focus={(event) => event.currentTarget.select()} /><small>{say("Enter the exact amount", "Укажите точную сумму")}</small></div>{@render asset(sendAsset)}</div>
   <ExchangeFlowBridge reversed={direction === "sell"} onSwap={() => onDirection(direction === "buy" ? "sell" : "buy")} label={`${copy.buy} / ${copy.sell}`} />
   <div class="intentLabel receiveLabel"><span>{copy.receive}</span></div>
-  <div class="moneyPanel exchangeMoneyPanel"><div class="panelCopy"><label for="otc-receive">{say(`You receive · ${receiveAsset} on ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы получаете · ${receiveAsset} · ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><input id="otc-receive" class="amountInput amountOutput" readonly value={quote?.terms.output || ""} placeholder="—" /><small>{quote ? say("Fixed net output", "Фиксированная сумма к получению") : say("Awaiting fixed quote", "Ожидается котировка")}</small></div>{@render asset(receiveAsset)}</div>
+  <div class="moneyPanel exchangeMoneyPanel"><div class="panelCopy"><label for="otc-receive">{say(`You receive · ${receiveAsset} on ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы получаете · ${receiveAsset} · ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><input id="otc-receive" class="amountInput amountOutput" readonly value={quote?.terms.output || ""} placeholder="—" /><small>{quote ? say("Fixed net output", "Фиксированная сумма к получению") : say("No quote yet", "Котировки пока нет")}</small></div>{@render asset(receiveAsset)}</div>
   <div class="orderDetails"><div><span>{say("Desk", "Деск")}</span><strong>{desk || "—"}</strong></div><div><span>{copy.fees}</span><strong>{quote ? `${decimal(quote.terms.fee_policy.fee_units, 6)} USDT` : "max(0.25%, 5 USDT)"}</strong></div><small>{say("Completion fee paid by the desk. Network costs are separate.", "Комиссию за завершение платит деск. Сетевые расходы отдельно.")}</small></div>
   {#if quote}<p class="priceHint">{say("Quote expires", "Котировка истекает")}: {quote.terms.quote_by}</p>{/if}
-  <button class="cta" type="submit" disabled={busy || disabled} data-testid="otc-review">{quote ? say("Review fixed quote", "Проверить котировку") : say("Request exact quote", "Запросить котировку")}<span aria-hidden="true">↗</span></button>
+  {#if status}<p class="priceHint" id="otc-ticket-status" role="status">{status}</p>{/if}
+  <button aria-describedby={status ? "otc-ticket-status" : undefined} class="cta" type="submit" disabled={busy || disabled} data-testid="otc-review">{quote ? say("Review fixed quote", "Проверить котировку") : say("Request exact quote", "Запросить котировку")}<span aria-hidden="true">↗</span></button>
 </form>
 
 <style>

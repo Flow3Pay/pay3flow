@@ -190,8 +190,9 @@
           {#if error || account?.error}<p role="alert">{error || account?.error}</p>{/if}
           {#if account?.progress}<p class="walletStatus" role="status">{copy(account.progress)}</p>{/if}
           {#if account?.session}<button class="accountAction" type="button" disabled={account.disconnectDisabled || !!account.progress || Boolean(busy)} on:click={account.onDisconnect}>{copy("Disconnect")}</button>{/if}
+          {#if account?.quoteStatus && !working}<p class="walletStatus" role="status" id="otc-wallet-quote-status" data-testid="otc-quote-status">{account.quoteStatus}</p>{/if}
           {#if account?.requestingQuote}
-            <button class="quoteAction" type="button" disabled={working || !account.quoteReady} on:click={account.onRequest}>{copy("Request exact quote")}</button>
+            <button class="quoteAction" type="button" disabled={working || !account.quoteReady} aria-describedby={account.quoteStatus && !working ? "otc-wallet-quote-status" : undefined} on:click={account.onRequest}>{copy("Request exact quote")}</button>
           {/if}
         </div>
       </div>
@@ -203,7 +204,7 @@
   .walletMenu { position: relative; }
   button { min-height: 36px; border: 1px solid var(--color-border); border-radius: 9px; background: var(--color-panel); color: var(--color-text); font: inherit; cursor: pointer; transition: background .16s ease; }
   button:hover { background: var(--color-accent-soft); }
-  button:disabled { opacity: .6; cursor: wait; }
+  button:disabled { opacity: .6; cursor: not-allowed; }
   .walletToggle { display: flex; align-items: center; gap: 7px; padding: 0 10px; white-space: nowrap; font-size: 12px; font-weight: 750; }
   .walletToggle img { width: 18px; height: 18px; flex: 0 0 auto; object-fit: contain; filter: brightness(0); }
   :global(html[data-theme="dark"]) .walletToggle img { filter: brightness(0) invert(1); }
