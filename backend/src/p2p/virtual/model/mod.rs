@@ -20,6 +20,7 @@ pub(in crate::p2p) struct NormalizedRouteQuery {
     pub(in crate::p2p) min_orders: Option<u64>,
     pub(in crate::p2p) min_completion_rate: Option<f64>,
     pub(in crate::p2p) allow_cross_venue: bool,
+    pub(in crate::p2p) max_actions: Option<usize>,
     pub(in crate::p2p) max_price_deviation_bps: u32,
     pub(in crate::p2p) limit: usize,
     pub(in crate::p2p) sources: Option<String>,

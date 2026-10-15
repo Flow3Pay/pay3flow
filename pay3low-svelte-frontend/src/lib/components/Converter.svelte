@@ -94,6 +94,7 @@
   let venueUrls: Record<string, string> = {};
   let providerGuidance: Record<string, ProviderGuidance> = {};
   let selectedSources: P2pSource[] = [];
+  let complexRoutes = false;
   let selectedExchangeMethods: ExchangeMethod[] = [...EXCHANGE_METHODS];
   let selectedIntermediaryAssets: string[] = [];
   let searching = false;
@@ -597,7 +598,7 @@
   $: showExchangeMethods = !settingsQuery || "exchange methods p2p exchangers".includes(settingsQuery.trim().toLowerCase()) || "обмен методы".includes(settingsQuery.trim().toLowerCase());
   $: searchingVenues = [...new Set([...selectedSources, ...alwaysOnProviders.map((provider) => provider.id)])].map((source) => p2pSources.find((item) => item.id === source) ?? { id: source, label: source, iconUrl: venueIcon(source), searchable: true, searchMode: "selectable" as const });
   $: exchangeMode = selectedExchangeMethods.length === EXCHANGE_METHODS.length ? "all" as const : selectedExchangeMethods[0];
-  $: searchSignature = `${corridor?.id ?? ""}:${sourceMethod?.id ?? ""}:${sourceNetwork?.id ?? ""}:${targetMethod?.id ?? ""}:${targetNetwork?.id ?? ""}:${amountSide}:${amount}:${targetAmount}:${selectedSources.join(",")}:${selectedExchangeMethods.join(",")}:${selectedIntermediaryAssets.join(",")}:${directionReversed}`;
+  $: searchSignature = `${corridor?.id ?? ""}:${sourceMethod?.id ?? ""}:${sourceNetwork?.id ?? ""}:${targetMethod?.id ?? ""}:${targetNetwork?.id ?? ""}:${amountSide}:${amount}:${targetAmount}:${selectedSources.join(",")}:${selectedExchangeMethods.join(",")}:${selectedIntermediaryAssets.join(",")}:${directionReversed}:${complexRoutes}`;
   $: scheduleAutomaticSearch(searchSignature, preferencesLoaded, urlReady, hasAmount, initialSearchReady);
   $: manageRefresh(guideRequested || walkthroughOpen ? 0 : refreshSeconds, lastUpdatedAt, hasAmount);
   $: if (preferencesLoaded) persistPreferences(amount, refreshSeconds, selectedSources, selectedExchangeMethods, selectedIntermediaryAssets, corridorId, sourceMethodId, targetMethodId, sourceNetwork?.id ?? sourceNetworkId, targetNetwork?.id ?? targetNetworkId, directionReversed);
@@ -873,7 +874,7 @@
     controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; controller = new AbortController(); const signal = controller.signal; const currentRequest = ++requestId; searching = true; awaitingFirstRoute = true; routesFound = 0; foundVenueIds = []; foundVenues = []; venueStats = {}; responseMetrics = new SearchResponseMetrics(); error = null;
     let rerunForTargetAmount = false;
     try {
-      const liveQuery = { sourceFiat: selectedSourceCurrency, targetFiat: selectedTargetCurrency, sourceAmount: value, intermediaryAssets: !sourceWallet && !targetWallet && selectedIntermediaryAssets.length ? selectedIntermediaryAssets : undefined, sourceNetwork: sourceWallet ? sourceNetwork?.id : undefined, targetNetwork: targetWallet ? targetNetwork?.id : undefined, sourcePaymentMethod: sourceWallet || sourceMethod.kind === "currency" ? undefined : sourceMethod.p2pQuery, targetPaymentMethod: targetWallet || targetMethod.kind === "currency" ? undefined : targetMethod.p2pQuery, sourcePaymentFeePercent: sourceWallet ? 0 : sourceMethod.bankFeePercent, targetPaymentFeePercent: targetWallet ? 0 : targetMethod.bankFeePercent, sources: selectedSources, exchangeMode, allowCrossVenue: true, limit: 40, countActivity };
+      const liveQuery = { sourceFiat: selectedSourceCurrency, targetFiat: selectedTargetCurrency, sourceAmount: value, intermediaryAssets: !sourceWallet && !targetWallet && selectedIntermediaryAssets.length ? selectedIntermediaryAssets : undefined, sourceNetwork: sourceWallet ? sourceNetwork?.id : undefined, targetNetwork: targetWallet ? targetNetwork?.id : undefined, sourcePaymentMethod: sourceWallet || sourceMethod.kind === "currency" ? undefined : sourceMethod.p2pQuery, targetPaymentMethod: targetWallet || targetMethod.kind === "currency" ? undefined : targetMethod.p2pQuery, sourcePaymentFeePercent: sourceWallet ? 0 : sourceMethod.bankFeePercent, targetPaymentFeePercent: targetWallet ? 0 : targetMethod.bankFeePercent, sources: selectedSources, exchangeMode, allowCrossVenue: true, maxActions: complexRoutes ? 8 : undefined, limit: 40, countActivity };
       let response: P2pRouteSearchResponse;
       try {
         if (!anonymousId) throw new Error("Anonymous ID unavailable");
@@ -1135,7 +1136,12 @@
                       <div class="settingsToggleGrid" aria-label={t("Exchange methods", {}, activeLocale)}>{#each EXCHANGE_METHODS as method}{@const enabled = selectedExchangeMethods.includes(method)}<button type="button" class="settingsToggleOption" aria-pressed={enabled} on:click={() => toggleExchangeMethod(method)}><span>{method === "p2p" ? "P2P" : t("Exchangers", {}, activeLocale)}</span><span class="iosSwitch" class:iosSwitchOn={enabled} aria-hidden="true"><i></i></span></button>{/each}</div>
                     </section>
                   {/if}
-                  {#if settingsQuery && !showRefreshSettings && !showExchangeMethods}<p class="settingsNoResults">No matching settings</p>{/if}
+                  {#if !settingsQuery || "complex routes actions сложные маршруты действия".includes(settingsQuery.trim().toLowerCase())}
+                    <section class="settingsSection"><div class="settingsSectionHeading"><strong>{activeLocale === "ru" ? "Сложные маршруты" : "Complex routes"}</strong><span>{activeLocale === "ru" ? "Криптоциклы: до 8 действий, включая переводы между биржами" : "Crypto cycles: up to 8 actions, including transfers between exchanges"}</span></div>
+                      <button type="button" class="settingsToggleOption" aria-pressed={complexRoutes} on:click={() => { complexRoutes = !complexRoutes; initialSearchReady = true; resetResults(); }}><span>{activeLocale === "ru" ? "Искать маршруты длиннее 5 действий" : "Include routes longer than 5 actions"}</span><span class="iosSwitch" class:iosSwitchOn={complexRoutes} aria-hidden="true"><i></i></span></button>
+                    </section>
+                  {/if}
+                  {#if settingsQuery && !"complex routes actions сложные маршруты действия".includes(settingsQuery.trim().toLowerCase()) && !showRefreshSettings && !showExchangeMethods}<p class="settingsNoResults">No matching settings</p>{/if}
                 </div>
               </div>
             </div>

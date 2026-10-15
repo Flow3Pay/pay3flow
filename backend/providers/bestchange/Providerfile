@@ -991,6 +991,7 @@ mod tests {
                 min_orders: Some(20),
                 min_completion_rate: Some(0.9),
                 allow_cross_venue: Some(true),
+                max_actions: None,
                 max_price_deviation_bps: None,
                 limit: Some(40),
                 sources: Some("bestchange".into()),

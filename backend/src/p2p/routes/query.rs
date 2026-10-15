@@ -9,6 +9,12 @@ pub(in crate::p2p) fn normalize_query(
     if !query.source_amount.is_finite() || query.source_amount <= 0.0 {
         bail!("source_amount must be a positive finite number");
     }
+    if query
+        .max_actions
+        .is_some_and(|limit| !(2..=8).contains(&limit))
+    {
+        bail!("max_actions must be between 2 and 8");
+    }
     let source_currency = query.source_fiat.trim().to_ascii_uppercase();
     let target_currency = query.target_fiat.trim().to_ascii_uppercase();
     if query
@@ -80,6 +86,7 @@ pub(in crate::p2p) fn normalize_query(
         min_orders: query.min_orders,
         min_completion_rate: query.min_completion_rate,
         allow_cross_venue: query.allow_cross_venue.unwrap_or(false),
+        max_actions: query.max_actions,
         max_price_deviation_bps,
         limit: query
             .limit

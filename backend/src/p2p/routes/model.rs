@@ -43,6 +43,9 @@ pub struct P2pRouteSearchQuery {
     pub min_completion_rate: Option<f64>,
     /// Default false: same-venue routes do not require an on-chain transfer.
     pub allow_cross_venue: Option<bool>,
+    /// Maximum spot-cycle actions, including inter-venue transfers (2..=8).
+    /// Omitted requests retain the existing two/three-trade search.
+    pub max_actions: Option<usize>,
     /// Reject prices too far from the median for that leg. Default 1000 (10%).
     pub max_price_deviation_bps: Option<u32>,
     pub limit: Option<usize>,

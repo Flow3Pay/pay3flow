@@ -558,6 +558,7 @@ export function fetchP2pRoutes(query: {
   sources?: string[];
   exchangeMode?: "all" | "p2p" | "exchanger";
   allowCrossVenue?: boolean;
+  maxActions?: number;
   limit?: number;
   signal?: AbortSignal;
   anonymousId?: string;
@@ -572,6 +573,7 @@ export function fetchP2pRoutes(query: {
     allow_cross_venue: String(query.allowCrossVenue ?? true),
     limit: String(query.limit ?? 40),
   });
+  if (query.maxActions != null) params.set("max_actions", String(query.maxActions));
   if (query.assets?.length) {
     params.set("assets", query.assets.join(","));
   }
@@ -631,6 +633,7 @@ function routeQueryPayload(query: P2pLiveQuery): Record<string, unknown> {
     sources: query.sources?.join(","),
     exchange_mode: query.exchangeMode ?? "all",
     allow_cross_venue: query.allowCrossVenue ?? true,
+    max_actions: query.maxActions,
     min_orders: 20,
     min_completion_rate: 0.9,
     limit: query.limit ?? 40,

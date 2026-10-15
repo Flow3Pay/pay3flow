@@ -94,37 +94,91 @@ pub(in crate::p2p) fn compose_crypto_market_cycles(
     });
     intermediaries.dedup();
     intermediaries.truncate(MAX_MARKET_INTERMEDIARIES);
+    // Stable traversal makes a bounded search independent of HashMap insertion order.
+    for edges in graph.values_mut() {
+        edges.sort_by(|a, b| (&a.to, &a.venue, &a.pair).cmp(&(&b.to, &b.venue, &b.pair)));
+    }
     let mut routes = Vec::new();
-    for first in entries
-        .iter()
-        .filter(|edge| intermediaries.contains(&edge.to))
-    {
-        let Some(seconds) = graph.get(&first.to) else {
-            continue;
-        };
-        for second in seconds {
-            if second.to == origin.symbol {
-                if query.allow_cross_venue || first.venue == second.venue {
-                    if let Some(route) = market_cycle(query, &origin, &[first, second]) {
-                        routes.push(route);
-                    }
-                }
-            } else if second.venue == first.venue && allowed(&second.to) {
-                // Three trades within one venue avoid intermediate withdrawals.
-                if let Some(thirds) = graph.get(&second.to) {
-                    for third in thirds
-                        .iter()
-                        .filter(|edge| edge.venue == first.venue && edge.to == origin.symbol)
-                    {
-                        if let Some(route) = market_cycle(query, &origin, &[first, second, third]) {
-                            routes.push(route);
-                        }
-                    }
-                }
-            }
+    let mut budget = if query.max_actions.is_some() {
+        10_000
+    } else {
+        usize::MAX
+    };
+    let mut path = Vec::new();
+    if let Some(entries) = graph.get(&origin.symbol) {
+        for first in entries
+            .iter()
+            .filter(|edge| intermediaries.contains(&edge.to))
+        {
+            path.push(first);
+            collect_cycles(
+                query,
+                &origin,
+                &graph,
+                &mut path,
+                1,
+                &mut budget,
+                &mut routes,
+            );
+            path.pop();
         }
     }
     routes
+}
+
+/// Each swap is one action; switching venues adds an asset-transfer action.
+fn collect_cycles<'a>(
+    query: &NormalizedRouteQuery,
+    origin: &Asset,
+    graph: &'a HashMap<String, Vec<Edge>>,
+    path: &mut Vec<&'a Edge>,
+    actions: usize,
+    budget: &mut usize,
+    routes: &mut Vec<P2pRoute>,
+) {
+    let Some(&last) = path.last() else {
+        return;
+    };
+    let Some(next) = graph.get(&last.to) else {
+        return;
+    };
+    let max_actions = query.max_actions.unwrap_or(3);
+    let last_venue = &last.venue;
+    for edge in next {
+        if *budget == 0 {
+            return;
+        }
+        *budget -= 1;
+        let changes_venue = edge.venue != *last_venue;
+        let next_actions = actions + 1 + usize::from(changes_venue);
+        if next_actions > max_actions || (changes_venue && !query.allow_cross_venue) {
+            continue;
+        }
+        // Preserve the original default: cross-venue round trips and same-venue triangles.
+        if query.max_actions.is_none()
+            && changes_venue
+            && (path.len() != 1 || edge.to != origin.symbol)
+        {
+            continue;
+        }
+        let closes = edge.to == origin.symbol;
+        if !closes
+            && (matches!(edge.to.as_str(), "USD" | "EUR")
+                || (query.assets_explicit && !query.assets.contains(&edge.to))
+                || path.iter().any(|previous| previous.from == edge.to))
+        {
+            continue;
+        }
+        path.push(edge);
+        if closes {
+            if let Some(route) = market_cycle(query, origin, path) {
+                routes.push(route);
+            }
+        } else if next_actions < max_actions {
+            collect_cycles(query, origin, graph, path, next_actions, budget, routes);
+        }
+        path.pop();
+    }
 }
 
 fn market_cycle(query: &NormalizedRouteQuery, origin: &Asset, edges: &[&Edge]) -> Option<P2pRoute> {

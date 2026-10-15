@@ -158,6 +158,7 @@ fn crypto_cycle_request(amount: f64) -> P2pRouteSearchQuery {
         min_orders: None,
         min_completion_rate: None,
         allow_cross_venue: Some(true),
+        max_actions: None,
         max_price_deviation_bps: None,
         limit: Some(40),
         sources: None,
@@ -874,6 +875,7 @@ fn query(allow_cross_venue: bool) -> NormalizedRouteQuery {
         min_orders: None,
         min_completion_rate: None,
         allow_cross_venue,
+        max_actions: None,
         max_price_deviation_bps: 1_000,
         limit: 20,
         sources: None,
@@ -1038,6 +1040,7 @@ fn same_asset_on_different_networks_is_allowed_for_provider_search() {
             min_orders: None,
             min_completion_rate: None,
             allow_cross_venue: Some(false),
+            max_actions: None,
             max_price_deviation_bps: Some(1_000),
             limit: Some(20),
             sources: None,
@@ -1073,6 +1076,7 @@ fn crypto_to_fiat_route_preserves_the_selected_source_network() {
             min_orders: None,
             min_completion_rate: None,
             allow_cross_venue: Some(false),
+            max_actions: None,
             max_price_deviation_bps: Some(1_000),
             limit: Some(20),
             sources: None,
@@ -1409,6 +1413,7 @@ async fn composes_fiat_provider_route_across_intermediary_networks() {
             min_orders: None,
             min_completion_rate: None,
             allow_cross_venue: Some(true),
+            max_actions: None,
             max_price_deviation_bps: Some(1_000),
             limit: Some(40),
             sources: None,
@@ -1451,6 +1456,7 @@ async fn discovers_cardano_to_amd_from_the_p2p_catalog() {
             min_orders: None,
             min_completion_rate: None,
             allow_cross_venue: Some(false),
+            max_actions: None,
             max_price_deviation_bps: Some(1_000),
             limit: Some(20),
             sources: None,
@@ -1496,6 +1502,7 @@ async fn discovers_bnd_to_amd_through_a_supported_intermediary() {
             min_orders: None,
             min_completion_rate: None,
             allow_cross_venue: Some(false),
+            max_actions: None,
             max_price_deviation_bps: Some(1_000),
             limit: Some(20),
             sources: None,
@@ -1555,6 +1562,7 @@ async fn keeps_independent_quotes_from_multiple_route_providers() {
             min_orders: None,
             min_completion_rate: None,
             allow_cross_venue: None,
+            max_actions: None,
             max_price_deviation_bps: None,
             limit: Some(20),
             sources: Some("near-intents,cow-swap".into()),
@@ -1598,6 +1606,7 @@ async fn keeps_independent_quotes_from_multiple_route_providers() {
             min_orders: None,
             min_completion_rate: None,
             allow_cross_venue: None,
+            max_actions: None,
             max_price_deviation_bps: None,
             limit: Some(20),
             sources: Some("binance".into()),
@@ -1647,6 +1656,7 @@ async fn route_stream_publishes_each_provider_quote_batch_as_it_finishes() {
                     min_orders: None,
                     min_completion_rate: None,
                     allow_cross_venue: None,
+                    max_actions: None,
                     max_price_deviation_bps: None,
                     limit: Some(20),
                     sources: Some("fast-swap,slow-swap".into()),
@@ -1721,6 +1731,7 @@ async fn fiat_to_crypto_stream_does_not_batch_fast_and_slow_providers() {
                     min_orders: None,
                     min_completion_rate: None,
                     allow_cross_venue: None,
+                    max_actions: None,
                     max_price_deviation_bps: None,
                     limit: Some(20),
                     sources: Some("p2p-entry,fast-swap,slow-swap".into()),
@@ -1801,6 +1812,7 @@ async fn dispatches_only_provider_supported_network_pairs() {
             min_orders: None,
             min_completion_rate: None,
             allow_cross_venue: None,
+            max_actions: None,
             max_price_deviation_bps: None,
             limit: Some(20),
             sources: Some("record-ethereum,record-tron".into()),
@@ -1845,6 +1857,7 @@ async fn adds_direct_fiat_quotes_in_both_amd_rub_directions() {
                 min_orders: None,
                 min_completion_rate: None,
                 allow_cross_venue: None,
+                max_actions: None,
                 max_price_deviation_bps: None,
                 limit: Some(20),
                 sources: Some("id-pay".into()),
@@ -1894,6 +1907,7 @@ async fn composes_fiat_to_crypto_route_through_provider() {
             min_orders: None,
             min_completion_rate: None,
             allow_cross_venue: Some(true),
+            max_actions: None,
             max_price_deviation_bps: Some(1_000),
             limit: Some(40),
             sources: None,
@@ -1942,6 +1956,7 @@ async fn composes_small_amd_to_btc_near_route_after_filter_fallback() {
             min_orders: Some(20),
             min_completion_rate: Some(0.9),
             allow_cross_venue: Some(true),
+            max_actions: None,
             max_price_deviation_bps: Some(1_000),
             limit: Some(40),
             sources: None,
@@ -2013,6 +2028,7 @@ async fn composes_crypto_to_crypto_provider_routes_for_supported_pairs() {
                 min_orders: None,
                 min_completion_rate: None,
                 allow_cross_venue: Some(true),
+                max_actions: None,
                 max_price_deviation_bps: Some(1_000),
                 limit: Some(40),
                 sources: None,
@@ -2064,6 +2080,7 @@ async fn composes_crypto_to_fiat_route_through_provider() {
             min_orders: None,
             min_completion_rate: None,
             allow_cross_venue: Some(true),
+            max_actions: None,
             max_price_deviation_bps: Some(1_000),
             limit: Some(40),
             sources: None,
@@ -2281,6 +2298,7 @@ async fn route_stream_reports_each_completed_asset_batch() {
                     min_orders: None,
                     min_completion_rate: None,
                     allow_cross_venue: Some(false),
+                    max_actions: None,
                     max_price_deviation_bps: Some(1_000),
                     limit: Some(40),
                     sources: Some("bybit".into()),
@@ -2340,6 +2358,7 @@ async fn route_stream_publishes_a_fast_provider_before_slower_providers_finish()
                     min_orders: None,
                     min_completion_rate: None,
                     allow_cross_venue: Some(true),
+                    max_actions: None,
                     max_price_deviation_bps: Some(1_000),
                     limit: Some(40),
                     sources: None,
@@ -2398,6 +2417,7 @@ async fn route_stream_does_not_make_a_direct_provider_wait_for_local_legs() {
                     min_orders: None,
                     min_completion_rate: None,
                     allow_cross_venue: Some(true),
+                    max_actions: None,
                     max_price_deviation_bps: Some(1_000),
                     limit: Some(40),
                     sources: None,
@@ -2465,6 +2485,7 @@ async fn unsupported_direct_provider_stops_waiting_before_slow_local_legs() {
                     min_orders: None,
                     min_completion_rate: None,
                     allow_cross_venue: Some(true),
+                    max_actions: None,
                     max_price_deviation_bps: Some(1_000),
                     limit: Some(40),
                     sources: Some("slow-p2p,id-pay".into()),
@@ -2556,6 +2577,7 @@ async fn direct_fiat_crypto_routes_keep_real_venue_price_outliers() {
         min_orders: None,
         min_completion_rate: None,
         allow_cross_venue: Some(false),
+        max_actions: None,
         max_price_deviation_bps: Some(1_000),
         limit: Some(40),
         sources: None,
@@ -2654,6 +2676,7 @@ async fn composes_amd_fiat_cycle_from_catalog_intermediary() {
             min_orders: None,
             min_completion_rate: None,
             allow_cross_venue: Some(true),
+            max_actions: None,
             max_price_deviation_bps: Some(1_000),
             limit: Some(20),
             sources: Some("id-pay".into()),
@@ -2698,6 +2721,7 @@ async fn provider_cycle_rejects_an_amd_price_outlier_before_quoting() {
             min_orders: None,
             min_completion_rate: None,
             allow_cross_venue: Some(true),
+            max_actions: None,
             max_price_deviation_bps: Some(1_000),
             limit: Some(40),
             sources: None,
@@ -2749,6 +2773,7 @@ async fn composes_an_amd_cycle_through_a_same_chain_cow_swap() {
             min_orders: None,
             min_completion_rate: None,
             allow_cross_venue: Some(true),
+            max_actions: None,
             max_price_deviation_bps: Some(1_000),
             limit: Some(40),
             sources: Some("outlier,cow-swap".into()),
@@ -2801,6 +2826,7 @@ async fn composes_an_amd_cycle_through_a_cross_chain_symbiosis_swap() {
             min_orders: None,
             min_completion_rate: None,
             allow_cross_venue: Some(true),
+            max_actions: None,
             max_price_deviation_bps: Some(1_000),
             limit: Some(40),
             sources: Some("outlier,symbiosis".into()),
@@ -2942,6 +2968,7 @@ fn composes_crypto_to_crypto_route_without_fiat() {
         min_orders: None,
         min_completion_rate: None,
         allow_cross_venue: true,
+        max_actions: None,
         max_price_deviation_bps: 1_000,
         limit: 20,
         sources: None,
@@ -3001,6 +3028,7 @@ async fn live_amd_to_rub_route_search() {
             min_orders: None,
             min_completion_rate: None,
             allow_cross_venue: Some(false),
+            max_actions: None,
             max_price_deviation_bps: Some(1_000),
             limit: Some(10),
             sources: None,
@@ -3044,6 +3072,7 @@ async fn live_bank_filtered_amd_to_rub_route_search() {
             min_orders: None,
             min_completion_rate: None,
             allow_cross_venue: Some(true),
+            max_actions: None,
             max_price_deviation_bps: Some(1_000),
             limit: Some(10),
             sources: None,
@@ -3331,4 +3360,83 @@ async fn regression_fiat_crypto_filters_networks_before_limiting_offers() {
     assert!(routes
         .iter()
         .all(|route| route.source_network.as_deref() == Some("tron")));
+}
+
+#[test]
+fn complex_crypto_cycles_support_six_trades_and_count_venue_transfers() {
+    let mut request = crypto_cycle_request(100.0);
+    request.intermediary_assets = None;
+    let mut query = normalize_query(
+        request,
+        &["USDT".into()],
+        &crate::networks::NetworkCatalog::test_default(),
+        &[Asset::new("USDT", Some("bnb-smart-chain")).unwrap()],
+    )
+    .unwrap();
+    let ticker = |symbol: &str, price| CryptoTicker {
+        symbol: symbol.into(),
+        bid: price,
+        ask: price,
+    };
+    let first = vec![
+        ticker("ETHUSDT", 1.0),
+        ticker("BTCETH", 1.0),
+        ticker("BNBBTC", 1.0),
+    ];
+    let second = vec![
+        ticker("USDCBNB", 1.0),
+        ticker("DAIUSDC", 1.0),
+        ticker("DAIUSDT", 1.05),
+    ];
+    let same_venue = HashMap::from([("bybit".into(), [first.clone(), second.clone()].concat())]);
+    assert!(compose_crypto_market_cycles(&query, &same_venue).is_empty());
+    query.max_actions = Some(5);
+    assert!(compose_crypto_market_cycles(&query, &same_venue).is_empty());
+    query.max_actions = Some(6);
+    let routes = compose_crypto_market_cycles(&query, &same_venue);
+    assert_eq!(routes.len(), 1);
+    assert_eq!(routes[0].cycle_legs.len(), 6);
+    assert_eq!(routes[0].route_path.len(), 7);
+    assert!(routes[0].target_amount.parse::<f64>().unwrap() > 100.0);
+    assert!(!routes[0].transfer_fee_included);
+    let cross = HashMap::from([("bybit".into(), first), ("binance".into(), second)]);
+    assert!(
+        compose_crypto_market_cycles(&query, &cross).is_empty(),
+        "six trades plus one transfer require seven actions"
+    );
+    query.max_actions = Some(7);
+    assert_eq!(compose_crypto_market_cycles(&query, &cross).len(), 1);
+    query.allow_cross_venue = false;
+    assert!(compose_crypto_market_cycles(&query, &cross).is_empty());
+    query.allow_cross_venue = true;
+    query.assets_explicit = true;
+    query.assets = vec!["ETH".into(), "BTC".into(), "USDC".into(), "DAI".into()];
+    assert!(
+        compose_crypto_market_cycles(&query, &same_venue).is_empty(),
+        "every intermediate must respect the asset filter"
+    );
+}
+
+#[test]
+fn route_action_limit_is_validated_and_optional_in_json() {
+    let request = crypto_cycle_request(100.0);
+    let mut value = serde_json::to_value(&request).unwrap();
+    value.as_object_mut().unwrap().remove("max_actions");
+    assert!(serde_json::from_value::<P2pRouteSearchQuery>(value)
+        .unwrap()
+        .max_actions
+        .is_none());
+    for limit in [0, 1, 9, usize::MAX] {
+        let mut request = request.clone();
+        request.max_actions = Some(limit);
+        assert!(normalize_query(
+            request,
+            &["USDT".into()],
+            &crate::networks::NetworkCatalog::test_default(),
+            &[]
+        )
+        .unwrap_err()
+        .to_string()
+        .contains("max_actions"));
+    }
 }

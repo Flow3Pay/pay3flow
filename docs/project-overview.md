@@ -266,6 +266,7 @@ Useful route parameters:
 | `source_payment_method`, `target_payment_method` | Bank or payment-method filters |
 | `sources` | Comma-separated source slugs; omit to search all configured adapters |
 | `allow_cross_venue` | Allow routes whose legs execute on different venues |
+| `max_actions` | Optional spot crypto-cycle action limit, `2`–`8`. Each trade counts once; switching venues adds one transfer. Set `8` to include complex routes with more than five actions. Omit for the existing two/three-trade search. |
 | `merchant_only` | Keep merchant ads only |
 | `min_orders` | Minimum completed orders reported by a venue |
 | `min_completion_rate` | Completion-rate fraction from `0` to `1` |
@@ -273,6 +274,18 @@ Useful route parameters:
 | `limit` | Returned route limit from `1` to `100`; default `20` |
 
 `routes_found` counts all unique valid routes before `limit` is applied.
+
+The **Complex routes** switch in converter settings requests `max_actions=8`
+for spot crypto cycles. Extended searches inspect at most 10,000 graph
+continuations in stable order and can return shorter routes as well. They are
+bounded searches, not an exhaustive scan of 10,000 complete routes. Intermediate
+assets cannot repeat. Bid/ask prices include the existing estimated trading fee;
+transfer fees and order-book depth remain unverified. These routes are estimates
+and do not execute a sequence of trades automatically.
+
+The separate capability graph published to Fmatch/Lefine supports
+`route_max_depth` up to `8` (default `4`); its edges already count individual
+configured actions. The converter switch does not change that background graph.
 
 ### Progressive WebSocket search
 
