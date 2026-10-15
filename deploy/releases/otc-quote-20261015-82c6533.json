@@ -1,0 +1,197 @@
+{
+  "source_revision": "82c65331140209740a424ea360a86e0eba77fc88",
+  "source_archive_sha256": "97e3a1b9466a95ead4f8a0e3045614adfddddf86c9bde014706c843d8c4689a3",
+  "frontend_image": "localhost/pay3flow/frontend:otc-quote-20261015-82c6533",
+  "frontend_config_id": "sha256:0a59936eefcd25a3e3ec0bc9fb4e7d821c01121e2b66cc0b3126b42be9377657",
+  "backend_image_unchanged": "localhost/pay3flow/backend:live-20261014-874b509",
+  "deployed_at": "2026-10-15T17:08:18Z",
+  "rollback_template_directory": "/var/lib/pay3flow/backups/otc-quote-20261015-82c6533",
+  "validation": {
+    "unit_tests_passed": 71,
+    "svelte_errors": 0,
+    "svelte_warnings": 0,
+    "browser_tests_passed": 126,
+    "production_build": "passed",
+    "secret_audit": "passed",
+    "public_endpoints": "passed",
+    "quote_blocker_explained": true,
+    "ethereum_connection_available": true,
+    "unavailable_everscale_disabled": true,
+    "disabled_quote_cursor": "not-allowed",
+    "real_wallet_signatures_or_transfers": false
+  },
+  "public_browser": {
+    "verified_at": "2026-10-15T17:08:53.971Z",
+    "url": "https://pay3flow.lefine.pro/#/otc",
+    "checks": [
+      {
+        "width": 1440,
+        "theme": "light",
+        "remote_ip": "195.123.218.200",
+        "state": "connected",
+        "safe_block_absent": true,
+        "wallet_network_heading_absent": true,
+        "tabs_and_motion": "passed",
+        "geometry": {
+          "overflow": false,
+          "panels": [
+            {
+              "y": 360.21875,
+              "bottom": 1218.96875
+            },
+            {
+              "y": 360.21875,
+              "bottom": 1218.96875
+            },
+            {
+              "y": 360.21875,
+              "bottom": 1218.96875
+            }
+          ],
+          "headHeights": [
+            56,
+            56,
+            56
+          ],
+          "amountSizes": [
+            {
+              "width": 324.375,
+              "height": 38
+            },
+            {
+              "width": 324.375,
+              "height": 38
+            }
+          ]
+        },
+        "errors": []
+      },
+      {
+        "width": 1024,
+        "theme": "dark",
+        "remote_ip": "195.123.218.200",
+        "state": "connected",
+        "safe_block_absent": true,
+        "wallet_network_heading_absent": true,
+        "tabs_and_motion": "passed",
+        "geometry": {
+          "overflow": false,
+          "panels": [
+            {
+              "y": 346.65625,
+              "bottom": 1243.78125
+            },
+            {
+              "y": 346.65625,
+              "bottom": 1243.78125
+            },
+            {
+              "y": 346.65625,
+              "bottom": 1243.78125
+            }
+          ],
+          "headHeights": [
+            56,
+            56,
+            56
+          ],
+          "amountSizes": [
+            {
+              "width": 221.515625,
+              "height": 38
+            },
+            {
+              "width": 221.515625,
+              "height": 38
+            }
+          ]
+        },
+        "errors": []
+      },
+      {
+        "width": 390,
+        "theme": "light",
+        "remote_ip": "195.123.218.200",
+        "state": "connected",
+        "safe_block_absent": true,
+        "wallet_network_heading_absent": true,
+        "tabs_and_motion": "passed",
+        "geometry": {
+          "overflow": false,
+          "panels": [
+            {
+              "y": 522.484375,
+              "bottom": 1427.421875
+            },
+            {
+              "y": 1471.421875,
+              "bottom": 1957.421875
+            },
+            {
+              "y": 2001.421875,
+              "bottom": 2395.421875
+            }
+          ],
+          "headHeights": [
+            56,
+            56,
+            56
+          ],
+          "amountSizes": [
+            {
+              "width": 306,
+              "height": 38
+            },
+            {
+              "width": 306,
+              "height": 38
+            }
+          ]
+        },
+        "errors": []
+      },
+      {
+        "width": 320,
+        "theme": "dark",
+        "remote_ip": "195.123.218.200",
+        "state": "connected",
+        "safe_block_absent": true,
+        "wallet_network_heading_absent": true,
+        "tabs_and_motion": "passed",
+        "geometry": {
+          "overflow": false,
+          "panels": [
+            {
+              "y": 553.03125,
+              "bottom": 1477.15625
+            },
+            {
+              "y": 1521.15625,
+              "bottom": 2007.15625
+            },
+            {
+              "y": 2051.15625,
+              "bottom": 2445.15625
+            }
+          ],
+          "headHeights": [
+            56,
+            56,
+            56
+          ],
+          "amountSizes": [
+            {
+              "width": 236,
+              "height": 38
+            },
+            {
+              "width": 236,
+              "height": 38
+            }
+          ]
+        },
+        "errors": []
+      }
+    ]
+  }
+}
