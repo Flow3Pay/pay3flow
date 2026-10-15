@@ -6,6 +6,13 @@ import { mockSafeRpc, mockSafeWallet, owners, reference, safeFixture, storageKey
 async function open(page: Page) {
   await page.route("**/api/**", route => route.fulfill({ json: route.request().url().endsWith("/config") ? { enabled: false, available: false, demo: false } : [] }));
   await page.goto("/#/otc");
+  await mountSafe(page);
+}
+async function mountSafe(page: Page) {
+  await page.evaluate(async () => {
+    const harness = await import("/tests/fixtures/safe-harness.ts");
+    harness.mountSafe();
+  });
   await page.getByTestId("production-safe").locator("summary").click();
 }
 const panel = (page: Page) => page.getByTestId("production-safe");
@@ -18,7 +25,7 @@ async function review(page: Page, chainId = 11155111) {
 }
 async function reloadSepolia(page: Page) {
   await page.reload();
-  await panel(page).locator("summary").click();
+  await mountSafe(page);
   await network(page).selectOption("11155111");
 }
 async function blocked(page: Page) {
@@ -101,7 +108,7 @@ for (const chainId of [1, 11155111]) test(`creation sends only the reviewed fact
   expect(saved.reference).toBe(reference);
   await expect(panel(page).getByRole("link", { name: "View original transaction" })).toHaveAttribute("href", `https://${chainId === 1 ? "" : "sepolia."}etherscan.io/tx/${reference}`);
   await page.reload();
-  await panel(page).locator("summary").click();
+  await mountSafe(page);
   await network(page).selectOption(String(chainId));
   await blocked(page);
   rpc.deployed = true;
@@ -173,7 +180,7 @@ test("legacy pending Mainnet operation migrates and stays isolated from Sepolia"
   await open(page);
   const legacy = { owners, salt: "1", address: safeDeployment(owners, 1n, safeFixture.creationCode).address, reference, state: "submitted" };
   await page.evaluate(value => localStorage.setItem("pay3flow.otc.production-safe.v1", JSON.stringify(value)), legacy);
-  await page.reload(); await panel(page).locator("summary").click();
+  await page.reload(); await mountSafe(page);
   await blocked(page);
   await expect(panel(page).getByRole("link", { name: "View original transaction" })).toHaveAttribute("href", `https://etherscan.io/tx/${reference}`);
   expect(await page.evaluate(() => localStorage.getItem("pay3flow.otc.production-safe.v1"))).toBeNull();

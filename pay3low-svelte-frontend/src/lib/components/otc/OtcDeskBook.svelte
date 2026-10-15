@@ -9,7 +9,7 @@
   $: say = (en: string, ru: string) => $locale === "ru" ? ru : en;
   $: offers = listings.map(proposal => ({ proposal, direction: proposalDirection(proposal, config) })).filter(item => item.direction);
 </script>
-<div class="bookHeader"><span>{say("Desk offers", "Предложения деска")}</span><span>EVER / USDT</span></div>
+<div class="bookHeader"><span>{say("Direction", "Направление")}</span><span>EVER / USDT</span></div>
 <div class="bookRows">
   {#each offers as { proposal, direction }}
     <div class="bookRow" class:sell={direction === "sell"} class:selected={proposal.id === selectedId}>
@@ -21,8 +21,21 @@
 </div>
 <p class="bookFooter">{say("Exact private quote · customer pays first", "Приватная котировка · клиент платит первым")}</p>
 <style>
-.bookHeader { display: flex; justify-content: space-between; gap: 12px; padding: 12px 17px; border-bottom: 1px solid var(--color-border); color: var(--color-text-soft); font-size: 11px; }
-.bookRows { min-height: 330px; } .bookRow { padding: 14px 17px; border-bottom: 1px solid var(--color-border); } .bookRow.selected { background: var(--otc-buy-soft); } .bookRow.sell.selected { background: var(--otc-sell-soft); }
-.bookRow button { display: flex; width: 100%; min-height: 44px; justify-content: space-between; align-items: center; gap: 10px; text-align: left; font-size: 12px; } .bookRow strong { color: var(--otc-buy); } .bookRow.sell strong { color: var(--otc-sell); } .bookRow span, .bookRow p { color: var(--color-text-soft); font-size: 11px; } .bookRow p { line-height: 1.6; margin-bottom: 7px; } .bookRow a { display: block; overflow-wrap: anywhere; font-size: 11px; text-decoration: underline; }
-.empty { display: grid; gap: 10px; padding: 80px 20px; text-align: center; justify-items: center; font-size: 13px; } .empty > span { font-size: 28px; color: var(--color-text-faint); } .empty p { max-width: 240px; color: var(--color-text-soft); line-height: 1.6; font-size: 12px; } .bookFooter { padding: 14px 17px; border-top: 1px solid var(--color-border); color: var(--color-text-soft); font-size: 11px; line-height: 1.5; }
+  .bookHeader { display: flex; flex: 0 0 auto; min-height: 48px; align-items: center; justify-content: space-between; gap: 12px; padding: 12px var(--otc-panel-padding, 20px); border-bottom: 1px solid var(--color-border); color: var(--color-text-soft); font-size: 12px; line-height: 1.5; }
+  .bookHeader span:last-child { white-space: nowrap; }
+  .bookRows { display: flex; flex: 1; flex-direction: column; min-height: 240px; }
+  .bookRow { min-width: 0; padding: 16px var(--otc-panel-padding, 20px); border-bottom: 1px solid var(--color-border); }
+  .bookRow.selected { background: var(--otc-buy-soft); }
+  .bookRow.sell.selected { background: var(--otc-sell-soft); }
+  .bookRow button { display: flex; width: 100%; min-width: 0; min-height: 44px; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; line-height: 1.5; text-align: left; }
+  .bookRow strong { color: var(--otc-buy); font-weight: 650; }
+  .bookRow.sell strong { color: var(--otc-sell); }
+  .bookRow span { min-width: 0; color: var(--color-text-soft); font-size: 12px; text-align: right; }
+  .bookRow p { margin: 4px 0 8px; color: var(--color-text-soft); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+  .bookRow a { display: block; overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; text-decoration: underline; text-underline-offset: 3px; }
+  .empty { display: grid; flex: 1; min-height: 240px; align-content: center; justify-items: center; gap: 8px; padding: 32px var(--otc-panel-padding, 20px); text-align: center; }
+  .empty > span { display: grid; width: 44px; height: 44px; place-items: center; margin-bottom: 4px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-panel); color: var(--color-text-soft); font-size: 20px; }
+  .empty strong { font-size: 14px; font-weight: 650; }
+  .empty p { max-width: 280px; color: var(--color-text-soft); font-size: 13px; line-height: 1.6; }
+  .bookFooter { display: flex; flex: 0 0 auto; min-height: 48px; align-items: center; padding: 12px var(--otc-panel-padding, 20px); border-top: 1px solid var(--color-border); color: var(--color-text-soft); font-size: 12px; line-height: 1.6; }
 </style>

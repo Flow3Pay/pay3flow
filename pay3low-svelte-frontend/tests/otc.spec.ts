@@ -56,6 +56,8 @@ async function select(page: Page, state: string, direction = "buy") { await page
 test("one real terminal, scoped networks, no demo feed, accessible at 320 pixels", async ({ page }) => {
   const sockets: string[] = []; page.on("websocket", socket => sockets.push(socket.url()));
   await page.setViewportSize({ width: 320, height: 780 }); await fixtures(page, { available: false }); await open(page);
+  await expect(page.getByTestId("production-safe")).toHaveCount(0);
+  await expect(page.locator(".walletMenu").getByRole("button", { name: "Connect wallet", exact: true })).toBeVisible();
   await expect(page.locator(".settlementSection")).toHaveCount(0);
   await expect(page.getByText("EVER / USDT · OTC desk settlement", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Request exact quote" })).toBeEnabled();
@@ -379,4 +381,63 @@ test("closing wallet connection discards a late sign-in response and never reque
   await expect(page.locator("#otc-bridge").getByRole("button", { name: "Request exact quote", exact: true })).toBeEnabled();
   expect(await page.evaluate(() => sessionStorage.getItem("pay3flow.otc.session.v1"))).toBeNull();
   expect(f.requests.filter(request => request.path === "/rfqs")).toHaveLength(0);
+});
+
+for (const theme of ["light", "dark"] as const) test(`OTC keeps panels and controls aligned across screen sizes in ${theme} theme`, async ({ page }) => {
+  await fixtures(page, { signedIn: true, state: "accepted", extra: [makeTrade("completed", "sell", "history-fixture")] });
+  await page.addInitScript(theme => { localStorage.setItem("pay3flow-theme", theme); localStorage.setItem("pay3flow-locale", "ru"); }, theme);
+  await open(page);
+  await page.evaluate(() => document.fonts.ready);
+  for (const width of [1440, 1024, 768, 390, 320]) {
+    await page.setViewportSize({ width, height: 1000 });
+    const geometry = await page.evaluate(() => {
+      const rect = (node: Element) => { const { x, y, width, height, right, bottom } = node.getBoundingClientRect(); return { x, y, width, height, right, bottom }; };
+      const panels = [...document.querySelectorAll(".otcGrid .otcPanel")].map(rect);
+      const heads = [...document.querySelectorAll(".otcGrid .panelHead")].map(rect);
+      const inputs = [...document.querySelectorAll("#otc-input,#otc-receive")].map(rect);
+      const clipped = [...document.querySelectorAll<HTMLElement>(".otcWorkspace button,.otcWorkspace p,.otcWorkspace .assetIdentity,.otcWorkspace .marketSelector")].filter(node => node.clientWidth > 1 && node.scrollWidth > node.clientWidth + 1).map(node => node.textContent);
+      return { panels, heads, inputs, clipped, overflow: document.documentElement.scrollWidth > innerWidth };
+    });
+    expect(geometry.overflow, `page overflow at ${width}px`).toBe(false);
+    expect(geometry.clipped, `clipped text at ${width}px`).toEqual([]);
+    expect(new Set(geometry.heads.map(head => head.height)).size).toBe(1);
+    expect(geometry.inputs[0].width).toBe(geometry.inputs[1].width);
+    expect(geometry.inputs[0].height).toBe(geometry.inputs[1].height);
+    if (width > 980) {
+      expect(Math.max(...geometry.panels.map(panel => panel.y)) - Math.min(...geometry.panels.map(panel => panel.y))).toBeLessThan(1);
+      expect(Math.max(...geometry.panels.map(panel => panel.bottom)) - Math.min(...geometry.panels.map(panel => panel.bottom))).toBeLessThan(1);
+    }
+    await expect(page.getByTestId("production-safe")).toHaveCount(0);
+  }
+  await page.locator("#otc-orders-tab").click();
+  await page.getByRole("button", { name: /Купить EVER 100 → 200 accepted/ }).click();
+  await expect(page.getByRole("heading", { name: "Buy EVER · accepted" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+});
+
+test("activity tabs animate their indicator and content height and respect reduced motion", async ({ page }) => {
+  await fixtures(page, { signedIn: true, state: "accepted", extra: [makeTrade("completed", "sell", "history-fixture")] });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await open(page);
+  await expect(page.locator(".introOverlay")).toHaveCount(0, { timeout: 6000 });
+  const activity = page.locator("#otc-activity");
+  await activity.scrollIntoViewIfNeeded();
+  const original = (await activity.locator(".activityViewport").boundingBox())!.height;
+  await page.getByRole("tab", { name: "Desk offers", exact: true }).click();
+  await expect(page.getByRole("tabpanel")).toHaveAttribute("id", "otc-trades-content");
+  await expect.poll(() => activity.evaluate(node => node.getAnimations({ subtree: true }).filter(animation => animation.playState === "running").length)).toBeGreaterThan(0);
+  await expect.poll(() => activity.evaluate(node => node.getAnimations({ subtree: true }).filter(animation => animation.playState === "running").length)).toBe(0);
+  expect((await activity.locator(".activityViewport").boundingBox())!.height).toBeGreaterThan(original);
+  const underline = await activity.locator(".tabIndicator").boundingBox();
+  const selected = await page.getByRole("tab", { name: "Desk offers", exact: true }).boundingBox();
+  expect(Math.abs(underline!.x - selected!.x)).toBeLessThan(1);
+  expect(Math.abs(underline!.width - selected!.width)).toBeLessThan(1);
+  await page.getByRole("tab", { name: "Desk offers", exact: true }).press("End");
+  await expect(page.getByRole("tab", { name: "History", exact: true })).toBeFocused();
+  await expect(page.getByRole("tabpanel")).toHaveAttribute("id", "otc-history-content");
+  await page.locator("#otc-orders-tab").click();
+  await expect(page.getByRole("button", { name: /Buy EVER 100 → 200 accepted/ })).toBeVisible();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.getByRole("tab", { name: "Desk offers", exact: true }).click();
+  await expect.poll(() => activity.evaluate(node => node.getAnimations({ subtree: true }).filter(animation => animation.playState === "running").length)).toBe(0);
 });

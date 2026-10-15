@@ -162,7 +162,7 @@
       <div class="titleBar"><h2 id="wallet-connections-title">{copy("Wallet connections")}</h2></div>
       <div class="resultPanel">
         <div class="walletList" id="wallet-search-results">
-          <section class="section"><h3>{copy("Available networks")}</h3>
+          <section class="section">
             {#each visibleChoices as choice (choice.family)}
               {@const wallet = $wallets[choice.family]}
               {@const otcChain = account && (choice.network === "ethereum" || choice.network === "everscale") ? choice.network : null}
@@ -226,7 +226,6 @@
   .resultPanel { display: flex; flex-direction: column; min-height: 0; overflow: hidden; flex: 1; }
   .walletList { min-height: 0; max-height: min(480px, calc(88dvh - 106px)); overflow-y: auto; overscroll-behavior: contain; padding: 4px 8px 12px; scrollbar-gutter: stable; }
   .section { padding: 0 0 8px; }
-  .section h3 { margin: 0; padding: 7px 8px; color: var(--color-text-faint); font-size: 10px; font-weight: 500; }
   .emptySearch { display: grid; gap: 6px; padding: 28px 12px; color: var(--color-text-soft); text-align: center; font-size: 12px; }
   .emptySearch strong { font-size: 13px; font-weight: 600; }
   .emptySearch span { color: var(--color-text-faint); }
