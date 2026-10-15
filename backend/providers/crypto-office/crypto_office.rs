@@ -5,8 +5,15 @@ use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
+use base64::{engine::general_purpose::STANDARD, Engine};
+use blake2::{digest::consts::U32, Blake2b, Digest};
+use rand::{rngs::OsRng, RngCore};
 use reqwest::header::{HeaderValue, ACCEPT, AUTHORIZATION};
 use reqwest::{Client, StatusCode, Url};
+use salsa20::{
+    cipher::{KeyIvInit, StreamCipher},
+    XSalsa20,
+};
 use serde::{de::DeserializeOwned, Deserialize, Deserializer};
 use serde_json::value::RawValue;
 use tokio::sync::Mutex;
@@ -116,31 +123,95 @@ struct CachedCatalog {
     catalog: Arc<Catalog>,
 }
 
-/// Enabled only when the server has an External Auth token. Never creates orders.
+/// Credentials never implement Debug; only sensitive headers leave this module.
+#[derive(Clone)]
+enum Authorization {
+    Token(HeaderValue),
+    Keys { public: String, key: [u8; 32] },
+}
+
+fn sensitive_header(token: &str) -> Result<HeaderValue> {
+    let mut header = HeaderValue::from_str(&format!("External {token}"))
+        .map_err(|_| anyhow!("invalid Crypto Office authorization header"))?;
+    header.set_sensitive(true);
+    Ok(header)
+}
+
+impl Authorization {
+    fn configured(
+        public: Option<&str>,
+        secret: Option<&str>,
+        token: Option<&str>,
+    ) -> Result<Option<Self>> {
+        fn nonempty(value: Option<&str>) -> Option<&str> {
+            value.map(str::trim).filter(|value| !value.is_empty())
+        }
+        match (nonempty(public), nonempty(secret)) {
+            (Some(public), Some(secret)) => {
+                if public.contains('|') || !public.bytes().all(|byte| byte.is_ascii_alphanumeric())
+                {
+                    bail!("invalid CRYPTO_OFFICE_PUBLIC_KEY format");
+                }
+                Ok(Some(Self::Keys {
+                    public: public.to_owned(),
+                    key: Blake2b::<U32>::digest(secret.as_bytes()).into(),
+                }))
+            }
+            (None, None) => nonempty(token)
+                .map(|token| sensitive_header(token).map(Self::Token))
+                .transpose(),
+            _ => bail!(
+                "Crypto Office requires both CRYPTO_OFFICE_PUBLIC_KEY and CRYPTO_OFFICE_SECRET_KEY"
+            ),
+        }
+    }
+}
+
+/// Compatible with the official PHP sodium_crypto_stream_xor example (XSalsa20).
+fn signed_header(
+    public: &str,
+    key: &[u8; 32],
+    phrase: &str,
+    timestamp: i64,
+    nonce: &[u8; 24],
+) -> Result<HeaderValue> {
+    let mut ciphertext = format!("{phrase}|{timestamp}").into_bytes();
+    XSalsa20::new(key.into(), nonce.into()).apply_keystream(&mut ciphertext);
+    let payload = [nonce.as_slice(), ciphertext.as_slice()].concat();
+    sensitive_header(&format!("{public}|{}", STANDARD.encode(payload)))
+}
+
+#[derive(Deserialize)]
+struct Phrase {
+    phrase: String,
+}
+
+/// Authenticated discovery and quotes; never creates orders.
 #[derive(Clone)]
 pub struct CryptoOfficeRouteProvider {
     client: Client,
     api_url: Url,
-    authorization: HeaderValue,
+    authorization: Authorization,
     catalog: Arc<RwLock<Option<CachedCatalog>>>,
     refresh: Arc<Mutex<()>>,
 }
 
 impl CryptoOfficeRouteProvider {
     pub fn from_env() -> Result<Option<Self>> {
-        let Some(token) = std::env::var("CRYPTO_OFFICE_API_TOKEN")
-            .ok()
-            .filter(|token| !token.trim().is_empty())
-        else {
-            return Ok(None);
-        };
-        Self::with_endpoint(API_URL, token.trim()).map(Some)
+        let public = std::env::var("CRYPTO_OFFICE_PUBLIC_KEY").ok();
+        let secret = std::env::var("CRYPTO_OFFICE_SECRET_KEY").ok();
+        let token = std::env::var("CRYPTO_OFFICE_API_TOKEN").ok();
+        Authorization::configured(public.as_deref(), secret.as_deref(), token.as_deref())?
+            .map(|authorization| Self::with_authorization(API_URL, authorization))
+            .transpose()
     }
 
+    #[cfg(test)]
     fn with_endpoint(api_url: &str, token: &str) -> Result<Self> {
-        let mut authorization = HeaderValue::from_str(&format!("External {token}"))
-            .map_err(|_| anyhow!("invalid CRYPTO_OFFICE_API_TOKEN header"))?;
-        authorization.set_sensitive(true);
+        Self::with_authorization(api_url, Authorization::Token(sensitive_header(token)?))
+    }
+
+    fn with_authorization(api_url: &str, authorization: Authorization) -> Result<Self> {
         Ok(Self {
             client: Client::builder()
                 .timeout(Duration::from_secs(10))
@@ -154,12 +225,58 @@ impl CryptoOfficeRouteProvider {
         })
     }
 
+    async fn authorization_header(&self) -> Result<HeaderValue> {
+        match &self.authorization {
+            Authorization::Token(header) => Ok(header.clone()),
+            Authorization::Keys { public, key } => {
+                let response = self
+                    .client
+                    .get(self.api_url.join("../get-phrase")?)
+                    .header(ACCEPT, "application/json")
+                    .send()
+                    .await
+                    .context("Crypto Office phrase request failed")?;
+                if !response.status().is_success() {
+                    bail!(
+                        "Crypto Office phrase endpoint returned HTTP {}",
+                        response.status()
+                    );
+                }
+                // Do not propagate deserialization errors that could contain the phrase.
+                let response: ApiResponse<Phrase> = response
+                    .json()
+                    .await
+                    .map_err(|_| anyhow!("invalid Crypto Office phrase response"))?;
+                if !response.status {
+                    bail!("Crypto Office phrase endpoint returned status=false");
+                }
+                let phrase = response
+                    .data
+                    .context("Crypto Office phrase response is missing data")?;
+                if phrase.phrase.is_empty() || phrase.phrase.len() > 4096 {
+                    bail!("invalid Crypto Office phrase length");
+                }
+                let mut nonce = [0; 24];
+                OsRng
+                    .try_fill_bytes(&mut nonce)
+                    .context("Crypto Office nonce generation failed")?;
+                signed_header(
+                    public,
+                    key,
+                    &phrase.phrase,
+                    chrono::Utc::now().timestamp(),
+                    &nonce,
+                )
+            }
+        }
+    }
+
     async fn get<T: DeserializeOwned>(&self, path: &str, query: &[(&str, String)]) -> Result<T> {
         let response = self
             .client
             .get(self.api_url.join(path)?)
             .header(ACCEPT, "application/json")
-            .header(AUTHORIZATION, self.authorization.clone())
+            .header(AUTHORIZATION, self.authorization_header().await?)
             .query(query)
             .send()
             .await
@@ -173,7 +290,7 @@ impl CryptoOfficeRouteProvider {
             .into());
         }
         if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN {
-            bail!("Crypto Office authentication rejected; check CRYPTO_OFFICE_API_TOKEN and account access");
+            bail!("Crypto Office authentication rejected; check credentials, IP whitelist and account access");
         }
         if !status.is_success() {
             bail!("Crypto Office API returned HTTP {status}");
@@ -262,6 +379,7 @@ fn provider_asset(code: &str) -> Option<Asset> {
                 "eth" => "ethereum",
                 "bnb" => "bnb-smart-chain",
                 "trx" => "tron",
+                "sol" => "solana",
                 _ => return None,
             };
             (symbol, network)

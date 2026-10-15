@@ -199,9 +199,11 @@ in the rendered Secret. Existing deployments may add `ZEROX_API_KEY` and
 `BARTER_API_KEY` to `pay3flow-secrets`; both references are optional. Empty keys
 keep these providers visible as catalog entries without advertising live quotes.
 
-Crypto Office swap discovery and indicative quotes use the optional
-`CRYPTO_OFFICE_API_TOKEN` key in `pay3flow-secrets`. The renderer accepts
-`PAY3FLOW_CRYPTO_OFFICE_API_TOKEN`; the live deployment path preserves the
-existing Secret and mounts the key as optional. Without a token, Crypto Office
-is visible in the catalog and has no live routes. After provisioning the token,
-restart the backend to enable its authenticated pair catalog and quote adapter.
+Crypto Office swap discovery and indicative quotes use `CRYPTO_OFFICE_PUBLIC_KEY`
+and `CRYPTO_OFFICE_SECRET_KEY` in `pay3flow-secrets`. The renderer accepts the same
+names prefixed with `PAY3FLOW_`; live deployment preserves the existing Secret
+and mounts both keys as optional. The backend generates fresh IP-bound tokens
+following the official Crypto Office PHP example. Whitelist its public egress IP.
+Restart the backend after provisioning keys. With no credentials the provider
+remains catalog-only. `CRYPTO_OFFICE_API_TOKEN` remains a legacy fallback when
+neither key is configured; a partial key pair is an error.

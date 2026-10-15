@@ -106,6 +106,8 @@ stringData:
   ZEROX_API_KEY: "$PAY3FLOW_ZEROX_API_KEY"
   BARTER_API_KEY: "$PAY3FLOW_BARTER_API_KEY"
   CRYPTO_OFFICE_API_TOKEN: "$PAY3FLOW_CRYPTO_OFFICE_API_TOKEN"
+  CRYPTO_OFFICE_PUBLIC_KEY: "$PAY3FLOW_CRYPTO_OFFICE_PUBLIC_KEY"
+  CRYPTO_OFFICE_SECRET_KEY: "$PAY3FLOW_CRYPTO_OFFICE_SECRET_KEY"
 ---
 apiVersion: batch/v1
 kind: Job
@@ -333,6 +335,18 @@ spec:
                 secretKeyRef:
                   name: pay3flow-secrets
                   key: CRYPTO_OFFICE_API_TOKEN
+                  optional: true
+            - name: CRYPTO_OFFICE_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: pay3flow-secrets
+                  key: CRYPTO_OFFICE_PUBLIC_KEY
+                  optional: true
+            - name: CRYPTO_OFFICE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: pay3flow-secrets
+                  key: CRYPTO_OFFICE_SECRET_KEY
                   optional: true
             - name: BARTER_API_KEY
               valueFrom:

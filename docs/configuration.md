@@ -71,22 +71,31 @@ These values are never read from `config.toml`:
 | `ADMIN_TOKEN` | Protects admin exchange controls |
 | `NEAR_INTENTS_JWT` | Optional authenticated 1-Click API credential |
 | `SYMBIOSIS_PARTNER_ID` | Optional Symbiosis partner credential |
-| `CRYPTO_OFFICE_API_TOKEN` | Crypto Office External Auth token; missing/empty keeps the provider catalog-only |
+| `CRYPTO_OFFICE_PUBLIC_KEY` | Crypto Office public API key; configure together with the secret key |
+| `CRYPTO_OFFICE_SECRET_KEY` | Crypto Office secret API key, used server-side to generate fresh authorization tokens |
+| `CRYPTO_OFFICE_API_TOKEN` | Optional legacy pre-generated token, used only when neither API key is configured |
 
 Development fallbacks exist for local startup; replace them in every
 deployment that handles real users or funds.
 
 ### Crypto Office
 
-The `crypto-office` catalog entry has a read-only swap adapter. Set
-`CRYPTO_OFFICE_API_TOKEN` to the raw token supplied by Crypto Office; the backend
-adds the `Authorization: External …` header. With no token, the provider remains
-catalog-only and makes no API requests. Restart the backend after adding a token.
+The `crypto-office` catalog entry has a read-only swap adapter. Configure both
+`CRYPTO_OFFICE_PUBLIC_KEY` and `CRYPTO_OFFICE_SECRET_KEY`. The backend fetches an
+IP-bound phrase from `GET /api/get-phrase` before each authenticated request,
+derives a 32-byte key with BLAKE2b, and encrypts `phrase|unix_timestamp` with
+XSalsa20 and a fresh random 24-byte nonce, following the official PHP example.
+It sends `Authorization: External public_key|base64(nonce + ciphertext)`.
+Whitelist the backend's public egress IP in Crypto Office. No manual token
+creation is required. A partial key pair is a startup error. Without credentials,
+the provider remains catalog-only. `CRYPTO_OFFICE_API_TOKEN` is a legacy fallback
+when neither key is configured; configured keys take priority.
 
-For Kubernetes, store the value under `CRYPTO_OFFICE_API_TOKEN` in the existing
-`pay3flow-secrets` Secret. Both deployment paths mount this key as optional, so an
-absent token does not prevent startup. The manifest renderer accepts
-`PAY3FLOW_CRYPTO_OFFICE_API_TOKEN` when provisioning the Secret.
+For Kubernetes, store the keys in the existing `pay3flow-secrets` Secret and
+restart the backend. Both deployment paths mount the keys as optional.
+The manifest renderer accepts `PAY3FLOW_CRYPTO_OFFICE_PUBLIC_KEY` and
+`PAY3FLOW_CRYPTO_OFFICE_SECRET_KEY`. Live deployment preserves the existing Secret.
+Never commit keys to configuration or release records.
 
 The adapter caches the authenticated available-pair catalog for five minutes,
 keeps only known network-qualified identifiers, and quotes the actual input
@@ -99,7 +108,8 @@ places; excess precision is rejected. Quotes have a local
 account funding are not supplied. Order creation and account transfers are not
 part of this integration.
 
-Documentation: [available pairs](https://developers.crypto-office.com/ru/rest-api/operations/get-swap-list-available-pairs),
+Documentation: [official authentication example](https://github.com/officeappbot/office_api),
+[available pairs](https://developers.crypto-office.com/ru/rest-api/operations/get-swap-list-available-pairs),
 [amount-specific quote](https://developers.crypto-office.com/ru/rest-api/operations/get-swap-get-rate-info).
 
 ## TOML sections

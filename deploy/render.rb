@@ -27,6 +27,8 @@ module Pay3flow
       "PAY3FLOW_ZEROX_API_KEY" => "",
       "PAY3FLOW_BARTER_API_KEY" => "",
       "PAY3FLOW_CRYPTO_OFFICE_API_TOKEN" => "",
+      "PAY3FLOW_CRYPTO_OFFICE_PUBLIC_KEY" => "",
+      "PAY3FLOW_CRYPTO_OFFICE_SECRET_KEY" => "",
       "PAY3FLOW_AP_HANDLE" => "pay3flow",
       "PAY3FLOW_AP_REQUIRE_SIGNATURES" => "true",
       "PAY3FLOW_FMATCH_INBOX" => "https://lefine.pro/inbox/actra",

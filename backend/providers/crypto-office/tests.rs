@@ -117,10 +117,17 @@ fn provider_identifiers_keep_chains_distinct_and_auth_is_redacted() {
         "USDC@ethereum"
     );
     assert_eq!(provider_asset("btc").unwrap().to_string(), "BTC@bitcoin");
+    assert_eq!(
+        provider_asset("usdt_sol").unwrap().to_string(),
+        "USDT@solana"
+    );
     assert!(provider_asset("usdt").is_none());
     assert!(provider_asset("usdt_unknown").is_none());
     let provider = CryptoOfficeRouteProvider::with_endpoint(API_URL, "test-token").unwrap();
-    assert!(!format!("{:?}", provider.authorization).contains("test-token"));
+    let Authorization::Token(header) = provider.authorization else {
+        panic!("expected token")
+    };
+    assert!(!format!("{header:?}").contains("test-token"));
     assert!(CryptoOfficeRouteProvider::with_endpoint(API_URL, "bad\ntoken").is_err());
 }
 
@@ -301,5 +308,101 @@ async fn output_limits_are_checked_against_the_live_quote() {
         assert!(error.downcast_ref::<QuoteUnavailable>().is_some());
         assert!(error.to_string().contains("output amount"));
     }
+    server.abort();
+}
+
+#[test]
+fn signing_matches_official_php_libsodium_fixture() {
+    let key: [u8; 32] = Blake2b::<U32>::digest(b"fixture-secret-key").into();
+    let nonce: [u8; 24] = std::array::from_fn(|index| index as u8);
+    let header =
+        signed_header("PUBLIC-FIXTURE", &key, "fixture phrase", 1700000000, &nonce).unwrap();
+    assert!(header.is_sensitive());
+    assert_eq!(header.to_str().unwrap(), "External PUBLIC-FIXTURE|AAECAwQFBgcICQoLDA0ODxAREhMUFRYXrqrjfF0F0wFCsiWzGqEu5DbTG8Q/4wEP/A==");
+}
+
+#[test]
+fn key_configuration_requires_both_keys_and_prefers_keys_over_static_tokens() {
+    assert!(Authorization::configured(None, None, None)
+        .unwrap()
+        .is_none());
+    assert!(Authorization::configured(Some("public"), None, Some("token")).is_err());
+    assert!(Authorization::configured(None, Some("secret"), None).is_err());
+    assert!(Authorization::configured(Some("bad|public"), Some("secret"), None).is_err());
+    assert!(matches!(
+        Authorization::configured(Some("public"), Some("secret"), Some("bad\ntoken")).unwrap(),
+        Some(Authorization::Keys { .. })
+    ));
+    assert!(matches!(
+        Authorization::configured(None, None, Some("token")).unwrap(),
+        Some(Authorization::Token(_))
+    ));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn key_auth_fetches_a_phrase_and_signs_fresh_tokens_for_each_request() {
+    let seen = Arc::new(std::sync::Mutex::new(Vec::<Vec<u8>>::new()));
+    let captured = Arc::clone(&seen);
+    let app = axum::Router::new()
+        .route("/api/get-phrase", get(|headers: HeaderMap| async move {
+            assert!(headers.get(AUTHORIZATION).is_none());
+            axum::Json(serde_json::json!({"status":true,"data":{"ip":"127.0.0.1","phrase":"mock IP-bound phrase"}}))
+        }))
+        .route("/api/v1/swap/list-available-pairs", get(move |headers: HeaderMap| {
+            let captured = Arc::clone(&captured);
+            async move {
+                let encoded = headers.get(AUTHORIZATION).unwrap().to_str().unwrap()
+                    .strip_prefix("External public|").unwrap();
+                let payload = STANDARD.decode(encoded).unwrap();
+                captured.lock().unwrap().push(payload[..24].to_vec());
+                let key: [u8; 32] = Blake2b::<U32>::digest(b"secret").into();
+                let mut plaintext = payload[24..].to_vec();
+                XSalsa20::new((&key).into(), payload[..24].into()).apply_keystream(&mut plaintext);
+                let plaintext = String::from_utf8(plaintext).unwrap();
+                let (phrase, timestamp) = plaintext.rsplit_once('|').unwrap();
+                assert_eq!(phrase, "mock IP-bound phrase");
+                assert!((chrono::Utc::now().timestamp() - timestamp.parse::<i64>().unwrap()).abs() < 5);
+                ([("content-type", "application/json")], PAIRS)
+            }
+        }));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let provider = CryptoOfficeRouteProvider::with_authorization(
+        &format!("http://{}/api/v1/", listener.local_addr().unwrap()),
+        Authorization::configured(Some("public"), Some("secret"), None)
+            .unwrap()
+            .unwrap(),
+    )
+    .unwrap();
+    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    for _ in 0..2 {
+        let _: HashMap<String, Pair> = provider
+            .get("swap/list-available-pairs", &[])
+            .await
+            .unwrap();
+    }
+    let nonces = seen.lock().unwrap();
+    assert_eq!(nonces.len(), 2);
+    assert_ne!(nonces[0], nonces[1]);
+    server.abort();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn phrase_failure_prevents_authenticated_requests_and_does_not_expose_response() {
+    let app = axum::Router::new().route(
+        "/api/get-phrase",
+        get(|| async { (HttpStatus::FORBIDDEN, "private-phrase-never-log") }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let provider = CryptoOfficeRouteProvider::with_authorization(
+        &format!("http://{}/api/v1/", listener.local_addr().unwrap()),
+        Authorization::configured(Some("public"), Some("secret"), None)
+            .unwrap()
+            .unwrap(),
+    )
+    .unwrap();
+    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let error = provider.catalog().await.err().unwrap().to_string();
+    assert!(error.contains("403"));
+    assert!(!error.contains("private-phrase"));
     server.abort();
 }
