@@ -2,7 +2,7 @@ import { apiUrl } from './api';
 import type { ProviderDefinition } from './exchange';
 
 export type ProfilePeriod = '7d' | '30d' | '90d';
-export type MarketType = 'p2p' | 'spot' | 'exchanger';
+export type MarketType = 'p2p' | 'spot' | 'swap' | 'exchanger';
 export interface ProfileDay { started_at: string; searches: number; top10: number; top1: number }
 export interface ProfileDirection { source_currency: string; target_currency: string; searches: number; top10: number; best_rank: number | null }
 export interface ProviderStatistics {
@@ -32,12 +32,12 @@ const identities: Array<[string, string, string, MarketType[]]> = [
   ['bitcoin-center', 'Bitcoin Center', 'https://www.bitcoincenter.am', ['exchanger']],
   ['bestchange', 'BestChange', 'https://www.bestchange.com', ['exchanger']],
   ['dzengi', 'Dzengi', 'https://dzengi.com', ['spot']],
-  ['cow-swap', 'CoW Swap', 'https://swap.cow.fi', ['exchanger']],
-  ['near-intents', 'NEAR Intents', 'https://app.near-intents.org', ['exchanger']],
-  ['symbiosis', 'Symbiosis', 'https://app.symbiosis.finance', ['exchanger']],
+  ['cow-swap', 'CoW Swap', 'https://swap.cow.fi', ['swap']],
+  ['near-intents', 'NEAR Intents', 'https://app.near-intents.org', ['swap']],
+  ['symbiosis', 'Symbiosis', 'https://app.symbiosis.finance', ['swap']],
   ['gate', 'Gate.io', 'https://www.gate.io', ['spot']],
-  ['0x', '0x', 'https://matcha.xyz', ['exchanger']],
-  ['barter', 'Barter', 'https://app.barterswap.xyz', ['exchanger']],
+  ['0x', '0x', 'https://matcha.xyz', ['swap']],
+  ['barter', 'Barter', 'https://app.barterswap.xyz', ['swap']],
   ['id-pay', 'ID Pay', 'https://id-pay.ru', ['exchanger']],
   ['crypto-office', 'Crypto Office', 'https://crypto-office.com/ru/exchange', ['exchanger']],
   ['papa-change', 'Papa Change', 'https://papa-change.biz', ['exchanger']],
@@ -59,10 +59,15 @@ export function venuesFromCatalog(catalog: ProviderDefinition[]): ProfileVenue[]
     const first = definitions[0];
     const fallback = fallbackVenue(slug);
     const declared = definitions.flatMap(definition => definition.market_types ?? []);
+    // Older catalogs classify wallet swap providers as exchangers.
+    const types = declared.length ? declared : fallback.types.length ? fallback.types : definitions.flatMap(definition => definition.exchange_methods);
+    const displayTypes = fallback.types.includes('swap')
+      ? [...types.filter(type => type !== 'exchanger'), 'swap' as const]
+      : types;
     return {
       slug, name: first.name.replace(/\s+(buy|sell)$/i, '').trim(),
       url: first.guidance?.links.find(link => /open .*webapp/i.test(link.label))?.url ?? first.source_url,
-      types: [...new Set(declared.length ? declared : fallback.types.length ? fallback.types : definitions.flatMap(definition => definition.exchange_methods))] as MarketType[],
+      types: [...new Set(displayTypes)] as MarketType[],
       currencies: [...new Set(definitions.flatMap(definition => definition.currencies))].filter(value => value.toUpperCase() !== 'ALL'),
       banks: [...new Set(definitions.flatMap(definition => definition.banks))],
       searchable: definitions.some(definition => definition.searchable),

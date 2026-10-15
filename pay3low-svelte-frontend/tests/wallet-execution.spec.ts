@@ -8,6 +8,7 @@ const harnessPath = "/tests/fixtures/wallet-harness.ts";
 
 async function wallets(page: Page) {
   await page.addInitScript(({ tron, evm, tx }) => {
+    if (window.top !== window) return;
     localStorage.setItem("pay3flow-locale", "en");
     const state = window as any;
     state.walletCalls = [];
@@ -166,10 +167,11 @@ for (const mode of ["connect", "existing", "switch"]) test(`Symbiosis AVAX guide
   await guide.getByTestId("start-guide").click();
   await expect(guide.getByRole("heading", { level: 1 })).toHaveText("Swap AVAX for USDT via Symbiosis");
   if (!preconnected) {
-    await expect(guide.getByRole("region", { name: "Step instructions" })).toBeVisible();
-    await expect(guide.getByRole("link", { name: "Open Symbiosis", exact: true })).toHaveAttribute("href", "https://app.symbiosis.finance/");
-    await expect(guide.getByTestId("wallet-swap-form")).toHaveCount(0);
-    await page.evaluate(async path => (await import(/* @vite-ignore */ path)).setEvmConnected(true), harnessPath);
+    await expect(guide.getByTestId("symbiosis-widget")).toBeVisible();
+    await guide.getByRole("button", { name: "Connect avalanche-c wallet", exact: true }).click();
+    await expect(guide.getByTestId("swap-source-wallet")).toBeVisible();
+    expect(mock.counts()).toEqual({ created: 0, submissions: 0 });
+    expect(await page.evaluate(() => (window as any).transfers)).toBe(0);
   }
   await expect(guide.getByTestId("wallet-swap-form")).toBeVisible();
   await expect(guide.getByRole("region", { name: "Step instructions" })).toHaveCount(0);
@@ -195,8 +197,8 @@ for (const mode of ["connect", "existing", "switch"]) test(`Symbiosis AVAX guide
   const calls = await page.evaluate(() => (window as any).walletCalls);
   expect(BigInt(calls[0].value)).toBe(250000000000000000n);
   await page.evaluate(async path => (await import(/* @vite-ignore */ path)).setEvmConnected(false), harnessPath);
-  await expect(guide.getByRole("region", { name: "Step instructions" })).toBeVisible();
-  await expect(guide.getByTestId("wallet-swap-form")).toHaveCount(0);
+  await expect(guide.getByRole("region", { name: "Step instructions" })).toHaveCount(0);
+  await expect(guide.getByTestId("symbiosis-widget")).toBeVisible();
   await expect(guide.getByTestId("route-wallet-execution")).toContainText("Submitted.");
   expect(await page.evaluate(() => (window as any).transfers)).toBe(1);
 });
@@ -251,6 +253,7 @@ for (const symbol of ["USDT", "TRX"]) test(`TRON ${symbol} automatically deposit
   await wallets(page);
   const mock = await panel(page, execution("near-intents", "tron", symbol));
   await page.locator("#wallet-test-panel").getByRole("button", { name: "Connect tron wallet" }).click();
+  await page.locator("#wallet-test-panel").getByRole("button", { name: /^Swap .+ for .+$/ }).click();
   await expect(page.getByTestId("route-wallet-execution")).toContainText("Submitted.");
   expect(mock.counts()).toEqual({ created: 1, submissions: 1 });
   expect(await page.evaluate(() => (window as any).transfers)).toBe(1);
@@ -262,6 +265,7 @@ test("Symbiosis TRON approval refreshes before automatically signing the swap", 
   await wallets(page);
   const mock = await panel(page, execution("symbiosis"));
   await page.locator("#wallet-test-panel").getByRole("button", { name: "Connect tron wallet" }).click();
+  await page.locator("#wallet-test-panel").getByRole("button", { name: /^Swap .+ for .+$/ }).click();
   await expect(page.getByTestId("route-wallet-execution")).toContainText("Submitted.");
   expect(mock.counts()).toEqual({ created: 2, submissions: 1 });
   expect(await page.evaluate(() => (window as any).approvals)).toBe(1);
@@ -274,6 +278,7 @@ test("backend notification retries preserve the broadcast hash and never sign tw
   await wallets(page);
   const mock = await panel(page, execution(), true);
   await page.locator("#wallet-test-panel").getByRole("button", { name: "Connect tron wallet" }).click();
+  await page.locator("#wallet-test-panel").getByRole("button", { name: /^Swap .+ for .+$/ }).click();
   await expect(page.getByRole("button", { name: "Retry tracking" })).toBeVisible();
   await page.getByRole("button", { name: "Retry tracking" }).click();
   await expect(page.getByTestId("route-wallet-execution")).toContainText("Submitted.");
@@ -286,6 +291,7 @@ test("wallet rejection stops automatic prompting", async ({ page }) => {
   await panel(page);
   await page.evaluate(() => { (window as any).rejectWallet = true; });
   await page.locator("#wallet-test-panel").getByRole("button", { name: "Connect tron wallet" }).click();
+  await page.locator("#wallet-test-panel").getByRole("button", { name: /^Swap .+ for .+$/ }).click();
   await expect(page.locator("#wallet-test-panel").getByRole("alert")).toContainText("cancelled");
   expect(await page.evaluate(() => (window as any).transfers)).toBe(0);
 });
@@ -295,6 +301,7 @@ test("a newly funded wallet automatically starts the prepared deposit", async ({
   await page.evaluate(() => { (window as any).tronBalance = "0"; });
   await panel(page);
   await page.locator("#wallet-test-panel").getByRole("button", { name: "Connect tron wallet" }).click();
+  await page.locator("#wallet-test-panel").getByRole("button", { name: /^Swap .+ for .+$/ }).click();
   await expect(page.getByTestId("route-wallet-execution")).toContainText("Waiting until");
   expect(await page.evaluate(() => (window as any).transfers)).toBe(0);
   await page.evaluate(() => { (window as any).tronBalance = "1000000000"; });
@@ -307,6 +314,7 @@ test("account changes invalidate a funded preparation without prompting again", 
   await page.evaluate(() => { (window as any).tronBalance = "0"; });
   const mock = await panel(page);
   await page.locator("#wallet-test-panel").getByRole("button", { name: "Connect tron wallet" }).click();
+  await page.locator("#wallet-test-panel").getByRole("button", { name: /^Swap .+ for .+$/ }).click();
   await expect(page.getByTestId("route-wallet-execution")).toContainText("Waiting until");
   await page.evaluate(() => {
     (window as any).changeTron("T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb");
@@ -321,6 +329,7 @@ test("an expired quote is refreshed before signing", async ({ page }) => {
   await wallets(page);
   const mock = await panel(page, execution(), false, true);
   await page.locator("#wallet-test-panel").getByRole("button", { name: "Connect tron wallet" }).click();
+  await page.locator("#wallet-test-panel").getByRole("button", { name: /^Swap .+ for .+$/ }).click();
   await expect(page.getByTestId("route-wallet-execution")).toContainText("Submitted.");
   expect(mock.counts()).toEqual({ created: 2, submissions: 1 });
   expect(await page.evaluate(() => (window as any).transfers)).toBe(1);
@@ -330,6 +339,7 @@ test("reload resumes notification of a broadcast transaction without signing", a
   await wallets(page);
   await panel(page, execution(), true);
   await page.locator("#wallet-test-panel").getByRole("button", { name: "Connect tron wallet" }).click();
+  await page.locator("#wallet-test-panel").getByRole("button", { name: /^Swap .+ for .+$/ }).click();
   await expect(page.getByRole("button", { name: "Retry tracking" })).toBeVisible();
   await page.reload();
   await expect(page.getByRole("button", { name: "Wallets (1)", exact: true })).toBeVisible();
@@ -345,6 +355,7 @@ test("invalid cross-chain recipient cannot create a quote or transfer", async ({
   await page.locator("#wallet-test-panel").getByRole("button", { name: "Connect tron wallet" }).click();
   await page.getByLabel("Swap recipient address").fill("INVALID.NEAR");
   await page.getByLabel("Swap recipient address").press("Tab");
+  await page.locator("#wallet-test-panel").getByRole("button", { name: /^Swap .+ for .+$/ }).click();
   await expect(page.locator("#wallet-test-panel").getByRole("alert")).toContainText("Invalid NEAR");
   expect(mock.counts()).toEqual({ created: 0, submissions: 0 });
 });
@@ -404,4 +415,85 @@ for (const symbol of ["ETH", "USDT"]) test(`Ethereum ${symbol} sends through the
   const result = await page.evaluate(async ({ path, value }) => (await import(/* @vite-ignore */ path)).perform(value, "evm"), { path: harnessPath, value });
   expect(result).toEqual({ reference: "0x" + TX, kind: "transaction_hash" });
   expect(await page.evaluate(() => (window as any).transfers)).toBe(1);
+});
+
+test("CoW guide embeds the official trading widget and connects without creating a swap", async ({ page }) => {
+  await wallets(page);
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  let executionRequests = 0;
+  await page.route("**/api/p2p/route-executions**", route => { executionRequests += 1; return route.fulfill({ status: 500, json: { error: "Connection must not create an execution" } }); });
+  await page.route("https://swap.cow.fi/**", route => route.fulfill({ contentType: "text/html", body: `<!doctype html><title>CoW Swap</title><main>Official widget fixture</main><script>
+    window.messages = [];
+    addEventListener('message', event => { window.messages.push(event.data); });
+    parent.postMessage({ key: 'cowSwapWidget', method: 'READY' }, '*');
+    </script>` }));
+  await page.evaluate(async path => {
+    const harness = await import(/* @vite-ignore */ path);
+    await harness.mountGuide({
+      route_id: "cow-native-route", route_kind: "crypto_to_crypto", route_provider: "cow-swap",
+      source_currency: "ETH", target_currency: "USDC", source_network: "ethereum", target_network: "ethereum", entry_asset: "ETH",
+      source_amount: "0.1", target_amount: "240", legs: [], route_path: ["ETH@ethereum", "USDC@ethereum"],
+      route_provider_url: "https://swap.cow.fi/#/1/swap/ETH/USDC",
+    });
+  }, harnessPath);
+  const guide = page.getByTestId("route-guide");
+  await guide.getByTestId("start-guide").click();
+  const widget = guide.getByTestId("cow-live-widget");
+  await expect(widget).toBeVisible();
+  await expect(guide.getByTestId("cow-swap-card")).toHaveCount(0);
+  const iframe = widget.locator('iframe[title="CoW Swap"]');
+  await expect(iframe).toBeVisible();
+  const url = new URL((await iframe.getAttribute("src"))!);
+  expect(url.origin).toBe("https://swap.cow.fi");
+  expect(url.toString()).toContain("sellAmount=0.1");
+  expect(url.hash).toContain("/1/widget/swap/ETH/USDC");
+  await widget.getByRole("button", { name: "Connect wallet", exact: true }).click();
+  await expect(widget.getByRole("button")).toContainText("0x0000…0001");
+  expect(executionRequests).toBe(0);
+  expect(await page.evaluate(() => (window as any).transfers)).toBe(0);
+  const frame = page.frameLocator('iframe[title="CoW Swap"]');
+  await frame.locator("body").evaluate(() => parent.postMessage({
+    key: "cowSwapIframeRpcProviderTransport", method: "PROVIDER_RPC_REQUEST",
+    rpcRequest: { id: 77, jsonrpc: "2.0", method: "eth_accounts", params: [] },
+  }, "*"));
+  await expect.poll(() => frame.locator("body").evaluate(() => (window as any).messages.find((message: any) => message.rpcResponse?.id === 77)?.rpcResponse.result)).toEqual([EVM]);
+  await page.getByRole("button", { name: "Switch theme" }).click();
+  await expect.poll(() => frame.locator("body").evaluate(() => (window as any).messages.filter((message: any) => message.method === "UPDATE_PARAMS").at(-1)?.urlParams.search)).toContain("theme=dark");
+  expect(errors).toEqual([]);
+});
+
+test("Symbiosis native balance includes the provider transaction fee", async ({ page }) => {
+  await wallets(page);
+  const value = execution("symbiosis", "ethereum", "ETH", "ethereum");
+  value.input_amount = "1";
+  value.action = {
+    kind: "symbiosis_transaction", chain_id: 1, source_token: "", input_amount: "1000000000000000000",
+    transaction: { chainId: 1, to: EVM, data: "0x12345678", value: "1000150000000000000" },
+  } as any;
+  const result = await page.evaluate(async ({ path, value }) => {
+    try { await (await import(/* @vite-ignore */ path)).perform(value, "evm"); return "submitted"; }
+    catch (cause) { return (cause as Error).message; }
+  }, { path: harnessPath, value });
+  expect(result).toBe("Insufficient balance");
+  expect(await page.evaluate(() => (window as any).transfers)).toBe(0);
+});
+
+test("changing the recipient discards the prepared quote without starting another swap", async ({ page }) => {
+  await wallets(page);
+  await page.evaluate(() => { (window as any).tronBalance = "0"; });
+  const value = execution();
+  value.recipient = "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb";
+  const mock = await panel(page, value);
+  const executionPanel = page.getByTestId("route-wallet-execution");
+  await executionPanel.getByRole("button", { name: "Connect tron wallet" }).click();
+  await executionPanel.getByRole("button", { name: "Another address", exact: true }).click();
+  await executionPanel.getByLabel("Swap recipient address").fill(value.recipient);
+  await executionPanel.getByRole("button", { name: /^Swap .+ for .+$/ }).click();
+  await expect(executionPanel).toContainText("Waiting until");
+  await executionPanel.getByRole("button", { name: "Connected wallet", exact: true }).click();
+  await expect(executionPanel.locator('.review')).toHaveCount(0);
+  await expect(executionPanel.getByRole("button", { name: /^Swap .+ for .+$/ })).toBeEnabled();
+  expect(mock.counts()).toEqual({ created: 1, submissions: 0 });
+  expect(await page.evaluate(() => (window as any).transfers)).toBe(0);
 });

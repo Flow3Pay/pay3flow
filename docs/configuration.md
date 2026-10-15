@@ -55,6 +55,15 @@ symbiosis_execution_contracts = [
 ]
 ```
 
+The optional third address pins the `OnchainGateway` used by same-chain
+Symbiosis swaps; it serves as both transaction destination and ERC-20 spender.
+Cross-chain quotes still require the separate MetaRouter and MetaRouterGateway.
+The gateways in `config.toml` were checked against live official `/v1/swap`
+responses and public RPC runtime bytecode on 2026-10-15. All seven EVM gateways
+have identical runtime bytecode (SHA-256
+`92b916b0f50975261ab2f7aaa45f913ac15bd2bf438e39d506e505703e98b4f7`),
+matching the [verified Ethereum OnchainGateway](https://etherscan.io/address/0xE7e68D336F90f98D22A479253eafA5f2424aCaD8#code).
+
 The TOML schema rejects unknown keys. This intentionally prevents credentials
 from being placed in the file by mistake.
 
@@ -139,7 +148,7 @@ wallet picker; injected Ethereum wallets work without it.
 NEAR Intents execution supports deposits from the supported EVM networks, NEAR,
 and TRON. CoW execution is limited to supported same-chain ERC20 pairs.
 Symbiosis execution requires a source-chain entry in
-`symbiosis_execution_contracts`, formatted as `chain-id=router,gateway`; NEAR
+`symbiosis_execution_contracts`, formatted as `chain-id=router,gateway[,onchain-gateway]`; NEAR
 origins and destinations use NEAR Intents. The repository configuration includes
 the TRON and supported EVM Symbiosis contracts. Other routes continue to use provider instructions.
 

@@ -1,6 +1,8 @@
 export const walletMessages = {
   en: {},
   ru: {
+    "Loading CoW Swap…": "Загрузка CoW Swap…",
+    "Could not load CoW Swap. Try again.": "Не удалось загрузить CoW Swap. Повторите попытку.",
     "Install EVER Wallet, or open Pay3Flow in its browser, to connect Everscale.": "Установите EVER Wallet или откройте Pay3Flow в его браузере, чтобы подключить Everscale.",
     "EVER Wallet did not initialize. Unlock it and try again.": "EVER Wallet не запустился. Разблокируйте кошелёк и повторите попытку.",
     "Switch EVER Wallet to Everscale mainnet and try again.": "Переключите EVER Wallet на основную сеть Everscale и повторите попытку.",
@@ -44,6 +46,8 @@ export const walletMessages = {
     "Rates, limits, and offers can change. Check the provider, payment details, and network before sending money. Executable swaps are signed in your wallet. Other route steps are completed on the provider platform.": "Курсы, лимиты и предложения могут измениться. Перед отправкой проверьте поставщика, реквизиты и сеть. Доступные обмены подписываются в вашем кошельке. Остальные шаги выполняются на площадке поставщика.",
   },
   hy: {
+    "Loading CoW Swap…": "CoW Swap-ը բեռնվում է…",
+    "Could not load CoW Swap. Try again.": "Չհաջողվեց բեռնել CoW Swap-ը։ Փորձեք կրկին։",
     "Install EVER Wallet, or open Pay3Flow in its browser, to connect Everscale.": "Տեղադրեք EVER Wallet-ը կամ բացեք Pay3Flow-ը դրա զննարկիչում՝ Everscale-ը միացնելու համար։",
     "EVER Wallet did not initialize. Unlock it and try again.": "EVER Wallet-ը չի գործարկվել։ Ապակողպեք այն և կրկին փորձեք։",
     "Switch EVER Wallet to Everscale mainnet and try again.": "EVER Wallet-ը փոխարկեք Everscale-ի հիմնական ցանցին և կրկին փորձեք։",

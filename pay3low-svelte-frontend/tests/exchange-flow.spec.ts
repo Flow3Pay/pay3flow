@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
 
 async function selectLanguage(page: Page, language: "en" | "ru" | "hy") {
   await page.locator(".languageToggle").click();
@@ -726,7 +727,7 @@ for (const side of ["sending", "recipient"] as const) test(`native EVER selects 
   await expect(page.getByLabel("Amount to send")).toHaveValue("1.25");
 });
 
-async function mockBackend(page: Page, options: { includeNewProviders?: boolean; includeEverscale?: boolean; routeCount?: number; spotCycle?: boolean; spotVenue?: string; spotGuidance?: boolean; reviews?: boolean; usdtFiatNetwork?: string; mexc?: boolean; guideVenue?: string; cifra?: boolean } = {}) {
+async function mockBackend(page: Page, options: { includeRestoredTokens?: boolean; includeNewProviders?: boolean; includeEverscale?: boolean; routeCount?: number; spotCycle?: boolean; spotVenue?: string; spotGuidance?: boolean; reviews?: boolean; usdtFiatNetwork?: string; mexc?: boolean; guideVenue?: string; cifra?: boolean } = {}) {
   await page.addInitScript(() => {
     if (!localStorage.getItem("pay3flow-locale")) localStorage.setItem("pay3flow-locale", "en");
     // These route fixtures use a saved AMD/RUB corridor independently of app defaults.
@@ -814,10 +815,22 @@ async function mockBackend(page: Page, options: { includeNewProviders?: boolean;
         method("kz-kaspi", "Kaspi.kz", "KZ", "KZT", "/icons/assets/kz-kaspi.png", "kaspi", true),
         wallet("USDT", "Tether"), wallet("USDC", "USD Coin"), wallet("BTC", "Bitcoin"), wallet("ETH", "Ethereum"),
         ...(options.includeEverscale ? [{ ...wallet("EVER", "Everscale"), icon_url: "/icons/assets/ever.svg" }] : []),
+        ...(options.includeRestoredTokens ? readFileSync(new URL("../../backend/providers/payment-methods/Providerfile", import.meta.url), "utf8")
+          .split("\n").filter(line => /id = "global-(10set|acnon)"/.test(line))
+          .map(line => {
+            const fields = Object.fromEntries([...line.matchAll(/(\w+) = "([^"]*)"/g)].map(match => [match[1], match[2]]));
+            return { ...wallet(fields.currency, fields.name), icon_url: fields.icon_url };
+          }) : []),
       ];
       return json({ items, total: items.length, limit: 100, offset: 0 });
     }
     if (url.pathname === "/api/networks") {
+      if (options.includeRestoredTokens) {
+        const sql = readFileSync(new URL("../../backend/migrations/catalogs.sql", import.meta.url), "utf8");
+        return json([...sql.matchAll(/\('([^']+)', '([^']+)', ARRAY\[([^\]]+)\]::TEXT\[\], 'enabled'\)/g)].map(match => ({
+          id: match[1], name: match[2], currencies: [...match[3].matchAll(/'([^']+)'/g)].map(currency => currency[1]),
+        })));
+      }
       return json([
         { id: "ethereum", name: "Ethereum (ERC-20)", currencies: ["ETH", "USDT", "USDC"] },
         { id: "base", name: "Base", currencies: ["ETH", "USDC"] },
@@ -4014,4 +4027,32 @@ test("compact selection search filters a network and handles empty results and E
   await networks.getByLabel("Blockchains").press("Escape");
   await expect(networks).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Select sending network: Ethereum/ })).toBeVisible();
+});
+
+
+for (const token of ["10SET", "ACNON"]) for (const side of ["sending", "recipient"] as const) test(`restored ${token} is searchable with its icon for ${side}`, async ({ page }) => {
+  await mockBackend(page, { includeRestoredTokens: true });
+  const searches: Record<string, string>[] = [];
+  await page.route("**/api/p2p/routes**", async route => {
+    const params = Object.fromEntries(new URL(route.request().url()).searchParams);
+    searches.push(params);
+    await route.fulfill({ json: { search_id: "00000000-0000-4000-8000-000000000111", searched_at: new Date().toISOString(), source_fiat: params.source_fiat, target_fiat: params.target_fiat, source_amount: params.source_amount, assets_searched: [], routes_found: 0, routes: [], can_exchange_to_target: false, entry_sources: [], exit_sources: [] } });
+  });
+  await openApp(page);
+  const other = await chooseCrypto(page, side === "sending" ? "recipient" : "sending", "USDT Ethereum");
+  await other.getByRole("option", { name: /Ethereum.*USDT/ }).click();
+  const picker = await openCryptoPicker(page, side);
+  await picker.getByRole("textbox", { name: "Currencies and digital assets" }).fill(token.toLowerCase());
+  const choice = picker.getByRole("option", { name: new RegExp(`^${token}\\b`) });
+  await expect(choice).toHaveCount(1);
+  await expect(choice.locator("img")).toHaveAttribute("src", `/icons/assets/${token.toLowerCase()}.png`);
+  await expect.poll(() => choice.locator("img").evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
+  await choice.click();
+  await picker.getByRole("option", { name: token === "10SET" ? /BNB Smart Chain.*10SET/ : /Ethereum.*ACNON/ }).click();
+  const storageSide = side === "sending" ? "source" : "target";
+  await expect.poll(() => page.evaluate(key => localStorage.getItem(key), `pay3flow.exchange.${storageSide}-method`)).toBe(`global-${token.toLowerCase()}`);
+  await page.getByLabel("Amount to send").fill("100");
+  await expect.poll(() => searches.some(params => params[side === "sending" ? "source_fiat" : "target_fiat"] === token && params[`${storageSide}_network`] === (token === "10SET" ? "bnb-smart-chain" : "ethereum"))).toBe(true);
+  await page.reload();
+  await expect.poll(() => page.evaluate(key => localStorage.getItem(key), `pay3flow.exchange.${storageSide}-method`)).toBe(`global-${token.toLowerCase()}`);
 });

@@ -311,7 +311,8 @@ export async function hasExecutionFunds(execution: RouteExecution, wallet: Conne
   const token = sourceToken(action);
   if (isNativeToken(token)) {
     const balance = await getBalance(evm.config as Parameters<typeof getBalance>[0], { address: evm.address, chainId: evm.chainId });
-    return balance.value >= required;
+    const transactionValue = action.kind === "symbiosis_transaction" ? BigInt(String(action.transaction.value ?? "0")) : required;
+    return balance.value >= (transactionValue > required ? transactionValue : required);
   }
   const balance = await readContract(evm.config as Parameters<typeof readContract>[0], {
     address: token as Address,

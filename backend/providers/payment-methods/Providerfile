@@ -93,6 +93,8 @@ payment_methods = [
   { id = "global-sol", name = "Solana", country = "GLOBAL", currency = "SOL", kind = "wallet", color = "#14f195", initials = "SOL", icon_url = "/icons/assets/sol.webp", p2p_query = "SOL" },
   { id = "global-trx", name = "TRON", country = "GLOBAL", currency = "TRX", kind = "wallet", color = "#ef0027", initials = "TRX", icon_url = "/icons/assets/trx.webp", p2p_query = "TRX" },
   { id = "global-ton", name = "Toncoin", country = "GLOBAL", currency = "TON", kind = "wallet", color = "#0098ea", initials = "TON", icon_url = "/icons/assets/ton.webp", p2p_query = "TON" },
+  { id = "global-10set", name = "Tenset", country = "GLOBAL", currency = "10SET", kind = "wallet", color = "#d5b169", initials = "10SET", icon_url = "/icons/assets/10set.png", p2p_query = "10SET" },
+  { id = "global-acnon", name = "Accenture (Ondo Tokenized Stock)", country = "GLOBAL", currency = "ACNON", kind = "wallet", color = "#304ffe", initials = "ACNON", icon_url = "/icons/assets/acnon.png", p2p_query = "ACNON" },
   { id = "global-aave", name = "Aave", country = "GLOBAL", currency = "AAVE", kind = "wallet", color = "#9391f7", initials = "AAVE", icon_url = "/icons/assets/aave.png", p2p_query = "AAVE" },
   { id = "global-aixbt", name = "aixbt", country = "GLOBAL", currency = "AIXBT", kind = "wallet", color = "#deef83", initials = "AIXBT", icon_url = "/icons/assets/aixbt.png", p2p_query = "AIXBT" },
   { id = "global-aevo", name = "Aevo", country = "GLOBAL", currency = "AEVO", kind = "wallet", color = "#a98fe9", initials = "AEVO", icon_url = "/icons/assets/aevo.png", p2p_query = "AEVO" },

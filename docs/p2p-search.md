@@ -248,8 +248,9 @@ provider step.
 
 The browser connects an EVM wallet through Reown AppKit or a NEAR wallet through
 NEAR Wallet Selector. The user chooses the recipient on every execution, either
-from a connected destination wallet or by entering an address. Pay3Flow requests
-a fresh quote for those source and recipient addresses, checks the source
+from a connected destination wallet or by entering an address. Connecting a wallet
+only establishes the session; it never creates an execution, requests approvals,
+or starts a transfer. After the user presses Swap, Pay3Flow requests a fresh quote for those source and recipient addresses, checks the source
 balance automatically, and asks the wallet to confirm every approval and
 transfer. ERC-20 approvals use the exact input amount rather than an unlimited
 allowance.
@@ -259,6 +260,15 @@ data, transaction hashes, and provider status are persisted. Private keys and
 wallet signatures never reach the backend. Pending operations are restored in
 the browser and their NEAR Intents deposit, CoW order, or Symbiosis transaction
 status is polled until a terminal state.
+
+CoW Swap instruction steps embed the official `@cowprotocol/widget-lib` interface
+from `https://swap.cow.fi`. The selected pair, input amount, source/destination
+chains, theme, and language are passed into it. Supported shared EVM wallets are
+bridged through its origin-checked JSON-RPC transport; other CoW networks use
+its standalone wallet flow. Quotes, approvals, signing, and order tracking in
+this widget are handled by CoW itself rather than Pay3Flow's execution endpoint.
+The widget supports native-asset routes even when the backend does not issue
+an ERC-20 execution descriptor.
 
 The frontend needs a WalletConnect Cloud project id at runtime:
 
@@ -271,7 +281,7 @@ addresses, provider credentials, and end-to-end wallet flows have been smoke
 tested. Manual provider links remain available while the flag is disabled.
 Symbiosis execution additionally requires audited
 `symbiosis_execution_contracts` entries in
-`chain_id=MetaRouter,MetaRouterGateway` form; returned calldata and approval
+`chain_id=MetaRouter,MetaRouterGateway[,OnchainGateway]` form; returned calldata and approval
 spenders are rejected when they do not match.
 
 ## Configuration

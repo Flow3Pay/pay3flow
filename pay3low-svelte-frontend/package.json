@@ -28,6 +28,7 @@
   "dependencies": {
     "@cowprotocol/cow-sdk": "^9.2.17",
     "@cowprotocol/sdk-viem-adapter": "^0.3.33",
+    "@cowprotocol/widget-lib": "4.8.1",
     "@near-js/transactions": "^2.5.1",
     "@near-wallet-selector/core": "^10.1.4",
     "@near-wallet-selector/modal-ui": "^10.1.4",

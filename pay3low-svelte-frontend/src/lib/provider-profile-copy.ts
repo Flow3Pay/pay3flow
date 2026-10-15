@@ -3,7 +3,7 @@ import type { Locale } from './i18n';
 const ru = {
   directory: 'Площадки', profile: 'Профиль площадки', title: 'Площадка в цифрах',
   subtitle: 'Как площадка проявляет себя в поисках Pay3Flow: позиции, направления и отзывы пользователей.',
-  search: 'Найти площадку', all: 'Все площадки', p2p: 'P2P', spot: 'Spot', exchanger: 'Обменник',
+  search: 'Найти площадку', all: 'Все площадки', p2p: 'P2P', spot: 'Spot', swap: 'SWAP', exchanger: 'Обменник',
   integrated: 'Доступна в поиске', catalogOnly: 'В каталоге', identity: 'Информация из каталога',
   official: 'Открыть сайт', findRoutes: 'Найти обмен', overview: 'Обзор', directions: 'Направления', reviews: 'Отзывы', about: 'О площадке',
   period: 'Период статистики', days7: '7 дней', days30: '30 дней', days90: '90 дней',
@@ -42,7 +42,7 @@ type Copy = typeof ru;
 const en: Copy = {
   directory: 'Platforms', profile: 'Platform profile', title: 'A platform in numbers',
   subtitle: 'How this platform performs in Pay3Flow searches: rankings, directions and customer reviews.',
-  search: 'Find a platform', all: 'All platforms', p2p: 'P2P', spot: 'Spot', exchanger: 'Exchanger',
+  search: 'Find a platform', all: 'All platforms', p2p: 'P2P', spot: 'Spot', swap: 'SWAP', exchanger: 'Exchanger',
   integrated: 'Available in search', catalogOnly: 'In the directory', identity: 'Directory information',
   official: 'Open website', findRoutes: 'Find an exchange', overview: 'Overview', directions: 'Directions', reviews: 'Reviews', about: 'About',
   period: 'Statistics period', days7: '7 days', days30: '30 days', days90: '90 days',

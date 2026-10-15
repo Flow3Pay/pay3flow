@@ -58,6 +58,10 @@
     fundsReady = false;
     preparedAction = null;
     quoteRequestKey = null;
+    if (execution?.status === "awaiting_signature" && !pendingSubmission) {
+      execution = null;
+      forgetExecution();
+    }
     if (fundTimer) clearInterval(fundTimer);
     fundTimer = null;
 
@@ -100,6 +104,10 @@
       await tick();
     } catch (cause) { error = message(cause); }
     finally { busy = false; }
+  }
+
+  async function swapWithWallet() {
+    await connectSource();
     if (sourceWallet && recipient && !error && !disposed) await beginAutomaticSwap();
   }
 
@@ -115,7 +123,6 @@
       await tick();
     } catch (cause) { error = message(cause); }
     finally { busy = false; }
-    if (!error && !disposed) await connectSource();
   }
   function chooseManualRecipient() {
     if (busy || pendingSubmission || execution?.status === "submitted") return;
@@ -129,7 +136,10 @@
     notice = "";
   }
   function recipientChanged() {
-    if (sourceWallet && recipient && !busy) void connectSource();
+    execution = null;
+    preparedAction = null;
+    autoPrompt = false;
+    forgetExecution();
   }
 
   async function prepareQuote(version: number): Promise<boolean> {
@@ -302,8 +312,8 @@
     {#if !sourceSupported}
       <p class="muted">{copy("Embedded execution does not yet support a wallet for {network}. Open the provider manually for this route.", { network: sourceNetwork })}</p>
     {:else}
-      {#if sourceWallet}
         {#snippet recipientControls()}
+          {#if sourceWallet}
           <p class="address" data-testid="swap-source-wallet">{copy("From wallet")} · {shortAddress(sourceWallet!.address)}</p>
           <fieldset>
             <legend>{copy("Send swap output to")}</legend>
@@ -314,10 +324,13 @@
             {#if recipientMode === "connected" && recipientWallet}<p class="address">{shortAddress(recipientWallet.address)} · {networkNames[destinationNetwork] ?? destinationNetwork}</p>{/if}
             {#if recipientMode === "manual"}<input disabled={busy || Boolean(pendingSubmission) || execution?.status === "submitted"} bind:value={manualRecipient} on:change={recipientChanged} autocomplete="off" spellcheck="false" placeholder={copy("Recipient on {network}", { network: networkNames[destinationNetwork] ?? destinationNetwork })} aria-label={copy("Swap recipient address")} />{/if}
           </fieldset>
+          {/if}
         {/snippet}
         {#snippet swapAction()}
-          {#if !execution}
-            <button type="button" class="primary" disabled={busy || !recipient} on:click={connectSource}>{busy ? copy("Preparing…") : copy("Swap {from} for {to}", { from: fromSymbol, to: toSymbol })}</button>
+          {#if !sourceWallet}
+            <button type="button" class="walletButton" disabled={busy || Boolean(pendingSubmission) || execution?.status === "submitted"} on:click={connectSource}>{busy ? copy("Waiting for wallet…") : copy("Connect {network} wallet", { network: sourceNetwork })}</button>
+          {:else if !execution}
+            <button type="button" class="primary" disabled={busy || !recipient} on:click={swapWithWallet}>{busy ? copy("Preparing…") : copy("Swap {from} for {to}", { from: fromSymbol, to: toSymbol })}</button>
           {/if}
         {/snippet}
         <div class="swapForm" data-testid="wallet-swap-form" data-provider={widgetProvider ?? "default"}>
@@ -342,11 +355,6 @@
             {@render swapAction()}
           {/if}
         </div>
-      {:else}
-        <div class="walletRow">
-          <button type="button" class="walletButton" disabled={busy || Boolean(pendingSubmission) || execution?.status === "submitted"} on:click={connectSource}>{copy("Connect {network} wallet", { network: sourceNetwork })}</button>
-        </div>
-      {/if}
       {#if execution}
         <div class="review">
           <span><small>{copy("Amount")}</small><strong>{execution.input_amount} {execution.from_asset}</strong></span>
@@ -367,7 +375,7 @@
             <button type="button" class="primary" disabled={busy} on:click={signAndSubmit}>{busy ? copy("Waiting for wallet…") : copy("Review and sign")}</button>
           {:else}
             <p class="muted">{copy("Waiting until the wallet contains at least {amount} {asset}. Balance is checked automatically.", { amount: execution.input_amount, asset: execution.from_asset })}</p>
-            <button type="button" class="secondary" disabled={busy || !sourceWallet} on:click={connectSource}>{copy("Retry swap")}</button>
+            <button type="button" class="secondary" disabled={busy || !sourceWallet} on:click={swapWithWallet}>{copy("Retry swap")}</button>
           {/if}
         {:else if execution.status === "submitted"}
           <p class="ready">{copy("Submitted. Pay3Flow is tracking provider completion automatically.")}</p>

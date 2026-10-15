@@ -9,6 +9,7 @@
   import { guideSharePath } from "$lib/guide-link";
   // import AdvertiserCard from "./AdvertiserCard.svelte";
   import ExternalReviews from "./ExternalReviews.svelte";
+  import CowSwapWidget from "./CowSwapWidget.svelte";
   import RouteExecutionPanel from "./RouteExecutionPanel.svelte";
   import { wallets } from "$lib/wallet-session";
   import { walletFamily } from "$lib/wallet-execution";
@@ -58,6 +59,8 @@
   $: spot = step && isSpotStep(step) ? spotTrade(step.pair, step.from, step.to) : null;
   $: sourceFamily = walletFamily(route.execution?.from_asset.split("@", 2)[1] ?? "");
   $: walletSwap = Boolean(step?.execution && route.execution && sourceFamily && $wallets[sourceFamily]);
+  $: officialCow = Boolean(step?.execution && step.provider === "cow-swap");
+  $: embeddedSwap = officialCow || Boolean(step?.execution && route.execution && step.provider === "symbiosis");
   $: walletProviderStep = Boolean(step?.execution && ["symbiosis", "near-intents", "cow-swap"].includes(step.provider));
   $: walletProviderUrl = step?.url ?? step?.guide?.links.find(link => /^Open\b/i.test(link.label))?.url ?? (step && venueUrls[step.provider.toLowerCase()]);
   $: exchangerWebsiteUrl = step?.provider.toLowerCase() === "bestchange" ? bestchangeWebsiteUrl(step) : null;
@@ -124,7 +127,7 @@
     let animationId: number;
     const advance = (now: number) => {
       animationId = requestAnimationFrame(advance);
-      if (!playing || !documentVisible || !sceneVisible || !step || walletSwap) { previousTick = undefined; return; }
+      if (!playing || !documentVisible || !sceneVisible || !step || walletSwap || embeddedSwap) { previousTick = undefined; return; }
       const delta = previousTick === undefined ? 0 : Math.min(now - previousTick, 100);
       previousTick = now;
       elapsed = Math.min(frameDuration, elapsed + delta);
@@ -177,7 +180,7 @@
           <div class="chapterHeading"><span class="eyebrow">{finished ? copy("GUIDE COMPLETED") : chapter === -1 ? copy("LET’S GET YOU THERE") : copy("STEP {current} OF {total}", { current: chapter + 1, total: steps.length })}</span></div>
           <h1 bind:this={heading} tabindex="-1">{finished ? copy("Every step. Done.") : headingTitle ?? copy("A clear route. At your pace.")}{#if step}{" "}{#if !titleIncludesVenue}{copy("on")}{" "}{/if}<span class="headingVenue"><img src={venueIcon(step.provider)} alt="" />{step.venue}</span>{/if}</h1>
           <p class="lead">{finished ? copy("You have confirmed every step. Check the final balance in your bank, wallet or exchange account.") : walletSwap ? copy("Review this swap and confirm it in your connected wallet.") : walletProviderStep && route.execution ? copy("Follow the instructions on {venue}, or connect your wallet to swap here.", { venue: step.venue }) : step?.summary ?? copy("First, see how your exchange works. Then follow the animated walkthrough, one step at a time.")}</p>
-          {#if !walletSwap}
+          {#if !walletSwap && !embeddedSwap}
           <div class="chapterContent" class:spotContent={Boolean(spot)}>
             <div class="visualColumn">
               <div class="videoStage" class:spotStage={Boolean(spot)} class:paused={!playing} use:sceneVisibility>
@@ -220,7 +223,7 @@
             </section>
           </div>
           {/if}
-          {#if walletProviderStep && !walletSwap && walletProviderUrl && step}
+          {#if walletProviderStep && !walletSwap && !embeddedSwap && walletProviderUrl && step}
             <a class="walletProviderLink" href={walletProviderUrl} target="_blank" rel="noreferrer noopener">{copy("Open {venue}", { venue: step.venue })} <span aria-hidden="true">↗</span></a>
           {/if}
           {#if spot && step?.url}
@@ -236,8 +239,10 @@
           {#if step?.offer && step.provider.toLowerCase() !== "bestchange" && !step.direct && (step.kind === "buy" || step.kind === "sell") && step.url}
             <a class="walletProviderLink" data-testid="p2p-profile-link" href={step.url} target="_blank" rel="noreferrer noopener">{copy(step.offer.advertiser_profile_url ? "Open {venue} profile" : "Open {venue}", { venue: step.offer.advertiser_profile_url ? step.offer.advertiser.nickname : step.venue })} <span aria-hidden="true">↗</span></a>
           {/if}
-          {#if step?.execution && route.execution}
-            <div class="swapExecution" class:connected={walletSwap}>{#key route.route_id}<RouteExecutionPanel {route} {networkNames} />{/key}</div>
+          {#if officialCow && step}
+            <CowSwapWidget {route} {step} />
+          {:else if step?.execution && route.execution}
+            <div class="swapExecution" class:connected={walletSwap || embeddedSwap}>{#key route.route_id}<RouteExecutionPanel {route} {networkNames} />{/key}</div>
           {/if}
           <!-- Actual platform actions are paused for now.
           {#if step}

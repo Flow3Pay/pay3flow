@@ -53,6 +53,13 @@ impl SymbiosisToken {
     }
 }
 
+#[derive(Clone)]
+struct ExecutionContracts {
+    meta_router: String,
+    meta_router_gateway: String,
+    onchain_gateway: Option<String>,
+}
+
 /// Read-only Symbiosis cross-chain quote provider.
 ///
 /// Token metadata is loaded lazily from the provider's public catalog. Quotes
@@ -67,7 +74,7 @@ pub struct SymbiosisRouteProvider {
     quote_address: String,
     slippage_bps: u32,
     tokens: Arc<RwLock<Option<Vec<SymbiosisToken>>>>,
-    execution_contracts: Arc<HashMap<u64, (String, String)>>,
+    execution_contracts: Arc<HashMap<u64, ExecutionContracts>>,
 }
 
 impl SymbiosisRouteProvider {
@@ -112,24 +119,35 @@ impl SymbiosisRouteProvider {
         })
     }
 
-    /// Configure audited `chain_id=meta_router,meta_router_gateway` pairs.
-    /// Executable calldata is rejected unless both addresses match this list.
+    /// Configure audited `chain_id=meta_router,meta_router_gateway[,onchain_gateway]` entries.
+    /// Same-chain swaps require their own gateway; cross-chain swaps use the MetaRouter.
     pub fn with_execution_contracts(mut self, entries: &[String]) -> Result<Self> {
         let mut contracts = HashMap::new();
         for entry in entries {
             let (chain_id, addresses) = entry
                 .split_once('=')
                 .with_context(|| format!("invalid Symbiosis execution contract entry {entry}"))?;
-            let (router, gateway) = addresses
-                .split_once(',')
-                .with_context(|| format!("invalid Symbiosis execution contract entry {entry}"))?;
+            let addresses = addresses.split(',').collect::<Vec<_>>();
+            let (router, gateway, onchain_gateway) = match addresses.as_slice() {
+                [router, gateway] => (*router, *gateway, None),
+                [router, gateway, onchain] => (*router, *gateway, Some(*onchain)),
+                _ => bail!("invalid Symbiosis execution contract entry {entry}"),
+            };
             let chain_id = chain_id
                 .trim()
                 .parse::<u64>()
                 .with_context(|| format!("invalid Symbiosis chain id in {entry}"))?;
             let router = checked_evm_address(router, "meta router")?;
             let gateway = checked_evm_address(gateway, "meta router gateway")?;
-            if contracts.insert(chain_id, (router, gateway)).is_some() {
+            let onchain_gateway = onchain_gateway
+                .map(|address| checked_evm_address(address, "onchain gateway"))
+                .transpose()?;
+            let entry = ExecutionContracts {
+                meta_router: router,
+                meta_router_gateway: gateway,
+                onchain_gateway,
+            };
+            if contracts.insert(chain_id, entry).is_some() {
                 bail!("duplicate Symbiosis execution contracts for chain {chain_id}");
             }
         }
@@ -361,7 +379,7 @@ impl SymbiosisRouteProvider {
             .or_else(|| raw.get("approvalAddress"))
             .and_then(Value::as_str)
             .map(str::to_string);
-        let (expected_router, expected_gateway) = self
+        let contracts = self
             .execution_contracts
             .get(&from_token.chain_id)
             .with_context(|| {
@@ -374,9 +392,21 @@ impl SymbiosisRouteProvider {
             .get("to")
             .and_then(Value::as_str)
             .context("Symbiosis executable transaction has no destination")?;
-        if !transaction_to.eq_ignore_ascii_case(expected_router) {
-            bail!("Symbiosis executable transaction destination is not the configured MetaRouter");
-        }
+        // Same-chain swaps go directly through OnchainGateway, which is also
+        // their approval spender. Never allow it for a cross-chain quote.
+        let onchain = from_token.chain_id == to_token.chain_id
+            && contracts
+                .onchain_gateway
+                .as_deref()
+                .is_some_and(|gateway| transaction_to.eq_ignore_ascii_case(gateway));
+        let expected_gateway = if onchain {
+            transaction_to
+        } else {
+            if !transaction_to.eq_ignore_ascii_case(&contracts.meta_router) {
+                bail!("Symbiosis executable transaction destination is not a configured router for this route");
+            }
+            &contracts.meta_router_gateway
+        };
         if !is_evm_native_token(&from_token.address) {
             let spender = approval_spender
                 .as_deref()
@@ -862,6 +892,65 @@ mod tests {
         }
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn same_chain_execution_uses_only_its_pinned_onchain_gateway() {
+        const ROUTER: &str = "0xf621Fb08BBE51aF70e7E0F4EA63496894166Ff7F";
+        const GATEWAY: &str = "0xfCEF2Fe72413b65d3F393d278A714caD87512bcd";
+        const ONCHAIN: &str = "0xE7e68D336F90f98D22A479253eafA5f2424aCaD8";
+        for violation in ["none", "router", "spender", "cross-chain", "unconfigured"] {
+            let app = axum::Router::new()
+                .route("/v2/tokens", axum::routing::get(|| async {
+                    axum::Json(json!([
+                        {"symbol":"USDT", "address":GATEWAY, "chainId":1, "decimals":6},
+                        {"symbol":"USDC", "address":ROUTER, "chainId":1, "decimals":6},
+                        {"symbol":"USDC", "address":ROUTER, "chainId":8453, "decimals":6}
+                    ]))
+                }))
+                .route("/v1/swap", axum::routing::post(move || async move {
+                    axum::Json(json!({
+                        "tokenAmountOut":{"amount":"12000000","decimals":6},
+                        "approveTo":if violation == "spender" { GATEWAY } else { ONCHAIN },
+                        "tx":{"chainId":1,"to":if violation == "router" { GATEWAY } else { ONCHAIN },"data":"0x00112233","value":"0"}
+                    }))
+                }));
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+            let entry = if violation == "unconfigured" {
+                format!("1={ROUTER},{GATEWAY}")
+            } else {
+                format!("1={ROUTER},{GATEWAY},{ONCHAIN}")
+            };
+            let provider =
+                SymbiosisRouteProvider::new(format!("http://{address}"), None, ROUTER, 300)
+                    .unwrap()
+                    .with_execution_contracts(&[entry])
+                    .unwrap();
+            let from = Asset::parse("USDT@ethereum").unwrap();
+            let to = Asset::parse(if violation == "cross-chain" {
+                "USDC@base"
+            } else {
+                "USDC@ethereum"
+            })
+            .unwrap();
+            let result = provider
+                .execution_quote(
+                    from.clone(),
+                    to,
+                    Amount::new("12.345678", from).unwrap(),
+                    ROUTER,
+                    ROUTER,
+                )
+                .await;
+            assert_eq!(
+                result.is_ok(),
+                violation == "none",
+                "{violation}: {result:?}"
+            );
+            server.abort();
+        }
+    }
+
     #[test]
     fn validates_and_indexes_execution_contract_allowlist() {
         let provider = SymbiosisRouteProvider::new(
@@ -876,7 +965,7 @@ mod tests {
         ])
         .unwrap();
         assert_eq!(
-            provider.execution_contracts.get(&1).unwrap().0,
+            provider.execution_contracts.get(&1).unwrap().meta_router,
             "0xf621Fb08BBE51aF70e7E0F4EA63496894166Ff7F"
         );
 
