@@ -1,0 +1,103 @@
+{
+  "status": "deployed",
+  "source_revision": "88d769ed1b24eb6c087f2e1ed835a6bee07fcc55",
+  "source_tree": "195e6980849c0d7a4c5ba2a00ca1b68e42573a28",
+  "deployed_at": "2026-10-15T18:40:17Z",
+  "verified_at": "2026-10-15T18:42:59.133159+00:00",
+  "target": "root@195.123.218.200",
+  "url": "https://pay3flow.lefine.pro/providers/crypto-office",
+  "image_tag": "crypto-office-20261015-88d769e",
+  "images": {
+    "pay3flow-backend": "localhost/pay3flow/backend:crypto-office-20261015-88d769e",
+    "pay3flow-frontend": "localhost/pay3flow/frontend:crypto-office-20261015-88d769e"
+  },
+  "previous_images": {
+    "pay3flow-backend": "localhost/pay3flow/backend:complex-routes-20261015-739be438",
+    "pay3flow-frontend": "localhost/pay3flow/frontend:complex-routes-20261015-739be438"
+  },
+  "backup_directory": "/var/lib/pay3flow/backups/crypto-office-20261015-88d769e",
+  "change": "Authenticated Crypto Office pair discovery and amount-specific indicative swap quotes, with network-qualified assets, amount limits and result_amount minus network_fee. No order creation.",
+  "activation": {
+    "environment_variable": "CRYPTO_OFFICE_API_TOKEN",
+    "scheme": "Authorization: External <token>",
+    "token_configured": false,
+    "current_mode": "catalog_only",
+    "next_step": "Provision the raw token in pay3flow-secrets and restart the backend.",
+    "live_authenticated_quotes": "not verified; token not provided"
+  },
+  "verification": {
+    "rust_tests_passed": 375,
+    "rust_tests_ignored": 38,
+    "new_adapter_tests_passed": 9,
+    "cargo_fmt": "passed, including external provider Rust files",
+    "cargo_clippy_all_targets": "passed with existing warnings",
+    "frontend_unit_tests_passed": 71,
+    "svelte_check": "0 errors, 0 warnings",
+    "frontend_build": "passed",
+    "secret_audit": "passed",
+    "providerfile_sql_check": "passed",
+    "optional_token_manifest": "rendered and runtime Secret reference verified",
+    "live_deploy_fish_syntax": "passed",
+    "database_backup_gzip_check": "passed",
+    "runtime_config_preserved": true,
+    "build_and_cri_image_ids": "verified by deployment script",
+    "public_endpoints": "home, health, providers and official SVG passed",
+    "catalog_api": {
+      "rows": 2,
+      "operations": [
+        "buy",
+        "sell"
+      ],
+      "searchable": false,
+      "search_mode": "catalog_only"
+    },
+    "unconfigured_search": "HTTP 200, no routes returned for explicitly selected crypto-office",
+    "upstream_without_token": "available-pairs endpoint returned HTTP 401",
+    "browser": [
+      {
+        "width": 1440,
+        "locale": "en",
+        "name": "Crypto Office",
+        "officialIcon": true,
+        "overflow": false,
+        "pageErrors": []
+      },
+      {
+        "width": 390,
+        "locale": "ru",
+        "name": "Crypto Office",
+        "officialIcon": true,
+        "overflow": false,
+        "pageErrors": []
+      }
+    ],
+    "pods": [
+      {
+        "name": "pay3flow-backend-59768dffcc-r4ktm",
+        "phase": "Running",
+        "containers": [
+          {
+            "name": "backend",
+            "ready": true,
+            "restarts": 0,
+            "image": "localhost/pay3flow/backend:crypto-office-20261015-88d769e",
+            "image_id": "sha256:ac1292e44b6fe2ed6cc82cda4f987d3b51b4cb170d315ea894f319929f30ab85"
+          }
+        ]
+      },
+      {
+        "name": "pay3flow-frontend-85959f6fd9-hmnkg",
+        "phase": "Running",
+        "containers": [
+          {
+            "name": "frontend",
+            "ready": true,
+            "restarts": 0,
+            "image": "localhost/pay3flow/frontend:crypto-office-20261015-88d769e",
+            "image_id": "sha256:7789129fc012b1eda37938b56637e4fb3ec79853d8795f3f358f76bdbc30e678"
+          }
+        ]
+      }
+    ]
+  }
+}
