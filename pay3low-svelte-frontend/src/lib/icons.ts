@@ -1,4 +1,4 @@
-const LOCAL_VENUE_ICONS = new Set(["binance", "bybit", "okx", "bitget", "mexc", "rapira", "whitebird", "cifra-broker", "cow-swap", "bestchange", "bitcoin-center", "bncex", "dzengi", "id-pay", "skylabs", "papa-change", "symbiosis", "near-intents", "gate", "barter", "1inch", "0x", "lifi", "nordstern", "velora", "enso", "bebop", "kyberswap"]);
+const LOCAL_VENUE_ICONS = new Set(["binance", "bybit", "okx", "bitget", "mexc", "rapira", "whitebird", "cifra-broker", "cow-swap", "bestchange", "bitcoin-center", "bncex", "dzengi", "id-pay", "skylabs", "papa-change", "crypto-office", "symbiosis", "near-intents", "gate", "barter", "1inch", "0x", "lifi", "nordstern", "velora", "enso", "bebop", "kyberswap"]);
 const PNG_VENUE_ICONS = new Set(["binance", "bybit", "bitget", "mexc", "rapira", "whitebird", "cifra-broker", "papa-change", "symbiosis", "near-intents", "gate", "1inch", "0x", "lifi", "velora", "enso", "bebop", "kyberswap"]);
 const JPG_VENUE_ICONS = new Set(["nordstern"]);
 const VENUE_ICON_ALIASES: Record<string, string> = { "1ich": "1inch", lighing: "lifi", verola: "velora" };

@@ -1,0 +1,35 @@
+# Swap discovery and read-only indicative quotes require CRYPTO_OFFICE_API_TOKEN.
+exchange_methods = ["exchanger"]
+
+[code]
+language = "rust"
+source = { path = "crypto_office.rs" }
+
+[buy]
+source_url = "https://crypto-office.com/ru/exchange"
+name = "Crypto Office Buy"
+currency = ["btc", "eth", "bnb", "sol", "trx", "usdt", "usdc"]
+banks = []
+
+[sell]
+source_url = "https://crypto-office.com/ru/exchange"
+name = "Crypto Office Sell"
+currency = ["btc", "eth", "bnb", "sol", "trx", "usdt", "usdc"]
+banks = []
+
+[fees]
+kind = "included_in_quote"
+description = "Indicative payout is result_amount minus network_fee from the amount-specific swap quote. Recipient-dependent fees and wallet funding costs must be confirmed before execution."
+docs_url = "https://developers.crypto-office.com/ru/rest-api/operations/get-swap-get-rate-info"
+
+[guidance]
+description = "Crypto Office crypto swaps. Live quotes require a server API token; supported directions come from its authenticated pair catalog."
+steps = [
+  "Open Crypto Office and choose the same currencies and networks as the route.",
+  "Check the final payout, fees, recipient address and account funding requirements.",
+  "Confirm the swap in Crypto Office after reviewing its current quote.",
+]
+
+[[guidance.links]]
+label = "Crypto Office API documentation"
+url = "https://developers.crypto-office.com/ru/rest-api/operations/get-swap-list-available-pairs"

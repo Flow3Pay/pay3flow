@@ -99,6 +99,9 @@ async fn main() -> anyhow::Result<()> {
     };
     let mut public_route_providers: Vec<Arc<dyn PublicRouteProvider>> =
         vec![Arc::new(near_intents.clone())];
+    if let Some(provider) = pay3flow_backend::compiled_provider_code::crypto_office::CryptoOfficeRouteProvider::from_env()? {
+        public_route_providers.push(Arc::new(provider));
+    }
     let cow = CowRouteProvider::from_config(
         &cfg.cow_api_urls,
         &cfg.cow_tokens,

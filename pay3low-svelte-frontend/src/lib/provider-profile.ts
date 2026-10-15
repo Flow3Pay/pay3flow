@@ -39,6 +39,7 @@ const identities: Array<[string, string, string, MarketType[]]> = [
   ['0x', '0x', 'https://matcha.xyz', ['exchanger']],
   ['barter', 'Barter', 'https://app.barterswap.xyz', ['exchanger']],
   ['id-pay', 'ID Pay', 'https://id-pay.ru', ['exchanger']],
+  ['crypto-office', 'Crypto Office', 'https://crypto-office.com/ru/exchange', ['exchanger']],
   ['papa-change', 'Papa Change', 'https://papa-change.biz', ['exchanger']],
 ];
 export const profileVenues: ProfileVenue[] = identities.map(([slug, name, url, types]) => ({

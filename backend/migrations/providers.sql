@@ -3,7 +3,7 @@
 -- The application embeds this migration; Providerfiles are not read at runtime.
 DELETE FROM providers
 WHERE source_file LIKE '%/Providerfile'
-AND (slug, operation) NOT IN (('0x', 'buy'), ('0x', 'sell'), ('barter', 'buy'), ('barter', 'sell'), ('bestchange', 'buy'), ('bestchange', 'sell'), ('binance', 'buy'), ('binance', 'sell'), ('bitcoin-center', 'buy'), ('bitcoin-center', 'sell'), ('bitget', 'buy'), ('bitget', 'sell'), ('bncex', 'buy'), ('bncex', 'sell'), ('bybit', 'buy'), ('bybit', 'sell'), ('cifra-broker', 'buy'), ('cifra-broker', 'sell'), ('cow-swap', 'buy'), ('cow-swap', 'sell'), ('dzengi', 'buy'), ('dzengi', 'sell'), ('gate', 'buy'), ('gate', 'sell'), ('id-pay', 'buy'), ('id-pay', 'sell'), ('mexc', 'buy'), ('mexc', 'sell'), ('near-intents', 'buy'), ('near-intents', 'sell'), ('okx', 'buy'), ('okx', 'sell'), ('papa-change', 'buy'), ('papa-change', 'sell'), ('rapira', 'buy'), ('rapira', 'sell'), ('skylabs', 'buy'), ('skylabs', 'sell'), ('symbiosis', 'buy'), ('symbiosis', 'sell'), ('whitebird', 'buy'), ('whitebird', 'sell'));
+AND (slug, operation) NOT IN (('0x', 'buy'), ('0x', 'sell'), ('barter', 'buy'), ('barter', 'sell'), ('bestchange', 'buy'), ('bestchange', 'sell'), ('binance', 'buy'), ('binance', 'sell'), ('bitcoin-center', 'buy'), ('bitcoin-center', 'sell'), ('bitget', 'buy'), ('bitget', 'sell'), ('bncex', 'buy'), ('bncex', 'sell'), ('bybit', 'buy'), ('bybit', 'sell'), ('cifra-broker', 'buy'), ('cifra-broker', 'sell'), ('cow-swap', 'buy'), ('cow-swap', 'sell'), ('crypto-office', 'buy'), ('crypto-office', 'sell'), ('dzengi', 'buy'), ('dzengi', 'sell'), ('gate', 'buy'), ('gate', 'sell'), ('id-pay', 'buy'), ('id-pay', 'sell'), ('mexc', 'buy'), ('mexc', 'sell'), ('near-intents', 'buy'), ('near-intents', 'sell'), ('okx', 'buy'), ('okx', 'sell'), ('papa-change', 'buy'), ('papa-change', 'sell'), ('rapira', 'buy'), ('rapira', 'sell'), ('skylabs', 'buy'), ('skylabs', 'sell'), ('symbiosis', 'buy'), ('symbiosis', 'sell'), ('whitebird', 'buy'), ('whitebird', 'sell'));
 
 INSERT INTO providers (slug, operation, source_url, name, currencies, currency_exceptions, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
 VALUES ('0x', 'buy', 'https://matcha.xyz/', '0x Buy', ARRAY['ETH', 'USDC', 'USDT']::TEXT[], ARRAY[]::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{}'::JSONB, '{"description":"0x Swap API v2 token quotes, enabled when the server has ZEROX_API_KEY. Token and network availability depends on the selected route.","steps":["Open Matcha and select the source and destination tokens and networks.","Review the quoted output, network fees, and slippage in Matcha.","Connect your wallet and confirm the transaction only after checking the network and token addresses."],"buy_steps":[],"sell_steps":[],"links":[{"label":"Open Matcha by 0x","url":"https://matcha.xyz/"}],"review_sources":[]}'::JSONB, '0x/Providerfile')
@@ -311,6 +311,38 @@ updated_at = now();
 
 INSERT INTO providers (slug, operation, source_url, name, currencies, currency_exceptions, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
 VALUES ('cow-swap', 'sell', 'https://swap.cow.fi', 'CoW Swap Sell', ARRAY['COW', 'DAI', 'ETH', 'USDC', 'USDT', 'WETH']::TEXT[], ARRAY[]::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{"kind":"quote_dependent","description":"No universal fixed protocol percentage: market-order costs are included in the live quote; liquidity, gas, and optional partner fees can affect execution.","docs_url":"https://docs.cow.fi/cow-protocol"}'::JSONB, '{"description":"Eligible same-chain ERC20 swaps can be signed in Pay3Flow with your Ethereum wallet. Check the fresh quote and approval details in your wallet; other routes open in CoW Swap.","steps":[],"buy_steps":[],"sell_steps":[],"links":[],"review_sources":[{"kind":"trustscores","url":"https://trustscores.org/companies/defi/swap.cow.fi"}]}'::JSONB, 'cow-swap/Providerfile')
+ON CONFLICT (slug, operation) DO UPDATE SET
+source_url = EXCLUDED.source_url,
+name = EXCLUDED.name,
+currencies = EXCLUDED.currencies,
+currency_exceptions = EXCLUDED.currency_exceptions,
+banks = EXCLUDED.banks,
+exchange_methods = EXCLUDED.exchange_methods,
+adapter = EXCLUDED.adapter,
+workflow = EXCLUDED.workflow,
+fee_model = EXCLUDED.fee_model,
+guidance = EXCLUDED.guidance,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO providers (slug, operation, source_url, name, currencies, currency_exceptions, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
+VALUES ('crypto-office', 'buy', 'https://crypto-office.com/ru/exchange', 'Crypto Office Buy', ARRAY['BNB', 'BTC', 'ETH', 'SOL', 'TRX', 'USDC', 'USDT']::TEXT[], ARRAY[]::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{"kind":"included_in_quote","description":"Indicative payout is result_amount minus network_fee from the amount-specific swap quote. Recipient-dependent fees and wallet funding costs must be confirmed before execution.","docs_url":"https://developers.crypto-office.com/ru/rest-api/operations/get-swap-get-rate-info"}'::JSONB, '{"description":"Crypto Office crypto swaps. Live quotes require a server API token; supported directions come from its authenticated pair catalog.","steps":["Open Crypto Office and choose the same currencies and networks as the route.","Check the final payout, fees, recipient address and account funding requirements.","Confirm the swap in Crypto Office after reviewing its current quote."],"buy_steps":[],"sell_steps":[],"links":[{"label":"Crypto Office API documentation","url":"https://developers.crypto-office.com/ru/rest-api/operations/get-swap-list-available-pairs"}],"review_sources":[]}'::JSONB, 'crypto-office/Providerfile')
+ON CONFLICT (slug, operation) DO UPDATE SET
+source_url = EXCLUDED.source_url,
+name = EXCLUDED.name,
+currencies = EXCLUDED.currencies,
+currency_exceptions = EXCLUDED.currency_exceptions,
+banks = EXCLUDED.banks,
+exchange_methods = EXCLUDED.exchange_methods,
+adapter = EXCLUDED.adapter,
+workflow = EXCLUDED.workflow,
+fee_model = EXCLUDED.fee_model,
+guidance = EXCLUDED.guidance,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO providers (slug, operation, source_url, name, currencies, currency_exceptions, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
+VALUES ('crypto-office', 'sell', 'https://crypto-office.com/ru/exchange', 'Crypto Office Sell', ARRAY['BNB', 'BTC', 'ETH', 'SOL', 'TRX', 'USDC', 'USDT']::TEXT[], ARRAY[]::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{"kind":"included_in_quote","description":"Indicative payout is result_amount minus network_fee from the amount-specific swap quote. Recipient-dependent fees and wallet funding costs must be confirmed before execution.","docs_url":"https://developers.crypto-office.com/ru/rest-api/operations/get-swap-get-rate-info"}'::JSONB, '{"description":"Crypto Office crypto swaps. Live quotes require a server API token; supported directions come from its authenticated pair catalog.","steps":["Open Crypto Office and choose the same currencies and networks as the route.","Check the final payout, fees, recipient address and account funding requirements.","Confirm the swap in Crypto Office after reviewing its current quote."],"buy_steps":[],"sell_steps":[],"links":[{"label":"Crypto Office API documentation","url":"https://developers.crypto-office.com/ru/rest-api/operations/get-swap-list-available-pairs"}],"review_sources":[]}'::JSONB, 'crypto-office/Providerfile')
 ON CONFLICT (slug, operation) DO UPDATE SET
 source_url = EXCLUDED.source_url,
 name = EXCLUDED.name,

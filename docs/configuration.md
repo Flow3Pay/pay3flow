@@ -71,9 +71,36 @@ These values are never read from `config.toml`:
 | `ADMIN_TOKEN` | Protects admin exchange controls |
 | `NEAR_INTENTS_JWT` | Optional authenticated 1-Click API credential |
 | `SYMBIOSIS_PARTNER_ID` | Optional Symbiosis partner credential |
+| `CRYPTO_OFFICE_API_TOKEN` | Crypto Office External Auth token; missing/empty keeps the provider catalog-only |
 
 Development fallbacks exist for local startup; replace them in every
 deployment that handles real users or funds.
+
+### Crypto Office
+
+The `crypto-office` catalog entry has a read-only swap adapter. Set
+`CRYPTO_OFFICE_API_TOKEN` to the raw token supplied by Crypto Office; the backend
+adds the `Authorization: External …` header. With no token, the provider remains
+catalog-only and makes no API requests. Restart the backend after adding a token.
+
+For Kubernetes, store the value under `CRYPTO_OFFICE_API_TOKEN` in the existing
+`pay3flow-secrets` Secret. Both deployment paths mount this key as optional, so an
+absent token does not prevent startup. The manifest renderer accepts
+`PAY3FLOW_CRYPTO_OFFICE_API_TOKEN` when provisioning the Secret.
+
+The adapter caches the authenticated available-pair catalog for five minutes,
+keeps only known network-qualified identifiers, and quotes the actual input
+amount with `GET /api/v1/swap/get-rate-info`. Pair direction and input/output
+limits are checked. Payout equals `result_amount - network_fee`; `rate_up` and
+catalog rates are not executable quotes, and `commission_info` is not subtracted
+again. Decimal JSON values use exact fixed-point arithmetic with up to 18 decimal
+places; excess precision is rejected. Quotes have a local
+30-second freshness window and are indicative because the recipient address and
+account funding are not supplied. Order creation and account transfers are not
+part of this integration.
+
+Documentation: [available pairs](https://developers.crypto-office.com/ru/rest-api/operations/get-swap-list-available-pairs),
+[amount-specific quote](https://developers.crypto-office.com/ru/rest-api/operations/get-swap-get-rate-info).
 
 ## TOML sections
 
