@@ -779,6 +779,17 @@ async function mockBackend(page: Page, options: { includeRestoredTokens?: boolea
       });
     }
     if (url.pathname === "/api/banks") {
+      if (options.includeRestoredTokens) {
+        const methods = readFileSync(new URL("../../backend/providers/payment-methods/Providerfile", import.meta.url), "utf8")
+          .split("\n").filter(line => /^\s*\{ id = /.test(line)).map(line => {
+            const fields = Object.fromEntries([...line.matchAll(/(\w+) = "([^"]*)"/g)].map(match => [match[1], match[2]]));
+            return { ...fields, method_id: fields.id, display_name: fields.name, role: "both", kind: fields.kind ?? "bank", icon_url: fields.icon_url ?? "", popular: line.includes("popular = true") };
+          });
+        // Put the restored tokens beyond the first 100 rows to catch truncated catalogs.
+        methods.sort((a, b) => Number(["10SET", "ACNON"].includes(a.currency)) - Number(["10SET", "ACNON"].includes(b.currency)));
+        const offset = Number(url.searchParams.get("offset") ?? 0);
+        return json({ items: methods.slice(offset, offset + 100), total: methods.length, limit: 100, offset });
+      }
       const method = (method_id: string, display_name: string, country: string, currency: string, icon_url: string, currency_group: string, popular = false) => ({
         method_id, name: method_id, display_name, role: "both", country, currency, kind: "bank", color: "#171a17", initials: display_name.slice(0, 2).toUpperCase(), popular, icon_url, p2p_query: display_name, currency_group,
       });
@@ -815,12 +826,7 @@ async function mockBackend(page: Page, options: { includeRestoredTokens?: boolea
         method("kz-kaspi", "Kaspi.kz", "KZ", "KZT", "/icons/assets/kz-kaspi.png", "kaspi", true),
         wallet("USDT", "Tether"), wallet("USDC", "USD Coin"), wallet("BTC", "Bitcoin"), wallet("ETH", "Ethereum"),
         ...(options.includeEverscale ? [{ ...wallet("EVER", "Everscale"), icon_url: "/icons/assets/ever.svg" }] : []),
-        ...(options.includeRestoredTokens ? readFileSync(new URL("../../backend/providers/payment-methods/Providerfile", import.meta.url), "utf8")
-          .split("\n").filter(line => /id = "global-(10set|acnon)"/.test(line))
-          .map(line => {
-            const fields = Object.fromEntries([...line.matchAll(/(\w+) = "([^"]*)"/g)].map(match => [match[1], match[2]]));
-            return { ...wallet(fields.currency, fields.name), icon_url: fields.icon_url };
-          }) : []),
+
       ];
       return json({ items, total: items.length, limit: 100, offset: 0 });
     }

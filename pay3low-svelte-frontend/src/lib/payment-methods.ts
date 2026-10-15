@@ -59,13 +59,13 @@ export async function fetchPaymentMethods(): Promise<PaymentMethod[]> {
 
   const firstPage = await response.json() as PaymentMethodDirectoryPage;
   const items = [...firstPage.items];
-  if (unfilteredFallback) {
-    const pageSize = Math.max(1, firstPage.limit || 100);
-    for (let offset = firstPage.offset + pageSize; offset < firstPage.total; offset += pageSize) {
-      const nextResponse = await fetch(apiUrl(`/api/banks?limit=100&offset=${offset}`), requestInit);
-      if (!nextResponse.ok) throw new Error(await catalogError(nextResponse));
-      items.push(...((await nextResponse.json()) as PaymentMethodDirectoryPage).items);
-    }
+  const pageSize = Math.max(1, firstPage.limit || 100);
+  for (let offset = firstPage.offset + pageSize; offset < firstPage.total; offset += pageSize) {
+    const params = new URLSearchParams({ limit: String(pageSize), offset: String(offset) });
+    if (!unfilteredFallback) params.set("picker_visible", "true");
+    const nextResponse = await fetch(apiUrl(`/api/banks?${params}`), requestInit);
+    if (!nextResponse.ok) throw new Error(await catalogError(nextResponse));
+    items.push(...((await nextResponse.json()) as PaymentMethodDirectoryPage).items);
   }
 
   return items.flatMap((item) => item.method_id ? [{
