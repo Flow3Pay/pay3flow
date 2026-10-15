@@ -1,0 +1,78 @@
+{
+  "status": "deployed",
+  "source_revision": "1a42ce30e1e0699a7c593be0fe77173059fda2f0",
+  "source_tree": "739be4383060cc8eac42f14f5f065b066eb5bbe7",
+  "deployed_at": "2026-10-15T18:13:43.009469+00:00",
+  "target": "root@195.123.218.200",
+  "url": "https://pay3flow.lefine.pro/",
+  "image_tag": "complex-routes-20261015-739be438",
+  "images": {
+    "pay3flow-backend": "localhost/pay3flow/backend:complex-routes-20261015-739be438",
+    "pay3flow-frontend": "localhost/pay3flow/frontend:complex-routes-20261015-739be438"
+  },
+  "previous_images": {
+    "pay3flow-backend": "localhost/pay3flow/backend:live-20261014-874b509",
+    "pay3flow-frontend": "localhost/pay3flow/frontend:routes-empty-20261015-bf0a0a6"
+  },
+  "backup_directory": "/var/lib/pay3flow/backups/complex-routes-20261015",
+  "change": "Opt-in spot crypto cycles with up to eight actions, counting each trade and each inter-venue transfer. Default search unchanged.",
+  "verification": {
+    "rust_tests_passed": 366,
+    "rust_tests_ignored": 38,
+    "cargo_fmt": "passed",
+    "cargo_clippy_all_targets": "passed with existing warnings; no warnings in modified Rust files",
+    "frontend_unit_tests_passed": 71,
+    "svelte_check": "0 errors, 0 warnings",
+    "frontend_build": "passed",
+    "secret_audit": "passed",
+    "providerfile_sql_check": "passed",
+    "database_backup_gzip_check": "passed",
+    "runtime_config_preserved": true,
+    "build_and_cri_image_ids": "verified by deployment script",
+    "public_endpoints": "home, health, providers passed",
+    "max_actions_9": "HTTP 400: max_actions must be between 2 and 8",
+    "max_actions_8": "HTTP 200 for same-asset USDT Ethereum cycle search on Bybit; no profitable routes returned",
+    "browser": [
+      {
+        "width": 1440,
+        "locale": "en",
+        "toggle": "off/on/off passed",
+        "page_errors": []
+      },
+      {
+        "width": 390,
+        "locale": "ru",
+        "toggle": "off/on/off passed",
+        "page_errors": []
+      }
+    ],
+    "pods": [
+      {
+        "name": "pay3flow-backend-7dd5b48954-q7ksf",
+        "phase": "Running",
+        "containers": [
+          {
+            "name": "backend",
+            "ready": true,
+            "restarts": 0,
+            "image": "localhost/pay3flow/backend:complex-routes-20261015-739be438",
+            "image_id": "sha256:432a3cd9aa3a70e02ea51faa20f5e6317c8baa24809a7cd9fae3670022cfdadd"
+          }
+        ]
+      },
+      {
+        "name": "pay3flow-frontend-7f6848b67-p4mx2",
+        "phase": "Running",
+        "containers": [
+          {
+            "name": "frontend",
+            "ready": true,
+            "restarts": 0,
+            "image": "localhost/pay3flow/frontend:complex-routes-20261015-739be438",
+            "image_id": "sha256:8d9e6c1fd871cb55efffc472adb74f395231f3bbad474a589bb8220832e7167c"
+          }
+        ]
+      }
+    ]
+  }
+}
