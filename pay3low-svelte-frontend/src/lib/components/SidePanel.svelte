@@ -244,8 +244,20 @@
       </div>
     {:else}
       <div class="emptyState">
-        <div class="emptyVisual" aria-hidden="true"><span class="emptyNode">AM</span><span class="emptyPath"><i></i><i></i><i></i></span><span class="emptyNode">RU</span></div>
-        <div><strong>{t(searched && hasAmount ? "No routes found" : hasAmount ? "Preparing market scan" : "Your routes will appear here", {}, $locale)}</strong><p>{t(searched && hasAmount ? circularSearch ? "No profitable quoted cycle was found for this amount and selected providers." : "No compatible live offers were found for this amount and payment method." : hasAmount ? "Pay3Flow is ready to compare entry assets, venues and recipient payout options." : "Enter an amount and we will assemble live cross-border paths in real time.", {}, $locale)}</p></div>
+        <div class="emptyIllustration" aria-hidden="true">
+          <svg width="160" height="96" viewBox="0 0 160 96" fill="none">
+            <path class="routeAlternative" d="M34 48h30c18 0 14 28 32 28h20" stroke-width="1.5" stroke-dasharray="3 5" stroke-linecap="round" />
+            <path class="routePrimary" d="M34 48h30c18 0 14-28 32-28h20" stroke-width="2" stroke-linecap="round" />
+            <rect class="routeOrigin" x="8" y="30" width="36" height="36" rx="12" stroke-width="1.5" />
+            <path class="routeOriginMark" d="M21 48h10m-4-4 4 4-4 4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+            <rect class="routeDestination" x="116" y="2" width="36" height="36" rx="12" stroke-width="1.5" />
+            <path class="routeCheck" d="m128 20 4 4 8-8" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" />
+            <rect class="routeOption" x="116" y="58" width="36" height="36" rx="12" stroke-width="1.5" />
+            <circle class="routeAlternative" cx="134" cy="76" r="3" stroke-width="1.5" />
+            <circle class="routeJunction" cx="64" cy="48" r="3" />
+          </svg>
+        </div>
+        <div><strong>{t(searched && hasAmount ? "No routes found" : hasAmount ? "Preparing market scan" : "Find your route", {}, $locale)}</strong><p>{t(searched && hasAmount ? circularSearch ? "No profitable quoted cycle was found for this amount and selected providers." : "No compatible live offers were found for this amount and payment method." : hasAmount ? "Pay3Flow is ready to compare entry assets, venues and recipient payout options." : "Choose currencies and enter an amount. We’ll compare available routes for you.", {}, $locale)}</p></div>
       </div>
     {/if}
   </div>
@@ -290,8 +302,7 @@
 .routeTopline,
 .liveBadge,
 .searchBadge,
-.readyBadge,
-.emptyVisual {
+.readyBadge {
   display: flex;
   align-items: center;
 }
@@ -987,81 +998,39 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 24px 18px 12px;
+  gap: 24px;
+  padding: 32px 8px;
   text-align: center;
 }
 
-.emptyVisual {
-  width: min(300px, 100%);
-  justify-content: center;
-  gap: 12px;
-  margin-bottom: 29px;
-}
+.emptyIllustration { flex: 0 0 auto; }
+.emptyIllustration svg { display: block; width: 160px; height: 96px; overflow: visible; }
+.routePrimary { stroke: var(--color-accent-strong); }
+.routeAlternative { stroke: var(--color-border-strong); }
+.routeOrigin, .routeOption { fill: var(--color-panel); stroke: var(--color-border-strong); }
+.routeOriginMark { stroke: var(--color-text-soft); }
+.routeDestination { fill: var(--color-accent-soft); stroke: var(--color-accent-strong); }
+.routeCheck { stroke: var(--color-text); }
+.routeJunction { fill: var(--color-accent-strong); }
 
-.emptyNode {
-  display: grid;
-  width: 58px;
-  height: 58px;
-  flex: 0 0 auto;
-  place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 19px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #fff;
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-
-.emptyNode:last-child {
-  border-color: rgba(185, 242, 39, 0.18);
-  background: rgba(185, 242, 39, 0.08);
-  color: var(--color-accent);
-}
-
-.emptyPath {
-  position: relative;
-  display: flex;
-  min-width: 90px;
-  flex: 1;
-  align-items: center;
-  justify-content: space-around;
-}
-
-.emptyPath::before {
-  position: absolute;
-  right: 0;
-  left: 0;
-  height: 1px;
-  background: linear-gradient(90deg, rgba(255,255,255,0.1), var(--color-accent), rgba(255,255,255,0.1));
-  content: "";
-}
-
-.emptyPath i {
-  position: relative;
-  z-index: 1;
-  width: 7px;
-  height: 7px;
-  border: 2px solid #1b1e1a;
-  border-radius: 50%;
-  background: var(--color-accent);
-  animation: pathPulse 1.8s ease-in-out infinite;
-}
-
-.emptyPath i:nth-child(2) { animation-delay: 0.2s; }
-.emptyPath i:nth-child(3) { animation-delay: 0.4s; }
-
+.emptyState > div:last-child { width: 100%; max-width: 280px; }
 .emptyState strong {
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: -0.03em;
+  display: block;
+  color: var(--color-text);
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.5;
+  letter-spacing: -.025em;
+  overflow-wrap: anywhere;
 }
 
 .emptyState p {
-  max-width: 330px;
-  margin-top: 8px;
-  color: rgba(255, 255, 255, 0.42);
-  font-size: 12px;
+  margin: 8px 0 0;
+  color: var(--color-text-soft);
+  font-size: 13px;
   line-height: 1.65;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
 }
 
 @keyframes pulse {
@@ -1084,11 +1053,6 @@
   0% { opacity: 0; transform: translate(9px, -5px) scale(0.72); }
   72% { opacity: 1; transform: translate(-1px, 1px) scale(1.06); }
   100% { opacity: 1; transform: translate(0, 0) scale(1); }
-}
-
-@keyframes pathPulse {
-  0%, 100% { opacity: 0.3; transform: scale(0.7); }
-  50% { opacity: 1; transform: scale(1.15); }
 }
 
 @media (max-width: 980px) {
@@ -1245,35 +1209,6 @@
   background: #dfe9db;
 }
 
-.emptyNode {
-  border-color: var(--color-border);
-  background: #f4f8f1;
-  color: var(--color-text-soft);
-}
-
-.emptyNode:last-child {
-  border-color: #cce29a;
-  background: #f1f8df;
-  color: var(--color-accent-text);
-}
-
-.emptyPath::before {
-  background: linear-gradient(90deg, #e0e9dc, var(--color-accent-strong), #e0e9dc);
-}
-
-.emptyPath i {
-  border-color: #fff;
-  background: var(--color-accent-strong);
-}
-
-.emptyState strong {
-  color: var(--color-text);
-}
-
-.emptyState p {
-  color: var(--color-text-faint);
-}
-
 @media (max-width: 640px) {
   .panel {
     height: 520px;
@@ -1324,8 +1259,7 @@
 }
 
 :global(html[data-theme="dark"]) .routeCard,
-:global(html[data-theme="dark"]) .skeletonCard,
-:global(html[data-theme="dark"]) .emptyNode {
+:global(html[data-theme="dark"]) .skeletonCard {
   border-color: #383838;
   background: #202020;
 }
@@ -1417,7 +1351,6 @@
 
 .panelTop { transform: none; padding-bottom: 16px; border-bottom: 1px solid var(--color-border); }
 .routeGroups { padding: 12px 6px 12px 0; border-bottom: 1px solid var(--color-border); }
-.emptyState p { font-size: 14px; }
 .routeQuoteMeta { overflow-wrap: anywhere; }
 .foundVenuePopover::before { position: absolute; height: 12px; left: 0; right: 0; bottom: 100%; content: ""; }
 :global(html[data-theme="dark"]) .venueFilterClear,
