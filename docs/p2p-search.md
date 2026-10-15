@@ -292,7 +292,7 @@ playwright_chromium_executable = "/usr/bin/chromium"
 
 Sources, endpoint URLs, response mappings, and browser workflows are declared
 in `backend/providers/*/Providerfile`. Regenerate the provider migration and
-rebuild after changing one; see [`../Providerfile.md`](../Providerfile.md).
+rebuild after changing one; see [`Providerfile.md`](Providerfile.md).
 
 Fmatch offer publication is best-effort. P2P route discovery queries the venue
 APIs for each user search. Direct-exchanger discovery can use a live Fmatch

@@ -25,7 +25,7 @@ is an experimental MVP.
   the general inbox does not implement the full agreement lifecycle.
 - [FEP-8fba](https://w3id.org/fep/8fba#): experimental exchange interface
   metadata, input/output shapes, preview, and invocation links. See the
-  [implementation](backend/src/activitypub/fep8fba.rs) for the exact vocabulary
+  [implementation](../backend/src/activitypub/fep8fba.rs) for the exact vocabulary
   and payloads supported by Pay3Flow.
 
 ## Actors and discovery
@@ -65,7 +65,7 @@ Proposals use the contexts `https://www.w3.org/ns/activitystreams` and
 `publishes` intent with `action`, `resourceConformsTo`, and `resourceQuantity`.
 Discovery requests add `command`, `content`, and `resultInbox`; P2P requests
 also include `candidatePageSize`. The request contract and examples are in
-[backend-to-fmatch.org](docs/backend-to-fmatch.org).
+[backend-to-fmatch.org](backend-to-fmatch.org).
 
 `POST /inbox` and `POST /inbox/{handle}` use the same handlers:
 
@@ -90,7 +90,7 @@ The optional OTC service uses relay-hosted participant actors and the custom
 `pay3flow-otc-fep0837-v1` profile for private negotiations and settlement.
 It is disabled by default and restricted to the configured relay and desk.
 Its agreement messages are separate from the general inbox described above;
-see [OTC service documentation](docs/otc-service.md) for its contract and limits.
+see [OTC service documentation](otc-service.md) for its contract and limits.
 
 ## Signatures and delivery
 
@@ -100,7 +100,7 @@ Outbound delivery uses `Content-Type: application/activity+json` and a
 the request body. The request target includes the query string when present.
 
 Inbound verification is controlled by `ap_require_signatures` (default `false`
-in [config.toml](config.toml)). When enabled, all four signed components and a
+in [config.toml](../config.toml)). When enabled, all four signed components and a
 date within five minutes of the server clock are required. The signing key ID
 must identify the activity author (`attributedTo` for proposals, `actor` for
 other activities). Remote keys are fetched from the actor document, whose
@@ -115,13 +115,13 @@ HTTP 429, and server errors, except recognized no-candidate rejections.
 
 ## Additional documentation
 
-- [Configuration](docs/configuration.md) and [config.toml](config.toml):
+- [Configuration](configuration.md) and [config.toml](../config.toml):
   `ap_origin`, `ap_handle`, `ap_key_path`, `ap_require_signatures`,
   `fmatch_inbox`, and `fmatch_actor_id`.
-- [API overview](docs/api-overview.md): Pay3Flow HTTP and WebSocket routes.
-- [Exchange discovery](docs/fmatch-exchange-discovery.md) and
-  [offer schema](docs/fmatch-offer-schema.md): fmatch-specific payloads.
-- [fmatch API](docs/fmatch-api.md): the separate matcher's endpoints, including
+- [API overview](api-overview.md): Pay3Flow HTTP and WebSocket routes.
+- [Exchange discovery](fmatch-exchange-discovery.md) and
+  [offer schema](fmatch-offer-schema.md): fmatch-specific payloads.
+- [fmatch API](fmatch-api.md): the separate matcher's endpoints, including
   its NodeInfo and outbox support; these are not Pay3Flow backend endpoints.
-- [ActivityPub source](backend/src/activitypub/) and
-  [HTTP handlers](backend/src/server/routing/activitypub/mod.rs).
+- [ActivityPub source](../backend/src/activitypub) and
+  [HTTP handlers](../backend/src/server/routing/activitypub/mod.rs).

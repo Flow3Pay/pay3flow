@@ -6,7 +6,7 @@ explicitly say `planned`, `research`, or `legacy`.
 
 ## Start here
 
-1. [`../README.md`](../README.md) — product summary and quick start.
+1. [`project-overview.md`](project-overview.md) — product summary and quick start.
 2. [`architecture.md`](architecture.md) — service boundaries and the order flow.
 3. [`development.md`](development.md) — local setup, checks, and smoke tests.
 4. [`configuration.md`](configuration.md) — environment variables and secrets.
@@ -14,7 +14,7 @@ explicitly say `planned`, `research`, or `legacy`.
 
 ## Domain and protocol references
 
-- [`../FEDERATION.md`](../FEDERATION.md) — supported federation protocols, FEPs, and interoperability limits.
+- [`FEDERATION.md`](FEDERATION.md) — supported federation protocols, FEPs, and interoperability limits.
 - [`otc-service.md`](otc-service.md) — EVER/USDT service setup, settlement, operations and live gate.
 - [`otc-evidence.md`](otc-evidence.md) — repeatable simulation tests and recorded validation.
 
@@ -34,12 +34,12 @@ explicitly say `planned`, `research`, or `legacy`.
   runtime-пайплайн виртуализации, top-K, snapshots и background refresh.
 - [`planned-routing-and-reputation.md`](planned-routing-and-reputation.md) — план
   быстрого фонового поиска, общего кеша и репутации провайдеров.
-- [`../Providerfile.md`](../Providerfile.md) — complete Providerfile schema, examples, and generated catalog workflow.
+- [`Providerfile.md`](Providerfile.md) — complete Providerfile schema, examples, and generated catalog workflow.
 - [`public-p2p-sources.md`](public-p2p-sources.md) — source policy and privacy boundaries.
 - [`route-aggregation-research.md`](route-aggregation-research.md) — possible future quote sources.
 - [`cow-services-analysis.md`](cow-services-analysis.md) — what is useful from the CoW reference checkout.
 - [`roadmap-cow.md`](roadmap-cow.md) — migration roadmap and outstanding work.
-- [`../cross-border-payments-providers.md`](../cross-border-payments-providers.md) — provider research; verify all commercial details before use.
+- [`cross-border-payments-providers.md`](cross-border-payments-providers.md) — provider research; verify all commercial details before use.
 - [`deployment.md`](deployment.md) — deployment and release checklist.
 
 ## Documentation rules

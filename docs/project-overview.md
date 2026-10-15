@@ -84,12 +84,12 @@ public-data adapters make anonymous read-only requests, except 0x and Barter
 which use the optional server credentials above. Both load addresses and token
 precision from the shared token list at startup.
 
-The [provider coverage audit](docs/route-aggregation-research.md#provider-coverage-audit--2026-10-12)
+The [provider coverage audit](route-aggregation-research.md#provider-coverage-audit--2026-10-12)
 records supported surfaces, live checks, corrected restrictions, and remaining limits.
 
 Provider capabilities live in
-[`backend/providers/*/Providerfile`](backend/providers/). They are compiled
-into [`backend/migrations/providers.sql`](backend/migrations/providers.sql) and
+[`backend/providers/*/Providerfile`](../backend/providers). They are compiled
+into [`backend/migrations/providers.sql`](../backend/migrations/providers.sql) and
 loaded into PostgreSQL when the backend starts.
 Providerfiles also define provider-specific guidance shown in route and order
 instructions. P2P providers can declare `currency = ["all"]` and use
@@ -353,7 +353,7 @@ that happens to use the same exchange service.
 The repository also retains authentication, payments, ActivityPub discovery,
 and the earlier `/api/exchange/orders` workflow. Those APIs are secondary to
 the current live-routing UI; see
-[`docs/api-overview.md`](docs/api-overview.md) for their route families.
+[`docs/api-overview.md`](api-overview.md) for their route families.
 
 See [FEDERATION.md](FEDERATION.md) for supported federation protocols, FEPs,
 and interoperability details.
@@ -411,17 +411,17 @@ npm run test:e2e
 ```
 
 Production builds run with `npm start`, which serves the adapter-node output
-through [`server.mjs`](pay3low-svelte-frontend/server.mjs).
+through [`server.mjs`](../pay3low-svelte-frontend/server.mjs).
 
 ## Configuration
 
-Non-secret backend settings live in [`config.toml`](config.toml), including
+Non-secret backend settings live in [`config.toml`](../config.toml), including
 listener, ActivityPub, FX, P2P, route, NEAR Intents, Symbiosis, and optional CoW settings.
 Use TOML arrays for lists. Credentials and connection strings remain
 environment-only: `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `SECRETS_KEY`,
 `ADMIN_TOKEN`, `NEAR_INTENTS_JWT`, and the optional `SYMBIOSIS_PARTNER_ID`.
 
-See [`docs/configuration.md`](docs/configuration.md) for the schema and the
+See [`docs/configuration.md`](configuration.md) for the schema and the
 secret boundary. Individual Providerfiles may override the default timeout.
 Whitebird currently uses a 5-second HTTP timeout for its anonymous quote API.
 
@@ -467,15 +467,15 @@ The optional legacy fmatch services use `7277`, `5433`, and `8108`.
 
 ## Further documentation
 
-- [`docs/p2p-search.md`](docs/p2p-search.md) — route-search internals and source behavior.
+- [`docs/p2p-search.md`](p2p-search.md) — route-search internals and source behavior.
 - [`Providerfile.md`](Providerfile.md) — complete provider format and examples.
-- [`docs/api-overview.md`](docs/api-overview.md) — broader API families.
-- [`docs/development.md`](docs/development.md) — development and test conventions.
-- [`docs/deployment.md`](docs/deployment.md) — deployment checklist and blockers.
+- [`docs/api-overview.md`](api-overview.md) — broader API families.
+- [`docs/development.md`](development.md) — development and test conventions.
+- [`docs/deployment.md`](deployment.md) — deployment checklist and blockers.
 
 ## License
 
 Pay3Flow is licensed under the GNU Affero General Public License, version 3 or
-any later version (`AGPL-3.0-or-later`). See [`LICENSE`](LICENSE).
+any later version (`AGPL-3.0-or-later`). See [`LICENSE`](../LICENSE).
 
-The EVER/USDT OTC desk service and connected `/#/otc` interface are documented in [OTC setup and operations](docs/otc-service.md). It is disabled by default; [simulation evidence](docs/otc-evidence.md) does not authorize live deposits.
+The EVER/USDT OTC desk service and connected `/#/otc` interface are documented in [OTC setup and operations](otc-service.md). It is disabled by default; [simulation evidence](otc-evidence.md) does not authorize live deposits.

@@ -44,8 +44,8 @@ The technical review must also cover:
 ## Health and observability
 
 The backend exposes `GET /health`. fmatch and Typesense expose their own
-health endpoints. `scripts/healthcheck.ps1` checks the Compose services from
-PowerShell; use the curl commands in `docs/development.md` on Unix-like hosts.
+health endpoints. Use the curl commands in `docs/development.md` to check
+the main services.
 
 Logs may contain IDs, statuses, and reason codes. They must never contain PAN,
 CVC, private keys, bearer tokens, or raw sensitive proof payloads.

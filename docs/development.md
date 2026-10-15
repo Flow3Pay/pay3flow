@@ -12,10 +12,9 @@
 ```bash
 docker compose up -d --build
 docker compose ps
-./scripts/healthcheck.ps1 # Windows PowerShell, optional
 ```
 
-On Unix-like systems, check the main services directly:
+Check the main services directly:
 
 ```bash
 curl -fsS http://localhost:8080/health
@@ -31,7 +30,7 @@ to remove the local database and cache volumes.
 The backend lives in `backend/` and applies the SQL schema during startup.
 Providerfiles are converted into a committed SQL migration before the Rust
 build and are never read by the running service; see
-[`../Providerfile.md`](../Providerfile.md).
+[`Providerfile.md`](Providerfile.md).
 Useful commands when Rust is installed:
 
 ```bash
