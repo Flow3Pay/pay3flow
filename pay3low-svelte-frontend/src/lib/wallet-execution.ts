@@ -3,6 +3,7 @@ import type { RouteExecution, RouteExecutionAction } from "$lib/exchange";
 import type { AppKitNetwork } from "@reown/appkit/networks";
 import type { EIP1193Provider } from "viem";
 import { decimalToAtomic, atomicToDecimal, sameWalletAddress } from "./wallet-amount";
+import { SAFE_NETWORKS } from "./otc/production-safe";
 import { TRON_CHAIN_ID, connectTronProvider, ensureTronMainnet, tronProvider, tronAddress, broadcastTron, type TronProvider } from "./tron-wallet";
 import { connectEverscale, restoreEverscale, observeEverscale, isEverscaleAddress, type EverscaleConnection } from "./everscale-wallet";
 
@@ -78,6 +79,7 @@ export interface PreparedWalletAction {
 
 const CHAIN_NAMES: Record<string, number> = {
   ethereum: 1,
+  sepolia: 11155111,
   gnosis: 100,
   "arbitrum-one": 42161,
   base: 8453,
@@ -120,7 +122,7 @@ async function appKit() {
       import("@reown/appkit-adapter-wagmi"),
       import("@reown/appkit/networks"),
     ]);
-    const supported: [AppKitNetwork, ...AppKitNetwork[]] = [networks.mainnet, networks.gnosis, networks.arbitrum, networks.base, networks.polygon, networks.avalanche, networks.bsc, networks.optimism];
+    const supported: [AppKitNetwork, ...AppKitNetwork[]] = [networks.mainnet, { ...networks.sepolia, rpcUrls: { default: { http: [SAFE_NETWORKS[11155111].rpcUrl] } } }, networks.gnosis, networks.arbitrum, networks.base, networks.polygon, networks.avalanche, networks.bsc, networks.optimism];
     const adapter = new WagmiAdapter({ projectId, networks: supported });
     const modal = createAppKit({
       adapters: [adapter],
@@ -170,7 +172,7 @@ async function injectedApp() {
           import("wagmi/connectors"),
           import("@reown/appkit/networks"),
         ]);
-        const supported = [networks.mainnet, networks.gnosis, networks.arbitrum, networks.base, networks.polygon, networks.avalanche, networks.bsc, networks.optimism] as const;
+        const supported = [networks.mainnet, { ...networks.sepolia, rpcUrls: { default: { http: [SAFE_NETWORKS[11155111].rpcUrl] } } }, networks.gnosis, networks.arbitrum, networks.base, networks.polygon, networks.avalanche, networks.bsc, networks.optimism] as const;
         const connector = injected({ target: injectedWalletTarget });
         const transports = Object.fromEntries(supported.map((chain) => [chain.id, http()])) as Record<(typeof supported)[number]["id"], ReturnType<typeof http>>;
         const config = createConfig({
@@ -199,10 +201,12 @@ export async function connectEvm(network: string): Promise<EvmConnection> {
     return { family: "evm", address: active.address, chainId, config };
   }
   const { modal, config } = await appKit();
-  const address = await waitForEvmAddress(modal);
-  const { switchChain } = await import("@wagmi/core");
+  await waitForEvmAddress(modal);
+  const { switchChain, getAccount } = await import("@wagmi/core");
   await switchChain(config as Parameters<typeof switchChain>[0], { chainId });
-  return { family: "evm", address, chainId, config };
+  const active = getAccount(config as Parameters<typeof getAccount>[0]);
+  if (!active.address || active.chainId !== chainId) throw new Error("Wallet did not switch to the selected network");
+  return { family: "evm", address: active.address, chainId, config };
 }
 
 async function nearSelector() {

@@ -191,3 +191,58 @@ The same verified release `otc-safe-20261012T131150Z-571a4227` is deployed to `r
 Backend and frontend each have one ready replica, PostgreSQL and Redis are ready, and Caddy is active. The profile uses ports 30280/30281 to avoid the existing Orator service. Its application route is `/var/lib/lefine-app-host/routes/pay3flow.caddy`. The existing certificate and its renewal metadata were migrated into the new Caddy certificate cache; the domain route retains automatic certificate management. DNS changes were left to the user, as requested. HTTPS checks used the original hostname with an explicit address override to the new server, and the browser asserted the actual response address was 195.123.218.200. Desktop/mobile wallet review passed at widths 1440 and 390 with live Ethereum contract verification and no wallet prompt or transaction broadcast. Health, providers JSON, the frontend and direct server HTTP health passed. Desk quoting remains paused and no custom contracts were deployed.
 
 Profile metadata is in `deploy/profiles/lefine-next.json`; deployment evidence is in `deploy/releases/otc-safe-20261012T131150Z-571a4227-lefine-next.json`. The fresh migration archive and secured manifests are under `/var/lib/pay3flow/migrations/otc-safe-20261012T131150Z-571a4227` on the new server, with source backups under `/home/xila/pay3flow-backups/new-profile-otc-safe-20261012T131150Z-571a4227`.
+
+## Sepolia standard Safe support — 2026-10-15
+
+The OTC multisig panel supports Ethereum Mainnet (the initial selection) and Sepolia, chain ID `11155111`. Sepolia is labelled as a test network and links to the [Sepolia ETH faucet](https://cloud.google.com/application/web3/faucet/ethereum/sepolia). Its reads use `https://ethereum-sepolia-rpc.publicnode.com`, transaction links use `https://sepolia.etherscan.io`, and Safe links explicitly use `sep:`. Browser wallet and Reown connections include Sepolia. Creation checks the selected RPC chain, official contract hashes, the reviewed owner account and the wallet's active chain before requesting the factory transaction.
+
+Network records use `pay3flow.otc.production-safe.v1.1` and `pay3flow.otc.production-safe.v1.11155111`. The previous unscoped record migrates to Mainnet with its state and transaction hash preserved; persistence must succeed before the legacy record is removed. Switching networks restores that network's record and is disabled during operations. Both `unknown` and `submitted` states prohibit a second creation after switching or reloading. An unreadable record blocks creation on its network.
+
+Read-only Sepolia RPC verification at block **11921509** confirmed all three official Safe 1.4.1 deployments. The canonical addresses and runtime hashes match the Safe deployment registry for [Safe](https://github.com/safe-global/safe-deployments/blob/main/src/assets/v1.4.1/safe.json), [factory](https://github.com/safe-global/safe-deployments/blob/main/src/assets/v1.4.1/safe_proxy_factory.json) and [fallback handler](https://github.com/safe-global/safe-deployments/blob/main/src/assets/v1.4.1/compatibility_fallback_handler.json):
+
+| Contract | Sepolia address | Runtime keccak256 |
+| --- | --- | --- |
+| Factory | `0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67` | `0x50c3cdc4074750a7a974204a716c999edd37482f907608d960b2b025ee0b3317` |
+| Singleton | `0x41675C099F32341bf84BFc5382aF534df5C7461a` | `0x1fe2df852ba3299d6534ef416eefa406e56ced995bca886ab7a553e6d0c5e1c4` |
+| Compatibility fallback handler | `0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99` | `0x7c6007a5d711cea8dfd5d91f5940ec29c7f200fe511eb1fc1397b367af3c42f9` |
+
+The bytecode and 486-byte factory `proxyCreationCode()` response are captured in `pay3low-svelte-frontend/tests/fixtures/safe-1.4.1.json`, with source RPC and block number. A unit test checks fixture runtime hashes. Browser tests use these bytes and a simulated EIP-1193 wallet; their transaction hashes and recovered contract state are fixtures, not Sepolia transaction evidence.
+
+Local verification from `pay3low-svelte-frontend`:
+
+| Check | Result | Coverage and limits |
+| --- | --- | --- |
+| `npm run test:unit` | 71 passed | Both network configurations/links; legacy state/hash migration; isolated network storage; failed persistence and invalid saved records; official fixture hashes, plus the existing suite. |
+| `npm run check` | Passed, 0 errors / 0 warnings | Frontend types and Svelte diagnostics, including both browser-wallet and Reown configuration. |
+| `npm run build` | Passed | Dependency bundle warnings remain. |
+| `playwright test tests/production-safe.spec.ts` | 34 passed | Desktop and mobile: Mainnet default, Sepolia selection/faucet/links, exact reviewed zero-value factory calldata, wallet network switching, owner and runtime-hash rejection, reload recovery, network locking, explicit rejection retry, lost responses and duplicate-send blocking. Uses simulated wallet/RPC responses. |
+| Wallet execution, Everscale wallet, OTC and escrow Playwright suites | 127 passed initially; remaining scenario passed isolated recheck | 128 desktop/mobile regression scenarios. One mobile wallet-menu focus restoration assertion failed once during the run and passed when repeated alone; no wallet-menu source changes were made. |
+| Live Sepolia RPC browser review | Passed at widths 1440 and 390 | Real contract reads and predicted-address review with illustrative owner addresses. No injected wallet, signature or broadcast. No horizontal overflow; screenshots inspected locally. |
+| `git diff --check` | Passed | No whitespace errors. |
+
+Browser verification used Chromium 152 with the existing `PLAYWRIGHT_CHROMIUM_EXECUTABLE` override and `PLAYWRIGHT_PORT=4173 PLAYWRIGHT_SHARE_PORT=18091` because the default app port was occupied. No live Reown relay session or participant signature was exercised. These are local implementation checks; verified deployment evidence is recorded separately when available.
+
+### Participant-run Sepolia cycle — pending
+
+No participant addresses or wallet signatures were provided during implementation. No Safe creation, faucet request, funding or transfer was broadcast in this work. The following fields remain unverified until the three participants complete the cycle. Use Sepolia ETH only. Create through Pay3Flow, then propose, sign and execute through the official Safe application. Backend OTC settlement, EVER/USDT and the custom four-hour escrow are outside this run.
+
+| Evidence | Actual result |
+| --- | --- |
+| Buyer / seller / arbitrator public addresses | Awaiting three distinct participant addresses |
+| Faucet funding and executor gas balances | Pending |
+| Safe address and creation transaction hash | Pending |
+| Predicted address equals deployed address; owners equal the three participants; threshold equals `2` | Pending on-chain checks |
+| Funding transaction hash; Safe ETH balance before/after | Pending |
+| One owner signature cannot execute a proposed transfer | Pending; record Safe transaction hash, confirmation count, unchanged nonce and balances |
+| Buyer + seller transfer | Pending; record Safe transaction hash, execution transaction hash, amount, recipient and balances at receipt block |
+| Buyer + arbitrator transfer | Pending; record the same evidence |
+| Seller + arbitrator refund to original funder | Pending; record the same evidence and final Safe balance |
+
+Suggested sequence after participant addresses are available:
+
+1. Obtain faucet ETH for the creating wallet and every wallet that will pay execution gas. Select **Sepolia (testnet)** in OTC, review the three participant addresses and create the Safe with an owner wallet. Keep the creation transaction hash. Use **Check on-chain status** to verify the deployed address, owner set, singleton and threshold before funding.
+2. Open the resulting `sep:` Safe link and confirm Sepolia and the same three owners/threshold. Fund the Safe with a small amount, for example `0.003` Sepolia ETH, and record sender, transaction hash and Safe balances at the blocks before/after funding.
+3. Propose a `0.0001` ETH transfer to the seller with buyer + seller as signers. With only the first confirmation, record the proposal hash, `1/2` confirmation state and unchanged Safe nonce/balances. Add the second signature, execute and record the execution receipt and `ExecutionSuccess` event. A successful outer receipt alone does not prove the inner Safe transfer succeeded.
+4. Repeat a `0.0001` ETH transfer to the arbitrator using buyer + arbitrator, again observing the single-signature boundary before the second confirmation and execution.
+5. Use seller + arbitrator to return the remaining Safe ETH balance to the original funder, observing the same single-signature boundary. For the example amounts and no other transfers or Safe reimbursements, the refund is `0.0028` ETH and the final Safe balance is zero. The executing owner pays gas separately.
+6. For every execution, record both the Safe transaction hash and on-chain transaction hash, receipt block, signers, recipient and amount. At fixed before/after blocks, check `Safe_after = Safe_before - amount` and recipient credit; account for gas when a recipient is also the transaction executor. Check the nonce advanced exactly once per executed transfer. Replace the pending rows above with actual links and measured values.
