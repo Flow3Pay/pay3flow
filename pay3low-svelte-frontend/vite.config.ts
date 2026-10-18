@@ -11,6 +11,11 @@ export default defineConfig(({ command }) => ({
       process: command === "build" ? true : "dev",
     },
   })],
-  optimizeDeps: { include: ["@aurora-is-near/intents-swap-widget-standalone"] },
+  optimizeDeps: {
+    include: ["pay3flow-near-sdk"],
+    // Respect SDK pure annotations so unused provider UI/icons do not enter
+    // the browser's development bundle through the service hooks.
+    esbuildOptions: { ignoreAnnotations: false },
+  },
   server: { fs: { allow: ["./tests/fixtures"] } },
 }));

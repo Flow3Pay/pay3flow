@@ -8,10 +8,29 @@ use crate::core::error::AppError;
 use crate::core::state::AppState;
 use crate::db::DbPool;
 use crate::route_execution::{
-    CreateRouteExecution, RouteExecutionError, RouteExecutionView, SubmitRouteExecution,
+    CreateRouteExecution, PrepareSwapExecution, RouteExecutionError, RouteExecutionView,
+    SubmitRouteExecution,
 };
 
 const IDEMPOTENCY_HEADER: &str = "Idempotency-Key";
+
+pub async fn prepare(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<PrepareSwapExecution>,
+) -> Result<Json<RouteExecutionView>, AppError> {
+    let key = headers
+        .get(IDEMPOTENCY_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| AppError::BadRequest("Idempotency-Key header is required".into()))?;
+    state
+        .route_executions
+        .prepare_swap(request, key)
+        .await
+        .map(Json)
+        .map_err(map_error)
+}
 
 pub async fn count_completed_last_hour(pool: &DbPool) -> anyhow::Result<i64> {
     let client = pool.get().await?;

@@ -20,7 +20,7 @@ development. Set `PUBLIC_API_URL` when the backend is hosted elsewhere.
 Set `PUBLIC_AURORA_INTENTS_API_KEY` in `.env.local` for local development, or in
 the frontend server environment in production. Obtain the widget integration
 key from [Aurora Widget Studio](https://studio.aurora.dev/). The official NEAR
-Intents standalone widget handles its own EVM, Solana, NEAR and Stellar wallet
+Intents service adapter handles its EVM, Solana, NEAR and Stellar wallet
 connections and receives the route's assets, networks and amount.
 
 Swap steps provide `SWAP` and `SWAP guide` modes. Switching modes keeps the live
@@ -28,10 +28,10 @@ widget mounted so its wallet connection and entered addresses are preserved.
 The mode also persists in shared links through `view=swap|guide`. Per-leg assets,
 networks and exact amounts come from the current route chapter. See the
 [widget integration reference](../docs/swap-widgets.md) for provider behavior,
-wallet boundaries, NEAR catalog aliases and iframe limitations.
-Routes without native wallet execution retain the official CoW and NEAR
-widgets or the embedded Symbiosis app. Platforms that cannot be embedded retain their quote
-and a link to the provider in `SWAP` mode.
+wallet boundaries and NEAR catalog aliases.
+All wallet swap chapters use `UnifiedSwap.svelte` and the shared `SwapForm.svelte`,
+including routes without execution descriptors. Provider SDKs supply service
+adapters; provider swap components and iframe fallbacks have been removed.
 
 `@0x/swap-ts-sdk` is installed for server-side integrations. Its API key belongs
 in a server environment variable, rather than a `PUBLIC_` variable; the SDK does
@@ -80,8 +80,8 @@ amount, assets, and networks. The same form stays visible before connection,
 while signing, and during provider tracking, including after disconnecting.
 Provider SDKs and transaction adapters handle execution behind this interface;
 provider-themed cards are used only for illustrative external walkthroughs.
-Routes without a supported execution descriptor retain their provider widget,
-instructions, and external link.
+Routes without execution descriptors use service adapters behind the same
+form. Unsupported execution is reported inside that form.
 
 The wallet menu connects Ethereum/EVM, NEAR, TRON, and Everscale accounts.
 Everscale uses the injected EVER Wallet provider on Everscale mainnet, including

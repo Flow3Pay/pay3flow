@@ -1,152 +1,69 @@
-# SWAP widgets and wallet execution
+# Unified SWAP interface
 
-Verified against the repository on 2026-10-18. The frontend is SvelteKit;
-the NEAR Intents React widget is a client-mounted island.
+Every wallet swap chapter renders `UnifiedSwap.svelte` and the same
+`SwapForm.svelte`. The form owns the amount, asset cards and application theme.
+There are no provider iframes or provider swap components. `SWAP guide` keeps
+this form mounted while showing the walkthrough; changing chapters selects
+that chapter’s exact assets, networks and input amount.
 
-## Route actions
+`swap-service.ts` creates service adapters for steps without a signed execution
+descriptor. A descriptor selects the existing `RouteExecutionPanel.svelte`
+controller, which uses the same shared form. Connecting a wallet never submits
+a swap. The user explicitly starts the swap and confirms wallet requests.
 
-Every swap chapter offers `SWAP` and `SWAP guide`. The result card can open
-either mode, and shared guide links preserve `view=swap|guide`. Switching modes
-hides the live panel while keeping it mounted, preserving its form and wallet
-state. Moving to another chapter selects that chapter's provider and assets.
-
-The converter shows `SWAP` / `SWAP guide` only when the selected route starts
-with a wallet swap provider or a native swap execution. `SWAP` opens its live
-panel immediately; `SWAP guide` opens the walkthrough overview. Bank payments,
-P2P and spot routes keep the single `Go` action. Routes with funding steps before
-a swap start with their guide so those steps are not skipped. This does not
-depend on a connected header wallet.
-
-Wallet support in the site header does not determine whether a swap chapter
-appears. A route without a Pay3Flow `execution` descriptor can still open the
-provider widget or provider website. Connecting a wallet does not prepare a
-transaction, create a route execution, approve a token, or submit a swap.
-
-| Provider or step | SWAP behavior |
+| Provider | Service execution |
 | --- | --- |
-| CoW Swap | Shared native Pay3Flow form when the route has a supported execution descriptor; official iframe for other routes and composed legs |
-| NEAR Intents | Shared native Pay3Flow form when execution is supported; official Aurora standalone widget for other routes |
-| Symbiosis | Native Pay3Flow execution panel when supported; otherwise the public app iframe, independent of site-header Solana wallet support |
-| Other providers and spot steps | Provider embed where supported, otherwise the selected quote and a link to the provider |
+| CoW Swap | Trading SDK for same-chain ERC20 and native currency orders; Bridging SDK with the NEAR Intents bridge for cross-chain quotes and orders |
+| NEAR Intents | Aurora SDK hooks for token metadata, quotes, wallet transfers and status; the React service host returns `null`, never `WidgetSwap` |
+| Symbiosis | Backend executable quotes, configured router and approval gateway validation, shared wallet signing, and backend status tracking |
 
-Provider frame restrictions and browser third-party storage policies can prevent
-an external app from working in an iframe. An external Open link remains
-available. A displayed quote does not establish that an external provider
-permits embedded execution. In particular, 0x and Barter retain external links.
+An unavailable wallet adapter or unsupported provider is reported inside the
+common form. There is no fallback to an external swap application. Availability
+still depends on provider liquidity, configured contracts and wallet support.
+0x and Barter quote credentials do not by themselves enable wallet execution.
 
-## Assets and amounts
+## Amounts and signing
 
-[`route-tutorial.ts`](../pay3low-svelte-frontend/src/lib/route-tutorial.ts)
-provides `fromAsset`, `toAsset` and the exact `inputAmount` for each composed leg.
-Widgets use these fields before whole-route fallbacks. For
-`BTC → USDC@ethereum → EVER@ethereum`, the second CoW widget receives that
-leg's USDC amount and Ethereum network, rather than the original BTC amount.
-Human-readable rounded chapter amounts are not authoritative widget inputs.
+`route-tutorial.ts` supplies exact `fromAsset`, `toAsset`, and `inputAmount`
+values for composed legs. For BTC → USDC@ethereum → EVER@ethereum, the CoW step
+uses the intermediate USDC amount rather than the original BTC amount. The
+readonly amount field preserves the full decimal string.
 
-Provider token catalogs resolve addresses, decimals and network-qualified
-identities. Native EVER and its Ethereum representation remain separate.
-Legacy TON endpoints and asset-bearing fields in shared operation signatures
-canonicalize to GRAM; provider IDs, advertiser IDs and network `ton` remain intact.
+Preparations bind the source wallet, recipient and quote expiry. Recipient or
+account changes invalidate a preparation. Token approvals require a refreshed
+quote. Native CoW orders use the EthFlow transaction built from the reviewed
+quote. Cross-chain tracking waits for bridge execution, not only the CoW leg.
+Symbiosis submission retries retain the broadcast reference to avoid signing a
+second transfer after a notification failure.
 
-## CoW Swap
+Steps without descriptors request fresh backend execution through
+`POST /api/p2p/route-executions/prepare`. Client preferences never supply
+calldata or approval targets. The endpoint checks the provider, assets, amount,
+wallet addresses and configured execution contracts, then uses the same quote
+and transaction validation as signed search descriptors. It requires an
+`Idempotency-Key` and respects `wallet_execution_enabled`.
 
-[`CowSwapWidget.svelte`](../pay3low-svelte-frontend/src/lib/components/CowSwapWidget.svelte)
-passes the selected tokens, source and target chain IDs, amount, language and
-theme to the official widget. Supported shared EVM sessions are bridged through
-the origin-checked widget transport. Other supported widget networks use CoW's
-wallet flow. CoW handles its own quotes, approvals, signing and tracking.
+## NEAR SDK configuration
 
-The iframe uses `color-scheme: normal` so the browser's iframe canvas does not
-introduce a white background when CoW renders its dark theme. The provider's
-theme setting and the enclosing site theme are synchronized separately.
+The browser service uses `PUBLIC_AURORA_INTENTS_API_KEY`, supplied to the
+frontend Node process at runtime (`$env/dynamic/public`). Kubernetes references
+this value from `pay3flow-secrets`. Backend `NEAR_INTENTS_JWT` remains server-only.
+Wallet selection may use the SDK’s wallet dialog; the swap itself always uses
+Pay3Flow’s form. The SDK can also prepare an external deposit with explicit
+recipient and refund addresses, including required deposit memos.
 
-## NEAR Intents
+NEAR allowlists include catalog `wNEAR`, and USDT allowlists include `USDT0`.
+These aliases are handled before seeding the exact source amount. Provider
+catalogs determine contract addresses and precision; native EVER and its
+Ethereum representation remain distinct.
 
-[`NearIntentsWidget.svelte`](../pay3low-svelte-frontend/src/lib/components/NearIntentsWidget.svelte)
-lazy-loads [`near-widget.ts`](../pay3low-svelte-frontend/src/lib/near-widget.ts),
-which mounts React with `createRoot`, `WidgetConfigProvider` and `WidgetSwap`
-from `@aurora-is-near/intents-swap-widget-standalone`.
+## Verification
 
-The standalone package supplies its EVM/Solana, NEAR and Stellar wallet flows.
-These sessions are separate from the shared Pay3Flow header wallets. Route
-assets and chains are constrained in widget configuration; direction is locked.
-`NEAR` allowlists include catalog `wNEAR`, and `USDT` allowlists include `USDT0`,
-because the SDK filters catalog symbols before normalizing display aliases.
-The exact source amount is seeded after the selected tokens are ready. The
-SDK may abbreviate the visible input to five decimals; its displayed text
-should not be used as an application amount serializer.
+Use `npm run check` and the desktop/mobile tests in
+`tests/wallet-execution.spec.ts`. Coverage includes routes with and without
+execution descriptors, absence of provider iframes, mode preservation, exact
+composed-leg amounts, NEAR aliases, explicit swap intent, approval refreshes,
+and retrying tracking without signing twice.
 
-The Aurora widget integration key is `PUBLIC_AURORA_INTENTS_API_KEY`:
-
-- Local development: set it in ignored `.env.local`.
-- Production: supply it to the frontend Node process at runtime. It is read
-  through `$env/dynamic/public`; a build-time-only setting is insufficient.
-- Kubernetes: store it in `pay3flow-secrets` and reference that key from the
-  frontend Deployment's `env`.
-
-Obtain the key from [Aurora Widget Studio](https://studio.aurora.dev/).
-The [official package repository](https://github.com/aurora-is-near/intents-swap-widget)
-documents standalone integration and chain adapters. This browser integration
-key is separate from backend `NEAR_INTENTS_JWT`, which authenticates server-side
-1Click requests. Server JWTs never belong in `PUBLIC_` variables.
-
-## Symbiosis
-
-[`swap-embed.ts`](../pay3low-svelte-frontend/src/lib/swap-embed.ts) resolves the
-selected tokens and chains against Symbiosis metadata and constructs an app
-URL with the current leg's input. Embedding does not require the site header
-to support every source/destination wallet family. Native execution remains
-limited to chains and contracts accepted by the backend validator.
-
-Some browsers block the external app's third-party storage and cause its
-embedded flow to fail. Use the supplied Open link in that case. Widget
-availability and provider liquidity are separate: neither guarantees the other.
-
-## Native Pay3Flow execution
-
-`RouteExecutionPanel.svelte` renders one Pay3Flow form for all three native
-providers, before wallet connection, while signing, and during tracking.
-Provider SDKs and transaction adapters remain behind that form. Connecting a
-wallet or changing a recipient does not submit a swap: the user starts it with
-the Swap button. Switching to the guide keeps the native form mounted, and
-wallet disconnection does not hide submitted execution tracking.
-
-`wallet_execution_enabled` controls signed backend execution descriptors and
-the `/api/p2p/route-executions` flow. Native NEAR Intents deposits support the
-implemented EVM, NEAR and TRON actions; native CoW actions validate supported
-same-chain ERC-20 orders; native Symbiosis validates configured routers and
-approval gateways. Everscale wallet connection alone does not add native EVER
-swap execution. See [configuration](configuration.md#wallet-swaps).
-
-Provider-owned widgets have their own execution and tracking. A swap submitted
-inside CoW or Aurora's widget is not automatically a Pay3Flow `route_executions`
-record. Neither guide animations nor route selection submit a transaction.
-
-`@0x/swap-ts-sdk` is installed for server integrations. Its installation does
-not provide an in-page 0x execution form. Backend `ZEROX_API_KEY` and
-`BARTER_API_KEY` remain server-only quote credentials.
-
-## Build and verification
-
-The Aurora standalone SDK is lazy-loaded and isolated from the legacy NEAR
-Wallet Selector's React dependency. Browser Node polyfills and explicit dev
-dependency optimization are configured in
-[`vite.config.ts`](../pay3low-svelte-frontend/vite.config.ts).
-Production enables the required globals; dev uses the plugin's dev-only global
-mode to avoid reinjecting shims into the large optimized SDK bundle.
-
-Use `NODE_OPTIONS=--max-old-space-size=6144` for builds and, when needed, cold
-dev optimization. Both Docker build paths set this for the build step and reuse the dependency
-stage for the builder. Live deployment uses
-[`deploy/frontend-runtime/Dockerfile`](../deploy/frontend-runtime/Dockerfile), whose fresh
-runtime image receives a filtered dependency tree without declarations,
-source maps or unused raw Material Symbols SVG source packages. Runtime
-JavaScript, native modules and compiled icon components are retained.
-`.dockerignore` excludes local environment files.
-
-Browser coverage is in
-[`wallet-execution.spec.ts`](../pay3low-svelte-frontend/tests/wallet-execution.spec.ts)
-and [`exchange-flow.spec.ts`](../pay3low-svelte-frontend/tests/exchange-flow.spec.ts):
-mode preservation, dark theme, unsupported site wallet families, per-leg amounts
-and networks, NEAR catalog aliases, and zero signing/submission on connection.
-Use serial workers for cold standalone SDK checks on memory-constrained hosts.
+Build with `NODE_OPTIONS=--max-old-space-size=6144`. Live deployment uses
+`deploy/frontend-runtime/Dockerfile` and its filtered runtime dependency tree.

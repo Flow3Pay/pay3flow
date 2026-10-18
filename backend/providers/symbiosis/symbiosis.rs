@@ -572,11 +572,19 @@ fn chain_for_network(network: &str) -> Option<u64> {
         "arbitrum-one" => 42161,
         "base" => 8453,
         "tron" => 728126428,
+        "solana" => 5426,
         _ => return None,
     })
 }
 
 fn api_wallet_address(chain_id: u64, address: &str) -> Result<String> {
+    if chain_id == 5426 {
+        let bytes = bs58::decode(address).into_vec().context("invalid Solana address")?;
+        if bytes.len() != 32 || bytes.iter().all(|byte| *byte == 0) {
+            bail!("invalid Solana address");
+        }
+        return Ok(address.to_string());
+    }
     if chain_id != 728126428 || address.starts_with("0x") {
         return checked_evm_address(address, "wallet");
     }
@@ -597,6 +605,16 @@ fn api_wallet_address(chain_id: u64, address: &str) -> Result<String> {
             .map(|byte| format!("{byte:02x}"))
             .collect::<String>()
     ))
+}
+
+#[cfg(test)]
+#[test]
+fn solana_execution_recipient_preserves_the_base58_address() {
+    let recipient = "So11111111111111111111111111111111111111112";
+    assert_eq!(chain_for_network("solana"), Some(5426));
+    assert_eq!(api_wallet_address(5426, recipient).unwrap(), recipient);
+    assert!(api_wallet_address(5426, "11111111111111111111111111111111").is_err());
+    assert!(api_wallet_address(5426, "0x8ba1f109551bD432803012645Ac136ddd64DBA72").is_err());
 }
 
 fn checked_evm_address(value: &str, label: &str) -> Result<String> {

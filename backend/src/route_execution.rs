@@ -80,6 +80,23 @@ pub struct CreateRouteExecution {
     pub slippage_bps: Option<u32>,
 }
 
+/// Prepare a fresh provider quote for an individual step without an old route token.
+/// The client supplies preferences; provider metadata and transaction validation
+/// remain authoritative, exactly as for a signed search result.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PrepareSwapExecution {
+    pub anonymous_id: Uuid,
+    pub route_id: String,
+    pub provider: String,
+    pub from_asset: String,
+    pub to_asset: String,
+    pub amount: String,
+    pub source_address: String,
+    pub recipient: String,
+    pub slippage_bps: Option<u32>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SubmitRouteExecution {
@@ -183,6 +200,62 @@ pub struct RouteExecutionService {
 }
 
 impl RouteExecutionService {
+    pub async fn prepare_swap(
+        &self,
+        request: PrepareSwapExecution,
+        idempotency_key: &str,
+    ) -> Result<RouteExecutionView, RouteExecutionError> {
+        if !self.enabled {
+            return Err(RouteExecutionError::Disabled);
+        }
+        if request.route_id.is_empty() || request.route_id.len() > 512 {
+            return Err(RouteExecutionError::InvalidSubmission);
+        }
+        positive_amount(&request.amount)?;
+        let from =
+            Asset::parse(&request.from_asset).map_err(|_| RouteExecutionError::UnsupportedRoute)?;
+        let to =
+            Asset::parse(&request.to_asset).map_err(|_| RouteExecutionError::UnsupportedRoute)?;
+        if from == to
+            || !match request.provider.as_str() {
+                "symbiosis" => self.symbiosis.supports_wallet_execution(&from, &to),
+                "cow-swap" => {
+                    self.cow.is_some() && CowRouteProvider::supports_wallet_execution(&from, &to)
+                }
+                "near-intents" => {
+                    supported_wallet_network(from.location.as_deref().unwrap_or_default())
+                }
+                _ => false,
+            }
+        {
+            return Err(RouteExecutionError::UnsupportedRoute);
+        }
+        let expires_at = Utc::now() + ChronoDuration::minutes(DESCRIPTOR_TTL_MINUTES);
+        let claims = ExecutionClaims {
+            route_id: request.route_id,
+            provider: request.provider,
+            from_asset: from.to_string(),
+            to_asset: to.to_string(),
+            input_amount: request.amount.clone(),
+            exp: usize::try_from(expires_at.timestamp()).unwrap_or(usize::MAX),
+        };
+        let route_token = encode(&Header::default(), &claims, &self.encode_key)
+            .map_err(|error| RouteExecutionError::Internal(error.into()))?;
+        self.create(
+            CreateRouteExecution {
+                anonymous_id: request.anonymous_id,
+                route_token,
+                source_address: request.source_address,
+                recipient: request.recipient,
+                refund_to: None,
+                amount: Some(request.amount),
+                slippage_bps: request.slippage_bps,
+            },
+            idempotency_key,
+        )
+        .await
+    }
+
     pub fn new(
         pool: DbPool,
         secret: &str,
@@ -236,7 +309,8 @@ impl RouteExecutionService {
             return;
         };
         if !supported_wallet_network(from.location.as_deref().unwrap_or_default())
-            || !supported_wallet_network(to.location.as_deref().unwrap_or_default())
+            || !(supported_wallet_network(to.location.as_deref().unwrap_or_default())
+                || to.location.as_deref() == Some("solana"))
             || (provider == "symbiosis" && !self.symbiosis.supports_wallet_execution(&from, &to))
         {
             return;
@@ -723,6 +797,9 @@ fn supported_wallet_network(network: &str) -> bool {
 
 fn validate_wallet_address(network: &str, address: &str) -> Result<(), RouteExecutionError> {
     let valid = match network {
+        "solana" => bs58::decode(address)
+            .into_vec()
+            .is_ok_and(|bytes| bytes.len() == 32 && bytes.iter().any(|byte| *byte != 0)),
         "near" => {
             (2..=64).contains(&address.len())
                 && address.bytes().all(|byte| {
@@ -802,6 +879,50 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    #[tokio::test]
+    async fn fresh_swap_preparation_rejects_unsupported_providers_before_using_storage() {
+        let mut config = deadpool_postgres::Config::new();
+        config.url = Some("postgres://localhost/not-used".into());
+        let pool = config
+            .create_pool(
+                Some(deadpool_postgres::Runtime::Tokio1),
+                tokio_postgres::NoTls,
+            )
+            .unwrap();
+        let service = RouteExecutionService::new(
+            pool,
+            "test-secret",
+            true,
+            NearIntentsProvider::new("https://example.test", None).unwrap(),
+            None,
+            SymbiosisRouteProvider::new("https://example.test", None, "preview", 100).unwrap(),
+        );
+        let request = || {
+            json!({
+                "anonymous_id": Uuid::new_v4(), "route_id": "composed:second-leg",
+                "provider": "untrusted-provider", "from_asset": "USDC@ethereum",
+                "to_asset": "USDT@ethereum", "amount": "1629.515056",
+                "source_address": "0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+                "recipient": "0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+            })
+        };
+        let value: PrepareSwapExecution = serde_json::from_value(request()).unwrap();
+        assert!(matches!(
+            service.prepare_swap(value, "fresh-step").await,
+            Err(RouteExecutionError::UnsupportedRoute)
+        ));
+        let mut injected_transaction = request();
+        injected_transaction["transaction"] = json!({ "to": "untrusted-router", "data": "0x1234" });
+        assert!(serde_json::from_value::<PrepareSwapExecution>(injected_transaction).is_err());
+        let mut unconfigured_router = request();
+        unconfigured_router["provider"] = json!("symbiosis");
+        let value = serde_json::from_value(unconfigured_router).unwrap();
+        assert!(matches!(
+            service.prepare_swap(value, "fresh-step").await,
+            Err(RouteExecutionError::UnsupportedRoute)
+        ));
+    }
+
     #[test]
     fn wallet_addresses_are_checked_against_the_actual_chain() {
         for (network, address, valid) in [
@@ -823,6 +944,13 @@ mod tests {
             ("tron", "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", true),
             ("tron", "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6u", false),
             ("tron", "0x8ba1f109551bD432803012645Ac136ddd64DBA72", false),
+            (
+                "solana",
+                "So11111111111111111111111111111111111111112",
+                true,
+            ),
+            ("solana", "11111111111111111111111111111111", false),
+            ("solana", "alice.near", false),
             ("unsupported", "alice.near", false),
         ] {
             assert_eq!(
@@ -858,6 +986,7 @@ mod tests {
             ("near-intents", "USDT@near", "USDC@ethereum", true),
             ("near-intents", "USDT@solana", "USDC@ethereum", false),
             ("symbiosis", "USDT@tron", "USDC@ethereum", true),
+            ("symbiosis", "USDT@tron", "SOL@solana", true),
             ("symbiosis", "USDT@ethereum", "TRX@tron", false),
             ("symbiosis", "USDT@tron", "USDC@near", false),
             ("cow-swap", "USDT@ethereum", "USDC@ethereum", false),

@@ -527,6 +527,21 @@ export function createRouteExecution(input: {
   });
 }
 
+export function prepareSwapExecution(input: {
+  anonymousId: string; routeId: string; provider: string; fromAsset: string; toAsset: string;
+  amount: string; sourceAddress: string; recipient: string; idempotencyKey: string;
+}): Promise<RouteExecution> {
+  return request("/api/p2p/route-executions/prepare", {
+    method: "POST",
+    headers: { "Idempotency-Key": input.idempotencyKey },
+    body: JSON.stringify({
+      anonymous_id: input.anonymousId, route_id: input.routeId, provider: input.provider,
+      from_asset: input.fromAsset, to_asset: input.toAsset, amount: input.amount,
+      source_address: input.sourceAddress, recipient: input.recipient, slippage_bps: 100,
+    }),
+  });
+}
+
 export function submitRouteExecution(
   id: string,
   anonymousId: string,

@@ -87,6 +87,9 @@ const CHAIN_NAMES: Record<string, number> = {
   "avalanche-c": 43114,
   "bnb-smart-chain": 56,
   optimism: 10,
+  linea: 59144,
+  plasma: 9745,
+  ink: 57073,
 };
 
 const erc20Abi = [
@@ -122,7 +125,7 @@ async function appKit() {
       import("@reown/appkit-adapter-wagmi"),
       import("@reown/appkit/networks"),
     ]);
-    const supported: [AppKitNetwork, ...AppKitNetwork[]] = [networks.mainnet, { ...networks.sepolia, rpcUrls: { default: { http: [SAFE_NETWORKS[11155111].rpcUrl] } } }, networks.gnosis, networks.arbitrum, networks.base, networks.polygon, networks.avalanche, networks.bsc, networks.optimism];
+    const supported: [AppKitNetwork, ...AppKitNetwork[]] = [networks.mainnet, { ...networks.sepolia, rpcUrls: { default: { http: [SAFE_NETWORKS[11155111].rpcUrl] } } }, networks.gnosis, networks.arbitrum, networks.base, networks.polygon, networks.avalanche, networks.bsc, networks.optimism, networks.linea, networks.plasma, networks.ink];
     const adapter = new WagmiAdapter({ projectId, networks: supported });
     const modal = createAppKit({
       adapters: [adapter],
@@ -172,7 +175,7 @@ async function injectedApp() {
           import("wagmi/connectors"),
           import("@reown/appkit/networks"),
         ]);
-        const supported = [networks.mainnet, { ...networks.sepolia, rpcUrls: { default: { http: [SAFE_NETWORKS[11155111].rpcUrl] } } }, networks.gnosis, networks.arbitrum, networks.base, networks.polygon, networks.avalanche, networks.bsc, networks.optimism] as const;
+        const supported = [networks.mainnet, { ...networks.sepolia, rpcUrls: { default: { http: [SAFE_NETWORKS[11155111].rpcUrl] } } }, networks.gnosis, networks.arbitrum, networks.base, networks.polygon, networks.avalanche, networks.bsc, networks.optimism, networks.linea, networks.plasma, networks.ink] as const;
         const connector = injected({ target: injectedWalletTarget });
         const transports = Object.fromEntries(supported.map((chain) => [chain.id, http()])) as Record<(typeof supported)[number]["id"], ReturnType<typeof http>>;
         const config = createConfig({
@@ -556,7 +559,10 @@ export function targetNetwork(execution: { to_asset: string }): string {
 }
 
 export async function validateRecipient(network: string, address: string): Promise<void> {
-  if (walletFamily(network) === "evm") {
+  if (network === "solana") {
+    const { isSolanaAddress } = await import("./wallet-address");
+    if (!isSolanaAddress(address)) throw new Error("Invalid Solana recipient address");
+  } else if (walletFamily(network) === "evm") {
     const { isAddress } = await import("viem");
     if (!isAddress(address) || /^0x0{40}$/i.test(address)) throw new Error("Invalid EVM recipient address");
   } else if (network === "near") {

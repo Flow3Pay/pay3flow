@@ -32,9 +32,8 @@
     "@0x/swap-ts-sdk": "^2.1.1",
     "@aurora-is-near/intents-swap-widget": "^7.27.0",
     "@aurora-is-near/intents-swap-widget-standalone": "^7.27.0",
-    "@cowprotocol/cow-sdk": "^9.2.17",
-    "@cowprotocol/sdk-viem-adapter": "^0.3.33",
-    "@cowprotocol/widget-lib": "4.8.1",
+    "@cowprotocol/cow-sdk": "9.2.21",
+    "@cowprotocol/sdk-viem-adapter": "0.3.36",
     "@near-js/transactions": "^2.5.1",
     "@near-wallet-selector/core": "^10.1.4",
     "@near-wallet-selector/modal-ui": "^10.1.4",
@@ -49,6 +48,7 @@
     "react-dom": "^19.3.1",
     "sharp": "^0.35.5",
     "viem": "^2.57.2",
-    "wagmi": "^3.7.7"
+    "wagmi": "^3.7.7",
+    "@cowprotocol/sdk-bridging": "4.4.19"
   }
 }

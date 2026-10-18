@@ -4,7 +4,7 @@
   import { getAnonymousUserId } from "$lib/anonymous-user";
   import { createRouteExecution, fetchRouteExecution, submitRouteExecution, type RouteCandidate, type RouteExecution } from "$lib/exchange";
   import { locale, t } from "$lib/i18n";
-  import { assetIcon, venueIcon } from "$lib/icons";
+  import SwapForm from "./SwapForm.svelte";
   import { chainIdForNetwork, hasExecutionFunds, prepareWalletAction, validateRecipient, walletFamily, type ConnectedWallet, type PreparedWalletAction } from "$lib/wallet-execution";
   import { wallets, connectWallet, restoreWallets } from "$lib/wallet-session";
 
@@ -306,22 +306,7 @@
 </script>
 
 {#if descriptor}
-  <section class="execution" data-testid="route-wallet-execution" data-provider={descriptor.provider} aria-label={copy("Execute with wallet")}>
-    <div class="executionTitle"><strong>Pay3Flow · SWAP</strong><span>{copy("Non-custodial")}</span></div>
-    <div class="provider"><img src={venueIcon(descriptor.provider)} alt="" width="20" height="20" /><span>{providerNames[descriptor.provider]}</span></div>
-    <div class="swapForm" data-testid="wallet-swap-form" data-provider={descriptor.provider} aria-busy={busy}>
-      <div class="assetCard">
-        <label>{copy("You pay")}
-          <span class="assetAmount"><input aria-label={copy("Swap amount")} readonly value={descriptor.input_amount} /><span><img src={assetIcon(fromSymbol)} alt="" />{fromSymbol}</span></span>
-        </label>
-        <small>{networkNames[sourceNetwork] ?? sourceNetwork}</small>
-      </div>
-      <div class="swapArrow" aria-hidden="true">↓</div>
-      <div class="assetCard">
-        <small>{copy("Estimated output")}</small>
-        <div class="assetAmount"><strong data-testid="swap-output">{estimatedOutput ?? "—"}</strong><span><img src={assetIcon(toSymbol)} alt="" />{toSymbol}</span></div>
-        <small>{networkNames[destinationNetwork] ?? destinationNetwork}</small>
-      </div>
+  <SwapForm provider={descriptor.provider} providerName={providerNames[descriptor.provider]} amount={descriptor.input_amount} {fromSymbol} {toSymbol} fromNetwork={sourceNetwork} toNetwork={destinationNetwork} output={estimatedOutput} {networkNames} {busy}>
       {#if !sourceSupported}
         <p class="muted">{copy("Embedded execution does not yet support a wallet for {network}. Open the provider manually for this route.", { network: sourceNetwork })}</p>
       {:else}
@@ -378,8 +363,7 @@
       {#if error}<p class="errorText" role="alert">{error}</p>{/if}
       {#if notice}<p class="ready" role="status">{notice}</p>{/if}
       <p class="safety">{copy("Pay3Flow never receives your private key. Approval and transfer require confirmation in your wallet.")}</p>
-    </div>
-  </section>
+  </SwapForm>
 {/if}
 
 <style>
