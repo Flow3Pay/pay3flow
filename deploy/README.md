@@ -120,11 +120,18 @@ to a release directory does not configure the running production process.
 
 ## Frontend build behavior
 
-The Dockerfile inherits its `deps` stage for both `builder` and `runner`.
-Dependencies are installed once with `npm ci --ignore-scripts`; large SDK trees
-are not recopied with cross-stage `COPY node_modules`. The builder allows a
-6 GiB Node heap. Node 24, DejaVu fonts, compression and frontend metrics remain
-part of the runtime image.
+Live deployment uses [`frontend-runtime/Dockerfile`](frontend-runtime/Dockerfile) with the
+frontend directory as its build context. Its dependency and builder stages
+match the frontend Dockerfile, allowing application build-cache reuse. The
+runner copies a filtered dependency tree into a fresh Node 24 image: generated
+JavaScript, JSON, CSS, native modules and licenses remain; declaration files,
+source maps and unused raw Material Symbols SVG source packages are omitted.
+The compiled React icons and built client assets are preserved. Removing files
+only in a child layer of the full dependency image would not shrink that image.
+
+The builder allows a 6 GiB Node heap. DejaVu fonts, compression and frontend
+metrics remain part of the runtime image. The frontend-directory Dockerfile
+retains the full dependency tree for the general Compose/local build path.
 
 If a cold release appears quiet, inspect `/tmp/pay3flow-backend-REV.log` and
 `/tmp/pay3flow-frontend-REV.log` on the host, where `REV` is the seven-character

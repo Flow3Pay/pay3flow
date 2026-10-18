@@ -115,7 +115,7 @@ rsync -az --delete \
     "$repo_root/" "$remote:$release_dir/"; or die 'Could not synchronize the release source.'
 
 set backend_log_command "cd $release_dir && '$nerdctl' --address '$containerd_socket' --namespace k8s.io build --tag '$backend_image' --file backend/Dockerfile . >'$backend_log' 2>&1"
-set frontend_log_command "cd $release_dir && '$nerdctl' --address '$containerd_socket' --namespace k8s.io build --tag '$frontend_image' --file pay3low-svelte-frontend/Dockerfile pay3low-svelte-frontend >'$frontend_log' 2>&1"
+set frontend_log_command "cd $release_dir && '$nerdctl' --address '$containerd_socket' --namespace k8s.io build --tag '$frontend_image' --file deploy/frontend-runtime/Dockerfile pay3low-svelte-frontend >'$frontend_log' 2>&1"
 remote "rm -f '$backend_log' '$frontend_log'"; or die 'Could not clear remote build logs.'
 echo 'Building backend and frontend images in parallel...'
 remote $backend_log_command &

@@ -122,9 +122,13 @@ Production enables the required globals; dev uses the plugin's dev-only global
 mode to avoid reinjecting shims into the large optimized SDK bundle.
 
 Use `NODE_OPTIONS=--max-old-space-size=6144` for builds and, when needed, cold
-dev optimization. The Dockerfile sets this for its build step and inherits the
-dependency stage for builder and runner to avoid repeated copies of the SDK's
-large dependency tree. `.dockerignore` excludes local environment files.
+dev optimization. Both Docker build paths set this for the build step and reuse the dependency
+stage for the builder. Live deployment uses
+[`deploy/frontend-runtime/Dockerfile`](../deploy/frontend-runtime/Dockerfile), whose fresh
+runtime image receives a filtered dependency tree without declarations,
+source maps or unused raw Material Symbols SVG source packages. Runtime
+JavaScript, native modules and compiled icon components are retained.
+`.dockerignore` excludes local environment files.
 
 Browser coverage is in
 [`wallet-execution.spec.ts`](../pay3low-svelte-frontend/tests/wallet-execution.spec.ts)

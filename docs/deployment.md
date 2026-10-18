@@ -18,11 +18,18 @@ a release directory and builds immutable images on the production host, verifies
 their k3s image IDs, records source-revision annotations, rolls out backend and
 frontend, and checks the public root, health and provider catalog.
 
-Frontend builder and runner inherit the dependency stage. This avoids hashing
-and copying the large standalone wallet SDK tree between stages. The build uses
-`NODE_OPTIONS=--max-old-space-size=6144`; local `.env*` files are excluded from
-the frontend Docker context. Cold dependency installation, image export and
-containerd import can still dominate release time on a busy disk.
+Live frontend builds use `deploy/frontend-runtime/Dockerfile`. The dependency/builder
+stages reuse the application build cache; a separate runtime stage excludes
+TypeScript declarations, source maps and unused raw Material Symbols SVG
+packages while keeping runtime JavaScript, native modules, licenses and built
+client assets. The final image starts from Node 24 rather than retaining a
+parent layer containing all SDK development files. This avoids exporting
+hundreds of thousands of unused dependency files.
+
+The builder uses `NODE_OPTIONS=--max-old-space-size=6144`; local `.env*` files
+are excluded from the frontend build context. Cold installation, filtered
+runtime copying, image export and containerd import can still affect release
+time on a busy disk.
 
 The Aurora widget needs `PUBLIC_AURORA_INTENTS_API_KEY` in the frontend Node
 server environment. Keep the value in the production secret store and use a
