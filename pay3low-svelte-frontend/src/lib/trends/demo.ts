@@ -4,7 +4,7 @@ import type { TrendEvent } from "./model";
 export function demoTrendActivity(now = Date.now()): TrendEvent[] {
   const assets = [
     ["USDT", "tron"], ["BTC", "bitcoin"], ["ETH", "ethereum"], ["USDC", "ethereum"],
-    ["SOL", "solana"], ["USDT", "ethereum"], ["TON", "ton"], ["USDT", "bsc"],
+    ["SOL", "solana"], ["USDT", "ethereum"], ["GRAM", "ton"], ["USDT", "bsc"],
     ["BNB", "bsc"], ["LTC", "litecoin"], ["NEAR", "near"], ["EVER", "everscale"],
   ];
   const venues = ["bestchange", "bybit", "binance", "mexc", "near-intents", "okx"];

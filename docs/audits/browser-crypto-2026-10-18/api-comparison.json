@@ -1,0 +1,1878 @@
+{
+  "observed_at": "2026-10-18T06:43:39.304198+00:00",
+  "scope": "Same selected sources and filters; API limit=100 instead of UI limit=40; quotes can change between observations",
+  "results": [
+    {
+      "query": {
+        "source_fiat": "ETH",
+        "target_fiat": "BTC",
+        "source_amount": 0.05,
+        "source_network": "ethereum",
+        "target_network": "bitcoin",
+        "source_payment_fee_percent": 0,
+        "target_payment_fee_percent": 0,
+        "sources": "0x,bestchange,binance,bitcoin-center,bitget,bncex,bybit,cifra-broker,cow-swap,crypto-office,dzengi,gate,id-pay,mexc,near-intents,okx,papa-change,rapira,skylabs,symbiosis,whitebird",
+        "exchange_mode": "all",
+        "allow_cross_venue": true,
+        "min_orders": 20,
+        "min_completion_rate": 0.9,
+        "limit": 100
+      },
+      "ui_routes_found": 98,
+      "ui_cards": 40,
+      "routes_found": 95,
+      "returned": 95,
+      "routes_exhaustive": true,
+      "assets_searched": [
+        "BTC",
+        "USDT",
+        "USDC",
+        "ETH",
+        "10SET",
+        "AAVE",
+        "AB",
+        "ACNON",
+        "ADA",
+        "AEVO",
+        "AIXBT",
+        "ALGO",
+        "APT",
+        "ATOM",
+        "AVAX",
+        "BCH",
+        "BNB",
+        "DAI",
+        "DOGE",
+        "DOT",
+        "EVER",
+        "FDUSD",
+        "LINK",
+        "LTC",
+        "MATIC",
+        "NEAR",
+        "SOL",
+        "SUI",
+        "TON",
+        "TRX",
+        "UNI",
+        "XRP"
+      ],
+      "provider_statuses": [
+        {
+          "source": "0x",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "bestchange",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 26,
+          "offers_found": 63,
+          "error": null
+        },
+        {
+          "source": "binance",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 610,
+          "offers_found": 1380,
+          "error": null
+        },
+        {
+          "source": "bitget",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 431,
+          "offers_found": 580,
+          "error": null
+        },
+        {
+          "source": "bybit",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 240,
+          "offers_found": 527,
+          "error": null
+        },
+        {
+          "source": "cifra-broker",
+          "ok": false,
+          "cached": false,
+          "latency_ms": 3184,
+          "offers_found": 0,
+          "error": "cifra-broker returned invalid JSON with HTTP 200 OK"
+        },
+        {
+          "source": "cow-swap",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 1529,
+          "offers_found": 1,
+          "error": null
+        },
+        {
+          "source": "crypto-office",
+          "ok": false,
+          "cached": false,
+          "latency_ms": 915,
+          "offers_found": 0,
+          "error": "invalid Crypto Office API response"
+        },
+        {
+          "source": "dzengi",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 123,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "gate",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 2164,
+          "offers_found": 2204,
+          "error": null
+        },
+        {
+          "source": "mexc",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 154,
+          "offers_found": 1864,
+          "error": null
+        },
+        {
+          "source": "near-intents",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 1069,
+          "offers_found": 1,
+          "error": null
+        },
+        {
+          "source": "okx",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 588,
+          "offers_found": 1182,
+          "error": null
+        },
+        {
+          "source": "symbiosis",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 831,
+          "offers_found": 1,
+          "error": null
+        },
+        {
+          "source": "whitebird",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 2501,
+          "offers_found": 10,
+          "error": null
+        }
+      ],
+      "route_counts_by_venue": {
+        "bestchange": 63,
+        "bybit": 3,
+        "gate": 3,
+        "okx": 3,
+        "bitget": 3,
+        "binance": 12,
+        "mexc": 4,
+        "whitebird": 1,
+        "symbiosis": 1,
+        "near-intents": 1,
+        "cow-swap": 1
+      },
+      "spot_estimates": 29,
+      "provider_quotes": 66
+    },
+    {
+      "query": {
+        "source_fiat": "ETH",
+        "target_fiat": "AVAX",
+        "source_amount": 0.05,
+        "source_network": "ethereum",
+        "target_network": "avalanche-c",
+        "source_payment_fee_percent": 0,
+        "target_payment_fee_percent": 0,
+        "sources": "0x,bestchange,binance,bitcoin-center,bitget,bncex,bybit,cifra-broker,cow-swap,crypto-office,dzengi,gate,id-pay,mexc,near-intents,okx,papa-change,rapira,skylabs,symbiosis,whitebird",
+        "exchange_mode": "all",
+        "allow_cross_venue": true,
+        "min_orders": 20,
+        "min_completion_rate": 0.9,
+        "limit": 100
+      },
+      "ui_routes_found": 56,
+      "ui_cards": 40,
+      "routes_found": 56,
+      "returned": 56,
+      "routes_exhaustive": true,
+      "assets_searched": [
+        "AVAX",
+        "USDT",
+        "USDC",
+        "BTC",
+        "ETH",
+        "10SET",
+        "AAVE",
+        "AB",
+        "ACNON",
+        "ADA",
+        "AEVO",
+        "AIXBT",
+        "ALGO",
+        "APT",
+        "ATOM",
+        "BCH",
+        "BNB",
+        "DAI",
+        "DOGE",
+        "DOT",
+        "EVER",
+        "FDUSD",
+        "LINK",
+        "LTC",
+        "MATIC",
+        "NEAR",
+        "SOL",
+        "SUI",
+        "TON",
+        "TRX",
+        "UNI",
+        "XRP"
+      ],
+      "provider_statuses": [
+        {
+          "source": "0x",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "bestchange",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 26,
+          "offers_found": 38,
+          "error": null
+        },
+        {
+          "source": "binance",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 638,
+          "offers_found": 1380,
+          "error": null
+        },
+        {
+          "source": "bitget",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 593,
+          "offers_found": 580,
+          "error": null
+        },
+        {
+          "source": "bybit",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 211,
+          "offers_found": 527,
+          "error": null
+        },
+        {
+          "source": "cifra-broker",
+          "ok": false,
+          "cached": false,
+          "latency_ms": 3107,
+          "offers_found": 0,
+          "error": "cifra-broker returned invalid JSON with HTTP 200 OK"
+        },
+        {
+          "source": "cow-swap",
+          "ok": false,
+          "cached": false,
+          "latency_ms": 2215,
+          "offers_found": 0,
+          "error": "request NEAR Intents quote failed with HTTP 400 Bad Request: {\"message\":\"Quoting for this pair is not available\",\"correlationId\":\"bfe59e51-023f-4d3f-a772-16896a067da3\",\"timestamp\":\"2026-10-18T06:43:27.232Z\",\"path\":\"/v0/quote\"}"
+        },
+        {
+          "source": "crypto-office",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "dzengi",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 340,
+          "offers_found": 515,
+          "error": null
+        },
+        {
+          "source": "gate",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 2146,
+          "offers_found": 2204,
+          "error": null
+        },
+        {
+          "source": "mexc",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 119,
+          "offers_found": 1864,
+          "error": null
+        },
+        {
+          "source": "near-intents",
+          "ok": false,
+          "cached": false,
+          "latency_ms": 528,
+          "offers_found": 0,
+          "error": "request NEAR Intents quote failed with HTTP 400 Bad Request: {\"message\":\"Quoting for this pair is not available\",\"correlationId\":\"0a87a045-9154-4eae-85b6-9935b4a9da00\",\"timestamp\":\"2026-10-18T06:43:25.546Z\",\"path\":\"/v0/quote\"}"
+        },
+        {
+          "source": "okx",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 534,
+          "offers_found": 1182,
+          "error": null
+        },
+        {
+          "source": "symbiosis",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 748,
+          "offers_found": 1,
+          "error": null
+        },
+        {
+          "source": "whitebird",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 2502,
+          "offers_found": 10,
+          "error": null
+        }
+      ],
+      "route_counts_by_venue": {
+        "bitget": 2,
+        "gate": 3,
+        "bybit": 2,
+        "okx": 2,
+        "binance": 4,
+        "mexc": 2,
+        "dzengi": 2,
+        "bestchange": 38,
+        "symbiosis": 1
+      },
+      "spot_estimates": 17,
+      "provider_quotes": 39
+    },
+    {
+      "query": {
+        "source_fiat": "ETH",
+        "target_fiat": "DOT",
+        "source_amount": 0.05,
+        "source_network": "ethereum",
+        "target_network": "polkadot",
+        "source_payment_fee_percent": 0,
+        "target_payment_fee_percent": 0,
+        "sources": "0x,bestchange,binance,bitcoin-center,bitget,bncex,bybit,cifra-broker,cow-swap,crypto-office,dzengi,gate,id-pay,mexc,near-intents,okx,papa-change,rapira,skylabs,symbiosis,whitebird",
+        "exchange_mode": "all",
+        "allow_cross_venue": true,
+        "min_orders": 20,
+        "min_completion_rate": 0.9,
+        "limit": 100
+      },
+      "ui_routes_found": 31,
+      "ui_cards": 31,
+      "routes_found": 31,
+      "returned": 31,
+      "routes_exhaustive": true,
+      "assets_searched": [
+        "DOT",
+        "USDT",
+        "USDC",
+        "BTC",
+        "ETH",
+        "10SET",
+        "AAVE",
+        "AB",
+        "ACNON",
+        "ADA",
+        "AEVO",
+        "AIXBT",
+        "ALGO",
+        "APT",
+        "ATOM",
+        "AVAX",
+        "BCH",
+        "BNB",
+        "DAI",
+        "DOGE",
+        "EVER",
+        "FDUSD",
+        "LINK",
+        "LTC",
+        "MATIC",
+        "NEAR",
+        "SOL",
+        "SUI",
+        "TON",
+        "TRX",
+        "UNI",
+        "XRP"
+      ],
+      "provider_statuses": [
+        {
+          "source": "0x",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "bestchange",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 44,
+          "offers_found": 16,
+          "error": null
+        },
+        {
+          "source": "binance",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 534,
+          "offers_found": 1380,
+          "error": null
+        },
+        {
+          "source": "bitget",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 742,
+          "offers_found": 580,
+          "error": null
+        },
+        {
+          "source": "bybit",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 197,
+          "offers_found": 527,
+          "error": null
+        },
+        {
+          "source": "cifra-broker",
+          "ok": false,
+          "cached": false,
+          "latency_ms": 743,
+          "offers_found": 0,
+          "error": "cifra-broker returned invalid JSON with HTTP 200 OK"
+        },
+        {
+          "source": "cow-swap",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "crypto-office",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "dzengi",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 92,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "gate",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 587,
+          "offers_found": 2204,
+          "error": null
+        },
+        {
+          "source": "mexc",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 46,
+          "offers_found": 1864,
+          "error": null
+        },
+        {
+          "source": "near-intents",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "okx",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 374,
+          "offers_found": 1182,
+          "error": null
+        },
+        {
+          "source": "symbiosis",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "whitebird",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 2500,
+          "offers_found": 10,
+          "error": null
+        }
+      ],
+      "route_counts_by_venue": {
+        "gate": 3,
+        "bitget": 1,
+        "binance": 4,
+        "bybit": 2,
+        "okx": 2,
+        "mexc": 3,
+        "bestchange": 16
+      },
+      "spot_estimates": 15,
+      "provider_quotes": 16
+    },
+    {
+      "query": {
+        "source_fiat": "ETH",
+        "target_fiat": "TON",
+        "source_amount": 0.05,
+        "source_network": "ethereum",
+        "target_network": "ton",
+        "source_payment_fee_percent": 0,
+        "target_payment_fee_percent": 0,
+        "sources": "0x,bestchange,binance,bitcoin-center,bitget,bncex,bybit,cifra-broker,cow-swap,crypto-office,dzengi,gate,id-pay,mexc,near-intents,okx,papa-change,rapira,skylabs,symbiosis,whitebird",
+        "exchange_mode": "all",
+        "allow_cross_venue": true,
+        "min_orders": 20,
+        "min_completion_rate": 0.9,
+        "limit": 100
+      },
+      "ui_routes_found": 1,
+      "ui_cards": 1,
+      "routes_found": 1,
+      "returned": 1,
+      "routes_exhaustive": true,
+      "assets_searched": [
+        "TON",
+        "USDT",
+        "USDC",
+        "BTC",
+        "ETH",
+        "10SET",
+        "AAVE",
+        "AB",
+        "ACNON",
+        "ADA",
+        "AEVO",
+        "AIXBT",
+        "ALGO",
+        "APT",
+        "ATOM",
+        "AVAX",
+        "BCH",
+        "BNB",
+        "DAI",
+        "DOGE",
+        "DOT",
+        "EVER",
+        "FDUSD",
+        "LINK",
+        "LTC",
+        "MATIC",
+        "NEAR",
+        "SOL",
+        "SUI",
+        "TRX",
+        "UNI",
+        "XRP"
+      ],
+      "provider_statuses": [
+        {
+          "source": "0x",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "bestchange",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "binance",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 572,
+          "offers_found": 1380,
+          "error": null
+        },
+        {
+          "source": "bitget",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 649,
+          "offers_found": 580,
+          "error": null
+        },
+        {
+          "source": "bybit",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 194,
+          "offers_found": 527,
+          "error": null
+        },
+        {
+          "source": "cifra-broker",
+          "ok": false,
+          "cached": false,
+          "latency_ms": 717,
+          "offers_found": 0,
+          "error": "cifra-broker returned invalid JSON with HTTP 200 OK"
+        },
+        {
+          "source": "cow-swap",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "crypto-office",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "dzengi",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 80,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "gate",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 1059,
+          "offers_found": 2204,
+          "error": null
+        },
+        {
+          "source": "mexc",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 45,
+          "offers_found": 1864,
+          "error": null
+        },
+        {
+          "source": "near-intents",
+          "ok": false,
+          "cached": false,
+          "latency_ms": 44,
+          "offers_found": 0,
+          "error": "request NEAR Intents quote failed with HTTP 400 Bad Request: {\"message\":\"Quoting for this pair is not available\",\"correlationId\":\"7cc0e1d7-0fd5-4ced-84ce-34f5b3e03e60\",\"timestamp\":\"2026-10-18T06:43:28.585Z\",\"path\":\"/v0/quote\"}"
+        },
+        {
+          "source": "okx",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 492,
+          "offers_found": 1182,
+          "error": null
+        },
+        {
+          "source": "symbiosis",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "whitebird",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 2502,
+          "offers_found": 10,
+          "error": null
+        }
+      ],
+      "route_counts_by_venue": {
+        "whitebird": 1
+      },
+      "spot_estimates": 1,
+      "provider_quotes": 0
+    },
+    {
+      "query": {
+        "source_fiat": "ETH",
+        "target_fiat": "TON",
+        "source_amount": 0.5,
+        "source_network": "ethereum",
+        "target_network": "ton",
+        "source_payment_fee_percent": 0,
+        "target_payment_fee_percent": 0,
+        "sources": "0x,bestchange,binance,bitcoin-center,bitget,bncex,bybit,cifra-broker,cow-swap,crypto-office,dzengi,gate,id-pay,mexc,near-intents,okx,papa-change,rapira,skylabs,symbiosis,whitebird",
+        "exchange_mode": "all",
+        "allow_cross_venue": true,
+        "min_orders": 20,
+        "min_completion_rate": 0.9,
+        "limit": 100
+      },
+      "ui_routes_found": 1,
+      "ui_cards": 1,
+      "routes_found": 1,
+      "returned": 1,
+      "routes_exhaustive": true,
+      "assets_searched": [
+        "TON",
+        "USDT",
+        "USDC",
+        "BTC",
+        "ETH",
+        "10SET",
+        "AAVE",
+        "AB",
+        "ACNON",
+        "ADA",
+        "AEVO",
+        "AIXBT",
+        "ALGO",
+        "APT",
+        "ATOM",
+        "AVAX",
+        "BCH",
+        "BNB",
+        "DAI",
+        "DOGE",
+        "DOT",
+        "EVER",
+        "FDUSD",
+        "LINK",
+        "LTC",
+        "MATIC",
+        "NEAR",
+        "SOL",
+        "SUI",
+        "TRX",
+        "UNI",
+        "XRP"
+      ],
+      "provider_statuses": [
+        {
+          "source": "0x",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "bestchange",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "binance",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 579,
+          "offers_found": 1380,
+          "error": null
+        },
+        {
+          "source": "bitget",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 798,
+          "offers_found": 580,
+          "error": null
+        },
+        {
+          "source": "bybit",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 199,
+          "offers_found": 527,
+          "error": null
+        },
+        {
+          "source": "cifra-broker",
+          "ok": false,
+          "cached": false,
+          "latency_ms": 623,
+          "offers_found": 0,
+          "error": "cifra-broker returned invalid JSON with HTTP 200 OK"
+        },
+        {
+          "source": "cow-swap",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "crypto-office",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "dzengi",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 134,
+          "offers_found": 515,
+          "error": null
+        },
+        {
+          "source": "gate",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 605,
+          "offers_found": 2204,
+          "error": null
+        },
+        {
+          "source": "mexc",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 51,
+          "offers_found": 1864,
+          "error": null
+        },
+        {
+          "source": "near-intents",
+          "ok": false,
+          "cached": false,
+          "latency_ms": 42,
+          "offers_found": 0,
+          "error": "request NEAR Intents quote failed with HTTP 400 Bad Request: {\"message\":\"Quoting for this pair is not available\",\"correlationId\":\"ffad76d1-30c8-4046-81e4-a01e0a0fc117\",\"timestamp\":\"2026-10-18T06:43:31.171Z\",\"path\":\"/v0/quote\"}"
+        },
+        {
+          "source": "okx",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 313,
+          "offers_found": 1182,
+          "error": null
+        },
+        {
+          "source": "symbiosis",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "whitebird",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 2509,
+          "offers_found": 10,
+          "error": null
+        }
+      ],
+      "route_counts_by_venue": {
+        "whitebird": 1
+      },
+      "spot_estimates": 1,
+      "provider_quotes": 0
+    },
+    {
+      "query": {
+        "source_fiat": "BTC",
+        "target_fiat": "AVAX",
+        "source_amount": 0.01,
+        "source_network": "bitcoin",
+        "target_network": "avalanche-c",
+        "source_payment_fee_percent": 0,
+        "target_payment_fee_percent": 0,
+        "sources": "0x,bestchange,binance,bitcoin-center,bitget,bncex,bybit,cifra-broker,cow-swap,crypto-office,dzengi,gate,id-pay,mexc,near-intents,okx,papa-change,rapira,skylabs,symbiosis,whitebird",
+        "exchange_mode": "all",
+        "allow_cross_venue": true,
+        "min_orders": 20,
+        "min_completion_rate": 0.9,
+        "limit": 100
+      },
+      "ui_routes_found": 74,
+      "ui_cards": 40,
+      "routes_found": 72,
+      "returned": 72,
+      "routes_exhaustive": true,
+      "assets_searched": [
+        "AVAX",
+        "USDT",
+        "USDC",
+        "BTC",
+        "ETH",
+        "10SET",
+        "AAVE",
+        "AB",
+        "ACNON",
+        "ADA",
+        "AEVO",
+        "AIXBT",
+        "ALGO",
+        "APT",
+        "ATOM",
+        "BCH",
+        "BNB",
+        "DAI",
+        "DOGE",
+        "DOT",
+        "EVER",
+        "FDUSD",
+        "LINK",
+        "LTC",
+        "MATIC",
+        "NEAR",
+        "SOL",
+        "SUI",
+        "TON",
+        "TRX",
+        "UNI",
+        "XRP"
+      ],
+      "provider_statuses": [
+        {
+          "source": "0x",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "bestchange",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 54,
+          "offers_found": 57,
+          "error": null
+        },
+        {
+          "source": "binance",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 553,
+          "offers_found": 1380,
+          "error": null
+        },
+        {
+          "source": "bitget",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 620,
+          "offers_found": 580,
+          "error": null
+        },
+        {
+          "source": "bybit",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 419,
+          "offers_found": 527,
+          "error": null
+        },
+        {
+          "source": "cifra-broker",
+          "ok": false,
+          "cached": false,
+          "latency_ms": 623,
+          "offers_found": 0,
+          "error": "cifra-broker returned invalid JSON with HTTP 200 OK"
+        },
+        {
+          "source": "cow-swap",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "crypto-office",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "dzengi",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 80,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "gate",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 352,
+          "offers_found": 2204,
+          "error": null
+        },
+        {
+          "source": "mexc",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 68,
+          "offers_found": 1864,
+          "error": null
+        },
+        {
+          "source": "near-intents",
+          "ok": false,
+          "cached": false,
+          "latency_ms": 42,
+          "offers_found": 0,
+          "error": "request NEAR Intents quote failed with HTTP 400 Bad Request: {\"message\":\"Quoting for this pair is not available\",\"correlationId\":\"e79b4505-62a2-4cd5-be7c-80ea8392ba62\",\"timestamp\":\"2026-10-18T06:43:31.288Z\",\"path\":\"/v0/quote\"}"
+        },
+        {
+          "source": "okx",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 457,
+          "offers_found": 1182,
+          "error": null
+        },
+        {
+          "source": "symbiosis",
+          "ok": false,
+          "cached": false,
+          "latency_ms": 44,
+          "offers_found": 0,
+          "error": "symbiosis: No swap available for BTC@bitcoin \u2192 AVAX@avalanche-c at 0.01 BTC"
+        },
+        {
+          "source": "whitebird",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 2523,
+          "offers_found": 10,
+          "error": null
+        }
+      ],
+      "route_counts_by_venue": {
+        "bestchange": 57,
+        "binance": 4,
+        "bybit": 2,
+        "bitget": 2,
+        "gate": 3,
+        "okx": 2,
+        "mexc": 2
+      },
+      "spot_estimates": 15,
+      "provider_quotes": 57
+    },
+    {
+      "query": {
+        "source_fiat": "AVAX",
+        "target_fiat": "BTC",
+        "source_amount": 100,
+        "source_network": "avalanche-c",
+        "target_network": "bitcoin",
+        "source_payment_fee_percent": 0,
+        "target_payment_fee_percent": 0,
+        "sources": "0x,bestchange,binance,bitcoin-center,bitget,bncex,bybit,cifra-broker,cow-swap,crypto-office,dzengi,gate,id-pay,mexc,near-intents,okx,papa-change,rapira,skylabs,symbiosis,whitebird",
+        "exchange_mode": "all",
+        "allow_cross_venue": true,
+        "min_orders": 20,
+        "min_completion_rate": 0.9,
+        "limit": 100
+      },
+      "ui_routes_found": 69,
+      "ui_cards": 40,
+      "routes_found": 69,
+      "returned": 69,
+      "routes_exhaustive": true,
+      "assets_searched": [
+        "BTC",
+        "USDT",
+        "USDC",
+        "ETH",
+        "10SET",
+        "AAVE",
+        "AB",
+        "ACNON",
+        "ADA",
+        "AEVO",
+        "AIXBT",
+        "ALGO",
+        "APT",
+        "ATOM",
+        "AVAX",
+        "BCH",
+        "BNB",
+        "DAI",
+        "DOGE",
+        "DOT",
+        "EVER",
+        "FDUSD",
+        "LINK",
+        "LTC",
+        "MATIC",
+        "NEAR",
+        "SOL",
+        "SUI",
+        "TON",
+        "TRX",
+        "UNI",
+        "XRP"
+      ],
+      "provider_statuses": [
+        {
+          "source": "0x",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "bestchange",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 43,
+          "offers_found": 51,
+          "error": null
+        },
+        {
+          "source": "binance",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 402,
+          "offers_found": 1380,
+          "error": null
+        },
+        {
+          "source": "bitget",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 545,
+          "offers_found": 580,
+          "error": null
+        },
+        {
+          "source": "bybit",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 1021,
+          "offers_found": 527,
+          "error": null
+        },
+        {
+          "source": "cifra-broker",
+          "ok": false,
+          "cached": false,
+          "latency_ms": 547,
+          "offers_found": 0,
+          "error": "cifra-broker returned invalid JSON with HTTP 200 OK"
+        },
+        {
+          "source": "cow-swap",
+          "ok": false,
+          "cached": false,
+          "latency_ms": 1261,
+          "offers_found": 0,
+          "error": "request NEAR Intents quote failed with HTTP 400 Bad Request: {\"message\":\"Quoting for this pair is not available\",\"correlationId\":\"c8a3337f-8d11-4eaf-9181-ea2632efd8c1\",\"timestamp\":\"2026-10-18T06:43:35.045Z\",\"path\":\"/v0/quote\"}"
+        },
+        {
+          "source": "crypto-office",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "dzengi",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 149,
+          "offers_found": 515,
+          "error": null
+        },
+        {
+          "source": "gate",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 1119,
+          "offers_found": 2204,
+          "error": null
+        },
+        {
+          "source": "mexc",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 57,
+          "offers_found": 1864,
+          "error": null
+        },
+        {
+          "source": "near-intents",
+          "ok": false,
+          "cached": false,
+          "latency_ms": 39,
+          "offers_found": 0,
+          "error": "request NEAR Intents quote failed with HTTP 400 Bad Request: {\"message\":\"Quoting for this pair is not available\",\"correlationId\":\"9b47d009-2558-4dae-9ba9-ac4f64a524e0\",\"timestamp\":\"2026-10-18T06:43:33.819Z\",\"path\":\"/v0/quote\"}"
+        },
+        {
+          "source": "okx",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 383,
+          "offers_found": 1182,
+          "error": null
+        },
+        {
+          "source": "symbiosis",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 974,
+          "offers_found": 1,
+          "error": null
+        },
+        {
+          "source": "whitebird",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 2501,
+          "offers_found": 10,
+          "error": null
+        }
+      ],
+      "route_counts_by_venue": {
+        "binance": 4,
+        "bestchange": 51,
+        "gate": 3,
+        "bybit": 2,
+        "mexc": 2,
+        "okx": 2,
+        "bitget": 2,
+        "dzengi": 2,
+        "symbiosis": 1
+      },
+      "spot_estimates": 17,
+      "provider_quotes": 52
+    },
+    {
+      "query": {
+        "source_fiat": "DOT",
+        "target_fiat": "ETH",
+        "source_amount": 100,
+        "source_network": "polkadot",
+        "target_network": "ethereum",
+        "source_payment_fee_percent": 0,
+        "target_payment_fee_percent": 0,
+        "sources": "0x,bestchange,binance,bitcoin-center,bitget,bncex,bybit,cifra-broker,cow-swap,crypto-office,dzengi,gate,id-pay,mexc,near-intents,okx,papa-change,rapira,skylabs,symbiosis,whitebird",
+        "exchange_mode": "all",
+        "allow_cross_venue": true,
+        "min_orders": 20,
+        "min_completion_rate": 0.9,
+        "limit": 100
+      },
+      "ui_routes_found": 33,
+      "ui_cards": 33,
+      "routes_found": 33,
+      "returned": 33,
+      "routes_exhaustive": true,
+      "assets_searched": [
+        "ETH",
+        "USDT",
+        "USDC",
+        "BTC",
+        "10SET",
+        "AAVE",
+        "AB",
+        "ACNON",
+        "ADA",
+        "AEVO",
+        "AIXBT",
+        "ALGO",
+        "APT",
+        "ATOM",
+        "AVAX",
+        "BCH",
+        "BNB",
+        "DAI",
+        "DOGE",
+        "DOT",
+        "EVER",
+        "FDUSD",
+        "LINK",
+        "LTC",
+        "MATIC",
+        "NEAR",
+        "SOL",
+        "SUI",
+        "TON",
+        "TRX",
+        "UNI",
+        "XRP"
+      ],
+      "provider_statuses": [
+        {
+          "source": "0x",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "bestchange",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 107,
+          "offers_found": 18,
+          "error": null
+        },
+        {
+          "source": "binance",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 579,
+          "offers_found": 1380,
+          "error": null
+        },
+        {
+          "source": "bitget",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 490,
+          "offers_found": 580,
+          "error": null
+        },
+        {
+          "source": "bybit",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 202,
+          "offers_found": 527,
+          "error": null
+        },
+        {
+          "source": "cifra-broker",
+          "ok": false,
+          "cached": false,
+          "latency_ms": 493,
+          "offers_found": 0,
+          "error": "cifra-broker returned invalid JSON with HTTP 200 OK"
+        },
+        {
+          "source": "cow-swap",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "crypto-office",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "dzengi",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 120,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "gate",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 318,
+          "offers_found": 2204,
+          "error": null
+        },
+        {
+          "source": "mexc",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 101,
+          "offers_found": 1864,
+          "error": null
+        },
+        {
+          "source": "near-intents",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "okx",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 406,
+          "offers_found": 1182,
+          "error": null
+        },
+        {
+          "source": "symbiosis",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "whitebird",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 2500,
+          "offers_found": 10,
+          "error": null
+        }
+      ],
+      "route_counts_by_venue": {
+        "gate": 3,
+        "okx": 2,
+        "bitget": 1,
+        "bybit": 2,
+        "binance": 4,
+        "mexc": 3,
+        "bestchange": 18
+      },
+      "spot_estimates": 15,
+      "provider_quotes": 18
+    },
+    {
+      "query": {
+        "source_fiat": "TON",
+        "target_fiat": "BTC",
+        "source_amount": 1000,
+        "source_network": "ton",
+        "target_network": "bitcoin",
+        "source_payment_fee_percent": 0,
+        "target_payment_fee_percent": 0,
+        "sources": "0x,bestchange,binance,bitcoin-center,bitget,bncex,bybit,cifra-broker,cow-swap,crypto-office,dzengi,gate,id-pay,mexc,near-intents,okx,papa-change,rapira,skylabs,symbiosis,whitebird",
+        "exchange_mode": "all",
+        "allow_cross_venue": true,
+        "min_orders": 20,
+        "min_completion_rate": 0.9,
+        "limit": 100
+      },
+      "ui_routes_found": 1,
+      "ui_cards": 1,
+      "routes_found": 1,
+      "returned": 1,
+      "routes_exhaustive": true,
+      "assets_searched": [
+        "BTC",
+        "USDT",
+        "USDC",
+        "ETH",
+        "10SET",
+        "AAVE",
+        "AB",
+        "ACNON",
+        "ADA",
+        "AEVO",
+        "AIXBT",
+        "ALGO",
+        "APT",
+        "ATOM",
+        "AVAX",
+        "BCH",
+        "BNB",
+        "DAI",
+        "DOGE",
+        "DOT",
+        "EVER",
+        "FDUSD",
+        "LINK",
+        "LTC",
+        "MATIC",
+        "NEAR",
+        "SOL",
+        "SUI",
+        "TON",
+        "TRX",
+        "UNI",
+        "XRP"
+      ],
+      "provider_statuses": [
+        {
+          "source": "0x",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "bestchange",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "binance",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 501,
+          "offers_found": 1380,
+          "error": null
+        },
+        {
+          "source": "bitget",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 483,
+          "offers_found": 580,
+          "error": null
+        },
+        {
+          "source": "bybit",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 696,
+          "offers_found": 527,
+          "error": null
+        },
+        {
+          "source": "cifra-broker",
+          "ok": false,
+          "cached": false,
+          "latency_ms": 665,
+          "offers_found": 0,
+          "error": "cifra-broker returned invalid JSON with HTTP 200 OK"
+        },
+        {
+          "source": "cow-swap",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "crypto-office",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "dzengi",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 93,
+          "offers_found": 515,
+          "error": null
+        },
+        {
+          "source": "gate",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 600,
+          "offers_found": 2204,
+          "error": null
+        },
+        {
+          "source": "mexc",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 42,
+          "offers_found": 1864,
+          "error": null
+        },
+        {
+          "source": "near-intents",
+          "ok": false,
+          "cached": false,
+          "latency_ms": 39,
+          "offers_found": 0,
+          "error": "request NEAR Intents quote failed with HTTP 400 Bad Request: {\"message\":\"Quoting for this pair is not available\",\"correlationId\":\"e28c663f-b40d-4bd0-8e9b-46d26ccf4a92\",\"timestamp\":\"2026-10-18T06:43:36.537Z\",\"path\":\"/v0/quote\"}"
+        },
+        {
+          "source": "okx",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 328,
+          "offers_found": 1182,
+          "error": null
+        },
+        {
+          "source": "symbiosis",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "whitebird",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 2500,
+          "offers_found": 10,
+          "error": null
+        }
+      ],
+      "route_counts_by_venue": {
+        "whitebird": 1
+      },
+      "spot_estimates": 1,
+      "provider_quotes": 0
+    },
+    {
+      "query": {
+        "source_fiat": "TON",
+        "target_fiat": "USDC",
+        "source_amount": 1000,
+        "source_network": "ton",
+        "target_network": "ethereum",
+        "source_payment_fee_percent": 0,
+        "target_payment_fee_percent": 0,
+        "sources": "0x,bestchange,binance,bitcoin-center,bitget,bncex,bybit,cifra-broker,cow-swap,crypto-office,dzengi,gate,id-pay,mexc,near-intents,okx,papa-change,rapira,skylabs,symbiosis,whitebird",
+        "exchange_mode": "all",
+        "allow_cross_venue": true,
+        "min_orders": 20,
+        "min_completion_rate": 0.9,
+        "limit": 100
+      },
+      "ui_routes_found": 0,
+      "ui_cards": 0,
+      "routes_found": 0,
+      "returned": 0,
+      "routes_exhaustive": true,
+      "assets_searched": [
+        "USDC",
+        "USDT",
+        "BTC",
+        "ETH",
+        "10SET",
+        "AAVE",
+        "AB",
+        "ACNON",
+        "ADA",
+        "AEVO",
+        "AIXBT",
+        "ALGO",
+        "APT",
+        "ATOM",
+        "AVAX",
+        "BCH",
+        "BNB",
+        "DAI",
+        "DOGE",
+        "DOT",
+        "EVER",
+        "FDUSD",
+        "LINK",
+        "LTC",
+        "MATIC",
+        "NEAR",
+        "SOL",
+        "SUI",
+        "TON",
+        "TRX",
+        "UNI",
+        "XRP"
+      ],
+      "provider_statuses": [
+        {
+          "source": "0x",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "bestchange",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "binance",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 456,
+          "offers_found": 1380,
+          "error": null
+        },
+        {
+          "source": "bitget",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 552,
+          "offers_found": 580,
+          "error": null
+        },
+        {
+          "source": "bybit",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 222,
+          "offers_found": 527,
+          "error": null
+        },
+        {
+          "source": "cifra-broker",
+          "ok": false,
+          "cached": false,
+          "latency_ms": 589,
+          "offers_found": 0,
+          "error": "cifra-broker returned invalid JSON with HTTP 200 OK"
+        },
+        {
+          "source": "cow-swap",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "crypto-office",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "dzengi",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 139,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "gate",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 307,
+          "offers_found": 2204,
+          "error": null
+        },
+        {
+          "source": "mexc",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 93,
+          "offers_found": 1864,
+          "error": null
+        },
+        {
+          "source": "near-intents",
+          "ok": false,
+          "cached": false,
+          "latency_ms": 105,
+          "offers_found": 0,
+          "error": "request NEAR Intents quote failed with HTTP 400 Bad Request: {\"message\":\"Quoting for this pair is not available\",\"correlationId\":\"102ab89e-f2df-4c55-ad87-5cfbf5835247\",\"timestamp\":\"2026-10-18T06:43:36.817Z\",\"path\":\"/v0/quote\"}"
+        },
+        {
+          "source": "okx",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 440,
+          "offers_found": 1182,
+          "error": null
+        },
+        {
+          "source": "symbiosis",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "error": null
+        },
+        {
+          "source": "whitebird",
+          "ok": true,
+          "cached": false,
+          "latency_ms": 2501,
+          "offers_found": 10,
+          "error": null
+        }
+      ],
+      "route_counts_by_venue": {},
+      "spot_estimates": 0,
+      "provider_quotes": 0
+    }
+  ]
+}

@@ -15,8 +15,8 @@ pub(in crate::p2p) fn normalize_query(
     {
         bail!("max_actions must be between 2 and 8");
     }
-    let source_currency = query.source_fiat.trim().to_ascii_uppercase();
-    let target_currency = query.target_fiat.trim().to_ascii_uppercase();
+    let source_currency = canonical_query_currency(&query.source_fiat);
+    let target_currency = canonical_query_currency(&query.target_fiat);
     if query
         .min_completion_rate
         .is_some_and(|rate| !rate.is_finite() || !(0.0..=1.0).contains(&rate))
@@ -39,7 +39,7 @@ pub(in crate::p2p) fn normalize_query(
         .map(|assets| assets.split(',').map(str::to_owned).collect::<Vec<_>>())
         .unwrap_or_else(|| default_assets.to_vec())
         .into_iter()
-        .map(|asset| asset.trim().to_ascii_uppercase())
+        .map(|asset| canonical_query_currency(&asset))
         .filter(|asset| !asset.is_empty())
         .collect::<Vec<_>>();
     // Bound caller-supplied search lists without limiting the backend catalog.
@@ -95,6 +95,13 @@ pub(in crate::p2p) fn normalize_query(
         sources: normalize_sources(query.sources)?,
         exchange_mode: query.exchange_mode,
     })
+}
+
+fn canonical_query_currency(value: &str) -> String {
+    match value.trim().to_ascii_uppercase().as_str() {
+        "TON" => "GRAM".into(),
+        value => value.into(),
+    }
 }
 
 fn payment_fee_bps(value: Option<f64>, field: &str) -> Result<Option<u32>> {
@@ -173,7 +180,7 @@ pub(in crate::p2p) fn is_crypto_currency(
             .any(|asset| asset.symbol.eq_ignore_ascii_case(currency))
 }
 
-fn is_fiat_currency(currency: &str) -> bool {
+pub(in crate::p2p) fn is_fiat_currency(currency: &str) -> bool {
     // ISO 4217 money codes, including legacy codes still used by some venues.
     const CODES: &[&str] = &[
         "AED", "AFN", "ALL", "AMD", "ANG", "AOA", "ARS", "AUD", "AWG", "AZN", "BAM", "BBD", "BDT",

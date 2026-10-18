@@ -84,7 +84,7 @@
   $: assetChoices = [...new Map(assetMethods.map((method) => [method.currency.toUpperCase(), method])).values()].map((method): CurrencyChoice => ({ id: method.currency.toUpperCase(), name: method.name, kind: "asset", initials: method.initials || method.currency.slice(0, 2), color: method.color, iconUrl: paymentMethodFavicon(method) ?? undefined })).sort((left, right) => left.id.localeCompare(right.id));
   $: currencyChoices = [...fiatChoices, ...assetChoices];
   $: normalizedQuery = normalizeSearch(query);
-  $: visibleCurrencies = normalizedQuery ? currencyChoices.filter((choice) => searchMatches(`${choice.id} ${choice.name}`, query)) : currencyChoices;
+  $: visibleCurrencies = normalizedQuery ? currencyChoices.filter((choice) => searchMatches(`${choice.id} ${choice.name} ${choice.id === "GRAM" ? "TON Toncoin" : ""}`, query)) : currencyChoices;
   $: selectedCurrency = selected?.currency?.toUpperCase() ?? "";
   $: activeChoice = currencyChoices.find((choice) => choice.id === activeCurrency);
   $: fiatGroups = activeChoice?.kind === "fiat" ? groupFiatMethods(fiatMethods.filter((method) => currencyMatches(method, activeCurrency)), selected) : [];

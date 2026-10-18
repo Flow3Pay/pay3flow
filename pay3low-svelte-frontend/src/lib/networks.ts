@@ -1,5 +1,6 @@
 import { apiUrl } from "./api";
 import { anonymousHeaders } from "$lib/anonymous-user";
+import { canonicalAssetTicker } from "./asset-identity";
 
 export interface CryptoNetwork {
   id: string;
@@ -22,5 +23,6 @@ export async function fetchNetworks(currency?: string): Promise<CryptoNetwork[]>
     throw new Error(`Network catalog request failed (${response.status})`);
   }
 
-  return (await response.json()) as CryptoNetwork[];
+  const networks = (await response.json()) as CryptoNetwork[];
+  return networks.map(network => ({ ...network, currencies: [...new Set(network.currencies.map(canonicalAssetTicker))] }));
 }

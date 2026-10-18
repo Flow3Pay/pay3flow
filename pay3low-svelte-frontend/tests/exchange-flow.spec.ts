@@ -723,6 +723,7 @@ for (const side of ["sending", "recipient"] as const) test(`native EVER selects 
   await expect.poll(() => page.evaluate(key => localStorage.getItem(key), `pay3flow.exchange.${storageSide}-method`)).toBe("global-ever");
   await expect(page.getByRole("button", { name: `Select ${side} network: Everscale`, exact: true })).toBeVisible();
   await page.getByLabel("Amount to send").fill("1.25");
+  if (side === "sending") await expect(page.locator(".moneyPanelSource .marketValue")).toHaveText("<$0.01");
   await expect.poll(() => searches.some(params => params.source_fiat === (side === "sending" ? "EVER" : "USDT")
     && params.target_fiat === (side === "recipient" ? "EVER" : "USDT")
     && params[`${storageSide}_network`] === "everscale" && params.source_amount === "1.25")).toBe(true);
@@ -733,7 +734,57 @@ for (const side of ["sending", "recipient"] as const) test(`native EVER selects 
   await expect(page.getByLabel("Amount to send")).toHaveValue("1.25");
 });
 
-async function mockBackend(page: Page, options: { includeRestoredTokens?: boolean; includeNewProviders?: boolean; includeEverscale?: boolean; routeCount?: number; spotCycle?: boolean; spotVenue?: string; spotGuidance?: boolean; reviews?: boolean; usdtFiatNetwork?: string; mexc?: boolean; guideVenue?: string; cifra?: boolean } = {}) {
+test("GRAM keeps the TON network, restores legacy TON links and remains searchable by TON", async ({ page }) => {
+  await mockBackend(page, { includeGram: true });
+  const queries: Record<string, string>[] = [];
+  await page.route("**/api/p2p/routes**", async route => {
+    const query = Object.fromEntries(new URL(route.request().url()).searchParams);
+    queries.push(query);
+    await route.fulfill({ json: { search_id: "00000000-0000-4000-8000-000000000110", searched_at: new Date().toISOString(), source_fiat: query.source_fiat, target_fiat: query.target_fiat, source_amount: query.source_amount, assets_searched: [], routes_found: 0, routes: [], can_exchange_to_target: false, asset_statuses: [], provider_statuses: [] } });
+  });
+  await openApp(page, "/#/swap/ETH/TON?amount=0.05");
+  await expect(page.getByRole("button", { name: "Select recipient asset: GRAM", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Select recipient network: TON", exact: true })).toBeVisible();
+  const image = page.locator('.moneyPanelTarget .methodTrigger img[src="/icons/assets/gram.png"]');
+  await expect.poll(() => image.evaluate((node: HTMLImageElement) => node.naturalWidth)).toBeGreaterThan(0);
+  await expect.poll(() => queries.some(query => query.source_fiat === "ETH" && query.target_fiat === "GRAM" && query.target_network === "ton")).toBe(true);
+
+  await page.getByLabel("Amount to send", { exact: true }).fill("0");
+  const btc = await chooseCrypto(page, "recipient", "BTC Bitcoin");
+  await btc.getByRole("option", { name: /^Bitcoin.*BTC/ }).click();
+  const source = await openCryptoPicker(page, "sending");
+  await source.getByRole("textbox", { name: "Currencies and digital assets" }).fill("TON");
+  await source.getByRole("option", { name: /^GRAM\b/ }).click();
+  await source.getByRole("option", { name: /^TON.*GRAM/ }).click();
+  await page.getByLabel("Amount to send", { exact: true }).fill("10");
+  await expect(page.locator(".moneyPanelSource .marketValue")).toHaveText("$12.50");
+  await expect.poll(() => queries.some(query => query.source_fiat === "GRAM" && query.source_network === "ton" && query.target_fiat === "BTC" && query.target_network === "bitcoin")).toBe(true);
+  await settleEntrance(page);
+  await page.screenshot({ path: `../docs/audits/browser-crypto-2026-10-18/local-gram-${test.info().project.name}.png` });
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Select sending asset: GRAM", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Select sending network: TON", exact: true })).toBeVisible();
+});
+
+test("USD values recover after the first market price request fails", async ({ page }) => {
+  await mockBackend(page);
+  let requests = 0;
+  await page.route("**/api/market-prices", async route => {
+    requests += 1;
+    if (requests === 1) return route.fulfill({ status: 503, json: { error: "temporarily unavailable" } });
+    return route.fulfill({ json: { source: "DefiLlama", stale: false, updated_at: Math.floor(Date.now() / 1000), prices: { USDT: 1, USDC: 1 } } });
+  });
+  await page.clock.install();
+  await openApp(page, "/#/swap/USDT/USDC?amount=2");
+  await expect(page.getByRole("button", { name: "Select sending asset: USDT" })).toBeVisible();
+  await expect.poll(() => requests).toBe(1);
+  await expect(page.locator(".moneyPanelSource .marketValue")).toHaveCount(0);
+  await page.clock.fastForward(61_000);
+  await expect.poll(() => requests).toBe(2);
+  await expect(page.locator(".moneyPanelSource .marketValue")).toHaveText("$2.00");
+});
+
+async function mockBackend(page: Page, options: { includeRestoredTokens?: boolean; includeGram?: boolean; includeNewProviders?: boolean; includeEverscale?: boolean; routeCount?: number; spotCycle?: boolean; spotVenue?: string; spotGuidance?: boolean; reviews?: boolean; usdtFiatNetwork?: string; mexc?: boolean; guideVenue?: string; cifra?: boolean } = {}) {
   await page.addInitScript(() => {
     if (!localStorage.getItem("pay3flow-locale")) localStorage.setItem("pay3flow-locale", "en");
     // These route fixtures use a saved AMD/RUB corridor independently of app defaults.
@@ -751,7 +802,7 @@ async function mockBackend(page: Page, options: { includeRestoredTokens?: boolea
         source: "DefiLlama",
         stale: false,
         updated_at: Math.floor(Date.now() / 1000),
-        prices: { USDT: 1, USDC: 1, BTC: 10000, ETH: 1000 },
+        prices: { USDT: 1, USDC: 1, BTC: 10000, ETH: 1000, EVER: 0.002, TON: 1.25 },
       });
     }
 
@@ -832,7 +883,7 @@ async function mockBackend(page: Page, options: { includeRestoredTokens?: boolea
         method("kz-kaspi", "Kaspi.kz", "KZ", "KZT", "/icons/assets/kz-kaspi.png", "kaspi", true),
         wallet("USDT", "Tether"), wallet("USDC", "USD Coin"), wallet("BTC", "Bitcoin"), wallet("ETH", "Ethereum"),
         ...(options.includeEverscale ? [{ ...wallet("EVER", "Everscale"), icon_url: "/icons/assets/ever.svg" }] : []),
-
+        ...(options.includeGram ? [wallet("TON", "Toncoin")] : []),
       ];
       return json({ items, total: items.length, limit: 100, offset: 0 });
     }

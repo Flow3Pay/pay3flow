@@ -2,15 +2,12 @@
 use crate::p2p::routes::{
     crypto_cycle_from_quotes, fixed, source_selected, NormalizedRouteQuery, P2pRoute,
 };
-use crate::p2p::spot::CryptoTicker;
+use crate::p2p::spot::{split_market_symbol, CryptoTicker, SPOT_QUOTE_ASSETS};
 use crate::route_engine::{Amount, Asset, PublicRouteQuote};
 use std::collections::HashMap;
 
 const ESTIMATED_TRADING_FEE: f64 = 0.001;
 const MAX_MARKET_INTERMEDIARIES: usize = 96;
-const QUOTE_ASSETS: &[&str] = &[
-    "FDUSD", "USDT", "USDC", "TUSD", "DAI", "BTC", "ETH", "BNB", "EUR", "USD",
-];
 
 struct Edge {
     from: String,
@@ -41,13 +38,7 @@ pub(in crate::p2p) fn compose_crypto_market_cycles(
             {
                 continue;
             }
-            let symbol = ticker.symbol.to_ascii_uppercase();
-            let Some((base, quote)) = QUOTE_ASSETS.iter().find_map(|quote| {
-                symbol
-                    .strip_suffix(quote)
-                    .filter(|base| !base.is_empty())
-                    .map(|base| (base.to_owned(), (*quote).to_owned()))
-            }) else {
+            let Some((base, quote)) = split_market_symbol(&ticker.symbol) else {
                 continue;
             };
             if Asset::new(&base, None).is_err() || base == quote {
@@ -75,7 +66,7 @@ pub(in crate::p2p) fn compose_crypto_market_cycles(
     };
     let allowed = |symbol: &str| {
         symbol != origin.symbol
-            && !matches!(symbol, "USD" | "EUR")
+            && !crate::p2p::routes::is_fiat_currency(symbol)
             && (!query.assets_explicit || query.assets.iter().any(|allowed| allowed == symbol))
     };
     let mut intermediaries = entries
@@ -85,10 +76,10 @@ pub(in crate::p2p) fn compose_crypto_market_cycles(
         .collect::<Vec<_>>();
     intermediaries.sort_by_key(|symbol| {
         (
-            QUOTE_ASSETS
+            SPOT_QUOTE_ASSETS
                 .iter()
                 .position(|asset| *asset == symbol)
-                .unwrap_or(QUOTE_ASSETS.len()),
+                .unwrap_or(SPOT_QUOTE_ASSETS.len()),
             symbol.clone(),
         )
     });

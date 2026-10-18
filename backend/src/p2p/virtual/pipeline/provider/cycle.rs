@@ -6,9 +6,9 @@ use futures::future::{BoxFuture, FutureExt, Shared};
 
 const MAX_CYCLE_ASSETS_PER_PROVIDER: usize = 48;
 const CYCLE_SEARCH_BUDGET: std::time::Duration = std::time::Duration::from_secs(60);
-type QuoteResult = std::result::Result<Vec<PublicRouteQuote>, Arc<anyhow::Error>>;
-type QuoteJob = Shared<BoxFuture<'static, QuoteResult>>;
-type QuoteFailures = Arc<std::sync::Mutex<HashMap<String, Arc<anyhow::Error>>>>;
+pub(super) type QuoteResult = std::result::Result<Vec<PublicRouteQuote>, Arc<anyhow::Error>>;
+pub(super) type QuoteJob = Shared<BoxFuture<'static, QuoteResult>>;
+pub(super) type QuoteFailures = Arc<std::sync::Mutex<HashMap<String, Arc<anyhow::Error>>>>;
 
 fn quote_error(message: impl ToString) -> Arc<anyhow::Error> {
     Arc::new(anyhow::anyhow!(message.to_string()))
@@ -207,7 +207,7 @@ impl P2pSearchService {
         Ok(())
     }
 
-    fn cycle_quote_job(
+    pub(super) fn cycle_quote_job(
         &self,
         provider: Arc<dyn PublicRouteProvider>,
         from: Asset,

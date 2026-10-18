@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::collections::BTreeSet;
 
 mod cycle;
 mod diversity;
@@ -6,14 +7,16 @@ mod fiat_spot;
 mod market_cycle;
 mod top_k;
 
-pub(in crate::p2p) use cycle::{crypto_cycle_from_quotes, crypto_cycle_route};
+pub(in crate::p2p) use cycle::{
+    crypto_cycle_from_quotes, crypto_cycle_route, crypto_swap_from_quotes, same_crypto_amount,
+};
 pub(in crate::p2p) use fiat_spot::compose_fiat_spot_routes;
 pub(in crate::p2p) use market_cycle::compose_crypto_market_cycles;
 pub(in crate::p2p) use top_k::compose_fiat_routes;
 
 use crate::p2p::routes::{CryptoMarketPath, NormalizedRouteQuery, P2pRoute, RouteAssetStatus};
 use crate::p2p::service::{P2pOffer, PaymentMethodMatch, SourceStatus};
-use crate::p2p::spot::CryptoTicker;
+use crate::p2p::spot::{split_market_symbol, CryptoTicker};
 use crate::p2p::P2pOfferMarket;
 use crate::route_engine::canonical_network_id;
 
@@ -339,9 +342,35 @@ pub(in crate::p2p) fn compose_crypto_market_routes(
     target_asset: &str,
     tickers: &[CryptoTicker],
 ) {
+    let mut candidates = query.assets.iter().cloned().collect::<BTreeSet<_>>();
+    if !query.assets_explicit {
+        let mut source_neighbors = BTreeSet::new();
+        let mut target_neighbors = BTreeSet::new();
+        for ticker in tickers.iter().filter(|ticker| ticker.is_valid()) {
+            let Some((base, quote)) = split_market_symbol(&ticker.symbol) else {
+                continue;
+            };
+            for (from, to) in [(&base, &quote), (&quote, &base)] {
+                if from == source_asset {
+                    source_neighbors.insert(to.clone());
+                }
+                if from == target_asset {
+                    target_neighbors.insert(to.clone());
+                }
+            }
+        }
+        candidates.extend(
+            source_neighbors
+                .intersection(&target_neighbors)
+                .filter(|symbol| {
+                    !crate::p2p::routes::is_fiat_currency(symbol)
+                        && crate::route_engine::Asset::new(symbol, None).is_ok()
+                })
+                .cloned(),
+        );
+    }
     let intermediaries = std::iter::once(None).chain(
-        query
-            .assets
+        candidates
             .iter()
             .map(String::as_str)
             .filter(|asset| !asset.eq_ignore_ascii_case(source_asset))
@@ -443,7 +472,7 @@ pub(in crate::p2p) fn conversion_quote(
     let direct = format!("{}{}", from.to_ascii_uppercase(), to.to_ascii_uppercase());
     if let Some(ticker) = tickers
         .iter()
-        .find(|ticker| ticker.symbol.eq_ignore_ascii_case(&direct))
+        .find(|ticker| ticker.is_valid() && ticker.symbol.eq_ignore_ascii_case(&direct))
     {
         return Some(ConversionQuote {
             pair: ticker.symbol.clone(),
@@ -454,7 +483,7 @@ pub(in crate::p2p) fn conversion_quote(
     let inverse = format!("{}{}", to.to_ascii_uppercase(), from.to_ascii_uppercase());
     tickers
         .iter()
-        .find(|ticker| ticker.symbol.eq_ignore_ascii_case(&inverse))
+        .find(|ticker| ticker.is_valid() && ticker.symbol.eq_ignore_ascii_case(&inverse))
         .map(|ticker| ConversionQuote {
             pair: ticker.symbol.clone(),
             rate: 1.0 / ticker.ask,

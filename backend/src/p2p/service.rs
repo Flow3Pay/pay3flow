@@ -787,7 +787,7 @@ impl P2pSearchService {
                 "BNB".into(),
                 "SOL".into(),
                 "TRX".into(),
-                "TON".into(),
+                "GRAM".into(),
                 "DOGE".into(),
                 "LTC".into(),
                 "DAI".into(),

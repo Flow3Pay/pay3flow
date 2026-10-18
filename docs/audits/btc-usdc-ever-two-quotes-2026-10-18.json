@@ -1,0 +1,84 @@
+{
+  "observed_at": "2026-10-18T06:16:28.431074+00:00",
+  "scope": "Two read-only provider quotes, composed manually; no execution and no production route rollout",
+  "first_leg": {
+    "provider": "near-intents",
+    "from": "BTC@bitcoin",
+    "to": "USDC@ethereum",
+    "quote": {
+      "amountIn": "2000000",
+      "amountInFormatted": "0.02",
+      "amountInUsd": "1633.780000000000",
+      "minAmountIn": "2000000",
+      "amountOut": "1629515056",
+      "amountOutFormatted": "1629.515056",
+      "amountOutUsd": "1629.125601901616",
+      "minAmountOut": "1613219905",
+      "timeEstimate": 812,
+      "refundFee": "1900",
+      "withdrawFee": "300000"
+    },
+    "request": {
+      "dry": true,
+      "depositMode": "SIMPLE",
+      "swapType": "EXACT_INPUT",
+      "slippageTolerance": 100,
+      "originAsset": "1cs_v1:btc:native:coin",
+      "depositType": "ORIGIN_CHAIN",
+      "destinationAsset": "nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near",
+      "amount": "2000000",
+      "refundTo": "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+      "refundType": "ORIGIN_CHAIN",
+      "recipient": "0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+      "recipientType": "DESTINATION_CHAIN",
+      "deadline": "2026-10-18T06:30:54.689Z",
+      "confidentiality": "public",
+      "quoteWaitingTimeMs": 3000,
+      "insured": false,
+      "appFees": [
+        {
+          "recipient": "5880ad2b362620fadf759cbceb1cd5737ce8c6ed7fb8e9942881e6731f9247dd",
+          "fee": 20
+        }
+      ]
+    }
+  },
+  "second_leg": {
+    "provider": "cow-swap",
+    "from": "USDC@ethereum",
+    "to": "EVER@ethereum",
+    "request": {
+      "sellToken": "0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "buyToken": "0x1ffEFD8036409Cb6d652bd610DE465933b226917",
+      "sellAmountBeforeFee": "1629515056",
+      "kind": "sell",
+      "from": "0x0000000000000000000000000000000000000001",
+      "receiver": "0x0000000000000000000000000000000000000001",
+      "validTo": 1792305387,
+      "appData": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "partiallyFillable": false,
+      "sellTokenBalance": "erc20",
+      "buyTokenBalance": "erc20",
+      "signingScheme": "eip712",
+      "priceQuality": "optimal"
+    },
+    "quote": {
+      "sellToken": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "buyToken": "0x1ffefd8036409cb6d652bd610de465933b226917",
+      "receiver": "0x0000000000000000000000000000000000000001",
+      "sellAmount": "1629282094",
+      "buyAmount": "233689083110962",
+      "validTo": 1792305387,
+      "appData": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "feeAmount": "232962",
+      "gasAmount": "665000",
+      "gasPrice": "145376129",
+      "sellTokenPrice": "414983746.767323315143585205078125",
+      "kind": "sell",
+      "partiallyFillable": false,
+      "sellTokenBalance": "erc20",
+      "buyTokenBalance": "erc20",
+      "signingScheme": "eip712"
+    }
+  }
+}

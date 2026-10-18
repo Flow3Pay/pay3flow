@@ -2,11 +2,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
+use super::token_catalog::TokenCatalog;
 use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
 use chrono::Utc;
 use reqwest::Client;
-use serde::Deserialize;
 use serde_json::Value;
 
 use crate::route_engine::{
@@ -26,20 +26,6 @@ enum DexKind {
 
 #[derive(Clone)]
 struct DexToken {
-    address: String,
-    decimals: u8,
-}
-
-#[derive(Deserialize)]
-struct TokenCatalog {
-    tokens: Vec<CatalogToken>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct CatalogToken {
-    chain_id: u64,
-    symbol: String,
     address: String,
     decimals: u8,
 }
@@ -172,7 +158,11 @@ impl DexAggregatorRouteProvider {
         match result {
             Ok(catalog) => {
                 let mut tokens = (*self.tokens).clone();
-                for token in catalog.tokens {
+                for token in catalog
+                    .tokens()
+                    .into_iter()
+                    .filter(|token| token.is_erc20())
+                {
                     let network = match token.chain_id {
                         1 => "ethereum",
                         56 => "bnb-smart-chain",

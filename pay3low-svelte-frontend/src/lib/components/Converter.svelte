@@ -611,6 +611,7 @@
     } catch {}
   }
   async function refreshMarketPrices() {
+    if (marketPricesUpdatedAt && Date.now() / 1000 - marketPricesUpdatedAt < 60 * 60) return;
     marketController?.abort();
     const controller = new AbortController();
     marketController = controller;
@@ -1003,7 +1004,7 @@
 
   onMount(() => {
     void refreshMarketPrices();
-    marketRefreshTimer = window.setInterval(() => void refreshMarketPrices(), 60 * 60 * 1000);
+    marketRefreshTimer = window.setInterval(() => void refreshMarketPrices(), 60 * 1000);
     const shared = readSharedExchange();
     const sharedLanguage = shared?.params.get("lang");
     if (shared && (sharedLanguage === "en" || sharedLanguage === "ru" || sharedLanguage === "hy")) setLocale(sharedLanguage);

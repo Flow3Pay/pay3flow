@@ -10,7 +10,7 @@ INSERT INTO crypto_networks (slug, name, currencies, status) VALUES
     ('bnb-smart-chain', 'BNB Smart Chain (BEP-20)', ARRAY['BNB', 'USDT', 'USDC', 'BTC', 'ETH', 'DAI', 'FDUSD', 'XRP', 'ADA', 'DOT', 'LINK', 'DOGE', 'LTC', 'BCH', 'UNI', 'AB', '10SET', 'ACNON']::TEXT[], 'enabled'),
     ('solana', 'Solana', ARRAY['SOL', 'USDT', 'USDC', 'AIXBT', 'ACNON']::TEXT[], 'enabled'),
     ('tron', 'TRON (TRC-20)', ARRAY['TRX', 'USDT']::TEXT[], 'enabled'),
-    ('ton', 'TON', ARRAY['TON', 'USDT']::TEXT[], 'enabled'),
+    ('ton', 'TON', ARRAY['GRAM', 'USDT']::TEXT[], 'enabled'),
     ('everscale', 'Everscale', ARRAY['EVER']::TEXT[], 'enabled'),
     ('dogecoin', 'Dogecoin', ARRAY['DOGE']::TEXT[], 'enabled'),
     ('litecoin', 'Litecoin', ARRAY['LTC']::TEXT[], 'enabled'),

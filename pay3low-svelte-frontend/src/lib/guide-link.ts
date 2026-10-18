@@ -1,4 +1,5 @@
 import type { P2pOffer, RouteCandidate } from './exchange';
+import { canonicalAssetTicker } from './asset-identity';
 
 const identifier = /^[a-z0-9._@:-]{1,100}$/i;
 export const GUIDE_PARAMETERS = ['amount', 'from', 'to', 'fromNetwork', 'toNetwork', 'sources', 'methods', 'assets', 'path', 'venues', 'lang', 'view'] as const;
@@ -16,7 +17,7 @@ export function parseExchangeHash(hash: string) {
   if (!match) return null;
   const params = guideParameters(new URLSearchParams(match[4] ?? ''));
   const amount = params.get('amount');
-  return { guide: match[1].toLowerCase() === 'guide', sourceCurrency: match[2].toUpperCase(), targetCurrency: match[3].toUpperCase(), amount: amount && /^\d+(?:[.,]\d+)?$/.test(amount) && Number(amount.replace(',', '.')) > 0 ? amount : null, params };
+  return { guide: match[1].toLowerCase() === 'guide', sourceCurrency: canonicalAssetTicker(match[2]), targetCurrency: canonicalAssetTicker(match[3]), amount: amount && /^\d+(?:[.,]\d+)?$/.test(amount) && Number(amount.replace(',', '.')) > 0 ? amount : null, params };
 }
 // Describe operations, not a short-lived quote, order or tracking token.
 export function guideRoutePath(route: RouteCandidate): string {

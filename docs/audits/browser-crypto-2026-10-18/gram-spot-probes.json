@@ -1,0 +1,133 @@
+{
+  "observed_at": "2026-10-18T06:35:06.919792+00:00",
+  "results": {
+    "binance": {
+      "url": "https://api.binance.com/api/v3/ticker/bookTicker?symbol=GRAMUSDT",
+      "status": 200,
+      "response": {
+        "symbol": "GRAMUSDT",
+        "bidPrice": "1.35300000",
+        "bidQty": "6365.69000000",
+        "askPrice": "1.35400000",
+        "askQty": "273.54000000"
+      }
+    },
+    "bybit": {
+      "url": "https://api.bybit.com/v5/market/tickers?category=spot&symbol=GRAMUSDT",
+      "status": 200,
+      "response": {
+        "retCode": 0,
+        "retMsg": "OK",
+        "result": {
+          "category": "spot",
+          "list": [
+            {
+              "symbol": "GRAMUSDT",
+              "bid1Price": "1.354",
+              "bid1Size": "1301.48",
+              "ask1Price": "1.355",
+              "ask1Size": "2727.22",
+              "lastPrice": "1.355",
+              "prevPrice24h": "1.35",
+              "price24hPcnt": "0.0037",
+              "highPrice24h": "1.373",
+              "lowPrice24h": "1.34",
+              "turnover24h": "2714708.95496",
+              "volume24h": "2005411.04",
+              "usdIndexPrice": "1.352456"
+            }
+          ]
+        },
+        "retExtInfo": {},
+        "time": 1792305300645
+      }
+    },
+    "okx": {
+      "url": "https://www.okx.com/api/v5/market/ticker?instId=GRAM-USDT",
+      "status": 200,
+      "response": {
+        "code": "0",
+        "data": [
+          {
+            "instType": "SPOT",
+            "instId": "GRAM-USDT",
+            "last": "1.355",
+            "lastSz": "1.444",
+            "askPx": "1.355",
+            "askSz": "7911.54",
+            "bidPx": "1.353",
+            "bidSz": "5918.036",
+            "open24h": "1.35",
+            "high24h": "1.372",
+            "low24h": "1.338",
+            "volCcy24h": "1271029.287524",
+            "vol24h": "940074.433",
+            "ts": "1792305306091",
+            "sodUtc0": "1.361",
+            "sodUtc8": "1.35"
+          }
+        ],
+        "msg": ""
+      }
+    },
+    "bitget": {
+      "url": "https://api.bitget.com/api/v2/spot/market/tickers?symbol=GRAMUSDT",
+      "status": 200,
+      "response": {
+        "code": "00000",
+        "msg": "success",
+        "requestTime": 1792305300654,
+        "data": [
+          {
+            "open": "1.349",
+            "symbol": "GRAMUSDT",
+            "high24h": "1.372",
+            "low24h": "1.338",
+            "lastPr": "1.354",
+            "quoteVolume": "385604.31",
+            "baseVolume": "284670.14",
+            "usdtVolume": "385604.30595",
+            "ts": "1792305299619",
+            "bidPr": "1.354",
+            "askPr": "1.355",
+            "bidSz": "246.59",
+            "askSz": "4954.21",
+            "openUtc": "1.361",
+            "changeUtc24h": "-0.00514",
+            "change24h": "0.00371"
+          }
+        ]
+      }
+    },
+    "mexc": {
+      "url": "https://api.mexc.com/api/v3/ticker/bookTicker?symbol=GRAMUSDT",
+      "status": 200,
+      "response": {
+        "symbol": "GRAMUSDT",
+        "bidPrice": "1.353",
+        "bidQty": "6971.16",
+        "askPrice": "1.354",
+        "askQty": "360.76"
+      }
+    },
+    "gate": {
+      "url": "https://api.gateio.ws/api/v4/spot/tickers?currency_pair=GRAM_USDT",
+      "status": 200,
+      "response": [
+        {
+          "currency_pair": "GRAM_USDT",
+          "last": "1.3542",
+          "lowest_ask": "1.3542",
+          "lowest_size": "423.5",
+          "highest_bid": "1.3538",
+          "highest_size": "475.6",
+          "change_percentage": "0.31",
+          "base_volume": "1018594.9",
+          "quote_volume": "1377632.7999",
+          "high_24h": "1.3712",
+          "low_24h": "1.3379"
+        }
+      ]
+    }
+  }
+}
