@@ -29,8 +29,8 @@ The mode also persists in shared links through `view=swap|guide`. Per-leg assets
 networks and exact amounts come from the current route chapter. See the
 [widget integration reference](../docs/swap-widgets.md) for provider behavior,
 wallet boundaries, NEAR catalog aliases and iframe limitations.
-CoW uses its official widget; Symbiosis uses its embedded app for routes without
-native wallet execution. Platforms that cannot be embedded retain their quote
+Routes without native wallet execution retain the official CoW and NEAR
+widgets or the embedded Symbiosis app. Platforms that cannot be embedded retain their quote
 and a link to the provider in `SWAP` mode.
 
 `@0x/swap-ts-sdk` is installed for server-side integrations. Its API key belongs
@@ -73,6 +73,15 @@ buy, sell, swap, and transfer demonstrations; new currency corridors do not
 need separate pages. Demonstrations are illustrative, while platform links,
 advertiser details, reviews, and wallet execution belong to the active chapter.
 The guide supports keyboard navigation, reduced motion, and mobile layouts.
+
+Executable CoW Swap, Symbiosis, and NEAR Intents chapters share the native
+Pay3Flow form in `RouteExecutionPanel.svelte`. The selected route fixes the
+amount, assets, and networks. The same form stays visible before connection,
+while signing, and during provider tracking, including after disconnecting.
+Provider SDKs and transaction adapters handle execution behind this interface;
+provider-themed cards are used only for illustrative external walkthroughs.
+Routes without a supported execution descriptor retain their provider widget,
+instructions, and external link.
 
 The wallet menu connects Ethereum/EVM, NEAR, TRON, and Everscale accounts.
 Everscale uses the injected EVER Wallet provider on Everscale mainnet, including

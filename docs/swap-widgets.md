@@ -24,8 +24,8 @@ transaction, create a route execution, approve a token, or submit a swap.
 
 | Provider or step | SWAP behavior |
 | --- | --- |
-| CoW Swap | Official `@cowprotocol/widget-lib` iframe, including composed-route legs and routes without a native execution descriptor |
-| NEAR Intents | Official Aurora standalone React widget with its own wallet connection flow |
+| CoW Swap | Shared native Pay3Flow form when the route has a supported execution descriptor; official iframe for other routes and composed legs |
+| NEAR Intents | Shared native Pay3Flow form when execution is supported; official Aurora standalone widget for other routes |
 | Symbiosis | Native Pay3Flow execution panel when supported; otherwise the public app iframe, independent of site-header Solana wallet support |
 | Other providers and spot steps | Provider embed where supported, otherwise the selected quote and a link to the provider |
 
@@ -103,6 +103,13 @@ embedded flow to fail. Use the supplied Open link in that case. Widget
 availability and provider liquidity are separate: neither guarantees the other.
 
 ## Native Pay3Flow execution
+
+`RouteExecutionPanel.svelte` renders one Pay3Flow form for all three native
+providers, before wallet connection, while signing, and during tracking.
+Provider SDKs and transaction adapters remain behind that form. Connecting a
+wallet or changing a recipient does not submit a swap: the user starts it with
+the Swap button. Switching to the guide keeps the native form mounted, and
+wallet disconnection does not hide submitted execution tracking.
 
 `wallet_execution_enabled` controls signed backend execution descriptors and
 the `/api/p2p/route-executions` flow. Native NEAR Intents deposits support the

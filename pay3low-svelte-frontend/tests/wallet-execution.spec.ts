@@ -7,6 +7,7 @@ const TX = "a".repeat(64);
 const harnessPath = "/tests/fixtures/wallet-harness.ts";
 
 async function wallets(page: Page) {
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.addInitScript(({ tron, evm, tx }) => {
     if (window.top !== window) return;
     localStorage.setItem("pay3flow-locale", "en");
@@ -120,7 +121,7 @@ async function quoteApi(page: Page, value = execution(), failSubmission = false,
     }
     return route.fulfill({ json: { ...value, status } });
   });
-  return { counts: () => ({ created, submissions }) };
+  return { counts: () => ({ created, submissions }), complete: () => { status = "completed"; } };
 }
 
 async function panel(page: Page, value = execution(), failSubmission = false, expireFirstQuote = false) {
@@ -167,11 +168,12 @@ for (const mode of ["connect", "existing", "switch"]) test(`Symbiosis AVAX guide
   await guide.getByTestId("start-guide").click();
   await expect(guide.getByRole("heading", { level: 1 })).toHaveText("Swap AVAX for USDT via Symbiosis");
   if (!preconnected) {
-    await expect(guide.getByTestId("symbiosis-widget")).toBeVisible();
-    await guide.getByRole("button", { name: "Connect avalanche-c wallet", exact: true }).click();
-    await expect(guide.getByTestId("swap-source-wallet")).toBeVisible();
+    await expect(guide.getByTestId("wallet-swap-form")).toBeVisible();
+    await expect(guide.getByLabel("Swap amount")).toHaveValue("0.25");
+    await expect(guide.getByRole("region", { name: "Step instructions" })).toHaveCount(0);
+    await expect(guide.getByRole("link", { name: "Open Symbiosis", exact: true })).toHaveCount(0);
     expect(mock.counts()).toEqual({ created: 0, submissions: 0 });
-    expect(await page.evaluate(() => (window as any).transfers)).toBe(0);
+    await page.evaluate(async path => (await import(/* @vite-ignore */ path)).setEvmConnected(true), harnessPath);
   }
   await expect(guide.getByTestId("wallet-swap-form")).toBeVisible();
   await expect(guide.getByRole("region", { name: "Step instructions" })).toHaveCount(0);
@@ -183,10 +185,11 @@ for (const mode of ["connect", "existing", "switch"]) test(`Symbiosis AVAX guide
   await expect(form).toHaveAttribute("data-provider", "symbiosis");
   await expect(form.getByLabel("Swap amount")).toHaveAttribute("readonly", "");
   await expect(form.locator("select, input[type=search]")).toHaveCount(0);
-  const widget = form.getByTestId("symbiosis-widget");
-  await expect(widget).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  const widget = guide.getByTestId("route-wallet-execution");
+  await expect(widget).toContainText("Pay3Flow · SWAP");
+  const lightBackground = await widget.evaluate(element => getComputedStyle(element).backgroundColor);
   await page.getByRole("button", { name: "Switch theme" }).click();
-  await expect(widget).toHaveCSS("background-color", "rgb(34, 36, 48)");
+  await expect.poll(() => widget.evaluate(element => getComputedStyle(element).backgroundColor)).not.toBe(lightBackground);
   await page.getByRole("button", { name: "Switch theme" }).click();
   expect(await form.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
   await guide.screenshot({ path: testInfo.outputPath("avax-swap.png") });
@@ -198,17 +201,19 @@ for (const mode of ["connect", "existing", "switch"]) test(`Symbiosis AVAX guide
   expect(BigInt(calls[0].value)).toBe(250000000000000000n);
   await page.evaluate(async path => (await import(/* @vite-ignore */ path)).setEvmConnected(false), harnessPath);
   await expect(guide.getByRole("region", { name: "Step instructions" })).toHaveCount(0);
-  await expect(guide.getByTestId("symbiosis-widget")).toBeVisible();
+  await expect(guide.getByTestId("wallet-swap-form")).toBeVisible();
+  await expect(guide.getByLabel("Swap amount")).toHaveValue("0.25");
   await expect(guide.getByTestId("route-wallet-execution")).toContainText("Submitted.");
+  await expect(guide.getByRole("button", { name: /Connect .* wallet/ })).toHaveCount(0);
   expect(await page.evaluate(() => (window as any).transfers)).toBe(1);
 });
 
-for (const provider of ["cow-swap", "near-intents"]) test(`${provider} uses its wallet widget or the default without preparing a swap`, async ({ page }, testInfo) => {
+for (const provider of ["cow-swap", "symbiosis", "near-intents"]) test(`${provider} uses the unified Pay3Flow widget without preparing a swap`, async ({ page }, testInfo) => {
   await wallets(page);
   await expect(page.locator(".introOverlay")).toHaveCount(0, { timeout: 6000 });
   const mock = await panel(page, execution(provider, "ethereum", "ETH", "ethereum"));
   const form = page.getByTestId("wallet-swap-form");
-  await expect(form).toHaveAttribute("data-provider", provider === "cow-swap" ? provider : "default");
+  await expect(form).toHaveAttribute("data-provider", provider);
   await expect(form.getByLabel("Swap amount")).toHaveValue("12.345678");
   await expect(form.getByLabel("Swap amount")).toHaveAttribute("readonly", "");
   await expect(form).toContainText("ETH");
@@ -216,16 +221,66 @@ for (const provider of ["cow-swap", "near-intents"]) test(`${provider} uses its 
   await expect(form.locator("select, input[type=search]")).toHaveCount(0);
   await expect(form.getByRole("button", { name: "Swap ETH for USDT", exact: true })).toBeVisible();
   expect(await form.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
-  if (provider === "cow-swap") {
-    const widget = form.getByTestId("cow-swap-widget");
-    await expect(widget).toHaveCSS("background-color", "rgb(255, 255, 255)");
-    await page.getByRole("button", { name: "Switch theme" }).click();
-    await expect(widget).toHaveCSS("background-color", "rgb(24, 24, 52)");
-    await form.screenshot({ path: testInfo.outputPath("cow-wallet-dark.png") });
-  } else {
-    await expect(form.locator(".assetCard")).toHaveCount(2);
-    await expect(form.locator("[data-provider]")).toHaveCount(0);
-  }
+  const widget = page.locator("#wallet-test-panel").getByTestId("route-wallet-execution");
+  await expect(widget).toContainText("Pay3Flow · SWAP");
+  await expect(form.locator(".assetCard")).toHaveCount(2);
+  await expect(widget.locator("iframe")).toHaveCount(0);
+  const lightBackground = await widget.evaluate(element => getComputedStyle(element).backgroundColor);
+  await page.getByRole("button", { name: "Switch theme" }).click();
+  await expect.poll(() => widget.evaluate(element => getComputedStyle(element).backgroundColor)).not.toBe(lightBackground);
+  await form.screenshot({ path: testInfo.outputPath(`${provider}-wallet-dark.png`) });
+  expect(mock.counts()).toEqual({ created: 0, submissions: 0 });
+  expect(await page.evaluate(() => (window as any).transfers)).toBe(0);
+});
+
+for (const provider of ["cow-swap", "near-intents", "symbiosis"]) test(`${provider} guide prioritizes the native widget and preserves it across views`, async ({ page }) => {
+  await wallets(page);
+  const value = execution(provider, "ethereum", "ETH", "ethereum");
+  const mock = await quoteApi(page, value);
+  await page.evaluate(async ({ path, value }) => {
+    const harness = await import(/* @vite-ignore */ path);
+    await harness.mountGuide({
+      route_id: value.route_id, route_kind: "crypto_to_crypto", route_provider: value.provider,
+      source_currency: "ETH", target_currency: "USDT", source_network: "ethereum", target_network: "ethereum", entry_asset: "ETH",
+      source_amount: value.input_amount, target_amount: "12", legs: [], route_path: [value.from_asset, value.to_asset],
+      execution: { from_asset: value.from_asset, to_asset: value.to_asset, input_amount: value.input_amount, token: "signed-test-token", provider: value.provider },
+    });
+  }, { path: harnessPath, value });
+  const guide = page.getByTestId("route-guide");
+  await guide.getByTestId("start-guide").click();
+  const widget = guide.getByTestId("route-wallet-execution");
+  await expect(widget).toBeVisible();
+  await expect(widget).toHaveAttribute("data-provider", provider);
+  await expect(widget.getByLabel("Swap amount")).toHaveValue(value.input_amount);
+  await expect(guide.getByTestId("cow-live-widget")).toHaveCount(0);
+  await expect(guide.getByTestId("near-intents-live-widget")).toHaveCount(0);
+  await widget.evaluate(element => element.setAttribute("data-session", "preserved"));
+  await guide.getByRole("button", { name: "SWAP guide", exact: true }).click();
+  await expect(widget).toBeHidden();
+  await guide.getByRole("button", { name: "SWAP", exact: true }).click();
+  await expect(widget).toBeVisible();
+  await expect(widget).toHaveAttribute("data-session", "preserved");
+  expect(mock.counts()).toEqual({ created: 0, submissions: 0 });
+});
+
+test("unsupported source networks retain the provider walkthrough and external link", async ({ page }) => {
+  await wallets(page);
+  const value = execution("symbiosis", "solana", "SOL", "ethereum");
+  const mock = await quoteApi(page, value);
+  await page.evaluate(async ({ path, value }) => {
+    const harness = await import(/* @vite-ignore */ path);
+    await harness.mountGuide({
+      route_id: value.route_id, route_kind: "crypto_to_crypto", route_provider: "symbiosis",
+      source_currency: "SOL", target_currency: "USDT", source_network: "solana", target_network: "ethereum", entry_asset: "SOL",
+      source_amount: value.input_amount, target_amount: "12", legs: [], route_path: [value.from_asset, value.to_asset],
+      execution: { from_asset: value.from_asset, to_asset: value.to_asset, input_amount: value.input_amount, token: "signed-test-token", provider: value.provider },
+    }, "guide");
+  }, { path: harnessPath, value });
+  const guide = page.getByTestId("route-guide");
+  await guide.getByTestId("start-guide").click();
+  await expect(guide.getByRole("region", { name: "Step instructions" })).toBeVisible();
+  await expect(guide.getByRole("link", { name: "Open Symbiosis", exact: true })).toHaveAttribute("href", "https://app.symbiosis.finance/");
+  await expect(guide.getByTestId("route-wallet-execution")).toHaveCount(0);
   expect(mock.counts()).toEqual({ created: 0, submissions: 0 });
   expect(await page.evaluate(() => (window as any).transfers)).toBe(0);
 });
@@ -259,6 +314,26 @@ for (const symbol of ["USDT", "TRX"]) test(`TRON ${symbol} automatically deposit
   expect(await page.evaluate(() => (window as any).transfers)).toBe(1);
   const calls = await page.evaluate(() => (window as any).walletCalls);
   expect(calls[0].amount).toBe("12345678");
+});
+
+test("the unified form keeps amounts, output and completion in one place", async ({ page }) => {
+  await wallets(page);
+  const mock = await panel(page);
+  const form = page.locator("#wallet-test-panel").getByTestId("wallet-swap-form");
+  await expect(form).toBeVisible();
+  await expect(form.getByLabel("Swap amount")).toHaveValue("12.345678");
+  await expect(form.getByTestId("swap-output")).toHaveText("—");
+  expect(mock.counts()).toEqual({ created: 0, submissions: 0 });
+  await form.getByRole("button", { name: "Connect tron wallet" }).click();
+  await form.getByRole("button", { name: /^Swap .+ for .+$/ }).click();
+  await expect(form).toContainText("Submitted.");
+  await expect(form.getByTestId("swap-output")).toHaveText("12");
+  await expect(form.getByRole("button", { name: "Another address", exact: true })).toBeDisabled();
+  mock.complete();
+  await expect(form).toContainText("Swap completed.", { timeout: 10_000 });
+  await expect(form.getByRole("button", { name: "Another address", exact: true })).toBeDisabled();
+  expect(mock.counts()).toEqual({ created: 1, submissions: 1 });
+  expect(await page.evaluate(() => (window as any).transfers)).toBe(1);
 });
 
 test("Symbiosis TRON approval refreshes before automatically signing the swap", async ({ page }) => {
@@ -358,6 +433,22 @@ test("invalid cross-chain recipient cannot create a quote or transfer", async ({
   await page.locator("#wallet-test-panel").getByRole("button", { name: /^Swap .+ for .+$/ }).click();
   await expect(page.locator("#wallet-test-panel").getByRole("alert")).toContainText("Invalid NEAR");
   expect(mock.counts()).toEqual({ created: 0, submissions: 0 });
+});
+
+test("the unified form accepts a manual recipient on another network", async ({ page }) => {
+  await wallets(page);
+  const mock = await panel(page, execution("near-intents", "tron", "USDT", "near"));
+  const form = page.locator("#wallet-test-panel").getByTestId("wallet-swap-form");
+  await form.getByRole("button", { name: "Connect tron wallet" }).click();
+  await expect(form.getByLabel("Swap recipient address")).toBeVisible();
+  expect(mock.counts()).toEqual({ created: 0, submissions: 0 });
+  await form.getByLabel("Swap recipient address").fill("bob.near");
+  await form.getByLabel("Swap recipient address").press("Tab");
+  await form.getByRole("button", { name: /^Swap .+ for .+$/ }).click();
+  await expect(form).toContainText("Submitted.");
+  await expect(form).toContainText("bob.near");
+  expect(mock.counts()).toEqual({ created: 1, submissions: 1 });
+  expect(await page.evaluate(() => (window as any).transfers)).toBe(1);
 });
 
 for (const symbol of ["NEAR", "wNEAR"]) test(`${symbol} deposit uses the correct balance and wraps native NEAR before transferring`, async ({ page }) => {

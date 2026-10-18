@@ -4,10 +4,9 @@
   import { getAnonymousUserId } from "$lib/anonymous-user";
   import { createRouteExecution, fetchRouteExecution, submitRouteExecution, type RouteCandidate, type RouteExecution } from "$lib/exchange";
   import { locale, t } from "$lib/i18n";
-  import { assetIcon } from "$lib/icons";
+  import { assetIcon, venueIcon } from "$lib/icons";
   import { chainIdForNetwork, hasExecutionFunds, prepareWalletAction, validateRecipient, walletFamily, type ConnectedWallet, type PreparedWalletAction } from "$lib/wallet-execution";
   import { wallets, connectWallet, restoreWallets } from "$lib/wallet-session";
-  import ProviderSwapWidget from "./ProviderSwapWidget.svelte";
 
   export let route: RouteCandidate;
   export let networkNames: Record<string, string> = {};
@@ -36,7 +35,7 @@
   const STORAGE_PREFIX = "pay3flow.route-execution.";
 
   $: descriptor = route.execution;
-  $: widgetProvider = descriptor?.provider === "cow-swap" || descriptor?.provider === "symbiosis" ? descriptor.provider : null;
+  const providerNames = { "cow-swap": "CoW Swap", symbiosis: "Symbiosis", "near-intents": "NEAR Intents" };
   $: sourceNetwork = descriptor?.from_asset.split("@", 2)[1]?.toLowerCase() ?? "";
   $: destinationNetwork = descriptor?.to_asset.split("@", 2)[1]?.toLowerCase() ?? "";
   $: sourceFamily = walletFamily(sourceNetwork);
@@ -307,56 +306,47 @@
 </script>
 
 {#if descriptor}
-  <section class="execution" class:branded={Boolean(widgetProvider)} class:cow={widgetProvider === "cow-swap"} class:symbiosis={widgetProvider === "symbiosis"} data-testid="route-wallet-execution">
-    <div class="executionTitle"><strong>{copy("Execute with wallet")}</strong><span>{copy("Non-custodial")}</span></div>
-    {#if !sourceSupported}
-      <p class="muted">{copy("Embedded execution does not yet support a wallet for {network}. Open the provider manually for this route.", { network: sourceNetwork })}</p>
-    {:else}
-        {#snippet recipientControls()}
-          {#if sourceWallet}
-          <p class="address" data-testid="swap-source-wallet">{copy("From wallet")} · {shortAddress(sourceWallet!.address)}</p>
-          <fieldset>
-            <legend>{copy("Send swap output to")}</legend>
-            <div class="choiceRow">
-              <button type="button" class:active={recipientMode === "connected"} disabled={busy || Boolean(pendingSubmission) || execution?.status === "submitted" || !walletFamily(destinationNetwork)} on:click={chooseConnectedRecipient}>{copy("Connected wallet")}</button>
-              <button type="button" class:active={recipientMode === "manual"} disabled={busy || Boolean(pendingSubmission) || execution?.status === "submitted"} on:click={chooseManualRecipient}>{copy("Another address")}</button>
-            </div>
-            {#if recipientMode === "connected" && recipientWallet}<p class="address">{shortAddress(recipientWallet.address)} · {networkNames[destinationNetwork] ?? destinationNetwork}</p>{/if}
-            {#if recipientMode === "manual"}<input disabled={busy || Boolean(pendingSubmission) || execution?.status === "submitted"} bind:value={manualRecipient} on:change={recipientChanged} autocomplete="off" spellcheck="false" placeholder={copy("Recipient on {network}", { network: networkNames[destinationNetwork] ?? destinationNetwork })} aria-label={copy("Swap recipient address")} />{/if}
-          </fieldset>
-          {/if}
-        {/snippet}
-        {#snippet swapAction()}
-          {#if !sourceWallet}
-            <button type="button" class="walletButton" disabled={busy || Boolean(pendingSubmission) || execution?.status === "submitted"} on:click={connectSource}>{busy ? copy("Waiting for wallet…") : copy("Connect {network} wallet", { network: sourceNetwork })}</button>
-          {:else if !execution}
+  <section class="execution" data-testid="route-wallet-execution" data-provider={descriptor.provider} aria-label={copy("Execute with wallet")}>
+    <div class="executionTitle"><strong>Pay3Flow · SWAP</strong><span>{copy("Non-custodial")}</span></div>
+    <div class="provider"><img src={venueIcon(descriptor.provider)} alt="" width="20" height="20" /><span>{providerNames[descriptor.provider]}</span></div>
+    <div class="swapForm" data-testid="wallet-swap-form" data-provider={descriptor.provider} aria-busy={busy}>
+      <div class="assetCard">
+        <label>{copy("You pay")}
+          <span class="assetAmount"><input aria-label={copy("Swap amount")} readonly value={descriptor.input_amount} /><span><img src={assetIcon(fromSymbol)} alt="" />{fromSymbol}</span></span>
+        </label>
+        <small>{networkNames[sourceNetwork] ?? sourceNetwork}</small>
+      </div>
+      <div class="swapArrow" aria-hidden="true">↓</div>
+      <div class="assetCard">
+        <small>{copy("Estimated output")}</small>
+        <div class="assetAmount"><strong data-testid="swap-output">{estimatedOutput ?? "—"}</strong><span><img src={assetIcon(toSymbol)} alt="" />{toSymbol}</span></div>
+        <small>{networkNames[destinationNetwork] ?? destinationNetwork}</small>
+      </div>
+      {#if !sourceSupported}
+        <p class="muted">{copy("Embedded execution does not yet support a wallet for {network}. Open the provider manually for this route.", { network: sourceNetwork })}</p>
+      {:else}
+        {#if sourceWallet}
+          <div class="recipientControls">
+            <p class="address" data-testid="swap-source-wallet">{copy("From wallet")} · {shortAddress(sourceWallet.address)}</p>
+            <fieldset>
+              <legend>{copy("Send swap output to")}</legend>
+              <div class="choiceRow">
+                <button type="button" class:active={recipientMode === "connected"} aria-pressed={recipientMode === "connected"} disabled={busy || Boolean(pendingSubmission) || execution?.status === "submitted" || execution?.status === "completed" || !destinationFamily} on:click={chooseConnectedRecipient}>{copy("Connected wallet")}</button>
+                <button type="button" class:active={recipientMode === "manual"} aria-pressed={recipientMode === "manual"} disabled={busy || Boolean(pendingSubmission) || execution?.status === "submitted" || execution?.status === "completed"} on:click={chooseManualRecipient}>{copy("Another address")}</button>
+              </div>
+              {#if recipientMode === "connected" && recipientWallet}<p class="address">{shortAddress(recipientWallet.address)} · {networkNames[destinationNetwork] ?? destinationNetwork}</p>{/if}
+              {#if recipientMode === "manual"}<input disabled={busy || Boolean(pendingSubmission) || execution?.status === "submitted" || execution?.status === "completed"} bind:value={manualRecipient} on:change={recipientChanged} autocomplete="off" spellcheck="false" placeholder={copy("Recipient on {network}", { network: networkNames[destinationNetwork] ?? destinationNetwork })} aria-label={copy("Swap recipient address")} />{/if}
+            </fieldset>
+          </div>
+          {#if !execution}
             <button type="button" class="primary" disabled={busy || !recipient} on:click={swapWithWallet}>{busy ? copy("Preparing…") : copy("Swap {from} for {to}", { from: fromSymbol, to: toSymbol })}</button>
           {/if}
-        {/snippet}
-        <div class="swapForm" data-testid="wallet-swap-form" data-provider={widgetProvider ?? "default"}>
-          {#if widgetProvider}
-            <ProviderSwapWidget provider={widgetProvider} from={fromSymbol} to={toSymbol} input={descriptor.input_amount} output={estimatedOutput ?? "—"} sourceNetwork={networkNames[sourceNetwork] ?? sourceNetwork} targetNetwork={networkNames[destinationNetwork] ?? destinationNetwork}>
-              <div class="recipientControls">{@render recipientControls()}</div>
-              <svelte:fragment slot="action">{@render swapAction()}</svelte:fragment>
-            </ProviderSwapWidget>
-          {:else}
-            <div class="assetCard">
-              <label for="swap-amount">{copy("You pay")}</label>
-              <div class="assetAmount"><input id="swap-amount" aria-label={copy("Swap amount")} readonly value={descriptor.input_amount} /><span><img src={assetIcon(fromSymbol)} alt="" />{fromSymbol}</span></div>
-              <small>{networkNames[sourceNetwork] ?? sourceNetwork}</small>
-            </div>
-            <div class="swapArrow" aria-hidden="true">↓</div>
-            <div class="assetCard">
-              <small>{copy("Estimated output")}</small>
-              <div class="assetAmount"><strong>{estimatedOutput ?? "—"}</strong><span><img src={assetIcon(toSymbol)} alt="" />{toSymbol}</span></div>
-              <small>{networkNames[destinationNetwork] ?? destinationNetwork}</small>
-            </div>
-            {@render recipientControls()}
-            {@render swapAction()}
-          {/if}
-        </div>
+        {:else if !pendingSubmission && (!execution || execution.status === "awaiting_signature")}
+          <button type="button" class="primary" disabled={busy} on:click={connectSource}>{busy ? copy("Connecting…") : copy("Connect {network} wallet", { network: sourceNetwork })}</button>
+        {/if}
+      {/if}
       {#if execution}
-        <div class="review">
+        <div class="review" aria-live="polite">
           <span><small>{copy("Amount")}</small><strong>{execution.input_amount} {execution.from_asset}</strong></span>
           {#if execution.expected_output}<span><small>{copy("Expected output")}</small><strong>{execution.expected_output} {execution.to_asset}</strong></span>{/if}
           {#if execution.expected_fee}<span><small>{copy("Provider fee")}</small><strong>{execution.expected_fee.amount} {execution.expected_fee.asset}</strong></span>{/if}
@@ -388,29 +378,32 @@
       {#if error}<p class="errorText" role="alert">{error}</p>{/if}
       {#if notice}<p class="ready" role="status">{notice}</p>{/if}
       <p class="safety">{copy("Pay3Flow never receives your private key. Approval and transfer require confirmation in your wallet.")}</p>
-    {/if}
+    </div>
   </section>
 {/if}
 
 <style>
-  .execution { display: grid; gap: 12px; margin-top: 14px; padding: 14px; border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-panel); }
-  .executionTitle, .walletRow, .choiceRow { display: flex; align-items: center; gap: 8px; }
-  .executionTitle { justify-content: space-between; }
+  .execution { min-width: 0; color: var(--color-text); display: grid; gap: 12px; margin-top: 14px; padding: 14px; border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-panel); }
+  .executionTitle, .provider, .choiceRow { display: flex; align-items: center; gap: 8px; }
+  .executionTitle { justify-content: space-between; flex-wrap: wrap; }
   .executionTitle span { padding: 4px 8px; border-radius: 999px; background: var(--color-accent-soft); color: var(--color-accent-text); font-size: 12px; font-weight: 800; text-transform: uppercase; }
   fieldset { display: grid; gap: 9px; margin: 0; padding: 0; border: 0; }
   legend, small { color: var(--color-text-soft); font-size: 12px; }
   button, input { min-height: 40px; border: 1px solid var(--color-border); border-radius: 11px; font: inherit; }
   button { padding: 0 12px; cursor: pointer; background: transparent; color: inherit; font-weight: 750; }
   button:disabled { cursor: not-allowed; opacity: .55; }
-  .walletButton, .primary { width: 100%; }
-  .primary { border-color: var(--color-primary); background: var(--color-primary); color: var(--color-text-invert); }
+  .primary { width: 100%; border-color: var(--color-primary); background: var(--color-primary); color: var(--color-text-invert); }
   .secondary { width: fit-content; }
-  .choiceRow button { flex: 1; }
+  .choiceRow { flex-wrap: wrap; }
+  .choiceRow button { flex: 1 1 130px; }
   .choiceRow button.active { border-color: var(--color-accent-text); border-width: var(--border-highlight-width); background: var(--color-accent-soft); }
   input { width: 100%; padding: 0 11px; background: transparent; color: inherit; }
   .swapForm { display: grid; gap: 12px; }
   .assetCard { display: grid; gap: 9px; padding: 16px; border: 1px solid var(--color-border); border-radius: 14px; background: var(--color-panel-soft); }
-  .assetCard label { color: var(--color-text-soft); font-size: 12px; }
+  .assetCard label { display: grid; gap: 9px; color: var(--color-text-soft); font-size: 12px; }
+  .assetAmount { color: var(--color-text); }
+  .provider { color: var(--color-text-soft); font-size: 12px; }
+  .provider img { flex-shrink: 0; }
   .assetAmount { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-width: 0; }
   .assetAmount input, .assetAmount strong { min-width: 0; width: 100%; padding: 0; border: 0; font-size: clamp(22px, 4vw, 30px); font-weight: 750; overflow-wrap: anywhere; }
   .assetAmount span { display: flex; align-items: center; gap: 8px; font-weight: 750; }
@@ -425,13 +418,7 @@
   .success { color: var(--color-good); font-weight: 700; }
   .errorText { color: var(--color-danger); font-size: 12px; }
   .safety { padding-top: 4px; border-top: 1px solid var(--color-border); }
-  .recipientControls { display: grid; gap: 12px; color: var(--widget-text, var(--color-text)); }
-  .branded { --color-text-soft: #506784; --color-border: #e6e8ed; --color-accent-text: #004591; --color-accent-soft: #65d9ff26; --color-primary: #004591; --color-text-invert: #65d9ff; background: #fff; color: #00234e; }
-  .branded .executionTitle { font-size: 12px; }
-  .branded legend { margin-bottom: 8px; }
-  .symbiosis { --color-text-soft: #929bad; --color-primary: #111218; --color-text-invert: #fff; --color-accent-text: #111218; --color-accent-soft: #a2ff3d26; color: #111218; }
-  :global(html[data-theme="dark"]) .cow { --color-text-soft: #a6a9b6; --color-border: #292944; --color-accent-text: #65d9ff; --color-primary: #65d9ff; --color-text-invert: #0d0e21; background: #181834; color: #dee3e6; }
-  :global(html[data-theme="dark"]) .symbiosis { --color-text-soft: #9a9fac; --color-border: #353643; --color-accent-text: #a2ff3d; --color-primary: #a2ff3d; --color-text-invert: #111218; background: #222430; color: #fff; }
+  .recipientControls { display: grid; gap: 12px; }
 
   @media (max-width: 980px), (pointer: coarse) { button, input { min-height: 44px; } input { font-size: 16px; } }
 </style>

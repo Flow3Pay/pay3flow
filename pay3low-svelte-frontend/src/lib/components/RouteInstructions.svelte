@@ -13,7 +13,6 @@
   import NearIntentsWidget from "./NearIntentsWidget.svelte";
   import ProviderSwapFrame from "./ProviderSwapFrame.svelte";
   import RouteExecutionPanel from "./RouteExecutionPanel.svelte";
-  import { wallets } from "$lib/wallet-session";
   import { walletFamily } from "$lib/wallet-execution";
   import InstructionScene from "./InstructionScene.svelte";
   import { isSpotStep, spotTrade } from "$lib/guides/spot/frames";
@@ -68,7 +67,7 @@
   $: swapStep = step?.kind === "swap";
   $: swapActive = swapStep && swapView === "swap";
   $: if (swapActive && step) activeSwapStep = step.id;
-  $: walletSwap = Boolean(swapActive && step?.execution && route.execution && sourceFamily && $wallets[sourceFamily]);
+  $: embeddedSwap = Boolean(step?.execution && route.execution && sourceFamily);
   $: officialCow = Boolean(swapStep && step?.provider === "cow-swap");
   $: walletProviderStep = Boolean(step?.execution);
   $: walletProviderUrl = step?.url ?? step?.guide?.links.find(link => /^Open\b/i.test(link.label))?.url ?? (step && venueUrls[step.provider.toLowerCase()]);
@@ -189,7 +188,7 @@
         <div class="chapterEntrance">
           <div class="chapterHeading"><span class="eyebrow">{finished ? copy("GUIDE COMPLETED") : chapter === -1 ? copy("LET’S GET YOU THERE") : copy("STEP {current} OF {total}", { current: chapter + 1, total: steps.length })}</span></div>
           <h1 bind:this={heading} tabindex="-1">{finished ? copy("Every step. Done.") : headingTitle ?? copy("A clear route. At your pace.")}{#if step}{" "}{#if !titleIncludesVenue}{copy("on")}{" "}{/if}<span class="headingVenue"><img src={venueIcon(step.provider)} alt="" />{step.venue}</span>{/if}</h1>
-          <p class="lead">{finished ? copy("You have confirmed every step. Check the final balance in your bank, wallet or exchange account.") : walletSwap ? copy("Review this swap and confirm it in your connected wallet.") : swapActive ? copy("Check the current quote on the platform before exchanging.") : step?.summary ?? copy("First, see how your exchange works. Then follow the animated walkthrough, one step at a time.")}</p>
+          <p class="lead">{finished ? copy("You have confirmed every step. Check the final balance in your bank, wallet or exchange account.") : swapActive && embeddedSwap ? copy("Connect your wallet, review the swap and confirm it here.") : swapActive ? copy("Check the current quote on the platform before exchanging.") : step?.summary ?? copy("First, see how your exchange works. Then follow the animated walkthrough, one step at a time.")}</p>
           {#if swapStep}
             <div class="swapModes" role="group" aria-label={copy("Swap view")}>
               <button type="button" aria-pressed={swapView === "swap"} on:click={() => swapView = "swap"}>SWAP</button>
@@ -257,12 +256,12 @@
           {/if}
           {#if swapStep && step && (swapActive || activeSwapStep === step.id)}
             <div hidden={!swapActive} data-testid="swap-view">
-              {#if officialCow}
+              {#if embeddedSwap}
+                <div class="swapExecution connected">{#key route.route_id}<RouteExecutionPanel {route} {networkNames} />{/key}</div>
+              {:else if officialCow}
                 <CowSwapWidget {route} {step} />
               {:else if step.provider === "near-intents"}
                 <NearIntentsWidget {route} {step} {networkNames} />
-              {:else if step.execution && route.execution}
-                <div class="swapExecution connected">{#key route.route_id}<RouteExecutionPanel {route} {networkNames} />{/key}</div>
               {:else}
                 <ProviderSwapFrame {route} {step} {networkNames} providerUrl={walletProviderUrl} />
               {/if}
