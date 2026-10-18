@@ -149,6 +149,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+@layer base {
 * {
   box-sizing: border-box;
   padding: 0;
@@ -171,6 +172,7 @@ button {
   cursor: pointer;
   border: 0;
   background: none;
+}
 }
 
 .appShell {
@@ -280,6 +282,7 @@ html[data-zooming] *::after {
 }
 
 /* Shared interaction sizing and visible scroll affordances. */
+@layer base {
 button { min-width: 32px; min-height: 32px; }
 input { min-height: 32px; }
 :where(input, button, a) { -webkit-tap-highlight-color: transparent; }
@@ -289,6 +292,7 @@ input { min-height: 32px; }
 @media (max-width: 980px), (pointer: coarse) {
   button, a[aria-label], .profileLink { min-width: 44px; min-height: 44px; }
   input { font-size: max(16px, 1em); }
+}
 }
 
 /* One lime scrollbar treatment for the page, pickers and route instructions. */

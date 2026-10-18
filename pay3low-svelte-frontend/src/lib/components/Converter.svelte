@@ -153,6 +153,7 @@
   }
   let paymentPickerComponent: typeof import("./PaymentMethodPicker.svelte").default | null = null;
   let routeInstructionsComponent: typeof import("./RouteInstructions.svelte").default | null = null;
+  let instructionsMode: "swap" | "guide" = "swap";
   let searchingVenues: P2pSourceOption[] = [];
   let foundVenues: P2pSourceOption[] = [];
   let venueStats: Record<string, VenueSearchStatus> = {};
@@ -815,9 +816,11 @@
     onDismissStartup(); restoreShared(shared); initialSearchReady = true;
     if (!guideUnavailable) void tick().then(() => startSearch(false));
   }
-  async function openInstructions(route: RouteCandidate, replace = false) {
+  async function openInstructions(route: RouteCandidate, replace = false, mode: "swap" | "guide" = "swap") {
     if (!browser) return;
+    instructionsMode = mode;
     const params = new URLSearchParams({ amount: route.source_amount ?? String(route.source_amount_minor / 100), from: sourceMethodId, to: targetMethodId, fromNetwork: sourceNetwork?.id ?? sourceNetworkId, toNetwork: targetNetwork?.id ?? targetNetworkId, sources: selectedSources.join(","), methods: selectedExchangeMethods.join(","), assets: selectedIntermediaryAssets.join(","), path: guideRoutePath(route), venues: [...new Set([route.route_provider, ...route.legs.map(leg => leg.provider), ...(route.cycle_legs ?? []).map(leg => leg.provider)].filter(Boolean))].join(","), lang: activeLocale });
+    params.set("view", mode);
     const hash = guideHash(route.source_currency, route.target_currency ?? route.entry_asset, params);
     if (replace) history.replaceState(history.state, "", hash); else history.pushState(history.state, "", hash);
     lastLocationHash = location.hash;
@@ -917,7 +920,7 @@
         if (guideRequested && pendingGuide) {
           const path = pendingGuide.params.get("path");
           const fresh = mapRoutes(response).find(item => item.status === "complete" && item.source_currency === pendingGuide!.sourceCurrency && item.target_currency === pendingGuide!.targetCurrency && (!path || guideRoutePath(item) === path));
-          if (fresh) await openInstructions(fresh, true); else guideUnavailable = true;
+          if (fresh) await openInstructions(fresh, true, new URLSearchParams(location.hash.split("?")[1] ?? "").get("view") === "guide" ? "guide" : "swap"); else guideUnavailable = true;
         }
       }
     } catch (cause) {
@@ -1197,7 +1200,10 @@
         </div>
       </div>
       {#if refreshSeconds > 0}<div class="marketBar"><div class="marketState"><span class="refreshProgress" role="img" aria-label={secondsUntilRefresh === null ? "Auto-refresh is off" : `Refresh in ${secondsUntilRefresh} seconds`}><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle class="refreshTrack" cx="9" cy="9" r="7" pathLength="100" /><circle class="refreshFill" cx="9" cy="9" r="7" pathLength="100" style:stroke-dashoffset={`${100 - refreshProgress}`} /></svg></span><div><span>{lastUpdatedAt ? `Updated ${Math.max(0, Math.floor((clock - lastUpdatedAt) / 1000))}s ago` : t("Public P2P sources only · no order placement", {}, activeLocale)}</span></div></div>{#if secondsUntilRefresh !== null}<span class="nextRefresh">{secondsUntilRefresh}s</span>{/if}</div>{/if}
-      <button type="button" class="cta" disabled={!hasAmount || (!previewRoute && (searching || !corridor))} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? t("Open route instructions", {}, activeLocale) : t("Find routes", {}, activeLocale)}>{#if previewRoute}{t("Go", {}, activeLocale)} <span>↗</span>{:else if searching}<span class="spinner"></span> {t("Finding routes", {}, activeLocale)}{:else if hasAmount}{t("Find routes", {}, activeLocale)} <span>↗</span>{:else}{t("Enter an amount to begin", {}, activeLocale)}{/if}</button>
+      <div class:swapActions={Boolean(previewRoute)}>
+        <button type="button" class="cta" disabled={!hasAmount || (!previewRoute && (searching || !corridor))} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? "SWAP" : t("Find routes", {}, activeLocale)}>{#if previewRoute}SWAP <span>↗</span>{:else if searching}<span class="spinner"></span> {t("Finding routes", {}, activeLocale)}{:else if hasAmount}{t("Find routes", {}, activeLocale)} <span>↗</span>{:else}{t("Enter an amount to begin", {}, activeLocale)}{/if}</button>
+        {#if previewRoute}<button type="button" class="cta guideCta" data-testid="open-swap-guide" on:click={() => openInstructions(previewRoute!, false, "guide")}>SWAP guide</button>{/if}
+      </div>
       {#if error}<div class="errorBox" role="alert">{error}</div>{/if}
     </div>
     <div class="panelToggles">
@@ -1226,7 +1232,7 @@
 {#if guideRequested}
   {#if routeInstructionsComponent && instructionsRoute}
     {#key instructionsRoute.route_id}
-      <svelte:component this={routeInstructionsComponent} route={instructionsRoute} {venueNames} {venueUrls} {providerGuidance} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} onOpenService={openService} onClose={closeGuide} />
+      <svelte:component this={routeInstructionsComponent} route={instructionsRoute} initialMode={instructionsMode} {venueNames} {venueUrls} {providerGuidance} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} onOpenService={openService} onClose={closeGuide} />
     {/key}
   {:else}
     <section class="guideLoading" aria-live="polite"><span class="loadingMark">↗</span><h1>{t(guideUnavailable ? "This route is no longer available" : error ? "Could not load this guide" : "Preparing your guide", {}, activeLocale)}</h1><p>{t(guideUnavailable ? "Quotes have changed. Choose a current route to continue." : error ? "Try again or choose a current route." : "Checking the selected banks, networks and platforms for a fresh quote.", {}, activeLocale)}</p><button type="button" on:click={() => locationChanged(true)}>{t("Try again", {}, activeLocale)}</button><button type="button" on:click={closeGuide}>← {t("Back to routes", {}, activeLocale)}</button></section>
@@ -2161,6 +2167,10 @@
   letter-spacing: -0.01em;
   transition: background 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
 }
+
+.swapActions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.swapActions .guideCta { background: var(--color-panel); color: var(--color-text); border: 1px solid var(--color-border); }
+.swapActions .guideCta:hover { background: var(--color-panel-soft); }
 
 .cta span:not(.spinner) {
   color: var(--color-accent);

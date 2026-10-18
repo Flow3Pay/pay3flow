@@ -77,7 +77,7 @@ async function wallets(page: Page) {
   }, { tron: TRON, evm: EVM, tx: TX });
   await page.route("**/api/**", route => route.fulfill({ contentType: "application/json", body: JSON.stringify([]) }));
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "Connect wallet", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Connect wallet", exact: true })).toBeVisible({ timeout: 20_000 });
   await page.waitForLoadState("networkidle");
 }
 
@@ -415,6 +415,115 @@ for (const symbol of ["ETH", "USDT"]) test(`Ethereum ${symbol} sends through the
   const result = await page.evaluate(async ({ path, value }) => (await import(/* @vite-ignore */ path)).perform(value, "evm"), { path: harnessPath, value });
   expect(result).toEqual({ reference: "0x" + TX, kind: "transaction_hash" });
   expect(await page.evaluate(() => (window as any).transfers)).toBe(1);
+});
+
+for (const reverse of [false, true]) test(`Symbiosis shows a swap widget without wallet execution (${reverse ? "SOL to DAI" : "DAI to SOL"})`, async ({ page }) => {
+  await wallets(page);
+  await page.route("https://api.symbiosis.finance/crosschain/**", route => route.fulfill({ headers: { "access-control-allow-origin": "*" }, json: route.request().url().endsWith("/chains")
+    ? [{ id: 56, name: "BNB" }, { id: 5426, name: "Solana" }]
+    : [{ symbol: "DAI", chainId: 56, address: "0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3" }, { symbol: "SOL", chainId: 5426, address: "" }] }));
+  await page.route("https://app.symbiosis.finance/**", route => route.fulfill({ contentType: "text/html", body: '<!doctype html><button>Connect wallet</button><input aria-label="Solana recipient address">' }));
+  let executionRequests = 0;
+  await page.route("**/api/p2p/route-executions**", route => { executionRequests += 1; return route.fulfill({ status: 500, json: { error: "This route uses the provider flow" } }); });
+  const from = reverse ? "SOL" : "DAI";
+  const to = reverse ? "DAI" : "SOL";
+  const sourceNetwork = reverse ? "solana" : "bnb-smart-chain";
+  const targetNetwork = reverse ? "bnb-smart-chain" : "solana";
+  await page.evaluate(async ({ path, from, to, sourceNetwork, targetNetwork }) => {
+    const harness = await import(/* @vite-ignore */ path);
+    await harness.mountGuide({
+      route_id: "symbiosis-provider-flow", route_kind: "crypto_to_crypto", route_provider: "symbiosis",
+      source_currency: from, target_currency: to, source_network: sourceNetwork, target_network: targetNetwork, entry_asset: from,
+      source_amount: "200", target_amount: "1.92", legs: [], route_path: [`${from}@${sourceNetwork}`, `${to}@${targetNetwork}`],
+    });
+  }, { path: harnessPath, from, to, sourceNetwork, targetNetwork });
+  const guide = page.getByTestId("route-guide");
+  await guide.getByTestId("start-guide").click();
+  const widget = guide.getByTestId("provider-swap-frame");
+  await expect(widget).toBeVisible();
+  const iframe = widget.locator("iframe");
+  await expect(iframe).toBeVisible();
+  const url = new URL((await iframe.getAttribute("src"))!);
+  expect(url.origin).toBe("https://app.symbiosis.finance");
+  expect(url.searchParams.get("chainIn")).toBe(reverse ? "Solana" : "BNB");
+  expect(url.searchParams.get("chainOut")).toBe(reverse ? "BNB" : "Solana");
+  expect(url.searchParams.get(reverse ? "tokenOut" : "tokenIn")).toBe("0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3");
+  expect(url.searchParams.get(reverse ? "tokenIn" : "tokenOut")).toBe("SOL");
+  expect(url.searchParams.get("amountIn")).toBe("200");
+  await expect(page.frameLocator('iframe[title="Symbiosis"]').getByRole("button", { name: "Connect wallet" })).toBeVisible();
+  await expect(guide.getByTestId("symbiosis-swap-card")).toHaveCount(0);
+  await expect(guide.getByTestId("route-wallet-execution")).toHaveCount(0);
+  await iframe.evaluate(element => element.setAttribute("data-session", "preserved"));
+  await guide.getByRole("button", { name: "SWAP guide", exact: true }).click();
+  await expect(guide.getByTestId("symbiosis-swap-card")).toBeVisible();
+  await expect(iframe).toBeHidden();
+  await guide.getByRole("button", { name: "SWAP", exact: true }).click();
+  await expect(iframe).toBeVisible();
+  await expect(iframe).toHaveAttribute("data-session", "preserved");
+  expect(executionRequests).toBe(0);
+  expect(await page.evaluate(() => (window as any).transfers)).toBe(0);
+});
+
+for (const [provider, origin] of [["0x", "https://matcha.xyz"], ["barter", "https://app.barterswap.xyz"]]) test(`${provider} provides SWAP and SWAP guide without a Pay3Flow wallet`, async ({ page }) => {
+  await wallets(page);
+  await page.route(`${origin}/**`, route => route.fulfill({ contentType: "text/html", body: "<!doctype html><button>Connect wallet</button>" }));
+  await page.evaluate(async ({ path, provider }) => (await import(/* @vite-ignore */ path)).mountGuide({
+    route_id: `${provider}-swap`, route_kind: "crypto_to_crypto", route_provider: provider,
+    source_currency: "ETH", target_currency: "USDC", source_network: "ethereum", target_network: "ethereum", entry_asset: "ETH",
+    source_amount: "0.1", target_amount: "240", legs: [], route_path: ["ETH@ethereum", "USDC@ethereum"],
+  }), { path: harnessPath, provider });
+  const guide = page.getByTestId("route-guide");
+  await guide.getByTestId("start-guide").click();
+  const swap = guide.getByTestId("provider-swap-frame");
+  await expect(swap.getByTestId("swap-quote")).toBeVisible();
+  await expect(swap.locator("iframe")).toHaveCount(0);
+  expect(new URL((await swap.getByRole("link").getAttribute("href"))!).origin).toBe(origin);
+  if (provider !== "barter") await expect(swap).toContainText("does not allow its swap form to be embedded");
+  await guide.getByRole("button", { name: "SWAP guide", exact: true }).click();
+  await expect(guide.getByTestId("instruction-scene")).toBeVisible();
+  await expect(swap).toBeHidden();
+  await guide.getByRole("button", { name: "SWAP", exact: true }).click();
+  await expect(swap).toBeVisible();
+});
+
+test("NEAR Intents mounts its standalone wallet widget and preserves it across guide and theme changes", async ({ page }) => {
+  await wallets(page);
+  await page.route("https://intents-api.aurora.dev/**", route => route.fulfill({
+    headers: { "access-control-allow-origin": "*" },
+    status: route.request().url().includes("/api/tokens/") ? 200 : 400,
+    json: route.request().url().includes("/api/tokens/") ? { asset_stats: [], tokens: [
+      { assetId: "nep141:eth.omft.near", symbol: "ETH", blockchain: "eth", decimals: 18, price: 2400 },
+      { assetId: "nep141:sol.omft.near", symbol: "SOL", blockchain: "sol", decimals: 9, price: 100 },
+    ] } : { message: "Quote fixture" },
+  }));
+  await page.evaluate(async path => (await import(/* @vite-ignore */ path)).mountGuide({
+    route_id: "near-widget", route_kind: "crypto_to_crypto", route_provider: "near-intents",
+    source_currency: "ETH", target_currency: "SOL", source_network: "ethereum", target_network: "solana", entry_asset: "ETH",
+    source_amount: "0.1", target_amount: "2.4", legs: [], route_path: ["ETH@ethereum", "SOL@solana"],
+  }), harnessPath);
+  const guide = page.getByTestId("route-guide");
+  await guide.getByTestId("start-guide").click();
+  const widget = guide.getByTestId("near-intents-live-widget");
+  const input = widget.locator("input").first();
+  await expect(input).toHaveValue("0.1", { timeout: 30_000 });
+  await expect(widget).toContainText("ETH");
+  await expect(widget).toContainText("SOL");
+  await widget.getByRole("button", { name: "Connect wallet", exact: true }).first().click();
+  const dialog = page.getByRole("dialog", { name: "Connect wallet", exact: true });
+  await expect(dialog.getByRole("heading", { name: "Connect wallet", exact: true })).toBeVisible();
+  await expect(dialog).toContainText("EVM / Solana");
+  await expect(dialog).toContainText("Stellar");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await page.getByRole("button", { name: "Switch theme" }).click();
+  await expect(widget.locator(".sw")).toHaveCSS("--c-sw-gray-950", "#191919");
+  await guide.getByRole("button", { name: "SWAP guide", exact: true }).click();
+  await expect(widget).toBeHidden();
+  await expect(guide.getByTestId("instruction-scene")).toBeVisible();
+  await guide.getByRole("button", { name: "SWAP", exact: true }).click();
+  await expect(widget).toBeVisible();
+  await expect(input).toHaveValue("0.1");
+  expect(await page.evaluate(() => (window as any).transfers)).toBe(0);
 });
 
 test("CoW guide embeds the official trading widget and connects without creating a swap", async ({ page }) => {

@@ -17,6 +17,22 @@ npm run dev -- --host 127.0.0.1 --port 3000
 The frontend expects the backend at `http://localhost:8080` during local
 development. Set `PUBLIC_API_URL` when the backend is hosted elsewhere.
 
+Set `PUBLIC_AURORA_INTENTS_API_KEY` in `.env.local` for local development, or in
+the frontend server environment in production. Obtain the widget integration
+key from [Aurora Widget Studio](https://studio.aurora.dev/). The official NEAR
+Intents standalone widget handles its own EVM, Solana, NEAR and Stellar wallet
+connections and receives the route's assets, networks and amount.
+
+Swap steps provide `SWAP` and `SWAP guide` modes. Switching modes keeps the live
+widget mounted so its wallet connection and entered addresses are preserved.
+CoW uses its official widget; Symbiosis uses its embedded app for routes without
+native wallet execution. Platforms that cannot be embedded retain their quote
+and a link to the provider in `SWAP` mode.
+
+`@0x/swap-ts-sdk` is installed for server-side integrations. Its API key belongs
+in a server environment variable, rather than a `PUBLIC_` variable; the SDK does
+not support browser use.
+
 ## Live result rendering
 
 WebSocket route snapshots can arrive while other providers are still being
@@ -74,6 +90,10 @@ npm run check
 npm run build
 PORT=3000 PUBLIC_API_URL=http://localhost:8080 node build
 ```
+
+The standalone wallet SDK needs a larger Node heap during builds and cold dev
+dependency optimization. If Node reaches its heap limit, use
+`NODE_OPTIONS=--max-old-space-size=6144 npm run build` (or `npm run dev`).
 
 Run the complete stack from the repository root:
 

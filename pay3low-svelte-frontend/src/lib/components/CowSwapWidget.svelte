@@ -94,6 +94,8 @@
   button { min-height: 44px; padding: 10px 16px; border: 0; border-radius: 24px; background: #004591; color: #65d9ff; font-size: 13px; font-weight: 600; }
   button:disabled { opacity: .6; }
   .widgetContainer { min-height: 520px; }
+  /* Match CoW's default document color scheme so the iframe canvas stays transparent. */
+  .widgetContainer :global(iframe) { color-scheme: normal; }
   p, a { display: block; font-size: 12px; line-height: 1.6; color: var(--color-text-soft); }
   p[role="alert"] { color: var(--color-danger); }
   a { text-align: center; margin-top: 14px; }

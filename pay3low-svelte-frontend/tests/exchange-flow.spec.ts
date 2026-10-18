@@ -1,6 +1,12 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 
+async function startWalkthrough(guide: Locator) {
+  await guide.getByTestId("start-guide").click();
+  const mode = guide.getByRole("button", { name: "SWAP guide", exact: true });
+  if (await mode.count()) await mode.click();
+}
+
 async function selectLanguage(page: Page, language: "en" | "ru" | "hy") {
   await page.locator(".languageToggle").click();
   await page.getByRole("listbox").getByRole("option", { name: { en: "English", ru: "Русский", hy: "Հայերեն" }[language], exact: true }).click();
@@ -21,7 +27,7 @@ async function expectNumberedTimeline(instructions: Locator, numbers: string[]) 
 async function openApp(page: Page, path = "/") {
   await page.goto(path);
   await expect
-    .poll(() => page.locator(".appShell").evaluate((element) => (element as HTMLElement).style.getPropertyValue("--puzzle-pattern")))
+    .poll(() => page.locator(".appShell").evaluate((element) => (element as HTMLElement).style.getPropertyValue("--puzzle-pattern")), { timeout: 20_000 })
     .not.toBe("");
   await expect(page.locator(".workspace")).toBeVisible();
   await expect(page.locator(".introOverlay")).toHaveCount(0, { timeout: 6000 });
@@ -1575,8 +1581,8 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await amountInput.fill("100000");
   await page.getByTestId("start-search").click();
   await expect(page.getByTestId("complete-route")).toHaveCount(101);
-  await expect(page.getByTestId("start-search")).toHaveText("Go ↗");
-  await expect(page.getByTestId("start-search")).toHaveAttribute("aria-label", "Open route instructions");
+  await expect(page.getByTestId("start-search")).toHaveText("SWAP ↗");
+  await expect(page.getByTestId("start-search")).toHaveAttribute("aria-label", "SWAP");
   await expect(page.getByText("101 routes found")).toBeVisible();
   const routeCounter = page.locator(".resultSummary small[aria-live='polite']");
   const toggleLanguage = async () => {
@@ -1635,7 +1641,7 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await expect(instructions).toBeVisible();
   await expect(instructions.getByRole("list", { name: "Exchange steps" })).toBeVisible();
   await expectNumberedTimeline(instructions, ["1", "2"]);
-  await instructions.getByTestId("start-guide").click();
+  await startWalkthrough(instructions);
   await expect(instructions.getByRole("heading", { name: "Buy USDT for 100,000 AMD" })).toBeVisible();
   await expect(instructions.locator(".frameList")).toContainText("Open More details");
   await instructions.getByTestId("confirm-instruction-step").click();
@@ -1654,7 +1660,7 @@ test("public P2P route search → open step-by-step instructions", async ({ page
     await route.fallback();
   });
   await page.getByRole("button", { name: "Refresh routes now" }).click();
-  await expect(page.getByTestId("start-search")).toHaveText("Go ↗");
+  await expect(page.getByTestId("start-search")).toHaveText("SWAP ↗");
   await expect(page.getByTestId("start-search")).toBeEnabled();
   await page.getByTestId("start-search").click();
   await expect(instructions).toBeVisible();
@@ -1714,7 +1720,7 @@ test("RUB to RUB bank routes require checking the order payment method", async (
 
   const instructions = page.getByTestId("route-guide");
   await expectNumberedTimeline(instructions, ["1", "2"]);
-  await instructions.getByTestId("start-guide").click();
+  await startWalkthrough(instructions);
   await expect(instructions.getByRole("heading", { name: "Buy USDT for 10,000 RUB" })).toBeVisible();
   await expect(instructions.locator(".frameList")).toContainText("find an active advertisement to buy USDT");
   await instructions.getByTestId("confirm-instruction-step").click();
@@ -1762,7 +1768,7 @@ test(`cross-venue instructions animate a contextual transfer from ${source}`, as
   await page.getByTestId("complete-route").nth(2).locator(".routeAmount").click();
   const instructions = page.getByTestId("route-guide");
   await expectNumberedTimeline(instructions, ["1", "2", "3"]);
-  await instructions.getByTestId("start-guide").click();
+  await startWalkthrough(instructions);
   await instructions.getByTestId("confirm-instruction-step").click();
   await expect(instructions.getByRole("heading", { name: "Transfer USDT to Bybit" })).toBeVisible();
   await expect(instructions.getByText("Choose the exact Ethereum (ERC-20) network on both platforms", { exact: false })).toBeVisible();
@@ -2098,7 +2104,7 @@ test("search venues only show providers with matching routes", async ({ page }) 
   await page.getByTestId("start-search").click();
   const guide = page.getByTestId("route-guide");
   await expect(guide).toBeVisible();
-  await guide.getByTestId("start-guide").click();
+  await startWalkthrough(guide);
   await expect(guide.locator(".headingVenue")).toContainText("Bybit");
   finishSearch?.();
   await expect(guide.locator(".headingVenue")).toContainText("Bybit");
@@ -2468,16 +2474,22 @@ test("direct provider quotes keep their API names and independent prices", async
   await expect(cards.nth(1).locator(".routeWorkflowButton")).toHaveAttribute(
     "aria-label", /USDT.*ERC-20.*USDC.*ERC-20.*CoW Protocol Live/,
   );
-  await cards.nth(0).locator(".routeAmount").click();
+  await expect(page.getByTestId("start-search")).toHaveAttribute("aria-label", "SWAP");
+  await page.getByTestId("open-swap-guide").click();
+  await expect(page).toHaveURL(/view=guide/);
   let instructions = page.getByTestId("route-guide");
-  await instructions.getByTestId("start-guide").click();
-  await expect(instructions.getByTestId("route-wallet-execution")).toBeVisible();
-  await expect(instructions.getByRole("button", { name: "Connect ethereum wallet" })).toBeVisible();
+  await startWalkthrough(instructions);
+  await expect(instructions.getByTestId("instruction-scene")).toBeVisible();
+  await instructions.getByRole("button", { name: "SWAP", exact: true }).click();
+  await expect(instructions.getByTestId("near-intents-live-widget")).toBeVisible();
+  await expect(instructions.getByTestId("route-wallet-execution")).toHaveCount(0);
   await instructions.locator(".guideToolbar").getByRole("button", { name: /Back to routes/ }).click();
   await cards.nth(1).locator(".routeAmount").click();
   instructions = page.getByTestId("route-guide");
   await instructions.getByTestId("start-guide").click();
-  await expect(instructions.getByTestId("route-wallet-execution")).toBeVisible();
+  await expect(instructions.getByTestId("cow-live-widget")).toBeVisible();
+  await instructions.getByRole("button", { name: "SWAP guide", exact: true }).click();
+  await expect(instructions.getByTestId("instruction-scene")).toBeVisible();
 });
 
 test("ID Pay provides a direct AMD to RUB route with its API name", async ({ page }) => {
@@ -2498,7 +2510,7 @@ test("ID Pay provides a direct AMD to RUB route with its API name", async ({ pag
 
   await route.locator(".routeAmount").click();
   const instructions = page.getByTestId("route-guide");
-  await instructions.getByTestId("start-guide").click();
+  await startWalkthrough(instructions);
   await expect(instructions.getByRole("heading", { name: "Transfer AMD to RUB via ID Pay Live" })).toBeVisible();
   await expect(instructions.locator(".realAction")).toHaveCount(0);
 });
@@ -2523,7 +2535,7 @@ test("small AMD to BTC@near routes keep crypto precision", async ({ page }) => {
   await route.locator(".routeAmount").click();
   const instructions = page.getByTestId("route-guide");
   await expectNumberedTimeline(instructions, ["1", "2"]);
-  await instructions.getByTestId("start-guide").click();
+  await startWalkthrough(instructions);
   await expect(instructions.getByRole("heading", { name: "Buy USDT for 10,000 AMD" })).toBeVisible();
   await instructions.getByTestId("confirm-instruction-step").click();
   await expect(instructions.getByRole("heading", { name: "Swap USDT for BTC via NEAR 1Click" })).toBeVisible();
@@ -2552,7 +2564,7 @@ test("direct Whitebird exchange uses its swap card, provider wording and local v
 
   await route.locator(".routeAmount").click();
   const instructions = page.getByTestId("route-guide");
-  await instructions.getByTestId("start-guide").click();
+  await startWalkthrough(instructions);
   await expect(instructions.locator(".realAction, .adHint, .counterpartyAvatar")).toHaveCount(0);
   const scene = instructions.getByTestId("instruction-scene");
   const swap = scene.getByTestId("whitebird-swap-card");
@@ -2604,7 +2616,7 @@ test("Bybit P2P walkthrough reviews the profile and selects the route's buy or s
   await expect(page.getByTestId("complete-route")).toHaveCount(12);
   await page.getByTestId("complete-route").nth(1).locator(".routeAmount").click();
   const guide = page.getByTestId("route-guide");
-  await guide.getByTestId("start-guide").click();
+  await startWalkthrough(guide);
   const scene = guide.getByTestId("instruction-scene");
   const profile = scene.getByTestId("bybit-profile-card");
   await scene.scrollIntoViewIfNeeded();
@@ -2690,7 +2702,7 @@ test("MEXC P2P walkthrough reviews the merchant and chooses the correct buy or s
   await expect(page.getByTestId("complete-route").first()).toBeVisible();
   await page.getByTestId("complete-route").first().locator(".routeAmount").click();
   const guide = page.getByTestId("route-guide");
-  await guide.getByTestId("start-guide").click();
+  await startWalkthrough(guide);
   const scene = guide.getByTestId("instruction-scene");
   const profile = scene.getByTestId("mexc-profile-card");
   await scene.scrollIntoViewIfNeeded();
@@ -2753,7 +2765,7 @@ test("MEXC profile walkthrough localizes route actions and supports reduced moti
   await expect(page.getByTestId("complete-route").first()).toBeVisible();
   await page.getByTestId("complete-route").first().locator(".routeAmount").click();
   const guide = page.getByTestId("route-guide");
-  await guide.getByTestId("start-guide").click();
+  await startWalkthrough(guide);
   const profile = guide.getByTestId("mexc-profile-card");
   await expect(profile).toHaveClass(/paused/);
   await expect(guide.locator(".frameList")).toContainText("на MEXC");
@@ -2789,7 +2801,7 @@ test("Bybit profile walkthrough localizes route actions and supports reduced mot
   await expect(page.getByTestId("complete-route")).toHaveCount(12);
   await page.getByTestId("complete-route").nth(1).locator(".routeAmount").click();
   const guide = page.getByTestId("route-guide");
-  await guide.getByTestId("start-guide").click();
+  await startWalkthrough(guide);
   const profile = guide.getByTestId("bybit-profile-card");
   await expect(profile).toHaveClass(/paused/);
   await expect(profile.getByTestId("bybit-trade-action")).toHaveText("Купить USDC");
@@ -2879,7 +2891,7 @@ test("crypto route keeps distinct source and target networks", async ({ page }) 
   await page.getByTestId("complete-route").locator(".routeAmount").click();
   const instructions = page.getByTestId("route-guide");
   await expectNumberedTimeline(instructions, ["1"]);
-  await instructions.getByTestId("start-guide").click();
+  await startWalkthrough(instructions);
   await expect(instructions.getByRole("heading", { name: "Convert ETH to USDT" })).toBeVisible();
   await expect(instructions.getByTestId("spot-terminal")).toHaveAttribute("data-order-side", "sell");
   await expect(instructions.getByTestId("spot-market-link")).toHaveAttribute("href", "https://www.binance.com/en/trade/ETH_USDT?type=spot");
@@ -2898,7 +2910,7 @@ for (const venue of ["binance", "bybit", "mexc", "bitget", "whitebird"]) {
     await page.getByTestId("start-search").click();
     await page.getByTestId("complete-route").locator(".routeAmount").click();
     const guide = page.getByTestId("route-guide");
-    await guide.getByTestId("start-guide").click();
+    await startWalkthrough(guide);
     await expect(guide.getByTestId("spot-terminal")).toHaveAttribute("data-order-side", "sell");
     await expect(guide.getByTestId("spot-market-pair")).toContainText("ETH/USDT");
 
@@ -2942,7 +2954,7 @@ test("bridged spot instructions split both market trades into separate steps", a
 
   const instructions = page.getByTestId("route-guide");
   await expectNumberedTimeline(instructions, ["1", "2"]);
-  await instructions.getByTestId("start-guide").click();
+  await startWalkthrough(instructions);
   await expect(instructions.getByRole("heading", { name: "Convert BTC to USDC" })).toBeVisible();
   await expect(instructions.getByTestId("spot-market-pair")).toContainText("BTC/USDC");
   await expect(instructions.getByTestId("spot-market-link")).toHaveAttribute("href", "https://www.binance.com/en/trade/BTC_USDC?type=spot");
@@ -2992,7 +3004,7 @@ test("same asset on the same network searches a cycle and displays both swap ste
   await card.locator(".workflow").click();
   const instructions = page.getByTestId("route-guide");
   await expectNumberedTimeline(instructions, ["1", "2"]);
-  await instructions.getByTestId("start-guide").click();
+  await startWalkthrough(instructions);
   await expect(instructions.getByRole("heading", { name: "Convert USDT in Ethereum (ERC-20) to USDC in Ethereum (ERC-20)" })).toBeVisible();
   await expect(instructions.getByTestId("cow-swap-swap-card")).toBeVisible();
   await instructions.getByTestId("confirm-instruction-step").click();
@@ -3017,7 +3029,7 @@ test("spot crypto cycles show three trades and wallet deposit and withdrawal ins
   await card.locator(".workflow").click();
   const instructions = page.getByTestId("route-guide");
   await expectNumberedTimeline(instructions, ["1", "2", "3"]);
-  await instructions.getByTestId("start-guide").click();
+  await startWalkthrough(instructions);
   await expect(instructions.getByTestId("spot-market-pair")).toContainText("ETH/USDT");
   await expect(instructions.getByTestId("spot-terminal")).toHaveAttribute("data-order-side", "buy");
   await expect(instructions.getByTestId("spot-market-link")).toHaveAttribute("href", "https://www.bybit.com/trade/spot/ETH/USDT");
@@ -3366,7 +3378,7 @@ test("animated guide has inline actions, scene controls and fresh progress on ev
   await page.screenshot({ animations: "disabled", path: testInfo.outputPath("guide-overview.png") });
   const chapters = guide.getByTestId("instruction-step").getByRole("button");
   await expect(chapters.nth(1)).toBeDisabled();
-  await guide.getByTestId("start-guide").click();
+  await startWalkthrough(guide);
   await expect(guide.locator("h1")).toBeFocused();
   await expect(actions).toHaveCSS("position", "static");
   await expect(guide.locator(".guideMain > .guideActions")).toHaveCount(1);
@@ -3406,7 +3418,7 @@ test("animated guide has inline actions, scene controls and fresh progress on ev
   await page.reload();
   await expect(guide.locator("h1")).toHaveText("A clear route. At your pace.");
   await expect(guide.locator(".chapterProgress strong")).toHaveText("0/2");
-  await guide.getByTestId("start-guide").click();
+  await startWalkthrough(guide);
   await guide.getByTestId("confirm-instruction-step").click();
   await expect(guide.locator("h1")).toContainText("Sell USDT");
   await guide.getByTestId("confirm-instruction-step").focus();
@@ -3433,7 +3445,7 @@ test("Russian guide supports reduced motion and accessible controls", async ({ p
   await page.getByTestId("complete-route").first().locator(".routeAmount").click();
   const guide = page.getByTestId("route-guide");
   await expect(guide.locator("h1")).toHaveText("Понятный маршрут. В вашем темпе.");
-  await guide.getByTestId("start-guide").click();
+  await startWalkthrough(guide);
   await expect(guide.getByTestId("center-playback")).toHaveAccessibleName("Продолжить демонстрацию");
   await guide.getByRole("button", { name: "Сцена 2: Откройте «Подробнее»" }).click();
   await expect(guide.locator(".sceneCount")).toHaveText("02 / 04");
@@ -3477,14 +3489,14 @@ test("guide URL restores banks and selected operations in a fresh browser", asyn
   await fresh.goto(share!);
   const guide = fresh.getByTestId("route-guide");
   await expect(guide.locator("h1")).toHaveText("A clear route. At your pace.");
-  await guide.getByTestId("start-guide").click();
+  await startWalkthrough(guide);
   await expect(guide.locator(".headingVenue")).toContainText("Binance");
   await guide.getByRole("button", { name: "Scene 3: Close details and find the advertisement", exact: true }).click();
   await expect(guide.getByTestId("binance-profile-card").locator(".adSection.highlight .payment")).toHaveText("Bank transfer");
   await fresh.reload();
   await expect(guide.locator("h1")).toHaveText("A clear route. At your pace.");
   await expect(guide.locator(".chapterProgress strong")).toHaveText("0/2");
-  await guide.getByTestId("start-guide").click();
+  await startWalkthrough(guide);
   await expect(guide.locator(".headingVenue")).toContainText("Binance");
   await guide.locator(".guideToolbar").getByRole("button", { name: /Back to routes/ }).click();
   await expect(fresh).toHaveURL(/#\/swap\/AMD\/RUB/);
@@ -3657,7 +3669,7 @@ test("guide suspends offscreen animation while scrolling", async ({ page, isMobi
   await expect(page.getByTestId("complete-route").first()).toBeVisible();
   await page.getByTestId("complete-route").first().locator(".routeWorkflowButton").click();
   const guide = page.getByTestId("route-guide");
-  await guide.getByTestId("start-guide").click();
+  await startWalkthrough(guide);
   await guide.locator(".scene").scrollIntoViewIfNeeded();
   await expect(guide.locator(".scene")).not.toHaveClass(/paused/);
   await expect(guide.getByTestId("playback-toggle").locator("img")).toHaveAttribute("src", "/icons/ui/guide-pause.png");
@@ -3684,7 +3696,7 @@ test("Binance profile walkthrough opens More details, closes it and selects the 
   await page.getByLabel("Amount to send").fill("100000");
   await page.getByTestId("complete-route").first().locator(".routeAmount").click();
   const guide = page.getByTestId("route-guide");
-  await guide.getByTestId("start-guide").click();
+  await startWalkthrough(guide);
   const profile = guide.getByTestId("binance-profile-card");
   await expect(profile).toHaveAttribute("data-side", "buy");
   await expect(guide.getByTestId("p2p-profile-link")).toHaveAttribute("href", "https://c2c.binance.com/ru/advertiserDetail?advertiserNo=s6b4151aab3223e9a87d491ca4256411b");
@@ -3723,7 +3735,7 @@ test("BestChange walkthrough reads reviews and ends at the contextual exchanger 
   await page.locator("#exchange-amount").fill("100000");
   await page.getByTestId("complete-route").first().locator(".routeAmount").click();
   const guide = page.getByTestId("route-guide");
-  await guide.getByTestId("start-guide").click();
+  await startWalkthrough(guide);
   const card = guide.getByTestId("bestchange-exchanger-card");
   await expect(guide.getByTestId("bestchange-exchanger-link")).toHaveAttribute("href", "https://www.bestchange.pro/changerbiz-exchanger.html#pay3flow-id=125");
   await expect(guide.getByTestId("bestchange-exchanger-link")).toHaveAttribute("target", "_blank");
@@ -3760,7 +3772,7 @@ for (const provider of ["bncex", "bitcoin-center"]) {
     await page.getByLabel("Amount to send").fill("100000");
     await page.getByTestId("complete-route").first().locator(".routeAmount").click();
     const guide = page.getByTestId("route-guide");
-    await guide.getByTestId("start-guide").click();
+    await startWalkthrough(guide);
     const card = guide.getByTestId(`${provider}-swap-card`);
     await expect(card).toBeVisible();
     await expect(card.getByTestId(`${provider}-send-amount`)).toHaveText("100,000");
@@ -3798,7 +3810,7 @@ for (const provider of ["symbiosis", "cow-swap", "dzengi"]) {
     await page.getByTestId("start-search").click();
     await page.getByTestId("complete-route").first().locator(".routeAmount").click();
     const guide = page.getByTestId("route-guide");
-    await guide.getByTestId("start-guide").click();
+    await startWalkthrough(guide);
     const card = guide.getByTestId(`${provider}-swap-card`);
     await expect(card).toBeVisible();
     await expect(card.getByTestId(`${provider}-send-amount`)).toHaveText("0.03");
@@ -3851,7 +3863,7 @@ for (const provider of ["binance", "bybit", "mexc", "whitebird", "bitget"]) {
     await page.getByTestId("start-search").click();
     await page.locator(".routeCard").first().locator(".workflow").click();
     const guide = page.getByTestId("route-guide");
-    await guide.getByTestId("start-guide").click();
+    await startWalkthrough(guide);
     const terminal = guide.getByTestId("spot-terminal");
     await expect(terminal).toHaveAttribute("data-provider", provider);
     await expect(terminal).toHaveAttribute("data-order-side", "buy");
@@ -3901,7 +3913,7 @@ test("Russian spot demonstration stays readable at 320px and respects reduced mo
   await page.setViewportSize({ width: 320, height: 900 });
   await page.reload();
   const guide = page.getByTestId("route-guide");
-  await guide.getByTestId("start-guide").click();
+  await startWalkthrough(guide);
   await expect(guide.getByTestId("playback-toggle")).toHaveAttribute("aria-pressed", "false");
   await expect(guide.getByTestId("spot-terminal").locator(".cursor")).toBeHidden();
   await expect(guide.getByTestId("spot-order-action")).toHaveText("Купить ETH");
@@ -3929,7 +3941,7 @@ test("Cifra Tradernet walkthrough prepares funds and changes from a buy to a sel
   await expect(page.getByTestId("complete-route")).toHaveCount(1);
   await page.getByTestId("complete-route").first().locator(".routeAmount").click();
   const guide = page.getByTestId("route-guide");
-  await guide.getByTestId("start-guide").click();
+  await startWalkthrough(guide);
   const card = guide.getByTestId("cifra-tradernet-card");
   await expect(card).toBeVisible();
   await expect(card).toHaveAttribute("data-side", "buy");
@@ -3973,7 +3985,7 @@ test("Cifra crypto walkthrough preserves the market direction and localizes the 
   await page.getByTestId("complete-route").first().locator(".routeAmount").click();
   await selectLanguage(page, "ru");
   const guide = page.getByTestId("route-guide");
-  await guide.getByTestId("start-guide").click();
+  await startWalkthrough(guide);
   const card = guide.getByTestId("cifra-tradernet-card");
   await expect(card).toHaveAttribute("data-side", "sell");
   await expect(card).toHaveClass(/paused/);

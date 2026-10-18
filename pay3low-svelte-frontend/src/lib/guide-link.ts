@@ -1,11 +1,12 @@
 import type { P2pOffer, RouteCandidate } from './exchange';
 
 const identifier = /^[a-z0-9._@:-]{1,100}$/i;
-export const GUIDE_PARAMETERS = ['amount', 'from', 'to', 'fromNetwork', 'toNetwork', 'sources', 'methods', 'assets', 'path', 'venues', 'lang'] as const;
+export const GUIDE_PARAMETERS = ['amount', 'from', 'to', 'fromNetwork', 'toNetwork', 'sources', 'methods', 'assets', 'path', 'venues', 'lang', 'view'] as const;
 export function guideParameters(input: URLSearchParams) {
   const output = new URLSearchParams();
   for (const key of GUIDE_PARAMETERS) {
     const value = input.get(key);
+    if (key === 'view' && value !== 'swap' && value !== 'guide') continue;
     if (value && value.length <= (key === 'path' ? 2500 : 500)) output.set(key, value);
   }
   return output;

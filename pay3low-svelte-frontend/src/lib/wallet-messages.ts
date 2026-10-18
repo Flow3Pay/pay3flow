@@ -1,6 +1,13 @@
 export const walletMessages = {
   en: {},
   ru: {
+    "Swap view": "Режим обмена",
+    "Loading NEAR Intents…": "Загрузка NEAR Intents…",
+    "Could not load NEAR Intents. Try again.": "Не удалось загрузить NEAR Intents. Повторите попытку.",
+    "This platform does not allow its swap form to be embedded. Open {venue} to complete this swap.": "Площадка запрещает встраивание своей формы обмена. Откройте {venue}, чтобы выполнить обмен.",
+    "Open {venue} to complete this swap.": "Откройте {venue}, чтобы выполнить обмен.",
+    "Preparing your swap…": "Подготовка обмена…",
+    "Select the tokens and networks shown above in the swap form.": "Выберите в форме обмена указанные выше токены и сети.",
     "Loading CoW Swap…": "Загрузка CoW Swap…",
     "Could not load CoW Swap. Try again.": "Не удалось загрузить CoW Swap. Повторите попытку.",
     "Install EVER Wallet, or open Pay3Flow in its browser, to connect Everscale.": "Установите EVER Wallet или откройте Pay3Flow в его браузере, чтобы подключить Everscale.",
@@ -46,6 +53,13 @@ export const walletMessages = {
     "Rates, limits, and offers can change. Check the provider, payment details, and network before sending money. Executable swaps are signed in your wallet. Other route steps are completed on the provider platform.": "Курсы, лимиты и предложения могут измениться. Перед отправкой проверьте поставщика, реквизиты и сеть. Доступные обмены подписываются в вашем кошельке. Остальные шаги выполняются на площадке поставщика.",
   },
   hy: {
+    "Swap view": "Փոխանակման ռեժիմ",
+    "Loading NEAR Intents…": "NEAR Intents-ը բեռնվում է…",
+    "Could not load NEAR Intents. Try again.": "Չհաջողվեց բեռնել NEAR Intents-ը։ Փորձեք կրկին։",
+    "This platform does not allow its swap form to be embedded. Open {venue} to complete this swap.": "Հարթակը չի թույլատրում ներդնել փոխանակման ձևը։ Բացեք {venue}-ը՝ փոխանակումն ավարտելու համար։",
+    "Open {venue} to complete this swap.": "Բացեք {venue}-ը՝ փոխանակումն ավարտելու համար։",
+    "Preparing your swap…": "Փոխանակումը պատրաստվում է…",
+    "Select the tokens and networks shown above in the swap form.": "Փոխանակման ձևում ընտրեք վերևում նշված թոքեններն ու ցանցերը։",
     "Loading CoW Swap…": "CoW Swap-ը բեռնվում է…",
     "Could not load CoW Swap. Try again.": "Չհաջողվեց բեռնել CoW Swap-ը։ Փորձեք կրկին։",
     "Install EVER Wallet, or open Pay3Flow in its browser, to connect Everscale.": "Տեղադրեք EVER Wallet-ը կամ բացեք Pay3Flow-ը դրա զննարկիչում՝ Everscale-ը միացնելու համար։",
