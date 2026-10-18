@@ -12,6 +12,8 @@
   import { homeContent } from "$lib/home-content";
   import { SearchResponseMetrics } from "$lib/response-metrics";
   import { providerRouteLegs } from "$lib/provider-route-legs";
+  import { buildRouteTutorial } from "$lib/route-tutorial";
+  import { canOpenSwap } from "$lib/swap-embed";
   import { fetchRouteSearchActivity, SEARCH_ACTIVITY_PERIODS, type RouteSearchActivityHour, type SearchActivityPeriod } from "$lib/route-activity";
   import { recordTrendSearch } from "$lib/trends/activity";
   import { fiatFlagUrl } from "$lib/currency-flags";
@@ -154,6 +156,7 @@
   let paymentPickerComponent: typeof import("./PaymentMethodPicker.svelte").default | null = null;
   let routeInstructionsComponent: typeof import("./RouteInstructions.svelte").default | null = null;
   let instructionsMode: "swap" | "guide" = "swap";
+  let instructionsStartAtSwap = false;
   let searchingVenues: P2pSourceOption[] = [];
   let foundVenues: P2pSourceOption[] = [];
   let venueStats: Record<string, VenueSearchStatus> = {};
@@ -567,6 +570,8 @@
     ? Number.isFinite(amountNumber(targetAmount)) && amountNumber(targetAmount) > 0
     : Number.isFinite(amountNumber(amount)) && amountNumber(amount) > 0;
   $: previewRoute = selected ?? routes.find((route) => route.status === "complete" && route.is_current_best) ?? routes.find((route) => route.status === "complete") ?? null;
+  // Routes that first require a bank payment or exchange deposit keep their guide action.
+  $: previewCanSwap = Boolean(previewRoute?.status === "complete" && canOpenSwap(buildRouteTutorial(previewRoute, {}, {}, {}, key => key)[0], previewRoute));
   $: displayedSourceAmount = amountSide === "target" && targetAmountNeedsRate && amountNumber(amount) <= 0 ? "" : amount;
   $: displayedTargetAmount = amountSide === "target" && !previewRoute ? targetAmount : amountFromRoute(previewRoute);
   $: displayedSourceInput = sourceAmountFocused ? displayedSourceAmount : compactInputAmount(displayedSourceAmount);
@@ -817,9 +822,10 @@
     onDismissStartup(); restoreShared(shared); initialSearchReady = true;
     if (!guideUnavailable) void tick().then(() => startSearch(false));
   }
-  async function openInstructions(route: RouteCandidate, replace = false, mode: "swap" | "guide" = "swap") {
+  async function openInstructions(route: RouteCandidate, replace = false, mode: "swap" | "guide" = "swap", startAtSwap = false) {
     if (!browser) return;
     instructionsMode = mode;
+    instructionsStartAtSwap = startAtSwap;
     const params = new URLSearchParams({ amount: route.source_amount ?? String(route.source_amount_minor / 100), from: sourceMethodId, to: targetMethodId, fromNetwork: sourceNetwork?.id ?? sourceNetworkId, toNetwork: targetNetwork?.id ?? targetNetworkId, sources: selectedSources.join(","), methods: selectedExchangeMethods.join(","), assets: selectedIntermediaryAssets.join(","), path: guideRoutePath(route), venues: [...new Set([route.route_provider, ...route.legs.map(leg => leg.provider), ...(route.cycle_legs ?? []).map(leg => leg.provider)].filter(Boolean))].join(","), lang: activeLocale });
     params.set("view", mode);
     const hash = guideHash(route.source_currency, route.target_currency ?? route.entry_asset, params);
@@ -834,7 +840,7 @@
 
   function runPrimaryAction() {
     if (previewRoute) {
-      void openInstructions(previewRoute);
+      void openInstructions(previewRoute, false, previewCanSwap ? "swap" : "guide", previewCanSwap);
       return;
     }
     if (!searching) void startSearch();
@@ -921,7 +927,10 @@
         if (guideRequested && pendingGuide) {
           const path = pendingGuide.params.get("path");
           const fresh = mapRoutes(response).find(item => item.status === "complete" && item.source_currency === pendingGuide!.sourceCurrency && item.target_currency === pendingGuide!.targetCurrency && (!path || guideRoutePath(item) === path));
-          if (fresh) await openInstructions(fresh, true, new URLSearchParams(location.hash.split("?")[1] ?? "").get("view") === "guide" ? "guide" : "swap"); else guideUnavailable = true;
+          if (fresh) {
+            const mode = new URLSearchParams(location.hash.split("?")[1] ?? "").get("view") === "guide" ? "guide" : "swap";
+            await openInstructions(fresh, true, mode, mode === "swap");
+          } else guideUnavailable = true;
         }
       }
     } catch (cause) {
@@ -1201,9 +1210,9 @@
         </div>
       </div>
       {#if refreshSeconds > 0}<div class="marketBar"><div class="marketState"><span class="refreshProgress" role="img" aria-label={secondsUntilRefresh === null ? "Auto-refresh is off" : `Refresh in ${secondsUntilRefresh} seconds`}><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle class="refreshTrack" cx="9" cy="9" r="7" pathLength="100" /><circle class="refreshFill" cx="9" cy="9" r="7" pathLength="100" style:stroke-dashoffset={`${100 - refreshProgress}`} /></svg></span><div><span>{lastUpdatedAt ? `Updated ${Math.max(0, Math.floor((clock - lastUpdatedAt) / 1000))}s ago` : t("Public P2P sources only · no order placement", {}, activeLocale)}</span></div></div>{#if secondsUntilRefresh !== null}<span class="nextRefresh">{secondsUntilRefresh}s</span>{/if}</div>{/if}
-      <div class:swapActions={Boolean(previewRoute)}>
-        <button type="button" class="cta" disabled={!hasAmount || (!previewRoute && (searching || !corridor))} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? "SWAP" : t("Find routes", {}, activeLocale)}>{#if previewRoute}SWAP <span>↗</span>{:else if searching}<span class="spinner"></span> {t("Finding routes", {}, activeLocale)}{:else if hasAmount}{t("Find routes", {}, activeLocale)} <span>↗</span>{:else}{t("Enter an amount to begin", {}, activeLocale)}{/if}</button>
-        {#if previewRoute}<button type="button" class="cta guideCta" data-testid="open-swap-guide" on:click={() => openInstructions(previewRoute!, false, "guide")}>SWAP guide</button>{/if}
+      <div class:swapActions={previewCanSwap}>
+        <button type="button" class="cta" disabled={!hasAmount || (!previewRoute && (searching || !corridor))} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? previewCanSwap ? "SWAP" : t("Open route instructions", {}, activeLocale) : t("Find routes", {}, activeLocale)}>{#if previewRoute}{previewCanSwap ? "SWAP" : t("Go", {}, activeLocale)} <span>↗</span>{:else if searching}<span class="spinner"></span> {t("Finding routes", {}, activeLocale)}{:else if hasAmount}{t("Find routes", {}, activeLocale)} <span>↗</span>{:else}{t("Enter an amount to begin", {}, activeLocale)}{/if}</button>
+        {#if previewCanSwap}<button type="button" class="cta guideCta" data-testid="open-swap-guide" on:click={() => openInstructions(previewRoute!, false, "guide")}>SWAP guide</button>{/if}
       </div>
       {#if error}<div class="errorBox" role="alert">{error}</div>{/if}
     </div>
@@ -1233,7 +1242,7 @@
 {#if guideRequested}
   {#if routeInstructionsComponent && instructionsRoute}
     {#key instructionsRoute.route_id}
-      <svelte:component this={routeInstructionsComponent} route={instructionsRoute} initialMode={instructionsMode} {venueNames} {venueUrls} {providerGuidance} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} onOpenService={openService} onClose={closeGuide} />
+      <svelte:component this={routeInstructionsComponent} route={instructionsRoute} initialMode={instructionsMode} startAtSwap={instructionsStartAtSwap} {venueNames} {venueUrls} {providerGuidance} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} onOpenService={openService} onClose={closeGuide} />
     {/key}
   {:else}
     <section class="guideLoading" aria-live="polite"><span class="loadingMark">↗</span><h1>{t(guideUnavailable ? "This route is no longer available" : error ? "Could not load this guide" : "Preparing your guide", {}, activeLocale)}</h1><p>{t(guideUnavailable ? "Quotes have changed. Choose a current route to continue." : error ? "Try again or choose a current route." : "Checking the selected banks, networks and platforms for a fresh quote.", {}, activeLocale)}</p><button type="button" on:click={() => locationChanged(true)}>{t("Try again", {}, activeLocale)}</button><button type="button" on:click={closeGuide}>← {t("Back to routes", {}, activeLocale)}</button></section>

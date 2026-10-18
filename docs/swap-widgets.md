@@ -10,6 +10,13 @@ either mode, and shared guide links preserve `view=swap|guide`. Switching modes
 hides the live panel while keeping it mounted, preserving its form and wallet
 state. Moving to another chapter selects that chapter's provider and assets.
 
+The converter shows `SWAP` / `SWAP guide` only when the selected route starts
+with a wallet swap provider or a native swap execution. `SWAP` opens its live
+panel immediately; `SWAP guide` opens the walkthrough overview. Bank payments,
+P2P and spot routes keep the single `Go` action. Routes with funding steps before
+a swap start with their guide so those steps are not skipped. This does not
+depend on a connected header wallet.
+
 Wallet support in the site header does not determine whether a swap chapter
 appears. A route without a Pay3Flow `execution` descriptor can still open the
 provider widget or provider website. Connecting a wallet does not prepare a

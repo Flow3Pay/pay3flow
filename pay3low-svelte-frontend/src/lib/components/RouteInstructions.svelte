@@ -18,6 +18,7 @@
   import InstructionScene from "./InstructionScene.svelte";
   import { isSpotStep, spotTrade } from "$lib/guides/spot/frames";
   import { bestchangeExchanger, bestchangeWebsiteUrl } from "$lib/guides/bestchange/frames";
+  import { canOpenSwap } from "$lib/swap-embed";
 
   export let route: RouteCandidate;
   export let venueNames: Record<string, string> = {};
@@ -26,6 +27,7 @@
   export let networkNames: Record<string, string> = {};
   export let onClose: () => void;
   export let initialMode: "swap" | "guide" = "swap";
+  export let startAtSwap = false;
   // svelte-ignore export_let_unused
   export let onOpenService: (link: ServiceLink) => void = () => {};
 
@@ -119,6 +121,7 @@
     return exchanger ? copy("Quoted exchanger: {description}.", { description: exchanger[1] }) : copy(warning);
   }
   onMount(() => {
+    if (startAtSwap && initialMode === "swap" && canOpenSwap(steps[0], route)) chapter = 0;
     let previousTick: number | undefined;
     const media = matchMedia("(prefers-reduced-motion: reduce)");
     const motionChanged = () => { reducedMotion = media.matches; if (reducedMotion) playing = false; };

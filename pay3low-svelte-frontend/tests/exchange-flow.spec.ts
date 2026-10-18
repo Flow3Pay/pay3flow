@@ -784,7 +784,7 @@ test("USD values recover after the first market price request fails", async ({ p
   await expect(page.locator(".moneyPanelSource .marketValue")).toHaveText("$2.00");
 });
 
-async function mockBackend(page: Page, options: { includeRestoredTokens?: boolean; includeGram?: boolean; includeNewProviders?: boolean; includeEverscale?: boolean; routeCount?: number; spotCycle?: boolean; spotVenue?: string; spotGuidance?: boolean; reviews?: boolean; usdtFiatNetwork?: string; mexc?: boolean; guideVenue?: string; cifra?: boolean } = {}) {
+async function mockBackend(page: Page, options: { includeRestoredTokens?: boolean; includeGram?: boolean; includeNewProviders?: boolean; includeEverscale?: boolean; routeCount?: number; spotCycle?: boolean; spotVenue?: string; spotGuidance?: boolean; reviews?: boolean; usdtFiatNetwork?: string; mexc?: boolean; guideVenue?: string; cifra?: boolean; directSwapProvider?: string } = {}) {
   await page.addInitScript(() => {
     if (!localStorage.getItem("pay3flow-locale")) localStorage.setItem("pay3flow-locale", "en");
     // These route fixtures use a saved AMD/RUB corridor independently of app defaults.
@@ -1232,14 +1232,16 @@ async function mockBackend(page: Page, options: { includeRestoredTokens?: boolea
         });
         return json({
           search_id: "00000000-0000-4000-8000-000000000107",
-          routes_found: 2,
+          routes_found: options.directSwapProvider ? 1 : 2,
           searched_at: "2026-09-26T10:00:00Z",
           source_fiat: "USDT",
           target_fiat: "USDC",
           source_amount: "100",
           assets_searched: [],
           can_exchange_to_target: true,
-          routes: [directRoute("near-intents", "99.6", 1), directRoute("cow-swap", "97.3", 2)],
+          routes: options.directSwapProvider
+            ? [{ ...directRoute(options.directSwapProvider, "99.6", 1), execution: undefined }]
+            : [directRoute("near-intents", "99.6", 1), directRoute("cow-swap", "97.3", 2)],
         });
       }
       if (url.searchParams.get("source_fiat") === "USDT" && url.searchParams.get("target_fiat") === "USDT") {
@@ -1632,8 +1634,9 @@ test("public P2P route search → open step-by-step instructions", async ({ page
   await amountInput.fill("100000");
   await page.getByTestId("start-search").click();
   await expect(page.getByTestId("complete-route")).toHaveCount(101);
-  await expect(page.getByTestId("start-search")).toHaveText("SWAP ↗");
-  await expect(page.getByTestId("start-search")).toHaveAttribute("aria-label", "SWAP");
+  await expect(page.getByTestId("start-search")).toHaveText("Go ↗");
+  await expect(page.getByTestId("start-search")).toHaveAttribute("aria-label", "Open route instructions");
+  await expect(page.getByTestId("open-swap-guide")).toHaveCount(0);
   await expect(page.getByText("101 routes found")).toBeVisible();
   const routeCounter = page.locator(".resultSummary small[aria-live='polite']");
   const toggleLanguage = async () => {
@@ -1711,7 +1714,7 @@ test("public P2P route search → open step-by-step instructions", async ({ page
     await route.fallback();
   });
   await page.getByRole("button", { name: "Refresh routes now" }).click();
-  await expect(page.getByTestId("start-search")).toHaveText("SWAP ↗");
+  await expect(page.getByTestId("start-search")).toHaveText("Go ↗");
   await expect(page.getByTestId("start-search")).toBeEnabled();
   await page.getByTestId("start-search").click();
   await expect(instructions).toBeVisible();
@@ -2526,6 +2529,11 @@ test("direct provider quotes keep their API names and independent prices", async
     "aria-label", /USDT.*ERC-20.*USDC.*ERC-20.*CoW Protocol Live/,
   );
   await expect(page.getByTestId("start-search")).toHaveAttribute("aria-label", "SWAP");
+  await page.getByTestId("start-search").click();
+  await expect(page).toHaveURL(/view=swap/);
+  await expect(page.getByTestId("near-intents-live-widget")).toBeVisible();
+  await expect(page.getByTestId("start-guide")).toHaveCount(0);
+  await page.getByTestId("route-guide").locator(".guideToolbar").getByRole("button", { name: /Back to routes/ }).click();
   await page.getByTestId("open-swap-guide").click();
   await expect(page).toHaveURL(/view=guide/);
   let instructions = page.getByTestId("route-guide");
@@ -2541,6 +2549,55 @@ test("direct provider quotes keep their API names and independent prices", async
   await expect(instructions.getByTestId("cow-live-widget")).toBeVisible();
   await instructions.getByRole("button", { name: "SWAP guide", exact: true }).click();
   await expect(instructions.getByTestId("instruction-scene")).toBeVisible();
+  await instructions.locator(".guideToolbar").getByRole("button", { name: /Back to routes/ }).click();
+  await cards.nth(1).locator(".routeCardMain").press("Space");
+  await expect(cards.nth(1).locator(".routeCardMain")).toHaveAttribute("aria-pressed", "true");
+  await page.getByTestId("start-search").click();
+  await expect(instructions.getByTestId("cow-live-widget")).toBeVisible();
+  await expect(instructions.getByTestId("start-guide")).toHaveCount(0);
+});
+
+for (const provider of ["cow-swap", "symbiosis", "0x", "barter"]) test(`converter opens ${provider} swap directly without a native wallet descriptor`, async ({ page }) => {
+  await mockBackend(page, { directSwapProvider: provider });
+  await page.route("https://api.symbiosis.finance/crosschain/**", route => route.fulfill({ json: route.request().url().endsWith("/chains")
+    ? [{ id: 1, name: "Ethereum" }]
+    : [{ symbol: "USDT", chainId: 1, address: "0xdAC17F958D2ee523a2206206994597C13D831ec7" }, { symbol: "USDC", chainId: 1, address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" }] }));
+  await page.route("https://app.symbiosis.finance/**", route => route.fulfill({ contentType: "text/html", body: "<button>Connect wallet</button>" }));
+  await openApp(page, `/#/swap/USDT/USDC?amount=100&from=global-usdt&to=global-usdc&fromNetwork=ethereum&toNetwork=ethereum&sources=${provider}&methods=exchanger&lang=en`);
+  await expect(page.getByTestId("complete-route")).toHaveCount(1);
+  await expect(page.getByTestId("start-search")).toHaveAttribute("aria-label", "SWAP");
+  await expect(page.getByTestId("open-swap-guide")).toBeVisible();
+  await page.getByTestId("start-search").click();
+  const guide = page.getByTestId("route-guide");
+  await expect(guide.getByTestId("swap-view")).toBeVisible();
+  await expect(guide.getByTestId("start-guide")).toHaveCount(0);
+  await expect(guide.getByTestId("instruction-scene")).toHaveCount(0);
+  if (provider === "cow-swap") {
+    await expect(guide.getByTestId("cow-live-widget")).toBeVisible();
+    await page.reload();
+    await expect(guide.getByTestId("cow-live-widget")).toBeVisible({ timeout: 20_000 });
+    await expect(guide.getByTestId("start-guide")).toHaveCount(0);
+  } else await expect(guide.getByTestId("provider-swap-frame")).toHaveAttribute("data-provider", provider);
+  await guide.locator(".guideToolbar").getByRole("button", { name: /Back to routes/ }).click();
+  await page.getByTestId("open-swap-guide").click();
+  await expect(page).toHaveURL(/view=guide/);
+  await expect(guide.getByTestId("start-guide")).toBeVisible();
+  await startWalkthrough(guide);
+  await expect(guide.getByTestId("instruction-scene")).toBeVisible();
+  await expect(guide.getByTestId("swap-view")).toHaveCount(0);
+});
+
+test("converter keeps one guide action for P2P routes without a swap provider", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page, "/#/swap/AMD/RUB?amount=100000&from=am-idbank&to=ru-alfabank&sources=bybit&methods=p2p&lang=en");
+  await expect(page.getByTestId("complete-route").first()).toBeVisible();
+  await expect(page.getByTestId("start-search")).toHaveText("Go ↗");
+  await expect(page.getByTestId("start-search")).toHaveAttribute("aria-label", "Open route instructions");
+  await expect(page.getByTestId("open-swap-guide")).toHaveCount(0);
+  await page.getByTestId("start-search").click();
+  const guide = page.getByTestId("route-guide");
+  await expect(guide.getByTestId("start-guide")).toBeVisible();
+  await expect(guide.getByTestId("swap-view")).toHaveCount(0);
 });
 
 test("ID Pay provides a direct AMD to RUB route with its API name", async ({ page }) => {
@@ -2554,6 +2611,8 @@ test("ID Pay provides a direct AMD to RUB route with its API name", async ({ pag
   await expect(route).toHaveCount(1);
   await expect(route).toContainText(/10,?000 RUB/);
   await expect(route).not.toContainText("Quote by");
+  await expect(page.getByTestId("start-search")).toHaveText("Go ↗");
+  await expect(page.getByTestId("open-swap-guide")).toHaveCount(0);
   await expect(route.locator(".routeWorkflowButton")).toHaveAttribute(
     "aria-label",
     "AMD · Ameriabank → RUB · Sberbank (ID Pay Live)",
@@ -2579,6 +2638,8 @@ test("small AMD to BTC@near routes keep crypto precision", async ({ page }) => {
   const route = page.getByTestId("complete-route").first();
   await expect(route).toBeVisible();
   await expect(route.locator(".routeAmount")).toHaveText("0.00032478 BTC");
+  await expect(page.getByTestId("start-search")).toHaveText("Go ↗");
+  await expect(page.getByTestId("open-swap-guide")).toHaveCount(0);
   await expect(page.locator("#exchange-output")).toHaveValue("0.00032478");
   await expect(route.locator(".routeWorkflowButton")).toHaveAttribute(
     "aria-label", /AMD.*USDT.*Bybit.*BTC.*NEAR/,
@@ -2590,7 +2651,7 @@ test("small AMD to BTC@near routes keep crypto precision", async ({ page }) => {
   await expect(instructions.getByRole("heading", { name: "Buy USDT for 10,000 AMD" })).toBeVisible();
   await instructions.getByTestId("confirm-instruction-step").click();
   await expect(instructions.getByRole("heading", { name: "Swap USDT for BTC via NEAR 1Click" })).toBeVisible();
-  await expect(instructions.getByRole("button", { name: "Connect optimism wallet" })).toBeVisible();
+  await expect(instructions.getByTestId("near-intents-live-widget")).toBeVisible();
 });
 
 test("direct Whitebird exchange uses its swap card, provider wording and local venue icons", async ({ page }, testInfo) => {
@@ -3074,6 +3135,8 @@ test("spot crypto cycles show three trades and wallet deposit and withdrawal ins
   await page.getByTestId("start-search").click();
   const card = page.locator(".routeCard").first();
   await expect(card).toContainText("+1 USDT (+1.00%)");
+  await expect(page.getByTestId("start-search")).toHaveText("Go ↗");
+  await expect(page.getByTestId("open-swap-guide")).toHaveCount(0);
   await expect(card.getByTestId("best-route-badge")).toHaveText("Best router");
   await expect(card.locator('.routeBadges .bestBadge:not([data-testid="best-route-badge"])')).toHaveText("+1 USDT (+1.00%)");
   await expect(card.locator(".routeBadges")).not.toContainText("Est.");
