@@ -76,6 +76,58 @@ POST /api/solver/orders/:id/quotes
 These routes are an MVP surface for solver integration. They require an
 authentication and callback-signing design before production use.
 
+## SWAP route discovery and wallet execution
+
+```text
+GET  /api/p2p/search
+GET  /api/p2p/routes
+GET  /ws/p2p/routes
+GET  /api/market-prices
+POST /api/p2p/route-executions
+GET  /api/p2p/route-executions/:id
+POST /api/p2p/route-executions/:id/submissions
+```
+
+Route search is read-only. It returns bounded candidates and source diagnostics;
+`routes_found` counts unique discovered candidates before the display limit,
+and `routes_exhaustive` describes search coverage. WebSocket searches publish
+progressive snapshots followed by `search_finished`. See
+[search API and semantics](p2p-search.md) and
+[current algorithms](route-virtualization-pipeline.md).
+
+An execution request requires the short-lived signed route descriptor and
+user-supplied source/recipient addresses. A search or wallet connection does
+not create it. Provider-owned CoW/Aurora widgets have separate execution and
+tracking and do not automatically populate these endpoints.
+
+## OTC desk HTTP API
+
+The current `/#/otc` workspace uses the dedicated `/api/otc` HTTP surface:
+
+```text
+GET  /api/otc/config
+GET  /api/otc/listings
+POST /api/otc/session/challenge
+POST /api/otc/session/proof
+GET  /api/otc/session
+POST /api/otc/session/revoke
+POST /api/otc/wallet/challenge
+POST /api/otc/wallet/proof
+POST /api/otc/rfqs
+GET  /api/otc/trades
+GET  /api/otc/trades/:id
+POST /api/otc/trades/:id/apply
+POST /api/otc/trades/:id/prepare
+POST /api/otc/attempts/:id/reference
+POST /api/otc/attempts/:id/retry
+```
+
+Wallet authentication, desk operations, optional escrow endpoints and live
+availability are defined in [the OTC service reference](otc-service.md) and
+[`otc/http.rs`](../backend/src/otc/http.rs). `OTC_CONFIG_FILE` and the separate
+live gate control availability; the exchange prototype auth flow does not
+replace OTC wallet proof. The older `/ws/otc` protocol is a separate surface.
+
 ## Legacy payments and directories
 
 ```text
@@ -87,12 +139,11 @@ GET  /api/banks
 GET  /api/networks
 GET  /api/providers
 GET  /api/exchange-pairs
-GET  /api/p2p/search
-GET  /api/p2p/routes
 ```
 
 The payment and acquiring routes are retained for compatibility. New exchange
-clients should use the exchange order API.
+clients should choose the contract for their surface: SWAP discovery, native
+execution, OTC trades or the exchange-order prototype are separate APIs.
 
 ## Admin and debugging routes
 
@@ -123,6 +174,7 @@ GET /ws
 GET /ws/otc
 GET /ws/rates
 GET /ws/payments
+GET /ws/p2p/routes
 GET /api/exchange/orders/:id/live
 ```
 
@@ -130,7 +182,8 @@ The exchange live endpoint emits route and status updates while an order is
 discovering or being quoted. Clients must tolerate reconnects and duplicate
 events; the durable order endpoint remains authoritative.
 
-The OTC test workspace uses `/ws/otc` for data and order commands. See [OTC WebSocket protocol](otc-websocket.md).
+The older OTC test protocol uses `/ws/otc` for data and order commands; the
+current EVER/USDT desk workspace uses the dedicated HTTP endpoints above. See [OTC WebSocket protocol](otc-websocket.md).
 
 ## Provider profiles
 

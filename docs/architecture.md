@@ -4,6 +4,26 @@ Pay3Flow is a cross-border exchange coordinator. The backend owns the order
 lifecycle; external services provide candidate discovery, quotes, and local
 execution capability.
 
+## Runtime surfaces
+
+The current frontend exposes SWAP route discovery and a separate EVER/USDT OTC
+workspace. These are distinct from the exchange-order auction prototype below.
+A route-search result is not an exchange order, an executed widget swap is not
+automatically a backend settlement, and an OTC trade has its own durable state.
+
+| Surface | Entry points | State owner |
+| --- | --- | --- |
+| SWAP discovery | `/api/p2p/routes`, `/ws/p2p/routes` | Bounded search pipeline; no order or transfer is created |
+| Native wallet execution | `/api/p2p/route-executions` | Pay3Flow execution records and provider status |
+| Provider widgets | CoW, Aurora NEAR Intents, Symbiosis app | Provider quote, wallet and tracking flow |
+| OTC desk | `/#/otc`, `/api/otc/*` | Dedicated backend OTC tables, attempts and observers |
+| Exchange-order prototype | `/api/exchange/orders/*` | Orders, auctions and mock settlement domain |
+
+The [route algorithm](route-virtualization-pipeline.md) documents current
+candidate composition, amount invariants, caches and search budgets.
+[SWAP widgets](swap-widgets.md) documents wallet and iframe boundaries.
+[OTC service](otc-service.md) documents the implemented desk and live gate.
+
 ## Boundaries
 
 ```text
@@ -36,14 +56,14 @@ fmatch is an ActivityPub matcher. It finds candidates whose advertised
 capabilities may satisfy a request. It does not own the Pay3Flow order, choose
 the final winner, or execute the settlement.
 
-### Solvers and rails
+### Exchange-order prototype solvers and rails
 
 A solver may provide a quote and execute one or both local legs. The MVP uses
 fake/local solver profiles and a mock TOKEN ledger. External provider and P2P
 adapters must remain read-only or explicitly gated until their authentication,
 limits, proof model, and compliance status are reviewed.
 
-## Exchange order flow
+## Exchange-order prototype flow
 
 ```mermaid
 sequenceDiagram
@@ -71,10 +91,13 @@ sequenceDiagram
     BE-->>FE: Final status over HTTP/WebSocket
 ```
 
-Discovery failure may use the local rules-based matcher or cached candidates,
+In the exchange-order prototype, discovery failure may use the local rules-based matcher or cached candidates,
 depending on the endpoint and available data. A successful fmatch response is
 not silently replaced by local candidates merely because the response is
-empty: an empty authoritative result remains empty.
+empty: an empty authoritative result remains empty. SWAP direct-exchange
+discovery has its own Fmatch/snapshot/provider fallback policy; P2P SWAP legs
+query advertisements directly. Do not apply one surface's fallback contract
+to another.
 
 ## Legacy boundary
 

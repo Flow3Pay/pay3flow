@@ -1,5 +1,12 @@
 # Roadmap: CoW-style exchange architecture
 
+Status: historical target architecture, reviewed 2026-10-18. Phase lists below
+are the original plan, not a claim that every listed endpoint is still absent.
+Current runtime behavior is documented in [architecture](architecture.md),
+[route algorithms](route-virtualization-pipeline.md), [SWAP widgets](swap-widgets.md)
+and [OTC operations](otc-service.md). Existing exchange-order API and mock
+settlement records are documented in [API overview](api-overview.md).
+
 Pay3Flow is moving from an acquiring-first model to solver-based cross-border
 exchange. Acquirers remain fallback rails and sources for individual payment
 methods; the target product is intent/orderbook plus solver competition and

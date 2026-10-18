@@ -11,9 +11,11 @@ only after the user confirms the transaction in their own wallet.
 - Whitebird, Cifra Markets, SkyLabs, bncex, and Bitcoin Center public
   direct-quote APIs. Bitcoin Center is restricted to AMD bank transfers and
   USDT on Solana.
-- BestChange public catalog and direction pages.
-- Binance, Bybit, OKX, Bitget, MEXC, Cifra Markets, and Dzengi spot tickers for
+- BestChange authenticated rates API and public catalog/direction links.
+- Binance, Bybit, OKX, Bitget, MEXC, Cifra Markets, Dzengi, and Gate spot tickers for
   crypto-to-crypto paths.
+- CoW Swap, NEAR Intents and Symbiosis token catalogs and amount-specific quotes;
+  optional authenticated 0x, Barter and Crypto Office quote adapters.
 
 Providerfile-backed sources are discovered from the generated provider catalog;
 the list is not hardcoded in the route API. Their normalized advertisements are
@@ -107,9 +109,10 @@ arrives instead of waiting for the complete fallback fan-out. Provider-only
 local searches retain `source: "provider"`.
 Route-search snapshots use the same source labels and mark `stale: true` only
 when results actually came from the bounded-stale database cache.
-The UI labels a venue as found only when the current route set includes a
-matching route; raw advertisements for a different bank remain visible in
-source diagnostics but do not claim an exchange path.
+The UI keeps source icons once matching offers are reported during the current
+search. Icons can remain even when that source has no displayed route after
+composition and ranking; route cards represent complete assembled routes.
+An icon is not a guarantee that a route can execute.
 
 Pay3Flow requests up to 64 candidates per direct-exchanger Fmatch page.
 `exchange_mode=all` searches live P2P ads and direct-exchanger candidates
@@ -156,7 +159,7 @@ unverified estimates instead of being silently discarded.
 ## Build the AMD -> asset -> RUB puzzle
 
 ```text
-GET /api/p2p/routes?source_fiat=AMD&target_fiat=RUB&source_amount=100000&intermediary_assets=USDT,USDC,BTC,ETH,BNB,SOL,TRX,TON,DOGE,LTC,DAI,FDUSD,XRP,ADA,DOT,LINK,AVAX,MATIC,BCH,NEAR,APT,ATOM,UNI,SUI&min_orders=20&min_completion_rate=0.9&sources=binance,okx&limit=20
+GET /api/p2p/routes?source_fiat=AMD&target_fiat=RUB&source_amount=100000&intermediary_assets=USDT,USDC,BTC,ETH,BNB,SOL,TRX,GRAM,DOGE,LTC,DAI,FDUSD,XRP,ADA,DOT,LINK,AVAX,MATIC,BCH,NEAR,APT,ATOM,UNI,SUI&min_orders=20&min_completion_rate=0.9&sources=binance,okx&limit=20
 ```
 
 `intermediary_assets` accepts one or more comma-separated crypto codes. If it is
@@ -223,31 +226,60 @@ Routes whose two selected banks are explicitly named by both advertisements
 are ranked ahead of routes with opaque payment IDs. The response exposes this
 as `payment_methods_verified`; unverified routes also include a warning.
 
-For crypto-to-crypto requests, the route builder uses spot-market tickers from
-the selected enabled venues instead of P2P fiat advertisements. It searches a
-direct pair or a crypto-only path such as `ETH -> USDT -> USDC`; `bridge_fiat`
-is retained only for wire compatibility and is ignored by this route type. No
-bank payment or AMD/RUB leg is introduced into a crypto-to-crypto route.
+Crypto-to-crypto searches start spot-market and route-provider producers
+independently. Spot tickers build direct/intermediate crypto paths. CoW, NEAR
+Intents, Symbiosis and configured optional providers quote the actual input
+amount using token/network identities. `bridge_fiat` is ignored for this route
+kind; a bank or fiat pivot is not introduced.
 
-By default only same-venue routes are returned. They do not require moving the
-asset from one exchange to another. Set `allow_cross_venue=true` to include
-cross-venue candidates; they are marked `requires_asset_transfer=true`, and
-their network compatibility and transfer fee are deliberately not claimed as
-verified.
+`allow_cross_venue=true` permits bounded two-provider paths through the exact
+same intermediary asset and network. The second leg quotes the actual first
+output; intermediate rounding or a synthetic 1:1 conversion cannot join legs.
+Only the initial source amount may be normalized to a provider's token
+precision. These sequential swaps require separate execution and are not atomic.
+Their bounded search reports `routes_exhaustive=false`.
+
+For P2P/spot compositions, the default excludes switching venues. Enabling
+cross-venue search can add required transfers, whose network/fee compatibility
+is not implied by a ticker. A provider's cross-chain swap is a separate provider
+workflow and does not require treating every supported network as a new venue.
+
+Crypto cycles use the same source and target asset/network. Provider cycles
+quote both legs at exact amounts. Spot cycles use bid/ask estimates and a 0.1%
+trading fee estimate; `max_actions=2..8` bounds trades plus venue transfers.
+Neither public ticker liquidity nor native Everscale swap support follows from
+listing an asset. Legacy ticker `TON` canonicalizes to `GRAM` while the network
+remains `ton`; `EVER@everscale` is distinct from the Ethereum representation.
+
+See [the algorithm reference](route-virtualization-pipeline.md) for candidate
+budgets, pacing, cache exceptions, cold capability loading and count semantics.
 
 Important: `target_amount` is a search estimate. Platform fees, account/KYC
 eligibility, ad availability at execution time, sanctions/geographic rules,
 and payment confirmation are not verified by this read-only layer.
 
-## Execute provider routes with a wallet
+## SWAP and guide modes
+
+Every swap chapter offers `SWAP` and `SWAP guide`, preserving the live form when
+switching modes. CoW embeds its official widget even without an execution
+descriptor; NEAR Intents mounts the Aurora standalone React widget with its own
+wallet connections; Symbiosis can embed its public app when native execution is
+unavailable. Other venues retain an external link when embedding is restricted.
+Header Solana wallet support is not a prerequisite for displaying a widget.
+The current chapter supplies the exact amount and networks for composed routes.
+See [SWAP widgets](swap-widgets.md).
+
+## Native Pay3Flow wallet execution
 
 When `wallet_execution_enabled = true`, eligible NEAR Intents, CoW Swap, and
 Symbiosis routes include a short-lived signed `execution` descriptor. The route
-instructions then show an embedded **Execute with wallet** panel in the exact
-provider step.
+instructions can use Pay3Flow's native execution panel in the exact provider
+step. Provider-owned widgets use their own quote, signing and status flow; their
+submissions do not automatically create Pay3Flow execution records.
 
-The browser connects an EVM wallet through Reown AppKit or a NEAR wallet through
-NEAR Wallet Selector. The user chooses the recipient on every execution, either
+The shared wallet menu supports EVM, NEAR, TRON and Everscale connections.
+Native provider actions are limited to the implemented EVM/NEAR/TRON flows;
+an Everscale connection does not add a native swap executor. The user chooses the recipient on every execution, either
 from a connected destination wallet or by entering an address. Connecting a wallet
 only establishes the session; it never creates an execution, requests approvals,
 or starts a transfer. After the user presses Swap, Pay3Flow requests a fresh quote for those source and recipient addresses, checks the source
@@ -276,9 +308,13 @@ The frontend needs a WalletConnect Cloud project id at runtime:
 PUBLIC_REOWN_PROJECT_ID=your-project-id
 ```
 
+The separate Aurora widget uses frontend runtime `PUBLIC_AURORA_INTENTS_API_KEY`;
+backend `NEAR_INTENTS_JWT` is a different, server-only credential.
+
 Keep `wallet_execution_enabled = false` until the configured mainnet token
 addresses, provider credentials, and end-to-end wallet flows have been smoke
-tested. Manual provider links remain available while the flag is disabled.
+tested. The flag controls native backend execution; provider widgets, guide mode and
+external links remain available according to their own capabilities.
 Symbiosis execution additionally requires audited
 `symbiosis_execution_contracts` entries in
 `chain_id=MetaRouter,MetaRouterGateway[,OnchainGateway]` form; returned calldata and approval

@@ -78,6 +78,9 @@ These values are never read from `config.toml`:
 | `JWT_SECRET` | Signs user tokens |
 | `SECRETS_KEY` | Encrypts stored sensitive values |
 | `ADMIN_TOKEN` | Protects admin exchange controls |
+| `BESTCHANGE_API_KEY` | Authenticated BestChange rates API |
+| `ZEROX_API_KEY` | Optional server-side 0x quote credential |
+| `BARTER_API_KEY` | Optional server-side Barter quote credential |
 | `NEAR_INTENTS_JWT` | Optional authenticated 1-Click API credential |
 | `SYMBIOSIS_PARTNER_ID` | Optional Symbiosis partner credential |
 | `CRYPTO_OFFICE_PUBLIC_KEY` | Crypto Office public API key; configure together with the secret key |
@@ -138,11 +141,32 @@ Documentation: [official authentication example](https://github.com/officeappbot
 Use TOML arrays for lists; the old comma-separated environment variables are no
 longer configuration inputs.
 
+## Frontend runtime configuration
+
+The frontend reads public values through `$env/dynamic/public`. Set them on the
+Node server process, including when using a prebuilt Docker image:
+
+| Variable | Purpose |
+| --- | --- |
+| `PUBLIC_API_URL` | Backend origin; empty uses the site's same origin |
+| `PUBLIC_REOWN_PROJECT_ID` | Optional shared Reown wallet picker project ID |
+| `PUBLIC_AURORA_INTENTS_API_KEY` | Aurora standalone NEAR Intents widget integration key |
+
+Use ignored `pay3low-svelte-frontend/.env.local` during local development. Local
+environment files are excluded from the frontend Docker context. The public
+Aurora widget key is delivered to the browser; backend credentials such as
+`NEAR_INTENTS_JWT`, `ZEROX_API_KEY` and `BARTER_API_KEY` stay server-only.
+Provision the Aurora key in `pay3flow-secrets` and reference it from the frontend
+Deployment when using k3s. A build-time-only value does not configure a running
+adapter-node server. See [widget integration](swap-widgets.md) and
+[deployment](../deploy/README.md).
+
 ## Wallet swaps
 
-The frontend connects injected Ethereum wallets, NEAR Wallet Selector wallets,
-and TronLink on mainnet. Connections are shared between the header and route
-instructions. The optional frontend `PUBLIC_REOWN_PROJECT_ID` enables the Reown
+The shared frontend menu connects injected/Reown EVM wallets, NEAR Wallet
+Selector, TronLink and EVER Wallet on their supported mainnets. Connections are
+shared between the header and route instructions. The optional frontend
+`PUBLIC_REOWN_PROJECT_ID` enables the Reown
 wallet picker; injected Ethereum wallets work without it.
 
 NEAR Intents execution supports deposits from the supported EVM networks, NEAR,
@@ -150,7 +174,14 @@ and TRON. CoW execution is limited to supported same-chain ERC20 pairs.
 Symbiosis execution requires a source-chain entry in
 `symbiosis_execution_contracts`, formatted as `chain-id=router,gateway[,onchain-gateway]`; NEAR
 origins and destinations use NEAR Intents. The repository configuration includes
-the TRON and supported EVM Symbiosis contracts. Other routes continue to use provider instructions.
+the TRON and supported EVM Symbiosis contracts. Everscale connection does not
+add a native Everscale swap action.
+
+These limits describe Pay3Flow native execution. CoW and Aurora widgets have
+their own wallet flows; Symbiosis can embed its public app. A missing native
+`execution` descriptor does not hide the swap chapter. `SWAP guide` and an
+external provider link remain available. Provider-owned widget submissions use
+provider tracking rather than automatically creating Pay3Flow execution records.
 
 Quotes use live token precision and expire. Source and recipient addresses are
 validated for their respective networks. Wallet account or network changes

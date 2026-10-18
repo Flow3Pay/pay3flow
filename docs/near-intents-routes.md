@@ -34,7 +34,7 @@ chains are excluded before requesting prices. NEAR previews use `intents.near`;
 `wrap.near` is the token contract and is rejected as a quote recipient by 1Click.
 The canonical `nep141:wrap.near` entry is exposed as `NEAR@near`, and
 the HOT bridge's native TON entry (`nep245:v2_1.omni.hot.tg:1117_`, named `GRAM`)
-is exposed as `TON@ton`; quote requests retain their original API asset IDs and
+is exposed as `GRAM@ton` (legacy `TON` queries normalize to `GRAM`); quote requests retain their original API asset IDs and
 token decimals. Catalog aliases and preview-address rules live in
 `backend/providers/near-intents/Providerfile`. NEAR wallet funding wraps native
 NEAR before transferring wNEAR.
@@ -91,7 +91,7 @@ as `RUB → USDT@tron → USDT@solana → AMD` when the configured P2P offers an
 NEAR Intents token catalog both support those legs. The route is a dry quote
 for display; Pay3Flow does not create an order or move funds.
 
-`ROUTE_WITHDRAWALS` is deployment-owned capability data. Each entry has the
+`route_withdrawals` is deployment-owned TOML capability data. Each entry has the
 form `FROM>TO|provider[|fee]`; an optional fee is denominated in the origin
 asset. Route discovery and matching remain fmatch’s job.
 
@@ -113,8 +113,9 @@ The amount may also be sent as `amount=500000 AMD`; the route id is still
 validated against Pay3Flow’s private registry before any edge is priced.
 
 Pay3Flow validates the route ID against its private registry, prices each edge,
-and returns a short-lived `RouteQuote`. No route graph or route-search result
-is exposed through a public HTTP API.
+and returns a short-lived `RouteQuote`. The private registry graph is not exposed as a public graph endpoint. Public
+`GET /api/p2p/routes` and `/ws/p2p/routes` do expose bounded, quoted route-search
+results; these are separate from this ActivityPub quote-by-ID contract.
 
 Fiat workflow discovery now reserves quote work for every selected provider,
 regardless of the result display limit. Token limits count symbols and retain
@@ -125,3 +126,22 @@ stream immediately and exact cached quotes honor their expiry.
 The 2026-10-12 provider audit also extends Symbiosis read-only discovery to 38
 identified EVM networks. Execution still uses its separate configured-contract
 registry. bncex non-cash requests include the required `fiatDestination=ACCOUNT`.
+
+## Frontend widget and credentials
+
+Public search uses the backend 1Click adapter described above. The SWAP chapter
+uses the official Aurora standalone React widget as a Svelte client island.
+The widget has its own wallet connections, quotes and status flow and can remain
+available without a Pay3Flow execution descriptor or header Solana wallet.
+
+`PUBLIC_AURORA_INTENTS_API_KEY` is a frontend runtime integration key from
+[Aurora Widget Studio](https://studio.aurora.dev/). It is distinct from the
+server-only `NEAR_INTENTS_JWT`. Configure it in ignored `.env.local` locally
+and the frontend process environment in production. The SDK's raw token
+allowlists include `wNEAR` and `USDT0` aliases; current-leg networks and exact
+input amounts seed the widget. See [SWAP widgets](swap-widgets.md).
+
+For ordinary crypto routes, discovery also searches bounded two-provider paths
+when `allow_cross_venue=true`, joining the exact first output to the next input.
+Catalog availability, native execution support and actual pair liquidity are
+separate checks. See the [current algorithm](route-virtualization-pipeline.md).

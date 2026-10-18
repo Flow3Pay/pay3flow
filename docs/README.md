@@ -11,6 +11,8 @@ explicitly say `planned`, `research`, or `legacy`.
 3. [`development.md`](development.md) — local setup, checks, and smoke tests.
 4. [`configuration.md`](configuration.md) — environment variables and secrets.
 5. [`api-overview.md`](api-overview.md) — HTTP and WebSocket route families.
+6. [`route-virtualization-pipeline.md`](route-virtualization-pipeline.md) — current route algorithms, budgets and caches.
+7. [`swap-widgets.md`](swap-widgets.md) — embedded swaps, wallet boundaries, runtime keys and build requirements.
 
 ## Domain and protocol references
 
@@ -32,13 +34,12 @@ explicitly say `planned`, `research`, or `legacy`.
 - [`p2p-search.md`](p2p-search.md) — read-only P2P route search.
 - [`route-virtualization-pipeline.md`](route-virtualization-pipeline.md) — подробный
   runtime-пайплайн виртуализации, top-K, snapshots и background refresh.
-- [`planned-routing-and-reputation.md`](planned-routing-and-reputation.md) — план
-  быстрого фонового поиска, общего кеша и репутации провайдеров.
+- [`planned-routing-and-reputation.md`](planned-routing-and-reputation.md) — historical requirements with a current implementation-status map.
 - [`Providerfile.md`](Providerfile.md) — complete Providerfile schema, examples, and generated catalog workflow.
 - [`public-p2p-sources.md`](public-p2p-sources.md) — source policy and privacy boundaries.
 - [`route-aggregation-research.md`](route-aggregation-research.md) — possible future quote sources.
 - [`cow-services-analysis.md`](cow-services-analysis.md) — what is useful from the CoW reference checkout.
-- [`roadmap-cow.md`](roadmap-cow.md) — migration roadmap and outstanding work.
+- [`roadmap-cow.md`](roadmap-cow.md) — historical target architecture; current SWAP/OTC implementation is documented separately.
 - [`cross-border-payments-providers.md`](cross-border-payments-providers.md) — provider research; verify all commercial details before use.
 - [`deployment.md`](deployment.md) — deployment and release checklist.
 

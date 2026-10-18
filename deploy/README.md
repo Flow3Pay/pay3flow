@@ -86,6 +86,52 @@ the Secret must contain `BESTCHANGE_API_KEY`; `SYMBIOSIS_PARTNER_ID` may be
 omitted or empty for the public API tier. `backend/.env` is never copied to the
 host.
 
+## Aurora widget runtime key
+
+The Aurora standalone NEAR Intents widget reads
+`PUBLIC_AURORA_INTENTS_API_KEY` from the frontend Node process through SvelteKit's
+`$env/dynamic/public`. Its browser integration key comes from
+[Aurora Widget Studio](https://studio.aurora.dev/) and is distinct from the
+backend-only `NEAR_INTENTS_JWT` used by the 1Click adapter.
+
+Provision `PUBLIC_AURORA_INTENTS_API_KEY` in the existing `pay3flow-secrets`
+Secret using the deployment's private secret-management process. Reference it
+from the `frontend` container's environment:
+
+```yaml
+env:
+  - name: PUBLIC_AURORA_INTENTS_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: pay3flow-secrets
+        key: PUBLIC_AURORA_INTENTS_API_KEY
+```
+
+Apply this alongside the existing frontend environment settings. The live
+image-patch deployment preserves configured environment entries. When using the
+separate rendered-manifest path, carry this reference in the frontend Deployment
+overlay as well. After changing a Secret value, restart the frontend and wait
+for readiness so the new process receives it. Do not print Secret values in
+rollout evidence.
+
+Local development uses ignored `pay3low-svelte-frontend/.env.local`. These files
+are excluded from the frontend image build context. Merely copying such a file
+to a release directory does not configure the running production process.
+
+## Frontend build behavior
+
+The Dockerfile inherits its `deps` stage for both `builder` and `runner`.
+Dependencies are installed once with `npm ci --ignore-scripts`; large SDK trees
+are not recopied with cross-stage `COPY node_modules`. The builder allows a
+6 GiB Node heap. Node 24, DejaVu fonts, compression and frontend metrics remain
+part of the runtime image.
+
+If a cold release appears quiet, inspect `/tmp/pay3flow-backend-REV.log` and
+`/tmp/pay3flow-frontend-REV.log` on the host, where `REV` is the seven-character
+revision. Distinguish npm/Vite work, image export and containerd import from
+Kubernetes rollout. Verify image IDs and revision annotations before declaring
+the release complete; retain the database backup and previous image tags.
+
 ## Deploy with in-cluster PostgreSQL and Redis via a registry
 
 The deployment app deletes and recreates the two build Jobs on each run, then

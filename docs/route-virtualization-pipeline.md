@@ -1,584 +1,242 @@
-# Пайплайн виртуализации маршрутов
+# Пайплайн поиска и виртуализации маршрутов
 
-Этот документ описывает текущую реализацию виртуализации маршрутов Pay3Flow.
-Orchestration и алгоритмы находятся в
-[`backend/src/p2p/virtual/`](../backend/src/p2p/virtual/), публичный контракт
-поиска — в [`backend/src/p2p/routes/`](../backend/src/p2p/routes/), получение
-предложений и интеграция с Fmatch — в
-[`backend/src/p2p/service.rs`](../backend/src/p2p/service.rs), HTTP/WebSocket
-обвязка — в
-[`backend/src/server/routing/p2p.rs`](../backend/src/server/routing/p2p.rs).
+Актуализировано 2026-10-18 по реализации в текущем репозитории. Документ
+описывает публичный поиск SWAP. Отдельные контуры exchange orders и OTC имеют
+собственные состояния и правила исполнения: [архитектура](architecture.md),
+[OTC](otc-service.md).
 
-Статус: реализовано в текущей ветке. Актуализировано 2026-10-01.
-
-## Назначение и границы
-
-Виртуализация отвечает на вопрос: «какие исполнимые цепочки можно построить из
-доступных сейчас узлов обмена?» Она не исполняет перевод и не обещает
-окончательную цену.
-
-Для fiat → fiat базовая цепочка выглядит так:
-
-```text
-source fiat -> купить intermediary asset -> при необходимости сменить сеть
-            -> продать intermediary asset -> target fiat
-```
-
-Есть два класса маршрутов:
-
-- локально составленные entry/exit-маршруты из P2P и direct-exchange офферов;
-- workflow-маршруты через route provider, например BestChange или Symbiosis,
-  между entry и exit.
-
-Fmatch здесь является универсальным discovery-сервисом: он отдаёт кандидатов,
-но не является биржей, route provider или исполнителем. В пользовательском
-маршруте всегда указываются реальные venue и provider.
-
-Основной SLO — завершать здоровый production-пайплайн не более чем за одну
-секунду, в том числе при множестве одновременных запросов. Это цель
-архитектуры, а не секундный timeout с молчаливым отбрасыванием работы.
-
-## Streaming-first этап
-
-Описанные ниже изменения реализованы в текущем коде. HTTP по-прежнему получает
-финальный совместимый ответ, а WebSocket публикует промежуточные snapshots.
-
-### 1. Отправлять результат каждой рутины сразу после её завершения
-
-Пайплайн работает streaming-first. Быстрая рутина не ждёт медленные рутины,
-общий `join` или полную сборку всех маршрутов. Как только отдельная
-рутина получила и проверила полезный результат, она передаёт batch маршрутов в
-общий bounded-канал. Агрегатор сразу выполняет инкрементальные deduplicate,
-merge и rank, после чего публикует новый WebSocket snapshot или delta.
-
-Поток событий:
-
-```text
-routine finished
-  -> validated RouteBatch
-  -> bounded result channel
-  -> incremental deduplicate/merge/rank
-  -> immediate WebSocket snapshot/delta
-```
-
-При этом:
-
-- первая готовая рутина публикует результат независимо от состояния остальных;
-- медленный или зависший источник не задерживает уже найденные маршруты;
-- одинаковые маршруты не должны повторно появляться в интерфейсе;
-- рейтинг и порядок могут уточняться по мере прихода новых результатов;
-- `search_finished` отправляется только после завершения всех производителей;
-- отключение клиента отменяет относящиеся к поиску задачи;
-- bounded-канал и backpressure не позволяют быстрым производителям бесконтрольно
-  накапливать данные в памяти;
-- HTTP endpoint остаётся совместимым и возвращает финальный результат, а
-  интерактивный frontend использует streaming transport для раннего показа.
-
-Регрессионная проверка: frontend получает и отображает первый валидный batch сразу
-после завершения первой рутины, не ожидая завершения всего route search.
-
-### 2. Исправить среднее время ответа на frontend
-
-Показатель среднего времени ответа имеет однозначную семантику и не
-зависит от числа повторно полученных WebSocket snapshots. Для активного поиска
-каждый уникальный завершённый замер учитывается ровно один раз, накопление
-сбрасывается при начале нового поиска, а cache hit не смешивается с реальным
-сетевым запросом без явной маркировки.
-
-Модель отображения:
-
-- `last_response_ms` — время последнего завершённого запроса к источнику;
-- `average_response_ms` — среднее уникальных завершённых замеров источника в
-  текущем поиске;
-- cache hit показывается отдельно и не превращает среднее время сети в `0 ms`;
-- повторный snapshot одного и того же результата не добавляет новый sample;
-- незавершённые и отменённые рутины не учитываются как успешные ответы.
-
-Unit-тест с фиксированным набором событий подтверждает
-правильное среднее, reset между поисками и отсутствие двойного учёта snapshots.
-
-### 3. Выделить виртуализацию в `p2p/virtual/`
-
-Алгоритм виртуализации вынесен из API-модуля в отдельное дерево модулей.
-Текущая структура:
-
-```text
-backend/src/p2p/virtual/
-├── mod.rs
-├── model/
-│   ├── mod.rs
-│   └── provider.rs
-├── pipeline/
-│   ├── mod.rs
-│   ├── fiat.rs
-│   ├── crypto.rs
-│   ├── provider.rs
-│   └── provider/
-│       ├── discovery.rs
-│       ├── fiat.rs
-│       └── fiat_crypto.rs
-├── composition/
-│   ├── mod.rs
-│   ├── top_k.rs
-│   └── diversity.rs
-├── snapshot/
-│   ├── mod.rs
-│   ├── capabilities.rs
-│   └── quotes.rs
-└── streaming/
-    ├── mod.rs
-    └── events.rs
-```
-
-Ответственность каталогов:
-
-- `pipeline/` управляет стадиями, параллельностью, отменой и завершением поиска;
-- `model/` содержит внутренние типы кандидатов, batch и событий стадий;
-- `composition/` строит маршруты, lazy top-K и provider-diverse выборку;
-- `snapshot/` работает с capability/quote snapshots;
-- `streaming/` передаёт частичные результаты агрегатору и клиенту.
-
-Это разделение не должно привязывать Fmatch к Pay3Flow: Fmatch остаётся
-универсальным discovery-сервисом, а доменная виртуализация маршрутов находится
-в Pay3Flow.
-
-Orchestration находится в `virtual/pipeline/`, алгоритмы не
-зависят от HTTP/WebSocket handlers, а публичное поведение и результаты поиска
-не меняются только из-за переноса файлов.
-
-### 4. Разбить `p2p/routes.rs` на модуль `p2p/routes/`
-
-Разросшийся `backend/src/p2p/routes.rs` заменён каталогом с небольшими
-модулями с одной ответственностью:
-
-```text
-backend/src/p2p/routes/
-├── mod.rs
-├── query.rs
-├── model.rs
-├── response.rs
-└── tests.rs
-```
-
-- `mod.rs` — компактный публичный façade и re-export существующего API;
-- `query.rs` — нормализация, валидация и классификация запроса;
-- `model.rs` — публичные типы route search;
-- `response.rs` — сборка публичного ответа, ranking, fingerprint,
-  deduplicate и merge;
-- `tests.rs` — регрессии публичного route-search поведения.
-
-`routes/` отвечает за контракт поиска и сборку ответа, а `virtual/` — за сам
-алгоритм построения маршрутов. При миграции нельзя одновременно оставлять
-`routes.rs` и `routes/mod.rs`; старый файл заменяется каталогом с сохранением
-публичных путей типов и функций.
-
-Перенос выполнен без изменения API, циклических
-зависимостей и ухудшения функциональных тестов или latency benchmark.
-
-### 5. Оптимизировать pipeline для всех crypto-направлений
-
-Направления fiat → crypto, crypto → fiat и crypto → crypto используют те же
-принципы, что и основной fiat → fiat pipeline: конкурентное исполнение,
-раннюю публикацию, bounded candidate set и повторное использование snapshots.
-
-Гарантии pipeline:
-
-- локальный leg и независимый provider search не ждут друг друга;
-- fiat → crypto публикует отдельно готовый buy leg и каждый готовый
-  provider workflow;
-- crypto → fiat не получает последовательно exit leg для каждого
-  intermediary asset;
-- crypto → crypto конкурентно запускает direct/cross-network providers
-  и spot ticker paths, не задерживая один класс маршрутов другим;
-- provider quote-задачи отдают готовые batches по мере завершения, а не
-  сначала накапливать весь `Vec`;
-- capability и quote snapshots кэшируются между поисками, а market
-  snapshots переиспользуются при инкрементальной сборке маршрута;
-- fan-out по сетям, intermediary assets, providers и market paths ограничен
-  конфигурационными лимитами и lazy top-K;
-- diversity сохраняется между сетями, venues и route providers, а не
-  только между fiat/P2P-источниками.
-
-Схема исполнения одинакова для каждого направления:
-
-```text
-classify fiat/crypto direction
-  -> start independent route producers concurrently
-  -> consume each completed candidate batch
-  -> validate and incrementally rank
-  -> publish immediately
-  -> stop when producers finish or useful search budget is exhausted
-```
-
-Оптимизация не должна возвращать crypto → crypto к искусственному fiat pivot:
-маршрут строится напрямую через совместимые сети, providers и market paths.
-
-Регрессионный benchmark-набор для fiat → crypto,
-crypto → fiat и crypto → crypto подтверждает раннюю выдачу первого batch и
-завершение здорового pipeline не более чем за одну секунду при целевой
-конкурентной нагрузке, без потери network/provider diversity и качества
-маршрутов.
-
-## Общая схема
+## Путь запроса
 
 ```mermaid
 flowchart TD
-    A[HTTP или WebSocket query] --> B[Нормализация и валидация]
-    B --> C[Capability snapshot провайдеров]
-    C --> D{Тип source/target}
-
-    D -->|fiat -> fiat| E[Параллельный поиск entry и exit для каждого asset]
-    D -->|fiat -> crypto| F[Один buy leg]
-    D -->|crypto -> fiat| G[Один sell leg]
-    D -->|crypto -> crypto| H[Route providers и spot tickers]
-
-    E --> I[Fmatch p2p и direct_exchange параллельно]
-    I --> J[Фильтры, outlier rejection, amount и network checks]
-    J --> K[Diversity seeds]
-    K --> L[Lazy best-first top-K]
-
-    C --> M[Workflow virtualization из capability/quote snapshot]
-    M --> N[Cache hit: свежая quote]
-    M --> O[Cache miss: capability estimate + background refresh]
-
-    L --> P[Deduplicate и merge]
-    F --> P
-    G --> P
-    H --> P
-    N --> P
-    O --> P
-
-    P --> Q[Rank и provider-diverse truncate]
-    Q --> R[Reputation/feedback enrichment]
-    R --> S[HTTP response или WebSocket snapshot]
+    A[HTTP или WebSocket query] --> B[Каталоги и нормализация]
+    B --> C{Направление}
+    C --> D[Fiat legs: P2P и обменники]
+    C --> E[Крипто: spot tickers]
+    C --> F[Крипто: amount-specific provider quotes]
+    D --> G[Проверка лимитов, банков, сетей и сумм]
+    E --> G
+    F --> G
+    G --> H[Bounded RouteBatch channel]
+    H --> I[Deduplicate, profitability, rank, diversity]
+    I --> J[Промежуточный WebSocket snapshot]
+    I --> K[Финальный HTTP ответ или search_finished]
 ```
 
-## 1. Вход в API
+Оркестрация находится в
+[`virtual/pipeline/mod.rs`](../backend/src/p2p/virtual/pipeline/mod.rs), контракт —
+в [`routes/`](../backend/src/p2p/routes/), HTTP/WebSocket и обогащение ответа —
+в [`server/routing/p2p.rs`](../backend/src/server/routing/p2p.rs).
+HTTP возвращает итоговый ответ; WebSocket публикует готовые snapshots по мере
+прихода batches. Независимые producers исполняются через `FuturesUnordered`.
+Канал `RouteBatch` ограничен 16 сообщениями. Закрытие канала обновлений
+останавливает относящуюся к запросу оркестрацию; общий прогрев и общий кэш
+провайдеров живут отдельно.
 
-Основные точки входа:
+Лимит выдачи не является дедлайном поиска. Время ответа зависит от внешних API,
+состояния каталогов, очередей провайдеров и выбранного типа маршрута. Цель
+низкой задержки не означает гарантию завершения всех поисков за одну секунду.
 
-- `GET /api/p2p/routes` — один итоговый ответ;
-- WebSocket route search — промежуточные snapshots по мере готовности источников.
+## Нормализация и идентичность активов
 
-HTTP handler до запуска поиска создаёт `search_id` и запись поиска. После
-виртуализации он параллельно загружает статистику сервисов и feedback по
-маршрутам, добавляет tracking links и завершает запись поиска.
+[`query.rs`](../backend/src/p2p/routes/query.rs) проверяет положительную конечную
+сумму, источники, ограничения репутации и способы оплаты. `limit` ограничен
+диапазоном 1–100. Явный список `intermediary_assets` (старый alias `assets`)
+содержит 1–24 кода; весь серверный каталог этим числом не обрезается.
+`max_actions`, если передан, должен быть от 2 до 8.
 
-WebSocket использует тот же `run_route_search`. Разница только в наличии
-канала обновлений: каждый законченный asset/source batch может породить новый
-snapshot, а последний ответ отправляется как `search_finished`.
+Код актива нормализуется отдельно от идентификатора сети. Старый ticker `TON`
+приводится к `GRAM`, сеть остаётся `ton`. Активы `EVER@ethereum` и
+`EVER@everscale` различаются: первый обозначает ERC-20-представление, второй —
+нативный EVER. Каталог и наличие значка не доказывают наличие ликвидности.
 
-## 2. Нормализация запроса
+Выбранная сеть проверяется по общему каталогу и runtime-каталогам провайдеров.
+ISO fiat-код без явно выбранной совместимой блокчейн-сети остаётся fiat, даже
+если внешний token catalog содержит одноимённый токен.
 
-До построения маршрутов backend:
+Capabilities прогреваются конкурентно и переиспользуются из памяти.
+При холодном запуске или неполном snapshot отсутствующие каталоги загружаются
+через `supported_assets()`; первый поиск не должен молча терять все providers.
+Это может увеличить задержку холодного запроса. Реализация —
+[`snapshot/capabilities.rs`](../backend/src/p2p/virtual/snapshot/capabilities.rs).
+При выборе fiat-workflow intermediaries лимит 12 относится к symbols;
+для каждого выбранного symbol сохраняются поддерживаемые варианты сетей.
 
-1. нормализует коды валют и активов;
-2. проверяет, что `source_amount` конечный и положительный;
-3. нормализует `sources` и payment methods;
-4. выбирает `intermediary_assets`, либо каталог `p2p_search_assets`;
-5. разрешает алиасы сетей в canonical network id;
-6. проверяет совместимость явно выбранной сети с активом;
-7. ограничивает `limit` диапазоном `1..=100`;
-8. ограничивает число intermediary assets значением 24;
-9. проверяет `max_price_deviation_bps` — максимум 5000 bps.
+## Fiat-маршруты и lazy top-K
 
-Классификация fiat/crypto использует сетевой каталог и capability snapshot
-route providers. От неё зависит ветка выполнения: fiat → fiat, fiat → crypto,
-crypto → fiat или crypto → crypto.
+Для fiat → fiat одновременно ищутся entry и exit для каждого intermediary asset.
+Fiat → crypto и crypto → fiat используют соответствующий buy/sell leg, а также
+доступные provider workflows. Fiat → crypto может дополнительно сочетать entry
+с spot-путём. Прямые fiat-провайдеры и fiat cycles запускаются отдельными
+producers, когда выбран режим с обменниками.
 
-## 3. Capability snapshot
+P2P-объявления читаются у выбранных venues при пользовательском запросе.
+Для direct-exchange допускаются snapshots, Fmatch и ограниченный stale fallback.
+`exchange_mode=all` объединяет независимые P2P и direct-exchange результаты,
+сохраняя разнообразие источников. Fmatch не становится площадкой исполнения.
 
-Capabilities описывают, какие `Asset@network` поддерживает каждый route
-provider. Snapshot прогревается при создании production-сервиса:
+Перед составлением проверяются цена, доступный объём, min/max, выбранные
+банки, сети и `allow_cross_venue`. Для многошаговых P2P-маршрутов применяется
+median outlier filter: по умолчанию 1000 bps, разрешён максимум 5000 bps.
+Прямые fiat/crypto объявления не отбрасываются только из-за такого сравнения
+с медианой. Неизвестные payment IDs сохраняются как непроверенные оценки.
 
-- `supported_assets()` всех providers запускаются конкурентно;
-- готовый результат публикуется одной заменой `RwLock<Option<...>>`;
-- запросы читают уже собранный immutable snapshot;
-- если прогрев ещё не завершён, запрос не ждёт внешний API и продолжает без
-  provider workflow-кандидатов;
-- повторный прогрев дедуплицируется ключом `provider-capabilities`.
+[`top_k.rs`](../backend/src/p2p/virtual/composition/top_k.rs) не материализует
+полное декартово произведение entry × exit. Entry сортируются по цене покупки,
+exit — по цене продажи; сначала резервируются разнообразные кандидаты,
+затем `BinaryHeap` обходит наиболее перспективные пары. На asset собирается
+до `3 * limit` валидных кандидатов. Пропуск комбинаций отражается в
+`routes_exhaustive`, а финальное ограничение выдачи выполняется отдельно.
 
-Таким образом, медленный каталог конкретного провайдера не удерживает
-пользовательский запрос на несколько секунд.
+## Обычные crypto → crypto маршруты
 
-## 4. Получение leg-офферов через Fmatch
+Spot producer и route-provider producer работают независимо. Искусственный
+fiat pivot для криптообмена не добавляется; `bridge_fiat` эту ветку не определяет.
 
-Для каждого fiat intermediary asset строятся два запроса:
+### Spot
 
-```text
-entry: source fiat -> asset, side=buy
-exit:  asset -> target fiat, side=sell
+[`composition/mod.rs`](../backend/src/p2p/virtual/composition/mod.rs) строит
+прямые и промежуточные пути по загруженным рынкам выбранных бирж. Символ пары
+разбирается общими функциями из [`spot.rs`](../backend/src/p2p/spot.rs).
+Без явного списка intermediaries дополнительно берётся пересечение соседей
+source и target в реальном графе торговых пар, исключая fiat-коды. Поэтому
+редкий промежуточный токен не обязан присутствовать в коротком UI-списке.
+Это оценка по рыночным данным, а не обещание исполнения ордера или доступной
+глубины стакана. Депозит и вывод на бирже остаются отдельными действиями.
+
+### Прямые provider quotes
+
+[`provider/discovery.rs`](../backend/src/p2p/virtual/pipeline/provider/discovery.rs)
+перебирает совместимые origin/destination networks выбранных провайдеров,
+до 32 network pairs на provider. Запрашиваются котировки конкретной суммы,
+проверяются активы, фактический input/output и срок действия. Готовые
+котировки сразу поступают в общий поток. Одна пара может дать до восьми
+предложений при последующей композиции.
+
+### Два разных провайдера
+
+При `allow_cross_venue=true`
+[`crypto_paths.rs`](../backend/src/p2p/virtual/pipeline/provider/crypto_paths.rs)
+ищет `source → middle → target` с разными providers. Middle должен совпадать
+по символу и сети и поддерживаться обеими сторонами. Явный список intermediaries
+ограничивает кандидатов. Приоритет учитывает сеть назначения, USDT/USDC/BTC/ETH
+и порядок сетей; перебор ограничен восемью entry-кандидатами и бюджетом до
+32 quote jobs на provider в этой фазе.
+
+Второй запрос получает **точный output первого**. Проверяется равенство input
+второй котировки этому значению. Округление или выдуманная конверсия между
+несовместимыми промежуточными активами не допускается. Повторяющиеся exit jobs
+с одинаковыми provider, парой и input разделяют одну future.
+
+Источник может нормализовать только первоначальный пользовательский input:
+CoW отбрасывает лишние дробные знаки по decimals реального токена. Например,
+`10.1234567 USDT` при 6 decimals становится `10.123456`. Котировка проверяется
+против этой нормализованной суммы. Промежуточный output таким образом не
+нормализуется. Последовательные сделки исполняются отдельно и не атомарны.
+Эти bounded provider searches возвращают `routes_exhaustive=false`.
+
+## Циклы
+
+Одинаковые crypto asset и выбранная сеть запускают поиск возврата в исходный
+актив. Wallet/provider cycles и биржевые spot cycles используют разные producers.
+
+Provider cycles выбирают до 48 intermediaries **на каждого** провайдера,
+сохраняя разные symbols и варианты сетей. Для входов используется отдельный
+последовательный gate, чтобы возвратные запросы не ждали за всей очередью входов.
+Возврат котируется на фактический результат первой сделки. Коэффициенты
+фонового обмена не подменяют amount-specific quotes в этой ветке.
+
+[`market_cycle.rs`](../backend/src/p2p/virtual/composition/market_cycle.rs) строит
+ориентированные рёбра из bid и `1 / ask`; некорректные bid/ask исключаются.
+Оценочная торговая комиссия — 0.1% на сделку. По умолчанию сохраняются
+двухсделочные возвраты и треугольники одной биржи; смена биржи требует
+`allow_cross_venue=true`. Каждая сделка считается действием, переход между
+биржами добавляет ещё одно. Явный `max_actions=2..8` расширяет обход с бюджетом
+10 000 переходов графа; выбор начальных intermediaries ограничен 96.
+Доступность вывода, его сеть, комиссия и глубина рынка не подтверждаются тикером.
+
+Успешный цикл не означает подтверждённую прибыль. `profitability` различает
+`confirmed` и `unconfirmed`; неизвестные затраты находятся в `missing_costs`.
+Сначала ранжируются подтверждённые прибыльные циклы, затем неподтверждённые,
+затем подтверждённые нулевые/убыточные. Лучшие доступные варианты остаются
+видимы, даже когда положительная прибыль не подтверждена.
+
+## Бюджеты, ошибки и pacing
+
+Provider workflow ограничен общим timeout 60 секунд, отдельный quote request —
+12 секундами. Общий semaphore допускает 16 параллельных provider quotes.
+Для direct/composed crypto quotes и wallet cycles применяется одна lane на
+provider: запросы одного provider сериализованы, разные providers работают
+независимо. Минимальные интервалы начала — 350 мс для Symbiosis и 150 мс для
+CoW/NEAR Intents. Ответы 429/quota exceeded блокируют lane на 60 секунд.
+
+В wallet cycles типизированный `QuoteUnavailable`, включая минимальную сумму,
+означает недоступный путь; транспортные и прочие ошибки отмечают provider
+неуспешным. Direct/composed discovery записывает quote errors в свой
+`SourceStatus`. Сохранённый отказ по minimum amount привязан к точным provider,
+паре и input, поэтому не исключает другие суммы или направления.
+
+## Кэши и фоновая работа
+
+| Данные | Текущее поведение |
+| --- | --- |
+| P2P advertisements | Пользовательский live search; готовые provider snapshots не используются как P2P-ответ |
+| Direct-exchange snapshots | До 35 минут, stale после 30; до 1024 пар в памяти |
+| Fmatch direct-exchange answers | Короткий memory cache, затем live Fmatch, bounded PostgreSQL stale fallback и live providers |
+| Exact provider quote cache | До 30 секунд и не дольше `expires_at`; используется только там, где ветка явно обращается к этому кэшу |
+| Fiat/provider coefficients | Обновление после 30 минут, TTL 35 минут; оценки для соответствующих workflow/background веток |
+| Завершённые route responses | Redis на 15 секунд только для `exchange_mode=exchanger`, непустых и не-stale результатов без failed leg sources; crypto cycles обходят этот кэш |
+
+Ключ общего route cache не содержит anonymous viewer ID. После чтения заново
+добавляются пользовательские votes, service links и execution descriptors.
+Внешние виджеты получают собственную свежую котировку перед исполнением.
+Наличие поля коэффициента в кэше не означает, что все ветки могут им заменить
+живую котировку; direct/composed crypto и wallet cycles котируют реальные суммы.
+
+Фоновый poller начинается при запуске сервиса, допускает не более пяти активных
+pipelines и новый запуск раз в 2400 мс, то есть до 25 запусков в минуту. Он
+обновляет наблюдения обменников и коэффициенты, не опрашивает P2P-объявления и
+не строит окончательные пользовательские маршруты. Константы и обход —
+[`service.rs`](../backend/src/p2p/service.rs), коэффициенты —
+[`snapshot/quotes.rs`](../backend/src/p2p/virtual/snapshot/quotes.rs).
+
+## Итоговый ответ и frontend
+
+[`response.rs`](../backend/src/p2p/routes/response.rs) устраняет дубли по
+идентичности маршрута, вычисляет profitability и ранжирует кандидатов.
+Для обычных маршрутов приоритет — больший target output, затем проверенные
+способы оплаты и same-venue. Обрезка резервирует места для представленных
+providers, насколько позволяет `limit`.
+
+`routes_found` — количество найденных уникальных bounded candidates **до**
+обрезки отображаемых `routes`. При `routes_exhaustive=false` оно не является
+числом всех математически возможных путей. Поиск репутации и tracking events
+выполняется отдельно; пользовательский голос не исключает provider из выдачи.
+
+Frontend сохраняет найденные source icons в пределах текущего поиска;
+иконка показывает наличие matching offers в диагностике источника, карточка —
+собранный маршрут. Большие snapshots отображаются порциями по 100 карточек.
+Повторный snapshot не добавляет повторный sample в среднюю latency; cache hit
+отмечается отдельно. Исполнение и разделение кошельков описаны в
+[SWAP widgets](swap-widgets.md).
+
+## Проверка изменений
+
+Проверять следует нормализацию и сети, сохранение source/provider diversity,
+раннюю выдачу batches, точные суммы между legs, источник и свежесть кэша,
+ограничения обхода и отсутствие подписи при подключении кошелька.
+
+```bash
+cargo fmt --check --manifest-path backend/Cargo.toml
+cargo test --all-features --manifest-path backend/Cargo.toml
+cargo clippy --all-targets --all-features --manifest-path backend/Cargo.toml
+cd pay3low-svelte-frontend
+npm run check
+npm run test:unit
+npm run test:e2e -- tests/exchange-flow.spec.ts tests/wallet-execution.spec.ts
 ```
 
-Entry и exit одного актива выполняются через `tokio::join!`, а разные assets —
-через `FuturesUnordered`. Поэтому время не складывается последовательно по
-числу активов.
-
-### Режимы рынка
-
-- `exchange_mode=p2p` запрашивает только P2P-офферы;
-- `exchange_mode=exchanger` запрашивает только direct-exchange офферы и
-  разрешает provider workflows;
-- `exchange_mode=all` конкурентно делает две независимые Fmatch-партиции:
-  `market=p2p` и `market=direct_exchange`, затем объединяет их.
-
-Разделение `all` принципиально: плотная выдача Binance/Bybit не может вытеснить
-редкий direct-оффер Whitebird ещё на странице Fmatch.
-
-Один leg использует `LEG_SEARCH_LIMIT=60`. Fmatch page дополнительно ограничен
-64 кандидатами. После объединения рынков предложения сортируются и обрезаются
-с сохранением хотя бы одного лучшего оффера каждого представленного source,
-пока позволяет limit.
-
-### Кэши и fallback
-
-Порядок получения leg snapshot:
-
-1. короткий in-memory cache; TTL задаётся `p2p_search_cache_ttl_ms`, production
-   default — 5 секунд;
-2. свежий запрос Fmatch;
-3. PostgreSQL-кэш Fmatch в пределах `p2p_fmatch_stale_secs`;
-4. live provider fallback, если Fmatch и допустимый stale snapshot недоступны.
-
-Успешный ответ Fmatch немедленно попадает в memory cache, а его запись в
-PostgreSQL выполняется best-effort в фоне. Поэтому provider-workflow фаза
-переиспользует те же entry/exit legs и не повторяет сетевой roundtrip.
-
-Нормальный production critical path использует пункты 1–2. Пункт 4 — режим
-деградации ради доступности; поскольку он обращается к внешним адаптерам, при
-аварии Fmatch секундный SLO для него не гарантируется. Ответ явно маркируется
-`source: "provider_fallback"`.
-
-## 5. Локальная виртуализация fiat → fiat
-
-После получения entry и exit backend оставляет только офферы, соответствующие
-amount, payment method, merchant и reputation-фильтрам. P2P-цены дальше
-проверяются относительно медианы; direct-exchange офферы не участвуют в
-расчёте P2P-медианы и не удаляются как P2P outlier.
-
-### Подготовка списков
-
-- entry сортируются по возрастанию цены покупки;
-- для каждого entry рассчитывается `acquired_asset = source_amount / price`;
-- entry без достаточной ликвидности отбрасываются;
-- exit сортируются по убыванию цены продажи;
-- строки с невалидной или неположительной ценой отбрасываются.
-
-### Проверка одной пары
-
-До вызова `compose_fiat_route` entry уже прошёл amount, source и liquidity
-фильтры. Сама пара принимается только если:
-
-1. сети офферов совместимы;
-2. same-venue маршрут разрешён всегда, cross-venue — только при
-   `allow_cross_venue=true`;
-3. exit обладает достаточной asset liquidity;
-4. рассчитанный `target_amount` попадает в min/max exit-оффера.
-
-Payment-method фильтрация выполняется раньше; opaque method id допускается как
-непроверенное совпадение и отражается в warning/`payment_methods_verified`.
-
-Для принятой пары рассчитываются `target_amount`, `effective_rate`, признаки
-same venue/transfer, payment verification и предупреждения. Это search-time
-estimate: комиссии, KYC, география и фактическая доступность перед отправкой
-средств должны быть проверены повторно.
-
-## 6. Diversity seeds
-
-Чистый top-K по доходности способен навсегда спрятать редкий venue под сотнями
-чуть более выгодных комбинаций. Перед основным heap traversal создаются
-bounded diversity seeds:
-
-1. источники entry и exit обходятся в перемежающемся порядке;
-2. для каждого ещё не представленного venue ищется его лучший валидный маршрут;
-3. выбранная пара помечается как уже проверенная;
-4. seeds также входят в общий candidate budget.
-
-Это сохраняет Whitebird, Cifra, SkyLabs и другие реальные источники, не
-превращая Fmatch в биржу и не добавляя Pay3Flow-эвристики внутрь Fmatch.
-
-## 7. Lazy best-first top-K
-
-После seeds выполняется ленивый обход лучших комбинаций. Candidate budget для
-одного asset равен `3 * query.limit`; при публичном максимуме `limit=100` это
-не более 300 принятых маршрутов вместо полного декартова произведения.
-
-Упрощённый алгоритм:
-
-```text
-entries = valid entries, cheapest first
-exits   = valid exits, best payout first
-result  = best valid route per venue       # diversity seeds
-heap    = (entry[i], exits[0]) for every i
-
-while heap is not empty and result is below candidate budget:
-    candidate = pop maximum estimated target amount
-    push (same entry, next exit) into heap
-
-    if pair was not evaluated and all constraints pass:
-        append virtual route
-
-sort accepted candidates by target amount descending
-```
-
-Каждая heap-строка относится к одному entry. После извлечения `(i, j)` в heap
-добавляется только `(i, j + 1)`. Поэтому алгоритм продвигает frontier по мере
-необходимости и не материализует заранее все `entry × exit`.
-
-Возвращаемое алгоритмом значение exhaustive истинно только если frontier был
-исчерпан естественно. Остановка по candidate budget делает его ложным.
-
-## 8. Виртуализация provider workflows
-
-Для fiat → fiat workflow-путь строится отдельно от локального entry/exit:
-
-1. из capability snapshot выбираются intermediary symbols;
-2. одинаковый symbol на разных сетях дедуплицируется — например, USDT
-   запрашивается как leg один раз, а не отдельно для каждой сети;
-3. берётся максимум 12 symbols;
-4. возможные пары сетей сортируются по практическому приоритету и ограничены 32;
-5. используются до двух лучших entry и до восьми exit offers;
-6. создаются quote jobs только для providers, поддерживающих обе стороны;
-7. на один запрос рассматривается не больше `query.limit` quote jobs.
-
-### Quote cache hit
-
-Live quote хранится 30 секунд и дополнительно проверяется по `expires_at`.
-Свежая quote даёт provider path, фактический output, fees, quote id и expiry.
-Даже такая quote должна быть подтверждена перед исполнением.
-
-### Quote cache miss
-
-В production с Fmatch cache miss не блокирует поиск:
-
-- немедленно строится capability-based estimate;
-- input нормализуется до шести десятичных знаков;
-- estimate использует тот же asset amount на выходе и явно не заявляет
-  неизвестные provider fees;
-- route получает предупреждение, что live output нужно подтвердить;
-- quote refreshes share the global background scheduler with catalog polling:
-  at most five pipelines are active and no more than 25 start per minute;
-- a refresh starts only if a slot and rate allowance are available, so it does
-  not wait in an unbounded queue. The current request returns its capability
-  estimate while a refresh is unavailable or in progress.
-
-Background refresh is deduplicated by provider/from/to/amount. Outbound quote
-calls have a 12-second timeout and successful answers update the 30-second
-quote cache. User-initiated live quotes continue to use their separate request
-path and do not wait for background capacity.
-
-Число workflow-маршрутов ограничено минимумом, достаточным для provider
-diversity: `max(ceil(limit / 2), provider_count)`. Этот поиск всегда помечает
-общую выдачу как не exhaustive.
-
-Direct fiat providers reuse a normalized coefficient keyed by provider and
-currency pair, so changing the requested amount does not trigger another live
-quote. The startup poller refreshes supported configured fiat pairs at a
-reference amount. Coefficients are kept in process memory and Redis for 35
-minutes, then scaled to the amount in the route query. Public route provider
-coefficients use the same persistence lifetime. Final route composition remains
-on the user search path; background work refreshes pair data and P2P offers
-without building complete routes.
-
-## 9. Остальные направления
-
-| Направление | Основной pipeline |
-|---|---|
-| fiat → fiat | Два leg, lazy top-K, optional cross-network provider workflow |
-| fiat → crypto | Один buy leg плюс поддерживаемые route providers |
-| crypto → fiat | Один sell leg плюс поддерживаемые route providers |
-| crypto → crypto | Direct/cross-network providers и spot ticker paths без fiat pivot |
-
-Для crypto → crypto `bridge_fiat` сохранён только ради wire compatibility и не
-используется как промежуточный fiat leg.
-
-## 10. Merge, deduplication и ranking
-
-Все локальные и provider routes объединяются в `HashMap` по стабильному
-fingerprint. В identity входят тип маршрута, активы/сети, venue, ad ids,
-payment methods, market path и route provider. Если fingerprint совпал,
-сохраняется вариант с большим `target_amount`.
-
-Итоговая сортировка:
-
-1. больший `target_amount`;
-2. подтверждённые payment methods;
-3. same-venue маршрут;
-4. стабильный `route_id` как tie-breaker.
-
-Перед выдачей limit применяется ещё раз, но с резервированием первого лучшего
-маршрута каждого представленного provider/venue. Поэтому workflow provider или
-редкий exchange не исчезает только из-за более плотной выдачи другого source.
-
-## 11. Семантика ответа
-
-- `routes` — отсортированный пользовательский срез размером не больше `limit`;
-- `routes_found` — размер реально построенного bounded candidate set до
-  display-limit, а не теоретическое число всех комбинаций;
-- `routes_exhaustive=true` — поиск действительно исчерпал доступный frontier;
-- `routes_exhaustive=false` — сработал top-K/provider bound, поэтому
-  `routes_found` нельзя трактовать как полную мощность пространства;
-- `source=fmatch` — legs получены из свежего Fmatch/memory snapshot;
-- `source=database_cache`, `stale=true` — использован допустимый stale snapshot;
-- `source=provider_fallback` — Fmatch path деградировал до live adapters;
-- `route_provider` относится к BestChange/Symbiosis/etc., но никогда к Fmatch.
-
-## 12. Почему время не зависит от полного числа комбинаций
-
-Пайплайн ограничен на каждом потенциально растущем участке:
-
-| Участок | Bound/механизм |
-|---|---|
-| Публичный response | `limit <= 100` |
-| Leg offers | 60 после source-diverse truncate |
-| Fmatch page | не более 64 кандидатов на market partition |
-| Локальные пары | максимум `3 * limit` принятых кандидатов на asset |
-| Provider assets | максимум 12 |
-| Network pairs | максимум 32 |
-| Provider quote jobs | максимум `query.limit` |
-| Background refresh | максимум 8 запусков на поиск |
-| Одновременные external quotes | semaphore 16, без ожидания в critical path |
-
-Количество выбранных intermediary assets всё ещё влияет на число параллельных
-leg-запросов, но они не выполняются последовательно. Полный `entry × exit` не
-создаётся.
-
-## 13. Наблюдаемость и SLO
-
-Основные structured events:
-
-- `p2p.fmatch_search.completed` — fiat, asset, side, source, offers и время;
-- `p2p.provider_route_search.completed` — quote jobs, refreshes, routes и время;
-- `p2p.route_search.completed` — `provider_assets_ms`, `local_search_ms`,
-  `provider_search_ms`, `total_ms`, `routes_found`, `routes_exhaustive`.
-
-Production benchmark от 2026-10-01 для AMD → RUB, USDT,
-`exchange_mode=all`, `limit=40`, после холодного истечения memory TTL:
-
-- 100 запросов, concurrency 20, 100/100 HTTP 200;
-- HTTP p95 652 мс, p99 685 мс, max 915 мс;
-- backend p95 449 мс, p99 495 мс, max 674 мс;
-- 24 workflow routes в типичном ответе;
-- Whitebird присутствует в смешанной выдаче;
-- Fmatch отсутствует среди venue.
-
-Регрессионный тест `one_hundred_large_virtualizations_finish_within_one_second`
-проверяет 100 параллельных локальных виртуализаций 60 × 60. Тест
-`fiat_virtualization_seeds_a_lower_ranked_venue` защищает diversity seeds.
-
-## 14. Execution-time правило
-
-Маршрут из search API — план и estimate, а не разрешение отправлять деньги.
-Перед исполнением необходимо заново подтвердить:
-
-- live provider quote и её expiry;
-- точный input/output с учётом decimals;
-- fees и минимумы;
-- source/destination network и token address;
-- memo/tag и deposit address;
-- KYC, географические и account ограничения;
-- актуальность P2P advertisement и контрагента.
-
-Именно разделение search-time virtualization и execution-time confirmation
-позволяет одновременно получать богатую выдачу менее чем за секунду и не
-выдавать capability estimate за гарантированную котировку.
+Опциональные live-аудиты и их ограничения описаны в
+[crypto-pair audit](ever-route-audit.md) и
+[frontend audit](frontend-crypto-audit.md). Записанный sample подтверждает
+конкретные пары и суммы на момент проверки, а не полное покрытие рынка.

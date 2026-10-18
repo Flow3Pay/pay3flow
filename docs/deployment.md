@@ -10,6 +10,27 @@ Deployments, and checks the public endpoints. The separate
 `nix run .#deploy-k8s` path builds with in-cluster Kaniko Jobs and supports
 either persistent in-cluster PostgreSQL and Redis or externally managed URLs.
 
+## Current production build and runtime
+
+`nix run .#deploy` deploys the current committed revision, rather than implicitly
+checking out remote master. Push and verify the intended commit first. It creates
+a release directory and builds immutable images on the production host, verifies
+their k3s image IDs, records source-revision annotations, rolls out backend and
+frontend, and checks the public root, health and provider catalog.
+
+Frontend builder and runner inherit the dependency stage. This avoids hashing
+and copying the large standalone wallet SDK tree between stages. The build uses
+`NODE_OPTIONS=--max-old-space-size=6144`; local `.env*` files are excluded from
+the frontend Docker context. Cold dependency installation, image export and
+containerd import can still dominate release time on a busy disk.
+
+The Aurora widget needs `PUBLIC_AURORA_INTENTS_API_KEY` in the frontend Node
+server environment. Keep the value in the production secret store and use a
+Secret reference from the frontend Deployment; do not depend on a local
+build-time `.env.local`. This key is distinct from backend `NEAR_INTENTS_JWT`.
+See [runtime configuration](configuration.md#frontend-runtime-configuration)
+and the [production deployment guide](../deploy/README.md).
+
 ## Release sequence
 
 1. Review the code and database migration changes.
@@ -44,11 +65,28 @@ The technical review must also cover:
 ## Health and observability
 
 The backend exposes `GET /health`. fmatch and Typesense expose their own
-health endpoints. Use the curl commands in `docs/development.md` to check
+health endpoints. The frontend also exposes `/frontend-metrics` through its
+production server. Use the curl commands in `docs/development.md` to check
 the main services.
 
 Logs may contain IDs, statuses, and reason codes. They must never contain PAN,
 CVC, private keys, bearer tokens, or raw sensitive proof payloads.
+
+## Post-rollout verification
+
+Confirm both Deployments are ready, use the intended image tag, and have the
+expected `pay3flow.io/source-revision` annotation. Check `/health`, `/`,
+`/api/providers` and the frontend metrics route. A successful image build alone
+is not a completed deployment.
+
+Use a read-only browser flow to check SWAP/guide switching and widget loading.
+For Aurora, confirm the token catalog authenticates and the selected pair and
+input appear; no wallet signature or funded transaction is needed for that
+check. Provider iframe/storage restrictions remain separate from app readiness.
+
+Documentation-only commits after an application deployment do not require
+rebuilding identical application images. Record the deployed application
+revision separately from later documentation commits.
 
 ## Rollback
 

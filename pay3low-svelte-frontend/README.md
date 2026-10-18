@@ -1,7 +1,7 @@
 # Pay3Flow web frontend
 
-The frontend is a SvelteKit application for creating exchange orders, viewing
-quotes, confirming funding instructions, and following settlement status.
+The frontend is a SvelteKit application for searching exchange routes, opening
+provider swaps and guides, and using the separate backend-connected OTC desk.
 The default development port is `3000`.
 
 A fresh SWAP session starts with USD → AMD using Ameriabank's USD and AMD
@@ -10,7 +10,7 @@ accounts. Saved payment methods and shared swap links override this default.
 ## Local development
 
 ```bash
-npm install
+npm ci
 npm run dev -- --host 127.0.0.1 --port 3000
 ```
 
@@ -25,6 +25,10 @@ connections and receives the route's assets, networks and amount.
 
 Swap steps provide `SWAP` and `SWAP guide` modes. Switching modes keeps the live
 widget mounted so its wallet connection and entered addresses are preserved.
+The mode also persists in shared links through `view=swap|guide`. Per-leg assets,
+networks and exact amounts come from the current route chapter. See the
+[widget integration reference](../docs/swap-widgets.md) for provider behavior,
+wallet boundaries, NEAR catalog aliases and iframe limitations.
 CoW uses its official widget; Symbiosis uses its embedded app for routes without
 native wallet execution. Platforms that cannot be embedded retain their quote
 and a link to the provider in `SWAP` mode.
@@ -87,8 +91,9 @@ by the selected providers. Catalog presence does not imply provider liquidity.
 
 ```bash
 npm run check
-npm run build
-PORT=3000 PUBLIC_API_URL=http://localhost:8080 node build
+npm run test:unit
+NODE_OPTIONS=--max-old-space-size=6144 npm run build
+PORT=3000 PUBLIC_API_URL=http://localhost:8080 npm start
 ```
 
 The standalone wallet SDK needs a larger Node heap during builds and cold dev
@@ -109,7 +114,9 @@ Guide links carry the amount, payment method IDs, networks, search settings, and
 an ordered operation signature. A new browser fetches fresh routes and matches
 that signature; it shows an unavailable state if the route is gone. Execution
 and tracking tokens are never included. Browser Back/Forward returns between
-routes and the guide. The action footer stays fixed to the viewport.
+routes and the guide. Chapter navigation appears after the active chapter;
+the overview starts through its own action button. Legacy TON guide paths are
+canonicalized to GRAM without renaming providers, advertisers or networks.
 
 The sidebar has a separate customer reviews view. Its summaries describe only
 collected reviews; Binance feedback remains a positive/negative percentage.
@@ -133,51 +140,34 @@ use canonical Spot market links and official Spot help, rather than the
 provider catalog's P2P profile instructions. P2P offer chapters continue to
 use the advertiser walkthroughs.
 
-## OTC frontend preview
+## Backend-connected OTC
 
-Open `/#/otc` for the default EVER/USDT market, or share `/#/otc?market=EVER-USDT`.
-The header switches between SWAP and OTC, keeps the current swap corridor when navigating to OTC, and moves
-API Docs, Telegram and GitHub into a left drawer on all screen sizes. Exchange
-sharing sits after the theme button.
+`/#/otc` loads `OtcWorkspace.svelte`, which calls `/api/otc` for availability,
+listings, wallet sessions, RFQs, trades, attempts and desk decisions. The current
+workspace handles native EVER on Everscale and issuer USDT on Ethereum. It does
+not implement an authoritative client-side orderbook or reuse SWAP route quotes.
 
-The OTC workspace uses the existing theme variables, fonts, asset icons and
-bridge visual language. Bridge, chart, orderbook and market activity each have
-a collapse arrow. The preview includes EVER/USDT, BTC/USDT, ETH/USDT and SOL/USDT
-markets, buy/sell and limit/market modes, line/candle charts, range and zoom controls,
-price grouping, clickable book levels, review, cancellation and order history.
-Market orders simulate consuming available opposite offers and reject amounts
-that exceed the demo liquidity.
+`OTC_CONFIG_FILE` controls backend availability. Without configuration the page
+shows the unavailable/paused state; it does not silently populate a demo market.
+Configured demo mode remains separate from live mode and does not permit live
+wallet transfers. The backend binds those environments to their original data.
 
-EVER uses five decimal places for quote prices and six for order amounts; its
-0.01 USDT starting price is a synthetic fixture, not a live exchange quote.
+Wallet sign-in proves account ownership. An RFQ requires the linked wallet
+families and an available desk listing; booking and outgoing transfer preparation
+are explicit actions. Transfer review, attempt IDs and transaction references
+support recovery after reload and block a second send while an attempt remains
+unresolved. The backend owns trade state, amount validation and reconciliation.
 
-All OTC prices, book levels, candles and trades are **demo data**, explicitly
-marked in the interface. Orders only live in tab-scoped `sessionStorage`, capped
-at 100, and never call an order API, sign a wallet request or move funds. A
-simulated market order is labelled `simulated`, not settled or filled.
+Implementation entry points:
 
-Integration boundaries for the backend implementation:
+- `src/lib/components/otc/OtcWorkspace.svelte`: availability, session, RFQ and trade UI.
+- `src/lib/otc/service.ts`: HTTP adapter and wallet authentication.
+- `src/lib/otc/terminal.ts`: exact-input and trade presentation helpers.
+- `src/lib/components/otc/OtcTransferReview.svelte`: explicit transfer review.
+- `src/lib/otc/escrow.ts`: the optional Ethereum escrow wallet adapter.
 
-- `src/lib/otc/model.ts` defines `OtcMarket`, `OtcSnapshot`, `BookLevel`,
-  `Candle`, `OtcTrade`, `OrderDraft` and `DemoOrder`, and holds the demo fixtures.
-- `OtcWorkspace.svelte` owns the selected market and demo order lifecycle;
-  replace `demoSnapshot`, storage, `confirmOrder` and `cancelOrder` with the
-  agreed API adapter. Request/response paths are intentionally not assumed.
-- `OtcChart.svelte` currently gets candles from `demoCandles`; provide server
-  candles per selected market and range. The buy/sell lines are illustrative
-  offsets around candle closes, not historical bid/ask measurements.
-- `OtcOrderbook.svelte` receives the snapshot and emits a side and selected
-  price; selecting a level fills a limit order and does not execute it.
-- `OtcBridge.svelte` produces a draft; `OtcOrderReview.svelte` reviews it.
-  Before live execution, obtain a server-validated quote and show actual fees,
-  settlement network, expiry, limits and funding requirements. Use server
-  order IDs, idempotency, authoritative statuses and authenticated ownership.
-
-The preview uses JavaScript numbers for illustrative calculations. The live
-money API should serialize exact prices and amounts as decimal strings or
-atomic units and perform precision, tick-size and liquidity validation on the
-server. Do not use `prepareDemoOrder` as authoritative matching logic.
-
-Run `npm run test:unit` for quote/amount validation and `npm run test:e2e --
-tests/otc.spec.ts` for desktop/mobile navigation, panels, chart/book controls,
-review, cancellation and history. No OTC backend is required for these tests.
+Older synthetic orderbook/chart helpers and their unit fixtures remain in the
+repository. Their prices and JavaScript-number calculations do not define live
+trade amounts, liquidity or settlement. Use [OTC setup and operations](../docs/otc-service.md),
+[verification evidence](../docs/otc-evidence.md), and the browser `/otc-runbook`
+for the implemented service and its separate live gate.

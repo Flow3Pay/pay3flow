@@ -59,7 +59,8 @@ remain an offline fallback for legacy adapters and custom deployments.
 Bridge destinations and intermediate tokens are discovered at runtime. Quotes
 combine CoW execution on the origin network with a dry NEAR Intents bridge
 quote; the selected pair opens in CoW Swap for a fresh quote and execution.
-Embedded CoW wallet execution supports same-chain ERC20 orders on EVM networks.
+Pay3Flow native CoW execution supports same-chain ERC20 orders on EVM networks;
+the official widget supports its own wallet and route flow.
 The header and swap instructions share wallet connections. Connecting in the
 header does not initiate a swap. Starting a swap connects its source wallet,
 validates the recipient, obtains a fresh quote, and opens the wallet's signing
@@ -75,9 +76,15 @@ CoW Swap, NEAR Intents, and Symbiosis are separate selectable exchanges. When se
 their quoted outputs are independent and can differ because each provider uses
 its own liquidity, execution costs, and fee model. Symbiosis uses a read-only
 preview address for route discovery; eligible EVM and TRON swaps are re-quoted
-with the user's wallet addresses and signed in the app. NEAR Intents supports
-deposits from Ethereum, NEAR, and TRON, including token transfers.
-Routes without an execution descriptor retain provider instructions. BestChange requires
+with the user's wallet addresses and signed in the app. Pay3Flow native NEAR
+Intents execution supports deposits from EVM networks, NEAR, and TRON.
+A missing native execution descriptor does not hide SWAP: CoW uses its official
+widget, Aurora NEAR Intents supplies standalone wallets including Solana, and
+Symbiosis can embed its public app. All swap chapters offer `SWAP` and
+`SWAP guide`, preserving widget state while toggling. External links remain
+available when a provider or browser blocks embedding. See
+[SWAP widget integration](swap-widgets.md) for per-leg amounts, wallet boundaries
+and `PUBLIC_AURORA_INTENTS_API_KEY` runtime configuration. BestChange requires
 `BESTCHANGE_API_KEY` from the referral-program dashboard; the numeric referral
 ID used in public links is not an API key. The other listed
 public-data adapters make anonymous read-only requests, except 0x and Barter
@@ -427,7 +434,8 @@ Verification commands:
 
 ```bash
 npm run check
-npm run build
+npm run test:unit
+NODE_OPTIONS=--max-old-space-size=6144 npm run build
 npm run test:e2e
 ```
 

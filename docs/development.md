@@ -4,8 +4,8 @@
 
 - Docker Engine and Docker Compose
 - Ruby 3.1+ for the exchange smoke test
-- Node.js and npm for frontend-only work
-- Rust tooling for backend-only work, if you are not using Docker
+- Node.js 24 and npm for frontend-only work
+- Rust 1.97+ for backend-only work, if you are not using Docker
 
 ## Start the stack
 
@@ -18,9 +18,11 @@ Check the main services directly:
 
 ```bash
 curl -fsS http://localhost:8080/health
-curl -fsS http://localhost:7277/health
-curl -fsS http://localhost:8108/health
+curl -fsS http://localhost:3000/
 ```
+
+Check optional fmatch/Typesense health only when those services are running;
+they are not part of the dedicated production Pay3Flow deployment.
 
 Stop the stack with `docker compose down`. Do not add `-v` unless you intend
 to remove the local database and cache volumes.
@@ -36,7 +38,8 @@ Useful commands when Rust is installed:
 ```bash
 cargo fmt --manifest-path backend/Cargo.toml -- --check
 cargo check --manifest-path backend/Cargo.toml
-cargo test --manifest-path backend/Cargo.toml
+cargo test --all-features --manifest-path backend/Cargo.toml
+cargo clippy --all-targets --all-features --manifest-path backend/Cargo.toml
 ```
 
 Use `backend/.env.example` as a reference. Development defaults are not safe
@@ -48,13 +51,27 @@ for production.
 cd pay3low-svelte-frontend
 npm ci
 npm run check
-npm run build
-npm test -- --run
+npm run test:unit
+NODE_OPTIONS=--max-old-space-size=6144 npm run build
+npm run test:e2e -- tests/exchange-flow.spec.ts tests/wallet-execution.spec.ts
 ```
 
-The Playwright configuration may require the backend and frontend services to
-be running. See `playwright.config.ts` and `tests/` for the current browser
-test setup.
+The configured Playwright suite starts its own Vite server and share-backend
+fixture. Browser tests mock the relevant APIs; the default suite does not need
+a live production backend. Install Chromium with `npx playwright install chromium`
+or set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to an installed compatible browser.
+Use `--workers=1` for cold standalone NEAR widget checks on constrained hosts.
+Explicit live-audit scripts are separate and issue read-only requests.
+
+Set `PUBLIC_AURORA_INTENTS_API_KEY` in ignored `.env.local` for a real local
+Aurora widget. Production supplies it on the frontend process at runtime.
+The SDK needs the browser polyfills and optimization rules in `vite.config.ts`;
+see [SWAP widgets](swap-widgets.md) before changing them.
+
+Use `npm start` to run the built production server. It wraps adapter-node with
+compression, frontend metrics and static-cache headers. For an end-to-end
+production deploy, run `nix run .#deploy` from a clean committed worktree;
+[deployment details](../deploy/README.md) include runtime secrets and verification.
 
 ## Verification checklist
 
@@ -72,7 +89,8 @@ switches. This makes it a useful regression test for state-machine changes.
 
 ## Working with fmatch
 
-The backend sends signed ActivityPub proposals to `FMATCH_INBOX`. For the
+The backend sends signed ActivityPub proposals to the `fmatch_inbox` configured
+in `config.toml`; general application settings are TOML, credentials are environment-only. For the
 request format and retry/idempotency behavior, read
 [`backend-to-fmatch.org`](backend-to-fmatch.org). For fmatch's public surfaces
 and accepted activities, read [`fmatch-api.md`](fmatch-api.md).
