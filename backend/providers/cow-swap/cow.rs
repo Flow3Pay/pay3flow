@@ -2,11 +2,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use crate::providers::token_catalog::TokenCatalog;
 use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use reqwest::Client;
-use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::sync::{Mutex, RwLock};
 
@@ -20,20 +20,6 @@ const EVM_NATIVE: &str = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
 
 #[derive(Clone)]
 struct CowToken {
-    address: String,
-    decimals: u8,
-}
-
-#[derive(Deserialize)]
-struct CowTokenList {
-    tokens: Vec<ListToken>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ListToken {
-    chain_id: u64,
-    symbol: String,
     address: String,
     decimals: u8,
 }
@@ -183,8 +169,8 @@ pub struct CowRouteProvider {
     client: Client,
     endpoints: Arc<HashMap<String, String>>,
     configured_tokens: Arc<HashMap<(String, String), String>>,
-    catalog: Arc<RwLock<HashMap<Asset, CowToken>>>,
-    catalog_url: Option<String>,
+    catalog: Arc<RwLock<HashMap<String, HashMap<Asset, CowToken>>>>,
+    catalog_urls: Vec<String>,
     catalog_refresh: Arc<Mutex<Option<Instant>>>,
     quote_address: String,
     bridge: Option<NearIntentsProvider>,
@@ -241,7 +227,7 @@ impl CowRouteProvider {
             endpoints: Arc::new(endpoints),
             configured_tokens: Arc::new(tokens),
             catalog: Arc::new(RwLock::new(HashMap::new())),
-            catalog_url: None,
+            catalog_urls: Vec::new(),
             catalog_refresh: Arc::new(Mutex::new(None)),
             quote_address: quote_address.to_string(),
             bridge: None,
@@ -281,7 +267,7 @@ impl CowRouteProvider {
 
     /// Enable live token discovery; configured addresses remain an offline fallback.
     pub fn with_token_catalog(mut self, url: impl Into<String>) -> Self {
-        self.catalog_url = Some(url.into());
+        self.catalog_urls.push(url.into());
         // Custom/test deployments keep their configured endpoints. The public
         // service uses the protocol's network registry, with config overrides.
         if self
@@ -302,35 +288,43 @@ impl CowRouteProvider {
     }
 
     async fn tokens(&self) -> HashMap<Asset, CowToken> {
-        if let Some(url) = &self.catalog_url {
+        if !self.catalog_urls.is_empty() {
             let mut refreshed = self.catalog_refresh.lock().await;
             if refreshed.is_none_or(|at| at.elapsed() >= Duration::from_secs(300)) {
-                let result = async {
-                    let response = self.client.get(url).send().await?.error_for_status()?;
-                    let list = response.json::<CowTokenList>().await?;
-                    Ok::<_, anyhow::Error>(
-                        list.tokens
-                            .into_iter()
-                            .filter_map(|token| {
-                                let network =
-                                    CHAINS.iter().find(|chain| chain.id == token.chain_id)?;
-                                let asset = Asset::new(token.symbol, Some(network.network)).ok()?;
-                                Some((
-                                    asset,
-                                    CowToken {
-                                        address: token.address,
-                                        decimals: token.decimals,
-                                    },
-                                ))
-                            })
-                            .collect::<HashMap<_, _>>(),
-                    )
-                }
-                .await;
-                match result {
-                    Ok(tokens) => *self.catalog.write().await = tokens,
-                    Err(error) => {
-                        tracing::warn!(%error, "CoW token catalog refresh failed; retaining previous metadata")
+                for url in &self.catalog_urls {
+                    let result = async {
+                        let response = self.client.get(url).send().await?.error_for_status()?;
+                        let list = response.json::<TokenCatalog>().await?;
+                        Ok::<_, anyhow::Error>(
+                            list.tokens()
+                                .into_iter()
+                                .filter_map(|token| {
+                                    let network =
+                                        CHAINS.iter().find(|chain| chain.id == token.chain_id)?;
+                                    if network.is_evm() && !token.is_erc20() {
+                                        return None;
+                                    }
+                                    let asset =
+                                        Asset::new(token.symbol, Some(network.network)).ok()?;
+                                    Some((
+                                        asset,
+                                        CowToken {
+                                            address: token.address,
+                                            decimals: token.decimals,
+                                        },
+                                    ))
+                                })
+                                .collect::<HashMap<_, _>>(),
+                        )
+                    }
+                    .await;
+                    match result {
+                        Ok(tokens) => {
+                            self.catalog.write().await.insert(url.clone(), tokens);
+                        }
+                        Err(error) => {
+                            tracing::warn!(%error, "CoW token catalog refresh failed; retaining previous metadata")
+                        }
                     }
                 }
                 *refreshed = Some(Instant::now());
@@ -349,7 +343,18 @@ impl CowRouteProvider {
                 ))
             })
             .collect::<HashMap<_, _>>();
-        tokens.extend(self.catalog.read().await.clone());
+        {
+            let catalogs = self.catalog.read().await;
+            for url in &self.catalog_urls {
+                if let Some(catalog) = catalogs.get(url) {
+                    tokens.extend(
+                        catalog
+                            .iter()
+                            .map(|(asset, token)| (asset.clone(), token.clone())),
+                    );
+                }
+            }
+        }
         if let Some(bridge) = &self.bridge {
             // The bridge catalog supplies native currencies and additional
             // tokens, including their actual per-network precision.

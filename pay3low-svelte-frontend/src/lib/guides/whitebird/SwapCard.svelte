@@ -13,7 +13,7 @@
   $: copy = (key: string) => t(key, {}, $locale);
   $: numberLocale = $locale === "en" ? "en-US" : $locale === "ru" ? "ru-RU" : "hy-AM";
   const currencyIcon = (asset: string) => fiatFlagUrl(asset) ?? assetIcon(asset);
-  const assetNames: Record<string, string> = { USDT: "Tether", USDC: "USD Coin", BTC: "Bitcoin", ETH: "Ethereum", TRX: "TRON", BNB: "BNB", GRAM: "TON", TON: "TON", SOL: "SOLANA" };
+  const assetNames: Record<string, string> = { USDT: "Tether", USDC: "USD Coin", BTC: "Bitcoin", ETH: "Ethereum", TRX: "TRON", BNB: "BNB", GRAM: "GRAM", TON: "GRAM", SOL: "SOLANA" };
   function amount(value: string | undefined, currency: string) {
     if (!value) return "—";
     const numeric = value.endsWith(` ${currency}`) ? value.slice(0, -currency.length - 1) : value;

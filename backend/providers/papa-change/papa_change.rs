@@ -458,12 +458,12 @@ fn crypto_asset(exchange: &ApiExchange) -> Option<&'static str> {
         .unwrap_or(&exchange.currency)
         .to_ascii_uppercase();
     [
-        "USDT", "USDC", "BTC", "BCH", "ETH", "BNB", "SOL", "TRX", "TON", "DOGE",
+        "USDT", "USDC", "BTC", "BCH", "ETH", "BNB", "SOL", "TRX", "TON", "GRAM", "DOGE",
         "LTC", "AVAX", "XMR", "DASH", "SHIB", "ARB", "OP", "POL",
     ]
     .into_iter()
     .find(|asset| code.starts_with(asset))
-    .map(|asset| if asset == "POL" { "MATIC" } else { asset })
+    .map(|asset| match asset { "POL" => "MATIC", "TON" => "GRAM", _ => asset })
 }
 
 fn crypto_network(exchange: &ApiExchange) -> Option<&'static str> {
@@ -480,7 +480,7 @@ fn crypto_network(exchange: &ApiExchange) -> Option<&'static str> {
         Some("bnb-smart-chain")
     } else if code.ends_with("SOL") || code == "SOL" {
         Some("solana")
-    } else if code.ends_with("TON") || code == "TON" {
+    } else if code.ends_with("TON") || code == "TON" || code == "GRAM" {
         Some("ton")
     } else if code.contains("ARBTM") || code == "ARB" {
         Some("arbitrum-one")

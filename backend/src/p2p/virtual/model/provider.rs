@@ -129,61 +129,6 @@ pub(in crate::p2p) async fn quote_provider(
     }
 }
 
-pub(in crate::p2p) async fn quote_provider_many(
-    provider: Arc<dyn PublicRouteProvider>,
-    from: Asset,
-    to: Asset,
-    amount: Amount,
-    quote_semaphore: Arc<tokio::sync::Semaphore>,
-) -> Option<(String, Vec<PublicRouteQuote>)> {
-    let provider_name = provider.name().to_string();
-    let from_label = from.to_string();
-    let to_label = to.to_string();
-    let amount_label = amount.value.clone();
-    let _permit = match quote_semaphore.acquire_owned().await {
-        Ok(permit) => permit,
-        Err(error) => {
-            tracing::warn!(
-                %error,
-                provider = %provider_name,
-                "provider quote semaphore closed"
-            );
-            return None;
-        }
-    };
-    let result = tokio::time::timeout(
-        std::time::Duration::from_secs(12),
-        provider.quotes(from, to, amount),
-    )
-    .await;
-    match result {
-        Ok(Ok(quotes)) if !quotes.is_empty() => Some((provider_name, quotes)),
-        Ok(Ok(_)) => None,
-        Ok(Err(error)) => {
-            tracing::warn!(
-                %error,
-                provider = %provider_name,
-                from = %from_label,
-                to = %to_label,
-                amount = %amount_label,
-                "public route quotes failed"
-            );
-            None
-        }
-        Err(error) => {
-            tracing::warn!(
-                %error,
-                provider = %provider_name,
-                from = %from_label,
-                to = %to_label,
-                amount = %amount_label,
-                "public route quotes timed out"
-            );
-            None
-        }
-    }
-}
-
 /// A provider owns one paced quote lane shared by concurrent wallet-cycle searches.
 #[derive(Default)]
 pub(in crate::p2p) struct CycleQuoteLane {

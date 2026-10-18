@@ -6,6 +6,7 @@ use crate::db::DbPool;
 use crate::provider_adapter::{ProviderAdapters, WorkflowConfig};
 
 pub mod dex_aggregator;
+pub(crate) mod token_catalog;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]

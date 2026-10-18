@@ -33,6 +33,7 @@ struct Fixture {
     cow: CowRouteProvider,
     requests: Requests,
     server: tokio::task::JoinHandle<()>,
+    supplemental_url: String,
 }
 
 impl Drop for Fixture {
@@ -60,6 +61,16 @@ async fn fixture(reject_usdt_bridge: bool, reject_all_bridges: bool) -> Fixture 
             {"chainId":1, "symbol":"ONLYCOW", "address":ONLY_COW, "decimals":8},
             {"chainId":56, "symbol":"USDT", "address":BSC_USDT, "decimals":18}
         ]})) }))
+        .route("/supplemental.json", get(|| async { Json(json!([
+            {"chainId":1, "symbol":"EVER", "address":"0x1ffEFD8036409Cb6d652bd610DE465933b226917", "decimals":9},
+            {"chainId":1, "symbol":"USDC", "address":USDC, "decimals":18},
+            {"chainId":1, "symbol":"BROKEN", "address":"", "decimals":18},
+            {"chainId":1, "symbol":"AMBIGUOUS", "address":DYNAMIC, "decimals":18},
+            {"chainId":1, "symbol":"AMBIGUOUS", "address":ONLY_COW, "decimals":18},
+            {"chainId":1, "symbol":"TON", "address":"0x2be5e8c109e2197D077D13A82dAead6a9b3433C5", "decimals":18},
+            {"chainId":1, "symbol":"TONCOIN", "address":"0x582d872A1B094FC48F5DE31D3B73F2D9bE47def1", "decimals":9},
+            {"chainId":1, "symbol":"GRAM", "address":ONLY_COW, "decimals":18}
+        ])) }))
         .route("/v0/tokens", get(|| async { Json(json!([
             {"assetId":"usdt-eth", "blockchain":"eth", "symbol":"USDT", "decimals":6, "contractAddress":USDT},
             {"assetId":"usdc-eth", "blockchain":"eth", "symbol":"USDC", "decimals":6, "contractAddress":USDC},
@@ -121,7 +132,51 @@ async fn fixture(reject_usdt_bridge: bool, reject_all_bridges: bool) -> Fixture 
         cow,
         requests,
         server,
+        supplemental_url: format!("http://{address}/supplemental.json"),
     }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn supplementary_catalog_adds_wrapped_ever_with_nine_decimals() {
+    let fixture = fixture(false, false).await;
+    // The curated list has priority over supplementary metadata for USDC.
+    let base = fixture
+        .supplemental_url
+        .trim_end_matches("/supplemental.json");
+    let cow = CowRouteProvider::from_config(&[format!("ethereum={base}")], &[], Some(OWNER))
+        .unwrap()
+        .unwrap()
+        .with_token_catalog(&fixture.supplemental_url)
+        .with_token_catalog(format!("{base}/tokens.json"));
+    let assets = cow.supported_assets().await;
+    assert!(assets.contains(&asset("EVER@ethereum")));
+    assert!(!assets.contains(&asset("EVER@everscale")));
+    assert!(!assets.contains(&asset("BROKEN@ethereum")));
+    assert!(!assets.contains(&asset("AMBIGUOUS@ethereum")));
+    assert!(assets.contains(&asset("GRAM@ethereum")));
+    assert!(!assets.contains(&asset("TON@ethereum")));
+    let from = asset("USDT@ethereum");
+    let quote = cow
+        .quote(
+            from.clone(),
+            asset("EVER@ethereum"),
+            Amount::new("100", from).unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(quote.output.value.parse::<f64>().unwrap(), 0.09875);
+    let from = asset("USDC@ethereum");
+    cow.quote(
+        from.clone(),
+        asset("EVER@ethereum"),
+        Amount::new("100", from).unwrap(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        fixture.requests.bodies.lock().unwrap().last().unwrap()["sellAmountBeforeFee"],
+        "100000000"
+    );
 }
 
 fn asset(value: &str) -> Asset {

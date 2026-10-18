@@ -17,6 +17,7 @@ use crate::core::error::AppError;
 use crate::core::state::AppState;
 
 const REFRESH_INTERVAL: Duration = Duration::from_secs(60 * 60);
+const RETRY_INTERVAL: Duration = Duration::from_secs(60);
 const MAX_STALE_AGE: Duration = Duration::from_secs(6 * 60 * 60);
 const MAX_PROVIDER_PRICE_AGE_SECS: i64 = 15 * 60;
 const DEFILLAMA_BASE: &str = "https://coins.llama.fi/prices/current/";
@@ -36,6 +37,8 @@ const ASSETS: &[(&str, &str)] = &[
     ("DOGE", "coingecko:dogecoin"),
     ("DOT", "coingecko:polkadot"),
     ("ETH", "coingecko:ethereum"),
+    ("EVER", "coingecko:everscale"),
+    ("10SET", "coingecko:tenset"),
     ("FDUSD", "coingecko:first-digital-usd"),
     ("LINK", "coingecko:chainlink"),
     ("LTC", "coingecko:litecoin"),
@@ -47,6 +50,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("POL", "coingecko:polygon-ecosystem-token"),
     ("SOL", "coingecko:solana"),
     ("SUI", "coingecko:sui"),
+    ("GRAM", "coingecko:the-open-network"),
     ("TON", "coingecko:the-open-network"),
     ("TRX", "coingecko:tron"),
     ("UNI", "coingecko:uniswap"),
@@ -148,18 +152,26 @@ impl MarketPriceService {
         }
     }
 
-    /// Fetch immediately at server startup, then on a one-hour timer anchored to that startup.
+    /// Fetch at startup, refresh hourly, and retry failures each minute.
     pub async fn initialize(&self) {
         let started_at = tokio::time::Instant::now();
         self.refresh().await;
         let service = self.clone();
         tokio::spawn(async move {
             let mut interval =
-                tokio::time::interval_at(started_at + REFRESH_INTERVAL, REFRESH_INTERVAL);
+                tokio::time::interval_at(started_at + RETRY_INTERVAL, RETRY_INTERVAL);
             interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
             loop {
                 interval.tick().await;
-                service.refresh().await;
+                let refresh_due = service
+                    .cache
+                    .read()
+                    .await
+                    .as_ref()
+                    .is_none_or(|snapshot| snapshot.fetched_at.elapsed() >= REFRESH_INTERVAL);
+                if refresh_due {
+                    service.refresh().await;
+                }
             }
         });
     }
@@ -344,7 +356,8 @@ mod tests {
                     }
                     Json(serde_json::json!({ "coins": {
                         "coingecko:bitcoin": { "price": 100.0, "timestamp": now_epoch(), "confidence": 0.99 },
-                        "coingecko:tether": { "price": 0.99, "timestamp": now_epoch(), "confidence": 0.99 }
+                        "coingecko:tether": { "price": 0.99, "timestamp": now_epoch(), "confidence": 0.99 },
+                        "coingecko:everscale": { "price": 0.002, "timestamp": now_epoch(), "confidence": 0.99 }
                     }}))
                 }
             }),
@@ -369,6 +382,10 @@ mod tests {
         assert!((first.values[1].value_usd.unwrap() - 2.97).abs() < 1e-10);
         assert_eq!(second.values[0].value_usd, Some(200.0));
         assert!(!first.stale);
+        let ever = service
+            .value(vec![("EVER".into(), "100".into(), 100.0)])
+            .await;
+        assert_eq!(ever.values[0].value_usd, Some(0.2));
 
         service.refresh().await;
         assert!((service.value(pair()).await.values[1].value_usd.unwrap() - 2.97).abs() < 1e-10);

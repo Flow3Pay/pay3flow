@@ -28,13 +28,22 @@ use crate::route_engine::{
 
 impl NearToken {
     pub fn matches(&self, asset: &Asset) -> bool {
-        asset.location.as_deref().is_some_and(|location| {
-            self.asset_symbol().eq_ignore_ascii_case(&asset.symbol)
-                && canonical_network_id(location) == canonical_network_id(&self.blockchain)
+        self.asset().is_ok_and(|candidate| {
+            candidate.symbol.eq_ignore_ascii_case(&asset.symbol)
+                && asset.location.as_deref().is_some_and(|network| {
+                    candidate.location.as_deref() == Some(canonical_network_id(network).as_str())
+                })
         })
     }
 
     pub fn asset(&self) -> Result<Asset> {
+        if canonical_network_id(&self.blockchain) == "ton"
+            && matches!(self.symbol.to_ascii_uppercase().as_str(), "TON" | "GRAM")
+            && self.asset_id != "nep245:v2_1.omni.hot.tg:1117_"
+            && !(self.asset_id.starts_with("1cs_v1:") && self.asset_id.contains(":native:"))
+        {
+            bail!("GRAM on TON must identify the native coin, not an unrelated jetton");
+        }
         Asset::new(
             self.asset_symbol(),
             Some(&canonical_network_id(&self.blockchain)),
@@ -42,12 +51,12 @@ impl NearToken {
     }
 
     fn asset_symbol(&self) -> &str {
-        // The native TON entry is still named GRAM by the HOT bridge catalog.
+        // The native coin is GRAM; TON remains the network identifier.
         if self.asset_id == "nep245:v2_1.omni.hot.tg:1117_"
             && canonical_network_id(&self.blockchain) == "ton"
             && self.symbol.eq_ignore_ascii_case("GRAM")
         {
-            return "TON";
+            return "GRAM";
         }
         // 1Click accepts NEAR deposits through the canonical wrap.near token.
         // Keep its API identifier and precision, but advertise the native ticker

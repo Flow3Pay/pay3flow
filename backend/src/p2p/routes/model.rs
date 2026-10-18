@@ -79,7 +79,7 @@ pub struct P2pRoute {
     pub route_kind: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profitability: Option<RouteProfitability>,
-    /// Ordered live swap quotes making up a wallet-to-wallet cycle.
+    /// Ordered live swap quotes for a wallet cycle or a composed crypto swap.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cycle_legs: Vec<CryptoCycleLeg>,
     /// Decimal scale of the integer amounts in `profitability`; fiat defaults to 2.

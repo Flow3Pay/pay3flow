@@ -1,0 +1,24 @@
+{
+  "observed_at": "2026-10-18T06:42:01.828323+00:00",
+  "request": {
+    "tokenAmountIn": {
+      "address": "",
+      "chainId": 1,
+      "decimals": 18,
+      "symbol": "ETH",
+      "amount": "50000000000000000"
+    },
+    "tokenOut": {
+      "address": "",
+      "chainId": 85918,
+      "decimals": 9,
+      "symbol": "GRAM"
+    },
+    "from": "0x0000000000000000000000000000000000000001",
+    "to": "EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c",
+    "slippage": 300
+  },
+  "scope": "Read-only swap quote; no signing or transaction submission",
+  "error": "HTTP Error 400: Bad Request",
+  "response": "{\"code\":0,\"message\":\"No route available right now, please try again\",\"errors\":[{\"message\":\"No route available right now, please try again\"}]}"
+}

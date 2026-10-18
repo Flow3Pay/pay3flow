@@ -52,6 +52,7 @@ export function venueIcon(venue: string): string {
 /** Returns a static asset served by this frontend. */
 export function assetIcon(asset: string): string {
   const key = asset.toLowerCase();
+  if (key === "gram") return "/icons/assets/gram.png";
   if (key === "near") return "/icons/assets/near-investx.png";
   if (key === "ever") return "/icons/assets/ever.svg";
   if (PNG_ASSET_ICONS.has(key)) return `/icons/assets/${key}.png`;

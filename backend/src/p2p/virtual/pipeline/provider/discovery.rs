@@ -38,7 +38,23 @@ impl P2pSearchService {
             })
             .collect::<Vec<_>>();
         let mut searches = FuturesUnordered::new();
+        let started = Instant::now();
+        let failures = super::cycle::QuoteFailures::default();
+        let mut statuses = HashMap::new();
+        let mut scheduled = std::collections::HashSet::new();
         for capability in capabilities.iter() {
+            let name = capability.provider.name().to_string();
+            statuses.insert(
+                name.clone(),
+                SourceStatus {
+                    source: name,
+                    ok: true,
+                    cached: false,
+                    latency_ms: 0,
+                    offers_found: 0,
+                    error: Some("No direct pair in this provider's token/network catalog".into()),
+                },
+            );
             for (source, target) in network_pairs
                 .iter()
                 .filter(|(source, target)| capability.supports(source, target))
@@ -49,33 +65,47 @@ impl P2pSearchService {
                 let Ok(amount) = Amount::from_f64(query.source_amount, from.clone()) else {
                     continue;
                 };
-                let cached_quote = self
-                    .cached_provider_coefficient_quote(
-                        capability.provider.name(),
-                        &from,
-                        &to,
-                        &amount,
-                    )
-                    .await;
                 let provider = capability.provider.clone();
-                let quote_semaphore = self.quote_semaphore.clone();
-                searches.push(async move {
-                    if let Some(quote) = cached_quote {
-                        Some((provider.name().to_string(), vec![quote]))
-                    } else {
-                        quote_provider_many(provider, from, to, amount, quote_semaphore).await
-                    }
-                });
+                scheduled.insert(provider.name().to_string());
+                let job = self.cycle_quote_job(
+                    provider.clone(),
+                    from.clone(),
+                    to.clone(),
+                    amount.clone(),
+                    failures.clone(),
+                );
+                searches.push(
+                    async move { (provider.name().to_string(), from, to, amount, job.await) },
+                );
             }
         }
 
         let mut routes = Vec::new();
         while let Some(result) = searches.next().await {
-            let Some((provider_name, quotes)) = result else {
+            let (provider_name, from, to, amount, result) = result;
+            let Some(status) = statuses.get_mut(&provider_name) else {
                 continue;
+            };
+            status.latency_ms = started.elapsed().as_millis();
+            let quotes = match result {
+                Ok(quotes) => {
+                    status.offers_found += quotes.len();
+                    if status.ok {
+                        status.error = None;
+                    }
+                    quotes
+                }
+                Err(error) => {
+                    status.ok = false;
+                    status.error = Some(error.to_string());
+                    Vec::new()
+                }
             };
             let mut batch = Vec::new();
             for quote in quotes {
+                if !super::crypto_paths::valid_quote(&quote, &from, &to, &amount) {
+                    continue;
+                }
                 let Ok(input_value) = quote.input.value.parse::<f64>() else {
                     continue;
                 };
@@ -95,6 +125,11 @@ impl P2pSearchService {
                 }
                 if source_network != target_network {
                     warnings.push("Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending.".into());
+                }
+                if [&quote.from, &quote.to].iter().any(|asset| {
+                    asset.symbol == "EVER" && asset.location.as_deref() == Some("ethereum")
+                }) {
+                    warnings.push("EVER on Ethereum is an ERC-20 representation (Wrapped EVER/WEVER), not a payout of native EVER on Everscale.".into());
                 }
                 batch.push(P2pRoute {
                     route_id: String::new(),
@@ -147,8 +182,47 @@ impl P2pSearchService {
                     service_links: Vec::new(),
                 });
             }
-            emit_routes(batches, &batch).await;
-            routes.extend(batch);
+            routes.extend(batch.iter().cloned());
+            if let Some(batches) = batches {
+                send_batch(
+                    batches,
+                    RouteBatch::ProviderResult {
+                        status: status.clone(),
+                        routes: batch,
+                        exhaustive: false,
+                    },
+                )
+                .await;
+            }
+        }
+        if let Some(batches) = batches {
+            for status in statuses
+                .values()
+                .filter(|status| !scheduled.contains(&status.source))
+            {
+                send_batch(
+                    batches,
+                    RouteBatch::ProviderResult {
+                        status: status.clone(),
+                        routes: Vec::new(),
+                        exhaustive: false,
+                    },
+                )
+                .await;
+            }
+        }
+        if query.allow_cross_venue {
+            routes.extend(
+                self.search_composed_crypto_routes(
+                    query,
+                    &capabilities,
+                    &source_networks,
+                    &target_networks,
+                    batches,
+                    &mut statuses,
+                )
+                .await,
+            );
         }
         routes
     }

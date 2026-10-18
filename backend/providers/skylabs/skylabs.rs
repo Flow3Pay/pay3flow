@@ -349,7 +349,7 @@ fn withdrawal_network(code: &str) -> Option<String> {
         "ETH" | "USDTE20" | "USDCE20" | "EURCE20" => Some("ethereum"),
         "TRX" | "USDTT20" | "USDCT20" => Some("tron"),
         "BNB" | "USDTB20" => Some("bnb-smart-chain"),
-        "USDTTON" | "TON" => Some("ton"),
+        "USDTTON" | "TON" | "GRAM" => Some("ton"),
         "MATIC" => Some("polygon-pos"),
         "LTC" => Some("litecoin"),
         "SOL" | "EURCSOL" => Some("solana"),

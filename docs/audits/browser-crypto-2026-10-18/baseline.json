@@ -1,0 +1,5215 @@
+{
+  "observed_at": "2026-10-18T06:31:46.043Z",
+  "base_url": "https://pay3flow.lefine.pro",
+  "scope": "Actual asset and network picker clicks; read-only route searches",
+  "results": [
+    {
+      "source": "ETH",
+      "source_network_label": "Ethereum",
+      "target": "BTC",
+      "target_network_label": "Bitcoin",
+      "amount": "0.05",
+      "sent_queries": [
+        {
+          "source_fiat": "ETH",
+          "target_fiat": "BTC",
+          "source_amount": 0.05,
+          "source_network": "ethereum",
+          "target_network": "bitcoin",
+          "source_payment_fee_percent": 0,
+          "target_payment_fee_percent": 0,
+          "sources": "0x,bestchange,binance,bitcoin-center,bitget,bncex,bybit,cifra-broker,cow-swap,crypto-office,dzengi,gate,id-pay,mexc,near-intents,okx,papa-change,rapira,skylabs,symbiosis,whitebird",
+          "exchange_mode": "all",
+          "allow_cross_venue": true,
+          "min_orders": 20,
+          "min_completion_rate": 0.9,
+          "limit": 40
+        }
+      ],
+      "controls": [
+        {
+          "label": "Select sending asset: ETH",
+          "text": "ETH ETH"
+        },
+        {
+          "label": "Select sending network: Ethereum (ERC-20)",
+          "text": ""
+        },
+        {
+          "label": "Select recipient asset: BTC",
+          "text": "BTC BTC"
+        },
+        {
+          "label": "Select recipient network: Bitcoin",
+          "text": ""
+        }
+      ],
+      "routes_found": 98,
+      "routes_exhaustive": true,
+      "provider_statuses": [
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "0x"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 74,
+          "offers_found": 64,
+          "ok": true,
+          "source": "bestchange"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 918,
+          "offers_found": 1380,
+          "ok": true,
+          "source": "binance"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 483,
+          "offers_found": 580,
+          "ok": true,
+          "source": "bitget"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 195,
+          "offers_found": 527,
+          "ok": true,
+          "source": "bybit"
+        },
+        {
+          "cached": false,
+          "error": "cifra-broker returned invalid JSON with HTTP 200 OK",
+          "latency_ms": 1307,
+          "offers_found": 0,
+          "ok": false,
+          "source": "cifra-broker"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 1137,
+          "offers_found": 1,
+          "ok": true,
+          "source": "cow-swap"
+        },
+        {
+          "cached": false,
+          "error": "invalid Crypto Office API response",
+          "latency_ms": 420,
+          "offers_found": 0,
+          "ok": false,
+          "source": "crypto-office"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 112,
+          "offers_found": 515,
+          "ok": true,
+          "source": "dzengi"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 1357,
+          "offers_found": 2204,
+          "ok": true,
+          "source": "gate"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 78,
+          "offers_found": 1864,
+          "ok": true,
+          "source": "mexc"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 1089,
+          "offers_found": 1,
+          "ok": true,
+          "source": "near-intents"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 357,
+          "offers_found": 1182,
+          "ok": true,
+          "source": "okx"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 722,
+          "offers_found": 1,
+          "ok": true,
+          "source": "symbiosis"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 430,
+          "offers_found": 11,
+          "ok": true,
+          "source": "whitebird"
+        }
+      ],
+      "routes": [
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.001481323079",
+          "route_path": [
+            "ETH@ethereum",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: AlwaysMoney.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "0.001474623900",
+            "source_pair": "ETHBTC",
+            "source_rate": "0.029522000000",
+            "target_pair": "ETHBTC",
+            "target_rate": "1.000000000000",
+            "venue": "bybit"
+          },
+          "target_amount": "0.001474623900",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "0.001474524000",
+            "source_pair": "ETHBTC",
+            "source_rate": "0.029520000000",
+            "target_pair": "ETHBTC",
+            "target_rate": "1.000000000000",
+            "venue": "dzengi"
+          },
+          "target_amount": "0.001474524000",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "0.001474524000",
+            "source_pair": "ETHBTC",
+            "source_rate": "0.029520000000",
+            "target_pair": "ETHBTC",
+            "target_rate": "1.000000000000",
+            "venue": "okx"
+          },
+          "target_amount": "0.001474524000",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "0.001474174350",
+            "source_pair": "ETHBTC",
+            "source_rate": "0.029513000000",
+            "target_pair": "ETHBTC",
+            "target_rate": "1.000000000000",
+            "venue": "gate"
+          },
+          "target_amount": "0.001474174350",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "0.001474024500",
+            "source_pair": "ETHBTC",
+            "source_rate": "0.029510000000",
+            "target_pair": "ETHBTC",
+            "target_rate": "1.000000000000",
+            "venue": "binance"
+          },
+          "target_amount": "0.001474024500",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "0.001473525000",
+            "source_pair": "ETHBTC",
+            "source_rate": "0.029500000000",
+            "target_pair": "ETHBTC",
+            "target_rate": "1.000000000000",
+            "venue": "bitget"
+          },
+          "target_amount": "0.001473525000",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.718660500000",
+            "source_pair": "ETHFDUSD",
+            "source_rate": "2416.790000000000",
+            "target_pair": "BTCFDUSD",
+            "target_rate": "0.000012217741",
+            "venue": "binance"
+          },
+          "target_amount": "0.001473434438",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.509370000000",
+            "source_pair": "ETHUSDT",
+            "source_rate": "2412.600000000000",
+            "target_pair": "BTCUSDT",
+            "target_rate": "0.000012238761",
+            "venue": "mexc"
+          },
+          "target_amount": "0.001473410444",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.512866500000",
+            "source_pair": "ETHUSDT",
+            "source_rate": "2412.670000000000",
+            "target_pair": "BTCUSDT",
+            "target_rate": "0.000012238009",
+            "venue": "binance"
+          },
+          "target_amount": "0.001473362672",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.514864500000",
+            "source_pair": "ETHUSDT",
+            "source_rate": "2412.710000000000",
+            "target_pair": "BTCUSDT",
+            "target_rate": "0.000012237715",
+            "venue": "bitget"
+          },
+          "target_amount": "0.001473351759",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.515863500000",
+            "source_pair": "ETHUSDT",
+            "source_rate": "2412.730000000000",
+            "target_pair": "BTCUSDT",
+            "target_rate": "0.000012237221",
+            "venue": "okx"
+          },
+          "target_amount": "0.001473304474",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.375504000000",
+            "source_pair": "ETHUSDC",
+            "source_rate": "2409.920000000000",
+            "target_pair": "BTCUSDC",
+            "target_rate": "0.000012251479",
+            "venue": "bybit"
+          },
+          "target_amount": "0.001473303152",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.514864500000",
+            "source_pair": "ETHUSDT",
+            "source_rate": "2412.710000000000",
+            "target_pair": "BTCUSDT",
+            "target_rate": "0.000012237251",
+            "venue": "bybit"
+          },
+          "target_amount": "0.001473295867",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.509370000000",
+            "source_pair": "ETHUSDT",
+            "source_rate": "2412.600000000000",
+            "target_pair": "BTCUSDT",
+            "target_rate": "0.000012237745",
+            "venue": "gate"
+          },
+          "target_amount": "0.001473288192",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.375504000000",
+            "source_pair": "ETHUSDC",
+            "source_rate": "2409.920000000000",
+            "target_pair": "BTCUSDC",
+            "target_rate": "0.000012251344",
+            "venue": "binance"
+          },
+          "target_amount": "0.001473286907",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.370009500000",
+            "source_pair": "ETHUSDC",
+            "source_rate": "2409.810000000000",
+            "target_pair": "BTCUSDC",
+            "target_rate": "0.000012251162",
+            "venue": "bitget"
+          },
+          "target_amount": "0.001473197820",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "1.163251047974",
+            "source_pair": "SOLETH",
+            "source_rate": "23.288309268747",
+            "target_pair": "SOLBTC",
+            "target_rate": "0.001267700000",
+            "venue": "binance"
+          },
+          "target_amount": "0.001473178700",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.370509000000",
+            "source_pair": "ETHUSDC",
+            "source_rate": "2409.820000000000",
+            "target_pair": "BTCUSDC",
+            "target_rate": "0.000012250863",
+            "venue": "okx"
+          },
+          "target_amount": "0.001473168018",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.504874500000",
+            "source_pair": "ETHUSDT",
+            "source_rate": "2412.510000000000",
+            "target_pair": "BTCUSDT",
+            "target_rate": "0.000012237085",
+            "venue": "dzengi"
+          },
+          "target_amount": "0.001473153728",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.486393000000",
+            "source_pair": "ETHUSDT",
+            "source_rate": "2412.140000000000",
+            "target_pair": "BTCUSDT",
+            "target_rate": "0.000012238344",
+            "venue": "whitebird"
+          },
+          "target_amount": "0.001473079395",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.359520000000",
+            "source_pair": "ETHUSDC",
+            "source_rate": "2409.600000000000",
+            "target_pair": "BTCUSDC",
+            "target_rate": "0.000012250794",
+            "venue": "gate"
+          },
+          "target_amount": "0.001473025227",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "0.001472725800",
+            "source_pair": "ETHBTC",
+            "source_rate": "0.029484000000",
+            "target_pair": "ETHBTC",
+            "target_rate": "1.000000000000",
+            "venue": "mexc"
+          },
+          "target_amount": "0.001472725800",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "361.301989150090",
+            "source_pair": "TRXETH",
+            "source_rate": "7233.273056057867",
+            "target_pair": "TRXBTC",
+            "target_rate": "0.000004080000",
+            "venue": "binance"
+          },
+          "target_amount": "0.001472638004",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "0.167112746738",
+            "source_pair": "BNBETH",
+            "source_rate": "3.345600535296",
+            "target_pair": "BNBBTC",
+            "target_rate": "0.008821000000",
+            "venue": "binance"
+          },
+          "target_amount": "0.001472627437",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.328551000000",
+            "source_pair": "ETHUSDC",
+            "source_rate": "2408.980000000000",
+            "target_pair": "BTCUSDC",
+            "target_rate": "0.000012250012",
+            "venue": "mexc"
+          },
+          "target_amount": "0.001472552223",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "92.878393454816",
+            "source_pair": "XRPETH",
+            "source_rate": "1859.427296392711",
+            "target_pair": "XRPBTC",
+            "target_rate": "0.000015870000",
+            "venue": "binance"
+          },
+          "target_amount": "0.001472506124",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "10.038183279743",
+            "source_pair": "LINKETH",
+            "source_rate": "200.964630225080",
+            "target_pair": "LINKBTC",
+            "target_rate": "0.000146800000",
+            "venue": "binance"
+          },
+          "target_amount": "0.001472131700",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.001471760295",
+          "route_path": [
+            "ETH@ethereum",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: EasyBit.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "2.038775510204",
+            "source_pair": "LTCETH",
+            "source_rate": "40.816326530612",
+            "target_pair": "LTCBTC",
+            "target_rate": "0.000722000000",
+            "venue": "binance"
+          },
+          "target_amount": "0.001470523922",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "547.097480832421",
+            "source_pair": "ADAETH",
+            "source_rate": "10952.902519167579",
+            "target_pair": "ADABTC",
+            "target_rate": "0.000002690000",
+            "venue": "binance"
+          },
+          "target_amount": "0.001470220531",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.001469555",
+          "route_path": [
+            "ETH@ethereum",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Exdex.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.001469274294",
+          "route_path": [
+            "ETH@ethereum",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Fswap.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.001469272908",
+          "route_path": [
+            "ETH@ethereum",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: ObminMe.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.00146862",
+          "route_path": [
+            "ETH@ethereum",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: FixedFloat.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.001468457711",
+          "route_path": [
+            "ETH@ethereum",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: ObminClub.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "92.706013363029",
+            "source_pair": "XRPETH",
+            "source_rate": "1855.976243504083",
+            "target_pair": "XRPBTC",
+            "target_rate": "0.000015855000",
+            "venue": "mexc"
+          },
+          "target_amount": "0.001468383988",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "symbiosis",
+          "market_path": null,
+          "target_amount": "0.00145979",
+          "route_path": [
+            "ETH@ethereum",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from symbiosis; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: crosschain-swap.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "near-intents",
+          "market_path": null,
+          "target_amount": "0.00145435",
+          "route_path": [
+            "ETH@ethereum",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from near-intents; execution and wallet compatibility are not verified.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "cow-swap",
+          "market_path": null,
+          "target_amount": "0.0014527",
+          "route_path": [
+            "ETH@ethereum",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from cow-swap; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: CoW Swap via NEAR Intents bridge (indicative quote).",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        }
+      ],
+      "visible_cards": 40
+    },
+    {
+      "source": "ETH",
+      "source_network_label": "Ethereum",
+      "target": "AVAX",
+      "target_network_label": "Avalanche",
+      "amount": "0.05",
+      "sent_queries": [
+        {
+          "source_fiat": "ETH",
+          "target_fiat": "AVAX",
+          "source_amount": 0.05,
+          "source_network": "ethereum",
+          "target_network": "avalanche-c",
+          "source_payment_fee_percent": 0,
+          "target_payment_fee_percent": 0,
+          "sources": "0x,bestchange,binance,bitcoin-center,bitget,bncex,bybit,cifra-broker,cow-swap,crypto-office,dzengi,gate,id-pay,mexc,near-intents,okx,papa-change,rapira,skylabs,symbiosis,whitebird",
+          "exchange_mode": "all",
+          "allow_cross_venue": true,
+          "min_orders": 20,
+          "min_completion_rate": 0.9,
+          "limit": 40
+        }
+      ],
+      "controls": [
+        {
+          "label": "Select sending asset: ETH",
+          "text": "ETH ETH"
+        },
+        {
+          "label": "Select sending network: Ethereum (ERC-20)",
+          "text": ""
+        },
+        {
+          "label": "Select recipient asset: AVAX",
+          "text": "AVAX AVAX"
+        },
+        {
+          "label": "Select recipient network: Avalanche C-Chain",
+          "text": ""
+        }
+      ],
+      "routes_found": 56,
+      "routes_exhaustive": true,
+      "provider_statuses": [
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "0x"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 66,
+          "offers_found": 38,
+          "ok": true,
+          "source": "bestchange"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 1601,
+          "offers_found": 1380,
+          "ok": true,
+          "source": "binance"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 488,
+          "offers_found": 580,
+          "ok": true,
+          "source": "bitget"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 192,
+          "offers_found": 527,
+          "ok": true,
+          "source": "bybit"
+        },
+        {
+          "cached": false,
+          "error": "cifra-broker returned invalid JSON with HTTP 200 OK",
+          "latency_ms": 598,
+          "offers_found": 0,
+          "ok": false,
+          "source": "cifra-broker"
+        },
+        {
+          "cached": false,
+          "error": "request NEAR Intents quote failed with HTTP 400 Bad Request: {\"message\":\"Quoting for this pair is not available\",\"correlationId\":\"f09f40b0-05dc-4590-9ca9-505a9ee0e5e8\",\"timestamp\":\"2026-10-18T06:31:58.093Z\",\"path\":\"/v0/quote\"}",
+          "latency_ms": 1078,
+          "offers_found": 0,
+          "ok": false,
+          "source": "cow-swap"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "crypto-office"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 376,
+          "offers_found": 515,
+          "ok": true,
+          "source": "dzengi"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 345,
+          "offers_found": 2204,
+          "ok": true,
+          "source": "gate"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 68,
+          "offers_found": 1864,
+          "ok": true,
+          "source": "mexc"
+        },
+        {
+          "cached": false,
+          "error": "request NEAR Intents quote failed with HTTP 400 Bad Request: {\"message\":\"Quoting for this pair is not available\",\"correlationId\":\"b68bf867-f309-4236-913f-3cae6439b700\",\"timestamp\":\"2026-10-18T06:31:57.050Z\",\"path\":\"/v0/quote\"}",
+          "latency_ms": 33,
+          "offers_found": 0,
+          "ok": false,
+          "source": "near-intents"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 400,
+          "offers_found": 1182,
+          "ok": true,
+          "source": "okx"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 718,
+          "offers_found": 1,
+          "ok": true,
+          "source": "symbiosis"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 179,
+          "offers_found": 11,
+          "ok": true,
+          "source": "whitebird"
+        }
+      ],
+      "routes": [
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "12.357743691242",
+            "source_pair": "AVAXETH",
+            "source_rate": "247.402276100940",
+            "target_pair": "AVAXETH",
+            "target_rate": "1.000000000000",
+            "venue": "gate"
+          },
+          "target_amount": "12.357743691242",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.514864500000",
+            "source_pair": "ETHUSDT",
+            "source_rate": "2412.710000000000",
+            "target_pair": "AVAXUSDT",
+            "target_rate": "0.102385584110",
+            "venue": "bybit"
+          },
+          "target_amount": "12.326645810945",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.514864500000",
+            "source_pair": "ETHUSDT",
+            "source_rate": "2412.710000000000",
+            "target_pair": "AVAXUSDT",
+            "target_rate": "0.102385584110",
+            "venue": "bitget"
+          },
+          "target_amount": "12.326645810945",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.370509000000",
+            "source_pair": "ETHUSDC",
+            "source_rate": "2409.820000000000",
+            "target_pair": "AVAXUSDC",
+            "target_rate": "0.102501025010",
+            "venue": "okx"
+          },
+          "target_amount": "12.325762452952",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.509370000000",
+            "source_pair": "ETHUSDT",
+            "source_rate": "2412.600000000000",
+            "target_pair": "AVAXUSDT",
+            "target_rate": "0.102375102375",
+            "venue": "gate"
+          },
+          "target_amount": "12.324821931818",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.515863500000",
+            "source_pair": "ETHUSDT",
+            "source_rate": "2412.730000000000",
+            "target_pair": "AVAXUSDT",
+            "target_rate": "0.102364622786",
+            "venue": "okx"
+          },
+          "target_amount": "12.324224346044",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.512866500000",
+            "source_pair": "ETHUSDT",
+            "source_rate": "2412.670000000000",
+            "target_pair": "AVAXUSDT",
+            "target_rate": "0.102364622786",
+            "venue": "binance"
+          },
+          "target_amount": "12.323917866056",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.376503000000",
+            "source_pair": "ETHUSDC",
+            "source_rate": "2409.940000000000",
+            "target_pair": "AVAXUSDC",
+            "target_rate": "0.102480016397",
+            "venue": "bybit"
+          },
+          "target_amount": "12.323849815229",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.375504000000",
+            "source_pair": "ETHUSDC",
+            "source_rate": "2409.920000000000",
+            "target_pair": "AVAXUSDC",
+            "target_rate": "0.102480016397",
+            "venue": "binance"
+          },
+          "target_amount": "12.323747540070",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.375004500000",
+            "source_pair": "ETHUSDC",
+            "source_rate": "2409.910000000000",
+            "target_pair": "AVAXUSDC",
+            "target_rate": "0.102480016397",
+            "venue": "bitget"
+          },
+          "target_amount": "12.323696402490",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.509370000000",
+            "source_pair": "ETHUSDT",
+            "source_rate": "2412.600000000000",
+            "target_pair": "AVAXUSDT",
+            "target_rate": "0.102364622786",
+            "venue": "mexc"
+          },
+          "target_amount": "12.323560306070",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.718660500000",
+            "source_pair": "ETHFDUSD",
+            "source_rate": "2416.790000000000",
+            "target_pair": "AVAXFDUSD",
+            "target_rate": "0.102134613420",
+            "venue": "binance"
+          },
+          "target_amount": "12.317224169084",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.359520000000",
+            "source_pair": "ETHUSDC",
+            "source_rate": "2409.600000000000",
+            "target_pair": "AVAXUSDC",
+            "target_rate": "0.102406554019",
+            "venue": "gate"
+          },
+          "target_amount": "12.313278082949",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.504874500000",
+            "source_pair": "ETHUSDT",
+            "source_rate": "2412.510000000000",
+            "target_pair": "AVAXUSDT",
+            "target_rate": "0.102282955568",
+            "venue": "dzengi"
+          },
+          "target_amount": "12.313269129521",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "0.001474024500",
+            "source_pair": "ETHBTC",
+            "source_rate": "0.029510000000",
+            "target_pair": "AVAXBTC",
+            "target_rate": "8361.204013377926",
+            "venue": "binance"
+          },
+          "target_amount": "12.312294945652",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "12.304785982364",
+          "route_path": [
+            "ETH@ethereum",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: EasyBit.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "12.304451107799",
+          "route_path": [
+            "ETH@ethereum",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: RateON.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.328551000000",
+            "source_pair": "ETHUSDC",
+            "source_rate": "2408.980000000000",
+            "target_pair": "AVAXUSDC",
+            "target_rate": "0.102343670044",
+            "venue": "mexc"
+          },
+          "target_amount": "12.302550654897",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "12.295008809895",
+          "route_path": [
+            "ETH@ethereum",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: MasonEx.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "symbiosis",
+          "market_path": null,
+          "target_amount": "12.293757866013977427",
+          "route_path": [
+            "ETH@ethereum",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from symbiosis; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: crosschain-swap.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "12.286457676572",
+          "route_path": [
+            "ETH@ethereum",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: FixedFloat.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "0.001474524000",
+            "source_pair": "ETHBTC",
+            "source_rate": "0.029520000000",
+            "target_pair": "AVAXBTC",
+            "target_rate": "8340.283569641368",
+            "venue": "dzengi"
+          },
+          "target_amount": "12.285650341952",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "12.282344951999",
+          "route_path": [
+            "ETH@ethereum",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: YellowChanger.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "12.268564998545",
+          "route_path": [
+            "ETH@ethereum",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Tarifex.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "12.268358849974",
+          "route_path": [
+            "ETH@ethereum",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: FloatChange.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "12.236723917509",
+          "route_path": [
+            "ETH@ethereum",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: SecureShift.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "12.235935388222",
+          "route_path": [
+            "ETH@ethereum",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: CyberMoney.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "12.227738046708",
+          "route_path": [
+            "ETH@ethereum",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: XStable.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "12.219224389209",
+          "route_path": [
+            "ETH@ethereum",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Меняла.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "12.203104081961",
+          "route_path": [
+            "ETH@ethereum",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Облака.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "12.19567117286",
+          "route_path": [
+            "ETH@ethereum",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Терминал.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "12.189508949923",
+          "route_path": [
+            "ETH@ethereum",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: CatChange.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "12.189165034916",
+          "route_path": [
+            "ETH@ethereum",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Fastify.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "12.183982382778",
+          "route_path": [
+            "ETH@ethereum",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: SimpleSwap.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "12.175978601475",
+          "route_path": [
+            "ETH@ethereum",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: UmaPay.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "12.16366720032",
+          "route_path": [
+            "ETH@ethereum",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: EpiChange.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "12.14300853304",
+          "route_path": [
+            "ETH@ethereum",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Банкомат.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "12.116494061231",
+          "route_path": [
+            "ETH@ethereum",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: ECashExpert.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "12.115089645383",
+          "route_path": [
+            "ETH@ethereum",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Монеткинс.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "12.105398300905",
+          "route_path": [
+            "ETH@ethereum",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: OneMoment.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        }
+      ],
+      "visible_cards": 40
+    },
+    {
+      "source": "ETH",
+      "source_network_label": "Ethereum",
+      "target": "DOT",
+      "target_network_label": "Polkadot",
+      "amount": "0.05",
+      "sent_queries": [
+        {
+          "source_fiat": "ETH",
+          "target_fiat": "DOT",
+          "source_amount": 0.05,
+          "source_network": "ethereum",
+          "target_network": "polkadot",
+          "source_payment_fee_percent": 0,
+          "target_payment_fee_percent": 0,
+          "sources": "0x,bestchange,binance,bitcoin-center,bitget,bncex,bybit,cifra-broker,cow-swap,crypto-office,dzengi,gate,id-pay,mexc,near-intents,okx,papa-change,rapira,skylabs,symbiosis,whitebird",
+          "exchange_mode": "all",
+          "allow_cross_venue": true,
+          "min_orders": 20,
+          "min_completion_rate": 0.9,
+          "limit": 40
+        }
+      ],
+      "controls": [
+        {
+          "label": "Select sending asset: ETH",
+          "text": "ETH ETH"
+        },
+        {
+          "label": "Select sending network: Ethereum (ERC-20)",
+          "text": ""
+        },
+        {
+          "label": "Select recipient asset: DOT",
+          "text": "DOT DOT"
+        },
+        {
+          "label": "Select recipient network: Polkadot",
+          "text": ""
+        }
+      ],
+      "routes_found": 31,
+      "routes_exhaustive": true,
+      "provider_statuses": [
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "0x"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 30,
+          "offers_found": 16,
+          "ok": true,
+          "source": "bestchange"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 1133,
+          "offers_found": 1380,
+          "ok": true,
+          "source": "binance"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 481,
+          "offers_found": 580,
+          "ok": true,
+          "source": "bitget"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 193,
+          "offers_found": 527,
+          "ok": true,
+          "source": "bybit"
+        },
+        {
+          "cached": false,
+          "error": "cifra-broker returned invalid JSON with HTTP 200 OK",
+          "latency_ms": 482,
+          "offers_found": 0,
+          "ok": false,
+          "source": "cifra-broker"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "cow-swap"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "crypto-office"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 108,
+          "offers_found": 515,
+          "ok": true,
+          "source": "dzengi"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 337,
+          "offers_found": 2204,
+          "ok": true,
+          "source": "gate"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 62,
+          "offers_found": 1864,
+          "ok": true,
+          "source": "mexc"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "near-intents"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 357,
+          "offers_found": 1182,
+          "ok": true,
+          "source": "okx"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "symbiosis"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 178,
+          "offers_found": 11,
+          "ok": true,
+          "source": "whitebird"
+        }
+      ],
+      "routes": [
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "0.001474174350",
+            "source_pair": "ETHBTC",
+            "source_rate": "0.029513000000",
+            "target_pair": "DOTBTC",
+            "target_rate": "74074.074074074073",
+            "venue": "gate"
+          },
+          "target_amount": "109.088901900000",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.514864500000",
+            "source_pair": "ETHUSDT",
+            "source_rate": "2412.710000000000",
+            "target_pair": "DOTUSDT",
+            "target_rate": "0.905469032959",
+            "venue": "bitget"
+          },
+          "target_amount": "109.013355338193",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.536343000000",
+            "source_pair": "ETHUSDT",
+            "source_rate": "2413.140000000000",
+            "target_pair": "DOTUSDT",
+            "target_rate": "0.905141202028",
+            "venue": "okx"
+          },
+          "target_amount": "108.993307980630",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.399979500000",
+            "source_pair": "ETHUSDC",
+            "source_rate": "2410.410000000000",
+            "target_pair": "DOTUSDC",
+            "target_rate": "0.906125407756",
+            "venue": "okx"
+          },
+          "target_amount": "108.988383037785",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.509370000000",
+            "source_pair": "ETHUSDT",
+            "source_rate": "2412.600000000000",
+            "target_pair": "DOTUSDT",
+            "target_rate": "0.905141202028",
+            "venue": "gate"
+          },
+          "target_amount": "108.968918021361",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.537841500000",
+            "source_pair": "ETHUSDT",
+            "source_rate": "2413.170000000000",
+            "target_pair": "DOTUSDT",
+            "target_rate": "0.904895484572",
+            "venue": "bybit"
+          },
+          "target_amount": "108.965074344856",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.369510000000",
+            "source_pair": "ETHUSDC",
+            "source_rate": "2409.800000000000",
+            "target_pair": "DOTUSDC",
+            "target_rate": "0.906125407756",
+            "venue": "gate"
+          },
+          "target_amount": "108.960801458862",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.509869500000",
+            "source_pair": "ETHUSDT",
+            "source_rate": "2412.610000000000",
+            "target_pair": "DOTUSDT",
+            "target_rate": "0.904977375566",
+            "venue": "mexc"
+          },
+          "target_amount": "108.949646724434",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.396982500000",
+            "source_pair": "ETHUSDC",
+            "source_rate": "2410.350000000000",
+            "target_pair": "DOTUSDC",
+            "target_rate": "0.905797101449",
+            "venue": "binance"
+          },
+          "target_amount": "108.946182533967",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.404475000000",
+            "source_pair": "ETHUSDC",
+            "source_rate": "2410.500000000000",
+            "target_pair": "DOTUSDC",
+            "target_rate": "0.905305087815",
+            "venue": "bybit"
+          },
+          "target_amount": "108.893781029332",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.520858500000",
+            "source_pair": "ETHUSDT",
+            "source_rate": "2412.830000000000",
+            "target_pair": "DOTUSDT",
+            "target_rate": "0.904159132007",
+            "venue": "binance"
+          },
+          "target_amount": "108.861064775316",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.728650500000",
+            "source_pair": "ETHFDUSD",
+            "source_rate": "2416.990000000000",
+            "target_pair": "DOTFDUSD",
+            "target_rate": "0.902527075812",
+            "venue": "binance"
+          },
+          "target_amount": "108.851915026625",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "108.830226355925",
+          "route_path": [
+            "ETH@ethereum",
+            "DOT@polkadot"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Fswap.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "0.001474524000",
+            "source_pair": "ETHBTC",
+            "source_rate": "0.029520000000",
+            "target_pair": "DOTBTC",
+            "target_rate": "73855.243722304280",
+            "venue": "binance"
+          },
+          "target_amount": "108.792428064993",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.328551000000",
+            "source_pair": "ETHUSDC",
+            "source_rate": "2408.980000000000",
+            "target_pair": "DOTUSDC",
+            "target_rate": "0.904568068747",
+            "venue": "mexc"
+          },
+          "target_amount": "108.736519628223",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "108.734029518702",
+          "route_path": [
+            "ETH@ethereum",
+            "DOT@polkadot"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: EasyBit.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "0.001472725800",
+            "source_pair": "ETHBTC",
+            "source_rate": "0.029484000000",
+            "target_pair": "DOTBTC",
+            "target_rate": "73800.738007380074",
+            "venue": "mexc"
+          },
+          "target_amount": "108.579562671587",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "108.463834989511",
+          "route_path": [
+            "ETH@ethereum",
+            "DOT@polkadot"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Tarifex.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "108.077390877855",
+          "route_path": [
+            "ETH@ethereum",
+            "DOT@polkadot"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: XStable.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "107.989372007383",
+          "route_path": [
+            "ETH@ethereum",
+            "DOT@polkadot"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Меняла.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "107.581281386855",
+          "route_path": [
+            "ETH@ethereum",
+            "DOT@polkadot"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Банкомат.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "107.525333633111",
+          "route_path": [
+            "ETH@ethereum",
+            "DOT@polkadot"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Alfacash.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "107.351649545104",
+          "route_path": [
+            "ETH@ethereum",
+            "DOT@polkadot"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: ECashExpert.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "107.084529003043",
+          "route_path": [
+            "ETH@ethereum",
+            "DOT@polkadot"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: OneMoment.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "106.984085584275",
+          "route_path": [
+            "ETH@ethereum",
+            "DOT@polkadot"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: MoneyOne.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "106.783782015941",
+          "route_path": [
+            "ETH@ethereum",
+            "DOT@polkadot"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: YChanger.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "105.445480078094",
+          "route_path": [
+            "ETH@ethereum",
+            "DOT@polkadot"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Ферма.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "104.352780807805",
+          "route_path": [
+            "ETH@ethereum",
+            "DOT@polkadot"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Сова.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "102.367124069251",
+          "route_path": [
+            "ETH@ethereum",
+            "DOT@polkadot"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Cash-Bit.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "101.893242181247",
+          "route_path": [
+            "ETH@ethereum",
+            "DOT@polkadot"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: BlaBlaMoney.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "90.627016002502",
+          "route_path": [
+            "ETH@ethereum",
+            "DOT@polkadot"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Ex-Bank.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        }
+      ],
+      "visible_cards": 31
+    },
+    {
+      "source": "ETH",
+      "source_network_label": "Ethereum",
+      "target": "TON",
+      "target_network_label": "TON",
+      "amount": "0.05",
+      "sent_queries": [
+        {
+          "source_fiat": "ETH",
+          "target_fiat": "TON",
+          "source_amount": 0.05,
+          "source_network": "ethereum",
+          "target_network": "ton",
+          "source_payment_fee_percent": 0,
+          "target_payment_fee_percent": 0,
+          "sources": "0x,bestchange,binance,bitcoin-center,bitget,bncex,bybit,cifra-broker,cow-swap,crypto-office,dzengi,gate,id-pay,mexc,near-intents,okx,papa-change,rapira,skylabs,symbiosis,whitebird",
+          "exchange_mode": "all",
+          "allow_cross_venue": true,
+          "min_orders": 20,
+          "min_completion_rate": 0.9,
+          "limit": 40
+        }
+      ],
+      "controls": [
+        {
+          "label": "Select sending asset: ETH",
+          "text": "ETH ETH"
+        },
+        {
+          "label": "Select sending network: Ethereum (ERC-20)",
+          "text": ""
+        },
+        {
+          "label": "Select recipient asset: TON",
+          "text": "TON TON"
+        },
+        {
+          "label": "Select recipient network: TON",
+          "text": ""
+        }
+      ],
+      "routes_found": 1,
+      "routes_exhaustive": true,
+      "provider_statuses": [
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "0x"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "bestchange"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 279,
+          "offers_found": 1380,
+          "ok": true,
+          "source": "binance"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 436,
+          "offers_found": 580,
+          "ok": true,
+          "source": "bitget"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 682,
+          "offers_found": 527,
+          "ok": true,
+          "source": "bybit"
+        },
+        {
+          "cached": false,
+          "error": "cifra-broker returned invalid JSON with HTTP 200 OK",
+          "latency_ms": 2684,
+          "offers_found": 0,
+          "ok": false,
+          "source": "cifra-broker"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "cow-swap"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "crypto-office"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 138,
+          "offers_found": 515,
+          "ok": true,
+          "source": "dzengi"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 863,
+          "offers_found": 2204,
+          "ok": true,
+          "source": "gate"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 73,
+          "offers_found": 1864,
+          "ok": true,
+          "source": "mexc"
+        },
+        {
+          "cached": false,
+          "error": "request NEAR Intents quote failed with HTTP 400 Bad Request: {\"message\":\"Quoting for this pair is not available\",\"correlationId\":\"ab6c36de-91f9-482d-a78f-7a61e9425485\",\"timestamp\":\"2026-10-18T06:32:04.419Z\",\"path\":\"/v0/quote\"}",
+          "latency_ms": 30,
+          "offers_found": 0,
+          "ok": false,
+          "source": "near-intents"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 449,
+          "offers_found": 1182,
+          "ok": true,
+          "source": "okx"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "symbiosis"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 190,
+          "offers_found": 11,
+          "ok": true,
+          "source": "whitebird"
+        }
+      ],
+      "routes": [
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "120.500379000000",
+            "source_pair": "ETHUSDT",
+            "source_rate": "2412.420000000000",
+            "target_pair": "TONUSDT",
+            "target_rate": "0.739371534196",
+            "venue": "whitebird"
+          },
+          "target_amount": "89.005455542329",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        }
+      ],
+      "visible_cards": 1
+    },
+    {
+      "source": "ETH",
+      "source_network_label": "Ethereum",
+      "target": "TON",
+      "target_network_label": "TON",
+      "amount": "0.5",
+      "sent_queries": [
+        {
+          "source_fiat": "ETH",
+          "target_fiat": "TON",
+          "source_amount": 0.5,
+          "source_network": "ethereum",
+          "target_network": "ton",
+          "source_payment_fee_percent": 0,
+          "target_payment_fee_percent": 0,
+          "sources": "0x,bestchange,binance,bitcoin-center,bitget,bncex,bybit,cifra-broker,cow-swap,crypto-office,dzengi,gate,id-pay,mexc,near-intents,okx,papa-change,rapira,skylabs,symbiosis,whitebird",
+          "exchange_mode": "all",
+          "allow_cross_venue": true,
+          "min_orders": 20,
+          "min_completion_rate": 0.9,
+          "limit": 40
+        }
+      ],
+      "controls": [
+        {
+          "label": "Select sending asset: ETH",
+          "text": "ETH ETH"
+        },
+        {
+          "label": "Select sending network: Ethereum (ERC-20)",
+          "text": ""
+        },
+        {
+          "label": "Select recipient asset: TON",
+          "text": "TON TON"
+        },
+        {
+          "label": "Select recipient network: TON",
+          "text": ""
+        }
+      ],
+      "routes_found": 1,
+      "routes_exhaustive": true,
+      "provider_statuses": [
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "0x"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "bestchange"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 1581,
+          "offers_found": 1380,
+          "ok": true,
+          "source": "binance"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 465,
+          "offers_found": 580,
+          "ok": true,
+          "source": "bitget"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 192,
+          "offers_found": 527,
+          "ok": true,
+          "source": "bybit"
+        },
+        {
+          "cached": false,
+          "error": "cifra-broker returned invalid JSON with HTTP 200 OK",
+          "latency_ms": 552,
+          "offers_found": 0,
+          "ok": false,
+          "source": "cifra-broker"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "cow-swap"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "crypto-office"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 117,
+          "offers_found": 515,
+          "ok": true,
+          "source": "dzengi"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 328,
+          "offers_found": 2204,
+          "ok": true,
+          "source": "gate"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 52,
+          "offers_found": 1864,
+          "ok": true,
+          "source": "mexc"
+        },
+        {
+          "cached": false,
+          "error": "request NEAR Intents quote failed with HTTP 400 Bad Request: {\"message\":\"Quoting for this pair is not available\",\"correlationId\":\"5da1085f-4421-4bd3-9cfe-4cb7e54933a2\",\"timestamp\":\"2026-10-18T06:32:09.202Z\",\"path\":\"/v0/quote\"}",
+          "latency_ms": 38,
+          "offers_found": 0,
+          "ok": false,
+          "source": "near-intents"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 382,
+          "offers_found": 1182,
+          "ok": true,
+          "source": "okx"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "symbiosis"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 171,
+          "offers_found": 11,
+          "ok": true,
+          "source": "whitebird"
+        }
+      ],
+      "routes": [
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "1205.003790000000",
+            "source_pair": "ETHUSDT",
+            "source_rate": "2412.420000000000",
+            "target_pair": "TONUSDT",
+            "target_rate": "0.739371534196",
+            "venue": "whitebird"
+          },
+          "target_amount": "890.054555423290",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        }
+      ],
+      "visible_cards": 1
+    },
+    {
+      "source": "BTC",
+      "source_network_label": "Bitcoin",
+      "target": "AVAX",
+      "target_network_label": "Avalanche",
+      "amount": "0.01",
+      "sent_queries": [
+        {
+          "source_fiat": "BTC",
+          "target_fiat": "AVAX",
+          "source_amount": 0.01,
+          "source_network": "bitcoin",
+          "target_network": "avalanche-c",
+          "source_payment_fee_percent": 0,
+          "target_payment_fee_percent": 0,
+          "sources": "0x,bestchange,binance,bitcoin-center,bitget,bncex,bybit,cifra-broker,cow-swap,crypto-office,dzengi,gate,id-pay,mexc,near-intents,okx,papa-change,rapira,skylabs,symbiosis,whitebird",
+          "exchange_mode": "all",
+          "allow_cross_venue": true,
+          "min_orders": 20,
+          "min_completion_rate": 0.9,
+          "limit": 40
+        }
+      ],
+      "controls": [
+        {
+          "label": "Select sending asset: BTC",
+          "text": "BTC BTC"
+        },
+        {
+          "label": "Select sending network: Bitcoin",
+          "text": ""
+        },
+        {
+          "label": "Select recipient asset: AVAX",
+          "text": "AVAX AVAX"
+        },
+        {
+          "label": "Select recipient network: Avalanche C-Chain",
+          "text": ""
+        }
+      ],
+      "routes_found": 74,
+      "routes_exhaustive": true,
+      "provider_statuses": [
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "0x"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 28,
+          "offers_found": 57,
+          "ok": true,
+          "source": "bestchange"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 1149,
+          "offers_found": 1380,
+          "ok": true,
+          "source": "binance"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 472,
+          "offers_found": 580,
+          "ok": true,
+          "source": "bitget"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 379,
+          "offers_found": 527,
+          "ok": true,
+          "source": "bybit"
+        },
+        {
+          "cached": false,
+          "error": "cifra-broker returned invalid JSON with HTTP 200 OK",
+          "latency_ms": 473,
+          "offers_found": 0,
+          "ok": false,
+          "source": "cifra-broker"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "cow-swap"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "crypto-office"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 105,
+          "offers_found": 515,
+          "ok": true,
+          "source": "dzengi"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 1273,
+          "offers_found": 2204,
+          "ok": true,
+          "source": "gate"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 59,
+          "offers_found": 1864,
+          "ok": true,
+          "source": "mexc"
+        },
+        {
+          "cached": false,
+          "error": "request NEAR Intents quote failed with HTTP 400 Bad Request: {\"message\":\"Quoting for this pair is not available\",\"correlationId\":\"ecbca608-8ccd-4f5e-9e8d-665476edd106\",\"timestamp\":\"2026-10-18T06:32:13.058Z\",\"path\":\"/v0/quote\"}",
+          "latency_ms": 29,
+          "offers_found": 0,
+          "ok": false,
+          "source": "near-intents"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 472,
+          "offers_found": 1182,
+          "ok": true,
+          "source": "okx"
+        },
+        {
+          "cached": false,
+          "error": "symbiosis: No swap available for BTC@bitcoin → AVAX@avalanche-c at 0.01 BTC",
+          "latency_ms": 44,
+          "offers_found": 0,
+          "ok": false,
+          "source": "symbiosis"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 168,
+          "offers_found": 11,
+          "ok": true,
+          "source": "whitebird"
+        }
+      ],
+      "routes": [
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "0.338208409506",
+            "source_pair": "ETHBTC",
+            "source_rate": "33.854695646286",
+            "target_pair": "AVAXETH",
+            "target_rate": "247.402276100940",
+            "venue": "gate"
+          },
+          "target_amount": "83.589856778053",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "83.507732342944",
+          "route_path": [
+            "BTC@bitcoin",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: TroyChange.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "83.458646616541",
+            "source_pair": "AVAXBTC",
+            "source_rate": "8354.218880534670",
+            "target_pair": "AVAXBTC",
+            "target_rate": "1.000000000000",
+            "venue": "binance"
+          },
+          "target_amount": "83.458646616541",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "83.455778887105",
+          "route_path": [
+            "BTC@bitcoin",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: GeekChange.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "816.431751000000",
+            "source_pair": "BTCUSDT",
+            "source_rate": "81724.899999999994",
+            "target_pair": "AVAXUSDT",
+            "target_rate": "0.102312257008",
+            "venue": "okx"
+          },
+          "target_amount": "83.447444162983",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "816.409573200000",
+            "source_pair": "BTCUSDT",
+            "source_rate": "81722.679999999993",
+            "target_pair": "AVAXUSDT",
+            "target_rate": "0.102312257008",
+            "venue": "bitget"
+          },
+          "target_amount": "83.445177371271",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "815.485897800000",
+            "source_pair": "BTCUSDC",
+            "source_rate": "81630.220000000001",
+            "target_pair": "AVAXUSDC",
+            "target_rate": "0.102427532521",
+            "venue": "binance"
+          },
+          "target_amount": "83.444680108799",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "816.401781000000",
+            "source_pair": "BTCUSDT",
+            "source_rate": "81721.899999999994",
+            "target_pair": "AVAXUSDT",
+            "target_rate": "0.102312257008",
+            "venue": "bybit"
+          },
+          "target_amount": "83.444380930939",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "83.436604348206",
+          "route_path": [
+            "BTC@bitcoin",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: GoldenWhale.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "815.475708000000",
+            "source_pair": "BTCUSDC",
+            "source_rate": "81629.199999999997",
+            "target_pair": "AVAXUSDC",
+            "target_rate": "0.102417042196",
+            "venue": "okx"
+          },
+          "target_amount": "83.435091385907",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "816.375307500000",
+            "source_pair": "BTCUSDT",
+            "source_rate": "81719.250000000000",
+            "target_pair": "AVAXUSDT",
+            "target_rate": "0.102301790281",
+            "venue": "binance"
+          },
+          "target_amount": "83.433138843222",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "815.503779900000",
+            "source_pair": "BTCUSDC",
+            "source_rate": "81632.009999999995",
+            "target_pair": "AVAXUSDC",
+            "target_rate": "0.102406554019",
+            "venue": "gate"
+          },
+          "target_amount": "83.429418957512",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "815.501682000000",
+            "source_pair": "BTCUSDC",
+            "source_rate": "81631.800000000003",
+            "target_pair": "AVAXUSDC",
+            "target_rate": "0.102406554019",
+            "venue": "bybit"
+          },
+          "target_amount": "83.429204333641",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "816.325857000000",
+            "source_pair": "BTCUSDT",
+            "source_rate": "81714.300000000003",
+            "target_pair": "AVAXUSDT",
+            "target_rate": "0.102301790281",
+            "venue": "gate"
+          },
+          "target_amount": "83.428085027417",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "815.473610100000",
+            "source_pair": "BTCUSDC",
+            "source_rate": "81628.990000000005",
+            "target_pair": "AVAXUSDC",
+            "target_rate": "0.102396067991",
+            "venue": "bitget"
+          },
+          "target_amount": "83.417789933432",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "816.325057800000",
+            "source_pair": "BTCUSDT",
+            "source_rate": "81714.220000000001",
+            "target_pair": "AVAXUSDT",
+            "target_rate": "0.102280863250",
+            "venue": "mexc"
+          },
+          "target_amount": "83.410937173182",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "817.748832600000",
+            "source_pair": "BTCFDUSD",
+            "source_rate": "81856.740000000005",
+            "target_pair": "AVAXFDUSD",
+            "target_rate": "0.102082482646",
+            "venue": "binance"
+          },
+          "target_amount": "83.394353181646",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "83.382845372058",
+          "route_path": [
+            "BTC@bitcoin",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: BtcChange24.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "816.242840100000",
+            "source_pair": "BTCUSDT",
+            "source_rate": "81705.990000000005",
+            "target_pair": "AVAXUSDT",
+            "target_rate": "0.102188885937",
+            "venue": "dzengi"
+          },
+          "target_amount": "83.327535537197",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "815.396287500000",
+            "source_pair": "BTCUSDC",
+            "source_rate": "81621.250000000000",
+            "target_pair": "AVAXUSDC",
+            "target_rate": "0.102270402945",
+            "venue": "mexc"
+          },
+          "target_amount": "83.307515975915",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "83.276437622003",
+          "route_path": [
+            "BTC@bitcoin",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: MasonEx.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "83.250000000000",
+            "source_pair": "AVAXBTC",
+            "source_rate": "8333.333333333334",
+            "target_pair": "AVAXBTC",
+            "target_rate": "1.000000000000",
+            "venue": "dzengi"
+          },
+          "target_amount": "83.250000000000",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "83.216608586439",
+          "route_path": [
+            "BTC@bitcoin",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: EasyBit.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "83.195533036155",
+          "route_path": [
+            "BTC@bitcoin",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: PerfectCash.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "83.190662940877",
+          "route_path": [
+            "BTC@bitcoin",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: YellowChanger.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "83.174331251574",
+          "route_path": [
+            "BTC@bitcoin",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: FixedFloat.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "83.154271973057",
+          "route_path": [
+            "BTC@bitcoin",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Tarifex.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "83.123539909045",
+          "route_path": [
+            "BTC@bitcoin",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: FloatChange.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "82.998089387302",
+          "route_path": [
+            "BTC@bitcoin",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Арбуз.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "82.998089387302",
+          "route_path": [
+            "BTC@bitcoin",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: ExWhite.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "82.998089318415",
+          "route_path": [
+            "BTC@bitcoin",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: ExHub.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "82.998089249529",
+          "route_path": [
+            "BTC@bitcoin",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Единорог.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "82.969226202911",
+          "route_path": [
+            "BTC@bitcoin",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: CyberMoney.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "82.945159938242",
+          "route_path": [
+            "BTC@bitcoin",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Fastify.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "82.87756742034",
+          "route_path": [
+            "BTC@bitcoin",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: XStable.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "82.847856767535",
+          "route_path": [
+            "BTC@bitcoin",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Меняла.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "82.804944493892",
+          "route_path": [
+            "BTC@bitcoin",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: BitcoinObmennik.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "82.791395827689",
+          "route_path": [
+            "BTC@bitcoin",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: CoinChanger.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "82.791395827689",
+          "route_path": [
+            "BTC@bitcoin",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: 365Cash.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "82.791395759145",
+          "route_path": [
+            "BTC@bitcoin",
+            "AVAX@avalanche-c"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Baltex.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        }
+      ],
+      "visible_cards": 40
+    },
+    {
+      "source": "AVAX",
+      "source_network_label": "Avalanche",
+      "target": "BTC",
+      "target_network_label": "Bitcoin",
+      "amount": "100",
+      "sent_queries": [
+        {
+          "source_fiat": "AVAX",
+          "target_fiat": "BTC",
+          "source_amount": 100,
+          "source_network": "avalanche-c",
+          "target_network": "bitcoin",
+          "source_payment_fee_percent": 0,
+          "target_payment_fee_percent": 0,
+          "sources": "0x,bestchange,binance,bitcoin-center,bitget,bncex,bybit,cifra-broker,cow-swap,crypto-office,dzengi,gate,id-pay,mexc,near-intents,okx,papa-change,rapira,skylabs,symbiosis,whitebird",
+          "exchange_mode": "all",
+          "allow_cross_venue": true,
+          "min_orders": 20,
+          "min_completion_rate": 0.9,
+          "limit": 40
+        }
+      ],
+      "controls": [
+        {
+          "label": "Select sending asset: AVAX",
+          "text": "AVAX AVAX"
+        },
+        {
+          "label": "Select sending network: Avalanche C-Chain",
+          "text": ""
+        },
+        {
+          "label": "Select recipient asset: BTC",
+          "text": "BTC BTC"
+        },
+        {
+          "label": "Select recipient network: Bitcoin",
+          "text": ""
+        }
+      ],
+      "routes_found": 69,
+      "routes_exhaustive": true,
+      "provider_statuses": [
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "0x"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 20,
+          "offers_found": 51,
+          "ok": true,
+          "source": "bestchange"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 1129,
+          "offers_found": 1380,
+          "ok": true,
+          "source": "binance"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 453,
+          "offers_found": 580,
+          "ok": true,
+          "source": "bitget"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 695,
+          "offers_found": 527,
+          "ok": true,
+          "source": "bybit"
+        },
+        {
+          "cached": false,
+          "error": "cifra-broker returned invalid JSON with HTTP 200 OK",
+          "latency_ms": 2947,
+          "offers_found": 0,
+          "ok": false,
+          "source": "cifra-broker"
+        },
+        {
+          "cached": false,
+          "error": "request NEAR Intents quote failed with HTTP 400 Bad Request: {\"message\":\"Quoting for this pair is not available\",\"correlationId\":\"58565a15-7f6e-499e-aeef-ac5c066719c4\",\"timestamp\":\"2026-10-18T06:32:18.245Z\",\"path\":\"/v0/quote\"}",
+          "latency_ms": 1443,
+          "offers_found": 0,
+          "ok": false,
+          "source": "cow-swap"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "crypto-office"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 116,
+          "offers_found": 515,
+          "ok": true,
+          "source": "dzengi"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 521,
+          "offers_found": 2204,
+          "ok": true,
+          "source": "gate"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 70,
+          "offers_found": 1864,
+          "ok": true,
+          "source": "mexc"
+        },
+        {
+          "cached": false,
+          "error": "request NEAR Intents quote failed with HTTP 400 Bad Request: {\"message\":\"Quoting for this pair is not available\",\"correlationId\":\"2ebef828-b856-4730-b56e-744592894097\",\"timestamp\":\"2026-10-18T06:32:16.842Z\",\"path\":\"/v0/quote\"}",
+          "latency_ms": 42,
+          "offers_found": 0,
+          "ok": false,
+          "source": "near-intents"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 330,
+          "offers_found": 1182,
+          "ok": true,
+          "source": "okx"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 7067,
+          "offers_found": 1,
+          "ok": true,
+          "source": "symbiosis"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 179,
+          "offers_found": 11,
+          "ok": true,
+          "source": "whitebird"
+        }
+      ],
+      "routes": [
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "0.011938050000",
+            "source_pair": "AVAXBTC",
+            "source_rate": "0.000119500000",
+            "target_pair": "AVAXBTC",
+            "target_rate": "1.000000000000",
+            "venue": "binance"
+          },
+          "target_amount": "0.011938050000",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "976.422600000000",
+            "source_pair": "AVAXUSDT",
+            "source_rate": "9.774000000000",
+            "target_pair": "BTCUSDT",
+            "target_rate": "0.000012237017",
+            "venue": "binance"
+          },
+          "target_amount": "0.011936551768",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "976.322700000000",
+            "source_pair": "AVAXUSDT",
+            "source_rate": "9.773000000000",
+            "target_pair": "BTCUSDT",
+            "target_rate": "0.000012236607",
+            "venue": "bybit"
+          },
+          "target_amount": "0.011934930341",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "976.222800000000",
+            "source_pair": "AVAXUSDT",
+            "source_rate": "9.772000000000",
+            "target_pair": "BTCUSDT",
+            "target_rate": "0.000012237771",
+            "venue": "mexc"
+          },
+          "target_amount": "0.011934843872",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "976.222800000000",
+            "source_pair": "AVAXUSDT",
+            "source_rate": "9.772000000000",
+            "target_pair": "BTCUSDT",
+            "target_rate": "0.000012237745",
+            "venue": "gate"
+          },
+          "target_amount": "0.011934819043",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "976.322700000000",
+            "source_pair": "AVAXUSDT",
+            "source_rate": "9.773000000000",
+            "target_pair": "BTCUSDT",
+            "target_rate": "0.000012236158",
+            "venue": "okx"
+          },
+          "target_amount": "0.011934492228",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "975.123900000000",
+            "source_pair": "AVAXUSDC",
+            "source_rate": "9.761000000000",
+            "target_pair": "BTCUSDC",
+            "target_rate": "0.000012250364",
+            "venue": "binance"
+          },
+          "target_amount": "0.011933676729",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "976.222800000000",
+            "source_pair": "AVAXUSDT",
+            "source_rate": "9.772000000000",
+            "target_pair": "BTCUSDT",
+            "target_rate": "0.000012236504",
+            "venue": "bitget"
+          },
+          "target_amount": "0.011933608368",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "975.123900000000",
+            "source_pair": "AVAXUSDC",
+            "source_rate": "9.761000000000",
+            "target_pair": "BTCUSDC",
+            "target_rate": "0.000012250113",
+            "venue": "bybit"
+          },
+          "target_amount": "0.011933432593",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "975.024000000000",
+            "source_pair": "AVAXUSDC",
+            "source_rate": "9.760000000000",
+            "target_pair": "BTCUSDC",
+            "target_rate": "0.000012250503",
+            "venue": "okx"
+          },
+          "target_amount": "0.011932590087",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "977.721300000000",
+            "source_pair": "AVAXFDUSD",
+            "source_rate": "9.787000000000",
+            "target_pair": "BTCFDUSD",
+            "target_rate": "0.000012216405",
+            "venue": "binance"
+          },
+          "target_amount": "0.011932295444",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "975.024000000000",
+            "source_pair": "AVAXUSDC",
+            "source_rate": "9.760000000000",
+            "target_pair": "BTCUSDC",
+            "target_rate": "0.000012250095",
+            "venue": "gate"
+          },
+          "target_amount": "0.011932192490",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.0119240649",
+          "route_path": [
+            "AVAX@avalanche-c",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: TroyChange.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "975.443580000000",
+            "source_pair": "AVAXUSDT",
+            "source_rate": "9.764200000000",
+            "target_pair": "BTCUSDT",
+            "target_rate": "0.000012236186",
+            "venue": "dzengi"
+          },
+          "target_amount": "0.011923773655",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.011918114768",
+          "route_path": [
+            "AVAX@avalanche-c",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: BtcChange24.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "973.825200000000",
+            "source_pair": "AVAXUSDC",
+            "source_rate": "9.748000000000",
+            "target_pair": "BTCUSDC",
+            "target_rate": "0.000012250014",
+            "venue": "mexc"
+          },
+          "target_amount": "0.011917442927",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.011912",
+          "route_path": [
+            "AVAX@avalanche-c",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: GoldenWhale.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "973.325700000000",
+            "source_pair": "AVAXUSDC",
+            "source_rate": "9.743000000000",
+            "target_pair": "BTCUSDC",
+            "target_rate": "0.000012250548",
+            "venue": "bitget"
+          },
+          "target_amount": "0.011911849640",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "0.011908080000",
+            "source_pair": "AVAXBTC",
+            "source_rate": "0.000119200000",
+            "target_pair": "AVAXBTC",
+            "target_rate": "1.000000000000",
+            "venue": "dzengi"
+          },
+          "target_amount": "0.011908080000",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "0.403496100000",
+            "source_pair": "AVAXETH",
+            "source_rate": "0.004039000000",
+            "target_pair": "ETHBTC",
+            "target_rate": "0.029519000000",
+            "venue": "gate"
+          },
+          "target_amount": "0.011898890575",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.011894900745",
+          "route_path": [
+            "AVAX@avalanche-c",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: EasyBit.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.011889010309",
+          "route_path": [
+            "AVAX@avalanche-c",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: MasonEx.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "symbiosis",
+          "market_path": null,
+          "target_amount": "0.01188878",
+          "route_path": [
+            "AVAX@avalanche-c",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from symbiosis; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: crosschain-swap.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.011876",
+          "route_path": [
+            "AVAX@avalanche-c",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: YellowChanger.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.011869999999",
+          "route_path": [
+            "AVAX@avalanche-c",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: FloatChange.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.0118681219",
+          "route_path": [
+            "AVAX@avalanche-c",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: FixedFloat.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.011865111246",
+          "route_path": [
+            "AVAX@avalanche-c",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Tarifex.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.011864676617",
+          "route_path": [
+            "AVAX@avalanche-c",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: CyberMoney.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.01184",
+          "route_path": [
+            "AVAX@avalanche-c",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Exdex.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.011823713858",
+          "route_path": [
+            "AVAX@avalanche-c",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: BitcoinObmennik.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.011819200014",
+          "route_path": [
+            "AVAX@avalanche-c",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: 365Cash.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.011819200014",
+          "route_path": [
+            "AVAX@avalanche-c",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: CoinChanger.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.011805171708",
+          "route_path": [
+            "AVAX@avalanche-c",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Арбуз.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.011805171708",
+          "route_path": [
+            "AVAX@avalanche-c",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: ExWhite.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.011805171694",
+          "route_path": [
+            "AVAX@avalanche-c",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: ExHub.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.01180517168",
+          "route_path": [
+            "AVAX@avalanche-c",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Единорог.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.011805171666",
+          "route_path": [
+            "AVAX@avalanche-c",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Baltex.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.01180175676",
+          "route_path": [
+            "AVAX@avalanche-c",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: SimpleSwap.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.0117814629",
+          "route_path": [
+            "AVAX@avalanche-c",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Fastify.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.011770945388",
+          "route_path": [
+            "AVAX@avalanche-c",
+            "BTC@bitcoin"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: CatChange.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        }
+      ],
+      "visible_cards": 40
+    },
+    {
+      "source": "DOT",
+      "source_network_label": "Polkadot",
+      "target": "ETH",
+      "target_network_label": "Ethereum",
+      "amount": "100",
+      "sent_queries": [
+        {
+          "source_fiat": "DOT",
+          "target_fiat": "ETH",
+          "source_amount": 100,
+          "source_network": "polkadot",
+          "target_network": "ethereum",
+          "source_payment_fee_percent": 0,
+          "target_payment_fee_percent": 0,
+          "sources": "0x,bestchange,binance,bitcoin-center,bitget,bncex,bybit,cifra-broker,cow-swap,crypto-office,dzengi,gate,id-pay,mexc,near-intents,okx,papa-change,rapira,skylabs,symbiosis,whitebird",
+          "exchange_mode": "all",
+          "allow_cross_venue": true,
+          "min_orders": 20,
+          "min_completion_rate": 0.9,
+          "limit": 40
+        }
+      ],
+      "controls": [
+        {
+          "label": "Select sending asset: DOT",
+          "text": "DOT DOT"
+        },
+        {
+          "label": "Select sending network: Polkadot",
+          "text": ""
+        },
+        {
+          "label": "Select recipient asset: ETH",
+          "text": "ETH ETH"
+        },
+        {
+          "label": "Select recipient network: Ethereum (ERC-20)",
+          "text": ""
+        }
+      ],
+      "routes_found": 33,
+      "routes_exhaustive": true,
+      "provider_statuses": [
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "0x"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 16,
+          "offers_found": 18,
+          "ok": true,
+          "source": "bestchange"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 1113,
+          "offers_found": 1380,
+          "ok": true,
+          "source": "binance"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 491,
+          "offers_found": 580,
+          "ok": true,
+          "source": "bitget"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 687,
+          "offers_found": 527,
+          "ok": true,
+          "source": "bybit"
+        },
+        {
+          "cached": false,
+          "error": "cifra-broker returned invalid JSON with HTTP 200 OK",
+          "latency_ms": 2948,
+          "offers_found": 0,
+          "ok": false,
+          "source": "cifra-broker"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "cow-swap"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "crypto-office"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 73,
+          "offers_found": 0,
+          "ok": true,
+          "source": "dzengi"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 336,
+          "offers_found": 2204,
+          "ok": true,
+          "source": "gate"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 70,
+          "offers_found": 1864,
+          "ok": true,
+          "source": "mexc"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "near-intents"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 382,
+          "offers_found": 1182,
+          "ok": true,
+          "source": "okx"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "symbiosis"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 2993,
+          "offers_found": 7,
+          "ok": true,
+          "source": "whitebird"
+        }
+      ],
+      "routes": [
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "110.429460000000",
+            "source_pair": "DOTUSDT",
+            "source_rate": "1.105400000000",
+            "target_pair": "ETHUSDT",
+            "target_rate": "0.000414324010",
+            "venue": "okx"
+          },
+          "target_amount": "0.045707823075",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "110.419470000000",
+            "source_pair": "DOTUSDT",
+            "source_rate": "1.105300000000",
+            "target_pair": "ETHUSDT",
+            "target_rate": "0.000414330876",
+            "venue": "bybit"
+          },
+          "target_amount": "0.045704445576",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "110.289600000000",
+            "source_pair": "DOTUSDC",
+            "source_rate": "1.104000000000",
+            "target_pair": "ETHUSDC",
+            "target_rate": "0.000414817273",
+            "venue": "binance"
+          },
+          "target_amount": "0.045704281080",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "110.409480000000",
+            "source_pair": "DOTUSDT",
+            "source_rate": "1.105200000000",
+            "target_pair": "ETHUSDT",
+            "target_rate": "0.000414310277",
+            "venue": "bitget"
+          },
+          "target_amount": "0.045698038456",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "110.389500000000",
+            "source_pair": "DOTUSDT",
+            "source_rate": "1.105000000000",
+            "target_pair": "ETHUSDT",
+            "target_rate": "0.000414372081",
+            "venue": "mexc"
+          },
+          "target_amount": "0.045696584538",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "110.389500000000",
+            "source_pair": "DOTUSDT",
+            "source_rate": "1.105000000000",
+            "target_pair": "ETHUSDT",
+            "target_rate": "0.000414339460",
+            "venue": "binance"
+          },
+          "target_amount": "0.045692987097",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "110.259630000000",
+            "source_pair": "DOTUSDC",
+            "source_rate": "1.103700000000",
+            "target_pair": "ETHUSDC",
+            "target_rate": "0.000414813832",
+            "venue": "okx"
+          },
+          "target_amount": "0.045691482366",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "110.369520000000",
+            "source_pair": "DOTUSDT",
+            "source_rate": "1.104800000000",
+            "target_pair": "ETHUSDT",
+            "target_rate": "0.000414390970",
+            "venue": "gate"
+          },
+          "target_amount": "0.045690396274",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "110.239650000000",
+            "source_pair": "DOTUSDC",
+            "source_rate": "1.103500000000",
+            "target_pair": "ETHUSDC",
+            "target_rate": "0.000414806949",
+            "venue": "bybit"
+          },
+          "target_amount": "0.045682444685",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "0.001349649000",
+            "source_pair": "DOTBTC",
+            "source_rate": "0.000013510000",
+            "target_pair": "ETHBTC",
+            "target_rate": "33.863867253640",
+            "venue": "binance"
+          },
+          "target_amount": "0.045658630240",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "110.489400000000",
+            "source_pair": "DOTFDUSD",
+            "source_rate": "1.106000000000",
+            "target_pair": "ETHFDUSD",
+            "target_rate": "0.000413650465",
+            "venue": "binance"
+          },
+          "target_amount": "0.045658287735",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "110.089800000000",
+            "source_pair": "DOTUSDC",
+            "source_rate": "1.102000000000",
+            "target_pair": "ETHUSDC",
+            "target_rate": "0.000414851691",
+            "venue": "gate"
+          },
+          "target_amount": "0.045625268699",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "110.089800000000",
+            "source_pair": "DOTUSDC",
+            "source_rate": "1.102000000000",
+            "target_pair": "ETHUSDC",
+            "target_rate": "0.000414831039",
+            "venue": "mexc"
+          },
+          "target_amount": "0.045622997486",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "0.001348650000",
+            "source_pair": "DOTBTC",
+            "source_rate": "0.000013500000",
+            "target_pair": "ETHBTC",
+            "target_rate": "33.847820200379",
+            "venue": "mexc"
+          },
+          "target_amount": "0.045603213851",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.045599924148",
+          "route_path": [
+            "DOT@polkadot",
+            "ETH@ethereum"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: EasyBit.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "0.001347651000",
+            "source_pair": "DOTBTC",
+            "source_rate": "0.000013490000",
+            "target_pair": "ETHBTC",
+            "target_rate": "33.854695646286",
+            "venue": "gate"
+          },
+          "target_amount": "0.045578690128",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.045536122798",
+          "route_path": [
+            "DOT@polkadot",
+            "ETH@ethereum"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Fswap.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.04545741547",
+          "route_path": [
+            "DOT@polkadot",
+            "ETH@ethereum"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Tarifex.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.045399999996",
+          "route_path": [
+            "DOT@polkadot",
+            "ETH@ethereum"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: XChangic.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.045379399994",
+          "route_path": [
+            "DOT@polkadot",
+            "ETH@ethereum"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: XStable.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.045321100009",
+          "route_path": [
+            "DOT@polkadot",
+            "ETH@ethereum"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Меняла.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.045149000007",
+          "route_path": [
+            "DOT@polkadot",
+            "ETH@ethereum"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Alfacash.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.044868090249",
+          "route_path": [
+            "DOT@polkadot",
+            "ETH@ethereum"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: MoneyOne.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.044767646037",
+          "route_path": [
+            "DOT@polkadot",
+            "ETH@ethereum"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: ECashExpert.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.044385496619",
+          "route_path": [
+            "DOT@polkadot",
+            "ETH@ethereum"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: OneMoment.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.043642732511",
+          "route_path": [
+            "DOT@polkadot",
+            "ETH@ethereum"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: FinBitFlow.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.043544847359",
+          "route_path": [
+            "DOT@polkadot",
+            "ETH@ethereum"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: GrumBot.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.043470331749",
+          "route_path": [
+            "DOT@polkadot",
+            "ETH@ethereum"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Гарантия.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.043470331749",
+          "route_path": [
+            "DOT@polkadot",
+            "ETH@ethereum"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Сова.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.042704315629",
+          "route_path": [
+            "DOT@polkadot",
+            "ETH@ethereum"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Cash-Bit.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.042438690008",
+          "route_path": [
+            "DOT@polkadot",
+            "ETH@ethereum"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: BlaBlaMoney.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.042097584434",
+          "route_path": [
+            "DOT@polkadot",
+            "ETH@ethereum"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Ферма.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        },
+        {
+          "route_kind": "crypto_to_crypto",
+          "route_provider": "bestchange",
+          "market_path": null,
+          "target_amount": "0.037914245784",
+          "route_path": [
+            "DOT@polkadot",
+            "ETH@ethereum"
+          ],
+          "warnings": [
+            "Live dry quote from bestchange; execution and wallet compatibility are not verified.",
+            "Quoted exchanger: Ex-Bank.",
+            "Cross-network transfer requires the provider's deposit and withdrawal flow; confirm addresses, memos, network fees, and finality before sending."
+          ]
+        }
+      ],
+      "visible_cards": 33
+    },
+    {
+      "source": "TON",
+      "source_network_label": "TON",
+      "target": "BTC",
+      "target_network_label": "Bitcoin",
+      "amount": "1000",
+      "sent_queries": [
+        {
+          "source_fiat": "TON",
+          "target_fiat": "BTC",
+          "source_amount": 1000,
+          "source_network": "ton",
+          "target_network": "bitcoin",
+          "source_payment_fee_percent": 0,
+          "target_payment_fee_percent": 0,
+          "sources": "0x,bestchange,binance,bitcoin-center,bitget,bncex,bybit,cifra-broker,cow-swap,crypto-office,dzengi,gate,id-pay,mexc,near-intents,okx,papa-change,rapira,skylabs,symbiosis,whitebird",
+          "exchange_mode": "all",
+          "allow_cross_venue": true,
+          "min_orders": 20,
+          "min_completion_rate": 0.9,
+          "limit": 40
+        }
+      ],
+      "controls": [
+        {
+          "label": "Select sending asset: TON",
+          "text": "TON TON"
+        },
+        {
+          "label": "Select sending network: TON",
+          "text": ""
+        },
+        {
+          "label": "Select recipient asset: BTC",
+          "text": "BTC BTC"
+        },
+        {
+          "label": "Select recipient network: Bitcoin",
+          "text": ""
+        }
+      ],
+      "routes_found": 1,
+      "routes_exhaustive": true,
+      "provider_statuses": [
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "0x"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "bestchange"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 493,
+          "offers_found": 1380,
+          "ok": true,
+          "source": "binance"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 478,
+          "offers_found": 580,
+          "ok": true,
+          "source": "bitget"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 198,
+          "offers_found": 527,
+          "ok": true,
+          "source": "bybit"
+        },
+        {
+          "cached": false,
+          "error": "cifra-broker returned invalid JSON with HTTP 200 OK",
+          "latency_ms": 494,
+          "offers_found": 0,
+          "ok": false,
+          "source": "cifra-broker"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "cow-swap"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "crypto-office"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 84,
+          "offers_found": 0,
+          "ok": true,
+          "source": "dzengi"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 356,
+          "offers_found": 2204,
+          "ok": true,
+          "source": "gate"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 53,
+          "offers_found": 1864,
+          "ok": true,
+          "source": "mexc"
+        },
+        {
+          "cached": false,
+          "error": "request NEAR Intents quote failed with HTTP 400 Bad Request: {\"message\":\"Quoting for this pair is not available\",\"correlationId\":\"6c0acbcc-1d02-4b4f-a932-357cf3b9f379\",\"timestamp\":\"2026-10-18T06:32:31.647Z\",\"path\":\"/v0/quote\"}",
+          "latency_ms": 51,
+          "offers_found": 0,
+          "ok": false,
+          "source": "near-intents"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 766,
+          "offers_found": 1182,
+          "ok": true,
+          "source": "okx"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "symbiosis"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 3267,
+          "offers_found": 7,
+          "ok": true,
+          "source": "whitebird"
+        }
+      ],
+      "routes": [
+        {
+          "route_kind": "crypto_to_crypto",
+          "market_path": {
+            "intermediary_amount": "1350.947700000000",
+            "source_pair": "TONUSDT",
+            "source_rate": "1.352300000000",
+            "target_pair": "BTCUSDT",
+            "target_rate": "0.000012237745",
+            "venue": "whitebird"
+          },
+          "target_amount": "0.016516021072",
+          "warnings": [
+            "Spot-market estimate only: trading fees, slippage and execution are not guaranteed.",
+            "Deposit and withdrawal network availability and fees are not verified by the selected venue."
+          ]
+        }
+      ],
+      "visible_cards": 1
+    },
+    {
+      "source": "TON",
+      "source_network_label": "TON",
+      "target": "USDC",
+      "target_network_label": "Ethereum",
+      "amount": "1000",
+      "sent_queries": [
+        {
+          "source_fiat": "TON",
+          "target_fiat": "USDC",
+          "source_amount": 1000,
+          "source_network": "ton",
+          "target_network": "ethereum",
+          "source_payment_fee_percent": 0,
+          "target_payment_fee_percent": 0,
+          "sources": "0x,bestchange,binance,bitcoin-center,bitget,bncex,bybit,cifra-broker,cow-swap,crypto-office,dzengi,gate,id-pay,mexc,near-intents,okx,papa-change,rapira,skylabs,symbiosis,whitebird",
+          "exchange_mode": "all",
+          "allow_cross_venue": true,
+          "min_orders": 20,
+          "min_completion_rate": 0.9,
+          "limit": 40
+        }
+      ],
+      "controls": [
+        {
+          "label": "Select sending asset: TON",
+          "text": "TON TON"
+        },
+        {
+          "label": "Select sending network: TON",
+          "text": ""
+        },
+        {
+          "label": "Select recipient asset: USDC",
+          "text": "USDC USDC"
+        },
+        {
+          "label": "Select recipient network: Ethereum (ERC-20)",
+          "text": ""
+        }
+      ],
+      "routes_found": 0,
+      "routes_exhaustive": true,
+      "provider_statuses": [
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "0x"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "bestchange"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 1121,
+          "offers_found": 1380,
+          "ok": true,
+          "source": "binance"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 468,
+          "offers_found": 580,
+          "ok": true,
+          "source": "bitget"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 195,
+          "offers_found": 527,
+          "ok": true,
+          "source": "bybit"
+        },
+        {
+          "cached": false,
+          "error": "cifra-broker returned invalid JSON with HTTP 200 OK",
+          "latency_ms": 2624,
+          "offers_found": 0,
+          "ok": false,
+          "source": "cifra-broker"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "cow-swap"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "crypto-office"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 76,
+          "offers_found": 0,
+          "ok": true,
+          "source": "dzengi"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 396,
+          "offers_found": 2204,
+          "ok": true,
+          "source": "gate"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 42,
+          "offers_found": 1864,
+          "ok": true,
+          "source": "mexc"
+        },
+        {
+          "cached": false,
+          "error": "request NEAR Intents quote failed with HTTP 400 Bad Request: {\"message\":\"Quoting for this pair is not available\",\"correlationId\":\"4e472d54-60bd-40d7-a858-fc398e5a7f40\",\"timestamp\":\"2026-10-18T06:32:37.129Z\",\"path\":\"/v0/quote\"}",
+          "latency_ms": 35,
+          "offers_found": 0,
+          "ok": false,
+          "source": "near-intents"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 332,
+          "offers_found": 1182,
+          "ok": true,
+          "source": "okx"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 0,
+          "offers_found": 0,
+          "ok": true,
+          "source": "symbiosis"
+        },
+        {
+          "cached": false,
+          "error": null,
+          "latency_ms": 3054,
+          "offers_found": 8,
+          "ok": true,
+          "source": "whitebird"
+        }
+      ],
+      "routes": [],
+      "visible_cards": 0
+    }
+  ],
+  "page_errors": []
+}

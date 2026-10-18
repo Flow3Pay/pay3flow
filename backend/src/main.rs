@@ -99,13 +99,16 @@ async fn main() -> anyhow::Result<()> {
     };
     let mut public_route_providers: Vec<Arc<dyn PublicRouteProvider>> =
         vec![Arc::new(near_intents.clone())];
+    let supplemental_token_catalog =
+        format!("{}/v2/tokens", cfg.symbiosis_url.trim_end_matches('/'));
     let cow = CowRouteProvider::from_config(
         &cfg.cow_api_urls,
         &cfg.cow_tokens,
         cfg.cow_quote_address.as_deref(),
     )?
     .map(|cow| {
-        cow.with_token_catalog(&cfg.cow_token_list_url)
+        cow.with_token_catalog(&supplemental_token_catalog)
+            .with_token_catalog(&cfg.cow_token_list_url)
             .with_bridge(near_intents.clone())
     });
     if let Some(cow) = &cow {
@@ -137,6 +140,8 @@ async fn main() -> anyhow::Result<()> {
         {
             let provider = provider
                 .with_api_key(key)
+                .with_token_catalog(&supplemental_token_catalog)
+                .await
                 .with_token_catalog(&cfg.cow_token_list_url)
                 .await;
             public_route_providers.push(Arc::new(provider));

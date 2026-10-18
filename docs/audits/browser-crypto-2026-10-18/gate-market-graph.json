@@ -1,0 +1,78 @@
+{
+  "observed_at": "2026-10-18T06:38:01.085138+00:00",
+  "url": "https://api.gateio.ws/api/v4/spot/tickers",
+  "ticker_count": 2205,
+  "results": [
+    {
+      "from": "ETH",
+      "to": "BTC",
+      "direct": true,
+      "two_trade_intermediaries": [
+        "ASTR",
+        "CRV",
+        "FIL",
+        "GT",
+        "GUSD",
+        "RLUSD",
+        "USD1",
+        "USDC",
+        "USDT"
+      ]
+    },
+    {
+      "from": "ETH",
+      "to": "AVAX",
+      "direct": true,
+      "two_trade_intermediaries": [
+        "USDC",
+        "USDT"
+      ]
+    },
+    {
+      "from": "ETH",
+      "to": "DOT",
+      "direct": false,
+      "two_trade_intermediaries": [
+        "BTC",
+        "USDC",
+        "USDT"
+      ]
+    },
+    {
+      "from": "AVAX",
+      "to": "BTC",
+      "direct": false,
+      "two_trade_intermediaries": [
+        "ETH",
+        "USDC",
+        "USDT"
+      ]
+    },
+    {
+      "from": "DOT",
+      "to": "ETH",
+      "direct": false,
+      "two_trade_intermediaries": [
+        "BTC",
+        "USDC",
+        "USDT"
+      ]
+    },
+    {
+      "from": "ETH",
+      "to": "GRAM",
+      "direct": false,
+      "two_trade_intermediaries": [
+        "USDT"
+      ]
+    },
+    {
+      "from": "GRAM",
+      "to": "BTC",
+      "direct": false,
+      "two_trade_intermediaries": [
+        "USDT"
+      ]
+    }
+  ]
+}

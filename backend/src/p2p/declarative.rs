@@ -1041,7 +1041,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn whitebird_gram_orderbook_is_returned_as_ton_market() {
+    async fn whitebird_gram_orderbook_keeps_the_canonical_gram_ticker() {
         let app = axum::Router::new().route("/orderbook", axum::routing::get(
             |axum::extract::Query(query): axum::extract::Query<BTreeMap<String, String>>| async move {
                 assert_eq!(query["symbol"], "GRAMUSDT");
@@ -1056,7 +1056,7 @@ mod tests {
         source.config.symbols = vec!["GRAMUSDT".into()];
         let quotes = source.tickers().await.unwrap();
         assert_eq!(quotes.len(), 1);
-        assert_eq!(quotes[0].symbol, "TONUSDT");
+        assert_eq!(quotes[0].symbol, "GRAMUSDT");
         assert_eq!((quotes[0].bid, quotes[0].ask), (1.45, 1.46));
         server.abort();
     }
@@ -1585,7 +1585,7 @@ mod tests {
             source.template_values(&query, operation).unwrap().asset,
             "NEWCOIN"
         );
-        query.asset = "TON".into();
+        query.asset = "GRAM".into();
         assert_eq!(
             source.template_values(&query, operation).unwrap().asset,
             "GRAM"
@@ -1631,7 +1631,7 @@ mod tests {
             for side in [P2pSide::BuyCrypto, P2pSide::SellCrypto] {
                 let query = P2pSearchQuery {
                     fiat: fiat.into(),
-                    asset: "TON".into(),
+                    asset: "GRAM".into(),
                     side,
                     amount: Some(1000.0),
                     asset_amount: None,
@@ -1658,7 +1658,7 @@ mod tests {
                 let offer = source
                     .into_offer(&response, &query, operation.offer.as_ref().unwrap())
                     .unwrap();
-                assert_eq!(offer.asset, "TON");
+                assert_eq!(offer.asset, "GRAM");
                 assert_eq!(offer.network.as_deref(), Some("ton"));
                 assert_eq!(offer.fiat, fiat);
                 assert_eq!(offer.price, "5");

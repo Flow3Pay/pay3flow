@@ -188,6 +188,7 @@ impl SymbiosisRouteProvider {
             "bitcoin" => Ok("bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"),
             "tron" => Ok("T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb"),
             "solana" => Ok("So11111111111111111111111111111111111111112"),
+            "ton" => Ok("EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c"),
             network if EXTRA_EVM_NETWORKS.iter().any(|(_, name)| *name == network) => {
                 Ok(&self.quote_address)
             }
@@ -660,6 +661,17 @@ mod tests {
 
     #[test]
     fn wrapped_ton_catalog_resolves_the_bridge_contract_instead_of_unrelated_ton_tickers() {
+        let provider = SymbiosisRouteProvider::new(
+            DEFAULT_API_URL,
+            None,
+            "0x0000000000000000000000000000000000000001",
+            300,
+        )
+        .unwrap();
+        let gram = Asset::parse("GRAM@ton").unwrap();
+        let eth = Asset::parse("ETH@ethereum").unwrap();
+        assert!(provider.supports_pair(&eth, &gram));
+        assert!(provider.supports_pair(&gram, &eth));
         let tokens: Vec<SymbiosisToken> = serde_json::from_value(json!([
             {"symbol": "TON", "chainId": 1, "address": "0x2be5e8c109e2197D077D13A82dAead6a9b3433C5", "decimals": 18},
             {"symbol": "TON", "chainId": 1, "address": "0x6a6c2adA3Ce053561C2FbC3eE211F23d9b8C520a", "decimals": 18},
@@ -668,7 +680,7 @@ mod tests {
             {"symbol": "GRAM", "chainId": 85918, "address": "", "decimals": 9}
         ])).unwrap();
         let ethereum =
-            SymbiosisRouteProvider::token_for(&tokens, &Asset::parse("TON@ethereum").unwrap())
+            SymbiosisRouteProvider::token_for(&tokens, &Asset::parse("GRAM@ethereum").unwrap())
                 .unwrap();
         assert_eq!(
             ethereum.address,
@@ -680,7 +692,7 @@ mod tests {
         assert_eq!(
             SymbiosisRouteProvider::token_for(
                 &tokens,
-                &Asset::parse("TON@bnb-smart-chain").unwrap()
+                &Asset::parse("GRAM@bnb-smart-chain").unwrap()
             )
             .unwrap()
             .symbol,
@@ -694,7 +706,7 @@ mod tests {
         );
         assert!(SymbiosisRouteProvider::token_for(
             &tokens[..2],
-            &Asset::parse("TON@ethereum").unwrap()
+            &Asset::parse("GRAM@ethereum").unwrap()
         )
         .is_err());
     }

@@ -1,5 +1,6 @@
 use super::*;
 
+mod crypto_coverage;
 mod fiat_spot;
 
 use chrono::DateTime;
@@ -364,7 +365,7 @@ impl PublicRouteProvider for BroadCycleProvider {
     async fn supported_assets(&self) -> Vec<Asset> {
         let mut assets = vec![Asset::new("USDT", Some("bnb-smart-chain")).unwrap()];
         for symbol in [
-            "USDC", "BTC", "ETH", "SOL", "BNB", "TRX", "TON", "DAI", "XRP", "AVAX", "NEAR", "AAA",
+            "USDC", "BTC", "ETH", "SOL", "BNB", "TRX", "GRAM", "DAI", "XRP", "AVAX", "NEAR", "AAA",
             "ZZZ",
         ] {
             for network in ["bnb-smart-chain", "ethereum"] {
@@ -907,7 +908,7 @@ fn exchange_mode_selects_p2p_exchangers_or_both() {
 #[test]
 fn recognizes_assets_present_in_the_network_catalog_as_crypto() {
     let networks = crate::networks::NetworkCatalog::test_default();
-    for asset in ["BTC", "ETH", "USDT", "USDC", "TRX", "TON", "EVER"] {
+    for asset in ["BTC", "ETH", "USDT", "USDC", "TRX", "GRAM", "EVER"] {
         assert!(
             networks.is_supported_asset(asset),
             "asset should use crypto routing: {asset}"
@@ -990,7 +991,7 @@ fn everscale_native_asset_can_be_sent_or_received_without_provider_metadata() {
 #[test]
 fn expanded_default_catalog_is_valid_while_explicit_search_lists_remain_bounded() {
     let defaults = [
-        "USDT", "USDC", "BTC", "ETH", "BNB", "SOL", "TRX", "TON", "DOGE", "LTC", "DAI", "FDUSD",
+        "USDT", "USDC", "BTC", "ETH", "BNB", "SOL", "TRX", "GRAM", "DOGE", "LTC", "DAI", "FDUSD",
         "XRP", "ADA", "DOT", "LINK", "AVAX", "MATIC", "BCH", "NEAR", "APT", "ATOM", "UNI", "SUI",
         "EVER",
     ]

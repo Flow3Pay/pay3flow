@@ -18,7 +18,7 @@ market = "direct_exchange"
 endpoint = "https://api.whitebird.io/api/v3/exchange/client/quote"
 method = "POST"
 headers = { Origin = "https://whitebird.io", Referer = "https://whitebird.io/exchanger", Accept = "application/json" }
-asset_codes = { USDT = "USDT_TRC", USDC = "USDC_ERC", TON = "GRAM" }
+asset_codes = { USDT = "USDT_TRC", USDC = "USDC_ERC", TON = "GRAM", GRAM = "GRAM" }
 all = true
 fiat_probe_amount = 1000
 asset_probe_amount = 1
@@ -32,7 +32,7 @@ amount_mode = "fiat_probe"
 request_json = '''{"input":{"asset":"{{fiat}}","type":"FIAT_PROVIDER","amount":"{{amount}}"},"output":{"asset":"{{asset}}","type":"CRYPTO_TRANSFER"},"merchantId":"11111111-1111-1111-1111-111111111111"}'''
 
 [adapter.p2p.buy.offer]
-network_by_asset = { TON = "ton" }
+network_by_asset = { TON = "ton", GRAM = "ton" }
 fiat_pointer = "/input/asset"
 asset_pointer = "/output/asset"
 fiat_amount_pointer = "/input/amount"
@@ -46,7 +46,7 @@ amount_mode = "asset_probe"
 request_json = '''{"input":{"asset":"{{asset}}","type":"CRYPTO_TRANSFER","amount":"{{amount}}"},"output":{"asset":"{{fiat}}","type":"FIAT_PROVIDER"},"merchantId":"11111111-1111-1111-1111-111111111111"}'''
 
 [adapter.p2p.sell.offer]
-network_by_asset = { TON = "ton" }
+network_by_asset = { TON = "ton", GRAM = "ton" }
 fiat_pointer = "/output/asset"
 asset_pointer = "/input/asset"
 fiat_amount_pointer = "/output/amount"
@@ -63,7 +63,7 @@ endpoint = "https://market-data-service.whitebird.io/api/v1/market/orderbook"
 method = "GET"
 query = { symbol = "{{asset}}", limit = "1" }
 symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "TRXUSDT", "LINKUSDT", "UNIUSDT", "AAVEUSDT", "GRAMUSDT", "PAXGUSDT", "XAUTUSDT"]
-symbol_aliases = { GRAMUSDT = "TONUSDT" }
+symbol_aliases = {}
 timeout_ms = 10000
 items_pointer = "/result"
 symbol_pointer = "/symbol"

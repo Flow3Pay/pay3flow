@@ -1,3 +1,4 @@
+mod crypto_paths;
 mod cycle;
 mod discovery;
 mod fiat;
@@ -59,7 +60,7 @@ pub(super) async fn produce_workflow_routes(
             }
             (true, true) => (
                 service.search_provider_routes(query, Some(&batches)).await,
-                true,
+                false,
             ),
         };
         Ok::<_, anyhow::Error>(result)

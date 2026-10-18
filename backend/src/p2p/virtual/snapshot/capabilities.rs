@@ -14,7 +14,16 @@ impl P2pSearchService {
         if self.has_fmatch_backend() {
             self.warm_provider_capabilities();
             let assets = self.cached_provider_assets();
-            if !assets.is_empty() {
+            let complete = self.provider_capabilities_cache.read().is_ok_and(|cache| {
+                cache.as_ref().is_some_and(|snapshot| {
+                    self.route_providers.iter().all(|provider| {
+                        snapshot
+                            .get(provider.name())
+                            .is_some_and(|assets| !assets.is_empty())
+                    })
+                })
+            });
+            if complete && !assets.is_empty() {
                 return assets;
             }
             return Self::provider_assets_for(&self.route_providers).await;
@@ -144,6 +153,7 @@ impl P2pSearchService {
             .filter_map(|provider| {
                 snapshot
                     .get(provider.name())
+                    .filter(|assets| !assets.is_empty())
                     .cloned()
                     .map(|assets| RouteProviderCapability {
                         provider: provider.clone(),
@@ -151,6 +161,16 @@ impl P2pSearchService {
                     })
             })
             .collect::<Vec<_>>();
+        let missing = providers
+            .iter()
+            .filter(|provider| {
+                snapshot
+                    .get(provider.name())
+                    .is_none_or(|assets| assets.is_empty())
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        capabilities.extend(Self::provider_capabilities(&missing).await.iter().cloned());
         capabilities.sort_by_key(|capability| provider_priority(capability.provider.name()));
         capabilities.into()
     }

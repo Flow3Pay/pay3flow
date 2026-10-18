@@ -1,4 +1,5 @@
 import { guideParameters } from "./guide-link";
+import { canonicalAssetTicker } from "./asset-identity";
 
 export type ExchangeShareState = {
   source: string;
@@ -48,7 +49,7 @@ export function exchangeShareUrl(origin: string, state: ExchangeShareState, lang
 }
 
 export function shareCurrency(value: string) {
-  return /^[a-z0-9._-]{1,20}$/i.test(value) ? value.toUpperCase() : null;
+  return /^[a-z0-9._-]{1,20}$/i.test(value) ? canonicalAssetTicker(value) : null;
 }
 export function shareAmount(value: string | null) {
   const normalized = value?.replace(',', '.');

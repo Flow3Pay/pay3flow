@@ -58,8 +58,11 @@ impl<'de> Deserialize<'de> for Asset {
 
 impl Asset {
     pub fn new(symbol: impl AsRef<str>, location: Option<&str>) -> Result<Self> {
-        let symbol = normalize_code(symbol.as_ref(), "asset symbol")?;
+        let mut symbol = normalize_code(symbol.as_ref(), "asset symbol")?;
         let location = location.map(normalize_location).transpose()?;
+        if symbol == "TON" && location.as_deref() == Some("ton") {
+            symbol = "GRAM".into();
+        }
         Ok(Self { symbol, location })
     }
 
@@ -1341,7 +1344,7 @@ mod tests {
     }
 
     #[test]
-    fn near_ton_catalog_uses_ton_for_the_native_gram_entry() {
+    fn near_ton_catalog_uses_gram_for_the_native_coin_only() {
         let token: NearToken = serde_json::from_value(json!({
             "assetId": "nep245:v2_1.omni.hot.tg:1117_", "blockchain": "ton",
             "symbol": "GRAM", "decimals": 9
@@ -1354,7 +1357,7 @@ mod tests {
             asset_id: "nep245:another-gram-token".into(),
             ..token
         };
-        assert_eq!(other.asset().unwrap(), asset("GRAM@ton"));
+        assert!(other.asset().is_err());
         assert!(!other.matches(&asset("TON@ton")));
         let provider = NearIntentsProvider::new("https://example.test", None).unwrap();
         assert!(provider.supports_pair(&asset("TON@ton"), &asset("USDT@tron")));

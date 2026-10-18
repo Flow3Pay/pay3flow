@@ -25,8 +25,10 @@ export interface MarketPricesResponse {
   prices: Record<string, number>;
 }
 
-export function fetchMarketPrices(signal?: AbortSignal): Promise<MarketPricesResponse> {
-  return request("/api/market-prices", { signal });
+export async function fetchMarketPrices(signal?: AbortSignal): Promise<MarketPricesResponse> {
+  const response = await request<MarketPricesResponse>("/api/market-prices", { signal });
+  if (response.prices.GRAM === undefined && response.prices.TON !== undefined) response.prices.GRAM = response.prices.TON;
+  return response;
 }
 
 export interface ProviderDefinition {

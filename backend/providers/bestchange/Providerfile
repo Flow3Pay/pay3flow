@@ -4,8 +4,8 @@ exchange_methods = ["exchanger"]
 language = "rust"
 source = '''
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
@@ -14,9 +14,7 @@ use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use tokio::sync::OnceCell;
 
-use crate::p2p::{
-    Advertiser, P2pOffer, P2pOfferMarket, P2pSearchQuery, P2pSide, P2pSource,
-};
+use crate::p2p::{Advertiser, P2pOffer, P2pOfferMarket, P2pSearchQuery, P2pSide, P2pSource};
 use crate::provider_adapter::BestChangeAdapterConfig;
 use crate::providers::ProviderAdapterRecord;
 use crate::route_engine::{Amount, Asset, PublicRouteProvider, PublicRouteQuote};
@@ -190,10 +188,17 @@ impl BestChangeSource {
         let mut cache = self.rate_cache.lock().await;
         let ttl = Duration::from_secs(5);
         if let Some((inserted, rates)) = cache.get(pair) {
-            if inserted.elapsed() < ttl { return Ok(rates.clone()); }
+            if inserted.elapsed() < ttl {
+                return Ok(rates.clone());
+            }
         }
-        let rates = Arc::new(self.api_json::<RateResponse>(&format!("rates/{pair}")).await?);
-        if cache.len() >= 512 { cache.retain(|_, (inserted, _)| inserted.elapsed() < ttl); }
+        let rates = Arc::new(
+            self.api_json::<RateResponse>(&format!("rates/{pair}"))
+                .await?,
+        );
+        if cache.len() >= 512 {
+            cache.retain(|_, (inserted, _)| inserted.elapsed() < ttl);
+        }
         cache.insert(pair.to_owned(), (Instant::now(), rates.clone()));
         Ok(rates)
     }
@@ -317,8 +322,7 @@ impl BestChangeSource {
                         completion_rate_30d: None,
                         positive_rate: None,
                     },
-                    advertiser_profile_url: changer
-                        .and_then(|changer| changer.profile_url.clone()),
+                    advertiser_profile_url: changer.and_then(|changer| changer.profile_url.clone()),
                     source_url: self.direction_url(from, to, query.amount),
                     source_url_is_exact: false,
                 });
@@ -370,9 +374,7 @@ impl P2pSource for BestChangeSource {
             6,
         );
         if from_units.is_empty() || to_units.is_empty() {
-            bail!(
-                "BestChange has no exchange-unit mapping for {from_code} -> {to_code}"
-            );
+            bail!("BestChange has no exchange-unit mapping for {from_code} -> {to_code}");
         }
         let combinations = from_units
             .iter()
@@ -440,78 +442,90 @@ impl PublicRouteProvider for BestChangeSource {
         }
 
         let catalog = self.metadata().await?;
-        let from_unit = catalog
+        let from_units = catalog
             .units
             .iter()
-            .find(|unit| unit.route_asset.as_ref() == Some(&from))
-            .with_context(|| format!("BestChange does not support {from}"))?;
-        let to_unit = catalog
+            .filter(|unit| unit.route_asset.as_ref() == Some(&from))
+            .collect::<Vec<_>>();
+        let to_units = catalog
             .units
             .iter()
-            .find(|unit| unit.route_asset.as_ref() == Some(&to))
-            .with_context(|| format!("BestChange does not support {to}"))?;
-        let pair = format!("{}-{}", from_unit.id, to_unit.id);
-        let response = self.route_rates(&pair).await?;
-        let rates = response
-            .rates
-            .get(&pair)
-            .context("BestChange returned no rates for the requested pair")?;
+            .filter(|unit| unit.route_asset.as_ref() == Some(&to))
+            .collect::<Vec<_>>();
+        if from_units.is_empty() || to_units.is_empty() {
+            bail!("BestChange does not support {from} -> {to}");
+        }
+        let combinations = from_units
+            .iter()
+            .flat_map(|from| to_units.iter().map(move |to| (*from, *to)))
+            .take(MAX_UNIT_COMBINATIONS)
+            .collect::<Vec<_>>();
+        let pairs = combinations
+            .iter()
+            .map(|(from, to)| format!("{}-{}", from.id, to.id))
+            .collect::<Vec<_>>()
+            .join("+");
+        let response = self.route_rates(&pairs).await?;
 
         let mut quotes = Vec::new();
-        for row in rates {
-            let Some(rate) = row.rate.value().filter(|rate| *rate > 0.0) else {
+        'pairs: for (from_unit, to_unit) in combinations {
+            let pair = format!("{}-{}", from_unit.id, to_unit.id);
+            let Some(rates) = response.rates.get(&pair) else {
                 continue;
             };
-            if row
-                .inmin
-                .as_ref()
-                .and_then(ApiNumber::value)
-                .is_some_and(|minimum| input < minimum)
-                || row
-                    .inmax
+            for row in rates {
+                let Some(rate) = row.rate.value().filter(|rate| *rate > 0.0) else {
+                    continue;
+                };
+                if row
+                    .inmin
                     .as_ref()
                     .and_then(ApiNumber::value)
-                    .is_some_and(|maximum| input > maximum)
-            {
-                continue;
-            }
-            let output = input / rate;
-            if !output.is_finite()
-                || output <= 0.0
-                || row
-                    .reserve
-                    .as_ref()
-                    .and_then(ApiNumber::value)
-                    .is_some_and(|reserve| output > reserve)
-            {
-                continue;
-            }
-            let exchanger = catalog.changers.get(&row.changer);
-            quotes.push(PublicRouteQuote {
-                provider: self.slug.clone(),
-                quote_id: Some(format!("{}-{}-{}", from_unit.id, to_unit.id, row.changer)),
-                description: Some(
-                    exchanger
-                        .map(|exchanger| exchanger.name.clone())
-                        .unwrap_or_else(|| format!("BestChange exchanger {}", row.changer)),
-                ),
-                source_url: Some(
-                    exchanger
-                        .and_then(|exchanger| exchanger.profile_url.clone())
-                        .unwrap_or_else(|| {
-                            self.direction_url(from_unit, to_unit, Some(input))
-                        }),
-                ),
-                from: from.clone(),
-                to: to.clone(),
-                input: amount.clone(),
-                output: Amount::new(number(output), to.clone())?,
-                fees: Vec::new(),
-                expires_at: None,
-                path: vec![from.clone(), to.clone()],
-            });
-            if quotes.len() >= self.config.max_results {
-                break;
+                    .is_some_and(|minimum| input < minimum)
+                    || row
+                        .inmax
+                        .as_ref()
+                        .and_then(ApiNumber::value)
+                        .is_some_and(|maximum| input > maximum)
+                {
+                    continue;
+                }
+                let output = input / rate;
+                if !output.is_finite()
+                    || output <= 0.0
+                    || row
+                        .reserve
+                        .as_ref()
+                        .and_then(ApiNumber::value)
+                        .is_some_and(|reserve| output > reserve)
+                {
+                    continue;
+                }
+                let exchanger = catalog.changers.get(&row.changer);
+                quotes.push(PublicRouteQuote {
+                    provider: self.slug.clone(),
+                    quote_id: Some(format!("{}-{}-{}", from_unit.id, to_unit.id, row.changer)),
+                    description: Some(
+                        exchanger
+                            .map(|exchanger| exchanger.name.clone())
+                            .unwrap_or_else(|| format!("BestChange exchanger {}", row.changer)),
+                    ),
+                    source_url: Some(
+                        exchanger
+                            .and_then(|exchanger| exchanger.profile_url.clone())
+                            .unwrap_or_else(|| self.direction_url(from_unit, to_unit, Some(input))),
+                    ),
+                    from: from.clone(),
+                    to: to.clone(),
+                    input: amount.clone(),
+                    output: Amount::new(number(output), to.clone())?,
+                    fees: Vec::new(),
+                    expires_at: None,
+                    path: vec![from.clone(), to.clone()],
+                });
+                if quotes.len() >= self.config.max_results {
+                    break 'pairs;
+                }
             }
         }
         if quotes.is_empty() {
@@ -521,11 +535,7 @@ impl PublicRouteProvider for BestChangeSource {
     }
 }
 
-fn catalog(
-    currencies: CurrencyResponse,
-    changers: ChangerResponse,
-    language: &str,
-) -> Catalog {
+fn catalog(currencies: CurrencyResponse, changers: ChangerResponse, language: &str) -> Catalog {
     let units = currencies
         .currencies
         .into_iter()
@@ -551,9 +561,10 @@ fn catalog(
         .changers
         .into_iter()
         .map(|changer| {
-            let profile_url = changer.pages.get(language).map(|url| {
-                format!("{url}#pay3flow-id={}", changer.id)
-            });
+            let profile_url = changer
+                .pages
+                .get(language)
+                .map(|url| format!("{url}#pay3flow-id={}", changer.id));
             (
                 changer.id,
                 CatalogChanger {
@@ -570,11 +581,12 @@ fn bestchange_route_asset(currency: &ApiCurrency) -> Option<Asset> {
     if !currency.crypto {
         return None;
     }
-    let symbol = currency
+    let mut symbol = currency
         .viewname
         .split_whitespace()
         .next()?
         .to_ascii_uppercase();
+    if symbol == "TON" { symbol = "GRAM".into(); }
     let code = currency.code.to_ascii_uppercase();
     let network = if code.contains("ARBTM") {
         "arbitrum-one"
@@ -604,7 +616,7 @@ fn bestchange_route_asset(currency: &ApiCurrency) -> Option<Asset> {
             "ETH" => "ethereum",
             "SOL" => "solana",
             "TRX" => "tron",
-            "TON" => "ton",
+            "GRAM" => "ton",
             "DOGE" => "dogecoin",
             "LTC" => "litecoin",
             "XRP" => "xrpl",
@@ -617,6 +629,8 @@ fn bestchange_route_asset(currency: &ApiCurrency) -> Option<Asset> {
             "APT" => "aptos",
             "ATOM" => "cosmos-hub",
             "SUI" => "sui",
+            "EVER" => "everscale",
+            "ZEC" => "zcash",
             _ => return None,
         }
     };
@@ -761,9 +775,7 @@ mod tests {
                 1163,
                 CatalogChanger {
                     name: "ExampleExchange".into(),
-                    profile_url: Some(
-                        "https://www.bestchange.com/example-exchanger.html".into(),
-                    ),
+                    profile_url: Some("https://www.bestchange.com/example-exchanger.html".into()),
                 },
             )]),
         };
@@ -903,7 +915,10 @@ mod tests {
             order: 0,
         }];
 
-        assert_eq!(select_units(&units, "RUB", Some("T-Bank"), false, 3)[0].id, 105);
+        assert_eq!(
+            select_units(&units, "RUB", Some("T-Bank"), false, 3)[0].id,
+            105
+        );
     }
 
     #[test]
@@ -933,6 +948,61 @@ mod tests {
             bestchange_route_asset(&trc20).unwrap(),
             Asset::new("USDT", Some("tron")).unwrap()
         );
+        for (symbol, network) in [("EVER", "everscale"), ("ZEC", "zcash")] {
+            let currency = ApiCurrency {
+                id: 1,
+                name: symbol.into(),
+                urlname: symbol.into(),
+                viewname: symbol.into(),
+                code: symbol.into(),
+                crypto: true,
+            };
+            assert_eq!(
+                bestchange_route_asset(&currency),
+                Some(Asset::new(symbol, Some(network)).unwrap())
+            );
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn crypto_quotes_search_every_matching_catalog_unit() {
+        let source = source();
+        let from = Asset::new("BTC", Some("bitcoin")).unwrap();
+        let to = Asset::new("EVER", Some("everscale")).unwrap();
+        let unit = |id, asset: &Asset| CatalogUnit {
+            id,
+            code: asset.symbol.clone(),
+            crypto: true,
+            route_asset: Some(asset.clone()),
+            slug: asset.symbol.clone(),
+            search_text: String::new(),
+            order: id as usize,
+        };
+        source
+            .metadata
+            .set(Catalog {
+                units: vec![unit(1, &from), unit(2, &from), unit(3, &to)],
+                changers: HashMap::new(),
+            })
+            .unwrap();
+        // Only the second source unit has rates. A first-match lookup misses both exchangers.
+        let rates: RateResponse = serde_json::from_value(serde_json::json!({"rates": {"2-3": [
+            {"changer": 11, "rate": 0.00001, "reserve": 1000000, "inmin": 0.001, "inmax": 1},
+            {"changer": 12, "rate": 0.00002, "reserve": 1000000, "inmin": 0.001, "inmax": 1}
+        ]}}))
+        .unwrap();
+        source
+            .rate_cache
+            .lock()
+            .await
+            .insert("1-3+2-3".into(), (Instant::now(), Arc::new(rates)));
+        let quotes = source
+            .quotes(from.clone(), to, Amount::new("0.01", from).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(quotes.len(), 2);
+        assert_eq!(quotes[0].quote_id.as_deref(), Some("2-3-11"));
+        assert_eq!(quotes[1].quote_id.as_deref(), Some("2-3-12"));
     }
 
     #[tokio::test]
@@ -945,8 +1015,12 @@ mod tests {
 
         assert!(!buy.is_empty());
         assert!(!sell.is_empty());
-        assert!(buy.iter().all(|offer| offer.price.parse::<f64>().unwrap() > 1.0));
-        assert!(sell.iter().all(|offer| offer.price.parse::<f64>().unwrap() > 1.0));
+        assert!(buy
+            .iter()
+            .all(|offer| offer.price.parse::<f64>().unwrap() > 1.0));
+        assert!(sell
+            .iter()
+            .all(|offer| offer.price.parse::<f64>().unwrap() > 1.0));
         assert!(buy
             .iter()
             .chain(&sell)
@@ -967,11 +1041,8 @@ mod tests {
     #[ignore = "requires BESTCHANGE_API_KEY and network access"]
     async fn live_router_returns_selected_bestchange_crypto_route() {
         let source = Arc::new(source());
-        let service = P2pSearchService::with_sources(
-            vec![source.clone()],
-            Duration::from_secs(10),
-        )
-        .with_route_providers(vec![source]);
+        let service = P2pSearchService::with_sources(vec![source.clone()], Duration::from_secs(10))
+            .with_route_providers(vec![source]);
 
         let response = service
             .search_routes(P2pRouteSearchQuery {

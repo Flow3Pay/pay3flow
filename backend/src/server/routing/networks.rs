@@ -93,7 +93,7 @@ mod tests {
                 Arc::new(CatalogProvider {
                     name: "another-provider",
                     assets: vec![
-                        Asset::parse("TON@ethereum").unwrap(),
+                        Asset::parse("GRAM@ethereum").unwrap(),
                         Asset::parse("TON@ton").unwrap(),
                         Asset::parse("NEWCOIN@ethereum").unwrap(),
                     ],
@@ -109,13 +109,13 @@ mod tests {
                 CryptoNetwork {
                     id: "ton".into(),
                     name: "TON".into(),
-                    currencies: vec!["TON".into()],
+                    currencies: vec!["GRAM".into()],
                 },
             ],
             &service,
         )
         .await;
-        assert_eq!(catalog[0].currencies, ["ETH", "NEWCOIN", "TON"]);
-        assert_eq!(catalog[1].currencies, ["TON"]);
+        assert_eq!(catalog[0].currencies, ["ETH", "GRAM", "NEWCOIN"]);
+        assert_eq!(catalog[1].currencies, ["GRAM"]);
     }
 }

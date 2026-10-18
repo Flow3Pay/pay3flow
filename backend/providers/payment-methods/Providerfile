@@ -92,7 +92,7 @@ payment_methods = [
   { id = "global-bnb", name = "BNB", country = "GLOBAL", currency = "BNB", kind = "wallet", color = "#f3ba2f", initials = "BNB", icon_url = "/icons/assets/bnb.webp", p2p_query = "BNB" },
   { id = "global-sol", name = "Solana", country = "GLOBAL", currency = "SOL", kind = "wallet", color = "#14f195", initials = "SOL", icon_url = "/icons/assets/sol.webp", p2p_query = "SOL" },
   { id = "global-trx", name = "TRON", country = "GLOBAL", currency = "TRX", kind = "wallet", color = "#ef0027", initials = "TRX", icon_url = "/icons/assets/trx.webp", p2p_query = "TRX" },
-  { id = "global-ton", name = "Toncoin", country = "GLOBAL", currency = "TON", kind = "wallet", color = "#0098ea", initials = "TON", icon_url = "/icons/assets/ton.webp", p2p_query = "TON" },
+  { id = "global-ton", name = "Gram", country = "GLOBAL", currency = "GRAM", kind = "wallet", color = "#0098ea", initials = "GRAM", icon_url = "/icons/assets/gram.png", p2p_query = "GRAM" },
   { id = "global-aave", name = "Aave", country = "GLOBAL", currency = "AAVE", kind = "wallet", color = "#9391f7", initials = "AAVE", icon_url = "/icons/assets/aave.png", p2p_query = "AAVE" },
   { id = "global-aixbt", name = "aixbt", country = "GLOBAL", currency = "AIXBT", kind = "wallet", color = "#deef83", initials = "AIXBT", icon_url = "/icons/assets/aixbt.png", p2p_query = "AIXBT" },
   { id = "global-aevo", name = "Aevo", country = "GLOBAL", currency = "AEVO", kind = "wallet", color = "#a98fe9", initials = "AEVO", icon_url = "/icons/assets/aevo.png", p2p_query = "AEVO" },

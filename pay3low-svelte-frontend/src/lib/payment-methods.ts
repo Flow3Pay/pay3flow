@@ -1,5 +1,6 @@
 import { apiUrl } from "$lib/api";
 import { anonymousHeaders } from "$lib/anonymous-user";
+import { canonicalAssetTicker } from "./asset-identity";
 
 export type PaymentMethodRole = "sender" | "recipient" | "both";
 export type PaymentMethodKind = "bank" | "cash" | "currency" | "wallet";
@@ -70,15 +71,15 @@ export async function fetchPaymentMethods(): Promise<PaymentMethod[]> {
 
   return items.flatMap((item) => item.method_id ? [{
     id: item.method_id,
-    name: item.display_name || item.name,
+    name: item.kind === "wallet" && item.currency === "TON" ? "Gram" : item.display_name || item.name,
     country: item.country,
-    currency: item.currency,
+    currency: item.kind === "wallet" ? canonicalAssetTicker(item.currency) : item.currency,
     role: item.role,
     kind: item.kind,
     color: item.color,
-    initials: item.initials,
+    initials: item.kind === "wallet" && item.currency === "TON" ? "GRAM" : item.initials,
     popular: item.popular || undefined,
-    iconUrl: localIconUrl(item.icon_url),
+    iconUrl: item.kind === "wallet" && ["TON", "GRAM"].includes(item.currency) ? "/icons/assets/gram.png" : localIconUrl(item.icon_url),
     bankFeePercent: item.bank_fee_percent,
     p2pQuery: item.p2p_query || item.display_name || item.name,
     currencyGroup: item.currency_group,
