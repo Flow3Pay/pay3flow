@@ -67,16 +67,15 @@ impl P2pSearchService {
                 };
                 let provider = capability.provider.clone();
                 scheduled.insert(provider.name().to_string());
-                let job = self.cycle_quote_job(
-                    provider.clone(),
-                    from.clone(),
-                    to.clone(),
-                    amount.clone(),
-                    failures.clone(),
-                );
-                searches.push(
-                    async move { (provider.name().to_string(), from, to, amount, job.await) },
-                );
+                let service = self.clone();
+                let failures = failures.clone();
+                searches.push(async move {
+                    let name = provider.name().to_string();
+                    let (amount, result) = service
+                        .source_quote(provider, from.clone(), to.clone(), amount, failures)
+                        .await;
+                    (name, from, to, amount, result)
+                });
             }
         }
 

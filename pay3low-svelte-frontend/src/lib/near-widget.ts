@@ -25,10 +25,12 @@ export interface MountedNearWidget {
 
 export function mountNearWidget(container: HTMLElement, route: RouteCandidate, step: TutorialStep, networks: Record<string, string>, apiKey: string | undefined, theme: "light" | "dark"): MountedNearWidget {
   const chain = (name: string | undefined) => chains[Object.keys(networks).find(id => networks[id] === name) ?? name ?? ""];
-  const sourceChain = chain(step.network);
-  const targetChain = chain(step.targetNetwork ?? step.network);
+  const sourceChain = chain(step.fromAsset?.split("@")[1] ?? step.network);
+  const targetChain = chain(step.toAsset?.split("@")[1] ?? step.targetNetwork ?? step.network);
   const input = step.amount?.endsWith(` ${step.from}`) ? step.amount.slice(0, -step.from.length - 1) : step.amount;
-  const amount = (input ?? route.acquired_asset_amount ?? route.source_amount ?? "").replace(/,/g, "");
+  const amount = (step.inputAmount ?? input ?? route.acquired_asset_amount ?? route.source_amount ?? "").replace(/,/g, "");
+  // The SDK filters raw catalog symbols before normalizing these display aliases.
+  const allowedTokens = (symbol: string) => symbol === "NEAR" ? ["NEAR", "wNEAR"] : symbol === "USDT" ? ["USDT", "USDT0"] : [symbol];
   const config: Partial<WidgetConfig> = {
     apiKey, referral: "Pay3Flow", enableAccountAbstraction: false,
     allowSwapWithExternalWallet: true, lockSwapDirection: true, enableAutoTokensSwitching: false,
@@ -36,7 +38,7 @@ export function mountNearWidget(container: HTMLElement, route: RouteCandidate, s
     defaultTargetToken: targetChain ? { symbol: step.to, blockchain: targetChain } : null,
     allowedSourceChainsList: sourceChain ? [sourceChain] : undefined,
     allowedTargetChainsList: targetChain ? [targetChain] : undefined,
-    allowedSourceTokensList: [step.from], allowedTargetTokensList: [step.to],
+    allowedSourceTokensList: allowedTokens(step.from), allowedTargetTokensList: allowedTokens(step.to),
     chainsFilter: { source: { external: "all", intents: "none" }, target: { external: "all", intents: "none" } },
     themeParentElementSelector: "[data-testid=near-intents-live-widget]",
   };

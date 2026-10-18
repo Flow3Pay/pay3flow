@@ -760,7 +760,7 @@ test("GRAM keeps the TON network, restores legacy TON links and remains searchab
   await expect(page.locator(".moneyPanelSource .marketValue")).toHaveText("$12.50");
   await expect.poll(() => queries.some(query => query.source_fiat === "GRAM" && query.source_network === "ton" && query.target_fiat === "BTC" && query.target_network === "bitcoin")).toBe(true);
   await settleEntrance(page);
-  await page.screenshot({ path: `../docs/audits/browser-crypto-2026-10-18/local-gram-${test.info().project.name}.png` });
+  await page.screenshot({ path: test.info().outputPath("local-gram.png") });
   await page.reload();
   await expect(page.getByRole("button", { name: "Select sending asset: GRAM", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Select sending network: TON", exact: true })).toBeVisible();

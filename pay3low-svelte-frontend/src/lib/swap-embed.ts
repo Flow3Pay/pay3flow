@@ -48,7 +48,7 @@ export async function symbiosisAppUrl(route: RouteCandidate, step: TutorialStep,
   select("In", step.from, step.network);
   select("Out", step.to, step.targetNetwork ?? step.network);
   const input = step.amount?.endsWith(` ${step.from}`) ? step.amount.slice(0, -step.from.length - 1) : step.amount;
-  const amount = input?.replace(/,/g, "") ?? route.acquired_asset_amount ?? route.source_amount;
+  const amount = step.inputAmount ?? input?.replace(/,/g, "") ?? route.acquired_asset_amount ?? route.source_amount;
   if (amount && /^\d+(\.\d+)?$/.test(amount)) url.searchParams.set("amountIn", amount);
   return url.href;
 }

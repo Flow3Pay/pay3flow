@@ -784,6 +784,11 @@ impl PublicRouteProvider for CowRouteProvider {
         "cow-swap"
     }
 
+    async fn normalize_input(&self, amount: Amount) -> Result<Amount> {
+        let token = self.token(&amount.asset).await?;
+        Amount::new(truncate_decimal(&amount.value, Some(token.decimals))?, amount.asset)
+    }
+
     fn supports_pair(&self, from: &Asset, to: &Asset) -> bool {
         let Some(origin) = from.location.as_deref() else {
             return false;

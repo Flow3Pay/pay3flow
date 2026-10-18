@@ -86,13 +86,13 @@ precision from the shared token list at startup.
 
 The [provider coverage audit](route-aggregation-research.md#provider-coverage-audit--2026-10-12)
 records supported surfaces, live checks, corrected restrictions, and remaining limits.
-The [EVER and crypto-pair audit](docs/ever-route-audit.md) records a 54-request
+The [EVER and crypto-pair audit](ever-route-audit.md) records a 54-request
 coverage sample, the distinction between native EVER and its ERC-20 representation,
 and the remaining Everscale liquidity gaps. Ordinary crypto swaps also search
 bounded two-provider paths through a shared asset and network when cross-venue
 routing is enabled. Every leg uses an amount-specific quote; these sequential
 routes require separate execution and report `routes_exhaustive = false`.
-The [frontend crypto audit](docs/frontend-crypto-audit.md) records actual picker
+The [frontend crypto audit](frontend-crypto-audit.md) records actual picker
 clicks for BTC, AVAX, DOT and TON, the GRAM rebrand, and missing spot intermediaries.
 
 Provider capabilities live in

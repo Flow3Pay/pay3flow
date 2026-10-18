@@ -67,7 +67,7 @@
   $: swapActive = swapStep && swapView === "swap";
   $: if (swapActive && step) activeSwapStep = step.id;
   $: walletSwap = Boolean(swapActive && step?.execution && route.execution && sourceFamily && $wallets[sourceFamily]);
-  $: officialCow = Boolean(step?.execution && step.provider === "cow-swap");
+  $: officialCow = Boolean(swapStep && step?.provider === "cow-swap");
   $: walletProviderStep = Boolean(step?.execution);
   $: walletProviderUrl = step?.url ?? step?.guide?.links.find(link => /^Open\b/i.test(link.label))?.url ?? (step && venueUrls[step.provider.toLowerCase()]);
   $: exchangerWebsiteUrl = step?.provider.toLowerCase() === "bestchange" ? bestchangeWebsiteUrl(step) : null;

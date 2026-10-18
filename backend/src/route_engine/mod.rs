@@ -505,6 +505,14 @@ pub trait PublicRouteProvider: Send + Sync {
     async fn supported_assets(&self) -> Vec<Asset> {
         Vec::new()
     }
+    /// Normalize a user-entered source amount to the provider's token precision.
+    /// Intermediate amounts are validated exactly and must not be rounded here.
+    ///
+    /// # Errors
+    /// Returns an error when source-token metadata or its amount is invalid.
+    async fn normalize_input(&self, amount: Amount) -> Result<Amount> {
+        Ok(amount)
+    }
     async fn quote(&self, from: Asset, to: Asset, amount: Amount) -> Result<PublicRouteQuote>;
     async fn quotes(
         &self,

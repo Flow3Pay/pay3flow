@@ -19,6 +19,9 @@ export interface TutorialStep {
   venue: string;
   from: string;
   to: string;
+  fromAsset?: string;
+  toAsset?: string;
+  inputAmount?: string;
   amount?: string;
   output?: string;
   network?: string;
@@ -113,6 +116,7 @@ export function buildRouteTutorial(route: RouteCandidate, names: Record<string, 
         if (index === legs.length - 1) notes.push(copy("After the last trade, withdraw the original asset to your wallet on the selected network. Deduct the withdrawal fee when checking profit."));
       }
       add({ id: `cycle-${index}`, kind: "swap", provider: leg.provider, venue: name, from, to,
+        fromAsset: leg.from_asset, toAsset: leg.to_asset, inputAmount: leg.input_amount,
         title: copy("Convert {from} to {to}", { from: pathAsset(leg.from_asset), to: pathAsset(leg.to_asset) }),
         summary: copy("Route through {venue}", { venue: leg.description ? `${name} · ${leg.description}` : name }),
         amount: `${leg.input_amount} ${from}`, output: `${leg.output_amount} ${to}`, network: network(leg.from_asset.split("@")[1]), targetNetwork: network(leg.to_asset.split("@")[1]), pair: leg.market_pair ?? undefined,
@@ -129,6 +133,7 @@ export function buildRouteTutorial(route: RouteCandidate, names: Record<string, 
     const provider = route.route_provider!, name = venue(provider);
     const from = route.entry_offer_snapshot?.asset ?? route.source_currency, to = route.exit_offer_snapshot?.asset ?? route.target_currency ?? route.entry_asset;
     add({ id: "provider", kind: "swap", provider, venue: name, from, to,
+      inputAmount: route.execution?.input_amount ?? (route.entry_offer_snapshot ? route.acquired_asset_amount : route.source_amount),
       title: providerSwap || crypto ? copy("Swap {from} for {to} via {venue}", { from, to, venue: name }) : copy("Route through {venue}", { venue: name }),
       summary: copy("Open the direct exchange on {venue}, check the final amount, and follow the provider's instructions.", { venue: name }),
       amount: !route.entry_offer_snapshot ? tutorialMoney(route.source_amount_minor, route.source_currency, route.source_amount) : undefined,

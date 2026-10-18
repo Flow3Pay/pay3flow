@@ -183,6 +183,86 @@ fn asset(value: &str) -> Asset {
     Asset::parse(value).unwrap()
 }
 
+struct ExactExit;
+
+#[async_trait::async_trait]
+impl PublicRouteProvider for ExactExit {
+    fn name(&self) -> &str {
+        "exact-exit"
+    }
+    fn supports_pair(&self, from: &Asset, to: &Asset) -> bool {
+        *from == asset("USDC@ethereum") && *to == asset("EVER@ethereum")
+    }
+    async fn supported_assets(&self) -> Vec<Asset> {
+        vec![asset("USDC@ethereum"), asset("EVER@ethereum")]
+    }
+    async fn quote(
+        &self,
+        from: Asset,
+        to: Asset,
+        input: Amount,
+    ) -> anyhow::Result<crate::route_engine::PublicRouteQuote> {
+        Ok(crate::route_engine::PublicRouteQuote {
+            provider: self.name().into(),
+            quote_id: None,
+            description: None,
+            source_url: None,
+            from: from.clone(),
+            to: to.clone(),
+            input,
+            output: Amount::new("25", to.clone())?,
+            fees: vec![],
+            expires_at: None,
+            path: vec![from, to],
+        })
+    }
+}
+
+#[tokio::test]
+async fn cow_rounding_keeps_direct_quotes_at_the_actual_token_precision() {
+    let fixture = fixture(false, false).await;
+    let service = P2pSearchService::with_sources(Vec::new(), Duration::from_secs(5))
+        .with_route_providers(vec![Arc::new(fixture.cow.clone())]);
+    let query = serde_json::from_value(json!({
+        "source_fiat":"USDT", "target_fiat":"USDC", "source_amount":10.1234567,
+        "source_network":"ethereum", "target_network":"ethereum", "sources":"cow-swap"
+    }))
+    .unwrap();
+    let response = service.search_routes(query).await.unwrap();
+    assert_eq!(
+        response.routes_found, 1,
+        "token rounding must not discard the live CoW quote"
+    );
+    assert_eq!(response.routes[0].source_amount, "10.123456");
+    assert_eq!(
+        fixture.requests.bodies.lock().unwrap()[0]["sellAmountBeforeFee"],
+        "10123456"
+    );
+}
+
+#[tokio::test]
+async fn cow_rounding_keeps_composed_source_quotes_and_exact_intermediate_amounts() {
+    let fixture = fixture(false, false).await;
+    let service = P2pSearchService::with_sources(Vec::new(), Duration::from_secs(5))
+        .with_route_providers(vec![Arc::new(fixture.cow.clone()), Arc::new(ExactExit)]);
+    let query = serde_json::from_value(json!({
+        "source_fiat":"USDT", "target_fiat":"EVER", "source_amount":10.1234567,
+        "source_network":"ethereum", "target_network":"ethereum",
+        "sources":"cow-swap,exact-exit", "allow_cross_venue":true, "intermediary_assets":"USDC"
+    }))
+    .unwrap();
+    let response = service.search_routes(query).await.unwrap();
+    let route = response
+        .routes
+        .iter()
+        .find(|route| route.cycle_legs.len() == 2)
+        .expect("token rounding must not discard the composed CoW route");
+    assert_eq!(route.source_amount, "10.123456");
+    assert_eq!(route.cycle_legs[0].input_amount, "10.123456");
+    assert_eq!(route.cycle_legs[0].output_amount, "8.873456");
+    assert_eq!(route.cycle_legs[1].input_amount, "8.873456");
+}
+
 #[tokio::test]
 async fn cow_selected_alone_finds_usdt_erc20_to_native_sol() {
     let fixture = fixture(false, false).await;

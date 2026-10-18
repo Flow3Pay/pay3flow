@@ -19,13 +19,13 @@
   let theme: "light" | "dark" = "light";
   $: copy = (key: string, params: Record<string, string | number> = {}) => t(key, params, $locale);
   $: paths = route.route_path?.filter(asset => asset.includes("@")) ?? [];
-  $: sourceNetwork = route.execution?.from_asset.split("@")[1] ?? paths[0]?.split("@")[1] ?? route.source_network ?? "ethereum";
-  $: targetNetwork = route.execution?.to_asset.split("@")[1] ?? paths.at(-1)?.split("@")[1] ?? route.target_network ?? sourceNetwork;
+  $: sourceNetwork = step.fromAsset?.split("@")[1] ?? route.execution?.from_asset.split("@")[1] ?? paths[0]?.split("@")[1] ?? route.source_network ?? "ethereum";
+  $: targetNetwork = step.toAsset?.split("@")[1] ?? route.execution?.to_asset.split("@")[1] ?? paths.at(-1)?.split("@")[1] ?? route.target_network ?? sourceNetwork;
   const extraChains: Record<string, number> = { linea: 59144, plasma: 9745, ink: 57073, bitcoin: 1000000000, solana: 1000000001 };
   $: sharedWalletSupported = Boolean(chainIdForNetwork(sourceNetwork));
   $: chainId = chainIdForNetwork(sourceNetwork) ?? extraChains[sourceNetwork];
   $: targetChainId = chainIdForNetwork(targetNetwork) ?? extraChains[targetNetwork];
-  $: amount = route.execution?.input_amount ?? (route.entry_offer_snapshot ? route.acquired_asset_amount : route.source_amount);
+  $: amount = step.inputAmount ?? route.execution?.input_amount ?? (route.entry_offer_snapshot ? route.acquired_asset_amount : route.source_amount);
   $: tokenUrl = (step.url ?? route.route_provider_url ?? "").match(/#\/\d+\/swap\/([^/?#]+)\/([^/?#]+)/);
   $: params = {
     appCode: "Pay3Flow",

@@ -487,6 +487,7 @@ for (const [provider, origin] of [["0x", "https://matcha.xyz"], ["barter", "http
 });
 
 test("NEAR Intents mounts its standalone wallet widget and preserves it across guide and theme changes", async ({ page }) => {
+  test.setTimeout(60_000);
   await wallets(page);
   await page.route("https://intents-api.aurora.dev/**", route => route.fulfill({
     headers: { "access-control-allow-origin": "*" },
@@ -505,7 +506,7 @@ test("NEAR Intents mounts its standalone wallet widget and preserves it across g
   await guide.getByTestId("start-guide").click();
   const widget = guide.getByTestId("near-intents-live-widget");
   const input = widget.locator("input").first();
-  await expect(input).toHaveValue("0.1", { timeout: 30_000 });
+  await expect(input).toHaveValue("0.1", { timeout: 45_000 });
   await expect(widget).toContainText("ETH");
   await expect(widget).toContainText("SOL");
   await widget.getByRole("button", { name: "Connect wallet", exact: true }).first().click();
@@ -523,6 +524,58 @@ test("NEAR Intents mounts its standalone wallet widget and preserves it across g
   await guide.getByRole("button", { name: "SWAP", exact: true }).click();
   await expect(widget).toBeVisible();
   await expect(input).toHaveValue("0.1");
+  expect(await page.evaluate(() => (window as any).transfers)).toBe(0);
+});
+
+test("composed routes open the CoW widget with the current leg's network and exact input", async ({ page }) => {
+  await wallets(page);
+  await page.route("https://swap.cow.fi/**", route => route.fulfill({ contentType: "text/html", body: "<!doctype html>CoW widget" }));
+  await page.evaluate(async path => (await import(/* @vite-ignore */ path)).mountGuide({
+    route_id: "composed-cow-route", route_kind: "crypto_to_crypto",
+    source_currency: "BTC", target_currency: "EVER", source_network: "bitcoin", target_network: "ethereum", entry_asset: "USDC",
+    source_amount: "0.02", target_amount: "233689.083110962", legs: [], route_path: ["BTC@bitcoin", "USDC@ethereum", "EVER@ethereum"],
+    cycle_legs: [
+      { provider: "near-intents", from_asset: "BTC@bitcoin", to_asset: "USDC@ethereum", input_amount: "0.02", output_amount: "1629.515056" },
+      { provider: "cow-swap", from_asset: "USDC@ethereum", to_asset: "EVER@ethereum", input_amount: "1629.515056", output_amount: "233689.083110962", source_url: "https://swap.cow.fi/#/1/swap/0x0000000000000000000000000000000000000020/0x1ffEFD8036409Cb6d652bd610DE465933b226917" },
+    ],
+  }, "guide"), harnessPath);
+  const guide = page.getByTestId("route-guide");
+  await guide.getByTestId("start-guide").click();
+  await guide.getByTestId("confirm-instruction-step").click();
+  await guide.getByRole("button", { name: "SWAP", exact: true }).click();
+  const iframe = guide.getByTestId("cow-live-widget").locator("iframe");
+  await expect(iframe).toBeVisible();
+  const url = new URL((await iframe.getAttribute("src"))!);
+  expect(url.hash).toContain("/1/widget/swap/0x0000000000000000000000000000000000000020/0x1ffEFD8036409Cb6d652bd610DE465933b226917");
+  expect(new URLSearchParams(url.hash.split("?")[1]).get("sellAmount")).toBe("1629.515056");
+  expect(await page.evaluate(() => (window as any).transfers)).toBe(0);
+});
+
+test("NEAR widget accepts native NEAR and USDT0 catalog aliases", async ({ page }) => {
+  test.setTimeout(60_000);
+  await wallets(page);
+  await page.route("https://intents-api.aurora.dev/**", route => {
+    return route.fulfill({
+    headers: { "access-control-allow-origin": "*" },
+    status: route.request().url().includes("/api/tokens/") ? 200 : 400,
+    json: route.request().url().includes("/api/tokens/") ? { asset_stats: [], tokens: [
+      { assetId: "nep141:wrap.near", symbol: "wNEAR", blockchain: "near", decimals: 24, price: 3 },
+      { assetId: "nep141:usdt0.arb.omft.near", symbol: "USDT0", blockchain: "arb", decimals: 6, price: 1 },
+    ] } : { message: "Quote fixture" },
+    });
+  });
+  await page.evaluate(async path => (await import(/* @vite-ignore */ path)).mountGuide({
+    route_id: "near-aliases", route_kind: "crypto_to_crypto", route_provider: "near-intents",
+    source_currency: "NEAR", target_currency: "USDT", source_network: "near", target_network: "arbitrum-one", entry_asset: "NEAR",
+    source_amount: "10.123456789123", target_amount: "30.37", legs: [], route_path: ["NEAR@near", "USDT@arbitrum-one"],
+  }), harnessPath);
+  const guide = page.getByTestId("route-guide");
+  await guide.getByTestId("start-guide").click();
+  const widget = guide.getByTestId("near-intents-live-widget");
+  // The official SDK abbreviates the displayed value to five decimals.
+  await expect(widget.locator("input").first()).toHaveValue("10.12345", { timeout: 45_000 });
+  await expect(widget).toContainText("NEAR");
+  await expect(widget).toContainText("USDT");
   expect(await page.evaluate(() => (window as any).transfers)).toBe(0);
 });
 

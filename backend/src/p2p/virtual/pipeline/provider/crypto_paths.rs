@@ -76,14 +76,15 @@ impl P2pSearchService {
                 };
                 let name = capability.provider.name().to_string();
                 *counts.entry(name.clone()).or_default() += 1;
-                let job = self.cycle_quote_job(
-                    capability.provider.clone(),
-                    from.clone(),
-                    middle.clone(),
-                    amount.clone(),
-                    failures.clone(),
-                );
-                entries.push(async move { (name, from, middle, amount, job.await) });
+                let service = self.clone();
+                let provider = capability.provider.clone();
+                let failures = failures.clone();
+                entries.push(async move {
+                    let (amount, result) = service
+                        .source_quote(provider, from.clone(), middle.clone(), amount, failures)
+                        .await;
+                    (name, from, middle, amount, result)
+                });
             }
         }
         let mut exits = FuturesUnordered::new();

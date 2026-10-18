@@ -207,6 +207,32 @@ impl P2pSearchService {
         Ok(())
     }
 
+    /// Normalize only user input; keep the provider's exact amount for validation.
+    pub(super) async fn source_quote(
+        &self,
+        provider: Arc<dyn PublicRouteProvider>,
+        from: Asset,
+        to: Asset,
+        amount: Amount,
+        failures: QuoteFailures,
+    ) -> (Amount, QuoteResult) {
+        let normalized = tokio::time::timeout(
+            std::time::Duration::from_secs(12),
+            provider.normalize_input(amount.clone()),
+        )
+        .await
+        .map_err(quote_error)
+        .and_then(|result| result.map_err(quote_error));
+        let normalized = match normalized {
+            Ok(normalized) => normalized,
+            Err(error) => return (amount, Err(error)),
+        };
+        let result = self
+            .cycle_quote_job(provider, from, to, normalized.clone(), failures)
+            .await;
+        (normalized, result)
+    }
+
     pub(super) fn cycle_quote_job(
         &self,
         provider: Arc<dyn PublicRouteProvider>,

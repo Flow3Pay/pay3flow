@@ -43,12 +43,12 @@ export async function setEvmConnected(connected: boolean) {
   });
 }
 
-export async function mountGuide(route: RouteCandidate) {
+export async function mountGuide(route: RouteCandidate, initialMode: "swap" | "guide" = "swap") {
   if (panel) await unmount(panel);
   const target = document.createElement("div");
   target.id = "wallet-test-panel";
   document.body.appendChild(target);
-  panel = mount(RouteInstructions, { target, props: { route, venueNames: { symbiosis: "Symbiosis" }, venueUrls: { symbiosis: "https://api.symbiosis.finance/crosschain/docs/" }, providerGuidance: { symbiosis: { description: "Cross-chain swap", steps: [], links: [{ label: "Open Symbiosis WebApp", url: "https://app.symbiosis.finance/" }] } }, networkNames: { "avalanche-c": "Avalanche C-Chain" }, onClose: () => {} } });
+  panel = mount(RouteInstructions, { target, props: { route, initialMode, venueNames: { symbiosis: "Symbiosis" }, venueUrls: { symbiosis: "https://api.symbiosis.finance/crosschain/docs/" }, providerGuidance: { symbiosis: { description: "Cross-chain swap", steps: [], links: [{ label: "Open Symbiosis WebApp", url: "https://app.symbiosis.finance/" }] } }, networkNames: { "avalanche-c": "Avalanche C-Chain" }, onClose: () => {} } });
 }
 
 export async function mountPanel(route: RouteCandidate, family: "near" | "evm" | "tron") {

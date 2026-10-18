@@ -89,7 +89,9 @@ pub(in crate::p2p) fn crypto_swap_from_quotes(
         return None;
     }
     let input_value = positive_number(&entry.input.value)?;
-    if (input_value - query.source_amount).abs() > query.source_amount.abs() * f64::EPSILON * 4.0 {
+    // Source quotes were validated against the provider's normalized input.
+    // It may be smaller than the request by token dust; joined legs stay exact.
+    if input_value > query.source_amount + query.source_amount.abs() * f64::EPSILON * 4.0 {
         return None;
     }
     let output_value = positive_number(&exit.output.value)?;
