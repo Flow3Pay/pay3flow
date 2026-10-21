@@ -1,0 +1,144 @@
+{
+  "checked_at": "2026-10-19T17:26:36.173189+00:00",
+  "url": "https://pay3flow.lefine.pro",
+  "private_configuration_inspected": true,
+  "automated_checks_passed": false,
+  "checks": [
+    {
+      "check": "health",
+      "passed": true,
+      "detail": "Public backend health"
+    },
+    {
+      "check": "live_mode",
+      "passed": true,
+      "detail": "Simulation must be disabled"
+    },
+    {
+      "check": "trading_enabled",
+      "passed": false,
+      "detail": "Configured trading switch"
+    },
+    {
+      "check": "route_available",
+      "passed": false,
+      "detail": "Route and observers ready"
+    },
+    {
+      "check": "ethereum_login",
+      "passed": true,
+      "detail": "Wallet verification configured"
+    },
+    {
+      "check": "everscale_login",
+      "passed": false,
+      "detail": "Wallet verification configured"
+    },
+    {
+      "check": "public_proposals",
+      "passed": false,
+      "detail": "Both desk directions need current structured Proposals"
+    },
+    {
+      "check": "backend_ready",
+      "passed": true,
+      "detail": "Backend has an available replica"
+    },
+    {
+      "check": "desk_configuration",
+      "passed": false,
+      "detail": {
+        "missing_fields": [
+          "desk_actor",
+          "matcher_actor",
+          "desk_name",
+          "ever_wallet",
+          "usdt_wallet",
+          "ever_resource",
+          "usdt_resource",
+          "support_owner",
+          "incident_owner",
+          "incident_backup",
+          "refund_policy",
+          "net_delivery_policy",
+          "operating_requirements_evidence",
+          "live_gate_evidence",
+          "alert_webhook",
+          "heartbeat_url"
+        ]
+      }
+    },
+    {
+      "check": "ethereum_providers",
+      "passed": true,
+      "detail": "Two distinct HTTPS providers required; operator independence needs review"
+    },
+    {
+      "check": "everscale_providers",
+      "passed": false,
+      "detail": "Two distinct HTTPS providers required; operator independence needs review"
+    },
+    {
+      "check": "everwallet_allowlist",
+      "passed": false,
+      "detail": "Approved deployed single-key wallet code hashes required"
+    },
+    {
+      "check": "persistent_secrets",
+      "passed": true,
+      "detail": "JWT and encryption secrets must each contain at least 32 characters"
+    },
+    {
+      "check": "route_resumed",
+      "passed": false,
+      "detail": "Persistent route pause"
+    },
+    {
+      "check": "signing_resumed",
+      "passed": true,
+      "detail": "Persistent signing pause"
+    },
+    {
+      "check": "ethereum_observer",
+      "passed": false,
+      "detail": "Successful scan within 60 seconds"
+    },
+    {
+      "check": "everscale_observer",
+      "passed": false,
+      "detail": "Successful scan within 60 seconds"
+    },
+    {
+      "check": "existing_obligations_inspected",
+      "passed": true,
+      "detail": {
+        "trades": 0,
+        "unresolved_attempts": 0
+      }
+    },
+    {
+      "check": "ethereum_rpc_1_mainnet",
+      "passed": true,
+      "detail": "Ethereum mainnet chain ID"
+    },
+    {
+      "check": "ethereum_rpc_2_mainnet",
+      "passed": true,
+      "detail": "Ethereum mainnet chain ID"
+    }
+  ],
+  "limits": "Read-only preflight. Passing checks cannot attest wallet ownership, provider independence, live settlement, relay delivery or operator evidence.",
+  "wallet_session_verification": {
+    "challenge": 200,
+    "signed_login": 200,
+    "session_restore": 200,
+    "private_history": 200,
+    "proof_replay": 401,
+    "customer_desk_access": 401,
+    "logout": 200,
+    "revoked_session": 401,
+    "wallet": "temporary test Ethereum EOA",
+    "trades_created": false,
+    "funds_moved": false
+  }
+}

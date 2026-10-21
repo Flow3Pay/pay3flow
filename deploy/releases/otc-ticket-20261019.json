@@ -1,0 +1,51 @@
+{
+  "status": "original_otc_ticket_extended_settlement_still_paused",
+  "verified_at": "2026-10-19T20:23:10.722015+00:00",
+  "url": "https://pay3flow.lefine.pro/#/otc",
+  "image": "localhost/pay3flow/frontend:otc-ticket-20261019-f48e457",
+  "image_id": "sha256:ae2e0153b0651b6f60c53a282664a3127027caed5634b6072ab9067c0ca1caba",
+  "source_base": "f48e4579a55fd34e7b05fda0e2317730422bd66d",
+  "source_manifest_sha256": "e50cfa7bb0b1bc8c3636773f48bcbdf4e454ed7d90df7aecd1148ebc239a2391",
+  "frontend_payload_sha256": "92ed2e08e37331abd59668031131706ef8ea881c91946e0e0d0e7f0aec80d952",
+  "backup": "/var/lib/pay3flow/backups/otc-ticket-20261019/frontend.json",
+  "scope": "Publication extends the original OtcTicket Sell side. OtcDeskBook shows public offers and original desk Proposals; My trades and History use the existing activity panel. No separate market mode or screen remains. Backend and saved offers are unchanged.",
+  "verification": {
+    "svelte_check": {
+      "errors": 0,
+      "warnings": 0
+    },
+    "browser_passed": 72,
+    "frontend_runtime_configuration_preserved": true,
+    "backend_image_preserved": true,
+    "running_frontend_matches_compiled_payload": true
+  },
+  "cancelled_offer": {
+    "id": "a9e7fb28-f592-48d5-8615-ee1c788a80b1",
+    "state": "cancelled"
+  },
+  "live": {
+    "checked_at": "2026-10-19T20:22:50.023Z",
+    "production_mutations": 0,
+    "shared_terminal": true,
+    "exact_rate": true,
+    "collapsed_chart_alignment": true,
+    "geometry": [
+      {
+        "width": 1440,
+        "no_overflow": true
+      },
+      {
+        "width": 390,
+        "no_overflow": true
+      },
+      {
+        "width": 320,
+        "no_overflow": true
+      }
+    ],
+    "original_ticket_used_for_both_sides": true,
+    "separate_market_screen_removed": true,
+    "closed_user_offer_not_reopened": true
+  },
+  "limits": "Buyer acceptance and settlement remain disabled. The cancelled user offer was not reopened, and no offers or funds were created or moved by verification."
+}

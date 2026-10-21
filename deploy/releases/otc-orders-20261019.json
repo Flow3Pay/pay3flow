@@ -1,0 +1,90 @@
+{
+  "status": "buy_sell_publication_with_editable_price_settlement_paused",
+  "verified_at": "2026-10-19T20:54:50.977493+00:00",
+  "url": "https://pay3flow.lefine.pro/#/otc",
+  "source_base": "f48e4579a55fd34e7b05fda0e2317730422bd66d",
+  "source_manifest_sha256": "5a7d764eb8a22804a311b14621548855f1ca07e861a88eb516729f78d8c06fd9",
+  "images": {
+    "backend": "localhost/pay3flow/backend:otc-orders-20261019-f48e457",
+    "frontend": "localhost/pay3flow/frontend:otc-orders-20261019-f48e457"
+  },
+  "image_ids": {
+    "backend": "sha256:93da61c763a419bfd99b712e4817e600e564b7415f0f24d5dae3631457e9d1d6",
+    "frontend": "sha256:44a5fb3c7315b7610dbfa85e188fd2ba415e073cfaa5a0ad135c4c5683cd6fc5"
+  },
+  "backend_binary_sha256": "9cf66b4bf087eb6f78dee6fa4000f2317d747a7ae97092eece2de65bcbf98959",
+  "frontend_payload_sha256": "844d30cb9abf44a5af44e0560dc8897d601b481dd8d199635238c48c0d509798",
+  "backup": {
+    "directory": "/var/lib/pay3flow/backups/otc-orders-20261019",
+    "database_sha256": "03561944ce1a9b60073f6dadfd9593d3905cd44771c0c6147b8c6332bbde364a",
+    "restore_listing": "passed"
+  },
+  "checks": {
+    "backend_ready_and_runtime_preserved": true,
+    "frontend_ready_and_runtime_preserved": true,
+    "settlement_configuration_unchanged": true,
+    "running_backend_matches_compiled_binary": true,
+    "running_frontend_matches_compiled_payload": true
+  },
+  "persistent_state": {
+    "cancelled_offer_state": "cancelled",
+    "controls_paused": true,
+    "open_offers": 0,
+    "trades": 0
+  },
+  "verification": {
+    "otc_tests_with_isolated_postgres": 37,
+    "amount_unit_tests": 6,
+    "browser_unique_scenarios_verified": 82,
+    "browser_initial": {
+      "passed": 76,
+      "failed": 2,
+      "failure": "An old assertion matched both the new inline pending hint and the success message; it was scoped to the success area."
+    },
+    "public_offer_browser_final_passed": 20,
+    "svelte_check": {
+      "errors": 0,
+      "warnings": 0
+    },
+    "cargo_fmt": "passed"
+  },
+  "live_verification": {
+    "checked_at": "2026-10-19T20:54:36.062Z",
+    "funds_moved": false,
+    "offers_published": false,
+    "publication_enabled": true,
+    "desk_settlement_paused": true,
+    "real_standard_wallet_signature_verified": true,
+    "replay_rejected": true,
+    "public_offer_read": true,
+    "reviewed_directions": [
+      "sell",
+      "buy"
+    ],
+    "browser_signed_login": true,
+    "zero_usdt_inventory_required": true,
+    "review_did_not_publish": true,
+    "price_editable_and_comma_normalized": true,
+    "blocking_reason_visible": true,
+    "geometry": [
+      {
+        "width": 1440,
+        "theme": "light",
+        "no_overflow": true
+      },
+      {
+        "width": 390,
+        "theme": "dark",
+        "no_overflow": true
+      },
+      {
+        "width": 320,
+        "theme": "light",
+        "no_overflow": true
+      }
+    ],
+    "logout_clears_connection": true
+  },
+  "scope": "Both public Buy and Sell offers are published through the original ticket. Unit price, EVER amount and USDT amount support exact two-way calculations, normalized decimal entry and explicit rounding. Invalid or missing fields explain why review is unavailable. Backend direction parsing, owned cancellation and replay behavior are verified against an isolated real PostgreSQL database.",
+  "limits": "This release enables publication of non-binding buy/sell offers. Acceptance and settlement remain paused. No synthetic offer was published on production, no user funds moved, and the cancelled user offer was not reopened."
+}

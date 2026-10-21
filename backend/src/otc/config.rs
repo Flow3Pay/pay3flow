@@ -7,6 +7,7 @@ pub(crate) const PROFILE: &str = "pay3flow-otc-fep0837-v1";
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct Config {
     pub enabled: bool,
+    pub public_offers_enabled: bool,
     pub demo: bool,
     pub origin: String,
     pub relay_origin: String,

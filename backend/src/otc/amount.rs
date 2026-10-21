@@ -33,7 +33,6 @@ pub(crate) fn units(value: &str, precision: u32) -> Result<u128> {
         .filter(|n| *n > 0)
         .ok_or_else(|| invalid("amount overflow or zero"))
 }
-#[cfg(test)]
 pub(crate) fn decimal(value: u128, precision: u32) -> String {
     let scale = 10_u128.pow(precision);
     if precision == 0 {

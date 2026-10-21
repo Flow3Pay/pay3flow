@@ -111,7 +111,13 @@
   async function selectChoice(family: WalletFamily, network: string) {
     if (working) return;
     const context = account;
-    if (context && (network === "ethereum" || network === "everscale")) {
+    const wallet = $wallets[family];
+    if (context && (network === "ethereum" || network === "everscale") && context.enabled && context.chains.includes(network)) {
+      const proof = context.bound.find(value => value.startsWith(`${network}:`))?.slice(network.length + 1).trim();
+      if (wallet && proof?.toLowerCase() === wallet.address.toLowerCase()) {
+        await disconnect(family);
+        return;
+      }
       busy = family; activeChain = network; error = "";
       try {
         if (context.session) await context.onVerify(network);
@@ -167,22 +173,28 @@
               {@const wallet = $wallets[choice.family]}
               {@const otcChain = account && (choice.network === "ethereum" || choice.network === "everscale") ? choice.network : null}
               {@const proof = otcChain ? account?.bound.find(value => value.startsWith(`${otcChain}:`))?.slice(otcChain.length + 1).trim() : undefined}
-              {@const action = busy === choice.family ? copy("Connecting…") : otcChain ? proof ? copy("Verified") : account?.session ? copy("Verify") : copy("Connect") : wallet ? copy("Disconnect") : copy("Connect")}
-              {@const address = proof || wallet?.address}
+              {@const canVerify = !!(otcChain && account?.enabled && account.chains.includes(otcChain))}
+              {@const verified = !!(wallet && proof?.toLowerCase() === wallet.address.toLowerCase())}
+              {@const disconnectable = !!wallet && (!otcChain || verified || !canVerify)}
+              {@const verificationAction = !!(canVerify && account?.session && (!proof || (wallet && !verified)))}
+              {@const action = busy === choice.family ? copy("Connecting…") : disconnectable ? copy("Disconnect") : verificationAction ? copy("Verify") : copy("Connect")}
+              {@const address = wallet?.address}
               <div class="walletChoice" data-family={choice.family} aria-busy={busy === choice.family}>
                 <PickerOptionCard
                   role="button"
                   name={choice.label}
                   iconUrl={choice.icon}
                   initials={choice.label.slice(0, 2).toUpperCase()}
-                  selected={otcChain ? Boolean(proof) : Boolean(wallet)}
+                  selected={Boolean(wallet)}
                   category={action}
                   meta={address && address.length > 20 ? `${address.slice(0, 7)}…${address.slice(-6)}` : address}
                   metaTitle={address}
-                  disabled={working || !!(otcChain && (!account?.enabled || !account.chains.includes(otcChain)))}
-                  ariaLabel={otcChain ? copy(account?.session ? "Verify {network} wallet" : "Connect {network} wallet", { network: choice.label }) : wallet ? copy("Disconnect {network} wallet", { network: choice.label }) : busy === choice.family ? copy("Connecting…") : copy("Connect {network} wallet", { network: choice.label })}
+                  disabled={working}
+                  ariaLabel={disconnectable ? copy("Disconnect {network} wallet", { network: choice.label }) : verificationAction ? copy("Verify {network} wallet", { network: choice.label }) : busy === choice.family ? copy("Connecting…") : copy("Connect {network} wallet", { network: choice.label })}
                   onSelect={() => selectChoice(choice.family, choice.network)}
                 />
+                {#if wallet || proof}<div class="connectionState"><span>{copy(wallet ? "Connected wallet" : "Wallet disconnected")}</span>{#if proof && (!wallet || verified)}<span>{copy("Verified")}</span>{/if}{#if wallet && !disconnectable}<button type="button" disabled={working} aria-label={copy("Disconnect {network} wallet", { network: choice.label })} on:click={() => disconnect(choice.family)}>{copy("Disconnect")}</button>{/if}</div>{/if}
+                {#if otcChain && !canVerify}<p class="verificationStatus">{copy("OTC verification is unavailable for this network.")}</p>{/if}
               </div>
             {/each}
             {#if !visibleChoices.length}<div class="emptySearch" role="status"><strong>{copy("No wallets found")}</strong><span>{copy("Try a different search.")}</span></div>{/if}
@@ -202,6 +214,9 @@
 
 <style>
   .walletMenu { position: relative; }
+  .connectionState { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 0 12px 8px; color: var(--color-text-soft); font-size: 12px; }
+  .connectionState button { margin-left: auto; padding: 4px 10px; }
+  .verificationStatus { margin: 0; padding: 0 12px 8px; color: var(--color-text-soft); font-size: 12px; line-height: 1.5; }
   button { min-height: 36px; border: 1px solid var(--color-border); border-radius: 9px; background: var(--color-panel); color: var(--color-text); font: inherit; cursor: pointer; transition: background .16s ease; }
   button:hover { background: var(--color-accent-soft); }
   button:disabled { opacity: .6; cursor: not-allowed; }

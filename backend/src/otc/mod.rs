@@ -9,6 +9,7 @@ mod chain;
 mod config;
 mod error;
 mod escrow;
+mod everwallet;
 mod federation;
 pub(crate) mod http;
 mod login;
@@ -16,6 +17,7 @@ mod metrics;
 mod model;
 mod operations;
 mod protocol;
+mod public_offers;
 mod repo;
 mod reporting;
 mod review;
@@ -51,7 +53,10 @@ impl Service {
         jwt_secret: &str,
     ) -> anyhow::Result<Self> {
         let cfg = Config::load(origin)?;
-        if cfg.enabled && !cfg.demo && (secrets_key.len() < 32 || jwt_secret.len() < 32) {
+        if (cfg.enabled || cfg.public_offers_enabled)
+            && !cfg.demo
+            && (secrets_key.len() < 32 || jwt_secret.len() < 32)
+        {
             anyhow::bail!("live OTC requires strong secrets");
         }
         Ok(Self {

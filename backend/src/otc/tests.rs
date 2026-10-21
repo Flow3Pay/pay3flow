@@ -213,9 +213,10 @@ pub(super) async fn fixture() -> (Service, tokio::task::JoinHandle<()>, String) 
         .await
         .unwrap()
         .batch_execute(&format!(
-            "{}\n{}",
+            "{}\n{}\n{}",
             include_str!("../../migrations/otc.sql"),
-            include_str!("../../migrations/otc_escrow.sql")
+            include_str!("../../migrations/otc_escrow.sql"),
+            include_str!("../../migrations/otc_public_offers.sql")
         ))
         .await
         .unwrap();

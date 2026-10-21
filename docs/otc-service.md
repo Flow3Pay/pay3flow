@@ -4,6 +4,67 @@ The backend owns a durable customer-first OTC workflow and the existing `/#/otc`
 
 ## Setup
 
+### Wallet-owned buy and sell advertisements
+
+`public_offers_enabled` enables publication from both sides of the existing
+Exchange Buy/Sell ticket. `public_offer_directions` in `/config` advertises the
+supported directions. The existing book shows public advertisements
+alongside desk Proposals. With public offers enabled, its labels are Orderbook and
+My orders; History shows the owner’s closed records. There is one terminal and one form.
+
+The author verifies their EVER wallet. Its address sends EVER for a sale and
+receives EVER for a buy offer. Their Ethereum address receives USDT for a sale
+and pays USDT for a buy. An already configured Ethereum address is suggested;
+a custom address is still editable. Publication requires no token inventory,
+second wallet proof, desk identity or transfer. It does not enable settlement.
+
+Both directions show EVER quantity first and total USDT second, with explicit
+Buy/Sell amount and Total to pay/receive labels. Both the unit price and total USDT amount are editable. Entering a price and
+EVER amount calculates the total with integer arithmetic, rounded down to six
+USDT decimals with an explicit hint. With a price set, either amount can be edited: a USDT budget computes EVER
+rounded down to nine decimals, and an EVER quantity computes USDT rounded down
+to six. Without a manually entered price, entering both amounts derives the rate. Decimal commas and surrounding whitespace normalize before submission.
+The disabled button explains the missing or invalid field. The review shows the
+exact canonical amounts and addresses before publication, explicitly marked as
+not yet published. The Publish button performs the write. The returned open
+offer immediately populates the book and chart, even if the subsequent refresh
+fails. Public and private refreshes update independently. A retry returning an
+already cancelled or expired offer is shown as closed, never reported as a new
+publication; another explicit review uses a new idempotency key.
+
+The book displays unit price, EVER quantity, total USDT and the author’s wallet.
+Sell offers sort by ascending unit price and buy offers by descending unit price,
+using exact integer ratios. The public chart plots one point per publication at
+its server publication time, with a visible USDT/EVER axis and exact selected
+point readout. It is not a completed-trade chart. Cancelled and expired offers
+leave the active book but remain in chart history. The history endpoint returns
+only the publication id, time, direction and amounts, never wallet addresses.
+
+Advertisements are public for 24 hours or until cancellation. They are local to
+Pay3Flow, not accepted trades, federated desk Proposals or payment instructions.
+Buyer acceptance and settlement still require an implemented, configured route.
+
+`GET /api/otc/offers` reads active advertisements; `/offers/history` returns
+sanitized publication history; `/offers/mine` reads the authenticated seller's
+latest advertisements. `POST /offers` requires the OTC
+session, a recent EVER proof and an `Idempotency-Key`. The body’s `direction` is
+`buy` or `sell`; omission preserves legacy `sell` behavior. `owner_ever` is the
+verified author address; `seller_ever` remains a legacy alias for older clients. Retrying the same body and
+key restores the original advertisement. A different body or seller wallet
+conflicts. `/offers/:id/cancel` authorizes the owner and remains available when
+posting is disabled. The browser saves the exact draft and key before posting.
+
+The pinned, immutable single-key Broxus EVER Wallet supports ownership proof
+before deployment: the backend reconstructs its StateInit from the public key,
+checks the exact derived workchain-0 address and approved code hash, and verifies
+the origin-bound one-use signature. This identity check needs no RPC. It never
+attests deployment, current balance or transfer receipt, and does not relax any
+settlement observer checks. Nonstandard initial states still require the existing
+deployed-account verification. Upstream derivation is documented in
+[EverWallet.ts](https://github.com/broxus/everscale-standalone-client/blob/master/src/client/AccountsStorage/EverWallet.ts).
+
+### Desk settlement setup
+
 1. Run the normal backend database setup. Startup applies the additive `backend/migrations/otc.sql` and `backend/migrations/otc_escrow.sql` migrations. Use separate databases for demo and live: the first enabled worker binds the database mode, and demo quotes remain unsignable after a configuration switch. OTC records use separate tables from the legacy acquiring/exchange simulation ledger. Preserve the database, JWT secret and encryption key across restarts.
 2. Copy `backend/otc.example.json` outside version control. Set `OTC_CONFIG_FILE` to that absolute path in the backend environment. Without it the route is disabled. The example intentionally cannot enable live quotes.
 3. Record the onboarded desk identity, canonical lowercase desk wallets, inventory and gas, two independently operated HTTPS RPC endpoints per chain, approved deployed single-key EverWallet code hashes, limits, UTC staffed hours, three deadline durations, refund/net-delivery policies, support owner, incident lead and backup, tested alert webhook, independent external heartbeat receiver, and operating/live-gate evidence. Configure stable asset-definition IRIs that identify the precise chain and deployment. The issuer address is fixed in the adapter and its precision is checked on chain.
@@ -54,7 +115,7 @@ All mutations use the isolated OTC bearer session; private reads are participant
 | `POST /api/otc/desk/control`, `/accounting`, `/incidents/:key` | Pause/resume, evidence-backed accounting and incident actions |
 | `GET /api/otc/desk/dashboard`, `/metrics` | Restricted durable dashboard and Prometheus exposition |
 
-Disconnect revokes the application session and clears private browser state. Server-side relay delegation remains available for outstanding-trade delivery and reconciliation. An operator may revoke compromised delegation separately; public wallet sign-in cannot restore revoked delegation or grant desk privileges. Access expiry never releases a reservation or declares an outgoing transfer failed.
+The wallet picker reports provider connections separately from server-verified addresses. An individual wallet card can disconnect its provider without removing the account's ownership proof or history. Connecting a provider whose OTC verification is unavailable does not authenticate it for trading. The account-wide Disconnect requests application-session revocation and disconnects the Ethereum and Everscale providers. Private browser state and their saved connections are cleared even if server revocation fails. Server-side relay delegation remains available for outstanding-trade delivery and reconciliation. An operator may revoke compromised delegation separately; public wallet sign-in cannot restore revoked delegation or grant desk privileges. Access expiry never releases a reservation or declares an outgoing transfer failed.
 
 ## Fees, operations and alerts
 
@@ -72,7 +133,7 @@ See [recorded evidence](otc-evidence.md) and the commands there. Fixtures are ex
 
 Primary implementation references: [FEP-0837](https://fediverse.codeberg.page/fep/fep/0837/), [USDT supported protocols](https://tether.to/en/supported-protocols/), [Ethereum JSON-RPC](https://ethereum.org/en/developers/docs/apis/json-rpc/), [EVER Wallet RPC](https://docs.broxus.com/pages/raw/provider-api.html), [Everscale receipt rules](https://docs.everscale.network/arch/transactions/), [Everscale pagination](https://docs.everscale.network/develop/graphql-pagination/), [TVM chain identity](https://namespaces.chainagnostic.org/tvm/caip2), [Prometheus instrumentation](https://prometheus.io/docs/practices/instrumentation/).
 
-The main OTC terminal uses `/api/otc` directly for original desk Proposals, private exact RFQs/quotes, immutable trade details, verified transfer evidence and the restricted desk console. The Exchange card is the settlement entry point; there is no separate settlement section or test-market feed. The chart shows only the participant’s server-recorded quote observations and remains empty without data. Public sharing includes only the pair and direction, never private quote amounts, rates or trade identities. Saved booking/handoff markers block duplicate selection or sends after a lost response; reconciliation uses the original booking/attempt. Live settlement remains paused until configuration and the live gate are complete.
+The main OTC terminal uses `/api/otc` directly for original desk Proposals, private exact RFQs/quotes, immutable trade details, verified transfer evidence and the restricted desk console. The Exchange card is the settlement entry point; there is no separate settlement section or test-market feed. The existing chart shows the participant’s server-recorded quote observations for desk trades, or current public asking prices when creating a sale or when no private observations exist. Public points use their publication timestamps and are explicitly labelled as asking prices rather than completed trades. The original terminal and panel collapse controls serve both types of offers. Sale amounts remain exact decimal strings, and the form distinguishes total USDT proceeds from the calculated USDT-per-EVER rate. Charts remain empty without data. Public sharing includes only the pair and direction, never private quote amounts, rates or trade identities. Saved booking/handoff markers block duplicate selection or sends after a lost response; reconciliation uses the original booking/attempt. Live settlement remains paused until configuration and the live gate are complete.
 
 The OTC connection bar has been removed. The Exchange card opens wallet sign-in or wallet management. Wallet prompts require a user action; application restoration verifies the saved token and wallet status with the server. Removing the status bar does not resume a paused route or relax trading availability checks.
 

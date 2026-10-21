@@ -1,0 +1,115 @@
+{
+  "status": "deployed",
+  "verified_at": "2026-10-19T18:01:56.555796+00:00",
+  "url": "https://pay3flow.lefine.pro/#/otc",
+  "target": "root@195.123.218.200",
+  "tag": "otc-ui-20261019-f48e457",
+  "base_revision": "f48e4579a55fd34e7b05fda0e2317730422bd66d",
+  "patch_sha256": "c9751362d1535360882794e5cdba236f009dac53c70ea78608180518c7d44ae9",
+  "files": {
+    "pay3low-svelte-frontend/src/lib/components/otc/OtcWorkspace.svelte": "016d7c514532d3a9734ebd701107d612e88d2011c524074da8f8560dc96f5cac",
+    "pay3low-svelte-frontend/src/lib/components/WalletMenu.svelte": "1063f5278394b74b0a250092c1897b2dd92fb25dea6d4d3e183a123fd144c407",
+    "pay3low-svelte-frontend/src/lib/i18n.ts": "6a123bf99bf0f86b551d6322c6b9554988c36d01a1309da9af29974d2cd34777"
+  },
+  "release_directory": "/root/pay3flow-release-otc-ui-20261019",
+  "delivery_method": "Compiled build artifacts on the previous production image; original package.json and release package-lock.json hashes match. Full image export stalled on dependency layers.",
+  "production_base_manifest": "sha256:a9454ec700ba6f1aed5410a326754ab11f4a6fa11de0d672ce475de0de23606f",
+  "backup_directory": "/var/lib/pay3flow/backups/otc-ui-20261019",
+  "previous_frontend_image": "localhost/pay3flow/frontend:live-20261018-f48e457",
+  "frontend_image": "localhost/pay3flow/frontend:otc-ui-20261019-f48e457",
+  "frontend_image_id": "sha256:910a32b80a3975fed5ba3bd2a5943612e1311884a6e4115cc06e8e1b6a7dc4f0",
+  "compiled_payload_sha256": "2104a173e2159f6fa2b9d18f3190d41e0232918e410afe624fa060426f148062",
+  "backend_image": "localhost/pay3flow/backend:live-20261018-f48e457",
+  "verification": {
+    "browser_regressions_passed": 92,
+    "svelte_errors": 0,
+    "svelte_warnings": 0,
+    "build": "passed with existing dependency warnings",
+    "production_chart_states": 56,
+    "chart_themes": [
+      "light",
+      "dark"
+    ],
+    "chart_widths": [
+      1440,
+      1280,
+      1024,
+      980,
+      768,
+      390,
+      320
+    ],
+    "production_wallets": {
+      "url": "https://pay3flow.lefine.pro/#/otc",
+      "passed": true,
+      "ethereumLogin": "Real temporary EOA signature verified by production API",
+      "walletProviders": "Injected controlled providers; no user wallet or funds",
+      "checks": [
+        "count 1\u21922\u21921\u21922\u21920",
+        "independent EVER disconnect/reconnect",
+        "connected status separate from OTC verification",
+        "320px wallet dialog",
+        "session logout",
+        "reload remains disconnected"
+      ],
+      "requests": [
+        {
+          "path": "/api/otc/config",
+          "method": "GET"
+        },
+        {
+          "path": "/api/otc/listings",
+          "method": "GET"
+        },
+        {
+          "path": "/api/otc/session/challenge",
+          "method": "POST"
+        },
+        {
+          "path": "/api/otc/session/proof",
+          "method": "POST"
+        },
+        {
+          "path": "/api/otc/config",
+          "method": "GET"
+        },
+        {
+          "path": "/api/otc/listings",
+          "method": "GET"
+        },
+        {
+          "path": "/api/otc/session",
+          "method": "GET"
+        },
+        {
+          "path": "/api/otc/trades",
+          "method": "GET"
+        },
+        {
+          "path": "/api/otc/session/revoke",
+          "method": "POST"
+        },
+        {
+          "path": "/api/otc/config",
+          "method": "GET"
+        },
+        {
+          "path": "/api/otc/listings",
+          "method": "GET"
+        }
+      ],
+      "errors": [],
+      "fundsMoved": false,
+      "ordersCreated": false
+    },
+    "backend_preserved": true,
+    "frontend_environment_and_mounts_preserved": true,
+    "otc_configuration_preserved": true,
+    "frontend_replica_ready": true,
+    "image_identity_verified": true
+  },
+  "trading_enabled": false,
+  "funds_moved": false,
+  "trades_created": false,
+  "remaining_trading_blockers": "Missing desk setup, Everscale verification/observers, provider/relay and operator readiness evidence; see otc-preflight-20261019.json."
+}

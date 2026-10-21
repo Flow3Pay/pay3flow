@@ -1,0 +1,59 @@
+{
+  "status": "shared_otc_terminal_deployed_settlement_still_paused",
+  "verified_at": "2026-10-19T20:06:36.238659+00:00",
+  "url": "https://pay3flow.lefine.pro/#/otc",
+  "image": "localhost/pay3flow/frontend:otc-terminal-20261019-f48e457",
+  "image_id": "sha256:6a3d02a5cc0793caa0754b98b38cdafd7059fe0768e12174b88678b8b9b7eab5",
+  "source_base": "f48e4579a55fd34e7b05fda0e2317730422bd66d",
+  "source_manifest_sha256": "ddd0f2e42609037568b6146c9e58889f2d9aa2db1fac51227d6e65bf112f5f38",
+  "frontend_payload_sha256": "9c30c9d1bb8f03e3ac0ffe5252f68cc271087ea54fbc1e44da082a9566f30438",
+  "backup": "/var/lib/pay3flow/backups/otc-terminal-20261019/frontend.json",
+  "scope": "Public sales and desk quotes use the same Exchange/Chart/offers terminal. Public chart points are open asking prices, not completed trades. Sale totals and calculated unit rates are explicitly distinguished.",
+  "verification": {
+    "svelte_check": {
+      "errors": 0,
+      "warnings": 0
+    },
+    "browser_initial": {
+      "passed": 69,
+      "failed": 1,
+      "failure": "Missing display whitespace between completed volume and unit, corrected."
+    },
+    "browser_targeted_after_fix": {
+      "passed": 4,
+      "includes": "Both desktop/mobile completed-volume checks and new public terminal/chart/mode/collapse scenarios."
+    },
+    "browser_unique_scenarios_verified": 72,
+    "frontend_runtime_configuration_preserved": true,
+    "backend_image_preserved": true,
+    "running_frontend_matches_compiled_payload": true
+  },
+  "cancelled_offer": {
+    "id": "a9e7fb28-f592-48d5-8615-ee1c788a80b1",
+    "state": "cancelled"
+  },
+  "live": {
+    "checked_at": "2026-10-19T20:06:20.077Z",
+    "production_mutations": 0,
+    "shared_terminal": true,
+    "exact_rate": true,
+    "collapsed_chart_alignment": true,
+    "geometry": [
+      {
+        "width": 1440,
+        "no_overflow": true
+      },
+      {
+        "width": 390,
+        "no_overflow": true
+      },
+      {
+        "width": 320,
+        "no_overflow": true
+      }
+    ],
+    "legacy_desk_mode_preserved": true,
+    "closed_user_offer_not_reopened": true
+  },
+  "limits": "Buyer acceptance and settlement remain disabled. The cancelled user offer was not reopened, and no offers or funds were created or moved by verification."
+}

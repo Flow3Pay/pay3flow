@@ -26,6 +26,13 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/api/otc/wallet/challenge", post(challenge))
         .route("/api/otc/wallet/proof", post(prove))
         .route("/api/otc/listings", get(listings))
+        .route(
+            "/api/otc/offers",
+            get(public_offers).post(post_public_offer),
+        )
+        .route("/api/otc/offers/mine", get(my_public_offers))
+        .route("/api/otc/offers/history", get(public_offer_history))
+        .route("/api/otc/offers/:id/cancel", post(cancel_public_offer))
         .route("/api/otc/rfqs", post(rfq))
         .route("/api/otc/trades", get(trades))
         .route("/api/otc/trades/:id", get(details))
@@ -70,15 +77,20 @@ async fn config(State(state): State<AppState>) -> Json<Value> {
     let cfg = &state.otc.cfg;
     let available = state.otc.ready().await.is_ok();
     let wallet_login_chains: Vec<_> = [
-        (cfg.ethereum_rpc.len() >= 2).then_some("ethereum"),
-        (cfg.everscale_graphql.len() >= 2 && !cfg.everwallet_code_hashes.is_empty())
+        state
+            .otc
+            .wallet_login_chain_available("ethereum")
+            .then_some("ethereum"),
+        state
+            .otc
+            .wallet_login_chain_available("everscale")
             .then_some("everscale"),
     ]
     .into_iter()
     .flatten()
     .collect();
     Json(
-        json!({"enabled":cfg.enabled,"available":available,"wallet_login_available":state.otc.wallet_login_available(),"wallet_login_chains":wallet_login_chains,"escrow":cfg.escrow,"escrow_lifetime_seconds":14400,"escrow_max_ever":"100000","demo":cfg.demo,"desk":cfg.desk_actor,"desk_name":cfg.desk_name,"ever_resource":cfg.ever_resource,"usdt_resource":cfg.usdt_resource,"support_owner":cfg.support_owner,"ever_network":"Everscale","usdt_network":"Ethereum","usdt_contract":super::config::USDT,"profile":super::protocol::profile(),"fee":{"payer":"desk","rate":"0.0025","floor":"5","currency":"USDT"},"counterparty_risk":if cfg.escrow.is_some(){"USDT funds a 2-of-3 Safe escrow before native EVER delivery. Expiry permits a USDT refund; it cannot reverse EVER delivery."}else{"Two separate transfers. The desk must deliver or refund; there is no atomic swap or automatic rollback."}}),
+        json!({"enabled":cfg.enabled,"available":available,"public_offers_available":state.otc.public_offers_available(),"public_offer_directions":["buy","sell"],"wallet_login_available":state.otc.wallet_login_available(),"wallet_login_chains":wallet_login_chains,"escrow":cfg.escrow,"escrow_lifetime_seconds":14400,"escrow_max_ever":"100000","demo":cfg.demo,"desk":cfg.desk_actor,"desk_name":cfg.desk_name,"ever_resource":cfg.ever_resource,"usdt_resource":cfg.usdt_resource,"support_owner":cfg.support_owner,"ever_network":"Everscale","usdt_network":"Ethereum","usdt_contract":super::config::USDT,"profile":super::protocol::profile(),"fee":{"payer":"desk","rate":"0.0025","floor":"5","currency":"USDT"},"counterparty_risk":if cfg.escrow.is_some(){"USDT funds a 2-of-3 Safe escrow before native EVER delivery. Expiry permits a USDT refund; it cannot reverse EVER delivery."}else{"Two separate transfers. The desk must deliver or refund; there is no atomic swap or automatic rollback."}}),
     )
 }
 async fn link(
@@ -131,6 +143,40 @@ async fn prove(
 }
 async fn listings(State(state): State<AppState>) -> Result<Json<Value>> {
     Ok(Json(state.otc.listings().await?))
+}
+async fn public_offers(State(state): State<AppState>) -> Result<Json<Value>> {
+    Ok(Json(state.otc.public_offers(None).await?))
+}
+async fn public_offer_history(State(state): State<AppState>) -> Result<Json<Value>> {
+    Ok(Json(state.otc.public_offer_history().await?))
+}
+async fn my_public_offers(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>> {
+    let (_, actor) = state.otc.session(bearer(&headers)?).await?;
+    Ok(Json(state.otc.public_offers(Some(&actor)).await?))
+}
+async fn post_public_offer(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(draft): Json<super::public_offers::PublicOfferDraft>,
+) -> Result<Json<Value>> {
+    let (_, actor) = state.otc.session(bearer(&headers)?).await?;
+    Ok(Json(
+        state
+            .otc
+            .post_public_offer(&actor, key(&headers)?, draft)
+            .await?,
+    ))
+}
+async fn cancel_public_offer(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Value>> {
+    let (_, actor) = state.otc.session(bearer(&headers)?).await?;
+    Ok(Json(state.otc.cancel_public_offer(&actor, id).await?))
 }
 async fn rfq(
     State(state): State<AppState>,

@@ -1,5 +1,6 @@
 {
   "enabled": false,
+  "public_offers_enabled": false,
   "demo": false,
   "relay_origin": "https://relay.example",
   "matcher_actor": "https://relay.example/actors/fmatch",

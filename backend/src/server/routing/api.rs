@@ -158,7 +158,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/p2p/routes", get(p2p::routes))
         .route("/api/p2p/route-activity", get(p2p::route_activity))
         .route("/api/p2p/route-executions", post(route_executions::create))
-        .route("/api/p2p/route-executions/prepare", post(route_executions::prepare))
+        .route(
+            "/api/p2p/route-executions/prepare",
+            post(route_executions::prepare),
+        )
         .route("/api/p2p/route-executions/:id", get(route_executions::get))
         .route(
             "/api/p2p/route-executions/:id/submissions",

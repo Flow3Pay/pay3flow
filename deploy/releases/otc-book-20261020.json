@@ -1,0 +1,99 @@
+{
+  "status": "orderbook_publication_feedback_and_unit_price_fixed_settlement_paused",
+  "verified_at": "2026-10-20T04:25:44.868368+00:00",
+  "url": "https://pay3flow.lefine.pro/#/otc",
+  "source_base": "f48e4579a55fd34e7b05fda0e2317730422bd66d",
+  "frontend_source_manifest_sha256": "23ccfd39d91af0713032076cdcc7f924b79c7ab9b84a6302de74fc7126eacb8e",
+  "image": "localhost/pay3flow/frontend:otc-book-20261020-f48e457",
+  "image_id": "sha256:759d4ffebe85751dc91c923325b5234ef1d943e40b5285097d7e1bed89aac058",
+  "frontend_payload_sha256": "c06be01d11ef43021ccd8652c370ac9b1c8a0d2b273165921e374204246bf347",
+  "backup_directory": "/var/lib/pay3flow/backups/otc-book-20261020",
+  "checks": {
+    "frontend_ready_and_runtime_preserved": true,
+    "backend_unchanged": true,
+    "settlement_configuration_unchanged": true,
+    "running_frontend_matches_compiled_payload": true,
+    "running_backend_matches_prior_release": true
+  },
+  "persistent_state": {
+    "cancelled_offer_state": "cancelled",
+    "controls_paused": true,
+    "open_offers": 0,
+    "trades": 0
+  },
+  "verification": {
+    "amount_unit_tests": 7,
+    "browser_unique_scenarios_verified": 92,
+    "initial_browser_run": {
+      "passed": 91,
+      "failed": 1,
+      "failure": "The running suite had captured the former Collapse Desk offers label before it changed to Orderbook. The final publication suite was rerun."
+    },
+    "final_publication_browser_passed": 30,
+    "legacy_browser_passed": 62,
+    "svelte_check": {
+      "errors": 0,
+      "warnings": 0
+    },
+    "populated_book_fixture_rendering": {
+      "fixture_only": true,
+      "checks": [
+        {
+          "width": 1440,
+          "overflow": false,
+          "accessibility_violations": 0
+        },
+        {
+          "width": 390,
+          "overflow": false,
+          "accessibility_violations": 0
+        },
+        {
+          "width": 320,
+          "overflow": false,
+          "accessibility_violations": 0
+        }
+      ]
+    }
+  },
+  "live_verification": {
+    "checked_at": "2026-10-20T04:25:23.202Z",
+    "funds_moved": false,
+    "offers_published": false,
+    "publication_enabled": true,
+    "desk_settlement_paused": true,
+    "real_standard_wallet_signature_verified": true,
+    "replay_rejected": true,
+    "public_offer_read": true,
+    "reviewed_directions": [
+      "sell",
+      "buy"
+    ],
+    "browser_signed_login": true,
+    "zero_usdt_inventory_required": true,
+    "review_did_not_publish": true,
+    "price_editable_and_comma_normalized": true,
+    "blocking_reason_visible": true,
+    "ever_quantity_first_on_both_sides": true,
+    "geometry": [
+      {
+        "width": 1440,
+        "theme": "light",
+        "no_overflow": true
+      },
+      {
+        "width": 390,
+        "theme": "dark",
+        "no_overflow": true
+      },
+      {
+        "width": 320,
+        "theme": "light",
+        "no_overflow": true
+      }
+    ],
+    "logout_clears_connection": true
+  },
+  "scope": "Same existing terminal: EVER quantity first on both Buy and Sell; total USDT is a separate field, with an explicit equation and unpublished review state. Returned open offers populate the book immediately. Closed idempotent replays cannot report publication success. Public/private list refreshes update independently. The book exposes sorted sellers and buyers, exact unit prices, EVER amounts, USDT totals and wallet identities. The chart shows one point per open offer, with a price axis and selectable exact readout.",
+  "limits": "Publication and cancellation were verified with browser API fixtures; the populated visual/accessibility checks used isolated fixtures. Production verification signed in and reviewed both directions without publishing synthetic offers or moving funds. The only preexisting production offer remained cancelled. Acceptance and settlement remain paused."
+}

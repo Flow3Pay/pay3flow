@@ -194,6 +194,19 @@ the correct service.
 
 ## Pay3Flow monitoring
 
+For a read-only OTC launch inspection against the running production stack:
+
+```sh
+python3 scripts/otc_preflight.py --ssh root@195.123.218.200 --output /tmp/otc-preflight.json
+```
+
+The command checks public availability, the mounted OTC configuration, persistent
+pause controls, recent observer scans, existing obligations, secret lengths and
+Ethereum RPC connectivity from the server. It emits a redacted JSON report and
+exits nonzero for failed checks. It never enables trading, sends funds or changes
+cluster resources. Wallet ownership, relay delivery, independent provider
+operation and actual settlement still require verification.
+
 The backend exposes Prometheus metrics at `/metrics`. The optional monitoring
 stack in [`monitoring.yaml`](monitoring.yaml) adds Prometheus, Grafana,
 PostgreSQL and Redis exporters, Loki, and Alloy. It provisions the Pay3Flow

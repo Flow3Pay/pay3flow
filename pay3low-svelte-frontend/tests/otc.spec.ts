@@ -191,6 +191,7 @@ async function walletLoginFixtures(page: Page, reject = false) {
         const permissions = { accountInteraction: { address: ever, publicKey: "11".repeat(32) } };
         if (method === "getProviderState") return { selectedConnection: "mainnet", networkId: 42, permissions };
         if (method === "requestPermissions") return permissions;
+        if (method === "disconnect") return;
         if (method === "signData") { if (reject) throw new Error("User rejected sign-in"); return { signature: "fixture-signature" }; }
         throw new Error(`Unexpected EVER request: ${method}`);
       }, addListener: () => {}, removeListener: () => {},
@@ -214,6 +215,58 @@ async function walletLoginFixtures(page: Page, reject = false) {
   }
   return { ...f, auth };
 }
+
+for (const revokeFails of [false, true]) test(`OTC logout disconnects both wallets and clears the count${revokeFails ? " even when revocation fails" : ""}`, async ({ page }) => {
+  const f = await walletLoginFixtures(page); await open(page);
+  if (revokeFails) await page.route("**/api/otc/session/revoke", route => route.fulfill({ status: 503, json: { error: "Revocation unavailable" } }));
+  await page.locator(".walletMenu .walletToggle").click();
+  const dialog = page.locator("#wallet-connections");
+  await dialog.getByRole("button", { name: "Connect Ethereum wallet", exact: true }).click();
+  await dialog.getByRole("button", { name: "Verify Everscale wallet", exact: true }).click();
+  await expect(page.locator(".walletMenu .walletToggle")).toHaveAttribute("aria-label", "Wallets (2)");
+  await dialog.locator(".accountAction").click();
+  await expect(page.locator(".walletMenu .walletToggle")).toHaveAttribute("aria-label", "Connect wallet");
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("pay3flow.wallet-families")!))).toEqual([]);
+  expect(await page.evaluate(() => sessionStorage.getItem("pay3flow.otc.session.v1"))).toBeNull();
+  await expect.poll(() => page.evaluate(() => (window as any).otcWalletCalls.some((call: any) => call.method === "disconnect"))).toBe(true);
+  if (!revokeFails) expect(f.requests.some(request => request.path === "/session/revoke")).toBe(true);
+  await page.reload();
+  await expect(page.locator(".walletMenu .walletToggle")).toHaveAttribute("aria-label", "Connect wallet");
+});
+
+test("a verified Everscale wallet can disconnect and reconnect without logging out Ethereum", async ({ page }) => {
+  await walletLoginFixtures(page); await open(page);
+  await page.locator(".walletMenu .walletToggle").click();
+  const dialog = page.locator("#wallet-connections");
+  await dialog.getByRole("button", { name: "Connect Ethereum wallet", exact: true }).click();
+  await dialog.getByRole("button", { name: "Verify Everscale wallet", exact: true }).click();
+  const everChoice = dialog.locator('[data-family="everscale"]');
+  await expect(everChoice).toContainText("Connected wallet");
+  await everChoice.getByRole("button", { name: "Disconnect Everscale wallet", exact: true }).click();
+  await expect(page.locator(".walletMenu .walletToggle")).toHaveAttribute("aria-label", "Wallets (1)");
+  await expect(everChoice).toContainText("Wallet disconnected");
+  await expect(dialog.getByRole("button", { name: "Disconnect Ethereum wallet", exact: true })).toBeEnabled();
+  await everChoice.getByRole("button", { name: "Connect Everscale wallet", exact: true }).click();
+  await expect(page.locator(".walletMenu .walletToggle")).toHaveAttribute("aria-label", "Wallets (2)");
+  await expect(everChoice).toContainText("Connected wallet");
+});
+
+test("a connected Everscale wallet has a disconnect action before OTC verification", async ({ page }) => {
+  const f = await walletLoginFixtures(page); await open(page);
+  await page.locator(".walletMenu .walletToggle").click();
+  const dialog = page.locator("#wallet-connections");
+  await dialog.getByRole("button", { name: "Connect Ethereum wallet", exact: true }).click();
+  await page.evaluate(async () => {
+    const path = "/src/lib/wallet-session.ts";
+    await (await import(/* @vite-ignore */ path)).connectWallet("everscale");
+  });
+  await expect(page.locator(".walletMenu .walletToggle")).toHaveAttribute("aria-label", "Wallets (2)");
+  const everChoice = dialog.locator('[data-family="everscale"]');
+  await expect(everChoice.getByRole("button", { name: "Verify Everscale wallet", exact: true })).toBeEnabled();
+  await everChoice.getByRole("button", { name: "Disconnect Everscale wallet", exact: true }).click();
+  await expect(page.locator(".walletMenu .walletToggle")).toHaveAttribute("aria-label", "Wallets (1)");
+  expect(f.auth.filter(request => request.path === "/wallet/proof")).toHaveLength(0);
+});
 
 for (const chain of ["ethereum", "everscale"]) test(`OTC ${chain} wallet sign-in replaces actor fields and verifies the other wallet`, async ({ page }) => {
   const f = await walletLoginFixtures(page); await open(page);
@@ -339,13 +392,20 @@ test("Ethereum-only paused deployment explains quote blocking after successful s
   expect(f.requests.filter(request => request.path === "/rfqs")).toHaveLength(0);
 });
 
-test("wallet dialog disables chains unavailable on this deployment", async ({ page }) => {
+test("unconfigured OTC verification still permits connecting and disconnecting the provider", async ({ page }) => {
   const f = await walletLoginFixtures(page);
   f.control.walletChains = ["ethereum"]; await open(page);
   await page.locator("#otc-bridge").getByRole("button", { name: "Request exact quote", exact: true }).click();
   const dialog = page.locator("#wallet-connections");
   await expect(dialog.getByRole("button", { name: "Connect Ethereum wallet", exact: true })).toBeEnabled();
-  await expect(dialog.getByRole("button", { name: "Connect Everscale wallet", exact: true })).toBeDisabled();
+  await expect(dialog.getByRole("button", { name: "Connect Everscale wallet", exact: true })).toBeEnabled();
+  await dialog.getByRole("button", { name: "Connect Everscale wallet", exact: true }).click();
+  await expect(page.locator(".walletMenu .walletToggle")).toHaveAttribute("aria-label", "Wallets (1)");
+  await expect(dialog.locator('[data-family="everscale"]')).toContainText("Connected wallet");
+  await expect(dialog.locator('[data-family="everscale"]')).toContainText("OTC verification is unavailable for this network.");
+  await dialog.getByRole("button", { name: "Disconnect Everscale wallet", exact: true }).click();
+  await expect(page.locator(".walletMenu .walletToggle")).toHaveAttribute("aria-label", "Connect wallet");
+  await expect(dialog.getByRole("button", { name: "Connect Everscale wallet", exact: true })).toBeEnabled();
   expect(f.requests.filter(request => request.path === "/session/challenge")).toHaveLength(0);
 });
 

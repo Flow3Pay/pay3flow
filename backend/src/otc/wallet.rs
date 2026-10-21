@@ -202,7 +202,6 @@ impl Service {
         } else {
             let public = unhex(request.public_key.as_deref().ok_or(Error::Unauthorized)?)?;
             let public: [u8; 32] = public.try_into().map_err(|_| Error::Unauthorized)?;
-            self.verify_ever_key(address, &public).await?;
             let signature = STANDARD
                 .decode(&request.signature)
                 .map_err(|_| Error::Unauthorized)?;
@@ -211,10 +210,19 @@ impl Service {
                 .map_err(|_| Error::Unauthorized)?
                 .verify_strict(&sha2::Sha256::digest(message.as_bytes()), &signature)
                 .map_err(|_| Error::Unauthorized)?;
+            self.verify_ever_key(address, &public).await?;
         }
         Ok(())
     }
     async fn verify_ever_key(&self, address: &str, key: &[u8; 32]) -> Result<()> {
+        // This exact immutable wallet's address commits to its signing key.
+        // Deployment and RPC availability are not prerequisites for identity.
+        // All balance/settlement checks still require the chain observers.
+        if super::everwallet::approved(&self.cfg.everwallet_code_hashes)
+            && super::everwallet::address(key)? == address
+        {
+            return Ok(());
+        }
         let query="query($address:String!){accounts(filter:{id:{eq:$address}},limit:1){id acc_type code_hash code data}}";
         let data = self.ever_agree(query, json!({"address":address})).await?;
         let account = data["accounts"]

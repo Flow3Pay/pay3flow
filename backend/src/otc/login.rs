@@ -66,10 +66,23 @@ pub(crate) async fn attach_wallet(
 impl Service {
     pub(crate) fn wallet_login_available(&self) -> bool {
         !self.cfg.relay_origin.trim().is_empty()
-            && (self.cfg.ethereum_rpc.len() >= 2 || self.cfg.everscale_graphql.len() >= 2)
+            && ["ethereum", "everscale"]
+                .iter()
+                .any(|chain| self.wallet_login_chain_available(chain))
+    }
+    pub(crate) fn wallet_login_chain_available(&self, chain: &str) -> bool {
+        match chain {
+            "ethereum" => self.cfg.ethereum_rpc.len() >= 2,
+            "everscale" => {
+                super::everwallet::approved(&self.cfg.everwallet_code_hashes)
+                    || (self.cfg.everscale_graphql.len() >= 2
+                        && !self.cfg.everwallet_code_hashes.is_empty())
+            }
+            _ => false,
+        }
     }
     pub(crate) async fn login_challenge(&self, request: ChallengeRequest) -> Result<Value> {
-        if !self.wallet_login_available() {
+        if !self.wallet_login_available() || !self.wallet_login_chain_available(&request.chain) {
             return Err(invalid(
                 "Wallet sign-in is not configured. Contact support.",
             ));
@@ -462,6 +475,52 @@ mod tests {
             ever_key,
             ever_address,
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore = "requires OTC_TEST_DATABASE_URL"]
+    async fn standard_everwallet_can_sign_in_before_deployment_without_chain_access() {
+        let mut f = fixture().await;
+        let address =
+            super::super::everwallet::address(f.ever_key.verifying_key().as_bytes()).unwrap();
+        let cfg = Arc::make_mut(&mut f.service.cfg);
+        cfg.enabled = false;
+        cfg.ethereum_rpc.clear();
+        cfg.everscale_graphql.clear();
+        cfg.everwallet_code_hashes = vec![super::super::everwallet::CODE_HASH.into()];
+        assert!(f.service.wallet_login_available());
+        assert!(f.service.wallet_login_chain_available("everscale"));
+        assert!(!f.service.wallet_login_chain_available("ethereum"));
+        let c = challenge(&f.service, "everscale", &address).await;
+        let mut bad = ever_proof(&c, &f.ever_key);
+        bad.signature = STANDARD.encode([0; 64]);
+        assert!(matches!(
+            f.service.login_prove(bad).await,
+            Err(Error::Unauthorized)
+        ));
+        let session = f
+            .service
+            .login_prove(ever_proof(&c, &f.ever_key))
+            .await
+            .unwrap();
+        assert_eq!(session["wallets"][0]["address"], address);
+        assert_eq!(session["signing_wallet"]["chain"], "everscale");
+        assert_eq!(session["desk"], false);
+        assert!(matches!(f.service.ready().await, Err(Error::Disabled)));
+        assert!(matches!(
+            f.service.login_prove(ever_proof(&c, &f.ever_key)).await,
+            Err(Error::Unauthorized)
+        ));
+        let other = challenge(&f.service, "everscale", &format!("0:{}", "a".repeat(64))).await;
+        assert!(f
+            .service
+            .login_prove(ever_proof(&other, &f.ever_key))
+            .await
+            .is_err());
+        let cfg = Arc::make_mut(&mut f.service.cfg);
+        cfg.everwallet_code_hashes.clear();
+        assert!(!f.service.wallet_login_available());
+        f.task.abort();
     }
 
     #[tokio::test]

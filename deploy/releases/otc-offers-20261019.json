@@ -1,0 +1,99 @@
+{
+  "status": "public_offer_publication_enabled_settlement_paused",
+  "verified_at": "2026-10-19T19:40:57.360335+00:00",
+  "url": "https://pay3flow.lefine.pro",
+  "source_base": "f48e4579a55fd34e7b05fda0e2317730422bd66d",
+  "source_manifest_sha256": "ba2dbed9db522c578d3898fa985853ef406e91f0844ca6d1b64deba9b5bb11c3",
+  "images": {
+    "backend": "localhost/pay3flow/backend:otc-offers-20261019-f48e457",
+    "frontend": "localhost/pay3flow/frontend:otc-offers-20261019-f48e457"
+  },
+  "image_ids": {
+    "backend": "sha256:b527750102e3369cf8c8e83bf00f12e755db1c7db5ce6ee83ab481af1b4c2b01",
+    "frontend": "sha256:cf598a3c0a1838c50d3828d4ec209cbe40579c71de33f17ee638f20155815ea0"
+  },
+  "backend_binary_sha256": "9087b6647a1f946d718d540dd6dc7e9a6d2348c8264803bcf2a1baa248f42878",
+  "frontend_payload_sha256": "0d9b4240fd4deeab8bfee9ef66938389cae934e50112b444b32ea71b554026ed",
+  "backup": {
+    "directory": "/var/lib/pay3flow/backups/otc-offers-20261019",
+    "database_sha256": "8b04c63f702914e71c9984ce4d6d1b98166fe1009e99e6b00902541e92d6b2f3",
+    "restore_listing": "passed"
+  },
+  "checks": {
+    "backend_ready": true,
+    "backend_environment_and_mounts_preserved": true,
+    "frontend_ready": true,
+    "frontend_environment_and_mounts_preserved": true,
+    "configuration_changes_limited_to_publication_and_approved_wallet_code": true,
+    "running_backend_matches_compiled_binary": true,
+    "running_frontend_matches_compiled_payload": true,
+    "frontend_runtime_and_package_manifest_match": true,
+    "frontend_dependencies_reused_from_previous_production_image": true,
+    "no_financial_obligations_created": true
+  },
+  "persistent_state": {
+    "trades": 0,
+    "unresolved_attempts": 0,
+    "public_offers": 0,
+    "route_paused": true
+  },
+  "verification": {
+    "backend_default": {
+      "passed": 361,
+      "ignored": 40
+    },
+    "otc_with_isolated_postgres": {
+      "passed": 35,
+      "skipped": "Unchanged local-chain escrow test requires its separate Anvil harness."
+    },
+    "browser_unique_scenarios_verified": 100,
+    "browser_initial_run": {
+      "passed": 97,
+      "animation_timing_failure": 1
+    },
+    "animation_isolated_recheck_passed": 1,
+    "public_offers_final_run_passed": 8,
+    "svelte_check": {
+      "errors": 0,
+      "warnings": 0
+    },
+    "cargo_fmt": "passed",
+    "cargo_clippy": "passed with existing warnings",
+    "regression_mutations_detected": [
+      "Undeployed wallet login depends on an unavailable RPC",
+      "Another account cancels a seller advertisement"
+    ]
+  },
+  "live_verification": {
+    "checked_at": "2026-10-19T19:38:32.752Z",
+    "funds_moved": false,
+    "offers_published": false,
+    "publication_enabled": true,
+    "desk_settlement_paused": true,
+    "real_standard_wallet_signature_verified": true,
+    "replay_rejected": true,
+    "public_offer_read": true,
+    "browser_signed_login": true,
+    "zero_usdt_inventory_required": true,
+    "review_did_not_publish": true,
+    "geometry": [
+      {
+        "width": 1440,
+        "theme": "light",
+        "no_overflow": true
+      },
+      {
+        "width": 390,
+        "theme": "dark",
+        "no_overflow": true
+      },
+      {
+        "width": 320,
+        "theme": "light",
+        "no_overflow": true
+      }
+    ],
+    "logout_clears_connection": true
+  },
+  "limits": "The public board publishes non-binding seller advertisements. Buyer acceptance, escrow and automatic settlement are not enabled by this release. No synthetic offer was published on production and no funds were moved."
+}
