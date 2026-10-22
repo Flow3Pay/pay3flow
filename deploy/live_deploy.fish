@@ -52,7 +52,11 @@ set dirty (git -C $repo_root status --porcelain --untracked-files=all -- \
     . ':(exclude)deploy/live_deploy.fish' ':(exclude)deploy/live_deploy.rb' \
     ':(exclude)deploy/watch_deploy.fish' ':(exclude)deploy/README.md' \
     ':(exclude)flake.nix' | string collect)
-test -z "$dirty"; or die "Refusing to deploy a dirty application worktree:\n$dirty"
+test -z "$dirty"; or begin
+    echo 'Refusing to deploy a dirty application worktree:' >&2
+    printf '%s\n' "$dirty" >&2
+    exit 1
+end
 
 set revision (git -C $repo_root rev-parse HEAD | string trim)
 set short_revision (string sub --start 1 --length 7 -- $revision)
