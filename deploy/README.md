@@ -61,9 +61,8 @@ Kubernetes Secret environment variables.
 
 ## One-command production deploy
 
-The Flake's production Fish app builds immutable images directly in the new
-host's k3s containerd namespace, so deploying the current committed revision
-is one command:
+The Flake's production Fish app builds immutable images in the host's k3s
+containerd namespace. Deploying the current committed revision is one command:
 
 ```sh
 nix run .#deploy
@@ -76,6 +75,43 @@ out the two Deployments, rolls back their
 images if readiness fails, and checks the public home, health, and provider
 endpoints. See `nix run .#deploy -- --help` for host, identity, namespace, URL,
 and image-tag overrides.
+
+After a successful rollout, and only after the public route checks pass, the
+command trims the artifacts that every build leaves behind:
+
+- source release directories (`PAY3FLOW_KEEP_RELEASES`, default `2`),
+- BuildKit records older than `PAY3FLOW_BUILDCACHE_KEEP` (default `72h`), so the
+  cache used by the latest builds survives and the next build stays
+  incremental while superseded per-commit layers are removed,
+- local `live-` image tags beyond the newest `PAY3FLOW_KEEP_IMAGE_TAGS`
+  (default `2`, so the image needed for a rollback survives).
+
+Cleanup never fails a deploy that already rolled out; problems print a warning.
+Set `PAY3FLOW_BUILDCACHE_KEEP` above your usual deploy cadence if you deploy
+less often than every three days. The BuildKit daemon is discovered
+automatically; set `PAY3FLOW_BUILDKIT_ADDR=unix:///run/buildkit/buildkitd.sock`
+when `buildctl` cannot locate it. Without `buildctl` on the host the cache
+prune is skipped with a warning.
+
+### Watch the deploy in real time
+
+The deploy command builds both images on the host and redirects their output to
+`/tmp/pay3flow-backend-REV.log` and `/tmp/pay3flow-frontend-REV.log`. Use the
+wrapper to follow those logs while the deploy runs:
+
+```sh
+nix run .#deploy-watch
+```
+
+It prints deploy steps with timestamps, prefixes streamed build lines with
+`[backend]` and `[frontend]`, follows the rollout and verification, and exits
+with the deploy status. Arguments are forwarded to the deploy script, so
+`nix run .#deploy-watch -- --help` shows the deploy options. The deploy-related
+environment variables (`PAY3FLOW_DEPLOY_HOST`, `PAY3FLOW_DEPLOY_USER`,
+`PAY3FLOW_DEPLOY_IDENTITY_FILE`, `PAY3FLOW_IMAGE_TAG`) work the same way.
+`PAY3FLOW_WATCH_LOG_DIR` changes the remote log directory and
+`PAY3FLOW_WATCH_DEPLOY_COMMAND` replaces the command that is run (for example,
+`nix run .#deploy`).
 
 Application Pods use `ndots:1` and `single-request-reopen` so external provider
 API names resolve before cluster search suffixes and A/AAAA lookups do not

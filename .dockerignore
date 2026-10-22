@@ -1,0 +1,14 @@
+# The backend build context is the repository root, so this file keeps local
+# build output (Rust target directories, node_modules, SvelteKit output) out of
+# the build context. Backend and frontend have their own .dockerignore files
+# for builds whose context is their own directory.
+.git
+**/target
+**/node_modules
+**/.svelte-kit
+**/build
+**/test-results
+**/playwright-report
+backend/.env
+data
+diagnostics

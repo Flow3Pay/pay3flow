@@ -33,6 +33,11 @@
             set -gx PATH "${pkgs.lib.makeBinPath (with pkgs; [ curl fish git openssh rsync ])}:$PATH"
             exec ${./deploy/live_deploy.fish} $argv
           '';
+          deployWatchScript = pkgs.writeScriptBin "deploy-pay3flow-watch" ''
+            #!${pkgs.fish}/bin/fish
+            set -gx PATH "${pkgs.lib.makeBinPath (with pkgs; [ curl fish git openssh rsync ])}:$PATH"
+            exec ${./deploy/watch_deploy.fish} $argv
+          '';
           manifests = pkgs.runCommand "pay3flow-kubernetes.yaml" {
             nativeBuildInputs = [ pkgs.ruby ];
           } ''
@@ -45,6 +50,7 @@
           kubernetes-manifests = manifests;
           render-manifests = renderScript;
           deploy = deployLiveScript;
+          deploy-watch = deployWatchScript;
           deploy-k8s = deployK8sScript;
           default = manifests;
         });
@@ -53,6 +59,7 @@
         let
           render = self.packages.${pkgs.system}.render-manifests;
           deploy = self.packages.${pkgs.system}.deploy;
+          deploy-watch = self.packages.${pkgs.system}.deploy-watch;
           deploy-k8s = self.packages.${pkgs.system}.deploy-k8s;
         in {
           render-manifests = {
@@ -62,6 +69,10 @@
           deploy = {
             type = "app";
             program = "${deploy}/bin/deploy-pay3flow-live";
+          };
+          deploy-watch = {
+            type = "app";
+            program = "${deploy-watch}/bin/deploy-pay3flow-watch";
           };
           deploy-k8s = {
             type = "app";
