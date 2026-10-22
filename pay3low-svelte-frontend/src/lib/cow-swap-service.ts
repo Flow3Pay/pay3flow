@@ -5,6 +5,12 @@ import { chainIdForNetwork, validateRecipient, type EvmConnection } from "./wall
 import { atomicToDecimal, decimalToAtomic } from "./wallet-amount";
 import type { SwapInput, SwapService, SwapServiceState } from "./swap-service";
 
+/** Local Bitcoin address check; the NEAR widget SDK used to provide this. */
+function isValidBitcoinAddress(address: string): boolean {
+  const value = address.trim();
+  return /^(bc1[02-9ac-hj-np-z]{11,71}|[13][1-9A-HJ-NP-Za-km-z]{25,34})$/i.test(value);
+}
+
 interface Token { chainId: number; symbol: string; address: string; decimals: number }
 let catalog: Promise<Token[]> | undefined;
 async function tokens(): Promise<Token[]> {
@@ -76,8 +82,7 @@ export async function createCowSwapService(input: SwapInput, onState: (state: Sw
       const connected = await connectWallet(sourceNetwork) as EvmConnection;
       if (connected.address.toLowerCase() !== wallet.address.toLowerCase()) throw new Error("The wallet account changed. Review the swap again.");
       if (targetNetwork === "bitcoin") {
-        const { isValidChainAddress } = await import("pay3flow-near-sdk");
-        if (!isValidChainAddress("btc", recipient)) throw new Error("Invalid recipient address");
+        if (!isValidBitcoinAddress(recipient)) throw new Error("Invalid recipient address");
       } else await validateRecipient(targetNetwork, recipient);
       const [{ getPublicClient, getWalletClient, getAccount, waitForTransactionReceipt }, { ViemAdapter }, sell, buy] = await Promise.all([
         import("@wagmi/core"), import("@cowprotocol/sdk-viem-adapter"), token(fromSymbol, chainId, input.fromTokenAddress), token(toSymbol, targetChainId, input.toTokenAddress),

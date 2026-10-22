@@ -17,6 +17,13 @@ npm run dev -- --host 127.0.0.1 --port 3000
 The frontend expects the backend at `http://localhost:8080` during local
 development. Set `PUBLIC_API_URL` when the backend is hosted elsewhere.
 
+> **Temporary change:** the NEAR Intents swap widget and its SDK dependency tree
+> have been removed from this build. Swap execution for the `near-intents`
+> provider is disabled and reports a clear "temporarily unavailable" error; the
+> rest of the app (OTC, providers, routes, share pages) keeps working. Restore
+> `src/lib/near-sdk.ts` and the original `src/lib/near-swap-service.ts` to
+> re-enable it.
+
 Set `PUBLIC_AURORA_INTENTS_API_KEY` in `.env.local` for local development, or in
 the frontend server environment in production. Obtain the widget integration
 key from [Aurora Widget Studio](https://studio.aurora.dev/). The official NEAR
@@ -32,10 +39,6 @@ wallet boundaries and NEAR catalog aliases.
 All wallet swap chapters use `UnifiedSwap.svelte` and the shared `SwapForm.svelte`,
 including routes without execution descriptors. Provider SDKs supply service
 adapters; provider swap components and iframe fallbacks have been removed.
-
-`@0x/swap-ts-sdk` is installed for server-side integrations. Its API key belongs
-in a server environment variable, rather than a `PUBLIC_` variable; the SDK does
-not support browser use.
 
 ## Live result rendering
 

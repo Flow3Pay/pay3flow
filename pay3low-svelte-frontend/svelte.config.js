@@ -8,7 +8,6 @@ export default {
     warningFilter: (warning) => warning.code !== "css_unused_selector",
   },
   kit: {
-    alias: { "pay3flow-near-sdk": "./src/lib/near-sdk.ts" },
     adapter: adapter(),
   },
 };
