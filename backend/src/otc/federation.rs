@@ -32,24 +32,25 @@ impl Service {
             ))
             .send()
             .await?;
-        if !self.cfg.demo
-            && response
+        // A relay that does not expose the OTC signature/profile contract is
+        // not a source of public desk listings. Treat it as an empty
+        // collection instead of failing the whole public OTC page.
+        if !response.status().is_success()
+            || (!self.cfg.demo
+                && response
+                    .headers()
+                    .get("x-relay-signatures")
+                    .and_then(|v| v.to_str().ok())
+                    != Some("required"))
+            || response
                 .headers()
-                .get("x-relay-signatures")
+                .get("x-relay-profile")
                 .and_then(|v| v.to_str().ok())
-                != Some("required")
+                != Some(PROFILE)
         {
-            return Err(Error::Disabled);
+            return Ok(json!([]));
         }
-        if response
-            .headers()
-            .get("x-relay-profile")
-            .and_then(|v| v.to_str().ok())
-            != Some(PROFILE)
-        {
-            return Err(Error::Disabled);
-        }
-        let body: Value = response.error_for_status()?.json().await?;
+        let body: Value = response.json().await?;
         let mut proposals = Vec::new();
         for p in body["orderedItems"].as_array().into_iter().flatten() {
             let p = if p["type"] == "Create" {
