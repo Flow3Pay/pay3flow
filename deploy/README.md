@@ -159,11 +159,13 @@ to a release directory does not configure the running production process.
 Live deployment uses [`frontend-runtime/Dockerfile`](frontend-runtime/Dockerfile) with the
 frontend directory as its build context. Its dependency and builder stages
 match the frontend Dockerfile, allowing application build-cache reuse. The
-runner copies a filtered dependency tree into a fresh Node 24 image: generated
-JavaScript, JSON, CSS, native modules and licenses remain; declaration files,
-source maps and unused raw Material Symbols SVG source packages are omitted.
-The compiled React icons and built client assets are preserved. Removing files
-only in a child layer of the full dependency image would not shrink that image.
+runner installs the production dependencies into a fresh Node 24 image
+(`npm ci --omit=dev`) and, in the same layer, drops declaration files, source
+maps, build info and the raw Material Symbols SVG source packages. Generated
+JavaScript, JSON, CSS, native modules and licenses remain, as do the compiled
+React icons and built client assets. Installing dependencies in the final layer
+avoids a cross-stage copy of the dependency tree, which rewrote tens of
+thousands of small files and dominated the build time on the production host.
 
 The builder allows a 6 GiB Node heap. DejaVu fonts, compression and frontend
 metrics remain part of the runtime image. The frontend-directory Dockerfile
