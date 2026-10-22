@@ -156,7 +156,7 @@ function prune_old_images
     test -n "$keep"; or set keep 2
     for repository in backend frontend
         set prefix "localhost/pay3flow/$repository"
-        set tags (remote "sudo '$k3s' crictl images 2>/dev/null | awk '\$1 == \"$prefix\" && \$2 ~ /^live-/ {print \$2}' | sort -u" | string split \n | string match -r '.+')
+        set tags (remote "sudo '$k3s' crictl images 2>/dev/null | awk '\$1 == \"$prefix\" && \$2 ~ /^live-/ {print \$2}' | sort -u" | string split \n | string match -r '.+' | string match -v -- "$image_tag")
         test (count $tags) -gt $keep; or continue
         set stale (string join \n -- $tags | awk -v keep=$keep '{ line[NR] = $0 } END { for (i = 1; i <= NR - keep; i++) print line[i] }' | string match -r '.+')
         for tag in $stale
