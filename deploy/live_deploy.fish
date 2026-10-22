@@ -18,6 +18,7 @@ function usage
     echo '  PAY3FLOW_NAMESPACE             Kubernetes namespace (default: pay3flow)'
     echo '  PAY3FLOW_PUBLIC_URL            URL verified after rollout'
     echo '  PAY3FLOW_IMAGE_TAG             Override the commit-derived image tag'
+    echo '  PAY3FLOW_SKIP_BUILD            Reuse images that already exist for this tag'
     echo '  PAY3FLOW_BUILDCACHE_KEEP       BuildKit cache window to keep (default: 72h)'
     echo '  PAY3FLOW_BUILDKIT_ADDR         BuildKit daemon address used for cache pruning'
     echo '  PAY3FLOW_KEEP_RELEASES         Source release directories to keep (default: 2)'
@@ -195,39 +196,46 @@ for key in DATABASE_URL REDIS_URL JWT_SECRET SECRETS_KEY ADMIN_TOKEN NEAR_INTENT
     remote "sudo '$kubectl' kubectl -n '$namespace' get secret pay3flow-secrets -o jsonpath='{.data.$key}' | grep -q ."; or die "Secret pay3flow-secrets is missing key: $key"
 end
 
-remote "test -d $release_dir || mkdir -m 0750 $release_dir"; or die 'Could not prepare the remote release directory.'
-printf '%s\n' $revision | remote "cat > $release_dir/.source-revision"; or die 'Could not write the source revision marker.'
+if test -n "$PAY3FLOW_SKIP_BUILD"
+    echo "Reusing existing images with tag $image_tag."
+    for image in $backend_image $frontend_image
+        remote "'$nerdctl' --address '$containerd_socket' --namespace k8s.io image inspect '$image' >/dev/null 2>&1"; or die "PAY3FLOW_SKIP_BUILD is set but the image is missing: $image"
+    end
+else
+    remote "test -d $release_dir || mkdir -m 0750 $release_dir"; or die 'Could not prepare the remote release directory.'
+    printf '%s\n' $revision | remote "cat > $release_dir/.source-revision"; or die 'Could not write the source revision marker.'
 
-set rsync_ssh (string join -- ' ' ssh $ssh_options)
-rsync -az --delete \
-    --exclude .git/ \
-    --exclude backend/.env \
-    --exclude node_modules/ \
-    --exclude target/ \
-    -e "$rsync_ssh" \
-    "$repo_root/" "$remote:$release_dir/"; or die 'Could not synchronize the release source.'
+    set rsync_ssh (string join -- ' ' ssh $ssh_options)
+    rsync -az --delete \
+        --exclude .git/ \
+        --exclude backend/.env \
+        --exclude node_modules/ \
+        --exclude target/ \
+        -e "$rsync_ssh" \
+        "$repo_root/" "$remote:$release_dir/"; or die 'Could not synchronize the release source.'
 
-set backend_log_command "cd $release_dir && '$nerdctl' --address '$containerd_socket' --namespace k8s.io build --tag '$backend_image' --file backend/Dockerfile . >'$backend_log' 2>&1"
-set frontend_log_command "cd $release_dir && '$nerdctl' --address '$containerd_socket' --namespace k8s.io build --tag '$frontend_image' --file deploy/frontend-runtime/Dockerfile pay3low-svelte-frontend >'$frontend_log' 2>&1"
-remote "rm -f '$backend_log' '$frontend_log'"; or die 'Could not clear remote build logs.'
-echo 'Building backend and frontend images in parallel...'
-remote $backend_log_command &
-set backend_pid $last_pid
-remote $frontend_log_command &
-set frontend_pid $last_pid
-wait $backend_pid
-set backend_status $status
-wait $frontend_pid
-set frontend_status $status
-if test $backend_status -ne 0 -o $frontend_status -ne 0
-    echo 'Backend build log:' >&2
-    remote "tail -80 '$backend_log'" >&2
-    echo 'Frontend build log:' >&2
-    remote "tail -80 '$frontend_log'" >&2
-    die 'Image build failed.'
+    set backend_log_command "cd $release_dir && '$nerdctl' --address '$containerd_socket' --namespace k8s.io build --tag '$backend_image' --file backend/Dockerfile . >'$backend_log' 2>&1"
+    set frontend_log_command "cd $release_dir && '$nerdctl' --address '$containerd_socket' --namespace k8s.io build --tag '$frontend_image' --file deploy/frontend-runtime/Dockerfile pay3low-svelte-frontend >'$frontend_log' 2>&1"
+    remote "rm -f '$backend_log' '$frontend_log'"; or die 'Could not clear remote build logs.'
+    echo 'Building backend and frontend images in parallel...'
+    remote $backend_log_command &
+    set backend_pid $last_pid
+    remote $frontend_log_command &
+    set frontend_pid $last_pid
+    wait $backend_pid
+    set backend_status $status
+    wait $frontend_pid
+    set frontend_status $status
+    if test $backend_status -ne 0 -o $frontend_status -ne 0
+        echo 'Backend build log:' >&2
+        remote "tail -80 '$backend_log'" >&2
+        echo 'Frontend build log:' >&2
+        remote "tail -80 '$frontend_log'" >&2
+        die 'Image build failed.'
+    end
+    remote "tail -8 '$backend_log'"
+    remote "tail -8 '$frontend_log'"
 end
-remote "tail -8 '$backend_log'"
-remote "tail -8 '$frontend_log'"
 
 echo 'Verifying images in the k3s containerd namespace...'
 set source_backend_id (remote "'$nerdctl' --address '$containerd_socket' --namespace k8s.io image inspect --format '{{.Id}}' '$backend_image'" | string replace --regex '^sha256:' '' | string trim)
