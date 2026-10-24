@@ -218,9 +218,11 @@ else
     set frontend_log_command "cd $release_dir && '$nerdctl' --address '$containerd_socket' --namespace k8s.io build --tag '$frontend_image' --file deploy/frontend-runtime/Dockerfile pay3low-svelte-frontend >'$frontend_log' 2>&1"
     remote "rm -f '$backend_log' '$frontend_log'"; or die 'Could not clear remote build logs.'
     echo 'Building backend and frontend images in parallel...'
-    remote $backend_log_command &
+    # ssh is invoked directly here: fish runs a backgrounded function such as
+    # `remote` synchronously, which would serialize the two image builds.
+    ssh $ssh_options $remote $backend_log_command &
     set backend_pid $last_pid
-    remote $frontend_log_command &
+    ssh $ssh_options $remote $frontend_log_command &
     set frontend_pid $last_pid
     wait $backend_pid
     set backend_status $status
