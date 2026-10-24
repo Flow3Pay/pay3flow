@@ -7,6 +7,7 @@
   export let publicOffers: PublicOffer[] = [], ownIds: string[] = [];
   export let onCancel: (id: string) => void = () => {};
   export let busy = false, compact = false, showEmpty = true;
+  export let dialogOnly = false;
   export let testId = "otc-public-offer";
   export let config: Config | null;
   export let listings: Proposal[] = [];
@@ -30,6 +31,7 @@
     await tick();
     if (dialog && !dialog.open) dialog.showModal();
   }
+  export function openOffer(offer: PublicOffer) { void showOffer(offer); }
   function closeOffer() {
     if (dialog?.open) dialog.close();
     selectedOffer = null; copied = "";
@@ -41,6 +43,7 @@
   onMount(() => () => { if (dialog?.open) dialog.close(); });
 </script>
 
+{#if !dialogOnly}
 {#if !compact}<div class="bookHeader" aria-hidden="true"><span>{say("Price", "Цена")}<small>USDT / EVER</small></span><span>{say("Amount", "Объём")}<small>EVER</small></span><span>{say("Total", "Всего")}<small>USDT</small></span></div>{/if}
 <div class="bookRows" class:compact>
   {#each sortedOffers as offer, index (offer.id)}
@@ -68,6 +71,7 @@
   {/each}
 </div>
 {#if !compact}<p class="bookFooter">{config?.public_offers_available && !config.available ? say("Offers are public · settlement on this site is paused", "Офферы публичны · расчёты через сайт отключены") : say("Public offers · USDT / EVER", "Публичные офферы · USDT / EVER")}</p>{/if}
+{/if}
 
 {#if selectedOffer}
   {@const selected = selectedOffer}

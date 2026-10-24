@@ -2,20 +2,53 @@
   import { locale } from "$lib/i18n";
   import { tradeRow } from "$lib/otc/market";
   import { terminalStates } from "$lib/otc/terminal";
+  import { offerDirection, offerOwner, saleRate, type PublicOffer } from "$lib/otc/public-offers";
   import type { Direction, Trade } from "$lib/otc/service";
   export let trades: Trade[] = [];
+  export let offers: PublicOffer[] = [];
   export let selectedId = "";
   export let busy = false;
   export let onSelect: (id: string) => void;
+  export let onOfferSelect: (offer: PublicOffer) => void = () => {};
   export let emptyTitle = "";
   export let emptyHint = "";
-  type Row = { trade: Trade; row: ReturnType<typeof tradeRow> };
+  type Item = {
+    key: string;
+    kind: "trade" | "offer";
+    direction: Direction;
+    time: number | null;
+    price: string;
+    amount: string;
+    total: string;
+    state: string;
+    id: string;
+    trade?: Trade;
+    offer?: PublicOffer;
+    owner?: string;
+  };
   $: say = (en: string, ru: string) => $locale === "ru" ? ru : en;
-  $: rows = trades.map(trade => ({ trade, row: tradeRow(trade) })) as Row[];
-  $: buys = rows.filter(item => item.trade.terms.direction === "buy");
-  $: sells = rows.filter(item => item.trade.terms.direction === "sell");
+  $: tradeItems = trades.map(trade => {
+    const row = tradeRow(trade);
+    return { key: `trade:${trade.id}`, kind: "trade", direction: trade.terms.direction, time: row.time, price: row.price, amount: row.amount, total: row.total, state: trade.state, id: trade.id, trade } as Item;
+  });
+  $: offerItems = offers.map(offer => ({
+    key: `offer:${offer.id}`,
+    kind: "offer",
+    direction: offerDirection(offer),
+    time: offer.created_at ? Date.parse(offer.created_at) : null,
+    price: saleRate(offer.terms.ever_amount, offer.terms.usdt_amount),
+    amount: offer.terms.ever_amount,
+    total: offer.terms.usdt_amount,
+    state: offer.state,
+    id: offer.id,
+    offer,
+    owner: offerOwner(offer),
+  }) as Item);
+  $: items = [...tradeItems, ...offerItems].sort((a, b) => (b.time ?? 0) - (a.time ?? 0));
+  $: buys = items.filter(item => item.direction === "buy");
+  $: sells = items.filter(item => item.direction === "sell");
   const labels: Record<string, string> = {
-    quoted: "Open", booking_pending: "Booking pending", accepted: "Accepted", funded: "Funded",
+    open: "Open", quoted: "Open", booking_pending: "Booking pending", accepted: "Accepted", funded: "Funded",
     payment_confirming: "Confirming", payout_pending: "Payout pending", review: "Review",
     completed: "Filled", refunded: "Refunded", rejected: "Rejected", expired: "Expired", cancelled: "Cancelled",
   };
@@ -28,14 +61,18 @@
   }
   function datePart(time: number | null) { return time === null ? "—" : new Date(time).toLocaleDateString($locale === "ru" ? "ru-RU" : "en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" }); }
   function timePart(time: number | null) { return time === null ? "" : new Date(time).toLocaleTimeString($locale === "ru" ? "ru-RU" : "en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }); }
-  function activate(event: KeyboardEvent, id: string) {
+  function open(item: Item) {
+    if (item.kind === "offer" && item.offer) onOfferSelect(item.offer);
+    else onSelect(item.id);
+  }
+  function activate(event: KeyboardEvent, item: Item) {
     if (!["Enter", " "].includes(event.key)) return;
     event.preventDefault();
-    onSelect(id);
+    open(item);
   }
 </script>
 
-{#snippet sideTable(title: string, direction: Direction, items: Row[])}
+{#snippet sideTable(title: string, direction: Direction, items: Item[])}
   <section class="sideTable" class:sell={direction === "sell"} aria-label={title}>
     <header><span class="sideDot"></span><h3>{title}</h3><span class="sideCount">{items.length}</span></header>
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -43,15 +80,18 @@
       <table>
         <thead><tr><th>{say("Date / Time", "Дата / время")}</th><th>{say("Pair", "Пара")}</th><th>{say("Type", "Тип")}</th><th>{say("Price", "Цена")} <small>USDT</small></th><th>{say("Amount", "Объём")} <small>EVER</small></th><th>{say("Total", "Всего")} <small>USDT</small></th><th>{say("Status", "Статус")}</th></tr></thead>
         <tbody>
-          {#each items as { trade, row } (trade.id)}
-            <tr class:selected={trade.id === selectedId} tabindex="0" role="button" aria-label={`${direction === "buy" ? say("Open buy", "Открыть покупку") : say("Open sell", "Открыть продажу")} EVER ${trade.id}`} on:click={() => !busy && onSelect(trade.id)} on:keydown={(event) => activate(event, trade.id)}>
-              <td class="dateCell"><span>{datePart(row.time)}</span><small>{timePart(row.time)}</small></td>
+          {#each items as item (item.key)}
+            <tr class:selected={item.kind === "trade" && item.id === selectedId} tabindex="0" role="button" data-kind={item.kind} aria-label={`${direction === "buy" ? say("Open buy", "Открыть покупку") : say("Open sell", "Открыть продажу")} ${item.kind === "offer" ? say("offer", "оффер") : "EVER"} ${item.id}`} on:click={() => !busy && open(item)} on:keydown={(event) => activate(event, item)}>
+              <td class="dateCell"><span>{datePart(item.time)}</span><small>{timePart(item.time)}</small></td>
               <td class="pairCell">EVER / USDT</td>
               <td><span class="sidePill" class:sell={direction === "sell"}>{direction === "buy" ? say("Buy", "Купить") : say("Sell", "Продать")}</span></td>
-              <td class="numberCell">{row.price}</td>
-              <td class="numberCell">{row.amount}</td>
-              <td class="numberCell">{row.total}</td>
-              <td><span class="status" class:filled={statusClass(trade.state) === "filled"} class:closed={statusClass(trade.state) === "closed"} class:review={statusClass(trade.state) === "review"}><i></i>{statusLabel(trade.state)}</span></td>
+              <td class="numberCell">{item.price}</td>
+              <td class="numberCell">{item.amount}</td>
+              <td class="numberCell">{item.total}</td>
+              <td>
+                <span class="status" class:filled={statusClass(item.state) === "filled"} class:closed={statusClass(item.state) === "closed"} class:review={statusClass(item.state) === "review"}><i></i>{statusLabel(item.state)}</span>
+                {#if item.kind === "offer"}<span class="kindTag">{say("Offer", "Оффер")}</span>{/if}
+              </td>
             </tr>
           {:else}
             <tr class="emptyRow"><td colspan="7"><strong>{emptyTitle || (direction === "buy" ? say("No buy orders yet", "Покупок пока нет") : say("No sell orders yet", "Продаж пока нет"))}</strong>{#if emptyHint}<small>{emptyHint}</small>{/if}</td></tr>
@@ -102,6 +142,7 @@
   .status.closed { color: var(--color-text-soft); }
   .status.review { color: var(--color-warn); }
   .status.review i { background: var(--color-warn); }
+  .kindTag { display: inline-block; margin-left: 6px; padding: 1px 5px; border-radius: 3px; background: var(--color-panel); color: var(--color-text-faint); font-size: 9px; vertical-align: 1px; }
   .emptyRow { cursor: default; }
   .emptyRow td { padding: 28px 12px; text-align: center; white-space: normal; }
   .emptyRow strong { display: block; color: var(--color-text-soft); font-size: 12px; font-weight: 600; }
