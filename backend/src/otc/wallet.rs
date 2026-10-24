@@ -214,7 +214,7 @@ impl Service {
         }
         Ok(())
     }
-    async fn verify_ever_key(&self, address: &str, key: &[u8; 32]) -> Result<()> {
+    pub(super) async fn verify_ever_key(&self, address: &str, key: &[u8; 32]) -> Result<()> {
         // This exact immutable wallet's address commits to its signing key.
         // Deployment and RPC availability are not prerequisites for identity.
         // All balance/settlement checks still require the chain observers.

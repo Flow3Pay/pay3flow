@@ -21,7 +21,7 @@ interface Instructions {
   leg: { chain: string; sender: string; recipient: string; amount: string; transfer_amount: string };
   call: { family: string; from?: string; to?: string; data?: string; value?: string; nonce?: string; sender?: string; recipient?: string; amount?: string; bounce?: boolean };
 }
-export interface Config { public_offers_available?: boolean; public_offer_directions?: Direction[]; escrow?: import("./escrow").EscrowPolicy | null; enabled: boolean; wallet_login_available?: boolean; wallet_login_chains?: ("ethereum" | "everscale")[]; available: boolean; demo: boolean; desk: string; desk_name: string; ever_resource: string; usdt_resource: string; counterparty_risk: string; support_owner: string }
+export interface Config { public_offers_available?: boolean; public_offer_directions?: Direction[]; everscale_multisig_available?: boolean; escrow?: import("./escrow").EscrowPolicy | null; enabled: boolean; wallet_login_available?: boolean; wallet_login_chains?: ("ethereum" | "everscale")[]; available: boolean; demo: boolean; desk: string; desk_name: string; ever_resource: string; usdt_resource: string; counterparty_risk: string; support_owner: string }
 export type LoginChain = "ethereum" | "everscale";
 export interface VerifiedWallet { chain: LoginChain; address: string; verified_at: string }
 export interface Session { token: string; actor: string; desk: boolean; expires_at: string; signing_wallet: { chain: LoginChain; address: string } | null; wallets: VerifiedWallet[] }

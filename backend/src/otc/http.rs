@@ -35,6 +35,13 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/api/otc/offers/:id/cancel", post(cancel_public_offer))
         .route("/api/otc/rfqs", post(rfq))
         .route("/api/otc/trades", get(trades))
+        .route("/api/otc/multisig/review", post(multisig_review))
+        .route("/api/otc/multisig/prepare", post(multisig_prepare))
+        .route("/api/otc/multisig/calls/:id", get(multisig_call))
+        .route(
+            "/api/otc/multisig/calls/:id/reference",
+            post(multisig_reference),
+        )
         .route("/api/otc/trades/:id", get(details))
         .route("/api/otc/trades/:id/apply", post(apply))
         .route("/api/otc/trades/:id/prepare", post(prepare))
@@ -90,7 +97,7 @@ async fn config(State(state): State<AppState>) -> Json<Value> {
     .flatten()
     .collect();
     Json(
-        json!({"enabled":cfg.enabled,"available":available,"public_offers_available":state.otc.public_offers_available(),"public_offer_directions":["buy","sell"],"wallet_login_available":state.otc.wallet_login_available(),"wallet_login_chains":wallet_login_chains,"escrow":cfg.escrow,"escrow_lifetime_seconds":14400,"escrow_max_ever":"100000","demo":cfg.demo,"desk":cfg.desk_actor,"desk_name":cfg.desk_name,"ever_resource":cfg.ever_resource,"usdt_resource":cfg.usdt_resource,"support_owner":cfg.support_owner,"ever_network":"Everscale","usdt_network":"Ethereum","usdt_contract":super::config::USDT,"profile":super::protocol::profile(),"fee":{"payer":"desk","rate":"0.0025","floor":"5","currency":"USDT"},"counterparty_risk":if cfg.escrow.is_some(){"USDT funds a 2-of-3 Safe escrow before native EVER delivery. Expiry permits a USDT refund; it cannot reverse EVER delivery."}else{"Two separate transfers. The desk must deliver or refund; there is no atomic swap or automatic rollback."}}),
+        json!({"enabled":cfg.enabled,"available":available,"public_offers_available":state.otc.public_offers_available(),"public_offer_directions":["buy","sell"],"everscale_multisig_available":state.otc.multisig_available(),"wallet_login_available":state.otc.wallet_login_available(),"wallet_login_chains":wallet_login_chains,"escrow":cfg.escrow,"escrow_lifetime_seconds":14400,"escrow_max_ever":"100000","demo":cfg.demo,"desk":cfg.desk_actor,"desk_name":cfg.desk_name,"ever_resource":cfg.ever_resource,"usdt_resource":cfg.usdt_resource,"support_owner":cfg.support_owner,"ever_network":"Everscale","usdt_network":"Ethereum","usdt_contract":super::config::USDT,"profile":super::protocol::profile(),"fee":{"payer":"desk","rate":"0.0025","floor":"5","currency":"USDT"},"counterparty_risk":if cfg.escrow.is_some(){"USDT funds a 2-of-3 Safe escrow before native EVER delivery. Expiry permits a USDT refund; it cannot reverse EVER delivery."}else{"Two separate transfers. The desk must deliver or refund; there is no atomic swap or automatic rollback."}}),
     )
 }
 async fn link(
@@ -405,4 +412,43 @@ async fn escrow_reference(
     let (_, actor) = state.otc.session(bearer(&headers)?).await?;
     key(&headers)?;
     Ok(Json(state.otc.escrow_reference(&actor, id, request).await?))
+}
+
+async fn multisig_review(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<super::multisig::ReviewRequest>,
+) -> Result<Json<Value>> {
+    state.otc.session(bearer(&headers)?).await?;
+    Ok(Json(state.otc.multisig_review(request).await?))
+}
+async fn multisig_prepare(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<super::multisig::PrepareRequest>,
+) -> Result<Json<Value>> {
+    let (_, actor) = state.otc.session(bearer(&headers)?).await?;
+    Ok(Json(
+        state
+            .otc
+            .multisig_prepare(&actor, key(&headers)?, request)
+            .await?,
+    ))
+}
+async fn multisig_call(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Value>> {
+    state.otc.session(bearer(&headers)?).await?;
+    Ok(Json(state.otc.multisig_call(id).await?))
+}
+async fn multisig_reference(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(request): Json<super::multisig::ReferenceRequest>,
+) -> Result<Json<Value>> {
+    state.otc.session(bearer(&headers)?).await?;
+    Ok(Json(state.otc.multisig_reference(id, request).await?))
 }

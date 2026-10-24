@@ -63,6 +63,16 @@ settlement observer checks. Nonstandard initial states still require the existin
 deployed-account verification. Upstream derivation is documented in
 [EverWallet.ts](https://github.com/broxus/everscale-standalone-client/blob/master/src/client/AccountsStorage/EverWallet.ts).
 
+### Native EVER multisig workspace
+
+The OTC page also exposes a native EVER multisig workspace backed by the bundled
+`evernode-multisig` crate. It verifies public 2-of-3 agreements, prepares
+owner-signed release/refund proposals and second approvals, and signs through
+EVER Wallet. Durable handoffs and message-level reconciliation are separate from
+desk-order settlement accounting. Startup applies `otc_ever_multisig.sql`; the
+workspace remains disabled until `everscale_multisig_backend` points at a
+server-owned ever-cli binary. See [setup and limits](otc-everscale-multisig.md).
+
 ### Desk settlement setup
 
 1. Run the normal backend database setup. Startup applies the additive `backend/migrations/otc.sql` and `backend/migrations/otc_escrow.sql` migrations. Use separate databases for demo and live: the first enabled worker binds the database mode, and demo quotes remain unsignable after a configuration switch. OTC records use separate tables from the legacy acquiring/exchange simulation ledger. Preserve the database, JWT secret and encryption key across restarts.

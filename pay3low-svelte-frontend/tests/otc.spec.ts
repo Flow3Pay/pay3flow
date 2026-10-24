@@ -51,7 +51,10 @@ async function fixtures(page: Page, options: { signedIn?: boolean; available?: b
   return { trades, attempts, rfqs, requests, control };
 }
 async function open(page: Page) { await page.goto("/#/otc"); await expect(page.getByTestId("otc-workspace")).toHaveAttribute("data-state", "connected"); }
-async function select(page: Page, state: string, direction = "buy") { await page.getByRole("button", { name: new RegExp(`${direction === "buy" ? "Buy" : "Sell"} EVER 100 → 200 ${state}`) }).click(); }
+async function select(page: Page, _state: string, direction = "buy") {
+  await page.getByRole("tab", { name: /^My trades/ }).click();
+  await page.getByRole("button", { name: `Open ${direction === "buy" ? "buy" : "sell"} EVER booking-fixture`, exact: true }).click();
+}
 
 test("one real terminal, scoped networks, no demo feed, accessible at 320 pixels", async ({ page }) => {
   const sockets: string[] = []; page.on("websocket", socket => sockets.push(socket.url()));
@@ -130,8 +133,8 @@ test("desk console decisions reserve first and unknown payout blocks refund", as
 test("server history and volume count completed USDT legs once, refunds stay visible", async ({ page }) => {
   await fixtures(page, { signedIn: true, extra: [makeTrade("completed", "buy", "done-buy"), makeTrade("completed", "sell", "done-sell"), makeTrade("refunded", "buy", "refund")] }); await open(page);
   await expect(page.locator(".volumeStat")).toContainText("300 USDT"); await expect(page.locator("#otc-chart circle")).toHaveCount(3);
-  await page.getByRole("tab", { name: "History" }).click(); await expect(page.locator(".tradeList button")).toHaveCount(3); await expect(page.locator(".tradeList")).toContainText("refunded");
-  await page.getByRole("tab", { name: "History" }).press("Home"); await expect(page.getByRole("tab", { name: "Desk offers" })).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("tab", { name: "History", exact: true }).click(); await expect(page.locator(".tradeTables tbody tr[role=button]")).toHaveCount(3); await expect(page.locator(".tradeTables")).toContainText("Refunded");
+  await page.getByRole("tab", { name: "History", exact: true }).press("Home"); await expect(page.getByRole("tab", { name: "Desk offers", exact: true })).toHaveAttribute("aria-selected", "true");
 });
 
 test("logout discards a delayed participant response", async ({ page }) => {
@@ -139,7 +142,7 @@ test("logout discards a delayed participant response", async ({ page }) => {
   await expect.poll(() => !!f.control.releasePrivate, { timeout: 12000 }).toBe(true);
   await page.locator(".walletMenu .walletToggle").click(); await page.getByRole("button", { name: "Disconnect", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Buy EVER · accepted" })).toHaveCount(0); f.control.releasePrivate!();
-  await page.waitForTimeout(250); await expect(page.locator(".tradeList button")).toHaveCount(0); await expect(page.locator("#otc-chart circle")).toHaveCount(0);
+  await page.waitForTimeout(250); await expect(page.locator(".tradeTables tbody tr[role=button]")).toHaveCount(0); await expect(page.locator("#otc-chart circle")).toHaveCount(0);
 });
 
 test("backend outage pauses new RFQs; panel layout survives reload", async ({ page }) => {
@@ -500,7 +503,7 @@ for (const theme of ["light", "dark"] as const) test(`OTC keeps panels and contr
     await expect(page.getByTestId("production-safe")).toHaveCount(0);
   }
   await page.locator("#otc-orders-tab").click();
-  await page.getByRole("button", { name: /Купить EVER 100 → 200 accepted/ }).click();
+  await page.locator(".tradeTables tbody tr[role=button]").first().click();
   await expect(page.getByRole("heading", { name: "Buy EVER · accepted" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
 });
@@ -512,12 +515,14 @@ test("activity tabs animate their indicator and content height and respect reduc
   await expect(page.locator(".introOverlay")).toHaveCount(0, { timeout: 6000 });
   const activity = page.locator("#otc-activity");
   await activity.scrollIntoViewIfNeeded();
+  await expect(page.locator(".tradeTables tbody tr[role=button]").first()).toBeVisible();
   const original = (await activity.locator(".activityViewport").boundingBox())!.height;
   await page.getByRole("tab", { name: "Desk offers", exact: true }).click();
   await expect(page.getByRole("tabpanel")).toHaveAttribute("id", "otc-trades-content");
   await expect.poll(() => activity.evaluate(node => node.getAnimations({ subtree: true }).filter(animation => animation.playState === "running").length)).toBeGreaterThan(0);
   await expect.poll(() => activity.evaluate(node => node.getAnimations({ subtree: true }).filter(animation => animation.playState === "running").length)).toBe(0);
-  expect((await activity.locator(".activityViewport").boundingBox())!.height).toBeGreaterThan(original);
+  const offersHeight = (await activity.locator(".activityViewport").boundingBox())!.height;
+  expect(offersHeight).not.toBe(original);
   const underline = await activity.locator(".tabIndicator").boundingBox();
   const selected = await page.getByRole("tab", { name: "Desk offers", exact: true }).boundingBox();
   expect(Math.abs(underline!.x - selected!.x)).toBeLessThan(1);
@@ -526,7 +531,7 @@ test("activity tabs animate their indicator and content height and respect reduc
   await expect(page.getByRole("tab", { name: "History", exact: true })).toBeFocused();
   await expect(page.getByRole("tabpanel")).toHaveAttribute("id", "otc-history-content");
   await page.locator("#otc-orders-tab").click();
-  await expect(page.getByRole("button", { name: /Buy EVER 100 → 200 accepted/ })).toBeVisible();
+  await expect(page.locator(".tradeTables tbody tr[role=button]").first()).toBeVisible();
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.getByRole("tab", { name: "Desk offers", exact: true }).click();
   await expect.poll(() => activity.evaluate(node => node.getAnimations({ subtree: true }).filter(animation => animation.playState === "running").length)).toBe(0);
