@@ -4,7 +4,7 @@
 
 - Docker Engine and Docker Compose
 - Ruby 3.1+ for the exchange smoke test
-- Node.js 24 and npm for frontend-only work
+- Node.js 24 and pnpm (Corepack) for frontend-only work
 - Rust 1.97+ for backend-only work, if you are not using Docker
 
 ## Start the stack
@@ -49,16 +49,17 @@ for production.
 
 ```bash
 cd pay3low-svelte-frontend
-npm ci
-npm run check
-npm run test:unit
-NODE_OPTIONS=--max-old-space-size=6144 npm run build
-npm run test:e2e -- tests/exchange-flow.spec.ts tests/wallet-execution.spec.ts
+corepack enable
+pnpm install --frozen-lockfile
+pnpm run check
+pnpm run test:unit
+NODE_OPTIONS=--max-old-space-size=6144 pnpm run build
+pnpm run test:e2e -- tests/exchange-flow.spec.ts tests/wallet-execution.spec.ts
 ```
 
 The configured Playwright suite starts its own Vite server and share-backend
 fixture. Browser tests mock the relevant APIs; the default suite does not need
-a live production backend. Install Chromium with `npx playwright install chromium`
+a live production backend. Install Chromium with `pnpm exec playwright install chromium`
 or set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to an installed compatible browser.
 Use `--workers=1` for cold standalone NEAR widget checks on constrained hosts.
 Explicit live-audit scripts are separate and issue read-only requests.
@@ -68,7 +69,7 @@ Aurora widget. Production supplies it on the frontend process at runtime.
 The SDK needs the browser polyfills and optimization rules in `vite.config.ts`;
 see [SWAP widgets](swap-widgets.md) before changing them.
 
-Use `npm start` to run the built production server. It wraps adapter-node with
+Use `pnpm start` to run the built production server. It wraps adapter-node with
 compression, frontend metrics and static-cache headers. For an end-to-end
 production deploy, run `nix run .#deploy` from a clean committed worktree;
 [deployment details](../deploy/README.md) include runtime secrets and verification.

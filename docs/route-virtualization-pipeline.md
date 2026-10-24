@@ -231,9 +231,9 @@ cargo fmt --check --manifest-path backend/Cargo.toml
 cargo test --all-features --manifest-path backend/Cargo.toml
 cargo clippy --all-targets --all-features --manifest-path backend/Cargo.toml
 cd pay3low-svelte-frontend
-npm run check
-npm run test:unit
-npm run test:e2e -- tests/exchange-flow.spec.ts tests/wallet-execution.spec.ts
+pnpm run check
+pnpm run test:unit
+pnpm run test:e2e -- tests/exchange-flow.spec.ts tests/wallet-execution.spec.ts
 ```
 
 Опциональные live-аудиты и их ограничения описаны в

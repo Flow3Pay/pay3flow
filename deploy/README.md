@@ -160,8 +160,9 @@ Live deployment uses [`frontend-runtime/Dockerfile`](frontend-runtime/Dockerfile
 frontend directory as its build context. Its dependency and builder stages
 match the frontend Dockerfile, allowing application build-cache reuse. The
 runner installs the production dependencies into a fresh Node 24 image
-(`npm ci --omit=dev`) and, in the same layer, drops declaration files, source
-maps, build info and the raw Material Symbols SVG source packages. Generated
+(`pnpm install --frozen-lockfile --prod`) and, in the same layer, drops
+declaration files, source maps, build info and the raw Material Symbols SVG
+source packages. Generated
 JavaScript, JSON, CSS, native modules and licenses remain, as do the compiled
 React icons and built client assets. Installing dependencies in the final layer
 avoids a cross-stage copy of the dependency tree, which rewrote tens of
@@ -173,7 +174,7 @@ retains the full dependency tree for the general Compose/local build path.
 
 If a cold release appears quiet, inspect `/tmp/pay3flow-backend-REV.log` and
 `/tmp/pay3flow-frontend-REV.log` on the host, where `REV` is the seven-character
-revision. Distinguish npm/Vite work, image export and containerd import from
+revision. Distinguish pnpm/Vite work, image export and containerd import from
 Kubernetes rollout. Verify image IDs and revision annotations before declaring
 the release complete; retain the database backup and previous image tags.
 

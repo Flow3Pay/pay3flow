@@ -4,6 +4,7 @@
   "private": true,
   "license": "AGPL-3.0-or-later",
   "type": "module",
+  "packageManager": "pnpm@12.3.4",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
@@ -35,6 +36,7 @@
     "@near-wallet-selector/my-near-wallet": "^10.1.4",
     "@reown/appkit": "^1.8.24",
     "@reown/appkit-adapter-wagmi": "^1.8.24",
+    "@wagmi/core": "3.6.5",
     "@xyflow/svelte": "^1.7.0",
     "compression": "^1.8.2",
     "layercake": "^10.0.3",

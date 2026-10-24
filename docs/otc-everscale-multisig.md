@@ -136,10 +136,10 @@ EVER_CLI_TEST_BINARY=/absolute/path/to/ever-cli \
   cargo test --manifest-path backend/Cargo.toml --lib otc:: -- --include-ignored --skip local_chain_roundtrip
 
 cd pay3low-svelte-frontend
-npm run check
-npm run test:unit
-npm run build
-npm run test:e2e -- tests/everscale-multisig.spec.ts tests/production-safe.spec.ts tests/otc.spec.ts
+pnpm run check
+pnpm run test:unit
+pnpm run build
+pnpm run test:e2e -- tests/everscale-multisig.spec.ts tests/production-safe.spec.ts tests/otc.spec.ts
 ```
 
 The ignored native service test additionally needs Python 3 and OpenSSL for its

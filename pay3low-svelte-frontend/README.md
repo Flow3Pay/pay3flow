@@ -9,9 +9,13 @@ accounts. Saved payment methods and shared swap links override this default.
 
 ## Local development
 
+The frontend uses pnpm; the required version is pinned in `package.json`.
+Enable Corepack once, then install the locked dependencies:
+
 ```bash
-npm ci
-npm run dev -- --host 127.0.0.1 --port 3000
+corepack enable
+pnpm install --frozen-lockfile
+pnpm run dev --host 127.0.0.1 --port 3000
 ```
 
 The frontend expects the backend at `http://localhost:8080` during local
@@ -102,15 +106,15 @@ by the selected providers. Catalog presence does not imply provider liquidity.
 ## Verification and production build
 
 ```bash
-npm run check
-npm run test:unit
-NODE_OPTIONS=--max-old-space-size=6144 npm run build
-PORT=3000 PUBLIC_API_URL=http://localhost:8080 npm start
+pnpm run check
+pnpm run test:unit
+NODE_OPTIONS=--max-old-space-size=6144 pnpm run build
+PORT=3000 PUBLIC_API_URL=http://localhost:8080 pnpm start
 ```
 
 The standalone wallet SDK needs a larger Node heap during builds and cold dev
 dependency optimization. If Node reaches its heap limit, use
-`NODE_OPTIONS=--max-old-space-size=6144 npm run build` (or `npm run dev`).
+`NODE_OPTIONS=--max-old-space-size=6144 pnpm run build` (or `pnpm run dev`).
 
 Run the complete stack from the repository root:
 

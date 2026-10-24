@@ -59,7 +59,7 @@ Ethereum representation remain distinct.
 
 ## Verification
 
-Use `npm run check` and the desktop/mobile tests in
+Use `pnpm run check` and the desktop/mobile tests in
 `tests/wallet-execution.spec.ts`. Coverage includes routes with and without
 execution descriptors, absence of provider iframes, mode preservation, exact
 composed-leg amounts, NEAR aliases, explicit swap intent, approval refreshes,

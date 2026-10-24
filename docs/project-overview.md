@@ -422,24 +422,25 @@ HTTP assertions and standalone Rust examples are documented in [Providerfile.md]
 
 ### Frontend
 
-Requirements: Node.js 24 and npm.
+Requirements: Node.js 24 and pnpm (Corepack).
 
 ```bash
 cd pay3low-svelte-frontend
-npm ci
-PUBLIC_API_URL=http://localhost:8080 npm run dev
+corepack enable
+pnpm install --frozen-lockfile
+PUBLIC_API_URL=http://localhost:8080 pnpm run dev
 ```
 
 Verification commands:
 
 ```bash
-npm run check
-npm run test:unit
-NODE_OPTIONS=--max-old-space-size=6144 npm run build
-npm run test:e2e
+pnpm run check
+pnpm run test:unit
+NODE_OPTIONS=--max-old-space-size=6144 pnpm run build
+pnpm run test:e2e
 ```
 
-Production builds run with `npm start`, which serves the adapter-node output
+Production builds run with `pnpm start`, which serves the adapter-node output
 through [`server.mjs`](../pay3low-svelte-frontend/server.mjs).
 
 ## Configuration

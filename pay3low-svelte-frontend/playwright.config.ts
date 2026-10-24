@@ -26,7 +26,7 @@ export default defineConfig({
     timeout: 30_000,
   }, {
     env: { SHARE_API_URL: `http://127.0.0.1:${sharePort}`, PUBLIC_AURORA_INTENTS_API_KEY: "playwright-widget-key" },
-    command: `npm run dev -- --host 127.0.0.1 --port ${port}`,
+    command: `pnpm run dev --host 127.0.0.1 --port ${port}`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
