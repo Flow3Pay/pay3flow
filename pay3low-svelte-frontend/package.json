@@ -6,12 +6,12 @@
   "type": "module",
   "packageManager": "pnpm@12.3.4",
   "scripts": {
-    "dev": "vite dev",
-    "build": "vite build",
+    "dev": "node scripts/build-hot-kit.mjs && vite dev",
+    "build": "node scripts/build-hot-kit.mjs && vite build",
     "preview": "vite preview",
     "start": "node server.mjs",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "test:unit": "node --test --experimental-strip-types tests/response-metrics.test.ts tests/wallet-amount.test.ts tests/otc-model.test.ts tests/otc-link.test.ts tests/otc-client.test.ts tests/otc-terminal.test.ts tests/otc-market-model.test.ts tests/spot-guide.test.ts tests/spot-market.test.ts tests/cifra-guide.test.ts tests/trends-model.test.ts tests/otc-escrow-model.test.ts tests/production-safe.test.ts tests/everscale-multisig.test.ts tests/provider-route-legs.test.ts tests/guide-link.test.ts",
+    "test:unit": "node --test --experimental-strip-types tests/hex-model.test.ts tests/hex-submission.test.ts tests/response-metrics.test.ts tests/wallet-amount.test.ts tests/otc-model.test.ts tests/otc-link.test.ts tests/otc-client.test.ts tests/otc-terminal.test.ts tests/otc-market-model.test.ts tests/spot-guide.test.ts tests/spot-market.test.ts tests/cifra-guide.test.ts tests/trends-model.test.ts tests/otc-escrow-model.test.ts tests/production-safe.test.ts tests/everscale-multisig.test.ts tests/provider-route-legs.test.ts tests/guide-link.test.ts",
     "test:e2e": "playwright test"
   },
   "devDependencies": {
@@ -21,6 +21,8 @@
     "@sveltejs/kit": "^2.48.0",
     "@sveltejs/vite-plugin-svelte": "^6.2.1",
     "@types/node": "^24.19.1",
+    "esbuild": "0.25.12",
+    "node-stdlib-browser": "1.3.1",
     "svelte": "^5.46.0",
     "svelte-check": "^4.3.4",
     "typescript": "^5.9.3",
@@ -29,7 +31,9 @@
   },
   "dependencies": {
     "@cowprotocol/cow-sdk": "9.2.21",
+    "@cowprotocol/sdk-bridging": "4.4.19",
     "@cowprotocol/sdk-viem-adapter": "0.3.36",
+    "@hot-labs/kit": "1.6.4",
     "@near-js/transactions": "^2.5.1",
     "@near-wallet-selector/core": "^10.1.4",
     "@near-wallet-selector/modal-ui": "^10.1.4",
@@ -40,9 +44,10 @@
     "@xyflow/svelte": "^1.7.0",
     "compression": "^1.8.2",
     "layercake": "^10.0.3",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
     "sharp": "^0.35.5",
     "viem": "^2.57.2",
-    "wagmi": "^3.7.7",
-    "@cowprotocol/sdk-bridging": "4.4.19"
+    "wagmi": "^3.7.7"
   }
 }

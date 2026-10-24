@@ -23,6 +23,8 @@ export type OtcWalletDialog = {
 
 export const otcWalletDialog = writable<OtcWalletDialog | null>(null);
 export const walletDialogMode = writable<"wallets" | "otc" | null>(null);
+/** Active venues can supply their own wallet connector and profile dialog. */
+export const venueWalletMenu = writable<{ count: number; disabled: boolean; onOpen: () => void } | null>(null);
 
 export function openWalletDialog(mode: "wallets" | "otc") {
   walletDialogMode.set(mode);

@@ -18,6 +18,7 @@ explicitly say `planned`, `research`, or `legacy`.
 
 - [`FEDERATION.md`](FEDERATION.md) — supported federation protocols, FEPs, and interoperability limits.
 - [`otc-service.md`](otc-service.md) — EVER/USDT service setup, settlement, operations and live gate.
+- [`hex-gonka.md`](hex-gonka.md) — GNK/USDT trading on HEX, HOT wallets and bridge funding, recovery and production setup.
 - [`otc-evidence.md`](otc-evidence.md) — repeatable simulation tests and recorded validation.
 
 - [`exchange-domain.md`](exchange-domain.md) — exchange tables, invariants, and status machines.

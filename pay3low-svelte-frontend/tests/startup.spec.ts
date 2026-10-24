@@ -39,7 +39,14 @@ test("switching SWAP and OTC never repeats the startup animation", async ({ page
 
 test("loading and reloading OTC shows its slogan and keeps the requested market", async ({ page }) => {
   await prepare(page);
-  await page.goto("/#/otc?market=SOL-USDT");
+  await page.route("**/api/hex/**", route => {
+    const path = new URL(route.request().url()).pathname;
+    return route.fulfill({ json: path.endsWith("/config") ? {
+      execution_enabled:false,contract:"orderbook.fi.tg",
+      base_token:"nep245:v2_1.omni.hot.tg:4444119_wyixUKCL",quote_token:"nep141:usdt.tether-token.near",
+    } : path.endsWith("/snapshot") ? {book:{bids:[],asks:[]},fees:{maker_fee_collectors:[],taker_fee_collectors:[]},fetched_at:new Date().toISOString()} : {transactions:[]} });
+  });
+  await page.goto("/#/otc?market=GNK-USDT");
   const intro = page.locator(".introOverlay");
   for (let load = 0; load < 2; load++) {
     await expect(intro).toHaveAttribute("data-startup-mode", "otc");
@@ -47,7 +54,7 @@ test("loading and reloading OTC shows its slogan and keeps the requested market"
     await expect(page.getByRole("link", { name: "OTC", exact: true })).toHaveAttribute("aria-current", "page");
     await expect(intro).toHaveCount(0, { timeout: 6000 });
     await expect(page.getByTestId("otc-workspace")).toBeVisible();
-    await expect(page.getByRole("combobox", { name: "Choose market" })).toHaveValue("SOL-USDT");
+    await expect(page.getByRole("combobox", { name: "OTC market" })).toHaveValue("GNK-USDT");
     await expect(page.locator(".workspace")).toHaveCount(0);
     expect(await startupModes(page)).toEqual(["otc"]);
     if (load === 0) await page.reload();

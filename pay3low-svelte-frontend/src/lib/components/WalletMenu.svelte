@@ -8,7 +8,7 @@
   import { assetIcon } from "$lib/icons";
   import { wallets, connectWallet, disconnectFamily, restoreWallets } from "$lib/wallet-session";
   import type { WalletFamily } from "$lib/wallet-execution";
-  import { walletDialogMode, otcWalletDialog, openWalletDialog, closeWalletDialog } from "$lib/wallet-dialog";
+  import { walletDialogMode, otcWalletDialog, venueWalletMenu, openWalletDialog, closeWalletDialog } from "$lib/wallet-dialog";
   import PickerOptionCard from "./PickerOptionCard.svelte";
 
   const choices: { family: WalletFamily; network: string; label: string; icon: string; keywords: string }[] = [
@@ -34,7 +34,7 @@
   let dragging = false;
   let dragStartY = 0;
   let dragDistance = 0;
-  $: count = Object.keys($wallets).length;
+  $: count = $venueWalletMenu?.count ?? Object.keys($wallets).length;
   $: terms = query.normalize("NFKC").toLowerCase().trim().split(/\s+/).filter(Boolean);
   $: visibleChoices = choices.filter(choice => {
     const text = `${choice.label} ${choice.network} ${choice.family} ${choice.keywords} ${$wallets[choice.family]?.address ?? ''}`.toLowerCase();
@@ -151,7 +151,7 @@
 
 <svelte:window on:keydown={keydown} />
 <div class="walletMenu">
-  <button class="walletToggle" type="button" bind:this={toggle} aria-label={count ? copy("Wallets ({count})", { count }) : copy("Connect wallet")} aria-haspopup="dialog" aria-expanded={open} aria-controls="wallet-connections" on:click={() => { error = ""; query = ""; openWalletDialog($otcWalletDialog ? "otc" : "wallets"); }}>
+  <button class="walletToggle" type="button" bind:this={toggle} disabled={$venueWalletMenu?.disabled ?? false} aria-label={count ? copy("Wallets ({count})", { count }) : copy("Connect wallet")} aria-haspopup="dialog" aria-expanded={$venueWalletMenu ? undefined : open} aria-controls={$venueWalletMenu ? undefined : "wallet-connections"} on:click={() => { error = ""; query = ""; if ($venueWalletMenu) $venueWalletMenu.onOpen(); else openWalletDialog($otcWalletDialog ? "otc" : "wallets"); }}>
     <img src="/icons/ui/wallet-connect.png" width="18" height="18" alt="" aria-hidden="true" />
     <span>{count ? copy("Wallets ({count})", { count }) : copy("Connect wallet")}</span>
   </button>

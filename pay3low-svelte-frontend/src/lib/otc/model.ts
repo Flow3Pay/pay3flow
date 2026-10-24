@@ -54,9 +54,10 @@ export const markets: OtcMarket[] = [
   { id: "SOL-USDT", base: "SOL", quote: "USDT", name: "Solana", price: 148.36, priceDecimals: 2, amountDecimals: 4, tickSize: 0.05, change: 4.21, volume: 214850, icon: "/icons/assets/sol.webp" },
 ];
 const anchorTime = Date.UTC(2026, 9, 9, 12);
+export const gnkMarket: OtcMarket = { id: "GNK-USDT", base: "GNK", quote: "USDT", name: "Gonka", price: 0, priceDecimals: 6, amountDecimals: 9, tickSize: 0, change: 0, volume: 0, icon: "/icons/assets/gnk.jpg" };
 export function marketFromHash(hash: string): OtcMarket {
   const params = new URLSearchParams(hash.split("?")[1] ?? "");
-  return markets.find((market) => market.id === params.get("market")) ?? markets[0];
+  return params.get("market") === "GNK-USDT" ? gnkMarket : markets.find((market) => market.id === params.get("market")) ?? markets[0];
 }
 export function demoSnapshot(market: OtcMarket): OtcSnapshot {
   const levels = (side: OrderSide): BookLevel[] => {

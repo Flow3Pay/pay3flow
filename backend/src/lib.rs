@@ -11,6 +11,7 @@ pub mod core;
 pub mod db;
 pub mod exchange;
 pub mod external_reviews;
+pub mod hex;
 pub mod market_prices;
 pub mod networks;
 pub mod observability;

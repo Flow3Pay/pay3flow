@@ -156,6 +156,12 @@ to a release directory does not configure the running production process.
 
 ## Frontend build behavior
 
+For GNK/USDT trading, see [HEX Gonka setup](../docs/hex-gonka.md). Execution
+requires `HEX_TRADING_ENABLED=true` on the backend and a browser-compatible
+`PUBLIC_HOT_KIT_API_KEY` on the frontend. The image-patch deploy preserves existing
+environment settings; the rendered manifest supplies an optional HOT Secret
+reference and defaults HEX execution to disabled.
+
 Live deployment uses [`frontend-runtime/Dockerfile`](frontend-runtime/Dockerfile) with the
 frontend directory as its build context. Its dependency and builder stages
 match the frontend Dockerfile, allowing application build-cache reuse. The

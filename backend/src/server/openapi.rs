@@ -28,6 +28,7 @@ fn api_document() -> Value {
             { "name": "Exchange", "description": "Create an exchange order, discover solvers, select a quote and track settlement." },
             { "name": "Solver", "description": "Solver-facing order and quote endpoints." },
             { "name": "Catalogs", "description": "Public banks, networks, providers and exchange-pair catalogs." },
+            { "name": "HEX", "description": "Read-only GNK/USDT market, account and simulation data. Wallets publish trading intents directly." },
             { "name": "Routing", "description": "P2P search, route execution and route reputation." },
             { "name": "Administration", "description": "Protected operational controls. These endpoints require the configured admin bearer token." },
             { "name": "WebSockets", "description": "Real-time rates, payment events and route updates." },
@@ -351,6 +352,11 @@ type Operation = (
 );
 
 const OPERATIONS: &[Operation] = &[
+    ("/api/hex/config", "get", "HEX market configuration", "Fixed GNK/USDT token identities, precision and execution availability.", "HEX", false, false),
+    ("/api/hex/snapshot", "get", "HEX order book", "Mainnet GNK/USDT bids, asks, protocol fees and observation time. Cached for two seconds.", "HEX", false, false),
+    ("/api/hex/account", "get", "HEX account balances and orders", "Public chain balances, claimable balances and owned resting orders. Integer quantities and large timestamps are strings.", "HEX", false, false),
+    ("/api/hex/history", "get", "HEX confirmed history", "Indexed events for the GNK/USDT pair, optionally filtered by Omni account. Upstream outages return 503.", "HEX", false, false),
+    ("/api/hex/quote", "post", "Simulate a HEX order", "Read-only contract simulation. Amount is an atomic input-token string (USDT for buy, GNK for sell); limit price is the scaled contract price. Never signs or publishes an order.", "HEX", true, false),
     (
         "/health",
         "get",
@@ -1139,6 +1145,14 @@ fn array_schema(name: &str) -> Value {
 }
 
 fn request_schema(path: &str, method: &str) -> Value {
+    if path == "/api/hex/quote" && method == "post" {
+        return json!({"type":"object", "additionalProperties":false, "required":["side","order_type","amount"], "properties":{
+            "side":{"type":"string","enum":["buy","sell"]},
+            "order_type":{"type":"string","enum":["market","limit"]},
+            "amount":{"type":"string","pattern":"^[0-9]+$","maxLength":39,"example":"1000000"},
+            "price":{"type":"string","description":"Required for limit orders. Human USDT/GNK price multiplied by 10^-3, up to 24 decimal places.","example":"0.000205"}
+        }});
+    }
     let name = match (path, method) {
         ("/api/auth/register", "post") | ("/api/auth/login", "post") => "AuthCodeRequest",
         ("/api/anonymous/register", "post") => "AnonymousRegisterRequest",
@@ -1220,6 +1234,11 @@ fn success_response(path: &str, method: &str) -> Value {
 
 fn extra_parameters(path: &str, method: &str) -> Vec<Value> {
     let mut parameters = Vec::new();
+    if matches!(path, "/api/hex/account" | "/api/hex/history") && method == "get" {
+        parameters.push(json!({"name":"account","in":"query","required":path == "/api/hex/account","schema":{"type":"string","maxLength":128},"description":"Omni account identity, including the 0x prefix for EVM-derived accounts."}));
+        parameters.push(json!({"name":"skip","in":"query","schema":{"type":"integer","minimum":0,"maximum":100000,"default":0}}));
+        parameters.push(json!({"name":"limit","in":"query","schema":{"type":"integer","minimum":1,"maximum":100,"default":100}}));
+    }
     if path == "/api/p2p/route-activity" && method == "get" {
         for name in ["source_currency", "target_currency"] {
             parameters.push(json!({

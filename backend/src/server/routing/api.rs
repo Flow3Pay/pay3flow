@@ -52,6 +52,7 @@ pub fn router(state: AppState) -> Router {
         )
         .merge(scalar_routes)
         .merge(crate::otc::http::router())
+        .merge(crate::hex::router())
         .route("/openapi.json", get(openapi::document))
         .route("/health", get(health))
         .route("/metrics", get(metrics))

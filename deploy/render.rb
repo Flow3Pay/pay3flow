@@ -22,6 +22,7 @@ module Pay3flow
       "PAY3FLOW_SECRETS_KEY" => "change-me-secrets",
       "PAY3FLOW_ADMIN_TOKEN" => "change-me-admin",
       "PAY3FLOW_NEAR_INTENTS_JWT" => "",
+      "PAY3FLOW_HEX_TRADING_ENABLED" => "false",
       "PAY3FLOW_BESTCHANGE_API_KEY" => "",
       "PAY3FLOW_SYMBIOSIS_PARTNER_ID" => "",
       "PAY3FLOW_ZEROX_API_KEY" => "",

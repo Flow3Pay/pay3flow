@@ -4,15 +4,16 @@
   import { locale } from "$lib/i18n";
   import OtcPanel from "./OtcPanel.svelte";
   import OtcPanelToggle from "./OtcPanelToggle.svelte";
+  export let baseAsset = "EVER", quoteAsset = "USDT", marketIcon = "/icons/assets/ever.svg", networkLabel = "Everscale ↔ Ethereum", venueLabel = "OTC";
   export let bridgeOpen = true, bookOpen = true, motionDuration = 320;
   export let selectedRate = "—", rateLabel = "", bookTitle = "", stats: { label:string; value:string; secondary?:boolean; unit?:string }[] = [];
   $: say = (en:string,ru:string) => $locale === "ru" ? ru : en;
   function panelTransition(node:Element,options:{duration:number}) { return (window.matchMedia("(max-width:980px)").matches ? slide : fade)(node,{...options,easing:cubicOut}); }
 </script>
-<div class="marketStrip"><div class="marketSelector"><img src="/icons/assets/ever.svg" width="38" height="38" alt="" /><div><div class="pairSelect"><strong>EVER / USDT</strong></div><span>Everscale ↔ Ethereum <span class="marketTag">OTC</span></span></div></div><div class="marketStat last"><span>{rateLabel || say("Your selected rate","Выбранный курс")}</span><strong>{selectedRate} <small>USDT / EVER</small></strong></div>{#each stats as stat}<div class="marketStat" class:secondaryStat={stat.secondary} class:volumeStat={!!stat.unit}><span>{stat.label}</span><strong>{stat.value}{#if stat.unit}{" "}<small>{stat.unit}</small>{/if}</strong></div>{/each}</div>
+<div class="marketStrip"><div class="marketSelector"><img src={marketIcon} width="38" height="38" alt="" /><div><div class="pairSelect"><strong>{baseAsset} / {quoteAsset}</strong></div><span>{networkLabel} <span class="marketTag">{venueLabel}</span></span></div></div><div class="marketStat last"><span>{rateLabel || say("Your selected rate","Выбранный курс")}</span><strong>{selectedRate} <small>{quoteAsset} / {baseAsset}</small></strong></div>{#each stats as stat}<div class="marketStat" class:secondaryStat={stat.secondary} class:volumeStat={!!stat.unit}><span>{stat.label}</span><strong>{stat.value}{#if stat.unit}{" "}<small>{stat.unit}</small>{/if}</strong></div>{/each}</div>
 <slot name="status" />
 <div class="otcGrid" class:bridgeClosed={!bridgeOpen} class:bookClosed={!bookOpen}>
-  {#if bridgeOpen}<div class="bridgeColumn" id="otc-bridge-column" transition:panelTransition={{duration:motionDuration}}><OtcPanel id="otc-bridge" title={say("Exchange","Обмен")} collapsible={false}><span slot="actions" class="panelMeta">OTC</span><slot name="ticket" /></OtcPanel></div>{/if}
+  {#if bridgeOpen}<div class="bridgeColumn" id="otc-bridge-column" transition:panelTransition={{duration:motionDuration}}><OtcPanel id="otc-bridge" title={say("Exchange","Обмен")} collapsible={false}><span slot="actions" class="panelMeta">{venueLabel}</span><slot name="ticket" /></OtcPanel></div>{/if}
   <div class="bridgeToggle"><OtcPanelToggle title={say("Exchange","Обмен")} controls="otc-bridge-column" bind:expanded={bridgeOpen} /></div>
   <div class="chartColumn" id="otc-chart-column"><OtcPanel id="otc-chart" title={say("Chart","График")} collapsible={false}><slot name="chart" /></OtcPanel></div>
   <div class="bookToggle"><OtcPanelToggle title={bookTitle} controls="otc-book-column" bind:expanded={bookOpen} direction="right" /></div>

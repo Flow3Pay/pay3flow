@@ -314,6 +314,8 @@ spec:
                 secretKeyRef:
                   name: pay3flow-secrets
                   key: NEAR_INTENTS_JWT
+            - name: HEX_TRADING_ENABLED
+              value: "$PAY3FLOW_HEX_TRADING_ENABLED"
             - name: BESTCHANGE_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -432,6 +434,12 @@ spec:
               value: "3000"
             - name: PUBLIC_API_URL
               value: "$PAY3FLOW_PUBLIC_API_URL"
+            - name: PUBLIC_HOT_KIT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: pay3flow-secrets
+                  key: PUBLIC_HOT_KIT_API_KEY
+                  optional: true
           readinessProbe:
             httpGet:
               path: /

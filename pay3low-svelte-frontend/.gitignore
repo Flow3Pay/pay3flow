@@ -6,3 +6,7 @@ playwright-report/
 .env
 .env.*
 !.env.example
+
+# Generated from locked HOT wallet dependencies before dev/build.
+/static/vendor/hex-hot-kit*
+/.cache/
