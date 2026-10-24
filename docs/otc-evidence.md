@@ -191,3 +191,28 @@ The same verified release `otc-safe-20261012T131150Z-571a4227` is deployed to `r
 Backend and frontend each have one ready replica, PostgreSQL and Redis are ready, and Caddy is active. The profile uses ports 30280/30281 to avoid the existing Orator service. Its application route is `/var/lib/lefine-app-host/routes/pay3flow.caddy`. The existing certificate and its renewal metadata were migrated into the new Caddy certificate cache; the domain route retains automatic certificate management. DNS changes were left to the user, as requested. HTTPS checks used the original hostname with an explicit address override to the new server, and the browser asserted the actual response address was 195.123.218.200. Desktop/mobile wallet review passed at widths 1440 and 390 with live Ethereum contract verification and no wallet prompt or transaction broadcast. Health, providers JSON, the frontend and direct server HTTP health passed. Desk quoting remains paused and no custom contracts were deployed.
 
 Profile metadata is in `deploy/profiles/lefine-next.json`; deployment evidence is in `deploy/releases/otc-safe-20261012T131150Z-571a4227-lefine-next.json`. The fresh migration archive and secured manifests are under `/var/lib/pay3flow/migrations/otc-safe-20261012T131150Z-571a4227` on the new server, with source backups under `/home/xila/pay3flow-backups/new-profile-otc-safe-20261012T131150Z-571a4227`.
+
+## Native EVER multisig integration — 2026-10-16
+
+The native EVER workspace imports the bundled Rust CLI's public OTC agreement,
+prepares fixed release/refund proposals and second approvals, and signs through
+EVER Wallet. Durable handoffs and message-level reconciliation are separate from
+business settlement. See [setup and limits](otc-everscale-multisig.md).
+
+| Check | Result | Evidence and limits |
+| --- | --- | --- |
+| Rust workspace tests | 397 passed, 41 ignored | 28 bundled CLI/library tests, 337 backend unit tests and 32 providerfile binary tests. Includes the frozen 1,226-case Python parity corpus. |
+| OTC backend including native integration | 39 passed | Isolated PostgreSQL, local TLS GraphQL fixtures, real offline ever-cli 0.44.0 encoding/decoding. Includes strict public input, code/network/quorum checks, actual owner indices, full uint64 IDs, signed receipt matching, immutability, idempotency, unknown-call blocking, signing pause and fresh recovery validation. The separate Ethereum local-chain roundtrip was excluded because it requires its dedicated environment. |
+| Frontend unit tests | 64 passed | Includes public agreement/hash canonicalization, rejected key files and exact unsigned-call validation. |
+| Frontend Svelte/TypeScript | 0 errors, 0 warnings | Native workspace and injected provider types. |
+| Frontend production build | Passed | Existing third-party build notices remain. |
+| OTC browser regression | 62 passed | Desktop and mobile: native multisig, production Ethereum Safe and existing OTC page. Uses provider/API fixtures; no live signing. |
+| Bundled Rust crate Clippy | Passed with `-D warnings` | All targets, including the CLI and tests. |
+| Backend strict Clippy | Blocked by 46 existing findings | Existing provider/P2P and other backend findings remain; no findings point to the new native multisig module. |
+| Formatting, whitespace and secret audit | Passed | Workspace rustfmt, `git diff --check`, and the repository's high-signal tracked-file audit. |
+
+Native service tests verify real signed-message compatibility without broadcasting
+or deploying. All chain account/receipt responses are local fixtures. No live
+funds were sent and no production configuration was enabled or deployed. The
+backend container build path was updated to include the bundled crate; a container
+image build was not run.

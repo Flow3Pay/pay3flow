@@ -6,6 +6,7 @@ export interface EverscaleProvider {
   request(args: { method: "requestPermissions"; params: { permissions: ["basic", "accountInteraction"] } }): Promise<EverscalePermissions>;
   request(args: { method: "signData"; params: { publicKey: string; data: string; withSignatureId: false } }): Promise<{ signature: string }>;
   request(args: { method: "sendMessage"; params: { sender: string; recipient: string; amount: string; bounce: boolean } }): Promise<{ transaction: { id: { hash: string } } }>;
+  request(args: { method: "sendExternalMessage"; params: import("./otc/everscale-multisig").EverCall }): Promise<{ transaction: { id: { hash: string } } }>;
   request(args: { method: "disconnect" }): Promise<unknown>;
   addListener(event: string, listener: (value: unknown) => void): unknown;
   removeListener(event: string, listener: (value: unknown) => void): unknown;

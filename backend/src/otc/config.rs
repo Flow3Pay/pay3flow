@@ -16,6 +16,8 @@ pub(crate) struct Config {
     pub ethereum_rpc: Vec<String>,
     pub everscale_graphql: Vec<String>,
     pub everwallet_code_hashes: Vec<String>,
+    /// Server-owned path to ever-cli. Enables the native EVER multisig workspace.
+    pub everscale_multisig_backend: Option<String>,
     pub ever_resource: String,
     pub usdt_resource: String,
     pub ever_wallet: String,

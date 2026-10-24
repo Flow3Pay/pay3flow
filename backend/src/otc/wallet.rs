@@ -214,7 +214,7 @@ impl Service {
         }
         Ok(())
     }
-    async fn verify_ever_key(&self, address: &str, key: &[u8; 32]) -> Result<()> {
+    pub(super) async fn verify_ever_key(&self, address: &str, key: &[u8; 32]) -> Result<()> {
         let query="query($address:String!){accounts(filter:{id:{eq:$address}},limit:1){id acc_type code_hash code data}}";
         let data = self.ever_agree(query, json!({"address":address})).await?;
         let account = data["accounts"]

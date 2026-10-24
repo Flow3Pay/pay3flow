@@ -14,6 +14,7 @@ pub(crate) mod http;
 mod login;
 mod metrics;
 mod model;
+mod multisig;
 mod operations;
 mod protocol;
 mod repo;
@@ -51,7 +52,10 @@ impl Service {
         jwt_secret: &str,
     ) -> anyhow::Result<Self> {
         let cfg = Config::load(origin)?;
-        if cfg.enabled && !cfg.demo && (secrets_key.len() < 32 || jwt_secret.len() < 32) {
+        if (cfg.enabled || cfg.everscale_multisig_backend.is_some())
+            && !cfg.demo
+            && (secrets_key.len() < 32 || jwt_secret.len() < 32)
+        {
             anyhow::bail!("live OTC requires strong secrets");
         }
         Ok(Self {

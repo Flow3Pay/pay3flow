@@ -16,66 +16,90 @@
   $: say = (en: string, ru: string) => $locale === "ru" ? ru : en;
   $: sendAsset = direction === "buy" ? "USDT" : "EVER";
   $: receiveAsset = direction === "buy" ? "EVER" : "USDT";
+  $: sendNetwork = direction === "buy" ? "Ethereum" : "Everscale";
+  $: receiveNetwork = direction === "buy" ? "Everscale" : "Ethereum";
+  $: sendLabel = `You send · ${sendAsset} on ${sendNetwork}`;
+  $: receiveLabel = `You receive · ${receiveAsset} on ${receiveNetwork}`;
+  $: fee = quote ? `${decimal(quote.terms.fee_policy.fee_units, 6)} USDT` : "max(0.25%, 5 USDT)";
 </script>
-{#snippet asset(asset: string)}
-  <div class="methodControls assetIdentity"><img src={asset === "EVER" ? "/icons/assets/ever.svg" : "/icons/assets/usdt.png"} width="22" height="22" alt="" /><strong>{asset}</strong><span>{asset === "EVER" ? "Everscale" : "Ethereum"}</span></div>
+
+{#snippet assetChip(asset: string, network: string)}
+  <div class="assetChip"><img src={asset === "EVER" ? "/icons/assets/ever.svg" : "/icons/assets/usdt.png"} width="22" height="22" alt="" /><span><strong>{asset}</strong><small>{network}</small></span></div>
 {/snippet}
+
 <form class="bridgeForm" on:submit|preventDefault={() => quote ? onReview() : onRequest()}>
   <div class="sideTabs" class:selling={direction === "sell"} role="group" aria-label="Trade direction"><button type="button" class:active={direction === "buy"} aria-pressed={direction === "buy"} on:click={() => onDirection("buy")}>{say("Buy EVER", "Купить EVER")}</button><button type="button" class:active={direction === "sell"} aria-pressed={direction === "sell"} on:click={() => onDirection("sell")}>{say("Sell EVER", "Продать EVER")}</button></div>
-  <div class="quoteMode">{say("Fixed desk quote", "Фиксированная котировка деска")}<span>OTC</span></div>
-  <label class="priceField"><span>{copy.price} · USDT / EVER</span><div><input aria-label={copy.price} readonly value={quote ? rate(quote.terms) : "—"} /><span>USDT</span></div></label>
-  <p class="priceHint">{say("The desk quotes your exact input. Whole trades only.", "Деск котирует точную сумму. Только целые сделки.")}</p>
-  <div class="intentLabel"><span>{copy.send}</span></div>
-  <div class="moneyPanel exchangeMoneyPanel"><div class="panelCopy"><label for="otc-input">{say(`You send · ${sendAsset} on ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы отправляете · ${sendAsset} · ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><input id="otc-input" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" bind:value={input} on:input={onEdit} on:focus={(event) => event.currentTarget.select()} /></div>{@render asset(sendAsset)}</div>
+
+  <div class="quoteMode"><span>{say("Fixed desk quote", "Фиксированная котировка деска")}</span><span class="otcTag">OTC</span></div>
+
+  <div class="fieldHead"><span>{say("You pay", "Вы платите")}</span><span class="fieldHint">{sendAsset} · {sendNetwork}</span></div>
+  <div class="moneyPanel exchangeMoneyPanel">
+    <div class="panelCopy">
+      <label for="otc-input">{sendLabel}</label>
+      <input id="otc-input" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" bind:value={input} on:input={onEdit} on:focus={(event) => event.currentTarget.select()} />
+      <small class="panelHint">{direction === "buy" ? say("USDT amount to convert", "Сумма USDT для обмена") : say("EVER amount to sell", "Сумма EVER к продаже")}</small>
+    </div>
+    {@render assetChip(sendAsset, sendNetwork)}
+  </div>
+
   <ExchangeFlowBridge reversed={direction === "sell"} onSwap={() => onDirection(direction === "buy" ? "sell" : "buy")} label={`${copy.buy} / ${copy.sell}`} />
-  <div class="intentLabel receiveLabel"><span>{copy.receive}</span></div>
-  <div class="moneyPanel exchangeMoneyPanel"><div class="panelCopy"><label for="otc-receive">{say(`You receive · ${receiveAsset} on ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы получаете · ${receiveAsset} · ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><input id="otc-receive" class="amountInput amountOutput" readonly value={quote?.terms.output || ""} placeholder="—" /><small>{quote ? say("Fixed net output", "Фиксированная сумма к получению") : say("Awaiting fixed quote", "Ожидается котировка")}</small></div>{@render asset(receiveAsset)}</div>
-  <div class="orderDetails"><div><span>{say("Desk", "Деск")}</span><strong>{desk || "—"}</strong></div><div><span>{copy.fees}</span><strong>{quote ? `${decimal(quote.terms.fee_policy.fee_units, 6)} USDT` : "max(0.25%, 5 USDT)"}</strong></div><small>{say("Completion fee paid by the desk. Network costs are separate.", "Комиссию за завершение платит деск. Сетевые расходы отдельно.")}</small></div>
-  {#if quote}<p class="priceHint">{say("Quote expires", "Котировка истекает")}: {quote.terms.quote_by}</p>{/if}
+
+  <div class="fieldHead receiveHead"><span>{say("You receive", "Вы получаете")}</span><span class="fieldHint">{say("Fixed net output", "Фиксированная сумма")}</span></div>
+  <div class="moneyPanel exchangeMoneyPanel receivePanel">
+    <div class="panelCopy">
+      <label for="otc-receive">{receiveLabel}</label>
+      <input id="otc-receive" class="amountInput amountOutput" type="text" readonly value={quote?.terms.output || ""} placeholder="—" />
+      <small class="panelHint">{quote ? say("Fixed net output", "Фиксированная сумма к получению") : say("Awaiting fixed quote", "Ожидается котировка")}</small>
+    </div>
+    {@render assetChip(receiveAsset, receiveNetwork)}
+  </div>
+
+  <div class="priceSummary">
+    <div><span>{say("Price", "Цена")} <small>USDT / EVER</small></span><strong>{quote ? rate(quote.terms) : "—"}</strong></div>
+    <div><span>{say("Desk fee", "Комиссия деска")}</span><strong>{fee}</strong></div>
+    <div><span>{say("Desk", "Деск")}</span><strong>{desk || "—"}</strong></div>
+  </div>
+  <p class="feeNote">{say("Completion fee is paid by the desk. Network costs are separate.", "Комиссию за завершение платит деск. Сетевые расходы отдельно.")}</p>
+  {#if quote}<p class="expiry"><span aria-hidden="true">◷</span>{say("Quote expires", "Котировка истекает")}: <strong>{quote.terms.quote_by}</strong></p>{/if}
   <button class="cta" type="submit" disabled={busy || disabled} data-testid="otc-review">{quote ? say("Review fixed quote", "Проверить котировку") : say("Request exact quote", "Запросить котировку")}<span aria-hidden="true">↗</span></button>
 </form>
 
 <style>
-
-  .bridgeForm { container-type: inline-size; container-name: exchange-bridge; padding: 0 19px 19px; }
-  .orderTypes { display: flex; gap: 16px; margin: 17px 0 15px; }
-  .orderTypes button { position: relative; font-size: 12px; color: var(--color-text-soft); padding-bottom: 8px; }
-  .orderTypes button.active { color: var(--color-text); font-weight: 800; }
-  .orderTypes button.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: 1px; background: var(--color-accent-strong); }
-  .priceField { display: block; font-size: 12px; color: var(--color-text-soft); }
-  .priceField > div { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin-top: 6px; background: var(--exchange-field-bg); border: 1px solid var(--exchange-field-border); border-radius: 7px; }
-  .priceField > div:focus-within { border-color: var(--color-accent-strong); }
-  .priceField input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; font-family: var(--font-mono); font-size: 16px; }
-  .priceField input:disabled { opacity: .45; }
-  .priceField > div > span { font-family: var(--font-mono); font-size: 12px; }
-  .priceHint { min-height: 25px; margin: 6px 0 13px; font-size: 12px; color: var(--color-text-faint); line-height: 1.5; }
-  .intentLabel { margin: 0 3px 9px; color: var(--color-text-soft); font-family: var(--font-mono); font-size: 12px; font-weight: 500; letter-spacing: .07em; text-transform: uppercase; }
-  .intentLabel span::before { display: inline-block; width: 5px; height: 5px; margin-right: 8px; border-radius: 50%; background: var(--color-danger); content: ""; vertical-align: 1px; }
-  .receiveLabel span::before { background: var(--color-accent); }
-  .orderDetails { display: grid; gap: 10px; padding: 18px 0; }
-  .orderDetails > div { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 12px; }
-  .orderDetails > div > span { color: var(--color-text-soft); }
-  .orderDetails strong { font-weight: 600; font-size: 12px; }
-  .orderDetails small { font-size: 12px; font-weight: 400; color: var(--color-text-soft); }
-  .cta { display: flex; width: 100%; min-height: 48px; padding: 12px 15px; align-items: center; justify-content: space-between; border: 1px solid #b9e834; background: var(--color-accent); color: #171717; border-radius: 5px; font-size: 12px; font-weight: 800; }
-  .cta:hover:not(:disabled) { background: #c9f34b; transform: translateY(-1px); }
-  .cta span { font-size: 17px; color: #2e2e2e; }
-  :global(html[data-theme="dark"]) .cta { background: var(--color-accent); color: #152016; }
-  :global(html[data-theme="dark"]) .cta span { color: #152016; }
-  .cta:disabled { opacity: .4; cursor: default; }
-  .validation { padding: 0 0 12px; font-size: 12px; color: var(--color-warn); }
-  .sideTabs { position: relative; isolation: isolate; display: flex; padding: 4px; gap: 4px; border-radius: 9px; background: var(--color-panel); }
+  .bridgeForm { display: flex; flex: 1; flex-direction: column; container-type: inline-size; container-name: exchange-bridge; padding: 0 17px 17px; }
+  .sideTabs { position: relative; isolation: isolate; display: flex; gap: 4px; padding: 4px; border-radius: 9px; background: var(--color-panel); }
   .sideTabs::before { position: absolute; z-index: -1; inset: 4px auto 4px 4px; width: calc(50% - 6px); border-radius: 6px; background: var(--color-accent); content: ""; transition: transform .32s cubic-bezier(.22, 1, .36, 1); }
   .sideTabs.selling::before { transform: translateX(calc(100% + 4px)); }
-  .sideTabs button.active { color: #152016; }
   .sideTabs button { flex: 1; min-width: 0; padding: 9px 3px; border-radius: 6px; color: var(--color-text-soft); font-size: 12px; font-weight: 750; transition: color .2s ease; }
-  .priceField > div { min-height: 44px; transition: border-color .18s ease, background .18s ease; }
-  .priceField > div:focus-within { outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 2px; }
-  .panelCopy small { font-size: 12px; color: var(--color-text-faint); }
-  .cta { transition: background .18s ease, transform .18s ease, opacity .18s ease; }
-  @media (max-width: 640px) { .bridgeForm { padding: 0 16px 16px; } .sideTabs button { padding: 11px; } .orderTypes button { min-height: 36px; } }
-  @media (prefers-reduced-motion: reduce) { .sideTabs::before, .sideTabs button, .priceField > div, .cta { transition: none; } }
-
-
-.assetIdentity { display: flex; align-items: center; gap: 9px; padding: 12px; border: 1px solid var(--exchange-field-border); border-radius: 6px; background: var(--color-panel); font-size: 12px; } .assetIdentity span { margin-left: auto; color: var(--color-text-soft); } .quoteMode { display: flex; justify-content: space-between; padding: 17px 0 15px; font-size: 12px; } .quoteMode span { color: var(--color-text-soft); } .orderDetails > small { color: var(--color-text-soft); line-height: 1.5; }
+  .sideTabs button.active { color: #152016; }
+  .quoteMode { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 13px 0 11px; font-size: 11px; color: var(--color-text-soft); }
+  .otcTag { padding: 2px 4px; border-radius: 3px; background: var(--color-panel); font-family: var(--font-mono); font-size: 10px; }
+  .fieldHead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0 2px 6px; }
+  .fieldHead > span:first-child { font-size: 12px; color: var(--color-text); font-weight: 650; }
+  .fieldHint { color: var(--color-text-faint); font-family: var(--font-mono); font-size: 9px; }
+  .moneyPanel.exchangeMoneyPanel { min-height: 82px; padding: 8px 11px 7px; }
+  .moneyPanel .amountInput { font-size: clamp(24px, 2.5vw, 30px); }
+  .panelHint { font-size: 10px; color: var(--color-text-faint); }
+  .assetChip { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 9px 6px 7px; border: 1px solid var(--exchange-asset-border); border-radius: 5px; background: var(--exchange-asset-bg); }
+  .assetChip img { border-radius: 50%; flex: 0 0 auto; }
+  .assetChip span { display: grid; gap: 1px; min-width: 0; }
+  .assetChip strong { font-size: 12px; font-weight: 800; }
+  .assetChip small { color: var(--color-text-soft); font-size: 9px; }
+  .receiveHead { margin-top: 4px; }
+  .receivePanel .amountInput { color: var(--color-text); }
+  .priceSummary { display: grid; gap: 6px; padding: 11px 0 7px; }
+  .priceSummary > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 11px; }
+  .priceSummary span { color: var(--color-text-soft); }
+  .priceSummary span small { font-family: var(--font-mono); font-size: 9px; }
+  .priceSummary strong { max-width: 58%; overflow-wrap: anywhere; text-align: right; font-family: var(--font-mono); font-size: 11px; font-weight: 500; }
+  .feeNote { font-size: 10px; color: var(--color-text-faint); line-height: 1.5; }
+  .expiry { display: flex; align-items: center; gap: 6px; margin-top: 9px; padding: 7px 9px; border: 1px solid var(--color-border); border-radius: 5px; color: var(--color-text-soft); font-size: 10px; }
+  .expiry strong { font-family: var(--font-mono); font-weight: 400; }
+  .cta { display: flex; width: 100%; min-height: 48px; margin-top: auto; padding: 12px 15px; align-items: center; justify-content: space-between; border: 1px solid #b9e834; background: var(--color-accent); color: #171717; border-radius: 5px; font-size: 12px; font-weight: 800; transition: background .18s ease, transform .18s ease, opacity .18s ease; }
+  .cta:hover:not(:disabled) { background: #c9f34b; transform: translateY(-1px); }
+  .cta span { font-size: 17px; color: #2e2e2e; }
+  :global(html[data-theme="dark"]) .cta { color: #152016; }
+  :global(html[data-theme="dark"]) .cta span { color: #152016; }
+  .cta:disabled { opacity: .4; cursor: default; }
+  @media (max-width: 640px) { .bridgeForm { padding: 0 14px 15px; } .sideTabs button { padding: 11px; } .moneyPanel.exchangeMoneyPanel { min-height: 96px; } .moneyPanel .amountInput { font-size: 30px; } }
+  @media (prefers-reduced-motion: reduce) { .sideTabs::before, .sideTabs button, .cta { transition: none; } }
 </style>

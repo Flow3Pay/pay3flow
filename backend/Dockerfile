@@ -3,6 +3,7 @@ WORKDIR /app
 ENV PLAYWRIGHT_DRIVER_CACHE_DIR=/app/playwright-driver-cache
 
 COPY backend/Cargo.toml backend/Cargo.lock backend/
+COPY backend/crates backend/crates
 RUN mkdir -p backend/src && echo "fn main(){}" > backend/src/main.rs \
     && cargo build --release --manifest-path backend/Cargo.toml 2>/dev/null \
     && rm -rf backend/src

@@ -18,6 +18,14 @@ function usage
     echo '  PAY3FLOW_NAMESPACE             Kubernetes namespace (default: pay3flow)'
     echo '  PAY3FLOW_PUBLIC_URL            URL verified after rollout'
     echo '  PAY3FLOW_IMAGE_TAG             Override the commit-derived image tag'
+    echo '  PAY3FLOW_BUILDCACHE_KEEP       BuildKit cache window to keep (default: 72h)'
+    echo '  PAY3FLOW_BUILDKIT_ADDR         BuildKit daemon address used for cache pruning'
+    echo '  PAY3FLOW_KEEP_RELEASES         Source release directories to keep (default: 2)'
+    echo '  PAY3FLOW_KEEP_IMAGE_TAGS       Local image tags to keep (default: 2)'
+    echo ''
+    echo 'After a verified rollout the command prunes old source releases, BuildKit'
+    echo 'cache records outside the configured window, and old local image tags.'
+    echo 'Use `nix run .#deploy-watch` to deploy with live build-log streaming.'
     echo ''
     echo 'The cluster, Caddy route, pay3flow-secrets Secret, PostgreSQL, and Redis'
     echo 'must already be bootstrapped. backend/.env is never copied to the server.'
@@ -42,8 +50,13 @@ or die 'This command must run inside the Pay3Flow git worktree.'
 # locally while still refusing to deploy unrelated application changes.
 set dirty (git -C $repo_root status --porcelain --untracked-files=all -- \
     . ':(exclude)deploy/live_deploy.fish' ':(exclude)deploy/live_deploy.rb' \
-    ':(exclude)deploy/README.md' ':(exclude)flake.nix' | string collect)
-test -z "$dirty"; or die "Refusing to deploy a dirty application worktree:\n$dirty"
+    ':(exclude)deploy/watch_deploy.fish' ':(exclude)deploy/README.md' \
+    ':(exclude)flake.nix' | string collect)
+test -z "$dirty"; or begin
+    echo 'Refusing to deploy a dirty application worktree:' >&2
+    printf '%s\n' "$dirty" >&2
+    exit 1
+end
 
 set revision (git -C $repo_root rev-parse HEAD | string trim)
 set short_revision (string sub --start 1 --length 7 -- $revision)
@@ -73,6 +86,86 @@ end
 
 function remote
     ssh $ssh_options $remote $argv
+end
+
+# Deployment artifacts grow with every build, so each successful deploy trims
+# the old ones. Cleanup is best-effort: a failure prints a warning and never
+# fails a deploy that already rolled out.
+function prune_old_releases
+    set keep $PAY3FLOW_KEEP_RELEASES
+    test -n "$keep"; or set keep 2
+    set dirs (remote "find '$remote_home' -maxdepth 1 -type d -name 'pay3flow-release-*' -printf '%T@ %p\\n' 2>/dev/null" | sort -nr | cut -d' ' -f2- | string split \n | string match -r '.+')
+    set index 0
+    for dir in $dirs
+        set index (math $index + 1)
+        test $index -le $keep; and continue
+        test "$dir" = "$release_dir"; and continue
+        if remote "rm -rf '$dir'"
+            echo "  removed source release $dir"
+        else
+            echo "  warning: could not remove source release $dir" >&2
+        end
+    end
+end
+
+# Keep the BuildKit cache window that the most recent builds still use and drop
+# everything older. Reused layers (Rust dependencies) are refreshed on every
+# build, so they survive; superseded per-commit layers expire. The daemon keeps
+# the last cache as long as deploys happen within the configured window.
+function prune_buildkit_cache
+    set keep $PAY3FLOW_BUILDCACHE_KEEP
+    test -n "$keep"; or set keep 72h
+
+    set buildctl_path (remote 'command -v buildctl' | string split \n | string match -r '.+' | head -1 | string trim)
+    if test -z "$buildctl_path"
+        echo '  warning: buildctl is not installed on the host; skipping the BuildKit cache prune.' >&2
+        return 0
+    end
+
+    set candidates
+    test -n "$PAY3FLOW_BUILDKIT_ADDR"; and set -a candidates $PAY3FLOW_BUILDKIT_ADDR
+    for socket in (remote "find /run /var/run -maxdepth 4 -type s -name 'buildkitd*.sock' 2>/dev/null" | string split \n | string match -r '.+')
+        contains -- unix://$socket $candidates; or set -a candidates unix://$socket
+    end
+    contains -- unix:///run/buildkit/buildkitd.sock $candidates; or set -a candidates unix:///run/buildkit/buildkitd.sock
+
+    for addr in $candidates
+        remote "sudo '$buildctl_path' --addr '$addr' info >/dev/null 2>&1"; or continue
+        echo "  pruning BuildKit cache, keeping records used within $keep ($addr)"
+        if remote "sudo '$buildctl_path' --addr '$addr' prune --all --keep-duration='$keep' --force"
+            echo '  BuildKit cache pruned.'
+            return 0
+        end
+        if remote "sudo '$buildctl_path' --addr '$addr' prune --all --age='$keep' --force"
+            echo '  BuildKit cache pruned.'
+            return 0
+        end
+        echo "  warning: BuildKit cache prune failed at $addr" >&2
+        return 1
+    end
+
+    echo '  warning: no BuildKit daemon answered; set PAY3FLOW_BUILDKIT_ADDR to its socket.' >&2
+    return 1
+end
+
+# Older live- image tags only consume disk. Two are kept: the current one and
+# the previous one, which the rollback path still references by name.
+function prune_old_images
+    set keep $PAY3FLOW_KEEP_IMAGE_TAGS
+    test -n "$keep"; or set keep 2
+    for repository in backend frontend
+        set prefix "localhost/pay3flow/$repository"
+        set tags (remote "sudo '$k3s' crictl images 2>/dev/null | awk '\$1 == \"$prefix\" && \$2 ~ /^live-/ {print \$2}' | sort -u" | string split \n | string match -r '.+')
+        test (count $tags) -gt $keep; or continue
+        set stale (string join \n -- $tags | awk -v keep=$keep '{ line[NR] = $0 } END { for (i = 1; i <= NR - keep; i++) print line[i] }' | string match -r '.+')
+        for tag in $stale
+            if remote "sudo '$nerdctl' --address '$containerd_socket' --namespace k8s.io rmi '$prefix:$tag' >/dev/null 2>&1"
+                echo "  removed local image $prefix:$tag"
+            else
+                echo "  warning: could not remove local image $prefix:$tag" >&2
+            end
+        end
+    end
 end
 
 # The production host is NixOS and provides kubectl through the k3s wrapper.
@@ -115,7 +208,7 @@ rsync -az --delete \
     "$repo_root/" "$remote:$release_dir/"; or die 'Could not synchronize the release source.'
 
 set backend_log_command "cd $release_dir && '$nerdctl' --address '$containerd_socket' --namespace k8s.io build --tag '$backend_image' --file backend/Dockerfile . >'$backend_log' 2>&1"
-set frontend_log_command "cd $release_dir && '$nerdctl' --address '$containerd_socket' --namespace k8s.io build --tag '$frontend_image' --file pay3low-svelte-frontend/Dockerfile pay3low-svelte-frontend >'$frontend_log' 2>&1"
+set frontend_log_command "cd $release_dir && '$nerdctl' --address '$containerd_socket' --namespace k8s.io build --tag '$frontend_image' --file deploy/frontend-runtime/Dockerfile pay3low-svelte-frontend >'$frontend_log' 2>&1"
 remote "rm -f '$backend_log' '$frontend_log'"; or die 'Could not clear remote build logs.'
 echo 'Building backend and frontend images in parallel...'
 remote $backend_log_command &
@@ -161,7 +254,7 @@ end
 
 set deployed_at (date -u +%Y-%m-%dT%H:%M:%SZ)
 set rollout_started 1
-set backend_patch "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"pay3flow.io/deployed-at\":\"$deployed_at\",\"pay3flow.io/source-revision\":\"$revision\"}},\"spec\":{\"containers\":[{\"name\":\"backend\",\"image\":\"$backend_image\",\"imagePullPolicy\":\"IfNotPresent\",\"env\":[{\"name\":\"ZEROX_API_KEY\",\"valueFrom\":{\"secretKeyRef\":{\"name\":\"pay3flow-secrets\",\"key\":\"ZEROX_API_KEY\",\"optional\":true}}},{\"name\":\"BARTER_API_KEY\",\"valueFrom\":{\"secretKeyRef\":{\"name\":\"pay3flow-secrets\",\"key\":\"BARTER_API_KEY\",\"optional\":true}}},{\"name\":\"BESTCHANGE_API_KEY\",\"valueFrom\":{\"secretKeyRef\":{\"name\":\"pay3flow-secrets\",\"key\":\"BESTCHANGE_API_KEY\"}}},{\"name\":\"SYMBIOSIS_PARTNER_ID\",\"valueFrom\":{\"secretKeyRef\":{\"name\":\"pay3flow-secrets\",\"key\":\"SYMBIOSIS_PARTNER_ID\"}}}] }]}}}}"
+set backend_patch "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"pay3flow.io/deployed-at\":\"$deployed_at\",\"pay3flow.io/source-revision\":\"$revision\"}},\"spec\":{\"containers\":[{\"name\":\"backend\",\"image\":\"$backend_image\",\"imagePullPolicy\":\"IfNotPresent\",\"env\":[{\"name\":\"ZEROX_API_KEY\",\"valueFrom\":{\"secretKeyRef\":{\"name\":\"pay3flow-secrets\",\"key\":\"ZEROX_API_KEY\",\"optional\":true}}},{\"name\":\"BARTER_API_KEY\",\"valueFrom\":{\"secretKeyRef\":{\"name\":\"pay3flow-secrets\",\"key\":\"BARTER_API_KEY\",\"optional\":true}}},{\"name\":\"CRYPTO_OFFICE_API_TOKEN\",\"valueFrom\":{\"secretKeyRef\":{\"name\":\"pay3flow-secrets\",\"key\":\"CRYPTO_OFFICE_API_TOKEN\",\"optional\":true}}},{\"name\":\"CRYPTO_OFFICE_PUBLIC_KEY\",\"valueFrom\":{\"secretKeyRef\":{\"name\":\"pay3flow-secrets\",\"key\":\"CRYPTO_OFFICE_PUBLIC_KEY\",\"optional\":true}}},{\"name\":\"CRYPTO_OFFICE_SECRET_KEY\",\"valueFrom\":{\"secretKeyRef\":{\"name\":\"pay3flow-secrets\",\"key\":\"CRYPTO_OFFICE_SECRET_KEY\",\"optional\":true}}},{\"name\":\"BESTCHANGE_API_KEY\",\"valueFrom\":{\"secretKeyRef\":{\"name\":\"pay3flow-secrets\",\"key\":\"BESTCHANGE_API_KEY\"}}},{\"name\":\"SYMBIOSIS_PARTNER_ID\",\"valueFrom\":{\"secretKeyRef\":{\"name\":\"pay3flow-secrets\",\"key\":\"SYMBIOSIS_PARTNER_ID\"}}}] }]}}}}"
 # Resolve public API names before Kubernetes search suffixes, and use separate
 # sockets for A/AAAA lookups to avoid five-second resolver stalls.
 set backend_patch (string replace '"containers":' '"dnsConfig":{"options":[{"name":"ndots","value":"1"},{"name":"single-request-reopen"}]},"containers":' -- $backend_patch)
@@ -200,5 +293,10 @@ test "$health" = ok; or die "Health check returned unexpected content: $health"
 set providers (curl --fail --silent --show-error --max-time 30 "$public_url/api/providers" | string lower | string collect); or die 'Provider route check failed.'
 string match -q '*"bestchange"*' -- $providers; or die 'Provider response does not include bestchange.'
 string match -q '*"symbiosis"*' -- $providers; or die 'Provider response does not include symbiosis.'
+
+echo 'Pruning old deployment artifacts...'
+prune_old_releases
+prune_buildkit_cache
+prune_old_images
 
 echo "Pay3Flow deployment completed: $image_tag"

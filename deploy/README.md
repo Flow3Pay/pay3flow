@@ -61,9 +61,8 @@ Kubernetes Secret environment variables.
 
 ## One-command production deploy
 
-The Flake's production Fish app builds immutable images directly in the new
-host's k3s containerd namespace, so deploying the current committed revision
-is one command:
+The Flake's production Fish app builds immutable images in the host's k3s
+containerd namespace. Deploying the current committed revision is one command:
 
 ```sh
 nix run .#deploy
@@ -77,6 +76,43 @@ images if readiness fails, and checks the public home, health, and provider
 endpoints. See `nix run .#deploy -- --help` for host, identity, namespace, URL,
 and image-tag overrides.
 
+After a successful rollout, and only after the public route checks pass, the
+command trims the artifacts that every build leaves behind:
+
+- source release directories (`PAY3FLOW_KEEP_RELEASES`, default `2`),
+- BuildKit records older than `PAY3FLOW_BUILDCACHE_KEEP` (default `72h`), so the
+  cache used by the latest builds survives and the next build stays
+  incremental while superseded per-commit layers are removed,
+- local `live-` image tags beyond the newest `PAY3FLOW_KEEP_IMAGE_TAGS`
+  (default `2`, so the image needed for a rollback survives).
+
+Cleanup never fails a deploy that already rolled out; problems print a warning.
+Set `PAY3FLOW_BUILDCACHE_KEEP` above your usual deploy cadence if you deploy
+less often than every three days. The BuildKit daemon is discovered
+automatically; set `PAY3FLOW_BUILDKIT_ADDR=unix:///run/buildkit/buildkitd.sock`
+when `buildctl` cannot locate it. Without `buildctl` on the host the cache
+prune is skipped with a warning.
+
+### Watch the deploy in real time
+
+The deploy command builds both images on the host and redirects their output to
+`/tmp/pay3flow-backend-REV.log` and `/tmp/pay3flow-frontend-REV.log`. Use the
+wrapper to follow those logs while the deploy runs:
+
+```sh
+nix run .#deploy-watch
+```
+
+It prints deploy steps with timestamps, prefixes streamed build lines with
+`[backend]` and `[frontend]`, follows the rollout and verification, and exits
+with the deploy status. Arguments are forwarded to the deploy script, so
+`nix run .#deploy-watch -- --help` shows the deploy options. The deploy-related
+environment variables (`PAY3FLOW_DEPLOY_HOST`, `PAY3FLOW_DEPLOY_USER`,
+`PAY3FLOW_DEPLOY_IDENTITY_FILE`, `PAY3FLOW_IMAGE_TAG`) work the same way.
+`PAY3FLOW_WATCH_LOG_DIR` changes the remote log directory and
+`PAY3FLOW_WATCH_DEPLOY_COMMAND` replaces the command that is run (for example,
+`nix run .#deploy`).
+
 Application Pods use `ndots:1` and `single-request-reopen` so external provider
 API names resolve before cluster search suffixes and A/AAAA lookups do not
 share a socket. Kubernetes service names still use the cluster DNS search list.
@@ -85,6 +121,59 @@ The cluster and `pay3flow-secrets` must already be bootstrapped. In particular,
 the Secret must contain `BESTCHANGE_API_KEY`; `SYMBIOSIS_PARTNER_ID` may be
 omitted or empty for the public API tier. `backend/.env` is never copied to the
 host.
+
+## Aurora widget runtime key
+
+The Aurora standalone NEAR Intents widget reads
+`PUBLIC_AURORA_INTENTS_API_KEY` from the frontend Node process through SvelteKit's
+`$env/dynamic/public`. Its browser integration key comes from
+[Aurora Widget Studio](https://studio.aurora.dev/) and is distinct from the
+backend-only `NEAR_INTENTS_JWT` used by the 1Click adapter.
+
+Provision `PUBLIC_AURORA_INTENTS_API_KEY` in the existing `pay3flow-secrets`
+Secret using the deployment's private secret-management process. Reference it
+from the `frontend` container's environment:
+
+```yaml
+env:
+  - name: PUBLIC_AURORA_INTENTS_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: pay3flow-secrets
+        key: PUBLIC_AURORA_INTENTS_API_KEY
+```
+
+Apply this alongside the existing frontend environment settings. The live
+image-patch deployment preserves configured environment entries. When using the
+separate rendered-manifest path, carry this reference in the frontend Deployment
+overlay as well. After changing a Secret value, restart the frontend and wait
+for readiness so the new process receives it. Do not print Secret values in
+rollout evidence.
+
+Local development uses ignored `pay3low-svelte-frontend/.env.local`. These files
+are excluded from the frontend image build context. Merely copying such a file
+to a release directory does not configure the running production process.
+
+## Frontend build behavior
+
+Live deployment uses [`frontend-runtime/Dockerfile`](frontend-runtime/Dockerfile) with the
+frontend directory as its build context. Its dependency and builder stages
+match the frontend Dockerfile, allowing application build-cache reuse. The
+runner copies a filtered dependency tree into a fresh Node 24 image: generated
+JavaScript, JSON, CSS, native modules and licenses remain; declaration files,
+source maps and unused raw Material Symbols SVG source packages are omitted.
+The compiled React icons and built client assets are preserved. Removing files
+only in a child layer of the full dependency image would not shrink that image.
+
+The builder allows a 6 GiB Node heap. DejaVu fonts, compression and frontend
+metrics remain part of the runtime image. The frontend-directory Dockerfile
+retains the full dependency tree for the general Compose/local build path.
+
+If a cold release appears quiet, inspect `/tmp/pay3flow-backend-REV.log` and
+`/tmp/pay3flow-frontend-REV.log` on the host, where `REV` is the seven-character
+revision. Distinguish npm/Vite work, image export and containerd import from
+Kubernetes rollout. Verify image IDs and revision annotations before declaring
+the release complete; retain the database backup and previous image tags.
 
 ## Deploy with in-cluster PostgreSQL and Redis via a registry
 
@@ -140,6 +229,19 @@ deploying the manifests. The backend and frontend Services are NodePorts
 the correct service.
 
 ## Pay3Flow monitoring
+
+For a read-only OTC launch inspection against the running production stack:
+
+```sh
+python3 scripts/otc_preflight.py --ssh root@195.123.218.200 --output /tmp/otc-preflight.json
+```
+
+The command checks public availability, the mounted OTC configuration, persistent
+pause controls, recent observer scans, existing obligations, secret lengths and
+Ethereum RPC connectivity from the server. It emits a redacted JSON report and
+exits nonzero for failed checks. It never enables trading, sends funds or changes
+cluster resources. Wallet ownership, relay delivery, independent provider
+operation and actual settlement still require verification.
 
 The backend exposes Prometheus metrics at `/metrics`. The optional monitoring
 stack in [`monitoring.yaml`](monitoring.yaml) adds Prometheus, Grafana,
@@ -198,3 +300,12 @@ Optional DEX quotes use `PAY3FLOW_ZEROX_API_KEY` and `PAY3FLOW_BARTER_API_KEY`
 in the rendered Secret. Existing deployments may add `ZEROX_API_KEY` and
 `BARTER_API_KEY` to `pay3flow-secrets`; both references are optional. Empty keys
 keep these providers visible as catalog entries without advertising live quotes.
+
+Crypto Office swap discovery and indicative quotes use `CRYPTO_OFFICE_PUBLIC_KEY`
+and `CRYPTO_OFFICE_SECRET_KEY` in `pay3flow-secrets`. The renderer accepts the same
+names prefixed with `PAY3FLOW_`; live deployment preserves the existing Secret
+and mounts both keys as optional. The backend generates fresh IP-bound tokens
+following the official Crypto Office PHP example. Whitelist its public egress IP.
+Restart the backend after provisioning keys. With no credentials the provider
+remains catalog-only. `CRYPTO_OFFICE_API_TOKEN` remains a legacy fallback when
+neither key is configured; a partial key pair is an error.

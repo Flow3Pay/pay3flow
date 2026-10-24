@@ -4,6 +4,12 @@ The backend owns a durable customer-first OTC workflow and the existing `/#/otc`
 
 ## Setup
 
+The OTC page also includes a [native EVER multisig workspace](otc-everscale-multisig.md)
+integrated with the bundled Rust CLI. It verifies public 2-of-3 agreements and
+prepares owner-signed EVER Wallet calls. Its reconciliation is independent of
+desk-order settlement accounting. Startup also applies `otc_ever_multisig.sql`;
+server signing remains off until its separate TVM/provider configuration is supplied.
+
 1. Run the normal backend database setup. Startup applies the additive `backend/migrations/otc.sql` and `backend/migrations/otc_escrow.sql` migrations. Use separate databases for demo and live: the first enabled worker binds the database mode, and demo quotes remain unsignable after a configuration switch. OTC records use separate tables from the legacy acquiring/exchange simulation ledger. Preserve the database, JWT secret and encryption key across restarts.
 2. Copy `backend/otc.example.json` outside version control. Set `OTC_CONFIG_FILE` to that absolute path in the backend environment. Without it the route is disabled. The example intentionally cannot enable live quotes.
 3. Record the onboarded desk identity, canonical lowercase desk wallets, inventory and gas, two independently operated HTTPS RPC endpoints per chain, approved deployed single-key EverWallet code hashes, limits, UTC staffed hours, three deadline durations, refund/net-delivery policies, support owner, incident lead and backup, tested alert webhook, independent external heartbeat receiver, and operating/live-gate evidence. Configure stable asset-definition IRIs that identify the precise chain and deployment. The issuer address is fixed in the adapter and its precision is checked on chain.

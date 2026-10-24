@@ -1,0 +1,7428 @@
+[
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 1,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 2,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 3,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 4,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 5,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 6,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 7,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 8,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 9,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 10,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 11,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 12,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 13,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 14,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 15,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 16,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 17,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 18,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 19,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 20,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 21,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 22,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 23,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 24,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 25,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 26,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 27,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 0,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 2,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 3,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 4,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 5,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 6,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 7,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 8,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 9,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 10,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 11,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 12,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 13,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 14,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 15,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 16,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 17,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 18,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 19,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 20,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 21,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 22,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 23,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 24,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 25,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 26,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 27,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 3,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 4,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 5,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 6,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 7,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 8,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 9,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 10,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 11,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 12,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 13,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 14,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 15,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 16,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 17,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 18,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 19,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 20,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 21,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 22,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 23,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 24,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 25,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 26,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 27,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 3,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 4,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 5,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 6,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 7,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 8,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 9,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 10,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 11,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 12,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 13,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 14,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 15,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 16,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 17,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 18,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 19,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 20,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 21,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 22,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 23,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 24,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 25,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 26,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 27,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 3,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 3,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 4,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 5,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 6,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 7,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 8,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 9,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 10,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 11,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 12,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 13,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 14,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 15,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 16,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 17,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 18,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 19,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 20,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 21,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 22,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 23,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 24,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 25,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 26,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 27,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 4,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 3,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 4,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 5,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 6,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 7,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 8,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 9,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 10,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 11,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 12,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 13,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 14,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 15,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 16,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 17,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 18,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 19,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 20,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 21,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 22,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 23,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 24,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 25,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 26,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 27,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 5,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 3,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 4,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 5,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 6,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 7,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 8,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 9,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 10,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 11,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 12,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 13,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 14,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 15,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 16,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 17,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 18,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 19,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 20,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 21,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 22,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 23,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 24,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 25,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 26,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 27,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 6,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 3,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 4,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 5,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 6,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 7,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 8,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 9,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 10,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 11,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 12,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 13,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 14,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 15,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 16,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 17,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 18,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 19,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 20,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 21,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 22,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 23,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 24,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 25,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 26,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 27,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 7,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 3,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 4,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 5,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 6,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 7,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 8,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 9,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 10,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 11,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 12,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 13,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 14,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 15,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 16,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 17,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 18,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 19,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 20,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 21,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 22,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 23,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 24,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 25,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 26,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 27,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 8,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 3,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 4,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 5,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 6,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 7,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 8,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 9,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 10,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 11,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 12,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 13,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 14,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 15,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 16,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 17,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 18,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 19,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 20,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 21,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 22,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 23,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 24,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 25,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 26,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 27,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 9,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 3,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 4,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 5,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 6,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 7,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 8,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 9,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 10,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 11,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 12,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 13,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 14,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 15,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 16,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 17,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 18,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 19,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 20,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 21,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 22,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 23,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 24,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 25,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 26,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 27,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 10,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 3,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 4,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 5,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 6,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 7,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 8,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 9,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 10,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 11,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 12,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 13,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 14,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 15,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 16,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 17,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 18,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 19,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 20,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 21,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 22,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 23,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 24,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 25,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 26,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 27,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 11,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 3,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 4,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 5,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 6,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 7,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 8,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 9,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 10,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 11,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 12,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 13,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 14,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 15,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 16,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 17,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 18,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 19,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 20,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 21,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 22,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 23,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 24,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 25,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 26,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 27,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 12,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 3,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 4,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 5,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 6,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 7,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 8,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 9,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 10,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 11,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 12,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 13,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 14,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 15,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 16,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 17,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 18,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 19,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 20,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 21,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 22,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 23,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 24,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 25,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 26,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 27,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 13,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 3,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 4,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 5,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 6,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 7,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 8,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 9,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 10,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 11,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 12,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 13,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 14,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 15,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 16,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 17,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 18,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 19,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 20,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 21,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 22,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 23,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 24,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 25,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 26,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 27,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 14,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 3,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 4,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 5,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 6,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 7,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 8,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 9,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 10,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 11,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 12,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 13,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 14,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 15,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 16,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 17,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 18,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 19,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 20,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 21,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 22,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 23,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 24,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 25,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 26,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 27,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 15,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 3,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 4,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 5,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 6,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 7,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 8,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 9,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 10,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 11,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 12,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 13,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 14,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 15,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 16,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 17,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 18,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 19,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 20,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 21,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 22,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 23,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 24,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 25,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 26,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 27,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 16,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 3,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 4,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 5,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 6,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 7,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 8,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 9,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 10,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 11,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 12,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 13,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 14,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 15,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 16,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 17,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 18,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 19,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 20,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 21,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 22,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 23,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 24,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 25,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 26,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 27,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 17,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 3,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 4,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 5,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 6,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 7,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 8,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 9,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 10,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 11,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 12,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 13,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 14,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 15,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 16,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 17,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 18,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 19,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 20,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 21,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 22,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 23,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 24,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 25,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 26,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 27,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 3,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 4,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 5,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 6,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 7,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 8,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 9,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 10,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 11,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 12,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 13,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 14,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 15,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 16,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 17,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 18,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 19,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 20,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 21,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 22,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 23,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 24,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 25,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 26,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 27,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 19,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 3,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 4,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 5,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 6,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 7,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 8,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 9,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 10,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 11,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 12,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 13,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 14,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 15,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 16,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 17,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 18,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 19,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 20,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 21,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 22,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 23,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 24,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 25,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 26,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 27,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 20,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 3,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 4,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 5,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 6,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 7,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 8,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 9,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 10,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 11,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 12,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 13,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 14,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 15,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 16,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 17,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 18,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 19,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 20,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 21,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 22,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 23,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 24,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 25,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 26,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 27,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 21,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 3,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 4,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 5,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 6,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 7,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 8,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 9,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 10,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 11,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 12,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 13,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 14,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 15,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 16,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 17,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 18,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 19,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 20,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 21,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 22,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 23,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 24,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 25,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 26,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 27,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 22,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 3,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 4,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 5,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 6,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 7,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 8,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 9,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 10,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 11,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 12,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 13,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 14,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 15,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 16,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 17,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 18,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 19,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 20,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 21,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 22,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 23,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 24,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 25,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 26,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 27,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 23,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 3,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 4,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 5,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 6,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 7,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 8,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 9,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 10,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 11,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 12,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 13,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 14,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 15,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 16,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 17,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 18,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 19,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 20,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 21,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 22,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 23,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 24,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 25,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 26,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 27,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 24,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 3,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 4,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 5,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 6,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 7,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 8,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 9,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 10,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 11,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 12,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 13,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 14,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 15,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 16,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 17,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 18,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 19,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 20,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 21,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 22,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 23,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 24,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 25,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 26,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 27,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 25,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 3,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 4,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 5,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 6,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 7,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 8,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 9,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 10,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 11,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 12,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 13,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 14,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 15,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 16,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 17,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 18,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 19,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 20,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 21,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 22,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 23,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 24,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 25,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 26,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 27,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 26,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 3,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 4,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 5,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 6,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 7,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 8,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 9,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 10,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 11,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 12,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 13,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 14,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 15,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 16,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 17,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 18,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 19,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 20,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 21,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 22,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 23,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 24,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 25,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 26,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 27,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 27,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 3,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 4,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 5,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 6,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 7,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 8,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 9,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 10,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 11,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 12,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 13,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 14,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 15,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 16,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 17,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 18,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 19,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 20,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 21,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 22,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 23,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 24,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 25,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 26,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 27,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 28,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 28,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 3,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 4,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 5,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 6,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 7,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 8,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 9,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 10,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 11,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 12,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 13,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 14,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 15,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 16,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 17,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 18,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 19,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 20,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 21,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 22,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 23,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 24,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 25,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 26,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 27,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 28,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 29,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 29,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 3,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 4,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 5,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 6,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 7,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 8,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 9,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 10,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 11,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 12,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 13,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 14,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 15,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 16,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 17,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 18,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 19,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 20,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 21,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 22,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 23,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 24,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 25,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 26,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 27,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 28,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 29,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 30,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 30,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 1,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 2,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 3,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 4,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 5,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 6,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 7,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 8,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 9,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 10,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 11,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 12,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 13,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 14,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 15,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 16,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 17,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 18,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 19,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 20,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 21,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 22,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 23,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 24,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 25,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 26,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 27,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 28,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 29,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 30,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 31,
+    "expected": true
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 31,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 1,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 2,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 3,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 4,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 5,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 6,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 7,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 8,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 9,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 10,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 11,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 12,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 13,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 14,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 15,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 16,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 17,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 18,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 19,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 20,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 21,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 22,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 23,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 24,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 25,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 26,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 27,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 32,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 0,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 1,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 2,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 3,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 4,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 5,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 6,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 7,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 8,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 9,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 10,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 11,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 12,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 13,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 14,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 15,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 16,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 17,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 18,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 19,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 20,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 21,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 22,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 23,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 24,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 25,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 26,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 27,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 28,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 29,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 30,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 31,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 32,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 33,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 33,
+    "required": 34,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": -1,
+    "required": 1,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": -1,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 18446744073709551616,
+    "required": 1,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": 18446744073709551616,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": true,
+    "required": 1,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 1,
+    "required": true,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": "2",
+    "required": 1,
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": 2,
+    "required": "1",
+    "expected": false
+  },
+  {
+    "kind": "quorum",
+    "custodians": null,
+    "required": 1,
+    "expected": false
+  },
+  {
+    "kind": "chain_key",
+    "input": "0",
+    "expected": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+    "kind": "chain_key",
+    "input": "1",
+    "expected": "0000000000000000000000000000000000000000000000000000000000000001"
+  },
+  {
+    "kind": "chain_key",
+    "input": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+    "expected": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  },
+  {
+    "kind": "chain_key",
+    "input": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "expected": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  },
+  {
+    "kind": "chain_key",
+    "input": "0XFF",
+    "expected": "00000000000000000000000000000000000000000000000000000000000000ff"
+  },
+  {
+    "kind": "chain_key",
+    "input": 1,
+    "expected": "0000000000000000000000000000000000000000000000000000000000000001"
+  },
+  {
+    "kind": "chain_key",
+    "input": 0,
+    "expected": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+    "kind": "chain_key",
+    "input": "0000001",
+    "expected": "0000000000000000000000000000000000000000000000000000000000000001"
+  },
+  {
+    "kind": "chain_key",
+    "input": "115792089237316195423570985008687907853269984665640564039457584007913129639936",
+    "expected": false
+  },
+  {
+    "kind": "chain_key",
+    "input": "-1",
+    "expected": false
+  },
+  {
+    "kind": "chain_key",
+    "input": "0x11111111111111111111111111111111111111111111111111111111111111111",
+    "expected": false
+  },
+  {
+    "kind": "chain_key",
+    "input": "hello",
+    "expected": false
+  },
+  {
+    "kind": "chain_key",
+    "input": "",
+    "expected": false
+  },
+  {
+    "kind": "chain_key",
+    "input": null,
+    "expected": false
+  },
+  {
+    "kind": "chain_key",
+    "input": true,
+    "expected": false
+  },
+  {
+    "kind": "chain_key",
+    "input": [],
+    "expected": false
+  },
+  {
+    "kind": "owners",
+    "local": [
+      "1"
+    ],
+    "remote": [
+      "1"
+    ],
+    "custodians": 1,
+    "required": 1,
+    "observed_required": 1,
+    "expected": true
+  },
+  {
+    "kind": "owners",
+    "local": [
+      "01",
+      "0x02"
+    ],
+    "remote": [
+      "02",
+      "01"
+    ],
+    "custodians": 2,
+    "required": 2,
+    "observed_required": 2,
+    "expected": true
+  },
+  {
+    "kind": "owners",
+    "local": [
+      "ff",
+      "AA"
+    ],
+    "remote": [
+      "aa",
+      "FF"
+    ],
+    "custodians": 2,
+    "required": 1,
+    "observed_required": 1,
+    "expected": true
+  },
+  {
+    "kind": "owners",
+    "local": [
+      "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    ],
+    "remote": [
+      "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    ],
+    "custodians": 1,
+    "required": 1,
+    "observed_required": 1,
+    "expected": true
+  },
+  {
+    "kind": "owners",
+    "local": [
+      "1",
+      "1"
+    ],
+    "remote": [
+      "1",
+      "2"
+    ],
+    "custodians": 2,
+    "required": 2,
+    "observed_required": 2,
+    "expected": false
+  },
+  {
+    "kind": "owners",
+    "local": [
+      "1",
+      "2"
+    ],
+    "remote": [
+      "1",
+      "1"
+    ],
+    "custodians": 2,
+    "required": 2,
+    "observed_required": 2,
+    "expected": false
+  },
+  {
+    "kind": "owners",
+    "local": [
+      "1",
+      "2"
+    ],
+    "remote": [
+      "1",
+      "3"
+    ],
+    "custodians": 2,
+    "required": 2,
+    "observed_required": 2,
+    "expected": false
+  },
+  {
+    "kind": "owners",
+    "local": [
+      "1"
+    ],
+    "remote": [
+      "1"
+    ],
+    "custodians": 1,
+    "required": 1,
+    "observed_required": 2,
+    "expected": false
+  },
+  {
+    "kind": "owners",
+    "local": [
+      "1",
+      "2"
+    ],
+    "remote": [
+      "1"
+    ],
+    "custodians": 2,
+    "required": 2,
+    "observed_required": 1,
+    "expected": false
+  },
+  {
+    "kind": "owners",
+    "local": [
+      "nothex"
+    ],
+    "remote": [
+      "1"
+    ],
+    "custodians": 1,
+    "required": 1,
+    "observed_required": 1,
+    "expected": false
+  },
+  {
+    "kind": "owners",
+    "local": [],
+    "remote": [
+      "1"
+    ],
+    "custodians": 1,
+    "required": 1,
+    "observed_required": 1,
+    "expected": false
+  }
+]

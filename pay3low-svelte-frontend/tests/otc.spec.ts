@@ -51,7 +51,10 @@ async function fixtures(page: Page, options: { signedIn?: boolean; available?: b
   return { trades, attempts, rfqs, requests, control };
 }
 async function open(page: Page) { await page.goto("/#/otc"); await expect(page.getByTestId("otc-workspace")).toHaveAttribute("data-state", "connected"); }
-async function select(page: Page, state: string, direction = "buy") { await page.getByRole("button", { name: new RegExp(`${direction === "buy" ? "Buy" : "Sell"} EVER 100 → 200 ${state}`) }).click(); }
+async function select(page: Page, _state: string, direction = "buy") {
+  await page.getByRole("tab", { name: "My orders", exact: true }).click();
+  await page.getByRole("button", { name: `Open ${direction === "buy" ? "buy" : "sell"} EVER booking-fixture`, exact: true }).click();
+}
 
 test("one real terminal, scoped networks, no demo feed, accessible at 320 pixels", async ({ page }) => {
   const sockets: string[] = []; page.on("websocket", socket => sockets.push(socket.url()));
@@ -128,8 +131,8 @@ test("desk console decisions reserve first and unknown payout blocks refund", as
 test("server history and volume count completed USDT legs once, refunds stay visible", async ({ page }) => {
   await fixtures(page, { signedIn: true, extra: [makeTrade("completed", "buy", "done-buy"), makeTrade("completed", "sell", "done-sell"), makeTrade("refunded", "buy", "refund")] }); await open(page);
   await expect(page.locator(".volumeStat")).toContainText("300 USDT"); await expect(page.locator("#otc-chart circle")).toHaveCount(3);
-  await page.getByRole("tab", { name: "History" }).click(); await expect(page.locator(".tradeList button")).toHaveCount(3); await expect(page.locator(".tradeList")).toContainText("refunded");
-  await page.getByRole("tab", { name: "History" }).press("Home"); await expect(page.getByRole("tab", { name: "Desk offers" })).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("tab", { name: "History", exact: true }).click(); await expect(page.locator(".tradeTables tbody tr[role=button]")).toHaveCount(3); await expect(page.locator(".tradeTables")).toContainText("Refunded");
+  await page.getByRole("tab", { name: "History", exact: true }).press("Home"); await expect(page.getByRole("tab", { name: "Open orders", exact: true })).toHaveAttribute("aria-selected", "true");
 });
 
 test("logout discards a delayed participant response", async ({ page }) => {
@@ -137,7 +140,7 @@ test("logout discards a delayed participant response", async ({ page }) => {
   await expect.poll(() => !!f.control.releasePrivate, { timeout: 12000 }).toBe(true);
   await page.locator(".walletMenu .walletToggle").click(); await page.getByRole("button", { name: "Disconnect", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Buy EVER · accepted" })).toHaveCount(0); f.control.releasePrivate!();
-  await page.waitForTimeout(250); await expect(page.locator(".tradeList button")).toHaveCount(0); await expect(page.locator("#otc-chart circle")).toHaveCount(0);
+  await page.waitForTimeout(250); await expect(page.locator(".tradeTables tbody tr[role=button]")).toHaveCount(0); await expect(page.locator("#otc-chart circle")).toHaveCount(0);
 });
 
 test("backend outage pauses new RFQs; panel layout survives reload", async ({ page }) => {

@@ -23,6 +23,7 @@ k256 = { version = "0.13", features = ["ecdsa"] }
 sha3 = "0.10"
 ed25519-dalek = "2"
 everscale-types = "0.1.2"
+evernode-multisig = { path = "crates/evernode-multisig" }
 jsonwebtoken = "9"
 rand = "0.8"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
@@ -49,3 +50,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 [build-dependencies]
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
+
+[workspace]
+members = ["crates/evernode-multisig"]
+resolver = "2"
