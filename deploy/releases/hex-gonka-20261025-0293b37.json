@@ -1,0 +1,149 @@
+{
+  "status": "deployed_verified_hex_execution_unconfigured",
+  "source_revision": "0293b374cd2a9d54a1e261356707f8f676a40672",
+  "image_tag": "live-20261025-0293b37",
+  "url": "https://pay3flow.lefine.pro",
+  "repository": "https://github.com/Flow3Pay/pay3flow",
+  "pushed_branches": [
+    "master",
+    "feat/hex-gonka"
+  ],
+  "backup_directory": "/var/lib/pay3flow/backups/hex-gonka-20261025-0293b37",
+  "database_backup": "database-before.dump",
+  "cluster": {
+    "verified_at": "2026-10-25T08:53:02.764179+00:00",
+    "deployments": [
+      {
+        "name": "pay3flow-backend",
+        "source_revision": "0293b374cd2a9d54a1e261356707f8f676a40672",
+        "image": "localhost/pay3flow/backend:live-20261025-0293b37",
+        "ready_replicas": 1
+      },
+      {
+        "name": "pay3flow-frontend",
+        "source_revision": "0293b374cd2a9d54a1e261356707f8f676a40672",
+        "image": "localhost/pay3flow/frontend:live-20261025-0293b37",
+        "ready_replicas": 1
+      }
+    ],
+    "pods": [
+      {
+        "name": "pay3flow-backend-7865476689-br9n2",
+        "containers": [
+          {
+            "name": "backend",
+            "image": "localhost/pay3flow/backend:live-20261025-0293b37",
+            "image_id": "sha256:23751c18509a475fe558ec6646307ea7039d254d78e8b1f44196ef5587c3232e",
+            "ready": true
+          }
+        ]
+      },
+      {
+        "name": "pay3flow-frontend-f9447d99d-75tqg",
+        "containers": [
+          {
+            "name": "frontend",
+            "image": "localhost/pay3flow/frontend:live-20261025-0293b37",
+            "image_id": "sha256:615788ce8c0009fee1bbc2787e3eb39e49f5801c6e4a69ff41dd21f5b852593a",
+            "ready": true
+          }
+        ]
+      }
+    ]
+  },
+  "validation": {
+    "svelte_check": {
+      "errors": 0,
+      "warnings": 0
+    },
+    "frontend_unit_tests": {
+      "passed": 100,
+      "failed": 0
+    },
+    "hex_browser_scenarios": {
+      "verified": 26,
+      "initial_passed": 21,
+      "sequential_rerun_passed": 5,
+      "rerun_reason": "Local memory pressure caused initial timeouts; all five passed after stopping duplicate compilation."
+    },
+    "backend_release_build": "passed",
+    "frontend_release_build": "passed",
+    "changed_hex_rustfmt": "passed",
+    "full_cargo_fmt": "Pre-existing formatting failure in backend/src/otc/public_offers.rs; no source changes made.",
+    "local_cargo_check": "Duplicate local compilation stopped under memory pressure; production release compilation completed successfully."
+  },
+  "public_api_checks": {
+    "checked_at": "2026-10-25T08:52:18.781331+00:00",
+    "url": "https://pay3flow.lefine.pro",
+    "funds_moved": false,
+    "checks": {
+      "home": {
+        "passed": true,
+        "status": 200,
+        "bytes": 20882
+      },
+      "health": {
+        "passed": true,
+        "status": 200,
+        "bytes": 2
+      },
+      "providers": {
+        "passed": true,
+        "status": 200,
+        "bytes": 40323
+      },
+      "hex_config": {
+        "passed": true,
+        "status": 200,
+        "bytes": 215
+      },
+      "hex_snapshot": {
+        "passed": true,
+        "status": 200,
+        "bytes": 36140
+      },
+      "hex_history": {
+        "passed": true,
+        "status": 200,
+        "bytes": 2057
+      },
+      "hex_quote": {
+        "passed": true,
+        "status": 200,
+        "bytes": 1018
+      },
+      "ever_config": {
+        "passed": true,
+        "status": 200,
+        "bytes": 1123
+      },
+      "ever_listings": {
+        "passed": true,
+        "status": 200,
+        "bytes": 2
+      }
+    },
+    "passed": true
+  },
+  "live_browser": {
+    "passed": true,
+    "gnk_live_market": true,
+    "gnk_execution_disabled": true,
+    "mobile_width": 390,
+    "mobile_overflow": false,
+    "ever_navigation": true,
+    "browser_errors": []
+  },
+  "runtime": {
+    "hex_execution_enabled": false,
+    "missing_browser_secret": "PUBLIC_HOT_KIT_API_KEY",
+    "existing_ever_configuration_preserved": true
+  },
+  "deployment_notes": [
+    "Production disk contention made frontend image export take 1560 seconds.",
+    "The cluster API restarted during follow-up inspection; both deployments and their immutable image IDs were subsequently verified.",
+    "The release command reported a best-effort BuildKit cache-prune warning; application deployment and public checks completed successfully."
+  ],
+  "funds_moved": false,
+  "orders_published": false
+}
