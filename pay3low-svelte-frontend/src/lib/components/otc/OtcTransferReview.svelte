@@ -2,10 +2,11 @@
   import { onMount } from "svelte";
   import { locale } from "$lib/i18n";
   import { lockPageScroll } from "$lib/page-scroll-lock";
-  import { type Trade, type Attempt, decimal } from "$lib/otc/service";
-  export let trade: Trade;
+  import { otcEvmNetwork, type Trade, type Attempt, decimal } from "$lib/otc/service";
+  export let trade: Trade | null = null;
   export let kind: string;
   export let instructions: Attempt["instructions"];
+  export let networkCosts = "";
   export let onClose: () => void;
   export let onConfirm: () => void;
   export let disabled = false;
@@ -17,8 +18,8 @@
 </script>
 <dialog bind:this={dialog} aria-labelledby="otc-transfer-title" on:cancel|preventDefault={onClose}>
   <div class="top"><h2 id="otc-transfer-title">{say("Review transfer", "Проверить перевод")}</h2><button aria-label={say("Close", "Закрыть")} on:click={onClose}>×</button></div>
-  <p>{kind} · {leg.chain === "ethereum" ? "Ethereum" : "Everscale"}</p>
-  <dl><dt>{say("Net amount", "Сумма к получению")}</dt><dd>{decimal(leg.amount, leg.chain === "ethereum" ? 6 : 9)} {asset}</dd><dt>{say("Sender", "Отправитель")}</dt><dd>{leg.sender}</dd><dt>{say("Recipient", "Получатель")}</dt><dd>{leg.recipient}</dd><dt>{say("Network costs", "Сетевые расходы")}</dt><dd>{trade.terms.network_costs}</dd></dl>
+  <p>{kind === "payment" ? say("Payment", "Оплата") : say("Delivery", "Выплата")} · {leg.chain === "ethereum" ? otcEvmNetwork().label : "Everscale"}</p>
+  <dl><dt>{say("Net amount", "Сумма к получению")}</dt><dd>{decimal(leg.amount, leg.chain === "ethereum" ? 6 : 9)} {asset}</dd><dt>{say("Sender", "Отправитель")}</dt><dd>{leg.sender}</dd><dt>{say("Recipient", "Получатель")}</dt><dd>{leg.recipient}</dd><dt>{say("Network costs", "Сетевые расходы")}</dt><dd>{trade?.terms.network_costs || networkCosts || "—"}</dd></dl>
   <p>{say("The saved transfer is sent once. An unknown result requires reconciliation.", "Сохранённый перевод отправляется один раз. Неизвестный результат требует сверки.")}</p>
   <button class="primary" {disabled} on:click={onConfirm}>{say("Confirm in wallet", "Подтвердить в кошельке")} ↗</button><button on:click={onClose}>{say("Close and track saved transfer", "Закрыть и отслеживать сохранённый перевод")}</button>
 </dialog>

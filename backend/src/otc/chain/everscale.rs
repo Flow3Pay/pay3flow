@@ -56,8 +56,7 @@ pub(crate) fn receipt(transaction: &Value, leg: &Leg) -> Result<Evidence> {
     })
 }
 impl Service {
-    pub(crate) async fn everscale_evidence(
-        &self,
+    pub(crate) async fn everscale_evidence(        &self,
         reference: &str,
         leg: &Leg,
     ) -> Result<Option<Evidence>> {
@@ -232,4 +231,103 @@ impl Service {
             lag,
         ))
     }
+    /// P2P counterparties choose their own fee top-up, so the recipient balance
+    /// increase may exceed the booked amount; anything less indicates a real shortfall.
+    pub(crate) async fn everscale_deal_evidence(
+        &self,
+        reference: &str,
+        leg: &Leg,
+    ) -> Result<Option<Evidence>> {
+        if reference.len() != 64 || !reference.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err(invalid("invalid EVER transaction hash"));
+        }
+        let query = format!(
+            "query($id:String!){{transactions(filter:{{id:{{eq:$id}}}},limit:1){{{FIELDS}}}}}"
+        );
+        let data = self.ever_agree(&query, json!({"id":reference})).await?;
+        let Some(transaction) = data["transactions"].as_array().and_then(|a| a.first()) else {
+            return Ok(None);
+        };
+        if transaction["account_addr"].as_str() == Some(&leg.recipient) {
+            return deal_receipt(transaction, leg).map(Some);
+        }
+        if transaction["account_addr"].as_str() != Some(&leg.sender) {
+            return Err(invalid("EVER reference is not a participant transaction"));
+        }
+        let messages=self.ever_agree("query($id:String!){transactions(filter:{id:{eq:$id}},limit:1){out_messages{id src dst value bounced}}}",json!({"id":reference})).await?;
+        let candidates: Vec<_> = messages["transactions"][0]["out_messages"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|m| {
+                m["src"].as_str() == Some(&leg.sender)
+                    && m["dst"].as_str() == Some(&leg.recipient)
+                    && number(&m["value"]).ok()
+                        == super::super::amount::integer(&leg.transfer_amount).ok()
+            })
+            .collect();
+        if candidates.len() != 1 {
+            return Err(invalid("EVER outgoing message missing or ambiguous"));
+        }
+        let message = candidates[0]["id"]
+            .as_str()
+            .ok_or_else(|| invalid("missing EVER outgoing message ID"))?;
+        let query = format!(
+            "query($id:String!){{transactions(filter:{{in_msg:{{eq:$id}}}},limit:2){{{FIELDS}}}}}"
+        );
+        let receiving = self.ever_agree(&query, json!({"id":message})).await?;
+        let rows = receiving["transactions"]
+            .as_array()
+            .ok_or_else(|| invalid("missing EVER receiving transactions"))?;
+        if rows.len() > 1 {
+            return Err(invalid("ambiguous EVER receiving evidence"));
+        }
+        rows.first().map(|tx| deal_receipt(tx, leg)).transpose()
+    }
+}
+fn deal_receipt(transaction: &Value, leg: &Leg) -> Result<Evidence> {
+    let message = &transaction["in_message"];
+    if message["src"].as_str() != Some(&leg.sender)
+        || message["dst"].as_str() != Some(&leg.recipient)
+        || transaction["account_addr"].as_str() != Some(&leg.recipient)
+        || number(&message["value"])? != super::super::amount::integer(&leg.transfer_amount)?
+    {
+        return Err(invalid("EVER receiving message differs from booked leg"));
+    }
+    let success = message["bounced"] != true
+        && transaction["aborted"] != true
+        && transaction["bounce"].is_null()
+        && transaction["compute"]["success"].as_bool() == Some(true)
+        && [Some(0), Some(1)].contains(&transaction["compute"]["exit_code"].as_i64())
+        && (transaction["action"].is_null() || transaction["action"]["success"] == true);
+    if success
+        && number(&transaction["balance_delta"])?
+            < super::super::amount::integer(&leg.amount)?
+    {
+        return Err(invalid(
+            "EVER net delivery is below the booked amount",
+        ));
+    }
+    let identity = message["id"]
+        .as_str()
+        .ok_or_else(|| invalid("missing EVER message identity"))?;
+    let at = Utc
+        .timestamp_opt(
+            transaction["now"]
+                .as_i64()
+                .ok_or_else(|| invalid("missing EVER inclusion time"))?,
+            0,
+        )
+        .single()
+        .ok_or_else(|| invalid("invalid EVER time"))?;
+    Ok(Evidence {
+        chain: "everscale".into(),
+        identity: identity.into(),
+        leg: leg.clone(),
+        included_at: at,
+        canonical: true,
+        finalized: transaction["status"] == 3,
+        successful: success,
+        raw: transaction.clone(),
+    })
 }

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { locale } from "$lib/i18n";
-  import { request, type Session, type Direction } from "$lib/otc/service";
+  import { request, otcEvmNetwork, walletNetwork, type Session, type Direction } from "$lib/otc/service";
   import { connectWallet, wallets } from "$lib/wallet-session";
   import { saleRate, offerDecimal, offerTotal, offerEver, validOfferAmount, type PublicOffer as Offer, type OfferHistoryPoint, type SaleTicketState } from "$lib/otc/public-offers";
   export let session: Session | null;
@@ -37,18 +37,18 @@
   $: roundingAsset = priceMode ? amountSource === "ever" ? offerTotal(everAmount,priceInput)?.rounded ? "USDT" as const : null : offerEver(usdtAmount,priceInput)?.rounded ? "EVER" as const : null : null;
   $: priceRounded = !!roundingAsset;
   $: blockingReason = priceMode && !offerDecimal(priceInput,12)
-    ? say("Enter a positive price in USDT per EVER, with at most 12 decimals.", "Укажите положительный курс USDT за EVER, до 12 знаков после запятой.")
+    ? say("Enter a positive price.", "Укажите положительный курс.")
     : !validOfferAmount(everAmount,9,100_000_000_000_000n)
-    ? say("Enter an EVER amount greater than zero, up to 100,000, with at most 9 decimals.", "Укажите сумму EVER больше нуля и не более 100 000, до 9 знаков после запятой.")
+    ? say("Enter a valid EVER amount.", "Укажите корректную сумму EVER.")
     : !validOfferAmount(usdtAmount,6,1_000_000_000_000n)
-    ? say("Enter a total USDT amount greater than zero, up to 1,000,000, with at most 6 decimals.", "Укажите общую сумму USDT больше нуля и не более 1 000 000, до 6 знаков после запятой.")
+    ? say("Enter a valid USDT total.", "Укажите корректную сумму USDT.")
     : !/^0x[0-9a-fA-F]{40}$/.test(receivingAddress.trim()) || /^0x0{40}$/.test(receivingAddress.trim())
-    ? say("Enter your Ethereum wallet address: 0x followed by 40 hexadecimal characters, or use the wallet button.", "Укажите адрес Ethereum: 0x и 40 шестнадцатеричных символов, либо нажмите кнопку кошелька.") : "";
+    ? say("Enter your Ethereum wallet address, or use the wallet button.", "Укажите адрес Ethereum-кошелька или нажмите кнопку кошелька.") : "";
   $: valid = !blockingReason;
   $: if (direction !== loadedDirection) resetDirection(direction);
   function resetDirection(next: Direction) { loadedDirection = next; amountSource = next === "buy" ? "usdt" : "ever"; reviewing = false; key = ""; message = ""; }
   $: if (mounted) suggestEthereum(
-    session?.wallets.find(w => w.chain === "ethereum")?.address || ($wallets.evm?.family === "evm" && $wallets.evm.chainId === 1 ? $wallets.evm.address : ""),
+    session?.wallets.find(w => w.chain === "ethereum")?.address || ($wallets.evm?.family === "evm" && $wallets.evm.chainId === otcEvmNetwork().chainId ? $wallets.evm.address : ""),
     session?.actor || "",
   );
   function suggestEthereum(address: string, actor: string) {
@@ -62,9 +62,9 @@
     if (posting || busy || linkingEvm) return;
     const actor = session?.actor; linkingEvm = true; error = "";
     try {
-      const wallet = await connectWallet("ethereum");
+      const wallet = await connectWallet(walletNetwork("ethereum"));
       if (session?.actor !== actor) return;
-      if (wallet.family !== "evm" || wallet.chainId !== 1) throw new Error(say("Select Ethereum mainnet.", "Выберите Ethereum mainnet."));
+      if (wallet.family !== "evm" || wallet.chainId !== otcEvmNetwork().chainId) throw new Error(say(`Select ${otcEvmNetwork().label}.`, `Выберите сеть ${otcEvmNetwork().label}.`));
       receivingAddress = wallet.address; edited();
     } catch (e) { if (session?.actor === actor) error = e instanceof Error ? e.message : "Connection failed"; }
     finally { linkingEvm = false; }

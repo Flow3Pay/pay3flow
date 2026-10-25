@@ -1,6 +1,5 @@
 use super::{
     super::{
-        config::USDT,
         error::{invalid, Result},
         model::{Evidence, Leg},
         wallet, Service,
@@ -24,13 +23,14 @@ pub(crate) fn receipt(
     finalized: u128,
     leg: &Leg,
     nonce: Option<u128>,
+    contract: &str,
 ) -> Result<Option<Evidence>> {
     if receipt.is_null() {
         return Ok(None);
     }
     if number(&receipt["status"])? != 1
         || wallet::address("ethereum", transaction["from"].as_str().unwrap_or(""))? != leg.sender
-        || wallet::address("ethereum", transaction["to"].as_str().unwrap_or(""))? != USDT
+        || wallet::address("ethereum", transaction["to"].as_str().unwrap_or(""))? != contract
         || transaction["input"].as_str() != Some(&transfer_data(leg)?)
         || nonce.is_some_and(|n| number(&transaction["nonce"]).ok() != Some(n))
     {
@@ -57,7 +57,7 @@ pub(crate) fn receipt(
         .filter(|log| {
             log["address"]
                 .as_str()
-                .is_some_and(|a| a.eq_ignore_ascii_case(USDT))
+                .is_some_and(|a| a.eq_ignore_ascii_case(contract))
                 && log["topics"][0] == TRANSFER
                 && log["topics"][1] == sender
                 && log["topics"][2] == recipient
@@ -100,7 +100,7 @@ impl Service {
         if wallet::unhex(reference)?.len() != 32 {
             return Err(invalid("invalid Ethereum hash"));
         }
-        if number(&self.evm_agree("eth_chainId", json!([])).await?)? != 1 {
+        if number(&self.evm_agree("eth_chainId", json!([])).await?)? != u128::from(self.cfg.ethereum_chain_id) {
             return Err(invalid("wrong Ethereum network"));
         }
         let observed = self
@@ -118,28 +118,27 @@ impl Service {
                 json!([observed["blockNumber"], false]),
             )
             .await?;
-        let finalized = self
-            .evm_agree("eth_getBlockByNumber", json!(["finalized", false]))
-            .await?;
+        let finalized = self.evm_finalized_height().await?;
         receipt(
             &observed,
             &transaction,
             &block,
-            number(&finalized["number"])?,
+            finalized,
             leg,
             nonce,
+            &self.cfg.usdt_contract,
         )
     }
     pub(crate) async fn ethereum_scan(
         &self,
     ) -> Result<(Value, String, chrono::DateTime<Utc>, u64)> {
-        if number(&self.evm_agree("eth_chainId", json!([])).await?)? != 1 {
+        if number(&self.evm_agree("eth_chainId", json!([])).await?)? != u128::from(self.cfg.ethereum_chain_id) {
             return Err(invalid("wrong Ethereum network"));
         }
         let precision = self
             .evm_agree(
                 "eth_call",
-                json!([{"to":USDT,"data":"0x313ce567"},"finalized"]),
+                json!([{"to":self.cfg.usdt_contract,"data":"0x313ce567"},"finalized"]),
             )
             .await?;
         if number(&precision)? != 6 {
@@ -162,7 +161,7 @@ impl Service {
             &self
                 .evm_agree(
                     "eth_call",
-                    json!([{"to":USDT,"data":data},finalized["number"]]),
+                    json!([{"to":self.cfg.usdt_contract,"data":data},finalized["number"]]),
                 )
                 .await?,
         )?;
@@ -200,7 +199,7 @@ impl Service {
         let from = instructions["checkpoint"]["block"]
             .as_str()
             .ok_or_else(|| invalid("missing payment checkpoint"))?;
-        let logs=self.evm_agree("eth_getLogs",json!([{"address":USDT,"fromBlock":from,"toBlock":"finalized","topics":[TRANSFER,format!("0x{:0>64}",leg.sender.trim_start_matches("0x")),format!("0x{:0>64}",leg.recipient.trim_start_matches("0x"))]}])).await?;
+        let logs=self.evm_agree("eth_getLogs",json!([{"address":self.cfg.usdt_contract,"fromBlock":from,"toBlock":"finalized","topics":[TRANSFER,format!("0x{:0>64}",leg.sender.trim_start_matches("0x")),format!("0x{:0>64}",leg.recipient.trim_start_matches("0x"))]}])).await?;
         let mut references = Vec::new();
         for log in logs.as_array().into_iter().flatten() {
             if number(&log["data"]).ok() != Some(super::super::amount::integer(&leg.amount)?) {

@@ -2,6 +2,7 @@ use super::{
     booking::{QuoteRequest, RfqRequest},
     error::{invalid, Error, Result},
     operations::IncidentAction,
+    p2p::{DealPrepareRequest, DealSubmitRequest},
     transfers::{PrepareRequest, SubmitRequest},
     wallet::{ChallengeRequest, LinkRequest, ProofRequest},
 };
@@ -33,6 +34,12 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/api/otc/offers/mine", get(my_public_offers))
         .route("/api/otc/offers/history", get(public_offer_history))
         .route("/api/otc/offers/:id/cancel", post(cancel_public_offer))
+        .route("/api/otc/offers/:id/accept", post(accept_offer))
+        .route("/api/otc/p2p/trades", get(p2p_trades))
+        .route("/api/otc/p2p/trades/:id", get(p2p_deal))
+        .route("/api/otc/p2p/trades/:id/prepare", post(p2p_prepare))
+        .route("/api/otc/p2p/trades/:id/cancel", post(p2p_cancel))
+        .route("/api/otc/p2p/attempts/:id/reference", post(p2p_submit))
         .route("/api/otc/rfqs", post(rfq))
         .route("/api/otc/trades", get(trades))
         .route("/api/otc/multisig/review", post(multisig_review))
@@ -97,7 +104,7 @@ async fn config(State(state): State<AppState>) -> Json<Value> {
     .flatten()
     .collect();
     Json(
-        json!({"enabled":cfg.enabled,"available":available,"public_offers_available":state.otc.public_offers_available(),"public_offer_directions":["buy","sell"],"everscale_multisig_available":state.otc.multisig_available(),"wallet_login_available":state.otc.wallet_login_available(),"wallet_login_chains":wallet_login_chains,"escrow":cfg.escrow,"escrow_lifetime_seconds":14400,"escrow_max_ever":"100000","demo":cfg.demo,"desk":cfg.desk_actor,"desk_name":cfg.desk_name,"ever_resource":cfg.ever_resource,"usdt_resource":cfg.usdt_resource,"support_owner":cfg.support_owner,"ever_network":"Everscale","usdt_network":"Ethereum","usdt_contract":super::config::USDT,"profile":super::protocol::profile(),"fee":{"payer":"desk","rate":"0.0025","floor":"5","currency":"USDT"},"counterparty_risk":if cfg.escrow.is_some(){"USDT funds a 2-of-3 Safe escrow before native EVER delivery. Expiry permits a USDT refund; it cannot reverse EVER delivery."}else{"Two separate transfers. The desk must deliver or refund; there is no atomic swap or automatic rollback."}}),
+        json!({"enabled":cfg.enabled,"available":available,"public_offers_available":state.otc.public_offers_available(),"public_offer_directions":["buy","sell"],"p2p_available":state.otc.p2p_available(),"ethereum_chain_id":cfg.ethereum_chain_id,"usdt_contract":cfg.usdt_contract,"everscale_multisig_available":state.otc.multisig_available(),"wallet_login_available":state.otc.wallet_login_available(),"wallet_login_chains":wallet_login_chains,"escrow":cfg.escrow,"escrow_lifetime_seconds":14400,"escrow_max_ever":"100000","demo":cfg.demo,"desk":cfg.desk_actor,"desk_name":cfg.desk_name,"ever_resource":cfg.ever_resource,"usdt_resource":cfg.usdt_resource,"support_owner":cfg.support_owner,"ever_network":"Everscale","usdt_network":if cfg.ethereum_chain_id==11155111 {"Sepolia"} else {"Ethereum"},"profile":super::protocol::profile(),"fee":{"payer":"desk","rate":"0.0025","floor":"5","currency":"USDT"},"counterparty_risk":if cfg.escrow.is_some(){"USDT funds a 2-of-3 Safe escrow before native EVER delivery. Expiry permits a USDT refund; it cannot reverse EVER delivery."}else{"Two separate transfers. The payer of each leg is responsible for it; there is no atomic swap or automatic rollback."}}),
     )
 }
 async fn link(
@@ -184,6 +191,64 @@ async fn cancel_public_offer(
 ) -> Result<Json<Value>> {
     let (_, actor) = state.otc.session(bearer(&headers)?).await?;
     Ok(Json(state.otc.cancel_public_offer(&actor, id).await?))
+}
+async fn accept_offer(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Value>> {
+    let (_, actor) = state.otc.session(bearer(&headers)?).await?;
+    Ok(Json(
+        state.otc.accept_offer(&actor, id, key(&headers)?).await?,
+    ))
+}
+async fn p2p_trades(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Value>> {
+    let (_, actor) = state.otc.session(bearer(&headers)?).await?;
+    Ok(Json(state.otc.p2p_trades(&actor).await?))
+}
+async fn p2p_deal(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Value>> {
+    let (_, actor) = state.otc.session(bearer(&headers)?).await?;
+    Ok(Json(state.otc.p2p_deal(&actor, id).await?))
+}
+async fn p2p_prepare(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(request): Json<DealPrepareRequest>,
+) -> Result<Json<Value>> {
+    let (_, actor) = state.otc.session(bearer(&headers)?).await?;
+    Ok(Json(
+        state
+            .otc
+            .p2p_prepare(&actor, id, key(&headers)?, &request.kind)
+            .await?,
+    ))
+}
+async fn p2p_cancel(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Value>> {
+    let (_, actor) = state.otc.session(bearer(&headers)?).await?;
+    Ok(Json(state.otc.p2p_cancel(&actor, id).await?))
+}
+async fn p2p_submit(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(request): Json<DealSubmitRequest>,
+) -> Result<Json<Value>> {
+    let (_, actor) = state.otc.session(bearer(&headers)?).await?;
+    Ok(Json(
+        state
+            .otc
+            .p2p_submit(&actor, id, &request.reference)
+            .await?,
+    ))
 }
 async fn rfq(
     State(state): State<AppState>,

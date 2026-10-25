@@ -17,6 +17,7 @@ mod metrics;
 mod model;
 mod multisig;
 mod operations;
+mod p2p;
 mod protocol;
 mod public_offers;
 mod repo;
@@ -54,7 +55,10 @@ impl Service {
         jwt_secret: &str,
     ) -> anyhow::Result<Self> {
         let cfg = Config::load(origin)?;
-        if (cfg.enabled || cfg.public_offers_enabled || cfg.everscale_multisig_backend.is_some())
+        if (cfg.enabled
+            || cfg.public_offers_enabled
+            || cfg.p2p_enabled
+            || cfg.everscale_multisig_backend.is_some())
             && !cfg.demo
             && (secrets_key.len() < 32 || jwt_secret.len() < 32)
         {

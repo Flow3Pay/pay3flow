@@ -4,6 +4,11 @@ use serde_json::json;
 use uuid::Uuid;
 impl Service {
     pub(crate) async fn tick(&self) -> Result<()> {
+        if self.p2p_available() {
+            if let Err(error) = self.p2p_tick().await {
+                tracing::warn!(error=%error,"otc.p2p.tick_failed");
+            }
+        }
         if !self.cfg.enabled {
             let pending:i64=self.pool.get().await?.query_one("SELECT count(*) FROM otc_trades WHERE state NOT IN ('completed','refunded','rejected','expired')",&[]).await?.get(0);
             if pending == 0 {

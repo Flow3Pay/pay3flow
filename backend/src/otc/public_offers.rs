@@ -24,7 +24,7 @@ fn legacy_sell_direction() -> Direction {
     Direction::Sell
 }
 impl PublicOfferDraft {
-    fn terms(&self) -> Result<Value> {
+    fn terms(&self, cfg: &super::config::Config) -> Result<Value> {
         let ever = amount::units(&self.ever_amount, 9)?;
         let usdt = amount::units(&self.usdt_amount, 6)?;
         if ever > 100_000 * 1_000_000_000u128 || usdt > 1_000_000 * 1_000_000u128 {
@@ -38,8 +38,8 @@ impl PublicOfferDraft {
             "direction":self.direction, "ever_amount":amount::decimal(ever,9),
             "usdt_amount":amount::decimal(usdt,6), "ever_units":ever.to_string(),
             "usdt_units":usdt.to_string(), "usdt_address":recipient,
-            "ever_network_id":42, "ethereum_chain_id":1,
-            "usdt_contract":super::config::USDT,
+            "ever_network_id":42, "ethereum_chain_id":cfg.ethereum_chain_id,
+            "usdt_contract":cfg.usdt_contract,
         }))
     }
 }
@@ -97,7 +97,7 @@ impl Service {
         if !self.public_offers_available() {
             return Err(Error::Disabled);
         }
-        let terms = draft.terms()?;
+        let terms = draft.terms(&self.cfg)?;
         let seller = self.wallet(actor, "everscale").await?;
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
@@ -135,7 +135,7 @@ impl Service {
     }
     pub(crate) async fn cancel_public_offer(&self, actor: &str, id: Uuid) -> Result<Value> {
         let client = self.pool.get().await?;
-        let row = client.query_opt("UPDATE otc_public_offers SET state='cancelled' WHERE id=$1 AND actor=$2 RETURNING *", &[&id,&actor]).await?.ok_or(Error::NotFound)?;
+        let row = client.query_opt("UPDATE otc_public_offers SET state='cancelled' WHERE id=$1 AND actor=$2 AND state='open' RETURNING *", &[&id,&actor]).await?.ok_or(Error::NotFound)?;
         Ok(offer(&row))
     }
 }
@@ -153,34 +153,45 @@ mod tests {
     }
     #[test]
     fn sale_has_exact_mainnet_terms_and_never_needs_usdt_inventory() {
-        let terms = draft().terms().unwrap();
+        let cfg = super::super::config::Config::default();
+        let terms = draft().terms(&cfg).unwrap();
         assert_eq!(terms["ever_units"], "250000000000");
         assert_eq!(terms["usdt_units"], "5000000");
         assert_eq!(terms["ethereum_chain_id"], 1);
         for value in ["0", "-1", "0.0000000001", "100001", "NaN"] {
             let mut item = draft();
             item.ever_amount = value.into();
-            assert!(item.terms().is_err(), "{value}");
+            assert!(item.terms(&cfg).is_err(), "{value}");
         }
         for value in ["0", "-1", "0.0000001", "1000001"] {
             let mut item = draft();
             item.usdt_amount = value.into();
-            assert!(item.terms().is_err(), "{value}");
+            assert!(item.terms(&cfg).is_err(), "{value}");
         }
         let mut item = draft();
         item.usdt_address = format!("0x{}", "0".repeat(40));
-        assert!(item.terms().is_err());
+        assert!(item.terms(&cfg).is_err());
     }
 
     #[test]
     fn buy_and_legacy_sell_directions_are_explicit_and_strict() {
+        let cfg = super::super::config::Config {
+            ethereum_chain_id: 11155111,
+            usdt_contract: format!("0x{}", "c".repeat(40)),
+            ..Default::default()
+        };
         let body = json!({"ever_amount":"100","usdt_amount":"11.889","usdt_address":format!("0x{}","b".repeat(40))});
         let legacy: PublicOfferDraft = serde_json::from_value(body.clone()).unwrap();
-        assert_eq!(legacy.terms().unwrap()["direction"], "sell");
+        assert_eq!(legacy.terms(&cfg).unwrap()["direction"], "sell");
         let mut buy = body.clone();
         buy["direction"] = json!("buy");
         let buy: PublicOfferDraft = serde_json::from_value(buy).unwrap();
-        assert_eq!(buy.terms().unwrap()["direction"], "buy");
+        assert_eq!(buy.terms(&cfg).unwrap()["direction"], "buy");
+        assert_eq!(buy.terms(&cfg).unwrap()["ethereum_chain_id"], 11155111);
+        assert_eq!(
+            buy.terms(&cfg).unwrap()["usdt_contract"],
+            format!("0x{}", "c".repeat(40))
+        );
         let mut invalid = body;
         invalid["direction"] = json!("anything");
         assert!(serde_json::from_value::<PublicOfferDraft>(invalid).is_err());
@@ -327,10 +338,10 @@ mod tests {
             service.cancel_public_offer("seller", id).await.unwrap()["state"],
             "cancelled"
         );
-        assert_eq!(
-            service.cancel_public_offer("seller", id).await.unwrap()["state"],
-            "cancelled"
-        );
+        assert!(matches!(
+            service.cancel_public_offer("seller", id).await,
+            Err(Error::NotFound)
+        ));
         assert!(service
             .public_offers(None)
             .await

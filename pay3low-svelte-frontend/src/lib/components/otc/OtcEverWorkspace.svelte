@@ -6,7 +6,7 @@
   import { otcCopy } from "$lib/otc/copy";
   import type { OtcPreview } from "$lib/share-links";
   import { parseOtcHash } from "$lib/otc/link";
-  import { request, signInWallet, OtcRequestError, bindWallet, sendAttempt, decimal, rate, type Config, type Session, type Proposal, type Trade, type Rfq, type Attempt, type Direction } from "$lib/otc/service";
+  import { request, signInWallet, OtcRequestError, bindWallet, sendAttempt, decimal, rate, setOtcNetwork, type Config, type Session, type Proposal, type Trade, type Rfq, type Attempt, type Direction } from "$lib/otc/service";
   import type { PublicOffer } from "$lib/otc/public-offers";
   import { exactInput, proposalDirection, terminalStates, completedVolume } from "$lib/otc/terminal";
   import "$lib/otc/terminal.css";
@@ -23,7 +23,7 @@
   import OtcTransferReview from "./OtcTransferReview.svelte";
   import OtcOffers from "./OtcOffers.svelte";
   import OtcTerminal from "./OtcTerminal.svelte";
-  import OtcEverscaleMultisig from "./OtcEverscaleMultisig.svelte";
+  import OtcDealPanel from "./OtcDealPanel.svelte";
   import OtcTradeTables from "./OtcTradeTables.svelte";
   export let onPreviewChange: (preview: OtcPreview | null) => void = () => {};
   export let onShareUrlChange: (url: string) => void = () => {};
@@ -39,6 +39,7 @@
   let tab: "trades" | "orders" | "history" = "orders", now = Date.now();
   let offersBusy = false;
   let offerBook: OtcDeskBook;
+  let dealPanel: OtcDealPanel | null = null;
   $: saleEnabled = !!config?.public_offers_available && (config.public_offer_directions ?? ["sell"]).includes(direction) && !listingId && !quote;
   const sessionKey = "pay3flow.otc.session.v1", layoutKey = "pay3flow.otc.panels.v1";
   $: copy = otcCopy($locale);
@@ -104,6 +105,7 @@
       const [route, proposals] = await Promise.all([request<Config>("/config"), request<Proposal[]>("/listings")]);
       if (!mounted) return;
       config = route; listings = proposals; healthy = true; loaded = true;
+      try { setOtcNetwork(route); void dealPanel?.refresh(); } catch (e) { error = e instanceof Error ? e.message : "Unsupported OTC network"; }
       if (!session) return;
       const owner = session, previousSelection = selected?.id, previousVersion = selectionVersion;
       const current = await request<Session>("/session", owner.token);
@@ -136,6 +138,10 @@
   function chooseSide(next: Direction) { if (next !== direction) { direction = next; listingId = ""; edited(); syncLink(); } }
   function selectListing(proposal: Proposal, side: Direction) { chooseSide(side); if (listingId !== proposal.id) edited(); listingId = proposal.id; bridgeOpen = true; document.getElementById("otc-input")?.focus(); }
   function openOffer(offer: PublicOffer) { void tick().then(() => offerBook?.openOffer(offer)); }
+  function acceptOffer(id: string) {
+    tab = "orders"; activityOpen = true;
+    void tick().then(() => dealPanel?.accept(id));
+  }
   function retainSession(current: Session) {
     if (session?.actor !== current.actor && sessionStorage.getItem("pay3flow.otc.recovery.actor") === current.actor) {
       try { handoff = JSON.parse(sessionStorage.getItem("pay3flow.otc.handoff") || "null"); } catch { handoff = null; }
@@ -269,7 +275,6 @@
 <OtcOffers enabled={!!config?.public_offers_available} {direction} {session} {busy} bind:posting={offersBusy} onConnect={() => run(() => session ? verify("everscale") : connectAccount("everscale"))} onPublished={() => { bookOpen = true; activityOpen = true; tab = "orders"; }} let:ticket let:offers let:mine let:history={offerHistory} let:message let:offerError let:onCancel>
 <section class="otcWorkspace" data-testid="otc-workspace" data-state={!loaded ? "connecting" : !healthy ? "unavailable" : "connected"}>
   <div class="pageIntro"><div><h1>{copy.titleLead}<span class="titleAccent">{copy.titleAccent}</span></h1><p>{config?.public_offers_available ? say("Native EVER on Everscale. USDT on Ethereum. Your OTC offers.", "Нативный EVER в Everscale. USDT в Ethereum. Ваши предложения OTC.") : say("Native EVER on Everscale. USDT on Ethereum. Direct desk settlement.", "Нативный EVER в Everscale. USDT в Ethereum. Прямой обмен с деском.")}</p></div></div>
-  <OtcEverscaleMultisig {config} {session} {busy} onConnect={() => connectAccount("everscale")} onBusyChange={value => busy = value} />
   <OtcTerminal bind:bridgeOpen bind:bookOpen {motionDuration} selectedRate={saleEnabled ? ticket.askingRate : selected ? rate(selected.terms) : "—"} rateLabel={saleEnabled ? say("Your offer price", "Цена вашего оффера") : ""} bookTitle={config?.public_offers_available ? say("Orderbook", "Стакан") : say("Desk offers", "Предложения деска")} stats={[
     {label:say("Desk","Деск"),value:config?.desk_name || "—"},
     {label:config?.public_offers_available ? say("Open offers","Открытые офферы") : say("Desk offers","Предложения деска"),value:String(listings.length + offers.length),secondary:true},
@@ -279,9 +284,9 @@
   <div slot="status" class="serviceControls">{#if offerError}<p class="message error" role="alert">{offerError}</p>{/if}{#if message}<p class="message" role="status">{message}</p>{/if}{#if walletProgress}<p class="message" role="status">{walletProgress}</p>{/if}{#if error}<p class="message error" role="alert">{error}</p>{/if}{#if notice}<p class="message" role="status">{notice}</p>{/if}{#if unresolvedBooking}<p class="message" role="status">{say("The original booking is awaiting its decision. Another selection is blocked.", "Ожидается решение по исходной сделке. Другое бронирование заблокировано.")}</p><button disabled={busy || !healthy || !bookingUnknown} on:click={() => run(reconcileBooking)}>{say("Reconcile original booking", "Проверить исходное бронирование")}</button>{/if}</div>
     <svelte:fragment slot="ticket"><OtcTicket sale={saleEnabled ? ticket : null} {direction} bind:input {quote} busy={busy || offersBusy} disabled={!exactInput(input, direction) || unresolvedBooking || (needsWallets && !quote ? !(config?.wallet_login_available ?? config?.enabled) : !healthy || !config?.available || !listing || (!!quote && now > Date.parse(quote.terms.quote_by)))} status={quote || saleEnabled ? "" : quoteStatus} desk={config?.desk_name || ""} onDirection={chooseSide} onEdit={edited} onRequest={requestQuote} onReview={() => { tab = "orders"; activityOpen = true; document.getElementById("otc-activity-section")?.scrollIntoView({ block: "start", behavior: motionDuration ? "smooth" : "instant" }); }} /></svelte:fragment>
     <OtcQuoteChart slot="chart" {trades} publicOffers={config?.public_offers_available && (saleEnabled || !trades.length) ? offerHistory : null} />
-    <OtcDeskBook slot="book" publicOffers={offers} ownIds={mine.map(o => o.id)} onCancel={onCancel} busy={busy || offersBusy} {config} {listings} selectedId={listing?.id || ""} onSelect={selectListing} />
+    <OtcDeskBook slot="book" publicOffers={offers} ownIds={mine.map(o => o.id)} onCancel={onCancel} onAccept={acceptOffer} busy={busy || offersBusy} {config} {listings} selectedId={listing?.id || ""} onSelect={selectListing} />
   </OtcTerminal>
-  <p class="risk">{config?.public_offers_available && !config.available ? say("Publication does not move or reserve funds. Buyer acceptance and settlement through this site are not available yet.", "Публикация не переводит и не резервирует средства. Принятие предложения покупателем и расчёты через сайт пока недоступны.") : config?.escrow ? say("Each trade uses a 2-of-3 USDT escrow for four hours from creation, capped at 100,000 EVER. USDT is funded first. Native EVER delivery is separate and is not reversed by a USDT refund.", "Каждая сделка использует эскроу USDT с 2 из 3 подписей на 4 часа с момента создания, до 100 000 EVER. Сначала вносится USDT. Перевод EVER выполняется отдельно и не отменяется возвратом USDT.") : say("Two separate transfers: the customer pays first; the desk delivers or refunds. No atomic swap or automatic rollback.", "Два отдельных перевода: клиент платит первым, деск выполняет выплату или возврат. Атомарного обмена и автоматического отката нет.")}</p>
+  <p class="risk">{config?.p2p_available ? say("Accepting an offer creates two direct transfers between the wallets of both parties. There is no escrow and no automatic rollback: whoever sends first relies on the counterparty delivering afterwards.", "Принятие оффера создаёт два прямых перевода между кошельками сторон. Эскроу и автоматического отката нет: кто отправляет первым, полагается на то, что контрагент выполнит свой перевод следом.") : config?.public_offers_available && !config.available ? say("Publication does not move or reserve funds. Buyer acceptance and settlement through this site are not available yet.", "Публикация не переводит и не резервирует средства. Принятие предложения покупателем и расчёты через сайт пока недоступны.") : config?.escrow ? say("Each trade uses a 2-of-3 USDT escrow for four hours from creation, capped at 100,000 EVER. USDT is funded first. Native EVER delivery is separate and is not reversed by a USDT refund.", "Каждая сделка использует эскроу USDT с 2 из 3 подписей на 4 часа с момента создания, до 100 000 EVER. Сначала вносится USDT. Перевод EVER выполняется отдельно и не отменяется возвратом USDT.") : say("Two separate transfers: the customer pays first; the desk delivers or refunds. No atomic swap or automatic rollback.", "Два отдельных перевода: клиент платит первым, деск выполняет выплату или возврат. Атомарного обмена и автоматического отката нет.")}</p>
   <div class="activityToggle"><OtcPanelToggle title={say("Trade activity", "Активность сделок")} controls="otc-activity-section" bind:expanded={activityOpen} vertical /></div>
   {#if activityOpen}<div class="activitySection" id="otc-activity-section" transition:slide={{ duration: motionDuration, easing: cubicOut }}><OtcPanel id="otc-activity" title={say("Trade activity", "Активность сделок")} collapsible={false}><span slot="actions" class="panelMeta">EVER/USDT</span>
     <div class="activityTabs" role="tablist" aria-label={say("Trade activity", "Активность сделок")} use:activityIndicator={`${tab}:${$locale}:${activeTrades.length}`} style:--activity-motion={`${motionDuration}ms`}>{#each ["trades", "orders", "history"] as item}<button type="button" role="tab" id={`otc-${item}-tab`} aria-selected={tab === item} tabindex={tab === item ? 0 : -1} aria-controls={`otc-${item}-content`} class:active={tab === item} on:keydown={navigateTab} on:click={() => tab = item as typeof tab}>{item === "trades" ? config?.public_offers_available ? say("Orderbook", "Стакан") : say("Desk offers", "Предложения деска") : item === "orders" ? config?.public_offers_available ? say("My orders", "Мои заявки") : say("My trades", "Мои сделки") : say("History", "История")}{#if item === "orders" && activeTrades.length + mine.filter(o => o.state === "open").length}<span class="orderCount">{activeTrades.length + mine.filter(o => o.state === "open").length}</span>{/if}</button>{/each}<span class="tabIndicator" aria-hidden="true"></span></div>
@@ -291,9 +296,10 @@
         {#if config?.public_offers_available}
           <OtcTradeTables trades={[]} offers={offers} busy={busy || offersBusy} onSelect={() => {}} onOfferSelect={openOffer} emptyTitle={say("No open offers", "Пока нет офферов")} emptyHint={say("Be the first to post an offer.", "Опубликуйте первый оффер.")} />
         {:else}
-          <OtcDeskBook publicOffers={offers} ownIds={mine.map(o => o.id)} onCancel={onCancel} busy={busy || offersBusy} {config} {listings} selectedId={listing?.id || ""} onSelect={selectListing} />
+          <OtcDeskBook publicOffers={offers} ownIds={mine.map(o => o.id)} onCancel={onCancel} onAccept={acceptOffer} busy={busy || offersBusy} {config} {listings} selectedId={listing?.id || ""} onSelect={selectListing} />
         {/if}
       {:else}
+        {#if tab === "orders"}<OtcDealPanel bind:this={dealPanel} {config} {session} locked={busy || offersBusy} {now} onNotice={message => notice = message} onError={message => error = message} onBusyChange={value => busy = value} />{/if}
         <OtcTradeTables trades={tab === "orders" ? activeTrades : history} offers={tab === "orders" ? mine.filter(o => o.state === "open") : mine.filter(o => o.state !== "open")} selectedId={selected?.id || ""} busy={busy || offersBusy} onSelect={id => run(() => selectTrade(id, true), false)} onOfferSelect={openOffer} emptyTitle={tab === "orders" ? say("No open orders", "Открытых ордеров нет") : say("No history yet", "Истории пока нет")} emptyHint={session ? say("Quotes, offers and accepted trades appear here.", "Здесь появятся котировки, офферы и принятые сделки.") : say("Connect your wallet to see private quotes and trades.", "Подключите кошелёк для доступа к приватным котировкам и сделкам.")} />
         {#if tab === "orders"}{#each rfqs.filter(r => r.state === "waiting") as r}<p class="waiting">{say("Waiting for desk quote", "Ожидается котировка деска")} · {r.direction} · {r.input} · {r.id}</p>{/each}{/if}
         {#if selected}<div class="tradeDetail">{#if handoffUnknown}<p class="waiting">{say("Saved outgoing attempt is unresolved. Another send is blocked.", "Сохранённая попытка перевода не завершена. Повторная отправка заблокирована.")}</p>{/if}<OtcTradeDetails {selected} {session} {config} {attempts} {receipts} {updates} busy={busy || !healthy} {unresolvedBooking} {handoffUnknown} {now} onApply={() => run(apply)} onDecide={accept => run(() => decide(accept))} onBusyChange={value => { busy = value; accountLocked = value; }} onRefresh={refresh} onTransfer={kind => run(() => prepareReview(kind))} onTrack={(attempt, reference) => run(() => track(attempt, reference))} onRetry={(attempt, evidence) => run(async () => { await request(`/attempts/${attempt.id}/retry`, session!.token, { evidence: { note: evidence } }); await refresh(); })} /></div>{/if}
@@ -303,7 +309,7 @@
   </OtcPanel></div>{/if}
   {#if session?.desk}<div class="console"><OtcDeskConsole {session} {config} {selected} {rfqs} {dashboard} {busy} {run} onRefresh={refresh} onSelect={selectTrade} /></div>{/if}
 </section>
-<OtcDeskBook bind:this={offerBook} dialogOnly publicOffers={offers} ownIds={mine.map(o => o.id)} onCancel={onCancel} onSelect={() => {}} busy={busy || offersBusy} {config} />
+<OtcDeskBook bind:this={offerBook} dialogOnly publicOffers={offers} ownIds={mine.map(o => o.id)} onCancel={onCancel} onAccept={acceptOffer} onSelect={() => {}} busy={busy || offersBusy} {config} />
 </OtcOffers>
 
 {#if transferReview}<OtcTransferReview trade={transferReview.trade} kind={transferReview.kind} instructions={transferReview.attempt.instructions} disabled={busy || !!config?.demo || transferReview.trade.terms.demo || (transferReview.attempt.instructions.escrow && now >= Date.parse(transferReview.attempt.instructions.expires_at!) - 1800000) || (!transferReview.trade.terms.escrow && transferReview.kind === "payment" && now > Date.parse(transferReview.trade.terms.pay_by))} onClose={() => transferReview = null} onConfirm={() => run(confirmTransfer)} />{/if}

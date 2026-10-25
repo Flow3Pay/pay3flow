@@ -1,7 +1,12 @@
 {
   "enabled": false,
   "public_offers_enabled": false,
+  "p2p_enabled": false,
   "demo": false,
+  "ethereum_chain_id": 1,
+  "usdt_contract": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+  "p2p_ever_fee_reserve": "0.05",
+  "origin": "https://app.example",
   "relay_origin": "https://relay.example",
   "matcher_actor": "https://relay.example/actors/fmatch",
   "desk_actor": "https://relay.example/actors/desk",

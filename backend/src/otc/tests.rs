@@ -108,13 +108,13 @@ fn ethereum_receipt_requires_exact_token_sender_nonce_and_finality() {
     let block = json!({"hash":"canonical","timestamp":"0x640","number":"0x64"});
     let receipt = json!({"status":"0x1","blockHash":"canonical","blockNumber":"0x64","transactionHash":hash,"logs":[{"address":super::config::USDT,"topics":["0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",format!("0x{:0>64}",leg.sender.trim_start_matches("0x")),format!("0x{:0>64}",leg.recipient.trim_start_matches("0x"))],"data":"0x5f5e100","logIndex":"0x0","removed":false}]});
     assert!(
-        !super::chain::ethereum::receipt(&receipt, &tx, &block, 99, &leg, Some(3))
+        !super::chain::ethereum::receipt(&receipt, &tx, &block, 99, &leg, Some(3), super::config::USDT)
             .unwrap()
             .unwrap()
             .finalized
     );
     assert!(
-        super::chain::ethereum::receipt(&receipt, &tx, &block, 100, &leg, Some(3))
+        super::chain::ethereum::receipt(&receipt, &tx, &block, 100, &leg, Some(3), super::config::USDT)
             .unwrap()
             .unwrap()
             .finalized
@@ -130,18 +130,18 @@ fn ethereum_receipt_requires_exact_token_sender_nonce_and_finality() {
         let mut bad = receipt.clone();
         *bad.pointer_mut(pointer).unwrap() = json!("0x0");
         assert!(
-            super::chain::ethereum::receipt(&bad, &tx, &block, 100, &leg, Some(3)).is_err(),
+            super::chain::ethereum::receipt(&bad, &tx, &block, 100, &leg, Some(3), super::config::USDT).is_err(),
             "{pointer}"
         );
     }
-    assert!(super::chain::ethereum::receipt(&receipt, &tx, &block, 100, &leg, Some(4)).is_err());
+    assert!(super::chain::ethereum::receipt(&receipt, &tx, &block, 100, &leg, Some(4), super::config::USDT).is_err());
     let mut bad = receipt.clone();
     bad["logs"][0]["removed"] = json!(true);
-    assert!(super::chain::ethereum::receipt(&bad, &tx, &block, 100, &leg, Some(3)).is_err());
+    assert!(super::chain::ethereum::receipt(&bad, &tx, &block, 100, &leg, Some(3), super::config::USDT).is_err());
     let mut bad = receipt;
     let duplicated = bad["logs"][0].clone();
     bad["logs"].as_array_mut().unwrap().push(duplicated);
-    assert!(super::chain::ethereum::receipt(&bad, &tx, &block, 100, &leg, Some(3)).is_err());
+    assert!(super::chain::ethereum::receipt(&bad, &tx, &block, 100, &leg, Some(3), super::config::USDT).is_err());
 }
 #[test]
 fn ever_receipt_traces_net_delivery_and_bounce() {
@@ -213,10 +213,11 @@ pub(super) async fn fixture() -> (Service, tokio::task::JoinHandle<()>, String) 
         .await
         .unwrap()
         .batch_execute(&format!(
-            "{}\n{}\n{}",
+            "{}\n{}\n{}\n{}",
             include_str!("../../migrations/otc.sql"),
             include_str!("../../migrations/otc_escrow.sql"),
-            include_str!("../../migrations/otc_public_offers.sql")
+            include_str!("../../migrations/otc_public_offers.sql"),
+            include_str!("../../migrations/otc_p2p.sql")
         ))
         .await
         .unwrap();
@@ -893,5 +894,321 @@ async fn short_payment_can_only_refund_the_verified_actual_amount() {
         service.owned_trade(&actor, id).await.unwrap().terms.input,
         "200"
     );
+    cleanup(service, task).await;
+}
+
+/// Isolated service for direct peer-to-peer settlement. The Ethereum RPC answers
+/// twice as two independent readers, so quorum reads behave as they do in production.
+async fn p2p_fixture() -> (Service, tokio::task::JoinHandle<()>, String, String) {
+    let url = std::env::var("OTC_TEST_DATABASE_URL")
+        .expect("set OTC_TEST_DATABASE_URL to an isolated PostgreSQL database");
+    let root = crate::db::build_pool(&url).await.unwrap();
+    let schema = format!("otc_p2p_test_{}", Uuid::new_v4().simple());
+    root.get()
+        .await
+        .unwrap()
+        .batch_execute(&format!("CREATE SCHEMA {schema}"))
+        .await
+        .unwrap();
+    let sep = if url.contains('?') { '&' } else { '?' };
+    let pool = crate::db::build_pool(&format!("{url}{sep}options=-csearch_path%3D{schema}"))
+        .await
+        .unwrap();
+    pool.get()
+        .await
+        .unwrap()
+        .batch_execute(&format!(
+            "{}\n{}\n{}\n{}",
+            include_str!("../../migrations/otc.sql"),
+            include_str!("../../migrations/otc_escrow.sql"),
+            include_str!("../../migrations/otc_public_offers.sql"),
+            include_str!("../../migrations/otc_p2p.sql")
+        ))
+        .await
+        .unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let mut cfg = config();
+    cfg.demo = false;
+    cfg.relay_origin = base.clone();
+    cfg.desk_actor = format!("{base}/actors/desk");
+    cfg.matcher_actor = format!("{base}/actors/matcher");
+    cfg.ethereum_rpc = vec![base.clone(), base.clone()];
+    cfg.public_offers_enabled = true;
+    cfg.p2p_enabled = true;
+    cfg.everwallet_code_hashes = vec![super::everwallet::CODE_HASH.to_string()];
+    let app = axum::Router::new().route(
+        "/",
+        axum::routing::post(|axum::Json(body): axum::Json<Value>| async move {
+            axum::Json(json!({
+                "jsonrpc": "2.0",
+                "id": body["id"],
+                "result": match body["method"].as_str() {
+                    Some("eth_chainId") => json!("0x1"),
+                    Some("eth_getBlockByNumber") => json!({"number": "0x3"}),
+                    _ => json!("0x3"),
+                }
+            }))
+        }),
+    );
+    let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let service = Service {
+        pool,
+        cfg: Arc::new(cfg),
+        secrets: crate::core::crypto::SecretBox::new("fixture-key"),
+        jwt: crate::core::jwt::Jwt::new("fixture-jwt"),
+        http: reqwest::Client::new(),
+    };
+    let owner = format!("{base}/actors/customer");
+    let taker = format!("{base}/actors/customer2");
+    let client = service.pool.get().await.unwrap();
+    client.execute("UPDATE otc_controls SET paused=FALSE", &[]).await.unwrap();
+    for (actor, ever, usdt) in [
+        (
+            owner.clone(),
+            format!("0:{}", "b".repeat(64)),
+            format!("0x{}", "b".repeat(40)),
+        ),
+        (
+            taker.clone(),
+            format!("0:{}", "d".repeat(64)),
+            format!("0x{}", "d".repeat(40)),
+        ),
+    ] {
+        for (chain, address) in [("everscale", ever), ("ethereum", usdt)] {
+            client
+                .execute(
+                    "INSERT INTO otc_wallets VALUES($1,$2,$3,now())",
+                    &[&actor, &chain, &address],
+                )
+                .await
+                .unwrap();
+        }
+    }
+    (service, task, owner, taker)
+}
+
+fn draft(direction: Direction, usdt_address: &str) -> super::public_offers::PublicOfferDraft {
+    super::public_offers::PublicOfferDraft {
+        direction,
+        ever_amount: "250".into(),
+        usdt_amount: "11.889".into(),
+        usdt_address: usdt_address.into(),
+    }
+}
+
+async fn published_offer(service: &Service, owner: &str, direction: Direction) -> Uuid {
+    let offer = service
+        .post_public_offer(
+            owner,
+            &Uuid::new_v4().to_string(),
+            draft(direction, &format!("0x{}", "b".repeat(40))),
+        )
+        .await
+        .unwrap();
+    Uuid::parse_str(offer["id"].as_str().unwrap()).unwrap()
+}
+
+async fn deal_id(deal: &Value) -> Uuid {
+    Uuid::parse_str(deal["id"].as_str().unwrap()).unwrap()
+}
+
+async fn offer_state(service: &Service, owner: &str) -> String {
+    service.public_offers(Some(owner)).await.unwrap()[0]["state"]
+        .as_str()
+        .unwrap()
+        .to_string()
+}
+
+async fn trade_state(service: &Service, id: Uuid) -> String {
+    service
+        .pool
+        .get()
+        .await
+        .unwrap()
+        .query_one("SELECT state FROM otc_p2p_trades WHERE id=$1", &[&id])
+        .await
+        .unwrap()
+        .get::<_, String>(0)
+}
+
+#[tokio::test]
+#[ignore = "requires OTC_TEST_DATABASE_URL; run cargo test otc::tests -- --include-ignored"]
+async fn p2p_accept_binds_cross_legs_and_replays_the_key() {
+    let (service, task, owner, taker) = p2p_fixture().await;
+    let offer_id = published_offer(&service, &owner, Direction::Sell).await;
+    let deal = service.accept_offer(&taker, offer_id, "accept").await.unwrap();
+    assert_eq!(deal["state"], json!("payment_pending"));
+    assert_eq!(deal["role"], json!("taker"));
+    assert_eq!(deal["counterparty"], json!(owner));
+    assert_eq!(
+        deal["terms"]["usdt_payer"],
+        json!(format!("0x{}", "d".repeat(40)))
+    );
+    assert_eq!(
+        deal["terms"]["ever_payer"],
+        json!(format!("0:{}", "b".repeat(64)))
+    );
+    assert_eq!(
+        deal["terms"]["ever_payee"],
+        json!(format!("0:{}", "d".repeat(64)))
+    );
+    assert_eq!(offer_state(&service, &owner).await, "taken");
+    // Replaying the acceptance key returns the same deal instead of a second one.
+    let replay = service.accept_offer(&taker, offer_id, "accept").await.unwrap();
+    assert_eq!(replay["id"], deal["id"]);
+    // A fresh key cannot take an offer that is already reserved.
+    let error = service
+        .accept_offer(&taker, offer_id, "second")
+        .await
+        .expect_err("reserved offer must refuse a second acceptance");
+    assert!(
+        matches!(&error, super::error::Error::Conflict(message) if message.contains("no longer open")),
+        "{error:?}"
+    );
+    // Publishing a new offer and accepting it as yourself is refused.
+    let own = published_offer(&service, &owner, Direction::Sell).await;
+    let error = service
+        .accept_offer(&owner, own, "self")
+        .await
+        .expect_err("an actor cannot accept their own offer");
+    assert!(
+        matches!(&error, super::error::Error::Conflict(message) if message.contains("your own offer")),
+        "{error:?}"
+    );
+    cleanup(service, task).await;
+}
+
+#[tokio::test]
+#[ignore = "requires OTC_TEST_DATABASE_URL; run cargo test otc::tests -- --include-ignored"]
+async fn p2p_buy_offer_flips_which_side_pays_usdt() {
+    let (service, task, owner, taker) = p2p_fixture().await;
+    let offer_id = published_offer(&service, &owner, Direction::Buy).await;
+    let deal = service.accept_offer(&taker, offer_id, "accept").await.unwrap();
+    let id = deal_id(&deal).await;
+    // The offer owner pays USDT from the address in the offer and receives EVER
+    // in their own wallet, so the taker becomes the EVER payer.
+    assert_eq!(
+        deal["terms"]["usdt_payer"],
+        json!(format!("0x{}", "b".repeat(40)))
+    );
+    assert_eq!(
+        deal["terms"]["usdt_payee"],
+        json!(format!("0x{}", "d".repeat(40)))
+    );
+    assert_eq!(
+        deal["terms"]["ever_payer"],
+        json!(format!("0:{}", "d".repeat(64)))
+    );
+    assert_eq!(
+        deal["terms"]["ever_payee"],
+        json!(format!("0:{}", "b".repeat(64)))
+    );
+    // The taker is not the booked USDT payer, and cannot deliver EVER before
+    // the payment leg is verified.
+    let error = service
+        .p2p_prepare(&taker, id, "pay", "payment")
+        .await
+        .expect_err("only the booked payer may sign the payment leg");
+    assert!(matches!(error, super::error::Error::Unauthorized), "{error:?}");
+    let error = service
+        .p2p_prepare(&taker, id, "deliver", "payout")
+        .await
+        .expect_err("the EVER leg is not payable yet");
+    assert!(
+        matches!(error, super::error::Error::Conflict(_)),
+        "{error:?}"
+    );
+    cleanup(service, task).await;
+}
+
+#[tokio::test]
+#[ignore = "requires OTC_TEST_DATABASE_URL; run cargo test otc::tests -- --include-ignored"]
+async fn p2p_prepare_builds_the_payment_handoff_and_blocks_duplicates() {
+    let (service, task, owner, taker) = p2p_fixture().await;
+    let offer_id = published_offer(&service, &owner, Direction::Sell).await;
+    let deal = service.accept_offer(&taker, offer_id, "accept").await.unwrap();
+    let id = deal_id(&deal).await;
+    let prepared = service
+        .p2p_prepare(&taker, id, "pay-1", "payment")
+        .await
+        .unwrap();
+    let instructions = &prepared["attempt"]["instructions"];
+    assert_eq!(prepared["attempt"]["state"], json!("prepared"));
+    assert_eq!(instructions["leg"]["transfer_amount"], json!("11889000"));
+    assert_eq!(instructions["leg"]["chain"], json!("ethereum"));
+    assert_eq!(instructions["call"]["chain_id"], json!(1));
+    assert_eq!(instructions["call"]["nonce"], json!("0x3"));
+    assert_eq!(instructions["call"]["to"], json!(service.cfg.usdt_contract));
+    assert_eq!(instructions["checkpoint"], json!({"block": "0x3"}));
+    assert!(instructions["submit_path"]
+        .as_str()
+        .unwrap()
+        .starts_with("/p2p/attempts/"));
+    // Replaying the key returns the identical handoff, never a second one.
+    let replay = service
+        .p2p_prepare(&taker, id, "pay-1", "payment")
+        .await
+        .unwrap();
+    assert_eq!(replay["attempt"]["id"], prepared["attempt"]["id"]);
+    assert_eq!(&replay["attempt"]["instructions"], instructions);
+    // A new key cannot open a second live attempt for the same leg.
+    let error = service
+        .p2p_prepare(&taker, id, "pay-2", "payment")
+        .await
+        .expect_err("one unresolved attempt per leg");
+    assert!(matches!(error, super::error::Error::Conflict(_)), "{error:?}");
+    // Deals and attempts are visible only to the two parties.
+    let stranger = service.cfg.matcher_actor.clone();
+    assert!(matches!(
+        service.p2p_deal(&stranger, id).await,
+        Err(super::error::Error::NotFound)
+    ));
+    let visible = service.p2p_trades(&taker).await.unwrap();
+    assert_eq!(visible["deals"][0]["attempts"].as_array().unwrap().len(), 1);
+    cleanup(service, task).await;
+}
+
+#[tokio::test]
+#[ignore = "requires OTC_TEST_DATABASE_URL; run cargo test otc::tests -- --include-ignored"]
+async fn p2p_cancel_and_payment_expiry_return_the_offer_to_the_book() {
+    let (service, task, owner, taker) = p2p_fixture().await;
+    let offer_id = published_offer(&service, &owner, Direction::Sell).await;
+    let deal = service.accept_offer(&taker, offer_id, "accept").await.unwrap();
+    let first = deal_id(&deal).await;
+    let cancelled = service.p2p_cancel(&taker, first).await.unwrap();
+    assert_eq!(cancelled["state"], json!("cancelled"));
+    assert_eq!(offer_state(&service, &owner).await, "open");
+    // Once the payment handoff exists the deal can no longer be cancelled.
+    let again = service
+        .accept_offer(&taker, offer_id, "accept-2")
+        .await
+        .unwrap();
+    let second = deal_id(&again).await;
+    service
+        .p2p_prepare(&taker, second, "pay", "payment")
+        .await
+        .unwrap();
+    let error = service
+        .p2p_cancel(&taker, second)
+        .await
+        .expect_err("a prepared payment freezes cancellation");
+    assert!(matches!(error, super::error::Error::Conflict(_)), "{error:?}");
+    // An unpaid deal expires and the reserved offer becomes available again.
+    service
+        .pool
+        .get()
+        .await
+        .unwrap()
+        .execute(
+            "UPDATE otc_p2p_trades SET pay_by=now()-interval '1 second' WHERE id=$1",
+            &[&second],
+        )
+        .await
+        .unwrap();
+    service.p2p_tick().await.unwrap();
+    assert_eq!(trade_state(&service, second).await, "expired");
+    assert_eq!(trade_state(&service, first).await, "cancelled");
+    assert_eq!(offer_state(&service, &owner).await, "open");
     cleanup(service, task).await;
 }

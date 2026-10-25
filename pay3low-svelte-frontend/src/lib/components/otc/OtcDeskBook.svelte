@@ -6,6 +6,7 @@
   import { saleRate, compareOfferRates, offerDirection, offerOwner, type PublicOffer } from "$lib/otc/public-offers";
   export let publicOffers: PublicOffer[] = [], ownIds: string[] = [];
   export let onCancel: (id: string) => void = () => {};
+  export let onAccept: (id: string) => void = () => {};
   export let busy = false, compact = false, showEmpty = true;
   export let dialogOnly = false;
   export let testId = "otc-public-offer";
@@ -196,7 +197,7 @@
         {/each}
       </div>
     {/if}
-    <p class="bookFooter">{config?.public_offers_available ? (config.available ? say("Public offers · USDT / EVER", "Публичные офферы · USDT / EVER") : say("Offers are public · settlement on this site is paused", "Офферы публичны · расчёты через сайт отключены")) : say("Desk quotes · USDT / EVER", "Котировки деска · USDT / EVER")}</p>
+    <p class="bookFooter">{config?.public_offers_available ? (config.p2p_available ? say("Public offers · USDT / EVER · accept to settle wallet to wallet", "Публичные офферы · USDT / EVER · примите оффер для расчёта между кошельками") : config.available ? say("Public offers · USDT / EVER", "Публичные офферы · USDT / EVER") : say("Offers are public · settlement on this site is paused", "Офферы публичны · расчёты через сайт отключены")) : say("Desk quotes · USDT / EVER", "Котировки деска · USDT / EVER")}</p>
   {/if}
 {/if}
 
@@ -204,6 +205,7 @@
   {@const selected = selectedOffer}
   {@const side = offerDirection(selected)}
   {@const isOwn = ownIds.includes(selected.id)}
+  {@const canAccept = !!config?.p2p_available && !isOwn && selected.state === "open" && Date.parse(selected.expires_at) > Date.now()}
   <dialog bind:this={dialog} class="offerDialog" aria-labelledby="otc-offer-details-title" on:cancel|preventDefault={closeOffer} on:click={(event) => { if (event.target === dialog) closeOffer(); }}>
     <div class="dialogHead"><div><span class="dialogEyebrow" class:sell={side === "sell"}>{side === "buy" ? say("BUY OFFER", "ОФФЕР НА ПОКУПКУ") : say("SELL OFFER", "ОФФЕР НА ПРОДАЖУ")}</span><h2 id="otc-offer-details-title">{say("Offer details", "Детали оффера")}</h2></div><button type="button" class="iconButton" aria-label={say("Close", "Закрыть")} on:click={closeOffer}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button></div>
     <div class="dialogSummary"><div><span>{say("Price", "Цена")}</span><strong>{saleRate(selected.terms.ever_amount,selected.terms.usdt_amount)} <small>USDT / EVER</small></strong></div><div><span>{say("Amount", "Количество")}</span><strong>{selected.terms.ever_amount} <small>EVER</small></strong></div><div><span>{say("Total", "Сумма")}</span><strong>{selected.terms.usdt_amount} <small>USDT</small></strong></div></div>
@@ -212,7 +214,9 @@
       <div class="addressRow"><img src="/icons/assets/usdt.png" alt="" width="22" height="22"><div><span>{side === "buy" ? say("USDT paying wallet", "Кошелёк оплаты USDT") : say("USDT receiving wallet", "Кошелёк получения USDT")}</span><code>{selected.terms.usdt_address}</code></div><button class="copyButton" type="button" aria-label={say("Copy Ethereum address", "Копировать Ethereum-адрес")} on:click={() => copyAddress(selected.terms.usdt_address, "usdt")}>{#if copied === "usdt"}<span>{say("Copied", "Скопировано")}</span>{:else}<svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="7" y="7" width="9" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M12 7V4.5A1.5 1.5 0 0 0 10.5 3h-6A1.5 1.5 0 0 0 3 4.5v8A1.5 1.5 0 0 0 4.5 14H7" stroke="currentColor" stroke-width="1.5"/></svg>{/if}</button></div>
     </div>
     <div class="dialogFoot"><span><svg width="15" height="15" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M10 6v4l2.5 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>{say("Open until", "Действует до")} {new Date(selected.expires_at).toLocaleString($locale)}</span>{#if isOwn && selected.state === "open"}<button type="button" class="cancelOffer" disabled={busy} on:click={() => { onCancel(selected.id); closeOffer(); }}>{say("Cancel offer", "Снять оффер")}</button>{/if}</div>
-    {#if config?.public_offers_available && !config.available}<p class="settlementNote"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M10 9v4m0-6h.01" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>{say("Settlement through this site is currently unavailable. Verify addresses with the other party before sending funds.", "Расчёты через сайт сейчас недоступны. Перед переводом сверьте адреса с контрагентом.")}</p>{/if}
+    {#if canAccept}
+      <div class="acceptRow"><p>{say("Two direct transfers between the two wallets: one side sends USDT, the other sends EVER. There is no escrow, so send only after checking the addresses.", "Два прямых перевода между кошельками: одна сторона отправляет USDT, другая — EVER. Эскроу нет, поэтому отправляйте только проверив адреса.")}</p><button type="button" class="acceptOffer" disabled={busy} data-testid="otc-accept-offer" on:click={() => { onAccept(selected.id); closeOffer(); }}>{say("Accept offer", "Принять оффер")}<span aria-hidden="true">↗</span></button></div>
+    {:else if config?.public_offers_available && !config.available}<p class="settlementNote"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M10 9v4m0-6h.01" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>{say("Settlement through this site is currently unavailable. Verify addresses with the other party before sending funds.", "Расчёты через сайт сейчас недоступны. Перед переводом сверьте адреса с контрагентом.")}</p>{/if}
   </dialog>
 {/if}
 
@@ -289,7 +293,7 @@
   .empty strong { font-size:13px; font-weight:650; }
   .empty p { margin:0; color:var(--color-text-soft); font-size:12px; }
   .bookFooter { display:flex; flex:0 0 auto; min-height:42px; align-items:center; padding:9px var(--otc-panel-padding,20px); border-top:1px solid var(--color-border); color:var(--color-text-soft); font-size:10px; line-height:1.45; }
-  .offerDialog { width:min(460px,calc(100% - 32px)); max-height:min(86dvh,720px); padding:0; overflow:auto; border:1px solid var(--color-border-strong); border-radius:14px; background:var(--color-paper); color:var(--color-text); box-shadow:0 24px 80px #0005; }
+  .offerDialog { position:fixed; top:0; right:0; bottom:0; left:0; margin:auto; width:min(460px,calc(100% - 32px)); height:fit-content; max-height:min(86dvh,720px); padding:0; overflow:auto; border:1px solid var(--color-border-strong); border-radius:14px; background:var(--color-paper); color:var(--color-text); box-shadow:0 24px 80px #0005; }
   .offerDialog::backdrop { background:#10151bcc; backdrop-filter:blur(4px); }
   .dialogHead { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:20px 22px 16px; border-bottom:1px solid var(--color-border); }
   .dialogEyebrow { color:var(--otc-buy); font-family:var(--font-mono); font-size:10px; font-weight:700; letter-spacing:.08em; }
@@ -312,7 +316,12 @@
   .cancelOffer:disabled { opacity:.5; cursor:default; }
   .settlementNote { display:flex; align-items:flex-start; gap:8px; margin:0; padding:12px 22px 18px; color:var(--color-text-soft); font-size:11px; line-height:1.55; }
   .settlementNote svg { flex:0 0 auto; color:var(--color-accent-strong); }
+  .acceptRow { display:grid; gap:12px; margin:0; padding:14px 22px 18px; border-top:1px solid var(--color-border); }
+  .acceptRow p { margin:0; color:var(--color-text-soft); font-size:11px; line-height:1.55; }
+  .acceptOffer { display:flex; min-height:44px; align-items:center; justify-content:space-between; gap:10px; padding:10px 14px; border:1px solid var(--color-accent-strong); border-radius:8px; background:var(--color-accent); color:#152016; font-size:13px; font-weight:750; }
+  .acceptOffer:disabled { opacity:.45; cursor:default; }
+  .acceptOffer:focus-visible { outline:var(--focus-ring-width) solid var(--color-focus); outline-offset:2px; }
   @media (min-width:640px) { .rowOwner { display:flex; } }
-  @media (max-width:520px) { .bookHeader,.bookRow { grid-template-columns:minmax(0,1fr) minmax(0,.8fr) minmax(0,.75fr) 12px; gap:5px; } .bookHeader,.bookRow { padding-right:12px; padding-left:12px; } .rowAmount small,.rowTotal small { display:none; } .obColumns,.obRow,.obSideHead,.obEmpty,.obMid { padding-right:12px; padding-left:12px; } .obRow,.obColumns { gap:5px; } .obRow { font-size:10.5px; } .dialogHead,.dialogSummary,.addressList { padding-right:16px; padding-left:16px; } .settlementNote { padding-right:16px; padding-left:16px; } .dialogFoot { align-items:flex-start; padding-right:16px; padding-left:16px; } }
+  @media (max-width:520px) { .bookHeader,.bookRow { grid-template-columns:minmax(0,1fr) minmax(0,.8fr) minmax(0,.75fr) 12px; gap:5px; } .bookHeader,.bookRow { padding-right:12px; padding-left:12px; } .rowAmount small,.rowTotal small { display:none; } .obColumns,.obRow,.obSideHead,.obEmpty,.obMid { padding-right:12px; padding-left:12px; } .obRow,.obColumns { gap:5px; } .obRow { font-size:10.5px; } .dialogHead,.dialogSummary,.addressList { padding-right:16px; padding-left:16px; } .settlementNote { padding-right:16px; padding-left:16px; } .acceptRow { padding-right:16px; padding-left:16px; } .dialogFoot { align-items:flex-start; padding-right:16px; padding-left:16px; } }
   @media (prefers-reduced-motion:reduce) { .bookRow,.obRow,.proposalSelect,.copyButton { transition:none; } }
 </style>

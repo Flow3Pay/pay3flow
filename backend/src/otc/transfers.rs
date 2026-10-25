@@ -67,7 +67,9 @@ impl Service {
         }
         let checkpoint=self.pool.get().await?.query_one("SELECT checkpoint FROM otc_observers WHERE chain=$1 AND NOT paused AND last_scan>now()-interval '60 seconds'",&[&leg.chain]).await?.get::<_,Value>(0);
         let (nonce, call) = if leg.chain == "ethereum" {
-            if super::chain::number(&self.evm_agree("eth_chainId", json!([])).await?)? != 1 {
+            if super::chain::number(&self.evm_agree("eth_chainId", json!([])).await?)?
+                != u128::from(self.cfg.ethereum_chain_id)
+            {
                 return Err(invalid("wrong Ethereum network"));
             }
             let nonce = self
@@ -76,7 +78,7 @@ impl Service {
             let data = super::chain::ethereum::transfer_data(&leg)?;
             (
                 nonce.clone(),
-                json!({"family":"evm","chain_id":1,"from":leg.sender,"to":super::config::USDT,"data":data,"value":"0x0","nonce":nonce}),
+                json!({"family":"evm","chain_id":self.cfg.ethereum_chain_id,"from":leg.sender,"to":self.cfg.usdt_contract,"data":data,"value":"0x0","nonce":nonce}),
             )
         } else {
             (
