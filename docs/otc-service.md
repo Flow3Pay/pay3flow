@@ -98,6 +98,17 @@ payment handoff exists, and an unreadable observer reading keeps the attempt in
 `confirming` rather than `failed`, because marking a real payment failed would
 invite a second send.
 
+Peer settlement runs on its own Ethereum contour: `p2p_ethereum_chain_id`,
+`p2p_usdt_contract` and `p2p_ethereum_rpc` override `ethereum_chain_id`,
+`usdt_contract` and `ethereum_rpc` for offers, handoffs and observers only. A
+deployment can therefore keep the desk on mainnet USDT while advertisements
+settle on a testnet with the live `enabled: true` route untouched. Each deal
+stores the chain id and token it was booked on and is read back through the peer
+RPC pair on that chain, so repointing the contour mid-deal leaves the outstanding
+attempt in `confirming` instead of confirming evidence from another network.
+Acceptance additionally refuses an offer whose published chain or token differs
+from the live peer contour; those advertisements must be republished.
+
 Settlement follows `ethereum_chain_id` and `usdt_contract`, so a test network
 works without touching the desk configuration; `validate_network` rejects a
 non-canonical contract on mainnet and requires a usable

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evmNetworkFor, walletNetworkName } from "../src/lib/otc/network.ts";
+import { evmNetworkFor, p2pEvmNetworkFor, walletNetworkName } from "../src/lib/otc/network.ts";
 
 test("the OTC wallet follows the Ethereum network published by the backend", () => {
   assert.deepEqual(evmNetworkFor(undefined), { name: "ethereum", label: "Ethereum mainnet", chainId: 1 });
@@ -18,4 +18,10 @@ test("only the Ethereum label is remapped, Everscale stays its own network", () 
   assert.equal(walletNetworkName("ethereum", sepolia), "sepolia");
   assert.equal(walletNetworkName("everscale", sepolia), "everscale");
   assert.equal(walletNetworkName("ethereum", evmNetworkFor(1)), "ethereum");
+});
+
+test("the desk keeps its network while peers settle on another one", () => {
+  assert.deepEqual(p2pEvmNetworkFor({ ethereum_chain_id: 1, p2p_ethereum_chain_id: 11155111 }), { name: "sepolia", label: "Sepolia testnet", chainId: 11155111 });
+  assert.deepEqual(p2pEvmNetworkFor({ ethereum_chain_id: 11155111 }), { name: "sepolia", label: "Sepolia testnet", chainId: 11155111 });
+  assert.deepEqual(p2pEvmNetworkFor({}), { name: "ethereum", label: "Ethereum mainnet", chainId: 1 });
 });

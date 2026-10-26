@@ -104,7 +104,7 @@ async fn config(State(state): State<AppState>) -> Json<Value> {
     .flatten()
     .collect();
     Json(
-        json!({"enabled":cfg.enabled,"available":available,"public_offers_available":state.otc.public_offers_available(),"public_offer_directions":["buy","sell"],"p2p_available":state.otc.p2p_available(),"ethereum_chain_id":cfg.ethereum_chain_id,"usdt_contract":cfg.usdt_contract,"everscale_multisig_available":state.otc.multisig_available(),"wallet_login_available":state.otc.wallet_login_available(),"wallet_login_chains":wallet_login_chains,"escrow":cfg.escrow,"escrow_lifetime_seconds":14400,"escrow_max_ever":"100000","demo":cfg.demo,"desk":cfg.desk_actor,"desk_name":cfg.desk_name,"ever_resource":cfg.ever_resource,"usdt_resource":cfg.usdt_resource,"support_owner":cfg.support_owner,"ever_network":"Everscale","usdt_network":if cfg.ethereum_chain_id==11155111 {"Sepolia"} else {"Ethereum"},"profile":super::protocol::profile(),"fee":{"payer":"desk","rate":"0.0025","floor":"5","currency":"USDT"},"counterparty_risk":if cfg.escrow.is_some(){"USDT funds a 2-of-3 Safe escrow before native EVER delivery. Expiry permits a USDT refund; it cannot reverse EVER delivery."}else{"Two separate transfers. The payer of each leg is responsible for it; there is no atomic swap or automatic rollback."}}),
+        json!({"enabled":cfg.enabled,"available":available,"public_offers_available":state.otc.public_offers_available(),"public_offer_directions":["buy","sell"],"p2p_available":state.otc.p2p_available(),"ethereum_chain_id":cfg.ethereum_chain_id,"usdt_contract":cfg.usdt_contract,"everscale_multisig_available":state.otc.multisig_available(),"wallet_login_available":state.otc.wallet_login_available(),"wallet_login_chains":wallet_login_chains,"escrow":cfg.escrow,"escrow_lifetime_seconds":14400,"escrow_max_ever":"100000","demo":cfg.demo,"desk":cfg.desk_actor,"desk_name":cfg.desk_name,"ever_resource":cfg.ever_resource,"usdt_resource":cfg.usdt_resource,"support_owner":cfg.support_owner,"ever_network":"Everscale","usdt_network":if cfg.ethereum_chain_id==11155111 {"Sepolia"} else {"Ethereum"},"p2p_ethereum_chain_id":cfg.p2p_chain(),"p2p_usdt_contract":cfg.p2p_usdt(),"p2p_usdt_network":if cfg.p2p_chain()==11155111 {"Sepolia"} else {"Ethereum"},"profile":super::protocol::profile(),"fee":{"payer":"desk","rate":"0.0025","floor":"5","currency":"USDT"},"counterparty_risk":if cfg.escrow.is_some(){"USDT funds a 2-of-3 Safe escrow before native EVER delivery. Expiry permits a USDT refund; it cannot reverse EVER delivery."}else{"Two separate transfers. The payer of each leg is responsible for it; there is no atomic swap or automatic rollback."}}),
     )
 }
 async fn link(
@@ -244,10 +244,7 @@ async fn p2p_submit(
 ) -> Result<Json<Value>> {
     let (_, actor) = state.otc.session(bearer(&headers)?).await?;
     Ok(Json(
-        state
-            .otc
-            .p2p_submit(&actor, id, &request.reference)
-            .await?,
+        state.otc.p2p_submit(&actor, id, &request.reference).await?,
     ))
 }
 async fn rfq(

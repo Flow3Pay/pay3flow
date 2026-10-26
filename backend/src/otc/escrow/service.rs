@@ -189,7 +189,11 @@ impl Service {
 
     pub(super) async fn evm_call(&self, to: &str, data: Vec<u8>, block: &Value) -> Result<Vec<u8>> {
         let value = self
-            .evm_agree("eth_call", json!([{"to":to,"data":abi::hex(data)},block]))
+            .evm_agree(
+                &self.desk_evm(),
+                "eth_call",
+                json!([{"to":to,"data":abi::hex(data)},block]),
+            )
             .await?;
         wallet::unhex(
             value
@@ -264,7 +268,11 @@ impl Service {
             ));
         }
         let latest = self
-            .evm_agree("eth_getBlockByNumber", json!(["latest", false]))
+            .evm_agree(
+                &self.desk_evm(),
+                "eth_getBlockByNumber",
+                json!(["latest", false]),
+            )
             .await?;
         if chain::number(&latest["timestamp"])? >= expires.timestamp() as u128 {
             return Err(invalid("escrow expired on chain"));
@@ -408,7 +416,11 @@ impl Service {
         let vault: Option<String> = row.get(1);
         let state: String = row.get(3);
         let latest = self
-            .evm_agree("eth_getBlockByNumber", json!(["latest", false]))
+            .evm_agree(
+                &self.desk_evm(),
+                "eth_getBlockByNumber",
+                json!(["latest", false]),
+            )
             .await?;
         let chain_time = chain::number(&latest["timestamp"])?;
         let (to, data) = match request.action.as_str() {
@@ -555,7 +567,11 @@ impl Service {
         .await?;
         if tx.query_opt("SELECT id FROM otc_escrow_calls WHERE sender=$1 AND state IN ('unknown','submitted') UNION ALL SELECT id FROM otc_attempts WHERE instructions->'leg'->>'chain'='ethereum' AND instructions->'leg'->>'sender'=$1 AND state IN ('prepared','unknown','submitted','confirming') LIMIT 1", &[&owner]).await?.is_some() {return Err(Error::Conflict("this wallet has an unresolved handoff; track the original reference".into()));}
         let nonce = self
-            .evm_agree("eth_getTransactionCount", json!([owner, "pending"]))
+            .evm_agree(
+                &self.desk_evm(),
+                "eth_getTransactionCount",
+                json!([owner, "pending"]),
+            )
             .await?;
         let instructions = json!({"chain_id":1,"from":owner,"to":to,"data":abi::hex(data),"value":"0x0","nonce":nonce,"checkpoint":latest["number"]});
         let call_id = Uuid::new_v4();
@@ -648,7 +664,11 @@ impl Service {
             .await?;
         let vault: String = row.get(0);
         let head = self
-            .evm_agree("eth_getBlockByNumber", json!(["latest", false]))
+            .evm_agree(
+                &self.desk_evm(),
+                "eth_getBlockByNumber",
+                json!(["latest", false]),
+            )
             .await?;
         let chain_state = Vault::stateCall::abi_decode_returns(
             &self

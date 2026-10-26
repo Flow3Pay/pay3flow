@@ -100,7 +100,11 @@ impl Service {
                     .as_str()
                     .unwrap_or("");
                 match self
-                    .evm_agree("eth_getTransactionReceipt", json!([reference]))
+                    .evm_agree(
+                        &self.desk_evm(),
+                        "eth_getTransactionReceipt",
+                        json!([reference]),
+                    )
                     .await
                 {
                     Ok(current) => {
@@ -112,6 +116,7 @@ impl Service {
                         } else {
                             match self
                                 .evm_agree(
+                                    &self.desk_evm(),
                                     "eth_getBlockByNumber",
                                     json!([current["blockNumber"], false]),
                                 )

@@ -24,3 +24,7 @@ export function evmNetworkFor(chainId: number | undefined): OtcEvmNetwork {
 export function walletNetworkName(chain: string, network: OtcEvmNetwork): string {
   return chain === "ethereum" ? network.name : chain;
 }
+/** Peer settlement may run on its own Ethereum network; unset means the desk network. */
+export function p2pEvmNetworkFor(config: { ethereum_chain_id?: number; p2p_ethereum_chain_id?: number }): OtcEvmNetwork {
+  return evmNetworkFor(config.p2p_ethereum_chain_id ?? config.ethereum_chain_id);
+}

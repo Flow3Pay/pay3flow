@@ -38,8 +38,8 @@ impl PublicOfferDraft {
             "direction":self.direction, "ever_amount":amount::decimal(ever,9),
             "usdt_amount":amount::decimal(usdt,6), "ever_units":ever.to_string(),
             "usdt_units":usdt.to_string(), "usdt_address":recipient,
-            "ever_network_id":42, "ethereum_chain_id":cfg.ethereum_chain_id,
-            "usdt_contract":cfg.usdt_contract,
+            "ever_network_id":42, "ethereum_chain_id":cfg.p2p_chain(),
+            "usdt_contract":cfg.p2p_usdt(),
         }))
     }
 }
@@ -71,22 +71,28 @@ impl Service {
     /// in history without exposing their wallet addresses or current state.
     pub(crate) async fn public_offer_history(&self) -> Result<Value> {
         let client = self.pool.get().await?;
-        let rows = client.query(
-            "SELECT id, body, created_at FROM otc_public_offers ORDER BY created_at ASC",
-            &[],
-        ).await?;
-        Ok(Value::Array(rows.iter().map(|row| {
-            let terms: Value = row.get("body");
-            json!({
-                "id": row.get::<_, Uuid>("id"),
-                "created_at": row.get::<_, DateTime<Utc>>("created_at"),
-                "terms": {
-                    "direction": terms.get("direction").cloned().unwrap_or(json!("sell")),
-                    "ever_amount": terms.get("ever_amount").cloned().unwrap_or(Value::Null),
-                    "usdt_amount": terms.get("usdt_amount").cloned().unwrap_or(Value::Null),
-                }
-            })
-        }).collect()))
+        let rows = client
+            .query(
+                "SELECT id, body, created_at FROM otc_public_offers ORDER BY created_at ASC",
+                &[],
+            )
+            .await?;
+        Ok(Value::Array(
+            rows.iter()
+                .map(|row| {
+                    let terms: Value = row.get("body");
+                    json!({
+                        "id": row.get::<_, Uuid>("id"),
+                        "created_at": row.get::<_, DateTime<Utc>>("created_at"),
+                        "terms": {
+                            "direction": terms.get("direction").cloned().unwrap_or(json!("sell")),
+                            "ever_amount": terms.get("ever_amount").cloned().unwrap_or(Value::Null),
+                            "usdt_amount": terms.get("usdt_amount").cloned().unwrap_or(Value::Null),
+                        }
+                    })
+                })
+                .collect(),
+        ))
     }
     pub(crate) async fn post_public_offer(
         &self,

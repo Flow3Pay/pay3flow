@@ -26,6 +26,14 @@ pub(crate) struct Config {
     pub usdt_contract: String,
     #[serde(default = "default_ever_fee_reserve")]
     pub p2p_ever_fee_reserve: String,
+    /// Peer settlement network. Defaults to the desk network when unset, so a
+    /// deployment can trade offers on a testnet while the desk keeps mainnet.
+    #[serde(default)]
+    pub p2p_ethereum_chain_id: Option<u64>,
+    #[serde(default)]
+    pub p2p_usdt_contract: Option<String>,
+    #[serde(default)]
+    pub p2p_ethereum_rpc: Vec<String>,
     pub origin: String,
     pub relay_origin: String,
     pub matcher_actor: String,
@@ -73,6 +81,9 @@ impl Default for Config {
             ethereum_chain_id: default_evm_chain(),
             usdt_contract: default_usdt_contract(),
             p2p_ever_fee_reserve: default_ever_fee_reserve(),
+            p2p_ethereum_chain_id: None,
+            p2p_usdt_contract: None,
+            p2p_ethereum_rpc: Vec::new(),
             origin: String::new(),
             relay_origin: String::new(),
             matcher_actor: String::new(),
@@ -119,6 +130,7 @@ impl Config {
         };
         cfg.origin = origin.trim_end_matches('/').to_string();
         cfg.usdt_contract = cfg.usdt_contract.to_ascii_lowercase();
+        cfg.p2p_usdt_contract = cfg.p2p_usdt_contract.map(|c| c.to_ascii_lowercase());
         // A view-only offers deployment must keep booting with whatever network
         // material it already has; only the flags that move funds are enforced.
         if cfg.enabled || cfg.p2p_enabled {
@@ -130,15 +142,39 @@ impl Config {
         Ok(cfg)
     }
     pub fn validate_network(&self) -> Result<()> {
-        let contract = super::wallet::address("ethereum", &self.usdt_contract)?;
-        if contract != self.usdt_contract || self.ethereum_chain_id == 0 {
-            return Err(invalid("Ethereum network settings must be canonical"));
-        }
-        if self.ethereum_chain_id == 1 && contract != USDT {
-            return Err(invalid("Ethereum mainnet must use the canonical USDT contract"));
+        self.check_evm_network(self.ethereum_chain_id, &self.usdt_contract)?;
+        if let Some(contract) = &self.p2p_usdt_contract {
+            self.check_evm_network(self.p2p_chain(), contract)?;
         }
         super::amount::units(&self.p2p_ever_fee_reserve, 9)?;
         Ok(())
+    }
+    fn check_evm_network(&self, chain_id: u64, contract: &str) -> Result<()> {
+        let canonical = super::wallet::address("ethereum", contract)?;
+        if canonical != contract || chain_id == 0 {
+            return Err(invalid("Ethereum network settings must be canonical"));
+        }
+        if chain_id == 1 && canonical != USDT {
+            return Err(invalid(
+                "Ethereum mainnet must use the canonical USDT contract",
+            ));
+        }
+        Ok(())
+    }
+    pub fn p2p_chain(&self) -> u64 {
+        self.p2p_ethereum_chain_id.unwrap_or(self.ethereum_chain_id)
+    }
+    pub fn p2p_usdt(&self) -> &str {
+        self.p2p_usdt_contract
+            .as_deref()
+            .unwrap_or(&self.usdt_contract)
+    }
+    pub fn p2p_rpc(&self) -> &[String] {
+        if self.p2p_ethereum_rpc.is_empty() {
+            &self.ethereum_rpc
+        } else {
+            &self.p2p_ethereum_rpc
+        }
     }
     pub fn validate(&self) -> Result<()> {
         if let Some(policy) = &self.escrow {

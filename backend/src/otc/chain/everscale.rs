@@ -56,7 +56,8 @@ pub(crate) fn receipt(transaction: &Value, leg: &Leg) -> Result<Evidence> {
     })
 }
 impl Service {
-    pub(crate) async fn everscale_evidence(        &self,
+    pub(crate) async fn everscale_evidence(
+        &self,
         reference: &str,
         leg: &Leg,
     ) -> Result<Option<Evidence>> {
@@ -301,12 +302,9 @@ fn deal_receipt(transaction: &Value, leg: &Leg) -> Result<Evidence> {
         && [Some(0), Some(1)].contains(&transaction["compute"]["exit_code"].as_i64())
         && (transaction["action"].is_null() || transaction["action"]["success"] == true);
     if success
-        && number(&transaction["balance_delta"])?
-            < super::super::amount::integer(&leg.amount)?
+        && number(&transaction["balance_delta"])? < super::super::amount::integer(&leg.amount)?
     {
-        return Err(invalid(
-            "EVER net delivery is below the booked amount",
-        ));
+        return Err(invalid("EVER net delivery is below the booked amount"));
     }
     let identity = message["id"]
         .as_str()

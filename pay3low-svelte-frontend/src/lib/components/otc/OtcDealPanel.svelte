@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
   import { locale } from "$lib/i18n";
-  import { decimal, otcEvmNetwork, request, sendAttempt, type Attempt, type Config, type Session } from "$lib/otc/service";
+  import { decimal, otcP2pNetwork, request, sendAttempt, type Attempt, type Config, type Session } from "$lib/otc/service";
   import OtcTransferReview from "./OtcTransferReview.svelte";
 
   interface DealTerms {
@@ -25,7 +25,7 @@
   let deals: Deal[] = [], review: { deal: Deal; attempt: Attempt; kind: string } | null = null;
   let busy = false, loadedActor = "", revision = 0;
   $: say = (en: string, ru: string) => $locale === "ru" ? ru : en;
-  $: networkLabel = otcEvmNetwork().label;
+  $: networkLabel = otcP2pNetwork().label;
   $: if (session && (session.actor || "") !== loadedActor) {
     loadedActor = session.actor || ""; deals = []; review = null;
     if (loadedActor) void refresh();

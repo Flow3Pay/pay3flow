@@ -1,6 +1,6 @@
 import { apiUrl } from "$lib/api";
 import { connectWallet } from "$lib/wallet-session";
-import { evmNetworkFor, walletNetworkName } from "./network";
+import { evmNetworkFor, p2pEvmNetworkFor, walletNetworkName } from "./network";
 
 export type Direction = "buy" | "sell";
 export interface Proposal { id: string; name?: string; publishes: { resourceConformsTo: string }; reciprocal: { resourceConformsTo: string } }
@@ -20,17 +20,20 @@ export interface Attempt { id: string; kind: string; state: string; instructions
 interface Instructions {
   escrow?: boolean; expires_at?: string; trade_id?: string; submit_path?: string;
   leg: { chain: string; sender: string; recipient: string; amount: string; transfer_amount: string };
-  call: { family: string; from?: string; to?: string; data?: string; value?: string; nonce?: string; sender?: string; recipient?: string; amount?: string; bounce?: boolean };
+  call: { family: string; chain_id?: number; from?: string; to?: string; data?: string; value?: string; nonce?: string; sender?: string; recipient?: string; amount?: string; bounce?: boolean };
 }
-export interface Config { public_offers_available?: boolean; public_offer_directions?: Direction[]; everscale_multisig_available?: boolean; p2p_available?: boolean; ethereum_chain_id?: number; usdt_contract?: string; usdt_network?: string; escrow?: import("./escrow").EscrowPolicy | null; enabled: boolean; wallet_login_available?: boolean; wallet_login_chains?: ("ethereum" | "everscale")[]; available: boolean; demo: boolean; desk: string; desk_name: string; ever_resource: string; usdt_resource: string; counterparty_risk: string; support_owner: string }
+export interface Config { public_offers_available?: boolean; public_offer_directions?: Direction[]; everscale_multisig_available?: boolean; p2p_available?: boolean; ethereum_chain_id?: number; usdt_contract?: string; usdt_network?: string; p2p_ethereum_chain_id?: number; p2p_usdt_contract?: string; p2p_usdt_network?: string; escrow?: import("./escrow").EscrowPolicy | null; enabled: boolean; wallet_login_available?: boolean; wallet_login_chains?: ("ethereum" | "everscale")[]; available: boolean; demo: boolean; desk: string; desk_name: string; ever_resource: string; usdt_resource: string; counterparty_risk: string; support_owner: string }
 export type LoginChain = "ethereum" | "everscale";
 export interface VerifiedWallet { chain: LoginChain; address: string; verified_at: string }
 export interface Session { token: string; actor: string; desk: boolean; expires_at: string; signing_wallet: { chain: LoginChain; address: string } | null; wallets: VerifiedWallet[] }
 let evmNetwork = evmNetworkFor(1);
+let p2pNetwork = evmNetworkFor(1);
 export function otcEvmNetwork() { return evmNetwork; }
+/** Offers settle between peers on their own network, which may differ from the desk one. */
+export function otcP2pNetwork() { return p2pNetwork; }
 /** The backend chooses the OTC networks; the browser must follow its configuration. */
-export function setOtcNetwork(config: Config) { evmNetwork = evmNetworkFor(config.ethereum_chain_id); }
-export function walletNetwork(chain: string): string { return walletNetworkName(chain, evmNetwork); }
+export function setOtcNetwork(config: Config) { evmNetwork = evmNetworkFor(config.ethereum_chain_id); p2pNetwork = p2pEvmNetworkFor(config); }
+export function walletNetwork(chain: string, network = evmNetwork): string { return walletNetworkName(chain, network); }
 export class OtcRequestError extends Error {
   constructor(message: string, readonly status: number) { super(message); this.name = "OtcRequestError"; }
 }
@@ -98,16 +101,18 @@ export async function sendAttempt(token: string, attempt: Attempt): Promise<void
     if (!everSigningAvailable(current)) throw new Error("USDT escrow is unavailable or the final 30-minute settlement window has started.");
   }
   const leg = attempt.instructions.leg;
-  const wallet = await connectWallet(walletNetwork(leg.chain));
+  // The signed handoff carries its own network: the desk and peer settlement can sit on different chains.
+  const net = evmNetworkFor(attempt.instructions.call.chain_id);
+  const wallet = await connectWallet(walletNetwork(leg.chain, net));
   if (wallet.address.toLowerCase() !== leg.sender) throw new Error("Connected wallet differs from the booked sender. Reconcile this saved attempt before sending.");
   let reference: string;
   if (wallet.family === "evm") {
-    if (wallet.chainId !== evmNetwork.chainId) throw new Error(`Switch to ${evmNetwork.label}.`);
+    if (wallet.chainId !== net.chainId) throw new Error(`Switch to ${net.label}.`);
     const { sendTransaction } = await import("@wagmi/core");
     const call = attempt.instructions.call;
     const nonce = BigInt(call.nonce!);
     if (nonce > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error("Wallet nonce cannot be represented safely.");
-    reference = await sendTransaction(wallet.config as Parameters<typeof sendTransaction>[0], { chainId: evmNetwork.chainId, account: wallet.address, to: call.to as `0x${string}`, data: call.data as `0x${string}`, value: 0n, nonce: Number(nonce) });
+    reference = await sendTransaction(wallet.config as Parameters<typeof sendTransaction>[0], { chainId: net.chainId, account: wallet.address, to: call.to as `0x${string}`, data: call.data as `0x${string}`, value: 0n, nonce: Number(nonce) });
   } else if (wallet.family === "everscale") {
     const state = await wallet.provider.request({ method: "getProviderState" });
     if (state.selectedConnection !== "mainnet") throw new Error("Switch EVER Wallet to Everscale mainnet.");

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { locale } from "$lib/i18n";
-  import { request, otcEvmNetwork, walletNetwork, type Session, type Direction } from "$lib/otc/service";
+  import { request, otcP2pNetwork, walletNetwork, type Session, type Direction } from "$lib/otc/service";
   import { connectWallet, wallets } from "$lib/wallet-session";
   import { saleRate, offerDecimal, offerTotal, offerEver, validOfferAmount, type PublicOffer as Offer, type OfferHistoryPoint, type SaleTicketState } from "$lib/otc/public-offers";
   export let session: Session | null;
@@ -48,7 +48,7 @@
   $: if (direction !== loadedDirection) resetDirection(direction);
   function resetDirection(next: Direction) { loadedDirection = next; amountSource = next === "buy" ? "usdt" : "ever"; reviewing = false; key = ""; message = ""; }
   $: if (mounted) suggestEthereum(
-    session?.wallets.find(w => w.chain === "ethereum")?.address || ($wallets.evm?.family === "evm" && $wallets.evm.chainId === otcEvmNetwork().chainId ? $wallets.evm.address : ""),
+    session?.wallets.find(w => w.chain === "ethereum")?.address || ($wallets.evm?.family === "evm" && $wallets.evm.chainId === otcP2pNetwork().chainId ? $wallets.evm.address : ""),
     session?.actor || "",
   );
   function suggestEthereum(address: string, actor: string) {
@@ -62,9 +62,9 @@
     if (posting || busy || linkingEvm) return;
     const actor = session?.actor; linkingEvm = true; error = "";
     try {
-      const wallet = await connectWallet(walletNetwork("ethereum"));
+      const wallet = await connectWallet(walletNetwork("ethereum", otcP2pNetwork()));
       if (session?.actor !== actor) return;
-      if (wallet.family !== "evm" || wallet.chainId !== otcEvmNetwork().chainId) throw new Error(say(`Select ${otcEvmNetwork().label}.`, `Выберите сеть ${otcEvmNetwork().label}.`));
+      if (wallet.family !== "evm" || wallet.chainId !== otcP2pNetwork().chainId) throw new Error(say(`Select ${otcP2pNetwork().label}.`, `Выберите сеть ${otcP2pNetwork().label}.`));
       receivingAddress = wallet.address; edited();
     } catch (e) { if (session?.actor === actor) error = e instanceof Error ? e.message : "Connection failed"; }
     finally { linkingEvm = false; }

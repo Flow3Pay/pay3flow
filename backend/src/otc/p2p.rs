@@ -29,6 +29,24 @@ impl Service {
         self.cfg.p2p_enabled
             && self.public_offers_available()
             && self.wallet_login_chain_available("ethereum")
+            && self.cfg.p2p_rpc().len() >= 2
+    }
+    /// Reads always follow the network the deal was booked on. If an operator
+    /// repoints the peer contour mid-deal, the chain check fails and the attempt
+    /// stays unresolved instead of confirming a transfer on another network.
+    fn p2p_net(&self, body: &Value) -> Result<super::chain::EvmNet> {
+        let chain_id = body["ethereum_chain_id"]
+            .as_u64()
+            .ok_or_else(|| invalid("deal network is missing"))?;
+        let usdt = body["usdt_contract"]
+            .as_str()
+            .ok_or_else(|| invalid("deal token is missing"))?
+            .to_string();
+        Ok(super::chain::EvmNet {
+            rpcs: self.cfg.p2p_rpc().to_vec(),
+            chain_id,
+            usdt,
+        })
     }
     pub(crate) async fn accept_offer(
         &self,
@@ -87,6 +105,13 @@ impl Service {
             .ok_or_else(|| invalid("offer terms are malformed"))?
             .to_string();
         let direction: Direction = serde_json::from_value(terms["direction"].clone())?;
+        if terms["ethereum_chain_id"] != json!(self.cfg.p2p_chain())
+            || terms["usdt_contract"] != json!(self.cfg.p2p_usdt())
+        {
+            return Err(Error::Conflict(
+                "offer was published for a different Ethereum network".into(),
+            ));
+        }
         let (usdt_payer, usdt_payee, ever_payer, ever_payee) = match direction {
             Direction::Sell => (
                 taker_eth,
@@ -109,8 +134,8 @@ impl Service {
             "ever_units": terms["ever_units"], "usdt_units": terms["usdt_units"],
             "usdt_payer": usdt_payer, "usdt_payee": usdt_payee,
             "ever_payer": ever_payer, "ever_payee": ever_payee,
-            "usdt_contract": self.cfg.usdt_contract,
-            "ethereum_chain_id": self.cfg.ethereum_chain_id,
+            "usdt_contract": self.cfg.p2p_usdt(),
+            "ethereum_chain_id": self.cfg.p2p_chain(),
             "ever_network_id": 42,
         });
         let id = Uuid::new_v4();
@@ -140,13 +165,23 @@ impl Service {
                 &[&actor],
             )
             .await?;
-        let ids = rows.iter().map(|row| row.get::<_, Uuid>("id")).collect::<Vec<_>>();
+        let ids = rows
+            .iter()
+            .map(|row| row.get::<_, Uuid>("id"))
+            .collect::<Vec<_>>();
         let attempts = self.p2p_attempts(&ids).await?;
-        let deals = rows.iter().map(|row| {
-            let mut deal = deal(row, actor);
-            deal["attempts"] = json!(attempts.iter().filter(|(trade, _)| *trade == row.get::<_, Uuid>("id")).map(|(_, attempt)| attempt.clone()).collect::<Vec<_>>());
-            deal
-        }).collect::<Vec<_>>();
+        let deals = rows
+            .iter()
+            .map(|row| {
+                let mut deal = deal(row, actor);
+                deal["attempts"] = json!(attempts
+                    .iter()
+                    .filter(|(trade, _)| *trade == row.get::<_, Uuid>("id"))
+                    .map(|(_, attempt)| attempt.clone())
+                    .collect::<Vec<_>>());
+                deal
+            })
+            .collect::<Vec<_>>();
         Ok(json!({"deals": deals}))
     }
     pub(crate) async fn p2p_deal(&self, actor: &str, id: Uuid) -> Result<Value> {
@@ -159,7 +194,9 @@ impl Service {
             .await?
             .ok_or(Error::NotFound)?;
         let attempts = self.p2p_attempts(&[id]).await?;
-        Ok(json!({"deal": deal(&row, actor), "attempts": attempts.into_iter().map(|(_, attempt)| attempt).collect::<Vec<_>>()}))
+        Ok(
+            json!({"deal": deal(&row, actor), "attempts": attempts.into_iter().map(|(_, attempt)| attempt).collect::<Vec<_>>()}),
+        )
     }
     async fn p2p_attempts(&self, ids: &[Uuid]) -> Result<Vec<(Uuid, Value)>> {
         if ids.is_empty() {
@@ -194,7 +231,12 @@ impl Service {
                 text("usdt_payer"),
                 text("usdt_payee"),
             ),
-            "payout" => ("everscale", text("ever_units"), text("ever_payer"), text("ever_payee")),
+            "payout" => (
+                "everscale",
+                text("ever_units"),
+                text("ever_payer"),
+                text("ever_payee"),
+            ),
             _ => return Err(invalid("invalid transfer kind")),
         };
         if sender.is_empty() || recipient.is_empty() || sender == recipient {
@@ -230,7 +272,16 @@ impl Service {
             return Err(invalid("invalid transfer kind"));
         }
         // Wallet freshness proves the signing party controls the booked sender address.
-        let verified = self.wallet(actor, if kind == "payment" { "ethereum" } else { "everscale" }).await?;
+        let verified = self
+            .wallet(
+                actor,
+                if kind == "payment" {
+                    "ethereum"
+                } else {
+                    "everscale"
+                },
+            )
+            .await?;
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
         if let Some(existing) = tx
@@ -266,7 +317,11 @@ impl Service {
         let state: String = row.get("state");
         let body: Value = row.get("body");
         let pay_by: DateTime<Utc> = row.get("pay_by");
-        let payer_field = if kind == "payment" { "usdt_payer" } else { "ever_payer" };
+        let payer_field = if kind == "payment" {
+            "usdt_payer"
+        } else {
+            "ever_payer"
+        };
         if body[payer_field] != json!(verified) {
             return Err(Error::Unauthorized);
         }
@@ -276,7 +331,8 @@ impl Service {
             }
             "delivery_pending" => {
                 kind == "payout"
-                    && row.get::<_, Option<DateTime<Utc>>>("payout_by")
+                    && row
+                        .get::<_, Option<DateTime<Utc>>>("payout_by")
                         .is_none_or(|until| Utc::now() <= until)
             }
             _ => false,
@@ -299,20 +355,21 @@ impl Service {
             ));
         }
         let leg = self.deal_leg(&body, kind)?;
+        let net = &self.p2p_net(&body)?;
         let call = if kind == "payment" {
-            if super::chain::number(&self.evm_agree("eth_chainId", json!([])).await?)?
-                != u128::from(self.cfg.ethereum_chain_id)
+            if super::chain::number(&self.evm_agree(net, "eth_chainId", json!([])).await?)?
+                != u128::from(net.chain_id)
             {
                 return Err(invalid("wrong Ethereum network"));
             }
-            let nonce = format!("0x{:x}", self.evm_pending_nonce(&leg.sender).await?);
+            let nonce = format!("0x{:x}", self.evm_pending_nonce(net, &leg.sender).await?);
             let data = super::chain::ethereum::transfer_data(&leg)?;
-            json!({"family":"evm","chain_id":self.cfg.ethereum_chain_id,"from":leg.sender,"to":self.cfg.usdt_contract,"data":data,"value":"0x0","nonce":nonce})
+            json!({"family":"evm","chain_id":net.chain_id,"from":leg.sender,"to":net.usdt,"data":data,"value":"0x0","nonce":nonce})
         } else {
             json!({"family":"everscale","sender":leg.sender,"recipient":leg.recipient,"amount":leg.transfer_amount,"bounce":true})
         };
         let checkpoint = if kind == "payment" {
-            json!({"block": format!("0x{:x}", self.evm_finalized_height().await?)})
+            json!({"block": format!("0x{:x}", self.evm_finalized_height(net).await?)})
         } else {
             Value::Null
         };
@@ -333,7 +390,8 @@ impl Service {
             .query_one("SELECT * FROM otc_p2p_trades WHERE id=$1", &[&id])
             .await?;
         let mut result = deal(&row, actor);
-        result["attempt"] = json!({"id": attempt, "state": "prepared", "instructions": instructions});
+        result["attempt"] =
+            json!({"id": attempt, "state": "prepared", "instructions": instructions});
         tx.commit().await?;
         Ok(result)
     }
@@ -382,7 +440,10 @@ impl Service {
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
         let row = tx
-            .query_opt("SELECT * FROM otc_p2p_trades WHERE id=$1 FOR UPDATE", &[&id])
+            .query_opt(
+                "SELECT * FROM otc_p2p_trades WHERE id=$1 FOR UPDATE",
+                &[&id],
+            )
             .await?
             .ok_or(Error::NotFound)?;
         let owner: String = row.get("owner_actor");
@@ -439,11 +500,26 @@ impl Service {
             let instructions: Value = row.get(4);
             let mut reference: Option<String> = row.get(5);
             let leg: Leg = serde_json::from_value(instructions["leg"].clone())?;
+            // Read the leg back on the network the handoff was built for.
+            let evm_net = || super::chain::EvmNet {
+                rpcs: self.cfg.p2p_rpc().to_vec(),
+                chain_id: instructions["call"]["chain_id"]
+                    .as_u64()
+                    .unwrap_or_else(|| self.cfg.p2p_chain()),
+                usdt: instructions["call"]["to"]
+                    .as_str()
+                    .map(str::to_string)
+                    .unwrap_or_else(|| self.cfg.p2p_usdt().to_string()),
+            };
             if reference.is_none() {
                 let located = if chain == "ethereum" {
-                    self.locate_ethereum(&leg, &instructions).await.unwrap_or(None)
+                    self.locate_ethereum(&leg, &instructions, &evm_net())
+                        .await
+                        .unwrap_or(None)
                 } else {
-                    self.locate_everscale(&leg, &instructions).await.unwrap_or(None)
+                    self.locate_everscale(&leg, &instructions)
+                        .await
+                        .unwrap_or(None)
                 };
                 if let Some(found) = located {
                     client
@@ -460,7 +536,8 @@ impl Service {
                 let nonce = instructions["call"]["nonce"]
                     .as_str()
                     .and_then(|n| u128::from_str_radix(n.trim_start_matches("0x"), 16).ok());
-                self.ethereum_evidence(&reference, &leg, nonce).await
+                self.ethereum_evidence(&reference, &leg, nonce, &evm_net())
+                    .await
             } else {
                 self.everscale_deal_evidence(&reference, &leg).await
             };
@@ -544,11 +621,18 @@ impl Service {
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
         let row = tx
-            .query_one("SELECT * FROM otc_p2p_trades WHERE id=$1 FOR UPDATE", &[&id])
+            .query_one(
+                "SELECT * FROM otc_p2p_trades WHERE id=$1 FOR UPDATE",
+                &[&id],
+            )
             .await?;
         let state: String = row.get("state");
         let offer_id: Uuid = row.get("offer_id");
-        let expected = if kind == "payment" { "payment_pending" } else { "delivery_pending" };
+        let expected = if kind == "payment" {
+            "payment_pending"
+        } else {
+            "delivery_pending"
+        };
         if state != expected {
             tx.commit().await?;
             return Ok(());
@@ -564,7 +648,10 @@ impl Service {
                 Some(Utc::now() + Duration::seconds(i64::from(self.cfg.payout_seconds))),
             )
         } else {
-            ("completed", row.get::<_, Option<DateTime<Utc>>>("payout_by"))
+            (
+                "completed",
+                row.get::<_, Option<DateTime<Utc>>>("payout_by"),
+            )
         };
         tx.execute(
             "UPDATE otc_p2p_trades SET state=$2,payout_by=$3,updated_at=now() WHERE id=$1",
