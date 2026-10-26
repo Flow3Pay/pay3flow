@@ -279,7 +279,7 @@ impl Service {
         let (id, actor) = self.session(token).await?;
         let client = self.pool.get().await?;
         let row = client.query_opt("SELECT expires_at,login_chain,login_address FROM otc_sessions WHERE id=$1 AND NOT revoked AND expires_at>now()", &[&id]).await?.ok_or(Error::Unauthorized)?;
-        let wallets: Vec<Value> = client.query("SELECT chain,address,verified_at FROM otc_wallets WHERE actor=$1 AND verified_at>now()-interval '24 hours' ORDER BY chain", &[&actor]).await?.iter().map(|r| json!({"chain":r.get::<_,String>(0),"address":r.get::<_,String>(1),"verified_at":r.get::<_,DateTime<Utc>>(2)})).collect();
+        let wallets: Vec<Value> = client.query("SELECT chain,address,verified_at FROM otc_wallets WHERE actor=$1 AND verified_at>now()-make_interval(days=>$2) ORDER BY chain", &[&actor,&super::repo::WALLET_VERIFICATION_DAYS]).await?.iter().map(|r| json!({"chain":r.get::<_,String>(0),"address":r.get::<_,String>(1),"verified_at":r.get::<_,DateTime<Utc>>(2)})).collect();
         let login_chain: Option<String> = row.get(1);
         let login_address: Option<String> = row.get(2);
         let signing_wallet = login_chain

@@ -95,9 +95,19 @@
     onShareUrlChange(`/${hash}`); onPreviewChange(null);
   }
   function historyReplace(hash: string) { window.history.replaceState(window.history.state, "", `${location.pathname}${location.search}${hash}`); }
+  const chainLabel = (chain: "ethereum" | "everscale") => (chain === "ethereum" ? "Ethereum" : "Everscale");
   async function run(action: () => Promise<void>, lockAccount = true) {
     if (busy || offersBusy) return; busy = true; accountLocked = lockAccount; error = ""; notice = "";
-    try { await action(); } catch (e) { error = e instanceof Error ? e.message : "Request failed"; } finally { busy = false; accountLocked = false; walletProgress = ""; }
+    try { await action(); } catch (e) {
+      // 403 is only ever a lapsed wallet verification: re-read the session so the expired wallet stops showing as connected.
+      if (e instanceof OtcRequestError && e.status === 403) {
+        await refresh();
+        const days = config?.wallet_verification_days ?? 7, names = missingWallets.map(chainLabel).join(" + ");
+        error = missingWallets.length
+          ? say(`Wallet verification lasts ${days} days and has lapsed. Confirm ${names} again.`, `Подтверждение кошелька действует ${days} дней и истекло. Подтвердите ${names} заново.`)
+          : say("Wallet verification has lapsed. Connect your wallet again to continue.", "Подтверждение кошелька истекло. Подключите кошелёк заново, чтобы продолжить.");
+      } else error = e instanceof Error ? e.message : "Request failed";
+    } finally { busy = false; accountLocked = false; walletProgress = ""; }
   }
   async function refresh() {
     const refreshToken = session?.token;

@@ -9,6 +9,9 @@ use serde_json::{json, Value};
 use tokio_postgres::Row;
 use uuid::Uuid;
 
+/// How long a wallet signature keeps granting authority over an OTC account.
+pub(crate) const WALLET_VERIFICATION_DAYS: i32 = 7;
+
 pub(crate) fn trade(row: &Row) -> Result<Trade> {
     Ok(Trade {
         id: row.get("id"),
@@ -85,9 +88,9 @@ impl Service {
             .ok_or(Error::Unauthorized)?;
         Ok(self.secrets.decrypt(&row.get::<_, String>(0))?)
     }
-    pub(crate) async fn wallet(&self, actor: &str, chain: &str) -> Result<String> {
+    pub(crate) async fn wallet(&self, actor: &str, chain: &'static str) -> Result<String> {
         let client = self.pool.get().await?;
-        let row = client.query_opt("SELECT address FROM otc_wallets WHERE actor=$1 AND chain=$2 AND verified_at>now()-interval '24 hours'",&[&actor,&chain]).await?.ok_or(Error::Unauthorized)?;
+        let row = client.query_opt("SELECT address FROM otc_wallets WHERE actor=$1 AND chain=$2 AND verified_at>now()-make_interval(days=>$3)",&[&actor,&chain,&WALLET_VERIFICATION_DAYS]).await?.ok_or(Error::VerificationRequired(chain))?;
         Ok(row.get(0))
     }
     pub(crate) fn desk(&self, actor: &str) -> Result<()> {

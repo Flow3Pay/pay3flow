@@ -322,7 +322,7 @@ mod tests {
         }
         client
             .execute(
-                "UPDATE otc_wallets SET verified_at=now()-interval '25 hours' WHERE actor='seller'",
+                "UPDATE otc_wallets SET verified_at=now()-make_interval(days=>8) WHERE actor='seller'",
                 &[],
             )
             .await
@@ -331,7 +331,7 @@ mod tests {
             service
                 .post_public_offer("seller", "expired-proof", draft())
                 .await,
-            Err(Error::Unauthorized)
+            Err(Error::VerificationRequired("everscale"))
         ));
         std::sync::Arc::make_mut(&mut service.cfg).public_offers_enabled = false;
         assert!(matches!(
