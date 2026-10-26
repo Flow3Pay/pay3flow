@@ -138,9 +138,17 @@
   function chooseSide(next: Direction) { if (next !== direction) { direction = next; listingId = ""; edited(); syncLink(); } }
   function selectListing(proposal: Proposal, side: Direction) { chooseSide(side); if (listingId !== proposal.id) edited(); listingId = proposal.id; bridgeOpen = true; document.getElementById("otc-input")?.focus(); }
   function openOffer(offer: PublicOffer) { void tick().then(() => offerBook?.openOffer(offer)); }
-  function acceptOffer(id: string) {
+  async function acceptOffer(id: string) {
+    const owner = session;
     tab = "orders"; activityOpen = true;
-    void tick().then(() => dealPanel?.accept(id));
+    if (!owner) { error = say("Connect your wallet to accept an offer.", "Подключите кошелёк, чтобы принять оффер."); return; }
+    await run(async () => {
+      await request(`/offers/${id}/accept`, owner.token, {}, crypto.randomUUID());
+      notice = say("Offer accepted. Send the first transfer to start settlement.", "Оффер принят. Отправьте первый перевод, чтобы начать расчёт.");
+      await tick();
+      void dealPanel?.refresh();
+    });
+    await refresh();
   }
   function retainSession(current: Session) {
     if (session?.actor !== current.actor && sessionStorage.getItem("pay3flow.otc.recovery.actor") === current.actor) {

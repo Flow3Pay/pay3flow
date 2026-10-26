@@ -70,13 +70,6 @@
       deals = page.deals;
     } catch { /* A transient failure keeps the last known deals on screen. */ }
   }
-  export function accept(offerId: string) {
-    return run(async () => {
-      const deal = await request<Deal>(`/offers/${offerId}/accept`, session!.token, {}, crypto.randomUUID());
-      deals = [deal, ...deals.filter(item => item.id !== deal.id)];
-      onNotice(say("Offer accepted. Send the first transfer to start settlement.", "Оффер принят. Отправьте первый перевод, чтобы начать расчёт."));
-    });
-  }
   async function run(action: () => Promise<void>) {
     if (!session || busy || locked) return;
     busy = true; onBusyChange(true); onError("");

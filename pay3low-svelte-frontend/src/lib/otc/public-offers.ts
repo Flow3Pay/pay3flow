@@ -7,7 +7,10 @@ export interface PublicOffer {
   state: string;
   created_at?: string;
   expires_at: string;
-  terms: { direction?: Direction; ever_amount: string; usdt_amount: string; usdt_address: string };
+  terms: {
+    direction?: Direction; ever_amount: string; usdt_amount: string; usdt_address: string;
+    ethereum_chain_id?: number; usdt_contract?: string;
+  };
 }
 
 /** Sanitized immutable data for a public publication-history chart. */
