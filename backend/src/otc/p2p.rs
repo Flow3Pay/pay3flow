@@ -205,7 +205,9 @@ impl Service {
         let client = self.pool.get().await?;
         let rows = client
             .query(
-                "SELECT id,trade_id,kind,state,instructions,reference FROM otc_p2p_attempts WHERE trade_id = ANY($1) AND state!='failed' ORDER BY created_at",
+                // Failed transfers are listed too: a leg that the chain rejected is something the
+                // trader has to see and retry, not a silent reset back to "send".
+                "SELECT id,trade_id,kind,state,instructions,reference FROM otc_p2p_attempts WHERE trade_id = ANY($1) ORDER BY created_at",
                 &[&ids],
             )
             .await?;

@@ -40,6 +40,15 @@ impl IntoResponse for Error {
             Self::Unauthorized => (StatusCode::UNAUTHORIZED, self.to_string()),
             Self::VerificationRequired(_) => (StatusCode::FORBIDDEN, self.to_string()),
             Self::NotFound => (StatusCode::NOT_FOUND, self.to_string()),
+            // An unreachable chain reader says nothing about the trade: say so and let the
+            // caller retry instead of reporting an opaque server failure.
+            Self::Http(error) => {
+                tracing::warn!(error = %error, "otc.reader.unavailable");
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "A chain or relay endpoint is unavailable right now. Try again in a moment.".into(),
+                )
+            }
             other => {
                 tracing::error!(error = %other, "otc.operation.failed");
                 (

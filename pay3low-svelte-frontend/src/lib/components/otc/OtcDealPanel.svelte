@@ -38,7 +38,40 @@
   const assetOf = (kind: string) => (kind === "payment" ? "USDT" : "EVER");
   const stepOf = (deal: Deal) => deal.state === "payment_pending" ? "payment" : deal.state === "delivery_pending" ? "payout" : null;
   const openOf = (deal: Deal, kind: string) => deal.attempts.filter(attempt => attempt.kind === kind && !["verified", "failed"].includes(attempt.state)).pop() || null;
+  const failedOf = (deal: Deal, kind: string) => deal.attempts.filter(attempt => attempt.kind === kind && attempt.state === "failed").pop() || null;
   const short = (value: string) => (value.length > 18 ? `${value.slice(0, 8)}…${value.slice(-6)}` : value);
+  // Backend refusals are written for operators; the trader needs to know what to do next.
+  const explain = (message: string) => ({
+    "original reference is immutable": say(
+      "This deal already tracks your saved transfer, so a second one is not accepted here. Open the saved transfer to watch it confirm.",
+      "Эта сделка уже привязана к сохранённому переводу, поэтому второй здесь не принимается. Откройте сохранённый перевод — он подтверждается.",
+    ),
+    "this deal leg already has an unresolved attempt": say(
+      "This leg already has a transfer in progress. Continue it with “Open saved transfer”.",
+      "По этой ноге уже есть перевод в работе. Продолжайте через «Открыть сохранённый перевод».",
+    ),
+    "transfer is unavailable in the current deal state": say(
+      "This leg is not open yet. Wait for the counterparty transfer to be confirmed.",
+      "Эта нога ещё не открыта. Дождитесь подтверждения перевода контрагента.",
+    ),
+    "Switch EVER Wallet to Everscale mainnet.": say(
+      "EVER Wallet is on another network. Switch it to Everscale mainnet, then send again.",
+      "Ever Wallet переключён на другую сеть. Поставьте Everscale mainnet и отправьте заново.",
+    ),
+    "A chain or relay endpoint is unavailable right now. Try again in a moment.": say(
+      "The network reader is unavailable right now. Try again in a moment — your transfer is not lost.",
+      "Сетевой ридер временно недоступен. Повторите через минуту — перевод не потерян.",
+    ),
+  }[message] ?? (
+    /insufficient funds for gas|not enough eth|gas price/i.test(message)
+      ? say(
+        "The sending address has no ETH for the network fee. Top it up on this network, then confirm the transfer again.",
+        "У адреса отправителя нет ETH на комиссию сети. Пополните его в этой сети и подтвердите перевод заново.",
+      )
+      : /rejected|denied|cancelled|abort/i.test(message)
+        ? say("You declined the transfer in the wallet.", "Вы отклонили перевод в кошельке.")
+        : message
+  ));
 
   function stateLabel(deal: Deal): string {
     if (deal.state === "completed") return say("Completed", "Завершена");
@@ -46,8 +79,8 @@
     if (deal.state === "cancelled") return say("Cancelled", "Отменена");
     const kind = stepOf(deal) || "payment";
     return payerOf(deal, kind) === walletOf(legOf(kind))
-      ? say(`You send ${assetOf(kind)}`, `Вам отправить ${assetOf(kind)}`)
-      : say(`Waiting for ${assetOf(kind)}`, `Ожидается ${assetOf(kind)}`);
+      ? say(`You send ${assetOf(kind)}`, `Вам нужно отправить ${assetOf(kind)}`)
+      : say(`Waiting for ${assetOf(kind)}`, `Ждём ${assetOf(kind)} от контрагента`);
   }
   function deadline(deal: Deal): string {
     const until = deal.state === "payment_pending" ? deal.pay_by : deal.state === "delivery_pending" ? deal.payout_by : null;
@@ -74,7 +107,7 @@
     if (!session || busy || locked) return;
     busy = true; onBusyChange(true); onError("");
     try { await action(); }
-    catch (e) { onError(e instanceof Error ? e.message : "Request failed"); }
+    catch (e) { onError(explain(e instanceof Error ? e.message : "Request failed")); }
     finally { busy = false; onBusyChange(false); await refresh(); }
   }
   function prepare(deal: Deal, kind: string) {
@@ -120,6 +153,11 @@
             <div><dt>{say("You send", "Вы отправляете")}</dt><dd>{amount(deal, kind)} {assetOf(kind)} · <code title={payerOf(deal, kind)}>{short(payerOf(deal, kind))}</code></dd></div>
             <div><dt>{say("Goes to", "Получатель")}</dt><dd><code title={payeeOf(deal, kind)}>{payeeOf(deal, kind)}</code></dd></div>
           </dl>
+          {#if failedOf(deal, kind)}
+            <p class="rejected" role="alert">{legOf(kind) === "ethereum"
+              ? say("The network rejected the saved USDT transfer — the coins never left your wallet. Send it again.", "Сеть отклонила сохранённый перевод USDT — деньги не ушли с кошелька. Отправьте заново.")
+              : say("The EVER transfer bounced back to your wallet: the receiving EVER account is not deployed in the network yet. Have it top up any small EVER amount, then send again.", "Перевод EVER вернулся на ваш кошелёк: аккаунт получателя ещё не развёрнут в сети. Пусть его пополнят на любой небольшой EVER и отправьте заново.")}</p>
+          {/if}
           {#if open && open.state !== "prepared"}
             <p class="pending" role="status">{say(`Saved ${assetOf(kind)} transfer ${short(open.reference || "")} is being confirmed on ${legOf(kind) === "ethereum" ? networkLabel : "Everscale"}.`, `Сохранённый перевод ${assetOf(kind)} ${short(open.reference || "")} подтверждается в сети ${legOf(kind) === "ethereum" ? networkLabel : "Everscale"}.`)} <button type="button" class="link" on:click={() => review = { deal, attempt: open, kind }}>{say("Open saved transfer", "Открыть сохранённый перевод")}</button></p>
           {:else}
@@ -154,6 +192,7 @@
   .legs dt { color:var(--color-text-soft); font-size:11px; }
   .legs dd { margin:0; overflow-wrap:anywhere; font-family:var(--font-mono); font-size:11px; }
   .pending { margin:0; color:var(--color-text-soft); font-size:11px; line-height:1.6; }
+  .rejected { margin:0; padding:8px 10px; border:1px solid color-mix(in srgb, var(--color-danger) 40%, transparent); border-radius:8px; color:var(--color-danger); font-size:11px; line-height:1.6; }
   .actions { display:flex; flex-wrap:wrap; gap:8px; }
   .actions .primary { display:flex; align-items:center; justify-content:space-between; gap:10px; min-height:42px; padding:9px 14px; border:1px solid var(--color-accent-strong); border-radius:8px; background:var(--color-accent); color:#152016; font-size:12px; font-weight:700; }
   .actions .ghost { min-height:42px; padding:9px 12px; border:1px solid var(--color-border); border-radius:8px; color:var(--color-text-soft); font-size:12px; }
