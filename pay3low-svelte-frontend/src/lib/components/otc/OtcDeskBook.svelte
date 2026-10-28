@@ -30,19 +30,6 @@
   $: numberLocale = $locale === "ru" ? "ru-RU" : "en-US";
   $: askLevels = buildLevels(publicOffers, "sell", ownIds);
   $: bidLevels = buildLevels(publicOffers, "buy", ownIds);
-  $: bestAsk = askLevels[0] ?? null;
-  $: bestBid = bidLevels[0] ?? null;
-  $: askRate = bestAsk && Number.isFinite(Number(bestAsk.price)) ? Number(bestAsk.price) : null;
-  $: bidRate = bestBid && Number.isFinite(Number(bestBid.price)) ? Number(bestBid.price) : null;
-  $: midRate = askRate !== null && bidRate !== null ? (askRate + bidRate) / 2 : askRate ?? bidRate;
-  $: spreadValue = askRate !== null && bidRate !== null ? askRate - bidRate : null;
-  $: midText = midRate === null || !Number.isFinite(midRate) ? "—" : formatPrice(String(midRate), numberLocale);
-  $: spreadText = spreadValue === null || midRate === null || !midRate ? "—" : `${formatPrice(String(spreadValue), numberLocale)} (${(spreadValue / midRate * 100).toFixed(2)}%)`;
-  $: askVolume = askLevels.reduce((sum, level) => sum + (Number(level.total) || 0), 0);
-  $: bidVolume = bidLevels.reduce((sum, level) => sum + (Number(level.total) || 0), 0);
-  $: totalVolume = askVolume + bidVolume;
-  $: bidShare = totalVolume ? Math.round(bidVolume / totalVolume * 1000) / 10 : 50;
-  $: askShare = totalVolume ? 100 - bidShare : 50;
 
   function buildLevels(source: PublicOffer[], side: Direction, own: string[]): BookLevel[] {
     return source
@@ -139,16 +126,6 @@
         {@render side(askLevels, say("Sellers", "Продавцы"), say("Sell offers", "Предложения на продажу"), "asks")}
         {@render side(bidLevels, say("Buyers", "Покупатели"), say("Buy offers", "Предложения на покупку"), "bids")}
       </div>
-      <div class="obMid">
-        <div><span>{say("Mid price", "Средняя цена")}</span><strong>{midText}</strong></div>
-        <div><span>{say("Spread", "Спред")}</span><strong>{spreadText}</strong></div>
-      </div>
-      {#if totalVolume}
-        <div class="obRatio" aria-label={say("Public offer volume", "Объём публичных офферов")}>
-          <div class="obRatioBar" aria-hidden="true"><span class="bid" style={`width:${bidShare}%`}></span><span class="ask" style={`width:${askShare}%`}></span></div>
-          <div class="obRatioLabels"><span class="bid">{say("Buy", "Покупка")} {bidShare.toFixed(1)}%</span><span class="ask">{say("Sell", "Продажа")} {askShare.toFixed(1)}%</span></div>
-        </div>
-      {/if}
       {#if offers.length}
         <div class="deskQuotes">
           <div class="obSideHead"><span>{say("Desk quotes", "Котировки деска")}</span><span>{offers.length}</span></div>
@@ -227,20 +204,7 @@
   .obAmount,.obTotal { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .obTotal { color:var(--color-text); }
   .obEmpty { display:flex; min-height:44px; align-items:center; padding:6px 12px; border:1px dashed var(--color-border); border-radius:10px; color:var(--color-text-faint); font-size:11px; }
-  .obMid { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:48px; margin-top:4px; padding:7px 12px; border-top:1px solid var(--color-border-strong); border-bottom:1px solid var(--color-border-strong); background:var(--color-panel-soft); }
-  .obMid > div { display:grid; min-width:0; gap:2px; }
-  .obMid > div:last-child { text-align:right; }
-  .obMid span { color:var(--color-text-faint); font-size:9px; letter-spacing:.04em; line-height:1.3; text-transform:uppercase; }
-  .obMid strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:var(--font-mono); font-size:13px; font-weight:600; font-variant-numeric:tabular-nums; }
-  .obMid > div:first-child strong { color:var(--color-text); font-size:15px; }
-  .obRatio { display:grid; gap:6px; padding:10px 12px; border-top:1px solid var(--color-border); }
-  .obRatioBar { display:flex; height:4px; overflow:hidden; border-radius:999px; background:var(--color-panel); }
-  .obRatioBar .bid { height:100%; background:var(--otc-buy); }
-  .obRatioBar .ask { height:100%; background:var(--otc-sell); }
-  .obRatioLabels { display:flex; justify-content:space-between; color:var(--color-text-faint); font-family:var(--font-mono); font-size:9px; font-variant-numeric:tabular-nums; }
-  .obRatioLabels .bid { color:var(--otc-buy); }
-  .obRatioLabels .ask { color:var(--otc-sell); }
-  .deskQuotes { margin-top:auto; border-top:1px solid var(--color-border-strong); }
+                                                      .deskQuotes { margin-top:auto; border-top:1px solid var(--color-border-strong); }
   .deskQuotes > .obSideHead { background:var(--color-panel); color:var(--color-text-soft); }
   .bookSide { margin:0; padding:9px var(--otc-panel-padding,20px); border-bottom:1px solid var(--color-border); background:var(--otc-buy-soft); color:var(--otc-buy); font-size:11px; font-weight:700; letter-spacing:.045em; text-transform:uppercase; }
   .bookSide.sell { color:var(--otc-sell); background:var(--otc-sell-soft); }
@@ -305,6 +269,6 @@
   .acceptOffer:disabled { opacity:.45; cursor:default; }
   .acceptOffer:focus-visible { outline:var(--focus-ring-width) solid var(--color-focus); outline-offset:2px; }
   @media (min-width:640px) { .rowOwner { display:flex; } }
-  @media (max-width:520px) { .bookHeader,.bookRow { grid-template-columns:minmax(0,1fr) minmax(0,.8fr) minmax(0,.75fr) 12px; gap:5px; } .bookHeader,.bookRow { padding-right:12px; padding-left:12px; } .rowAmount small,.rowTotal small { display:none; } .obHead,.obRow,.obSideHead,.obEmpty,.obMid { padding-right:8px; padding-left:8px; } .obHead,.obRow { grid-template-columns:minmax(0,1fr) minmax(0,.8fr) minmax(0,.8fr) minmax(0,.9fr); gap:5px; font-size:10.5px; } .orderbook { padding-right:12px; padding-left:12px; } .dialogHead,.dialogSummary,.addressList { padding-right:16px; padding-left:16px; } .settlementNote { padding-right:16px; padding-left:16px; } .acceptRow { padding-right:16px; padding-left:16px; } .dialogFoot { align-items:flex-start; padding-right:16px; padding-left:16px; } }
+  @media (max-width:520px) { .bookHeader,.bookRow { grid-template-columns:minmax(0,1fr) minmax(0,.8fr) minmax(0,.75fr) 12px; gap:5px; } .bookHeader,.bookRow { padding-right:12px; padding-left:12px; } .rowAmount small,.rowTotal small { display:none; } .obHead,.obRow,.obSideHead,.obEmpty { padding-right:8px; padding-left:8px; } .obHead,.obRow { grid-template-columns:minmax(0,1fr) minmax(0,.8fr) minmax(0,.8fr) minmax(0,.9fr); gap:5px; font-size:10.5px; } .orderbook { padding-right:12px; padding-left:12px; } .dialogHead,.dialogSummary,.addressList { padding-right:16px; padding-left:16px; } .settlementNote { padding-right:16px; padding-left:16px; } .acceptRow { padding-right:16px; padding-left:16px; } .dialogFoot { align-items:flex-start; padding-right:16px; padding-left:16px; } }
   @media (prefers-reduced-motion:reduce) { .bookRow,.obRow,.proposalSelect,.copyButton { transition:none; } }
 </style>

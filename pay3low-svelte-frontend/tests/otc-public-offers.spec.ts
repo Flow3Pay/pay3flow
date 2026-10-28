@@ -88,7 +88,8 @@ test("seller signs in with EVER alone and publishes, restores, and cancels a rea
   expect(f.calls.filter(call => call.path === "/offers" && call.method === "POST")).toHaveLength(0);
   await page.getByTestId("otc-publish-offer").click();
   await expect(page.locator(".serviceControls [role=status]")).toContainText("Your EVER sale offer is published.");
-  await expect(page.getByTestId("otc-public-offer")).toContainText("10.000000001 EVER → 1.000001 USDT");
+  await expect(page.getByTestId("otc-public-offer")).toContainText("10.000000001");
+  await expect(page.getByTestId("otc-public-offer")).toContainText("1.000001");
   expect(f.calls.find(call => call.path === "/session/challenge")?.body.chain).toBe("everscale");
   expect(f.calls.find(call => call.path === "/offers" && call.method === "POST")?.body).toEqual({ direction:"sell", ever_amount: "10.000000001", usdt_amount: "1.000001", usdt_address: eth });
   expect(f.calls.some(call => /rfqs|attempts|prepare|decision/.test(call.path))).toBe(false);
@@ -96,10 +97,11 @@ test("seller signs in with EVER alone and publishes, restores, and cancels a rea
   expect(await page.evaluate(() => (window as any).everCalls)).not.toContain("sendMessage");
   await page.reload();
   await expect(page.getByTestId("otc-public-offer")).toBeVisible();
-  await page.getByTestId("otc-own-offer").getByRole("button", { name: "Cancel my offer", exact: true }).click();
+  await page.getByTestId("otc-public-offer").click();
+  await page.getByRole("button", { name: "Cancel offer", exact: true }).click();
   await expect(page.getByTestId("otc-public-offer")).toHaveCount(0);
   await page.getByRole("tab", { name:"History", exact:true }).click();
-  await expect(page.getByTestId("otc-own-offer")).toContainText("Cancelled");
+  await expect(page.locator(".tradeTables tbody tr[data-kind=offer]").first()).toContainText("Cancelled");
 });
 
 for (const direction of ["sell","buy"] as const) test(`a lost ${direction} publication restores the exact draft and reuses its key after reload`, async ({ page }) => {
@@ -151,21 +153,21 @@ test("sale publication uses the original Buy/Sell ticket, book and activity with
   await page.getByTestId("otc-offer-recipient").fill(eth);
   await expect(page.getByRole("textbox", { name:"Price", exact:true })).toHaveValue("0.0011889");
   await expect(page.locator(".bridgeColumn .bridgeForm")).toBeVisible();
-  await expect(page.locator(".chartColumn")).toContainText("Public asking prices");
+  await expect(page.locator(".chartColumn .marketChart")).toContainText("EVER / USDT");
   await page.getByTestId("otc-publish-offer").click();
   await expect(page.getByTestId("otc-offer-review")).toContainText("0.0011889 USDT / EVER");
   await page.getByTestId("otc-publish-offer").click();
-  await expect(page.locator(".bookColumn")).toContainText("100 EVER → 0.11889 USDT");
-  await expect(page.locator(".chartColumn circle")).toHaveCount(1);
-  await page.getByRole("button", { name:"Collapse Orderbook", exact:true }).click();
-  await expect(page.locator(".bookColumn")).toHaveCount(0);
+  const published = page.locator(".bookColumn .obRow");
+  await expect(published).toHaveCount(1);
+  await expect(published).toContainText("100");
+  await expect(published).toContainText("0.11889");
+  await expect(page.locator(".chartColumn .marketChart")).toHaveAttribute("data-points", "1");
   await page.setViewportSize({width:1440,height:1000});
   await expect.poll(async () => page.evaluate(() => {
     const grid=document.querySelector(".otcGrid")!.getBoundingClientRect();
     const chart=document.querySelector(".chartColumn")!.getBoundingClientRect();
     return Math.abs(grid.right-chart.right);
   })).toBeLessThan(1);
-  await page.getByRole("button", { name:"Expand Orderbook", exact:true }).click();
   await expect(page.getByRole("group", {name:"OTC mode",exact:true})).toHaveCount(0);
   await expect(page.locator(".otcGrid")).toHaveCount(1);
   await expect(page.locator(".bridgeForm")).toHaveCount(1);
@@ -175,8 +177,9 @@ test("sale publication uses the original Buy/Sell ticket, book and activity with
   await page.locator(".bridgeForm .sideTabs").getByRole("button", { name:"Sell EVER", exact:true }).click();
   await expect(page.getByTestId("otc-offer-ever")).toHaveValue("100");
   await expect(page.getByTestId("otc-offer-usdt")).toHaveValue("0.11889");
-  await expect(page.getByTestId("otc-public-offer")).toContainText("100 EVER → 0.11889 USDT");
-  await expect(page.getByTestId("otc-own-offer")).toContainText("100 EVER → 0.11889 USDT");
+  await expect(page.getByTestId("otc-public-offer")).toContainText("100");
+  await expect(page.getByTestId("otc-public-offer")).toContainText("0.11889");
+  await expect(page.locator(".bookColumn .obRow.own")).toContainText("0.11889");
 });
 
 
@@ -197,14 +200,17 @@ for (const direction of ["buy","sell"] as const) test(`price and amount publish 
   await expect(page.getByTestId("otc-offer-review")).toContainText(`${direction === "buy" ? "Buy" : "Sell"} 100 EVER · 11.889 USDT`);
   expect(f.calls.filter(c=>c.path === "/offers" && c.method === "POST")).toHaveLength(0);
   await page.getByTestId("otc-publish-offer").click();
-  const offer=page.locator(".bookColumn").getByTestId("otc-public-offer");
-  await expect(offer).toContainText(direction === "buy" ? "Buy EVER" : "Sell EVER");
-  await expect(offer).toContainText(direction === "buy" ? "11.889 USDT → 100 EVER" : "100 EVER → 11.889 USDT");
+  const offer=page.locator(`.bookColumn .obTable[data-side="${direction === "buy" ? "bids" : "asks"}"]`).getByTestId("otc-public-offer");
+  await expect(offer).toHaveCount(1);
+  await expect(offer).toContainText("0.11889");
+  await expect(offer).toContainText("100");
+  await expect(offer).toContainText("11.889");
   expect(f.calls.find(c=>c.path === "/offers" && c.method === "POST")?.body).toEqual({direction,ever_amount:"100",usdt_amount:"11.889",usdt_address:eth});
-  await offer.getByRole("button",{name:"Cancel my offer",exact:true}).click();
-  await expect(offer).toHaveCount(0);
+  await offer.click();
+  await page.getByRole("button",{name:"Cancel offer",exact:true}).click();
+  await expect(page.locator(".bookColumn").getByTestId("otc-public-offer")).toHaveCount(0);
   await page.getByRole("tab",{name:"History",exact:true}).click();
-  await expect(page.getByTestId("otc-own-offer")).toContainText("Cancelled");
+  await expect(page.locator(".tradeTables tbody tr[data-kind=offer]").first()).toContainText("Cancelled");
 });
 
 test("decimal commas, final totals, and price rounding remain explicit", async ({ page }) => {
@@ -244,20 +250,18 @@ for (const direction of ["buy","sell"] as const) test(`HEX-style ${direction} qu
   await expect(page.getByTestId("otc-offer-usdt")).toHaveValue("2.05");
   await expect(page.getByTestId("otc-offer-price")).toHaveValue("0.205");
   await expect(page.locator(".marketStat.last")).toContainText("0.205 USDT / EVER");
-  await expect(page.getByTestId("otc-offer-equation")).toContainText("10 EVER × 0.205 USDT / EVER = 2.05 USDT");
   await page.getByTestId("otc-offer-recipient").fill(eth);
   await page.getByTestId("otc-publish-offer").click();
   await page.getByTestId("otc-publish-offer").click();
   const row=page.locator(".bookColumn").getByTestId("otc-public-offer");
   await expect(row.getByTestId("otc-book-price")).toHaveText("0.205");
-  await expect(row.locator(".offerNumbers")).toContainText("2.05");
-  await expect(page.getByTestId("otc-chart-readout")).toContainText("0.205 USDT / EVER");
-  await expect(page.getByTestId("otc-chart-price")).toHaveCount(5);
-  await expect(page.locator(".chartColumn polyline")).toHaveCount(0);
+  await expect(row).toContainText("2.05");
+  await expect(page.getByTestId("otc-chart-price")).toHaveText("$0.205");
+  await expect(page.locator(".chartColumn .marketChart")).toHaveAttribute("data-points", "1");
   expect(f.calls.find(c=>c.method === "POST" && c.path === "/offers")?.body).toEqual({direction,ever_amount:"10",usdt_amount:"2.05",usdt_address:eth});
   await page.reload();
   await expect(page.locator(".bookColumn").getByTestId("otc-book-price")).toHaveText("0.205");
-  await expect(page.getByTestId("otc-chart-readout")).toContainText("0.205 USDT / EVER");
+  await expect(page.getByTestId("otc-chart-price")).toHaveText("$0.205");
 });
 
 test("a cancelled publication replay is never reported as a newly published offer",async({page})=>{
@@ -284,10 +288,11 @@ test("a saved publication populates the book and chart even if the following pub
   await page.getByTestId("otc-publish-offer").click();
   await expect(page.getByRole("alert")).toHaveText("Public offer refresh unavailable");
   await expect(page.locator(".bookColumn").getByTestId("otc-public-offer")).toHaveCount(1);
-  await expect(page.locator(".chartColumn circle")).toHaveCount(1);
-  await page.locator(".bookColumn").getByRole("button",{name:"Cancel my offer",exact:true}).click();
+  await expect(page.locator(".chartColumn .marketChart")).toHaveAttribute("data-points", "1");
+  await page.locator(".bookColumn").getByTestId("otc-public-offer").click();
+  await page.getByRole("button",{name:"Cancel offer",exact:true}).click();
   await expect(page.locator(".bookColumn").getByTestId("otc-public-offer")).toHaveCount(0);
-  await expect(page.locator(".chartColumn circle")).toHaveCount(1);
+  await expect(page.locator(".chartColumn .marketChart")).toHaveAttribute("data-points", "1");
 });
 
 test("public book loads despite a failed private history, with asks ascending and bids descending",async({page})=>{
@@ -298,5 +303,5 @@ test("public book loads despite a failed private history, with asks ascending an
   await page.reload();
   await expect(page.getByRole("alert")).toHaveText("Private offer list unavailable");
   await expect(page.locator(".bookColumn").getByTestId("otc-book-price")).toHaveText(["0.2","0.3","0.15","0.1"]);
-  await expect(page.locator(".chartColumn circle")).toHaveCount(4);
+  await expect(page.locator(".chartColumn .marketChart")).toHaveAttribute("data-points", "4");
 });

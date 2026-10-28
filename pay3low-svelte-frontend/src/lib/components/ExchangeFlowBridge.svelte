@@ -6,14 +6,12 @@
 </script>
 
 <div class="flowBridge">
-  <span class="bridgeLine" aria-hidden="true"></span>
   <button type="button" class="bridgeIcon" class:bridgeIconReversed={reversed} on:click={onSwap} aria-label={label} title={label}><img src={swapIcon} alt="" width="18" height="18" aria-hidden="true" /></button>
   <slot />
 </div>
 
 <style>
   .flowBridge { position: relative; z-index: 4; display: flex; height: 31px; align-items: center; justify-content: center; }
-  .bridgeLine { position: absolute; top: 50%; right: 0; left: 0; height: 1px; background: var(--exchange-line); pointer-events: none; }
   .bridgeIcon { position: relative; z-index: 1; display: grid; width: 27px; height: 27px; place-items: center; border: 1px solid var(--exchange-arrow-border); border-radius: 50%; background: var(--exchange-arrow-bg); color: var(--color-accent-text); cursor: pointer; box-shadow: none; transition: transform .2s ease; }
   .bridgeIcon:hover { transform: translateY(-1px) scale(1.04); }
   .bridgeIcon:active { transform: scale(.96); }
