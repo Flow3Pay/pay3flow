@@ -26,11 +26,11 @@
   });
   $: maxBuy = Math.max(1, ...sortedOffers.filter(o => offerDirection(o) === "buy").map(o => Number(o.terms.usdt_amount) || 0));
   $: maxSell = Math.max(1, ...sortedOffers.filter(o => offerDirection(o) === "sell").map(o => Number(o.terms.usdt_amount) || 0));
-  type BookLevel = { offer: PublicOffer; price: string; amount: string; total: string; depth: number; own: boolean };
+  type BookLevel = { offer: PublicOffer; price: string; amount: string; total: string; own: boolean };
   $: numberLocale = $locale === "ru" ? "ru-RU" : "en-US";
   $: askLevels = buildLevels(publicOffers, "sell", ownIds);
   $: bidLevels = buildLevels(publicOffers, "buy", ownIds);
-  $: bestAsk = askLevels.at(-1) ?? null;
+  $: bestAsk = askLevels[0] ?? null;
   $: bestBid = bidLevels[0] ?? null;
   $: askRate = bestAsk && Number.isFinite(Number(bestAsk.price)) ? Number(bestAsk.price) : null;
   $: bidRate = bestBid && Number.isFinite(Number(bestBid.price)) ? Number(bestBid.price) : null;
@@ -38,44 +38,23 @@
   $: spreadValue = askRate !== null && bidRate !== null ? askRate - bidRate : null;
   $: midText = midRate === null || !Number.isFinite(midRate) ? "—" : formatPrice(String(midRate), numberLocale);
   $: spreadText = spreadValue === null || midRate === null || !midRate ? "—" : `${formatPrice(String(spreadValue), numberLocale)} (${(spreadValue / midRate * 100).toFixed(2)}%)`;
-  $: askVolume = askLevels.length ? amountUnits(askLevels[0].total) : 0n;
-  $: bidVolume = bidLevels.length ? amountUnits(bidLevels[bidLevels.length - 1].total) : 0n;
+  $: askVolume = askLevels.reduce((sum, level) => sum + (Number(level.total) || 0), 0);
+  $: bidVolume = bidLevels.reduce((sum, level) => sum + (Number(level.total) || 0), 0);
   $: totalVolume = askVolume + bidVolume;
-  $: bidShare = totalVolume ? Number(bidVolume * 1000n / totalVolume) / 10 : 50;
+  $: bidShare = totalVolume ? Math.round(bidVolume / totalVolume * 1000) / 10 : 50;
   $: askShare = totalVolume ? 100 - bidShare : 50;
 
-  function amountUnits(value: string): bigint {
-    const [whole, fraction = ""] = value.split(".");
-    return BigInt(whole + fraction.padEnd(9, "0").slice(0, 9));
-  }
-  function cumulativeAmount(value: bigint): string {
-    const scale = 10n ** 9n;
-    const whole = value / scale;
-    const fraction = (value % scale).toString().padStart(9, "0").replace(/0+$/, "");
-    return fraction ? `${whole}.${fraction}` : `${whole}`;
-  }
   function buildLevels(source: PublicOffer[], side: Direction, own: string[]): BookLevel[] {
-    const sorted = source.filter(offer => offerDirection(offer) === side).sort((a, b) =>
-      compareOfferRates(a.terms.ever_amount, a.terms.usdt_amount, b.terms.ever_amount, b.terms.usdt_amount) * (side === "sell" ? 1 : -1)
-    );
-    let cumulative = 0n;
-    const levels = sorted.map(offer => {
-      cumulative += amountUnits(offer.terms.ever_amount);
-      return {
+    return source
+      .filter(offer => offerDirection(offer) === side)
+      .sort((a, b) => compareOfferRates(a.terms.ever_amount, a.terms.usdt_amount, b.terms.ever_amount, b.terms.usdt_amount) * (side === "sell" ? 1 : -1))
+      .map(offer => ({
         offer,
         price: saleRate(offer.terms.ever_amount, offer.terms.usdt_amount),
         amount: offer.terms.ever_amount,
-        total: cumulativeAmount(cumulative),
-        depth: 0,
+        total: offer.terms.usdt_amount,
         own: own.includes(offer.id),
-      };
-    });
-    const max = cumulative || 1n;
-    const withDepth = levels.map(level => ({
-      ...level,
-      depth: Math.max(4, Math.min(100, Number(BigInt(amountUnits(level.total)) * 100n / max))),
-    }));
-    return side === "sell" ? withDepth.reverse() : withDepth;
+      }));
   }
   function formatPrice(value: string, loc: string): string {
     const number = Number(value);
@@ -108,11 +87,22 @@
 
 {#snippet levelRow(level: BookLevel)}
   <button type="button" class="obRow" class:own={level.own} data-testid={testId} aria-label={`${level.own ? say("Your offer", "Ваш оффер") + ". " : ""}${say("Offer details", "Детали оффера")}: ${formatPrice(level.price, numberLocale)} USDT / EVER`} title={`${offerOwner(level.offer)} · ${formatEver(level.amount, numberLocale)} EVER → ${formatEver(level.offer.terms.usdt_amount, numberLocale)} USDT`} on:click={() => showOffer(level.offer)}>
-    <span class="obDepth" style={`--depth:${level.depth}%`}></span>
-    <span class="obPrice" data-testid="otc-book-price">{#if level.own}<i class="ownDot" aria-hidden="true"></i>{/if}{formatPrice(level.price, numberLocale)}</span>
+    <span class="obOwner"><i class="ownDot" aria-hidden="true"></i><code>{offerOwner(level.offer).slice(0, 6)}…{offerOwner(level.offer).slice(-4)}</code></span>
+    <span class="obPrice"><i aria-hidden="true">$</i><b data-testid="otc-book-price">{formatPrice(level.price, numberLocale)}</b></span>
     <span class="obAmount">{formatEver(level.amount, numberLocale)}</span>
-    <span class="obTotal">{formatEver(level.total, numberLocale)}</span>
+    <span class="obTotal"><i aria-hidden="true">$</i>{formatEver(level.total, numberLocale)}</span>
   </button>
+{/snippet}
+
+{#snippet side(levels: BookLevel[], who: string, label: string, key: string)}
+  <section class="obTable" data-side={key} aria-label={label}>
+    <div class="obHead"><span>{who}</span><span>{say("Price", "Цена")}<small>USDT</small></span><span>{say("Amount", "Объём")}<small>EVER</small></span><span>{say("Total", "Всего")}<small>USDT</small></span></div>
+    {#each levels as level (level.offer.id)}
+      {@render levelRow(level)}
+    {:else}
+      {#if showEmpty}<div class="obEmpty">{label}</div>{/if}
+    {/each}
+  </section>
 {/snippet}
 
 {#if !dialogOnly}
@@ -144,27 +134,15 @@
   {:else}
     {#if config?.public_offers_available}
     <div class="orderbook">
-      <div class="obColumns" aria-hidden="true"><span>{say("Price", "Цена")}<small>USDT</small></span><span>{say("Amount", "Объём")}<small>EVER</small></span><span>{say("Total", "Всего")}<small>EVER</small></span></div>
-      <section class="obSide asks" aria-label={say("Sell offers", "Предложения на продажу")}>
-        <div class="obSideHead"><span>{say("Sell offers", "Продажа")}</span><span>{askLevels.length}</span></div>
-        {#each askLevels as level (level.offer.id)}
-          {@render levelRow(level)}
-        {:else}
-          {#if showEmpty}<div class="obEmpty">{say("No sell offers", "Нет продаж")}</div>{/if}
-        {/each}
-      </section>
+      <div class="obTables">
+        <!-- Sellers come first so the book reads ask-then-bid; the grid places buyers on the left, as the layout asks for. -->
+        {@render side(askLevels, say("Sellers", "Продавцы"), say("Sell offers", "Предложения на продажу"), "asks")}
+        {@render side(bidLevels, say("Buyers", "Покупатели"), say("Buy offers", "Предложения на покупку"), "bids")}
+      </div>
       <div class="obMid">
         <div><span>{say("Mid price", "Средняя цена")}</span><strong>{midText}</strong></div>
         <div><span>{say("Spread", "Спред")}</span><strong>{spreadText}</strong></div>
       </div>
-      <section class="obSide bids" aria-label={say("Buy offers", "Предложения на покупку")}>
-        <div class="obSideHead"><span>{say("Buy offers", "Покупка")}</span><span>{bidLevels.length}</span></div>
-        {#each bidLevels as level (level.offer.id)}
-          {@render levelRow(level)}
-        {:else}
-          {#if showEmpty}<div class="obEmpty">{say("No buy offers", "Нет покупок")}</div>{/if}
-        {/each}
-      </section>
       {#if totalVolume}
         <div class="obRatio" aria-label={say("Public offer volume", "Объём публичных офферов")}>
           <div class="obRatioBar" aria-hidden="true"><span class="bid" style={`width:${bidShare}%`}></span><span class="ask" style={`width:${askShare}%`}></span></div>
@@ -225,29 +203,31 @@
 
 <style>
   .bookRows.compact { min-height:0; flex:0 0 auto; }
-  .orderbook { display:flex; flex:1; min-height:0; flex-direction:column; overflow-y:auto; scrollbar-width:thin; }
-  .obColumns { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr); gap:8px; align-items:end; min-height:40px; padding:7px 12px; border-bottom:1px solid var(--color-border); color:var(--color-text-soft); font-size:10px; line-height:1.35; text-align:right; }
-  .obColumns > span:first-child { text-align:left; }
-  .obColumns small { display:block; color:var(--color-text-faint); font-size:9px; }
-  .obSide { display:flex; flex:0 0 auto; flex-direction:column; }
+  .orderbook { display:flex; flex:1; min-height:0; flex-direction:column; overflow-y:auto; scrollbar-width:thin; padding:0 var(--otc-panel-padding,20px) 12px; gap:12px; }
+  .obTables { display:flex; flex-wrap:wrap; gap:20px; }
+  .obTable { display:flex; flex:1 1 260px; min-width:0; flex-direction:column; gap:8px; }
+  .obTable[data-side="bids"] { order:-1; }
+  .obHead { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr) minmax(0,.9fr) minmax(0,1fr); gap:8px; align-items:end; min-height:32px; padding:0 12px; color:var(--color-text-soft); font-size:11px; line-height:1.35; text-align:right; }
+  .obHead > span:first-child { text-align:left; }
+  .obHead small { display:block; color:var(--color-text-faint); font-size:9px; }
   .obSideHead { display:flex; min-height:24px; align-items:center; justify-content:space-between; gap:8px; padding:4px 12px; border-bottom:1px solid var(--color-border); color:var(--color-text-faint); font-size:9px; font-weight:650; letter-spacing:.08em; line-height:1.4; text-transform:uppercase; }
   .obSideHead > span:last-child { font-family:var(--font-mono); font-size:10px; font-weight:400; letter-spacing:0; }
-  .asks .obSideHead { background:var(--otc-sell-soft); color:var(--otc-sell); }
-  .bids .obSideHead { background:var(--otc-buy-soft); color:var(--otc-buy); }
-  .obRow { position:relative; isolation:isolate; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr); width:100%; min-height:27px; align-items:center; gap:8px; padding:3px 12px; border-bottom:1px solid color-mix(in srgb, var(--color-border) 55%, transparent); background:transparent; color:var(--color-text); font-family:var(--font-mono); font-size:11px; font-variant-numeric:tabular-nums; line-height:1.35; text-align:right; cursor:pointer; transition:background .12s ease; }
-  .obRow.own { box-shadow:inset 2px 0 var(--color-accent-strong); }
-  .obRow:hover { background:var(--color-panel); }
-  .obDepth { position:absolute; z-index:-1; inset:1px 0 1px auto; width:var(--depth); border-radius:3px 0 0 3px; pointer-events:none; }
-  .asks .obDepth { background:color-mix(in srgb, var(--otc-sell) 10%, transparent); }
-  .bids .obDepth { background:color-mix(in srgb, var(--otc-buy) 10%, transparent); }
-  .obPrice { justify-self:start; font-weight:650; }
-  .asks .obPrice { color:var(--otc-sell); }
-  .bids .obPrice { color:var(--otc-buy); }
-  .ownDot { display:inline-block; width:4px; height:4px; margin-right:4px; border-radius:50%; background:var(--color-accent-strong); vertical-align:2px; }
-  .obAmount,.obTotal { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .obTotal { color:var(--color-text-soft); }
-  .obEmpty { display:flex; min-height:30px; align-items:center; padding:3px 12px; color:var(--color-text-faint); font-size:10px; }
-  .obMid { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:48px; padding:7px 12px; border-top:1px solid var(--color-border-strong); border-bottom:1px solid var(--color-border-strong); background:var(--color-panel-soft); }
+  .obRow { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr) minmax(0,.9fr) minmax(0,1fr); width:100%; min-height:44px; align-items:center; gap:8px; padding:6px 12px; border:1px solid var(--color-border); border-radius:10px; background:var(--otc-row-sell-bg); color:var(--color-text); font-family:var(--font-mono); font-size:12px; font-variant-numeric:tabular-nums; line-height:1.35; text-align:right; cursor:pointer; transition:box-shadow .12s ease; }
+  .obTable[data-side="bids"] .obRow { background:var(--otc-row-buy-bg); }
+  .obRow:hover { box-shadow:inset 0 0 0 1px var(--color-border-strong); }
+  .obRow.own { box-shadow:inset 3px 0 0 var(--color-accent-strong); }
+  .obOwner { display:flex; min-width:0; align-items:center; gap:6px; justify-self:start; text-align:left; }
+  .obOwner code { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:700; letter-spacing:-.02em; }
+  .ownDot { display:none; width:5px; height:5px; flex:0 0 auto; border-radius:50%; background:var(--color-accent-strong); }
+  .obRow.own .ownDot { display:inline-block; }
+  .obPrice { min-width:0; overflow:hidden; text-overflow:ellipsis; font-weight:650; color:var(--color-good); }
+  .obTable[data-side="bids"] .obPrice { color:var(--color-danger); }
+  .obPrice i, .obTotal i { font-style:normal; opacity:.62; }
+  .obPrice b { font-weight:650; }
+  .obAmount,.obTotal { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .obTotal { color:var(--color-text); }
+  .obEmpty { display:flex; min-height:44px; align-items:center; padding:6px 12px; border:1px dashed var(--color-border); border-radius:10px; color:var(--color-text-faint); font-size:11px; }
+  .obMid { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:48px; margin-top:4px; padding:7px 12px; border-top:1px solid var(--color-border-strong); border-bottom:1px solid var(--color-border-strong); background:var(--color-panel-soft); }
   .obMid > div { display:grid; min-width:0; gap:2px; }
   .obMid > div:last-child { text-align:right; }
   .obMid span { color:var(--color-text-faint); font-size:9px; letter-spacing:.04em; line-height:1.3; text-transform:uppercase; }
@@ -325,6 +305,6 @@
   .acceptOffer:disabled { opacity:.45; cursor:default; }
   .acceptOffer:focus-visible { outline:var(--focus-ring-width) solid var(--color-focus); outline-offset:2px; }
   @media (min-width:640px) { .rowOwner { display:flex; } }
-  @media (max-width:520px) { .bookHeader,.bookRow { grid-template-columns:minmax(0,1fr) minmax(0,.8fr) minmax(0,.75fr) 12px; gap:5px; } .bookHeader,.bookRow { padding-right:12px; padding-left:12px; } .rowAmount small,.rowTotal small { display:none; } .obColumns,.obRow,.obSideHead,.obEmpty,.obMid { padding-right:12px; padding-left:12px; } .obRow,.obColumns { gap:5px; } .obRow { font-size:10.5px; } .dialogHead,.dialogSummary,.addressList { padding-right:16px; padding-left:16px; } .settlementNote { padding-right:16px; padding-left:16px; } .acceptRow { padding-right:16px; padding-left:16px; } .dialogFoot { align-items:flex-start; padding-right:16px; padding-left:16px; } }
+  @media (max-width:520px) { .bookHeader,.bookRow { grid-template-columns:minmax(0,1fr) minmax(0,.8fr) minmax(0,.75fr) 12px; gap:5px; } .bookHeader,.bookRow { padding-right:12px; padding-left:12px; } .rowAmount small,.rowTotal small { display:none; } .obHead,.obRow,.obSideHead,.obEmpty,.obMid { padding-right:8px; padding-left:8px; } .obHead,.obRow { grid-template-columns:minmax(0,1fr) minmax(0,.8fr) minmax(0,.8fr) minmax(0,.9fr); gap:5px; font-size:10.5px; } .orderbook { padding-right:12px; padding-left:12px; } .dialogHead,.dialogSummary,.addressList { padding-right:16px; padding-left:16px; } .settlementNote { padding-right:16px; padding-left:16px; } .acceptRow { padding-right:16px; padding-left:16px; } .dialogFoot { align-items:flex-start; padding-right:16px; padding-left:16px; } }
   @media (prefers-reduced-motion:reduce) { .bookRow,.obRow,.proposalSelect,.copyButton { transition:none; } }
 </style>

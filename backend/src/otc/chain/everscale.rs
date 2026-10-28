@@ -56,6 +56,22 @@ pub(crate) fn receipt(transaction: &Value, leg: &Leg) -> Result<Evidence> {
     })
 }
 impl Service {
+    /// Account state for any Everscale address, read through the agreeing
+    /// GraphQL pair. Callers check `acc_type` themselves because activity means
+    /// something different to the desk observer than to a customer's wallet.
+    pub(crate) async fn ever_account(&self, address: &str) -> Result<Value> {
+        let data = self
+            .ever_agree(
+                "query($address:String!){accounts(filter:{id:{eq:$address}},limit:1){id balance acc_type}}",
+                json!({"address": address}),
+            )
+            .await?;
+        data["accounts"]
+            .as_array()
+            .and_then(|accounts| accounts.first())
+            .cloned()
+            .ok_or_else(|| invalid("Everscale wallet account is missing"))
+    }
     pub(crate) async fn everscale_evidence(
         &self,
         reference: &str,
@@ -166,11 +182,7 @@ impl Service {
         if lag > self.cfg.everscale_lag_seconds {
             return Err(invalid("Everscale observer exceeds lag limit"));
         }
-        let balance=self.ever_agree("query($address:String!){accounts(filter:{id:{eq:$address}},limit:1){id balance acc_type}}",json!({"address":self.cfg.ever_wallet})).await?;
-        let account = balance["accounts"]
-            .as_array()
-            .and_then(|a| a.first())
-            .ok_or_else(|| invalid("desk EVER wallet missing"))?;
+        let account = self.ever_account(&self.cfg.ever_wallet).await?;
         if account["acc_type"] != 1 {
             return Err(invalid("desk EVER wallet inactive"));
         }

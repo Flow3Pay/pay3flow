@@ -8,13 +8,15 @@ use super::{
 };
 use crate::core::state::AppState;
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::HeaderMap,
     routing::{get, post},
     Json, Router,
 };
+use chrono::Utc;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 pub(crate) fn router() -> Router<AppState> {
@@ -27,6 +29,7 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/api/otc/wallet/challenge", post(challenge))
         .route("/api/otc/wallet/proof", post(prove))
         .route("/api/otc/listings", get(listings))
+        .route("/api/otc/history", get(history))
         .route(
             "/api/otc/offers",
             get(public_offers).post(post_public_offer),
@@ -42,6 +45,7 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/api/otc/p2p/attempts/:id/reference", post(p2p_submit))
         .route("/api/otc/rfqs", post(rfq))
         .route("/api/otc/trades", get(trades))
+        .route("/api/otc/balances", get(balances))
         .route("/api/otc/multisig/review", post(multisig_review))
         .route("/api/otc/multisig/prepare", post(multisig_prepare))
         .route("/api/otc/multisig/calls/:id", get(multisig_call))
@@ -164,6 +168,43 @@ async fn public_offers(State(state): State<AppState>) -> Result<Json<Value>> {
 async fn public_offer_history(State(state): State<AppState>) -> Result<Json<Value>> {
     Ok(Json(state.otc.public_offer_history().await?))
 }
+/// Time-bucketed chart data: candles and book levels from the desk's own
+/// records, plus the indicative daily series the converter is priced from.
+async fn history(
+    State(state): State<AppState>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<Json<Value>> {
+    let market = params
+        .get("market")
+        .map(String::as_str)
+        .unwrap_or("EVER-USDT");
+    if market != "EVER-USDT" {
+        return Err(invalid("unsupported market"));
+    }
+    let window = super::history::Window::parse(
+        params.get("range").map(String::as_str).unwrap_or("1m"),
+        Utc::now(),
+    )?;
+    let (candles, levels) = super::history::aggregate(&state.otc.history(&window).await?, &window);
+    let (points, stale) = if window.history_days > 0 {
+        state
+            .market_prices
+            .daily_history("EVER", window.history_days)
+            .await
+    } else {
+        (Vec::new(), false)
+    };
+    Ok(Json(json!({
+        "market": market,
+        "range": window.range,
+        "bucket_seconds": window.bucket_seconds,
+        "from": window.from,
+        "to": window.to,
+        "spot": { "source": "DefiLlama", "stale": stale, "points": points },
+        "candles": candles,
+        "levels": levels,
+    })))
+}
 async fn my_public_offers(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -258,6 +299,10 @@ async fn rfq(
 async fn trades(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Value>> {
     let (_, actor) = state.otc.session(bearer(&headers)?).await?;
     Ok(Json(state.otc.trades(&actor).await?))
+}
+async fn balances(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Value>> {
+    let (_, actor) = state.otc.session(bearer(&headers)?).await?;
+    Ok(Json(state.otc.balances(&actor).await))
 }
 async fn details(
     State(state): State<AppState>,

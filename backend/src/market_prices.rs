@@ -20,7 +20,8 @@ const REFRESH_INTERVAL: Duration = Duration::from_secs(60 * 60);
 const RETRY_INTERVAL: Duration = Duration::from_secs(60);
 const MAX_STALE_AGE: Duration = Duration::from_secs(6 * 60 * 60);
 const MAX_PROVIDER_PRICE_AGE_SECS: i64 = 15 * 60;
-const DEFILLAMA_BASE: &str = "https://coins.llama.fi/prices/current/";
+const DEFILLAMA_ROOT: &str = "https://coins.llama.fi/";
+const HISTORY_TTL: Duration = Duration::from_secs(6 * 60 * 60);
 
 // The Open Network's CoinGecko ID now reports GRAM, the renamed native TON.
 // MATIC's legacy ticker is priced through its wrapped Ethereum contract.
@@ -66,7 +67,9 @@ const ASSETS: &[(&str, &str)] = &[
 pub struct MarketPriceService {
     client: reqwest::Client,
     endpoint: String,
+    chart_root: String,
     cache: Arc<RwLock<Option<PriceSnapshot>>>,
+    history: Arc<RwLock<HashMap<u32, HistorySnapshot>>>,
 }
 
 #[derive(Clone)]
@@ -74,6 +77,18 @@ struct PriceSnapshot {
     fetched_at: Instant,
     updated_at: i64,
     prices: HashMap<&'static str, MarketPrice>,
+}
+
+#[derive(Clone)]
+struct HistorySnapshot {
+    fetched_at: Instant,
+    points: Vec<SpotPoint>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+pub struct SpotPoint {
+    pub t: i64,
+    pub usd: f64,
 }
 
 #[derive(Clone)]
@@ -92,6 +107,22 @@ struct ProviderPrice {
     price: f64,
     timestamp: i64,
     confidence: Option<f64>,
+}
+
+#[derive(Deserialize)]
+struct ChartResponse {
+    coins: HashMap<String, ChartSeries>,
+}
+
+#[derive(Deserialize)]
+struct ChartSeries {
+    prices: Vec<ChartPoint>,
+}
+
+#[derive(Deserialize)]
+struct ChartPoint {
+    timestamp: i64,
+    price: f64,
 }
 
 #[derive(Deserialize)]
@@ -136,10 +167,10 @@ impl MarketPriceService {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(8))
             .build()?;
-        Ok(Self::with_client(client, DEFILLAMA_BASE.to_owned()))
+        Ok(Self::with_client(client, DEFILLAMA_ROOT.to_owned()))
     }
 
-    fn with_client(client: reqwest::Client, base: String) -> Self {
+    fn with_client(client: reqwest::Client, root: String) -> Self {
         let ids = ASSETS
             .iter()
             .map(|(_, id)| *id)
@@ -147,8 +178,10 @@ impl MarketPriceService {
             .join(",");
         Self {
             client,
-            endpoint: format!("{base}{ids}"),
+            endpoint: format!("{root}prices/current/{ids}"),
+            chart_root: root,
             cache: Arc::new(RwLock::new(None)),
+            history: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -293,6 +326,84 @@ impl MarketPriceService {
             values,
         }
     }
+
+    /// Daily indicative USD series for one listed asset, cached per length.
+    /// The provider only answers at day resolution for most coins, so charts
+    /// shorter than a week rely on the desk's own prints instead.
+    pub async fn daily_history(&self, asset: &str, days: u32) -> (Vec<SpotPoint>, bool) {
+        let days = days.clamp(2, 400);
+        let Some(id) = ASSETS
+            .iter()
+            .find(|(symbol, _)| *symbol == asset)
+            .map(|(_, id)| *id)
+        else {
+            return (Vec::new(), true);
+        };
+        if let Some(cached) = self.history.read().await.get(&days) {
+            if cached.fetched_at.elapsed() < HISTORY_TTL {
+                return (cached.points.clone(), false);
+            }
+        }
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_secs() as i64)
+            .unwrap_or_default();
+        let url = format!(
+            "{}chart/{id}?start={}&span={}&period=1d",
+            self.chart_root,
+            now - i64::from(days) * 86_400,
+            days + 2
+        );
+        let fetched = async {
+            Ok::<_, reqwest::Error>(
+                self.client
+                    .get(&url)
+                    .send()
+                    .await?
+                    .error_for_status()?
+                    .json::<ChartResponse>()
+                    .await?,
+            )
+        };
+        let points: Vec<SpotPoint> = match fetched.await {
+            Ok(payload) => payload
+                .coins
+                .get(id)
+                .map(|series| {
+                    series
+                        .prices
+                        .iter()
+                        .filter(|point| point.price.is_finite() && point.price > 0.0)
+                        .map(|point| SpotPoint {
+                            t: point.timestamp,
+                            usd: point.price,
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            Err(error) => {
+                tracing::warn!(%error, "market history refresh failed");
+                let stale = self
+                    .history
+                    .read()
+                    .await
+                    .get(&days)
+                    .map(|cached| cached.points.clone())
+                    .unwrap_or_default();
+                return (stale, true);
+            }
+        };
+        if !points.is_empty() {
+            self.history.write().await.insert(
+                days,
+                HistorySnapshot {
+                    fetched_at: Instant::now(),
+                    points: points.clone(),
+                },
+            );
+        }
+        (points, false)
+    }
 }
 
 pub async fn market_prices(State(state): State<AppState>) -> Json<MarketPricesResponse> {
@@ -364,11 +475,21 @@ mod tests {
         );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
-        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-        let mut service = MarketPriceService::with_client(
-            reqwest::Client::new(),
-            format!("http://{address}/prices/current/"),
+        let app = app.route(
+            "/chart/:id",
+            get(|| async {
+                Json(serde_json::json!({
+                    "coins": { "coingecko:everscale": { "prices": [
+                        { "timestamp": 1_700_000_000, "price": 0.002 },
+                        { "timestamp": 1_700_086_400, "price": 0.0021 },
+                        { "timestamp": 1_700_172_800, "price": 0.0 }
+                    ] } }
+                }))
+            }),
         );
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let mut service =
+            MarketPriceService::with_client(reqwest::Client::new(), format!("http://{address}/"));
         service.initialize().await;
         let pair = || {
             vec![
@@ -390,6 +511,24 @@ mod tests {
         service.refresh().await;
         assert!((service.value(pair()).await.values[1].value_usd.unwrap() - 2.97).abs() < 1e-10);
         assert_eq!(calls.load(Ordering::SeqCst), 2);
+
+        let (points, stale) = service.daily_history("EVER", 30).await;
+        assert!(!stale);
+        assert_eq!(
+            points,
+            vec![
+                SpotPoint {
+                    t: 1_700_000_000,
+                    usd: 0.002
+                },
+                SpotPoint {
+                    t: 1_700_086_400,
+                    usd: 0.0021
+                },
+            ]
+        );
+        assert!(service.daily_history("EVER", 30).await.0.len() == 2);
+        assert!(service.daily_history("NOPE", 30).await.1);
 
         service.endpoint = "http://127.0.0.1:1/unavailable".to_owned();
         service.refresh().await;

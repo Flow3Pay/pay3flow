@@ -129,6 +129,29 @@ impl Service {
             &net.usdt,
         )
     }
+    /// ERC-20 `balanceOf` for any holder on a contour, agreed across that
+    /// contour's RPC pair. The block is pinned by the caller so a settlement
+    /// check can reuse the exact block it already scanned.
+    pub(crate) async fn erc20_balance_of(
+        &self,
+        net: &EvmNet,
+        holder: &str,
+        block: &Value,
+    ) -> Result<u128> {
+        let data = format!(
+            "0x70a08231{:0>64}",
+            holder.trim_start_matches("0x").to_ascii_lowercase()
+        );
+        number(
+            &self
+                .evm_agree(
+                    net,
+                    "eth_call",
+                    json!([{"to": net.usdt, "data": data}, block]),
+                )
+                .await?,
+        )
+    }
     pub(crate) async fn ethereum_scan(
         &self,
     ) -> Result<(Value, String, chrono::DateTime<Utc>, u64)> {
@@ -153,19 +176,9 @@ impl Service {
         if lag > self.cfg.ethereum_lag_blocks {
             return Err(invalid("Ethereum observer exceeds configured lag"));
         }
-        let data = format!(
-            "0x70a08231{:0>64}",
-            self.cfg.usdt_wallet.trim_start_matches("0x")
-        );
-        let balance = number(
-            &self
-                .evm_agree(
-                    net,
-                    "eth_call",
-                    json!([{"to":net.usdt,"data":data},finalized["number"]]),
-                )
-                .await?,
-        )?;
+        let balance = self
+            .erc20_balance_of(net, &self.cfg.usdt_wallet, &finalized["number"])
+            .await?;
         let gas = number(
             &self
                 .evm_agree(

@@ -4,6 +4,7 @@ pub use test_workspace::{Draft, OrderType, Side, TestOtc};
 
 mod accounting;
 mod amount;
+mod balances;
 mod booking;
 mod chain;
 mod config;
@@ -11,6 +12,7 @@ mod error;
 mod escrow;
 mod everwallet;
 mod federation;
+mod history;
 pub(crate) mod http;
 mod login;
 mod metrics;

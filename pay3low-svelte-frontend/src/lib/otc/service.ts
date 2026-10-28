@@ -47,6 +47,35 @@ export async function request<T>(path: string, token = "", body?: unknown, key?:
   if (!response.ok) throw new OtcRequestError(result.error || `OTC request failed (${response.status})`, response.status);
   return result;
 }
+/** One server-bucketed OHLC print. Empty buckets are returned as nulls, not gaps. */
+export interface HistoryCandle {
+  t: number;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  close: number | null;
+  volume: number | null;
+  prints: number;
+}
+/** Indicative bid/ask for a bucket, carried forward while an offer stays open. */
+export interface HistoryLevel { t: number; bid: number | null; ask: number | null }
+export interface HistorySpot { t: number; usd: number }
+export interface History {
+  market?: string;
+  range?: string;
+  bucket_seconds?: number;
+  spot?: { source?: string; stale?: boolean; points?: HistorySpot[] };
+  candles?: HistoryCandle[];
+  levels?: HistoryLevel[];
+}
+export interface WalletBalance { chain: string; symbol: string; network: string; amount: string | null; state: string }
+export async function getHistory(range: string): Promise<History> {
+  return request<History>(`/history?market=EVER-USDT&range=${encodeURIComponent(range)}`);
+}
+export async function getBalances(token: string): Promise<WalletBalance[]> {
+  const result = await request<{ balances?: WalletBalance[] }>("/balances", token);
+  return Array.isArray(result.balances) ? result.balances : [];
+}
 export function decimal(units: string, precision: number): string {
   const amount = BigInt(units), scale = 10n ** BigInt(precision);
   const fraction = (amount % scale).toString().padStart(precision, "0").replace(/0+$/, "");

@@ -33,6 +33,9 @@ pub async fn apply_schema(pool: &DbPool) -> Result<()> {
         .batch_execute(include_str!("../../migrations/otc_p2p.sql"))
         .await?;
     client
+        .batch_execute(include_str!("../../migrations/otc_history.sql"))
+        .await?;
+    client
         .batch_execute(include_str!("../../migrations/otc_ever_multisig.sql"))
         .await?;
     client

@@ -16,7 +16,7 @@
   <div id={id} class="panelBody" hidden={!expanded}><slot /></div>
 </section>
 <style>
-  .otcPanel { display: flex; flex: 1; flex-direction: column; width: 100%; min-width: 0; border: 1px solid var(--color-border-strong); border-radius: 12px; background: var(--exchange-card-bg); overflow: hidden; }
+  .otcPanel { display: flex; flex: 1; flex-direction: column; width: 100%; min-width: 0; border: 1px solid var(--color-border-strong); border-radius: var(--otc-card-radius, 24px); background: var(--exchange-card-bg); overflow: hidden; }
   .panelHead { display: flex; flex: 0 0 auto; min-height: 56px; align-items: center; justify-content: space-between; gap: 12px; padding: 16px var(--otc-panel-padding, 20px); }
   .panelTitle, .panelActions { display: flex; min-width: 0; align-items: center; gap: 8px; }
   .panelActions { flex: 0 0 auto; }
