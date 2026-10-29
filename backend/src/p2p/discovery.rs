@@ -331,6 +331,8 @@ fn evaluate(mut route: P2pRoute, observed_at: DateTime<Utc>, stale: bool, banks:
         _ => Vec::new(),
     };
     if route.entry_offer.iter().chain(route.exit_offer.iter()).any(|o| o.market == super::P2pOfferMarket::DirectExchange) { missing.push("provider_fee".into()); }
+    // An advertisement price does not prove a venue's account-specific trading commission.
+    if route.entry_offer.iter().chain(route.exit_offer.iter()).any(|o| o.market == super::P2pOfferMarket::P2p) { missing.push("venue_trading_fee".into()); }
     if route.cycle_legs.iter().any(|l| l.market_pair.is_some()) { missing.push("actual_trading_fee_and_slippage".into()); }
     if stale { missing.push("stale_quote".into()); }
     if !a.verified || !b.verified { missing.push("payment_method".into()); }
@@ -363,6 +365,7 @@ fn evaluate(mut route: P2pRoute, observed_at: DateTime<Utc>, stale: bool, banks:
             "source_payment_fee" => super::RouteCostKind::SourcePaymentFee,
             "target_payment_fee" => super::RouteCostKind::TargetPaymentFee,
             "stale_quote" => super::RouteCostKind::LiveQuote,
+            "provider_fee" | "venue_trading_fee" | "actual_trading_fee_and_slippage" => super::RouteCostKind::ProviderFee,
             _ => super::RouteCostKind::NetworkFee,
         }).collect() });
     } }
@@ -568,7 +571,7 @@ mod tests {
         let prices=HashMap::from([("RUB".into(),Valuation{price_usd:0.01,observed_at:Utc::now(),source:"fixture".into()})]);
         banks[0].bank_fee_percent=Some(0.75);
         let result=evaluate(route,Utc::now(),false,&banks,&q,&job,None,None,&[],&service,&prices).unwrap();
-        assert!(result.profit_confirmed);assert_eq!(result.net_profit.as_deref(),Some("84.25"));assert!((result.net_profit_usd.unwrap()-0.8425).abs()<1e-12);
+        assert!(!result.profit_confirmed);assert!(result.net_profit.is_none());assert!((result.estimated_profit_before_missing_costs_usd.unwrap()-0.8425).abs()<1e-12);assert!(result.missing_costs.iter().any(|c|c=="venue_trading_fee"));
     }
     #[test] fn missing_fees_and_stale_quotes_never_produce_confirmed_profit() {
         let (service,q,job,mut banks,route)=fixture();banks[0].bank_fee_percent=None;
