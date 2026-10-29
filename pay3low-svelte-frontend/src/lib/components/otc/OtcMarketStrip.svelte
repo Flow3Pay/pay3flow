@@ -69,7 +69,7 @@
   .marketStat { display: grid; align-content: center; gap: 5px; min-width: 0; padding: 14px 15px; border-left: 1px solid var(--color-border); }
   .marketStat > span { color: var(--color-text-soft); font-size: 10px; }
   .marketStat strong { display: flex; align-items: baseline; gap: 6px; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: 13px; font-weight: 400; }
-  .marketStat strong em { font-style: normal; font-size: 10px; color: var(--otc-buy); }
+  .marketStat strong em { font-style: normal; font-size: 10px; color: var(--color-good-ink); }
   .marketStat strong em.negative { color: var(--otc-sell); }
   .marketStat strong > small { font-size: 9px; color: var(--color-text-soft); }
   .marketStat > small { color: var(--color-text-faint); font-size: 9px; white-space: nowrap; }

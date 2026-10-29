@@ -183,7 +183,7 @@
   .deal header { display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
   .deal header strong { font-family:var(--font-mono); font-size:13px; font-weight:600; }
   .state { flex:0 0 auto; padding:3px 8px; border:1px solid var(--color-border); border-radius:999px; color:var(--color-text-soft); font-size:11px; white-space:nowrap; }
-  .state.ok { border-color:color-mix(in srgb, var(--color-good) 40%, transparent); background:var(--otc-buy-soft, rgba(36,115,56,.12)); color:var(--color-good); }
+  .state.ok { border-color:color-mix(in srgb, var(--color-good) 40%, transparent); background:var(--otc-buy-soft, rgba(141,203,0,.12)); color:var(--color-good-ink); }
   .state.bad { color:var(--color-danger); }
   .meta { margin:0; color:var(--color-text-soft); font-size:11px; line-height:1.6; }
   .meta code { font-size:11px; }

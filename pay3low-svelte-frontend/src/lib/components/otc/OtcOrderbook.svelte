@@ -93,16 +93,16 @@
   .level { font-weight: 500; font-style: normal; position: relative; isolation: isolate; width: 100%; height: 28px; min-height: 28px; padding: 0 16px; font-family: var(--font-sans); font-size: 12px; font-variant-numeric: tabular-nums; }
   .level::before { content: ""; position: absolute; z-index: -1; inset: 1px 0 1px auto; width: var(--depth); background: var(--otc-buy-soft); }
   .ask::before { background: var(--otc-sell-soft); }
-  .bid { color: var(--otc-buy); }
+  .bid { color: var(--color-good-ink); }
   .ask { color: var(--otc-sell); }
   .level:hover, .level.selected { background: var(--color-panel); outline: 1px solid var(--color-border); outline-offset: -1px; }
   .spread { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 4px; margin: 7px 0; padding: 9px 16px; border-block: 1px solid var(--color-border); }
-  .spread strong { color: var(--otc-buy); font-family: var(--font-sans); font-size: 16px; font-weight: 500; }
+  .spread strong { color: var(--color-good-ink); font-family: var(--font-sans); font-size: 16px; font-weight: 500; }
   .spread strong > span { padding-left: 6px; font-family: var(--font-sans); font-size: 12px; }
   .spread > span { font-size: 12px; color: var(--color-text-soft); }
   .spread small { font-size: 12px; }
   .pressure { padding: 13px 16px 16px; }
-  .pressureLabels { display: flex; justify-content: space-between; font-family: var(--font-sans); font-size: 12px; margin-bottom: 6px; color: var(--otc-buy); }
+  .pressureLabels { display: flex; justify-content: space-between; font-family: var(--font-sans); font-size: 12px; margin-bottom: 6px; color: var(--color-good-ink); }
   .pressureLabels > span:last-child { color: var(--otc-sell); }
   .pressureBar { height: 3px; border-radius: 3px; overflow: hidden; background: var(--otc-sell); }
   .pressureBar > span { display: block; height: 100%; background: var(--otc-buy); border-right: 3px solid var(--color-paper); }

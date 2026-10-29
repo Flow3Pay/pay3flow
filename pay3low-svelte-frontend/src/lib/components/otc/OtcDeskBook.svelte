@@ -194,7 +194,7 @@
   .obRow:hover { box-shadow:inset 0 0 0 1px var(--color-border-strong); }
   .obOwner { display:flex; min-width:0; align-items:center; gap:6px; justify-self:start; text-align:left; }
   .obOwner code { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:700; letter-spacing:-.02em; }
-  .obPrice { min-width:0; overflow:hidden; text-overflow:ellipsis; font-weight:650; color:var(--color-good); }
+  .obPrice { min-width:0; overflow:hidden; text-overflow:ellipsis; font-weight:650; color:var(--color-good-ink); }
   .obTable[data-side="bids"] .obPrice { color:var(--color-danger); }
   .obPrice i, .obTotal i { font-style:normal; opacity:.62; }
   .obPrice b { font-weight:650; }
@@ -203,7 +203,7 @@
   .obEmpty { display:flex; min-height:44px; align-items:center; padding:6px 12px; border:1px dashed var(--color-border); border-radius:10px; color:var(--color-text-faint); font-size:11px; }
                                                       .deskQuotes { margin-top:auto; border-top:1px solid var(--color-border-strong); }
   .deskQuotes > .obSideHead { background:var(--color-panel); color:var(--color-text-soft); }
-  .bookSide { margin:0; padding:9px var(--otc-panel-padding,20px); border-bottom:1px solid var(--color-border); background:var(--otc-buy-soft); color:var(--otc-buy); font-size:11px; font-weight:700; letter-spacing:.045em; text-transform:uppercase; }
+  .bookSide { margin:0; padding:9px var(--otc-panel-padding,20px); border-bottom:1px solid var(--color-border); background:var(--otc-buy-soft); color:var(--color-good-ink); font-size:11px; font-weight:700; letter-spacing:.045em; text-transform:uppercase; }
   .bookSide.sell { color:var(--otc-sell); background:var(--otc-sell-soft); }
   .bookHeader, .bookRow { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,.8fr) minmax(0,.8fr) 14px; gap:8px; align-items:center; }
   .bookHeader { min-height:44px; padding:8px var(--otc-panel-padding,20px); border-bottom:1px solid var(--color-border); color:var(--color-text-soft); font-size:11px; line-height:1.4; text-align:right; }
@@ -214,7 +214,7 @@
   .bookRow:hover { background:var(--color-panel); }
   .depth { position:absolute; z-index:-1; inset:3px 0 3px auto; width:var(--depth); border-radius:5px 0 0 5px; background:var(--otc-buy-soft); pointer-events:none; }
   .bookRow.sell .depth { background:var(--otc-sell-soft); }
-  .rowPrice { justify-self:start; color:var(--otc-buy); font-weight:650; }
+  .rowPrice { justify-self:start; color:var(--color-good-ink); font-weight:650; }
   .bookRow.sell .rowPrice { color:var(--otc-sell); }
   .rowAmount,.rowTotal { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .rowAmount small,.rowTotal small { margin-left:4px; color:var(--color-text-faint); font-family:var(--font-sans,inherit); font-size:9px; }
@@ -228,7 +228,7 @@
   .proposalRow.selected { background:var(--otc-buy-soft); }
   .proposalSelect { display:flex; width:100%; min-width:0; min-height:38px; align-items:center; gap:8px; text-align:left; font-size:12px; }
   .proposalSelect > span:nth-child(2) { margin-left:auto; color:var(--color-text-soft); font-size:11px; }
-  .proposalSide { color:var(--otc-buy); font-weight:650; }
+  .proposalSide { color:var(--color-good-ink); font-weight:650; }
   .proposalRow.sell .proposalSide { color:var(--otc-sell); }
   .proposalRow p { margin:4px 0; color:var(--color-text-soft); font-size:11px; }
   .proposalRow a { color:var(--color-text-soft); font-size:11px; text-decoration:underline; text-underline-offset:3px; }
@@ -240,7 +240,7 @@
   .offerDialog { position:fixed; top:0; right:0; bottom:0; left:0; margin:auto; width:min(460px,calc(100% - 32px)); height:fit-content; max-height:min(86dvh,720px); padding:0; overflow:auto; border:1px solid var(--color-border-strong); border-radius:14px; background:var(--color-paper); color:var(--color-text); box-shadow:0 24px 80px #0005; }
   .offerDialog::backdrop { background:#10151bcc; backdrop-filter:blur(4px); }
   .dialogHead { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:20px 22px 16px; border-bottom:1px solid var(--color-border); }
-  .dialogEyebrow { color:var(--otc-buy); font-family:var(--font-mono); font-size:10px; font-weight:700; letter-spacing:.08em; }
+  .dialogEyebrow { color:var(--color-good-ink); font-family:var(--font-mono); font-size:10px; font-weight:700; letter-spacing:.08em; }
   .dialogEyebrow.sell { color:var(--otc-sell); }
   .dialogHead h2 { margin:5px 0 0; font-size:19px; letter-spacing:-.03em; }
   .iconButton { display:grid; width:36px; height:36px; flex:0 0 auto; place-items:center; border:1px solid var(--color-border); border-radius:9px; color:var(--color-text-soft); }

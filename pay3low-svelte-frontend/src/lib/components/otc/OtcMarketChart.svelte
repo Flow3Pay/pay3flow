@@ -102,7 +102,7 @@
   }
 
   function buildStyles(): DeepPartial<Styles> {
-    const good = css("--color-good", "#247338");
+    const good = css("--color-good", "#8dcb00");
     const danger = css("--color-danger", "#d43d35");
     const border = css("--color-border", "rgba(41, 67, 42, 0.16)");
     const text = css("--color-text", "#152016");
@@ -126,7 +126,7 @@
           last: {
             show: true, compareRule: "current_open", upColor: good, downColor: danger, noChangeColor: soft,
             line: { show: true, style: "dashed", size: 1, dashedValue: [3, 3], color: null },
-            text: { show: true, style: "fill", color: "#ffffff", size: 11, family: mono, weight: "500", backgroundColor: null },
+            text: { show: true, style: "fill", color: "#152016", size: 11, family: mono, weight: "500", backgroundColor: null },
             extendTexts: [],
           },
         },
@@ -171,7 +171,6 @@
 <div class="marketChart" data-points={marks.length}>
   <div class="chartHead">
     <div class="chartQuote">
-      <span class="chartPair">EVER / USDT</span>
       <div class="chartValue">
         <strong data-testid="otc-chart-price">{latest === null ? "—" : `$${latest.toLocaleString(numbers, { maximumFractionDigits: Math.max(2, precision) })}`}</strong>
         {#if change !== null}<em class:negative={change < 0}>{change >= 0 ? "+" : "−"}{Math.abs(change).toFixed(2)}%</em>{/if}
@@ -196,15 +195,14 @@
   .marketChart { display: flex; width: 100%; min-width: 0; flex: 1; flex-direction: column; border: 1px solid var(--color-border-strong); border-radius: var(--otc-card-radius, 24px); background: var(--exchange-card-bg); overflow: hidden; }
   .chartHead { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; padding: 20px var(--otc-panel-padding, 20px) 8px; }
   .chartQuote { display: grid; gap: 2px; min-width: 0; }
-  .chartPair { color: var(--color-text-soft); font-family: var(--font-mono); font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
   .chartValue { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
   .chartValue strong { font-family: var(--font-mono); font-size: clamp(34px, 4.4vw, 52px); font-weight: 500; line-height: 1.05; letter-spacing: -.04em; overflow-wrap: anywhere; }
-  .chartValue em { color: var(--color-good); font-family: var(--font-mono); font-size: 15px; font-style: normal; }
+  .chartValue em { color: var(--color-good-ink); font-family: var(--font-mono); font-size: 15px; font-style: normal; }
   .chartValue em.negative { color: var(--color-danger); }
   .ranges { display: flex; flex: 0 1 auto; gap: 2px; padding: 3px; border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-paper); }
   .ranges button { min-width: 40px; min-height: 34px; padding: 4px 8px; border-radius: 999px; color: var(--color-text-soft); font-family: var(--font-mono); font-size: 12px; line-height: 1.5; transition: background .18s ease, color .18s ease; }
   .ranges button:hover { color: var(--color-text); }
-  .ranges button.active { background: var(--color-panel); color: var(--color-text); font-weight: 650; }
+  .ranges button.active { background: var(--color-good); color: #152016; font-weight: 650; }
   .chartPlot { position: relative; width: 100%; height: clamp(320px, 34vw, 460px); padding: 0 4px 4px; }
   .empty { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px; text-align: center; pointer-events: none; }
   .empty strong { background: var(--exchange-card-bg); font-size: 14px; font-weight: 650; padding: 5px 12px; }

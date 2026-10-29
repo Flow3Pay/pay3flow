@@ -73,7 +73,6 @@
       </div>
     {/if}
   </div>
-  <div class="quoteMode">{sale ? say("Your offer", "Ваше предложение") : say("Fixed desk quote", "Фиксированная котировка деска")}</div>
   <div class="moneyPanel exchangeMoneyPanel"><div class="panelTop">{@render asset(sendAsset)}{@render stack(direction === "buy" ? say("You pay", "Платите") : say("You sell", "Продаёте"), sendAsset)}</div><div class="panelCopy"><label for="otc-input">{sale ? direction === "buy" ? say("Buy amount · EVER", "Количество к покупке · EVER") : say("Sell amount · EVER", "Количество к продаже · EVER") : say(`You send · ${sendAsset} on ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы отправляете · ${sendAsset} · ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><input id="otc-input" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={sendValue} data-testid={sale ? "otc-offer-ever" : undefined} disabled={busy} on:input={(event) => changeSend(event.currentTarget.value)} on:focus={(event) => event.currentTarget.select()} /><small>{sale ? say("Amount of EVER, not USDT", "Количество EVER, не сумма USDT") : say("Enter the exact amount", "Укажите точную сумму")}</small></div></div>
   <ExchangeFlowBridge reversed={direction === "sell"} onSwap={() => { if (!busy) onDirection(direction === "buy" ? "sell" : "buy"); }} label={`${copy.buy} / ${copy.sell}`} />
   <div class="moneyPanel exchangeMoneyPanel"><div class="panelTop">{@render asset(receiveAsset)}{@render stack(direction === "buy" ? say("You buy", "Покупаете") : say("You receive", "Получаете"), receiveAsset)}</div><div class="panelCopy"><label for="otc-receive">{sale ? direction === "buy" ? say("Total to pay · USDT", "Всего к оплате · USDT") : say("Total to receive · USDT", "Всего к получению · USDT") : say(`You receive · ${receiveAsset} on ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы получаете · ${receiveAsset} · ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><input id="otc-receive" class="amountInput amountOutput" readonly={!sale} value={receiveValue} data-testid={sale ? "otc-offer-usdt" : undefined} disabled={busy} inputmode="decimal" autocomplete="off" on:input={(event) => changeReceive(event.currentTarget.value)} placeholder="—" /><small>{sale ? say("Total USDT for the entire offer", "Всего USDT за весь объём EVER") : quote ? say("Fixed net output", "Фиксированная сумма к получению") : say("No quote yet", "Котировки пока нет")}</small></div></div>
@@ -97,8 +96,8 @@
   .saleReview p { margin-top:8px; color:var(--color-text-soft); font-size:12px; line-height:1.6; }
   .saleReview code { overflow-wrap:anywhere; font-size:11px; }
   .bridgeForm { display: flex; flex: 1; flex-direction: column; min-width: 0; padding: 0 var(--otc-panel-padding, 20px) var(--otc-panel-padding, 20px); }
-  .ticketHead { position: relative; display: flex; align-items: center; gap: 8px; padding-top: 4px; }
-  .sideTabs { --side-buy: color-mix(in srgb, var(--otc-buy, #247338) 74%, #fff); --side-sell: color-mix(in srgb, var(--otc-sell, #d43d35) 74%, #fff); position: relative; isolation: isolate; display: flex; flex: 1; min-width: 0; gap: 4px; padding: 4px; border-radius: 12px; background: var(--color-panel); }
+  .ticketHead { position: relative; display: flex; align-items: center; gap: 8px; margin-bottom: 16px; padding-top: 4px; }
+  .sideTabs { --side-buy: color-mix(in srgb, var(--otc-buy, #8dcb00) 74%, #fff); --side-sell: color-mix(in srgb, var(--otc-sell, #d43d35) 74%, #fff); position: relative; isolation: isolate; display: flex; flex: 1; min-width: 0; gap: 4px; padding: 4px; border-radius: 12px; background: var(--color-panel); }
   .sideTabs::before { position: absolute; z-index: -1; inset: 4px auto 4px 4px; width: calc(50% - 6px); border-radius: 9px; background-image: linear-gradient(90deg, var(--side-buy) 0 34%, #e6d94c 42%, #f0a34d 50%, var(--side-sell) 58% 100%); background-position: 0% 50%; background-size: 300% 100%; content: ""; transition: transform .32s cubic-bezier(.22, 1, .36, 1), background-position .5s ease; }
   .sideTabs.selling::before { background-position: 100% 50%; transform: translateX(calc(100% + 4px)); }
   .settingsWrap { flex: 0 0 auto; }
@@ -113,7 +112,6 @@
   .settingsClose:hover { background: var(--color-panel); color: var(--color-text); }
   .sideTabs button { flex: 1; min-width: 0; min-height: 40px; padding: 8px 4px; border-radius: 9px; color: var(--color-text-soft); font-size: 13px; font-weight: 650; line-height: 1.5; transition: color .2s ease; }
   .sideTabs button.active { color: #152016; }
-  .quoteMode { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 0; font-size: 12px; line-height: 1.5; }
   .priceField { display: block; color: var(--color-text-soft); font-size: 12px; }
   .priceField > div { display: flex; min-height: 44px; align-items: center; gap: 8px; margin-top: 8px; padding: 8px 12px; border: 1px solid var(--exchange-field-border); border-radius: 8px; background: var(--exchange-field-bg); }
   .priceField input { width: 100%; min-width: 0; min-height: 24px; height: 24px; padding: 0; border: 0; outline: 0; background: transparent; font-family: var(--font-mono); font-size: 16px; }
@@ -138,7 +136,7 @@
   .assetIdentity strong { font-weight: 650; }
   .assetIdentity span { min-width: 0; margin-left: auto; overflow-wrap: anywhere; color: var(--color-text-soft); font-size: 12px; }
   .cta { display: flex; width: 100%; min-height: 56px; align-items: center; justify-content: space-between; gap: 12px; margin-top: auto; padding: 14px 18px; border: 1px solid var(--color-accent-strong); border-radius: var(--otc-panel-radius, 16px); background: var(--color-accent); color: #152016; font-size: 13px; font-weight: 750; line-height: 1.5; text-align: left; transition: background .18s ease, opacity .18s ease; }
-  .cta:hover:not(:disabled) { background: #c9f34b; }
+  .cta:hover:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 82%, #fff); }
   .cta span { flex: 0 0 auto; font-size: 18px; }
   .cta:disabled { opacity: .45; cursor: default; }
   button:focus-visible, .priceField > div:focus-within, .amountInput:focus-visible { outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 2px; }

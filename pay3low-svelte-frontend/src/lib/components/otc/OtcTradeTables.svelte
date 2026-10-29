@@ -136,14 +136,14 @@
   tbody tr.selected td { background:var(--color-accent-soft); }
   .obWhen { display:grid; gap:2px; justify-content:start; justify-items:start; }
   .obWhen small { color:var(--color-text-faint); font-size:9px; }
-  .obPrice { overflow:hidden; text-overflow:ellipsis; color:var(--color-good); }
+  .obPrice { overflow:hidden; text-overflow:ellipsis; color:var(--color-good-ink); }
   .obTable[data-side="bids"] .obPrice { color:var(--color-danger); }
   .obPrice i, .obTotal i { font-style:normal; opacity:.62; }
   .obPrice b { font-weight:650; }
   .obAmount,.obTotal { overflow:hidden; text-overflow:ellipsis; }
   .status { display:inline-flex; align-items:center; gap:5px; color:var(--color-text-soft); font-size:10px; }
   .status i { width:5px; height:5px; border-radius:50%; background:var(--color-text-faint); }
-  .status.open, .status.filled { color:var(--otc-buy); }
+  .status.open, .status.filled { color:var(--color-good-ink); }
   .status.open i, .status.filled i { background:var(--otc-buy); }
   .status.closed { color:var(--color-text-soft); }
   .status.review { color:var(--color-warn); }

@@ -784,9 +784,9 @@
 }
 
 .routeBest {
-  border-color: rgba(185, 242, 39, 0.3);
+  border-color: color-mix(in srgb, var(--color-accent) 30%, transparent);
   border-width: var(--border-highlight-width);
-  background: linear-gradient(135deg, rgba(185, 242, 39, 0.095), rgba(255, 255, 255, 0.04));
+  background: linear-gradient(135deg, var(--color-accent-soft), rgba(255, 255, 255, 0.04));
 }
 
 .selected {
