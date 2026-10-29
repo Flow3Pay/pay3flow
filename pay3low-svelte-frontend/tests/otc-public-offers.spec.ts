@@ -70,9 +70,15 @@ async function setup(page: Page, options: { signedIn?: boolean; lostResponse?: b
   await expect(page.locator(".bridgeForm .sideTabs").getByRole("button", {name:"Sell EVER",exact:true})).toHaveAttribute("aria-pressed", "true");
   return { calls, offers };
 }
+async function openOfferSettings(page: Page) {
+  const toggle = page.getByRole("button", { name: "Offer settings", exact: true });
+  if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+}
 async function fill(page: Page) {
   await page.getByTestId("otc-offer-ever").fill("10.000000001");
   await page.getByTestId("otc-offer-usdt").fill("1.000001");
+  await openOfferSettings(page);
   await page.getByTestId("otc-offer-recipient").fill(eth);
 }
 
@@ -82,6 +88,7 @@ test("seller signs in with EVER alone and publishes, restores, and cancels a rea
   await page.getByRole("button", { name: "Connect EVER Wallet to publish", exact: true }).click();
   await expect(page.getByTestId("otc-publish-offer")).toBeVisible();
   await expect(page.getByTestId("otc-offer-ever")).toHaveValue("10.000000001");
+  await openOfferSettings(page);
   await expect(page.getByTestId("otc-offer-recipient")).toHaveValue(eth);
   await page.getByTestId("otc-publish-offer").click();
   await expect(page.getByTestId("otc-offer-review")).toContainText(ever);
@@ -138,6 +145,7 @@ test("publication rejects invalid precision and zero recipients, and fits an acc
 
 test("receiving address can be obtained from Ethereum without a USDT balance or a signature", async ({ page }) => {
   await setup(page, { signedIn: true });
+  await openOfferSettings(page);
   await page.getByRole("button", { name: "Use my Ethereum wallet address", exact: true }).click();
   await expect.poll(async () => (await page.getByTestId("otc-offer-recipient").inputValue()).toLowerCase()).toBe(eth);
   const calls: string[] = await page.evaluate(() => (window as any).evmCalls);
@@ -150,6 +158,7 @@ test("sale publication uses the original Buy/Sell ticket, book and activity with
   await setup(page, { signedIn: true });
   await page.getByTestId("otc-offer-ever").fill("100");
   await page.getByTestId("otc-offer-usdt").fill("0.11889");
+  await openOfferSettings(page);
   await page.getByTestId("otc-offer-recipient").fill(eth);
   await expect(page.getByRole("textbox", { name:"Price", exact:true })).toHaveValue("0.0011889");
   await expect(page.locator(".bridgeColumn .bridgeForm")).toBeVisible();
@@ -193,6 +202,7 @@ for (const direction of ["buy","sell"] as const) test(`price and amount publish 
   await expect(page.getByTestId("otc-offer-usdt")).toHaveValue("11.889");
   await expect(page.getByTestId("otc-publish-offer")).toBeDisabled();
   await expect(page.locator("#otc-sale-status")).toContainText("Ethereum wallet address");
+  await openOfferSettings(page);
   await page.getByTestId("otc-offer-recipient").fill(`  ${eth}  `);
   await expect(page.getByTestId("otc-publish-offer")).toBeEnabled();
   await expect(page.locator("#otc-sale-status")).toHaveCount(0);
@@ -222,6 +232,7 @@ test("decimal commas, final totals, and price rounding remain explicit", async (
   await page.getByTestId("otc-offer-usdt").fill("1,25");
   await expect(page.getByTestId("otc-offer-price")).toHaveValue("0.123456789012");
   await expect(page.getByTestId("otc-offer-ever")).toHaveValue("10.125000091");
+  await openOfferSettings(page);
   await page.getByTestId("otc-offer-recipient").fill(eth);
   await expect(page.getByTestId("otc-publish-offer")).toBeEnabled();
   await page.getByTestId("otc-offer-price").fill("0");
@@ -234,6 +245,7 @@ test("an already configured Ethereum wallet fills the address without a second c
   const f=await setup(page,{signedIn:true,verifiedEthereum:true});
   await page.getByTestId("otc-offer-price").fill("0.1");
   await page.getByTestId("otc-offer-ever").fill("100");
+  await openOfferSettings(page);
   await expect(page.getByTestId("otc-offer-recipient")).toHaveValue(eth);
   await expect(page.getByTestId("otc-publish-offer")).toBeEnabled();
   await page.getByTestId("otc-publish-offer").click();
@@ -250,6 +262,7 @@ for (const direction of ["buy","sell"] as const) test(`HEX-style ${direction} qu
   await expect(page.getByTestId("otc-offer-usdt")).toHaveValue("2.05");
   await expect(page.getByTestId("otc-offer-price")).toHaveValue("0.205");
   await expect(page.locator(".marketStat.last")).toContainText("0.205 USDT / EVER");
+  await openOfferSettings(page);
   await page.getByTestId("otc-offer-recipient").fill(eth);
   await page.getByTestId("otc-publish-offer").click();
   await page.getByTestId("otc-publish-offer").click();

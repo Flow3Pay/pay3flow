@@ -65,7 +65,7 @@
   p { margin: 0; line-height: 1.45; }
   .muted, .safety, .address { color: var(--color-text-soft); font-size: 12px; }
   .ready { color: var(--color-accent-text); font-size: 12px; }
-  .success { color: var(--color-good); font-weight: 700; }
+  .success { color: var(--color-good-ink); font-weight: 700; }
   .errorText { color: var(--color-danger); font-size: 12px; }
   .safety { padding-top: 4px; border-top: 1px solid var(--color-border); }
   .recipientControls { display: grid; gap: 12px; }

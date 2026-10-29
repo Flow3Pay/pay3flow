@@ -126,7 +126,7 @@
   .ohlc { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; min-height: 36px; padding: 0 17px; font-family: var(--font-mono); font-size: 12px; color: var(--color-text-soft); }
   .ohlc strong { color: var(--color-text); font-size: 12px; }
   .ohlc b { font-weight: 400; color: var(--otc-sell); }
-  .ohlc .positive b { color: var(--otc-buy); }
+  .ohlc .positive b { color: var(--color-good-ink); }
   .chartPlot { position: relative; min-height: 290px; display: flex; align-items: stretch; }
   .priceChart { display: block; width: 100%; min-height: 290px; overflow: visible; font-family: var(--font-mono); }
   .gridLine { stroke: var(--color-border); stroke-width: .7; }
@@ -145,7 +145,7 @@
   .chartTooltip dt { color: var(--color-text-soft); }
   .chartTooltip dd { margin: 0; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
   .chartTooltip small { font-size: 10px; color: var(--color-text-soft); }
-  .buyValue dd { color: var(--otc-buy); } .sellValue dd { color: var(--otc-sell); }
+  .buyValue dd { color: var(--color-good-ink); } .sellValue dd { color: var(--otc-sell); }
   .chartFooter { display: flex; align-items: center; justify-content: space-between; padding: 3px 17px 13px; font-size: 12px; color: var(--color-text-soft); }
   .chartFooter > span { display: flex; align-items: center; gap: 6px; }
   .zoomTools { display: flex; gap: 3px; border: 1px solid var(--color-border); border-radius: 6px; padding: 2px; }

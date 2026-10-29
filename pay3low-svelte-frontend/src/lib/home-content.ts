@@ -8,6 +8,7 @@ type HomeContent = {
   title: string;
   description: string;
   intro: string;
+  heroPhrases: string[][];
   nojs: string;
   aboutTitle: string;
   about: string;
@@ -32,6 +33,12 @@ export const homeContent: Record<Locale, HomeContent> = {
     title: "Pay3Flow — сравнение маршрутов обмена валют и криптовалют",
     description: "Сравните маршруты обмена валют и криптовалют через P2P, обменники и спот. Pay3Flow показывает расчётную сумму получения, шаги обмена и условия площадок.",
     intro: "Не тратьте своё время на поиск обмена.",
+    heroPhrases: [
+      ["Переводите деньги.", "Сохраняйте больше."],
+      ["Найдите маршрут.", "Без лишнего шума."],
+      ["Обмен между сетями.", "Контроль у вас."],
+      ["Один поиск.", "Все маршруты."],
+    ],
     nojs: "Описание сервиса доступно без JavaScript. Для загрузки котировок и поиска маршрутов включите JavaScript в браузере.",
     aboutTitle: "Что такое Pay3Flow",
     about: "Pay3Flow — экспериментальный сервис с открытым исходным кодом для сравнения маршрутов обмена. Он сопоставляет публичные P2P-объявления, предложения обменников, цены спотовых рынков и OTC-предложения (beta). Вы можете сравнить прямой обмен с маршрутом через промежуточный цифровой актив и увидеть, сколько примерно получите на каждом шаге.",
@@ -68,6 +75,12 @@ export const homeContent: Record<Locale, HomeContent> = {
     title: "Pay3Flow — compare currency and crypto exchange routes",
     description: "Compare currency and crypto exchange routes across P2P markets, exchangers and spot markets. See estimated amounts, exchange steps and provider conditions with Pay3Flow.",
     intro: "Don’t waste your time looking for an exchange.",
+    heroPhrases: [
+      ["Move money.", "Keep more."],
+      ["Find the route.", "Skip the noise."],
+      ["Swap across chains.", "Stay in control."],
+      ["One search.", "Every route."],
+    ],
     nojs: "Product information is available without JavaScript. Enable JavaScript in your browser to load quotes and search for routes.",
     aboutTitle: "What is Pay3Flow?",
     about: "Pay3Flow is an experimental open source service for comparing exchange routes. It brings together public P2P advertisements, exchanger quotes, spot market prices and OTC offers (beta). Compare a direct exchange with a route through an intermediate digital asset and see the estimated amount at each step.",
@@ -104,6 +117,12 @@ export const homeContent: Record<Locale, HomeContent> = {
     title: "Pay3Flow — համեմատեք արժույթի և կրիպտոարժույթի փոխանակման ուղիները",
     description: "Համեմատեք արժույթի և կրիպտոարժույթի փոխանակման ուղիները P2P հարթակներում, փոխանակման ծառայություններում և սփոթ շուկաներում։ Տեսեք մոտավոր գումարներն ու քայլերը։",
     intro: "Մի՛ վատնեք ձեր ժամանակը փոխանակում փնտրելու վրա։",
+    heroPhrases: [
+      ["Փոխանցեք գումարը։", "Պահպանեք ավելին։"],
+      ["Գտեք ուղին։", "Առանց ավելորդ աղմուկի։"],
+      ["Փոխանակեք ցանցերում։", "Վերահսկողությունը ձերն է։"],
+      ["Մեկ որոնում։", "Բոլոր ուղիները։"],
+    ],
     nojs: "Ծառայության նկարագրությունը հասանելի է առանց JavaScript-ի։ Հաշվարկները բեռնելու և ուղիներ որոնելու համար միացրեք JavaScript-ը։",
     aboutTitle: "Ի՞նչ է Pay3Flow-ը",
     about: "Pay3Flow-ը բաց կոդով փորձարարական ծառայություն է փոխանակման ուղիները համեմատելու համար։ Այն համադրում է հրապարակային P2P հայտարարությունները, փոխանակման ծառայությունների առաջարկները, սփոթ գներն ու OTC առաջարկները (beta)։ Համեմատեք ուղղակի փոխանակումը միջանկյալ թվային ակտիվով ուղու հետ և տեսեք յուրաքանչյուր քայլի մոտավոր գումարը։",

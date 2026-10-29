@@ -4,7 +4,7 @@
   import { otcCopy } from "$lib/otc/copy";
   import type { OtcPreview } from "$lib/share-links";
   import { parseOtcHash } from "$lib/otc/link";
-  import { request, signInWallet, OtcRequestError, bindWallet, sendAttempt, getBalances, decimal, rate, setOtcNetwork, type Config, type Session, type Proposal, type Trade, type Rfq, type Attempt, type Direction, type WalletBalance } from "$lib/otc/service";
+  import { request, signInWallet, OtcRequestError, isTransientReaderOutage, bindWallet, sendAttempt, getBalances, decimal, rate, setOtcNetwork, type Config, type Session, type Proposal, type Trade, type Rfq, type Attempt, type Direction, type WalletBalance } from "$lib/otc/service";
   import type { PublicOffer } from "$lib/otc/public-offers";
   import { exactInput, proposalDirection, terminalStates, completedVolume } from "$lib/otc/terminal";
   import "$lib/otc/terminal.css";
@@ -21,8 +21,10 @@
   import OtcTerminal from "./OtcTerminal.svelte";
   import OtcDealPanel from "./OtcDealPanel.svelte";
   import OtcTradeTables from "./OtcTradeTables.svelte";
+  import ScrambleHeadline from "../ScrambleHeadline.svelte";
   export let onPreviewChange: (preview: OtcPreview | null) => void = () => {};
   export let onShareUrlChange: (url: string) => void = () => {};
+  export let introCompleted = true;
   let config: Config | null = null, session: Session | null = null;
   let input = "100", direction: Direction = "buy", listings: Proposal[] = [], trades: Trade[] = [], rfqs: Rfq[] = [];
   let selected: Trade | null = null, attempts: Attempt[] = [], receipts: { chain: string; leg: { amount: string }; included_at: string }[] = [], updates: { message: string; at: string }[] = [];
@@ -294,13 +296,14 @@
 </script>
 <OtcOffers enabled={!!config?.public_offers_available} {direction} {session} {busy} bind:posting={offersBusy} onConnect={() => run(() => session ? verify("everscale") : connectAccount("everscale"))} onPublished={() => { tab = "trades"; }} let:ticket let:offers let:mine let:history={offerHistory} let:message let:offerError let:onCancel>
 <section class="otcWorkspace" data-testid="otc-workspace" data-state={!loaded ? "connecting" : !healthy ? "unavailable" : "connected"}>
+  <div class="pageIntro" class:localeLong={$locale !== "en"}><ScrambleHeadline phrases={copy.heroPhrases} active={introCompleted} /><p>{config?.public_offers_available ? say("Native EVER on Everscale. USDT on Ethereum. Your OTC offers.", "Нативный EVER в Everscale. USDT в Ethereum. Ваши предложения OTC.") : say("Native EVER on Everscale. USDT on Ethereum. Direct desk settlement.", "Нативный EVER в Everscale. USDT в Ethereum. Прямой обмен с деском.")}</p></div>
   <OtcTerminal chartPanel={false} bookPanel={false} selectedRate={saleEnabled ? ticket.askingRate : selected ? rate(selected.terms) : "—"} rateLabel={saleEnabled ? say("Your offer price", "Цена вашего оффера") : ""} {bookTitle} stats={[
     {label:say("Desk","Деск"),value:config?.desk_name || "—"},
     {label:config?.public_offers_available ? say("Open offers","Открытые офферы") : say("Desk offers","Предложения деска"),value:String(listings.length + offers.length),secondary:true},
     {label:config?.public_offers_available ? say("Your open orders","Ваши открытые ордера") : say("Your open trades","Ваши открытые сделки"),value:session ? String(activeTrades.length + mine.filter(o => o.state === "open").length) : "—",secondary:true},
     {label:say("Your completed volume","Ваш завершённый объём"),value:session ? decimal(completedVolume(trades),6) : "—",unit:"USDT"},
   ]}>
-  <div slot="status" class="serviceControls">{#if offerError}<p class="message error" role="alert">{offerError}</p>{/if}{#if message}<p class="message" role="status">{message}</p>{/if}{#if walletProgress}<p class="message" role="status">{walletProgress}</p>{/if}{#if error}<p class="message error" role="alert">{error}</p>{/if}{#if notice}<p class="message" role="status">{notice}</p>{/if}{#if unresolvedBooking}<p class="message" role="status">{say("The original booking is awaiting its decision. Another selection is blocked.", "Ожидается решение по исходной сделке. Другое бронирование заблокировано.")}</p><button disabled={busy || !healthy || !bookingUnknown} on:click={() => run(reconcileBooking)}>{say("Reconcile original booking", "Проверить исходное бронирование")}</button>{/if}</div>
+  <div slot="status" class="serviceControls">{#if offerError && !isTransientReaderOutage(offerError)}<p class="message error" role="alert">{offerError}</p>{/if}{#if message}<p class="message" role="status">{message}</p>{/if}{#if walletProgress}<p class="message" role="status">{walletProgress}</p>{/if}{#if error && !isTransientReaderOutage(error)}<p class="message error" role="alert">{error}</p>{/if}{#if notice}<p class="message" role="status">{notice}</p>{/if}{#if unresolvedBooking}<p class="message" role="status">{say("The original booking is awaiting its decision. Another selection is blocked.", "Ожидается решение по исходной сделке. Другое бронирование заблокировано.")}</p><button disabled={busy || !healthy || !bookingUnknown} on:click={() => run(reconcileBooking)}>{say("Reconcile original booking", "Проверить исходное бронирование")}</button>{/if}</div>
     <svelte:fragment slot="ticket"><OtcTicket sale={saleEnabled ? ticket : null} {direction} bind:input {quote} {balances} busy={busy || offersBusy} disabled={!exactInput(input, direction) || unresolvedBooking || (needsWallets && !quote ? !(config?.wallet_login_available ?? config?.enabled) : !healthy || !config?.available || !listing || (!!quote && now > Date.parse(quote.terms.quote_by)))} status={quote || saleEnabled ? "" : quoteStatus} onDirection={chooseSide} onEdit={edited} onRequest={requestQuote} onReview={() => { tab = "orders"; document.getElementById("otc-book-column")?.scrollIntoView({ block: "start", behavior: motionDuration ? "smooth" : "instant" }); }} /></svelte:fragment>
     <OtcMarketChart slot="chart" {trades} publicOffers={config?.public_offers_available && (saleEnabled || !trades.length) ? offerHistory : null} />
     <svelte:fragment slot="book">
@@ -338,6 +341,13 @@
     width: min(var(--layout-width), calc(100% - 2 * var(--page-gutter)));
     margin: 0 auto; padding: 32px 0 24px; font-size: 13px; line-height: 1.5;
   }
+  /* The startup headline docks onto this one, so both share the same metrics. */
+  .pageIntro { width: min(900px, 100%); margin: 0 auto 32px; text-align: center; }
+  .pageIntro h1 { margin: 0; color: var(--color-text); font-size: clamp(44px, 5.5vw, 72px); font-weight: 650; letter-spacing: -.065em; line-height: .96; }
+  .pageIntro.localeLong h1 { font-size: clamp(42px, 5vw, 68px); }
+  .titleAccent { position: relative; z-index: 0; display: inline-block; margin-inline-start: .06em; }
+  .titleAccent::after { position: absolute; right: -.05em; bottom: .02em; left: -.04em; z-index: -1; height: .2em; border-radius: 3px; background: var(--color-accent); content: ""; transform: rotate(-1deg); }
+  .pageIntro p { max-width: 560px; margin: 12px auto 0; color: var(--color-text-soft); font-size: 14px; line-height: 1.6; }
   .risk { margin: 16px 0 0; color: var(--color-text-soft); font-size: 12px; line-height: 1.6; }
   .panelMeta { color: var(--color-text-faint); font-family: var(--font-mono); font-size: 12px; }
   .activityCard { display: flex; width: 100%; min-width: 0; flex-direction: column; border: 1px solid var(--color-border-strong); border-radius: var(--otc-card-radius, 24px); background: var(--exchange-card-bg); overflow: hidden; scroll-margin-top: 24px; }
@@ -366,6 +376,9 @@
   }
   @media (max-width: 640px) {
     .otcWorkspace { --otc-panel-padding: 16px; padding-top: 24px; }
+    .pageIntro { margin-bottom: 24px; }
+    .pageIntro h1 { font-size: clamp(30px, 8vw, 44px); }
+    .pageIntro p { font-size: 13px; }
     .activityTabs { margin: 12px 12px 4px; gap: 2px; }
     .activityTabs button { min-height: 44px; padding: 6px; font-size: 12px; }
     .tradeList button { grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; }

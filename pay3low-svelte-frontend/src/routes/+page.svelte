@@ -99,7 +99,7 @@
   <Header shareState={guideActive || otcActive ? null : shareState} activePage={otcActive ? "otc" : "swap"} {swapHref} otcHref={otcShareUrl} {otcPreview} onOtcNavigate={rememberSwap} shareUrl={otcActive ? otcShareUrl : null} />
   <main>
     {#if otcActive}
-      {#if OtcWorkspace}<svelte:component this={OtcWorkspace} onShareUrlChange={(url) => otcShareUrl = url} onPreviewChange={(preview) => otcPreview = preview} />{:else}<div class="otcLoading" aria-busy="true">OTC<span>…</span></div>{/if}
+      {#if OtcWorkspace}<svelte:component this={OtcWorkspace} introCompleted={startupCompleted} onShareUrlChange={(url) => otcShareUrl = url} onPreviewChange={(preview) => otcPreview = preview} />{:else}<div class="otcLoading" aria-busy="true">OTC<span>…</span></div>{/if}
     {:else}
     <Converter introCompleted={startupCompleted} onDismissStartup={finishStartup} onShareStateChange={(state) => shareState = state} onGuideChange={(active) => guideActive = active} onBelarusP2pWarningChange={(show) => showBelarusP2pWarning = show} onOpenBelarusP2pWarning={() => belarusP2pWarningOpen = true} />
     {/if}

@@ -117,8 +117,8 @@
   .orderDetails > div > span { color: var(--color-text-soft); }
   .orderDetails strong { font-weight: 600; font-size: 12px; }
   .orderDetails small { font-size: 12px; font-weight: 400; color: var(--color-text-soft); }
-  .cta { display: flex; width: 100%; min-height: 48px; padding: 12px 15px; align-items: center; justify-content: space-between; border: 1px solid #b9e834; background: var(--color-accent); color: #171717; border-radius: 5px; font-size: 12px; font-weight: 800; }
-  .cta:hover:not(:disabled) { background: #c9f34b; transform: translateY(-1px); }
+  .cta { display: flex; width: 100%; min-height: 48px; padding: 12px 15px; align-items: center; justify-content: space-between; border: 1px solid var(--color-accent-strong); background: var(--color-accent); color: #171717; border-radius: 5px; font-size: 12px; font-weight: 800; }
+  .cta:hover:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 82%, #fff); transform: translateY(-1px); }
   .cta span { font-size: 17px; color: #2e2e2e; }
   :global(html[data-theme="dark"]) .cta { background: var(--color-accent); color: #152016; }
   :global(html[data-theme="dark"]) .cta span { color: #152016; }

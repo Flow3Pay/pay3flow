@@ -28,6 +28,7 @@
   import SearchActivityModal from "./SearchActivityModal.svelte";
   import CurrencyPicker from "./CurrencyPicker.svelte";
   import NetworkPicker from "./NetworkPicker.svelte";
+  import ScrambleHeadline from "./ScrambleHeadline.svelte";
 
   export let onGuideChange: (active: boolean) => void = () => {};
   export let guideActive = false;
@@ -1135,7 +1136,7 @@
 <svelte:window on:resize={closeInlineActivityOnMobile} />
 
 <section hidden={guideRequested} class="shell" class:localeLong={activeLocale !== "en"} class:introReady={introCompleted} id="transfer">
-  <div class="hero"><h1>{t("Move money.", {}, activeLocale)} <span>{t("Keep more.", {}, activeLocale)}</span></h1><p>{home.intro}</p></div>
+  <div class="hero"><ScrambleHeadline phrases={home.heroPhrases} active={introCompleted} /><p>{home.intro}</p></div>
   <nav class="discoveryModes" aria-label="Search mode">
     <button type="button" aria-pressed={discoveryMode === null} on:click={() => selectDiscoveryMode(null)}>Exchange</button>
     <button type="button" aria-pressed={discoveryMode === "exchange"} on:click={() => selectDiscoveryMode("exchange")}>Any / any</button>
@@ -1749,7 +1750,7 @@
 .iosSwitchOn { background: var(--color-accent); }
 .iosSwitchOn i { transform: translateX(14px); }
 .alwaysOnProvider { color: var(--color-text-faint); }
-.alwaysOnProvider small { color: var(--color-good); font-size: 10px; font-weight: 800; white-space: nowrap; }
+.alwaysOnProvider small { color: var(--color-good-ink); font-size: 10px; font-weight: 800; white-space: nowrap; }
 .settingsNoResults { padding: 22px 0; color: var(--color-text-faint); font-size: 13px; text-align: center; }
 
 .refreshOptions {
@@ -1854,13 +1855,13 @@
 
 .exchangeOptions .alwaysOnProvider {
   justify-content: flex-start;
-  background: rgba(45, 142, 69, 0.07);
+  background: color-mix(in srgb, var(--color-good) 12%, transparent);
   color: var(--color-text);
 }
 
 .alwaysOnProvider small {
   margin-left: auto;
-  color: var(--color-good);
+  color: var(--color-good-ink);
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -1994,7 +1995,7 @@
 }
 
 .moneyPanelSource::after {
-  background: rgba(185, 242, 39, 0.2);
+  background: var(--color-accent-soft);
 }
 
 .moneyPanelTarget {
@@ -2248,9 +2249,9 @@
 .selectionBox {
   gap: 11px;
   padding: 12px 14px;
-  border: 1px solid rgba(45, 142, 69, 0.16);
+  border: 1px solid color-mix(in srgb, var(--color-good) 22%, transparent);
   border-radius: 17px;
-  background: rgba(45, 142, 69, 0.06);
+  background: color-mix(in srgb, var(--color-good) 8%, transparent);
 }
 
 .selectionIcon {
@@ -2261,7 +2262,7 @@
   place-items: center;
   border-radius: 11px;
   background: var(--color-good);
-  color: #fff;
+  color: #152016;
   font-size: 13px;
   font-weight: 900;
 }
@@ -2829,7 +2830,7 @@
 .cta {
   height: 48px;
   margin-top: 3px;
-  border: 1px solid #b9e834;
+  border: 1px solid var(--color-accent-strong);
   border-radius: 5px;
   background: var(--color-accent);
   color: #171717;
@@ -2843,7 +2844,7 @@
 }
 
 .cta:hover:not(:disabled) {
-  background: #c9f34b;
+  background: color-mix(in srgb, var(--color-accent) 82%, #fff);
   box-shadow: none;
   transform: translateY(-1px);
 }

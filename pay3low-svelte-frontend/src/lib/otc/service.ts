@@ -37,6 +37,10 @@ export function walletNetwork(chain: string, network = evmNetwork): string { ret
 export class OtcRequestError extends Error {
   constructor(message: string, readonly status: number) { super(message); this.name = "OtcRequestError"; }
 }
+/** A chain reader that is briefly unreachable resolves itself on the next poll; the trader has nothing to act on. */
+export function isTransientReaderOutage(message: string) {
+  return /chain or relay endpoint|network reader is unavailable|Сетевой ридер/i.test(message);
+}
 export async function request<T>(path: string, token = "", body?: unknown, key?: string): Promise<T> {
   const response = await fetch(apiUrl(`/api/otc${path}`), {
     method: body === undefined ? "GET" : "POST",
