@@ -67,16 +67,25 @@ impl Service {
         }
         let checkpoint=self.pool.get().await?.query_one("SELECT checkpoint FROM otc_observers WHERE chain=$1 AND NOT paused AND last_scan>now()-interval '60 seconds'",&[&leg.chain]).await?.get::<_,Value>(0);
         let (nonce, call) = if leg.chain == "ethereum" {
-            if super::chain::number(&self.evm_agree("eth_chainId", json!([])).await?)? != 1 {
+            if super::chain::number(
+                &self
+                    .evm_agree(&self.desk_evm(), "eth_chainId", json!([]))
+                    .await?,
+            )? != u128::from(self.cfg.ethereum_chain_id)
+            {
                 return Err(invalid("wrong Ethereum network"));
             }
             let nonce = self
-                .evm_agree("eth_getTransactionCount", json!([leg.sender, "pending"]))
+                .evm_agree(
+                    &self.desk_evm(),
+                    "eth_getTransactionCount",
+                    json!([leg.sender, "pending"]),
+                )
                 .await?;
             let data = super::chain::ethereum::transfer_data(&leg)?;
             (
                 nonce.clone(),
-                json!({"family":"evm","chain_id":1,"from":leg.sender,"to":super::config::USDT,"data":data,"value":"0x0","nonce":nonce}),
+                json!({"family":"evm","chain_id":self.cfg.ethereum_chain_id,"from":leg.sender,"to":self.cfg.usdt_contract,"data":data,"value":"0x0","nonce":nonce}),
             )
         } else {
             (
@@ -359,7 +368,8 @@ impl Service {
             let leg: Leg = serde_json::from_value(instructions["leg"].clone())?;
             if reference.is_none() {
                 reference = if chain == "ethereum" {
-                    self.locate_ethereum(&leg, &instructions).await?
+                    self.locate_ethereum(&leg, &instructions, &self.desk_evm())
+                        .await?
                 } else {
                     self.locate_everscale(&leg, &instructions).await?
                 };
@@ -380,7 +390,8 @@ impl Service {
                 let nonce = instructions["nonce"]
                     .as_str()
                     .and_then(|n| u128::from_str_radix(n.trim_start_matches("0x"), 16).ok());
-                self.ethereum_evidence(&reference, &leg, nonce).await
+                self.ethereum_evidence(&reference, &leg, nonce, &self.desk_evm())
+                    .await
             } else {
                 self.everscale_evidence(&reference, &leg).await
             };
@@ -428,8 +439,9 @@ impl Service {
                                 let reference = paid.raw["receipt"]["transactionHash"]
                                     .as_str()
                                     .ok_or_else(|| invalid("missing credited payment reference"))?;
-                                let current =
-                                    self.ethereum_evidence(reference, &paid.leg, None).await?;
+                                let current = self
+                                    .ethereum_evidence(reference, &paid.leg, None, &self.desk_evm())
+                                    .await?;
                                 current.is_some_and(|e| {
                                     e.canonical
                                         && e.finalized
@@ -542,22 +554,35 @@ impl Service {
         instructions: &Value,
     ) -> Result<Option<Value>> {
         let receipt = self
-            .evm_agree("eth_getTransactionReceipt", json!([reference]))
+            .evm_agree(
+                &self.desk_evm(),
+                "eth_getTransactionReceipt",
+                json!([reference]),
+            )
             .await?;
         if receipt.is_null() || super::chain::number(&receipt["status"]).ok() != Some(0) {
             return Ok(None);
         }
         let transaction = self
-            .evm_agree("eth_getTransactionByHash", json!([reference]))
+            .evm_agree(
+                &self.desk_evm(),
+                "eth_getTransactionByHash",
+                json!([reference]),
+            )
             .await?;
         let block = self
             .evm_agree(
+                &self.desk_evm(),
                 "eth_getBlockByNumber",
                 json!([receipt["blockNumber"], false]),
             )
             .await?;
         let finalized = self
-            .evm_agree("eth_getBlockByNumber", json!(["finalized", false]))
+            .evm_agree(
+                &self.desk_evm(),
+                "eth_getBlockByNumber",
+                json!(["finalized", false]),
+            )
             .await?;
         let leg: Leg = serde_json::from_value(instructions["leg"].clone())?;
         if transaction["hash"] == receipt["transactionHash"]

@@ -1,11 +1,10 @@
 use super::{
     super::{
-        config::USDT,
         error::{invalid, Result},
         model::{Evidence, Leg},
         wallet, Service,
     },
-    number,
+    number, EvmNet,
 };
 use chrono::{TimeZone, Utc};
 use serde_json::{json, Value};
@@ -24,13 +23,14 @@ pub(crate) fn receipt(
     finalized: u128,
     leg: &Leg,
     nonce: Option<u128>,
+    contract: &str,
 ) -> Result<Option<Evidence>> {
     if receipt.is_null() {
         return Ok(None);
     }
     if number(&receipt["status"])? != 1
         || wallet::address("ethereum", transaction["from"].as_str().unwrap_or(""))? != leg.sender
-        || wallet::address("ethereum", transaction["to"].as_str().unwrap_or(""))? != USDT
+        || wallet::address("ethereum", transaction["to"].as_str().unwrap_or(""))? != contract
         || transaction["input"].as_str() != Some(&transfer_data(leg)?)
         || nonce.is_some_and(|n| number(&transaction["nonce"]).ok() != Some(n))
     {
@@ -57,7 +57,7 @@ pub(crate) fn receipt(
         .filter(|log| {
             log["address"]
                 .as_str()
-                .is_some_and(|a| a.eq_ignore_ascii_case(USDT))
+                .is_some_and(|a| a.eq_ignore_ascii_case(contract))
                 && log["topics"][0] == TRANSFER
                 && log["topics"][1] == sender
                 && log["topics"][2] == recipient
@@ -96,79 +96,93 @@ impl Service {
         reference: &str,
         leg: &Leg,
         nonce: Option<u128>,
+        net: &EvmNet,
     ) -> Result<Option<Evidence>> {
         if wallet::unhex(reference)?.len() != 32 {
             return Err(invalid("invalid Ethereum hash"));
         }
-        if number(&self.evm_agree("eth_chainId", json!([])).await?)? != 1 {
-            return Err(invalid("wrong Ethereum network"));
-        }
+        self.evm_chain_matches(net).await?;
         let observed = self
-            .evm_agree("eth_getTransactionReceipt", json!([reference]))
+            .evm_agree(net, "eth_getTransactionReceipt", json!([reference]))
             .await?;
         if observed.is_null() {
             return Ok(None);
         }
         let transaction = self
-            .evm_agree("eth_getTransactionByHash", json!([reference]))
+            .evm_agree(net, "eth_getTransactionByHash", json!([reference]))
             .await?;
         let block = self
             .evm_agree(
+                net,
                 "eth_getBlockByNumber",
                 json!([observed["blockNumber"], false]),
             )
             .await?;
-        let finalized = self
-            .evm_agree("eth_getBlockByNumber", json!(["finalized", false]))
-            .await?;
+        let finalized = self.evm_finalized_height(net).await?;
         receipt(
             &observed,
             &transaction,
             &block,
-            number(&finalized["number"])?,
+            finalized,
             leg,
             nonce,
+            &net.usdt,
+        )
+    }
+    /// ERC-20 `balanceOf` for any holder on a contour, agreed across that
+    /// contour's RPC pair. The block is pinned by the caller so a settlement
+    /// check can reuse the exact block it already scanned.
+    pub(crate) async fn erc20_balance_of(
+        &self,
+        net: &EvmNet,
+        holder: &str,
+        block: &Value,
+    ) -> Result<u128> {
+        let data = format!(
+            "0x70a08231{:0>64}",
+            holder.trim_start_matches("0x").to_ascii_lowercase()
+        );
+        number(
+            &self
+                .evm_agree(
+                    net,
+                    "eth_call",
+                    json!([{"to": net.usdt, "data": data}, block]),
+                )
+                .await?,
         )
     }
     pub(crate) async fn ethereum_scan(
         &self,
     ) -> Result<(Value, String, chrono::DateTime<Utc>, u64)> {
-        if number(&self.evm_agree("eth_chainId", json!([])).await?)? != 1 {
-            return Err(invalid("wrong Ethereum network"));
-        }
+        let net = &self.desk_evm();
+        self.evm_chain_matches(net).await?;
         let precision = self
             .evm_agree(
+                net,
                 "eth_call",
-                json!([{"to":USDT,"data":"0x313ce567"},"finalized"]),
+                json!([{"to":net.usdt,"data":"0x313ce567"},"finalized"]),
             )
             .await?;
         if number(&precision)? != 6 {
             return Err(invalid("USDT precision mismatch"));
         }
         let finalized = self
-            .evm_agree("eth_getBlockByNumber", json!(["finalized", false]))
+            .evm_agree(net, "eth_getBlockByNumber", json!(["finalized", false]))
             .await?;
-        let head = self.evm_agree("eth_blockNumber", json!([])).await?;
+        let head = self.evm_agree(net, "eth_blockNumber", json!([])).await?;
         let lag = u64::try_from(number(&head)?.saturating_sub(number(&finalized["number"])?))
             .map_err(|_| invalid("Ethereum lag overflow"))?;
         if lag > self.cfg.ethereum_lag_blocks {
             return Err(invalid("Ethereum observer exceeds configured lag"));
         }
-        let data = format!(
-            "0x70a08231{:0>64}",
-            self.cfg.usdt_wallet.trim_start_matches("0x")
-        );
-        let balance = number(
-            &self
-                .evm_agree(
-                    "eth_call",
-                    json!([{"to":USDT,"data":data},finalized["number"]]),
-                )
-                .await?,
-        )?;
+        let balance = self
+            .erc20_balance_of(net, &self.cfg.usdt_wallet, &finalized["number"])
+            .await?;
         let gas = number(
             &self
                 .evm_agree(
+                    net,
                     "eth_getBalance",
                     json!([self.cfg.usdt_wallet, finalized["number"]]),
                 )
@@ -196,11 +210,12 @@ impl Service {
         &self,
         leg: &Leg,
         instructions: &Value,
+        net: &EvmNet,
     ) -> Result<Option<String>> {
         let from = instructions["checkpoint"]["block"]
             .as_str()
             .ok_or_else(|| invalid("missing payment checkpoint"))?;
-        let logs=self.evm_agree("eth_getLogs",json!([{"address":USDT,"fromBlock":from,"toBlock":"finalized","topics":[TRANSFER,format!("0x{:0>64}",leg.sender.trim_start_matches("0x")),format!("0x{:0>64}",leg.recipient.trim_start_matches("0x"))]}])).await?;
+        let logs=self.evm_agree(net, "eth_getLogs",json!([{"address":net.usdt,"fromBlock":from,"toBlock":"finalized","topics":[TRANSFER,format!("0x{:0>64}",leg.sender.trim_start_matches("0x")),format!("0x{:0>64}",leg.recipient.trim_start_matches("0x"))]}])).await?;
         let mut references = Vec::new();
         for log in logs.as_array().into_iter().flatten() {
             if number(&log["data"]).ok() != Some(super::super::amount::integer(&leg.amount)?) {
@@ -208,7 +223,7 @@ impl Service {
             }
             if let Some(hash) = log["transactionHash"].as_str() {
                 let tx = self
-                    .evm_agree("eth_getTransactionByHash", json!([hash]))
+                    .evm_agree(net, "eth_getTransactionByHash", json!([hash]))
                     .await?;
                 if number(&tx["nonce"]).ok()
                     == instructions["nonce"]

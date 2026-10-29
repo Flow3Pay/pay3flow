@@ -32,7 +32,7 @@ pub(in crate::p2p) fn normalize_query(
         "target_payment_fee_percent",
     )?;
     let assets_explicit = query.intermediary_assets.is_some() || query.assets.is_some();
-    let assets = query
+    let mut assets = query
         .intermediary_assets
         .as_deref()
         .or(query.assets.as_deref())
@@ -46,10 +46,23 @@ pub(in crate::p2p) fn normalize_query(
     if assets.is_empty() || (assets_explicit && assets.len() > 24) {
         bail!("assets must contain between 1 and 24 comma-separated codes");
     }
-    if assets.iter().any(|asset| {
-        !(2..=12).contains(&asset.len()) || !asset.bytes().all(|b| b.is_ascii_alphanumeric())
-    }) {
-        bail!("every asset must be a 2-12 character alphanumeric code");
+    if assets_explicit {
+        if assets.iter().any(|asset| !is_asset_code(asset)) {
+            bail!("every asset must be a 2-12 character alphanumeric code");
+        }
+    } else {
+        // Defaults come from our own network catalog. A ticker that the route engine
+        // cannot name (a dotted bridged asset, say) must skip out of the seed list,
+        // not reject every search that did not name assets itself.
+        let skipped = assets
+            .iter()
+            .filter(|asset| !is_asset_code(asset))
+            .cloned()
+            .collect::<Vec<_>>();
+        if !skipped.is_empty() {
+            tracing::warn!(assets = ?skipped, "p2p.query.unusable_catalog_asset_skipped");
+            assets.retain(|asset| is_asset_code(asset));
+        }
     }
     let max_price_deviation_bps = query
         .max_price_deviation_bps
@@ -102,6 +115,10 @@ fn canonical_query_currency(value: &str) -> String {
         "TON" => "GRAM".into(),
         value => value.into(),
     }
+}
+
+fn is_asset_code(asset: &str) -> bool {
+    (2..=12).contains(&asset.len()) && asset.bytes().all(|byte| byte.is_ascii_alphanumeric())
 }
 
 fn payment_fee_bps(value: Option<f64>, field: &str) -> Result<Option<u32>> {

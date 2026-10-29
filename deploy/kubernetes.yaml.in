@@ -356,41 +356,18 @@ spec:
                   name: pay3flow-secrets
                   key: BARTER_API_KEY
                   optional: true
-          # Readiness round-trips the database: /health answers from the
-          # process alone, so a backend whose database is gone stays in the
-          # Service and the Ingress keeps handing it API traffic it can only
-          # hang on. timeoutSeconds sits just above the 5s pool timeout so the
-          # probe reads a definite 503 rather than cutting the request off.
           readinessProbe:
             httpGet:
-              path: /health/ready
+              path: /health
               port: http
             initialDelaySeconds: 10
             periodSeconds: 10
-            timeoutSeconds: 6
-            failureThreshold: 3
-          # Liveness also round-trips the database, because the failure this
-          # guards against is a pool that has handed out every permit and
-          # gets none back: the process keeps running and answering /health
-          # while nothing it serves can reach the database, so no restart is
-          # ever triggered and the wedge persists until a human notices.
-          # Restarting does fix that, which is why this probe is worth the
-          # risk it carries.
-          #
-          # That risk is a genuine database outage restarting the pod in a
-          # loop, so the thresholds are deliberately slack: 6 failures at 20s
-          # is about two minutes of sustained unreadiness before a restart,
-          # well clear of a slow query or a brief Postgres blip. Readiness,
-          # at 3 failures over 10s, pulls the pod from the Service long
-          # before this fires.
           livenessProbe:
             httpGet:
-              path: /health/ready
+              path: /health
               port: http
-            initialDelaySeconds: 60
+            initialDelaySeconds: 30
             periodSeconds: 20
-            timeoutSeconds: 6
-            failureThreshold: 6
           volumeMounts:
             - name: backend-data
               mountPath: /app/data

@@ -194,7 +194,11 @@ impl Service {
         if chain == "ethereum" {
             verify_evm(message, &request.signature, address)?;
             let code = self
-                .evm_agree("eth_getCode", json!([address, "finalized"]))
+                .evm_agree(
+                    &self.desk_evm(),
+                    "eth_getCode",
+                    json!([address, "finalized"]),
+                )
                 .await?;
             if code.as_str() != Some("0x") {
                 return Err(invalid("Ethereum contract wallets are outside the MVP"));

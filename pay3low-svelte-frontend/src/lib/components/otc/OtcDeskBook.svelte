@@ -6,6 +6,7 @@
   import { saleRate, compareOfferRates, offerDirection, offerOwner, type PublicOffer } from "$lib/otc/public-offers";
   export let publicOffers: PublicOffer[] = [], ownIds: string[] = [];
   export let onCancel: (id: string) => void = () => {};
+  export let onAccept: (id: string) => void = () => {};
   export let busy = false, compact = false, showEmpty = true;
   export let dialogOnly = false;
   export let testId = "otc-public-offer";
@@ -25,56 +26,22 @@
   });
   $: maxBuy = Math.max(1, ...sortedOffers.filter(o => offerDirection(o) === "buy").map(o => Number(o.terms.usdt_amount) || 0));
   $: maxSell = Math.max(1, ...sortedOffers.filter(o => offerDirection(o) === "sell").map(o => Number(o.terms.usdt_amount) || 0));
-  type BookLevel = { offer: PublicOffer; price: string; amount: string; total: string; depth: number; own: boolean };
+  type BookLevel = { offer: PublicOffer; price: string; amount: string; total: string; own: boolean };
   $: numberLocale = $locale === "ru" ? "ru-RU" : "en-US";
   $: askLevels = buildLevels(publicOffers, "sell", ownIds);
   $: bidLevels = buildLevels(publicOffers, "buy", ownIds);
-  $: bestAsk = askLevels.at(-1) ?? null;
-  $: bestBid = bidLevels[0] ?? null;
-  $: askRate = bestAsk && Number.isFinite(Number(bestAsk.price)) ? Number(bestAsk.price) : null;
-  $: bidRate = bestBid && Number.isFinite(Number(bestBid.price)) ? Number(bestBid.price) : null;
-  $: midRate = askRate !== null && bidRate !== null ? (askRate + bidRate) / 2 : askRate ?? bidRate;
-  $: spreadValue = askRate !== null && bidRate !== null ? askRate - bidRate : null;
-  $: midText = midRate === null || !Number.isFinite(midRate) ? "—" : formatPrice(String(midRate), numberLocale);
-  $: spreadText = spreadValue === null || midRate === null || !midRate ? "—" : `${formatPrice(String(spreadValue), numberLocale)} (${(spreadValue / midRate * 100).toFixed(2)}%)`;
-  $: askVolume = askLevels.length ? amountUnits(askLevels[0].total) : 0n;
-  $: bidVolume = bidLevels.length ? amountUnits(bidLevels[bidLevels.length - 1].total) : 0n;
-  $: totalVolume = askVolume + bidVolume;
-  $: bidShare = totalVolume ? Number(bidVolume * 1000n / totalVolume) / 10 : 50;
-  $: askShare = totalVolume ? 100 - bidShare : 50;
 
-  function amountUnits(value: string): bigint {
-    const [whole, fraction = ""] = value.split(".");
-    return BigInt(whole + fraction.padEnd(9, "0").slice(0, 9));
-  }
-  function cumulativeAmount(value: bigint): string {
-    const scale = 10n ** 9n;
-    const whole = value / scale;
-    const fraction = (value % scale).toString().padStart(9, "0").replace(/0+$/, "");
-    return fraction ? `${whole}.${fraction}` : `${whole}`;
-  }
   function buildLevels(source: PublicOffer[], side: Direction, own: string[]): BookLevel[] {
-    const sorted = source.filter(offer => offerDirection(offer) === side).sort((a, b) =>
-      compareOfferRates(a.terms.ever_amount, a.terms.usdt_amount, b.terms.ever_amount, b.terms.usdt_amount) * (side === "sell" ? 1 : -1)
-    );
-    let cumulative = 0n;
-    const levels = sorted.map(offer => {
-      cumulative += amountUnits(offer.terms.ever_amount);
-      return {
+    return source
+      .filter(offer => offerDirection(offer) === side)
+      .sort((a, b) => compareOfferRates(a.terms.ever_amount, a.terms.usdt_amount, b.terms.ever_amount, b.terms.usdt_amount) * (side === "sell" ? 1 : -1))
+      .map(offer => ({
         offer,
         price: saleRate(offer.terms.ever_amount, offer.terms.usdt_amount),
         amount: offer.terms.ever_amount,
-        total: cumulativeAmount(cumulative),
-        depth: 0,
+        total: offer.terms.usdt_amount,
         own: own.includes(offer.id),
-      };
-    });
-    const max = cumulative || 1n;
-    const withDepth = levels.map(level => ({
-      ...level,
-      depth: Math.max(4, Math.min(100, Number(BigInt(amountUnits(level.total)) * 100n / max))),
-    }));
-    return side === "sell" ? withDepth.reverse() : withDepth;
+      }));
   }
   function formatPrice(value: string, loc: string): string {
     const number = Number(value);
@@ -107,11 +74,22 @@
 
 {#snippet levelRow(level: BookLevel)}
   <button type="button" class="obRow" class:own={level.own} data-testid={testId} aria-label={`${level.own ? say("Your offer", "Ваш оффер") + ". " : ""}${say("Offer details", "Детали оффера")}: ${formatPrice(level.price, numberLocale)} USDT / EVER`} title={`${offerOwner(level.offer)} · ${formatEver(level.amount, numberLocale)} EVER → ${formatEver(level.offer.terms.usdt_amount, numberLocale)} USDT`} on:click={() => showOffer(level.offer)}>
-    <span class="obDepth" style={`--depth:${level.depth}%`}></span>
-    <span class="obPrice" data-testid="otc-book-price">{#if level.own}<i class="ownDot" aria-hidden="true"></i>{/if}{formatPrice(level.price, numberLocale)}</span>
+    <span class="obOwner"><i class="ownDot" aria-hidden="true"></i><code>{offerOwner(level.offer).slice(0, 6)}…{offerOwner(level.offer).slice(-4)}</code></span>
+    <span class="obPrice"><i aria-hidden="true">$</i><b data-testid="otc-book-price">{formatPrice(level.price, numberLocale)}</b></span>
     <span class="obAmount">{formatEver(level.amount, numberLocale)}</span>
-    <span class="obTotal">{formatEver(level.total, numberLocale)}</span>
+    <span class="obTotal"><i aria-hidden="true">$</i>{formatEver(level.total, numberLocale)}</span>
   </button>
+{/snippet}
+
+{#snippet side(levels: BookLevel[], who: string, label: string, key: string)}
+  <section class="obTable" data-side={key} aria-label={label}>
+    <div class="obHead"><span>{who}</span><span>{say("Price", "Цена")}<small>USDT</small></span><span>{say("Amount", "Объём")}<small>EVER</small></span><span>{say("Total", "Всего")}<small>USDT</small></span></div>
+    {#each levels as level (level.offer.id)}
+      {@render levelRow(level)}
+    {:else}
+      {#if showEmpty}<div class="obEmpty">{label}</div>{/if}
+    {/each}
+  </section>
 {/snippet}
 
 {#if !dialogOnly}
@@ -143,33 +121,11 @@
   {:else}
     {#if config?.public_offers_available}
     <div class="orderbook">
-      <div class="obColumns" aria-hidden="true"><span>{say("Price", "Цена")}<small>USDT</small></span><span>{say("Amount", "Объём")}<small>EVER</small></span><span>{say("Total", "Всего")}<small>EVER</small></span></div>
-      <section class="obSide asks" aria-label={say("Sell offers", "Предложения на продажу")}>
-        <div class="obSideHead"><span>{say("Sell offers", "Продажа")}</span><span>{askLevels.length}</span></div>
-        {#each askLevels as level (level.offer.id)}
-          {@render levelRow(level)}
-        {:else}
-          {#if showEmpty}<div class="obEmpty">{say("No sell offers", "Нет продаж")}</div>{/if}
-        {/each}
-      </section>
-      <div class="obMid">
-        <div><span>{say("Mid price", "Средняя цена")}</span><strong>{midText}</strong></div>
-        <div><span>{say("Spread", "Спред")}</span><strong>{spreadText}</strong></div>
+      <div class="obTables">
+        <!-- Sellers come first so the book reads ask-then-bid; the grid places buyers on the left, as the layout asks for. -->
+        {@render side(askLevels, say("Sellers", "Продавцы"), say("Sell offers", "Предложения на продажу"), "asks")}
+        {@render side(bidLevels, say("Buyers", "Покупатели"), say("Buy offers", "Предложения на покупку"), "bids")}
       </div>
-      <section class="obSide bids" aria-label={say("Buy offers", "Предложения на покупку")}>
-        <div class="obSideHead"><span>{say("Buy offers", "Покупка")}</span><span>{bidLevels.length}</span></div>
-        {#each bidLevels as level (level.offer.id)}
-          {@render levelRow(level)}
-        {:else}
-          {#if showEmpty}<div class="obEmpty">{say("No buy offers", "Нет покупок")}</div>{/if}
-        {/each}
-      </section>
-      {#if totalVolume}
-        <div class="obRatio" aria-label={say("Public offer volume", "Объём публичных офферов")}>
-          <div class="obRatioBar" aria-hidden="true"><span class="bid" style={`width:${bidShare}%`}></span><span class="ask" style={`width:${askShare}%`}></span></div>
-          <div class="obRatioLabels"><span class="bid">{say("Buy", "Покупка")} {bidShare.toFixed(1)}%</span><span class="ask">{say("Sell", "Продажа")} {askShare.toFixed(1)}%</span></div>
-        </div>
-      {/if}
       {#if offers.length}
         <div class="deskQuotes">
           <div class="obSideHead"><span>{say("Desk quotes", "Котировки деска")}</span><span>{offers.length}</span></div>
@@ -196,7 +152,7 @@
         {/each}
       </div>
     {/if}
-    <p class="bookFooter">{config?.public_offers_available ? (config.available ? say("Public offers · USDT / EVER", "Публичные офферы · USDT / EVER") : say("Offers are public · settlement on this site is paused", "Офферы публичны · расчёты через сайт отключены")) : say("Desk quotes · USDT / EVER", "Котировки деска · USDT / EVER")}</p>
+    <p class="bookFooter">{config?.public_offers_available ? (config.p2p_available ? say("Public offers · USDT / EVER · accept to settle wallet to wallet", "Публичные офферы · USDT / EVER · примите оффер для расчёта между кошельками") : config.available ? say("Public offers · USDT / EVER", "Публичные офферы · USDT / EVER") : say("Offers are public · settlement on this site is paused", "Офферы публичны · расчёты через сайт отключены")) : say("Desk quotes · USDT / EVER", "Котировки деска · USDT / EVER")}</p>
   {/if}
 {/if}
 
@@ -204,6 +160,9 @@
   {@const selected = selectedOffer}
   {@const side = offerDirection(selected)}
   {@const isOwn = ownIds.includes(selected.id)}
+  {@const offerChain = selected.terms.ethereum_chain_id ?? 1}
+  {@const wrongNetwork = !!config?.p2p_usdt_contract && offerChain !== (config.p2p_ethereum_chain_id ?? config.ethereum_chain_id)}
+  {@const canAccept = !!config?.p2p_available && !isOwn && !wrongNetwork && selected.state === "open" && Date.parse(selected.expires_at) > Date.now()}
   <dialog bind:this={dialog} class="offerDialog" aria-labelledby="otc-offer-details-title" on:cancel|preventDefault={closeOffer} on:click={(event) => { if (event.target === dialog) closeOffer(); }}>
     <div class="dialogHead"><div><span class="dialogEyebrow" class:sell={side === "sell"}>{side === "buy" ? say("BUY OFFER", "ОФФЕР НА ПОКУПКУ") : say("SELL OFFER", "ОФФЕР НА ПРОДАЖУ")}</span><h2 id="otc-offer-details-title">{say("Offer details", "Детали оффера")}</h2></div><button type="button" class="iconButton" aria-label={say("Close", "Закрыть")} on:click={closeOffer}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button></div>
     <div class="dialogSummary"><div><span>{say("Price", "Цена")}</span><strong>{saleRate(selected.terms.ever_amount,selected.terms.usdt_amount)} <small>USDT / EVER</small></strong></div><div><span>{say("Amount", "Количество")}</span><strong>{selected.terms.ever_amount} <small>EVER</small></strong></div><div><span>{say("Total", "Сумма")}</span><strong>{selected.terms.usdt_amount} <small>USDT</small></strong></div></div>
@@ -212,48 +171,40 @@
       <div class="addressRow"><img src="/icons/assets/usdt.png" alt="" width="22" height="22"><div><span>{side === "buy" ? say("USDT paying wallet", "Кошелёк оплаты USDT") : say("USDT receiving wallet", "Кошелёк получения USDT")}</span><code>{selected.terms.usdt_address}</code></div><button class="copyButton" type="button" aria-label={say("Copy Ethereum address", "Копировать Ethereum-адрес")} on:click={() => copyAddress(selected.terms.usdt_address, "usdt")}>{#if copied === "usdt"}<span>{say("Copied", "Скопировано")}</span>{:else}<svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="7" y="7" width="9" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M12 7V4.5A1.5 1.5 0 0 0 10.5 3h-6A1.5 1.5 0 0 0 3 4.5v8A1.5 1.5 0 0 0 4.5 14H7" stroke="currentColor" stroke-width="1.5"/></svg>{/if}</button></div>
     </div>
     <div class="dialogFoot"><span><svg width="15" height="15" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M10 6v4l2.5 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>{say("Open until", "Действует до")} {new Date(selected.expires_at).toLocaleString($locale)}</span>{#if isOwn && selected.state === "open"}<button type="button" class="cancelOffer" disabled={busy} on:click={() => { onCancel(selected.id); closeOffer(); }}>{say("Cancel offer", "Снять оффер")}</button>{/if}</div>
-    {#if config?.public_offers_available && !config.available}<p class="settlementNote"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M10 9v4m0-6h.01" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>{say("Settlement through this site is currently unavailable. Verify addresses with the other party before sending funds.", "Расчёты через сайт сейчас недоступны. Перед переводом сверьте адреса с контрагентом.")}</p>{/if}
+    {#if canAccept}
+      <div class="acceptRow"><p>{say("Two direct transfers between the two wallets: one side sends USDT, the other sends EVER. There is no escrow, so send only after checking the addresses.", "Два прямых перевода между кошельками: одна сторона отправляет USDT, другая — EVER. Эскроу нет, поэтому отправляйте только проверив адреса.")}</p><button type="button" class="acceptOffer" disabled={busy} data-testid="otc-accept-offer" on:click={() => { onAccept(selected.id); closeOffer(); }}>{say("Accept offer", "Принять оффер")}<span aria-hidden="true">↗</span></button></div>
+    {:else if wrongNetwork}<p class="settlementNote"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M10 9v4m0-6h.01" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>{say(`This offer was published for another Ethereum network (${offerChain}). It has to be reposted before it can be settled wallet to wallet.`, `Этот оффер опубликован для другой сети Ethereum (${offerChain}). Чтобы рассчитать его между кошельками, его нужно перепубликовать.`)}</p>
+    {:else if config?.public_offers_available && !config.available}<p class="settlementNote"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M10 9v4m0-6h.01" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>{say("Settlement through this site is currently unavailable. Verify addresses with the other party before sending funds.", "Расчёты через сайт сейчас недоступны. Перед переводом сверьте адреса с контрагентом.")}</p>{/if}
   </dialog>
 {/if}
 
 <style>
   .bookRows.compact { min-height:0; flex:0 0 auto; }
-  .orderbook { display:flex; flex:1; min-height:0; flex-direction:column; overflow-y:auto; scrollbar-width:thin; }
-  .obColumns { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr); gap:8px; align-items:end; min-height:40px; padding:7px 12px; border-bottom:1px solid var(--color-border); color:var(--color-text-soft); font-size:10px; line-height:1.35; text-align:right; }
-  .obColumns > span:first-child { text-align:left; }
-  .obColumns small { display:block; color:var(--color-text-faint); font-size:9px; }
-  .obSide { display:flex; flex:0 0 auto; flex-direction:column; }
+  .orderbook { display:flex; flex:1; min-height:0; flex-direction:column; overflow-y:auto; scrollbar-width:thin; padding:0 var(--otc-panel-padding,20px) 12px; gap:12px; }
+  .obTables { display:flex; flex-wrap:wrap; gap:20px; }
+  .obTable { display:flex; flex:1 1 260px; min-width:0; flex-direction:column; gap:8px; }
+  .obTable[data-side="bids"] { order:-1; }
+  .obHead { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr) minmax(0,.9fr) minmax(0,1fr); gap:8px; align-items:end; min-height:32px; padding:0 12px; color:var(--color-text-soft); font-size:11px; line-height:1.35; text-align:right; }
+  .obHead > span:first-child { text-align:left; }
+  .obHead small { display:block; color:var(--color-text-faint); font-size:9px; }
   .obSideHead { display:flex; min-height:24px; align-items:center; justify-content:space-between; gap:8px; padding:4px 12px; border-bottom:1px solid var(--color-border); color:var(--color-text-faint); font-size:9px; font-weight:650; letter-spacing:.08em; line-height:1.4; text-transform:uppercase; }
   .obSideHead > span:last-child { font-family:var(--font-mono); font-size:10px; font-weight:400; letter-spacing:0; }
-  .asks .obSideHead { background:var(--otc-sell-soft); color:var(--otc-sell); }
-  .bids .obSideHead { background:var(--otc-buy-soft); color:var(--otc-buy); }
-  .obRow { position:relative; isolation:isolate; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr); width:100%; min-height:27px; align-items:center; gap:8px; padding:3px 12px; border-bottom:1px solid color-mix(in srgb, var(--color-border) 55%, transparent); background:transparent; color:var(--color-text); font-family:var(--font-mono); font-size:11px; font-variant-numeric:tabular-nums; line-height:1.35; text-align:right; cursor:pointer; transition:background .12s ease; }
-  .obRow.own { box-shadow:inset 2px 0 var(--color-accent-strong); }
-  .obRow:hover { background:var(--color-panel); }
-  .obDepth { position:absolute; z-index:-1; inset:1px 0 1px auto; width:var(--depth); border-radius:3px 0 0 3px; pointer-events:none; }
-  .asks .obDepth { background:color-mix(in srgb, var(--otc-sell) 10%, transparent); }
-  .bids .obDepth { background:color-mix(in srgb, var(--otc-buy) 10%, transparent); }
-  .obPrice { justify-self:start; font-weight:650; }
-  .asks .obPrice { color:var(--otc-sell); }
-  .bids .obPrice { color:var(--otc-buy); }
-  .ownDot { display:inline-block; width:4px; height:4px; margin-right:4px; border-radius:50%; background:var(--color-accent-strong); vertical-align:2px; }
-  .obAmount,.obTotal { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .obTotal { color:var(--color-text-soft); }
-  .obEmpty { display:flex; min-height:30px; align-items:center; padding:3px 12px; color:var(--color-text-faint); font-size:10px; }
-  .obMid { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:48px; padding:7px 12px; border-top:1px solid var(--color-border-strong); border-bottom:1px solid var(--color-border-strong); background:var(--color-panel-soft); }
-  .obMid > div { display:grid; min-width:0; gap:2px; }
-  .obMid > div:last-child { text-align:right; }
-  .obMid span { color:var(--color-text-faint); font-size:9px; letter-spacing:.04em; line-height:1.3; text-transform:uppercase; }
-  .obMid strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:var(--font-mono); font-size:13px; font-weight:600; font-variant-numeric:tabular-nums; }
-  .obMid > div:first-child strong { color:var(--color-text); font-size:15px; }
-  .obRatio { display:grid; gap:6px; padding:10px 12px; border-top:1px solid var(--color-border); }
-  .obRatioBar { display:flex; height:4px; overflow:hidden; border-radius:999px; background:var(--color-panel); }
-  .obRatioBar .bid { height:100%; background:var(--otc-buy); }
-  .obRatioBar .ask { height:100%; background:var(--otc-sell); }
-  .obRatioLabels { display:flex; justify-content:space-between; color:var(--color-text-faint); font-family:var(--font-mono); font-size:9px; font-variant-numeric:tabular-nums; }
-  .obRatioLabels .bid { color:var(--otc-buy); }
-  .obRatioLabels .ask { color:var(--otc-sell); }
-  .deskQuotes { margin-top:auto; border-top:1px solid var(--color-border-strong); }
+  .obRow { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr) minmax(0,.9fr) minmax(0,1fr); width:100%; min-height:44px; align-items:center; gap:8px; padding:6px 12px; border:1px solid var(--color-border); border-radius:10px; background:var(--otc-row-sell-bg); color:var(--color-text); font-family:var(--font-mono); font-size:12px; font-variant-numeric:tabular-nums; line-height:1.35; text-align:right; cursor:pointer; transition:box-shadow .12s ease; }
+  .obTable[data-side="bids"] .obRow { background:var(--otc-row-buy-bg); }
+  .obRow:hover { box-shadow:inset 0 0 0 1px var(--color-border-strong); }
+  .obRow.own { box-shadow:inset 3px 0 0 var(--color-accent-strong); }
+  .obOwner { display:flex; min-width:0; align-items:center; gap:6px; justify-self:start; text-align:left; }
+  .obOwner code { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:700; letter-spacing:-.02em; }
+  .ownDot { display:none; width:5px; height:5px; flex:0 0 auto; border-radius:50%; background:var(--color-accent-strong); }
+  .obRow.own .ownDot { display:inline-block; }
+  .obPrice { min-width:0; overflow:hidden; text-overflow:ellipsis; font-weight:650; color:var(--color-good); }
+  .obTable[data-side="bids"] .obPrice { color:var(--color-danger); }
+  .obPrice i, .obTotal i { font-style:normal; opacity:.62; }
+  .obPrice b { font-weight:650; }
+  .obAmount,.obTotal { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .obTotal { color:var(--color-text); }
+  .obEmpty { display:flex; min-height:44px; align-items:center; padding:6px 12px; border:1px dashed var(--color-border); border-radius:10px; color:var(--color-text-faint); font-size:11px; }
+                                                      .deskQuotes { margin-top:auto; border-top:1px solid var(--color-border-strong); }
   .deskQuotes > .obSideHead { background:var(--color-panel); color:var(--color-text-soft); }
   .bookSide { margin:0; padding:9px var(--otc-panel-padding,20px); border-bottom:1px solid var(--color-border); background:var(--otc-buy-soft); color:var(--otc-buy); font-size:11px; font-weight:700; letter-spacing:.045em; text-transform:uppercase; }
   .bookSide.sell { color:var(--otc-sell); background:var(--otc-sell-soft); }
@@ -289,7 +240,7 @@
   .empty strong { font-size:13px; font-weight:650; }
   .empty p { margin:0; color:var(--color-text-soft); font-size:12px; }
   .bookFooter { display:flex; flex:0 0 auto; min-height:42px; align-items:center; padding:9px var(--otc-panel-padding,20px); border-top:1px solid var(--color-border); color:var(--color-text-soft); font-size:10px; line-height:1.45; }
-  .offerDialog { width:min(460px,calc(100% - 32px)); max-height:min(86dvh,720px); padding:0; overflow:auto; border:1px solid var(--color-border-strong); border-radius:14px; background:var(--color-paper); color:var(--color-text); box-shadow:0 24px 80px #0005; }
+  .offerDialog { position:fixed; top:0; right:0; bottom:0; left:0; margin:auto; width:min(460px,calc(100% - 32px)); height:fit-content; max-height:min(86dvh,720px); padding:0; overflow:auto; border:1px solid var(--color-border-strong); border-radius:14px; background:var(--color-paper); color:var(--color-text); box-shadow:0 24px 80px #0005; }
   .offerDialog::backdrop { background:#10151bcc; backdrop-filter:blur(4px); }
   .dialogHead { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:20px 22px 16px; border-bottom:1px solid var(--color-border); }
   .dialogEyebrow { color:var(--otc-buy); font-family:var(--font-mono); font-size:10px; font-weight:700; letter-spacing:.08em; }
@@ -312,7 +263,12 @@
   .cancelOffer:disabled { opacity:.5; cursor:default; }
   .settlementNote { display:flex; align-items:flex-start; gap:8px; margin:0; padding:12px 22px 18px; color:var(--color-text-soft); font-size:11px; line-height:1.55; }
   .settlementNote svg { flex:0 0 auto; color:var(--color-accent-strong); }
+  .acceptRow { display:grid; gap:12px; margin:0; padding:14px 22px 18px; border-top:1px solid var(--color-border); }
+  .acceptRow p { margin:0; color:var(--color-text-soft); font-size:11px; line-height:1.55; }
+  .acceptOffer { display:flex; min-height:44px; align-items:center; justify-content:space-between; gap:10px; padding:10px 14px; border:1px solid var(--color-accent-strong); border-radius:8px; background:var(--color-accent); color:#152016; font-size:13px; font-weight:750; }
+  .acceptOffer:disabled { opacity:.45; cursor:default; }
+  .acceptOffer:focus-visible { outline:var(--focus-ring-width) solid var(--color-focus); outline-offset:2px; }
   @media (min-width:640px) { .rowOwner { display:flex; } }
-  @media (max-width:520px) { .bookHeader,.bookRow { grid-template-columns:minmax(0,1fr) minmax(0,.8fr) minmax(0,.75fr) 12px; gap:5px; } .bookHeader,.bookRow { padding-right:12px; padding-left:12px; } .rowAmount small,.rowTotal small { display:none; } .obColumns,.obRow,.obSideHead,.obEmpty,.obMid { padding-right:12px; padding-left:12px; } .obRow,.obColumns { gap:5px; } .obRow { font-size:10.5px; } .dialogHead,.dialogSummary,.addressList { padding-right:16px; padding-left:16px; } .settlementNote { padding-right:16px; padding-left:16px; } .dialogFoot { align-items:flex-start; padding-right:16px; padding-left:16px; } }
+  @media (max-width:520px) { .bookHeader,.bookRow { grid-template-columns:minmax(0,1fr) minmax(0,.8fr) minmax(0,.75fr) 12px; gap:5px; } .bookHeader,.bookRow { padding-right:12px; padding-left:12px; } .rowAmount small,.rowTotal small { display:none; } .obHead,.obRow,.obSideHead,.obEmpty { padding-right:8px; padding-left:8px; } .obHead,.obRow { grid-template-columns:minmax(0,1fr) minmax(0,.8fr) minmax(0,.8fr) minmax(0,.9fr); gap:5px; font-size:10.5px; } .orderbook { padding-right:12px; padding-left:12px; } .dialogHead,.dialogSummary,.addressList { padding-right:16px; padding-left:16px; } .settlementNote { padding-right:16px; padding-left:16px; } .acceptRow { padding-right:16px; padding-left:16px; } .dialogFoot { align-items:flex-start; padding-right:16px; padding-left:16px; } }
   @media (prefers-reduced-motion:reduce) { .bookRow,.obRow,.proposalSelect,.copyButton { transition:none; } }
 </style>

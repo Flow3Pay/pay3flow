@@ -184,7 +184,7 @@
 
 <section class="otcWorkspace gonka" data-testid="otc-workspace" data-market="GNK-USDT" data-state={!loaded ? "connecting" : healthy ? "connected" : "unavailable"}>
   <div class="intro"><h1>Gonka <span>OTC</span></h1><p>{say("Trade GNK / USDT on HEX. Your wallet signs every action.","Торгуйте GNK / USDT на HEX. Каждое действие подписывает ваш кошелёк.")}</p></div>
-  <OtcTerminal baseAsset="GNK" marketIcon="/icons/assets/gnk.jpg" networkLabel="Gonka · HOT Omni Balance" venueLabel="HEX" bind:bridgeOpen bind:bookOpen selectedRate={asks[0]?.price ?? "—"} rateLabel={say("Best ask","Лучшая продажа")} bookTitle={say("HEX orderbook","Стакан HEX")} stats={[
+  <OtcTerminal baseAsset="GNK" marketIcon="/icons/assets/gnk.jpg" networkLabel="Gonka · HOT Omni Balance" venueLabel="HEX" selectedRate={asks[0]?.price ?? "—"} rateLabel={say("Best ask","Лучшая продажа")} bookTitle={say("HEX orderbook","Стакан HEX")} stats={[
     {label:say("Best bid","Лучшая покупка"),value:bids[0]?.price ?? "—"},
     {label:say("Open orders","Открытые ордера"),value:owner && accountData ? String(accountData.orders.length) : "—",secondary:true},
     {label:say("HEX balance","Баланс HEX"),value:accountData ? decimal(accountData.balances[0],9) : "—",unit:"GNK"},

@@ -71,6 +71,10 @@
   --exchange-line: #d2ddd0;
   --exchange-arrow-bg: #eff5eb;
   --exchange-arrow-border: #cad8c6;
+  --otc-card-radius: 24px;
+  --otc-panel-radius: 16px;
+  --otc-row-buy-bg: color-mix(in srgb, var(--color-danger) 8%, transparent);
+  --otc-row-sell-bg: color-mix(in srgb, var(--color-good) 10%, transparent);
   --radius-card: 15px;
   --radius-panel: 12px;
   --radius-pill: 999px;
@@ -96,6 +100,8 @@ html[data-theme="dark"] {
   --exchange-line: #404040;
   --exchange-arrow-bg: #272727;
   --exchange-arrow-border: #505050;
+  --otc-row-buy-bg: color-mix(in srgb, var(--color-danger) 14%, transparent);
+  --otc-row-sell-bg: color-mix(in srgb, var(--color-good) 14%, transparent);
   --color-bg: #101010;
   --color-paper: #191919;
   --color-panel: #222222;

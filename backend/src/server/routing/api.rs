@@ -248,8 +248,9 @@ pub async fn health() -> &'static str {
 }
 
 /// `GET /health/ready` — liveness plus a database round-trip. Readiness has to
-/// touch the pool: a process whose database is gone still answers `/health`,
-/// and without this the proxy keeps sending it API traffic it cannot serve.
+/// touch the pool: a process whose pool can no longer hand out a connection
+/// still answers /health, and without this the Ingress keeps sending it API
+/// traffic it can only hang on.
 pub async fn ready(State(state): State<AppState>) -> impl IntoResponse {
     match crate::db::ping(&state.pool).await {
         Ok(()) => (StatusCode::OK, "ok"),

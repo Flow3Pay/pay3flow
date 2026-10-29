@@ -3,12 +3,37 @@ use serde::{Deserialize, Serialize};
 
 pub(crate) const USDT: &str = "0xdac17f958d2ee523a2206206994597c13d831ec7";
 pub(crate) const PROFILE: &str = "pay3flow-otc-fep0837-v1";
-#[derive(Clone, Deserialize, Serialize, Default)]
+fn default_evm_chain() -> u64 {
+    1
+}
+fn default_usdt_contract() -> String {
+    USDT.into()
+}
+fn default_ever_fee_reserve() -> String {
+    "0.05".into()
+}
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct Config {
     pub enabled: bool,
     pub public_offers_enabled: bool,
+    #[serde(default)]
+    pub p2p_enabled: bool,
     pub demo: bool,
+    #[serde(default = "default_evm_chain")]
+    pub ethereum_chain_id: u64,
+    #[serde(default = "default_usdt_contract")]
+    pub usdt_contract: String,
+    #[serde(default = "default_ever_fee_reserve")]
+    pub p2p_ever_fee_reserve: String,
+    /// Peer settlement network. Defaults to the desk network when unset, so a
+    /// deployment can trade offers on a testnet while the desk keeps mainnet.
+    #[serde(default)]
+    pub p2p_ethereum_chain_id: Option<u64>,
+    #[serde(default)]
+    pub p2p_usdt_contract: Option<String>,
+    #[serde(default)]
+    pub p2p_ethereum_rpc: Vec<String>,
     pub origin: String,
     pub relay_origin: String,
     pub matcher_actor: String,
@@ -46,6 +71,57 @@ pub(crate) struct Config {
     pub live_gate_evidence: Option<String>,
     pub escrow: Option<super::escrow::EscrowPolicy>,
 }
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            public_offers_enabled: false,
+            p2p_enabled: false,
+            demo: false,
+            ethereum_chain_id: default_evm_chain(),
+            usdt_contract: default_usdt_contract(),
+            p2p_ever_fee_reserve: default_ever_fee_reserve(),
+            p2p_ethereum_chain_id: None,
+            p2p_usdt_contract: None,
+            p2p_ethereum_rpc: Vec::new(),
+            origin: String::new(),
+            relay_origin: String::new(),
+            matcher_actor: String::new(),
+            desk_actor: String::new(),
+            desk_name: String::new(),
+            ethereum_rpc: Vec::new(),
+            everscale_graphql: Vec::new(),
+            everwallet_code_hashes: Vec::new(),
+            everscale_multisig_backend: None,
+            ever_resource: String::new(),
+            usdt_resource: String::new(),
+            ever_wallet: String::new(),
+            usdt_wallet: String::new(),
+            ever_gas_reserve: "1".into(),
+            eth_gas_reserve: "0.01".into(),
+            min_usdt: "100".into(),
+            max_usdt: "10000".into(),
+            quote_seconds: 120,
+            payment_seconds: 600,
+            payout_seconds: 900,
+            ethereum_lag_blocks: 100,
+            everscale_lag_seconds: 60,
+            everscale_global_id: 42,
+            staffed_utc_start: 9,
+            staffed_utc_end: 18,
+            support_owner: String::new(),
+            incident_owner: String::new(),
+            incident_backup: String::new(),
+            refund_policy: String::new(),
+            net_delivery_policy: String::new(),
+            operating_requirements_evidence: String::new(),
+            alert_webhook: None,
+            heartbeat_url: None,
+            live_gate_evidence: None,
+            escrow: None,
+        }
+    }
+}
 impl Config {
     pub fn load(origin: &str) -> anyhow::Result<Self> {
         let mut cfg: Self = match std::env::var("OTC_CONFIG_FILE") {
@@ -53,15 +129,58 @@ impl Config {
             Err(_) => Self::default(),
         };
         cfg.origin = origin.trim_end_matches('/').to_string();
+        cfg.usdt_contract = cfg.usdt_contract.to_ascii_lowercase();
+        cfg.p2p_usdt_contract = cfg.p2p_usdt_contract.map(|c| c.to_ascii_lowercase());
+        // A view-only offers deployment must keep booting with whatever network
+        // material it already has; only the flags that move funds are enforced.
+        if cfg.enabled || cfg.p2p_enabled {
+            cfg.validate_network()?;
+        }
         if cfg.enabled {
             cfg.validate()?;
         }
         Ok(cfg)
     }
+    pub fn validate_network(&self) -> Result<()> {
+        self.check_evm_network(self.ethereum_chain_id, &self.usdt_contract)?;
+        if let Some(contract) = &self.p2p_usdt_contract {
+            self.check_evm_network(self.p2p_chain(), contract)?;
+        }
+        super::amount::units(&self.p2p_ever_fee_reserve, 9)?;
+        Ok(())
+    }
+    fn check_evm_network(&self, chain_id: u64, contract: &str) -> Result<()> {
+        let canonical = super::wallet::address("ethereum", contract)?;
+        if canonical != contract || chain_id == 0 {
+            return Err(invalid("Ethereum network settings must be canonical"));
+        }
+        if chain_id == 1 && canonical != USDT {
+            return Err(invalid(
+                "Ethereum mainnet must use the canonical USDT contract",
+            ));
+        }
+        Ok(())
+    }
+    pub fn p2p_chain(&self) -> u64 {
+        self.p2p_ethereum_chain_id.unwrap_or(self.ethereum_chain_id)
+    }
+    pub fn p2p_usdt(&self) -> &str {
+        self.p2p_usdt_contract
+            .as_deref()
+            .unwrap_or(&self.usdt_contract)
+    }
+    pub fn p2p_rpc(&self) -> &[String] {
+        if self.p2p_ethereum_rpc.is_empty() {
+            &self.ethereum_rpc
+        } else {
+            &self.p2p_ethereum_rpc
+        }
+    }
     pub fn validate(&self) -> Result<()> {
         if let Some(policy) = &self.escrow {
             policy.validate()?;
         }
+        self.validate_network()?;
         for value in [
             &self.relay_origin,
             &self.matcher_actor,

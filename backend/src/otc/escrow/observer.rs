@@ -64,18 +64,31 @@ fn exact_transfer(receipt: &Value, from: &str, to: &str, amount: &str) -> Result
 impl Service {
     pub(super) async fn verify_escrow_factory(&self, p: &EscrowPolicy) -> Result<()> {
         p.validate()?;
-        if chain::number(&self.evm_agree("eth_chainId", json!([])).await?)? != 1 {
+        if chain::number(
+            &self
+                .evm_agree(&self.desk_evm(), "eth_chainId", json!([]))
+                .await?,
+        )? != 1
+        {
             return Err(invalid("wrong escrow network"));
         }
         let block = self
-            .evm_agree("eth_getBlockByNumber", json!(["finalized", false]))
+            .evm_agree(
+                &self.desk_evm(),
+                "eth_getBlockByNumber",
+                json!(["finalized", false]),
+            )
             .await?;
         for (address, expected) in [
             (&p.factory, &p.factory_code_hash),
             (&p.singleton, &p.singleton_code_hash),
         ] {
             let code = self
-                .evm_agree("eth_getCode", json!([address, block["number"]]))
+                .evm_agree(
+                    &self.desk_evm(),
+                    "eth_getCode",
+                    json!([address, block["number"]]),
+                )
                 .await?;
             let bytes = wallet::unhex(
                 code.as_str()
@@ -112,19 +125,28 @@ impl Service {
         reference: &str,
     ) -> Result<Option<(Value, Value, DateTime<Utc>)>> {
         let receipt = self
-            .evm_agree("eth_getTransactionReceipt", json!([reference]))
+            .evm_agree(
+                &self.desk_evm(),
+                "eth_getTransactionReceipt",
+                json!([reference]),
+            )
             .await?;
         if receipt.is_null() {
             return Ok(None);
         }
         let block = self
             .evm_agree(
+                &self.desk_evm(),
                 "eth_getBlockByNumber",
                 json!([receipt["blockNumber"], false]),
             )
             .await?;
         let final_head = self
-            .evm_agree("eth_getBlockByNumber", json!(["finalized", false]))
+            .evm_agree(
+                &self.desk_evm(),
+                "eth_getBlockByNumber",
+                json!(["finalized", false]),
+            )
             .await?;
         if receipt["blockHash"] != block["hash"]
             || chain::number(&receipt["blockNumber"])? != chain::number(&block["number"])?
@@ -133,7 +155,11 @@ impl Service {
             return Ok(None);
         }
         let transaction = self
-            .evm_agree("eth_getTransactionByHash", json!([reference]))
+            .evm_agree(
+                &self.desk_evm(),
+                "eth_getTransactionByHash",
+                json!([reference]),
+            )
             .await?;
         if transaction["hash"] != receipt["transactionHash"]
             || transaction["blockHash"] != block["hash"]
@@ -187,7 +213,11 @@ impl Service {
         self.verify_escrow_factory(&p).await?;
         self.revalidate_escrow(id).await?;
         let final_head = self
-            .evm_agree("eth_getBlockByNumber", json!(["finalized", false]))
+            .evm_agree(
+                &self.desk_evm(),
+                "eth_getBlockByNumber",
+                json!(["finalized", false]),
+            )
             .await?;
         let start: String = row.get(4);
         let cursor: Option<String> = client
@@ -208,7 +238,7 @@ impl Service {
         let logs = if chain::number(&json!(from))? > scan_end {
             json!([])
         } else {
-            self.evm_agree("eth_getLogs",json!([{"address":p.factory,"fromBlock":from,"toBlock":scan_end_hex,"topics":[format!("{:#x}",Factory::EscrowCreated::SIGNATURE_HASH),d.trade_id]}])).await?
+            self.evm_agree(&self.desk_evm(), "eth_getLogs",json!([{"address":p.factory,"fromBlock":from,"toBlock":scan_end_hex,"topics":[format!("{:#x}",Factory::EscrowCreated::SIGNATURE_HASH),d.trade_id]}])).await?
         };
         for log in logs
             .as_array()
@@ -315,7 +345,7 @@ impl Service {
             let logs = if chain::number(&json!(from))? > chain::number(&final_head["number"])? {
                 json!([])
             } else {
-                self.evm_agree("eth_getLogs",json!([{"address":vault,"fromBlock":from,"toBlock":scan_end_hex,"topics":[null,d.trade_id]}])).await?
+                self.evm_agree(&self.desk_evm(), "eth_getLogs",json!([{"address":vault,"fromBlock":from,"toBlock":scan_end_hex,"topics":[null,d.trade_id]}])).await?
             };
             for log in logs
                 .as_array()
@@ -576,6 +606,7 @@ impl Service {
                 for height in start..=end.min(start + 31) {
                     let block = self
                         .evm_agree(
+                            &self.desk_evm(),
                             "eth_getBlockByNumber",
                             json!([format!("0x{height:x}"), true]),
                         )

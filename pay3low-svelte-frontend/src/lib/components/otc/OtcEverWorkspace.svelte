@@ -1,21 +1,17 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
-  import { slide } from "svelte/transition";
-  import { cubicOut } from "svelte/easing";
   import { locale } from "$lib/i18n";
   import { otcCopy } from "$lib/otc/copy";
   import type { OtcPreview } from "$lib/share-links";
   import { parseOtcHash } from "$lib/otc/link";
-  import { request, signInWallet, OtcRequestError, bindWallet, sendAttempt, decimal, rate, type Config, type Session, type Proposal, type Trade, type Rfq, type Attempt, type Direction } from "$lib/otc/service";
+  import { request, signInWallet, OtcRequestError, bindWallet, sendAttempt, getBalances, decimal, rate, setOtcNetwork, type Config, type Session, type Proposal, type Trade, type Rfq, type Attempt, type Direction, type WalletBalance } from "$lib/otc/service";
   import type { PublicOffer } from "$lib/otc/public-offers";
   import { exactInput, proposalDirection, terminalStates, completedVolume } from "$lib/otc/terminal";
   import "$lib/otc/terminal.css";
-  import OtcPanel from "./OtcPanel.svelte";
   import OtcActivityContent from "./OtcActivityContent.svelte";
-  import OtcPanelToggle from "./OtcPanelToggle.svelte";
   import OtcTicket from "./OtcTicket.svelte";
   import OtcDeskBook from "./OtcDeskBook.svelte";
-  import OtcQuoteChart from "./OtcQuoteChart.svelte";
+  import OtcMarketChart from "./OtcMarketChart.svelte";
   import OtcTradeDetails from "./OtcTradeDetails.svelte";
   import OtcDeskConsole from "./OtcDeskConsole.svelte";
   import { otcWalletDialog, openWalletDialog, closeWalletDialog } from "$lib/wallet-dialog";
@@ -23,7 +19,7 @@
   import OtcTransferReview from "./OtcTransferReview.svelte";
   import OtcOffers from "./OtcOffers.svelte";
   import OtcTerminal from "./OtcTerminal.svelte";
-  import OtcEverscaleMultisig from "./OtcEverscaleMultisig.svelte";
+  import OtcDealPanel from "./OtcDealPanel.svelte";
   import OtcTradeTables from "./OtcTradeTables.svelte";
   export let onPreviewChange: (preview: OtcPreview | null) => void = () => {};
   export let onShareUrlChange: (url: string) => void = () => {};
@@ -34,13 +30,15 @@
   let rfqKey = "", listingId = "", bookingUnknown = "", requestingQuote = false;
   let transferReview: { attempt: Attempt; trade: Trade; kind: string } | null = null;
   let handoff: { tradeId: string; kind: string; key: string; phase: string; attemptId?: string } | null = null;
-  let bridgeOpen = true, bookOpen = true, activityOpen = true, motionDuration = 320, mounted = false;
+  let motionDuration = 320, mounted = false;
   let selectionVersion = 0, accountVersion = 0, walletProgress = "", accountLocked = false;
-  let tab: "trades" | "orders" | "history" = "orders", now = Date.now();
-  let offersBusy = false;
+  let tab: "trades" | "orders" | "history" = "trades", now = Date.now();
+  let offersBusy = false, balances: WalletBalance[] = [];
   let offerBook: OtcDeskBook;
+  let dealPanel: OtcDealPanel | null = null;
   $: saleEnabled = !!config?.public_offers_available && (config.public_offer_directions ?? ["sell"]).includes(direction) && !listingId && !quote;
-  const sessionKey = "pay3flow.otc.session.v1", layoutKey = "pay3flow.otc.panels.v1";
+  $: bookTitle = config?.public_offers_available ? say("Orderbook", "Стакан") : say("Desk offers", "Предложения деска");
+  const sessionKey = "pay3flow.otc.session.v1";
   $: copy = otcCopy($locale);
   $: say = (en: string, ru: string) => $locale === "ru" ? ru : en;
   $: listing = listings.find(p => p.id === listingId && proposalDirection(p, config) === direction) || listings.find(p => proposalDirection(p, config) === direction);
@@ -71,15 +69,13 @@
   });
   $: activeTrades = trades.filter(t => !terminalStates.has(t.state));
   $: history = trades.filter(t => terminalStates.has(t.state));
-  $: if (mounted) {
-    try { localStorage.setItem(layoutKey, JSON.stringify({ bridgeOpen, bookOpen, activityOpen })); } catch { /* Layout remains usable. */ }
-  }
   function activityIndicator(node: HTMLDivElement, _key: string) {
     const measure = () => {
       const active = node.querySelector<HTMLElement>('[aria-selected="true"]');
       if (!active) return;
-      node.style.setProperty("--active-tab-left", `${active.offsetLeft}px`);
-      node.style.setProperty("--active-tab-width", `${active.offsetWidth}px`);
+      const box = node.getBoundingClientRect(), rect = active.getBoundingClientRect();
+      node.style.setProperty("--active-tab-left", `${rect.left - box.left}px`);
+      node.style.setProperty("--active-tab-width", `${rect.width}px`);
     };
     const observer = new ResizeObserver(measure);
     observer.observe(node);
@@ -94,9 +90,19 @@
     onShareUrlChange(`/${hash}`); onPreviewChange(null);
   }
   function historyReplace(hash: string) { window.history.replaceState(window.history.state, "", `${location.pathname}${location.search}${hash}`); }
+  const chainLabel = (chain: "ethereum" | "everscale") => (chain === "ethereum" ? "Ethereum" : "Everscale");
   async function run(action: () => Promise<void>, lockAccount = true) {
     if (busy || offersBusy) return; busy = true; accountLocked = lockAccount; error = ""; notice = "";
-    try { await action(); } catch (e) { error = e instanceof Error ? e.message : "Request failed"; } finally { busy = false; accountLocked = false; walletProgress = ""; }
+    try { await action(); } catch (e) {
+      // 403 is only ever a lapsed wallet verification: re-read the session so the expired wallet stops showing as connected.
+      if (e instanceof OtcRequestError && e.status === 403) {
+        await refresh();
+        const days = config?.wallet_verification_days ?? 7, names = missingWallets.map(chainLabel).join(" + ");
+        error = missingWallets.length
+          ? say(`Wallet verification lasts ${days} days and has lapsed. Confirm ${names} again.`, `Подтверждение кошелька действует ${days} дней и истекло. Подтвердите ${names} заново.`)
+          : say("Wallet verification has lapsed. Connect your wallet again to continue.", "Подтверждение кошелька истекло. Подключите кошелёк заново, чтобы продолжить.");
+      } else error = e instanceof Error ? e.message : "Request failed";
+    } finally { busy = false; accountLocked = false; walletProgress = ""; }
   }
   async function refresh() {
     const refreshToken = session?.token;
@@ -104,6 +110,7 @@
       const [route, proposals] = await Promise.all([request<Config>("/config"), request<Proposal[]>("/listings")]);
       if (!mounted) return;
       config = route; listings = proposals; healthy = true; loaded = true;
+      try { setOtcNetwork(route); void dealPanel?.refresh(); } catch (e) { error = e instanceof Error ? e.message : "Unsupported OTC network"; }
       if (!session) return;
       const owner = session, previousSelection = selected?.id, previousVersion = selectionVersion;
       const current = await request<Session>("/session", owner.token);
@@ -112,6 +119,7 @@
       const page = await request<{ trades: Trade[]; rfqs: Rfq[] }>("/trades", owner.token);
       if (!mounted || session?.token !== owner.token) return;
       trades = page.trades; rfqs = page.rfqs;
+      if (!balances.length) void pollBalances();
       if (bookingUnknown && trades.some(t => t.id === bookingUnknown && t.state !== "quoted")) { bookingUnknown = ""; sessionStorage.removeItem("pay3flow.otc.booking"); }
       if (previousSelection && selected?.id === previousSelection && selectionVersion === previousVersion) await selectTrade(previousSelection);
       if (owner.desk && session?.token === owner.token) { const data = await request<Record<string, any>>("/desk/dashboard", owner.token); if (session?.token === owner.token) dashboard = data; }
@@ -121,6 +129,11 @@
       if (e instanceof OtcRequestError && e.status === 401) { if (session?.token !== refreshToken) return; clearAccount(); error = say("Session expired. Connect your wallet again.", "Сессия истекла. Подключите кошелёк снова."); return; }
       healthy = false; throw e;
     }
+  }
+  async function pollBalances() {
+    const owner = session;
+    if (!owner) { balances = []; return; }
+    try { const result = await getBalances(owner.token); if (session?.token === owner.token) balances = result; } catch { balances = []; }
   }
   async function selectTrade(id: string, editTicket = false) {
     if (!session) return;
@@ -134,8 +147,20 @@
   }
   function edited() { selectionVersion++; rfqKey = ""; if (selected?.state === "quoted") { selected = null; attempts = []; receipts = []; updates = []; sessionStorage.removeItem("pay3flow.otc.selected"); } }
   function chooseSide(next: Direction) { if (next !== direction) { direction = next; listingId = ""; edited(); syncLink(); } }
-  function selectListing(proposal: Proposal, side: Direction) { chooseSide(side); if (listingId !== proposal.id) edited(); listingId = proposal.id; bridgeOpen = true; document.getElementById("otc-input")?.focus(); }
+  function selectListing(proposal: Proposal, side: Direction) { chooseSide(side); if (listingId !== proposal.id) edited(); listingId = proposal.id; document.getElementById("otc-input")?.focus(); }
   function openOffer(offer: PublicOffer) { void tick().then(() => offerBook?.openOffer(offer)); }
+  async function acceptOffer(id: string) {
+    const owner = session;
+    tab = "orders";
+    if (!owner) { error = say("Connect your wallet to accept an offer.", "Подключите кошелёк, чтобы принять оффер."); return; }
+    await run(async () => {
+      await request(`/offers/${id}/accept`, owner.token, {}, crypto.randomUUID());
+      notice = say("Offer accepted. Send the first transfer to start settlement.", "Оффер принят. Отправьте первый перевод, чтобы начать расчёт.");
+      await tick();
+      void dealPanel?.refresh();
+    });
+    await refresh();
+  }
   function retainSession(current: Session) {
     if (session?.actor !== current.actor && sessionStorage.getItem("pay3flow.otc.recovery.actor") === current.actor) {
       try { handoff = JSON.parse(sessionStorage.getItem("pay3flow.otc.handoff") || "null"); } catch { handoff = null; }
@@ -173,7 +198,7 @@
     const amount = exactInput(input, direction); if (!amount) throw new Error("Enter a positive exact amount with the asset precision.");
     rfqKey ||= crypto.randomUUID();
     const result = await request<{ id: string }>("/rfqs", session.token, { direction, input: amount, listing_id: listing.id }, rfqKey);
-    notice = `Quote requested. Reference: ${result.id}`; tab = "orders"; activityOpen = true; await refresh();
+    notice = `Quote requested. Reference: ${result.id}`; tab = "orders"; await refresh();
   }
   async function apply() {
     if (!session || !selected || selected.state !== "quoted" || unresolvedBooking || now > Date.parse(selected.terms.quote_by)) return;
@@ -238,7 +263,6 @@
     const media = matchMedia("(prefers-reduced-motion: reduce)"); const motionChanged = () => motionDuration = media.matches ? 0 : 320; motionChanged(); media.addEventListener("change", motionChanged);
     const restoreDirection = () => { const shared = parseOtcHash(location.hash); if (shared.marketId === "GNK-USDT") return; if (shared.side) direction = shared.side; edited(); syncLink(); };
     const shared = parseOtcHash(location.hash); direction = shared.side || "buy"; if (shared.amount && exactInput(shared.amount, direction)) input = shared.amount;
-    try { const saved = JSON.parse(localStorage.getItem(layoutKey) || "null"); if (saved) for (const name of ["bridgeOpen", "bookOpen", "activityOpen"] as const) { if (typeof saved[name] === "boolean") { if (name === "bridgeOpen") bridgeOpen = saved[name]; if (name === "bookOpen") bookOpen = saved[name]; if (name === "activityOpen") activityOpen = saved[name]; } } } catch { /* Ignore invalid layout storage. */ }
     let restoreToken = "";
     try {
       const saved = JSON.parse(sessionStorage.getItem(sessionKey) || "null");
@@ -259,51 +283,48 @@
           if (e instanceof OtcRequestError && e.status === 401) clearAccount(); else throw e;
         }
       }
-      await refresh(); const id = sessionStorage.getItem("pay3flow.otc.selected"); if (id && session) await selectTrade(id, true); }, false);
+      await refresh(); const id = sessionStorage.getItem("pay3flow.otc.selected"); if (id && session) { tab = "orders"; await selectTrade(id, true); } }, false);
     const timer = setInterval(async () => { if (stopped || busy || polling) return; polling = true; try { await refresh(); } catch (e) { error = e instanceof Error ? e.message : "Status unavailable"; } finally { polling = false; } }, 5000);
+    // Display-only chain reads: they can wait for the RPCs instead of the 5-second desk poll.
+    const walletTimer = setInterval(() => void pollBalances(), 30000);
     const clock = setInterval(() => now = Date.now(), 1000);
     window.addEventListener("hashchange", restoreDirection); window.addEventListener("popstate", restoreDirection);
-    return () => { closeWalletDialog(); otcWalletDialog.set(null); stopped = true; mounted = false; accountVersion++; clearInterval(timer); clearInterval(clock); media.removeEventListener("change", motionChanged); window.removeEventListener("hashchange", restoreDirection); window.removeEventListener("popstate", restoreDirection); };
+    return () => { closeWalletDialog(); otcWalletDialog.set(null); stopped = true; mounted = false; accountVersion++; clearInterval(timer); clearInterval(walletTimer); clearInterval(clock); media.removeEventListener("change", motionChanged); window.removeEventListener("hashchange", restoreDirection); window.removeEventListener("popstate", restoreDirection); };
   });
 </script>
-<OtcOffers enabled={!!config?.public_offers_available} {direction} {session} {busy} bind:posting={offersBusy} onConnect={() => run(() => session ? verify("everscale") : connectAccount("everscale"))} onPublished={() => { bookOpen = true; activityOpen = true; tab = "orders"; }} let:ticket let:offers let:mine let:history={offerHistory} let:message let:offerError let:onCancel>
+<OtcOffers enabled={!!config?.public_offers_available} {direction} {session} {busy} bind:posting={offersBusy} onConnect={() => run(() => session ? verify("everscale") : connectAccount("everscale"))} onPublished={() => { tab = "trades"; }} let:ticket let:offers let:mine let:history={offerHistory} let:message let:offerError let:onCancel>
 <section class="otcWorkspace" data-testid="otc-workspace" data-state={!loaded ? "connecting" : !healthy ? "unavailable" : "connected"}>
-  <div class="pageIntro"><div><h1>{copy.titleLead}<span class="titleAccent">{copy.titleAccent}</span></h1><p>{config?.public_offers_available ? say("Native EVER on Everscale. USDT on Ethereum. Your OTC offers.", "Нативный EVER в Everscale. USDT в Ethereum. Ваши предложения OTC.") : say("Native EVER on Everscale. USDT on Ethereum. Direct desk settlement.", "Нативный EVER в Everscale. USDT в Ethereum. Прямой обмен с деском.")}</p></div></div>
-  <OtcEverscaleMultisig {config} {session} {busy} onConnect={() => connectAccount("everscale")} onBusyChange={value => busy = value} />
-  <OtcTerminal bind:bridgeOpen bind:bookOpen {motionDuration} selectedRate={saleEnabled ? ticket.askingRate : selected ? rate(selected.terms) : "—"} rateLabel={saleEnabled ? say("Your offer price", "Цена вашего оффера") : ""} bookTitle={config?.public_offers_available ? say("Orderbook", "Стакан") : say("Desk offers", "Предложения деска")} stats={[
+  <OtcTerminal chartPanel={false} bookPanel={false} selectedRate={saleEnabled ? ticket.askingRate : selected ? rate(selected.terms) : "—"} rateLabel={saleEnabled ? say("Your offer price", "Цена вашего оффера") : ""} {bookTitle} stats={[
     {label:say("Desk","Деск"),value:config?.desk_name || "—"},
     {label:config?.public_offers_available ? say("Open offers","Открытые офферы") : say("Desk offers","Предложения деска"),value:String(listings.length + offers.length),secondary:true},
     {label:config?.public_offers_available ? say("Your open orders","Ваши открытые ордера") : say("Your open trades","Ваши открытые сделки"),value:session ? String(activeTrades.length + mine.filter(o => o.state === "open").length) : "—",secondary:true},
     {label:say("Your completed volume","Ваш завершённый объём"),value:session ? decimal(completedVolume(trades),6) : "—",unit:"USDT"},
   ]}>
   <div slot="status" class="serviceControls">{#if offerError}<p class="message error" role="alert">{offerError}</p>{/if}{#if message}<p class="message" role="status">{message}</p>{/if}{#if walletProgress}<p class="message" role="status">{walletProgress}</p>{/if}{#if error}<p class="message error" role="alert">{error}</p>{/if}{#if notice}<p class="message" role="status">{notice}</p>{/if}{#if unresolvedBooking}<p class="message" role="status">{say("The original booking is awaiting its decision. Another selection is blocked.", "Ожидается решение по исходной сделке. Другое бронирование заблокировано.")}</p><button disabled={busy || !healthy || !bookingUnknown} on:click={() => run(reconcileBooking)}>{say("Reconcile original booking", "Проверить исходное бронирование")}</button>{/if}</div>
-    <svelte:fragment slot="ticket"><OtcTicket sale={saleEnabled ? ticket : null} {direction} bind:input {quote} busy={busy || offersBusy} disabled={!exactInput(input, direction) || unresolvedBooking || (needsWallets && !quote ? !(config?.wallet_login_available ?? config?.enabled) : !healthy || !config?.available || !listing || (!!quote && now > Date.parse(quote.terms.quote_by)))} status={quote || saleEnabled ? "" : quoteStatus} desk={config?.desk_name || ""} onDirection={chooseSide} onEdit={edited} onRequest={requestQuote} onReview={() => { tab = "orders"; activityOpen = true; document.getElementById("otc-activity-section")?.scrollIntoView({ block: "start", behavior: motionDuration ? "smooth" : "instant" }); }} /></svelte:fragment>
-    <OtcQuoteChart slot="chart" {trades} publicOffers={config?.public_offers_available && (saleEnabled || !trades.length) ? offerHistory : null} />
-    <OtcDeskBook slot="book" publicOffers={offers} ownIds={mine.map(o => o.id)} onCancel={onCancel} busy={busy || offersBusy} {config} {listings} selectedId={listing?.id || ""} onSelect={selectListing} />
+    <svelte:fragment slot="ticket"><OtcTicket sale={saleEnabled ? ticket : null} {direction} bind:input {quote} {balances} busy={busy || offersBusy} disabled={!exactInput(input, direction) || unresolvedBooking || (needsWallets && !quote ? !(config?.wallet_login_available ?? config?.enabled) : !healthy || !config?.available || !listing || (!!quote && now > Date.parse(quote.terms.quote_by)))} status={quote || saleEnabled ? "" : quoteStatus} onDirection={chooseSide} onEdit={edited} onRequest={requestQuote} onReview={() => { tab = "orders"; document.getElementById("otc-book-column")?.scrollIntoView({ block: "start", behavior: motionDuration ? "smooth" : "instant" }); }} /></svelte:fragment>
+    <OtcMarketChart slot="chart" {trades} publicOffers={config?.public_offers_available && (saleEnabled || !trades.length) ? offerHistory : null} />
+    <svelte:fragment slot="book">
+      <section class="activityCard" id="otc-activity" aria-label={say("Trade activity", "Активность сделок")}>
+        <div class="activityTabs" role="tablist" aria-label={say("Trade activity", "Активность сделок")} use:activityIndicator={`${tab}:${$locale}:${activeTrades.length}`} style:--activity-motion={`${motionDuration}ms`}>{#each ["trades", "orders", "history"] as item}<button type="button" role="tab" id={`otc-${item}-tab`} aria-selected={tab === item} tabindex={tab === item ? 0 : -1} aria-controls={`otc-${item}-content`} class:active={tab === item} on:keydown={navigateTab} on:click={() => tab = item as typeof tab}>{item === "trades" ? config?.public_offers_available ? say("Orderbook", "Стакан") : say("Desk offers", "Предложения деска") : item === "orders" ? config?.public_offers_available ? say("My orders", "Мои заявки") : say("My trades", "Мои сделки") : say("History", "История")}{#if item === "orders" && activeTrades.length + mine.filter(o => o.state === "open").length}<span class="orderCount">{activeTrades.length + mine.filter(o => o.state === "open").length}</span>{/if}</button>{/each}<span class="tabIndicator" aria-hidden="true"></span></div>
+        <OtcActivityContent activeKey={tab} duration={motionDuration}>
+        <div class="activityContent" role="tabpanel" id={`otc-${tab}-content`} aria-labelledby={`otc-${tab}-tab`} tabindex="0">
+          {#if tab === "trades"}
+            <OtcDeskBook publicOffers={offers} ownIds={mine.map(o => o.id)} onCancel={onCancel} onAccept={acceptOffer} busy={busy || offersBusy} {config} {listings} selectedId={listing?.id || ""} onSelect={selectListing} />
+          {:else}
+            {#if tab === "orders"}<OtcDealPanel bind:this={dealPanel} {config} {session} locked={busy || offersBusy} {now} onNotice={message => notice = message} onError={message => error = message} onBusyChange={value => busy = value} />{/if}
+            <OtcTradeTables trades={tab === "orders" ? activeTrades : history} offers={tab === "orders" ? mine.filter(o => o.state === "open") : mine.filter(o => o.state !== "open")} selectedId={selected?.id || ""} busy={busy || offersBusy} onSelect={id => run(() => selectTrade(id, true), false)} onOfferSelect={openOffer} emptyTitle={tab === "orders" ? say("No open orders", "Открытых ордеров нет") : say("No history yet", "Истории пока нет")} emptyHint={session ? say("Quotes, offers and accepted trades appear here.", "Здесь появятся котировки, офферы и принятые сделки.") : say("Connect your wallet to see private quotes and trades.", "Подключите кошелёк для доступа к приватным котировкам и сделкам.")} />
+            {#if tab === "orders"}{#each rfqs.filter(r => r.state === "waiting") as r}<p class="waiting">{say("Waiting for desk quote", "Ожидается котировка деска")} · {r.direction} · {r.input} · {r.id}</p>{/each}{/if}
+            {#if selected}<div class="tradeDetail">{#if handoffUnknown}<p class="waiting">{say("Saved outgoing attempt is unresolved. Another send is blocked.", "Сохранённая попытка перевода не завершена. Повторная отправка заблокирована.")}</p>{/if}<OtcTradeDetails {selected} {session} {config} {attempts} {receipts} {updates} busy={busy || !healthy} {unresolvedBooking} {handoffUnknown} {now} onApply={() => run(apply)} onDecide={accept => run(() => decide(accept))} onBusyChange={value => { busy = value; accountLocked = value; }} onRefresh={refresh} onTransfer={kind => run(() => prepareReview(kind))} onTrack={(attempt, reference) => run(() => track(attempt, reference))} onRetry={(attempt, evidence) => run(async () => { await request(`/attempts/${attempt.id}/retry`, session!.token, { evidence: { note: evidence } }); await refresh(); })} /></div>{/if}
+          {/if}
+        </div>
+        </OtcActivityContent>
+      </section>
+    </svelte:fragment>
   </OtcTerminal>
-  <p class="risk">{config?.public_offers_available && !config.available ? say("Publication does not move or reserve funds. Buyer acceptance and settlement through this site are not available yet.", "Публикация не переводит и не резервирует средства. Принятие предложения покупателем и расчёты через сайт пока недоступны.") : config?.escrow ? say("Each trade uses a 2-of-3 USDT escrow for four hours from creation, capped at 100,000 EVER. USDT is funded first. Native EVER delivery is separate and is not reversed by a USDT refund.", "Каждая сделка использует эскроу USDT с 2 из 3 подписей на 4 часа с момента создания, до 100 000 EVER. Сначала вносится USDT. Перевод EVER выполняется отдельно и не отменяется возвратом USDT.") : say("Two separate transfers: the customer pays first; the desk delivers or refunds. No atomic swap or automatic rollback.", "Два отдельных перевода: клиент платит первым, деск выполняет выплату или возврат. Атомарного обмена и автоматического отката нет.")}</p>
-  <div class="activityToggle"><OtcPanelToggle title={say("Trade activity", "Активность сделок")} controls="otc-activity-section" bind:expanded={activityOpen} vertical /></div>
-  {#if activityOpen}<div class="activitySection" id="otc-activity-section" transition:slide={{ duration: motionDuration, easing: cubicOut }}><OtcPanel id="otc-activity" title={say("Trade activity", "Активность сделок")} collapsible={false}><span slot="actions" class="panelMeta">EVER/USDT</span>
-    <div class="activityTabs" role="tablist" aria-label={say("Trade activity", "Активность сделок")} use:activityIndicator={`${tab}:${$locale}:${activeTrades.length}`} style:--activity-motion={`${motionDuration}ms`}>{#each ["trades", "orders", "history"] as item}<button type="button" role="tab" id={`otc-${item}-tab`} aria-selected={tab === item} tabindex={tab === item ? 0 : -1} aria-controls={`otc-${item}-content`} class:active={tab === item} on:keydown={navigateTab} on:click={() => tab = item as typeof tab}>{item === "trades" ? config?.public_offers_available ? say("Orderbook", "Стакан") : say("Desk offers", "Предложения деска") : item === "orders" ? config?.public_offers_available ? say("My orders", "Мои заявки") : say("My trades", "Мои сделки") : say("History", "История")}{#if item === "orders" && activeTrades.length + mine.filter(o => o.state === "open").length}<span class="orderCount">{activeTrades.length + mine.filter(o => o.state === "open").length}</span>{/if}</button>{/each}<span class="tabIndicator" aria-hidden="true"></span></div>
-    <OtcActivityContent activeKey={tab} duration={motionDuration}>
-    <div class="activityContent" role="tabpanel" id={`otc-${tab}-content`} aria-labelledby={`otc-${tab}-tab`} tabindex="0">
-      {#if tab === "trades"}
-        {#if config?.public_offers_available}
-          <OtcTradeTables trades={[]} offers={offers} busy={busy || offersBusy} onSelect={() => {}} onOfferSelect={openOffer} emptyTitle={say("No open offers", "Пока нет офферов")} emptyHint={say("Be the first to post an offer.", "Опубликуйте первый оффер.")} />
-        {:else}
-          <OtcDeskBook publicOffers={offers} ownIds={mine.map(o => o.id)} onCancel={onCancel} busy={busy || offersBusy} {config} {listings} selectedId={listing?.id || ""} onSelect={selectListing} />
-        {/if}
-      {:else}
-        <OtcTradeTables trades={tab === "orders" ? activeTrades : history} offers={tab === "orders" ? mine.filter(o => o.state === "open") : mine.filter(o => o.state !== "open")} selectedId={selected?.id || ""} busy={busy || offersBusy} onSelect={id => run(() => selectTrade(id, true), false)} onOfferSelect={openOffer} emptyTitle={tab === "orders" ? say("No open orders", "Открытых ордеров нет") : say("No history yet", "Истории пока нет")} emptyHint={session ? say("Quotes, offers and accepted trades appear here.", "Здесь появятся котировки, офферы и принятые сделки.") : say("Connect your wallet to see private quotes and trades.", "Подключите кошелёк для доступа к приватным котировкам и сделкам.")} />
-        {#if tab === "orders"}{#each rfqs.filter(r => r.state === "waiting") as r}<p class="waiting">{say("Waiting for desk quote", "Ожидается котировка деска")} · {r.direction} · {r.input} · {r.id}</p>{/each}{/if}
-        {#if selected}<div class="tradeDetail">{#if handoffUnknown}<p class="waiting">{say("Saved outgoing attempt is unresolved. Another send is blocked.", "Сохранённая попытка перевода не завершена. Повторная отправка заблокирована.")}</p>{/if}<OtcTradeDetails {selected} {session} {config} {attempts} {receipts} {updates} busy={busy || !healthy} {unresolvedBooking} {handoffUnknown} {now} onApply={() => run(apply)} onDecide={accept => run(() => decide(accept))} onBusyChange={value => { busy = value; accountLocked = value; }} onRefresh={refresh} onTransfer={kind => run(() => prepareReview(kind))} onTrack={(attempt, reference) => run(() => track(attempt, reference))} onRetry={(attempt, evidence) => run(async () => { await request(`/attempts/${attempt.id}/retry`, session!.token, { evidence: { note: evidence } }); await refresh(); })} /></div>{/if}
-      {/if}
-    </div>
-    </OtcActivityContent>
-  </OtcPanel></div>{/if}
+  <p class="risk">{config?.p2p_available ? say("Accepting an offer creates two direct transfers between the wallets of both parties. There is no escrow and no automatic rollback: whoever sends first relies on the counterparty delivering afterwards.", "Принятие оффера создаёт два прямых перевода между кошельками сторон. Эскроу и автоматического отката нет: кто отправляет первым, полагается на то, что контрагент выполнит свой перевод следом.") : config?.public_offers_available && !config.available ? say("Publication does not move or reserve funds. Buyer acceptance and settlement through this site are not available yet.", "Публикация не переводит и не резервирует средства. Принятие предложения покупателем и расчёты через сайт пока недоступны.") : config?.escrow ? say("Each trade uses a 2-of-3 USDT escrow for four hours from creation, capped at 100,000 EVER. USDT is funded first. Native EVER delivery is separate and is not reversed by a USDT refund.", "Каждая сделка использует эскроу USDT с 2 из 3 подписей на 4 часа с момента создания, до 100 000 EVER. Сначала вносится USDT. Перевод EVER выполняется отдельно и не отменяется возвратом USDT.") : say("Two separate transfers: the customer pays first; the desk delivers or refunds. No atomic swap or automatic rollback.", "Два отдельных перевода: клиент платит первым, деск выполняет выплату или возврат. Атомарного обмена и автоматического отката нет.")}</p>
   {#if session?.desk}<div class="console"><OtcDeskConsole {session} {config} {selected} {rfqs} {dashboard} {busy} {run} onRefresh={refresh} onSelect={selectTrade} /></div>{/if}
 </section>
-<OtcDeskBook bind:this={offerBook} dialogOnly publicOffers={offers} ownIds={mine.map(o => o.id)} onCancel={onCancel} onSelect={() => {}} busy={busy || offersBusy} {config} />
+<OtcDeskBook bind:this={offerBook} dialogOnly publicOffers={offers} ownIds={mine.map(o => o.id)} onCancel={onCancel} onAccept={acceptOffer} onSelect={() => {}} busy={busy || offersBusy} {config} />
 </OtcOffers>
 
 {#if transferReview}<OtcTransferReview trade={transferReview.trade} kind={transferReview.kind} instructions={transferReview.attempt.instructions} disabled={busy || !!config?.demo || transferReview.trade.terms.demo || (transferReview.attempt.instructions.escrow && now >= Date.parse(transferReview.attempt.instructions.expires_at!) - 1800000) || (!transferReview.trade.terms.escrow && transferReview.kind === "payment" && now > Date.parse(transferReview.trade.terms.pay_by))} onClose={() => transferReview = null} onConfirm={() => run(confirmTransfer)} />{/if}
@@ -317,19 +338,14 @@
     width: min(var(--layout-width), calc(100% - 2 * var(--page-gutter)));
     margin: 0 auto; padding: 32px 0 24px; font-size: 13px; line-height: 1.5;
   }
-  .pageIntro { margin: 0 auto 24px; text-align: center; }
-  h1 { max-width: 1000px; margin: 0 auto; text-wrap: balance; font-size: clamp(40px, 5vw, 64px); font-weight: 650; letter-spacing: -.06em; line-height: 1.06; }
-  .titleAccent { position: relative; z-index: 0; display: inline-block; margin-inline-start: .06em; }
-  .titleAccent::after { position: absolute; right: -.04em; bottom: .04em; left: -.03em; z-index: -1; height: .18em; border-radius: 3px; background: var(--color-accent); content: ""; transform: rotate(-1deg); }
-  .pageIntro p { max-width: 560px; margin: 12px auto 0; color: var(--color-text-soft); font-size: 14px; line-height: 1.6; }
   .risk { margin: 16px 0 0; color: var(--color-text-soft); font-size: 12px; line-height: 1.6; }
-  .activityToggle { display: grid; height: 44px; place-items: center; }
   .panelMeta { color: var(--color-text-faint); font-family: var(--font-mono); font-size: 12px; }
-  .activitySection { min-width: 0; scroll-margin-top: 24px; }
-  .activityTabs { position: relative; display: flex; align-items: stretch; gap: 24px; padding: 0 var(--otc-panel-padding); border-bottom: 1px solid var(--color-border); }
-  .activityTabs button { display: flex; min-width: 0; min-height: 48px; align-items: center; gap: 8px; padding: 12px 0; color: var(--color-text-soft); font-size: 13px; line-height: 1.5; transition: color var(--activity-motion) ease; }
+  .activityCard { display: flex; width: 100%; min-width: 0; flex-direction: column; border: 1px solid var(--color-border-strong); border-radius: var(--otc-card-radius, 24px); background: var(--exchange-card-bg); overflow: hidden; scroll-margin-top: 24px; }
+  .activityTabs { position: relative; display: flex; flex: 0 0 auto; align-items: stretch; gap: 4px; margin: 16px var(--otc-panel-padding) 8px; padding: 4px; border-radius: 12px; background: var(--color-panel); box-shadow: inset 0 0 0 1px var(--color-border); }
+  .activityTabs button { position: relative; z-index: 1; display: flex; flex: 1 1 0; min-width: 0; min-height: 38px; align-items: center; justify-content: center; gap: 8px; padding: 6px 10px; border-radius: 9px; color: var(--color-text-soft); font-size: 13px; line-height: 1.35; text-align: center; transition: color var(--activity-motion) ease; }
+  .activityTabs button:hover { color: var(--color-text); }
   .activityTabs button.active { color: var(--color-text); font-weight: 650; }
-  .tabIndicator { position: absolute; bottom: -1px; left: 0; width: var(--active-tab-width, 0px); height: 2px; border-radius: 2px; background: var(--color-accent-strong); transform: translateX(var(--active-tab-left, 0px)); transition: transform var(--activity-motion) cubic-bezier(.22, 1, .36, 1), width var(--activity-motion) cubic-bezier(.22, 1, .36, 1); pointer-events: none; }
+  .tabIndicator { position: absolute; z-index: 0; top: 4px; left: 0; width: var(--active-tab-width, 0px); height: calc(100% - 8px); border-radius: 9px; background: var(--color-paper); box-shadow: 0 1px 4px rgb(0 0 0 / .08); transform: translateX(var(--active-tab-left, 0px)); transition: transform var(--activity-motion) cubic-bezier(.22, 1, .36, 1), width var(--activity-motion) cubic-bezier(.22, 1, .36, 1); pointer-events: none; }
   .orderCount { display: grid; flex: 0 0 auto; min-width: 20px; height: 20px; padding: 0 4px; place-items: center; border-radius: 4px; background: var(--color-accent-soft); font-family: var(--font-mono); font-size: 11px; }
   .activityContent { min-height: 240px; }
   .activityContent:focus-visible { outline-offset: -3px; }
@@ -350,10 +366,8 @@
   }
   @media (max-width: 640px) {
     .otcWorkspace { --otc-panel-padding: 16px; padding-top: 24px; }
-    h1 { font-size: clamp(34px, 9vw, 46px); letter-spacing: -.05em; line-height: 1.08; }
-    .pageIntro p { font-size: 13px; }
-    .activityTabs { gap: 12px; padding-inline: 12px; }
-    .activityTabs button { flex: 1; justify-content: center; min-height: 56px; gap: 4px; font-size: 12px; text-align: center; overflow-wrap: anywhere; }
+    .activityTabs { margin: 12px 12px 4px; gap: 2px; }
+    .activityTabs button { min-height: 44px; padding: 6px; font-size: 12px; }
     .tradeList button { grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; }
     .tradeList button span:last-child { grid-column: 1 / -1; text-align: left; }
   }

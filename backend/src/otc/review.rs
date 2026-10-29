@@ -119,7 +119,11 @@ impl Service {
         nonce: Option<u128>,
     ) -> Result<Option<Evidence>> {
         let observed = self
-            .evm_agree("eth_getTransactionReceipt", json!([reference]))
+            .evm_agree(
+                &self.desk_evm(),
+                "eth_getTransactionReceipt",
+                json!([reference]),
+            )
             .await?;
         let sender = format!("0x{:0>64}", booked.sender.trim_start_matches("0x"));
         let recipient = format!("0x{:0>64}", booked.recipient.trim_start_matches("0x"));
@@ -149,7 +153,8 @@ impl Service {
             transfer_amount: actual.to_string(),
             ..booked.clone()
         };
-        self.ethereum_evidence(reference, &leg, nonce).await
+        self.ethereum_evidence(reference, &leg, nonce, &self.desk_evm())
+            .await
     }
     pub(crate) async fn everscale_review(
         &self,

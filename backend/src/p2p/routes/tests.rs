@@ -991,6 +991,34 @@ fn everscale_native_asset_can_be_sent_or_received_without_provider_metadata() {
 }
 
 #[test]
+fn unnameable_catalog_ticker_is_skipped_from_defaults_but_rejected_when_named() {
+    let defaults = ["USDT".to_owned(), "USDC.N".to_owned(), "EVER".to_owned()];
+    let networks = crate::networks::NetworkCatalog::test_default();
+    for explicit in [false, true] {
+        let mut request = crypto_cycle_request(1.0);
+        request.source_fiat = "USD".into();
+        request.target_fiat = "EUR".into();
+        request.source_network = None;
+        request.target_network = None;
+        request.intermediary_assets = explicit.then(|| "USDC.N".into());
+        let query = normalize_query(request, &defaults, &networks, &[]);
+        if explicit {
+            assert!(
+                query.is_err(),
+                "a caller must still be told that USDC.N is not a searchable code"
+            );
+        } else {
+            assert_eq!(
+                query
+                    .expect("one malformed catalog row must not disable every swap")
+                    .assets,
+                vec!["USDT".to_owned(), "EVER".to_owned()]
+            );
+        }
+    }
+}
+
+#[test]
 fn expanded_default_catalog_is_valid_while_explicit_search_lists_remain_bounded() {
     let defaults = [
         "USDT", "USDC", "BTC", "ETH", "BNB", "SOL", "TRX", "GRAM", "DOGE", "LTC", "DAI", "FDUSD",

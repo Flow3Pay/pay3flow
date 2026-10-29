@@ -132,7 +132,7 @@ test("desk console decisions reserve first and unknown payout blocks refund", as
 
 test("server history and volume count completed USDT legs once, refunds stay visible", async ({ page }) => {
   await fixtures(page, { signedIn: true, extra: [makeTrade("completed", "buy", "done-buy"), makeTrade("completed", "sell", "done-sell"), makeTrade("refunded", "buy", "refund")] }); await open(page);
-  await expect(page.locator(".volumeStat")).toContainText("300 USDT"); await expect(page.locator("#otc-chart circle")).toHaveCount(3);
+  await expect(page.locator(".volumeStat")).toContainText("300 USDT"); await expect(page.locator(".chartColumn .marketChart")).toHaveAttribute("data-points", "3");
   await page.getByRole("tab", { name: "History", exact: true }).click(); await expect(page.locator(".tradeTables tbody tr[role=button]")).toHaveCount(3); await expect(page.locator(".tradeTables")).toContainText("Refunded");
   await page.getByRole("tab", { name: "History", exact: true }).press("Home"); await expect(page.getByRole("tab", { name: "Desk offers", exact: true })).toHaveAttribute("aria-selected", "true");
 });
@@ -142,12 +142,12 @@ test("logout discards a delayed participant response", async ({ page }) => {
   await expect.poll(() => !!f.control.releasePrivate, { timeout: 12000 }).toBe(true);
   await page.locator(".walletMenu .walletToggle").click(); await page.getByRole("button", { name: "Disconnect", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Buy EVER · accepted" })).toHaveCount(0); f.control.releasePrivate!();
-  await page.waitForTimeout(250); await expect(page.locator(".tradeTables tbody tr[role=button]")).toHaveCount(0); await expect(page.locator("#otc-chart circle")).toHaveCount(0);
+  await page.waitForTimeout(250); await expect(page.locator(".tradeTables tbody tr[role=button]")).toHaveCount(0); await expect(page.locator(".chartColumn .marketChart")).toHaveAttribute("data-points", "0");
 });
 
-test("backend outage pauses new RFQs; panel layout survives reload", async ({ page }) => {
-  const f = await fixtures(page, { signedIn: true }); await open(page); await page.getByRole("button", { name: "Collapse Exchange", exact: true }).click(); await page.reload();
-  await expect(page.getByRole("button", { name: "Expand Exchange", exact: true })).toBeVisible(); await page.getByRole("button", { name: "Expand Exchange", exact: true }).click();
+test("backend outage pauses new RFQs without collapsing the terminal", async ({ page }) => {
+  const f = await fixtures(page, { signedIn: true }); await open(page); await page.reload();
+  await expect(page.locator(".marketStrip")).toBeVisible(); await expect(page.locator(".bridgeColumn .bridgeForm")).toBeVisible();
   f.control.outage = true; await expect(page.getByTestId("otc-workspace")).toHaveAttribute("data-state", "unavailable", { timeout: 12000 }); await expect(page.getByRole("button", { name: "Request exact quote" })).toBeDisabled();
 });
 
@@ -485,20 +485,19 @@ for (const theme of ["light", "dark"] as const) test(`OTC keeps panels and contr
     await page.setViewportSize({ width, height: 1000 });
     const geometry = await page.evaluate(() => {
       const rect = (node: Element) => { const { x, y, width, height, right, bottom } = node.getBoundingClientRect(); return { x, y, width, height, right, bottom }; };
-      const panels = [...document.querySelectorAll(".otcGrid .otcPanel")].map(rect);
-      const heads = [...document.querySelectorAll(".otcGrid .panelHead")].map(rect);
+      const chart = rect(document.querySelector(".chartColumn")!);
+      const bridge = rect(document.querySelector(".bridgeColumn")!);
       const inputs = [...document.querySelectorAll("#otc-input,#otc-receive")].map(rect);
       const clipped = [...document.querySelectorAll<HTMLElement>(".otcWorkspace button,.otcWorkspace p,.otcWorkspace .assetIdentity,.otcWorkspace .marketSelector")].filter(node => node.clientWidth > 1 && node.scrollWidth > node.clientWidth + 1).map(node => node.textContent);
-      return { panels, heads, inputs, clipped, overflow: document.documentElement.scrollWidth > innerWidth };
+      return { chart, bridge, inputs, clipped, overflow: document.documentElement.scrollWidth > innerWidth };
     });
     expect(geometry.overflow, `page overflow at ${width}px`).toBe(false);
     expect(geometry.clipped, `clipped text at ${width}px`).toEqual([]);
-    expect(new Set(geometry.heads.map(head => head.height)).size).toBe(1);
     expect(geometry.inputs[0].width).toBe(geometry.inputs[1].width);
     expect(geometry.inputs[0].height).toBe(geometry.inputs[1].height);
     if (width > 980) {
-      expect(Math.max(...geometry.panels.map(panel => panel.y)) - Math.min(...geometry.panels.map(panel => panel.y))).toBeLessThan(1);
-      expect(Math.max(...geometry.panels.map(panel => panel.bottom)) - Math.min(...geometry.panels.map(panel => panel.bottom))).toBeLessThan(1);
+      expect(Math.abs(geometry.chart.y - geometry.bridge.y)).toBeLessThan(1);
+      expect(geometry.chart.width).toBeGreaterThan(geometry.bridge.width);
     }
     await expect(page.getByTestId("production-safe")).toHaveCount(0);
   }
@@ -515,14 +514,20 @@ test("activity tabs animate their indicator and content height and respect reduc
   await expect(page.locator(".introOverlay")).toHaveCount(0, { timeout: 6000 });
   const activity = page.locator("#otc-activity");
   await activity.scrollIntoViewIfNeeded();
+  await page.locator("#otc-orders-tab").click();
   await expect(page.locator(".tradeTables tbody tr[role=button]").first()).toBeVisible();
   const original = (await activity.locator(".activityViewport").boundingBox())!.height;
-  await page.getByRole("tab", { name: "Desk offers", exact: true }).click();
-  await expect(page.getByRole("tabpanel")).toHaveAttribute("id", "otc-trades-content");
+  await page.getByRole("tab", { name: "History", exact: true }).click();
+  await expect(page.getByRole("tabpanel")).toHaveAttribute("id", "otc-history-content");
   await expect.poll(() => activity.evaluate(node => node.getAnimations({ subtree: true }).filter(animation => animation.playState === "running").length)).toBeGreaterThan(0);
   await expect.poll(() => activity.evaluate(node => node.getAnimations({ subtree: true }).filter(animation => animation.playState === "running").length)).toBe(0);
-  const offersHeight = (await activity.locator(".activityViewport").boundingBox())!.height;
-  expect(offersHeight).not.toBe(original);
+  const historyHeight = (await activity.locator(".activityViewport").boundingBox())!.height;
+  const contentHeight = await activity.locator(".activityViewport > div").evaluate(node => node.getBoundingClientRect().height);
+  expect(Math.abs(historyHeight - contentHeight)).toBeLessThan(1);
+  expect(original).toBeGreaterThan(0);
+  await page.getByRole("tab", { name: "Desk offers", exact: true }).click();
+  await expect(page.getByRole("tabpanel")).toHaveAttribute("id", "otc-trades-content");
+  await expect.poll(() => activity.evaluate(node => node.getAnimations({ subtree: true }).filter(animation => animation.playState === "running").length)).toBe(0);
   const underline = await activity.locator(".tabIndicator").boundingBox();
   const selected = await page.getByRole("tab", { name: "Desk offers", exact: true }).boundingBox();
   expect(Math.abs(underline!.x - selected!.x)).toBeLessThan(1);

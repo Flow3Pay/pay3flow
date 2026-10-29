@@ -42,7 +42,8 @@ only the publication id, time, direction and amounts, never wallet addresses.
 
 Advertisements are public for 24 hours or until cancellation. They are local to
 Pay3Flow, not accepted trades, federated desk Proposals or payment instructions.
-Buyer acceptance and settlement still require an implemented, configured route.
+Acceptance and settlement run through the direct peer-to-peer route below, which
+is separate from the desk and stays available while `enabled` is false.
 
 `GET /api/otc/offers` reads active advertisements; `/offers/history` returns
 sanitized publication history; `/offers/mine` reads the authenticated seller's
@@ -72,6 +73,56 @@ EVER Wallet. Durable handoffs and message-level reconciliation are separate from
 desk-order settlement accounting. Startup applies `otc_ever_multisig.sql`; the
 workspace remains disabled until `everscale_multisig_backend` points at a
 server-owned ever-cli binary. See [setup and limits](otc-everscale-multisig.md).
+The OTC terminal no longer renders that workspace; the routes and tables remain for
+the EVER Wallet tooling that still uses them.
+
+### Direct peer-to-peer settlement
+
+`p2p_enabled` turns an open advertisement into a deal: `POST /offers/:id/accept`
+reserves the offer, books both wallets from the two verified accounts and writes
+`otc_p2p_trades` (startup applies `backend/migrations/otc_p2p.sql`). The offer
+author and the taker then each sign one ordinary transfer in their own wallet
+through `POST /p2p/trades/:id/prepare` and `POST /p2p/attempts/:id/reference`:
+USDT first, EVER after that leg verifies. There is no escrow, no atomic swap and
+no rollback; each payer is responsible for their own leg, and the deal records
+which leg each side still owes.
+
+The route deliberately bypasses the desk: it works with `enabled: false`, needs no
+inventory, relay account, RFQ, federation or staffed-hours gate, and the worker
+runs `p2p_tick` before the desk enablement check. Acceptance requires both a
+verified Ethereum and a verified EVER wallet for the acting account, refuses an
+actor's own offer, and refuses a counterparty address that equals one of the
+actor's verified wallets. A prepared leg stays locked until it resolves: a second
+attempt for the same leg conflicts, cancellation is only possible while no
+payment handoff exists, and an unreadable observer reading keeps the attempt in
+`confirming` rather than `failed`, because marking a real payment failed would
+invite a second send.
+
+Peer settlement runs on its own Ethereum contour: `p2p_ethereum_chain_id`,
+`p2p_usdt_contract` and `p2p_ethereum_rpc` override `ethereum_chain_id`,
+`usdt_contract` and `ethereum_rpc` for offers, handoffs and observers only. A
+deployment can therefore keep the desk on mainnet USDT while advertisements
+settle on a testnet with the live `enabled: true` route untouched. Each deal
+stores the chain id and token it was booked on and is read back through the peer
+RPC pair on that chain, so repointing the contour mid-deal leaves the outstanding
+attempt in `confirming` instead of confirming evidence from another network.
+Acceptance additionally refuses an offer whose published chain or token differs
+from the live peer contour; those advertisements must be republished.
+
+Settlement follows `ethereum_chain_id` and `usdt_contract`, so a test network
+works without touching the desk configuration; `validate_network` rejects a
+non-canonical contract on mainnet and requires a usable
+`p2p_ever_fee_reserve`. The EVER leg adds that reserve to the booked amount and
+accepts a balance increase of at least the booked amount, because a receiving
+contract may take its fee from the transfer. Chain labels come from
+`ethereum_chain_id`, and `counterparty_risk` states the no-escrow property, so the
+browser never has to guess which network it is signing on.
+
+Verification still needs independent observers: at least two HTTPS Ethereum RPCs
+for the USDT leg and at least two HTTPS Everscale GraphQL endpoints for the EVER
+leg. Finalized heights and pending nonces are read from every endpoint and the
+conservative value is used instead of demanding identical answers, since public
+providers legitimately sit at different heads.
 
 ### Desk settlement setup
 
