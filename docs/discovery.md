@@ -1,6 +1,10 @@
 # Exchange and arbitrage discovery
 
-The converter offers Exchange, Any / any (wildcard exchange), and Arbitrage.
+The existing Exchange converter includes Any currency and Any method in its
+sending and receiving pickers. The regular Find routes action searches wildcard
+selections and displays results in the existing route panel. Shared wildcard
+selections use `/#/swap/ANY/ANY?from=any-ANY&to=any-ANY`; older discovery links
+are restored inside Exchange. Arbitrage remains available through the API.
 RUB supports the selectable SBP / СБП method in both directions. The method
 catalog includes enabled directory methods, and provider availability still
 determines whether an amount and method can produce a route.

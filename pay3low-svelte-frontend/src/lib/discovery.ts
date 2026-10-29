@@ -14,6 +14,7 @@ export interface DiscoveryQuery {
   max_actions: number;
   exchange_mode: "all" | "p2p" | "exchanger";
   sources?: string;
+  intermediary_assets?: string;
   cursor?: string;
 }
 export interface SettlementEndpoint {

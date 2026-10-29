@@ -17,6 +17,10 @@ const messages: Record<Locale, Record<string, string>> = {
     "Whitebird verification required": "Exchange is available to verified users",
   },
   ru: {
+    "See routes": "Смотрите маршруты",
+    "Any currency": "Любая валюта",
+    "Any method": "Любой способ",
+    "The same amount is compared separately in each starting currency.": "Одна и та же сумма сравнивается отдельно для каждой исходной валюты.",
     "Platforms": "Площадки",
     "TRENDS": "Тренды",
     "Send": "Отправить",

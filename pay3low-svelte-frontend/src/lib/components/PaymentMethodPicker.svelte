@@ -9,6 +9,8 @@
   import PickerOptionCard from "./PickerOptionCard.svelte";
   import { navigatePicker } from "$lib/picker-keyboard";
 
+  export let allowAny = false;
+  export let onSelectAny: (currency: string) => void = () => {};
   export let open: boolean;
   export let title: string;
   export let role: "sender" | "recipient";
@@ -105,6 +107,7 @@
       <div class="titleBar"><h2 class="title">{title}</h2>{#if stage === "detail" && activeChoice}<span class="stageHint">{activeChoice.id}</span>{/if}</div>
       <section class="resultPanel">
         <div class="methods" role="listbox" aria-label={t(stage === "currency" ? "Currencies and digital assets" : activeChoice?.kind === "asset" ? "Blockchains" : "Payment methods", {}, $locale)}>
+          {#if allowAny}<section class="section"><PickerOptionCard name={t(stage === "currency" ? "Any currency" : "Any method",{},$locale)} meta={stage === "currency" ? t("Any method",{},$locale) : activeCurrency} initials="ANY" color="#272727" selected={selected?.id === `any-${stage === "currency" ? "ANY" : activeCurrency}`} onSelect={() => {onSelectAny(stage === "currency" ? "ANY" : activeCurrency);close();}} /></section>{/if}
           {#if stage === "currency"}
             {#if visibleCurrencies.length === 0}<div class="empty"><strong>{t("No currencies or assets found", {}, $locale)}</strong><span>{t("Try a different search.", {}, $locale)}</span></div>{/if}
             {#if visibleCurrencies.some((choice) => choice.kind === "fiat")}<section class="section"><h3>{t("Fiat currencies", {}, $locale)}</h3>{#each visibleCurrencies.filter((choice) => choice.kind === "fiat") as choice (choice.id)}<PickerOptionCard name={choice.id} meta={choice.name} category={t(choice.kind === "fiat" ? "Currencies" : "Digital assets", {}, $locale)} iconUrl={choice.iconUrl ?? null} initials={choice.initials} color={choice.color} selected={selectedCurrency === choice.id} onSelect={() => chooseCurrency(choice)} />{/each}</section>{/if}

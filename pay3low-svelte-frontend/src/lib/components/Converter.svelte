@@ -1,6 +1,6 @@
 <script lang="ts">
   import DiscoveryPanel from "./DiscoveryPanel.svelte";
-  import type { DiscoveryMode } from "$lib/discovery";
+  import type { DiscoveryQuery } from "$lib/discovery";
   import { browser } from "$app/environment";
   import { afterUpdate, onMount, onDestroy, tick } from "svelte";
   import { quintOut } from "svelte/easing";
@@ -45,25 +45,21 @@
   export let onBelarusP2pWarningChange: (show: boolean) => void = () => {};
   export let onOpenBelarusP2pWarning: () => void = () => {};
 
-  let discoveryMode: DiscoveryMode | null = null;
-  function syncDiscoveryMode() {
-    if (!browser) return;
-    if (window.location.hash.startsWith("#/discover")) {
-      const params = new URLSearchParams(window.location.hash.split("?")[1]);
-      discoveryMode = params.get("mode") === "arbitrage" ? "arbitrage" : "exchange";
-      controller?.abort(); searching = false;
-    } else discoveryMode = null;
+  let discoveryPanel: DiscoveryPanel | undefined;
+  const isAnyMethod = (method: PaymentMethod | null | undefined) => Boolean(method?.id.startsWith("any-"));
+  function anyMethod(currency: string): PaymentMethod {
+    return {id:`any-${currency}`,name:"Any method",country:"GLOBAL",currency,role:"both",kind:"bank",color:"#272727",initials:"ANY",p2pQuery:""};
   }
-  function selectDiscoveryMode(mode: DiscoveryMode | null) {
-    controller?.abort(); searching = false;
-    discoveryMode = mode;
-    if (mode) {
-      const params = new URLSearchParams(window.location.hash.startsWith("#/discover?") ? window.location.hash.split("?")[1] : "");
-      params.set("mode",mode);
-      history.replaceState(null,"",`/#/discover?${params}`);
-    } else history.replaceState(null,"","/#/swap");
-  }
-  onMount(() => { syncDiscoveryMode(); window.addEventListener("hashchange",syncDiscoveryMode); window.addEventListener("popstate",syncDiscoveryMode); return () => { window.removeEventListener("hashchange",syncDiscoveryMode); window.removeEventListener("popstate",syncDiscoveryMode); }; });
+  // Keep previously shared discovery URLs usable inside the existing converter.
+  onMount(() => {
+    if (!location.hash.startsWith("#/discover")) return;
+    const old = new URLSearchParams(location.hash.split("?")[1]);
+    const source = old.get("source_fiat") || "ANY", target = old.get("target_fiat") || "ANY";
+    const params = new URLSearchParams({amount:old.get("source_amount") || "1000",from:old.get("source_payment_method") || `any-${source}`,to:old.get("target_payment_method") || `any-${target}`});
+    if (old.get("source_network")) params.set("fromNetwork",old.get("source_network")!);
+    if (old.get("target_network")) params.set("toNetwork",old.get("target_network")!);
+    history.replaceState(null,"",`/#/swap/${encodeURIComponent(source)}/${encodeURIComponent(target)}?${params}`);
+  });
 
   type RefreshSeconds = number;
   type PickerSide = "source" | "target" | null;
@@ -277,6 +273,7 @@
     return parseExchangeHash(window.location.hash);
   }
   function sharedMethod(methods: PaymentMethod[], currency: string, role: "sender" | "recipient", currentId: string) {
+    if (currentId.startsWith("any-") || currency === "ANY") return anyMethod(currency);
     const choices = methods.filter((method) => method.kind !== "currency" && method.currency === currency && (method.role === role || method.role === "both"));
     return choices.find((method) => method.id === currentId)
       ?? choices.find((method) => method.kind === "wallet")
@@ -577,6 +574,16 @@
   $: targetMethods = paymentMethods.filter((method) => method.kind !== "currency" && (method.role === "recipient" || method.role === "both"));
   $: sourceMethod = resolveMethod(sourceMethods, sourceMethodId, sourceCountry, sourceCurrency);
   $: targetMethod = resolveMethod(targetMethods, targetMethodId, targetCountry, targetCurrency);
+  $: useDiscovery = isAnyMethod(sourceMethod) || isAnyMethod(targetMethod);
+  $: discoveryQuery = {
+    mode:"exchange", source_fiat:selectedSourceCurrency, target_fiat:selectedTargetCurrency, source_amount:normalizeAmount(amount).replace(",","."),
+    source_payment_method:sourceMethod && !isAnyMethod(sourceMethod) && sourceMethod.kind !== "wallet" ? sourceMethod.id : undefined,
+    target_payment_method:targetMethod && !isAnyMethod(targetMethod) && targetMethod.kind !== "wallet" ? targetMethod.id : undefined,
+    source_network:sourceMethod?.kind === "wallet" ? sourceNetwork?.id : undefined,
+    target_network:targetMethod?.kind === "wallet" ? targetNetwork?.id : undefined,
+    intermediary_assets:selectedIntermediaryAssets.join(",") || undefined, sources:selectedSources.join(",") || undefined,
+    exchange_mode:exchangeMode, max_actions:complexRoutes ? 8 : 4, allow_cross_venue:true,
+  } satisfies DiscoveryQuery;
   $: sourceCurrencyChoice = sourceMethod?.currency || sourceCurrency;
   $: targetCurrencyChoice = targetMethod?.currency || targetCurrency;
   $: sourceCurrencyFlag = sourceMethod?.kind === "wallet" ? null : fiatFlagUrl(sourceCurrencyChoice);
@@ -587,8 +594,9 @@
   $: targetNetworks = targetMethod?.kind === "wallet" ? networks.filter((network) => network.currencies.includes(targetMethod!.currency)) : [];
   $: sourceNetwork = sourceNetworks.find((network) => network.id === sourceNetworkId) ?? (sourceMethod?.kind === "wallet" ? preferredNetwork(sourceMethod.currency) : undefined);
   $: targetNetwork = targetNetworks.find((network) => network.id === targetNetworkId) ?? (targetMethod?.kind === "wallet" ? preferredNetwork(targetMethod.currency) : undefined);
-  $: sourceCurrencyChoices = currencyChoicesFor(sourceMethod, "sender");
-  $: targetCurrencyChoices = currencyChoicesFor(targetMethod, "recipient");
+  $: availableCurrencies = [...new Set([...paymentMethods.map(method => method.currency), ...networks.flatMap(network => network.currencies)])].sort();
+  $: sourceCurrencyChoices = currencyChoicesFor(availableCurrencies);
+  $: targetCurrencyChoices = currencyChoicesFor(availableCurrencies);
   $: showBelarusP2pWarning = selectedExchangeMethods.includes("p2p") && [sourceMethod, targetMethod].some((method) => method?.kind === "bank" && method.country === "BY" && method.currency === "BYN");
   $: onBelarusP2pWarningChange(showBelarusP2pWarning);
   $: hasAmount = amountSide === "target"
@@ -601,7 +609,7 @@
   $: displayedTargetAmount = amountSide === "target" && !previewRoute ? targetAmount : amountFromRoute(previewRoute);
   $: displayedSourceInput = sourceAmountFocused ? displayedSourceAmount : compactInputAmount(displayedSourceAmount);
   $: displayedTargetInput = targetAmountFocused ? displayedTargetAmount : compactInputAmount(displayedTargetAmount);
-  $: onShareStateChange(discoveryMode === null && urlReady && sourceMethod && targetMethod ? {
+  $: onShareStateChange(urlReady && sourceMethod && targetMethod ? {
     source: selectedSourceCurrency, target: selectedTargetCurrency,
     amount: displayedSourceAmount, receive: displayedTargetAmount,
     from: sourceMethod.id, to: targetMethod.id,
@@ -672,8 +680,13 @@
     return `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
   function updateHash(source: string, target: string, value: string) {
-    if (discoveryMode !== null || location.hash.startsWith("#/discover") || guideRequested || parseExchangeHash(location.hash)?.guide) return;
+    if (guideRequested || parseExchangeHash(location.hash)?.guide) return;
     const params = new URLSearchParams(); if (value !== "0") params.set("amount", value);
+    if (isAnyMethod(sourceMethod) || isAnyMethod(targetMethod)) {
+      params.set("from",sourceMethod?.id ?? `any-${source}`); params.set("to",targetMethod?.id ?? `any-${target}`);
+      if (sourceMethod?.kind === "wallet" && sourceNetwork) params.set("fromNetwork",sourceNetwork.id);
+      if (targetMethod?.kind === "wallet" && targetNetwork) params.set("toNetwork",targetNetwork.id);
+    }
     const query = params.toString();
     history.replaceState(null, "", `${location.pathname}${location.search}#/swap/${encodeURIComponent(source)}/${encodeURIComponent(target)}${query ? `?${query}` : ""}`);
   }
@@ -687,6 +700,7 @@
     if (!guideRequested && seconds && updatedAt && validAmount) refreshTimer = window.setInterval(() => { if (!searching) void startSearch(false); }, seconds * 1000);
   }
   function resetResults() {
+    discoveryPanel?.reset();
     controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; displayRoutes([]); routesFound = 0; selected = null; selectionPinnedByUser = false; instructionsRoute = null; lastUpdatedAt = null; searching = false; awaitingFirstRoute = false; foundVenueIds = []; foundVenues = []; venueStats = {}; error = null;
     if (refreshTimer) window.clearInterval(refreshTimer);
   }
@@ -739,7 +753,7 @@
     resetResults();
   }
   function swapDirection() {
-    if (!corridor) return;
+    if (!corridor && !useDiscovery) return;
     initialSearchReady = true;
     const nextSource = targetMethod?.id ?? "", nextTarget = sourceMethod?.id ?? "";
     const nextAmount = amountSide === "target" ? targetAmount : amountFromRoute(previewRoute);
@@ -752,6 +766,7 @@
     return (left.currencyGroup ?? left.id) === (right.currencyGroup ?? right.id);
   }
   function resolveMethod(methods: PaymentMethod[], selectedId: string, country: string, currency: string) {
+    if (selectedId.startsWith("any-")) return anyMethod(selectedId.slice(4));
     const selected = methods.find((method) => method.id === selectedId);
     if (selected) return selected;
     const matchesCorridor = (method: PaymentMethod) => method.kind === "wallet"
@@ -764,41 +779,24 @@
       ?? methods[0]
       ?? null;
   }
-  function currencyChoicesFor(method: PaymentMethod | null, role: "sender" | "recipient") {
-    if (!method || method.kind === "wallet") return [];
-    const supported = new Set(
-      paymentMethods
-        .filter((candidate) => candidate.kind === "bank" || candidate.kind === "cash")
-        .filter((candidate) => sameCurrencyGroup(candidate, method) && (candidate.role === role || candidate.role === "both"))
-        .map((candidate) => candidate.currency),
-    );
-    return currencyCards
-      .filter((choice) => supported.has(choice.currency))
-      .map((choice) => ({ id: choice.currency, name: choice.name, mark: choice.initials, color: choice.color }))
-      .sort((left, right) => Number(right.id === method.currency) - Number(left.id === method.currency));
+  function currencyChoicesFor(currencies: string[]) {
+    return [{id:"ANY",name:t("Any currency",{},activeLocale),mark:"ANY",color:"#272727"},...currencies.map(currency => ({id:currency,name:currencyCards.find(card=>card.currency===currency)?.name ?? currency,mark:currencyMark(currency),color:"#272727"}))];
   }
   function chooseCurrency(side: Exclude<PickerSide, null>, choice: string) {
     const role = side === "source" ? "sender" : "recipient";
     const current = side === "source" ? sourceMethod : targetMethod;
-    const next = current && current.kind !== "wallet"
-      ? paymentMethods.find((method) => (method.kind === "bank" || method.kind === "cash") && sameCurrencyGroup(method, current) && method.currency === choice && (method.role === role || method.role === "both"))
+    const next = current && !isAnyMethod(current) && current.kind !== "wallet" && choice !== "ANY"
+      ? paymentMethods.find(method => (method.kind === "bank" || method.kind === "cash") && sameCurrencyGroup(method,current) && method.currency === choice && (method.role === role || method.role === "both"))
       : undefined;
-    if (!next) return;
-    initialSearchReady = true;
-    if (side === "source") {
-      sourceMethodId = next.id;
-    } else {
-      targetMethodId = next.id;
-    }
+    if (side === "source") chooseSource(next ?? anyMethod(choice)); else chooseTarget(next ?? anyMethod(choice));
     currencyPicker = null;
-    resetResults();
   }
   function preferredNetwork(currency: string) {
     const compatible = networks.filter((network) => network.currencies.includes(currency));
     return compatible.find((network) => network.id.toLowerCase() === currency.toLowerCase()) ?? compatible[0];
   }
-  function chooseSource(method: PaymentMethod, network?: CryptoNetwork) { initialSearchReady = true; sourceMethodId = method.id; if (method.kind === "wallet") sourceNetworkId = network?.id ?? preferredNetwork(method.currency)?.id ?? FALLBACK_NETWORK.id; methodPicker = null; resetResults(); }
-  function chooseTarget(method: PaymentMethod, network?: CryptoNetwork) { initialSearchReady = true; targetMethodId = method.id; if (method.kind === "wallet") targetNetworkId = network?.id ?? preferredNetwork(method.currency)?.id ?? FALLBACK_NETWORK.id; methodPicker = null; resetResults(); }
+  function chooseSource(method: PaymentMethod, network?: CryptoNetwork) { if (isAnyMethod(method) || isAnyMethod(targetMethod)) { amountSide = "source"; targetAmount = "0"; targetAmountNeedsRate = false; } initialSearchReady = true; sourceMethodId = method.id; if (method.kind === "wallet") sourceNetworkId = network?.id ?? preferredNetwork(method.currency)?.id ?? FALLBACK_NETWORK.id; methodPicker = null; resetResults(); }
+  function chooseTarget(method: PaymentMethod, network?: CryptoNetwork) { if (isAnyMethod(method) || isAnyMethod(sourceMethod)) { amountSide = "source"; targetAmount = "0"; targetAmountNeedsRate = false; } initialSearchReady = true; targetMethodId = method.id; if (method.kind === "wallet") targetNetworkId = network?.id ?? preferredNetwork(method.currency)?.id ?? FALLBACK_NETWORK.id; methodPicker = null; resetResults(); }
   function selectNetwork(network: CryptoNetwork) { initialSearchReady = true; if (networkPicker === "source") sourceNetworkId = network.id; else targetNetworkId = network.id; networkPicker = null; resetResults(); }
   function openCurrencyPicker(side: Exclude<PickerSide, null>) { currencyPicker = side; }
   async function openMethodPicker(side: Exclude<PickerSide, null>) {
@@ -893,7 +891,13 @@
   }
 
   async function startSearch(countActivity = true) {
-    if (discoveryMode !== null) return;
+    if (useDiscovery) {
+      if (!hasAmount) return;
+      routesExpanded = true;
+      await tick();
+      await discoveryPanel?.search();
+      return;
+    }
     if (debounceTimer) window.clearTimeout(debounceTimer);
     debounceTimer = undefined;
     if (!corridor || !sourceMethod || !targetMethod) return;
@@ -1139,14 +1143,8 @@
 
 <section hidden={guideRequested} class="shell" class:localeLong={activeLocale !== "en"} class:introReady={introCompleted} id="transfer">
   <div class="hero"><ScrambleHeadline phrases={home.heroPhrases} active={introCompleted} /><p>{home.intro}</p></div>
-  <nav class="discoveryModes" aria-label="Search mode">
-    <button type="button" aria-pressed={discoveryMode === null} on:click={() => selectDiscoveryMode(null)}>Exchange</button>
-    <button type="button" aria-pressed={discoveryMode === "exchange"} on:click={() => selectDiscoveryMode("exchange")}>Any / any</button>
-    <button type="button" aria-pressed={discoveryMode === "arbitrage"} on:click={() => selectDiscoveryMode("arbitrage")}>Arbitrage</button>
-  </nav>
-  {#if discoveryMode !== null}<DiscoveryPanel mode={discoveryMode} {paymentMethods} {networks} catalogError={paymentCatalogError} catalogLoading={paymentCatalogLoading} />{/if}
   <noscript><p class="nojsNotice">{home.nojs}</p></noscript>
-  <div style:display={discoveryMode !== null ? "none" : undefined} class="workspace" class:activityExpanded class:routesCollapsed={!routesExpanded} style:--converter-width={`${converterWidth}px`} style:--amount-digits={converterAmountDigits}>
+  <div class="workspace" class:activityExpanded class:routesCollapsed={!routesExpanded} style:--converter-width={`${converterWidth}px`} style:--amount-digits={converterAmountDigits}>
     <div class="converterStack">
     <div class="card" class:modalOpen bind:this={converterCard}>
       <div class="cardTop">
@@ -1232,7 +1230,7 @@
       <ExchangeFlowBridge reversed={directionReversed} onSwap={swapDirection} label={t("Swap sender and recipient", {}, activeLocale)}><button type="button" class="routesToggle" class:routesToggleOpen={routesExpanded} on:click={toggleRoutes} aria-label={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)} aria-expanded={routesExpanded} title={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)}><span aria-hidden="true">❯</span></button></ExchangeFlowBridge>
       <div class="intentLabel intentLabelBuy"><span>{t("Buy", {}, activeLocale)}</span></div>
       <div class="moneyPanel moneyPanelTarget exchangeMoneyPanel">
-        <div class="panelCopy"><label for="exchange-output">{t("Recipient gets", {}, activeLocale)}</label><input id="exchange-output" class:amountOutputEmpty={!previewRoute && amountSide !== "target"} class="amountInput amountOutput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedTargetInput} on:focus={(event) => focusAmountInput(event, "target")} on:blur={() => blurAmountInput("target")} on:input={(event) => updateTargetAmount(event.currentTarget.value)} aria-label={t("Amount to receive", {}, activeLocale)} />{#if marketUsd.target !== null}<span class="marketValue" aria-label={t("Approximate USD market value", {}, activeLocale)}>{formatMarketUsd(marketUsd.target)}</span>{/if}</div>
+        <div class="panelCopy"><label for="exchange-output">{t("Recipient gets", {}, activeLocale)}</label><input id="exchange-output" disabled={useDiscovery} class:amountOutputEmpty={!previewRoute && amountSide !== "target"} class="amountInput amountOutput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={useDiscovery ? "" : displayedTargetInput} placeholder={useDiscovery ? t("See routes",{},activeLocale) : undefined} on:focus={(event) => focusAmountInput(event, "target")} on:blur={() => blurAmountInput("target")} on:input={(event) => updateTargetAmount(event.currentTarget.value)} aria-label={t("Amount to receive", {}, activeLocale)} />{#if marketUsd.target !== null}<span class="marketValue" aria-label={t("Approximate USD market value", {}, activeLocale)}>{formatMarketUsd(marketUsd.target)}</span>{/if}</div>
         <div class="methodControls">
           <button type="button" class="methodTrigger" data-tooltip={targetMethod?.kind === "wallet" ? `${targetCurrencyChoice} · ${t(targetMethod.name, {}, activeLocale)}` : t(methodTitle(targetMethod), {}, activeLocale)} on:click={() => void openMethodPicker("target")} aria-label={`Select recipient ${methodNoun(targetMethod)}: ${targetMethod ? methodTitle(targetMethod) : "none"}`}>
             <span class="methodAvatar" style:background-color={paymentMethodFavicon(targetMethod) ? "transparent" : targetMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(targetMethod)}<img src={paymentMethodFavicon(targetMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{:else}<span>{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{/if}</span>
@@ -1242,8 +1240,9 @@
         </div>
       </div>
       {#if refreshSeconds > 0}<div class="marketBar"><div class="marketState"><span class="refreshProgress" role="img" aria-label={secondsUntilRefresh === null ? "Auto-refresh is off" : `Refresh in ${secondsUntilRefresh} seconds`}><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle class="refreshTrack" cx="9" cy="9" r="7" pathLength="100" /><circle class="refreshFill" cx="9" cy="9" r="7" pathLength="100" style:stroke-dashoffset={`${100 - refreshProgress}`} /></svg></span><div><span>{lastUpdatedAt ? `Updated ${Math.max(0, Math.floor((clock - lastUpdatedAt) / 1000))}s ago` : t("Public P2P sources only · no order placement", {}, activeLocale)}</span></div></div>{#if secondsUntilRefresh !== null}<span class="nextRefresh">{secondsUntilRefresh}s</span>{/if}</div>{/if}
+      {#if useDiscovery && selectedSourceCurrency === "ANY"}<p class="note">{t("The same amount is compared separately in each starting currency.",{},activeLocale)}</p>{/if}
       <div class:swapActions={previewCanSwap}>
-        <button type="button" class="cta" disabled={!hasAmount || (!previewRoute && (searching || !corridor))} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? previewCanSwap ? "SWAP" : t("Open route instructions", {}, activeLocale) : t("Find routes", {}, activeLocale)}>{#if previewRoute}{previewCanSwap ? "SWAP" : t("Go", {}, activeLocale)} <span>↗</span>{:else if searching}<span class="spinner"></span> {t("Finding routes", {}, activeLocale)}{:else if hasAmount}{t("Find routes", {}, activeLocale)} <span>↗</span>{:else}{t("Enter an amount to begin", {}, activeLocale)}{/if}</button>
+        <button type="button" class="cta" disabled={!hasAmount || (!previewRoute && (searching || (!useDiscovery && !corridor)))} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? previewCanSwap ? "SWAP" : t("Open route instructions", {}, activeLocale) : t("Find routes", {}, activeLocale)}>{#if previewRoute}{previewCanSwap ? "SWAP" : t("Go", {}, activeLocale)} <span>↗</span>{:else if searching}<span class="spinner"></span> {t("Finding routes", {}, activeLocale)}{:else if hasAmount}{t("Find routes", {}, activeLocale)} <span>↗</span>{:else}{t("Enter an amount to begin", {}, activeLocale)}{/if}</button>
         {#if previewCanSwap}<button type="button" class="cta guideCta" data-testid="open-swap-guide" on:click={() => openInstructions(previewRoute!, false, "guide")}>SWAP guide</button>{/if}
       </div>
       {#if error}<div class="errorBox" role="alert">{error}</div>{/if}
@@ -1258,7 +1257,11 @@
       </div>
     {/if}
     </div>
-    {#if routesExpanded}
+    {#if useDiscovery}
+      <div class="routesReveal" hidden={!routesExpanded}>
+        <DiscoveryPanel bind:this={discoveryPanel} request={discoveryQuery} bind:loading={searching} catalogError={paymentCatalogError} catalogLoading={paymentCatalogLoading} />
+      </div>
+    {:else if routesExpanded}
       <div class="routesReveal" bind:this={routesRevealElement} transition:routesRevealTransition inert={!routesExpanded} aria-hidden={!routesExpanded}>
         <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {renderingRoutes} {searchingVenues} {foundVenues} {venueStats} {venueNames} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} searched={lastUpdatedAt !== null} {hasAmount} {showBelarusP2pWarning} {onOpenBelarusP2pWarning} onOpenSearchActivity={() => activityModalOpen = true} />
       </div>
@@ -1267,7 +1270,7 @@
   {#if activityModalOpen && !guideRequested}<SearchActivityModal sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} hours={activityHours} period={activityPeriod} onPeriodChange={selectActivityPeriod} loading={activityLoading} error={activityError} onClose={() => activityModalOpen = false} />{/if}
   {#if walkthroughOpen && walkthroughComponent}<svelte:component this={walkthroughComponent} card={converterCard} {paymentMethods} {networks} onClose={() => walkthroughOpen = false} />{/if}
   {#if currencyPicker === "source" || currencyPicker === "target"}<CurrencyPicker open={currencyPicker !== null} selected={currencyPicker === "source" ? sourceCurrencyChoice : targetCurrencyChoice} choices={currencyPicker === "source" ? sourceCurrencyChoices : targetCurrencyChoices} onClose={() => currencyPicker = null} onSelect={(choice) => chooseCurrency(currencyPicker ?? "source", choice)} />{/if}
-  {#if paymentPickerComponent}<svelte:component this={paymentPickerComponent} open={methodPicker === "source"} title="Choose where you pay from" role="sender" {networks} {paymentMethods} selected={sourceMethod} selectedNetwork={sourceNetwork} onClose={() => methodPicker = null} onSelect={chooseSource} /><svelte:component this={paymentPickerComponent} open={methodPicker === "target"} title="Choose where the recipient gets paid" role="recipient" {networks} {paymentMethods} selected={targetMethod} selectedNetwork={targetNetwork} onClose={() => methodPicker = null} onSelect={chooseTarget} />{/if}
+  {#if paymentPickerComponent}<svelte:component this={paymentPickerComponent} open={methodPicker === "source"} title="Choose where you pay from" role="sender" allowAny onSelectAny={(currency: string) => chooseSource(anyMethod(currency))} {networks} {paymentMethods} selected={sourceMethod} selectedNetwork={sourceNetwork} onClose={() => methodPicker = null} onSelect={chooseSource} /><svelte:component this={paymentPickerComponent} open={methodPicker === "target"} title="Choose where the recipient gets paid" role="recipient" allowAny onSelectAny={(currency: string) => chooseTarget(anyMethod(currency))} {networks} {paymentMethods} selected={targetMethod} selectedNetwork={targetNetwork} onClose={() => methodPicker = null} onSelect={chooseTarget} />{/if}
   {#if networkPicker === "source" || networkPicker === "target"}<NetworkPicker open={networkPicker !== null} networks={networkPicker === "source" ? sourceNetworks : targetNetworks} selected={networkPicker === "source" ? sourceNetwork : targetNetwork} onClose={() => networkPicker = null} onSelect={selectNetwork} />{/if}
 
 </section>
@@ -1282,13 +1285,6 @@
 {/if}
 
 <style>
-  .discoveryModes { display: flex; justify-content: center; gap: 8px; margin: 24px 0; }
-  .discoveryModes button { padding: 8px 12px; font-family: inherit; font-size: 16px; line-height: 24px; font-weight: 600; color: inherit; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-paper); cursor: pointer; transition: opacity 300ms cubic-bezier(0.22,1,0.36,1), transform 300ms cubic-bezier(0.22,1,0.36,1); }
-  .discoveryModes button[aria-pressed="true"] { background: #272727; color: #fff; }
-  .discoveryModes button:hover { opacity: .8; } .discoveryModes button:active { transform: scale(.98); }
-  .discoveryModes button:focus-visible { outline: 2px solid #168451; outline-offset: 4px; }
-  @media(prefers-reduced-motion:reduce) { .discoveryModes button { transition: none; } }
-
 .shell[hidden] { display: none; }
 .guideLoading { min-height: 70vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 32px; text-align: center; }.loadingMark { font-size: 50px; color: var(--color-accent-text); }.guideLoading h1 { font-size: 32px; }.guideLoading p { color: var(--color-text-soft); }.guideLoading button { min-height: 44px; padding: 10px 20px; border: 1px solid var(--color-border); border-radius: 12px; }
 
