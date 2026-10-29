@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { locale, t } from "$lib/i18n";
 
   export let phrases: string[][] = [["Move money.", "Keep more."]];
   export let active = true;
@@ -24,7 +23,6 @@
     glyphs: string[];
     glyphAt: number[];
     maxEnd: number;
-    total: number;
     startedAt: number;
   };
 
@@ -34,9 +32,6 @@
   let reduced = false;
   let phraseIndex = 0;
   let currentLines: [string, string] = ["", ""];
-  let locked = true;
-  let resolvedChars = 0;
-  let totalChars = 0;
 
   let run: Run | null = null;
   let raf = 0;
@@ -50,23 +45,15 @@
 
   $: phraseCount = Math.max(1, phrases.length);
   $: firstSentence = (phrases[0] ?? []).join(" ");
-  $: statusLabel = locked ? t("Locked", {}, $locale) : t("Decoding", {}, $locale);
 
   function linesOf(phrase: string[] | undefined): [string, string] {
     return [phrase?.[0] ?? "", phrase?.[1] ?? ""];
-  }
-
-  function countResolved(lines: [string, string]) {
-    return Array.from(lines[0]).filter((char) => char !== " ").length + Array.from(lines[1]).filter((char) => char !== " ").length;
   }
 
   function setStatic(index: number) {
     const lines = linesOf(phrases[index]);
     phraseIndex = index;
     currentLines = lines;
-    locked = true;
-    resolvedChars = countResolved(lines);
-    totalChars = resolvedChars;
     if (lineOne) lineOne.textContent = lines[0];
     if (lineTwo) lineTwo.textContent = lines[1];
   }
@@ -113,14 +100,11 @@
       glyphs: new Array<string>(length).fill(GLYPHS[0]),
       glyphAt: new Array<number>(length).fill(0),
       maxEnd,
-      total: countResolved(to),
       startedAt: 0,
     };
   }
 
   function render(runAt: Run, elapsed: number, now: number) {
-    let resolved = 0;
-
     for (let line = 0; line < 2; line++) {
       const element = line === 0 ? lineOne : lineTwo;
       if (!element) continue;
@@ -153,12 +137,7 @@
         }
 
         if (elapsed >= runAt.ends[i]) {
-          if (after === " ") {
-            fragment.append(" ");
-          } else {
-            resolved += 1;
-            fragment.append(after);
-          }
+          fragment.append(after);
           continue;
         }
 
@@ -167,8 +146,6 @@
 
       element.replaceChildren(fragment);
     }
-
-    if (resolved !== resolvedChars) resolvedChars = resolved;
   }
 
   function makeDud(runAt: Run, index: number, now: number) {
@@ -184,9 +161,6 @@
 
   function finish(now: number) {
     if (!run) return;
-    resolvedChars = run.total;
-    totalChars = run.total;
-    locked = true;
     run = null;
     holdEndsAt = now + holdMs;
     holdRemaining = holdMs;
@@ -215,10 +189,7 @@
     const next = linesOf(phrases[index]);
     phraseIndex = index;
     currentLines = next;
-    locked = false;
-    resolvedChars = 0;
     run = buildRun(from, next);
-    totalChars = run.total;
     run.startedAt = performance.now();
     raf = window.requestAnimationFrame(step);
   }
@@ -316,10 +287,6 @@
       <span class="line accentLine" bind:this={lineTwo}></span>
     </span>
   </h1>
-  <div class="status" aria-hidden="true">
-    <span>{statusLabel} <strong>{resolvedChars}/{totalChars}</strong></span>
-    <span>{t("Phrase", {}, $locale)} <strong>{phraseIndex + 1} / {phraseCount}</strong></span>
-  </div>
 </div>
 
 <style>
@@ -379,25 +346,7 @@
     opacity: 0.9;
   }
 
-  .status {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 8px 20px;
-    margin-top: 14px;
-    color: var(--color-text-faint);
-    font-family: var(--font-mono);
-    font-size: 10px;
-    font-weight: 500;
-    letter-spacing: 0.12em;
-    line-height: 1.4;
-    text-transform: uppercase;
-  }
 
-  .status strong {
-    color: var(--color-text);
-    font-weight: 500;
-  }
 
   .srOnly {
     position: absolute;
@@ -431,10 +380,5 @@
       font-size: clamp(34px, 11.5vw, 52px);
     }
 
-    .status {
-      gap: 6px 14px;
-      margin-top: 12px;
-      font-size: 9px;
-    }
   }
 </style>

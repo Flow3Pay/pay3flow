@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { afterUpdate, onMount } from "svelte";
   import { locale } from "$lib/i18n";
   import { getHistory, rate, type History, type Trade } from "$lib/otc/service";
   import { saleRate, type OfferHistoryPoint } from "$lib/otc/public-offers";
@@ -22,6 +22,11 @@
   let range: ChartRange = "1m";
   let history: History | null = null;
   let plot: HTMLDivElement;
+  let ranges: HTMLDivElement;
+  let rangeButtons: HTMLButtonElement[] = [];
+  let thumb = { offset: 0, width: 0, ready: false };
+  let mounted = false;
+  let swapping = false;
   let chart: Chart | null = null;
   let signature = "";
 
@@ -86,11 +91,24 @@
   function choose(value: ChartRange) {
     if (range === value) return;
     range = value;
+    swapping = true;
     try { localStorage.setItem(rangeStorageKey, value); } catch { /* A blocked storage keeps the choice for this visit only. */ }
     history = null;
     signature = "";
-    void load();
+    void load().then(() => { swapping = false; });
   }
+
+  function syncThumb() {
+    if (!mounted || !ranges) return;
+    const active = rangeButtons[chartRanges.indexOf(range)];
+    if (!active) return;
+    const border = parseFloat(getComputedStyle(ranges).borderLeftWidth) || 0;
+    const offset = Math.round(active.getBoundingClientRect().left - ranges.getBoundingClientRect().left - border);
+    if (thumb.ready && thumb.offset === offset && thumb.width === active.offsetWidth) return;
+    thumb = { offset, width: active.offsetWidth, ready: true };
+  }
+
+  afterUpdate(syncThumb);
 
   async function load() {
     try { history = await getHistory(range); } catch { history = null; }
@@ -159,16 +177,20 @@
       chart.setOffsetRightDistance(12);
     }
     void load();
+    mounted = true;
+    syncThumb();
+    window.addEventListener("resize", syncThumb);
+    document.fonts?.ready.then(syncThumb);
     const timer = setInterval(() => void load(), 60_000);
     const resize = new ResizeObserver(() => chart?.resize());
     resize.observe(plot);
     const theme = new MutationObserver(() => chart?.setStyles(buildStyles()));
     theme.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-    return () => { clearInterval(timer); resize.disconnect(); theme.disconnect(); if (chart) dispose(plot); chart = null; };
+    return () => { clearInterval(timer); resize.disconnect(); theme.disconnect(); window.removeEventListener("resize", syncThumb); if (chart) dispose(plot); chart = null; };
   });
 </script>
 
-<div class="marketChart" data-points={marks.length}>
+<div class="marketChart" class:swapping data-points={marks.length}>
   <div class="chartHead">
     <div class="chartQuote">
       <div class="chartValue">
@@ -176,8 +198,9 @@
         {#if change !== null}<em class:negative={change < 0}>{change >= 0 ? "+" : "−"}{Math.abs(change).toFixed(2)}%</em>{/if}
       </div>
     </div>
-    <div class="ranges" role="group" aria-label={say("Chart range", "Период графика")}>
-      {#each chartRanges as item}<button type="button" class:active={range === item} aria-pressed={range === item} on:click={() => choose(item)}>{item}</button>{/each}
+    <div class="ranges" bind:this={ranges} role="group" aria-label={say("Chart range", "Период графика")}>
+      <span class="rangeThumb" class:ready={thumb.ready} style="transform: translateX({thumb.offset}px); width: {thumb.width}px" aria-hidden="true"></span>
+      {#each chartRanges as item, index}<button type="button" bind:this={rangeButtons[index]} class:active={range === item} aria-pressed={range === item} on:click={() => choose(item)}>{item}</button>{/each}
     </div>
   </div>
 
@@ -199,11 +222,14 @@
   .chartValue strong { font-family: var(--font-mono); font-size: clamp(34px, 4.4vw, 52px); font-weight: 500; line-height: 1.05; letter-spacing: -.04em; overflow-wrap: anywhere; }
   .chartValue em { color: var(--color-good-ink); font-family: var(--font-mono); font-size: 15px; font-style: normal; }
   .chartValue em.negative { color: var(--color-danger); }
-  .ranges { display: flex; flex: 0 1 auto; gap: 2px; padding: 3px; border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-paper); }
-  .ranges button { min-width: 40px; min-height: 34px; padding: 4px 8px; border-radius: 999px; color: var(--color-text-soft); font-family: var(--font-mono); font-size: 12px; line-height: 1.5; transition: background .18s ease, color .18s ease; }
+  .ranges { position: relative; display: flex; flex: 0 1 auto; gap: 2px; padding: 3px; border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-paper); }
+  .rangeThumb { position: absolute; z-index: 0; top: 3px; bottom: 3px; left: 0; border-radius: 999px; background: var(--color-good); opacity: 0; pointer-events: none; transition: transform .32s cubic-bezier(.22, 1, .36, 1), width .32s cubic-bezier(.22, 1, .36, 1), opacity .2s ease; }
+  .rangeThumb.ready { opacity: 1; }
+  .ranges button { position: relative; z-index: 1; min-width: 40px; min-height: 34px; padding: 4px 8px; border: 0; border-radius: 999px; background: transparent; color: var(--color-text-soft); font-family: var(--font-mono); font-size: 12px; line-height: 1.5; transition: color .2s ease; }
   .ranges button:hover { color: var(--color-text); }
-  .ranges button.active { background: var(--color-good); color: #152016; font-weight: 650; }
-  .chartPlot { position: relative; width: 100%; height: clamp(320px, 34vw, 460px); padding: 0 4px 4px; }
+  .ranges button.active { color: #152016; font-weight: 650; }
+  .chartPlot { position: relative; width: 100%; height: clamp(320px, 34vw, 460px); padding: 0 4px 4px; transition: opacity .22s ease; }
+  .marketChart.swapping .chartPlot { opacity: .5; }
   .empty { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px; text-align: center; pointer-events: none; }
   .empty strong { background: var(--exchange-card-bg); font-size: 14px; font-weight: 650; padding: 5px 12px; }
   .empty p { max-width: 320px; background: var(--exchange-card-bg); color: var(--color-text-soft); font-size: 12px; line-height: 1.6; padding: 5px; }
@@ -213,5 +239,5 @@
     .ranges button { min-width: 0; flex: 1; }
     .chartPlot { height: 280px; }
   }
-  @media (prefers-reduced-motion: reduce) { .ranges button { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { .ranges button, .rangeThumb, .chartPlot { transition: none; } }
 </style>
