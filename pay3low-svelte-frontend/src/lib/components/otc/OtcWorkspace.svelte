@@ -8,6 +8,7 @@
   let version = 0;
   export let onPreviewChange: (preview: OtcPreview | null) => void = () => {};
   export let onShareUrlChange: (url: string) => void = () => {};
+  export let introCompleted = true;
   let market = "EVER-USDT", ready = false;
   onMount(() => {
     const sync = async () => {
@@ -33,7 +34,7 @@
     <select id="otc-market" value={market} on:change={choose}><option value="EVER-USDT">EVER / USDT · Pay3Flow</option><option value="GNK-USDT">GNK / USDT · HEX</option></select>
   </span>
 </div>
-{#if Workspace}<svelte:component this={Workspace} {onPreviewChange} {onShareUrlChange} />{/if}
+{#if Workspace}<svelte:component this={Workspace} {onPreviewChange} {onShareUrlChange} {introCompleted} />{/if}
 <style>
   .marketPicker { display:flex; align-items:center; justify-content:flex-end; gap:12px; width:min(var(--layout-width),calc(100% - 2 * var(--page-gutter))); margin:20px auto 0; font-size:13px; }
   .pickerLabel { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); clip-path:inset(50%); white-space:nowrap; border:0; }

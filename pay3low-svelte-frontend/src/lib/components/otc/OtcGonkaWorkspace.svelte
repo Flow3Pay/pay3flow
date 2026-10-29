@@ -13,6 +13,7 @@
   import "$lib/otc/terminal.css";
   export let onPreviewChange: (preview: OtcPreview | null) => void = () => {};
   export let onShareUrlChange: (url: string) => void = () => {};
+  export let introCompleted = true;
   let config: Config | null = null, snapshot: Snapshot | null = null, accountData: Account | null = null;
   let wallets: wallet.Wallet[] = [], owner = "", history: HistoryEntry[] = [], personalHistory: HistoryEntry[] = [];
   let side: Side = "buy", type: OrderType = "market", amount = "", price = "", slippage = "0.5";
@@ -182,7 +183,7 @@
   $: if (mounted) onPreviewChange({closes:settledTrades(history).slice(-64).map(t=>t.price!),bids:bids.slice(0,6).map(l=>({price:Number(l.price),amount:Number(l.amount)})),asks:asks.slice(0,6).map(l=>({price:Number(l.price),amount:Number(l.amount)})),capturedAt:Date.now()});
 </script>
 
-<section class="otcWorkspace gonka" data-testid="otc-workspace" data-market="GNK-USDT" data-state={!loaded ? "connecting" : healthy ? "connected" : "unavailable"}>
+<section class="otcWorkspace gonka" data-testid="otc-workspace" data-market="GNK-USDT" data-intro-completed={introCompleted} data-state={!loaded ? "connecting" : healthy ? "connected" : "unavailable"}>
   <div class="intro"><h1>Gonka <span>OTC</span></h1><p>{say("Trade GNK / USDT on HEX. Your wallet signs every action.","Торгуйте GNK / USDT на HEX. Каждое действие подписывает ваш кошелёк.")}</p></div>
   <OtcTerminal baseAsset="GNK" marketIcon="/icons/assets/gnk.jpg" networkLabel="Gonka · HOT Omni Balance" venueLabel="HEX" selectedRate={asks[0]?.price ?? "—"} rateLabel={say("Best ask","Лучшая продажа")} bookTitle={say("HEX orderbook","Стакан HEX")} stats={[
     {label:say("Best bid","Лучшая покупка"),value:bids[0]?.price ?? "—"},

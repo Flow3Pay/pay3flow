@@ -26,6 +26,7 @@
   import SearchActivityModal from "./SearchActivityModal.svelte";
   import CurrencyPicker from "./CurrencyPicker.svelte";
   import NetworkPicker from "./NetworkPicker.svelte";
+  import ScrambleHeadline from "./ScrambleHeadline.svelte";
 
   export let onGuideChange: (active: boolean) => void = () => {};
   export let guideActive = false;
@@ -1112,7 +1113,7 @@
 <svelte:window on:resize={closeInlineActivityOnMobile} />
 
 <section hidden={guideRequested} class="shell" class:localeLong={activeLocale !== "en"} class:introReady={introCompleted} id="transfer">
-  <div class="hero"><h1>{t("Move money.", {}, activeLocale)} <span>{t("Keep more.", {}, activeLocale)}</span></h1><p>{home.intro}</p></div>
+  <div class="hero"><ScrambleHeadline phrases={home.heroPhrases} active={introCompleted} /><p>{home.intro}</p></div>
   <noscript><p class="nojsNotice">{home.nojs}</p></noscript>
   <div class="workspace" class:activityExpanded class:routesCollapsed={!routesExpanded} style:--converter-width={`${converterWidth}px`} style:--amount-digits={converterAmountDigits}>
     <div class="converterStack">

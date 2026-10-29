@@ -241,6 +241,9 @@ const messages: Record<Locale, Record<string, string>> = {
     "Usage policy": "Правила использования",
     "Move money.": "Переводите деньги.",
     "Keep more.": "Сохраняйте больше.",
+    "Decoding": "Декодирование",
+    "Locked": "Зафиксировано",
+    "Phrase": "Фраза",
     "Stop spending hours searching for an exchange.": "Не тратьте часы на поиск обмена.",
     "Exchange mode": "Режим обмена",
     Bridge: "Маршрут",
@@ -771,6 +774,9 @@ const messages: Record<Locale, Record<string, string>> = {
     "Usage policy": "Օգտագործման կանոններ",
     "Move money.": "Փոխանցեք գումարը։",
     "Keep more.": "Պահպանեք ավելին։",
+    "Decoding": "Վերծանում",
+    "Locked": "Ամրագրված",
+    "Phrase": "Արտահայտություն",
     "Stop spending hours searching for an exchange.": "Այլևս ժամեր մի ծախսեք փոխանակում փնտրելու վրա։",
     "Exchange mode": "Փոխանակման ռեժիմ",
     Bridge: "Ուղղորդում",
@@ -1172,7 +1178,13 @@ export function localize(node: HTMLElement) {
   }
 
   function translateTree(root: Node, language: Locale) {
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    if (root instanceof Element && root.closest("[data-no-localize]")) return;
+    if (root.parentElement?.closest("[data-no-localize]")) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        return (node.parentElement?.closest("[data-no-localize]")) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+      },
+    });
     const textNodes: Text[] = root instanceof Text ? [root] : [];
     let current: Node | null;
     while ((current = walker.nextNode())) textNodes.push(current as Text);
@@ -1185,7 +1197,8 @@ export function localize(node: HTMLElement) {
       renderedText.set(text, rendered);
       if (value !== rendered) text.nodeValue = rendered;
     }
-    const elements = root instanceof Element ? [root, ...Array.from(root.querySelectorAll("*"))] : Array.from((root as ParentNode).querySelectorAll?.("*") ?? []);
+    const elements = (root instanceof Element ? [root, ...Array.from(root.querySelectorAll("*"))] : Array.from((root as ParentNode).querySelectorAll?.("*") ?? []))
+      .filter((element) => !element.closest("[data-no-localize]"));
     for (const element of elements) {
       if (!originalAttributes.has(element)) originalAttributes.set(element, new Map());
       if (!renderedAttributes.has(element)) renderedAttributes.set(element, new Map());

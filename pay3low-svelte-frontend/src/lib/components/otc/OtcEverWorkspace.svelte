@@ -21,8 +21,10 @@
   import OtcTerminal from "./OtcTerminal.svelte";
   import OtcDealPanel from "./OtcDealPanel.svelte";
   import OtcTradeTables from "./OtcTradeTables.svelte";
+  import ScrambleHeadline from "../ScrambleHeadline.svelte";
   export let onPreviewChange: (preview: OtcPreview | null) => void = () => {};
   export let onShareUrlChange: (url: string) => void = () => {};
+  export let introCompleted = true;
   let config: Config | null = null, session: Session | null = null;
   let input = "100", direction: Direction = "buy", listings: Proposal[] = [], trades: Trade[] = [], rfqs: Rfq[] = [];
   let selected: Trade | null = null, attempts: Attempt[] = [], receipts: { chain: string; leg: { amount: string }; included_at: string }[] = [], updates: { message: string; at: string }[] = [];
@@ -294,7 +296,7 @@
 </script>
 <OtcOffers enabled={!!config?.public_offers_available} {direction} {session} {busy} bind:posting={offersBusy} onConnect={() => run(() => session ? verify("everscale") : connectAccount("everscale"))} onPublished={() => { tab = "trades"; }} let:ticket let:offers let:mine let:history={offerHistory} let:message let:offerError let:onCancel>
 <section class="otcWorkspace" data-testid="otc-workspace" data-state={!loaded ? "connecting" : !healthy ? "unavailable" : "connected"}>
-  <div class="pageIntro" class:localeLong={$locale !== "en"}><h1>{copy.titleLead}<span class="titleAccent">{copy.titleAccent}</span></h1><p>{config?.public_offers_available ? say("Native EVER on Everscale. USDT on Ethereum. Your OTC offers.", "Нативный EVER в Everscale. USDT в Ethereum. Ваши предложения OTC.") : say("Native EVER on Everscale. USDT on Ethereum. Direct desk settlement.", "Нативный EVER в Everscale. USDT в Ethereum. Прямой обмен с деском.")}</p></div>
+  <div class="pageIntro" class:localeLong={$locale !== "en"}><ScrambleHeadline phrases={copy.heroPhrases} active={introCompleted} /><p>{config?.public_offers_available ? say("Native EVER on Everscale. USDT on Ethereum. Your OTC offers.", "Нативный EVER в Everscale. USDT в Ethereum. Ваши предложения OTC.") : say("Native EVER on Everscale. USDT on Ethereum. Direct desk settlement.", "Нативный EVER в Everscale. USDT в Ethereum. Прямой обмен с деском.")}</p></div>
   <OtcTerminal chartPanel={false} bookPanel={false} selectedRate={saleEnabled ? ticket.askingRate : selected ? rate(selected.terms) : "—"} rateLabel={saleEnabled ? say("Your offer price", "Цена вашего оффера") : ""} {bookTitle} stats={[
     {label:say("Desk","Деск"),value:config?.desk_name || "—"},
     {label:config?.public_offers_available ? say("Open offers","Открытые офферы") : say("Desk offers","Предложения деска"),value:String(listings.length + offers.length),secondary:true},
