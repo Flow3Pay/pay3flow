@@ -14,26 +14,27 @@
     return match ? { first: match[1], second: match[2], punctuation: match[3] } : { first: value, second: "", punctuation: "" };
   }
   function animationFinished(event: AnimationEvent) {
-    if (event.animationName.endsWith("introDock") || event.animationName.endsWith("introOtcOut")) onComplete();
+    if (event.animationName.endsWith("introDock")) onComplete();
   }
   onMount(() => {
     let disposed = false;
-    let frame: number | undefined, timer: number | undefined;
+    let frame: number | undefined, timer: number | undefined, landing: number | undefined;
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
     const motionChanged = () => { if (media.matches) onComplete(); };
     const positionIntro = () => {
-      if (mode !== "swap") return;
-      const heading = document.querySelector(".hero h1")?.getBoundingClientRect();
-      if (!heading) return;
+      const heading = document.querySelector(mode === "otc" ? ".pageIntro h1" : ".hero h1")?.getBoundingClientRect();
+      if (!heading) return false;
       overlay.style.setProperty("--intro-x", `${heading.left + heading.width / 2 - window.innerWidth / 2}px`);
       overlay.style.setProperty("--intro-y", `${heading.top + heading.height / 2 - window.innerHeight / 2}px`);
+      return true;
     };
     document.documentElement.classList.add("introPlaying");
     window.addEventListener("resize", positionIntro, { passive: true });
     media.addEventListener("change", motionChanged);
     void tick().then(() => {
       if (disposed) return;
-      positionIntro();
+      // The OTC desk is imported lazily, so its heading can land after the first paint; keep looking until it does.
+      if (!positionIntro()) landing = window.setInterval(() => { if (disposed || positionIntro()) window.clearInterval(landing); }, 80);
       frame = window.requestAnimationFrame(() => {
         if (disposed) return;
         introStarted = true;
@@ -45,6 +46,7 @@
       document.documentElement.classList.remove("introPlaying");
       window.removeEventListener("resize", positionIntro);
       media.removeEventListener("change", motionChanged);
+      if (landing !== undefined) window.clearInterval(landing);
       if (frame !== undefined) window.cancelAnimationFrame(frame);
       if (timer !== undefined) window.clearTimeout(timer);
     };
@@ -89,13 +91,12 @@
 @keyframes introMarkerDraw { 0% { left: -.04em; opacity: 0; } 8%, 88% { opacity: 1; } 100% { left: calc(100% + .05em); opacity: 0; } }
 @keyframes introDock { to { transform: translate(calc(-50% + var(--intro-x)), calc(-50% + var(--intro-y))) scale(1); } }
 
-.introStarted.otcIntro .introTitle { animation: introOtcOut .68s 2.2s cubic-bezier(.22, 1, .36, 1) both; }
+.introStarted.otcIntro .introTitle { animation: introDock .68s 2.2s cubic-bezier(.22, 1, .36, 1) both; }
 .introStarted .introWordOtcLead { animation: introRise .48s .2s cubic-bezier(.22, 1, .36, 1) forwards; }
 .introStarted .introWordOtcAccent { animation: introRise .48s .7s cubic-bezier(.22, 1, .36, 1) forwards; }
 .introStarted.otcIntro .introEmphasis::after { animation-delay: 1.25s; }
 .introStarted.otcIntro .introMarker { animation-delay: 1.25s; }
 @media (max-width: 640px) { .otcIntro .introTitle { font-size: clamp(30px, 8vw, 44px); } }
-@keyframes introOtcOut { to { opacity: 0; transform: translate(-50%, -50%) scale(1); } }
 @media (prefers-reduced-motion: reduce) { .introOverlay { display: none; } }
 
 </style>
