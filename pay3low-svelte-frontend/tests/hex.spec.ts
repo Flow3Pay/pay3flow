@@ -103,9 +103,18 @@ test("funding, cancellation, and claiming use selected wallet and explicit confi
 test("market, direction and exact input survive reload; EVER navigation still works",async({page})=>{
   await fixture(page);await open(page,"&side=sell&type=limit&amount=1.000000001&price=0.205");
   await page.reload();await expect(page.locator("#hex-amount")).toHaveValue("1.000000001");
-  await expect(page.locator("#hex-price")).toHaveValue("0.205");await expect(page.locator("#otc-market")).toHaveValue("GNK-USDT");
-  await page.locator("#otc-market").selectOption("EVER-USDT");await expect(page.getByTestId("otc-workspace")).toContainText("EVER");
-  await page.locator("#otc-market").selectOption("GNK-USDT");await expect(page.getByTestId("otc-workspace")).toHaveAttribute("data-market","GNK-USDT");
+  await expect(page.locator("#hex-price")).toHaveValue("0.205");await expect(page.getByTestId("otc-workspace")).toHaveAttribute("data-market","GNK-USDT");
+  await expect(page.getByTestId("otc-market-selector")).toHaveAttribute("aria-label",/GNK \/ USDT/);
+  await page.getByTestId("otc-market-selector").click();
+  const marketDialog=page.getByRole("dialog"),search=marketDialog.getByRole("textbox",{name:"OTC markets"});
+  await search.fill("gonka");await expect(marketDialog.getByRole("option")).toHaveCount(1);await expect(marketDialog.getByRole("option")).toContainText("GNK / USDT");
+  await search.fill("everscale");await expect(marketDialog.getByRole("option")).toHaveCount(1);
+  await marketDialog.getByRole("option",{name:/EVER \/ USDT/}).click();
+  await expect(page.getByTestId("otc-workspace")).toContainText("EVER");
+  await expect(page.getByTestId("otc-market-selector")).toHaveAttribute("aria-label",/EVER \/ USDT/);
+  await page.getByTestId("otc-market-selector").click();
+  await page.getByRole("dialog").getByRole("option",{name:/GNK \/ USDT/}).click();
+  await expect(page.getByTestId("otc-workspace")).toHaveAttribute("data-market","GNK-USDT");
   await page.setViewportSize({width:320,height:760});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });

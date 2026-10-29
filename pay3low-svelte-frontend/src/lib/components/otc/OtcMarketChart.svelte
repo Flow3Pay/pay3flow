@@ -11,6 +11,14 @@
 
   type Mark = { id: string; time: number; value: number };
 
+  const rangeStorageKey = "pay3flow.otc.chart-range.v1";
+  function savedRange(): ChartRange {
+    try {
+      const value = localStorage.getItem(rangeStorageKey);
+      return chartRanges.includes(value as ChartRange) ? value as ChartRange : "1m";
+    } catch { return "1m"; }
+  }
+
   let range: ChartRange = "1m";
   let history: History | null = null;
   let plot: HTMLDivElement;
@@ -78,6 +86,7 @@
   function choose(value: ChartRange) {
     if (range === value) return;
     range = value;
+    try { localStorage.setItem(rangeStorageKey, value); } catch { /* A blocked storage keeps the choice for this visit only. */ }
     history = null;
     signature = "";
     void load();
@@ -139,6 +148,8 @@
   }
 
   onMount(() => {
+    const restored = savedRange();
+    if (restored !== range) { range = restored; history = null; signature = ""; }
     chart = init(plot, { locale: "en-US", timezone: "UTC", styles: buildStyles() });
     if (chart) {
       chart.setSymbol({ ticker: "EVER/USDT", pricePrecision: precision, volumePrecision: 2 });
