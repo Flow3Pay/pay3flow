@@ -27,6 +27,7 @@
     owner?: string;
   };
   $: say = (en: string, ru: string) => $locale === "ru" ? ru : en;
+  $: numberLocale = $locale === "ru" ? "ru-RU" : "en-US";
   $: tradeItems = trades.map(trade => {
     const row = tradeRow(trade);
     return { key: `trade:${trade.id}`, kind: "trade", direction: trade.terms.direction, time: row.time, price: row.price, amount: row.amount, total: row.total, state: trade.state, id: trade.id, trade } as Item;
@@ -59,6 +60,17 @@
     if (state === "review") return "review";
     return terminalStates.has(state) ? "closed" : "open";
   }
+  function formatPrice(value: string, loc: string): string {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return "—";
+    return number.toLocaleString(loc, { maximumSignificantDigits: 8 });
+  }
+  function formatEver(value: string, loc: string): string {
+    const [whole, fraction = ""] = value.split(".");
+    const grouped = BigInt(whole || "0").toLocaleString(loc);
+    const tail = fraction.replace(/0+$/, "");
+    return tail ? `${grouped}.${tail}` : grouped;
+  }
   function datePart(time: number | null) { return time === null ? "—" : new Date(time).toLocaleDateString($locale === "ru" ? "ru-RU" : "en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" }); }
   function timePart(time: number | null) { return time === null ? "" : new Date(time).toLocaleTimeString($locale === "ru" ? "ru-RU" : "en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }); }
   function open(item: Item) {
@@ -72,29 +84,26 @@
   }
 </script>
 
-{#snippet sideTable(title: string, direction: Direction, items: Item[])}
-  <section class="sideTable" class:sell={direction === "sell"} aria-label={title}>
-    <header><span class="sideDot"></span><h3>{title}</h3><span class="sideCount">{items.length}</span></header>
-    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-    <div class="tableScroll" tabindex="0" role="region" aria-label={`${title} table`}>
+{#snippet sideTable(title: string, direction: Direction, side: "bids" | "asks", items: Item[])}
+  <section class="obTable" data-side={side} aria-label={title}>
+    <div class="tableScroll">
       <table>
-        <thead><tr><th>{say("Date / Time", "Дата / время")}</th><th>{say("Pair", "Пара")}</th><th>{say("Type", "Тип")}</th><th>{say("Price", "Цена")} <small>USDT</small></th><th>{say("Amount", "Объём")} <small>EVER</small></th><th>{say("Total", "Всего")} <small>USDT</small></th><th>{say("Status", "Статус")}</th></tr></thead>
+        <thead><tr>
+          <th>{title}</th>
+          <th>{say("Price", "Цена")}<small>USDT</small></th>
+          <th>{say("Amount", "Объём")}<small>EVER</small></th>
+          <th>{say("Total", "Всего")}<small>USDT</small></th>
+        </tr></thead>
         <tbody>
           {#each items as item (item.key)}
-            <tr class:selected={item.kind === "trade" && item.id === selectedId} tabindex="0" role="button" data-kind={item.kind} aria-label={`${direction === "buy" ? say("Open buy", "Открыть покупку") : say("Open sell", "Открыть продажу")} ${item.kind === "offer" ? say("offer", "оффер") : "EVER"} ${item.id}`} on:click={() => !busy && open(item)} on:keydown={(event) => activate(event, item)}>
-              <td class="dateCell"><span>{datePart(item.time)}</span><small>{timePart(item.time)}</small></td>
-              <td class="pairCell">EVER / USDT</td>
-              <td><span class="sidePill" class:sell={direction === "sell"}>{direction === "buy" ? say("Buy", "Купить") : say("Sell", "Продать")}</span></td>
-              <td class="numberCell">{item.price}</td>
-              <td class="numberCell">{item.amount}</td>
-              <td class="numberCell">{item.total}</td>
-              <td>
-                <span class="status" class:filled={statusClass(item.state) === "filled"} class:closed={statusClass(item.state) === "closed"} class:review={statusClass(item.state) === "review"}><i></i>{statusLabel(item.state)}</span>
-                {#if item.kind === "offer"}<span class="kindTag">{say("Offer", "Оффер")}</span>{/if}
-              </td>
+            <tr class:selected={item.kind === "trade" && item.id === selectedId} tabindex="0" role="button" data-kind={item.kind} aria-label={`${direction === "buy" ? say("Open buy", "Открыть покупку") : say("Open sell", "Открыть продажу")} ${item.kind === "offer" ? say("offer", "оффер") : "EVER"} ${item.id}`} title={item.kind === "offer" && item.owner ? item.owner : `${datePart(item.time)} ${timePart(item.time)}`} on:click={() => !busy && open(item)} on:keydown={(event) => activate(event, item)}>
+              <td class="obWhen"><span class="status {statusClass(item.state)}"><i></i>{statusLabel(item.state)}</span><small>{datePart(item.time)} · {timePart(item.time)}</small></td>
+              <td class="obPrice"><i aria-hidden="true">$</i><b>{formatPrice(item.price, numberLocale)}</b></td>
+              <td class="obAmount">{formatEver(item.amount, numberLocale)}</td>
+              <td class="obTotal"><i aria-hidden="true">$</i>{formatEver(item.total, numberLocale)}</td>
             </tr>
           {:else}
-            <tr class="emptyRow"><td colspan="7"><strong>{emptyTitle || (direction === "buy" ? say("No buy orders yet", "Покупок пока нет") : say("No sell orders yet", "Продаж пока нет"))}</strong>{#if emptyHint}<small>{emptyHint}</small>{/if}</td></tr>
+            <tr class="emptyRow"><td colspan="4"><strong>{emptyTitle || (direction === "buy" ? say("No buy orders yet", "Покупок пока нет") : say("No sell orders yet", "Продаж пока нет"))}</strong>{#if emptyHint}<small>{emptyHint}</small>{/if}</td></tr>
           {/each}
         </tbody>
       </table>
@@ -103,51 +112,47 @@
 {/snippet}
 
 <div class="tradeTables">
-  {@render sideTable(say("Buy orders", "Ордера на покупку"), "buy", buys)}
-  {@render sideTable(say("Sell orders", "Ордера на продажу"), "sell", sells)}
+  <!-- Sellers come first so the list reads ask-then-bid; buyers take the left side, as in the book. -->
+  {@render sideTable(say("Sell orders", "Ордера на продажу"), "sell", "asks", sells)}
+  {@render sideTable(say("Buy orders", "Ордера на покупку"), "buy", "bids", buys)}
 </div>
 
 <style>
-  .tradeTables { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; padding: 16px 18px 20px; }
-  .sideTable { min-width: 0; }
-  .sideTable header { display: flex; align-items: center; gap: 7px; padding: 0 2px 9px; }
-  .sideTable h3 { font-size: 12px; font-weight: 700; }
-  .sideDot { width: 7px; height: 7px; border-radius: 50%; background: var(--otc-buy); box-shadow: 0 0 0 3px var(--otc-buy-soft); }
-  .sideTable.sell .sideDot { background: var(--otc-sell); box-shadow: 0 0 0 3px var(--otc-sell-soft); }
-  .sideCount { display: grid; min-width: 17px; height: 17px; place-items: center; margin-left: 2px; padding: 0 4px; border-radius: 4px; background: var(--color-panel); color: var(--color-text-soft); font-family: var(--font-mono); font-size: 10px; }
-  .tableScroll { overflow-x: auto; border: 1px solid var(--color-border); border-radius: 7px; }
-  .tableScroll:focus-visible { outline: 2px solid var(--color-accent-strong); outline-offset: 2px; }
-  table { width: 100%; min-width: 540px; border-collapse: collapse; font-family: var(--font-sans); font-variant-numeric: tabular-nums; font-size: 11px; white-space: nowrap; }
-  th { padding: 9px 10px; border-bottom: 1px solid var(--color-border); color: var(--color-text-soft); font-size: 10px; font-weight: 500; text-align: right; }
-  th:first-child, th:nth-child(2) { text-align: left; }
-  th small { display: block; margin-top: 2px; font-family: var(--font-mono); font-size: 9px; opacity: .7; }
-  td { padding: 8px 10px; text-align: right; }
-  td:first-child, td:nth-child(2) { text-align: left; }
-  tbody tr { cursor: pointer; transition: background .15s ease; }
-  tbody tr:hover, tbody tr:focus-visible { background: var(--color-panel); outline: none; }
-  tbody tr.selected { background: var(--color-accent-soft); }
-  tbody tr + tr td { border-top: 1px solid var(--color-border); }
-  .dateCell span, .dateCell small { display: block; }
-  .dateCell small { margin-top: 2px; color: var(--color-text-soft); font-family: var(--font-mono); font-size: 9px; }
-  .pairCell { color: var(--color-text-soft); font-size: 10px; }
-  .numberCell { font-family: var(--font-mono); font-size: 10px; }
-  .sidePill { display: inline-block; min-width: 37px; padding: 3px 5px; border-radius: 3px; background: var(--otc-buy-soft); color: var(--otc-buy); font-size: 10px; font-weight: 700; text-align: center; }
-  .sidePill.sell { background: var(--otc-sell-soft); color: var(--otc-sell); }
-  .status { display: inline-flex; align-items: center; gap: 5px; color: var(--color-text-soft); font-size: 10px; }
-  .status i { width: 5px; height: 5px; border-radius: 50%; background: var(--color-text-faint); }
-  .status.open { color: var(--otc-buy); }
-  .status.open i { background: var(--otc-buy); }
-  .status.filled { color: var(--otc-buy); }
-  .status.filled i { background: var(--otc-buy); }
-  .status.closed { color: var(--color-text-soft); }
-  .status.review { color: var(--color-warn); }
-  .status.review i { background: var(--color-warn); }
-  .kindTag { display: inline-block; margin-left: 6px; padding: 1px 5px; border-radius: 3px; background: var(--color-panel); color: var(--color-text-faint); font-size: 9px; vertical-align: 1px; }
-  .emptyRow { cursor: default; }
-  .emptyRow td { padding: 28px 12px; text-align: center; white-space: normal; }
-  .emptyRow strong { display: block; color: var(--color-text-soft); font-size: 12px; font-weight: 600; }
-  .emptyRow small { display: block; max-width: 340px; margin: 5px auto 0; color: var(--color-text-faint); font-size: 11px; line-height: 1.5; }
-  @media (max-width: 900px) { .tradeTables { grid-template-columns: 1fr; } }
-  @media (max-width: 640px) { .tradeTables { padding: 12px 12px 16px; gap: 14px; } table { min-width: 570px; } }
-  @media (prefers-reduced-motion: reduce) { tbody tr { transition: none; } }
+  .tradeTables { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:20px; padding:0 var(--otc-panel-padding,20px) 16px; }
+  .obTable { min-width:0; }
+  .obTable[data-side="bids"] { order:-1; }
+  .tableScroll { overflow-x:auto; }
+  table { width:100%; min-width:290px; border-collapse:separate; border-spacing:0 4px; font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-size:12px; }
+  th { padding:0 12px 6px; color:var(--color-text-soft); font-size:11px; font-weight:500; line-height:1.35; text-align:right; white-space:nowrap; }
+  th:first-child { width:34%; text-align:left; }
+  th small { display:block; color:var(--color-text-faint); font-size:9px; }
+  tbody td { padding:8px 12px; border-top:1px solid var(--color-border); border-bottom:1px solid var(--color-border); background:var(--otc-row-sell-bg); color:var(--color-text); text-align:right; white-space:nowrap; }
+  .obTable[data-side="bids"] tbody td { background:var(--otc-row-buy-bg); }
+  tbody td:first-child { border-left:1px solid var(--color-border); border-radius:10px 0 0 10px; text-align:left; }
+  tbody td:last-child { border-right:1px solid var(--color-border); border-radius:0 10px 10px 0; }
+  tbody tr { cursor:pointer; }
+  tbody tr:hover td, tbody tr:focus-visible td { background:var(--color-panel); }
+  tbody tr:focus-visible { outline:none; }
+  tbody tr.selected td { background:var(--color-accent-soft); }
+  .obWhen { display:grid; gap:2px; justify-content:start; justify-items:start; }
+  .obWhen small { color:var(--color-text-faint); font-size:9px; }
+  .obPrice { overflow:hidden; text-overflow:ellipsis; color:var(--color-good); }
+  .obTable[data-side="bids"] .obPrice { color:var(--color-danger); }
+  .obPrice i, .obTotal i { font-style:normal; opacity:.62; }
+  .obPrice b { font-weight:650; }
+  .obAmount,.obTotal { overflow:hidden; text-overflow:ellipsis; }
+  .status { display:inline-flex; align-items:center; gap:5px; color:var(--color-text-soft); font-size:10px; }
+  .status i { width:5px; height:5px; border-radius:50%; background:var(--color-text-faint); }
+  .status.open, .status.filled { color:var(--otc-buy); }
+  .status.open i, .status.filled i { background:var(--otc-buy); }
+  .status.closed { color:var(--color-text-soft); }
+  .status.review { color:var(--color-warn); }
+  .status.review i { background:var(--color-warn); }
+  .emptyRow { cursor:default; }
+  .emptyRow td { border-style:dashed; border-radius:10px; background:transparent; color:var(--color-text-faint); text-align:left; white-space:normal; }
+  .emptyRow strong { display:block; color:var(--color-text-soft); font-size:12px; font-weight:600; }
+  .emptyRow small { display:block; margin-top:5px; font-family:var(--font-sans); font-size:11px; line-height:1.5; }
+  @media (max-width:900px) { .tradeTables { grid-template-columns:minmax(0,1fr); } }
+  @media (max-width:520px) { .tradeTables { padding-right:12px; padding-left:12px; } table { font-size:10.5px; } th,tbody td { padding-right:8px; padding-left:8px; } }
+  @media (prefers-reduced-motion:reduce) { tbody td { transition:none; } }
 </style>

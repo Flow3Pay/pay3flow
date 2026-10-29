@@ -74,7 +74,7 @@
 
 {#snippet levelRow(level: BookLevel)}
   <button type="button" class="obRow" class:own={level.own} data-testid={testId} aria-label={`${level.own ? say("Your offer", "Ваш оффер") + ". " : ""}${say("Offer details", "Детали оффера")}: ${formatPrice(level.price, numberLocale)} USDT / EVER`} title={`${offerOwner(level.offer)} · ${formatEver(level.amount, numberLocale)} EVER → ${formatEver(level.offer.terms.usdt_amount, numberLocale)} USDT`} on:click={() => showOffer(level.offer)}>
-    <span class="obOwner"><i class="ownDot" aria-hidden="true"></i><code>{offerOwner(level.offer).slice(0, 6)}…{offerOwner(level.offer).slice(-4)}</code></span>
+    <span class="obOwner"><code>{offerOwner(level.offer).slice(0, 6)}…{offerOwner(level.offer).slice(-4)}</code></span>
     <span class="obPrice"><i aria-hidden="true">$</i><b data-testid="otc-book-price">{formatPrice(level.price, numberLocale)}</b></span>
     <span class="obAmount">{formatEver(level.amount, numberLocale)}</span>
     <span class="obTotal"><i aria-hidden="true">$</i>{formatEver(level.total, numberLocale)}</span>
@@ -192,11 +192,8 @@
   .obRow { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr) minmax(0,.9fr) minmax(0,1fr); width:100%; min-height:44px; align-items:center; gap:8px; padding:6px 12px; border:1px solid var(--color-border); border-radius:10px; background:var(--otc-row-sell-bg); color:var(--color-text); font-family:var(--font-mono); font-size:12px; font-variant-numeric:tabular-nums; line-height:1.35; text-align:right; cursor:pointer; transition:box-shadow .12s ease; }
   .obTable[data-side="bids"] .obRow { background:var(--otc-row-buy-bg); }
   .obRow:hover { box-shadow:inset 0 0 0 1px var(--color-border-strong); }
-  .obRow.own { box-shadow:inset 3px 0 0 var(--color-accent-strong); }
   .obOwner { display:flex; min-width:0; align-items:center; gap:6px; justify-self:start; text-align:left; }
   .obOwner code { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:700; letter-spacing:-.02em; }
-  .ownDot { display:none; width:5px; height:5px; flex:0 0 auto; border-radius:50%; background:var(--color-accent-strong); }
-  .obRow.own .ownDot { display:inline-block; }
   .obPrice { min-width:0; overflow:hidden; text-overflow:ellipsis; font-weight:650; color:var(--color-good); }
   .obTable[data-side="bids"] .obPrice { color:var(--color-danger); }
   .obPrice i, .obTotal i { font-style:normal; opacity:.62; }
