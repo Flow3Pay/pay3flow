@@ -312,7 +312,10 @@ fn decimal_string(units: i128) -> String {
 fn payment_fee(amount: i128, percent: f64) -> Option<i128> {
     if !percent.is_finite() || !(0.0..=100.0).contains(&percent) { return None; }
     let bps = (percent * 100.0).ceil() as i128;
-    amount.checked_mul(bps)?.checked_add(9999)?.checked_div(10000)
+    let fee = amount.checked_mul(bps)?.checked_add(9999)?.checked_div(10000)?;
+    // Match the concrete fiat scorer: payment fees round upward to a minor unit.
+    let minor_unit = DECIMAL_SCALE / 100;
+    fee.checked_add(minor_unit - 1)?.checked_div(minor_unit)?.checked_mul(minor_unit)
 }
 
 fn evaluate(mut route: P2pRoute, observed_at: DateTime<Utc>, stale: bool, banks: &[Bank], query: &DiscoveryQuery, job: &Job, source: Option<&Bank>, target: Option<&Bank>, provider_assets: &[Asset], service: &super::P2pSearchService, prices: &HashMap<String, Valuation>) -> Option<DiscoveryRoute> {
@@ -520,6 +523,7 @@ mod tests {
         let b=decimal_units("1000.000000000000000003").unwrap();
         assert_eq!(decimal_string(b-a),"0.000000000000000002");
         assert_eq!(decimal_string(payment_fee(decimal_units("100").unwrap(),0.75).unwrap()),"0.75");
+        assert_eq!(decimal_string(payment_fee(decimal_units("100.01").unwrap(),0.75).unwrap()),"0.76");
         assert!(decimal_units("1000000000000000000000").is_none());
         assert!(decimal_units("0.0000000000000000001").is_none());
         assert!(decimal_units("NaN").is_none());
