@@ -59,3 +59,9 @@ the current batch's partial combinations separately. A changed catalog or expire
 cursor requires a new search. Redis failure permits initial search results but
 cannot provide continuation. The browser merges fresh continuation results by
 route id, removes expired estimates, and keeps at most 100 results.
+
+The SBP payment method uses the unmodified compact official logo from
+https://sbp.nspk.ru/storage/settings/common/logo_mobile/5e648604-f95d-472d-afe2-33b856f345ed.svg
+(the logo used by the mobile header of https://sbp.nspk.ru/), stored locally at
+`pay3low-svelte-frontend/static/icons/assets/sbp.svg`. The shared payment-method
+icon mapping displays it in the existing picker, converter, cards and instructions.

@@ -71,7 +71,7 @@ export async function fetchPaymentMethods(): Promise<PaymentMethod[]> {
     color: item.color || "#272727",
     initials: item.kind === "wallet" && item.currency === "TON" ? "GRAM" : item.initials || item.currency,
     popular: item.popular || undefined,
-    iconUrl: item.kind === "wallet" && ["TON", "GRAM"].includes(item.currency) ? "/icons/assets/gram.png" : localIconUrl(item.icon_url),
+    iconUrl: item.method_id === "ru-sbp" ? "/icons/assets/sbp.svg" : item.kind === "wallet" && ["TON", "GRAM"].includes(item.currency) ? "/icons/assets/gram.png" : localIconUrl(item.icon_url),
     bankFeePercent: item.bank_fee_percent,
     p2pQuery: item.name === "SBP Fast Payments" ? "SBP" : item.p2p_query || item.display_name || item.name,
     currencyGroup: item.currency_group,

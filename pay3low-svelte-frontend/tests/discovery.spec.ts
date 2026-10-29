@@ -28,6 +28,9 @@ test("Any currency is selected inside Exchange and survives reload without mode 
   await catalog(page);
   await page.goto("/#/swap/RUB/RUB?from=ru-sbp&to=ru-sbp");
   await expect(page.getByRole("button",{name:/^Select sending bank: SBP/})).toBeVisible();
+  const sbpLogo = page.getByRole("button",{name:/^Select sending bank: SBP/}).locator(".methodAvatar img");
+  await expect(sbpLogo).toHaveAttribute("src","/icons/assets/sbp.svg");
+  await expect.poll(() => sbpLogo.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
   await expect(page.getByRole("button",{name:"Any / any",exact:true})).toHaveCount(0);
   await expect(page.getByRole("button",{name:"Arbitrage",exact:true})).toHaveCount(0);
   await page.getByRole("button",{name:/^Select sending bank:/}).click();
