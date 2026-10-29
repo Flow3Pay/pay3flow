@@ -1,0 +1,59 @@
+{
+  "status": "deployed",
+  "verified_at": "2026-10-29T20:35:44.830538+00:00",
+  "url": "https://pay3flow.lefine.pro/#/swap",
+  "source_revision": "5e5a4bbb0911d42c38844076272437dbe4319c01",
+  "branch": "feat/sbp-discovery",
+  "scope": "RUB SBP support and wildcard currencies and methods inside the existing Exchange pickers and Find routes action; separate Any / any and Arbitrage buttons removed.",
+  "images": {
+    "backend": {
+      "pod": "pay3flow-backend-6df777cff6-hzz7t",
+      "image_id": "sha256:dcecfc3c8e05fdefc4b99ed38fb26e107caa0ef544508df37819bc6b704a063f",
+      "image": "localhost/pay3flow/backend:sbp-exchange-5e5a4bb"
+    },
+    "frontend": {
+      "pod": "pay3flow-frontend-596584876b-pwc2h",
+      "image_id": "sha256:0e72890116b93efc442f6e290224d111c2c537f2fb2468eec9a06079dbaf9078",
+      "image": "localhost/pay3flow/frontend:sbp-exchange-5e5a4bb"
+    }
+  },
+  "frontend_packaging": {
+    "application_tree_sha256": "7da2a79ffa9b4f043c51617acdb5b32fea3273e59c9b44604c7707a3635ceb9d",
+    "payload_sha256": "5e519e15c249c162b18030274c1bca9b8a2cbe6c9e8145db5a6002a1b747ebae",
+    "runtime_base_image_id": "sha256:035658756e2796a521e17d85baab77f6cae5828dd79e83efefb7329897be72dc",
+    "dependency_lock_sha256": "d283a2787708d944c352fa1fc080e7ba6bfeb38c5748fc5d9d78510501720c4e",
+    "method": "Tested application layer added to the existing runtime with the identical dependency lockfile."
+  },
+  "backup_directory": "/var/lib/pay3flow/backups/sbp-exchange-7f10886",
+  "verification": {
+    "backend_tests_passed": 152,
+    "backend_live_tests_ignored": 9,
+    "frontend_unit_tests_passed": 106,
+    "compiled_browser_tests_passed": 8,
+    "svelte_errors": 0,
+    "svelte_warnings": 0,
+    "public_browser_widths": [
+      1440,
+      390
+    ],
+    "public_any_selection_reload_and_sbp_recipient": true,
+    "separate_mode_buttons_absent": true,
+    "running_frontend_matches_tested_build": true,
+    "sbp_search": {
+      "routes_found": 4,
+      "coverage": {
+        "combinations_total": 1,
+        "combinations_completed": 1,
+        "combinations_failed": 0,
+        "combinations_timed_out": 0,
+        "batch_completed": 1,
+        "combinations_partial": 0
+      },
+      "errors": [],
+      "verified": true
+    },
+    "funds_moved": false,
+    "orders_submitted": false
+  },
+  "limits": "Search is bounded and ranks the best discovered routes. Unknown fees keep profit unconfirmed."
+}
