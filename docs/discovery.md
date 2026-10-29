@@ -2,7 +2,12 @@
 
 The existing Exchange converter includes Any currency and Any method in its
 sending and receiving pickers. The regular Find routes action searches wildcard
-selections and displays results in the existing route panel. Shared wildcard
+selections through the existing search state, route cards, loading and empty
+states, provider filters, feedback, selection and instructions. There is no
+separate wildcard results component. The ordinary refresh action and automatic
+refresh continue remaining combinations for unchanged selections; edits start
+a new search. Comparisons between currencies use value ratios rather than
+nominal output amounts. Instruction links use each route's resolved methods. Shared wildcard
 selections use `/#/swap/ANY/ANY?from=any-ANY&to=any-ANY`; older discovery links
 are restored inside Exchange. Arbitrage remains available through the API.
 RUB supports the selectable SBP / СБП method in both directions. The method

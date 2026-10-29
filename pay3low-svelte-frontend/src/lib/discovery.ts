@@ -1,4 +1,4 @@
-import type { P2pRoute, SourceStatus } from "./exchange";
+import type { P2pRoute, P2pRouteSearchResponse, SourceStatus } from "./exchange";
 
 export type DiscoveryMode = "exchange" | "arbitrage";
 export interface DiscoveryQuery {
@@ -44,6 +44,7 @@ export interface DiscoveryRoute extends P2pRoute {
   stale: boolean;
 }
 export interface DiscoveryResponse {
+  searched_at: string;
   search_id: string;
   mode: DiscoveryMode;
   source_amount: string;
@@ -74,4 +75,22 @@ export function discoveryLink(query: DiscoveryQuery): string {
   const params = new URLSearchParams();
   for (const [key,value] of Object.entries(query)) if (value !== undefined && key !== "cursor") params.set(key, String(value));
   return `/#/discover?${params}`;
+}
+
+/** Keep wildcard transport details outside Exchange's shared cards and actions. */
+export function asExchangeResponse(query: DiscoveryQuery, response: DiscoveryResponse, routes: DiscoveryRoute[]): P2pRouteSearchResponse {
+  return {
+    search_id: response.search_id,
+    searched_at: response.searched_at,
+    source_fiat: query.source_fiat,
+    target_fiat: query.target_fiat,
+    source_amount: response.source_amount,
+    assets_searched: [...new Set(routes.map(route => route.asset))],
+    can_exchange_to_target: routes.length > 0,
+    routes,
+    routes_found: Math.max(response.routes_found, routes.length),
+    routes_exhaustive: response.routes_exhaustive,
+    provider_statuses: response.provider_statuses,
+    stale: false,
+  };
 }

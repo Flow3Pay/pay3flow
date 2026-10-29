@@ -147,6 +147,10 @@ export interface RouteCandidate {
   source_currency: string;
   source_payment_method?: string;
   target_payment_method?: string;
+  source_payment_method_id?: string;
+  source_network_id?: string;
+  target_network_id?: string;
+  target_payment_method_id?: string;
   source_bank_fee_percent?: number;
   target_bank_fee_percent?: number;
   source_method_icon_url?: string;

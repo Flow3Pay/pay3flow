@@ -57,7 +57,7 @@
     }
     return minor == null ? "—" : `${(minor / 100).toLocaleString("en-US", { maximumFractionDigits: 2, useGrouping: false })} ${currency ?? ""}`;
   };
-  const spreadLabel = (bps: number, language: Locale) => Math.abs(bps / 100) < 0.005
+  const spreadLabel = (bps: number, language: Locale) => !Number.isFinite(bps) ? t("Unavailable", {}, language) : Math.abs(bps / 100) < 0.005
     ? t("Same output", {}, language)
     : t("{percent}% less", { percent: Math.abs(bps / 100).toFixed(2) }, language);
   const profitLabel = (route: RouteCandidate) => {
@@ -78,7 +78,7 @@
   $: routeVenues = foundVenues.filter((venue) => (venueStats[venue.id.toLowerCase()]?.routes_found ?? 0) > 0);
   $: visiblePendingVenues = pendingVenues.slice(0, 5);
   $: hasHiddenPendingVenues = pendingVenues.length > visiblePendingVenues.length;
-  $: circularSearch = sourceCurrency.toUpperCase() === targetCurrency.toUpperCase();
+  $: circularSearch = sourceCurrency.toUpperCase() !== "ANY" && sourceCurrency.toUpperCase() === targetCurrency.toUpperCase();
   $: if (`${sourceCurrency}:${targetCurrency}` !== lastPair) {
     lastPair = `${sourceCurrency}:${targetCurrency}`;
     selectedVenueId = null;

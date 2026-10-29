@@ -1,6 +1,6 @@
 <script lang="ts">
-  import DiscoveryPanel from "./DiscoveryPanel.svelte";
-  import type { DiscoveryQuery } from "$lib/discovery";
+  import { mergeDiscoveryRoutes, asExchangeResponse, type DiscoveryQuery, type DiscoveryRoute } from "$lib/discovery";
+  import { searchDiscovery } from "$lib/discovery-client";
   import { browser } from "$app/environment";
   import { afterUpdate, onMount, onDestroy, tick } from "svelte";
   import { quintOut } from "svelte/easing";
@@ -45,7 +45,9 @@
   export let onBelarusP2pWarningChange: (show: boolean) => void = () => {};
   export let onOpenBelarusP2pWarning: () => void = () => {};
 
-  let discoveryPanel: DiscoveryPanel | undefined;
+  let discoveryRows: DiscoveryRoute[] = [];
+  let discoveryCursor: string | null = null;
+  let discoverySignature = "";
   const isAnyMethod = (method: PaymentMethod | null | undefined) => Boolean(method?.id.startsWith("any-"));
   function anyMethod(currency: string): PaymentMethod {
     return {id:`any-${currency}`,name:"Any method",country:"GLOBAL",currency,role:"both",kind:"bank",color:"#272727",initials:"ANY",p2pQuery:""};
@@ -366,9 +368,13 @@
 
   function mapRoutes(response: Awaited<ReturnType<typeof fetchP2pRoutes>>, displayNetworks = true): RouteCandidate[] {
     const bestTarget = Number(response.routes[0]?.target_amount ?? 0);
+    const bestValue = (response.routes[0] as DiscoveryRoute | undefined)?.value_received_per_input;
     const routeNetwork = (value?: string | null) => displayNetworks ? networkName(value) : value ?? "";
     return response.routes.map((route, index) => {
     const entryOffer = route.entry_offer, exitOffer = route.exit_offer, targetAmount = Number(route.target_amount);
+      const discovered = "source_settlement" in route ? route as DiscoveryRoute : null;
+      const fromMethod = discovered ? paymentMethods.find(method => method.id === discovered.source_settlement.method_id || (method.kind === "wallet" && method.currency === route.source_fiat && Boolean(discovered.source_settlement.network))) : sourceMethod;
+      const toMethod = discovered ? paymentMethods.find(method => method.id === discovered.target_settlement.method_id || (method.kind === "wallet" && method.currency === route.target_fiat && Boolean(discovered.target_settlement.network))) : targetMethod;
       const legs = route.cycle_legs?.length
         ? route.cycle_legs.map((leg, index) => ({ kind: index === 0 ? "entry" as const : "exit" as const, from: leg.from_asset, to: leg.to_asset, provider: leg.provider, status: "found" as const }))
         : route.route_provider
@@ -384,21 +390,26 @@
       return {
         route_id: route.route_id?.trim() || fallbackRouteId,
         status: "complete", source_amount_minor: Math.round(Number(route.source_amount) * 100), source_amount: route.source_amount, acquired_asset_amount: route.acquired_asset_amount, source_currency: route.source_fiat,
-        source_payment_method: sourceMethod?.kind !== "wallet" ? sourceMethod?.name : undefined,
-        target_payment_method: targetMethod?.kind !== "wallet" ? targetMethod?.name : undefined,
-        source_bank_fee_percent: sourceMethod?.kind === "bank" ? sourceMethod.bankFeePercent : undefined,
-        target_bank_fee_percent: targetMethod?.kind === "bank" ? targetMethod.bankFeePercent : undefined,
-        source_method_icon_url: sourceMethod?.kind !== "wallet" ? paymentMethodFavicon(sourceMethod) ?? undefined : undefined,
+        source_payment_method: fromMethod?.kind !== "wallet" ? fromMethod?.name ?? discovered?.source_settlement.method ?? undefined : undefined,
+        source_payment_method_id: discovered ? discovered.source_settlement.method_id ?? fromMethod?.id ?? `any-${route.source_fiat}` : undefined,
+        source_network_id: discovered?.source_settlement.network ?? undefined,
+        target_network_id: discovered?.target_settlement.network ?? undefined,
+        target_payment_method_id: discovered ? discovered.target_settlement.method_id ?? toMethod?.id ?? `any-${route.target_fiat}` : undefined,
+        target_payment_method: toMethod?.kind !== "wallet" ? toMethod?.name ?? discovered?.target_settlement.method ?? undefined : undefined,
+        source_bank_fee_percent: fromMethod?.kind === "bank" ? fromMethod.bankFeePercent : undefined,
+        target_bank_fee_percent: toMethod?.kind === "bank" ? toMethod.bankFeePercent : undefined,
+        source_method_icon_url: fromMethod?.kind !== "wallet" ? paymentMethodFavicon(fromMethod) ?? undefined : undefined,
         entry_asset: route.asset, entry_network: routeNetwork(route.entry_network), source_network: route.source_network ? routeNetwork(route.source_network) : undefined, target_network: route.target_network ? routeNetwork(route.target_network) : undefined,
         target_amount_minor: Math.round(targetAmount * 100), target_amount: route.target_amount, target_currency: route.target_fiat,
-        target_method_icon_url: targetMethod?.kind !== "wallet" ? paymentMethodFavicon(targetMethod) ?? undefined : undefined,
+        target_method_icon_url: toMethod?.kind !== "wallet" ? paymentMethodFavicon(toMethod) ?? undefined : undefined,
         route_kind: route.route_kind, profitability: route.profitability, cycle_legs: route.cycle_legs, profitability_decimals: route.profitability_decimals, bridge_currency: route.bridge_currency, market_path: route.market_path,
         route_provider: route.route_provider, route_provider_url: route.route_provider_url, route_path: route.route_path, route_fees: route.route_fees, quote_expires_at: route.quote_expires_at, execution: route.execution,
-        spread_bps: bestTarget > 0 && Number.isFinite(targetAmount) ? Math.round((targetAmount / bestTarget - 1) * 10_000) : 0,
+        spread_bps: discovered ? bestValue != null && bestValue > 0 && discovered.value_received_per_input != null && !discovered.missing_costs.length
+          ? Math.round((discovered.value_received_per_input / bestValue - 1) * 10_000) : NaN : bestTarget > 0 && Number.isFinite(targetAmount) ? Math.round((targetAmount / bestTarget - 1) * 10_000) : 0,
         is_current_best: index === 0, is_live_market: true, payment_methods_verified: route.payment_methods_verified,
         entry_offer_url: entryOffer?.source_url, entry_offer_is_exact: entryOffer?.source_url_is_exact, entry_offer_ad_id: entryOffer?.ad_id,
         exit_offer_url: exitOffer?.source_url, exit_offer_is_exact: exitOffer?.source_url_is_exact, exit_offer_ad_id: exitOffer?.ad_id,
-        entry_offer_snapshot: entryOffer, exit_offer_snapshot: exitOffer, warnings: route.warnings,
+        entry_offer_snapshot: entryOffer, exit_offer_snapshot: exitOffer, warnings: [...route.warnings, ...(discovered?.missing_costs.map(cost => `Missing cost: ${cost.replaceAll("_", " ")}`) ?? [])],
         services: route.services, reputation: route.reputation, feedback: route.feedback ?? { likes_total: 0, dislikes_total: 0 }, service_links: route.service_links,
         legs,
       };
@@ -693,14 +704,14 @@
   function scheduleAutomaticSearch(_signature: string, loaded: boolean, ready: boolean, validAmount: boolean, initialReady: boolean) {
     if (debounceTimer) window.clearTimeout(debounceTimer);
     debounceTimer = undefined;
-    if ((!guideRequested || (!instructionsRoute && !guideUnavailable)) && loaded && ready && initialReady && corridor && sourceMethod && targetMethod && validAmount) debounceTimer = window.setTimeout(startSearch, 650);
+    if ((!guideRequested || (!instructionsRoute && !guideUnavailable)) && loaded && ready && initialReady && (corridor || useDiscovery) && sourceMethod && targetMethod && validAmount) debounceTimer = window.setTimeout(startSearch, 650);
   }
   function manageRefresh(seconds: RefreshSeconds, updatedAt: number | null, validAmount: boolean) {
     if (refreshTimer) window.clearInterval(refreshTimer);
     if (!guideRequested && seconds && updatedAt && validAmount) refreshTimer = window.setInterval(() => { if (!searching) void startSearch(false); }, seconds * 1000);
   }
   function resetResults() {
-    discoveryPanel?.reset();
+    discoveryRows = []; discoveryCursor = null; discoverySignature = "";
     controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; displayRoutes([]); routesFound = 0; selected = null; selectionPinnedByUser = false; instructionsRoute = null; lastUpdatedAt = null; searching = false; awaitingFirstRoute = false; foundVenueIds = []; foundVenues = []; venueStats = {}; error = null;
     if (refreshTimer) window.clearInterval(refreshTimer);
   }
@@ -728,6 +739,10 @@
   }
   function updateTargetAmount(value: string) {
     initialSearchReady = true;
+    if (useDiscovery && previewRoute) {
+      if (selectedSourceCurrency === "ANY") sourceMethodId = previewRoute.source_payment_method_id ?? `any-${previewRoute.source_currency}`;
+      if (selectedTargetCurrency === "ANY") targetMethodId = previewRoute.target_payment_method_id ?? `any-${previewRoute.target_currency}`;
+    }
     const nextTargetAmount = normalizeAmount(value);
     const desiredTarget = amountNumber(nextTargetAmount);
     const quotedTarget = previewRoute?.target_amount ? Number(previewRoute.target_amount) : NaN;
@@ -738,7 +753,7 @@
     targetRefinementAttempts = 0;
     targetQuoteRouteKey = previewRoute ? routeFamilyKey(previewRoute) : null;
     if (Number.isFinite(desiredTarget) && desiredTarget > 0 && Number.isFinite(quotedTarget) && quotedTarget > 0 && Number.isFinite(quotedSource) && quotedSource > 0) {
-      amount = formatEditableAmount(desiredTarget * quotedSource / quotedTarget, selectedSourceCurrency);
+      amount = formatEditableAmount(desiredTarget * quotedSource / quotedTarget, previewRoute?.source_currency ?? selectedSourceCurrency);
       targetAmountNeedsRate = false;
       targetProbeAmount = null;
     } else {
@@ -849,7 +864,7 @@
     if (!browser) return;
     instructionsMode = mode;
     instructionsStartAtSwap = startAtSwap;
-    const params = new URLSearchParams({ amount: route.source_amount ?? String(route.source_amount_minor / 100), from: sourceMethodId, to: targetMethodId, fromNetwork: sourceNetwork?.id ?? sourceNetworkId, toNetwork: targetNetwork?.id ?? targetNetworkId, sources: selectedSources.join(","), methods: selectedExchangeMethods.join(","), assets: selectedIntermediaryAssets.join(","), path: guideRoutePath(route), venues: [...new Set([route.route_provider, ...route.legs.map(leg => leg.provider), ...(route.cycle_legs ?? []).map(leg => leg.provider)].filter(Boolean))].join(","), lang: activeLocale });
+    const params = new URLSearchParams({ amount: route.source_amount ?? String(route.source_amount_minor / 100), from: route.source_payment_method_id ?? sourceMethodId, to: route.target_payment_method_id ?? targetMethodId, fromNetwork: route.source_network_id ?? sourceNetwork?.id ?? sourceNetworkId, toNetwork: route.target_network_id ?? targetNetwork?.id ?? targetNetworkId, sources: selectedSources.join(","), methods: selectedExchangeMethods.join(","), assets: selectedIntermediaryAssets.join(","), path: guideRoutePath(route), venues: [...new Set([route.route_provider, ...route.legs.map(leg => leg.provider), ...(route.cycle_legs ?? []).map(leg => leg.provider)].filter(Boolean))].join(","), lang: activeLocale });
     params.set("view", mode);
     const hash = guideHash(route.source_currency, route.target_currency ?? route.entry_asset, params);
     if (replace) history.replaceState(history.state, "", hash); else history.pushState(history.state, "", hash);
@@ -893,16 +908,7 @@
   async function startSearch(countActivity = true) {
     if (debounceTimer) window.clearTimeout(debounceTimer);
     debounceTimer = undefined;
-    if (useDiscovery) {
-      if (!hasAmount) return;
-      routesExpanded = true;
-      await tick();
-      await discoveryPanel?.search();
-      return;
-    }
-    if (debounceTimer) window.clearTimeout(debounceTimer);
-    debounceTimer = undefined;
-    if (!corridor || !sourceMethod || !targetMethod) return;
+    if ((!corridor && !useDiscovery) || !sourceMethod || !targetMethod) return;
     const desiredTarget = amountNumber(targetAmount);
     const targetDriven = amountSide === "target" && Number.isFinite(desiredTarget) && desiredTarget > 0;
     const value = targetDriven && targetAmountNeedsRate && targetProbeAmount != null ? targetProbeAmount : amountNumber(amount);
@@ -918,7 +924,26 @@
     try {
       const liveQuery = { sourceFiat: selectedSourceCurrency, targetFiat: selectedTargetCurrency, sourceAmount: value, intermediaryAssets: !sourceWallet && !targetWallet && selectedIntermediaryAssets.length ? selectedIntermediaryAssets : undefined, sourceNetwork: sourceWallet ? sourceNetwork?.id : undefined, targetNetwork: targetWallet ? targetNetwork?.id : undefined, sourcePaymentMethod: sourceWallet || sourceMethod.kind === "currency" ? undefined : sourceMethod.p2pQuery, targetPaymentMethod: targetWallet || targetMethod.kind === "currency" ? undefined : targetMethod.p2pQuery, sourcePaymentFeePercent: sourceWallet ? 0 : sourceMethod.bankFeePercent, targetPaymentFeePercent: targetWallet ? 0 : targetMethod.bankFeePercent, sources: selectedSources, exchangeMode, allowCrossVenue: true, maxActions: complexRoutes ? 8 : undefined, limit: 40, countActivity };
       let response: P2pRouteSearchResponse;
-      try {
+      if (useDiscovery) {
+        routesExpanded = true;
+        const query = { ...discoveryQuery, source_amount: targetDriven && targetAmountNeedsRate ? value.toLocaleString("en-US", { maximumFractionDigits: 20, useGrouping: false }) : normalizeAmount(amount).replace(",", ".") };
+        const signature = JSON.stringify(query);
+        const previous = signature === discoverySignature ? discoveryRows : [];
+        const cursor = signature === discoverySignature ? discoveryCursor : null;
+        discoverySignature = signature;
+        const payload = { ...query, ...(cursor ? { cursor } : {}) };
+        const applyDiscovery = (next: Awaited<ReturnType<typeof searchDiscovery>>) => {
+          if (currentRequest !== requestId || signal.aborted) return;
+          discoveryRows = mergeDiscoveryRoutes(previous, next.routes, "exchange");
+          discoveryCursor = next.next_cursor;
+          const adapted = asExchangeResponse(query, next, discoveryRows);
+          if (!(amountSide === "target" && targetAmountNeedsRate)) applySearchResponse(adapted);
+          if (discoveryRows.length) awaitingFirstRoute = false;
+        };
+        const result = await searchDiscovery(payload, signal, applyDiscovery);
+        response = asExchangeResponse(query, result, discoveryRows);
+        if (result.errors.length) error = result.errors.join("; ");
+      } else try {
         if (!anonymousId) throw new Error("Anonymous ID unavailable");
         response = await streamP2pRoutes(liveQuery, anonymousId, signal, (event) => {
           if (currentRequest !== requestId) return;
@@ -941,7 +966,11 @@
         const quotedTarget = Number(quotedRoute?.target_amount);
         if (desiredTarget > 0 && quotedSource > 0 && quotedTarget > 0) {
           targetQuoteRouteKey = routeFamilyKey(quotedRoute);
-          const calculatedSource = formatEditableAmount(desiredTarget * quotedSource / quotedTarget, selectedSourceCurrency);
+          // An inverse amount belongs to the quoted currencies, even when the
+          // first probe searched ANY. Subsequent quotes use that concrete pair.
+          if (useDiscovery && selectedSourceCurrency === "ANY") sourceMethodId = quotedRoute.source_payment_method_id ?? `any-${quotedRoute.source_currency}`;
+          if (useDiscovery && selectedTargetCurrency === "ANY") targetMethodId = quotedRoute.target_payment_method_id ?? `any-${quotedRoute.target_currency}`;
+          const calculatedSource = formatEditableAmount(desiredTarget * quotedSource / quotedTarget, quotedRoute.source_currency);
           const targetPrecision = CRYPTO_CURRENCIES.has(selectedTargetCurrency.toUpperCase()) ? 8 : 2;
           const closeEnough = Math.abs(quotedTarget - desiredTarget) < 0.5 * 10 ** -targetPrecision;
           targetAmountNeedsRate = false;
@@ -967,6 +996,7 @@
       }
     } catch (cause) {
       if (signal.aborted || currentRequest !== requestId) return;
+      if (useDiscovery) discoveryCursor = null;
       error = cause instanceof Error ? cause.message : "Could not search live P2P markets";
     } finally {
       if (currentRequest === requestId) { searching = false; awaitingFirstRoute = false; }
@@ -1232,7 +1262,7 @@
       <ExchangeFlowBridge reversed={directionReversed} onSwap={swapDirection} label={t("Swap sender and recipient", {}, activeLocale)}><button type="button" class="routesToggle" class:routesToggleOpen={routesExpanded} on:click={toggleRoutes} aria-label={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)} aria-expanded={routesExpanded} title={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)}><span aria-hidden="true">❯</span></button></ExchangeFlowBridge>
       <div class="intentLabel intentLabelBuy"><span>{t("Buy", {}, activeLocale)}</span></div>
       <div class="moneyPanel moneyPanelTarget exchangeMoneyPanel">
-        <div class="panelCopy"><label for="exchange-output">{t("Recipient gets", {}, activeLocale)}</label><input id="exchange-output" disabled={useDiscovery} class:amountOutputEmpty={!previewRoute && amountSide !== "target"} class="amountInput amountOutput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={useDiscovery ? "" : displayedTargetInput} placeholder={useDiscovery ? t("See routes",{},activeLocale) : undefined} on:focus={(event) => focusAmountInput(event, "target")} on:blur={() => blurAmountInput("target")} on:input={(event) => updateTargetAmount(event.currentTarget.value)} aria-label={t("Amount to receive", {}, activeLocale)} />{#if marketUsd.target !== null}<span class="marketValue" aria-label={t("Approximate USD market value", {}, activeLocale)}>{formatMarketUsd(marketUsd.target)}</span>{/if}</div>
+        <div class="panelCopy"><label for="exchange-output">{t("Recipient gets", {}, activeLocale)}</label><input id="exchange-output" class:amountOutputEmpty={!previewRoute && amountSide !== "target"} class="amountInput amountOutput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedTargetInput} on:focus={(event) => focusAmountInput(event, "target")} on:blur={() => blurAmountInput("target")} on:input={(event) => updateTargetAmount(event.currentTarget.value)} aria-label={t("Amount to receive", {}, activeLocale)} />{#if marketUsd.target !== null}<span class="marketValue" aria-label={t("Approximate USD market value", {}, activeLocale)}>{formatMarketUsd(marketUsd.target)}</span>{/if}</div>
         <div class="methodControls">
           <button type="button" class="methodTrigger" data-tooltip={targetMethod?.kind === "wallet" ? `${targetCurrencyChoice} · ${t(targetMethod.name, {}, activeLocale)}` : t(methodTitle(targetMethod), {}, activeLocale)} on:click={() => void openMethodPicker("target")} aria-label={`Select recipient ${methodNoun(targetMethod)}: ${targetMethod ? methodTitle(targetMethod) : "none"}`}>
             <span class="methodAvatar" style:background-color={paymentMethodFavicon(targetMethod) ? "transparent" : targetMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(targetMethod)}<img src={paymentMethodFavicon(targetMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{:else}<span>{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{/if}</span>
@@ -1259,11 +1289,7 @@
       </div>
     {/if}
     </div>
-    {#if useDiscovery}
-      <div class="routesReveal" hidden={!routesExpanded}>
-        <DiscoveryPanel bind:this={discoveryPanel} request={discoveryQuery} bind:loading={searching} catalogError={paymentCatalogError} catalogLoading={paymentCatalogLoading} />
-      </div>
-    {:else if routesExpanded}
+    {#if routesExpanded}
       <div class="routesReveal" bind:this={routesRevealElement} transition:routesRevealTransition inert={!routesExpanded} aria-hidden={!routesExpanded}>
         <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {renderingRoutes} {searchingVenues} {foundVenues} {venueStats} {venueNames} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} searched={lastUpdatedAt !== null} {hasAmount} {showBelarusP2pWarning} {onOpenBelarusP2pWarning} onOpenSearchActivity={() => activityModalOpen = true} />
       </div>
