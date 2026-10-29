@@ -53,7 +53,7 @@ export interface DiscoveryResponse {
   routes_found: number;
   routes_exhaustive: boolean;
   complete: boolean;
-  coverage: { combinations_total: number; combinations_completed: number; combinations_failed: number; combinations_timed_out: number; batch_completed: number };
+  coverage: { combinations_total: number; combinations_completed: number; combinations_failed: number; combinations_timed_out: number; combinations_partial?: number; batch_completed: number };
   provider_statuses: SourceStatus[];
   errors: string[];
   next_cursor: string | null;

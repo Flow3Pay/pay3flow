@@ -26,6 +26,7 @@
   export let venueNames: Record<string, string> = {};
   export let networkNames: Record<string, string> = {};
   export let searched = false;
+  export let searchIncomplete = false;
   export let hasAmount = false;
   export let showBelarusP2pWarning = false;
   export let onOpenBelarusP2pWarning: () => void = () => {};
@@ -137,7 +138,7 @@
         {/if}
         {#if hasAmount}
           <span class="resultSummary">
-            {#if hasAmount}<small aria-live="polite">{routeCountLabel(routesFound, $locale)}{searching ? " · searching…" : ""}</small>{/if}
+            {#if hasAmount}<small aria-live="polite">{routeCountLabel(routesFound, $locale)}{searching ? " · searching…" : searchIncomplete ? ` · ${t("Partial results", {}, $locale)}` : ""}</small>{/if}
             {#if routeVenues.length}
               <span class="foundVenues" aria-label={`Venues used in found routes: ${routeVenues.map((venue) => venue.label).join(", ")}`}>
                 {#each routeVenues as venue, index (venue.id)}
@@ -257,7 +258,7 @@
             <circle class="routeJunction" cx="64" cy="48" r="3" />
           </svg>
         </div>
-        <div><strong>{t(searched && hasAmount ? "No routes found" : hasAmount ? "Preparing market scan" : "Find your route", {}, $locale)}</strong><p>{t(searched && hasAmount ? circularSearch ? "No profitable quoted cycle was found for this amount and selected providers." : "No compatible live offers were found for this amount and payment method." : hasAmount ? "Pay3Flow is ready to compare entry assets, venues and recipient payout options." : "Choose currencies and enter an amount. We’ll compare available routes for you.", {}, $locale)}</p></div>
+        <div><strong>{t(searched && hasAmount ? searchIncomplete ? "Search incomplete" : "No routes found" : hasAmount ? "Preparing market scan" : "Find your route", {}, $locale)}</strong><p>{t(searched && hasAmount ? searchIncomplete ? "Some sources are still being checked. Refresh routes to continue the search." : circularSearch ? "No profitable quoted cycle was found for this amount and selected providers." : "No compatible live offers were found for this amount and payment method." : hasAmount ? "Pay3Flow is ready to compare entry assets, venues and recipient payout options." : "Choose currencies and enter an amount. We’ll compare available routes for you.", {}, $locale)}</p></div>
       </div>
     {/if}
   </div>

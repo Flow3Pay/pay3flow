@@ -48,6 +48,7 @@
   let discoveryRows: DiscoveryRoute[] = [];
   let discoveryCursor: string | null = null;
   let discoverySignature = "";
+  let searchIncomplete = false;
   const isAnyMethod = (method: PaymentMethod | null | undefined) => Boolean(method?.id.startsWith("any-"));
   function anyMethod(currency: string): PaymentMethod {
     return {id:`any-${currency}`,name:"Any method",country:"GLOBAL",currency,role:"both",kind:"bank",color:"#272727",initials:"ANY",p2pQuery:""};
@@ -711,7 +712,7 @@
     if (!guideRequested && seconds && updatedAt && validAmount) refreshTimer = window.setInterval(() => { if (!searching) void startSearch(false); }, seconds * 1000);
   }
   function resetResults() {
-    discoveryRows = []; discoveryCursor = null; discoverySignature = "";
+    discoveryRows = []; discoveryCursor = null; discoverySignature = ""; searchIncomplete = false;
     controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; displayRoutes([]); routesFound = 0; selected = null; selectionPinnedByUser = false; instructionsRoute = null; lastUpdatedAt = null; searching = false; awaitingFirstRoute = false; foundVenueIds = []; foundVenues = []; venueStats = {}; error = null;
     if (refreshTimer) window.clearInterval(refreshTimer);
   }
@@ -936,6 +937,7 @@
           if (currentRequest !== requestId || signal.aborted) return;
           discoveryRows = mergeDiscoveryRoutes(previous, next.routes, "exchange");
           discoveryCursor = next.next_cursor;
+          searchIncomplete = !next.complete || next.coverage.combinations_failed > 0 || next.coverage.combinations_timed_out > 0 || (next.coverage.combinations_partial ?? 0) > 0;
           const adapted = asExchangeResponse(query, next, discoveryRows);
           if (!(amountSide === "target" && targetAmountNeedsRate)) applySearchResponse(adapted);
           if (discoveryRows.length) awaitingFirstRoute = false;
@@ -1290,7 +1292,7 @@
     </div>
     {#if routesExpanded}
       <div class="routesReveal" bind:this={routesRevealElement} transition:routesRevealTransition inert={!routesExpanded} aria-hidden={!routesExpanded}>
-        <SidePanel {routes} {routesFound} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {renderingRoutes} {searchingVenues} {foundVenues} {venueStats} {venueNames} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} searched={lastUpdatedAt !== null} {hasAmount} {showBelarusP2pWarning} {onOpenBelarusP2pWarning} onOpenSearchActivity={() => activityModalOpen = true} />
+        <SidePanel {routes} {routesFound} {searchIncomplete} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {renderingRoutes} {searchingVenues} {foundVenues} {venueStats} {venueNames} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} searched={lastUpdatedAt !== null} {hasAmount} {showBelarusP2pWarning} {onOpenBelarusP2pWarning} onOpenSearchActivity={() => activityModalOpen = true} />
       </div>
     {/if}
   </div>

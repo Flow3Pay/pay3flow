@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{anyhow, Result};
-use futures::stream::{FuturesUnordered, StreamExt};
+use futures::stream::{self, StreamExt};
 use tokio::sync::mpsc;
 
 use crate::p2p::routes::{
@@ -22,10 +22,9 @@ pub(super) async fn produce_fiat_to_fiat(
     query: &NormalizedRouteQuery,
     batches: mpsc::Sender<RouteBatch>,
 ) -> Result<()> {
-    let mut searches = query
-        .assets
-        .iter()
-        .map(|asset| {
+    let mut assets = query.assets.iter().collect::<Vec<_>>();
+    assets.sort_by_key(|asset| crate::p2p::routes::intermediary_asset_priority(asset, &query.target_currency));
+    let mut searches = stream::iter(assets.into_iter().map(|asset| {
             let entry =
                 super::leg_query_for(query, &query.source_currency, asset, P2pSide::BuyCrypto);
             let exit =
@@ -38,12 +37,13 @@ pub(super) async fn produce_fiat_to_fiat(
                 query.offer_market(),
                 batches.clone(),
             )
-        })
-        .collect::<FuturesUnordered<_>>();
-    drop(batches);
-
-    while let Some(result) = searches.next().await {
+        })).buffer_unordered(4);
+    // Keep the same budget as the provider composers and preserve streamed work.
+    let search = async { while let Some(result) = searches.next().await { result?; } Ok::<_, anyhow::Error>(()) };
+    if let Ok(result) = tokio::time::timeout(std::time::Duration::from_secs(60), search).await {
         result?;
+    } else {
+        send_batch(&batches, RouteBatch::Routes { routes: Vec::new(), exhaustive: false }).await;
     }
     Ok(())
 }

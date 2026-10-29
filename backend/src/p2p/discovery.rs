@@ -83,12 +83,12 @@ impl DiscoveryQuery {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct Endpoint { currency: String, network: Option<String> }
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct Job { source: Endpoint, target: Endpoint }
 #[derive(Deserialize, Serialize)]
-struct CursorState { query_hash: String, catalog_hash: String, completed: BTreeSet<usize>, expires_at: i64 }
+struct CursorState { query_hash: String, catalog_hash: String, completed: BTreeSet<usize>, expires_at: i64, #[serde(default)] next_index: usize }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct SettlementEndpoint {
@@ -182,8 +182,7 @@ impl super::P2pSearchService {
             }
         }
         let mut endpoints = endpoints.into_iter().collect::<Vec<_>>();
-        // Broad discovery remains deterministic and advances through every catalog endpoint.
-        endpoints.sort_by_key(|e| (match e.currency.as_str() { "RUB" => 0, "USD" => 1, "USDT" => 2, "USDC" => 3, "AMD" => 4, _ => 5 }, e.clone()));
+        prioritize_endpoints(&mut endpoints);
         endpoints
     }
     async fn discovery_fiat_usd(&self, currency: &str) -> Option<Valuation> {
@@ -210,6 +209,31 @@ impl super::P2pSearchService {
         while let Some(value) = loads.next().await { if value.is_some() { return value; } }
         None
     }
+}
+
+// Visit one settlement network per currency before revisiting that currency.
+// Otherwise a large USDT network catalog consumes the entire first batch.
+fn prioritize_endpoints(endpoints: &mut [Endpoint]) {
+    let priority = |e: &Endpoint| match e.currency.as_str() {
+        "RUB" => 0, "USD" => 1, "USDT" => 2, "USDC" => 3, "AMD" => 4,
+        "EUR" => 5, "BYN" => 6, "UAH" => 7, "KZT" => 8, "BTC" => 9, "ETH" => 10, _ => 11,
+    };
+    let network_priority = |e: &Endpoint| match e.network.as_deref() {
+        None => 0, Some("tron" | "ethereum" | "bitcoin" | "solana") => 1, _ => 2,
+    };
+    endpoints.sort_by_key(|e| (priority(e), e.currency.clone(), network_priority(e), e.clone()));
+    let mut counts = HashMap::<String, usize>::new();
+    let mut rounds = HashMap::new();
+    for endpoint in endpoints.iter() {
+        let count = counts.entry(endpoint.currency.clone()).or_default();
+        rounds.insert(endpoint.clone(), *count);
+        *count += 1;
+    }
+    endpoints.sort_by_key(|e| (rounds[e], priority(e), e.clone()));
+}
+fn batch_indices(total: usize, cursor: &CursorState) -> Vec<usize> {
+    (0..total).map(|offset| (cursor.next_index + offset) % total)
+        .filter(|index| !cursor.completed.contains(index)).take(BATCH_SIZE).collect()
 }
 
 fn endpoints_for(catalog: &[Endpoint], currency: &str, network: &Option<String>, method: Option<&Bank>) -> Vec<Endpoint> {
@@ -262,8 +286,15 @@ fn offer_venue(offer: &super::P2pOffer) -> Option<String> {
 fn settlements(route: &P2pRoute, banks: &[Bank], source: Option<&Bank>, target: Option<&Bank>, mode: DiscoveryMode) -> Option<(SettlementEndpoint, SettlementEndpoint, Option<f64>, Option<f64>)> {
     let mut entry_bank = offer_bank(banks, &route.source_fiat, route.entry_offer.as_ref(), source, true);
     let mut exit_bank = offer_bank(banks, &route.target_fiat, route.exit_offer.as_ref(), target, false);
-    // A selected method is a constraint, not permission to infer missing provider metadata.
-    if (source.is_some() && entry_bank.is_none()) || (target.is_some() && exit_bank.is_none()) { return None; }
+    // Match normal Exchange: reject explicit mismatches, retain estimates when
+    // the provider gives no bank identity. Never infer verification from a query.
+    let explicit_mismatch = |offer: Option<&super::P2pOffer>, selected: Option<&Bank>| {
+        offer.zip(selected).is_some_and(|(offer, bank)| offer.payment_method_match(method_label(bank)) == PaymentMethodMatch::No)
+    };
+    if explicit_mismatch(route.entry_offer.as_ref(), source) || explicit_mismatch(route.exit_offer.as_ref(), target) { return None; }
+    if mode == DiscoveryMode::Arbitrage && ((source.is_some() && entry_bank.is_none()) || (target.is_some() && exit_bank.is_none())) { return None; }
+    if route.entry_offer.as_ref().is_some_and(|offer| offer.market == super::P2pOfferMarket::DirectExchange) && !route.payment_methods_verified { entry_bank = None; }
+    if route.exit_offer.as_ref().is_some_and(|offer| offer.market == super::P2pOfferMarket::DirectExchange) && !route.payment_methods_verified { exit_bank = None; }
     if mode == DiscoveryMode::Arbitrage && route.source_network.is_none() {
         let entry = route.entry_offer.as_ref()?;
         let exit = route.exit_offer.as_ref()?;
@@ -288,10 +319,16 @@ fn settlements(route: &P2pRoute, banks: &[Bank], source: Option<&Bank>, target: 
         currency: currency.clone(), network: network.clone(), method_id: bank.map(bank_method_id), method: bank.map(|b| if b.display_name.is_empty() { b.name.clone() } else { b.display_name.clone() }),
         verified: bank.is_some() || (network.is_some() && venue.is_some()), venue,
     };
-    let a = endpoint(&route.source_fiat, &route.source_network, entry_bank, entry_venue);
-    let b = endpoint(&route.target_fiat, &route.target_network, exit_bank, exit_venue);
+    let mut a = endpoint(&route.source_fiat, &route.source_network, entry_bank, entry_venue);
+    let mut b = endpoint(&route.target_fiat, &route.target_network, exit_bank, exit_venue);
+    for (endpoint, selected) in [(&mut a, source), (&mut b, target)] {
+        if endpoint.method_id.is_none() { if let Some(bank) = selected {
+            endpoint.method_id = Some(bank_method_id(bank));
+            endpoint.method = Some(if bank.display_name.is_empty() { bank.name.clone() } else { bank.display_name.clone() });
+        } }
+    }
     if mode == DiscoveryMode::Arbitrage && (!a.verified || !b.verified || a.currency != b.currency || a.network != b.network || a.method_id != b.method_id || a.venue != b.venue) { return None; }
-    Some((a, b, entry_bank.and_then(|b| b.bank_fee_percent), exit_bank.and_then(|b| b.bank_fee_percent)))
+    Some((a, b, entry_bank.or(source).and_then(|b| b.bank_fee_percent), exit_bank.or(target).and_then(|b| b.bank_fee_percent)))
 }
 
 // Exact fixed-scale arithmetic; values outside the checked range remain unconfirmed.
@@ -323,6 +360,12 @@ fn payment_fee(amount: i128, percent: f64) -> Option<i128> {
 fn evaluate(mut route: P2pRoute, observed_at: DateTime<Utc>, stale: bool, banks: &[Bank], query: &DiscoveryQuery, job: &Job, source: Option<&Bank>, target: Option<&Bank>, provider_assets: &[Asset], service: &super::P2pSearchService, prices: &HashMap<String, Valuation>) -> Option<DiscoveryRoute> {
     if route.quote_expires_at.is_some_and(|v| v <= Utc::now()) || route.cycle_legs.iter().any(|l| l.expires_at.is_some_and(|v| v <= Utc::now())) { return None; }
     let (a,b,source_fee,target_fee) = settlements(&route, banks, source, target, query.mode)?;
+    route.payment_methods_verified = a.verified && b.verified;
+    for (endpoint, selected) in [(&a, source), (&b, target)] {
+        if selected.is_some() && !endpoint.verified {
+            route.warnings.push(format!("Provider has not verified the selected {} payment method; confirm recipient eligibility before sending.", endpoint.method.as_deref().unwrap_or("bank")));
+        }
+    }
     let mut concrete = concrete_query(query, job, source, target);
     concrete.source_payment_fee_percent = if a.network.is_some() { Some(0.0) } else { source_fee };
     concrete.target_payment_fee_percent = if b.network.is_some() { Some(0.0) } else { target_fee };
@@ -425,9 +468,9 @@ pub async fn run(state: &AppState, mut query: DiscoveryQuery, updates: Option<mp
         let cursor: CursorState = redis_read(state, &format!("pay3flow:discovery:cursor:{token}")).await?.context("search cursor expired; start a new search")?;
         if cursor.query_hash != query_hash || cursor.catalog_hash != catalog_hash || cursor.expires_at < Utc::now().timestamp() { bail!("search or catalog changed; start a new search"); }
         cursor
-    } else { CursorState { query_hash, catalog_hash, completed: BTreeSet::new(), expires_at: Utc::now().timestamp() + CURSOR_TTL as i64 } };
+    } else { CursorState { query_hash, catalog_hash, completed: BTreeSet::new(), expires_at: Utc::now().timestamp() + CURSOR_TTL as i64, next_index: 0 } };
     let total = job_count(&source_endpoints, &target_endpoints, query.mode);
-    let indices = (0..total).filter(|i| !cursor.completed.contains(i)).take(BATCH_SIZE).collect::<Vec<_>>();
+    let indices = batch_indices(total, &cursor);
     let mut response = DiscoveryResponse { search_id: Uuid::new_v4(), mode: query.mode, source_amount: query.source_amount.clone(), amount_basis: "same_numeric_amount_per_starting_currency", reporting_currency: "USD", searched_at: Utc::now(), routes: Vec::new(), routes_found: 0,
         routes_exhaustive: false, complete: false, coverage: Coverage { combinations_total: total, combinations_completed: cursor.completed.len(), ..Coverage::default() }, provider_statuses: Vec::new(), errors: Vec::new(), next_cursor: None };
     if let Some(tx) = &updates { let _ = tx.send(response.clone()).await; }
@@ -449,10 +492,13 @@ pub async fn run(state: &AppState, mut query: DiscoveryQuery, updates: Option<mp
         (index, job, concrete)
     }).collect::<Vec<_>>();
     let (snapshot_tx, mut snapshots) = mpsc::channel(16);
+    let (started_tx, mut starts) = mpsc::channel(BATCH_SIZE);
     let jobs = concrete_jobs.into_iter().map(|(index,job,concrete)| {
         let service = state.p2p.clone();
         let snapshot_tx = snapshot_tx.clone();
+        let started_tx = started_tx.clone();
         async move {
+            let _ = started_tx.try_send(index);
             let (tx,mut rx) = mpsc::channel(4);
             let search = service.stream_routes(concrete,Uuid::new_v4(),tx);
             tokio::pin!(search);
@@ -472,15 +518,16 @@ pub async fn run(state: &AppState, mut query: DiscoveryQuery, updates: Option<mp
     let mut partitions=HashMap::new();
     let mut partial=HashSet::new();
     let mut snapshots_open=true;
+    let mut started = BTreeSet::new();
     loop {
         tokio::select! {
             _ = &mut deadline => { response.coverage.combinations_timed_out=indices.len().saturating_sub(response.coverage.batch_completed); break; },
             _ = async { if let Some(tx)=&updates { tx.closed().await } else { std::future::pending::<()>().await } } => bail!("search cancelled"),
+            Some(index) = starts.recv() => { started.insert(index); },
             snapshot=snapshots.recv(), if snapshots_open => {
                 if let Some((index,job,snapshot))=snapshot {
-                    // A sampled combination advances the cursor even if its bounded live search reaches the batch deadline.
-                    if cursor.completed.insert(index) { partial.insert(index); }
-                    response.coverage.combinations_completed=cursor.completed.len();
+                    // A streamed snapshot is not a completed search, even when empty.
+                    partial.insert(index);
                     response.coverage.combinations_partial=partial.len();
                     absorb_snapshot(&mut response,&mut partitions,index,snapshot,&banks,&query,&job,source_method,target_method,&provider_assets,&state.p2p,&prices);
                     if let Some(tx)=&updates { let mut visible=response.clone(); visible.routes.truncate(query.limit.unwrap_or(40)); if tx.send(visible).await.is_err() { bail!("search cancelled"); } }
@@ -502,6 +549,8 @@ pub async fn run(state: &AppState, mut query: DiscoveryQuery, updates: Option<mp
             }
         }
     }
+    while let Ok(index) = starts.try_recv() { started.insert(index); }
+    if let Some(index) = indices.iter().rev().find(|index| started.contains(*index)) { cursor.next_index = (index + 1) % total; }
     response.complete=cursor.completed.len()==total;
     // Individual composers also use bounded beams/top-K, even when every endpoint was visited.
     response.routes_exhaustive=false;
@@ -568,19 +617,23 @@ mod tests {
         route.exit_offer.as_mut().unwrap().advertiser.id=Some("other-exchanger".into());
         assert!(settlements(&route,&banks,None,None,q.mode).is_none());
     }
-    #[test] fn selected_methods_exclude_unverified_or_mismatched_endpoints() {
+    #[test] fn selected_methods_retain_unverified_estimates_but_exclude_mismatches() {
         let (_,_,_,banks,mut route)=fixture();
         let selected=Some(&banks[0]);
         assert!(settlements(&route,&banks,selected,selected,DiscoveryMode::Exchange).is_some());
         route.exit_offer.as_mut().unwrap().payment_methods.clear();
-        assert!(settlements(&route,&banks,selected,selected,DiscoveryMode::Exchange).is_none());
+        let (_, endpoint, _, _) = settlements(&route,&banks,selected,selected,DiscoveryMode::Exchange).unwrap();
+        assert!(!endpoint.verified);
+        assert_eq!(endpoint.method_id.as_deref(), Some("ru-sbp"));
+        assert!(settlements(&route,&banks,selected,selected,DiscoveryMode::Arbitrage).is_none());
         // Wildcard exchange may still show the unverified endpoint with missing-cost warnings.
         assert!(settlements(&route,&banks,selected,None,DiscoveryMode::Exchange).is_some());
         route.exit_offer.as_mut().unwrap().payment_methods=vec!["Other bank".into()];
         assert!(settlements(&route,&banks,selected,selected,DiscoveryMode::Exchange).is_none());
         route.exit_offer.as_mut().unwrap().payment_methods=vec!["SBP".into()];
         route.entry_offer.as_mut().unwrap().payment_methods.clear();
-        assert!(settlements(&route,&banks,selected,selected,DiscoveryMode::Exchange).is_none());
+        assert!(settlements(&route,&banks,selected,selected,DiscoveryMode::Exchange).is_some());
+        assert!(settlements(&route,&banks,selected,selected,DiscoveryMode::Arbitrage).is_none());
     }
     #[test] fn profit_includes_both_endpoint_fees_and_usd_valuation() {
         let (service,q,job,mut banks,route)=fixture();
@@ -595,6 +648,42 @@ mod tests {
         assert!(!result.profit_confirmed);assert!(result.net_profit_usd.is_none());assert!(result.missing_costs.iter().any(|c|c=="source_payment_fee"));
         banks[0].bank_fee_percent=Some(0.0);
         let result=evaluate(route,Utc::now(),true,&banks,&q,&job,None,None,&[],&service,&HashMap::new()).unwrap();assert!(!result.profit_confirmed);
+    }
+    #[test] fn any_to_idbank_retains_an_indicative_direct_quote_without_inventing_bank_verification() {
+        let (service,mut q,mut job,mut banks,mut route)=fixture();
+        let mut idbank=banks[0].clone();
+        idbank.id=Uuid::new_v4();idbank.method_id=Some("am-idbank".into());idbank.name="IDBank".into();idbank.display_name="IDBank".into();idbank.p2p_query="IDBank".into();idbank.currency="AMD".into();idbank.country="AM".into();idbank.bank_fee_percent=Some(0.75);
+        banks.push(idbank);
+        q.mode=DiscoveryMode::Exchange;q.source_fiat="ANY".into();q.target_fiat="AMD".into();q.target_payment_method=Some("am-idbank".into());
+        job.target=Endpoint{currency:"AMD".into(),network:None};
+        route.target_fiat="AMD".into();route.target_amount="4290.00".into();route.asset="AMD".into();route.exit_offer=None;route.payment_methods_verified=false;
+        let offer=route.entry_offer.as_mut().unwrap();offer.market=super::super::P2pOfferMarket::DirectExchange;offer.source="id-pay".into();offer.payment_methods=vec!["IDBank".into()];
+        let selected=Some(&banks[1]);
+        let result=evaluate(route,Utc::now(),false,&banks,&q,&job,None,selected,&[],&service,&HashMap::new()).unwrap();
+        assert_eq!(result.route.target_amount,"4290.00");
+        assert_eq!(result.target_settlement.method_id.as_deref(),Some("am-idbank"));
+        assert!(!result.target_settlement.verified);
+        assert!(!result.route.payment_methods_verified);
+        assert!(result.missing_costs.contains(&"payment_method".into()));
+        assert!(result.route.warnings.iter().any(|warning| warning.contains("IDBank")));
+        assert!(!result.profit_confirmed);
+    }
+    #[test] fn first_batch_diversifies_currencies_instead_of_only_stablecoin_networks() {
+        let mut endpoints=(0..40).map(|i| Endpoint{currency:"USDT".into(),network:Some(format!("chain-{i}"))}).collect::<Vec<_>>();
+        endpoints.extend([Endpoint{currency:"USDT".into(),network:Some("tron".into())},Endpoint{currency:"USD".into(),network:None},Endpoint{currency:"RUB".into(),network:None},Endpoint{currency:"AMD".into(),network:None},Endpoint{currency:"USDC".into(),network:Some("ethereum".into())}]);
+        prioritize_endpoints(&mut endpoints);
+        assert_eq!(endpoints.iter().take(5).map(|e|e.currency.as_str()).collect::<Vec<_>>(),["RUB","USD","USDT","USDC","AMD"]);
+        assert_eq!(endpoints[2].network.as_deref(),Some("tron"));
+        assert_eq!(endpoints.len(),45);
+    }
+    #[test] fn continuation_advances_past_slow_jobs_then_revisits_unfinished_pairs() {
+        let mut cursor=CursorState{query_hash:String::new(),catalog_hash:String::new(),completed:BTreeSet::from([1,2]),expires_at:0,next_index:4};
+        assert_eq!(batch_indices(40,&cursor).first(),Some(&4));
+        cursor.next_index=39;
+        let indices=batch_indices(40,&cursor);
+        assert_eq!(&indices[..3],&[39,0,3]);
+        assert!(!cursor.completed.contains(&0));
+        assert_eq!(batch_indices(1,&CursorState{completed:BTreeSet::new(),next_index:0,..cursor}),vec![0]);
     }
     #[test] fn expired_provider_quotes_are_excluded() {
         let (service,q,job,banks,mut route)=fixture();route.quote_expires_at=Some(Utc::now()-chrono::Duration::seconds(1));

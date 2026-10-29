@@ -18,7 +18,10 @@ determines whether an amount and method can produce a route.
 `target_fiat` (default `ANY`), and required decimal-string `source_amount`.
 Method constraints are stable `/api/banks` method ids; directory rows without
 `method_id` use `directory-{id}`. Omission means any supported method. Selecting
-a method excludes routes whose provider cannot verify that endpoint method. Networks,
+a method excludes explicit provider mismatches. As in ordinary Exchange, opaque
+bank ids and direct-transfer estimates remain visible with unverified method
+warnings; they do not prove recipient eligibility. Arbitrage still requires
+verified matching settlement endpoints. Networks,
 intermediary assets, sources, exchange mode, reputation filters, action count
 (2–8), price deviation and result limit follow concrete route search semantics.
 Arbitrage defaults to four actions and intermediate cross-venue transfers.
@@ -53,9 +56,15 @@ Provider failures remain visible alongside usable partial results.
 `next_cursor` resumes remaining combinations with an unchanged query and
 catalog. Redis holds traversal metadata only for 15 minutes; it never holds P2P
 offers as discovery answers. Sampled combinations are not repeated within a
-continuation. Partial inner route searches stream immediately and advance the
-traversal; combinations that produced no snapshot are retried. Coverage reports
-the current batch's partial combinations separately. A changed catalog or expired
+continuation. Partial inner route searches stream immediately, but only a
+finished combination counts as completed. The cursor rotates past started slow
+jobs and returns to unfinished pairs after fresh combinations, so an empty
+snapshot neither consumes a pair permanently nor blocks all later currencies.
+The first pass diversifies currencies before revisiting their other networks.
+Coverage reports the current batch's partial combinations separately. The shared
+Exchange panel labels incomplete searches rather than reporting definitive absence.
+Fiat P2P intermediary searches prioritize liquid assets, run four assets at a
+time, and retain partial results within a 60-second budget. A changed catalog or expired
 cursor requires a new search. Redis failure permits initial search results but
 cannot provide continuation. The browser merges fresh continuation results by
 route id, removes expired estimates, and keeps at most 100 results.
