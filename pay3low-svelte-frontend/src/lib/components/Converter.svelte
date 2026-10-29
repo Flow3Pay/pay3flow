@@ -80,6 +80,8 @@
   let INTERMEDIARY_ASSETS: string[] = [];
   const EXCHANGE_METHODS: ExchangeMethod[] = ["p2p", "exchanger"];
   let paymentMethods: PaymentMethod[] = [];
+  let paymentCatalogError = "";
+  let paymentCatalogLoading = true;
   const STORAGE = { amount: "pay3flow.exchange.amount", refresh: "pay3flow.exchange.refresh-seconds", activityPeriod: "pay3flow.exchange.activity-period", activityVisible: "pay3flow.exchange.activity-visible", routesVisible: "pay3flow.exchange.routes-visible", sources: "pay3flow.exchange.p2p-sources", knownSources: "pay3flow.exchange.known-p2p-sources", methods: "pay3flow.exchange.methods", corridor: "pay3flow.exchange.corridor", sourceMethod: "pay3flow.exchange.source-method", targetMethod: "pay3flow.exchange.target-method", sourceNetwork: "pay3flow.exchange.source-network", targetNetwork: "pay3flow.exchange.target-network", direction: "pay3flow.exchange.direction-reversed", assets: "pay3flow.exchange.intermediary-assets" };
 
   let corridors: ExchangeCorridor[] = [];
@@ -1077,7 +1079,7 @@
         sourceMethodId = sharedMethod(items, shared.sourceCurrency, "sender", shared.params.get("from") ?? sourceMethodId)?.id ?? sourceMethodId;
         targetMethodId = sharedMethod(items, shared.targetCurrency, "recipient", shared.params.get("to") ?? targetMethodId)?.id ?? targetMethodId;
       }
-    }).catch((cause: Error) => error ??= cause.message).finally(() => { methodsReady = true; markUrlReady(); });
+    }).catch((cause: Error) => { paymentCatalogError = cause.message; error ??= cause.message; }).finally(() => { paymentCatalogLoading = false; methodsReady = true; markUrlReady(); });
     fetchProviders().then((providers) => {
       p2pSources = providerSources(providers);
       onProvidersLoaded(providers);
@@ -1142,7 +1144,7 @@
     <button type="button" aria-pressed={discoveryMode === "exchange"} on:click={() => selectDiscoveryMode("exchange")}>Any / any</button>
     <button type="button" aria-pressed={discoveryMode === "arbitrage"} on:click={() => selectDiscoveryMode("arbitrage")}>Arbitrage</button>
   </nav>
-  {#if discoveryMode !== null}<DiscoveryPanel mode={discoveryMode} {paymentMethods} {networks} />{/if}
+  {#if discoveryMode !== null}<DiscoveryPanel mode={discoveryMode} {paymentMethods} {networks} catalogError={paymentCatalogError} catalogLoading={paymentCatalogLoading} />{/if}
   <noscript><p class="nojsNotice">{home.nojs}</p></noscript>
   <div style:display={discoveryMode !== null ? "none" : undefined} class="workspace" class:activityExpanded class:routesCollapsed={!routesExpanded} style:--converter-width={`${converterWidth}px`} style:--amount-digits={converterAmountDigits}>
     <div class="converterStack">

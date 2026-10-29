@@ -8,6 +8,8 @@
   export let mode: DiscoveryMode = "exchange";
   export let paymentMethods: PaymentMethod[] = [];
   export let networks: CryptoNetwork[] = [];
+  export let catalogError = "";
+  export let catalogLoading = false;
   let source = "ANY", target = "ANY", sourceMethod = "", targetMethod = "", sourceNetwork = "", targetNetwork = "";
   let amount = "1000", maxActions = 4, crossVenue = true;
   let exchangeMode: "all" | "p2p" | "exchanger" = "all";
@@ -150,6 +152,8 @@
     <p class="note">{source === "ANY" ? `The same number is searched separately in each currency. ${amount || "1000"} RUB and ${amount || "1000"} USDT represent different starting capital.` : `Starting capital is ${amount || "0"} ${source}.`} USD values are indicative. Missing costs keep profit unconfirmed.</p>
     <div class="actions"><button type="submit" disabled={loading || !currencies.length}>{loading ? "Searching…" : mode === "arbitrage" ? "Find arbitrage" : "Find exchanges"}</button>{#if loading}<button type="button" class="secondary" on:click={cancel}>Stop search</button>{/if}{#if response?.next_cursor}<button type="button" class="secondary" disabled={loading} on:click={() => search(true)}>Continue search</button>{/if}</div>
   </form>
+  {#if catalogLoading}<p role="status">Loading payment methods…</p>{/if}
+  {#if catalogError}<p class="error" role="alert">Payment methods could not be loaded. Reload the page to choose bank methods.</p>{/if}
   {#if error}<p class="error" role="alert">{error}</p>{/if}
   {#if response}<div class="coverage" aria-live="polite"><strong>{response.coverage.combinations_completed} / {response.coverage.combinations_total} combinations searched</strong><span>{loading ? "Live results arriving" : response.complete ? "Catalog pass complete" : "Partial coverage"} · Bounded search · Best discovered results</span>{#if response.provider_statuses.some(s => !s.ok)}<span>{response.provider_statuses.filter(s => !s.ok).length} provider requests unavailable</span>{/if}</div>{#if response.errors.length}<details class="diagnostics"><summary>Search details</summary>{#each response.errors as detail}<p>{detail}</p>{/each}</details>{/if}{/if}
   <div class="results" aria-busy={loading}>
