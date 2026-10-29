@@ -26,9 +26,11 @@ export default defineConfig({
     timeout: 30_000,
   }, {
     env: { SHARE_API_URL: `http://127.0.0.1:${sharePort}`, PUBLIC_AURORA_INTENTS_API_KEY: "playwright-widget-key" },
-    command: `pnpm run dev --host 127.0.0.1 --port ${port}`,
+    command: process.env.PLAYWRIGHT_USE_PREBUILT_VENDOR === "1"
+      ? `test -f static/vendor/hex-hot-kit.js && node node_modules/vite/bin/vite.js --host 127.0.0.1 --port ${port}`
+      : `pnpm run dev --host 127.0.0.1 --port ${port}`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    timeout: Number(process.env.PLAYWRIGHT_STARTUP_TIMEOUT ?? 120_000),
   }],
 });
