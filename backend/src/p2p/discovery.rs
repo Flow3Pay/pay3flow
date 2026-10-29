@@ -127,6 +127,7 @@ pub struct Coverage {
     pub combinations_failed: usize,
     pub combinations_timed_out: usize,
     pub batch_completed: usize,
+    pub combinations_partial: usize,
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct DiscoveryResponse {
@@ -175,7 +176,7 @@ impl super::P2pSearchService {
                 endpoints.insert(Endpoint { currency: currency.clone(), network: Some(network.id) });
             }
         }
-        for asset in self.provider_assets().await {
+        for asset in tokio::time::timeout(Duration::from_secs(8),self.provider_assets()).await.unwrap_or_else(|_|self.cached_provider_assets()) {
             if asset.location.is_some() {
                 endpoints.insert(Endpoint { currency: asset.symbol, network: asset.location });
             }
@@ -213,6 +214,7 @@ impl super::P2pSearchService {
 
 fn endpoints_for(catalog: &[Endpoint], currency: &str, network: &Option<String>, method: Option<&Bank>) -> Vec<Endpoint> {
     catalog.iter().filter(|e| (currency == "ANY" || e.currency == currency)
+        && !(currency != "ANY" && is_fiat_currency(currency) && network.is_none() && e.network.is_some())
         && network.as_ref().is_none_or(|n| e.network.as_ref() == Some(n))
         && method.is_none_or(|b| e.currency == b.currency && e.network.is_none())).cloned().collect()
 }
@@ -381,6 +383,18 @@ pub fn sort_results(routes: &mut [DiscoveryRoute], mode: DiscoveryMode) {
     for (index, route) in routes.iter_mut().enumerate() { route.route.rank = index + 1; }
 }
 
+fn absorb_snapshot(response: &mut DiscoveryResponse, partitions: &mut HashMap<usize,Vec<DiscoveryRoute>>, index: usize, snapshot: super::P2pRouteSearchResponse, banks: &[Bank], query: &DiscoveryQuery, job: &Job, source: Option<&Bank>, target: Option<&Bank>, provider_assets: &[Asset], service: &super::P2pSearchService, prices: &HashMap<String,Valuation>) {
+    for status in snapshot.provider_statuses.iter().chain(snapshot.asset_statuses.iter().flat_map(|s| s.entry_sources.iter().chain(s.exit_sources.iter()))) {
+        if !response.provider_statuses.iter().any(|s| s.source==status.source && s.ok==status.ok) { response.provider_statuses.push(status.clone()); }
+    }
+    partitions.insert(index,snapshot.routes.into_iter().filter_map(|route| evaluate(route,snapshot.searched_at,snapshot.stale,banks,query,job,source,target,provider_assets,service,prices)).collect());
+    let mut unique=HashMap::new();
+    for route in partitions.values().flatten() { unique.insert(route.route.route_id.clone(),route.clone()); }
+    response.routes=unique.into_values().collect();
+    sort_results(&mut response.routes,query.mode);
+    response.routes_found=response.routes.len();
+}
+
 async fn redis_read<T: serde::de::DeserializeOwned>(state: &AppState, key: &str) -> Result<Option<T>> {
     let redis = state.redis.as_ref().context("continuation requires Redis; start a new search")?;
     tokio::time::timeout(Duration::from_secs(1), redis::get_json(redis, key)).await.context("continuation store timed out")?
@@ -426,32 +440,55 @@ pub async fn run(state: &AppState, mut query: DiscoveryQuery, updates: Option<mp
         let concrete=concrete_query(&query,&job,source_method,target_method);
         (index, job, concrete)
     }).collect::<Vec<_>>();
+    let (snapshot_tx, mut snapshots) = mpsc::channel(16);
     let jobs = concrete_jobs.into_iter().map(|(index,job,concrete)| {
         let service = state.p2p.clone();
-        async move { (index,job,service.search_routes(concrete).await) }
+        let snapshot_tx = snapshot_tx.clone();
+        async move {
+            let (tx,mut rx) = mpsc::channel(4);
+            let search = service.stream_routes(concrete,Uuid::new_v4(),tx);
+            tokio::pin!(search);
+            let mut receiving = true;
+            loop { tokio::select! {
+                result = &mut search => return (index,job,result),
+                snapshot = rx.recv(), if receiving => match snapshot {
+                    Some(snapshot) => { if snapshot_tx.send((index,job.clone(),snapshot)).await.is_err() { return (index,job,Err(anyhow::anyhow!("search cancelled"))); } },
+                    None => receiving = false,
+                }
+            } }
+        }
     }).collect::<Vec<_>>();
+    drop(snapshot_tx);
     let mut jobs=stream::iter(jobs).buffer_unordered(4);
     let deadline=tokio::time::sleep(Duration::from_secs(BATCH_SECONDS)); tokio::pin!(deadline);
-    let mut seen=HashSet::new();
+    let mut partitions=HashMap::new();
+    let mut partial=HashSet::new();
+    let mut snapshots_open=true;
     loop {
         tokio::select! {
             _ = &mut deadline => { response.coverage.combinations_timed_out=indices.len().saturating_sub(response.coverage.batch_completed); break; },
             _ = async { if let Some(tx)=&updates { tx.closed().await } else { std::future::pending::<()>().await } } => bail!("search cancelled"),
+            snapshot=snapshots.recv(), if snapshots_open => {
+                if let Some((index,job,snapshot))=snapshot {
+                    // A sampled combination advances the cursor even if its bounded live search reaches the batch deadline.
+                    if cursor.completed.insert(index) { partial.insert(index); }
+                    response.coverage.combinations_completed=cursor.completed.len();
+                    response.coverage.combinations_partial=partial.len();
+                    absorb_snapshot(&mut response,&mut partitions,index,snapshot,&banks,&query,&job,source_method,target_method,&provider_assets,&state.p2p,&prices);
+                    if let Some(tx)=&updates { let mut visible=response.clone(); visible.routes.truncate(query.limit.unwrap_or(40)); if tx.send(visible).await.is_err() { bail!("search cancelled"); } }
+                } else { snapshots_open=false; }
+            },
             item=jobs.next() => {
                 let Some((index,job,result))=item else { break; };
                 cursor.completed.insert(index); response.coverage.batch_completed+=1; response.coverage.combinations_completed=cursor.completed.len();
                 match result {
                     Ok(snapshot) => {
-                        for status in snapshot.provider_statuses.iter().chain(snapshot.asset_statuses.iter().flat_map(|s| s.entry_sources.iter().chain(s.exit_sources.iter()))) {
-                            if !response.provider_statuses.iter().any(|s| s.source==status.source && s.ok==status.ok) { response.provider_statuses.push(status.clone()); }
-                        }
-                        for route in snapshot.routes {
-                            if seen.contains(&route.route_id) { continue; }
-                            if let Some(route)=evaluate(route,snapshot.searched_at,snapshot.stale,&banks,&query,&job,source_method,target_method,&provider_assets,&state.p2p,&prices) { seen.insert(route.route.route_id.clone()); response.routes.push(route); }
-                        }
+                        partial.remove(&index);
+                        absorb_snapshot(&mut response,&mut partitions,index,snapshot,&banks,&query,&job,source_method,target_method,&provider_assets,&state.p2p,&prices);
                     },
                     Err(error) => { response.coverage.combinations_failed+=1; response.errors.push(format!("{} → {}: {error}",job.source.currency,job.target.currency)); }
                 }
+                response.coverage.combinations_partial=partial.len();
                 sort_results(&mut response.routes,query.mode); response.routes_found=response.routes.len();
                 if let Some(tx)=&updates { let mut visible=response.clone(); visible.routes.truncate(query.limit.unwrap_or(40)); if tx.send(visible).await.is_err() { bail!("search cancelled"); } }
             }
@@ -505,7 +542,7 @@ mod tests {
         let endpoint=Endpoint{currency:"RUB".into(),network:None};let job=Job{source:endpoint.clone(),target:endpoint};
         let request=concrete_query(&q,&job,None,None);
         let normalized=normalize_query(request,&service.default_assets,&service.networks,&[]).unwrap();
-        let offer=|side| super::super::P2pOffer {market:super::super::P2pOfferMarket::P2p,source:"venue".into(),ad_id:"ad".into(),side,fiat:"RUB".into(),asset:"USDT".into(),network:Some("tron".into()),price:"100".into(),available_asset:"100000".into(),min_fiat:"1".into(),max_fiat:"1000000000".into(),payment_methods:vec!["SBP".into()],pay_time_limit_minutes:None,advertiser:super::super::Advertiser{id:Some("merchant".into()),nickname:"Example".into(),is_merchant:true,completed_orders_30d:Some(100),completion_rate_30d:Some(1.0),positive_rate:Some(1.0)},advertiser_profile_url:None,source_url:"https://example.com/offer".into(),source_url_is_exact:true};
+        let offer=|side| super::super::P2pOffer {market:super::super::P2pOfferMarket::P2p,source:"venue".into(),ad_id:"ad".into(),side,fiat:"RUB".into(),asset:"USDT".into(),network:Some("tron".into()),price:"100".into(),available_asset:"100000".into(),min_fiat:"1".into(),max_fiat:"1000000000".into(),payment_methods:vec!["SBP".into()],pay_time_limit_minutes:None,advertiser:super::super::Advertiser{id:Some("merchant".into()),nickname:"Example".into(),is_merchant:true,is_verified:true,user_type:None,completed_orders_30d:Some(100),completion_rate_30d:Some(1.0),positive_rate:Some(1.0)},advertiser_profile_url:None,source_url:"https://example.com/offer".into(),source_url_is_exact:true};
         let mut route=super::super::routes::compose_fiat_route(&normalized,"USDT",&offer(super::super::P2pSide::BuyCrypto),&offer(super::super::P2pSide::SellCrypto),10.0,1100.0).unwrap();route.route_id="fixture".into();
         (service,q,job,banks,route)
     }

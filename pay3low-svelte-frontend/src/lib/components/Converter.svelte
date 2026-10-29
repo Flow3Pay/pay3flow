@@ -599,7 +599,7 @@
   $: displayedTargetAmount = amountSide === "target" && !previewRoute ? targetAmount : amountFromRoute(previewRoute);
   $: displayedSourceInput = sourceAmountFocused ? displayedSourceAmount : compactInputAmount(displayedSourceAmount);
   $: displayedTargetInput = targetAmountFocused ? displayedTargetAmount : compactInputAmount(displayedTargetAmount);
-  $: onShareStateChange(urlReady && sourceMethod && targetMethod ? {
+  $: onShareStateChange(discoveryMode === null && urlReady && sourceMethod && targetMethod ? {
     source: selectedSourceCurrency, target: selectedTargetCurrency,
     amount: displayedSourceAmount, receive: displayedTargetAmount,
     from: sourceMethod.id, to: targetMethod.id,

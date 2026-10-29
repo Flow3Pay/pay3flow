@@ -42,8 +42,10 @@ Provider failures remain visible alongside usable partial results.
 
 `next_cursor` resumes remaining combinations with an unchanged query and
 catalog. Redis holds traversal metadata only for 15 minutes; it never holds P2P
-offers as discovery answers. Completed combinations are not repeated within a
-continuation. Unfinished combinations are retried. A changed catalog or expired
+offers as discovery answers. Sampled combinations are not repeated within a
+continuation. Partial inner route searches stream immediately and advance the
+traversal; combinations that produced no snapshot are retried. Coverage reports
+the current batch's partial combinations separately. A changed catalog or expired
 cursor requires a new search. Redis failure permits initial search results but
 cannot provide continuation. The browser merges fresh continuation results by
 route id, removes expired estimates, and keeps at most 100 results.
