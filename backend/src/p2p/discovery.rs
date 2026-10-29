@@ -262,6 +262,8 @@ fn offer_venue(offer: &super::P2pOffer) -> Option<String> {
 fn settlements(route: &P2pRoute, banks: &[Bank], source: Option<&Bank>, target: Option<&Bank>, mode: DiscoveryMode) -> Option<(SettlementEndpoint, SettlementEndpoint, Option<f64>, Option<f64>)> {
     let mut entry_bank = offer_bank(banks, &route.source_fiat, route.entry_offer.as_ref(), source, true);
     let mut exit_bank = offer_bank(banks, &route.target_fiat, route.exit_offer.as_ref(), target, false);
+    // A selected method is a constraint, not permission to infer missing provider metadata.
+    if (source.is_some() && entry_bank.is_none()) || (target.is_some() && exit_bank.is_none()) { return None; }
     if mode == DiscoveryMode::Arbitrage && route.source_network.is_none() {
         let entry = route.entry_offer.as_ref()?;
         let exit = route.exit_offer.as_ref()?;
@@ -565,6 +567,20 @@ mod tests {
         for offer in [&mut route.entry_offer,&mut route.exit_offer] {offer.as_mut().unwrap().market=super::super::P2pOfferMarket::DirectExchange;}
         route.exit_offer.as_mut().unwrap().advertiser.id=Some("other-exchanger".into());
         assert!(settlements(&route,&banks,None,None,q.mode).is_none());
+    }
+    #[test] fn selected_methods_exclude_unverified_or_mismatched_endpoints() {
+        let (_,_,_,banks,mut route)=fixture();
+        let selected=Some(&banks[0]);
+        assert!(settlements(&route,&banks,selected,selected,DiscoveryMode::Exchange).is_some());
+        route.exit_offer.as_mut().unwrap().payment_methods.clear();
+        assert!(settlements(&route,&banks,selected,selected,DiscoveryMode::Exchange).is_none());
+        // Wildcard exchange may still show the unverified endpoint with missing-cost warnings.
+        assert!(settlements(&route,&banks,selected,None,DiscoveryMode::Exchange).is_some());
+        route.exit_offer.as_mut().unwrap().payment_methods=vec!["Other bank".into()];
+        assert!(settlements(&route,&banks,selected,selected,DiscoveryMode::Exchange).is_none());
+        route.exit_offer.as_mut().unwrap().payment_methods=vec!["SBP".into()];
+        route.entry_offer.as_mut().unwrap().payment_methods.clear();
+        assert!(settlements(&route,&banks,selected,selected,DiscoveryMode::Exchange).is_none());
     }
     #[test] fn profit_includes_both_endpoint_fees_and_usd_valuation() {
         let (service,q,job,mut banks,route)=fixture();

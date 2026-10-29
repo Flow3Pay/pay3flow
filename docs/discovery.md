@@ -8,7 +8,8 @@ determines whether an amount and method can produce a route.
 `GET /api/p2p/discovery` accepts `mode=exchange|arbitrage`, `source_fiat` and
 `target_fiat` (default `ANY`), and required decimal-string `source_amount`.
 Method constraints are stable `/api/banks` method ids; directory rows without
-`method_id` use `directory-{id}`. Omission means any supported method. Networks,
+`method_id` use `directory-{id}`. Omission means any supported method. Selecting
+a method excludes routes whose provider cannot verify that endpoint method. Networks,
 intermediary assets, sources, exchange mode, reputation filters, action count
 (2–8), price deviation and result limit follow concrete route search semantics.
 Arbitrage defaults to four actions and intermediate cross-venue transfers.
