@@ -22,13 +22,13 @@ pub(super) async fn produce_fiat_to_fiat(
     query: &NormalizedRouteQuery,
     batches: mpsc::Sender<RouteBatch>,
 ) -> Result<()> {
-    let mut assets = query.assets.iter().collect::<Vec<_>>();
+    let mut assets = query.assets.clone();
     assets.sort_by_key(|asset| crate::p2p::routes::intermediary_asset_priority(asset, &query.target_currency));
     let mut searches = stream::iter(assets.into_iter().map(|asset| {
             let entry =
-                super::leg_query_for(query, &query.source_currency, asset, P2pSide::BuyCrypto);
+                super::leg_query_for(query, &query.source_currency, &asset, P2pSide::BuyCrypto);
             let exit =
-                super::leg_query_for(query, &query.target_currency, asset, P2pSide::SellCrypto);
+                super::leg_query_for(query, &query.target_currency, &asset, P2pSide::SellCrypto);
             stream_asset(
                 service,
                 asset.clone(),
