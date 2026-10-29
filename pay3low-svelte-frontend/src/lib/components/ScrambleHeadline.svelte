@@ -293,7 +293,7 @@
   .scrambleBlock {
     position: relative;
     width: 100%;
-    max-width: 900px;
+    max-width: none;
     margin: 0 auto;
     text-align: center;
   }
@@ -365,6 +365,12 @@
     display: block;
     min-height: 0.96em;
     white-space: pre-wrap;
+  }
+
+  @media (min-width: 981px) {
+    .line {
+      white-space: nowrap;
+    }
   }
 
   :global(.localeLong) .headline {

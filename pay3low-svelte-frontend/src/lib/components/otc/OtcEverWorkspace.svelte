@@ -342,14 +342,14 @@
     margin: 0 auto; padding: 32px 0 24px; font-size: 13px; line-height: 1.5;
   }
   /* The startup headline docks onto this one, so both share the same metrics. */
-  .pageIntro { width: min(900px, 100%); margin: 0 auto 32px; text-align: center; }
+  .pageIntro { width: min(var(--layout-width), 100%); margin: 0 auto 32px; text-align: center; }
   .pageIntro h1 { margin: 0; color: var(--color-text); font-size: clamp(44px, 5.5vw, 72px); font-weight: 650; letter-spacing: -.065em; line-height: .96; }
   .pageIntro.localeLong h1 { font-size: clamp(42px, 5vw, 68px); }
   .titleAccent { position: relative; z-index: 0; display: inline-block; margin-inline-start: .06em; }
   .titleAccent::after { position: absolute; right: -.05em; bottom: .02em; left: -.04em; z-index: -1; height: .2em; border-radius: 3px; background: var(--color-accent); content: ""; transform: rotate(-1deg); }
   .risk { margin: 16px 0 0; color: var(--color-text-soft); font-size: 12px; line-height: 1.6; }
   .panelMeta { color: var(--color-text-faint); font-family: var(--font-mono); font-size: 12px; }
-  .activityCard { display: flex; width: 100%; min-width: 0; flex-direction: column; border: 1px solid var(--color-border-strong); border-radius: var(--otc-card-radius, 24px); background: var(--exchange-card-bg); overflow: hidden; scroll-margin-top: 24px; }
+  .activityCard { display: flex; width: 100%; min-width: 0; flex-direction: column; border: 1px solid var(--color-border-strong); border-radius: var(--otc-card-radius, 10px); background: var(--exchange-card-bg); overflow: hidden; scroll-margin-top: 24px; }
   .activityTabs { position: relative; display: flex; flex: 0 0 auto; align-items: stretch; gap: 4px; margin: 16px var(--otc-panel-padding) 8px; padding: 4px; border-radius: 12px; background: var(--color-panel); box-shadow: inset 0 0 0 1px var(--color-border); }
   .activityTabs button { position: relative; z-index: 1; display: flex; flex: 1 1 0; min-width: 0; min-height: 38px; align-items: center; justify-content: center; gap: 8px; padding: 6px 10px; border-radius: 9px; color: var(--color-text-soft); font-size: 13px; line-height: 1.35; text-align: center; transition: color var(--activity-motion) ease; }
   .activityTabs button:hover { color: var(--color-text); }
