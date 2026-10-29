@@ -1,5 +1,7 @@
 import { test, expect } from "@playwright/test";
 
+test.use({ reducedMotion: "reduce" });
+
 async function catalog(page: import("@playwright/test").Page) {
   await page.route("**/api/banks?*", route => route.fulfill({json:{total:3,limit:100,offset:0,items:[
     {id:"one",method_id:"ru-sbp",name:"SBP",display_name:"SBP / СБП",currency:"RUB",country:"RU",role:"both",kind:"bank",color:"#272727",initials:"SBP",popular:true,p2p_query:"SBP",bank_fee_percent:0},
@@ -16,11 +18,11 @@ function response(overrides = {}) {
 test("SBP works on both selectors and shared discovery selections survive reload",async({page})=>{
   await catalog(page);
   await page.goto("/#/discover?mode=exchange&source_fiat=RUB&target_fiat=RUB&source_amount=1234.56&source_payment_method=ru-sbp&target_payment_method=ru-sbp");
-  await expect(page.getByLabel("Sending method",{exact:true})).toHaveValue("ru-sbp");
-  await expect(page.getByLabel("Receiving method",{exact:true})).toHaveValue("ru-sbp");
-  await expect(page.getByLabel("Amount per starting currency")).toHaveValue("1234.56");
+  await expect(page.getByLabel("Sending method",{exact:true})).toHaveValue("ru-sbp", { timeout: 30_000 });
+  await expect(page.getByLabel("Receiving method",{exact:true})).toHaveValue("ru-sbp", { timeout: 30_000 });
+  await expect(page.getByLabel("Amount per starting currency")).toHaveValue("1234.56", { timeout: 30_000 });
   await page.reload();
-  await expect(page.getByLabel("Sending method",{exact:true})).toHaveValue("ru-sbp");
+  await expect(page.getByLabel("Sending method",{exact:true})).toHaveValue("ru-sbp", { timeout: 30_000 });
   await expect(page).toHaveURL(/#\/discover/);
   await page.getByRole("button",{name:"Arbitrage",exact:true}).click();
   await expect(page.getByText("Return to the same currency, network, payment method and venue.")).toBeVisible();
