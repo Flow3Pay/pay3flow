@@ -1,10 +1,16 @@
 {
   "status": "deployed",
-  "verified_at": "2026-10-29T20:35:44.830538+00:00",
+  "verified_at": "2026-10-29T21:05:57.887060+00:00",
   "url": "https://pay3flow.lefine.pro/#/swap",
-  "source_revision": "5e5a4bbb0911d42c38844076272437dbe4319c01",
+  "source_revision": "f42aeec88a8baee9ed697983d9923c24ec3baf12",
   "branch": "feat/sbp-discovery",
-  "scope": "RUB SBP support and wildcard currencies and methods inside the existing Exchange pickers and Find routes action; separate Any / any and Arbitrage buttons removed.",
+  "sbp_logo": {
+    "source": "https://sbp.nspk.ru/storage/settings/common/logo_mobile/5e648604-f95d-472d-afe2-33b856f345ed.svg",
+    "local_path": "pay3low-svelte-frontend/static/icons/assets/sbp.svg",
+    "sha256": "aef2635757f59ff475bce0c10d3c7c721552f5ddac7f9fcb53047b4065d113e2",
+    "modified": false
+  },
+  "scope": "Wildcard currencies and methods use existing Exchange search state, SidePanel cards, selection, feedback, refresh, inverse quote calculation and RouteInstructions. Removed the separate DiscoveryPanel. RUB SBP backend is unchanged.",
   "images": {
     "backend": {
       "pod": "pay3flow-backend-6df777cff6-hzz7t",
@@ -12,48 +18,64 @@
       "image": "localhost/pay3flow/backend:sbp-exchange-5e5a4bb"
     },
     "frontend": {
-      "pod": "pay3flow-frontend-596584876b-pwc2h",
-      "image_id": "sha256:0e72890116b93efc442f6e290224d111c2c537f2fb2468eec9a06079dbaf9078",
-      "image": "localhost/pay3flow/frontend:sbp-exchange-5e5a4bb"
+      "pod": "pay3flow-frontend-6fd7549fc-v99rn",
+      "image_id": "sha256:e56eb281f4d3ab7f82ad852b18afc7c1a3dc1598f7d4261bfecb14772d6f9899",
+      "image": "localhost/pay3flow/frontend:sbp-exchange-f42aeec-verified"
     }
   },
   "frontend_packaging": {
-    "application_tree_sha256": "7da2a79ffa9b4f043c51617acdb5b32fea3273e59c9b44604c7707a3635ceb9d",
-    "payload_sha256": "5e519e15c249c162b18030274c1bca9b8a2cbe6c9e8145db5a6002a1b747ebae",
+    "application_tree_sha256": "6db417e3d32e7c115cbec6a5887f4f9cde18e7c4e75e5477959f94a1be145db0",
+    "payload_sha256": "6e3cfa1e86661fddff8477a4ea8ad5bae6a6360b1d077098187247b3a62b25b4",
     "runtime_base_image_id": "sha256:035658756e2796a521e17d85baab77f6cae5828dd79e83efefb7329897be72dc",
     "dependency_lock_sha256": "d283a2787708d944c352fa1fc080e7ba6bfeb38c5748fc5d9d78510501720c4e",
-    "method": "Tested application layer added to the existing runtime with the identical dependency lockfile."
+    "method": "Tested application layer added to existing runtime with identical dependency lockfile.",
+    "pax_long_paths_preserved": true
   },
-  "backup_directory": "/var/lib/pay3flow/backups/sbp-exchange-7f10886",
+  "backup_directory": "/var/lib/pay3flow/backups/exchange-shared-f42aeec-verified",
   "verification": {
-    "backend_tests_passed": 152,
-    "backend_live_tests_ignored": 9,
-    "frontend_unit_tests_passed": 106,
-    "compiled_browser_tests_passed": 8,
+    "frontend_unit_tests_passed": 107,
+    "compiled_browser_tests_passed": 14,
     "svelte_errors": 0,
     "svelte_warnings": 0,
-    "public_browser_widths": [
-      1440,
-      390
-    ],
-    "public_any_selection_reload_and_sbp_recipient": true,
-    "separate_mode_buttons_absent": true,
-    "running_frontend_matches_tested_build": true,
-    "sbp_search": {
-      "routes_found": 4,
-      "coverage": {
-        "combinations_total": 1,
-        "combinations_completed": 1,
-        "combinations_failed": 0,
-        "combinations_timed_out": 0,
-        "batch_completed": 1,
-        "combinations_partial": 0
+    "public_browser": [
+      {
+        "width": 1440,
+        "live_routes": 0,
+        "received": "0",
+        "search": {
+          "type": "search_finished",
+          "routes": 0,
+          "coverage": {
+            "batch_completed": 0,
+            "combinations_completed": 1,
+            "combinations_failed": 0,
+            "combinations_partial": 1,
+            "combinations_timed_out": 1,
+            "combinations_total": 1
+          },
+          "errors": []
+        },
+        "shared_panel": true
       },
-      "errors": [],
-      "verified": true
-    },
+      {
+        "width": 390,
+        "any_reload": true,
+        "shared_panel": true
+      }
+    ],
+    "running_frontend_matches_tested_build": true,
+    "backend_unchanged_from_previous_release": true,
     "funds_moved": false,
     "orders_submitted": false
   },
-  "limits": "Search is bounded and ranks the best discovered routes. Unknown fees keep profit unconfirmed."
+  "limits": "Bounded search ranks the best discovered routes by normalized value. Unknown costs remain warnings.",
+  "known_existing_issues": [
+    {
+      "path": "/share/guide/RUB/USD/preview.png",
+      "status": 500,
+      "baseline_status": 500,
+      "baseline_image": "localhost/pay3flow/frontend:sbp-discovery-7c2087d-oci",
+      "reason": "The guide PNG renderer passes a bundled Buffer implementation to Sharp, which rejects it. Reproduced in the preceding baseline image in an isolated container."
+    }
+  ]
 }
