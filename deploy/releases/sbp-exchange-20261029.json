@@ -1,74 +1,252 @@
 {
   "status": "deployed",
-  "verified_at": "2026-10-29T21:05:57.887060+00:00",
-  "url": "https://pay3flow.lefine.pro/#/swap",
-  "source_revision": "f42aeec88a8baee9ed697983d9923c24ec3baf12",
+  "verified_at": "2026-10-29T21:58:50.972090+00:00",
+  "url": "https://pay3flow.lefine.pro/#/swap/ANY/AMD?amount=1000&from=any-ANY&to=am-idbank",
+  "source_revision": "e17a8ec082e4c05ff2b80659721d40d052d697db",
+  "frontend_build_revision": "bd00b434c25cbdfc2e61efbbdacda30ae66ee149",
   "branch": "feat/sbp-discovery",
+  "scope": "Retain indicative Exchange bank routes with unverified recipient eligibility, exclude explicit mismatches, diversify wildcard currencies and fairly resume unfinished jobs. Pace fiat asset requests and distinguish incomplete searches from no matches in the existing Exchange panel.",
+  "images": {
+    "backend": {
+      "pod": "pay3flow-backend-68648789cc-t7wts",
+      "image": "localhost/pay3flow/backend:any-amd-e17a8ec",
+      "image_id": "sha256:b1d4030e854fee410f8eee41694fdf1a20923bccebcdb61c11022374a66c4c1c"
+    },
+    "frontend": {
+      "pod": "pay3flow-frontend-7f6798c4b8-75pcc",
+      "image": "localhost/pay3flow/frontend:any-amd-bd00b43",
+      "image_id": "sha256:91ab49e86a0e439f484b7a4779302ff3762301202cc236fe6e4fb020002be0df"
+    }
+  },
   "sbp_logo": {
     "source": "https://sbp.nspk.ru/storage/settings/common/logo_mobile/5e648604-f95d-472d-afe2-33b856f345ed.svg",
     "local_path": "pay3low-svelte-frontend/static/icons/assets/sbp.svg",
     "sha256": "aef2635757f59ff475bce0c10d3c7c721552f5ddac7f9fcb53047b4065d113e2",
     "modified": false
   },
-  "scope": "Wildcard currencies and methods use existing Exchange search state, SidePanel cards, selection, feedback, refresh, inverse quote calculation and RouteInstructions. Removed the separate DiscoveryPanel. RUB SBP backend is unchanged.",
-  "images": {
-    "backend": {
-      "pod": "pay3flow-backend-6df777cff6-hzz7t",
-      "image_id": "sha256:dcecfc3c8e05fdefc4b99ed38fb26e107caa0ef544508df37819bc6b704a063f",
-      "image": "localhost/pay3flow/backend:sbp-exchange-5e5a4bb"
-    },
-    "frontend": {
-      "pod": "pay3flow-frontend-6fd7549fc-v99rn",
-      "image_id": "sha256:e56eb281f4d3ab7f82ad852b18afc7c1a3dc1598f7d4261bfecb14772d6f9899",
-      "image": "localhost/pay3flow/frontend:sbp-exchange-f42aeec-verified"
-    }
-  },
   "frontend_packaging": {
-    "application_tree_sha256": "6db417e3d32e7c115cbec6a5887f4f9cde18e7c4e75e5477959f94a1be145db0",
-    "payload_sha256": "6e3cfa1e86661fddff8477a4ea8ad5bae6a6360b1d077098187247b3a62b25b4",
-    "runtime_base_image_id": "sha256:035658756e2796a521e17d85baab77f6cae5828dd79e83efefb7329897be72dc",
-    "dependency_lock_sha256": "d283a2787708d944c352fa1fc080e7ba6bfeb38c5748fc5d9d78510501720c4e",
-    "method": "Tested application layer added to existing runtime with identical dependency lockfile.",
-    "pax_long_paths_preserved": true
+    "application_tree_sha256": "6ffa7d9c02432b4408462f43ba5daa4ce8c9eed903cdbebb5873718d6275ca91",
+    "pax_long_paths_preserved": true,
+    "payload_sha256": "8e38ee728e9c2eccfe4b6a3c46f6fa9d87ed4bdbb9cb6838e4f28fa6e5c39593"
   },
-  "backup_directory": "/var/lib/pay3flow/backups/exchange-shared-f42aeec-verified",
+  "backup_directory": "/var/lib/pay3flow/backups/any-amd-e17a8ec",
   "verification": {
+    "backend_p2p_tests_passed": 155,
+    "backend_live_tests_ignored": 9,
     "frontend_unit_tests_passed": 107,
-    "compiled_browser_tests_passed": 14,
+    "compiled_browser_tests_passed": 18,
     "svelte_errors": 0,
     "svelte_warnings": 0,
+    "running_frontend_matches_tested_build": true,
+    "before": {
+      "routes_found": 0,
+      "complete": false,
+      "coverage": {
+        "combinations_total": 7072,
+        "combinations_completed": 2,
+        "combinations_failed": 0,
+        "combinations_timed_out": 16,
+        "batch_completed": 0,
+        "combinations_partial": 2
+      }
+    },
     "public_browser": [
       {
         "width": 1440,
-        "live_routes": 0,
-        "received": "0",
+        "cards": 40,
+        "received": "352266",
         "search": {
           "type": "search_finished",
-          "routes": 0,
+          "complete": false,
           "coverage": {
             "batch_completed": 0,
-            "combinations_completed": 1,
+            "combinations_completed": 0,
             "combinations_failed": 0,
-            "combinations_partial": 1,
-            "combinations_timed_out": 1,
-            "combinations_total": 1
+            "combinations_partial": 4,
+            "combinations_timed_out": 16,
+            "combinations_total": 7072
           },
-          "errors": []
+          "count": 40,
+          "routes": [
+            {
+              "source": "USDC",
+              "target": "AMD",
+              "input": "1000.00000000",
+              "output": "352266.00",
+              "target_method": "am-idbank",
+              "method_verified": false,
+              "warnings": [
+                "Search estimate only: platform fees, account eligibility and execution are not verified.",
+                "Provider has not verified the selected IDBank payment method; confirm recipient eligibility before sending."
+              ]
+            },
+            {
+              "source": "USDT",
+              "target": "AMD",
+              "input": "1000.00000000",
+              "output": "351910.00",
+              "target_method": "am-idbank",
+              "method_verified": true,
+              "warnings": [
+                "Search estimate only: platform fees, account eligibility and execution are not verified."
+              ]
+            },
+            {
+              "source": "USD",
+              "target": "AMD",
+              "input": "1000.00",
+              "output": "409825.00",
+              "provider": "bybit",
+              "target_method": "am-idbank",
+              "method_verified": false,
+              "warnings": [
+                "Search estimate only: platform fees, account eligibility and execution are not verified.",
+                "Cross-venue route requires an asset transfer; network fee and compatible network are not included.",
+                "The selected recipient bank could not be verified because the venue returned an opaque payment-method ID.",
+                "At least one selected venue does not expose a public deep-link for this advertisement. Verify the advertiser ID and terms on the venue before sending money.",
+                "Provider has not verified the selected IDBank payment method; confirm recipient eligibility before sending."
+              ]
+            },
+            {
+              "source": "USD",
+              "target": "AMD",
+              "input": "1000.00",
+              "output": "410163.28",
+              "provider": "bybit",
+              "target_method": "am-idbank",
+              "method_verified": false,
+              "warnings": [
+                "Search estimate only: platform fees, account eligibility and execution are not verified.",
+                "Cross-venue route requires an asset transfer; network fee and compatible network are not included.",
+                "The selected recipient bank could not be verified because the venue returned an opaque payment-method ID.",
+                "At least one selected venue does not expose a public deep-link for this advertisement. Verify the advertiser ID and terms on the venue before sending money.",
+                "Provider has not verified the selected IDBank payment method; confirm recipient eligibility before sending."
+              ]
+            },
+            {
+              "source": "USD",
+              "target": "AMD",
+              "input": "1000.00",
+              "output": "409870.26",
+              "provider": "bybit",
+              "target_method": "am-idbank",
+              "method_verified": false,
+              "warnings": [
+                "Search estimate only: platform fees, account eligibility and execution are not verified.",
+                "Cross-venue route requires an asset transfer; network fee and compatible network are not included.",
+                "The selected recipient bank could not be verified because the venue returned an opaque payment-method ID.",
+                "At least one selected venue does not expose a public deep-link for this advertisement. Verify the advertiser ID and terms on the venue before sending money.",
+                "Provider has not verified the selected IDBank payment method; confirm recipient eligibility before sending."
+              ]
+            },
+            {
+              "source": "USD",
+              "target": "AMD",
+              "input": "1000.00",
+              "output": "409478.78",
+              "provider": "bybit",
+              "target_method": "am-idbank",
+              "method_verified": false,
+              "warnings": [
+                "Search estimate only: platform fees, account eligibility and execution are not verified.",
+                "Cross-venue route requires an asset transfer; network fee and compatible network are not included.",
+                "The selected recipient bank could not be verified because the venue returned an opaque payment-method ID.",
+                "At least one selected venue does not expose a public deep-link for this advertisement. Verify the advertiser ID and terms on the venue before sending money.",
+                "Provider has not verified the selected IDBank payment method; confirm recipient eligibility before sending."
+              ]
+            },
+            {
+              "source": "RUB",
+              "target": "AMD",
+              "input": "1000.00",
+              "output": "4276.77",
+              "provider": "bybit",
+              "target_method": "am-idbank",
+              "method_verified": true,
+              "warnings": [
+                "Search estimate only: platform fees, account eligibility and execution are not verified.",
+                "Cross-venue route requires an asset transfer; network fee and compatible network are not included.",
+                "At least one selected venue does not expose a public deep-link for this advertisement. Verify the advertiser ID and terms on the venue before sending money."
+              ]
+            },
+            {
+              "source": "RUB",
+              "target": "AMD",
+              "input": "1000.00",
+              "output": "3951.16",
+              "provider": "cifra-broker",
+              "target_method": "am-idbank",
+              "method_verified": true,
+              "warnings": [
+                "Search estimate only: platform fees, account eligibility and execution are not verified.",
+                "Cross-venue route requires an asset transfer; network fee and compatible network are not included.",
+                "At least one selected venue does not expose a public deep-link for this advertisement. Verify the advertiser ID and terms on the venue before sending money."
+              ]
+            }
+          ]
         },
-        "shared_panel": true
+        "request": {
+          "mode": "exchange",
+          "source_fiat": "ANY",
+          "target_fiat": "AMD",
+          "source_amount": "1000",
+          "target_payment_method": "am-idbank",
+          "sources": "0x,bestchange,binance,bitcoin-center,bitget,bncex,bybit,cifra-broker,cow-swap,crypto-office,dzengi,gate,id-pay,mexc,near-intents,okx,papa-change,rapira,skylabs,symbiosis,whitebird",
+          "exchange_mode": "all",
+          "max_actions": 4,
+          "allow_cross_venue": true
+        },
+        "page_errors": []
       },
       {
         "width": 390,
-        "any_reload": true,
-        "shared_panel": true
+        "cards": 1,
+        "received": "4226.9",
+        "search": {
+          "type": "routes_updated",
+          "complete": false,
+          "coverage": {
+            "batch_completed": 0,
+            "combinations_completed": 0,
+            "combinations_failed": 0,
+            "combinations_partial": 2,
+            "combinations_timed_out": 0,
+            "combinations_total": 7072
+          },
+          "count": 1,
+          "routes": [
+            {
+              "source": "RUB",
+              "target": "AMD",
+              "input": "1000.00",
+              "output": "4226.90",
+              "provider": "id-pay",
+              "target_method": "am-idbank",
+              "method_verified": false,
+              "warnings": [
+                "Indicative direct-transfer quote; confirm the live rate, account eligibility, transfer limits, and recipient details with the provider before sending.",
+                "Provider has not verified the selected IDBank payment method; confirm recipient eligibility before sending."
+              ]
+            }
+          ]
+        },
+        "request": {
+          "mode": "exchange",
+          "source_fiat": "ANY",
+          "target_fiat": "AMD",
+          "source_amount": "1000",
+          "target_payment_method": "am-idbank",
+          "sources": "0x,bestchange,binance,bitcoin-center,bitget,bncex,bybit,cifra-broker,cow-swap,crypto-office,dzengi,gate,id-pay,mexc,near-intents,okx,papa-change,rapira,skylabs,symbiosis,whitebird",
+          "exchange_mode": "all",
+          "max_actions": 4,
+          "allow_cross_venue": true
+        },
+        "page_errors": []
       }
     ],
-    "running_frontend_matches_tested_build": true,
-    "backend_unchanged_from_previous_release": true,
     "funds_moved": false,
     "orders_submitted": false
   },
-  "limits": "Bounded search ranks the best discovered routes by normalized value. Unknown costs remain warnings.",
   "known_existing_issues": [
     {
       "path": "/share/guide/RUB/USD/preview.png",
@@ -77,5 +255,6 @@
       "baseline_image": "localhost/pay3flow/frontend:sbp-discovery-7c2087d-oci",
       "reason": "The guide PNG renderer passes a bundled Buffer implementation to Sharp, which rejects it. Reproduced in the preceding baseline image in an isolated container."
     }
-  ]
+  ],
+  "limits": "Search remains bounded. A selected bank is retained on indicative estimates without claiming the provider has verified recipient eligibility; explicit method mismatches are excluded and arbitrage still requires verified settlement closure."
 }
