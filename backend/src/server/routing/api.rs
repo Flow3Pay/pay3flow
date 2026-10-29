@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use axum::extract::State;
-use axum::http::{header::CONTENT_TYPE, HeaderValue, Request, Response};
+use axum::http::{header::CONTENT_TYPE, HeaderValue, Request, Response, StatusCode};
 use axum::middleware;
 use axum::response::IntoResponse;
 use axum::routing::{get, post, put};
@@ -55,6 +55,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::hex::router())
         .route("/openapi.json", get(openapi::document))
         .route("/health", get(health))
+        .route("/health/ready", get(ready))
         .route("/metrics", get(metrics))
         .route("/api/share-links", post(share_links::create))
         .route("/api/share-links/:id", get(share_links::get))
@@ -244,6 +245,20 @@ pub fn router(state: AppState) -> Router {
 
 pub async fn health() -> &'static str {
     "ok"
+}
+
+/// `GET /health/ready` — liveness plus a database round-trip. Readiness has to
+/// touch the pool: a process whose pool can no longer hand out a connection
+/// still answers /health, and without this the Ingress keeps sending it API
+/// traffic it can only hang on.
+pub async fn ready(State(state): State<AppState>) -> impl IntoResponse {
+    match crate::db::ping(&state.pool).await {
+        Ok(()) => (StatusCode::OK, "ok"),
+        Err(error) => {
+            tracing::error!(error = %error, "readiness probe could not reach the database");
+            (StatusCode::SERVICE_UNAVAILABLE, "database unavailable")
+        }
+    }
 }
 
 fn observe_request<B>(_: &Request<B>, _: &tracing::Span) {
