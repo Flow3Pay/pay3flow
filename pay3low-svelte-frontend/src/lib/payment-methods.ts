@@ -38,7 +38,7 @@ interface PaymentMethodDirectoryPage {
     color: string;
     initials: string;
     popular: boolean;
-    icon_url: string;
+    icon_url?: string | null;
     bank_fee_percent?: number;
     p2p_query: string;
     currency_group?: string;
@@ -83,8 +83,8 @@ async function catalogError(response: Response): Promise<string> {
   return `payment-method catalog failed (${response.status})${detail ? `: ${detail}` : ""}`;
 }
 
-function localIconUrl(value: string): string | undefined {
-  return value.startsWith("/") || value.startsWith("data:") ? value : undefined;
+function localIconUrl(value?: string | null): string | undefined {
+  return value && (value.startsWith("/") || value.startsWith("data:")) ? value : undefined;
 }
 
 export function paymentMethodFavicon(method: PaymentMethod | null | undefined): string | null {
