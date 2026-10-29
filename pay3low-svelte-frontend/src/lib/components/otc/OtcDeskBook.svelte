@@ -196,7 +196,7 @@
   .obOwner code { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:700; letter-spacing:-.02em; }
   .obPrice { min-width:0; overflow:hidden; text-overflow:ellipsis; font-weight:650; color:var(--color-good-ink); }
   .obTable[data-side="bids"] .obPrice { color:var(--color-danger); }
-  .obPrice i, .obTotal i { font-style:normal; opacity:.62; }
+  .obPrice i, .obTotal i { font-style:normal; color:var(--color-text); opacity:.62; }
   .obPrice b { font-weight:650; }
   .obAmount,.obTotal { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .obTotal { color:var(--color-text); }

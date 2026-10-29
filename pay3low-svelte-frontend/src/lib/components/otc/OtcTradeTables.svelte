@@ -138,7 +138,7 @@
   .obWhen small { color:var(--color-text-faint); font-size:9px; }
   .obPrice { overflow:hidden; text-overflow:ellipsis; color:var(--color-good-ink); }
   .obTable[data-side="bids"] .obPrice { color:var(--color-danger); }
-  .obPrice i, .obTotal i { font-style:normal; opacity:.62; }
+  .obPrice i, .obTotal i { font-style:normal; color:var(--color-text); opacity:.62; }
   .obPrice b { font-weight:650; }
   .obAmount,.obTotal { overflow:hidden; text-overflow:ellipsis; }
   .status { display:inline-flex; align-items:center; gap:5px; color:var(--color-text-soft); font-size:10px; }
