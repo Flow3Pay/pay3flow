@@ -891,6 +891,8 @@
   }
 
   async function startSearch(countActivity = true) {
+    if (debounceTimer) window.clearTimeout(debounceTimer);
+    debounceTimer = undefined;
     if (useDiscovery) {
       if (!hasAmount) return;
       routesExpanded = true;

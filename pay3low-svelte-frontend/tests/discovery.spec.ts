@@ -74,6 +74,8 @@ test("normal Exchange search streams wildcard coverage and continues with the sa
   await expect.poll(()=>requests.length).toBeGreaterThan(2);
   expect(requests[2].source_amount).toBe("0.00000001");
   expect(requests[2].cursor).toBeUndefined();
+  await page.waitForTimeout(800);
+  expect(requests).toHaveLength(3);
 });
 test("failed wildcard search shows a retryable error inside Exchange",async({page})=>{
   await catalog(page);
