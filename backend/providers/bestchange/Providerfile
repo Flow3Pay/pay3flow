@@ -308,7 +308,11 @@ impl BestChangeSource {
                     available_asset: number(available_asset),
                     min_fiat: number(min_fiat),
                     max_fiat: number(max_fiat),
-                    payment_methods: query.payment_method.clone().into_iter().collect(),
+                    payment_methods: {
+                        let unit = match query.side { P2pSide::BuyCrypto => from, P2pSide::SellCrypto => to };
+                        let label = if unit.search_text.contains("sbp") || unit.search_text.contains("сбп") || unit.search_text.contains("системабыстрыхплатежей") { "SBP".to_string() } else { unit.search_text.clone() };
+                        vec![label]
+                    },
                     pay_time_limit_minutes: None,
                     advertiser: Advertiser {
                         id: Some(row.changer.to_string()),
@@ -686,6 +690,7 @@ fn normalize_payment_method(value: &str) -> String {
     match normalized.as_str() {
         "tbank" | "тбанк" | "tinkoffbank" => "tinkoff".into(),
         "sber" => "sberbank".into(),
+        "сбп" | "системабыстрыхплатежей" | "sbpfastpayments" => "sbp".into(),
         _ => normalized,
     }
 }

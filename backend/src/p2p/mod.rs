@@ -1,4 +1,5 @@
 mod declarative;
+pub(crate) mod discovery;
 mod latency;
 mod models;
 mod routes;

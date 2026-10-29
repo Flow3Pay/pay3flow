@@ -736,6 +736,16 @@ const OPERATIONS: &[Operation] = &[
         false,
     ),
     (
+        "/api/p2p/discovery", "get", "Discover exchange and arbitrage routes",
+        "Bounded live search with ANY currencies, catalog method ids, USD comparison values, exact settlement closure for arbitrage, coverage and a 15-minute continuation cursor. source_amount is a decimal string used separately in each starting currency. Missing costs keep profit unconfirmed.",
+        "Routing", false, false,
+    ),
+    (
+        "/ws/p2p/discovery", "get", "Stream route discovery",
+        "Send one discovery query as JSON. Receives routes_updated and search_finished events containing a response envelope, or search_failed with an error. Closing the socket cancels discovery.",
+        "Routing", false, false,
+    ),
+    (
         "/api/p2p/route-activity",
         "get",
         "Route search activity",
@@ -1251,6 +1261,14 @@ fn extra_parameters(path: &str, method: &str) -> Vec<Value> {
             "description": "Time range. Longer ranges use daily, weekly, or monthly buckets.",
             "schema": { "type": "string", "enum": ["1h", "1d", "1w", "1m", "3m", "6m", "1y", "all"], "default": "1w" }
         }));
+    }
+    if path == "/api/p2p/discovery" && method == "get" {
+        for name in ["mode", "source_fiat", "target_fiat", "source_amount", "source_network", "target_network", "source_payment_method", "target_payment_method", "intermediary_assets", "sources", "exchange_mode", "cursor"] {
+            parameters.push(json!({ "name": name, "in": "query", "required": name == "source_amount", "schema": {"type":"string"} }));
+        }
+        for name in ["allow_cross_venue", "merchant_only"] { parameters.push(json!({"name":name,"in":"query","required":false,"schema":{"type":"boolean"}})); }
+        for name in ["max_actions", "min_orders", "max_price_deviation_bps", "limit"] { parameters.push(json!({"name":name,"in":"query","required":false,"schema":{"type":"integer"}})); }
+        parameters.push(json!({"name":"min_completion_rate","in":"query","required":false,"schema":{"type":"number"}}));
     }
     if path == "/api/p2p/routes" && method == "get" {
         parameters.push(json!({

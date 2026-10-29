@@ -1,7 +1,7 @@
 <script lang="ts">
   import { locale } from "$lib/i18n";
   import { rate, type Trade } from "$lib/otc/service";
-  import { bookSummary, candleSeries, chartRanges, compactNumber, filterByRange, percentChange, quoteObservations, rangeBucketMs, trimDecimal, type ChartRange } from "$lib/otc/market";
+  import { bookSummary, candleSeries, chartRanges, compactNumber, filterByRange, percentChange, quoteObservations, rangeBucketMs, trimDecimal, type ChartRange } from "$lib/otc/private-quote-market";
   export let trades: Trade[] = [];
   let range: ChartRange = "ALL";
   let mode: "line" | "candles" = "line";

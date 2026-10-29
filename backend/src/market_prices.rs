@@ -240,6 +240,16 @@ impl MarketPriceService {
         })
     }
 
+    /// Only fresh, identified prices may participate in discovery rankings.
+    pub(crate) async fn discovery_prices(&self) -> Vec<(String, f64, chrono::DateTime<chrono::Utc>)> {
+        let Some((snapshot, stale)) = self.prices().await else { return Vec::new(); };
+        if stale { return Vec::new(); }
+        snapshot.prices.into_iter().filter_map(|(asset, price)| {
+            if chrono::Utc::now().timestamp().saturating_sub(price.timestamp) > MAX_PROVIDER_PRICE_AGE_SECS || !price.usd.is_finite() || price.usd <= 0.0 { return None; }
+            Some((asset.to_string(), price.usd, chrono::DateTime::from_timestamp(price.timestamp, 0)?))
+        }).collect()
+    }
+
     pub async fn list(&self) -> MarketPricesResponse {
         let snapshot = self.prices().await;
         MarketPricesResponse {

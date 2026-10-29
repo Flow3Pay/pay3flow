@@ -37,6 +37,7 @@ asset_codes = { USDT = "128f589271cb4951b03e71e6323eb7be", USDC = "34309140878b4
 supported_assets = ["ALL"]
 
 [adapter.p2p.payment_method_aliases]
+"SBP" = ["СБП", "Система быстрых платежей", "SBP Fast Payments", "Faster Payments System Russia"]
 "T-Bank" = ["Tinkoff", "Tinkoff Bank"]
 "Sberbank" = ["Sber"]
 "Alfa-Bank Belarus" = ["Alfa Bank Belarus", "A-Bank"]

@@ -3,6 +3,7 @@ pub mod anonymous;
 pub mod api;
 pub mod auth;
 pub mod banks;
+pub mod discovery;
 pub mod exchange;
 pub mod matcher;
 pub mod networks;

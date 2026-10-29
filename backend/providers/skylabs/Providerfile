@@ -32,6 +32,7 @@ default_available_asset = 1000000000
 market = "direct_exchange"
 
 [adapter.p2p.payment_method_aliases]
+"SBP" = ["СБП", "Система быстрых платежей", "SBP Fast Payments", "Faster Payments System Russia"]
 "Cash" = ["Cash USD", "Cash Dollar", "SkyLabs ATM"]
 
 [adapter.p2p.buy]

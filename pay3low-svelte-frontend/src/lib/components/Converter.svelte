@@ -1,4 +1,6 @@
 <script lang="ts">
+  import DiscoveryPanel from "./DiscoveryPanel.svelte";
+  import type { DiscoveryMode } from "$lib/discovery";
   import { browser } from "$app/environment";
   import { afterUpdate, onMount, onDestroy, tick } from "svelte";
   import { quintOut } from "svelte/easing";
@@ -41,6 +43,26 @@
   export let onProvidersLoaded: (items: ProviderDefinition[]) => void = () => {};
   export let onBelarusP2pWarningChange: (show: boolean) => void = () => {};
   export let onOpenBelarusP2pWarning: () => void = () => {};
+
+  let discoveryMode: DiscoveryMode | null = null;
+  function syncDiscoveryMode() {
+    if (!browser) return;
+    if (window.location.hash.startsWith("#/discover")) {
+      const params = new URLSearchParams(window.location.hash.split("?")[1]);
+      discoveryMode = params.get("mode") === "arbitrage" ? "arbitrage" : "exchange";
+      controller?.abort(); searching = false;
+    } else discoveryMode = null;
+  }
+  function selectDiscoveryMode(mode: DiscoveryMode | null) {
+    controller?.abort(); searching = false;
+    discoveryMode = mode;
+    if (mode) {
+      const params = new URLSearchParams(window.location.hash.startsWith("#/discover?") ? window.location.hash.split("?")[1] : "");
+      params.set("mode",mode);
+      history.replaceState(null,"",`/#/discover?${params}`);
+    } else history.replaceState(null,"","/#/swap");
+  }
+  onMount(() => { syncDiscoveryMode(); window.addEventListener("hashchange",syncDiscoveryMode); window.addEventListener("popstate",syncDiscoveryMode); return () => { window.removeEventListener("hashchange",syncDiscoveryMode); window.removeEventListener("popstate",syncDiscoveryMode); }; });
 
   type RefreshSeconds = number;
   type PickerSide = "source" | "target" | null;
@@ -647,7 +669,7 @@
     return `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
   function updateHash(source: string, target: string, value: string) {
-    if (guideRequested || parseExchangeHash(location.hash)?.guide) return;
+    if (discoveryMode !== null || location.hash.startsWith("#/discover") || guideRequested || parseExchangeHash(location.hash)?.guide) return;
     const params = new URLSearchParams(); if (value !== "0") params.set("amount", value);
     const query = params.toString();
     history.replaceState(null, "", `${location.pathname}${location.search}#/swap/${encodeURIComponent(source)}/${encodeURIComponent(target)}${query ? `?${query}` : ""}`);
@@ -868,6 +890,7 @@
   }
 
   async function startSearch(countActivity = true) {
+    if (discoveryMode !== null) return;
     if (debounceTimer) window.clearTimeout(debounceTimer);
     debounceTimer = undefined;
     if (!corridor || !sourceMethod || !targetMethod) return;
@@ -1113,8 +1136,14 @@
 
 <section hidden={guideRequested} class="shell" class:localeLong={activeLocale !== "en"} class:introReady={introCompleted} id="transfer">
   <div class="hero"><h1>{t("Move money.", {}, activeLocale)} <span>{t("Keep more.", {}, activeLocale)}</span></h1><p>{home.intro}</p></div>
+  <nav class="discoveryModes" aria-label="Search mode">
+    <button type="button" aria-pressed={discoveryMode === null} on:click={() => selectDiscoveryMode(null)}>Exchange</button>
+    <button type="button" aria-pressed={discoveryMode === "exchange"} on:click={() => selectDiscoveryMode("exchange")}>Any / any</button>
+    <button type="button" aria-pressed={discoveryMode === "arbitrage"} on:click={() => selectDiscoveryMode("arbitrage")}>Arbitrage</button>
+  </nav>
+  {#if discoveryMode !== null}<DiscoveryPanel mode={discoveryMode} {paymentMethods} {networks} />{/if}
   <noscript><p class="nojsNotice">{home.nojs}</p></noscript>
-  <div class="workspace" class:activityExpanded class:routesCollapsed={!routesExpanded} style:--converter-width={`${converterWidth}px`} style:--amount-digits={converterAmountDigits}>
+  <div style:display={discoveryMode !== null ? "none" : undefined} class="workspace" class:activityExpanded class:routesCollapsed={!routesExpanded} style:--converter-width={`${converterWidth}px`} style:--amount-digits={converterAmountDigits}>
     <div class="converterStack">
     <div class="card" class:modalOpen bind:this={converterCard}>
       <div class="cardTop">
@@ -1250,6 +1279,13 @@
 {/if}
 
 <style>
+  .discoveryModes { display: flex; justify-content: center; gap: 8px; margin: 24px 0; }
+  .discoveryModes button { padding: 8px 12px; font-family: inherit; font-size: 16px; line-height: 24px; font-weight: 600; color: inherit; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-paper); cursor: pointer; transition: opacity 300ms cubic-bezier(0.22,1,0.36,1), transform 300ms cubic-bezier(0.22,1,0.36,1); }
+  .discoveryModes button[aria-pressed="true"] { background: #272727; color: #fff; }
+  .discoveryModes button:hover { opacity: .8; } .discoveryModes button:active { transform: scale(.98); }
+  .discoveryModes button:focus-visible { outline: 2px solid #168451; outline-offset: 4px; }
+  @media(prefers-reduced-motion:reduce) { .discoveryModes button { transition: none; } }
+
 .shell[hidden] { display: none; }
 .guideLoading { min-height: 70vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 32px; text-align: center; }.loadingMark { font-size: 50px; color: var(--color-accent-text); }.guideLoading h1 { font-size: 32px; }.guideLoading p { color: var(--color-text-soft); }.guideLoading button { min-height: 44px; padding: 10px 20px; border: 1px solid var(--color-border); border-radius: 12px; }
 

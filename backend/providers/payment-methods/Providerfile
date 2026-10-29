@@ -2,6 +2,7 @@
 # it creates no exchange provider rows, but is compiled into the public bank
 # directory consumed by the frontend.
 payment_methods = [
+  { id = "ru-sbp", name = "SBP / СБП", country = "RU", currency = "RUB", role = "both", kind = "bank", color = "#21a038", initials = "SBP", popular = true, p2p_query = "SBP" },
   # Cash settlement in each supported country currency. The shared
   # currency_group lets the compact currency picker switch between them.
   { id = "global-usd-cash", name = "Cash USD", country = "GLOBAL", currency = "USD", kind = "cash", color = "#168451", initials = "$", popular = true, p2p_query = "Cash", currency_group = "cash" },
