@@ -1186,7 +1186,7 @@
     <div class="converterStack">
     <div class="card" class:modalOpen bind:this={converterCard}>
       <div class="cardTop">
-        <div class="modeTabs" aria-label={t("Exchange mode", {}, activeLocale)}><button type="button" class="modeActive">{t("Bridge", {}, activeLocale)}</button><button type="button" disabled>{t("History", {}, activeLocale)}</button></div>
+        <h2 class="cardTitle">{t("Bridge", {}, activeLocale)}</h2>
         <div class="cardActions" bind:this={settingsElement}>
           <button type="button" class="helpButton" disabled={!paymentMethods.some(method => method.kind === "bank" && (method.role === "sender" || method.role === "both")) || !paymentMethods.some(method => method.kind === "bank" && (method.role === "recipient" || method.role === "both"))} on:click={() => void openWalkthrough()} aria-label={t("How to find a route", {}, activeLocale)} title={t("How to find a route", {}, activeLocale)} data-testid="start-converter-walkthrough">?</button>
           <button type="button" class="refreshButton" on:click={() => void startSearch()} disabled={!hasAmount || searching} aria-label={t("Refresh routes now", {}, activeLocale)}><img class:refreshSpin={awaitingFirstRoute} src="/icons/ui/route-refresh.png" alt="" width="18" height="18" aria-hidden="true" /></button>
@@ -1254,8 +1254,8 @@
         </div>
       </div>
 
-      <div class="intentLabel"><span>{t("Sell", {}, activeLocale)}</span></div>
       <div class="moneyPanel moneyPanelSource exchangeMoneyPanel">
+        <span class="panelRole">{t("Sell", {}, activeLocale)}</span>
         <div class="panelCopy"><label for="exchange-amount">{t("You send", {}, activeLocale)}</label><input id="exchange-amount" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedSourceInput} on:focus={(event) => focusAmountInput(event, "source")} on:blur={() => blurAmountInput("source")} on:input={(event) => updateAmount(event.currentTarget.value)} aria-label={t("Amount to send", {}, activeLocale)} />{#if marketUsd.source !== null}<span class="marketValue" aria-label={t("Approximate USD market value", {}, activeLocale)}>{formatMarketUsd(marketUsd.source)}</span>{/if}</div>
         <div class="methodControls">
           <button type="button" class="methodTrigger" data-tooltip={sourceMethod?.kind === "wallet" ? `${sourceCurrencyChoice} · ${t(sourceMethod.name, {}, activeLocale)}` : t(methodTitle(sourceMethod), {}, activeLocale)} on:click={() => void openMethodPicker("source")} aria-label={`Select sending ${methodNoun(sourceMethod)}: ${sourceMethod ? methodTitle(sourceMethod) : "none"}`}>
@@ -1266,8 +1266,8 @@
         </div>
       </div>
       <ExchangeFlowBridge reversed={directionReversed} onSwap={swapDirection} label={t("Swap sender and recipient", {}, activeLocale)}><button type="button" class="routesToggle" class:routesToggleOpen={routesExpanded} on:click={toggleRoutes} aria-label={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)} aria-expanded={routesExpanded} title={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)}><span aria-hidden="true">❯</span></button></ExchangeFlowBridge>
-      <div class="intentLabel intentLabelBuy"><span>{t("Buy", {}, activeLocale)}</span></div>
       <div class="moneyPanel moneyPanelTarget exchangeMoneyPanel">
+        <span class="panelRole">{t("Buy", {}, activeLocale)}</span>
         <div class="panelCopy"><label for="exchange-output">{t("Recipient gets", {}, activeLocale)}</label><input id="exchange-output" class:amountOutputEmpty={!previewRoute && amountSide !== "target"} class="amountInput amountOutput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedTargetInput} on:focus={(event) => focusAmountInput(event, "target")} on:blur={() => blurAmountInput("target")} on:input={(event) => updateTargetAmount(event.currentTarget.value)} aria-label={t("Amount to receive", {}, activeLocale)} />{#if marketUsd.target !== null}<span class="marketValue" aria-label={t("Approximate USD market value", {}, activeLocale)}>{formatMarketUsd(marketUsd.target)}</span>{/if}</div>
         <div class="methodControls">
           <button type="button" class="methodTrigger" data-tooltip={targetMethod?.kind === "wallet" ? `${targetCurrencyChoice} · ${t(targetMethod.name, {}, activeLocale)}` : t(methodTitle(targetMethod), {}, activeLocale)} on:click={() => void openMethodPicker("target")} aria-label={`Select recipient ${methodNoun(targetMethod)}: ${targetMethod ? methodTitle(targetMethod) : "none"}`}>
@@ -1279,7 +1279,7 @@
       </div>
       {#if refreshSeconds > 0}<div class="marketBar"><div class="marketState"><span class="refreshProgress" role="img" aria-label={secondsUntilRefresh === null ? "Auto-refresh is off" : `Refresh in ${secondsUntilRefresh} seconds`}><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle class="refreshTrack" cx="9" cy="9" r="7" pathLength="100" /><circle class="refreshFill" cx="9" cy="9" r="7" pathLength="100" style:stroke-dashoffset={`${100 - refreshProgress}`} /></svg></span><div><span>{lastUpdatedAt ? `Updated ${Math.max(0, Math.floor((clock - lastUpdatedAt) / 1000))}s ago` : t("Public P2P sources only · no order placement", {}, activeLocale)}</span></div></div>{#if secondsUntilRefresh !== null}<span class="nextRefresh">{secondsUntilRefresh}s</span>{/if}</div>{/if}
       <div class:swapActions={previewCanSwap}>
-        <button type="button" class="cta" disabled={!hasAmount || (!previewRoute && (searching || (!useDiscovery && !corridor)))} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? previewCanSwap ? "SWAP" : t("Open route instructions", {}, activeLocale) : t("Find routes", {}, activeLocale)}>{#if previewRoute}{previewCanSwap ? "SWAP" : t("Go", {}, activeLocale)} <span>↗</span>{:else if searching}<span class="spinner"></span> {t("Finding routes", {}, activeLocale)}{:else if hasAmount}{t("Find routes", {}, activeLocale)} <span>↗</span>{:else}{t("Enter an amount to begin", {}, activeLocale)}{/if}</button>
+        <button type="button" class="cta" disabled={!hasAmount || (!previewRoute && (searching || (!useDiscovery && !corridor)))} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? previewCanSwap ? "SWAP" : t("Open route instructions", {}, activeLocale) : t("Find routes", {}, activeLocale)}><span class="ctaContent">{#if previewRoute}{previewCanSwap ? "SWAP" : t("Go", {}, activeLocale)}{:else if searching}<span class="spinner"></span>{t("Finding routes", {}, activeLocale)}{:else if hasAmount}{t("Find routes", {}, activeLocale)}{:else}{t("Enter an amount to begin", {}, activeLocale)}{/if}</span>{#if !searching}<span class="ctaArrow" aria-hidden="true">{" ↗"}</span>{/if}</button>
         {#if previewCanSwap}<button type="button" class="cta guideCta" data-testid="open-swap-guide" on:click={() => openInstructions(previewRoute!, false, "guide")}>SWAP guide</button>{/if}
       </div>
       <ReferenceRates from={selectedSourceCurrency} to={selectedTargetCurrency} market={sourceMethod?.kind === "cash" || targetMethod?.kind === "cash" ? "cash" : "noncash"} crypto={CRYPTO_CURRENCIES.has(selectedSourceCurrency) || CRYPTO_CURRENCIES.has(selectedTargetCurrency)} ready={urlReady && selectedSourceCurrency !== "ANY" && selectedTargetCurrency !== "ANY"} routes={referenceRoutes} now={clock} locale={activeLocale} />
@@ -2251,7 +2251,7 @@
 .swapActions .guideCta { background: var(--color-panel); color: var(--color-text); border: 1px solid var(--color-border); }
 .swapActions .guideCta:hover { background: var(--color-panel-soft); }
 
-.cta span:not(.spinner) {
+.cta .ctaArrow {
   color: var(--color-accent);
   font-size: 20px;
 }
@@ -2272,8 +2272,8 @@
 .spinner {
   width: 17px;
   height: 17px;
-  border: 2px solid rgba(255, 255, 255, 0.25);
-  border-top-color: var(--color-accent);
+  border: 2px solid color-mix(in srgb, #152016 24%, transparent);
+  border-top-color: #152016;
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
@@ -2643,7 +2643,7 @@
   }
 
   .workspace:not(.routesCollapsed) .amountInput {
-    font-size: clamp(28px, calc(3.2vw - (var(--amount-digits) - 10) * 1px), 38px);
+    font-size: clamp(28px, calc(3.2vw - (var(--amount-digits) - 10) * 1px), 32px);
   }
 }
 
@@ -2676,8 +2676,8 @@
 
 .card {
   min-height: 0;
-  gap: 12px;
-  padding: 19px;
+  gap: 14px;
+  padding: 16px 20px 20px;
   border: 1px solid var(--color-border-strong);
   border-radius: 10px;
   background: var(--exchange-card-bg);
@@ -2691,78 +2691,70 @@
 }
 
 .cardTop {
-  min-height: 34px;
-  padding: 0 1px 5px;
-}
-
-.modeTabs {
-  padding: 0;
-  background: transparent;
-}
-
-.modeTabs button {
   min-height: 32px;
   padding: 0;
+}
+
+.cardTitle {
+  margin: 0;
   color: var(--color-text);
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 650;
   letter-spacing: -0.02em;
-}
-
-.modeTabs button + button {
-  display: none;
-}
-
-.modeTabs .modeActive {
-  background: transparent;
-  box-shadow: none;
+  line-height: 1.5;
 }
 
 .cardActions {
-  gap: 8px;
+  gap: 6px;
+}
+
+.helpButton,
+.refreshButton,
+.exchangesButton,
+.settingsButton {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid var(--exchange-field-border);
+  background: var(--color-panel);
+  color: var(--color-text-soft);
 }
 
 .refreshButton,
 .exchangesButton,
 .settingsButton {
-  width: 32px;
-  height: 32px;
   border-radius: 9px;
 }
 
-.intentLabel {
-  justify-content: flex-start;
-  gap: 8px;
-  margin: 0 3px 9px;
-  padding: 0;
-  color: #687164;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+.helpButton {
+  font-size: 17px;
+  font-weight: 600;
 }
 
-.intentLabel > span:first-child::before {
-  display: inline-block;
-  width: 5px;
-  height: 5px;
-  margin-right: 8px;
-  border-radius: 50%;
-  background: #d9534f;
-  content: "";
-  vertical-align: 1px;
+.helpButton:hover,
+.refreshButton:hover:not(:disabled),
+.exchangesButton:hover,
+.settingsButton:hover {
+  border-color: var(--color-border-strong);
+  border-width: var(--border-highlight-width);
+  background: var(--color-paper);
+  color: var(--color-text);
 }
 
-.intentLabelBuy > span:first-child::before {
-  background: var(--color-accent);
+.refreshButton img,
+.exchangesButton img,
+.settingsButton img {
+  opacity: 0.62;
 }
 
 .moneyPanel {
-  min-height: 96px;
-  flex-wrap: wrap;
+  display: grid;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  padding: 15px 15px 12px;
+  gap: 8px 12px;
+  padding: 12px;
   border: 1px solid var(--exchange-field-border);
   border-radius: 7px;
   background: var(--exchange-field-bg);
@@ -2778,8 +2770,41 @@
   display: none;
 }
 
+.panelRole {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  color: var(--color-text-soft);
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.panelRole::before {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--color-danger);
+  content: "";
+}
+
+.moneyPanelTarget .panelRole::before {
+  background: var(--color-accent-strong);
+}
+
 .panelCopy {
-  gap: 5px;
+  grid-column: 1 / -1;
+  gap: 4px;
+  width: 100%;
 }
 
 .panelCopy label {
@@ -2806,9 +2831,9 @@
 .amountOutput,
 .amountOutputEmpty {
   font-family: var(--font-mono);
-  font-size: clamp(28px, 3.2vw, 38px);
+  font-size: clamp(28px, 3.2vw, 32px);
   font-weight: 500;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.04em;
 }
 
 .methodTrigger {
@@ -2860,19 +2885,36 @@
 }
 
 .cta {
-  height: 48px;
+  height: auto;
+  min-height: 56px;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
   margin-top: 3px;
   border: 1px solid var(--color-accent-strong);
   border-radius: 5px;
   background: var(--color-accent);
-  color: #171717;
+  color: #152016;
   box-shadow: none;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.5;
+  text-align: left;
 }
 
-.cta span:not(.spinner) {
+.cta .ctaContent {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+  font-size: inherit;
+}
+
+.cta .ctaArrow {
+  flex: 0 0 auto;
   color: #2e2e2e;
-  font-size: 17px;
+  font-size: 18px;
 }
 
 .cta:hover:not(:disabled) {
@@ -2882,9 +2924,11 @@
 }
 
 .cta:disabled {
-  border-color: #d3dfd0;
-  background: #f3f6f0;
-  color: #9aa79a;
+  border-color: var(--color-accent-strong);
+  background: var(--color-accent);
+  color: #152016;
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .moneyPanel {
@@ -2965,10 +3009,12 @@
   z-index: 4;
   display: flex;
   min-width: 0;
-  flex: 0 0 auto;
+  max-width: min(100%, 256px);
+  grid-column: 2;
+  grid-row: 1;
   align-items: center;
   justify-content: flex-end;
-  max-width: min(100%, 256px);
+  justify-self: end;
   gap: 0;
   overflow: hidden;
   border: 1px solid var(--exchange-asset-border);
@@ -3163,14 +3209,20 @@
   }
 
   .moneyPanel {
-    min-height: 116px;
-    justify-content: flex-start;
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
     gap: 8px;
-    padding-top: 13px;
-    padding-bottom: 10px;
+    padding: 12px;
+  }
+
+  .panelRole {
+    grid-column: 1;
+    grid-row: 1;
   }
 
   .panelCopy {
+    grid-column: 1;
+    grid-row: 3;
     flex: none;
     width: 100%;
   }
@@ -3180,6 +3232,9 @@
   }
 
   .methodControls {
+    grid-column: 1;
+    grid-row: 2;
+    justify-self: stretch;
     width: 100%;
     max-width: none;
   }
@@ -3206,6 +3261,7 @@
   box-shadow: none;
 }
 
+:global(html[data-theme="dark"]) .helpButton:hover,
 :global(html[data-theme="dark"]) .refreshButton:hover:not(:disabled),
 :global(html[data-theme="dark"]) .exchangesButton:hover,
 :global(html[data-theme="dark"]) .settingsButton:hover {
@@ -3262,9 +3318,9 @@
 }
 
 :global(html[data-theme="dark"]) .cta:disabled {
-  border-color: #383838;
-  background: #262626;
-  color: #707070;
+  border-color: var(--color-accent-strong);
+  background: var(--color-accent);
+  color: #152016;
 }
 
 :global(html[data-theme="dark"]) .textInput {
@@ -3274,8 +3330,6 @@
 
 
 @media (max-width: 980px), (pointer: coarse) {
-  .modeTabs button { min-height: 44px; }
-  .refreshButton, .exchangesButton, .settingsButton { width: 44px; height: 44px; }
   .panelToggles { height: 56px; }
   .flowBridge { height: 44px; margin: 10px 0 4px; }
   .chartToggle, .mobileRoutesToggle { height: 44px; }

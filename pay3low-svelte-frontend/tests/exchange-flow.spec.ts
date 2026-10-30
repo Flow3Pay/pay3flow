@@ -385,7 +385,7 @@ test("search placeholders stay inside the route panel", async ({ page }) => {
   const skeletons = page.locator("#routes .skeletonCard");
   await expect(skeletons).toHaveCount(5);
   await expect(page.getByTestId("start-search")).toBeDisabled();
-  await expect(page.getByTestId("start-search")).toHaveCSS("background-color", "rgb(243, 246, 240)");
+  await expect(page.getByTestId("start-search")).toHaveCSS("background-color", "rgb(181, 245, 0)");
   const bounds = await page.evaluate(() => ({
     panelBottom: document.querySelector("#routes .panel")!.getBoundingClientRect().bottom,
     lastBottom: [...document.querySelectorAll("#routes .skeletonCard")].at(-1)!.getBoundingClientRect().bottom,
