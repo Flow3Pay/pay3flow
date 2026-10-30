@@ -1,3 +1,61 @@
+# Nix release commands
+
+The normal release workflow is defined in [`release.nix`](release.nix). Deploy,
+verification and rollback use Nix entry points with declared tool dependencies;
+they do not call the legacy Fish or Ruby deployment scripts.
+
+```sh
+nix run .#deploy
+nix run .#verify
+nix run .#rollback -- --image-tag RELEASE_TAG
+```
+
+Deploy requires a clean tracked checkout. It archives the selected commit,
+builds the backend and frontend images on the existing Kubernetes host, saves
+both deployment specifications and the ConfigMap in a private backup directory,
+then rolls out backend followed by frontend. It preserves deployment settings
+and secret references. Readiness and public reference rates must pass before
+release metadata is updated. A failure restores both deployments and the prior
+ConfigMap and waits for their rollouts.
+
+Already built and tested images can be reused when their application source
+matches the selected revision:
+
+```sh
+nix run .#deploy -- --reuse-images --revision COMMIT --image-tag RELEASE_TAG
+```
+
+The image names are `localhost/pay3flow/backend:RELEASE_TAG` and
+`localhost/pay3flow/frontend:RELEASE_TAG`. Snapshots live under
+`/var/lib/pay3flow/backups/RELEASE_TAG`; an existing snapshot is never overwritten.
+Verification checks readiness, USD references for RUB/AMD/BYN/UAH/KZT, both
+RUB/AMD sources, and frontend availability. `rollback` requires an explicit tag.
+
+SSH normally uses the workstation's existing key or agent. The environment
+variables `PAY3FLOW_DEPLOY_HOST`, `PAY3FLOW_DEPLOY_USER`, `PAY3FLOW_NAMESPACE`,
+and `PAY3FLOW_PUBLIC_URL` override the production defaults. Environments that
+hold the deploy key in an SSH container can use the Nix-defined transport:
+
+```sh
+PAY3FLOW_SSH_CONTAINER=hive-mind-hive-mind:latest \
+PAY3FLOW_SSH_KEY_DIRECTORY=/home/lion/.ssh \
+nix run .#verify
+```
+
+The host's existing Kubernetes services, database, Redis, TLS routing and secrets
+must already exist. This command only updates Pay3flow's deployment images and
+release metadata. The backend retains its normal schema checks at startup; this command does not
+move databases or activate a host-wide NixOS configuration.
+The flake exposes only Nix-defined release tools; `nix run` defaults to the
+read-only verifier. Legacy `render-manifests` and `deploy-k8s` entry points are
+retired. The `deploy-watch` entry point is a compatibility alias for `deploy`, which
+streams build and rollout output directly.
+
+## Legacy bootstrap and monitoring reference
+
+The material below describes the older bootstrap tools and monitoring setup.
+Its Fish/Ruby deployment commands are superseded by the Nix commands above.
+
 # k3s deployment
 
 The flake renders Kubernetes resources for the services that exist in this

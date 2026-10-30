@@ -1,5 +1,5 @@
 {
-  description = "Pay3Flow k3s deployment and in-cluster image builds";
+  description = "Pay3Flow Nix release, verification and rollback commands";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
@@ -10,87 +10,26 @@
         f { pkgs = import nixpkgs { inherit system; }; });
     in {
       packages = forEachSystem ({ pkgs }:
-        let
-          applicationTemplate = ./deploy/kubernetes.yaml.in;
-          servicesTemplate = ./deploy/in-cluster-services.yaml.in;
-          renderScript = pkgs.writeScriptBin "render-pay3flow-k8s" ''
-            #!${pkgs.ruby}/bin/ruby
-            ENV["PAY3FLOW_K8S_TEMPLATE"] ||= "${applicationTemplate}"
-            ENV["PAY3FLOW_K8S_SERVICES_TEMPLATE"] ||= "${servicesTemplate}"
-            load "${./deploy/render.rb}"
-            Pay3flow::Render.main(ARGV)
-          '';
-          deployK8sScript = pkgs.writeScriptBin "deploy-pay3flow-k8s" ''
-            #!${pkgs.ruby}/bin/ruby
-            ENV["PAY3FLOW_K8S_TEMPLATE"] ||= "${applicationTemplate}"
-            ENV["PAY3FLOW_K8S_SERVICES_TEMPLATE"] ||= "${servicesTemplate}"
-            load "${./deploy/render.rb}"
-            load "${./deploy/deploy.rb}"
-            Pay3flow::Deploy.main(ARGV)
-          '';
-          deployLiveScript = pkgs.writeScriptBin "deploy-pay3flow-live" ''
-            #!${pkgs.fish}/bin/fish
-            set -gx PATH "${pkgs.lib.makeBinPath (with pkgs; [ curl fish git openssh rsync ])}:$PATH"
-            exec ${./deploy/live_deploy.fish} $argv
-          '';
-          deployWatchScript = pkgs.writeScriptBin "deploy-pay3flow-watch" ''
-            #!${pkgs.fish}/bin/fish
-            set -gx PATH "${pkgs.lib.makeBinPath (with pkgs; [ curl fish git openssh rsync ])}:$PATH"
-            exec ${./deploy/watch_deploy.fish} $argv
-          '';
-          manifests = pkgs.runCommand "pay3flow-kubernetes.yaml" {
-            nativeBuildInputs = [ pkgs.ruby ];
-          } ''
-            ${pkgs.ruby}/bin/ruby ${./deploy/render.rb} \
-              --template ${applicationTemplate} \
-              --services-template ${servicesTemplate} \
-              --output "$out"
-          '';
-        in {
-          kubernetes-manifests = manifests;
-          render-manifests = renderScript;
-          deploy = deployLiveScript;
-          deploy-watch = deployWatchScript;
-          deploy-k8s = deployK8sScript;
-          default = manifests;
+        let release = import ./deploy/release.nix { inherit pkgs; };
+        in release // {
+          deploy-watch = release.deploy;
+          default = release.verify;
         });
 
       apps = forEachSystem ({ pkgs }:
-        let
-          render = self.packages.${pkgs.system}.render-manifests;
-          deploy = self.packages.${pkgs.system}.deploy;
-          deploy-watch = self.packages.${pkgs.system}.deploy-watch;
-          deploy-k8s = self.packages.${pkgs.system}.deploy-k8s;
+        let packages = self.packages.${pkgs.stdenv.hostPlatform.system};
         in {
-          render-manifests = {
-            type = "app";
-            program = "${render}/bin/render-pay3flow-k8s";
-          };
-          deploy = {
-            type = "app";
-            program = "${deploy}/bin/deploy-pay3flow-live";
-          };
-          deploy-watch = {
-            type = "app";
-            program = "${deploy-watch}/bin/deploy-pay3flow-watch";
-          };
-          deploy-k8s = {
-            type = "app";
-            program = "${deploy-k8s}/bin/deploy-pay3flow-k8s";
-          };
-          default = self.apps.${pkgs.system}.render-manifests;
+          deploy = { type = "app"; program = "${packages.deploy}/bin/pay3flow-deploy"; };
+          verify = { type = "app"; program = "${packages.verify}/bin/pay3flow-verify"; };
+          rollback = { type = "app"; program = "${packages.rollback}/bin/pay3flow-rollback"; };
+          deploy-watch = self.apps.${pkgs.stdenv.hostPlatform.system}.deploy;
+          default = self.apps.${pkgs.stdenv.hostPlatform.system}.verify;
         });
 
-      devShells = forEachSystem ({ pkgs }:
-        {
-          default = pkgs.mkShell {
-            packages = [
-              pkgs.cargo
-              pkgs.clippy
-              pkgs.rustc
-              pkgs.rustfmt
-            ];
-          };
-        });
+      devShells = forEachSystem ({ pkgs }: {
+        default = pkgs.mkShell {
+          packages = [ pkgs.cargo pkgs.clippy pkgs.rustc pkgs.rustfmt ];
+        };
+      });
     };
 }
