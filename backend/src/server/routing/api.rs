@@ -147,6 +147,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/banks", get(banks::list))
         .route("/api/networks", get(networks::list))
         .route("/api/market-prices", get(market_prices::market_prices))
+        .route("/api/reference-rates", get(crate::reference_rates::reference_rates))
         .route(
             "/api/reviews/providers/:slug",
             get(external_reviews::provider_reviews),

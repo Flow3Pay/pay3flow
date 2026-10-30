@@ -67,3 +67,13 @@ and retrying tracking without signing twice.
 
 Build with `NODE_OPTIONS=--max-old-space-size=6144`. Live deployment uses
 `deploy/frontend-runtime/Dockerfile` and its filtered runtime dependency tree.
+
+## Reference rates below the converter CTA
+
+`GET /api/reference-rates?from=USD&to=AMD&market=noncash` returns informational benchmarks, independent of provider quote amounts and payment execution. `from` and `to` support AMD, RUB, USD, BYN, UAH and KZT; `market` accepts `cash` or `noncash` (default). The response includes `rates` and `unavailable_sources`; a failed source does not remove another source's valid result. Each rate includes attribution, source publication and fetch dates, calculation method, sample count and a stale flag.
+
+RUB/USD uses CBR; USD/AMD uses Rate.am; BYN, UAH and KZT use their national banks. RUB/AMD displays separate CBR and Rate.am benchmarks. Other crosses use each currency's USD reference. Rate.am uses the median of bank buy/sell midpoints, using CASH if either selected method is cash and CLEARING otherwise. RUR is normalized to RUB. Missing, inverted and old bank quotes and duplicate banks are excluded.
+
+Official source snapshots refresh hourly; Rate.am refreshes every five minutes. Concurrent refreshes are coalesced. Failures retry after one minute and may retain a visibly stale snapshot for up to 72 hours for official feeds or one hour for Rate.am. Source outages are explicit; no alternative source is silently substituted.
+
+For any pair involving crypto, the UI instead shows the median target/source ratio of complete, unexpired routes in the current search. It uses major-unit amounts and the full result set, deduplicated by route ID, independently of the selected best route and progressive display. The reference is cleared when search inputs change.

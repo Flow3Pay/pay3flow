@@ -106,6 +106,9 @@ fn components() -> Value {
                     } } }
                 }
             },
+            "ReferenceRateSource": {"type": "object", "required": ["name", "url", "published_at", "fetched_at"], "properties": {"name": {"type": "string"}, "url": {"type": "string"}, "published_at": {"type": "string"}, "fetched_at": {"type": "string"}}},
+            "ReferenceRate": {"type": "object", "required": ["from", "to", "rate", "sources", "method", "sample_count", "stale"], "properties": {"from": {"type": "string"}, "to": {"type": "string"}, "rate": {"type": "number", "exclusiveMinimum": true, "minimum": 0}, "sources": {"type": "array", "items": {"$ref": "#/components/schemas/ReferenceRateSource"}}, "method": {"type": "string", "enum": ["identity", "official", "median_bank_midpoint", "cross_via_usd"]}, "sample_count": {"type": "integer", "minimum": 1}, "stale": {"type": "boolean"}}},
+            "ReferenceRatesResponse": {"type": "object", "required": ["from", "to", "market", "rates", "unavailable_sources"], "properties": {"from": {"type": "string"}, "to": {"type": "string"}, "market": {"type": "string", "enum": ["cash", "noncash"]}, "rates": {"type": "array", "items": {"$ref": "#/components/schemas/ReferenceRate"}}, "unavailable_sources": {"type": "array", "items": {"type": "object", "required": ["name", "url"], "properties": {"name": {"type": "string"}, "url": {"type": "string", "format": "uri"}}}}}},
             "MarketPricesResponse": {
                 "type": "object",
                 "required": ["source", "stale", "updated_at", "prices"],
@@ -664,6 +667,15 @@ const OPERATIONS: &[Operation] = &[
         false,
     ),
     (
+        "/api/reference-rates",
+        "get",
+        "Get informational fiat reference rates",
+        "Rates per one source currency unit. Local sources cover AMD, RUB, USD, BYN, UAH and KZT. RUB/AMD returns separate CBR and Rate.am benchmarks; other crosses use USD. Partial failures are explicit. Rates do not price executable quotes.",
+        "Catalogs",
+        false,
+        false,
+    ),
+    (
         "/api/market-prices",
         "get",
         "List cached crypto prices in USD",
@@ -1188,6 +1200,7 @@ fn response_schema(path: &str, method: &str) -> Value {
         ("/api/anonymous/register", "post") => schema_ref("AnonymousUser"),
         ("/api/market-values", "post") => schema_ref("MarketValuesResponse"),
         ("/api/market-prices", "get") => schema_ref("MarketPricesResponse"),
+        ("/api/reference-rates", "get") => schema_ref("ReferenceRatesResponse"),
         ("/api/referrals/me", "get") => schema_ref("ReferralProfile"),
         ("/api/payments", "post") | ("/api/payments/{id}", "get") => schema_ref("PaymentView"),
         ("/api/payments", "get") => array_schema("PaymentView"),
@@ -1244,6 +1257,12 @@ fn success_response(path: &str, method: &str) -> Value {
 
 fn extra_parameters(path: &str, method: &str) -> Vec<Value> {
     let mut parameters = Vec::new();
+    if path == "/api/reference-rates" && method == "get" {
+        for name in ["from", "to"] {
+            parameters.push(json!({"name":name,"in":"query","required":true,"schema":{"type":"string","enum":["AMD","RUB","USD","BYN","UAH","KZT"]}}));
+        }
+        parameters.push(json!({"name":"market","in":"query","schema":{"type":"string","enum":["cash","noncash"],"default":"noncash"}}));
+    }
     if matches!(path, "/api/hex/account" | "/api/hex/history") && method == "get" {
         parameters.push(json!({"name":"account","in":"query","required":path == "/api/hex/account","schema":{"type":"string","maxLength":128},"description":"Omni account identity, including the 0x prefix for EVM-derived accounts."}));
         parameters.push(json!({"name":"skip","in":"query","schema":{"type":"integer","minimum":0,"maximum":100000,"default":0}}));
@@ -1346,6 +1365,16 @@ mod tests {
             .as_str()
             .is_some_and(|value| !value.is_empty()));
         assert!(document["components"]["schemas"]["NewPayment"].is_object());
+    }
+
+    #[test]
+    fn documents_reference_rates() {
+        let document = api_document();
+        let operation = &document["paths"]["/api/reference-rates"]["get"];
+        assert_eq!(operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"], "#/components/schemas/ReferenceRatesResponse");
+        assert_eq!(operation["parameters"].as_array().unwrap().len(), 3);
+        assert!(operation.get("security").is_none());
+        assert!(document["components"]["schemas"]["ReferenceRate"]["properties"]["sources"].is_object());
     }
 
     #[test]

@@ -46,6 +46,8 @@ pub struct AppState {
     pub route_executions: RouteExecutionService,
     /// Cached indicative USD prices for the converter.
     pub market_prices: MarketPriceService,
+    /// Informational local FX references, separate from executable quotes.
+    pub reference_rates: crate::reference_rates::ReferenceRateService,
     /// Durable customer-first OTC settlement.
     pub otc: crate::otc::Service,
 }
@@ -90,6 +92,7 @@ impl AppState {
             reputation,
             route_executions,
             market_prices,
+            reference_rates: crate::reference_rates::ReferenceRateService::default(),
             otc,
         }
     }

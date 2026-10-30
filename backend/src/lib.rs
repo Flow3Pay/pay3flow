@@ -24,6 +24,7 @@ pub mod provider_profile;
 pub mod providers;
 pub mod quotes;
 pub mod referrals;
+pub mod reference_rates;
 pub mod route_engine;
 pub mod route_execution;
 pub mod routing;

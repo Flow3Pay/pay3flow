@@ -4188,3 +4188,97 @@ for (const token of ["10SET", "ACNON"]) for (const side of ["sending", "recipien
   await page.reload();
   await expect.poll(() => page.evaluate(key => localStorage.getItem(key), `pay3flow.exchange.${storageSide}-method`)).toBe(`global-${token.toLowerCase()}`);
 });
+
+async function mockReferenceBenchmark(page: Page) {
+  await page.route("**/api/reference-rates?*", route => {
+    const query = new URL(route.request().url()).searchParams;
+    const from = query.get("from")!, to = query.get("to")!, market = query.get("market")!;
+    const dual = [from, to].includes("RUB") && [from, to].includes("AMD");
+    const rate = from === "USD" ? 370 : from === "RUB" ? 5 : 0.2;
+    return route.fulfill({ json: { from, to, market, rates: (dual ? ["CBR", "Rate.am"] : ["Rate.am"]).map((name, index) => ({
+      from, to, rate: rate + index / 100, method: name === "Rate.am" ? "median_bank_midpoint" : "official", sample_count: name === "Rate.am" ? 17 : 1, stale: false,
+      sources: [{ name, url: name === "CBR" ? "https://www.cbr.ru/scripts/XML_daily.asp" : "https://www.rate.am/en/armenian-dram-exchange-rates/banks", published_at: "2026-10-30", fetched_at: "2026-10-30T12:00:00Z" }],
+    })), unavailable_sources: [] } });
+  });
+}
+
+test("reference benchmark loads before an amount and sits below the CTA", async ({ page }) => {
+  await mockBackend(page);
+  await mockReferenceBenchmark(page);
+  await page.goto("/#/swap/USD/AMD?amount=0&from=am-ameriabank-usd-account&to=am-ameriabank");
+  const rates = page.getByTestId("reference-rates");
+  await expect(rates).toContainText("1 USD = 370 AMD");
+  await expect(rates).toContainText("Non-cash");
+  await expect(rates.getByRole("link", { name: "Rate.am", exact: true })).toHaveAttribute("href", "https://www.rate.am/en/armenian-dram-exchange-rates/banks");
+  await expect(page.getByLabel("Amount to send")).toHaveValue("0");
+  await expect(page.getByLabel("Amount to receive")).toHaveValue("0");
+  const cta = await page.getByTestId("start-search").boundingBox();
+  const reference = await rates.boundingBox();
+  expect(reference!.y).toBeGreaterThanOrEqual(cta!.y + cta!.height);
+});
+
+test("reference benchmark shows both RUB AMD sources and follows direction and cash", async ({ page }) => {
+  await mockBackend(page);
+  await mockReferenceBenchmark(page);
+  await page.goto("/#/swap/AMD/RUB?amount=0&from=am-ameriabank&to=ru-sberbank");
+  const rates = page.getByTestId("reference-rates");
+  await expect(rates.getByTestId("reference-rate-row")).toHaveCount(2);
+  await expect(rates).toContainText("1 AMD = 0.2 RUB");
+  await expect(page.locator(".introOverlay")).toHaveCount(0, { timeout: 6000 });
+  await page.getByRole("button", { name: "Swap sender and recipient", exact: true }).click();
+  await expect(rates).toContainText("1 RUB = 5 AMD");
+  await expect(rates).not.toContainText(/· 1 AMD =/);
+  await page.getByRole("button", { name: "Select sending bank: Sberbank" }).click();
+  const methods = page.getByRole("dialog", { name: "Choose where you pay from" });
+  await methods.getByRole("option", { name: /^USD\b/ }).click();
+  await methods.getByRole("option", { name: /Cash USD/ }).click();
+  await expect(rates).toContainText("1 USD = 370 AMD");
+  await expect(rates).toContainText("Cash");
+  await expect(rates).not.toContainText("Non-cash");
+});
+
+test("reference benchmark crypto median leaves the best provider quote unchanged", async ({ page }) => {
+  await mockBackend(page);
+  let fiatRequests = 0;
+  await page.route("**/api/reference-rates?*", route => { fiatRequests++; return route.fulfill({ status: 500 }); });
+  await page.goto("/#/swap/USDT/USDC?amount=100&from=global-usdt&to=global-usdc&fromNetwork=ethereum&toNetwork=ethereum");
+  await expect(page.getByTestId("reference-rates")).toContainText("1 USDT = 0.9845 USDC");
+  await expect(page.getByTestId("reference-rates")).toContainText("2 samples");
+  await expect(page.getByLabel("Amount to receive")).toHaveValue("99.6");
+  expect(fiatRequests).toBe(0);
+  await page.getByLabel("Amount to send").fill("0");
+  await expect(page.getByTestId("reference-rates")).toContainText("Rate available after route search");
+});
+
+test("reference benchmark preserves partial failures and rejects obsolete responses", async ({ page }) => {
+  await mockBackend(page);
+  let release: (() => void) | undefined;
+  await page.route("**/api/reference-rates?*", async route => {
+    const query = new URL(route.request().url()).searchParams;
+    const from = query.get("from")!, to = query.get("to")!, market = query.get("market")!;
+    if (from === "AMD") await new Promise<void>(resolve => { release = resolve; });
+    await route.fulfill({ json: { from, to, market, rates: [{ from, to, rate: from === "AMD" ? 0.2 : 5, method: "official", sample_count: 1, stale: true,
+      sources: [{ name: "CBR", url: "https://www.cbr.ru/scripts/XML_daily.asp", published_at: "2026-10-30", fetched_at: "2026-10-30T12:00:00Z" }],
+    }], unavailable_sources: [{ name: "Rate.am", url: "https://www.rate.am" }] } }).catch(() => {});
+  });
+  await page.goto("/#/swap/AMD/RUB?amount=0&from=am-ameriabank&to=ru-sberbank");
+  await expect.poll(() => Boolean(release)).toBe(true);
+  await expect(page.locator(".introOverlay")).toHaveCount(0, { timeout: 6000 });
+  await page.getByRole("button", { name: "Swap sender and recipient", exact: true }).click();
+  const rates = page.getByTestId("reference-rates");
+  await expect(rates).toContainText("1 RUB = 5 AMD");
+  release!();
+  await expect(rates).toContainText("Cached rate");
+  await expect(rates).toContainText("Reference rate unavailable");
+  await expect(rates).not.toContainText(/· 1 AMD =/);
+});
+
+test("reference benchmark waits for a concrete wildcard currency", async ({ page }) => {
+  await mockBackend(page);
+  let requests = 0;
+  await page.route("**/api/reference-rates?*", route => { requests++; return route.fulfill({ status: 500 }); });
+  await page.goto("/#/swap/ANY/AMD?amount=0&from=any-ANY&to=am-ameriabank");
+  await expect(page.getByRole("button", { name: /Select sending currency: ANY/ })).toBeVisible();
+  await expect(page.getByTestId("reference-rates")).toHaveCount(0);
+  expect(requests).toBe(0);
+});

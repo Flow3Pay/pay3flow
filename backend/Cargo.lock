@@ -2949,6 +2949,7 @@ dependencies = [
  "deadpool-postgres",
  "deadpool-redis",
  "ed25519-dalek",
+ "encoding_rs",
  "evernode-multisig",
  "everscale-types",
  "futures",
@@ -2959,6 +2960,7 @@ dependencies = [
  "prost",
  "rand 0.8.8",
  "reqwest",
+ "roxmltree",
  "rsa",
  "salsa20",
  "scalar_api_reference",
@@ -3746,6 +3748,15 @@ checksum = "bb919243f34364b6bd2fc10ef797edbfa75f33c252e7998527479c6d6b47e1ec"
 dependencies = [
  "bytes",
  "rustc-hex",
+]
+
+[[package]]
+name = "roxmltree"
+version = "0.21.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9da7f59328b09405b181fee1018925fad50f157afb43c0c0f5c522c256dd5907"
+dependencies = [
+ "memchr",
 ]
 
 [[package]]

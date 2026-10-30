@@ -27,6 +27,7 @@
   import SearchActivityChart from "./SearchActivityChart.svelte";
   import SearchActivityModal from "./SearchActivityModal.svelte";
   import CurrencyPicker from "./CurrencyPicker.svelte";
+  import ReferenceRates from "./ReferenceRates.svelte";
   import NetworkPicker from "./NetworkPicker.svelte";
   import ScrambleHeadline from "./ScrambleHeadline.svelte";
 
@@ -95,6 +96,7 @@
   let targetRefinementAttempts = 0;
   let targetQuoteRouteKey: string | null = null;
   let routes: RouteCandidate[] = [];
+  let referenceRoutes: RouteCandidate[] = [];
   let routesFound = 0;
   let selected: RouteCandidate | null = null;
   let selectionPinnedByUser = false;
@@ -467,6 +469,7 @@
 
   function applySearchResponse(response: P2pRouteSearchResponse) {
     const nextRoutes = mapRoutes(response);
+    referenceRoutes = nextRoutes;
     const routeCounts = new Map<string, number>();
     for (const route of nextRoutes) {
       const providers = new Set([...route.legs.map((leg) => leg.provider), ...(route.route_provider ? [route.route_provider] : [])].map((provider) => provider.toLowerCase()));
@@ -712,6 +715,7 @@
     if (!guideRequested && seconds && updatedAt && validAmount) refreshTimer = window.setInterval(() => { if (!searching) void startSearch(false); }, seconds * 1000);
   }
   function resetResults() {
+    referenceRoutes = [];
     discoveryRows = []; discoveryCursor = null; discoverySignature = ""; searchIncomplete = false;
     controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; displayRoutes([]); routesFound = 0; selected = null; selectionPinnedByUser = false; instructionsRoute = null; lastUpdatedAt = null; searching = false; awaitingFirstRoute = false; foundVenueIds = []; foundVenues = []; venueStats = {}; error = null;
     if (refreshTimer) window.clearInterval(refreshTimer);
@@ -1278,6 +1282,7 @@
         <button type="button" class="cta" disabled={!hasAmount || (!previewRoute && (searching || (!useDiscovery && !corridor)))} on:click={runPrimaryAction} data-testid="start-search" aria-label={previewRoute ? previewCanSwap ? "SWAP" : t("Open route instructions", {}, activeLocale) : t("Find routes", {}, activeLocale)}>{#if previewRoute}{previewCanSwap ? "SWAP" : t("Go", {}, activeLocale)} <span>↗</span>{:else if searching}<span class="spinner"></span> {t("Finding routes", {}, activeLocale)}{:else if hasAmount}{t("Find routes", {}, activeLocale)} <span>↗</span>{:else}{t("Enter an amount to begin", {}, activeLocale)}{/if}</button>
         {#if previewCanSwap}<button type="button" class="cta guideCta" data-testid="open-swap-guide" on:click={() => openInstructions(previewRoute!, false, "guide")}>SWAP guide</button>{/if}
       </div>
+      <ReferenceRates from={selectedSourceCurrency} to={selectedTargetCurrency} market={sourceMethod?.kind === "cash" || targetMethod?.kind === "cash" ? "cash" : "noncash"} crypto={CRYPTO_CURRENCIES.has(selectedSourceCurrency) || CRYPTO_CURRENCIES.has(selectedTargetCurrency)} ready={urlReady && selectedSourceCurrency !== "ANY" && selectedTargetCurrency !== "ANY"} routes={referenceRoutes} now={clock} locale={activeLocale} />
       {#if error}<div class="errorBox" role="alert">{error}</div>{/if}
     </div>
     <div class="panelToggles">
