@@ -77,7 +77,7 @@
 </div>
 
 <style>
-  .portfolio { display:flex; flex-direction:column; gap:16px; padding:20px; border:1px solid var(--color-border); border-radius:var(--otc-card-radius,24px); background:var(--color-paper); }
+  .portfolio { display:flex; flex-direction:column; gap:16px; padding:20px; border:1px solid var(--color-border); border-radius:var(--otc-card-radius,10px); background:var(--color-paper); }
   .cardHead { display:flex; align-items:center; justify-content:space-between; gap:12px; }
   h2 { margin:0; font-size:19px; font-weight:700; letter-spacing:-.02em; }
   .walletIcon { display:grid; width:44px; height:44px; flex:0 0 auto; place-items:center; border-radius:50%; background:var(--color-accent-soft, var(--color-accent)); }

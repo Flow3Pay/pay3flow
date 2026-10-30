@@ -70,7 +70,7 @@
   --exchange-asset-bg: #e7ebe2;
   --exchange-asset-border: #d7dcd3;
   --exchange-line: #d2ddd0;
-  --otc-card-radius: 24px;
+  --otc-card-radius: 10px;
   --otc-panel-radius: 16px;
   --otc-row-buy-bg: color-mix(in srgb, var(--color-danger) 8%, transparent);
   --otc-row-sell-bg: color-mix(in srgb, var(--color-good) 10%, transparent);

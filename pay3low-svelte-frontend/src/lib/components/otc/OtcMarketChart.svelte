@@ -215,7 +215,7 @@
 </div>
 
 <style>
-  .marketChart { display: flex; width: 100%; min-width: 0; flex: 1; flex-direction: column; border: 1px solid var(--color-border-strong); border-radius: var(--otc-card-radius, 24px); background: var(--exchange-card-bg); overflow: hidden; }
+  .marketChart { display: flex; width: 100%; min-width: 0; flex: 1; flex-direction: column; border: 1px solid var(--color-border-strong); border-radius: var(--otc-card-radius, 10px); background: var(--exchange-card-bg); overflow: hidden; }
   .chartHead { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; padding: 20px var(--otc-panel-padding, 20px) 8px; }
   .chartQuote { display: grid; gap: 2px; min-width: 0; }
   .chartValue { display: flex; align-items: baseline; gap: 12px; min-width: 0; }

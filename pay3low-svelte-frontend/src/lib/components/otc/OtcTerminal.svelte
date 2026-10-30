@@ -55,7 +55,7 @@
 </div>
 <OtcMarketPicker open={pickerOpen} selected={currentMarket.id} onClose={closePicker} onSelect={chooseMarket} />
 <style>
-  .marketStrip { display: grid; grid-template-columns: minmax(220px, 1.25fr) repeat(5, minmax(0, 1fr)); gap: 20px; align-items: center; min-height: 96px; margin-bottom: 24px; padding: 20px; border: 1px solid var(--color-border); border-radius: var(--otc-card-radius, 24px); background: var(--color-paper); }
+  .marketStrip { display: grid; grid-template-columns: minmax(220px, 1.25fr) repeat(5, minmax(0, 1fr)); gap: 20px; align-items: center; min-height: 96px; margin-bottom: 24px; padding: 20px; border: 1px solid var(--color-border); border-radius: var(--otc-card-radius, 10px); background: var(--color-paper); }
   .marketSelector { display: flex; min-width: 0; align-items: center; gap: 12px; padding: 0 20px 0 0; border: 0; border-right: 1px solid var(--color-border); border-radius: 12px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
   .marketSelector:hover .pairSelect strong, .marketSelector:focus-visible .pairSelect strong, .marketSelector.open .pairSelect strong { color: var(--color-accent-text); }
   .marketSelector:focus-visible { outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 6px; }

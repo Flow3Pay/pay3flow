@@ -1325,7 +1325,7 @@
 }
 
 .hero {
-  width: min(900px, 100%);
+  width: min(var(--layout-width), 100%);
   margin: 0 auto 42px;
   text-align: center;
 }
@@ -2595,7 +2595,7 @@
 }
 
 .hero {
-  width: min(900px, 100%);
+  width: min(var(--layout-width), 100%);
   margin: 0 auto 26px;
   text-align: center;
 }
