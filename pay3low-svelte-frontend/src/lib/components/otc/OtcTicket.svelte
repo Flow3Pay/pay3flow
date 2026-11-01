@@ -3,16 +3,14 @@
   import ExchangeFlowBridge from "../ExchangeFlowBridge.svelte";
   import { locale } from "$lib/i18n";
   import { otcCopy } from "$lib/otc/copy";
-  import { rate, type Direction, type Trade, type WalletBalance } from "$lib/otc/service";
+  import { rate, type Direction, type Trade } from "$lib/otc/service";
   import { offerDecimal, type SaleTicketState } from "$lib/otc/public-offers";
-  import { trimDecimal } from "$lib/otc/market";
   export let sale: SaleTicketState | null = null;
   export let direction: Direction = "buy";
   export let input = "100";
   export let quote: Trade | null = null;
   export let disabled = false, busy = false;
   export let status = "";
-  export let balances: WalletBalance[] = [];
   export let onDirection: (direction: Direction) => void;
   export let onEdit: () => void;
   export let onRequest: () => void;
@@ -24,10 +22,6 @@
   $: sendValue = sale ? sale.everAmount : input;
   $: receiveValue = sale ? sale.usdtAmount : quote?.terms.output || "";
   $: saleStatus = sale ? busy ? say("Please wait for the current wallet or offer request.", "Дождитесь завершения текущего запроса кошелька или оффера.") : sale.linkingEvm ? say("Waiting for your Ethereum wallet address.", "Ожидаем адрес Ethereum-кошелька.") : sale.blockingReason : "";
-  $: balanceOf = (asset: string) => {
-    const entry = balances.find(balance => balance.symbol === asset);
-    return entry?.state === "ok" && entry.amount ? trimDecimal(entry.amount, asset === "EVER" ? 4 : 2) : "—";
-  };
   let settingsOpen = false, settingsWrap: HTMLDivElement, settingsInput: HTMLInputElement;
   function openSettings() {
     settingsOpen = true;
@@ -53,9 +47,6 @@
 {#snippet asset(asset: string)}
   <div class="assetIdentity"><img src={asset === "EVER" ? "/icons/assets/ever.svg" : "/icons/assets/usdt.png"} width="22" height="22" alt="" /><strong>{asset}</strong><span>{asset === "EVER" ? "Everscale" : "Ethereum"}</span></div>
 {/snippet}
-{#snippet stack(role: string, asset: string)}
-  <div class="balanceStack"><span>{role}</span><b>{say("Balance", "Баланс")}</b><i>{balanceOf(asset)}</i></div>
-{/snippet}
 <svelte:window on:pointerdown={outsideSettings} on:keydown={settingsKeys} />
 <form class="bridgeForm" on:submit|preventDefault={() => sale ? sale.onRequest() : quote ? onReview() : onRequest()}>
   <div class="ticketHead">
@@ -73,9 +64,9 @@
       </div>
     {/if}
   </div>
-  <div class="moneyPanel exchangeMoneyPanel"><div class="panelTop">{@render asset(sendAsset)}{@render stack(direction === "buy" ? say("You pay", "Платите") : say("You sell", "Продаёте"), sendAsset)}</div><div class="panelCopy"><label for="otc-input">{sale ? direction === "buy" ? say("Buy amount · EVER", "Количество к покупке · EVER") : say("Sell amount · EVER", "Количество к продаже · EVER") : say(`You send · ${sendAsset} on ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы отправляете · ${sendAsset} · ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><input id="otc-input" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={sendValue} data-testid={sale ? "otc-offer-ever" : undefined} disabled={busy} on:input={(event) => changeSend(event.currentTarget.value)} on:focus={(event) => event.currentTarget.select()} /><small>{sale ? say("Amount of EVER, not USDT", "Количество EVER, не сумма USDT") : say("Enter the exact amount", "Укажите точную сумму")}</small></div></div>
+  <div class="moneyPanel exchangeMoneyPanel"><div class="panelTop">{@render asset(sendAsset)}</div><div class="panelCopy"><label for="otc-input">{sale ? direction === "buy" ? say("Buy amount · EVER", "Количество к покупке · EVER") : say("Sell amount · EVER", "Количество к продаже · EVER") : say(`You send · ${sendAsset} on ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы отправляете · ${sendAsset} · ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><input id="otc-input" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={sendValue} data-testid={sale ? "otc-offer-ever" : undefined} disabled={busy} on:input={(event) => changeSend(event.currentTarget.value)} on:focus={(event) => event.currentTarget.select()} /></div></div>
   <ExchangeFlowBridge reversed={direction === "sell"} onSwap={() => { if (!busy) onDirection(direction === "buy" ? "sell" : "buy"); }} label={`${copy.buy} / ${copy.sell}`} />
-  <div class="moneyPanel exchangeMoneyPanel"><div class="panelTop">{@render asset(receiveAsset)}{@render stack(direction === "buy" ? say("You buy", "Покупаете") : say("You receive", "Получаете"), receiveAsset)}</div><div class="panelCopy"><label for="otc-receive">{sale ? direction === "buy" ? say("Total to pay · USDT", "Всего к оплате · USDT") : say("Total to receive · USDT", "Всего к получению · USDT") : say(`You receive · ${receiveAsset} on ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы получаете · ${receiveAsset} · ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><input id="otc-receive" class="amountInput amountOutput" readonly={!sale} value={receiveValue} data-testid={sale ? "otc-offer-usdt" : undefined} disabled={busy} inputmode="decimal" autocomplete="off" on:input={(event) => changeReceive(event.currentTarget.value)} placeholder="—" /><small>{sale ? say("Total USDT for the entire offer", "Всего USDT за весь объём EVER") : quote ? say("Fixed net output", "Фиксированная сумма к получению") : say("No quote yet", "Котировки пока нет")}</small></div></div>
+  <div class="moneyPanel exchangeMoneyPanel"><div class="panelTop">{@render asset(receiveAsset)}</div><div class="panelCopy"><label for="otc-receive">{sale ? direction === "buy" ? say("Total to pay · USDT", "Всего к оплате · USDT") : say("Total to receive · USDT", "Всего к получению · USDT") : say(`You receive · ${receiveAsset} on ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы получаете · ${receiveAsset} · ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><input id="otc-receive" class="amountInput amountOutput" readonly={!sale} value={receiveValue} data-testid={sale ? "otc-offer-usdt" : undefined} disabled={busy} inputmode="decimal" autocomplete="off" on:input={(event) => changeReceive(event.currentTarget.value)} placeholder="—" /></div></div>
     <label class="priceField"><span>{copy.price} · USDT / EVER</span><div><input aria-label={copy.price} readonly={!sale} value={sale ? sale.price : quote ? rate(quote.terms) : "—"} data-testid={sale ? "otc-offer-price" : undefined} disabled={busy} inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="—" on:input={(event) => sale?.onPrice(event.currentTarget.value)} /><span>USDT</span></div></label>
   {#if sale}
     {#if sale.priceRounded}<p class="priceHint">{sale.roundingAsset === "EVER" ? say("The EVER amount is rounded down to 9 decimals. Review the exact amounts before publishing.", "Сумма EVER округлена вниз до 9 знаков. Проверьте точные суммы перед публикацией.") : say("The total is rounded down to 6 USDT decimal places. Review the exact amount before publishing.", "Общая сумма округлена вниз до 6 знаков USDT. Проверьте точную сумму перед публикацией.")}</p>{/if}
@@ -112,7 +103,7 @@
   .settingsClose:hover { background: var(--color-panel); color: var(--color-text); }
   .sideTabs button { flex: 1; min-width: 0; min-height: 40px; padding: 8px 4px; border-radius: 9px; color: var(--color-text-soft); font-size: 13px; font-weight: 650; line-height: 1.5; transition: color .2s ease; }
   .sideTabs button.active { color: #152016; }
-  .priceField { display: block; color: var(--color-text-soft); font-size: 12px; }
+  .priceField { display: block; margin-top: 8px; color: var(--color-text-soft); font-size: 12px; }
   .priceField > div { display: flex; min-height: 44px; align-items: center; gap: 8px; margin-top: 8px; padding: 8px 12px; border: 1px solid var(--exchange-field-border); border-radius: 8px; background: var(--exchange-field-bg); }
   .priceField input { width: 100%; min-width: 0; min-height: 24px; height: 24px; padding: 0; border: 0; outline: 0; background: transparent; font-family: var(--font-mono); font-size: 16px; }
   .priceField > div > span { flex: 0 0 auto; font-family: var(--font-mono); font-size: 12px; }
@@ -123,14 +114,10 @@
   .moneyPanel { display: grid; flex: 0 0 auto; grid-template-columns: minmax(0, 1fr); min-height: 0; gap: 8px; padding: 12px; border: 1px solid var(--exchange-field-border); border-radius: var(--otc-panel-radius, 16px); background: var(--exchange-field-bg); }
   .panelTop { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
   .panelTop > :first-child { flex: 1; min-width: 0; }
-  .balanceStack { display: grid; flex: 0 0 auto; max-width: 42%; gap: 1px; justify-items: end; color: var(--color-text-faint); font-size: 11px; line-height: 1.4; text-align: right; }
-  .balanceStack b { color: var(--color-text-soft); font-weight: 400; }
-  .balanceStack i { color: var(--color-text); font-family: var(--font-mono); font-size: 13px; font-style: normal; overflow-wrap: anywhere; }
   .moneyPanel:hover, .moneyPanel:focus-within { border-width: 1px; }
   .moneyPanel:hover:not(:focus-within) { outline: none; }
-  .moneyPanel .panelCopy { display: grid; flex: none; width: 100%; grid-template-rows: 38px 18px; gap: 4px; }
+  .moneyPanel .panelCopy { display: grid; flex: none; width: 100%; grid-template-rows: 38px; gap: 4px; }
   .moneyPanel .amountInput { min-height: 38px; height: 38px; padding: 0; font-size: 32px; line-height: 1.15; letter-spacing: -.04em; }
-  .panelCopy small { overflow: hidden; color: var(--color-text-soft); font-size: 12px; line-height: 18px; text-overflow: ellipsis; white-space: nowrap; }
   .assetIdentity { display: flex; min-width: 0; min-height: 40px; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--exchange-asset-border); border-radius: 12px; background: var(--exchange-asset-bg); font-size: 13px; line-height: 1.5; }
   .assetIdentity img { flex: 0 0 22px; border-radius: 50%; }
   .assetIdentity strong { font-weight: 650; }
@@ -140,6 +127,6 @@
   .cta span { flex: 0 0 auto; font-size: 18px; }
   .cta:disabled { opacity: .45; cursor: default; }
   button:focus-visible, .priceField > div:focus-within, .amountInput:focus-visible { outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 2px; }
-  @media (max-width: 640px) { .moneyPanel .amountInput { font-size: 28px; } .sideTabs button { min-height: 44px; } .balanceStack { max-width: 50%; } }
+  @media (max-width: 640px) { .moneyPanel .amountInput { font-size: 28px; } .sideTabs button { min-height: 44px; } }
   @media (prefers-reduced-motion: reduce) { .sideTabs::before, .sideTabs button, .cta { transition: none; } }
 </style>

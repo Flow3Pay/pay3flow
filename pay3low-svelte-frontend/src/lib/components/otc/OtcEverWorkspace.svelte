@@ -4,7 +4,7 @@
   import { otcCopy } from "$lib/otc/copy";
   import type { OtcPreview } from "$lib/share-links";
   import { parseOtcHash } from "$lib/otc/link";
-  import { request, signInWallet, OtcRequestError, bindWallet, sendAttempt, getBalances, decimal, rate, setOtcNetwork, type Config, type Session, type Proposal, type Trade, type Rfq, type Attempt, type Direction, type WalletBalance } from "$lib/otc/service";
+  import { request, signInWallet, OtcRequestError, bindWallet, sendAttempt, decimal, rate, setOtcNetwork, type Config, type Session, type Proposal, type Trade, type Rfq, type Attempt, type Direction } from "$lib/otc/service";
   import type { PublicOffer } from "$lib/otc/public-offers";
   import { exactInput, proposalDirection, terminalStates, completedVolume } from "$lib/otc/terminal";
   import "$lib/otc/terminal.css";
@@ -35,7 +35,7 @@
   let motionDuration = 320, mounted = false;
   let selectionVersion = 0, accountVersion = 0, walletProgress = "", accountLocked = false;
   let tab: "trades" | "orders" | "history" = "trades", now = Date.now();
-  let offersBusy = false, balances: WalletBalance[] = [];
+  let offersBusy = false;
   let offerBook: OtcDeskBook;
   let dealPanel: OtcDealPanel | null = null;
   $: saleEnabled = !!config?.public_offers_available && (config.public_offer_directions ?? ["sell"]).includes(direction) && !listingId && !quote;
@@ -121,7 +121,6 @@
       const page = await request<{ trades: Trade[]; rfqs: Rfq[] }>("/trades", owner.token);
       if (!mounted || session?.token !== owner.token) return;
       trades = page.trades; rfqs = page.rfqs;
-      if (!balances.length) void pollBalances();
       if (bookingUnknown && trades.some(t => t.id === bookingUnknown && t.state !== "quoted")) { bookingUnknown = ""; sessionStorage.removeItem("pay3flow.otc.booking"); }
       if (previousSelection && selected?.id === previousSelection && selectionVersion === previousVersion) await selectTrade(previousSelection);
       if (owner.desk && session?.token === owner.token) { const data = await request<Record<string, any>>("/desk/dashboard", owner.token); if (session?.token === owner.token) dashboard = data; }
@@ -131,11 +130,6 @@
       if (e instanceof OtcRequestError && e.status === 401) { if (session?.token !== refreshToken) return; clearAccount(); error = say("Session expired. Connect your wallet again.", "Сессия истекла. Подключите кошелёк снова."); return; }
       healthy = false; throw e;
     }
-  }
-  async function pollBalances() {
-    const owner = session;
-    if (!owner) { balances = []; return; }
-    try { const result = await getBalances(owner.token); if (session?.token === owner.token) balances = result; } catch { balances = []; }
   }
   async function selectTrade(id: string, editTicket = false) {
     if (!session) return;
@@ -287,11 +281,9 @@
       }
       await refresh(); const id = sessionStorage.getItem("pay3flow.otc.selected"); if (id && session) { tab = "orders"; await selectTrade(id, true); } }, false);
     const timer = setInterval(async () => { if (stopped || busy || polling) return; polling = true; try { await refresh(); } catch (e) { error = e instanceof Error ? e.message : "Status unavailable"; } finally { polling = false; } }, 5000);
-    // Display-only chain reads: they can wait for the RPCs instead of the 5-second desk poll.
-    const walletTimer = setInterval(() => void pollBalances(), 30000);
     const clock = setInterval(() => now = Date.now(), 1000);
     window.addEventListener("hashchange", restoreDirection); window.addEventListener("popstate", restoreDirection);
-    return () => { closeWalletDialog(); otcWalletDialog.set(null); stopped = true; mounted = false; accountVersion++; clearInterval(timer); clearInterval(walletTimer); clearInterval(clock); media.removeEventListener("change", motionChanged); window.removeEventListener("hashchange", restoreDirection); window.removeEventListener("popstate", restoreDirection); };
+    return () => { closeWalletDialog(); otcWalletDialog.set(null); stopped = true; mounted = false; accountVersion++; clearInterval(timer); clearInterval(clock); media.removeEventListener("change", motionChanged); window.removeEventListener("hashchange", restoreDirection); window.removeEventListener("popstate", restoreDirection); };
   });
 </script>
 <OtcOffers enabled={!!config?.public_offers_available} {direction} {session} {busy} bind:posting={offersBusy} onConnect={() => run(() => session ? verify("everscale") : connectAccount("everscale"))} onPublished={() => { tab = "trades"; }} let:ticket let:offers let:mine let:history={offerHistory} let:message let:onCancel>
@@ -304,7 +296,7 @@
     {label:say("Your completed volume","Ваш завершённый объём"),value:session ? decimal(completedVolume(trades),6) : "—",unit:"USDT"},
   ]}>
   <div slot="status" class="serviceControls">{#if message}<p class="message" role="status">{message}</p>{/if}{#if walletProgress}<p class="message" role="status">{walletProgress}</p>{/if}{#if notice}<p class="message" role="status">{notice}</p>{/if}{#if unresolvedBooking}<p class="message" role="status">{say("The original booking is awaiting its decision. Another selection is blocked.", "Ожидается решение по исходной сделке. Другое бронирование заблокировано.")}</p><button disabled={busy || !healthy || !bookingUnknown} on:click={() => run(reconcileBooking)}>{say("Reconcile original booking", "Проверить исходное бронирование")}</button>{/if}</div>
-    <svelte:fragment slot="ticket"><OtcTicket sale={saleEnabled ? ticket : null} {direction} bind:input {quote} {balances} busy={busy || offersBusy} disabled={!exactInput(input, direction) || unresolvedBooking || (needsWallets && !quote ? !(config?.wallet_login_available ?? config?.enabled) : !healthy || !config?.available || !listing || (!!quote && now > Date.parse(quote.terms.quote_by)))} status={quote || saleEnabled ? "" : quoteStatus} onDirection={chooseSide} onEdit={edited} onRequest={requestQuote} onReview={() => { tab = "orders"; document.getElementById("otc-book-column")?.scrollIntoView({ block: "start", behavior: motionDuration ? "smooth" : "instant" }); }} /></svelte:fragment>
+    <svelte:fragment slot="ticket"><OtcTicket sale={saleEnabled ? ticket : null} {direction} bind:input {quote} busy={busy || offersBusy} disabled={!exactInput(input, direction) || unresolvedBooking || (needsWallets && !quote ? !(config?.wallet_login_available ?? config?.enabled) : !healthy || !config?.available || !listing || (!!quote && now > Date.parse(quote.terms.quote_by)))} status={quote || saleEnabled ? "" : quoteStatus} onDirection={chooseSide} onEdit={edited} onRequest={requestQuote} onReview={() => { tab = "orders"; document.getElementById("otc-book-column")?.scrollIntoView({ block: "start", behavior: motionDuration ? "smooth" : "instant" }); }} /></svelte:fragment>
     <OtcMarketChart slot="chart" {trades} publicOffers={config?.public_offers_available && (saleEnabled || !trades.length) ? offerHistory : null} />
     <svelte:fragment slot="book">
       <section class="activityCard" id="otc-activity" aria-label={say("Trade activity", "Активность сделок")}>
