@@ -51,6 +51,7 @@ export function venueIcon(venue: string): string {
 export function assetIcon(asset: string): string {
   const key = asset.toLowerCase();
   if (key === "gnk") return "/icons/assets/gnk.jpg";
+  if (key === "any") return "/icons/assets/any.svg";
   if (key === "gram") return "/icons/assets/gram.png";
   if (key === "near") return "/icons/assets/near-investx.png";
   if (key === "ever") return "/icons/assets/ever.svg";

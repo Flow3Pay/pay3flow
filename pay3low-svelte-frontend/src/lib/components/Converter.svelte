@@ -52,7 +52,7 @@
   let searchIncomplete = false;
   const isAnyMethod = (method: PaymentMethod | null | undefined) => Boolean(method?.id.startsWith("any-"));
   function anyMethod(currency: string): PaymentMethod {
-    return {id:`any-${currency}`,name:"Any method",country:"GLOBAL",currency,role:"both",kind:"bank",color:"#272727",initials:"ANY",p2pQuery:""};
+    return {id:`any-${currency}`,name:"Any method",country:"GLOBAL",currency,role:"both",kind:"bank",color:"#272727",initials:"ANY",iconUrl:"/icons/assets/any.svg",p2pQuery:""};
   }
   // Keep previously shared discovery URLs usable inside the existing converter.
   onMount(() => {
@@ -601,8 +601,8 @@
   } satisfies DiscoveryQuery;
   $: sourceCurrencyChoice = sourceMethod?.currency || sourceCurrency;
   $: targetCurrencyChoice = targetMethod?.currency || targetCurrency;
-  $: sourceCurrencyFlag = sourceMethod?.kind === "wallet" ? null : fiatFlagUrl(sourceCurrencyChoice);
-  $: targetCurrencyFlag = targetMethod?.kind === "wallet" ? null : fiatFlagUrl(targetCurrencyChoice);
+  $: sourceCurrencyFlag = sourceMethod?.kind === "wallet" ? null : sourceCurrencyChoice === "ANY" ? assetIcon("ANY") : fiatFlagUrl(sourceCurrencyChoice);
+  $: targetCurrencyFlag = targetMethod?.kind === "wallet" ? null : targetCurrencyChoice === "ANY" ? assetIcon("ANY") : fiatFlagUrl(targetCurrencyChoice);
   $: selectedSourceCurrency = sourceMethod?.currency || sourceCurrency;
   $: selectedTargetCurrency = targetMethod?.currency || targetCurrency;
   $: sourceNetworks = sourceMethod?.kind === "wallet" ? networks.filter((network) => network.currencies.includes(sourceMethod!.currency)) : [];
@@ -1255,7 +1255,6 @@
       </div>
 
       <div class="moneyPanel moneyPanelSource exchangeMoneyPanel">
-        <span class="panelRole">{t("Sell", {}, activeLocale)}</span>
         <div class="panelCopy"><label for="exchange-amount">{t("You send", {}, activeLocale)}</label><input id="exchange-amount" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedSourceInput} on:focus={(event) => focusAmountInput(event, "source")} on:blur={() => blurAmountInput("source")} on:input={(event) => updateAmount(event.currentTarget.value)} aria-label={t("Amount to send", {}, activeLocale)} />{#if marketUsd.source !== null}<span class="marketValue" aria-label={t("Approximate USD market value", {}, activeLocale)}>{formatMarketUsd(marketUsd.source)}</span>{/if}</div>
         <div class="methodControls">
           <button type="button" class="methodTrigger" data-tooltip={sourceMethod?.kind === "wallet" ? `${sourceCurrencyChoice} · ${t(sourceMethod.name, {}, activeLocale)}` : t(methodTitle(sourceMethod), {}, activeLocale)} on:click={() => void openMethodPicker("source")} aria-label={`Select sending ${methodNoun(sourceMethod)}: ${sourceMethod ? methodTitle(sourceMethod) : "none"}`}>
@@ -1267,7 +1266,6 @@
       </div>
       <ExchangeFlowBridge reversed={directionReversed} onSwap={swapDirection} label={t("Swap sender and recipient", {}, activeLocale)}><button type="button" class="routesToggle" class:routesToggleOpen={routesExpanded} on:click={toggleRoutes} aria-label={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)} aria-expanded={routesExpanded} title={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)}><span aria-hidden="true">❯</span></button></ExchangeFlowBridge>
       <div class="moneyPanel moneyPanelTarget exchangeMoneyPanel">
-        <span class="panelRole">{t("Buy", {}, activeLocale)}</span>
         <div class="panelCopy"><label for="exchange-output">{t("Recipient gets", {}, activeLocale)}</label><input id="exchange-output" class:amountOutputEmpty={!previewRoute && amountSide !== "target"} class="amountInput amountOutput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedTargetInput} on:focus={(event) => focusAmountInput(event, "target")} on:blur={() => blurAmountInput("target")} on:input={(event) => updateTargetAmount(event.currentTarget.value)} aria-label={t("Amount to receive", {}, activeLocale)} />{#if marketUsd.target !== null}<span class="marketValue" aria-label={t("Approximate USD market value", {}, activeLocale)}>{formatMarketUsd(marketUsd.target)}</span>{/if}</div>
         <div class="methodControls">
           <button type="button" class="methodTrigger" data-tooltip={targetMethod?.kind === "wallet" ? `${targetCurrencyChoice} · ${t(targetMethod.name, {}, activeLocale)}` : t(methodTitle(targetMethod), {}, activeLocale)} on:click={() => void openMethodPicker("target")} aria-label={`Select recipient ${methodNoun(targetMethod)}: ${targetMethod ? methodTitle(targetMethod) : "none"}`}>
@@ -2770,37 +2768,6 @@
   display: none;
 }
 
-.panelRole {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-  overflow: hidden;
-  color: var(--color-text-soft);
-  text-overflow: ellipsis;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 400;
-  letter-spacing: 0.04em;
-  line-height: 1.4;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.panelRole::before {
-  display: inline-block;
-  width: 5px;
-  height: 5px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: var(--color-danger);
-  content: "";
-}
-
-.moneyPanelTarget .panelRole::before {
-  background: var(--color-accent-strong);
-}
-
 .panelCopy {
   grid-column: 1 / -1;
   gap: 4px;
@@ -3009,12 +2976,12 @@
   z-index: 4;
   display: flex;
   min-width: 0;
-  max-width: min(100%, 256px);
-  grid-column: 2;
+  max-width: none;
+  grid-column: 1 / -1;
   grid-row: 1;
   align-items: center;
   justify-content: flex-end;
-  justify-self: end;
+  justify-self: stretch;
   gap: 0;
   overflow: hidden;
   border: 1px solid var(--exchange-asset-border);
@@ -3215,14 +3182,9 @@
     padding: 12px;
   }
 
-  .panelRole {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
   .panelCopy {
     grid-column: 1;
-    grid-row: 3;
+    grid-row: 2;
     flex: none;
     width: 100%;
   }
@@ -3233,7 +3195,7 @@
 
   .methodControls {
     grid-column: 1;
-    grid-row: 2;
+    grid-row: 1;
     justify-self: stretch;
     width: 100%;
     max-width: none;

@@ -99,7 +99,7 @@
         {#if mode === "currency"}
           {#each visibleCurrencies as currency (currency.id)}
             {@const isSelected = currency.id === selectedCurrency}
-            <PickerOptionCard name={currency.id} meta={currency.name} category={t("Currencies", {}, $locale)} iconUrl={fiatFlagUrl(currency.id)} initials={currency.mark} color={currency.color} selected={isSelected} onSelect={() => onSelectCurrency(currency.id)} />
+            <PickerOptionCard name={currency.id} meta={currency.name} category={t("Currencies", {}, $locale)} iconUrl={currency.id === "ANY" ? "/icons/assets/any.svg" : fiatFlagUrl(currency.id)} initials={currency.mark} color={currency.color} selected={isSelected} onSelect={() => onSelectCurrency(currency.id)} />
           {:else}<div class="empty">{t("Try a different search.", {}, $locale)}</div>{/each}
         {:else}
           {#each visibleNetworks as network (network.id)}

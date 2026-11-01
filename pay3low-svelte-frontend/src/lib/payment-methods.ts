@@ -48,7 +48,15 @@ interface PaymentMethodDirectoryPage {
 /** Load the complete card catalog generated from backend Providerfiles. */
 export async function fetchPaymentMethods(): Promise<PaymentMethod[]> {
   const requestInit = { headers: anonymousHeaders({ Accept: "application/json" }) };
-  const response = await fetch(apiUrl("/api/banks?limit=100"), requestInit);
+  let response = await fetch(apiUrl("/api/banks?picker_visible=true&limit=100"), requestInit);
+  let unfilteredFallback = false;
+  if (response.status === 400) {
+    // Rolling deployments can briefly serve a backend from before the
+    // picker_visible filter existed. Its rows still carry method_id, so page
+    // through that directory and filter the catalog client-side.
+    unfilteredFallback = true;
+    response = await fetch(apiUrl("/api/banks?limit=100&offset=0"), requestInit);
+  }
   if (!response.ok) throw new Error(await catalogError(response));
 
   const firstPage = await response.json() as PaymentMethodDirectoryPage;
@@ -56,13 +64,14 @@ export async function fetchPaymentMethods(): Promise<PaymentMethod[]> {
   const pageSize = Math.max(1, firstPage.limit || 100);
   for (let offset = firstPage.offset + pageSize; offset < firstPage.total; offset += pageSize) {
     const params = new URLSearchParams({ limit: String(pageSize), offset: String(offset) });
+    if (!unfilteredFallback) params.set("picker_visible", "true");
     const nextResponse = await fetch(apiUrl(`/api/banks?${params}`), requestInit);
     if (!nextResponse.ok) throw new Error(await catalogError(nextResponse));
     items.push(...((await nextResponse.json()) as PaymentMethodDirectoryPage).items);
   }
 
-  return items.flatMap((item) => item.method_id || item.id ? [{
-    id: item.method_id ?? `directory-${item.id}`,
+  return items.flatMap((item) => item.method_id ? [{
+    id: item.method_id,
     name: item.kind === "wallet" && item.currency === "TON" ? "Gram" : item.display_name || item.name,
     country: item.country,
     currency: item.kind === "wallet" ? canonicalAssetTicker(item.currency) : item.currency,

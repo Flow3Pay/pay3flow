@@ -158,7 +158,7 @@
                         {t("Open platform profile", {}, $locale)}
                         <span aria-hidden="true">→</span>
                       </a>
-                      {#if !hasRoute || status?.ok === false}<span class:venueOk={status?.ok} class:venueError={status && !status.ok}>{status?.ok === false ? t("Error", {}, $locale) : (status?.offers_found ?? 0) > 0 ? "Offers received · no matching route" : "No matching route"}</span>{/if}
+                      {#if !hasRoute && status?.ok !== false}<span class:venueOk={status?.ok}>{(status?.offers_found ?? 0) > 0 ? "Offers received · no matching route" : "No matching route"}</span>{/if}
                       <dl>
                         <div><dt>Routes found</dt><dd>{status?.routes_found ?? 0}</dd></div>
                         <div><dt>Quotes / markets received</dt><dd>{status?.offers_found ?? 0}</dd></div>
@@ -166,7 +166,6 @@
                         {#if status?.average_response_ms != null}<div><dt>Average response</dt><dd>{status.average_response_ms} ms ({status.response_samples})</dd></div>{/if}
                         {#if status?.cache_hits}<div><dt>Cache hits</dt><dd>{status.cache_hits}</dd></div>{/if}
                       </dl>
-                      {#if status?.error}<small>{status.error}</small>{/if}
                     </div>
                   </div>
                 {/each}
@@ -481,7 +480,6 @@
 }
 
 .foundVenuePopover .venueOk { color: var(--color-accent-text); }
-.foundVenuePopover .venueError { color: var(--color-danger); }
 
 .foundVenuePopover dl {
   display: grid;
@@ -497,7 +495,7 @@
 
 .foundVenuePopover dt { color: var(--color-text-soft); }
 .foundVenuePopover dd { margin: 0; font-weight: 800; }
-.foundVenuePopover small { color: var(--color-danger); line-height: 1.35; }
+
 
 .foundVenueProfile {
   display: flex;
