@@ -2034,7 +2034,6 @@
   background: rgba(117, 88, 246, 0.14);
 }
 
-.moneyPanel:hover,
 .moneyPanel:focus-within {
   border-color: var(--color-border-strong);
   border-width: var(--border-highlight-width);
@@ -2932,7 +2931,6 @@
   text-align: left;
 }
 
-.networkButton:hover .networkCopy strong,
 .networkButton:focus-visible .networkCopy strong {
   color: #4d7d0e;
 }
@@ -3002,7 +3000,7 @@
   transition: border-color 0.15s ease;
 }
 
-.methodControls:has(> .methodTrigger:is(:hover, :focus-visible)) {
+.methodControls:has(> .methodTrigger:focus-visible) {
   border-color: #a4af9e;
   border-width: var(--border-highlight-width);
 }
@@ -3020,7 +3018,6 @@
 }
 
 .methodControls .methodTrigger:hover {
-  background: #edf2e8;
   box-shadow: none;
   transform: none;
 }
@@ -3045,7 +3042,7 @@
 }
 
 .methodControls .networkButton:hover {
-  background: #edf2e8;
+  background: transparent;
 }
 
 @media (max-width: 980px) {
@@ -3265,21 +3262,16 @@
 
 :global(html[data-theme="dark"]) .methodControls {
   border-color: #3b3b3b;
-  background: #2a2a2a;
+  background: var(--exchange-asset-bg);
 }
 
 :global(html[data-theme="dark"]) .methodControls .networkControl {
   border-color: #3b3b3b;
 }
 
-:global(html[data-theme="dark"]) .methodControls:has(> .methodTrigger:is(:hover, :focus-visible)) {
+:global(html[data-theme="dark"]) .methodControls:has(> .methodTrigger:focus-visible) {
   border-color: #626262;
   border-width: var(--border-highlight-width);
-}
-
-:global(html[data-theme="dark"]) .methodControls .methodTrigger:hover,
-:global(html[data-theme="dark"]) .methodControls .networkButton:hover {
-  background: #323232;
 }
 
 :global(html[data-theme="dark"]) .networkButton,

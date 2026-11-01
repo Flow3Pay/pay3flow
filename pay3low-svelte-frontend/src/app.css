@@ -67,7 +67,7 @@
   --exchange-card-bg: rgba(255, 255, 255, .96);
   --exchange-field-bg: #f9faf6;
   --exchange-field-border: #d9ded4;
-  --exchange-asset-bg: #e7ebe2;
+  --exchange-asset-bg: #edf2e8;
   --exchange-asset-border: #d7dcd3;
   --exchange-line: #d2ddd0;
   --otc-card-radius: 10px;
@@ -94,7 +94,7 @@ html[data-theme="dark"] {
   --exchange-card-bg: rgba(25, 25, 25, .96);
   --exchange-field-bg: #202020;
   --exchange-field-border: #383838;
-  --exchange-asset-bg: #2a2a2a;
+  --exchange-asset-bg: #323232;
   --exchange-asset-border: #3b3b3b;
   --exchange-line: #404040;
   --otc-row-buy-bg: color-mix(in srgb, var(--color-danger) 14%, transparent);
@@ -348,7 +348,7 @@ html.introPlaying::-webkit-scrollbar, html.introPlaying body::-webkit-scrollbar 
   border-radius: 7px; background: var(--exchange-field-bg); overflow: visible;
   transition: border-color .18s ease, background .18s ease;
 }
-.exchangeMoneyPanel:hover, .exchangeMoneyPanel:focus-within {
+.exchangeMoneyPanel:focus-within {
   border-color: var(--color-border-strong); border-width: var(--border-highlight-width);
   outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 2px;
 }
@@ -378,9 +378,7 @@ html.introPlaying::-webkit-scrollbar, html.introPlaying body::-webkit-scrollbar 
 .exchangeMoneyPanel .networkDot { display: grid; width: 18px; height: 18px; flex: 0 0 auto; place-items: center; overflow: hidden; border-radius: 50%; background: var(--exchange-arrow-bg); }
 .exchangeMoneyPanel .networkDot img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .exchangeMoneyPanel .networkChevron { color: var(--color-text-faint); flex: 0 0 auto; }
-.exchangeMoneyPanel .methodTrigger:hover, .exchangeMoneyPanel .networkButton:hover { background: #edf2e8; }
 .exchangeMoneyPanel .methodTrigger:focus-visible, .exchangeMoneyPanel .networkButton:focus-visible { outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: calc(-1 * var(--focus-ring-width)); }
-html[data-theme="dark"] .exchangeMoneyPanel .methodTrigger:hover, html[data-theme="dark"] .exchangeMoneyPanel .networkButton:hover { background: #323232; }
 @media (max-width: 640px) {
   .exchangeMoneyPanel { min-height: 116px; justify-content: flex-start; gap: 8px; padding-top: 13px; padding-bottom: 10px; }
   .exchangeMoneyPanel .panelCopy { flex: none; width: 100%; }

@@ -119,12 +119,10 @@
   .moneyPanel { display: grid; flex: 0 0 auto; grid-template-columns: minmax(0, 1fr); min-height: 0; gap: 8px; padding: 12px; border: 1px solid var(--exchange-field-border); border-radius: 7px; background: var(--exchange-field-bg); }
   .panelTop { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
   .panelTop > :first-child { flex: 1; min-width: 0; }
-  .moneyPanel:hover, .moneyPanel:focus-within { border-width: 1px; }
-  .moneyPanel:hover:not(:focus-within) { outline: none; }
+  .moneyPanel:focus-within { border-width: 1px; }
   .moneyPanel .panelCopy { display: grid; flex: none; width: 100%; grid-template-rows: 38px; gap: 4px; }
   .moneyPanel .amountInput { min-height: 38px; height: 38px; padding: 0; font-size: 32px; line-height: 1.15; letter-spacing: -.04em; }
-  .assetIdentity { display: flex; min-width: 0; align-items: center; justify-content: flex-end; overflow: hidden; border: 1px solid var(--exchange-asset-border); border-radius: 5px; background: var(--exchange-asset-bg); transition: border-color .15s ease; }
-  .assetIdentity:hover { border-color: var(--color-border-strong); }
+  .assetIdentity { display: flex; min-width: 0; align-items: center; justify-content: flex-end; overflow: hidden; border: 1px solid var(--exchange-asset-border); border-radius: 5px; background: var(--exchange-asset-bg); }
   .assetMain { display: flex; min-width: 0; flex: 1 1 auto; align-items: center; gap: 7px; min-height: 44px; padding: 6px 8px 6px 6px; }
   .assetAvatar { display: grid; flex: 0 0 auto; width: 28px; height: 28px; place-items: center; overflow: hidden; border-radius: 50%; }
   .assetAvatar img { width: 20px; height: 20px; border-radius: 50%; object-fit: contain; }

@@ -12,8 +12,8 @@
 
 <style>
   .flowBridge { position: relative; z-index: 4; display: flex; height: 31px; align-items: center; justify-content: center; }
-  .bridgeIcon { position: relative; z-index: 1; display: grid; width: 28px; height: 28px; place-items: center; padding: 0; border: 0; border-radius: 50%; background: var(--color-panel); color: var(--color-text-soft); cursor: pointer; box-shadow: none; transition: transform .2s ease, background .18s ease, color .18s ease; }
-  .bridgeIcon:hover { background: var(--exchange-asset-bg); color: var(--color-text); transform: translateY(-1px); }
+  .bridgeIcon { position: relative; z-index: 1; display: grid; width: 28px; height: 28px; place-items: center; padding: 0; border: 0; border-radius: 7px; background: var(--exchange-card-bg); color: var(--color-text-soft); cursor: pointer; box-shadow: none; transition: color .18s ease; }
+  .bridgeIcon:hover { color: var(--color-text); }
   .bridgeIcon:focus-visible { outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 2px; }
   .bridgeIcon:active { transform: scale(.96); }
   .bridgeIcon svg { width: 22px; height: 22px; fill: currentColor; transition: transform .32s cubic-bezier(.22, 1, .36, 1); }
