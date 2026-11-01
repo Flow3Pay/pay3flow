@@ -13,7 +13,6 @@ export type OtcWalletDialog = {
   progress: string;
   requestingQuote: boolean;
   quoteReady: boolean;
-  quoteStatus: string;
   onClose: () => void;
   onConnect: (chain: WalletChain) => Promise<void>;
   onVerify: (chain: WalletChain) => Promise<void>;

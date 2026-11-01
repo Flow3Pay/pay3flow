@@ -64,7 +64,7 @@
   }
   async function focusChoice(family: WalletFamily) {
     await tick();
-    if (open) (dialog.querySelector<HTMLButtonElement>(`[data-family="${family}"] button`) ?? searchInput)?.focus();
+    if (open) (dialog.querySelector<HTMLElement>(`[data-family="${family}"] .optionCard`) ?? searchInput)?.focus();
   }
   function clearSearch() { query = ""; searchInput?.focus(); }
   function startSheetDrag(event: PointerEvent) {
@@ -102,7 +102,7 @@
       return;
     }
     if (event.key !== "Tab") return;
-    const items = [...dialog.querySelectorAll<HTMLElement>("input:not(:disabled), button:not(:disabled)")].filter(node => node.tabIndex >= 0 && node.checkVisibility());
+    const items = [...dialog.querySelectorAll<HTMLElement>('input:not(:disabled), button:not(:disabled), .optionCard[tabindex="0"]')].filter(node => node.tabIndex >= 0 && node.checkVisibility());
     const first = items[0], last = items.at(-1);
     if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
@@ -180,6 +180,13 @@
               {@const action = busy === choice.family ? copy("Connecting…") : disconnectable ? copy("Disconnect") : verificationAction ? copy("Verify") : copy("Connect")}
               {@const address = wallet?.address}
               <div class="walletChoice" data-family={choice.family} aria-busy={busy === choice.family}>
+                {#snippet disconnectAction()}
+                  {#if wallet && !disconnectable}
+                    <button type="button" class="cardAction" disabled={working} aria-label={copy("Disconnect {network} wallet", { network: choice.label })} on:click|stopPropagation={() => disconnect(choice.family)}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8.9 7.56c.31-3.6 2.16-5.07 6.21-5.07h.13c4.47 0 6.26 1.79 6.26 6.26v6.52c0 4.47-1.79 6.26-6.26 6.26h-.13c-4.02 0-5.87-1.45-6.2-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /><path d="M15 12H3.62" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /><path d="m5.85 8.65-3.35 3.35 3.35 3.35" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                    </button>
+                  {/if}
+                {/snippet}
                 <PickerOptionCard
                   role="button"
                   name={choice.label}
@@ -191,9 +198,10 @@
                   metaTitle={address}
                   disabled={working}
                   ariaLabel={disconnectable ? copy("Disconnect {network} wallet", { network: choice.label }) : verificationAction ? copy("Verify {network} wallet", { network: choice.label }) : busy === choice.family ? copy("Connecting…") : copy("Connect {network} wallet", { network: choice.label })}
+                  trailing={disconnectAction}
                   onSelect={() => selectChoice(choice.family, choice.network)}
                 />
-                {#if wallet || proof}<div class="connectionState"><span>{copy(wallet ? "Connected wallet" : "Wallet disconnected")}</span>{#if proof && (!wallet || verified)}<span>{copy("Verified")}</span>{/if}{#if wallet && !disconnectable}<button type="button" disabled={working} aria-label={copy("Disconnect {network} wallet", { network: choice.label })} on:click={() => disconnect(choice.family)}>{copy("Disconnect")}</button>{/if}</div>{/if}
+                {#if proof && (!wallet || verified)}<div class="connectionState"><span>{copy("Verified")}</span></div>{/if}
                 {#if otcChain && !canVerify}<p class="verificationStatus">{copy("OTC verification is unavailable for this network.")}</p>{/if}
               </div>
             {/each}
@@ -202,9 +210,8 @@
           {#if error || account?.error}<p role="alert">{error || account?.error}</p>{/if}
           {#if account?.progress}<p class="walletStatus" role="status">{copy(account.progress)}</p>{/if}
           {#if account?.session}<button class="accountAction" type="button" disabled={account.disconnectDisabled || !!account.progress || Boolean(busy)} on:click={account.onDisconnect}>{copy("Disconnect")}</button>{/if}
-          {#if account?.quoteStatus && !working}<p class="walletStatus" role="status" id="otc-wallet-quote-status" data-testid="otc-quote-status">{account.quoteStatus}</p>{/if}
           {#if account?.requestingQuote}
-            <button class="quoteAction" type="button" disabled={working || !account.quoteReady} aria-describedby={account.quoteStatus && !working ? "otc-wallet-quote-status" : undefined} on:click={account.onRequest}>{copy("Request exact quote")}</button>
+            <button class="quoteAction" type="button" disabled={working || !account.quoteReady} on:click={account.onRequest}>{copy("Request exact quote")}</button>
           {/if}
         </div>
       </div>
@@ -215,7 +222,9 @@
 <style>
   .walletMenu { position: relative; }
   .connectionState { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 0 12px 8px; color: var(--color-text-soft); font-size: 12px; }
-  .connectionState button { margin-left: auto; padding: 4px 10px; }
+  .cardAction { display: grid; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; border: 1px solid var(--color-border); border-radius: 7px; background: var(--color-paper); color: var(--color-text-soft); transition: color .13s ease, border-color .13s ease; }
+  .cardAction:hover:not(:disabled) { border-color: var(--color-border-strong); color: var(--color-text); }
+  .cardAction:disabled { opacity: .5; cursor: not-allowed; }
   .verificationStatus { margin: 0; padding: 0 12px 8px; color: var(--color-text-soft); font-size: 12px; line-height: 1.5; }
   button { min-height: 36px; border: 1px solid var(--color-border); border-radius: 9px; background: var(--color-panel); color: var(--color-text); font: inherit; cursor: pointer; transition: background .16s ease; }
   button:hover { background: var(--color-accent-soft); }
