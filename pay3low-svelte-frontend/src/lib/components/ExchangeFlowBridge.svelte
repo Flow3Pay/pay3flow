@@ -12,10 +12,10 @@
 
 <style>
   .flowBridge { position: relative; z-index: 4; display: flex; height: 31px; align-items: center; justify-content: center; }
-  .bridgeIcon { position: relative; z-index: 1; display: grid; width: 28px; height: 28px; place-items: center; padding: 0; border: 0; border-radius: 7px; background: var(--exchange-card-bg); color: var(--color-text-soft); cursor: pointer; box-shadow: none; transition: color .18s ease; }
-  .bridgeIcon:hover { color: var(--color-text); }
+  .bridgeIcon { position: relative; z-index: 1; display: grid; width: 28px; height: 28px; place-items: center; padding: 0; border: 0; border-radius: 7px; background: var(--exchange-card-bg); color: var(--color-text-soft); cursor: pointer; box-shadow: none; }
   .bridgeIcon:focus-visible { outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 2px; }
   .bridgeIcon:active { transform: scale(.96); }
+  :global(html[data-theme="dark"]) .bridgeIcon { color: #fff; }
   .bridgeIcon svg { width: 22px; height: 22px; fill: currentColor; transition: transform .32s cubic-bezier(.22, 1, .36, 1); }
   .bridgeIconReversed svg { transform: rotate(180deg); }
   .flowBridge.flowBridgeOverlay { position: absolute; top: 50%; right: 0; left: 0; height: 0; margin: 0; transform: translateY(-50%); }
