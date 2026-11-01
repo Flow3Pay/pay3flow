@@ -1262,7 +1262,7 @@
             <span class="methodAvatar" style:background-color={paymentMethodFavicon(sourceMethod) ? "transparent" : sourceMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(sourceMethod)}<img src={paymentMethodFavicon(sourceMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{:else}<span>{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{/if}</span>
             <span class="methodText" class:methodTextAsset={sourceMethod?.kind === "wallet"}><strong>{t(methodTitle(sourceMethod), {}, activeLocale)}</strong></span><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
           </button>
-          <div class="networkControl"><button type="button" class="networkButton" on:click={() => sourceMethod?.kind === "wallet" ? openNetworkPicker("source") : openCurrencyPicker("source")} aria-haspopup="dialog" aria-label={sourceMethod?.kind === "wallet" ? `Select sending network: ${sourceNetwork?.name ?? "none"}` : `Select sending currency: ${sourceCurrencyChoice}`} title={sourceMethod?.kind === "wallet" ? sourceNetwork?.name ?? "Select network" : sourceCurrencyChoice === "ANY" ? t("The same amount is compared separately in each starting currency.", {}, activeLocale) : sourceCurrencyChoice}><span class:currencyDot={sourceMethod?.kind !== "wallet"} class:flagDot={Boolean(sourceCurrencyFlag)} class="networkDot" aria-hidden="true">{#if sourceMethod?.kind === "wallet" && sourceNetwork}<img src={networkIcon(sourceNetwork.name)} alt="" width="18" height="18" loading="lazy" decoding="async" />{:else if sourceCurrencyFlag}<img src={sourceCurrencyFlag} alt="" width="18" height="18" decoding="async" />{:else}{currencyMark(sourceCurrencyChoice)}{/if}</span>{#if sourceMethod?.kind !== "wallet"}<span class="networkCopy"><strong>{sourceCurrencyChoice}</strong></span>{/if}<svg class="networkChevron" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></button></div>
+          <div class="networkControl"><button type="button" class="networkButton" on:click={() => sourceMethod?.kind === "wallet" ? openNetworkPicker("source") : openCurrencyPicker("source")} aria-haspopup="dialog" aria-label={sourceMethod?.kind === "wallet" ? `Select sending network: ${sourceNetwork?.name ?? "none"}` : `Select sending currency: ${sourceCurrencyChoice}`} title={sourceMethod?.kind === "wallet" ? sourceNetwork?.name ?? "Select network" : sourceCurrencyChoice === "ANY" ? t("The same amount is compared separately in each starting currency.", {}, activeLocale) : sourceCurrencyChoice}><span class:currencyDot={sourceMethod?.kind !== "wallet"} class:flagDot={Boolean(sourceCurrencyFlag)} class="networkDot" aria-hidden="true">{#if sourceMethod?.kind === "wallet" && sourceNetwork}<img src={networkIcon(sourceNetwork.name)} alt="" width="18" height="18" loading="lazy" decoding="async" />{:else if sourceCurrencyFlag}<img src={sourceCurrencyFlag} alt="" width="18" height="18" decoding="async" />{:else}{currencyMark(sourceCurrencyChoice)}{/if}</span><span class="networkCopy">{#if sourceMethod?.kind === "wallet" && sourceNetwork}<span class="networkName">{sourceNetwork.name} ·</span>{/if}<strong>{sourceCurrencyChoice}</strong></span><svg class="networkChevron" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></button></div>
         </div>
       </div>
       <ExchangeFlowBridge reversed={directionReversed} overlay onSwap={swapDirection} label={t("Swap sender and recipient", {}, activeLocale)}><button type="button" class="routesToggle" class:routesToggleOpen={routesExpanded} on:click={toggleRoutes} aria-label={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)} aria-expanded={routesExpanded} title={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)}><span aria-hidden="true">❯</span></button></ExchangeFlowBridge>
@@ -1273,7 +1273,7 @@
             <span class="methodAvatar" style:background-color={paymentMethodFavicon(targetMethod) ? "transparent" : targetMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(targetMethod)}<img src={paymentMethodFavicon(targetMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{:else}<span>{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{/if}</span>
             <span class="methodText" class:methodTextAsset={targetMethod?.kind === "wallet"}><strong>{t(methodTitle(targetMethod), {}, activeLocale)}</strong></span><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
           </button>
-          <div class="networkControl"><button type="button" class="networkButton" on:click={() => targetMethod?.kind === "wallet" ? openNetworkPicker("target") : openCurrencyPicker("target")} aria-haspopup="dialog" aria-label={targetMethod?.kind === "wallet" ? `Select recipient network: ${targetNetwork?.name ?? "none"}` : `Select recipient currency: ${targetCurrencyChoice}`} title={targetMethod?.kind === "wallet" ? targetNetwork?.name ?? "Select network" : targetCurrencyChoice}><span class:currencyDot={targetMethod?.kind !== "wallet"} class:flagDot={Boolean(targetCurrencyFlag)} class="networkDot" aria-hidden="true">{#if targetMethod?.kind === "wallet" && targetNetwork}<img src={networkIcon(targetNetwork.name)} alt="" width="18" height="18" loading="lazy" decoding="async" />{:else if targetCurrencyFlag}<img src={targetCurrencyFlag} alt="" width="18" height="18" decoding="async" />{:else}{currencyMark(targetCurrencyChoice)}{/if}</span>{#if targetMethod?.kind !== "wallet"}<span class="networkCopy"><strong>{targetCurrencyChoice}</strong></span>{/if}<svg class="networkChevron" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></button></div>
+          <div class="networkControl"><button type="button" class="networkButton" on:click={() => targetMethod?.kind === "wallet" ? openNetworkPicker("target") : openCurrencyPicker("target")} aria-haspopup="dialog" aria-label={targetMethod?.kind === "wallet" ? `Select recipient network: ${targetNetwork?.name ?? "none"}` : `Select recipient currency: ${targetCurrencyChoice}`} title={targetMethod?.kind === "wallet" ? targetNetwork?.name ?? "Select network" : targetCurrencyChoice}><span class:currencyDot={targetMethod?.kind !== "wallet"} class:flagDot={Boolean(targetCurrencyFlag)} class="networkDot" aria-hidden="true">{#if targetMethod?.kind === "wallet" && targetNetwork}<img src={networkIcon(targetNetwork.name)} alt="" width="18" height="18" loading="lazy" decoding="async" />{:else if targetCurrencyFlag}<img src={targetCurrencyFlag} alt="" width="18" height="18" decoding="async" />{:else}{currencyMark(targetCurrencyChoice)}{/if}</span><span class="networkCopy">{#if targetMethod?.kind === "wallet" && targetNetwork}<span class="networkName">{targetNetwork.name} ·</span>{/if}<strong>{targetCurrencyChoice}</strong></span><svg class="networkChevron" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></button></div>
         </div>
       </div>
       </div>
@@ -2962,6 +2962,19 @@
   object-fit: cover;
 }
 
+.networkCopy {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.networkName {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
 .networkCopy strong {
   color: #344235;
   font-size: 12px;
@@ -2992,11 +3005,6 @@
   border-radius: 5px;
   background: var(--exchange-asset-bg);
   transition: border-color 0.15s ease;
-}
-
-.methodControls:has(> .methodTrigger:focus-visible) {
-  border-color: #a4af9e;
-  border-width: var(--border-highlight-width);
 }
 
 .methodControls .methodTrigger {
@@ -3263,14 +3271,13 @@
   border-color: #3b3b3b;
 }
 
-:global(html[data-theme="dark"]) .methodControls:has(> .methodTrigger:focus-visible) {
-  border-color: #626262;
-  border-width: var(--border-highlight-width);
-}
-
 :global(html[data-theme="dark"]) .networkButton,
 :global(html[data-theme="dark"]) .networkCopy strong {
   color: var(--color-text);
+}
+
+:global(html[data-theme="dark"]) .networkName {
+  color: var(--color-text-soft);
 }
 
 :global(html[data-theme="dark"]) .networkChevron {
