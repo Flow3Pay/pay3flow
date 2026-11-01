@@ -1,4 +1,5 @@
 import { get, writable } from "svelte/store";
+import { scramblingNodes } from "./scramble-on-load";
 import { walletMessages } from "./wallet-messages";
 import { spotMessages } from "./guides/spot/messages";
 import { guideMessages } from "./guides/messages";
@@ -1221,6 +1222,7 @@ export function localize(node: HTMLElement) {
     let current: Node | null;
     while ((current = walker.nextNode())) textNodes.push(current as Text);
     for (const text of textNodes) {
+      if (scramblingNodes.has(text)) continue;
       const value = text.nodeValue ?? "";
       if (!originalText.has(text) || (renderedText.has(text) && value !== renderedText.get(text))) originalText.set(text, value);
       const source = originalText.get(text) ?? "";
@@ -1254,6 +1256,7 @@ export function localize(node: HTMLElement) {
       if (record.type === "childList") {
         for (const added of record.addedNodes) translateTree(added, get(locale));
       } else {
+        if (record.target instanceof Text && scramblingNodes.has(record.target)) continue;
         translateTree(record.target, get(locale));
       }
     }

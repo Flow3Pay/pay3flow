@@ -2,7 +2,6 @@
   import { tick } from "svelte";
   import { locale } from "$lib/i18n";
   import { marketByBase, type OtcMarket } from "$lib/otc/markets";
-  import ScrambleText from "../ScrambleText.svelte";
   import OtcMarketPicker from "./OtcMarketPicker.svelte";
   import OtcPanel from "./OtcPanel.svelte";
   export let baseAsset = "EVER", quoteAsset = "USDT", marketIcon = "/icons/assets/ever.svg", networkLabel = "Everscale ↔ Ethereum", venueLabel = "OTC";
@@ -11,7 +10,7 @@
   export let bookPanel = true, chartPanel = true;
   $: say = (en:string,ru:string) => $locale === "ru" ? ru : en;
   $: currentMarket = marketByBase(baseAsset);
-  let pickerOpen = false, selectorButton: HTMLButtonElement, pairText: ScrambleText;
+  let pickerOpen = false, selectorButton: HTMLButtonElement;
   function closePicker() {
     pickerOpen = false;
     void tick().then(() => selectorButton?.focus());
@@ -31,9 +30,9 @@
   }
 </script>
 <div class="marketStrip">
-  <button type="button" class="marketSelector" data-testid="otc-market-selector" bind:this={selectorButton} class:open={pickerOpen} aria-haspopup="dialog" aria-expanded={pickerOpen} aria-label={`${say("Choose OTC market","Выберите рынок OTC")}: ${baseAsset} / ${quoteAsset}`} on:click={() => pickerOpen = true} on:mouseenter={() => pairText?.play()} on:focus={() => pairText?.play()}>
+  <button type="button" class="marketSelector" data-testid="otc-market-selector" bind:this={selectorButton} class:open={pickerOpen} aria-haspopup="dialog" aria-expanded={pickerOpen} aria-label={`${say("Choose OTC market","Выберите рынок OTC")}: ${baseAsset} / ${quoteAsset}`} on:click={() => pickerOpen = true}>
     <img src={marketIcon} width="38" height="38" alt="" />
-    <span class="marketCopy"><span class="pairSelect"><strong><ScrambleText bind:this={pairText} text={`${baseAsset} / ${quoteAsset}`} /></strong></span><span class="marketRoute">{networkLabel} <span class="marketTag">{venueLabel}</span></span></span>
+    <span class="marketCopy"><span class="pairSelect"><strong>{baseAsset} / {quoteAsset}</strong></span><span class="marketRoute">{networkLabel} <span class="marketTag">{venueLabel}</span></span></span>
     <svg class="selectorChevron" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
   </button>
   <div class="marketStat last"><span>{rateLabel || say("Your selected rate","Выбранный курс")}</span><strong>{selectedRate} <small>{quoteAsset} / {baseAsset}</small></strong></div>{#each stats as stat}<div class="marketStat" class:secondaryStat={stat.secondary} class:volumeStat={!!stat.unit}><span>{stat.label}</span><strong>{stat.value}{#if stat.unit}{" "}<small>{stat.unit}</small>{/if}</strong></div>{/each}
