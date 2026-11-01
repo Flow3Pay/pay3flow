@@ -3,7 +3,7 @@
 -- The application embeds this migration; Providerfiles are not read at runtime.
 DELETE FROM providers
 WHERE source_file LIKE '%/Providerfile'
-AND (slug, operation) NOT IN (('0x', 'buy'), ('0x', 'sell'), ('barter', 'buy'), ('barter', 'sell'), ('bestchange', 'buy'), ('bestchange', 'sell'), ('binance', 'buy'), ('binance', 'sell'), ('bitcoin-center', 'buy'), ('bitcoin-center', 'sell'), ('bitget', 'buy'), ('bitget', 'sell'), ('bncex', 'buy'), ('bncex', 'sell'), ('bybit', 'buy'), ('bybit', 'sell'), ('cifra-broker', 'buy'), ('cifra-broker', 'sell'), ('cow-swap', 'buy'), ('cow-swap', 'sell'), ('crypto-office', 'buy'), ('crypto-office', 'sell'), ('dzengi', 'buy'), ('dzengi', 'sell'), ('gate', 'buy'), ('gate', 'sell'), ('id-pay', 'buy'), ('id-pay', 'sell'), ('mexc', 'buy'), ('mexc', 'sell'), ('near-intents', 'buy'), ('near-intents', 'sell'), ('okx', 'buy'), ('okx', 'sell'), ('papa-change', 'buy'), ('papa-change', 'sell'), ('rapira', 'buy'), ('rapira', 'sell'), ('skylabs', 'buy'), ('skylabs', 'sell'), ('symbiosis', 'buy'), ('symbiosis', 'sell'), ('whitebird', 'buy'), ('whitebird', 'sell'));
+AND (slug, operation) NOT IN (('0x', 'buy'), ('0x', 'sell'), ('barter', 'buy'), ('barter', 'sell'), ('bestchange', 'buy'), ('bestchange', 'sell'), ('binance', 'buy'), ('binance', 'sell'), ('bitcoin-center', 'buy'), ('bitcoin-center', 'sell'), ('bitget', 'buy'), ('bitget', 'sell'), ('bncex', 'buy'), ('bncex', 'sell'), ('bybit', 'buy'), ('bybit', 'sell'), ('cifra-broker', 'buy'), ('cifra-broker', 'sell'), ('cow-swap', 'buy'), ('cow-swap', 'sell'), ('crypto-office', 'buy'), ('crypto-office', 'sell'), ('dzengi', 'buy'), ('dzengi', 'sell'), ('gate', 'buy'), ('gate', 'sell'), ('id-pay', 'buy'), ('id-pay', 'sell'), ('mexc', 'buy'), ('mexc', 'sell'), ('near-intents', 'buy'), ('near-intents', 'sell'), ('okx', 'buy'), ('okx', 'sell'), ('papa-change', 'buy'), ('papa-change', 'sell'), ('pay3flow-otc', 'buy'), ('pay3flow-otc', 'sell'), ('rapira', 'buy'), ('rapira', 'sell'), ('skylabs', 'buy'), ('skylabs', 'sell'), ('symbiosis', 'buy'), ('symbiosis', 'sell'), ('whitebird', 'buy'), ('whitebird', 'sell'));
 
 INSERT INTO providers (slug, operation, source_url, name, currencies, currency_exceptions, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
 VALUES ('0x', 'buy', 'https://matcha.xyz/', '0x Buy', ARRAY['ETH', 'USDC', 'USDT']::TEXT[], ARRAY[]::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{}'::JSONB, '{"description":"0x Swap API v2 token quotes, enabled when the server has ZEROX_API_KEY. Token and network availability depends on the selected route.","steps":["Open Matcha and select the source and destination tokens and networks.","Review the quoted output, network fees, and slippage in Matcha.","Connect your wallet and confirm the transaction only after checking the network and token addresses."],"buy_steps":[],"sell_steps":[],"links":[{"label":"Open Matcha by 0x","url":"https://matcha.xyz/"}],"review_sources":[]}'::JSONB, '0x/Providerfile')
@@ -567,6 +567,38 @@ updated_at = now();
 
 INSERT INTO providers (slug, operation, source_url, name, currencies, currency_exceptions, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
 VALUES ('papa-change', 'sell', 'https://papa-change.biz/', 'Papa Change Sell', ARRAY['AED', 'CAD', 'EUR', 'KGS', 'KZT', 'RUB', 'TRY', 'UAH', 'USD', 'UZS']::TEXT[], ARRAY[]::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{"p2p":null,"market":null,"bestchange":null,"papa_change":{"directions_endpoint":"https://api.papa-change.biz/users-directions/get-all-available","rates_endpoint":"https://api.papa-change.biz/exchange-rates-api/get-all","public_endpoint":"https://papa-change.biz/","timeout_ms":10000,"cache_ttl_ms":30000,"max_results":100}}'::JSONB, '{}'::JSONB, '{"kind":"included_in_quote","description":"The live rate includes Papa Change''s direction commission and public amount-tiered rate; payment-system and blockchain fees may still apply.","docs_url":"https://papa-change.biz/agreement"}'::JSONB, '{"description":"Check the current exchange amount and payout details in Papa Change.","steps":[],"buy_steps":[],"sell_steps":[],"links":[],"review_sources":[{"kind":"bestchange","url":"https://bestchange.biz/papa-change-exchanger"},{"kind":"provider","url":"https://papa-change.biz/#reviews"}]}'::JSONB, 'papa-change/Providerfile')
+ON CONFLICT (slug, operation) DO UPDATE SET
+source_url = EXCLUDED.source_url,
+name = EXCLUDED.name,
+currencies = EXCLUDED.currencies,
+currency_exceptions = EXCLUDED.currency_exceptions,
+banks = EXCLUDED.banks,
+exchange_methods = EXCLUDED.exchange_methods,
+adapter = EXCLUDED.adapter,
+workflow = EXCLUDED.workflow,
+fee_model = EXCLUDED.fee_model,
+guidance = EXCLUDED.guidance,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO providers (slug, operation, source_url, name, currencies, currency_exceptions, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
+VALUES ('pay3flow-otc', 'buy', 'https://pay3flow.lefine.pro/#/otc?market=EVER-USDT&side=buy', 'Pay3Flow OTC Buy', ARRAY['EVER', 'USDT']::TEXT[], ARRAY[]::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{"kind":"included_in_quote","description":"Pay3Flow OTC prices come directly from the best open advertisements in the EVER/USDT book. Each quote is backed by a single advertisement, so it fills only up to that advertisement''s remaining size. On-chain transfer fees for the EVER and USDT legs are paid by the traders and are not included in the advertised price.","docs_url":"https://pay3flow.lefine.pro/#/otc?market=EVER-USDT"}'::JSONB, '{"description":"Pay3Flow OTC matches you against the best live EVER/USDT advertisements on the Pay3Flow Everscale book. No order routing is needed: the offers are already on our own platform, so settlement starts the moment you accept one.","steps":["Review the best open EVER/USDT offers shown here; each one fills its own size, so a larger amount may need a bigger advertisement.","Open the offer, connect the wallets that hold your USDT (Ethereum ERC-20) and EVER (Everscale), and check the advertised price, wallet addresses and expiry.","Accept the advertisement and complete the two wallet-to-wallet transfers in the OTC terminal before the offer expires."],"buy_steps":[],"sell_steps":[],"links":[{"label":"Open the Pay3Flow OTC terminal","url":"https://pay3flow.lefine.pro/#/otc?market=EVER-USDT"}],"review_sources":[]}'::JSONB, 'pay3flow-otc/Providerfile')
+ON CONFLICT (slug, operation) DO UPDATE SET
+source_url = EXCLUDED.source_url,
+name = EXCLUDED.name,
+currencies = EXCLUDED.currencies,
+currency_exceptions = EXCLUDED.currency_exceptions,
+banks = EXCLUDED.banks,
+exchange_methods = EXCLUDED.exchange_methods,
+adapter = EXCLUDED.adapter,
+workflow = EXCLUDED.workflow,
+fee_model = EXCLUDED.fee_model,
+guidance = EXCLUDED.guidance,
+source_file = EXCLUDED.source_file,
+updated_at = now();
+
+INSERT INTO providers (slug, operation, source_url, name, currencies, currency_exceptions, banks, exchange_methods, adapter, workflow, fee_model, guidance, source_file)
+VALUES ('pay3flow-otc', 'sell', 'https://pay3flow.lefine.pro/#/otc?market=EVER-USDT&side=sell', 'Pay3Flow OTC Sell', ARRAY['EVER', 'USDT']::TEXT[], ARRAY[]::TEXT[], ARRAY[]::TEXT[], ARRAY['exchanger']::TEXT[], '{}'::JSONB, '{}'::JSONB, '{"kind":"included_in_quote","description":"Pay3Flow OTC prices come directly from the best open advertisements in the EVER/USDT book. Each quote is backed by a single advertisement, so it fills only up to that advertisement''s remaining size. On-chain transfer fees for the EVER and USDT legs are paid by the traders and are not included in the advertised price.","docs_url":"https://pay3flow.lefine.pro/#/otc?market=EVER-USDT"}'::JSONB, '{"description":"Pay3Flow OTC matches you against the best live EVER/USDT advertisements on the Pay3Flow Everscale book. No order routing is needed: the offers are already on our own platform, so settlement starts the moment you accept one.","steps":["Review the best open EVER/USDT offers shown here; each one fills its own size, so a larger amount may need a bigger advertisement.","Open the offer, connect the wallets that hold your USDT (Ethereum ERC-20) and EVER (Everscale), and check the advertised price, wallet addresses and expiry.","Accept the advertisement and complete the two wallet-to-wallet transfers in the OTC terminal before the offer expires."],"buy_steps":[],"sell_steps":[],"links":[{"label":"Open the Pay3Flow OTC terminal","url":"https://pay3flow.lefine.pro/#/otc?market=EVER-USDT"}],"review_sources":[]}'::JSONB, 'pay3flow-otc/Providerfile')
 ON CONFLICT (slug, operation) DO UPDATE SET
 source_url = EXCLUDED.source_url,
 name = EXCLUDED.name,

@@ -1,9 +1,11 @@
 import { spotMessages } from "./spot/messages";
 import { cifraMessages } from "./cifra/messages";
+import { otcMessages } from "./otc/messages";
 export const guideMessages = {
   ru: {
     ...spotMessages.ru,
     ...cifraMessages.ru,
+    ...otcMessages.ru,
     "Check tokens and networks": "Сверьте токены и сети",
     "Check the fixed tokens and networks for {from} → {to}. Connect your wallet on {venue}.": "Сверьте заданные токены и сети для {from} → {to}. Подключите кошелёк на {venue}.",
     "Select currencies": "Выберите валюты",
@@ -81,6 +83,7 @@ export const guideMessages = {
   hy: {
     ...spotMessages.hy,
     ...cifraMessages.hy,
+    ...otcMessages.hy,
     "Check tokens and networks": "Ստուգեք տոկեններն ու ցանցերը",
     "Check the fixed tokens and networks for {from} → {to}. Connect your wallet on {venue}.": "Ստուգեք {from} → {to} փոխանակման սահմանված տոկեններն ու ցանցերը։ Միացրեք ձեր դրամապանակը {venue}-ում։",
     "Select currencies": "Ընտրեք արժույթները",

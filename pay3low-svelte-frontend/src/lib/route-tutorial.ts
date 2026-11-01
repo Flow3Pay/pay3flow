@@ -6,6 +6,7 @@ import { buildVenueSwapFrames, swapGuideVenues } from "./guides/exchangers/frame
 import { buildP2pProfileFrames } from "./guides/p2p/frames";
 import { buildSpotFrames, spotGuideLinks } from "./guides/spot/frames";
 import { buildCifraFrames, cifraGuideUrl, cifraTerminalUrl } from "./guides/cifra/frames";
+import { buildOtcFrames, otcTerminalHash } from "./guides/otc/frames";
 
 export type TutorialKind = "buy" | "sell" | "swap" | "transfer";
 export type TutorialFrameKind = "open" | "verify" | "review" | "act" | "receive";
@@ -80,6 +81,7 @@ export function buildRouteTutorial(route: RouteCandidate, names: Record<string, 
     const spotGuide = data.kind === "swap" && data.pair ? spotGuideLinks[key] : undefined;
     const spotFrames = data.kind === "swap" && data.pair ? buildSpotFrames(data, copy) : null;
     const frames = spotFrames ?? (data.kind === "transfer" ? data.frames
+      : key === "pay3flow-otc" ? buildOtcFrames(data, copy)
       : key === "cifra-broker" ? buildCifraFrames(data, copy)
       : key === "bestchange" ? buildBestchangeFrames(data.from, data.to, copy)
       : key === "whitebird" ? buildWhitebirdFrames(copy)
@@ -93,6 +95,11 @@ export function buildRouteTutorial(route: RouteCandidate, names: Record<string, 
       data.summary = copy("Use Cifra Markets in Tradernet: prepare your balance, find the market and place the order for your route.");
       data.checkpoint = copy("Check execution and the balance");
       data.guideSteps = [];
+    }
+    if (key === "pay3flow-otc" && data.kind !== "transfer") {
+      data.url = data.url ?? otcTerminalHash(data);
+      data.summary = copy("Choose a live Pay3Flow OTC offer that covers your whole amount, check both wallets and settle directly between them.");
+      data.checkpoint = copy("Check that {to} arrived in your wallet before you continue.", { to: data.to });
     }
     const spotUrl = data.kind === "swap" && data.pair ? spotTutorialUrl(data.provider, data.pair, data.from, data.to) : null;
     const cifraGuide = key === "cifra-broker" && data.kind !== "transfer" ? { ...guide, description: "", steps: [], links: [{ label: copy("Cifra official video guides"), url: cifraGuideUrl }] } : undefined;

@@ -51,11 +51,14 @@ pub(in crate::p2p) fn provider_coefficient_key(provider: &str, from: &Asset, to:
 
 pub(in crate::p2p) fn provider_priority(provider: &str) -> u8 {
     match provider {
-        "symbiosis" => 0,
-        "bestchange" => 1,
-        "cow-swap" => 2,
-        "near-intents" => 3,
-        _ => 4,
+        // Pay3Flow's own OTC book is read from the local database, so it is quoted
+        // and streamed back ahead of every external venue.
+        "pay3flow-otc" => 0,
+        "symbiosis" => 1,
+        "bestchange" => 2,
+        "cow-swap" => 3,
+        "near-intents" => 4,
+        _ => 5,
     }
 }
 
@@ -69,6 +72,7 @@ pub(in crate::p2p) fn network_priority(network: Option<&str>) -> u8 {
         Some("optimism") => 5,
         Some("avalanche-c") => 6,
         Some("solana") => 7,
+        Some("everscale") => 9,
         _ => 8,
     }
 }

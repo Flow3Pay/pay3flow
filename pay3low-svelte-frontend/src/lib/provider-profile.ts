@@ -41,6 +41,7 @@ const identities: Array<[string, string, string, MarketType[]]> = [
   ['id-pay', 'ID Pay', 'https://id-pay.ru', ['exchanger']],
   ['crypto-office', 'Crypto Office', 'https://crypto-office.com/ru/exchange', ['exchanger']],
   ['papa-change', 'Papa Change', 'https://papa-change.biz', ['exchanger']],
+  ['pay3flow-otc', 'Pay3Flow OTC', 'https://pay3flow.lefine.pro/#/otc?market=EVER-USDT', ['exchanger']],
 ];
 export const profileVenues: ProfileVenue[] = identities.map(([slug, name, url, types]) => ({
   slug, name, url, types, currencies: [], banks: [], searchable: null, guidance: null, feeModel: null,

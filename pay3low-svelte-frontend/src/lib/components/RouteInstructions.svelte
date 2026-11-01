@@ -13,6 +13,7 @@
   import InstructionScene from "./InstructionScene.svelte";
   import { isSpotStep, spotTrade } from "$lib/guides/spot/frames";
   import { bestchangeExchanger, bestchangeWebsiteUrl } from "$lib/guides/bestchange/frames";
+  import OtcDealCard from "$lib/guides/otc/OtcDealCard.svelte";
   import { canOpenSwap } from "$lib/swap-embed";
 
   export let route: RouteCandidate;
@@ -65,6 +66,7 @@
   $: walletProviderStep = Boolean(step?.execution);
   $: walletProviderUrl = step?.url ?? step?.guide?.links.find(link => /^Open\b/i.test(link.label))?.url ?? (step && venueUrls[step.provider.toLowerCase()]);
   $: exchangerWebsiteUrl = step?.provider.toLowerCase() === "bestchange" ? bestchangeWebsiteUrl(step) : null;
+  $: otcStep = Boolean(step?.kind !== "transfer" && step?.provider.toLowerCase() === "pay3flow-otc");
   $: finished = steps.length > 0 && chapter === steps.length;
   $: titleIncludesVenue = Boolean(step && step.title.endsWith(step.venue));
   $: headingTitle = titleIncludesVenue && step ? step.title.slice(0, -step.venue.length).trimEnd() : step?.title;
@@ -179,7 +181,7 @@
       {:else}
       {#key chapter}
         <div class="chapterEntrance">
-          <div class="chapterHeading"><span class="eyebrow">{finished ? copy("GUIDE COMPLETED") : chapter === -1 ? copy("LET’S GET YOU THERE") : copy("STEP {current} OF {total}", { current: chapter + 1, total: steps.length })}</span></div>
+          <div class="chapterHeading"><span class="eyebrow">{finished ? copy("GUIDE COMPLETED") : chapter === -1 ? copy("LET’S GET YOU THERE") : copy("STEP {current} OF {total}", { current: chapter + 1, total: steps.length })}</span>{#if otcStep}<span class="fastChip" data-testid="otc-step-chip" title={copy("Quoted instantly from the Pay3Flow OTC book")}><img src={venueIcon("pay3flow-otc")} alt="" />{copy("Fastest · Pay3Flow OTC")}</span>{/if}</div>
           <h1 bind:this={heading} tabindex="-1">{finished ? copy("Every step. Done.") : headingTitle ?? copy("A clear route. At your pace.")}{#if step}{" "}{#if !titleIncludesVenue}{copy("on")}{" "}{/if}<span class="headingVenue"><img src={venueIcon(step.provider)} alt="" />{step.venue}</span>{/if}</h1>
           <p class="lead">{finished ? copy("You have confirmed every step. Check the final balance in your bank, wallet or exchange account.") : swapActive ? copy("Connect your wallet, review the swap and confirm it here.") : step?.summary ?? copy("First, see how your exchange works. Then follow the animated walkthrough, one step at a time.")}</p>
           {#if swapStep}
@@ -217,6 +219,7 @@
                 {#if step.guideSteps.length}<ul class="stepNotes">{#each step.guideSteps as note}<li>{note}</li>{/each}</ul>{/if}
                 {#if step.guide?.links.length}<div class="guideLinks">{#each step.guide.links as link}<a href={link.url} target="_blank" rel="noreferrer noopener">{link.label} ↗</a>{/each}</div>{/if}
                 {#if spot && step.notes.length}<ul class="stepNotes">{#each step.notes as note}<li>{note}</li>{/each}</ul>{/if}
+                {#if otcStep}<div class="otcLive"><OtcDealCard step={step} /></div>{/if}
               {:else if finished}
                 <span class="eyebrow">{copy("YOUR CHECKLIST")}</span>
                 <div class="finishChecklist">{#each steps as item}<div><span>✓</span><p>{item.title}</p></div>{/each}</div>
@@ -249,7 +252,7 @@
           {/if}
           {#if swapStep && step && (swapActive || activeSwapStep === step.id)}
             <div hidden={!swapActive} data-testid="swap-view">
-              <UnifiedSwap {route} {step} {networkNames} />
+              {#if otcStep}<OtcDealCard step={step!} />{:else}<UnifiedSwap {route} {step} {networkNames} />{/if}
             </div>
           {/if}
           <!-- Actual platform actions are paused for now.
@@ -285,6 +288,8 @@
   .guideLayout { display: grid; grid-template-columns: 246px minmax(0, 1fr); width: min(var(--layout-width), calc(100% - 2 * var(--page-gutter))); margin: 0 auto; padding-inline: 24px; }
   .chapters { padding: 26px 22px 48px 0; border-right: 1px solid var(--color-border); min-width: 0; }
   .eyebrow { font: 10px var(--font-mono); letter-spacing: .09em; color: var(--color-text-soft); }
+  .fastChip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px 4px 5px; border-radius: 999px; background: var(--color-accent-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 45%, transparent); color: var(--color-accent-text); font: 650 10px var(--font-mono); letter-spacing: .05em; white-space: nowrap; }
+  .fastChip img { width: 14px; height: 14px; border-radius: 50%; }
   .routePair { display: flex; align-items: center; gap: 13px; margin-top: 15px; font-size: 24px; font-weight: 800; letter-spacing: -.05em; }.routePair > span { font-size: 20px; color: var(--color-text-soft); }
   .overviewButton { display: flex; align-items: center; gap: 13px; width: 100%; padding: 12px 8px; margin-top: 31px; border-radius: 8px; text-align: left; font-size: 12px; font-weight: 650; color: var(--color-text-soft); }.beforeIcon { flex: 0 0 auto; object-fit: contain; filter: brightness(0); } :global(html[data-theme="dark"]) .beforeIcon { filter: brightness(0) invert(1); }.overviewButton.current { color: var(--color-text); background: var(--color-panel-soft); }
   .chapters ol { list-style: none; display: grid; gap: 9px; margin-top: 19px; }
@@ -308,6 +313,7 @@
   .playerControls { display: flex; align-items: center; gap: 10px; padding: 8px 4px; margin-top: 5px; }.playerControls > button { display: grid; place-items: center; font-size: 17px; color: var(--color-text-soft); width: 32px; height: 32px; }.playerTimeline { display: flex; gap: 4px; flex: 1; }.playerTimeline button { position: relative; flex: 1; min-width: 0; height: 32px; background: transparent; }.playerTimeline button::before { content: ""; position: absolute; left: 0; right: 0; height: 3px; top: 15px; border-radius: 3px; background: var(--color-border); }.playerTimeline button > span { position: absolute; top: 15px; left: 0; height: 3px; border-radius: 3px; background: var(--color-accent-text); transition: width .1s linear; }.sceneCount { white-space: nowrap; font: 9px var(--font-mono); color: var(--color-text-soft); }
   /* .realAction { padding: 22px; margin-top: 28px; border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-paper); }.platformLink { display: flex; align-items: center; justify-content: space-between; gap: 18px; width: fit-content; min-height: 44px; padding: 0 16px; background: var(--color-accent); color: #152016; border-radius: 10px; font-size: 12px; font-weight: 750; }.platformLink:hover { background: #c3ff22; }.platformLink > span { font-size: 19px; }.marketInfo { margin-top: 14px; font-size: 12px; font-family: var(--font-mono); }.marketInfo > span { display: block; font-family: var(--font-sans); margin-top: 5px; color: var(--color-text-soft); } */
   .guideLinks { display: flex; flex-wrap: wrap; gap: 15px; margin-top: 13px; }.guideLinks a { text-decoration: underline; text-underline-offset: 3px; }
+  .otcLive { margin-top: 18px; }
   .routeNotice { display: flex; align-items: flex-start; gap: 12px; margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--color-border); color: var(--color-text-soft); font-size: 11px; line-height: 1.9; }.routeNotice > span { font-size: 18px; }.routeNotice strong { color: var(--color-text); font-size: 11px; }.routeNotice p { margin-top: 5px; }.finishChecklist { margin-top: 22px; display: grid; gap: 17px; }.finishChecklist > div { display: flex; gap: 11px; font-size: 12px; line-height: 1.7; }.finishChecklist > div > span { color: var(--color-accent-text); }
   .guideActions { margin-top: 32px; display: flex; justify-content: flex-end; align-items: center; padding: 20px 0; border-top: 1px solid var(--color-border); }.footerActions { display: flex; align-items: center; gap: 24px; }.backButton { font-size: 12px; color: var(--color-text-soft); }.continueButton { display: flex; align-items: center; justify-content: space-between; gap: 35px; min-height: 47px; padding: 0 21px; border-radius: 10px; background: var(--color-accent); color: #152016; font-size: 13px; font-weight: 800; }.continueButton > span { font-size: 22px; font-weight: 400; }.continueButton:hover { background: #c3ff22; }.continueButton:disabled { opacity: .5; cursor: default; }
   .guideToolbar { display: flex; justify-content: space-between; width: min(var(--layout-width), calc(100% - 2 * var(--page-gutter))); margin: 0 auto; padding: 18px 24px; border-bottom: 1px solid var(--color-border); }.guideToolbar button { min-height: 44px; font-size: 12px; color: var(--color-text-soft); display: flex; align-items: center; gap: 8px; }.guideToolbar button:hover { color: var(--color-text); }

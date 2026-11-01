@@ -5,7 +5,8 @@
   import { LayerCake, Svg } from "layercake";
   import { locale, t } from "$lib/i18n";
   import { fiatFlagUrl } from "$lib/currency-flags";
-  import { assetIcon } from "$lib/icons";
+  import { assetIcon, venueIcon } from "$lib/icons";
+  import { OTC_PROVIDER, otcCorridor } from "$lib/otc/route";
   import { SEARCH_ACTIVITY_PERIOD_LABELS, type RouteSearchActivityHour, type SearchActivityPeriod } from "$lib/route-activity";
   import ActivityLine from "./ActivityLine.svelte";
   import ChartPeriodOptions from "./ChartPeriodOptions.svelte";
@@ -75,7 +76,7 @@
 <section class="activityCard" data-testid="search-activity" aria-label={t("Searches for this exchange", {}, $locale)} aria-busy={loading}>
   {@render sheetHandle?.()}
   <div class="activityHeading">
-    <div class="headingCopy"><strong>{t("Searches for this exchange", {}, $locale)}</strong></div>
+    <div class="headingCopy"><strong>{t("Searches for this exchange", {}, $locale)}</strong>{#if otcCorridor(sourceCurrency, targetCurrency)}<span class="headingVenue"><img src={venueIcon(OTC_PROVIDER)} alt="" width="16" height="16" aria-hidden="true" />{t("Pay3Flow OTC", {}, $locale)}</span>{/if}</div>
     <div class="headingActions">
       <span class="pair">
         <span class="pairCurrency">
@@ -117,6 +118,8 @@
   .activityCard { display: flex; min-width: 0; min-height: 0; flex-direction: column; gap: 6px; padding: 16px 18px 12px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-card); background: rgba(255,255,255,.96); box-shadow: none; color: var(--color-text); }
   .activityHeading { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
   .headingCopy { display: flex; min-width: 0; flex-direction: column; gap: 1px; }
+  .headingVenue { display: inline-flex; align-items: center; gap: 4px; color: var(--color-accent-text); font-size: 11px; font-weight: 650; }
+  .headingVenue img { border-radius: 50%; }
   .activityHeading strong { font-size: 14px; line-height: 1.2; }
   .headingActions { display: flex; align-items: center; gap: 7px; flex: 0 0 auto; }
   .pair { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 5px; padding: 5px 8px; border-radius: 6px; background: var(--color-panel); color: var(--color-text-soft); font-size: 12px; font-weight: 750; }

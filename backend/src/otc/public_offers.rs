@@ -53,7 +53,8 @@ fn offer(row: &Row) -> Value {
         "created_at":row.get::<_,DateTime<Utc>>("created_at"), "expires_at":expires})
 }
 impl Service {
-    pub(crate) fn public_offers_available(&self) -> bool {
+    /// Whether the desk publishes offers the route engine may quote as a venue.
+    pub fn public_offers_available(&self) -> bool {
         self.cfg.public_offers_enabled
             && !self.cfg.demo
             && self.wallet_login_available()

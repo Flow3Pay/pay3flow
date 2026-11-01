@@ -522,6 +522,13 @@ pub trait PublicRouteProvider: Send + Sync {
     ) -> Result<Vec<PublicRouteQuote>> {
         Ok(vec![self.quote(from, to, amount).await?])
     }
+    /// Whether a thin, size-dependent book may be collapsed into the amount-blind
+    /// background coefficient cache.  Venues whose quotes only hold for amounts a
+    /// single offer actually covers must return `false` so the solver keeps calling
+    /// `quote`/`quotes` with the concrete requested amount.
+    fn supports_background_coefficient(&self) -> bool {
+        true
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

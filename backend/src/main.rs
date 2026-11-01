@@ -97,8 +97,21 @@ async fn main() -> anyhow::Result<()> {
             &cfg.near_intents_quote_refunds,
         )?
     };
+    let otc = pay3flow_backend::otc::Service::build(
+        pool.clone(),
+        &cfg.ap_origin,
+        &cfg.secrets_key,
+        &cfg.jwt_secret,
+    )?;
+    otc.start();
     let mut public_route_providers: Vec<Arc<dyn PublicRouteProvider>> =
         vec![Arc::new(near_intents.clone())];
+    if otc.public_offers_available() {
+        public_route_providers.push(Arc::new(pay3flow_backend::otc::OtcRouteProvider::new(
+            pool.clone(),
+            &cfg.ap_origin,
+        )));
+    }
     if let Some(provider) = pay3flow_backend::compiled_provider_code::crypto_office::CryptoOfficeRouteProvider::from_env()? {
         public_route_providers.push(Arc::new(provider));
     }
@@ -199,13 +212,6 @@ async fn main() -> anyhow::Result<()> {
 
     let market_prices = pay3flow_backend::market_prices::MarketPriceService::new()?;
     market_prices.initialize().await;
-    let otc = pay3flow_backend::otc::Service::build(
-        pool.clone(),
-        &cfg.ap_origin,
-        &cfg.secrets_key,
-        &cfg.jwt_secret,
-    )?;
-    otc.start();
     let state = AppState::new(
         pool,
         Jwt::new(&cfg.jwt_secret),

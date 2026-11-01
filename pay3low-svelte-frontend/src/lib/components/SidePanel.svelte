@@ -9,6 +9,7 @@
   import { routeWorkflowSteps } from "$lib/workflow-steps";
   import { routeScrollColor } from "$lib/route-scroll-color";
   import { fiatFlagUrl } from "$lib/currency-flags";
+  import { OTC_PROVIDER, routeUsesOtc } from "$lib/otc/route";
 
   export let routes: RouteCandidate[];
   export let routesFound = 0;
@@ -208,7 +209,7 @@
             <li animate:flip={{ duration: routeFlipDuration, easing: quintOut }} in:fly={{ y: 18, duration: routeEnterDuration(), easing: quintOut }}><div class="routeCardShell">
               <div class:routeBest={route.is_current_best} class:selected={route.route_id === selectedRouteId} class="routeCard" data-testid={complete ? "complete-route" : "partial-route"}>
               <button type="button" class="routeCardMain" disabled={!complete} aria-pressed={route.route_id === selectedRouteId} aria-label={`Select route ${index + 1}: ${money(route.target_amount_minor, route.target_currency, route.target_amount)}`} on:click={(event) => cardClick(event, route)}>
-                <span class="routeTopline"><span class="routeRank">#{String(index + 1).padStart(2, "0")}</span><span class="routeBadges">{#if route.is_current_best}<span class="bestBadge" data-testid="best-route-badge">{t("Best router", {}, $locale)}</span>{/if}{#if route.profitability}<span class={route.is_current_best ? "bestBadge" : "deltaBadge"}>{profitLabel(route)}</span>{:else if !route.is_current_best}<span class="deltaBadge">{spreadLabel(route.spread_bps, $locale)}</span>{/if}</span></span>
+                <span class="routeTopline"><span class="routeRank">#{String(index + 1).padStart(2, "0")}</span><span class="routeBadges">{#if route.is_current_best}<span class="bestBadge" data-testid="best-route-badge">{t("Best router", {}, $locale)}</span>{/if}{#if routeUsesOtc(route)}<span class="otcBadge" data-testid="otc-fast-route-badge" title={t("Quoted instantly from the Pay3Flow OTC book", {}, $locale)}><img src={venueIcon(OTC_PROVIDER)} alt="" width="13" height="13" aria-hidden="true" />{t("Fastest · Pay3Flow OTC", {}, $locale)}</span>{/if}{#if route.profitability}<span class={route.is_current_best ? "bestBadge" : "deltaBadge"}>{profitLabel(route)}</span>{:else if !route.is_current_best}<span class="deltaBadge">{spreadLabel(route.spread_bps, $locale)}</span>{/if}</span></span>
                 <span class="routeAmount">{money(route.target_amount_minor, route.target_currency, route.target_amount)}</span>
               </button>
               <div class="routeActionRow">
@@ -817,13 +818,30 @@
 }
 
 .bestBadge,
-.deltaBadge {
+.deltaBadge,
+.otcBadge {
   padding: 4px 8px;
   border-radius: var(--radius-pill);
   font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.07em;
   text-transform: uppercase;
+}
+
+.otcBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px 4px 5px;
+  background: rgba(181, 245, 0, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(181, 245, 0, 0.45);
+  color: var(--color-accent-text);
+}
+
+.otcBadge img {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
 }
 
 .bestBadge {
@@ -1364,7 +1382,7 @@
   .routeCard { gap: 12px; padding: 12px; }
   .routeTopline { align-items: start; gap: 8px; }
   .routeBadges { flex: 1; min-width: 0; justify-content: flex-end; }
-  .bestBadge, .deltaBadge { max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: right; line-height: 1.45; }
+  .bestBadge, .deltaBadge, .otcBadge { max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: right; line-height: 1.45; }
   .routeAmount { max-width: 100%; font-size: clamp(22px, 6vw, 28px); overflow-wrap: anywhere; }
   .routeActionRow { flex-direction: column; align-items: stretch; gap: 10px; }
   .routeWorkflowButton { width: 100%; flex: initial; }

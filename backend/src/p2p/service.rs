@@ -438,6 +438,7 @@ impl P2pSearchService {
         let capabilities = Self::provider_capabilities(&self.route_providers).await;
         let mut route_provider_assets = capabilities
             .iter()
+            .filter(|capability| capability.provider.supports_background_coefficient())
             .map(|capability| {
                 let mut assets = capability.assets.iter().cloned().collect::<Vec<_>>();
                 assets.sort_by_key(ToString::to_string);

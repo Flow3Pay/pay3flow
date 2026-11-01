@@ -1,0 +1,34 @@
+# Pay3Flow OTC is Pay3Flow's own Everscale settlement venue. The executable
+# routing provider is the compiled-in module src/otc/route_provider.rs (it reads
+# the local otc_public_offers book directly), so this Providerfile is catalog-only:
+# it registers the venue, its advertised currencies and its guidance for /api/providers.
+exchange_methods = ["exchanger"]
+
+[sell]
+source_url = "https://pay3flow.lefine.pro/#/otc?market=EVER-USDT&side=sell"
+name = "Pay3Flow OTC Sell"
+currency = ["ever", "usdt"]
+banks = []
+
+[buy]
+source_url = "https://pay3flow.lefine.pro/#/otc?market=EVER-USDT&side=buy"
+name = "Pay3Flow OTC Buy"
+currency = ["ever", "usdt"]
+banks = []
+
+[fees]
+kind = "included_in_quote"
+description = "Pay3Flow OTC prices come directly from the best open advertisements in the EVER/USDT book. Each quote is backed by a single advertisement, so it fills only up to that advertisement's remaining size. On-chain transfer fees for the EVER and USDT legs are paid by the traders and are not included in the advertised price."
+docs_url = "https://pay3flow.lefine.pro/#/otc?market=EVER-USDT"
+
+[guidance]
+description = "Pay3Flow OTC matches you against the best live EVER/USDT advertisements on the Pay3Flow Everscale book. No order routing is needed: the offers are already on our own platform, so settlement starts the moment you accept one."
+steps = [
+  "Review the best open EVER/USDT offers shown here; each one fills its own size, so a larger amount may need a bigger advertisement.",
+  "Open the offer, connect the wallets that hold your USDT (Ethereum ERC-20) and EVER (Everscale), and check the advertised price, wallet addresses and expiry.",
+  "Accept the advertisement and complete the two wallet-to-wallet transfers in the OTC terminal before the offer expires.",
+]
+
+[[guidance.links]]
+label = "Open the Pay3Flow OTC terminal"
+url = "https://pay3flow.lefine.pro/#/otc?market=EVER-USDT"

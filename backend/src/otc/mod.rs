@@ -1,6 +1,7 @@
 //! Customer-first, non-custodial EVER/USDT OTC settlement.
 mod test_workspace;
 pub use test_workspace::{Draft, OrderType, Side, TestOtc};
+pub use route_provider::OtcRouteProvider;
 
 mod accounting;
 mod amount;
@@ -25,6 +26,7 @@ mod public_offers;
 mod repo;
 mod reporting;
 mod review;
+mod route_provider;
 #[cfg(test)]
 mod tests;
 mod transfers;
