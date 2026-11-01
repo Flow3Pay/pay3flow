@@ -295,6 +295,7 @@
     width: 100%;
     max-width: none;
     margin: 0 auto;
+    container-type: inline-size;
     text-align: center;
   }
 
@@ -303,11 +304,11 @@
     margin: 0 auto;
     color: var(--color-text);
     font-family: var(--font-sans);
-    font-size: clamp(44px, 5.5vw, 72px);
+    /* Ratio of the longest joined phrase to the container width, per script. */
+    font-size: min(68px, calc(100cqi / 15.2));
     font-weight: 650;
     letter-spacing: -0.065em;
     line-height: 0.96;
-    text-wrap: balance;
   }
 
   .lines {
@@ -315,8 +316,7 @@
   }
 
   .line {
-    display: block;
-    min-height: 0.96em;
+    display: inline;
     white-space: pre-wrap;
     font-variant-ligatures: none;
   }
@@ -324,8 +324,7 @@
   .accentLine {
     position: relative;
     z-index: 0;
-    width: fit-content;
-    margin: 0 auto;
+    display: inline-block;
   }
 
   .accentLine::after {
@@ -367,24 +366,33 @@
     white-space: pre-wrap;
   }
 
-  @media (min-width: 981px) {
+  @media (min-width: 641px) {
     .line {
       white-space: nowrap;
     }
   }
 
-  :global(.localeLong) .headline {
-    font-size: clamp(42px, 5vw, 68px);
+  :global(html[lang="ru"]) .headline {
+    font-size: min(68px, calc(100cqi / 18.5));
   }
 
+  :global(html[lang="hy"]) .headline {
+    font-size: min(52px, calc(100cqi / 25.7));
+  }
+
+  /* Phones stack the two phrases instead of shrinking the type past what reads. */
   @media (max-width: 640px) {
     .headline {
-      font-size: clamp(43px, 14vw, 64px);
+      font-size: clamp(30px, 8vw, 48px);
     }
 
-    :global(.localeLong) .headline {
-      font-size: clamp(34px, 11.5vw, 52px);
+    :global(html[lang="hy"]) .headline {
+      font-size: clamp(20px, 5.4vw, 34px);
     }
 
+    .line {
+      display: block;
+      min-height: 0.96em;
+    }
   }
 </style>

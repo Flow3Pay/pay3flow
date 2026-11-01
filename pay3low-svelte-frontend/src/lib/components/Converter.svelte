@@ -1384,10 +1384,6 @@
 
 @media (min-width: 981px) {
   .hero h1 { white-space: nowrap; }
-  .shell.localeLong .hero h1 {
-    font-size: clamp(42px, 5vw, 68px);
-    white-space: normal;
-  }
 }
 
 
@@ -2765,7 +2761,13 @@
   position: relative;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 8px;
+}
+
+.moneyStack > .moneyPanel {
+  width: 100%;
+  max-width: 460px;
 }
 
 .moneyPanelSource,
@@ -2806,6 +2808,7 @@
 .amountInput,
 .amountOutput,
 .amountOutputEmpty {
+  padding-block: 8px;
   font-family: var(--font-mono);
   font-size: clamp(28px, 3.2vw, 32px);
   font-weight: 500;

@@ -2,6 +2,7 @@
   import { tick } from "svelte";
   import ExchangeFlowBridge from "../ExchangeFlowBridge.svelte";
   import { locale } from "$lib/i18n";
+  import { networkIcon } from "$lib/icons";
   import { otcCopy } from "$lib/otc/copy";
   import { rate, type Direction, type Trade } from "$lib/otc/service";
   import { offerDecimal, type SaleTicketState } from "$lib/otc/public-offers";
@@ -45,7 +46,11 @@
 
 </script>
 {#snippet asset(asset: string)}
-  <div class="assetIdentity"><img src={asset === "EVER" ? "/icons/assets/ever.svg" : "/icons/assets/usdt.png"} width="22" height="22" alt="" /><strong>{asset}</strong><span>{asset === "EVER" ? "Everscale" : "Ethereum"}</span></div>
+  {@const networkName = asset === "EVER" ? "Everscale" : "Ethereum"}
+  <div class="assetIdentity">
+    <span class="assetMain"><span class="assetAvatar" aria-hidden="true"><img src={asset === "EVER" ? "/icons/assets/ever.svg" : "/icons/assets/usdt.png"} alt="" width="28" height="28" /></span><span class="assetText"><strong>{asset}</strong></span></span>
+    <span class="assetNetwork"><span class="assetDot" aria-hidden="true"><img src={networkIcon(networkName)} alt="" width="18" height="18" /></span><span class="assetCopy"><strong>{networkName}</strong></span></span>
+  </div>
 {/snippet}
 <svelte:window on:pointerdown={outsideSettings} on:keydown={settingsKeys} />
 <form class="bridgeForm" on:submit|preventDefault={() => sale ? sale.onRequest() : quote ? onReview() : onRequest()}>
@@ -104,25 +109,33 @@
   .sideTabs button { flex: 1; min-width: 0; min-height: 40px; padding: 8px 4px; border-radius: 9px; color: var(--color-text-soft); font-size: 13px; font-weight: 650; line-height: 1.5; transition: color .2s ease; }
   .sideTabs button.active { color: #152016; }
   .priceField { display: block; margin-top: 8px; color: var(--color-text-soft); font-size: 12px; }
-  .priceField > div { display: flex; min-height: 44px; align-items: center; gap: 8px; margin-top: 8px; padding: 8px 12px; border: 1px solid var(--exchange-field-border); border-radius: 8px; background: var(--exchange-field-bg); }
+  .priceField > div { display: flex; min-height: 44px; align-items: center; gap: 8px; margin-top: 8px; padding: 8px 12px; border: 1px solid var(--exchange-field-border); border-radius: 7px; background: var(--exchange-field-bg); }
   .priceField input { width: 100%; min-width: 0; min-height: 24px; height: 24px; padding: 0; border: 0; outline: 0; background: transparent; font-family: var(--font-mono); font-size: 16px; }
   .priceField > div > span { flex: 0 0 auto; font-family: var(--font-mono); font-size: 12px; }
   .priceHint { margin: 8px 0 16px; color: var(--color-text-soft); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
   .intentLabel { margin: 0 0 8px; color: var(--color-text-soft); font-family: var(--font-mono); font-size: 12px; font-weight: 400; letter-spacing: .04em; text-transform: uppercase; }
   .intentLabel span::before { display: inline-block; width: 5px; height: 5px; margin-right: 8px; border-radius: 50%; background: var(--color-danger); content: ""; vertical-align: 2px; }
   .receiveLabel span::before { background: var(--color-accent-strong); }
-  .moneyPanel { display: grid; flex: 0 0 auto; grid-template-columns: minmax(0, 1fr); min-height: 0; gap: 8px; padding: 12px; border: 1px solid var(--exchange-field-border); border-radius: var(--otc-panel-radius, 16px); background: var(--exchange-field-bg); }
+  .moneyPanel { display: grid; flex: 0 0 auto; grid-template-columns: minmax(0, 1fr); min-height: 0; gap: 8px; padding: 12px; border: 1px solid var(--exchange-field-border); border-radius: 7px; background: var(--exchange-field-bg); }
   .panelTop { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
   .panelTop > :first-child { flex: 1; min-width: 0; }
   .moneyPanel:hover, .moneyPanel:focus-within { border-width: 1px; }
   .moneyPanel:hover:not(:focus-within) { outline: none; }
   .moneyPanel .panelCopy { display: grid; flex: none; width: 100%; grid-template-rows: 38px; gap: 4px; }
   .moneyPanel .amountInput { min-height: 38px; height: 38px; padding: 0; font-size: 32px; line-height: 1.15; letter-spacing: -.04em; }
-  .assetIdentity { display: flex; min-width: 0; min-height: 40px; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--exchange-asset-border); border-radius: 12px; background: var(--exchange-asset-bg); font-size: 13px; line-height: 1.5; }
-  .assetIdentity img { flex: 0 0 22px; border-radius: 50%; }
-  .assetIdentity strong { font-weight: 650; }
-  .assetIdentity span { min-width: 0; margin-left: auto; overflow-wrap: anywhere; color: var(--color-text-soft); font-size: 12px; }
-  .cta { display: flex; width: 100%; min-height: 56px; align-items: center; justify-content: space-between; gap: 12px; margin-top: auto; padding: 14px 18px; border: 1px solid var(--color-accent-strong); border-radius: var(--otc-panel-radius, 16px); background: var(--color-accent); color: #152016; font-size: 13px; font-weight: 750; line-height: 1.5; text-align: left; transition: background .18s ease, opacity .18s ease; }
+  .assetIdentity { display: flex; min-width: 0; align-items: center; justify-content: flex-end; overflow: hidden; border: 1px solid var(--exchange-asset-border); border-radius: 5px; background: var(--exchange-asset-bg); transition: border-color .15s ease; }
+  .assetIdentity:hover { border-color: var(--color-border-strong); }
+  .assetMain { display: flex; min-width: 0; flex: 1 1 auto; align-items: center; gap: 7px; min-height: 44px; padding: 6px 8px 6px 6px; }
+  .assetAvatar { display: grid; flex: 0 0 auto; width: 28px; height: 28px; place-items: center; overflow: hidden; border-radius: 50%; }
+  .assetAvatar img { width: 20px; height: 20px; border-radius: 50%; object-fit: contain; }
+  .assetText { min-width: 0; }
+  .assetText strong { color: var(--color-text); font-size: 14px; font-weight: 650; line-height: 1.2; }
+  .assetNetwork { display: flex; flex: 0 0 auto; align-items: center; gap: 7px; min-height: 44px; padding: 6px 8px; border-left: 1px solid var(--exchange-asset-border); }
+  .assetDot { display: grid; flex: 0 0 auto; width: 18px; height: 18px; place-items: center; overflow: hidden; border-radius: 50%; }
+  .assetDot img { display: block; width: 100%; height: 100%; object-fit: contain; }
+  .assetCopy { min-width: 0; }
+  .assetCopy strong { color: #344235; font-size: 12px; font-weight: 700; line-height: 1; }
+  .cta { display: flex; width: 100%; min-height: 56px; align-items: center; justify-content: space-between; gap: 12px; margin-top: auto; padding: 14px 18px; border: 1px solid var(--color-accent-strong); border-radius: 5px; background: var(--color-accent); color: #152016; font-size: 13px; font-weight: 750; line-height: 1.5; text-align: left; transition: background .18s ease, opacity .18s ease; }
   .cta:hover:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 82%, #fff); }
   .cta span { flex: 0 0 auto; font-size: 18px; }
   .cta:disabled { opacity: .45; cursor: default; }
