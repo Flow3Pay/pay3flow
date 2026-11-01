@@ -49,7 +49,7 @@
     </div>
   </div>
   <div class="railColumn">
-    <div class="terminalColumn bridgeColumn" id="otc-bridge-column"><OtcPanel id="otc-bridge" title={say("Exchange","Обмен")} collapsible={false}><slot name="ticket" /></OtcPanel></div>
+    <div class="terminalColumn bridgeColumn" id="otc-bridge-column"><OtcPanel id="otc-bridge" title={say("Create Order","Создать ордер")} collapsible={false}><slot name="ticket" /></OtcPanel></div>
     <slot name="rail" />
   </div>
 </div>

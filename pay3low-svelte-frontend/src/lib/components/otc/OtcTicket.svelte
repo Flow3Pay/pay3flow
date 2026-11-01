@@ -69,10 +69,12 @@
       </div>
     {/if}
   </div>
+  <div class="moneyStack">
   <div class="moneyPanel exchangeMoneyPanel"><div class="panelTop">{@render asset(sendAsset)}</div><div class="panelCopy"><label for="otc-input">{sale ? direction === "buy" ? say("Buy amount · EVER", "Количество к покупке · EVER") : say("Sell amount · EVER", "Количество к продаже · EVER") : say(`You send · ${sendAsset} on ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы отправляете · ${sendAsset} · ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><input id="otc-input" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={sendValue} data-testid={sale ? "otc-offer-ever" : undefined} disabled={busy} on:input={(event) => changeSend(event.currentTarget.value)} on:focus={(event) => event.currentTarget.select()} /></div></div>
-  <ExchangeFlowBridge reversed={direction === "sell"} onSwap={() => { if (!busy) onDirection(direction === "buy" ? "sell" : "buy"); }} label={`${copy.buy} / ${copy.sell}`} />
+  <ExchangeFlowBridge overlay reversed={direction === "sell"} onSwap={() => { if (!busy) onDirection(direction === "buy" ? "sell" : "buy"); }} label={`${copy.buy} / ${copy.sell}`} />
   <div class="moneyPanel exchangeMoneyPanel"><div class="panelTop">{@render asset(receiveAsset)}</div><div class="panelCopy"><label for="otc-receive">{sale ? direction === "buy" ? say("Total to pay · USDT", "Всего к оплате · USDT") : say("Total to receive · USDT", "Всего к получению · USDT") : say(`You receive · ${receiveAsset} on ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы получаете · ${receiveAsset} · ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><input id="otc-receive" class="amountInput amountOutput" readonly={!sale} value={receiveValue} data-testid={sale ? "otc-offer-usdt" : undefined} disabled={busy} inputmode="decimal" autocomplete="off" on:input={(event) => changeReceive(event.currentTarget.value)} placeholder="—" /></div></div>
-    <label class="priceField"><span>{copy.price} · USDT / EVER</span><div><input aria-label={copy.price} readonly={!sale} value={sale ? sale.price : quote ? rate(quote.terms) : "—"} data-testid={sale ? "otc-offer-price" : undefined} disabled={busy} inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="—" on:input={(event) => sale?.onPrice(event.currentTarget.value)} /><span>USDT</span></div></label>
+  </div>
+  <label class="priceField"><span>{copy.price} · USDT / EVER</span><div><input aria-label={copy.price} readonly={!sale} value={sale ? sale.price : quote ? rate(quote.terms) : "—"} data-testid={sale ? "otc-offer-price" : undefined} disabled={busy} inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="—" on:input={(event) => sale?.onPrice(event.currentTarget.value)} /><span>USDT</span></div></label>
   {#if sale}
     {#if sale.priceRounded}<p class="priceHint">{sale.roundingAsset === "EVER" ? say("The EVER amount is rounded down to 9 decimals. Review the exact amounts before publishing.", "Сумма EVER округлена вниз до 9 знаков. Проверьте точные суммы перед публикацией.") : say("The total is rounded down to 6 USDT decimal places. Review the exact amount before publishing.", "Общая сумма округлена вниз до 6 знаков USDT. Проверьте точную сумму перед публикацией.")}</p>{/if}
     {#if sale.reviewing && sale.seller}<div class="saleReview" data-testid="otc-offer-review"><p class="reviewPending">{say("Not published yet. Check the terms and click Publish offer below.", "Ещё не опубликовано. Проверьте условия и нажмите «Опубликовать предложение» ниже.")}</p><strong>{direction === "buy" ? say("Buy", "Купить") : say("Sell", "Продать")} {offerDecimal(sale.everAmount,9)} EVER · {offerDecimal(sale.usdtAmount,6)} USDT</strong><p>{say("Price", "Курс")}: {sale.askingRate} USDT / EVER</p><p>{direction === "buy" ? say("Your EVER receiving wallet", "Ваш кошелёк для получения EVER") : say("Seller", "Продавец")}: <code>{sale.seller}</code></p><p>{direction === "buy" ? say("USDT paying wallet", "Кошелёк оплаты USDT") : say("USDT recipient", "Получатель USDT")}: <code>{sale.receivingAddress.trim()}</code></p><p>{say("These amounts and addresses will be public for 24 hours, or until you cancel. Publication does not move or reserve funds.", "Эти суммы и адреса будут опубликованы на 24 часа или до отмены. Публикация не переводит и не резервирует средства.")}</p></div>{/if}
@@ -116,10 +118,11 @@
   .intentLabel { margin: 0 0 8px; color: var(--color-text-soft); font-family: var(--font-mono); font-size: 12px; font-weight: 400; letter-spacing: .04em; text-transform: uppercase; }
   .intentLabel span::before { display: inline-block; width: 5px; height: 5px; margin-right: 8px; border-radius: 50%; background: var(--color-danger); content: ""; vertical-align: 2px; }
   .receiveLabel span::before { background: var(--color-accent-strong); }
+  .moneyStack { position: relative; display: flex; flex-direction: column; gap: 8px; }
   .moneyPanel { display: grid; flex: 0 0 auto; grid-template-columns: minmax(0, 1fr); min-height: 0; gap: 8px; padding: 12px; border: 1px solid var(--exchange-field-border); border-radius: 7px; background: var(--exchange-field-bg); }
   .panelTop { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
   .panelTop > :first-child { flex: 1; min-width: 0; }
-  .moneyPanel:focus-within { border-width: 1px; }
+  .moneyPanel:focus-within { border-width: 1px; border-color: var(--exchange-field-border); outline: none; }
   .moneyPanel .panelCopy { display: grid; flex: none; width: 100%; grid-template-rows: 38px; gap: 4px; }
   .moneyPanel .amountInput { min-height: 38px; height: 38px; padding: 0; font-size: 32px; line-height: 1.15; letter-spacing: -.04em; }
   .assetIdentity { display: flex; min-width: 0; align-items: center; justify-content: flex-end; overflow: hidden; border: 1px solid var(--exchange-asset-border); border-radius: 5px; background: var(--exchange-asset-bg); }
@@ -133,11 +136,12 @@
   .assetDot img { display: block; width: 100%; height: 100%; object-fit: contain; }
   .assetCopy { min-width: 0; }
   .assetCopy strong { color: #344235; font-size: 12px; font-weight: 700; line-height: 1; }
+  :global(html[data-theme="dark"]) .assetCopy strong { color: var(--color-text); }
   .cta { display: flex; width: 100%; min-height: 56px; align-items: center; justify-content: space-between; gap: 12px; margin-top: auto; padding: 14px 18px; border: 1px solid var(--color-accent-strong); border-radius: 5px; background: var(--color-accent); color: #152016; font-size: 13px; font-weight: 750; line-height: 1.5; text-align: left; transition: background .18s ease, opacity .18s ease; }
   .cta:hover:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 82%, #fff); }
   .cta span { flex: 0 0 auto; font-size: 18px; }
   .cta:disabled { opacity: .45; cursor: default; }
-  button:focus-visible, .priceField > div:focus-within, .amountInput:focus-visible { outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 2px; }
+  button:focus-visible, .priceField > div:focus-within { outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 2px; }
   @media (max-width: 640px) { .moneyPanel .amountInput { font-size: 28px; } .sideTabs button { min-height: 44px; } }
   @media (prefers-reduced-motion: reduce) { .sideTabs::before, .sideTabs button, .cta { transition: none; } }
 </style>

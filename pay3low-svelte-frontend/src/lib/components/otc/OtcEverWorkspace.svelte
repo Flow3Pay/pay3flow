@@ -62,7 +62,7 @@
   $: if (mounted) otcWalletDialog.set({
     session, bound, busy, error, progress: walletProgress, disconnectDisabled: accountLocked || offersBusy,
     chains: config?.wallet_login_chains ?? ["ethereum", "everscale"],
-    enabled: !!(config?.wallet_login_available ?? config?.enabled), requestingQuote, quoteReady, quoteStatus,
+    enabled: !!(config?.wallet_login_available ?? config?.enabled), requestingQuote, quoteReady,
     onClose: closeIdentity,
     onConnect: chain => run(() => connectAccount(chain)),
     onVerify: chain => run(() => verify(chain)),
@@ -280,7 +280,7 @@
         }
       }
       await refresh(); const id = sessionStorage.getItem("pay3flow.otc.selected"); if (id && session) { tab = "orders"; await selectTrade(id, true); } }, false);
-    const timer = setInterval(async () => { if (stopped || busy || polling) return; polling = true; try { await refresh(); } catch (e) { error = e instanceof Error ? e.message : "Status unavailable"; } finally { polling = false; } }, 5000);
+    const timer = setInterval(async () => { if (stopped || busy || polling) return; polling = true; try { await refresh(); } finally { polling = false; } }, 5000);
     const clock = setInterval(() => now = Date.now(), 1000);
     window.addEventListener("hashchange", restoreDirection); window.addEventListener("popstate", restoreDirection);
     return () => { closeWalletDialog(); otcWalletDialog.set(null); stopped = true; mounted = false; accountVersion++; clearInterval(timer); clearInterval(clock); media.removeEventListener("change", motionChanged); window.removeEventListener("hashchange", restoreDirection); window.removeEventListener("popstate", restoreDirection); };
@@ -342,11 +342,11 @@
   .risk { margin: 16px 0 0; color: var(--color-text-soft); font-size: 12px; line-height: 1.6; }
   .panelMeta { color: var(--color-text-faint); font-family: var(--font-mono); font-size: 12px; }
   .activityCard { display: flex; width: 100%; min-width: 0; flex-direction: column; border: 1px solid var(--color-border-strong); border-radius: var(--otc-card-radius, 10px); background: var(--exchange-card-bg); overflow: hidden; scroll-margin-top: 24px; }
-  .activityTabs { position: relative; display: flex; flex: 0 0 auto; align-items: stretch; gap: 4px; margin: 16px var(--otc-panel-padding) 8px; padding: 4px; border-radius: 12px; background: var(--color-panel); box-shadow: inset 0 0 0 1px var(--color-border); }
-  .activityTabs button { position: relative; z-index: 1; display: flex; flex: 1 1 0; min-width: 0; min-height: 38px; align-items: center; justify-content: center; gap: 8px; padding: 6px 10px; border-radius: 9px; color: var(--color-text-soft); font-size: 13px; line-height: 1.35; text-align: center; transition: color var(--activity-motion) ease; }
+  .activityTabs { position: relative; display: flex; flex: 0 0 auto; align-items: stretch; gap: 4px; margin: 16px var(--otc-panel-padding) 8px; padding: 4px; border-radius: 10px; background: var(--color-panel); box-shadow: inset 0 0 0 1px var(--color-border); }
+  .activityTabs button { position: relative; z-index: 1; display: flex; flex: 1 1 0; min-width: 0; min-height: 38px; align-items: center; justify-content: center; gap: 8px; padding: 6px 10px; border-radius: 7px; color: var(--color-text-soft); font-size: 13px; line-height: 1.35; text-align: center; transition: color var(--activity-motion) ease; }
   .activityTabs button:hover { color: var(--color-text); }
   .activityTabs button.active { color: var(--color-text); font-weight: 650; }
-  .tabIndicator { position: absolute; z-index: 0; top: 4px; left: 0; width: var(--active-tab-width, 0px); height: calc(100% - 8px); border-radius: 9px; background: var(--color-paper); box-shadow: 0 1px 4px rgb(0 0 0 / .08); transform: translateX(var(--active-tab-left, 0px)); transition: transform var(--activity-motion) cubic-bezier(.22, 1, .36, 1), width var(--activity-motion) cubic-bezier(.22, 1, .36, 1); pointer-events: none; }
+  .tabIndicator { position: absolute; z-index: 0; top: 4px; left: 0; width: var(--active-tab-width, 0px); height: calc(100% - 8px); border-radius: 7px; background: var(--color-paper); box-shadow: 0 1px 4px rgb(0 0 0 / .08); transform: translateX(var(--active-tab-left, 0px)); transition: transform var(--activity-motion) cubic-bezier(.22, 1, .36, 1), width var(--activity-motion) cubic-bezier(.22, 1, .36, 1); pointer-events: none; }
   .orderCount { display: grid; flex: 0 0 auto; min-width: 20px; height: 20px; padding: 0 4px; place-items: center; border-radius: 4px; background: var(--color-accent-soft); font-family: var(--font-mono); font-size: 11px; }
   .activityContent { min-height: 240px; }
   .activityContent:focus-visible { outline-offset: -3px; }
