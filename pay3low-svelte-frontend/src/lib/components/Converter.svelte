@@ -640,7 +640,7 @@
     target: targetMethod?.kind === "wallet" ? calculateMarketUsd(displayedTargetAmount, marketPrices[selectedTargetCurrency]) : null,
   };
   $: converterAmountDigits = Math.min(14, Math.max(10, displayedSourceAmount.replace(/\D/g, "").length, displayedTargetAmount.replace(/\D/g, "").length));
-  $: converterWidth = 550 + (converterAmountDigits - 10) * 21;
+  $: converterWidth = 500 + (converterAmountDigits - 10) * 21;
   $: secondsUntilRefresh = refreshSeconds && lastUpdatedAt ? Math.max(0, refreshSeconds - Math.floor((clock - lastUpdatedAt) / 1000)) : null;
   $: refreshProgress = secondsUntilRefresh !== null && refreshSeconds ? ((refreshSeconds - secondsUntilRefresh) / refreshSeconds) * 100 : 0;
   $: exchangeChoices = p2pSources.filter((source) => source.searchMode !== "always_on");
@@ -2760,13 +2760,7 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 8px;
-}
-
-.moneyStack > .moneyPanel {
-  width: 100%;
-  max-width: 460px;
 }
 
 .moneyPanelSource,
