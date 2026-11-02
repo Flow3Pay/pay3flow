@@ -15,6 +15,17 @@ export function offerUnits(value: string, precision: number): bigint | null {
 export function offerFloored(value: string, precision: number): boolean {
   return parse(value, precision)?.floored ?? false;
 }
+/** Base units of a balance the server reports. Zero is a real balance here, so unlike {@link offerUnits} it is not null. */
+export function balanceUnits(value: string | null | undefined, precision: number): bigint | null {
+  const text = value?.trim() ?? "";
+  if (!text || text.length > 80 || !/^\d+(?:\.\d+)?$/.test(text)) return null;
+  const [whole, fraction = ""] = text.split(".");
+  return BigInt(`${whole}${fraction.slice(0, precision).padEnd(precision, "0")}`);
+}
+/** Warning only: the entered amount is strictly larger than the wallet holds, so it cannot be paid from it. */
+export function offerShortfall(enteredUnits: bigint | null, balance: bigint | null): boolean {
+  return enteredUnits !== null && balance !== null && enteredUnits > balance;
+}
 export const MAX_OFFER_EVER_UNITS = 1_000_000_000_000n * 10n**9n;
 export const MAX_OFFER_USDT_UNITS = 1_000_000n * 10n**6n;
 function parse(value: string, precision: number): { amount: string; units: bigint; floored: boolean } | null {

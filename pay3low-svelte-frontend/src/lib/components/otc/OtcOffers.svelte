@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { locale } from "$lib/i18n";
-  import { request, otcP2pNetwork, walletNetwork, type Session, type Direction } from "$lib/otc/service";
+  import { getBalances, request, otcP2pNetwork, walletNetwork, type Session, type Direction, type WalletBalance } from "$lib/otc/service";
   import { connectWallet, wallets } from "$lib/wallet-session";
+  import { sameWalletAddress } from "$lib/wallet-amount";
   import { fetchMarketPrices } from "$lib/exchange";
-  import { saleRate, offerDecimal, offerTotal, offerEver, offerUnits, offerFloored, marketUsdtPerEver, MAX_OFFER_EVER_UNITS, MAX_OFFER_USDT_UNITS, type PublicOffer as Offer, type OfferHistoryPoint, type SaleTicketState } from "$lib/otc/public-offers";
+  import { saleRate, offerDecimal, offerTotal, offerEver, offerUnits, offerFloored, balanceUnits, offerShortfall, marketUsdtPerEver, MAX_OFFER_EVER_UNITS, MAX_OFFER_USDT_UNITS, type PublicOffer as Offer, type OfferHistoryPoint, type SaleTicketState } from "$lib/otc/public-offers";
   export let session: Session | null;
   export let busy = false;
   export let onConnect: () => void;
@@ -19,6 +20,7 @@
   let marketRate = "", marketStale = true, marketPrice = false;
   let everAmount = "", usdtAmount = "", receivingAddress = "", key = "";
   let linkingEvm = false, reviewing = false, mounted = false, generation = 0, loadedActor = "";
+  let balances: WalletBalance[] = [], balanceGeneration = 0;
   $: say = (en: string, ru: string) => $locale === "ru" ? ru : en;
   $: seller = session?.wallets?.find(wallet => wallet.chain === "everscale")?.address || "";
   $: draftKey = session ? `pay3flow.otc.sell-draft.v1:${session.actor}` : "";
@@ -35,6 +37,7 @@
     } catch { /* An unreadable draft is not submitted. */ }
     if (marketPrice && marketRate) applyMarketRate(marketRate);
     void refresh();
+    void refreshBalances();
   }
   $: askingRate = saleRate(everAmount,usdtAmount);
   $: marketApprox = marketRate ? offerTotal(everAmount, marketRate)?.amount || "" : "";
@@ -44,6 +47,18 @@
   $: amountFloored = offerFloored(everAmount,9) ? "EVER" as const : offerFloored(usdtAmount,6) ? "USDT" as const : null;
   $: everUnits = offerUnits(everAmount,9);
   $: usdtUnits = offerUnits(usdtAmount,6);
+  /** Only the leg the trader pays from their own wallet can be short: EVER when selling, USDT when buying. */
+  $: fundedLeg = direction === "sell" ? "ever" as const : "usdt" as const;
+  // The reported USDT balance belongs to the verified wallet, so a hand-typed paying address is not ours to judge.
+  $: fundedBalance = fundedLeg === "ever"
+    ? balances.find(balance => balance.symbol === "EVER" && balance.state === "ok")?.amount || ""
+    : sameWalletAddress("evm", receivingAddress.trim(), session?.wallets.find(wallet => wallet.chain === "ethereum")?.address || "")
+      ? balances.find(balance => balance.symbol === "USDT" && balance.state === "ok")?.amount || ""
+      : "";
+  $: shortfall = offerShortfall(
+    fundedLeg === "ever" ? everUnits : usdtUnits,
+    balanceUnits(fundedBalance, fundedLeg === "ever" ? 9 : 6),
+  ) ? fundedLeg : null;
   $: blockingReason = priceMode && !offerDecimal(priceInput,12)
     ? say("Enter a positive price.", "Укажите положительный курс.")
     : everUnits === null
@@ -97,6 +112,20 @@
       if (failed?.status === "rejected") error = failed.reason instanceof Error ? failed.reason.message : "Request failed";
     } catch (e) {
       if (mounted && revision === generation) { error = e instanceof Error ? e.message : "Request failed"; }
+    }
+  }
+  /** Display-only warning feed: a wallet that cannot be read simply leaves nothing to warn about. */
+  async function refreshBalances() {
+    const owner = session, revision = ++balanceGeneration;
+    if (!enabled || !owner) { balances = []; return; }
+    try {
+      const list = await getBalances(owner.token);
+      if (!mounted || revision !== balanceGeneration || session?.token !== owner.token) return;
+      balances = list;
+    } catch (error) {
+      if (revision !== balanceGeneration) return;
+      balances = [];
+      console.warn("Wallet balances unavailable", error);
     }
   }
   async function publish() {
@@ -173,17 +202,18 @@
     const controller = new AbortController();
     void refreshMarket(controller.signal);
     const marketTimer = setInterval(() => { if (enabled && !posting && !busy) void refreshMarket(controller.signal); }, 60_000);
-    return () => { mounted = false; generation++; clearInterval(timer); clearInterval(marketTimer); controller.abort(); };
+    const balanceTimer = setInterval(() => { if (enabled && session && !posting && !busy) void refreshBalances(); }, 20_000);
+    return () => { mounted = false; generation++; clearInterval(timer); clearInterval(marketTimer); clearInterval(balanceTimer); controller.abort(); };
   });
 
   let started = false;
-  $: if (mounted && enabled && !started) { started = true; void refresh(); }
+  $: if (mounted && enabled && !started) { started = true; void refresh(); void refreshBalances(); }
   function changePrice(value: string) { priceInput = value; priceMode = true; if (amountSource === "ever") usdtAmount = offerTotal(everAmount,priceInput)?.amount || ""; else everAmount = offerEver(usdtAmount,priceInput)?.amount || ""; edited(); }
   function changeEver(value: string) { everAmount = value; amountSource = "ever"; if (priceMode) usdtAmount = offerTotal(everAmount,priceInput)?.amount || ""; edited(); }
   function changeUsdt(value: string) { usdtAmount = value; amountSource = "usdt"; if (priceMode) everAmount = offerEver(usdtAmount,priceInput)?.amount || ""; edited(); }
   function changeAddress(value: string) { receivingAddress = value; edited(); }
   $: ticket = {
-    direction, price, priceRounded, roundingAsset, amountFloored, blockingReason, everAmount, usdtAmount, receivingAddress, seller, askingRate, valid, reviewing, linkingEvm,
+    direction, price, priceRounded, roundingAsset, amountFloored, shortfall, fundedBalance, blockingReason, everAmount, usdtAmount, receivingAddress, seller, askingRate, valid, reviewing, linkingEvm,
     marketPrice, marketRate, marketApprox, marketStale, error,
     onPrice: changePrice,
     onEver: changeEver,

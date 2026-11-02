@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
 const ever = `0:${"a".repeat(64)}`, eth = `0x${"b".repeat(40)}`;
-async function setup(page: Page, options: { signedIn?: boolean; lostResponse?: boolean; verifiedEthereum?: boolean; cancelledReplay?: boolean; failPublicRefresh?: boolean; failPrivateRefresh?: boolean; deals?: any[] } = {}) {
+async function setup(page: Page, options: { signedIn?: boolean; lostResponse?: boolean; verifiedEthereum?: boolean; cancelledReplay?: boolean; failPublicRefresh?: boolean; failPrivateRefresh?: boolean; deals?: any[]; balances?: { ever?: string | null; usdt?: string | null; state?: "ok" | "unverified" | "unavailable"; fail?: boolean } } = {}) {
   const session = { token: "seller-token", actor: "https://relay.example/actors/seller", desk: false, expires_at: "2099-01-01T00:00:00Z", signing_wallet: { chain: "everscale", address: ever }, wallets: [{ chain: "everscale", address: ever, verified_at: new Date().toISOString() }] };
   if (options.verifiedEthereum) session.wallets.push({chain:"ethereum",address:eth,verified_at:new Date().toISOString()});
   const calls: { path: string; method: string; body: any; key: string | undefined }[] = [];
@@ -46,6 +46,17 @@ async function setup(page: Page, options: { signedIn?: boolean; lostResponse?: b
     calls.push({ path, method: req.method(), body, key });
     let response: any = [], status = 200;
     if (path.endsWith("/market-prices")) response = { source: "stub", stale: false, updated_at: Math.floor(Date.now() / 1000), prices: { EVER: 0.00105027, USDT: 0.9998 } };
+    else if (path === "/balances") {
+      const wallet = options.balances;
+      if (wallet?.fail) { status = 503; response = { error: "Balance reader is unavailable" }; }
+      else {
+        const leg = (symbol: "EVER" | "USDT", amount: string | null | undefined) => ({
+          chain: symbol === "EVER" ? "everscale" : "ethereum", symbol, network: symbol === "EVER" ? "Everscale" : "Ethereum",
+          amount: amount ?? null, state: wallet?.state ?? (amount === undefined ? "unavailable" : "ok"),
+        });
+        response = { balances: [leg("EVER", wallet?.ever), leg("USDT", wallet?.usdt)] };
+      }
+    }
     else if (path === "/config") response = { enabled: false, available: false, public_offers_available: true, public_offer_directions: ["buy","sell"], p2p_available: !!options.deals, wallet_login_available: true, wallet_login_chains: ["everscale", "ethereum"], demo: false, desk: "", desk_name: "", ever_resource: "", usdt_resource: "" };
     else if (path === "/session/challenge") response = { id: "challenge", message: "Sign in only; no transfer", everscale_data: btoa("sign-in") };
     else if (path === "/session/proof" || path === "/session") response = session;
@@ -76,6 +87,11 @@ async function openOfferSettings(page: Page) {
   const toggle = page.getByRole("button", { name: "Offer settings", exact: true });
   if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
+}
+async function closeOfferSettings(page: Page) {
+  const toggle = page.getByRole("button", { name: "Offer settings", exact: true });
+  if (await toggle.getAttribute("aria-expanded") === "true") await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
 }
 async function fill(page: Page) {
   await page.getByTestId("otc-offer-ever").fill("10.000000001");
@@ -417,4 +433,45 @@ test("public book loads despite a failed private history, with asks ascending an
   await expect(page.getByRole("alert")).toHaveText("Private offer list unavailable");
   await expect(page.locator(".bookColumn").getByTestId("otc-book-price")).toHaveText(["0.2","0.3","0.15","0.1"]);
   await expect(page.locator(".chartColumn .marketChart")).toHaveAttribute("data-points", "4");
+});
+
+test("a shortfall on the funded leg warns beside the amount and still publishes", async ({ page }) => {
+  const f = await setup(page, { signedIn: true, balances: { ever: "1.5", usdt: "900" } });
+  await fill(page);
+  const warning = page.getByTestId("otc-shortfall-warning");
+  await expect(warning).toHaveCount(1);
+  await expect(page.locator("#otc-input")).toHaveClass(/shortfall/);
+  await expect(page.locator("#otc-receive")).not.toHaveClass(/shortfall/);
+  await expect(warning).toHaveAttribute("data-tooltip", "Not enough EVER in your wallet — available 1.5 EVER. You can still publish the offer.");
+  await closeOfferSettings(page);
+  await warning.hover();
+  await expect(page.getByRole("tooltip")).toContainText("Not enough EVER in your wallet");
+  await expect(page.getByTestId("otc-publish-offer")).toBeEnabled();
+  await page.getByTestId("otc-publish-offer").click();
+  await expect(page.getByTestId("otc-offer-review")).toBeVisible();
+  expect(f.calls.filter(call => call.path === "/offers" && call.method === "POST")).toHaveLength(0);
+});
+
+test("a buy offer warns on the USDT total and only for the verified paying wallet", async ({ page }) => {
+  await setup(page, { signedIn: true, verifiedEthereum: true, balances: { ever: "1000", usdt: "2" } });
+  await page.locator(".sideTabs").getByRole("button", { name: "Buy EVER", exact: true }).click();
+  await page.getByTestId("otc-offer-ever").fill("100");
+  await page.getByTestId("otc-offer-usdt").fill("11.889");
+  const warning = page.getByTestId("otc-shortfall-warning");
+  await expect(warning).toHaveCount(1);
+  await expect(page.locator("#otc-receive")).toHaveClass(/shortfall/);
+  await expect(page.locator("#otc-input")).not.toHaveClass(/shortfall/);
+  await expect(warning).toHaveAttribute("data-tooltip", /Not enough USDT in your wallet — available 2 USDT/);
+  await openOfferSettings(page);
+  await page.getByTestId("otc-offer-recipient").fill(`0x${"c".repeat(40)}`);
+  await expect(warning).toHaveCount(0);
+});
+
+for (const [label, balances] of [["unverified", { state: "unverified" as const }], ["unavailable", { state: "unavailable" as const }], ["a failed reader", { fail: true }]] as const) test(`a balance that is ${label} warns nothing and stays out of the errors`, async ({ page }) => {
+  await setup(page, { signedIn: true, balances });
+  await fill(page);
+  await expect(page.getByTestId("otc-shortfall-warning")).toHaveCount(0);
+  await expect(page.locator("#otc-input")).not.toHaveClass(/shortfall/);
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(page.getByTestId("otc-publish-offer")).toBeEnabled();
 });

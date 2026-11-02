@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { exactInput, proposalDirection, completedVolume } from "../src/lib/otc/terminal.ts";
-import {offerDecimal,offerTotal,offerEver,saleRate,offerUnits,offerFloored,MAX_OFFER_EVER_UNITS,compareOfferRates,marketUsdtPerEver,p2pFeeSplit} from "../src/lib/otc/offer-amount.ts";
+import {offerDecimal,offerTotal,offerEver,saleRate,offerUnits,offerFloored,balanceUnits,offerShortfall,MAX_OFFER_EVER_UNITS,compareOfferRates,marketUsdtPerEver,p2pFeeSplit} from "../src/lib/otc/offer-amount.ts";
 import type { Config, Trade, Proposal } from "../src/lib/otc/service.ts";
 
 test("exact input respects selected-chain precision, u128 limits and avoids Number loss", () => {
@@ -75,4 +75,19 @@ test('the 3% service fee is split exactly from the gross USDT total and rounds u
   assert.deepEqual(p2pFeeSplit('0.000001'),{basis:'0.000001',fee:'0.000001',net:'0'});
   assert.equal(p2pFeeSplit('0'),null);
   assert.equal(p2pFeeSplit(''),null);
+});
+
+test('a wallet balance is read exactly and a shortfall stays a warning, never a limit',()=>{
+  assert.equal(balanceUnits('0',9),0n);
+  assert.equal(balanceUnits('378.357',9),378357000000n);
+  assert.equal(balanceUnits(' 15812.49 ',6),15812490000n);
+  assert.equal(balanceUnits('12',6),12000000n);
+  assert.equal(balanceUnits('1.0000000001',9),1000000000n);
+  for(const gap of [null,undefined,'','-1','NaN','1e3','1.','.1','0x10','9'.repeat(81)]) assert.equal(balanceUnits(gap as string|null|undefined,6),null);
+  assert.equal(offerShortfall(offerUnits('5',9),balanceUnits('1',9)),true);
+  assert.equal(offerShortfall(offerUnits('0.5',9),balanceUnits('0',9)),true);
+  assert.equal(offerShortfall(offerUnits('1',9),balanceUnits('1',9)),false);
+  assert.equal(offerShortfall(offerUnits('118426.073187715',9),balanceUnits('118426.073187715',9)),false);
+  assert.equal(offerShortfall(offerUnits('1',9),null),false);
+  assert.equal(offerShortfall(null,balanceUnits('5',9)),false);
 });

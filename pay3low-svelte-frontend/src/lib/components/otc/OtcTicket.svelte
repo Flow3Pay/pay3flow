@@ -24,6 +24,12 @@
   $: sendValue = sale ? sale.everAmount : input;
   $: receiveValue = sale ? sale.usdtAmount : quote?.terms.output || "";
   $: saleStatus = sale ? busy ? say("Please wait for the current wallet or offer request.", "Дождитесь завершения текущего запроса кошелька или оффера.") : sale.linkingEvm ? say("Waiting for your Ethereum wallet address.", "Ожидаем адрес Ethereum-кошелька.") : sale.blockingReason : "";
+  $: sendShort = sale?.shortfall === "ever";
+  $: receiveShort = sale?.shortfall === "usdt";
+  $: shortfallNote = (asset: "EVER" | "USDT") => {
+    const available = sale?.fundedBalance ? say(` — available ${sale.fundedBalance} ${asset}`, ` — доступно ${sale.fundedBalance} ${asset}`) : "";
+    return say(`Not enough ${asset} in your wallet${available}. You can still publish the offer.`, `Недостаточно ${asset} на кошельке${available}. Опубликовать предложение всё равно можно.`);
+  };
   let settingsOpen = false, settingsWrap: HTMLDivElement, settingsInput: HTMLInputElement;
   function openSettings() {
     settingsOpen = true;
@@ -53,6 +59,15 @@
     <span class="assetNetwork"><span class="assetDot" aria-hidden="true"><img src={networkIcon(networkName)} alt="" width="18" height="18" /></span><span class="assetCopy"><strong>{networkName}</strong></span></span>
   </div>
 {/snippet}
+{#snippet shortfallMark(asset: "EVER" | "USDT")}
+  <button type="button" class="shortfallMark" data-testid="otc-shortfall-warning" data-tooltip={shortfallNote(asset)} aria-label={shortfallNote(asset)}>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 9V14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+      <path d="M12.0001 21.4093H5.94005C2.47005 21.4093 1.02005 18.9293 2.70005 15.8993L5.82006 10.2793L8.76006 4.9993C10.5401 1.7893 13.4601 1.7893 15.2401 4.9993L18.1801 10.2893L21.3001 15.9093C22.9801 18.9393 21.5201 21.4193 18.0601 21.4193H12.0001V21.4093Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+      <path d="M11.9945 17H12.0035" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  </button>
+{/snippet}
 <svelte:window on:pointerdown={outsideSettings} on:keydown={settingsKeys} />
 <form class="bridgeForm" on:submit|preventDefault={() => sale ? sale.onRequest() : quote ? onReview() : onRequest()}>
   <div class="ticketHead">
@@ -71,9 +86,9 @@
     {/if}
   </div>
   <div class="moneyStack">
-  <div class="moneyPanel exchangeMoneyPanel"><div class="panelTop">{@render asset(sendAsset)}</div><div class="panelCopy"><label for="otc-input">{sale ? direction === "buy" ? say("Buy amount · EVER", "Количество к покупке · EVER") : say("Sell amount · EVER", "Количество к продаже · EVER") : say(`You send · ${sendAsset} on ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы отправляете · ${sendAsset} · ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><input id="otc-input" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={sendValue} data-testid={sale ? "otc-offer-ever" : undefined} disabled={busy} on:input={(event) => changeSend(event.currentTarget.value)} on:focus={(event) => event.currentTarget.select()} /></div></div>
+  <div class="moneyPanel exchangeMoneyPanel"><div class="panelTop">{@render asset(sendAsset)}</div><div class="panelCopy"><label for="otc-input">{sale ? direction === "buy" ? say("Buy amount · EVER", "Количество к покупке · EVER") : say("Sell amount · EVER", "Количество к продаже · EVER") : say(`You send · ${sendAsset} on ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы отправляете · ${sendAsset} · ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><div class="amountRow"><input id="otc-input" class="amountInput" class:shortfall={sendShort} type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={sendValue} data-testid={sale ? "otc-offer-ever" : undefined} disabled={busy} on:input={(event) => changeSend(event.currentTarget.value)} on:focus={(event) => event.currentTarget.select()} />{#if sendShort}{@render shortfallMark("EVER")}{/if}</div></div></div>
   <ExchangeFlowBridge overlay reversed={direction === "sell"} onSwap={() => { if (!busy) onDirection(direction === "buy" ? "sell" : "buy"); }} label={`${copy.buy} / ${copy.sell}`} />
-  <div class="moneyPanel exchangeMoneyPanel"><div class="panelTop">{@render asset(receiveAsset)}</div><div class="panelCopy"><label for="otc-receive">{sale ? direction === "buy" ? say("Total to pay · USDT", "Всего к оплате · USDT") : say("Total to receive · USDT", "Всего к получению · USDT") : say(`You receive · ${receiveAsset} on ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы получаете · ${receiveAsset} · ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><input id="otc-receive" class="amountInput amountOutput" readonly={!sale} value={receiveValue} data-testid={sale ? "otc-offer-usdt" : undefined} disabled={busy} inputmode="decimal" autocomplete="off" on:input={(event) => changeReceive(event.currentTarget.value)} placeholder={sale?.marketApprox ? `≈ ${sale.marketApprox}` : "—"} /></div></div>
+  <div class="moneyPanel exchangeMoneyPanel"><div class="panelTop">{@render asset(receiveAsset)}</div><div class="panelCopy"><label for="otc-receive">{sale ? direction === "buy" ? say("Total to pay · USDT", "Всего к оплате · USDT") : say("Total to receive · USDT", "Всего к получению · USDT") : say(`You receive · ${receiveAsset} on ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы получаете · ${receiveAsset} · ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><div class="amountRow"><input id="otc-receive" class="amountInput amountOutput" class:shortfall={receiveShort} readonly={!sale} value={receiveValue} data-testid={sale ? "otc-offer-usdt" : undefined} disabled={busy} inputmode="decimal" autocomplete="off" on:input={(event) => changeReceive(event.currentTarget.value)} placeholder={sale?.marketApprox ? `≈ ${sale.marketApprox}` : "—"} />{#if receiveShort}{@render shortfallMark("USDT")}{/if}</div></div></div>
   </div>
   <div class="priceField">
     <div class="priceHead">
@@ -141,6 +156,10 @@
   .moneyPanel:focus-within { border-width: 1px; border-color: var(--exchange-field-border); outline: none; }
   .moneyPanel .panelCopy { display: grid; flex: none; width: 100%; grid-template-rows: 34px; gap: 2px; }
   .moneyPanel .amountInput { min-height: 34px; height: 34px; padding: 0; font-size: 28px; line-height: 1.15; letter-spacing: -.04em; }
+  .moneyPanel .amountRow { display: flex; min-width: 0; align-items: center; gap: 6px; }
+  .moneyPanel .amountRow .amountInput { width: auto; flex: 1 1 auto; min-width: 0; }
+  .moneyPanel .amountInput.shortfall { color: var(--color-warn); }
+  .shortfallMark { display: grid; width: 20px; height: 20px; flex: 0 0 auto; place-items: center; border: 0; padding: 0; background: transparent; color: var(--color-warn); }
   .assetIdentity { display: flex; min-width: 0; align-items: center; justify-content: flex-end; overflow: hidden; border: 1px solid var(--exchange-asset-border); border-radius: 5px; background: var(--exchange-asset-bg); }
   .assetMain { display: flex; min-width: 0; flex: 1 1 auto; align-items: center; gap: 7px; min-height: 40px; padding: 5px 7px 5px 6px; }
   .assetAvatar { display: grid; flex: 0 0 auto; width: 28px; height: 28px; place-items: center; overflow: hidden; border-radius: 50%; }

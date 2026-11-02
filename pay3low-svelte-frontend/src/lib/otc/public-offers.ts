@@ -20,7 +20,7 @@ export interface OfferHistoryPoint {
   terms: { direction: Direction; ever_amount: string; usdt_amount: string };
 }
 
-export { offerDecimal, offerTotal, offerEver, offerUnits, offerFloored, marketUsdtPerEver, p2pFeeSplit, MAX_OFFER_EVER_UNITS, MAX_OFFER_USDT_UNITS, saleRate, compareOfferRates } from "./offer-amount";
+export { offerDecimal, offerTotal, offerEver, offerUnits, offerFloored, balanceUnits, offerShortfall, marketUsdtPerEver, p2pFeeSplit, MAX_OFFER_EVER_UNITS, MAX_OFFER_USDT_UNITS, saleRate, compareOfferRates } from "./offer-amount";
 
 export const offerDirection = (offer: PublicOffer): Direction => offer.terms.direction || "sell";
 export const offerOwner = (offer: PublicOffer): string => offer.owner_ever || offer.seller_ever;
@@ -31,6 +31,10 @@ export interface SaleTicketState {
   priceRounded: boolean;
   roundingAsset: "USDT" | "EVER" | null;
   amountFloored: "USDT" | "EVER" | null;
+  /** The leg the trader pays from their own wallet, when the entered amount is above what it holds. */
+  shortfall: "ever" | "usdt" | null;
+  /** Wallet balance behind {@link shortfall}, in the asset's own decimals; empty when no balance was read. */
+  fundedBalance: string;
   blockingReason: string;
   everAmount: string;
   usdtAmount: string;
