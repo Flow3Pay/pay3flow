@@ -87,7 +87,7 @@
   <div class="referenceRates" data-testid="reference-rates" aria-label={t("Reference rate", {}, locale)} aria-busy={loading}>
     {#if crypto}
       {#if median}
-        <div class="rateRow"><span>{t("Reference rate", {}, locale)} · 1 {from} = {formatReferenceRate(median.rate, locale)} {to}</span><span class="details">{t("Route median", {}, locale)} · {t("{count} samples", { count: median.sample_count }, locale)}</span></div>
+        <div class="rateRow"><span><img class="rateIcon" src="/icons/ui/coinbase-pictogram.svg" alt="" width="14" height="14" />{t("Reference rate", {}, locale)} · 1 {from} = {formatReferenceRate(median.rate, locale)} {to}</span><span class="details">{t("Route median", {}, locale)} · {t("{count} samples", { count: median.sample_count }, locale)}</span></div>
       {:else}<span class="details">{t("Rate available after route search", {}, locale)}</span>{/if}
     {:else if loading}
       <span class="skeleton" role="status" aria-label={t("Loading reference rate", {}, locale)}></span>
@@ -115,6 +115,7 @@
   .rateRow { display: flex; flex-direction: column; gap: 4px; }
   .details { color: #9b9b9b; font-size: 12px; line-height: 16px; }
   .sourceIcon { display: inline-block; width: 14px; height: 14px; margin-right: 4px; border-radius: 3px; vertical-align: -3px; object-fit: contain; }
+  .rateIcon { display: inline-block; width: 14px; height: 14px; margin-right: 5px; vertical-align: -2px; object-fit: contain; }
   a { color: inherit; text-decoration: underline; text-underline-offset: 2px; transition: opacity 300ms cubic-bezier(0.22,1,0.36,1); }
   a:hover { opacity: 0.75; }
   a:active { opacity: 0.6; }
