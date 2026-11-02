@@ -4,14 +4,20 @@
   import { decimal, otcP2pNetwork, request, sendAttempt, type Attempt, type Config, type Session } from "$lib/otc/service";
   import OtcTransferReview from "./OtcTransferReview.svelte";
 
+  interface FeePolicy {
+    version: string; rate: string; floor: string;
+    basis_units: string; fee_units: string; net_units: string; precision: number;
+  }
   interface DealTerms {
     direction: "buy" | "sell"; ever_amount: string; usdt_amount: string;
     ever_units: string; usdt_units: string;
     usdt_payer: string; usdt_payee: string; ever_payer: string; ever_payee: string;
+    fee_policy?: FeePolicy;
   }
   interface Deal {
     id: string; offer_id: string; state: string; role: "owner" | "taker"; counterparty: string;
-    terms: DealTerms; pay_by: string; payout_by: string | null; created_at: string; attempts: Attempt[];
+    terms: DealTerms; fee_policy?: FeePolicy; fee_accrued?: boolean;
+    pay_by: string; payout_by: string | null; created_at: string; attempts: Attempt[];
   }
 
   export let config: Config | null = null;
@@ -142,12 +148,15 @@
       {@const kind = stepOf(deal)}
       {@const open = kind ? openOf(deal, kind) : null}
       {@const mine = !!kind && payerOf(deal, kind) === walletOf(legOf(kind))}
+      {@const fee = deal.fee_policy || deal.terms.fee_policy}
+      {@const getsUsdt = deal.terms.usdt_payee.toLowerCase() === walletOf("ethereum")}
       <article class="deal" class:settled={!kind} data-testid="otc-p2p-deal">
         <header>
           <strong>{deal.terms.ever_amount} EVER · {deal.terms.usdt_amount} USDT</strong>
           <span class="state" class:ok={deal.state === "completed"} class:bad={deal.state === "expired" || deal.state === "cancelled"}>{stateLabel(deal)}</span>
         </header>
         <p class="meta">{deal.role === "owner" ? say("Your offer", "Ваш оффер") : say("Accepted offer", "Принятый оффер")} · {say("Counterparty", "Контрагент")}: <code title={deal.counterparty}>{short(deal.counterparty)}</code>{#if deadline(deal)} · {deadline(deal)}{/if}</p>
+        {#if fee}<dl class="fees" data-testid="otc-deal-fee-split"><div><dt>{say("Amount", "Сумма")}</dt><dd>{decimal(fee.basis_units, 6)} USDT</dd></div><div><dt>{say("Service fee (3%)", "Комиссия сервиса (3%)")}</dt><dd>−{decimal(fee.fee_units, 6)} USDT</dd></div><div><dt>{say("Amount to exchange", "Сумма для обмена")}</dt><dd>{decimal(fee.net_units, 6)} USDT</dd></div>{#if getsUsdt}<div class="net"><dt>{say("You receive", "К получению")}</dt><dd>{decimal(fee.net_units, 6)} USDT</dd></div>{/if}</dl>{/if}
         {#if kind && mine}
           <dl class="legs">
             <div><dt>{say("You send", "Вы отправляете")}</dt><dd>{amount(deal, kind)} {assetOf(kind)} · <code title={payerOf(deal, kind)}>{short(payerOf(deal, kind))}</code></dd></div>
@@ -174,7 +183,7 @@
   </div>
 {/if}
 
-{#if review}<OtcTransferReview kind={review.kind} instructions={review.attempt.instructions} networkCosts={review.kind === "payment" ? say(`Token transfer on ${networkLabel}; gas is paid from your own wallet.`, `Перевод токена в сети ${networkLabel}; газ платится с вашего кошелька.`) : say("The EVER transfer includes the receiving transaction cost.", "Перевод EVER включает стоимость приёма средства.")} onClose={() => review = null} onConfirm={confirmTransfer} disabled={busy || locked} />{/if}
+{#if review}<OtcTransferReview p2p kind={review.kind} instructions={review.attempt.instructions} networkCosts={review.kind === "payment" ? say(`Token transfer on ${networkLabel}; gas is paid from your own wallet.`, `Перевод токена в сети ${networkLabel}; газ платится с вашего кошелька.`) : say("The EVER transfer includes the receiving transaction cost.", "Перевод EVER включает стоимость приёма средства.")} onClose={() => review = null} onConfirm={confirmTransfer} disabled={busy || locked} />{/if}
 
 <style>
   .deals { display:grid; gap:12px; padding:var(--otc-panel-padding,20px); }
@@ -191,6 +200,11 @@
   .legs > div { display:grid; grid-template-columns:minmax(0,120px) minmax(0,1fr); align-items:baseline; gap:10px; }
   .legs dt { color:var(--color-text-soft); font-size:11px; }
   .legs dd { margin:0; overflow-wrap:anywhere; font-family:var(--font-mono); font-size:11px; }
+  .fees { display:grid; gap:5px; margin:0; padding:9px 0 0; border-top:1px solid var(--color-border); }
+  .fees > div { display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
+  .fees dt { color:var(--color-text-soft); font-size:11px; }
+  .fees dd { margin:0; font-family:var(--font-mono); font-size:11px; }
+  .fees .net dt, .fees .net dd { color:var(--color-text); font-weight:650; }
   .pending { margin:0; color:var(--color-text-soft); font-size:11px; line-height:1.6; }
   .rejected { margin:0; padding:8px 10px; border:1px solid color-mix(in srgb, var(--color-danger) 40%, transparent); border-radius:8px; color:var(--color-danger); font-size:11px; line-height:1.6; }
   .actions { display:flex; flex-wrap:wrap; gap:8px; }

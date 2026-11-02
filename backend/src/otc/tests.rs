@@ -265,11 +265,12 @@ pub(super) async fn fixture() -> (Service, tokio::task::JoinHandle<()>, String) 
         .await
         .unwrap()
         .batch_execute(&format!(
-            "{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}",
             include_str!("../../migrations/otc.sql"),
             include_str!("../../migrations/otc_escrow.sql"),
             include_str!("../../migrations/otc_public_offers.sql"),
-            include_str!("../../migrations/otc_p2p.sql")
+            include_str!("../../migrations/otc_p2p.sql"),
+            include_str!("../../migrations/otc_p2p_fees.sql")
         ))
         .await
         .unwrap();
@@ -970,11 +971,12 @@ async fn p2p_fixture() -> (Service, tokio::task::JoinHandle<()>, String, String)
         .await
         .unwrap()
         .batch_execute(&format!(
-            "{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}",
             include_str!("../../migrations/otc.sql"),
             include_str!("../../migrations/otc_escrow.sql"),
             include_str!("../../migrations/otc_public_offers.sql"),
-            include_str!("../../migrations/otc_p2p.sql")
+            include_str!("../../migrations/otc_p2p.sql"),
+            include_str!("../../migrations/otc_p2p_fees.sql")
         ))
         .await
         .unwrap();
@@ -1312,6 +1314,79 @@ async fn p2p_cancel_and_payment_expiry_return_the_offer_to_the_book() {
     assert_eq!(trade_state(&service, second).await, "expired");
     assert_eq!(trade_state(&service, first).await, "cancelled");
     assert_eq!(offer_state(&service, &owner).await, "open");
+    cleanup(service, task).await;
+}
+#[tokio::test]
+#[ignore = "requires OTC_TEST_DATABASE_URL; run cargo test otc::tests -- --include-ignored"]
+async fn p2p_completion_accrues_the_service_fee_once() {
+    let (service, task, owner, taker) = p2p_fixture().await;
+    let offer_id = published_offer(&service, &owner, Direction::Sell).await;
+    let deal = service
+        .accept_offer(&taker, offer_id, "accept")
+        .await
+        .unwrap();
+    let id = deal_id(&deal).await;
+    // The deal freezes the policy, so a later offer edit cannot change it.
+    assert_eq!(deal["fee_policy"]["version"], json!("p2p-3pct-v1"));
+    assert_eq!(deal["fee_policy"]["rate"], json!("0.03"));
+    assert_eq!(deal["fee_policy"]["basis_units"], json!("11889000"));
+    assert_eq!(deal["fee_policy"]["fee_units"], json!("356670"));
+    assert_eq!(deal["fee_policy"]["net_units"], json!("11532330"));
+    assert_eq!(deal["fee_accrued"], json!(false));
+    let evidence = |chain: &str| Evidence {
+        chain: chain.into(),
+        identity: format!("0x{}", "e".repeat(64)),
+        leg: super::model::Leg {
+            chain: chain.into(),
+            amount: "1".into(),
+            transfer_amount: "1".into(),
+            sender: format!("0:{}", "1".repeat(64)),
+            recipient: format!("0:{}", "2".repeat(64)),
+        },
+        included_at: Utc::now(),
+        canonical: true,
+        finalized: true,
+        successful: true,
+        raw: json!({}),
+    };
+    service
+        .credit_p2p(Uuid::new_v4(), id, "payment", &evidence("ethereum"))
+        .await
+        .unwrap();
+    assert_eq!(trade_state(&service, id).await, "delivery_pending");
+    service
+        .credit_p2p(Uuid::new_v4(), id, "payout", &evidence("everscale"))
+        .await
+        .unwrap();
+    assert_eq!(trade_state(&service, id).await, "completed");
+    let client = service.pool.get().await.unwrap();
+    let row = client
+        .query_one(
+            "SELECT basis_units::text,fee_units::text,net_units::text,rate::text,version,state FROM otc_p2p_fees WHERE trade_id=$1",
+            &[&id],
+        )
+        .await
+        .unwrap();
+    assert_eq!(row.get::<_, String>(0), "11889000");
+    assert_eq!(row.get::<_, String>(1), "356670");
+    assert_eq!(row.get::<_, String>(2), "11532330");
+    assert_eq!(row.get::<_, String>(3), "0.03");
+    assert_eq!(row.get::<_, String>(4), "p2p-3pct-v1");
+    assert_eq!(row.get::<_, String>(5), "accrued");
+    // Replaying the completing leg is idempotent and never doubles the fee.
+    service
+        .credit_p2p(Uuid::new_v4(), id, "payout", &evidence("everscale"))
+        .await
+        .unwrap();
+    let count: i64 = client
+        .query_one("SELECT count(*) FROM otc_p2p_fees WHERE trade_id=$1", &[&id])
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(count, 1);
+    let visible = service.p2p_deal(&taker, id).await.unwrap();
+    assert_eq!(visible["deal"]["fee_accrued"], json!(true));
+    assert_eq!(visible["deal"]["fee_policy"], deal["fee_policy"]);
     cleanup(service, task).await;
 }
 #[tokio::test]

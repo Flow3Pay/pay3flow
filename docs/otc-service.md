@@ -87,6 +87,13 @@ USDT first, EVER after that leg verifies. There is no escrow, no atomic swap and
 no rollback; each payer is responsible for their own leg, and the deal records
 which leg each side still owes.
 
+Each completed deal accrues a 3% service fee exactly once from the gross USDT
+leg (`otc_p2p_fees`; startup also applies `backend/migrations/otc_p2p_fees.sql`).
+The policy is frozen into the deal body at acceptance, so republishing the offer
+cannot change it. Both on-chain transfers stay gross: the fee is not a network
+cost, is never deducted from a signed transfer, and is recorded as `accrued` for
+later collection.
+
 The route deliberately bypasses the desk: it works with `enabled: false`, needs no
 inventory, relay account, RFQ, federation or staffed-hours gate, and the worker
 runs `p2p_tick` before the desk enablement check. Acceptance requires both a

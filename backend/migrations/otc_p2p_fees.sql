@@ -1,0 +1,20 @@
+-- One service fee per completed peer-to-peer deal. Both on-chain legs stay
+-- gross; the fee is accrued here and collected separately, never deducted
+-- from a signed transfer.
+CREATE TABLE IF NOT EXISTS otc_p2p_fees (
+ id UUID PRIMARY KEY,
+ trade_id UUID NOT NULL REFERENCES otc_p2p_trades(id),
+ offer_id UUID NOT NULL REFERENCES otc_public_offers(id),
+ asset TEXT NOT NULL DEFAULT 'USDT' CHECK(asset='USDT'),
+ precision SMALLINT NOT NULL DEFAULT 6 CHECK(precision=6),
+ basis_units NUMERIC NOT NULL CHECK(basis_units>0),
+ fee_units NUMERIC NOT NULL CHECK(fee_units>0),
+ net_units NUMERIC NOT NULL CHECK(net_units>=0),
+ rate NUMERIC NOT NULL,
+ version TEXT NOT NULL,
+ state TEXT NOT NULL DEFAULT 'accrued' CHECK(state IN ('accrued','collected')),
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+ collected_at TIMESTAMPTZ,
+ UNIQUE(trade_id)
+);
+CREATE INDEX IF NOT EXISTS otc_p2p_fees_state ON otc_p2p_fees(state,created_at);

@@ -104,6 +104,18 @@ impl Service {
             .as_str()
             .ok_or_else(|| invalid("offer terms are malformed"))?
             .to_string();
+        // The fee policy is frozen with the deal: republishing the offer later
+        // must never change what this trade agreed to pay.
+        let usdt_basis = amount::integer(
+            terms["usdt_units"]
+                .as_str()
+                .ok_or_else(|| invalid("offer terms are malformed"))?,
+        )?;
+        let fee_policy = terms
+            .get("fee_policy")
+            .filter(|policy| policy.is_object())
+            .cloned()
+            .unwrap_or_else(|| super::public_offers::fee_policy(usdt_basis));
         let direction: Direction = serde_json::from_value(terms["direction"].clone())?;
         if terms["ethereum_chain_id"] != json!(self.cfg.p2p_chain())
             || terms["usdt_contract"] != json!(self.cfg.p2p_usdt())
@@ -137,6 +149,7 @@ impl Service {
             "usdt_contract": self.cfg.p2p_usdt(),
             "ethereum_chain_id": self.cfg.p2p_chain(),
             "ever_network_id": 42,
+            "fee_policy": fee_policy,
         });
         let id = Uuid::new_v4();
         tx.execute(
@@ -613,7 +626,7 @@ impl Service {
         }
         Ok(())
     }
-    async fn credit_p2p(
+    pub(crate) async fn credit_p2p(
         &self,
         attempt: Uuid,
         id: Uuid,
@@ -630,6 +643,7 @@ impl Service {
             .await?;
         let state: String = row.get("state");
         let offer_id: Uuid = row.get("offer_id");
+        let body: Value = row.get("body");
         let expected = if kind == "payment" {
             "payment_pending"
         } else {
@@ -666,6 +680,30 @@ impl Service {
                 &[&offer_id],
             )
             .await?;
+            // Both chain legs settle gross. The 3% service fee is accrued once,
+            // in the same transaction that completes the deal, for later collection.
+            let basis = amount::integer(
+                body["usdt_units"]
+                    .as_str()
+                    .ok_or_else(|| invalid("deal terms are malformed"))?,
+            )?;
+            let policy = body
+                .get("fee_policy")
+                .filter(|policy| policy.is_object())
+                .cloned()
+                .unwrap_or_else(|| super::public_offers::fee_policy(basis));
+            let text = |key: &str| {
+                policy
+                    .get(key)
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string()
+            };
+            tx.execute(
+                "INSERT INTO otc_p2p_fees(id,trade_id,offer_id,asset,precision,basis_units,fee_units,net_units,rate,version,state) VALUES($1,$2,$3,'USDT',6,$4::text::numeric,$5::text::numeric,$6::text::numeric,$7::text::numeric,$8,'accrued') ON CONFLICT (trade_id) DO NOTHING",
+                &[&Uuid::new_v4(), &id, &offer_id, &text("basis_units"), &text("fee_units"), &text("net_units"), &text("rate"), &text("version")],
+            )
+            .await?;
         }
         tracing::info!(trade=%id, kind, state=next, "otc.p2p.leg_verified");
         tx.commit().await?;
@@ -673,17 +711,32 @@ impl Service {
     }
 }
 fn deal(row: &Row, actor: &str) -> Value {
+    let body: Value = row.get("body");
+    let state: String = row.get("state");
+    let fee_policy = body
+        .get("fee_policy")
+        .filter(|policy| policy.is_object())
+        .cloned()
+        .or_else(|| {
+            body["usdt_units"]
+                .as_str()
+                .and_then(|units| units.parse::<u128>().ok())
+                .map(super::public_offers::fee_policy)
+        })
+        .unwrap_or(Value::Null);
     json!({
         "id": row.get::<_, Uuid>("id"),
         "offer_id": row.get::<_, Uuid>("offer_id"),
-        "state": row.get::<_, String>("state"),
+        "state": state,
         "role": if row.get::<_, String>("owner_actor") == actor { "owner" } else { "taker" },
         "counterparty": if row.get::<_, String>("owner_actor") == actor {
             row.get::<_, String>("taker_actor")
         } else {
             row.get::<_, String>("owner_actor")
         },
-        "terms": row.get::<_, Value>("body"),
+        "terms": body,
+        "fee_policy": fee_policy,
+        "fee_accrued": state == "completed",
         "pay_by": row.get::<_, DateTime<Utc>>("pay_by"),
         "payout_by": row.get::<_, Option<DateTime<Utc>>>("payout_by"),
         "created_at": row.get::<_, DateTime<Utc>>("created_at"),

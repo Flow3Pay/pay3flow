@@ -11,6 +11,25 @@ use serde_json::{json, Value};
 use tokio_postgres::Row;
 use uuid::Uuid;
 
+/// Wider than `escrow::MAX_EVER_UNITS` on purpose: offers settle peer-to-peer and never reach the escrow factory.
+const MAX_EVER_OFFER_UNITS: u128 = 1_000_000_000_000 * 1_000_000_000;
+const MAX_USDT_OFFER_UNITS: u128 = 1_000_000 * 1_000_000;
+/// One service fee per peer-to-peer deal, withheld from the USDT leg and collected later.
+pub(crate) const P2P_FEE_VERSION: &str = "p2p-3pct-v1";
+pub(crate) const P2P_FEE_RATE: &str = "0.03";
+pub(crate) const P2P_FEE_PRECISION: u32 = 6;
+
+/// Fee policy for a USDT basis in its six-decimal units. Rounding up matches
+/// `amount::fee()`: the service never keeps less than three percent.
+pub(crate) fn fee_policy(basis: u128) -> Value {
+    let fee = basis.saturating_mul(3).saturating_add(99) / 100;
+    json!({
+        "version": P2P_FEE_VERSION, "rate": P2P_FEE_RATE, "floor": "0",
+        "basis_units": basis.to_string(), "fee_units": fee.to_string(),
+        "net_units": basis.saturating_sub(fee).to_string(), "precision": P2P_FEE_PRECISION,
+    })
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct PublicOfferDraft {
@@ -27,8 +46,11 @@ impl PublicOfferDraft {
     fn terms(&self, cfg: &super::config::Config) -> Result<Value> {
         let ever = amount::units(&self.ever_amount, 9)?;
         let usdt = amount::units(&self.usdt_amount, 6)?;
-        if ever > 100_000 * 1_000_000_000u128 || usdt > 1_000_000 * 1_000_000u128 {
-            return Err(invalid("offer amount exceeds the publication limit"));
+        if ever > MAX_EVER_OFFER_UNITS {
+            return Err(invalid("EVER offer amount exceeds the 1,000,000,000,000 EVER limit"));
+        }
+        if usdt > MAX_USDT_OFFER_UNITS {
+            return Err(invalid("USDT offer total exceeds the 1,000,000 USDT limit"));
         }
         let recipient = wallet::address("ethereum", &self.usdt_address)?;
         if recipient == format!("0x{}", "0".repeat(40)) {
@@ -39,7 +61,7 @@ impl PublicOfferDraft {
             "usdt_amount":amount::decimal(usdt,6), "ever_units":ever.to_string(),
             "usdt_units":usdt.to_string(), "usdt_address":recipient,
             "ever_network_id":42, "ethereum_chain_id":cfg.p2p_chain(),
-            "usdt_contract":cfg.p2p_usdt(),
+            "usdt_contract":cfg.p2p_usdt(), "fee_policy":fee_policy(usdt),
         }))
     }
 }
@@ -165,11 +187,21 @@ mod tests {
         assert_eq!(terms["ever_units"], "250000000000");
         assert_eq!(terms["usdt_units"], "5000000");
         assert_eq!(terms["ethereum_chain_id"], 1);
-        for value in ["0", "-1", "0.0000000001", "100001", "NaN"] {
+        assert_eq!(terms["fee_policy"]["version"], P2P_FEE_VERSION);
+        assert_eq!(terms["fee_policy"]["rate"], "0.03");
+        assert_eq!(terms["fee_policy"]["floor"], "0");
+        assert_eq!(terms["fee_policy"]["precision"], 6);
+        assert_eq!(terms["fee_policy"]["basis_units"], "5000000");
+        assert_eq!(terms["fee_policy"]["fee_units"], "150000");
+        assert_eq!(terms["fee_policy"]["net_units"], "4850000");
+        for value in ["0", "-1", "0.0000000001", "1000000000001", "NaN"] {
             let mut item = draft();
             item.ever_amount = value.into();
             assert!(item.terms(&cfg).is_err(), "{value}");
         }
+        let mut item = draft();
+        item.ever_amount = "1000000000000".into();
+        assert_eq!(item.terms(&cfg).unwrap()["ever_units"], "1000000000000000000000");
         for value in ["0", "-1", "0.0000001", "1000001"] {
             let mut item = draft();
             item.usdt_amount = value.into();
@@ -178,6 +210,24 @@ mod tests {
         let mut item = draft();
         item.usdt_address = format!("0x{}", "0".repeat(40));
         assert!(item.terms(&cfg).is_err());
+    }
+
+    #[test]
+    fn p2p_fee_policy_rounds_up_at_six_decimals_without_a_floor() {
+        let tiny = fee_policy(1);
+        assert_eq!(tiny["fee_units"], "1");
+        assert_eq!(tiny["net_units"], "0");
+        let policy = fee_policy(11_889_000);
+        assert_eq!(policy["basis_units"], "11889000");
+        assert_eq!(policy["fee_units"], "356670");
+        assert_eq!(policy["net_units"], "11532330");
+        assert_eq!(policy["floor"], "0");
+        let mut one = draft();
+        one.usdt_amount = "0.000001".into();
+        let terms = one.terms(&super::super::config::Config::default()).unwrap();
+        assert_eq!(terms["fee_policy"]["basis_units"], "1");
+        assert_eq!(terms["fee_policy"]["fee_units"], "1");
+        assert_eq!(terms["fee_policy"]["net_units"], "0");
     }
 
     #[test]

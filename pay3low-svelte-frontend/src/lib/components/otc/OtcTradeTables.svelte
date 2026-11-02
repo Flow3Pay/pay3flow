@@ -90,17 +90,17 @@
       <table>
         <thead><tr>
           <th>{title}</th>
-          <th>{say("Price", "Цена")}<small>USDT</small></th>
-          <th>{say("Amount", "Объём")}<small>EVER</small></th>
-          <th>{say("Total", "Всего")}<small>USDT</small></th>
+          <th>{say("Price", "Цена")}<small><img src="/icons/assets/usdt.png" alt="" width="12" height="12" />USDT</small></th>
+          <th>{say("Amount", "Объём")}<small><img src="/icons/assets/ever.svg" alt="" width="12" height="12" />EVER</small></th>
+          <th>{say("Total", "Всего")}<small><img src="/icons/assets/usdt.png" alt="" width="12" height="12" />USDT</small></th>
         </tr></thead>
         <tbody>
           {#each items as item (item.key)}
             <tr class:selected={item.kind === "trade" && item.id === selectedId} tabindex="0" role="button" data-kind={item.kind} aria-label={`${direction === "buy" ? say("Open buy", "Открыть покупку") : say("Open sell", "Открыть продажу")} ${item.kind === "offer" ? say("offer", "оффер") : "EVER"} ${item.id}`} title={item.kind === "offer" && item.owner ? item.owner : `${datePart(item.time)} ${timePart(item.time)}`} on:click={() => !busy && open(item)} on:keydown={(event) => activate(event, item)}>
               <td class="obWhen"><span class="status {statusClass(item.state)}"><i></i>{statusLabel(item.state)}</span><small>{datePart(item.time)} · {timePart(item.time)}</small></td>
-              <td class="obPrice"><i aria-hidden="true">$</i><b>{formatPrice(item.price, numberLocale)}</b></td>
+              <td class="obPrice"><b>{formatPrice(item.price, numberLocale)}</b><i aria-hidden="true">$</i></td>
               <td class="obAmount">{formatEver(item.amount, numberLocale)}</td>
-              <td class="obTotal"><i aria-hidden="true">$</i>{formatEver(item.total, numberLocale)}</td>
+              <td class="obTotal">{formatEver(item.total, numberLocale)}<i aria-hidden="true">$</i></td>
             </tr>
           {:else}
             <tr class="emptyRow"><td colspan="4"><strong>{emptyTitle || (direction === "buy" ? say("No buy orders yet", "Покупок пока нет") : say("No sell orders yet", "Продаж пока нет"))}</strong>{#if emptyHint}<small>{emptyHint}</small>{/if}</td></tr>
@@ -125,7 +125,8 @@
   table { width:100%; min-width:290px; border-collapse:separate; border-spacing:0 4px; font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-size:12px; }
   th { padding:0 12px 6px; color:var(--color-text-soft); font-size:11px; font-weight:500; line-height:1.35; text-align:right; white-space:nowrap; }
   th:first-child { width:34%; text-align:left; }
-  th small { display:block; color:var(--color-text-faint); font-size:9px; }
+  th small { display:flex; align-items:center; justify-content:flex-end; gap:4px; color:var(--color-text-faint); font-size:9px; }
+  th small img { width:12px; height:12px; flex:0 0 auto; border-radius:50%; object-fit:contain; }
   tbody td { padding:8px 12px; border-top:1px solid var(--color-border); border-bottom:1px solid var(--color-border); background:var(--otc-row-sell-bg); color:var(--color-text); text-align:right; white-space:nowrap; }
   .obTable[data-side="bids"] tbody td { background:var(--otc-row-buy-bg); }
   tbody td:first-child { border-left:1px solid var(--color-border); border-radius:10px 0 0 10px; text-align:left; }
@@ -138,7 +139,7 @@
   .obWhen small { color:var(--color-text-faint); font-size:9px; }
   .obPrice { overflow:hidden; text-overflow:ellipsis; color:var(--color-good-ink); }
   .obTable[data-side="bids"] .obPrice { color:var(--color-danger); }
-  .obPrice i, .obTotal i { font-style:normal; color:var(--color-text); opacity:.62; }
+  .obPrice i, .obTotal i { margin-left:.22em; font-style:normal; color:var(--color-text); opacity:.62; }
   .obPrice b { font-weight:650; }
   .obAmount,.obTotal { overflow:hidden; text-overflow:ellipsis; }
   .status { display:inline-flex; align-items:center; gap:5px; color:var(--color-text-soft); font-size:10px; }

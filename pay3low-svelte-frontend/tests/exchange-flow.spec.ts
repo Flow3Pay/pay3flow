@@ -2327,7 +2327,7 @@ test("currency control only lists currencies supported by the selected payment m
   await expect(page.locator(".moneyPanelSource .currencyHint")).toHaveCount(0);
   const sendingNetwork = page.getByRole("button", { name: "Select sending network: Ethereum (ERC-20)" });
   await expect(sendingNetwork).toBeVisible();
-  await expect(sendingNetwork.locator(".networkCopy")).toHaveCount(0);
+  await expect(sendingNetwork.locator(".networkName")).toHaveText("Ethereum (ERC-20)");
   await sendingNetwork.click();
   const networkPicker = page.getByRole("dialog", { name: "Choose network" });
   await expect(networkPicker.locator(".optionMeta")).toHaveCount(0);
@@ -2493,6 +2493,7 @@ test("cryptocurrency search binds the selected asset to its network", async ({ p
 
   const selectedNetwork = page.getByRole("button", { name: /Select sending network: Ethereum \(ERC-20\)/ });
   await expect(selectedNetwork).toHaveAttribute("title", "Ethereum (ERC-20)");
+  await expect(selectedNetwork).toHaveText("Ethereum (ERC-20)");
 
   await page.getByLabel("Amount to send").fill("125");
   await page.getByTestId("start-search").click();

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { exactInput, proposalDirection, completedVolume } from "../src/lib/otc/terminal.ts";
-import {offerDecimal,offerTotal,offerEver,saleRate,validOfferAmount,compareOfferRates} from "../src/lib/otc/offer-amount.ts";
+import {offerDecimal,offerTotal,offerEver,saleRate,offerUnits,offerFloored,MAX_OFFER_EVER_UNITS,compareOfferRates,marketUsdtPerEver,p2pFeeSplit} from "../src/lib/otc/offer-amount.ts";
 import type { Config, Trade, Proposal } from "../src/lib/otc/service.ts";
 
 test("exact input respects selected-chain precision, u128 limits and avoids Number loss", () => {
@@ -28,8 +28,14 @@ test('offer decimal entry normalizes locale punctuation without losing exact pre
   assert.equal(offerDecimal(' 001,2500000 ',6),'1.25');
   assert.equal(offerDecimal('.5',9),'0.5');
   assert.equal(offerDecimal('1.',9),'1');
-  for(const v of ['0','-1','NaN','1e3','1,2.3','1.0000001']) assert.equal(offerDecimal(v,6),null);
-  assert.equal(validOfferAmount('100001',9,100_000_000_000_000n),false);
+  for(const v of ['0','-1','NaN','1e3','1,2.3']) assert.equal(offerDecimal(v,6),null);
+  assert.equal(offerDecimal('1.0000001',6),'1');
+  assert.equal(offerDecimal('118426.07318771596',9),'118426.073187715');
+  assert.equal(offerFloored('118426.07318771596',9),true);
+  assert.equal(offerFloored('118426.073187715',9),false);
+  assert.equal(offerUnits('100001',9)! < MAX_OFFER_EVER_UNITS,true);
+  assert.equal(offerUnits('1000000000000',9),MAX_OFFER_EVER_UNITS);
+  assert.equal(offerUnits('1000000000001',9)! > MAX_OFFER_EVER_UNITS,true);
 });
 test('entered prices calculate exact executable USDT totals and disclose discarded fractions',()=>{
   assert.deepEqual(offerTotal('100','0,11889'),{amount:'11.889',rounded:false});
@@ -53,4 +59,20 @@ test('book prices sort by exact ratios, including ratios with identical displaye
   assert.equal(compareOfferRates('99999.999999999','0.000001','100000','0.000001'),1);
   assert.deepEqual(offerTotal('10','0.205'),{amount:'2.05',rounded:false});
   assert.equal(saleRate('10','2.05'),'0.205');
+});
+
+test('market rate converts USD reference prices into an exact twelve-decimal USDT price',()=>{
+  assert.equal(marketUsdtPerEver(0.00105027,0.9998),'0.001050480096');
+  assert.equal(marketUsdtPerEver(0.00105027,0.9998)!.split('.')[1].length <= 12,true);
+  for(const [ever,usdt] of [[undefined,0.9998],[0,0.9998],[-1,0.9998],[NaN,0.9998],[1e19,0.9998],[0.001,undefined],[0.001,0],[0.001,NaN],[0.001,1e19]] as const)
+    assert.equal(marketUsdtPerEver(ever,usdt),null);
+  assert.deepEqual(offerTotal('100000',marketUsdtPerEver(0.00105027,0.9998)!),{amount:'105.048009',rounded:true});
+});
+
+test('the 3% service fee is split exactly from the gross USDT total and rounds up',()=>{
+  assert.deepEqual(p2pFeeSplit('11.889'),{basis:'11.889',fee:'0.35667',net:'11.53233'});
+  assert.deepEqual(p2pFeeSplit('100'),{basis:'100',fee:'3',net:'97'});
+  assert.deepEqual(p2pFeeSplit('0.000001'),{basis:'0.000001',fee:'0.000001',net:'0'});
+  assert.equal(p2pFeeSplit('0'),null);
+  assert.equal(p2pFeeSplit(''),null);
 });

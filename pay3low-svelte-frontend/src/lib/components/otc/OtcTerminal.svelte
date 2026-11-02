@@ -7,7 +7,7 @@
   export let baseAsset = "EVER", quoteAsset = "USDT", marketIcon = "/icons/assets/ever.svg", networkLabel = "Everscale ↔ Ethereum", venueLabel = "OTC";
   export let selectedRate = "—", rateLabel = "", bookTitle = "", stats: { label:string; value:string; secondary?:boolean; unit?:string }[] = [];
   // Terminals whose content brings its own card shell still get the generic panel here.
-  export let bookPanel = true, chartPanel = true;
+  export let bookPanel = true, chartPanel = true, bookWide = false;
   $: say = (en:string,ru:string) => $locale === "ru" ? ru : en;
   $: currentMarket = marketByBase(baseAsset);
   let pickerOpen = false, selectorButton: HTMLButtonElement;
@@ -43,15 +43,22 @@
     <div class="terminalColumn chartColumn" id="otc-chart-column">
       {#if chartPanel}<OtcPanel id="otc-chart" title={say("Chart","График")} collapsible={false}><slot name="chart" /></OtcPanel>{:else}<slot name="chart" />{/if}
     </div>
-    <div class="terminalColumn bookColumn" id="otc-book-column">
-      {#if bookPanel}<OtcPanel id="otc-book" title={bookTitle} collapsible={false}><slot name="book" /></OtcPanel>{:else}<slot name="book" />{/if}
-    </div>
+    {#if !bookWide}
+      <div class="terminalColumn bookColumn" id="otc-book-column">
+        {#if bookPanel}<OtcPanel id="otc-book" title={bookTitle} collapsible={false}><slot name="book" /></OtcPanel>{:else}<slot name="book" />{/if}
+      </div>
+    {/if}
   </div>
   <div class="railColumn">
     <div class="terminalColumn bridgeColumn" id="otc-bridge-column"><OtcPanel id="otc-bridge" title={say("Create Order","Создать ордер")} collapsible={false}><slot name="ticket" /></OtcPanel></div>
     <slot name="rail" />
   </div>
 </div>
+{#if bookWide}
+  <div class="terminalColumn bookColumn bookWide" id="otc-book-column">
+    {#if bookPanel}<OtcPanel id="otc-book" title={bookTitle} collapsible={false}><slot name="book" /></OtcPanel>{:else}<slot name="book" />{/if}
+  </div>
+{/if}
 <OtcMarketPicker open={pickerOpen} selected={currentMarket.id} onClose={closePicker} onSelect={chooseMarket} />
 <style>
   .marketStrip { display: grid; grid-template-columns: minmax(220px, 1.25fr) repeat(5, minmax(0, 1fr)); gap: 20px; align-items: center; min-height: 96px; margin-bottom: 24px; padding: 20px; border: 1px solid var(--color-border); border-radius: var(--otc-card-radius, 10px); background: var(--color-paper); }
@@ -74,10 +81,13 @@
   .terminalShell { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: 24px; align-items: start; }
   .otcGrid, .railColumn { display: flex; min-width: 0; flex-direction: column; gap: 24px; }
   .terminalColumn { display: flex; width: 100%; min-width: 0; overflow: clip; }
+  .bookWide { margin-top: 24px; }
+  .bridgeColumn :global(.panelHead) { min-height: 48px; padding-block: 12px; }
   .panelMeta { color: var(--color-text-faint); font-family: var(--font-mono); font-size: 12px; }
   @media (min-width: 981px) and (max-width: 1200px) { .marketStrip { grid-template-columns: minmax(220px, 1.3fr) repeat(3, minmax(0, 1fr)); } .secondaryStat { display: none; } }
   @media (max-width: 980px) {
     .terminalShell { display: flex; width: 100%; flex-direction: column; gap: 20px; }
+    .bookWide { margin-top: 20px; }
     .marketStrip { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
     .marketSelector { grid-column: span 2; border-right: 0; padding-right: 0; }
     .marketStat:not(.last) { border-top: 1px solid var(--color-border); padding-top: 12px; }

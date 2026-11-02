@@ -20,7 +20,7 @@ export interface OfferHistoryPoint {
   terms: { direction: Direction; ever_amount: string; usdt_amount: string };
 }
 
-export { offerDecimal, offerTotal, offerEver, validOfferAmount, saleRate, compareOfferRates } from "./offer-amount";
+export { offerDecimal, offerTotal, offerEver, offerUnits, offerFloored, marketUsdtPerEver, p2pFeeSplit, MAX_OFFER_EVER_UNITS, MAX_OFFER_USDT_UNITS, saleRate, compareOfferRates } from "./offer-amount";
 
 export const offerDirection = (offer: PublicOffer): Direction => offer.terms.direction || "sell";
 export const offerOwner = (offer: PublicOffer): string => offer.owner_ever || offer.seller_ever;
@@ -30,6 +30,7 @@ export interface SaleTicketState {
   price: string;
   priceRounded: boolean;
   roundingAsset: "USDT" | "EVER" | null;
+  amountFloored: "USDT" | "EVER" | null;
   blockingReason: string;
   everAmount: string;
   usdtAmount: string;
@@ -39,10 +40,15 @@ export interface SaleTicketState {
   valid: boolean;
   reviewing: boolean;
   linkingEvm: boolean;
+  marketPrice: boolean;
+  marketRate: string;
+  marketApprox: string;
+  marketStale: boolean;
   onPrice: (value: string) => void;
   onEver: (value: string) => void;
   onUsdt: (value: string) => void;
   onAddress: (value: string) => void;
   onUseEthereum: () => void;
+  onMarketPrice: (checked: boolean) => void;
   onRequest: () => void;
 }

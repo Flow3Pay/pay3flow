@@ -194,7 +194,7 @@
   <div class="chartHead">
     <div class="chartQuote">
       <div class="chartValue">
-        <strong data-testid="otc-chart-price">{latest === null ? "—" : `$${latest.toLocaleString(numbers, { maximumFractionDigits: Math.max(2, precision) })}`}</strong>
+        <strong data-testid="otc-chart-price">{latest === null ? "—" : `${latest.toLocaleString(numbers, { maximumFractionDigits: Math.max(2, precision) })} $`}</strong>
         {#if change !== null}<em class:negative={change < 0}>{change >= 0 ? "+" : "−"}{Math.abs(change).toFixed(2)}%</em>{/if}
       </div>
     </div>

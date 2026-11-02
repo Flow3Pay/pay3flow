@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
 const ever = `0:${"a".repeat(64)}`, eth = `0x${"b".repeat(40)}`;
-async function setup(page: Page, options: { signedIn?: boolean; lostResponse?: boolean; verifiedEthereum?: boolean; cancelledReplay?: boolean; failPublicRefresh?: boolean; failPrivateRefresh?: boolean } = {}) {
+async function setup(page: Page, options: { signedIn?: boolean; lostResponse?: boolean; verifiedEthereum?: boolean; cancelledReplay?: boolean; failPublicRefresh?: boolean; failPrivateRefresh?: boolean; deals?: any[] } = {}) {
   const session = { token: "seller-token", actor: "https://relay.example/actors/seller", desk: false, expires_at: "2099-01-01T00:00:00Z", signing_wallet: { chain: "everscale", address: ever }, wallets: [{ chain: "everscale", address: ever, verified_at: new Date().toISOString() }] };
   if (options.verifiedEthereum) session.wallets.push({chain:"ethereum",address:eth,verified_at:new Date().toISOString()});
   const calls: { path: string; method: string; body: any; key: string | undefined }[] = [];
@@ -45,10 +45,12 @@ async function setup(page: Page, options: { signedIn?: boolean; lostResponse?: b
     const body = req.postDataJSON(), key = req.headers()["idempotency-key"];
     calls.push({ path, method: req.method(), body, key });
     let response: any = [], status = 200;
-    if (path === "/config") response = { enabled: false, available: false, public_offers_available: true, public_offer_directions: ["buy","sell"], wallet_login_available: true, wallet_login_chains: ["everscale", "ethereum"], demo: false, desk: "", desk_name: "", ever_resource: "", usdt_resource: "" };
+    if (path.endsWith("/market-prices")) response = { source: "stub", stale: false, updated_at: Math.floor(Date.now() / 1000), prices: { EVER: 0.00105027, USDT: 0.9998 } };
+    else if (path === "/config") response = { enabled: false, available: false, public_offers_available: true, public_offer_directions: ["buy","sell"], p2p_available: !!options.deals, wallet_login_available: true, wallet_login_chains: ["everscale", "ethereum"], demo: false, desk: "", desk_name: "", ever_resource: "", usdt_resource: "" };
     else if (path === "/session/challenge") response = { id: "challenge", message: "Sign in only; no transfer", everscale_data: btoa("sign-in") };
     else if (path === "/session/proof" || path === "/session") response = session;
     else if (path === "/session/revoke") response = { revoked: true };
+    else if (path === "/p2p/trades") response = { deals: options.deals || [] };
     else if (path === "/trades") response = { trades: [], rfqs: [] };
     else if (path === "/offers" && req.method() === "POST") {
       let offer = keys.get(key!);
@@ -111,6 +113,47 @@ test("seller signs in with EVER alone and publishes, restores, and cancels a rea
   await expect(page.locator(".tradeTables tbody tr[data-kind=offer]").first()).toContainText("Cancelled");
 });
 
+test("market price hint fills the USDT total and toggles a live rate", async ({ page }) => {
+  await setup(page, { signedIn: true });
+  await page.getByTestId("otc-offer-ever").fill("100000");
+  await expect(page.getByTestId("otc-offer-usdt")).toHaveAttribute("placeholder", "≈ 105.048009");
+  await page.getByRole("checkbox", { name: "Market price", exact: true }).check();
+  await expect(page.getByTestId("otc-offer-price")).toHaveValue("0.001050480096");
+  await expect(page.getByTestId("otc-offer-price")).toHaveJSProperty("readOnly", true);
+  await expect(page.getByTestId("otc-offer-usdt")).toHaveValue("105.048009");
+  await expect(page.getByTestId("otc-market-price-hint")).toContainText("live market feed");
+  await page.getByRole("checkbox", { name: "Market price", exact: true }).uncheck();
+  await expect(page.getByTestId("otc-offer-price")).toHaveJSProperty("readOnly", false);
+  await page.getByTestId("otc-offer-price").fill("0.2");
+  await expect(page.getByTestId("otc-offer-usdt")).toHaveValue("20000");
+});
+
+test("a P2P deal shows the gross amount, the 3% service fee, the net and the USDT payout", async ({ page }) => {
+  const fee = { version: "p2p-3pct-v1", rate: "0.03", floor: "0", basis_units: "11889000", fee_units: "356670", net_units: "11532330", precision: 6 };
+  const deal = {
+    id: "deal-1", offer_id: "offer-1", state: "delivery_pending", role: "owner",
+    counterparty: "https://relay.example/actors/taker",
+    terms: {
+      direction: "sell", ever_amount: "100", usdt_amount: "11.889", ever_units: "100000000000", usdt_units: "11889000",
+      usdt_payer: `0x${"c".repeat(40)}`, usdt_payee: eth,
+      ever_payer: ever, ever_payee: `0:${"c".repeat(64)}`, fee_policy: fee,
+    },
+    fee_policy: fee, fee_accrued: false,
+    pay_by: "2099-01-01T00:00:00Z", payout_by: "2099-01-01T00:00:00Z",
+    created_at: new Date().toISOString(), attempts: [],
+  };
+  await setup(page, { signedIn: true, verifiedEthereum: true, deals: [deal] });
+  await page.getByRole("tab", { name: "My orders", exact: true }).click();
+  const split = page.getByTestId("otc-deal-fee-split");
+  await expect(split).toBeVisible();
+  await expect(split).toContainText("Amount");
+  await expect(split).toContainText("Service fee (3%)");
+  await expect(split).toContainText("11.889 USDT");
+  await expect(split).toContainText("0.35667 USDT");
+  await expect(split).toContainText("11.53233 USDT");
+  await expect(split).toContainText("You receive");
+});
+
 for (const direction of ["sell","buy"] as const) test(`a lost ${direction} publication restores the exact draft and reuses its key after reload`, async ({ page }) => {
   const f = await setup(page, { signedIn: true, lostResponse: true });
   await page.locator(".sideTabs").getByRole("button",{name:direction === "buy" ? "Buy EVER" : "Sell EVER",exact:true}).click();
@@ -128,13 +171,19 @@ for (const direction of ["sell","buy"] as const) test(`a lost ${direction} publi
   expect(sent[1].body).toEqual(sent[0].body);
 });
 
-test("publication rejects invalid precision and zero recipients, and fits an accessible 320px screen", async ({ page }) => {
+test("publication rejects zero, negative and over-cap amounts, floors extra digits, and fits an accessible 320px screen", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 820 });
   await setup(page, { signedIn: true }); await fill(page);
-  for (const value of ["0", "1.0000000001", "-10", "100001"]) {
+  for (const value of ["0", "-10"]) {
     await page.getByTestId("otc-offer-ever").fill(value);
     await expect(page.getByTestId("otc-publish-offer")).toBeDisabled();
   }
+  await page.getByTestId("otc-offer-ever").fill("1000000000001");
+  await expect(page.getByTestId("otc-publish-offer")).toBeDisabled();
+  await expect(page.locator("#otc-sale-status")).toContainText("1,000,000,000,000 EVER");
+  await page.getByTestId("otc-offer-ever").fill("1.0000000001");
+  await expect(page.getByTestId("otc-publish-offer")).toBeEnabled();
+  await expect(page.locator(".priceHint")).toContainText("extra digits you typed were dropped");
   await fill(page); await page.getByTestId("otc-offer-recipient").fill(`0x${"0".repeat(40)}`);
   await expect(page.getByTestId("otc-publish-offer")).toBeDisabled();
   await fill(page); await expect(page.getByTestId("otc-publish-offer")).toBeEnabled();
@@ -165,6 +214,12 @@ test("sale publication uses the original Buy/Sell ticket, book and activity with
   await expect(page.locator(".chartColumn .marketChart")).toContainText("EVER / USDT");
   await page.getByTestId("otc-publish-offer").click();
   await expect(page.getByTestId("otc-offer-review")).toContainText("0.0011889 USDT / EVER");
+  const split = page.getByTestId("otc-offer-fee-split");
+  await expect(split).toContainText("Amount");
+  await expect(split).toContainText("Service fee (3%)");
+  await expect(split).toContainText("0.003567 USDT");
+  await expect(split).toContainText("0.115323 USDT");
+  await expect(split).toContainText("You receive");
   await page.getByTestId("otc-publish-offer").click();
   const published = page.locator(".bookColumn .obRow");
   await expect(published).toHaveCount(1);
@@ -269,12 +324,12 @@ for (const direction of ["buy","sell"] as const) test(`HEX-style ${direction} qu
   const row=page.locator(".bookColumn").getByTestId("otc-public-offer");
   await expect(row.getByTestId("otc-book-price")).toHaveText("0.205");
   await expect(row).toContainText("2.05");
-  await expect(page.getByTestId("otc-chart-price")).toHaveText("$0.205");
+  await expect(page.getByTestId("otc-chart-price")).toHaveText("0.205 $");
   await expect(page.locator(".chartColumn .marketChart")).toHaveAttribute("data-points", "1");
   expect(f.calls.find(c=>c.method === "POST" && c.path === "/offers")?.body).toEqual({direction,ever_amount:"10",usdt_amount:"2.05",usdt_address:eth});
   await page.reload();
   await expect(page.locator(".bookColumn").getByTestId("otc-book-price")).toHaveText("0.205");
-  await expect(page.getByTestId("otc-chart-price")).toHaveText("$0.205");
+  await expect(page.getByTestId("otc-chart-price")).toHaveText("0.205 $");
 });
 
 test("a cancelled publication replay is never reported as a newly published offer",async({page})=>{

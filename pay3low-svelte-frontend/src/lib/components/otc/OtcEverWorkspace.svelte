@@ -289,7 +289,7 @@
 <OtcOffers enabled={!!config?.public_offers_available} {direction} {session} {busy} bind:posting={offersBusy} onConnect={() => run(() => session ? verify("everscale") : connectAccount("everscale"))} onPublished={() => { tab = "trades"; }} let:ticket let:offers let:mine let:history={offerHistory} let:message let:onCancel>
 <section class="otcWorkspace" data-testid="otc-workspace" data-state={!loaded ? "connecting" : !healthy ? "unavailable" : "connected"}>
   <div class="pageIntro" class:localeLong={$locale !== "en"}><ScrambleHeadline phrases={copy.heroPhrases} active={introCompleted} /></div>
-  <OtcTerminal chartPanel={false} bookPanel={false} selectedRate={saleEnabled ? ticket.askingRate : selected ? rate(selected.terms) : "—"} rateLabel={saleEnabled ? say("Your offer price", "Цена вашего оффера") : ""} {bookTitle} stats={[
+  <OtcTerminal chartPanel={false} bookPanel={false} bookWide selectedRate={saleEnabled ? ticket.askingRate : selected ? rate(selected.terms) : "—"} rateLabel={saleEnabled ? say("Your offer price", "Цена вашего оффера") : ""} {bookTitle} stats={[
     {label:say("Desk","Деск"),value:config?.desk_name || "—"},
     {label:config?.public_offers_available ? say("Open offers","Открытые офферы") : say("Desk offers","Предложения деска"),value:String(listings.length + offers.length),secondary:true},
     {label:config?.public_offers_available ? say("Your open orders","Ваши открытые ордера") : say("Your open trades","Ваши открытые сделки"),value:session ? String(activeTrades.length + mine.filter(o => o.state === "open").length) : "—",secondary:true},
