@@ -124,6 +124,8 @@
     const danger = css("--color-danger", "#d43d35");
     const border = css("--color-border", "rgba(41, 67, 42, 0.16)");
     const text = css("--color-text", "#152016");
+    // The crosshair chip is painted with the text colour, so its label needs the token that flips with the theme.
+    const onText = css("--color-text-invert", "#ffffff");
     const soft = css("--color-text-soft", "#5d6b5f");
     const faint = css("--color-text-faint", "#8a968c");
     const mono = 'ui-monospace, "SFMono-Regular", Consolas, monospace';
@@ -159,8 +161,8 @@
       separator: { size: 8, color: border, fill: true, activeBackgroundColor: border },
       crosshair: {
         show: true,
-        horizontal: { show: true, line: { show: true, color: faint, style: "dashed", dashedValue: [3, 3], size: 1 }, text: { show: true, style: "fill", color: "#ffffff", size: 11, family: mono, weight: "400", backgroundColor: text } },
-        vertical: { show: true, line: { show: true, color: faint, style: "dashed", dashedValue: [3, 3], size: 1 }, text: { show: true, style: "fill", color: "#ffffff", size: 11, family: mono, weight: "400", backgroundColor: text } },
+        horizontal: { show: true, line: { show: true, color: faint, style: "dashed", dashedValue: [3, 3], size: 1 }, text: { show: true, style: "fill", color: onText, size: 11, family: mono, weight: "400", backgroundColor: text } },
+        vertical: { show: true, line: { show: true, color: faint, style: "dashed", dashedValue: [3, 3], size: 1 }, text: { show: true, style: "fill", color: onText, size: 11, family: mono, weight: "400", backgroundColor: text } },
       },
     };
   }
