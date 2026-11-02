@@ -77,13 +77,13 @@
 </div>
 
 <style>
-  .portfolio { display:flex; flex-direction:column; gap:16px; padding:20px; border:1px solid var(--color-border); border-radius:var(--otc-card-radius,10px); background:var(--color-paper); }
+  .portfolio { display:flex; flex-direction:column; gap:16px; padding:20px; border:1px solid var(--color-border); border-radius:var(--otc-card-radius, 15px); background:var(--color-paper); }
   .cardHead { display:flex; align-items:center; justify-content:space-between; gap:12px; }
   h2 { margin:0; font-size:19px; font-weight:700; letter-spacing:-.02em; }
   .walletIcon { display:grid; width:44px; height:44px; flex:0 0 auto; place-items:center; border-radius:50%; background:var(--color-accent-soft, var(--color-accent)); }
   .walletIcon:hover { filter:brightness(1.04); }
   .assetRows { display:grid; gap:12px; }
-  .assetRow { display:grid; grid-template-columns:38px minmax(0,1fr) auto; align-items:center; gap:12px; min-width:0; padding:14px; border:1px solid transparent; border-radius:16px; background:var(--color-panel); }
+  .assetRow { display:grid; grid-template-columns:38px minmax(0,1fr) auto; align-items:center; gap:12px; min-width:0; padding:14px; border:1px solid transparent; border-radius:var(--radius-panel, 12px); background:var(--color-panel); }
   .assetRow.active { border-color:var(--color-accent-strong); background:var(--color-accent-soft, color-mix(in srgb, var(--color-accent) 22%, transparent)); }
   .assetRow.empty { grid-template-columns:minmax(0,1fr); }
   .assetIcon { flex:0 0 38px; border-radius:50%; }

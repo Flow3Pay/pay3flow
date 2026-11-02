@@ -121,7 +121,7 @@
   .settingsButton:hover, .settingsButton.active { border-color: var(--color-border-strong); background: var(--color-paper); }
   .settingsButton img { display: block; width: 18px; height: 18px; object-fit: contain; filter: brightness(0); opacity: .62; }
   :global(html[data-theme="dark"]) .settingsButton img { filter: brightness(0) invert(1); }
-  .settingsPanel { position: absolute; z-index: 30; top: calc(100% + 8px); right: 0; width: min(320px, 100%); padding: 16px; border: 1px solid var(--color-border-strong); border-radius: 16px; background: var(--color-paper); box-shadow: 0 18px 50px rgb(0 0 0 / .18); }
+  .settingsPanel { position: absolute; z-index: 30; top: calc(100% + 8px); right: 0; width: min(320px, 100%); padding: 16px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-panel, 12px); background: var(--color-paper); box-shadow: 0 18px 50px rgb(0 0 0 / .18); }
   .settingsPanelHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
   .settingsPanelHead strong { font-size: 13px; }
   .settingsClose { display: grid; width: 28px; height: 28px; flex: 0 0 auto; place-items: center; border-radius: 7px; color: var(--color-text-soft); font-size: 18px; line-height: 1; }

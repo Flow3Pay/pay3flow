@@ -52,7 +52,7 @@ async function fixture(page: Page, options: { state?: string; direction?: string
   await page.goto("/#/otc");
   await expect(page.getByTestId("otc-workspace")).toHaveAttribute("data-state", "connected", { timeout: 20_000 });
   await page.getByRole("tab", { name: /^My trades/ }).click();
-  await page.locator(".tradeTables tbody tr[role=button]").first().click();
+  await page.locator(".tradeTables tbody tr[data-testid='otc-order-row']").first().click();
   await expect(page.getByTestId("otc-escrow")).toContainText("100,000 EVER");
   return { requests, escrow };
 }

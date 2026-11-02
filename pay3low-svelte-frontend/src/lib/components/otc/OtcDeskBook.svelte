@@ -190,9 +190,8 @@
   .obHead small img { width:12px; height:12px; flex:0 0 auto; border-radius:50%; object-fit:contain; }
   .obSideHead { display:flex; min-height:24px; align-items:center; justify-content:space-between; gap:8px; padding:4px 12px; border-bottom:1px solid var(--color-border); color:var(--color-text-faint); font-size:9px; font-weight:650; letter-spacing:.08em; line-height:1.4; text-transform:uppercase; }
   .obSideHead > span:last-child { font-family:var(--font-mono); font-size:10px; font-weight:400; letter-spacing:0; }
-  .obRow { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr) minmax(0,.9fr) minmax(0,1fr); width:100%; min-height:44px; align-items:center; gap:8px; padding:6px 12px; border:1px solid var(--color-border); border-radius:10px; background:var(--otc-row-sell-bg); color:var(--color-text); font-family:var(--font-mono); font-size:12px; font-variant-numeric:tabular-nums; line-height:1.35; text-align:right; cursor:pointer; transition:box-shadow .12s ease; }
-  .obTable[data-side="bids"] .obRow { background:var(--otc-row-buy-bg); }
-  .obRow:hover { box-shadow:inset 0 0 0 1px var(--color-border-strong); }
+  .obRow { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr) minmax(0,.9fr) minmax(0,1fr); width:100%; min-height:44px; align-items:center; gap:8px; padding:6px 12px; border:1px solid var(--color-border); border-radius:10px; background:transparent; color:var(--color-text); font-family:var(--font-mono); font-size:12px; font-variant-numeric:tabular-nums; line-height:1.35; text-align:right; cursor:pointer; transition:background .12s ease, box-shadow .12s ease; }
+  .obRow:hover, .obRow:focus-visible { background:var(--color-panel); box-shadow:inset 0 0 0 1px var(--color-border-strong); }
   .obOwner { display:flex; min-width:0; align-items:center; gap:6px; justify-self:start; text-align:left; }
   .obOwner code { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:700; letter-spacing:-.02em; }
   .obPrice { min-width:0; overflow:hidden; text-overflow:ellipsis; font-weight:650; color:var(--color-good-ink); }

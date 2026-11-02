@@ -5,7 +5,7 @@
   import type { OtcPreview } from "$lib/share-links";
   import { parseOtcHash } from "$lib/otc/link";
   import { request, signInWallet, OtcRequestError, bindWallet, sendAttempt, decimal, rate, setOtcNetwork, type Config, type Session, type Proposal, type Trade, type Rfq, type Attempt, type Direction } from "$lib/otc/service";
-  import type { PublicOffer } from "$lib/otc/public-offers";
+  import type { PublicOffer, SaleTicketState } from "$lib/otc/public-offers";
   import { exactInput, proposalDirection, terminalStates, completedVolume } from "$lib/otc/terminal";
   import "$lib/otc/terminal.css";
   import OtcActivityContent from "./OtcActivityContent.svelte";
@@ -145,6 +145,18 @@
   function chooseSide(next: Direction) { if (next !== direction) { direction = next; listingId = ""; edited(); syncLink(); } }
   function selectListing(proposal: Proposal, side: Direction) { chooseSide(side); if (listingId !== proposal.id) edited(); listingId = proposal.id; document.getElementById("otc-input")?.focus(); }
   function openOffer(offer: PublicOffer) { void tick().then(() => offerBook?.openOffer(offer)); }
+  function repeatOrder(entry: { direction: Direction; input?: string; ever?: string; usdt?: string; address?: string }, saleTicket: SaleTicketState) {
+    // Repeating an order copies its terms into the ticket; nothing is sent or published until the user confirms.
+    direction = entry.direction; listingId = ""; edited(); syncLink();
+    if (entry.ever !== undefined) {
+      saleTicket.onMarketPrice(false);
+      saleTicket.onEver(entry.ever);
+      if (entry.usdt !== undefined) saleTicket.onUsdt(entry.usdt);
+      if (entry.address) saleTicket.onAddress(entry.address);
+    } else if (entry.input !== undefined) input = entry.input;
+    document.getElementById("otc-bridge-column")?.scrollIntoView({ block: "start", behavior: motionDuration ? "smooth" : "instant" });
+    void tick().then(() => document.getElementById("otc-input")?.focus());
+  }
   async function acceptOffer(id: string) {
     const owner = session;
     tab = "orders";
@@ -307,7 +319,7 @@
             <OtcDeskBook publicOffers={offers} ownIds={mine.map(o => o.id)} onCancel={onCancel} onAccept={acceptOffer} busy={busy || offersBusy} {config} {listings} selectedId={listing?.id || ""} onSelect={selectListing} />
           {:else}
             {#if tab === "orders"}<OtcDealPanel bind:this={dealPanel} {config} {session} locked={busy || offersBusy} {now} onNotice={message => notice = message} onError={message => error = message} onBusyChange={value => busy = value} />{/if}
-            <OtcTradeTables trades={tab === "orders" ? activeTrades : history} offers={tab === "orders" ? mine.filter(o => o.state === "open") : mine.filter(o => o.state !== "open")} selectedId={selected?.id || ""} busy={busy || offersBusy} onSelect={id => run(() => selectTrade(id, true), false)} onOfferSelect={openOffer} emptyTitle={tab === "orders" ? say("No open orders", "Открытых ордеров нет") : say("No history yet", "Истории пока нет")} emptyHint={session ? say("Quotes, offers and accepted trades appear here.", "Здесь появятся котировки, офферы и принятые сделки.") : say("Connect your wallet to see private quotes and trades.", "Подключите кошелёк для доступа к приватным котировкам и сделкам.")} />
+            <OtcTradeTables trades={tab === "orders" ? activeTrades : history} offers={tab === "orders" ? mine.filter(o => o.state === "open") : mine.filter(o => o.state !== "open")} selectedId={selected?.id || ""} busy={busy || offersBusy} onSelect={id => run(() => selectTrade(id, true), false)} onOfferSelect={openOffer} onRepeat={entry => repeatOrder(entry, ticket)} emptyTitle={tab === "orders" ? say("No open orders", "Открытых ордеров нет") : say("No history yet", "Истории пока нет")} emptyHint={session ? say("Quotes, offers and accepted trades appear here.", "Здесь появятся котировки, офферы и принятые сделки.") : say("Connect your wallet to see private quotes and trades.", "Подключите кошелёк для доступа к приватным котировкам и сделкам.")} />
             {#if tab === "orders"}{#each rfqs.filter(r => r.state === "waiting") as r}<p class="waiting">{say("Waiting for desk quote", "Ожидается котировка деска")} · {r.direction} · {r.input} · {r.id}</p>{/each}{/if}
             {#if selected}<div class="tradeDetail">{#if handoffUnknown}<p class="waiting">{say("Saved outgoing attempt is unresolved. Another send is blocked.", "Сохранённая попытка перевода не завершена. Повторная отправка заблокирована.")}</p>{/if}<OtcTradeDetails {selected} {session} {config} {attempts} {receipts} {updates} busy={busy || !healthy} {unresolvedBooking} {handoffUnknown} {now} onApply={() => run(apply)} onDecide={accept => run(() => decide(accept))} onBusyChange={value => { busy = value; accountLocked = value; }} onRefresh={refresh} onTransfer={kind => run(() => prepareReview(kind))} onTrack={(attempt, reference) => run(() => track(attempt, reference))} onRetry={(attempt, evidence) => run(async () => { await request(`/attempts/${attempt.id}/retry`, session!.token, { evidence: { note: evidence } }); await refresh(); })} /></div>{/if}
           {/if}
@@ -341,7 +353,7 @@
   .titleAccent::after { position: absolute; right: -.05em; bottom: .02em; left: -.04em; z-index: -1; height: .2em; border-radius: 3px; background: var(--color-accent); content: ""; transform: rotate(-1deg); }
   .risk { margin: 16px 0 0; color: var(--color-text-soft); font-size: 12px; line-height: 1.6; }
   .panelMeta { color: var(--color-text-faint); font-family: var(--font-mono); font-size: 12px; }
-  .activityCard { display: flex; width: 100%; min-width: 0; flex-direction: column; border: 1px solid var(--color-border-strong); border-radius: var(--otc-card-radius, 10px); background: var(--exchange-card-bg); overflow: hidden; scroll-margin-top: 24px; }
+  .activityCard { display: flex; width: 100%; min-width: 0; flex-direction: column; border: 1px solid var(--color-border-strong); border-radius: var(--otc-card-radius, 15px); background: var(--exchange-card-bg); overflow: hidden; scroll-margin-top: 24px; }
   .activityTabs { position: relative; display: flex; flex: 0 0 auto; align-items: stretch; gap: 4px; margin: 16px var(--otc-panel-padding) 8px; padding: 4px; border-radius: 10px; background: var(--color-panel); box-shadow: inset 0 0 0 1px var(--color-border); }
   .activityTabs button { position: relative; z-index: 1; display: flex; flex: 1 1 0; min-width: 0; min-height: 38px; align-items: center; justify-content: center; gap: 8px; padding: 6px 10px; border-radius: 7px; color: var(--color-text-soft); font-size: 13px; line-height: 1.35; text-align: center; transition: color var(--activity-motion) ease; }
   .activityTabs button:hover { color: var(--color-text); }

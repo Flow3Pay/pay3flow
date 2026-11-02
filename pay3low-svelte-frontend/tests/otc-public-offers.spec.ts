@@ -128,6 +128,35 @@ test("market price hint fills the USDT total and toggles a live rate", async ({ 
   await expect(page.getByTestId("otc-offer-usdt")).toHaveValue("20000");
 });
 
+test("the buy and sell chip on an order copies its terms back into Create Order", async ({ page }) => {
+  await setup(page, { signedIn: true });
+  await page.getByTestId("otc-offer-ever").fill("500");
+  await page.getByTestId("otc-offer-usdt").fill("100");
+  await openOfferSettings(page);
+  await page.getByTestId("otc-offer-recipient").fill(eth);
+  await page.getByTestId("otc-publish-offer").click();
+  await expect(page.getByTestId("otc-offer-review")).toBeVisible();
+  await page.getByTestId("otc-publish-offer").click();
+  await expect(page.getByTestId("otc-public-offer")).toBeVisible();
+
+  await page.getByTestId("otc-offer-ever").fill("7");
+  await openOfferSettings(page);
+  await page.getByTestId("otc-offer-recipient").fill(`0x${"d".repeat(40)}`);
+
+  await page.getByRole("tab", { name: /^My orders/ }).click();
+  const row = page.getByTestId("otc-order-row");
+  await expect(row).toHaveCount(1);
+  await expect(row.locator(".sideButton")).toHaveText("Sell");
+  await row.getByTestId("otc-repeat-order").click();
+
+  await expect(page.getByTestId("otc-offer-ever")).toHaveValue("500");
+  await expect(page.getByTestId("otc-offer-usdt")).toHaveValue("100");
+  await expect(page.getByTestId("otc-offer-price")).toHaveValue("0.2");
+  await openOfferSettings(page);
+  await expect(page.getByTestId("otc-offer-recipient")).toHaveValue(eth);
+  await expect(row.getByTestId("otc-repeat-order")).toBeEnabled();
+});
+
 test("a P2P deal shows the gross amount, the 3% service fee, the net and the USDT payout", async ({ page }) => {
   const fee = { version: "p2p-3pct-v1", rate: "0.03", floor: "0", basis_units: "11889000", fee_units: "356670", net_units: "11532330", precision: 6 };
   const deal = {

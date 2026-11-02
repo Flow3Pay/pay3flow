@@ -133,7 +133,7 @@ test("desk console decisions reserve first and unknown payout blocks refund", as
 test("server history and volume count completed USDT legs once, refunds stay visible", async ({ page }) => {
   await fixtures(page, { signedIn: true, extra: [makeTrade("completed", "buy", "done-buy"), makeTrade("completed", "sell", "done-sell"), makeTrade("refunded", "buy", "refund")] }); await open(page);
   await expect(page.locator(".volumeStat")).toContainText("300 USDT"); await expect(page.locator(".chartColumn .marketChart")).toHaveAttribute("data-points", "3");
-  await page.getByRole("tab", { name: "History", exact: true }).click(); await expect(page.locator(".tradeTables tbody tr[role=button]")).toHaveCount(3); await expect(page.locator(".tradeTables")).toContainText("Refunded");
+  await page.getByRole("tab", { name: "History", exact: true }).click(); await expect(page.locator(".tradeTables tbody tr[data-testid='otc-order-row']")).toHaveCount(3); await expect(page.locator(".tradeTables")).toContainText("Refunded");
   await page.getByRole("tab", { name: "History", exact: true }).press("Home"); await expect(page.getByRole("tab", { name: "Desk offers", exact: true })).toHaveAttribute("aria-selected", "true");
 });
 
@@ -142,7 +142,7 @@ test("logout discards a delayed participant response", async ({ page }) => {
   await expect.poll(() => !!f.control.releasePrivate, { timeout: 12000 }).toBe(true);
   await page.locator(".walletMenu .walletToggle").click(); await page.getByRole("button", { name: "Disconnect", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Buy EVER · accepted" })).toHaveCount(0); f.control.releasePrivate!();
-  await page.waitForTimeout(250); await expect(page.locator(".tradeTables tbody tr[role=button]")).toHaveCount(0); await expect(page.locator(".chartColumn .marketChart")).toHaveAttribute("data-points", "0");
+  await page.waitForTimeout(250); await expect(page.locator(".tradeTables tbody tr[data-testid='otc-order-row']")).toHaveCount(0); await expect(page.locator(".chartColumn .marketChart")).toHaveAttribute("data-points", "0");
 });
 
 test("backend outage pauses new RFQs without collapsing the terminal", async ({ page }) => {
@@ -502,7 +502,7 @@ for (const theme of ["light", "dark"] as const) test(`OTC keeps panels and contr
     await expect(page.getByTestId("production-safe")).toHaveCount(0);
   }
   await page.locator("#otc-orders-tab").click();
-  await page.locator(".tradeTables tbody tr[role=button]").first().click();
+  await page.locator(".tradeTables tbody tr[data-testid='otc-order-row']").first().click();
   await expect(page.getByRole("heading", { name: "Buy EVER · accepted" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
 });
@@ -515,7 +515,7 @@ test("activity tabs animate their indicator and content height and respect reduc
   const activity = page.locator("#otc-activity");
   await activity.scrollIntoViewIfNeeded();
   await page.locator("#otc-orders-tab").click();
-  await expect(page.locator(".tradeTables tbody tr[role=button]").first()).toBeVisible();
+  await expect(page.locator(".tradeTables tbody tr[data-testid='otc-order-row']").first()).toBeVisible();
   const original = (await activity.locator(".activityViewport").boundingBox())!.height;
   await page.getByRole("tab", { name: "History", exact: true }).click();
   await expect(page.getByRole("tabpanel")).toHaveAttribute("id", "otc-history-content");
@@ -536,7 +536,7 @@ test("activity tabs animate their indicator and content height and respect reduc
   await expect(page.getByRole("tab", { name: "History", exact: true })).toBeFocused();
   await expect(page.getByRole("tabpanel")).toHaveAttribute("id", "otc-history-content");
   await page.locator("#otc-orders-tab").click();
-  await expect(page.locator(".tradeTables tbody tr[role=button]").first()).toBeVisible();
+  await expect(page.locator(".tradeTables tbody tr[data-testid='otc-order-row']").first()).toBeVisible();
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.getByRole("tab", { name: "Desk offers", exact: true }).click();
   await expect.poll(() => activity.evaluate(node => node.getAnimations({ subtree: true }).filter(animation => animation.playState === "running").length)).toBe(0);
