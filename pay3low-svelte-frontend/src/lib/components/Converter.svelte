@@ -1256,7 +1256,7 @@
 
       <div class="moneyStack">
       <div class="moneyPanel moneyPanelSource exchangeMoneyPanel">
-        <div class="panelCopy"><label for="exchange-amount">{t("You send", {}, activeLocale)}</label><input id="exchange-amount" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedSourceInput} on:focus={(event) => focusAmountInput(event, "source")} on:blur={() => blurAmountInput("source")} on:input={(event) => updateAmount(event.currentTarget.value)} aria-label={t("Amount to send", {}, activeLocale)} />{#if marketUsd.source !== null}<span class="marketValue" aria-label={t("Approximate USD market value", {}, activeLocale)}>{formatMarketUsd(marketUsd.source)}</span>{/if}</div>
+        <div class="panelCopy"><label for="exchange-amount">{t("You send", {}, activeLocale)}</label><input id="exchange-amount" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedSourceInput} on:focus={(event) => focusAmountInput(event, "source")} on:blur={() => blurAmountInput("source")} on:input={(event) => updateAmount(event.currentTarget.value)} aria-label={t("Amount to send", {}, activeLocale)} /><span class="marketValue" aria-label={marketUsd.source === null ? undefined : t("Approximate USD market value", {}, activeLocale)}>{marketUsd.source === null ? "" : formatMarketUsd(marketUsd.source)}</span></div>
         <div class="methodControls">
           <button type="button" class="methodTrigger" data-tooltip={sourceMethod?.kind === "wallet" ? `${sourceCurrencyChoice} · ${t(sourceMethod.name, {}, activeLocale)}` : t(methodTitle(sourceMethod), {}, activeLocale)} on:click={() => void openMethodPicker("source")} aria-label={`Select sending ${methodNoun(sourceMethod)}: ${sourceMethod ? methodTitle(sourceMethod) : "none"}`}>
             <span class="methodAvatar" style:background-color={paymentMethodFavicon(sourceMethod) ? "transparent" : sourceMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(sourceMethod)}<img src={paymentMethodFavicon(sourceMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{:else}<span>{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{/if}</span>
@@ -1267,7 +1267,7 @@
       </div>
       <ExchangeFlowBridge reversed={directionReversed} overlay onSwap={swapDirection} label={t("Swap sender and recipient", {}, activeLocale)}><button type="button" class="routesToggle" class:routesToggleOpen={routesExpanded} on:click={toggleRoutes} aria-label={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)} aria-expanded={routesExpanded} title={t(routesExpanded ? "Hide routes" : "Show routes", {}, activeLocale)}><span aria-hidden="true">❯</span></button></ExchangeFlowBridge>
       <div class="moneyPanel moneyPanelTarget exchangeMoneyPanel">
-        <div class="panelCopy"><label for="exchange-output">{t("Recipient gets", {}, activeLocale)}</label><input id="exchange-output" class:amountOutputEmpty={!previewRoute && amountSide !== "target"} class="amountInput amountOutput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedTargetInput} on:focus={(event) => focusAmountInput(event, "target")} on:blur={() => blurAmountInput("target")} on:input={(event) => updateTargetAmount(event.currentTarget.value)} aria-label={t("Amount to receive", {}, activeLocale)} />{#if marketUsd.target !== null}<span class="marketValue" aria-label={t("Approximate USD market value", {}, activeLocale)}>{formatMarketUsd(marketUsd.target)}</span>{/if}</div>
+        <div class="panelCopy"><label for="exchange-output">{t("Recipient gets", {}, activeLocale)}</label><input id="exchange-output" class:amountOutputEmpty={!previewRoute && amountSide !== "target"} class="amountInput amountOutput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedTargetInput} on:focus={(event) => focusAmountInput(event, "target")} on:blur={() => blurAmountInput("target")} on:input={(event) => updateTargetAmount(event.currentTarget.value)} aria-label={t("Amount to receive", {}, activeLocale)} /><span class="marketValue" aria-label={marketUsd.target === null ? undefined : t("Approximate USD market value", {}, activeLocale)}>{marketUsd.target === null ? "" : formatMarketUsd(marketUsd.target)}</span></div>
         <div class="methodControls">
           <button type="button" class="methodTrigger" data-tooltip={targetMethod?.kind === "wallet" ? `${targetCurrencyChoice} · ${t(targetMethod.name, {}, activeLocale)}` : t(methodTitle(targetMethod), {}, activeLocale)} on:click={() => void openMethodPicker("target")} aria-label={`Select recipient ${methodNoun(targetMethod)}: ${targetMethod ? methodTitle(targetMethod) : "none"}`}>
             <span class="methodAvatar" style:background-color={paymentMethodFavicon(targetMethod) ? "transparent" : targetMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(targetMethod)}<img src={paymentMethodFavicon(targetMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{:else}<span>{targetMethod?.initials ?? corridor?.target_country ?? "—"}</span>{/if}</span>
@@ -2788,11 +2788,13 @@
 }
 
 .marketValue {
+  /* The slot stays reserved so the USD line can appear without moving the money panels or the swap bridge. */
+  min-height: 15px;
   overflow: hidden;
   color: var(--color-text-soft);
   font-size: 12px;
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 15px;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;

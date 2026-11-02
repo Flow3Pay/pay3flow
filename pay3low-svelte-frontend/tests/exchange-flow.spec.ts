@@ -778,7 +778,7 @@ test("USD values recover after the first market price request fails", async ({ p
   await openApp(page, "/#/swap/USDT/USDC?amount=2");
   await expect(page.getByRole("button", { name: "Select sending asset: USDT" })).toBeVisible();
   await expect.poll(() => requests).toBe(1);
-  await expect(page.locator(".moneyPanelSource .marketValue")).toHaveCount(0);
+  await expect(page.locator(".moneyPanelSource .marketValue")).toHaveText("");
   await page.clock.fastForward(61_000);
   await expect.poll(() => requests).toBe(2);
   await expect(page.locator(".moneyPanelSource .marketValue")).toHaveText("$2.00");
@@ -2323,7 +2323,7 @@ test("currency control only lists currencies supported by the selected payment m
   await expect(page.locator(".moneyPanelSource .marketValue")).toHaveText("$3.00");
   expect(marketPriceRequests).toBe(1);
   await page.getByLabel("Amount to send").fill("0");
-  await expect(page.locator(".moneyPanelSource .marketValue")).toHaveCount(0);
+  await expect(page.locator(".moneyPanelSource .marketValue")).toHaveText("");
   await expect(page.locator(".moneyPanelSource .currencyHint")).toHaveCount(0);
   const sendingNetwork = page.getByRole("button", { name: "Select sending network: Ethereum (ERC-20)" });
   await expect(sendingNetwork).toBeVisible();
