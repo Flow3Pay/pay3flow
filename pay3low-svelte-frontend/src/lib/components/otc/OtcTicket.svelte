@@ -1,11 +1,12 @@
 <script lang="ts">
   import { tick } from "svelte";
   import ExchangeFlowBridge from "../ExchangeFlowBridge.svelte";
+  import OtcOfferReview from "./OtcOfferReview.svelte";
   import { locale } from "$lib/i18n";
   import { networkIcon } from "$lib/icons";
   import { otcCopy } from "$lib/otc/copy";
   import { rate, type Direction, type Trade } from "$lib/otc/service";
-  import { offerDecimal, p2pFeeSplit, type SaleTicketState } from "$lib/otc/public-offers";
+  import { type SaleTicketState } from "$lib/otc/public-offers";
   export let sale: SaleTicketState | null = null;
   export let direction: Direction = "buy";
   export let input = "100";
@@ -90,7 +91,7 @@
     {#if sale.marketPrice}<p class="priceHint" data-testid="otc-market-price-hint">{sale.marketStale ? say("The market rate may be stale; you can still set the price by hand.", "Курс мог устареть; цену можно выставить вручную.") : say("Rate from the live market feed.", "Курс из живого рыночного фида.")}</p>{/if}
     {#if sale.priceRounded}<p class="priceHint">{sale.roundingAsset === "EVER" ? say("The EVER amount is rounded down to 9 decimals. Review the exact amounts before publishing.", "Сумма EVER округлена вниз до 9 знаков. Проверьте точные суммы перед публикацией.") : say("The total is rounded down to 6 USDT decimal places. Review the exact amount before publishing.", "Общая сумма округлена вниз до 6 знаков USDT. Проверьте точную сумму перед публикацией.")}</p>{/if}
     {#if sale.amountFloored}<p class="priceHint">{sale.amountFloored === "EVER" ? say("EVER has 9 decimals, so the extra digits you typed were dropped. Review the exact amount before publishing.", "У EVER 9 знаков после запятой, лишние введённые цифры отброшены. Проверьте точную сумму перед публикацией.") : say("USDT has 6 decimals, so the extra digits you typed were dropped. Review the exact amount before publishing.", "У USDT 6 знаков после запятой, лишние введённые цифры отброшены. Проверьте точную сумму перед публикацией.")}</p>{/if}
-    {#if sale.reviewing && sale.seller}{@const fee = p2pFeeSplit(sale.usdtAmount)}<div class="saleReview" data-testid="otc-offer-review"><p class="reviewPending">{say("Not published yet. Check the terms and click Publish offer below.", "Ещё не опубликовано. Проверьте условия и нажмите «Опубликовать предложение» ниже.")}</p><strong>{direction === "buy" ? say("Buy", "Купить") : say("Sell", "Продать")} {offerDecimal(sale.everAmount,9)} EVER · {offerDecimal(sale.usdtAmount,6)} USDT</strong>{#if fee}<dl class="feeSplit" data-testid="otc-offer-fee-split"><div><dt>{say("Amount", "Сумма")}</dt><dd>{fee.basis} USDT</dd></div><div><dt>{say("Service fee (3%)", "Комиссия сервиса (3%)")}</dt><dd>−{fee.fee} USDT</dd></div><div><dt>{say("Amount to exchange", "Сумма для обмена")}</dt><dd>{fee.net} USDT</dd></div><div class="net"><dt>{say("You receive", "К получению")}</dt><dd>{fee.net} USDT</dd></div></dl>{/if}<p>{say("Price", "Курс")}: {sale.askingRate} USDT / EVER</p><p>{direction === "buy" ? say("Your EVER receiving wallet", "Ваш кошелёк для получения EVER") : say("Seller", "Продавец")}: <code>{sale.seller}</code></p><p>{direction === "buy" ? say("USDT paying wallet", "Кошелёк оплаты USDT") : say("USDT recipient", "Получатель USDT")}: <code>{sale.receivingAddress.trim()}</code></p><p>{say("The 3% service fee is withheld from the USDT total and collected by the service; it is not a network fee. On-chain transfers stay at the gross amount.", "Комиссия сервиса 3% удерживается из суммы USDT и собирается сервисом; это не сетевой расход. Переводы в сети идут на полную сумму.")}</p><p>{say("These amounts and addresses will be public for 24 hours, or until you cancel. Publication does not move or reserve funds.", "Эти суммы и адреса будут опубликованы на 24 часа или до отмены. Публикация не переводит и не резервирует средства.")}</p></div>{/if}
+    {#if sale.reviewing && sale.seller}<OtcOfferReview {direction} everAmount={sale.everAmount} usdtAmount={sale.usdtAmount} askingRate={sale.askingRate} seller={sale.seller} receivingAddress={sale.receivingAddress} error={sale.error} busy={busy} onClose={sale.onCloseReview} onPublish={() => sale.onRequest()} />{/if}
   {/if}
   {#if quote}<p class="priceHint">{say("Quote expires", "Котировка истекает")}: {quote.terms.quote_by}</p>{/if}
   {#if status}<p class="priceHint" id="otc-ticket-status" role="status">{status}</p>{/if}
@@ -102,15 +103,6 @@
   .recipientField { display:grid; gap:8px; margin:16px 0 8px; color:var(--color-text-soft); font-size:12px; }
   .recipientField input { width:100%; min-width:0; min-height:44px; padding:10px 12px; border:1px solid var(--exchange-field-border); border-radius:8px; background:var(--exchange-field-bg); color:var(--color-text); font:inherit; }
   .walletAddress { width:100%; min-height:44px; padding:8px 12px; border:1px solid var(--color-border); border-radius:8px; font-size:12px; }
-  .saleReview { margin-bottom:16px; padding:12px; border:1px solid var(--color-border); border-radius:8px; }
-  .saleReview .reviewPending { margin:0 0 12px; color:var(--color-text); font-weight:600; }
-  .saleReview p { margin-top:8px; color:var(--color-text-soft); font-size:12px; line-height:1.6; }
-  .saleReview code { overflow-wrap:anywhere; font-size:11px; }
-  .saleReview .feeSplit { display:grid; gap:6px; margin:12px 0 0; padding:10px 0 0; border-top:1px solid var(--color-border); }
-  .saleReview .feeSplit > div { display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
-  .saleReview .feeSplit dt { color:var(--color-text-soft); font-size:11px; }
-  .saleReview .feeSplit dd { margin:0; font-family:var(--font-mono); font-size:11px; }
-  .saleReview .feeSplit .net dt, .saleReview .feeSplit .net dd { color:var(--color-text); font-weight:650; }
   .bridgeForm { display: flex; flex: 1; flex-direction: column; min-width: 0; padding: 0 var(--otc-panel-padding, 20px) 16px; }
   .ticketHead { position: relative; display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding-top: 2px; }
   .sideTabs { --side-buy: color-mix(in srgb, var(--otc-buy, #8dcb00) 74%, #fff); --side-sell: color-mix(in srgb, var(--otc-sell, #d43d35) 74%, #fff); position: relative; isolation: isolate; display: flex; flex: 1; min-width: 0; gap: 4px; padding: 4px; border-radius: 12px; background: var(--color-panel); }

@@ -18,6 +18,9 @@ const MAX_USDT_OFFER_UNITS: u128 = 1_000_000 * 1_000_000;
 pub(crate) const P2P_FEE_VERSION: &str = "p2p-3pct-v1";
 pub(crate) const P2P_FEE_RATE: &str = "0.03";
 pub(crate) const P2P_FEE_PRECISION: u32 = 6;
+/// The public chart polls `/offers/history` every few seconds, so the feed is
+/// bounded by rows rather than by how many advertisements an account may post.
+const MAX_HISTORY_ROWS: i64 = 500;
 
 /// Fee policy for a USDT basis in its six-decimal units. Rounding up matches
 /// `amount::fee()`: the service never keeps less than three percent.
@@ -96,8 +99,11 @@ impl Service {
         let client = self.pool.get().await?;
         let rows = client
             .query(
-                "SELECT id, body, created_at FROM otc_public_offers ORDER BY created_at ASC",
-                &[],
+                "SELECT id, body, created_at FROM (
+                   SELECT id, body, created_at FROM otc_public_offers
+                   ORDER BY created_at DESC LIMIT $1
+                 ) recent ORDER BY created_at ASC",
+                &[&MAX_HISTORY_ROWS],
             )
             .await?;
         Ok(Value::Array(
@@ -130,7 +136,7 @@ impl Service {
         let seller = self.wallet(actor, "everscale").await?;
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
-        // Serialize replays and the account's active-offer limit.
+        // Serialize idempotent replays for this account.
         tx.query_one(
             "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
             &[&format!("otc-offers:{actor}")],
@@ -150,12 +156,6 @@ impl Service {
                 ));
             }
             return Ok(offer(&row));
-        }
-        let count:i64 = tx.query_one("SELECT count(*) FROM otc_public_offers WHERE actor=$1 AND state='open' AND expires_at>now()", &[&actor]).await?.get(0);
-        if count >= 10 {
-            return Err(invalid(
-                "cancel an existing offer before publishing another",
-            ));
         }
         let row = tx.query_one("INSERT INTO otc_public_offers(id,actor,seller_ever,body,idempotency_key) VALUES($1,$2,$3,$4,$5) RETURNING *", &[&Uuid::new_v4(),&actor,&seller,&terms,&key]).await?;
         let result = offer(&row);
@@ -321,6 +321,41 @@ mod tests {
                 0
             );
         }
+        task.abort();
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore = "requires OTC_TEST_DATABASE_URL"]
+    async fn one_account_publishes_as_many_offers_as_it_wants() {
+        let (mut service, task, _) = super::super::tests::fixture().await;
+        let cfg = std::sync::Arc::make_mut(&mut service.cfg);
+        cfg.enabled = false;
+        cfg.public_offers_enabled = true;
+        cfg.everwallet_code_hashes = vec![super::super::everwallet::CODE_HASH.into()];
+        let client = service.pool.get().await.unwrap();
+        let owner = format!("0:{}", "e".repeat(64));
+        client.execute("INSERT INTO otc_wallets(actor,chain,address,verified_at) VALUES('many','everscale',$1,now())", &[&owner]).await.unwrap();
+        let mut ids = Vec::new();
+        for index in 0..12 {
+            let offer = service
+                .post_public_offer("many", &format!("bulk-key-{index}"), draft())
+                .await
+                .unwrap();
+            ids.push(offer["id"].as_str().unwrap().to_string());
+        }
+        ids.sort();
+        ids.dedup();
+        assert_eq!(ids.len(), 12);
+        assert_eq!(
+            service
+                .public_offers(Some("many"))
+                .await
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .len(),
+            12
+        );
         task.abort();
     }
 

@@ -44,6 +44,7 @@ export interface SaleTicketState {
   marketRate: string;
   marketApprox: string;
   marketStale: boolean;
+  error: string;
   onPrice: (value: string) => void;
   onEver: (value: string) => void;
   onUsdt: (value: string) => void;
@@ -51,4 +52,5 @@ export interface SaleTicketState {
   onUseEthereum: () => void;
   onMarketPrice: (checked: boolean) => void;
   onRequest: () => void;
+  onCloseReview: () => void;
 }

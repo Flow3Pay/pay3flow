@@ -95,7 +95,7 @@ test("seller signs in with EVER alone and publishes, restores, and cancels a rea
   await page.getByTestId("otc-publish-offer").click();
   await expect(page.getByTestId("otc-offer-review")).toContainText(ever);
   expect(f.calls.filter(call => call.path === "/offers" && call.method === "POST")).toHaveLength(0);
-  await page.getByTestId("otc-publish-offer").click();
+  await page.getByTestId("otc-offer-publish").click();
   await expect(page.locator(".serviceControls [role=status]")).toContainText("Your EVER sale offer is published.");
   await expect(page.getByTestId("otc-public-offer")).toContainText("10.000000001");
   await expect(page.getByTestId("otc-public-offer")).toContainText("1.000001");
@@ -136,7 +136,7 @@ test("the buy and sell chip on an order copies its terms back into Create Order"
   await page.getByTestId("otc-offer-recipient").fill(eth);
   await page.getByTestId("otc-publish-offer").click();
   await expect(page.getByTestId("otc-offer-review")).toBeVisible();
-  await page.getByTestId("otc-publish-offer").click();
+  await page.getByTestId("otc-offer-publish").click();
   await expect(page.getByTestId("otc-public-offer")).toBeVisible();
 
   await page.getByTestId("otc-offer-ever").fill("7");
@@ -188,12 +188,12 @@ for (const direction of ["sell","buy"] as const) test(`a lost ${direction} publi
   await page.locator(".sideTabs").getByRole("button",{name:direction === "buy" ? "Buy EVER" : "Sell EVER",exact:true}).click();
   await fill(page);
   await page.getByTestId("otc-publish-offer").click();
-  await page.getByTestId("otc-publish-offer").click();
+  await page.getByTestId("otc-offer-publish").click();
   await expect(page.getByRole("alert")).toHaveText("Publication response lost");
   await page.reload();
   await expect(page.getByTestId("otc-offer-ever")).toHaveValue("10.000000001");
   await page.getByTestId("otc-publish-offer").click();
-  await page.getByTestId("otc-publish-offer").click();
+  await page.getByTestId("otc-offer-publish").click();
   await expect(page.getByTestId("otc-public-offer")).toHaveCount(1);
   const sent = f.calls.filter(call => call.path === "/offers" && call.method === "POST");
   expect(sent).toHaveLength(2); expect(sent[0].key).toBeTruthy(); expect(sent[1].key).toBe(sent[0].key);
@@ -249,7 +249,7 @@ test("sale publication uses the original Buy/Sell ticket, book and activity with
   await expect(split).toContainText("0.003567 USDT");
   await expect(split).toContainText("0.115323 USDT");
   await expect(split).toContainText("You receive");
-  await page.getByTestId("otc-publish-offer").click();
+  await page.getByTestId("otc-offer-publish").click();
   const published = page.locator(".bookColumn .obRow");
   await expect(published).toHaveCount(1);
   await expect(published).toContainText("100");
@@ -293,7 +293,7 @@ for (const direction of ["buy","sell"] as const) test(`price and amount publish 
   await page.getByTestId("otc-publish-offer").click();
   await expect(page.getByTestId("otc-offer-review")).toContainText(`${direction === "buy" ? "Buy" : "Sell"} 100 EVER · 11.889 USDT`);
   expect(f.calls.filter(c=>c.path === "/offers" && c.method === "POST")).toHaveLength(0);
-  await page.getByTestId("otc-publish-offer").click();
+  await page.getByTestId("otc-offer-publish").click();
   const offer=page.locator(`.bookColumn .obTable[data-side="${direction === "buy" ? "bids" : "asks"}"]`).getByTestId("otc-public-offer");
   await expect(offer).toHaveCount(1);
   await expect(offer).toContainText("0.11889");
@@ -337,6 +337,22 @@ test("an already configured Ethereum wallet fills the address without a second c
   expect(f.calls.some(c=>c.path === "/offers" && c.method === "POST")).toBe(false);
 });
 
+test("the offer review is a modal that Escape returns from and a failed publication reports inside", async ({ page }) => {
+  await setup(page, { signedIn: true, lostResponse: true });
+  await fill(page);
+  await page.getByTestId("otc-publish-offer").click();
+  const review = page.getByRole("dialog", { name: "Review your offer", exact: true });
+  await expect(review).toBeVisible();
+  await expect(review.getByTestId("otc-offer-fee-split")).toContainText("Service fee (3%)");
+  await page.keyboard.press("Escape");
+  await expect(review).toHaveCount(0);
+  await expect(page.getByTestId("otc-publish-offer")).toHaveText(/Review offer/);
+  await expect(page.getByTestId("otc-publish-offer")).toBeFocused();
+  await page.getByTestId("otc-publish-offer").click();
+  await page.getByTestId("otc-offer-publish").click();
+  await expect(review.getByRole("alert")).toHaveText("Publication response lost");
+});
+
 for (const direction of ["buy","sell"] as const) test(`HEX-style ${direction} quantity keeps unit price identical in the ticket, book and chart`, async ({ page }) => {
   const f=await setup(page,{signedIn:true});
   await page.locator(".sideTabs").getByRole("button",{name:direction === "buy" ? "Buy EVER" : "Sell EVER",exact:true}).click();
@@ -349,7 +365,7 @@ for (const direction of ["buy","sell"] as const) test(`HEX-style ${direction} qu
   await openOfferSettings(page);
   await page.getByTestId("otc-offer-recipient").fill(eth);
   await page.getByTestId("otc-publish-offer").click();
-  await page.getByTestId("otc-publish-offer").click();
+  await page.getByTestId("otc-offer-publish").click();
   const row=page.locator(".bookColumn").getByTestId("otc-public-offer");
   await expect(row.getByTestId("otc-book-price")).toHaveText("0.205");
   await expect(row).toContainText("2.05");
@@ -365,13 +381,13 @@ test("a cancelled publication replay is never reported as a newly published offe
   const f=await setup(page,{signedIn:true,cancelledReplay:true});
   await fill(page);
   await page.getByTestId("otc-publish-offer").click();
-  await page.getByTestId("otc-publish-offer").click();
+  await page.getByTestId("otc-offer-publish").click();
   await expect(page.getByRole("alert")).toContainText("already cancelled or expired");
   await expect(page.locator(".serviceControls [role=status]")).toHaveCount(0);
   await expect(page.locator(".bookColumn").getByTestId("otc-public-offer")).toHaveCount(0);
   await expect(page.getByTestId("otc-publish-offer")).toHaveText(/Review offer/);
   await page.getByTestId("otc-publish-offer").click();
-  await page.getByTestId("otc-publish-offer").click();
+  await page.getByTestId("otc-offer-publish").click();
   await expect(page.locator(".serviceControls [role=status]")).toContainText("is published");
   await expect(page.locator(".bookColumn").getByTestId("otc-public-offer")).toHaveCount(1);
   const posts=f.calls.filter(c=>c.method === "POST" && c.path === "/offers");
@@ -382,7 +398,7 @@ test("a saved publication populates the book and chart even if the following pub
   await setup(page,{signedIn:true,failPublicRefresh:true});
   await fill(page);
   await page.getByTestId("otc-publish-offer").click();
-  await page.getByTestId("otc-publish-offer").click();
+  await page.getByTestId("otc-offer-publish").click();
   await expect(page.getByRole("alert")).toHaveText("Public offer refresh unavailable");
   await expect(page.locator(".bookColumn").getByTestId("otc-public-offer")).toHaveCount(1);
   await expect(page.locator(".chartColumn .marketChart")).toHaveAttribute("data-points", "1");

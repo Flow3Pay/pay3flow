@@ -184,7 +184,7 @@
   function changeAddress(value: string) { receivingAddress = value; edited(); }
   $: ticket = {
     direction, price, priceRounded, roundingAsset, amountFloored, blockingReason, everAmount, usdtAmount, receivingAddress, seller, askingRate, valid, reviewing, linkingEvm,
-    marketPrice, marketRate, marketApprox, marketStale,
+    marketPrice, marketRate, marketApprox, marketStale, error,
     onPrice: changePrice,
     onEver: changeEver,
     onUsdt: changeUsdt,
@@ -192,6 +192,7 @@
     onUseEthereum: useEthereumWallet,
     onMarketPrice: useMarketPrice,
     onRequest: () => seller ? void publish() : onConnect(),
+    onCloseReview: () => { reviewing = false; },
   } satisfies SaleTicketState;
 </script>
 
