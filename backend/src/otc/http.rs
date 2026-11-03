@@ -41,6 +41,7 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/api/otc/p2p/trades", get(p2p_trades))
         .route("/api/otc/p2p/trades/:id", get(p2p_deal))
         .route("/api/otc/p2p/trades/:id/prepare", post(p2p_prepare))
+        .route("/api/otc/p2p/trades/:id/confirm", post(p2p_confirm))
         .route("/api/otc/p2p/trades/:id/cancel", post(p2p_cancel))
         .route("/api/otc/p2p/attempts/:id/reference", post(p2p_submit))
         .route("/api/otc/rfqs", post(rfq))
@@ -276,6 +277,14 @@ async fn p2p_cancel(
 ) -> Result<Json<Value>> {
     let (_, actor) = state.otc.session(bearer(&headers)?).await?;
     Ok(Json(state.otc.p2p_cancel(&actor, id).await?))
+}
+async fn p2p_confirm(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Value>> {
+    let (_, actor) = state.otc.session(bearer(&headers)?).await?;
+    Ok(Json(state.otc.p2p_confirm(&actor, id).await?))
 }
 async fn p2p_submit(
     State(state): State<AppState>,

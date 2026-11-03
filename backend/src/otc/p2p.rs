@@ -211,6 +211,38 @@ impl Service {
             json!({"deal": deal(&row, actor), "attempts": attempts.into_iter().map(|(_, attempt)| attempt).collect::<Vec<_>>()}),
         )
     }
+    pub(crate) async fn p2p_confirm(&self, actor: &str, id: Uuid) -> Result<Value> {
+        if !self.p2p_available() {
+            return Err(Error::Disabled);
+        }
+        let mut client = self.pool.get().await?;
+        let tx = client.transaction().await?;
+        let row = tx
+            .query_opt(
+                "SELECT * FROM otc_p2p_trades WHERE id=$1 AND (owner_actor=$2 OR taker_actor=$2) FOR UPDATE",
+                &[&id, &actor],
+            )
+            .await?
+            .ok_or(Error::NotFound)?;
+        let state: String = row.get("state");
+        if state == "payment_pending" || state == "delivery_pending" {
+            let owner: String = row.get("owner_actor");
+            let sql = if owner == actor {
+                "UPDATE otc_p2p_trades SET owner_confirmed_at=COALESCE(owner_confirmed_at,now()),updated_at=now() WHERE id=$1 RETURNING *"
+            } else {
+                "UPDATE otc_p2p_trades SET taker_confirmed_at=COALESCE(taker_confirmed_at,now()),updated_at=now() WHERE id=$1 RETURNING *"
+            };
+            let row = tx.query_one(sql, &[&id]).await?;
+            let deal = deal(&row, actor);
+            tx.commit().await?;
+            tracing::info!(trade=%id, actor, "otc.p2p.confirmed");
+            Ok(deal)
+        } else {
+            let deal = deal(&row, actor);
+            tx.commit().await?;
+            Ok(deal)
+        }
+    }
     async fn p2p_attempts(&self, ids: &[Uuid]) -> Result<Vec<(Uuid, Value)>> {
         if ids.is_empty() {
             return Ok(Vec::new());
@@ -713,6 +745,40 @@ impl Service {
 fn deal(row: &Row, actor: &str) -> Value {
     let body: Value = row.get("body");
     let state: String = row.get("state");
+    let owner_actor: String = row.get("owner_actor");
+    let taker_actor: String = row.get("taker_actor");
+    let is_owner = owner_actor == actor;
+    let direction = body["direction"].as_str().unwrap_or("sell").to_string();
+    let ever_payer = body["ever_payer"].as_str().unwrap_or_default().to_string();
+    let ever_payee = body["ever_payee"].as_str().unwrap_or_default().to_string();
+    let (owner_ever, taker_ever) = if direction == "sell" {
+        (ever_payer, ever_payee)
+    } else {
+        (ever_payee, ever_payer)
+    };
+    let (my_ever, counterparty_ever) = if is_owner {
+        (owner_ever, taker_ever)
+    } else {
+        (taker_ever, owner_ever)
+    };
+    let (my_leg, counterparty_leg) = match (is_owner, direction.as_str()) {
+        (true, "buy") | (false, "sell") => ("payment", "payout"),
+        _ => ("payout", "payment"),
+    };
+    let owner_confirmed = row
+        .get::<_, Option<DateTime<Utc>>>("owner_confirmed_at")
+        .is_some();
+    let taker_confirmed = row
+        .get::<_, Option<DateTime<Utc>>>("taker_confirmed_at")
+        .is_some();
+    let (my_confirmed, counterparty_confirmed) = if is_owner {
+        (owner_confirmed, taker_confirmed)
+    } else {
+        (taker_confirmed, owner_confirmed)
+    };
+    let my_avatar = super::avatar::identicon(&my_ever);
+    let counterparty_avatar = super::avatar::identicon(&counterparty_ever);
+    let counterparty = if is_owner { taker_actor } else { owner_actor };
     let fee_policy = body
         .get("fee_policy")
         .filter(|policy| policy.is_object())
@@ -724,19 +790,26 @@ fn deal(row: &Row, actor: &str) -> Value {
                 .map(super::public_offers::fee_policy)
         })
         .unwrap_or(Value::Null);
+    let fee_accrued = state == "completed";
     json!({
         "id": row.get::<_, Uuid>("id"),
         "offer_id": row.get::<_, Uuid>("offer_id"),
         "state": state,
-        "role": if row.get::<_, String>("owner_actor") == actor { "owner" } else { "taker" },
-        "counterparty": if row.get::<_, String>("owner_actor") == actor {
-            row.get::<_, String>("taker_actor")
-        } else {
-            row.get::<_, String>("owner_actor")
-        },
+        "role": if is_owner { "owner" } else { "taker" },
+        "counterparty": counterparty,
+        "my_leg": my_leg,
+        "counterparty_leg": counterparty_leg,
+        "my_ever": my_ever,
+        "counterparty_ever": counterparty_ever,
+        "my_avatar": my_avatar,
+        "counterparty_avatar": counterparty_avatar,
+        "my_confirmed": my_confirmed,
+        "counterparty_confirmed": counterparty_confirmed,
+        "owner_confirmed": owner_confirmed,
+        "taker_confirmed": taker_confirmed,
         "terms": body,
         "fee_policy": fee_policy,
-        "fee_accrued": state == "completed",
+        "fee_accrued": fee_accrued,
         "pay_by": row.get::<_, DateTime<Utc>>("pay_by"),
         "payout_by": row.get::<_, Option<DateTime<Utc>>>("payout_by"),
         "created_at": row.get::<_, DateTime<Utc>>("created_at"),

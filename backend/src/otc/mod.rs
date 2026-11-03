@@ -5,6 +5,7 @@ pub use route_provider::OtcRouteProvider;
 
 mod accounting;
 mod amount;
+mod avatar;
 mod balances;
 mod booking;
 mod chain;

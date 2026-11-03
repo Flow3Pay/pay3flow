@@ -3,6 +3,7 @@ import type { Direction } from "./service";
 export interface PublicOffer {
   id: string;
   seller_ever: string;
+  seller_avatar?: string;
   owner_ever?: string;
   state: string;
   created_at?: string;

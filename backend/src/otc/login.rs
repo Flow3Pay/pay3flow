@@ -171,6 +171,7 @@ impl Service {
             .get(0);
         tx.execute("INSERT INTO otc_sessions(id,actor,credential,expires_at,login_chain,login_address) VALUES($1,$2,$3,$4,$5,$6)", &[&id,&actor,&credential,&expires,&chain,&address]).await?;
         tx.execute("INSERT INTO otc_wallets(actor,chain,address,verified_at) VALUES($1,$2,$3,now()) ON CONFLICT(actor,chain) DO UPDATE SET address=$3,verified_at=now()", &[&actor,&chain,&address]).await?;
+        super::avatar::record(&tx, &chain, &address, request.public_key.as_deref()).await?;
         tx.commit().await?;
         drop(client);
         self.session_info(&token).await
@@ -279,7 +280,12 @@ impl Service {
         let (id, actor) = self.session(token).await?;
         let client = self.pool.get().await?;
         let row = client.query_opt("SELECT expires_at,login_chain,login_address FROM otc_sessions WHERE id=$1 AND NOT revoked AND expires_at>now()", &[&id]).await?.ok_or(Error::Unauthorized)?;
-        let wallets: Vec<Value> = client.query("SELECT chain,address,verified_at FROM otc_wallets WHERE actor=$1 AND verified_at>now()-make_interval(days=>$2) ORDER BY chain", &[&actor,&super::repo::WALLET_VERIFICATION_DAYS]).await?.iter().map(|r| json!({"chain":r.get::<_,String>(0),"address":r.get::<_,String>(1),"verified_at":r.get::<_,DateTime<Utc>>(2)})).collect();
+        let wallets: Vec<Value> = client.query("SELECT chain,address,verified_at FROM otc_wallets WHERE actor=$1 AND verified_at>now()-make_interval(days=>$2) ORDER BY chain", &[&actor,&super::repo::WALLET_VERIFICATION_DAYS]).await?.iter().map(|r| {
+            let chain: String = r.get(0);
+            let address: String = r.get(1);
+            let avatar = super::avatar::identicon(&address);
+            json!({"chain":chain,"address":address,"verified_at":r.get::<_,DateTime<Utc>>(2),"avatar":avatar})
+        }).collect();
         let login_chain: Option<String> = row.get(1);
         let login_address: Option<String> = row.get(2);
         let signing_wallet = login_chain

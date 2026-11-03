@@ -181,6 +181,7 @@ impl Service {
         }
         super::login::attach_wallet(&tx, actor, &chain, &address).await?;
         tx.execute("INSERT INTO otc_wallets(actor,chain,address,verified_at) VALUES($1,$2,$3,now()) ON CONFLICT(actor,chain) DO UPDATE SET address=$3,verified_at=now()",&[&actor,&chain,&address]).await?;
+        super::avatar::record(&tx, &chain, &address, request.public_key.as_deref()).await?;
         tx.commit().await?;
         Ok(json!({"chain":chain,"address":address,"verified":true}))
     }

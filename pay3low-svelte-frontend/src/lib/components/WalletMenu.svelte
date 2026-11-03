@@ -7,6 +7,7 @@
   import { locale, t } from "$lib/i18n";
   import { assetIcon } from "$lib/icons";
   import { wallets, connectWallet, disconnectFamily, restoreWallets } from "$lib/wallet-session";
+  import { identiconDataUri } from "$lib/otc/identicon";
   import type { WalletFamily } from "$lib/wallet-execution";
   import { walletDialogMode, otcWalletDialog, venueWalletMenu, openWalletDialog, closeWalletDialog } from "$lib/wallet-dialog";
   import PickerOptionCard from "./PickerOptionCard.svelte";
@@ -35,6 +36,8 @@
   let dragStartY = 0;
   let dragDistance = 0;
   $: count = $venueWalletMenu?.count ?? Object.keys($wallets).length;
+  $: avatarAddress = $wallets.everscale?.address || $wallets.evm?.address || $wallets.tron?.address || $wallets.near?.address || "";
+  $: avatar = avatarAddress ? identiconDataUri(avatarAddress) : "";
   $: terms = query.normalize("NFKC").toLowerCase().trim().split(/\s+/).filter(Boolean);
   $: visibleChoices = choices.filter(choice => {
     const text = `${choice.label} ${choice.network} ${choice.family} ${choice.keywords} ${$wallets[choice.family]?.address ?? ''}`.toLowerCase();
@@ -152,7 +155,8 @@
 <svelte:window on:keydown={keydown} />
 <div class="walletMenu">
   <button class="walletToggle" type="button" bind:this={toggle} disabled={$venueWalletMenu?.disabled ?? false} aria-label={count ? copy("Wallets ({count})", { count }) : copy("Connect wallet")} aria-haspopup="dialog" aria-expanded={$venueWalletMenu ? undefined : open} aria-controls={$venueWalletMenu ? undefined : "wallet-connections"} on:click={() => { error = ""; query = ""; if ($venueWalletMenu) $venueWalletMenu.onOpen(); else openWalletDialog($otcWalletDialog ? "otc" : "wallets"); }}>
-    <img src="/icons/ui/wallet-connect.png" width="18" height="18" alt="" aria-hidden="true" />
+    {#if avatar}<img class="walletAvatar" src={avatar} width="20" height="20" alt="" aria-hidden="true" />{/if}
+    <img class="walletIcon" src="/icons/ui/wallet-connect.png" width="18" height="18" alt="" aria-hidden="true" />
     <span>{count ? copy("Wallets ({count})", { count }) : copy("Connect wallet")}</span>
   </button>
 </div>
@@ -230,8 +234,9 @@
   button:hover { background: var(--color-accent-soft); }
   button:disabled { opacity: .6; cursor: not-allowed; }
   .walletToggle { display: flex; align-items: center; gap: 7px; padding: 0 10px; white-space: nowrap; font-size: 12px; font-weight: 750; }
-  .walletToggle img { width: 18px; height: 18px; flex: 0 0 auto; object-fit: contain; filter: brightness(0); }
-  :global(html[data-theme="dark"]) .walletToggle img { filter: brightness(0) invert(1); }
+  .walletToggle .walletIcon { width: 18px; height: 18px; flex: 0 0 auto; object-fit: contain; filter: brightness(0); }
+  .walletToggle .walletAvatar { width: 20px; height: 20px; flex: 0 0 auto; border-radius: 6px; object-fit: cover; }
+  :global(html[data-theme="dark"]) .walletToggle .walletIcon { filter: brightness(0) invert(1); }
   .walletBackdrop { position: fixed; inset: 0; z-index: 2000; display: grid; place-items: center; padding: 24px; background: #11172255; backdrop-filter: blur(5px); touch-action: none; }
   .walletBackdrop.handoff { visibility: hidden; pointer-events: none; }
   .walletConnections { display: flex; flex-direction: column; width: min(100%, 480px); max-height: min(620px, 88dvh); overflow: hidden; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-paper); color: var(--color-text); box-shadow: 0 24px 90px #11172224, 0 3px 12px #11172212; touch-action: auto; }
@@ -262,7 +267,7 @@
   @media (max-width: 640px), (pointer: coarse) { button { min-height: 44px; } }
   @media (max-width: 640px) {
     .walletToggle span { display: none; }
-    .walletToggle { width: 44px; justify-content: center; }
+    .walletToggle { width: auto; min-width: 44px; justify-content: center; padding: 0 8px; }
   }
   @media (max-width: 700px) {
     .walletBackdrop { align-items: end; padding: 0; }

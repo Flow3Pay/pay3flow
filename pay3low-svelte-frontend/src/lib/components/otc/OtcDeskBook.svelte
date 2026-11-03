@@ -4,6 +4,7 @@
   import { proposalDirection } from "$lib/otc/terminal";
   import type { Config, Direction, Proposal } from "$lib/otc/service";
   import { saleRate, compareOfferRates, offerDirection, offerOwner, type PublicOffer } from "$lib/otc/public-offers";
+  import { identiconDataUri } from "$lib/otc/identicon";
   export let publicOffers: PublicOffer[] = [], ownIds: string[] = [];
   export let onCancel: (id: string) => void = () => {};
   export let onAccept: (id: string) => void = () => {};
@@ -30,6 +31,7 @@
   $: numberLocale = $locale === "ru" ? "ru-RU" : "en-US";
   $: askLevels = buildLevels(publicOffers, "sell", ownIds);
   $: bidLevels = buildLevels(publicOffers, "buy", ownIds);
+  const avatar = (offer: PublicOffer) => offer.seller_avatar || identiconDataUri(offerOwner(offer));
 
   function buildLevels(source: PublicOffer[], side: Direction, own: string[]): BookLevel[] {
     return source
@@ -75,7 +77,7 @@
 {#snippet levelRow(level: BookLevel)}
   {@const taker = level.own ? "own" : offerDirection(level.offer) === "sell" ? "buy" : "sell"}
   <div class="obRow" class:own={level.own} data-testid={testId} title={`${offerOwner(level.offer)} · ${formatEver(level.amount, numberLocale)} EVER → ${formatEver(level.offer.terms.usdt_amount, numberLocale)} USDT`}>
-    <span class="obOwner"><code>{offerOwner(level.offer).slice(0, 6)}…{offerOwner(level.offer).slice(-4)}</code></span>
+    <span class="obOwner"><img class="obAvatar" src={avatar(level.offer)} alt="" width="18" height="18" /><code>{offerOwner(level.offer).slice(0, 6)}…{offerOwner(level.offer).slice(-4)}</code></span>
     <span class="obPrice"><b data-testid="otc-book-price">{formatPrice(level.price, numberLocale)}</b><i aria-hidden="true">$</i></span>
     <span class="obAmount">{formatEver(level.amount, numberLocale)}</span>
     <span class="obTotal">{formatEver(level.total, numberLocale)}<i aria-hidden="true">$</i></span>
@@ -106,7 +108,7 @@
           <span class="rowPrice" data-testid="otc-book-price">{saleRate(offer.terms.ever_amount,offer.terms.usdt_amount)}</span>
           <span class="rowAmount">{offer.terms.ever_amount}<small>EVER</small></span>
           <span class="rowTotal">{offer.terms.usdt_amount}<small>USDT</small></span>
-          <span class="rowOwner"><span class="ownerDot" aria-hidden="true"></span><code title={offerOwner(offer)}>{offerOwner(offer).slice(0,6)}…{offerOwner(offer).slice(-4)}</code>{#if isOwn}<span class="ownTag">{say("You", "Вы")}</span>{/if}</span>
+          <span class="rowOwner"><img class="obAvatar" src={avatar(offer)} alt="" width="16" height="16" /><code title={offerOwner(offer)}>{offerOwner(offer).slice(0,6)}…{offerOwner(offer).slice(-4)}</code>{#if isOwn}<span class="ownTag">{say("You", "Вы")}</span>{/if}</span>
           <svg class="rowChevron" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m6 3 5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
       {/each}
@@ -198,6 +200,7 @@
   .takeBuy { color:var(--color-good-ink); }
   .takeSell { color:var(--color-danger); }
   .obOwner { display:flex; min-width:0; align-items:center; gap:6px; justify-self:start; text-align:left; }
+  .obAvatar { width:18px; height:18px; flex:0 0 auto; border-radius:5px; object-fit:cover; }
   .obOwner code { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:700; letter-spacing:-.02em; }
   .obPrice { min-width:0; overflow:hidden; text-overflow:ellipsis; font-weight:650; color:var(--color-good-ink); }
   .obTable[data-side="bids"] .obPrice { color:var(--color-danger); }
@@ -224,8 +227,8 @@
   .rowAmount,.rowTotal { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .rowAmount small,.rowTotal small { margin-left:4px; color:var(--color-text-faint); font-family:var(--font-sans,inherit); font-size:9px; }
   .rowOwner { display:none; grid-column:1/4; align-items:center; gap:6px; color:var(--color-text-soft); text-align:left; }
+  .rowOwner .obAvatar { width:16px; height:16px; border-radius:4px; }
   .rowOwner code { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px; }
-  .ownerDot { width:5px; height:5px; flex:0 0 auto; border-radius:50%; background:var(--color-text-faint); }
   .ownTag { padding:2px 5px; border-radius:4px; background:var(--color-panel); color:var(--color-text-soft); font-family:var(--font-sans,inherit); font-size:9px; }
   .rowChevron { color:var(--color-text-faint); }
   .bookRow:focus-visible,.obTake:focus-visible,.proposalSelect:focus-visible,.copyButton:focus-visible,.iconButton:focus-visible,.cancelOffer:focus-visible { outline:var(--focus-ring-width) solid var(--color-focus); outline-offset:2px; }

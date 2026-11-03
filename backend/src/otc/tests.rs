@@ -265,12 +265,13 @@ pub(super) async fn fixture() -> (Service, tokio::task::JoinHandle<()>, String) 
         .await
         .unwrap()
         .batch_execute(&format!(
-            "{}\n{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}\n{}",
             include_str!("../../migrations/otc.sql"),
             include_str!("../../migrations/otc_escrow.sql"),
             include_str!("../../migrations/otc_public_offers.sql"),
             include_str!("../../migrations/otc_p2p.sql"),
-            include_str!("../../migrations/otc_p2p_fees.sql")
+            include_str!("../../migrations/otc_p2p_fees.sql"),
+            include_str!("../../migrations/otc_p2p_ui.sql")
         ))
         .await
         .unwrap();
@@ -971,12 +972,13 @@ async fn p2p_fixture() -> (Service, tokio::task::JoinHandle<()>, String, String)
         .await
         .unwrap()
         .batch_execute(&format!(
-            "{}\n{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}\n{}",
             include_str!("../../migrations/otc.sql"),
             include_str!("../../migrations/otc_escrow.sql"),
             include_str!("../../migrations/otc_public_offers.sql"),
             include_str!("../../migrations/otc_p2p.sql"),
-            include_str!("../../migrations/otc_p2p_fees.sql")
+            include_str!("../../migrations/otc_p2p_fees.sql"),
+            include_str!("../../migrations/otc_p2p_ui.sql")
         ))
         .await
         .unwrap();
@@ -1241,6 +1243,41 @@ async fn p2p_prepare_builds_the_payment_handoff_and_blocks_duplicates() {
     ));
     let visible = service.p2p_trades(&taker).await.unwrap();
     assert_eq!(visible["deals"][0]["attempts"].as_array().unwrap().len(), 1);
+    cleanup(service, task).await;
+}
+
+#[tokio::test]
+#[ignore = "requires OTC_TEST_DATABASE_URL; run cargo test otc::tests -- --include-ignored"]
+async fn p2p_confirm_records_both_sides_once() {
+    let (service, task, owner, taker) = p2p_fixture().await;
+    let offer_id = published_offer(&service, &owner, Direction::Sell).await;
+    let deal = service
+        .accept_offer(&taker, offer_id, "accept")
+        .await
+        .unwrap();
+    let id = deal_id(&deal).await;
+
+    let taker_view = service.p2p_confirm(&taker, id).await.unwrap();
+    assert_eq!(taker_view["my_confirmed"], json!(true));
+    assert_eq!(taker_view["counterparty_confirmed"], json!(false));
+    assert_eq!(taker_view["my_leg"], json!("payment"));
+    assert_eq!(taker_view["counterparty_leg"], json!("payout"));
+
+    let owner_view = service.p2p_confirm(&owner, id).await.unwrap();
+    assert_eq!(owner_view["my_confirmed"], json!(true));
+    assert_eq!(owner_view["counterparty_confirmed"], json!(true));
+    assert_eq!(owner_view["my_leg"], json!("payout"));
+    assert_eq!(owner_view["counterparty_leg"], json!("payment"));
+
+    let replay = service.p2p_confirm(&taker, id).await.unwrap();
+    assert_eq!(replay["my_confirmed"], json!(true));
+    assert_eq!(replay["counterparty_confirmed"], json!(true));
+
+    let stranger = service.cfg.matcher_actor.clone();
+    assert!(matches!(
+        service.p2p_confirm(&stranger, id).await,
+        Err(super::error::Error::NotFound)
+    ));
     cleanup(service, task).await;
 }
 

@@ -71,7 +71,10 @@ impl PublicOfferDraft {
 fn offer(row: &Row) -> Value {
     let expires: DateTime<Utc> = row.get("expires_at");
     let state: &str = row.get("state");
-    json!({"id":row.get::<_,Uuid>("id"), "seller_ever":row.get::<_,String>("seller_ever"),
+    let seller: String = row.get("seller_ever");
+    let avatar = super::avatar::identicon(&seller);
+    json!({"id":row.get::<_,Uuid>("id"), "seller_ever":seller,
+        "seller_avatar":avatar,
         "owner_ever":row.get::<_,String>("seller_ever"),
         "terms":row.get::<_,Value>("body"),
         "state":if state == "open" && expires <= Utc::now() {"expired"} else {state},

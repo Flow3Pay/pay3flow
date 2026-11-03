@@ -163,30 +163,35 @@ test("USD input converts the EVER amount and shows the token value", async ({ pa
 });
 
 
-test("a P2P deal shows the gross amount, the 3% service fee, the net and the USDT payout", async ({ page }) => {
-  const fee = { version: "p2p-3pct-v1", rate: "0.03", floor: "0", basis_units: "11889000", fee_units: "356670", net_units: "11532330", precision: 6 };
+test("a P2P deal opens as a modal with both wallets and one confirmation", async ({ page }) => {
   const deal = {
     id: "deal-1", offer_id: "offer-1", state: "delivery_pending", role: "owner",
     counterparty: "https://relay.example/actors/taker",
     terms: {
       direction: "sell", ever_amount: "100", usdt_amount: "11.889", ever_units: "100000000000", usdt_units: "11889000",
       usdt_payer: `0x${"c".repeat(40)}`, usdt_payee: eth,
-      ever_payer: ever, ever_payee: `0:${"c".repeat(64)}`, fee_policy: fee,
+      ever_payer: ever, ever_payee: `0:${"c".repeat(64)}`,
     },
-    fee_policy: fee, fee_accrued: false,
+    my_leg: "payout", counterparty_leg: "payment",
+    my_ever: ever, counterparty_ever: `0:${"c".repeat(64)}`,
+    my_confirmed: false, counterparty_confirmed: true,
+    owner_confirmed: false, taker_confirmed: true,
     pay_by: "2099-01-01T00:00:00Z", payout_by: "2099-01-01T00:00:00Z",
     created_at: new Date().toISOString(), attempts: [],
   };
   await setup(page, { signedIn: true, verifiedEthereum: true, deals: [deal] });
+  const modal = page.getByTestId("otc-p2p-modal");
+  await expect(modal).toBeVisible();
+  await modal.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(modal).not.toBeVisible();
   await page.getByRole("tab", { name: "My orders", exact: true }).click();
-  const split = page.getByTestId("otc-deal-fee-split");
-  await expect(split).toBeVisible();
-  await expect(split).toContainText("Amount");
-  await expect(split).toContainText("Service fee (3%)");
-  await expect(split).toContainText("11.889 USDT");
-  await expect(split).toContainText("0.35667 USDT");
-  await expect(split).toContainText("11.53233 USDT");
-  await expect(split).toContainText("You receive");
+  await expect(modal).toBeVisible();
+  await expect(modal).toContainText("100");
+  await expect(modal).toContainText("11.889");
+  await expect(modal.getByTestId("otc-p2p-avatar-self")).toBeVisible();
+  await expect(modal.getByTestId("otc-p2p-avatar-counterparty")).toBeVisible();
+  await expect(modal.getByTestId("otc-p2p-confirm")).toBeEnabled();
+  await expect(page.locator(".deals, otc-p2p-deal")).toHaveCount(0);
 });
 
 for (const direction of ["sell","buy"] as const) test(`a lost ${direction} publication restores the exact draft and reuses its key after reload`, async ({ page }) => {
