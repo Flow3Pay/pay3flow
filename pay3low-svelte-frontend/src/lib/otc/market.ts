@@ -32,6 +32,68 @@ export interface QuoteObservation {
 export const chartRanges = ["1h", "24h", "1w", "1m", "6m", "1y"] as const;
 export type ChartRange = (typeof chartRanges)[number];
 
+/** Bucket layout used by the server for each range; the window is `buckets * bucketSeconds`. */
+export const chartWindows: Record<ChartRange, { bucketSeconds: number; buckets: number }> = {
+  "1h": { bucketSeconds: 60, buckets: 60 },
+  "24h": { bucketSeconds: 900, buckets: 96 },
+  "1w": { bucketSeconds: 7_200, buckets: 84 },
+  "1m": { bucketSeconds: 21_600, buckets: 120 },
+  "6m": { bucketSeconds: 86_400, buckets: 183 },
+  "1y": { bucketSeconds: 604_800, buckets: 52 },
+};
+
+export interface ChartWindow {
+  /** Window start in milliseconds. */
+  from: number;
+  bucketSeconds: number;
+  buckets: number;
+}
+
+export interface MarketMark {
+  time: number;
+  value: number;
+}
+
+export interface MarketCandle {
+  timestamp: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  [key: string]: unknown;
+}
+
+/** The exact window the chart should cover, ending at `now` (milliseconds). */
+export function chartWindow(range: ChartRange, now = Date.now()): ChartWindow {
+  const { bucketSeconds, buckets } = chartWindows[range];
+  return { from: now - bucketSeconds * buckets * 1000, bucketSeconds, buckets };
+}
+
+/**
+ * Turns prints into range-scoped OHLC candles. Prints outside the window are
+ * dropped and the rest are grouped on the same grid the server uses, so every
+ * range keeps its own granularity instead of replaying the whole history.
+ */
+export function markCandles(marks: MarketMark[], window: ChartWindow): MarketCandle[] {
+  const bucketMs = window.bucketSeconds * 1000;
+  const to = window.from + bucketMs * window.buckets;
+  const candles: MarketCandle[] = [];
+  for (const mark of marks) {
+    if (!(mark.time >= window.from && mark.time < to)) continue;
+    const timestamp = window.from + Math.floor((mark.time - window.from) / bucketMs) * bucketMs;
+    const candle = candles.at(-1);
+    if (candle?.timestamp === timestamp) {
+      candle.high = Math.max(candle.high, mark.value);
+      candle.low = Math.min(candle.low, mark.value);
+      candle.close = mark.value;
+    } else {
+      candles.push({ timestamp, open: mark.value, high: mark.value, low: mark.value, close: mark.value, volume: 0 });
+    }
+  }
+  return candles;
+}
+
 /** Price observations are the participant's own server-confirmed quotes. */
 export function quoteObservations(trades: Trade[]): QuoteObservation[] {
   return trades

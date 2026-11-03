@@ -3,7 +3,7 @@
   import { locale } from "$lib/i18n";
   import { getHistory, rate, type History, type Trade } from "$lib/otc/service";
   import { saleRate, type OfferHistoryPoint } from "$lib/otc/public-offers";
-  import { chartRanges, type ChartRange } from "$lib/otc/market";
+  import { chartRanges, chartWindow, chartWindows, markCandles, type ChartRange, type ChartWindow } from "$lib/otc/market";
   import { dispose, init, type Chart, type DeepPartial, type KLineData, type Period, type Styles } from "klinecharts";
 
   export let trades: Trade[] = [];
@@ -41,14 +41,29 @@
     .filter(mark => Number.isFinite(mark.time) && Number.isFinite(mark.value) && mark.value > 0)
     .sort((a, b) => a.time - b.time);
 
-  $: bars = buildBars(history, marks);
-  $: latest = bars.length ? bars[bars.length - 1].close : null;
+  $: bounds = chartBounds(history, range, marks.at(-1)?.time);
+  $: bars = buildBars(history, marks, bounds);
+  // The hero price keeps the latest print even when the selected range has no candles.
+  $: latest = bars.length ? bars[bars.length - 1].close : marks.at(-1)?.value ?? null;
   $: change = bars.length > 1 && bars[0].open > 0 ? (bars[bars.length - 1].close - bars[0].open) / bars[0].open * 100 : null;
   $: precision = latest === null ? 8 : latest >= 100 ? 2 : latest >= 1 ? 3 : latest >= 0.01 ? 5 : 8;
 
-  $: if (chart) synchronize(bars, precision, range, history?.bucket_seconds);
+  $: if (chart) synchronize(bars, precision, bounds);
 
-  function buildBars(source: History | null, prints: Mark[]): KLineData[] {
+  /** Prefer the server's own grid so the fallback candles line up with its buckets. */
+  function chartBounds(source: History | null, selectedRange: ChartRange, latestPrint?: number): ChartWindow {
+    const candles = source?.candles ?? [];
+    // Anchor the fallback to the newest print so a just-published offer stays inside the window edge.
+    if (!candles.length) return chartWindow(selectedRange, Math.max(Date.now(), (latestPrint ?? 0) + 1));
+    const layout = chartWindows[selectedRange];
+    return {
+      from: candles[0].t * 1000,
+      bucketSeconds: source?.bucket_seconds && source.bucket_seconds > 0 ? source.bucket_seconds : layout.bucketSeconds,
+      buckets: candles.length,
+    };
+  }
+
+  function buildBars(source: History | null, prints: Mark[], window: ChartWindow): KLineData[] {
     const server = (source?.candles ?? []).flatMap(candle => candle.close === null ? [] : [{
       timestamp: candle.t * 1000,
       open: candle.open ?? candle.close,
@@ -58,33 +73,25 @@
       volume: candle.volume ?? 0,
     }]);
     if (server.length) return server;
-    // Without bucketed trades, every publication still becomes one candle so offers stay visible.
-    const bars: KLineData[] = [];
-    for (const mark of prints) {
-      if (bars.at(-1)?.timestamp === mark.time) { bars[bars.length - 1].close = mark.value; continue; }
-      const open = bars.length ? bars[bars.length - 1].close : mark.value;
-      bars.push({ timestamp: mark.time, open, high: Math.max(open, mark.value), low: Math.min(open, mark.value), close: mark.value, volume: 0 });
-    }
-    return bars;
+    // Without bucketed trades, publications are grouped on the selected range's grid.
+    return markCandles(prints, window);
   }
 
-  function periodFor(bucketSeconds: number | undefined): Period {
-    const fallback = ({ "1h": 60, "24h": 900, "1w": 3600, "1m": 14400, "6m": 86400, "1y": 604800 } as Record<ChartRange, number>)[range];
-    const bucket = bucketSeconds && bucketSeconds > 0 ? bucketSeconds : fallback;
-    if (bucket < 60) return { type: "second", span: Math.max(1, bucket) };
-    if (bucket < 3600) return { type: "minute", span: Math.max(1, Math.round(bucket / 60)) };
-    if (bucket < 86400) return { type: "hour", span: Math.max(1, Math.round(bucket / 3600)) };
-    return { type: "day", span: Math.max(1, Math.round(bucket / 86400)) };
+  function periodFor(bucketSeconds: number): Period {
+    if (bucketSeconds < 60) return { type: "second", span: Math.max(1, bucketSeconds) };
+    if (bucketSeconds < 3600) return { type: "minute", span: Math.max(1, Math.round(bucketSeconds / 60)) };
+    if (bucketSeconds < 86400) return { type: "hour", span: Math.max(1, Math.round(bucketSeconds / 3600)) };
+    return { type: "day", span: Math.max(1, Math.round(bucketSeconds / 86400)) };
   }
 
-  function synchronize(data: KLineData[], pricePrecision: number, nextRange: ChartRange, bucketSeconds?: number) {
+  function synchronize(data: KLineData[], pricePrecision: number, window: ChartWindow) {
     if (!chart) return;
     const head = data[0], tail = data[data.length - 1];
-    const next = `${data.length}|${head?.timestamp ?? 0}|${head?.open ?? 0}|${tail?.timestamp ?? 0}|${tail?.close ?? 0}|${pricePrecision}|${nextRange}`;
+    const next = `${data.length}|${head?.timestamp ?? 0}|${head?.open ?? 0}|${tail?.timestamp ?? 0}|${tail?.close ?? 0}|${pricePrecision}|${window.from}|${window.bucketSeconds}|${window.buckets}`;
     if (next === signature) return;
     signature = next;
     chart.setSymbol({ ticker: "EVER/USDT", pricePrecision, volumePrecision: 2 });
-    chart.setPeriod(periodFor(bucketSeconds));
+    chart.setPeriod(periodFor(window.bucketSeconds));
     chart.resetData();
   }
 
@@ -95,7 +102,7 @@
     try { localStorage.setItem(rangeStorageKey, value); } catch { /* A blocked storage keeps the choice for this visit only. */ }
     history = null;
     signature = "";
-    void load().then(() => { swapping = false; });
+    void load().finally(() => { if (range === value) swapping = false; });
   }
 
   function syncThumb() {
@@ -110,8 +117,16 @@
 
   afterUpdate(syncThumb);
 
+  let loadVersion = 0;
   async function load() {
-    try { history = await getHistory(range); } catch { history = null; }
+    // A slower response for a previous range must not replace the current one.
+    const version = ++loadVersion, requested = range;
+    try {
+      const next = await getHistory(requested);
+      if (version === loadVersion && range === requested) history = next;
+    } catch {
+      if (version === loadVersion && range === requested) history = null;
+    }
   }
 
   function css(name: string, fallback: string) {
@@ -173,7 +188,7 @@
     chart = init(plot, { locale: "en-US", timezone: "UTC", styles: buildStyles() });
     if (chart) {
       chart.setSymbol({ ticker: "EVER/USDT", pricePrecision: precision, volumePrecision: 2 });
-      chart.setPeriod(periodFor(history?.bucket_seconds));
+      chart.setPeriod(periodFor(chartBounds(history, range).bucketSeconds));
       chart.createIndicator({ name: "VOL", calcParams: [] });
       chart.setDataLoader({ getBars: ({ callback }) => callback(bars) });
       chart.setOffsetRightDistance(12);
