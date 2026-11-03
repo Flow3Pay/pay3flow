@@ -414,9 +414,7 @@
 .activityButton:focus-visible { outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 2px; }
 @media (max-width: 980px) { .activityButton { display: grid; } }
 
-.resultSummary,
-.foundVenues,
-.searchingVenues {
+.resultSummary, .foundVenues, .searchingVenues {
   display: flex;
   align-items: center;
 }
@@ -488,12 +486,6 @@
   background: var(--color-panel-soft);
 }
 
-.legalWarning {
-
-.resultSummary.hasActivity .activityButton {
-  display: inline-flex;
-}
-
 .resultSummary.hasActivity .routeCountGroup {
   display: none;
 }
@@ -504,6 +496,7 @@
     gap: 4px;
   }
 }
+
 
 .legalWarning {
   display: grid;
