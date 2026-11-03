@@ -23,6 +23,7 @@ const MAX_PROVIDER_PRICE_AGE_SECS: i64 = 15 * 60;
 const DEFILLAMA_ROOT: &str = "https://coins.llama.fi/";
 const GATE_ROOT: &str = "https://api.gateio.ws/api/v4/";
 const HISTORY_TTL: Duration = Duration::from_secs(6 * 60 * 60);
+const EMPTY_TTL: Duration = Duration::from_secs(60);
 
 // The Open Network's CoinGecko ID now reports GRAM, the renamed native TON.
 // MATIC's legacy ticker is priced through its wrapped Ethereum contract.
@@ -128,10 +129,15 @@ struct ChartPoint {
     price: f64,
 }
 
-/// Gate.io candlestick row: timestamp, quote volume, close, high, low, open,
-/// base volume, window closed.
-#[derive(Deserialize)]
-struct GateCandle(String, String, String, String, String, String, String, bool);
+/// Exchange rows mix quoted numbers and plain JSON scalars, so every field is
+/// read through one tolerant conversion.
+fn as_number(value: &serde_json::Value) -> Option<f64> {
+    match value {
+        serde_json::Value::String(text) => text.parse::<f64>().ok(),
+        serde_json::Value::Number(number) => number.as_f64(),
+        _ => None,
+    }
+}
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -374,7 +380,10 @@ impl MarketPriceService {
         };
         let key = format!("{period}:{span}");
         if let Some(cached) = self.history.read().await.get(&key) {
-            if cached.fetched_at.elapsed() < HISTORY_TTL {
+            // An empty series retries soon: a provider hiccup should not blank
+            // the chart for the whole full-history window.
+            let ttl = if cached.points.is_empty() { EMPTY_TTL } else { HISTORY_TTL };
+            if cached.fetched_at.elapsed() < ttl {
                 return (cached.points.clone(), false);
             }
         }
@@ -434,15 +443,13 @@ impl MarketPriceService {
         if points.is_empty() {
             points = self.exchange_history(asset, period, span).await;
         }
-        if !points.is_empty() {
-            self.history.write().await.insert(
-                key,
-                HistorySnapshot {
-                    fetched_at: Instant::now(),
-                    points: points.clone(),
-                },
-            );
-        }
+        self.history.write().await.insert(
+            key,
+            HistorySnapshot {
+                fetched_at: Instant::now(),
+                points: points.clone(),
+            },
+        );
         (points, false)
     }
 
@@ -485,12 +492,13 @@ impl MarketPriceService {
                 return Vec::new();
             }
         };
-        match response.json::<Vec<GateCandle>>().await {
+        match response.json::<Vec<Vec<serde_json::Value>>>().await {
             Ok(payload) => payload
                 .into_iter()
-                .filter_map(|GateCandle(timestamp, _, close, _, _, _, _, _)| {
-                    let t = timestamp.parse::<i64>().ok()?;
-                    let usd = close.parse::<f64>().ok()?;
+                .filter_map(|row| {
+                    // [timestamp, quote volume, close, high, low, open, ...]
+                    let t = as_number(row.first()?)? as i64;
+                    let usd = as_number(row.get(2)?)?;
                     (t > 0 && usd.is_finite() && usd > 0.0).then_some(SpotPoint { t, usd })
                 })
                 .collect(),
@@ -648,7 +656,8 @@ mod tests {
                     Json(serde_json::json!([
                         ["1700000000", "1", "0.002", "0.002", "0.002", "0.002", "2", true],
                         ["1700000300", "1", "0.0021", "0.002", "0.002", "0.002", "2", true],
-                        ["1700000600", "0", "0", "0", "0", "0", "0", false]
+                        ["1700000600", "0", "0", "0", "0", "0", "0", false],
+                        [1700000900, 0, 0.0022, 0.0022, 0.0022, 0.0022, 0, false]
                     ]))
                 }),
             );
@@ -672,6 +681,10 @@ mod tests {
                 SpotPoint {
                     t: 1_700_000_300,
                     usd: 0.0021
+                },
+                SpotPoint {
+                    t: 1_700_000_900,
+                    usd: 0.0022
                 },
             ]
         );
