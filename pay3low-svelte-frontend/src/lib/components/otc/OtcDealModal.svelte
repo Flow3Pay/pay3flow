@@ -15,6 +15,7 @@
   export let onError: (message: string) => void = () => {};
   export let onBusyChange: (value: boolean) => void = () => {};
   export let onActiveCount: (count: number) => void = () => {};
+  export let onActiveDeals: (deals: P2pDeal[]) => void = () => {};
 
   let dialog: HTMLDialogElement | undefined;
   let deals: P2pDeal[] = [];
@@ -28,6 +29,7 @@
   let dismissed = new Set<string>();
   let autoTried = new Set<string>();
   let reportedActive = -1;
+  let reportedActiveIds = "";
 
   const autoMarker = "pay3flow.otc.p2p.auto.";
   const dismissMarker = "pay3flow.otc.p2p.dismissed.v1.";
@@ -79,10 +81,15 @@
           ? say("Waiting for the transfer to confirm.", "Ожидаем подтверждения перевода.")
           : say("Waiting for the counterparty.", "Ожидаем контрагента.");
   $: {
-    const count = deals.filter(p2pActive).length;
-    if (count !== reportedActive) {
-      reportedActive = count;
-      onActiveCount(count);
+    const active = deals.filter(p2pActive);
+    if (active.length !== reportedActive) {
+      reportedActive = active.length;
+      onActiveCount(active.length);
+    }
+    const ids = active.map(item => item.id).join(",");
+    if (ids !== reportedActiveIds) {
+      reportedActiveIds = ids;
+      onActiveDeals(active);
     }
   }
   $: selfWallet = session?.wallets.find(wallet => wallet.chain === "everscale") || null;

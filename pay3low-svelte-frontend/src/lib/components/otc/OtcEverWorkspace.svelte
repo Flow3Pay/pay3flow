@@ -6,7 +6,7 @@
   import { parseOtcHash } from "$lib/otc/link";
   import { request, signInWallet, OtcRequestError, bindWallet, sendAttempt, decimal, rate, setOtcNetwork, type Config, type Session, type Proposal, type Trade, type Rfq, type Attempt, type Direction } from "$lib/otc/service";
   import type { PublicOffer } from "$lib/otc/public-offers";
-  import type { P2pDeal } from "$lib/otc/p2p";
+  import { p2pShortAddress, type P2pDeal } from "$lib/otc/p2p";
   import { exactInput, proposalDirection, terminalStates, completedVolume } from "$lib/otc/terminal";
   import "$lib/otc/terminal.css";
   import OtcActivityContent from "./OtcActivityContent.svelte";
@@ -37,7 +37,8 @@
   let selectionVersion = 0, accountVersion = 0, walletProgress = "", accountLocked = false;
   let tab: "trades" | "orders" | "history" = "trades", now = Date.now();
   let offersBusy = false;
-  let p2pActiveCount = 0;
+  let p2pActiveDeals: P2pDeal[] = [];
+  $: p2pActiveCount = p2pActiveDeals.length;
   let offerBook: OtcDeskBook;
   let dealModal: OtcDealModal | null = null;
   $: saleEnabled = !!config?.public_offers_available && (config.public_offer_directions ?? ["sell"]).includes(direction) && !listingId && !quote;
@@ -95,6 +96,10 @@
   }
   function historyReplace(hash: string) { window.history.replaceState(window.history.state, "", `${location.pathname}${location.search}${hash}`); }
   const chainLabel = (chain: "ethereum" | "everscale") => (chain === "ethereum" ? "Ethereum" : "Everscale");
+  function activeDealLabel(item: P2pDeal) {
+    const stage = item.state === "payment_pending" ? say("awaiting USDT", "ждёт USDT") : say("awaiting EVER", "ждёт EVER");
+    return `${item.terms.usdt_amount} USDT · ${item.terms.ever_amount} EVER · ${stage}`;
+  }
   async function run(action: () => Promise<void>, lockAccount = true) {
     if (busy || offersBusy) return; busy = true; accountLocked = lockAccount; error = ""; notice = "";
     try { await action(); } catch (e) {
@@ -310,10 +315,28 @@
           {:else}
             {#if tab === "orders" && p2pActiveCount}
               <div class="activeDealRow">
-                <button type="button" class="activeDealButton" data-testid="otc-open-active-deal" on:click={() => dealModal?.openActive()}>
-                  {say("Open active P2P deal", "Открыть активную P2P сделку")}
-                  <span class="orderCount">{p2pActiveCount}</span>
-                </button>
+                {#if p2pActiveCount === 1}
+                  <button type="button" class="activeDealButton" data-testid="otc-open-active-deal" on:click={() => dealModal?.openDeal(p2pActiveDeals[0].id)}>
+                    {say("Open active P2P deal", "Открыть активную P2P сделку")}
+                  </button>
+                {:else}
+                  <details class="activeDealMenu">
+                    <summary class="activeDealButton" data-testid="otc-open-active-deal">
+                      {say("Open active P2P deal", "Открыть активную P2P сделку")}
+                      <span class="orderCount">{p2pActiveCount}</span>
+                    </summary>
+                    <ul class="activeDealList">
+                      {#each p2pActiveDeals as item (item.id)}
+                        <li>
+                          <button type="button" data-testid="otc-active-deal-option" on:click={() => dealModal?.openDeal(item.id)}>
+                            <span class="activeDealAmount">{activeDealLabel(item)}</span>
+                            <span class="activeDealParty">{p2pShortAddress(item.counterparty_ever || item.terms.ever_payer)}</span>
+                          </button>
+                        </li>
+                      {/each}
+                    </ul>
+                  </details>
+                {/if}
               </div>
             {/if}
             <OtcTradeTables trades={tab === "orders" ? activeTrades : history} offers={tab === "orders" ? mine.filter(o => o.state === "open") : mine.filter(o => o.state !== "open")} selectedId={selected?.id || ""} busy={busy || offersBusy} onSelect={id => run(() => selectTrade(id, true), false)} onOfferSelect={openOffer} emptyTitle={tab === "orders" ? say("No open orders", "Открытых ордеров нет") : say("No history yet", "Истории пока нет")} emptyHint={session ? say("Quotes, offers and accepted trades appear here.", "Здесь появятся котировки, офферы и принятые сделки.") : say("Connect your wallet to see private quotes and trades.", "Подключите кошелёк для доступа к приватным котировкам и сделкам.")} />
@@ -325,7 +348,7 @@
       </section>
     </svelte:fragment>
   </OtcTerminal>
-  <OtcDealModal bind:this={dealModal} {config} {session} locked={busy || offersBusy} onError={message => error = message} onBusyChange={value => busy = value} onActiveCount={count => p2pActiveCount = count} />
+  <OtcDealModal bind:this={dealModal} {config} {session} locked={busy || offersBusy} onError={message => error = message} onBusyChange={value => busy = value} onActiveDeals={deals => p2pActiveDeals = deals} />
   <p class="risk">{config?.p2p_available ? say("Accepting an offer creates two direct transfers between the wallets of both parties. There is no escrow and no automatic rollback: whoever sends first relies on the counterparty delivering afterwards.", "Принятие оффера создаёт два прямых перевода между кошельками сторон. Эскроу и автоматического отката нет: кто отправляет первым, полагается на то, что контрагент выполнит свой перевод следом.") : config?.public_offers_available && !config.available ? say("Publication does not move or reserve funds. Buyer acceptance and settlement through this site are not available yet.", "Публикация не переводит и не резервирует средства. Принятие предложения покупателем и расчёты через сайт пока недоступны.") : config?.escrow ? say("Each trade uses a 2-of-3 USDT escrow for four hours from creation, capped at 100,000 EVER. USDT is funded first. Native EVER delivery is separate and is not reversed by a USDT refund.", "Каждая сделка использует эскроу USDT с 2 из 3 подписей на 4 часа с момента создания, до 100 000 EVER. Сначала вносится USDT. Перевод EVER выполняется отдельно и не отменяется возвратом USDT.") : say("Two separate transfers: the customer pays first; the desk delivers or refunds. No atomic swap or automatic rollback.", "Два отдельных перевода: клиент платит первым, деск выполняет выплату или возврат. Атомарного обмена и автоматического отката нет.")}</p>
   {#if session?.desk}<div class="console"><OtcDeskConsole {session} {config} {selected} {rfqs} {dashboard} {busy} {run} onRefresh={refresh} onSelect={selectTrade} /></div>{/if}
 </section>
@@ -363,6 +386,14 @@
   .activeDealRow { padding: 8px var(--otc-panel-padding) 0; }
   .activeDealButton { display: flex; width: 100%; min-height: 44px; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--color-accent-strong); border-radius: 8px; background: var(--color-accent-soft); color: var(--color-text); font-size: 13px; font-weight: 650; }
   .activeDealButton:hover { background: var(--color-panel-soft); }
+  .activeDealMenu { position: relative; }
+  .activeDealMenu summary { cursor: pointer; list-style: none; }
+  .activeDealMenu summary::-webkit-details-marker { display: none; }
+  .activeDealList { display: flex; margin: 8px 0 0; padding: 4px; flex-direction: column; gap: 2px; list-style: none; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-paper); }
+  .activeDealList button { display: flex; width: 100%; min-height: 40px; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 10px; border-radius: 6px; color: var(--color-text); font-size: 12.5px; text-align: left; }
+  .activeDealList button:hover { background: var(--color-panel-soft); }
+  .activeDealAmount { font-weight: 600; }
+  .activeDealParty { color: var(--color-text-faint); font-family: var(--font-mono); font-size: 11.5px; }
   .tradeList { display: grid; gap: 8px; padding: var(--otc-panel-padding); }
   .tradeList:has(.emptyState) { padding: 0; }
   .tradeList button { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); min-width: 0; min-height: 48px; align-items: center; gap: 16px; padding: 12px 16px; border: 1px solid var(--color-border); border-radius: 8px; text-align: left; font-size: 13px; line-height: 1.5; }
