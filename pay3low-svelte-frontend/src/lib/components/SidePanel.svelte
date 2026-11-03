@@ -11,6 +11,23 @@
   import { fiatFlagUrl } from "$lib/currency-flags";
   import { OTC_PROVIDER, routeUsesOtc } from "$lib/otc/route";
 
+  let routeCountHover = false;
+  let activityExpanded = false;
+  let activityModalOpen = false;
+  let activityModalTarget: HTMLElement | null = null;
+
+  function toggleActivityGraph() {
+    if (!sourceCurrency || !targetCurrency) return;
+    activityModalOpen = true;
+    onOpenSearchActivity();
+  }
+
+  function hideActivity() {
+    activityExpanded = false;
+    activityModalOpen = false;
+    activityModalTarget = null;
+  }
+
   export let routes: RouteCandidate[];
   export let routesFound = 0;
   export let sourceCurrency = "";
@@ -102,18 +119,58 @@
   }
 
   function closeVenuePopover(venue: HTMLDivElement, id: string) {
-    if (openVenueId === id && !venue.contains(document.activeElement) && !venue.matches(":hover")) openVenueId = null;
+    if (openVenueId === id && !venue.contains(document.activeElement) && !venue.matches(":hover")) {
+      openVenueId = null;
+      routeCountHover = false;
+    }
+  }
+
+  function hideActivity() {
+    activityExpanded = false;
+    activityModalOpen = false;
+    activityModalTarget = null;
   }
 
   const workflowSteps = (route: RouteCandidate) => routeWorkflowSteps(route).map((step) => ({ ...step, networkLabel: compactNetwork(step.network) }));
 
-  const workflowLabel = (route: RouteCandidate) => workflowSteps(route).map((step) => `${assetLabel(step.currency)}${step.paymentMethod ? ` · ${step.paymentMethod}` : ""}${step.network ? ` · ${step.networkLabel ?? compactNetwork(step.network)}` : ""}${step.provider ? ` (${venueName(step.provider)})` : ""}`).join(" → ");
-
-  function cardClick(event: MouseEvent, route: RouteCandidate) {
+  const workflowLabel = (route: RouteCandidate) => workflowSteps(route).map((step) => `${assetLabel(step.currency)}${step.paymentMethod ? ` · ${step.paymentMethod}` : ""}${step.network ? ` · ${step.networkLabel ?? compactNetwork(step.network)}` : ""}${step.provider ? ` (${venueName(step.provider)})` : ""}`).join(" → ");  function cardClick(event: MouseEvent, route: RouteCandidate) {
     onSelect(route);
     const target = event.target as HTMLElement;
     if (target.closest(".routeAmount") || target.closest(".workflow")) onOpenInstructions(route);
   }
+
+  function popupFocusableElements(popup: HTMLElement): HTMLElement[] {
+    return Array.from(popup.querySelectorAll<HTMLElement>("button, a[href]"));
+  }
+
+  function keepActivityPopupFocus() {
+    if (!activityModalTarget) return;
+    const popup = activityModalTarget.querySelector(".searchActivityPopup") as HTMLElement | null;
+    if (!popup) return;
+    const focusable = popupFocusableElements(popup);
+    if (focusable.length === 0) return;
+    focusable[0].focus();
+  }
+  
+
+  
+  function closeActivityOnEscape(event: KeyboardEvent) {
+    if (!activityModalOpen) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      activityExpanded = false;
+      activityModalOpen = false;
+    }
+  }
+
+  function closeActivityOnWindowBlur() {
+    if (!activityModalOpen) return;
+    if (!document.hasFocus()) return;
+    if (activityModalTarget && !activityModalTarget.contains(document.activeElement)) return;
+    hideActivity();
+  }
+
   function fallbackVenueIcon(event: Event, provider: string) {
     const image = event.currentTarget as HTMLImageElement;
     image.onerror = null;
@@ -138,11 +195,25 @@
           <strong>{t("Awaiting your intent", {}, $locale)}</strong>
         {/if}
         {#if hasAmount}
-          <span class="resultSummary">
-            {#if hasAmount}<small aria-live="polite">{routeCountLabel(routesFound, $locale)}{searching ? " · searching…" : searchIncomplete ? ` · ${t("Partial results", {}, $locale)}` : ""}</small>{/if}
+          <span class="resultSummary" class:hasActivity={routeVenues.length > 0}>
+            {#if hasAmount}              <div class="routeCountGroup" class:routeCountGroupHover={routeCountHover} role="status" aria-live="polite" aria-describedby="routeCountHint" on:pointerleave={() => routeCountHover = false} on:focusout={() => routeCountHover = false}>
+              <button
+                type="button"
+                class="activityButton"
+                class:activityButtonOpen={activityExpanded}
+                aria-label={t(activityExpanded ? "Hide search activity" : "Show search activity", {}, $locale)}
+                aria-expanded={activityExpanded || activityModalOpen}
+                title={t(activityExpanded ? "Hide search activity" : "Show search activity", {}, $locale)}
+                on:click={toggleActivityGraph}
+              >
+                <img src="/icons/ui/search-activity.png" alt="" width="16" height="16" decoding="async" aria-hidden="true" />
+              </button>
+                <span class="routeCountText">{routeCountLabel(routesFound, $locale)}{searching ? " · searching…" : searchIncomplete ? ` · ${t("Partial results", {}, $locale)}` : ""}</span>
+                <span class="routeCountHint" id="routeCountHint" hidden>{t("Open search activity", {}, $locale)}</span>
+              </div>
+            {/if}
             {#if routeVenues.length}
-              <span class="foundVenues" aria-label={`Venues used in found routes: ${routeVenues.map((venue) => venue.label).join(", ")}`}>
-                {#each routeVenues as venue, index (venue.id)}
+              <span class="foundVenues" aria-label={`Venues used in found routes: ${routeVenues.map((venue) => venue.label).join(", ")}`} on:pointerleave={() => routeCountHover = false} on:focusout={() => routeCountHover = false}>              {#each routeVenues as venue, index (venue.id)}
                   {@const status = venueStats[venue.id.toLowerCase()]}
                   {@const hasRoute = (status?.routes_found ?? 0) > 0}
                   <div class:foundVenueActive={selectedVenueId === venue.id.toLowerCase()} class:foundVenueOpen={openVenueId === venue.id} class="foundVenue" role="group" aria-label={venue.label} data-testid="found-venue" title={`Found on ${venue.label}`} style:animation-delay={`${index * 70}ms`} on:pointerenter={(event) => openVenuePopover(event.currentTarget, venue.id)} on:pointerleave={(event) => closeVenuePopover(event.currentTarget, venue.id)} on:focusin={(event) => openVenuePopover(event.currentTarget, venue.id)} on:focusout={(event) => closeVenuePopover(event.currentTarget, venue.id)}>
@@ -150,7 +221,7 @@
                       <img src={venue.iconUrl || venueIcon(venue.id)} alt="" width="18" height="18" decoding="async" on:error={fallbackFoundVenueIcon} />
                       <span class="foundVenueFallback" aria-hidden="true" hidden>{venue.label.slice(0, 1).toUpperCase()}</span>
                     </button>
-                    <div class="foundVenuePopover" role="group" aria-label={venue.label}>
+                    <div class="foundVenuePopover" role="group" aria-label={venue.label} on:click|stopPropagation={hideActivity}>
                       <div class="foundVenuePopoverTitle">
                         <img src={venue.iconUrl || venueIcon(venue.id)} alt="" width="20" height="20" decoding="async" on:error={(event) => fallbackVenueIcon(event, venue.id)} />
                         <strong>{venue.label}</strong>
@@ -354,8 +425,85 @@
   min-height: 24px;
   flex-wrap: wrap;
   gap: 7px;
+  position: relative;
 }
 
+.routeCountGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.routeCountGroupHover .routeCountText {
+  background: var(--color-strong-accent);
+  color: var(--color-strong-accent-contrast);
+  border-radius: 6px;
+}
+
+.routeCountText {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-soft);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.routeCountHint {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.activityButton {
+  display: none;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--color-text-soft);
+  cursor: pointer;
+  transition: color 0.14s ease, background 0.14s ease;
+  z-index: 1;
+}
+
+.activityButton img {
+  display: block;
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  filter: brightness(0);
+}
+
+:global(html[data-theme="dark"]) .activityButton img {
+  filter: brightness(0) invert(1);
+}
+
+.activityButton:focus-visible {
+  color: var(--color-text);
+  background: var(--color-panel-soft);
+}
+
+.legalWarning {
+
+.resultSummary.hasActivity .activityButton {
+  display: inline-flex;
+}
+
+.resultSummary.hasActivity .routeCountGroup {
+  display: none;
+}
+
+@media (max-width: 980px) {
+  .routeCountGroup {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+}
 
 .legalWarning {
   display: grid;

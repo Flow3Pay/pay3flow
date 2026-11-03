@@ -158,7 +158,7 @@
   .settingsClose { display: grid; width: 28px; height: 28px; flex: 0 0 auto; place-items: center; border-radius: 7px; color: var(--color-text-soft); font-size: 18px; line-height: 1; }
   .settingsClose:hover { background: var(--color-panel); color: var(--color-text); }
   .sideTabs button { flex: 1; min-width: 0; min-height: 40px; padding: 8px 4px; border-radius: 9px; color: var(--color-text-soft); font-size: 13px; font-weight: 650; line-height: 1.5; transition: color .2s ease; }
-  .sideTabs button.active { color: #152016; }
+  .sideTabs button.active { color: var(--otc-sell); }
   .priceField { display: block; margin-top: 6px; color: var(--color-text-soft); font-size: 12px; }
   .priceHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .marketToggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--color-text-soft); font-size: 12px; line-height: 1.4; white-space: nowrap; }

@@ -164,7 +164,7 @@
 
   function buildStyles(): DeepPartial<Styles> {
     const good = css("--color-good", "#8dcb00");
-    const danger = css("--color-danger", "#d43d35");
+    const danger = css("--color-danger", "var(--otc-sell, #d43d35)");
     const border = css("--color-border", "rgba(41, 67, 42, 0.16)");
     const text = css("--color-text", "#152016");
     // The crosshair chip is painted with the text colour, so its label needs the token that flips with the theme.

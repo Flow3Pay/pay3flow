@@ -933,7 +933,7 @@
     }
   }
 
-  async function startSearch(countActivity = true) {
+  async function startSearch(countActivity = false) {
     if (debounceTimer) window.clearTimeout(debounceTimer);
     debounceTimer = undefined;
     if ((!corridor && !useDiscovery) || !sourceMethod || !targetMethod) return;
