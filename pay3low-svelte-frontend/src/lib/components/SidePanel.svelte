@@ -125,7 +125,7 @@
     }
   }
 
-  function hideActivity() {
+  function closeActivity() {
     activityExpanded = false;
     activityModalOpen = false;
     activityModalTarget = null;
