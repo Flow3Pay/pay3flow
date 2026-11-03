@@ -4,8 +4,8 @@
   import { request, sendAttempt, type Attempt, type Config, type Session } from "$lib/otc/service";
   import { identiconDataUri } from "$lib/otc/identicon";
   import {
-    p2pAction, p2pActive, p2pBothConfirmed, p2pKind, p2pLegActive, p2pLegDone,
-    p2pLegFailed, p2pOpenAttempt, p2pShortAddress,
+    p2pAction, p2pActive, p2pBothConfirmed, p2pKind, p2pLegActive, p2pLegAsset, p2pLegDone,
+    p2pLegFailed, p2pOpenAttempt, p2pOverdue, p2pShortAddress, p2pViewerLegs,
     type P2pDeal, type P2pLeg,
   } from "$lib/otc/p2p";
 
@@ -14,6 +14,7 @@
   export let locked = false;
   export let onError: (message: string) => void = () => {};
   export let onBusyChange: (value: boolean) => void = () => {};
+  export let onActiveCount: (count: number) => void = () => {};
 
   let dialog: HTMLDialogElement | undefined;
   let deals: P2pDeal[] = [];
@@ -26,8 +27,10 @@
   let autoOpen = true;
   let dismissed = new Set<string>();
   let autoTried = new Set<string>();
+  let reportedActive = -1;
 
   const autoMarker = "pay3flow.otc.p2p.auto.";
+  const dismissMarker = "pay3flow.otc.p2p.dismissed.v1.";
   $: say = (en: string, ru: string) => $locale === "ru" ? ru : en;
   function markerKey(current: P2pDeal, kind: P2pLeg) {
     return `${autoMarker}${current.id}:${kind}`;
@@ -39,9 +42,49 @@
     autoTried.add(key);
     try { sessionStorage.setItem(markerKey(current, kind), "1"); } catch { /* private mode keeps the in-memory guard */ }
   }
+  function dismissKey(actor: string) {
+    return `${dismissMarker}${encodeURIComponent(actor)}`;
+  }
+  function loadDismissed(actor: string): Set<string> {
+    if (!actor || typeof localStorage === "undefined") return new Set<string>();
+    try {
+      const saved = JSON.parse(localStorage.getItem(dismissKey(actor)) || "[]");
+      const ids = Array.isArray(saved) ? saved.filter((id: unknown) => typeof id === "string") : [];
+      return new Set<string>(ids as string[]);
+    } catch { return new Set<string>(); }
+  }
+  function saveDismissed(actor: string) {
+    if (!actor || typeof localStorage === "undefined") return;
+    try { localStorage.setItem(dismissKey(actor), JSON.stringify([...dismissed])); } catch { /* private mode keeps the in-memory dismissal */ }
+  }
   $: deal = deals.find(item => item.id === selectedId) || null;
   $: action = deal ? p2pAction(deal) : null;
-  $: actionLabel = action === "retry" ? say("Retry", "Повторить") : say("Confirm", "Подтвердить");
+  $: actionKind = deal ? p2pKind(deal) : null;
+  $: actionAsset = actionKind ? p2pLegAsset(actionKind) : "";
+  $: actionLabel = action === "retry"
+    ? actionAsset ? say(`Retry ${actionAsset}`, `Повторить ${actionAsset}`) : say("Retry", "Повторить")
+    : action === "send"
+      ? actionAsset ? say(`Send ${actionAsset}`, `Отправить ${actionAsset}`) : say("Send", "Отправить")
+      : say("Confirm", "Подтвердить");
+  $: legs = deal ? p2pViewerLegs(deal) : null;
+  $: myLegDone = deal && deal.my_leg ? p2pLegDone(deal, deal.my_leg) : false;
+  $: overdue = !!deal && deal.state === "delivery_pending" && p2pOverdue(deal);
+  $: waitingForChain = !!(deal && actionKind && p2pOpenAttempt(deal, actionKind));
+  $: waitingLabel = !deal ? ""
+    : !deal.counterparty_confirmed
+      ? say("Waiting for the counterparty to confirm.", "Ожидаем подтверждения контрагента.")
+      : myLegDone
+        ? say("Your leg is complete. Waiting for the counterparty.", "Ваша часть выполнена. Ожидаем контрагента.")
+        : waitingForChain
+          ? say("Waiting for the transfer to confirm.", "Ожидаем подтверждения перевода.")
+          : say("Waiting for the counterparty.", "Ожидаем контрагента.");
+  $: {
+    const count = deals.filter(p2pActive).length;
+    if (count !== reportedActive) {
+      reportedActive = count;
+      onActiveCount(count);
+    }
+  }
   $: selfWallet = session?.wallets.find(wallet => wallet.chain === "everscale") || null;
   $: selfEver = deal?.my_ever || selfWallet?.address || "";
   $: counterpartyEver = deal?.counterparty_ever || "";
@@ -58,7 +101,7 @@
       deals = [];
       selectedId = "";
       autoOpen = true;
-      dismissed.clear();
+      dismissed = loadDismissed(actor);
       autoTried.clear();
       configReady = false;
       error = "";
@@ -82,7 +125,10 @@
   }
 
   function close() {
-    if (selectedId) dismissed.add(selectedId);
+    if (selectedId) {
+      dismissed.add(selectedId);
+      saveDismissed(session?.actor || "");
+    }
     autoOpen = false;
     if (dialog?.open) dialog.close();
     selectedId = "";
@@ -143,6 +189,7 @@
 
   export async function openDeal(id: string) {
     dismissed.delete(id);
+    saveDismissed(session?.actor || "");
     autoOpen = true;
     if (!deals.some(item => item.id === id)) await refresh();
     if (!deals.some(item => item.id === id)) return;
@@ -155,9 +202,12 @@
     if (!session || !config?.p2p_available) return;
     autoOpen = true;
     await refresh();
-    const next = sortNewest(deals.filter(p2pActive))[0];
+    const active = deals.filter(p2pActive);
+    // Prefer a deal where this viewer still has to sign something.
+    const next = sortNewest(active).find(item => p2pKind(item)) || sortNewest(active)[0];
     if (!next) return;
     dismissed.delete(next.id);
+    saveDismissed(session?.actor || "");
     selectedId = next.id;
     error = "";
     await present();
@@ -315,6 +365,23 @@
       </span>
     </div>
 
+    {#if legs}
+      <div class="legs" data-testid="otc-p2p-legs">
+        <span class="leg" class:done={myLegDone}>
+          <small>{myLegDone ? say("You sent", "Вы отправили") : say("You send", "Вы отправляете")}</small>
+          <b>{legs.send.amount} {legs.send.asset}</b>
+        </span>
+        <span class="leg">
+          <small>{say("You receive", "Вы получаете")}</small>
+          <b>{legs.receive.amount} {legs.receive.asset}</b>
+        </span>
+      </div>
+    {/if}
+
+    {#if overdue}
+      <p class="notice" role="status">{say("The nominal delivery window has passed. You can still complete this transfer.", "Номинальный срок доставки прошёл. Вы всё ещё можете выполнить этот перевод.")}</p>
+    {/if}
+
     {#if error}<p class="error" role="alert">{error}</p>{/if}
 
     <div class="action">
@@ -324,7 +391,7 @@
           <span>{actionLabel}</span>
         </button>
       {:else}
-        <span class="buttonPlaceholder" aria-hidden="true"></span>
+        <p class="waitingAction">{waitingLabel}</p>
       {/if}
     </div>
   {/if}
@@ -360,16 +427,21 @@
   .rail span { position:absolute; top:50%; left:50%; width:7px; height:7px; border-radius:50%; background:var(--color-text-faint); transform:translate(-50%,-50%); }
   .flow.active .rail span { background:var(--color-accent-strong); animation:travel 1.4s ease-in-out infinite; }
   .flow.done .rail span { background:var(--color-good-ink); }
+  .legs { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; padding:18px 26px 0; }
+  .leg { display:grid; min-width:0; gap:2px; padding:9px 10px; border:1px solid var(--color-border); border-radius:10px; background:var(--color-panel); }
+  .leg.done { border-color:color-mix(in srgb, var(--color-good-ink) 38%, var(--color-border)); background:var(--otc-buy-soft); }
+  .leg small { color:var(--color-text-faint); font-size:9px; font-weight:650; letter-spacing:.04em; text-transform:uppercase; }
+  .leg b { overflow:hidden; font-family:var(--font-mono); font-size:11px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
+  .notice { margin:12px 26px 0; color:var(--color-text-soft); font-size:11px; line-height:1.45; text-align:center; }
   .error { margin:14px 26px 0; color:var(--color-danger); font-size:11px; line-height:1.45; text-align:center; }
   .action { padding:22px 26px 26px; }
-  .confirmButton, .buttonPlaceholder { display:flex; width:100%; min-height:46px; align-items:center; justify-content:center; gap:8px; border-radius:11px; }
-  .confirmButton { border:1px solid var(--color-accent-strong); background:var(--color-accent); color:#152016; font-size:13px; font-weight:750; }
+  .confirmButton { display:flex; width:100%; min-height:46px; align-items:center; justify-content:center; gap:8px; border:1px solid var(--color-accent-strong); border-radius:11px; background:var(--color-accent); color:#152016; font-size:13px; font-weight:750; }
   .confirmButton:disabled { opacity:.45; cursor:default; }
   .confirmButton:focus-visible { outline:var(--focus-ring-width) solid var(--color-focus); outline-offset:2px; }
-  .buttonPlaceholder { display:block; }
+  .waitingAction { display:flex; min-height:46px; align-items:center; justify-content:center; margin:0; color:var(--color-text-soft); font-size:12px; line-height:1.45; text-align:center; }
   .spinner { width:13px; height:13px; border:2px solid #15201655; border-top-color:#152016; border-radius:50%; animation:spin .8s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
   @keyframes travel { 0%,100% { transform:translate(-50%,-50%); } 50% { transform:translate(calc(-50% + 13px),-50%); } }
-  @media (max-width:420px) { .people, .flow, .action { padding-right:18px; padding-left:18px; } .dealHead { padding-right:18px; padding-left:18px; } }
+  @media (max-width:420px) { .people, .flow, .legs, .action { padding-right:18px; padding-left:18px; } .dealHead { padding-right:18px; padding-left:18px; } .notice { margin-right:18px; margin-left:18px; } }
   @media (prefers-reduced-motion:reduce) { .flow.active .rail span, .spinner { animation:none; } }
 </style>

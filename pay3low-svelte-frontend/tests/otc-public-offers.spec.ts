@@ -182,16 +182,54 @@ test("a P2P deal opens as a modal with both wallets and one confirmation", async
   await setup(page, { signedIn: true, verifiedEthereum: true, deals: [deal] });
   const modal = page.getByTestId("otc-p2p-modal");
   await expect(modal).toBeVisible();
+  await expect(modal.getByTestId("otc-p2p-legs")).toContainText("You send");
+  await expect(modal.getByTestId("otc-p2p-legs")).toContainText("100 EVER");
+  await expect(modal.getByTestId("otc-p2p-legs")).toContainText("You receive");
+  await expect(modal.getByTestId("otc-p2p-legs")).toContainText("11.889 USDT");
   await modal.getByRole("button", { name: "Close", exact: true }).click();
   await expect(modal).not.toBeVisible();
-  await page.getByRole("tab", { name: "My orders", exact: true }).click();
+  await page.reload();
+  await expect(page.getByTestId("otc-workspace")).toHaveAttribute("data-state", "connected");
+  await expect(modal).not.toBeVisible();
+  await page.getByRole("tab", { name: /^My orders/ }).click();
+  await expect(modal).not.toBeVisible();
+  const reopen = page.getByTestId("otc-open-active-deal");
+  await expect(reopen).toBeVisible();
+  await reopen.click();
   await expect(modal).toBeVisible();
   await expect(modal).toContainText("100");
   await expect(modal).toContainText("11.889");
   await expect(modal.getByTestId("otc-p2p-avatar-self")).toBeVisible();
   await expect(modal.getByTestId("otc-p2p-avatar-counterparty")).toBeVisible();
   await expect(modal.getByTestId("otc-p2p-confirm")).toBeEnabled();
+  await expect(modal.getByTestId("otc-p2p-confirm")).toHaveText("Confirm");
   await expect(page.locator(".deals, otc-p2p-deal")).toHaveCount(0);
+});
+
+test("the delivery button names the EVER leg instead of a generic confirmation", async ({ page }) => {
+  const deal = {
+    id: "deal-1", offer_id: "offer-1", state: "delivery_pending", role: "owner",
+    counterparty: "https://relay.example/actors/taker",
+    terms: {
+      direction: "sell", ever_amount: "100", usdt_amount: "11.889", ever_units: "100000000000", usdt_units: "11889000",
+      usdt_payer: `0x${"c".repeat(40)}`, usdt_payee: eth,
+      ever_payer: ever, ever_payee: `0:${"c".repeat(64)}`,
+    },
+    my_leg: "payout", counterparty_leg: "payment",
+    my_ever: ever, counterparty_ever: `0:${"c".repeat(64)}`,
+    my_confirmed: true, counterparty_confirmed: true,
+    owner_confirmed: true, taker_confirmed: true,
+    pay_by: "2099-01-01T00:00:00Z", payout_by: "2099-01-01T00:00:00Z",
+    created_at: new Date().toISOString(), attempts: [],
+  };
+  // Auto-send is deliberately blocked so the primary action stays visible for inspection.
+  await page.addInitScript(() => sessionStorage.setItem("pay3flow.otc.p2p.auto.deal-1:payout", "1"));
+  await setup(page, { signedIn: true, verifiedEthereum: true, deals: [deal] });
+  const modal = page.getByTestId("otc-p2p-modal");
+  await expect(modal).toBeVisible();
+  await expect(modal.getByTestId("otc-p2p-legs")).toContainText("You send");
+  await expect(modal.getByTestId("otc-p2p-legs")).toContainText("100 EVER");
+  await expect(modal.getByTestId("otc-p2p-confirm")).toHaveText("Send EVER");
 });
 
 for (const direction of ["sell","buy"] as const) test(`a lost ${direction} publication restores the exact draft and reuses its key after reload`, async ({ page }) => {

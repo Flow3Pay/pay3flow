@@ -37,6 +37,7 @@
   let selectionVersion = 0, accountVersion = 0, walletProgress = "", accountLocked = false;
   let tab: "trades" | "orders" | "history" = "trades", now = Date.now();
   let offersBusy = false;
+  let p2pActiveCount = 0;
   let offerBook: OtcDeskBook;
   let dealModal: OtcDealModal | null = null;
   $: saleEnabled = !!config?.public_offers_available && (config.public_offer_directions ?? ["sell"]).includes(direction) && !listingId && !quote;
@@ -251,7 +252,7 @@
   }
   function openIdentity(forQuote = false) { requestingQuote = forQuote; openWalletDialog("otc"); }
   function closeIdentity() { requestingQuote = false; accountVersion++; }
-  function setTab(next: typeof tab) { tab = next; if (next === "orders") void tick().then(() => dealModal?.openActive()); }
+  function setTab(next: typeof tab) { tab = next; }
   function navigateTab(event: KeyboardEvent) {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return; event.preventDefault(); const tabs = ["trades", "orders", "history"] as const;
     setTab(tabs[event.key === "Home" ? 0 : event.key === "End" ? 2 : (tabs.indexOf(tab) + (event.key === "ArrowRight" ? 1 : -1) + 3) % 3]); document.getElementById(`otc-${tab}-tab`)?.focus();
@@ -301,12 +302,20 @@
     <OtcMarketChart slot="chart" {trades} publicOffers={config?.public_offers_available && (saleEnabled || !trades.length) ? offerHistory : null} />
     <svelte:fragment slot="book">
       <section class="activityCard" id="otc-activity" aria-label={say("Trade activity", "Активность сделок")}>
-        <div class="activityTabs" role="tablist" aria-label={say("Trade activity", "Активность сделок")} use:activityIndicator={`${tab}:${$locale}:${activeTrades.length}`} style:--activity-motion={`${motionDuration}ms`}>{#each ["trades", "orders", "history"] as item}<button type="button" role="tab" id={`otc-${item}-tab`} aria-selected={tab === item} tabindex={tab === item ? 0 : -1} aria-controls={`otc-${item}-content`} class:active={tab === item} on:keydown={navigateTab} on:click={() => setTab(item as typeof tab)}>{item === "trades" ? config?.public_offers_available ? say("Orderbook", "Стакан") : say("Desk offers", "Предложения деска") : item === "orders" ? config?.public_offers_available ? say("My orders", "Мои заявки") : say("My trades", "Мои сделки") : say("History", "История")}{#if item === "orders" && activeTrades.length + mine.filter(o => o.state === "open").length}<span class="orderCount">{activeTrades.length + mine.filter(o => o.state === "open").length}</span>{/if}</button>{/each}<span class="tabIndicator" aria-hidden="true"></span></div>
+        <div class="activityTabs" role="tablist" aria-label={say("Trade activity", "Активность сделок")} use:activityIndicator={`${tab}:${$locale}:${activeTrades.length}`} style:--activity-motion={`${motionDuration}ms`}>{#each ["trades", "orders", "history"] as item}<button type="button" role="tab" id={`otc-${item}-tab`} aria-selected={tab === item} tabindex={tab === item ? 0 : -1} aria-controls={`otc-${item}-content`} class:active={tab === item} on:keydown={navigateTab} on:click={() => setTab(item as typeof tab)}>{item === "trades" ? config?.public_offers_available ? say("Orderbook", "Стакан") : say("Desk offers", "Предложения деска") : item === "orders" ? config?.public_offers_available ? say("My orders", "Мои заявки") : say("My trades", "Мои сделки") : say("History", "История")}{#if item === "orders" && activeTrades.length + mine.filter(o => o.state === "open").length + p2pActiveCount}<span class="orderCount">{activeTrades.length + mine.filter(o => o.state === "open").length + p2pActiveCount}</span>{/if}</button>{/each}<span class="tabIndicator" aria-hidden="true"></span></div>
         <OtcActivityContent activeKey={tab} duration={motionDuration}>
         <div class="activityContent" role="tabpanel" id={`otc-${tab}-content`} aria-labelledby={`otc-${tab}-tab`} tabindex="0">
           {#if tab === "trades"}
             <OtcDeskBook publicOffers={offers} ownIds={mine.map(o => o.id)} onCancel={onCancel} onAccept={acceptOffer} busy={busy || offersBusy} {config} {listings} selectedId={listing?.id || ""} onSelect={selectListing} />
           {:else}
+            {#if tab === "orders" && p2pActiveCount}
+              <div class="activeDealRow">
+                <button type="button" class="activeDealButton" data-testid="otc-open-active-deal" on:click={() => dealModal?.openActive()}>
+                  {say("Open active P2P deal", "Открыть активную P2P сделку")}
+                  <span class="orderCount">{p2pActiveCount}</span>
+                </button>
+              </div>
+            {/if}
             <OtcTradeTables trades={tab === "orders" ? activeTrades : history} offers={tab === "orders" ? mine.filter(o => o.state === "open") : mine.filter(o => o.state !== "open")} selectedId={selected?.id || ""} busy={busy || offersBusy} onSelect={id => run(() => selectTrade(id, true), false)} onOfferSelect={openOffer} emptyTitle={tab === "orders" ? say("No open orders", "Открытых ордеров нет") : say("No history yet", "Истории пока нет")} emptyHint={session ? say("Quotes, offers and accepted trades appear here.", "Здесь появятся котировки, офферы и принятые сделки.") : say("Connect your wallet to see private quotes and trades.", "Подключите кошелёк для доступа к приватным котировкам и сделкам.")} />
             {#if tab === "orders"}{#each rfqs.filter(r => r.state === "waiting") as r}<p class="waiting">{say("Waiting for desk quote", "Ожидается котировка деска")} · {r.direction} · {r.input} · {r.id}</p>{/each}{/if}
             {#if selected}<div class="tradeDetail">{#if handoffUnknown}<p class="waiting">{say("Saved outgoing attempt is unresolved. Another send is blocked.", "Сохранённая попытка перевода не завершена. Повторная отправка заблокирована.")}</p>{/if}<OtcTradeDetails {selected} {session} {config} {attempts} {receipts} {updates} busy={busy || !healthy} {unresolvedBooking} {handoffUnknown} {now} onApply={() => run(apply)} onDecide={accept => run(() => decide(accept))} onBusyChange={value => { busy = value; accountLocked = value; }} onRefresh={refresh} onTransfer={kind => run(() => prepareReview(kind))} onTrack={(attempt, reference) => run(() => track(attempt, reference))} onRetry={(attempt, evidence) => run(async () => { await request(`/attempts/${attempt.id}/retry`, session!.token, { evidence: { note: evidence } }); await refresh(); })} /></div>{/if}
@@ -316,7 +325,7 @@
       </section>
     </svelte:fragment>
   </OtcTerminal>
-  <OtcDealModal bind:this={dealModal} {config} {session} locked={busy || offersBusy} onError={message => error = message} onBusyChange={value => busy = value} />
+  <OtcDealModal bind:this={dealModal} {config} {session} locked={busy || offersBusy} onError={message => error = message} onBusyChange={value => busy = value} onActiveCount={count => p2pActiveCount = count} />
   <p class="risk">{config?.p2p_available ? say("Accepting an offer creates two direct transfers between the wallets of both parties. There is no escrow and no automatic rollback: whoever sends first relies on the counterparty delivering afterwards.", "Принятие оффера создаёт два прямых перевода между кошельками сторон. Эскроу и автоматического отката нет: кто отправляет первым, полагается на то, что контрагент выполнит свой перевод следом.") : config?.public_offers_available && !config.available ? say("Publication does not move or reserve funds. Buyer acceptance and settlement through this site are not available yet.", "Публикация не переводит и не резервирует средства. Принятие предложения покупателем и расчёты через сайт пока недоступны.") : config?.escrow ? say("Each trade uses a 2-of-3 USDT escrow for four hours from creation, capped at 100,000 EVER. USDT is funded first. Native EVER delivery is separate and is not reversed by a USDT refund.", "Каждая сделка использует эскроу USDT с 2 из 3 подписей на 4 часа с момента создания, до 100 000 EVER. Сначала вносится USDT. Перевод EVER выполняется отдельно и не отменяется возвратом USDT.") : say("Two separate transfers: the customer pays first; the desk delivers or refunds. No atomic swap or automatic rollback.", "Два отдельных перевода: клиент платит первым, деск выполняет выплату или возврат. Атомарного обмена и автоматического отката нет.")}</p>
   {#if session?.desk}<div class="console"><OtcDeskConsole {session} {config} {selected} {rfqs} {dashboard} {busy} {run} onRefresh={refresh} onSelect={selectTrade} /></div>{/if}
 </section>
@@ -351,6 +360,9 @@
   .orderCount { display: grid; flex: 0 0 auto; min-width: 20px; height: 20px; padding: 0 4px; place-items: center; border-radius: 4px; background: var(--color-accent-soft); font-family: var(--font-mono); font-size: 11px; }
   .activityContent { min-height: 240px; }
   .activityContent:focus-visible { outline-offset: -3px; }
+  .activeDealRow { padding: 8px var(--otc-panel-padding) 0; }
+  .activeDealButton { display: flex; width: 100%; min-height: 44px; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--color-accent-strong); border-radius: 8px; background: var(--color-accent-soft); color: var(--color-text); font-size: 13px; font-weight: 650; }
+  .activeDealButton:hover { background: var(--color-panel-soft); }
   .tradeList { display: grid; gap: 8px; padding: var(--otc-panel-padding); }
   .tradeList:has(.emptyState) { padding: 0; }
   .tradeList button { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); min-width: 0; min-height: 48px; align-items: center; gap: 16px; padding: 12px 16px; border: 1px solid var(--color-border); border-radius: 8px; text-align: left; font-size: 13px; line-height: 1.5; }

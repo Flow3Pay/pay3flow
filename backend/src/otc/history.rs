@@ -76,6 +76,20 @@ impl Window {
         let index = offset.div_euclid(self.bucket_seconds);
         (0..self.buckets).contains(&index).then_some(index as usize)
     }
+
+    /// The provider period, point span and bucket size for the indicative
+    /// price overlay. Short ranges use hourly points; longer ranges use the
+    /// daily series and let the chart aggregate it to the selected bucket.
+    pub(crate) fn spot_layout(&self) -> (&'static str, u32, u32) {
+        match self.range {
+            "1h" => ("1h", 24, 3_600),
+            "24h" => ("1h", 26, 3_600),
+            "1w" => ("1h", 170, 3_600),
+            "1m" => ("1d", 32, 86_400),
+            "6m" => ("1d", 186, 86_400),
+            _ => ("1d", 372, 86_400),
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -237,6 +251,17 @@ mod tests {
             );
         }
         assert!(Window::parse("5m", now).is_err());
+    }
+
+    #[test]
+    fn spot_layout_uses_hourly_points_for_short_ranges_and_daily_after() {
+        let now = at(1_761_000_000);
+        assert_eq!(Window::parse("1h", now).unwrap().spot_layout(), ("1h", 24, 3_600));
+        assert_eq!(Window::parse("24h", now).unwrap().spot_layout(), ("1h", 26, 3_600));
+        assert_eq!(Window::parse("1w", now).unwrap().spot_layout(), ("1h", 170, 3_600));
+        assert_eq!(Window::parse("1m", now).unwrap().spot_layout(), ("1d", 32, 86_400));
+        assert_eq!(Window::parse("6m", now).unwrap().spot_layout(), ("1d", 186, 86_400));
+        assert_eq!(Window::parse("1y", now).unwrap().spot_layout(), ("1d", 372, 86_400));
     }
 
     #[test]

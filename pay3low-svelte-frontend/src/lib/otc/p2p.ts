@@ -105,6 +105,42 @@ export function p2pLegDone(deal: P2pDeal, kind: P2pLeg): boolean {
     || (deal.attempts || []).some(attempt => attempt.kind === kind && attempt.state === "verified");
 }
 
+/** Token transferred by a deal leg. */
+export function p2pLegAsset(kind: P2pLeg): "USDT" | "EVER" {
+  return kind === "payment" ? "USDT" : "EVER";
+}
+
+export interface P2pLegAmount {
+  asset: "USDT" | "EVER";
+  amount: string;
+}
+
+export interface P2pViewerLegs {
+  send: P2pLegAmount;
+  receive: P2pLegAmount;
+}
+
+/** The exact token amounts this viewer sends and receives in the deal. */
+export function p2pViewerLegs(deal: P2pDeal): P2pViewerLegs | null {
+  if (!deal.my_leg) return null;
+  const send = deal.my_leg === "payment"
+    ? { asset: p2pLegAsset("payment"), amount: deal.terms.usdt_amount }
+    : { asset: p2pLegAsset("payout"), amount: deal.terms.ever_amount };
+  const receive = deal.my_leg === "payment"
+    ? { asset: p2pLegAsset("payout"), amount: deal.terms.ever_amount }
+    : { asset: p2pLegAsset("payment"), amount: deal.terms.usdt_amount };
+  return { send, receive };
+}
+
+/** True once the nominal payment or delivery window has passed. */
+export function p2pOverdue(deal: P2pDeal, now = Date.now()): boolean {
+  if (deal.state === "payment_pending") return Date.parse(deal.pay_by) < now;
+  if (deal.state === "delivery_pending") {
+    return !!deal.payout_by && Date.parse(deal.payout_by) < now;
+  }
+  return false;
+}
+
 export function p2pLegActive(deal: P2pDeal, kind: P2pLeg): boolean {
   return p2pBothConfirmed(deal) && p2pKind(deal) === kind && !p2pLegDone(deal, kind);
 }

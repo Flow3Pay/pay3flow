@@ -187,21 +187,23 @@ async fn history(
         Utc::now(),
     )?;
     let (candles, levels) = super::history::aggregate(&state.otc.history(&window).await?, &window);
-    let (points, stale) = if window.history_days > 0 {
-        state
-            .market_prices
-            .daily_history("EVER", window.history_days)
-            .await
-    } else {
-        (Vec::new(), false)
-    };
+    let (period, span, bucket_seconds) = window.spot_layout();
+    let (points, stale) = state
+        .market_prices
+        .spot_history("EVER", period, span)
+        .await;
     Ok(Json(json!({
         "market": market,
         "range": window.range,
         "bucket_seconds": window.bucket_seconds,
         "from": window.from,
         "to": window.to,
-        "spot": { "source": "DefiLlama", "stale": stale, "points": points },
+        "spot": {
+            "source": "DefiLlama",
+            "stale": stale,
+            "bucket_seconds": bucket_seconds,
+            "points": points,
+        },
         "candles": candles,
         "levels": levels,
     })))

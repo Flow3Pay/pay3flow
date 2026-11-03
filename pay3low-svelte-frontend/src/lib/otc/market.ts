@@ -71,6 +71,16 @@ export function chartWindow(range: ChartRange, now = Date.now()): ChartWindow {
 }
 
 /**
+ * Re-bucket a window so a coarser source (for example daily spot points) still
+ * covers the whole selected range instead of leaving empty space between bars.
+ */
+export function fitWindow(window: ChartWindow, minimumBucketSeconds: number): ChartWindow {
+  const bucketSeconds = Math.max(window.bucketSeconds, Math.max(1, minimumBucketSeconds));
+  const span = window.bucketSeconds * window.buckets;
+  return { from: window.from, bucketSeconds, buckets: Math.max(1, Math.ceil(span / bucketSeconds)) };
+}
+
+/**
  * Turns prints into range-scoped OHLC candles. Prints outside the window are
  * dropped and the rest are grouped on the same grid the server uses, so every
  * range keeps its own granularity instead of replaying the whole history.

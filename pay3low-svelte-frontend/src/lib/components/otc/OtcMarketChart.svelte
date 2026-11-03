@@ -3,7 +3,7 @@
   import { locale } from "$lib/i18n";
   import { getHistory, rate, type History, type Trade } from "$lib/otc/service";
   import { saleRate, type OfferHistoryPoint } from "$lib/otc/public-offers";
-  import { chartRanges, chartWindow, chartWindows, markCandles, type ChartRange, type ChartWindow } from "$lib/otc/market";
+  import { chartRanges, chartWindow, chartWindows, fitWindow, markCandles, type ChartRange, type ChartWindow } from "$lib/otc/market";
   import { dispose, init, type Chart, type DeepPartial, type KLineData, type Period, type Styles } from "klinecharts";
 
   export let trades: Trade[] = [];
@@ -42,13 +42,14 @@
     .sort((a, b) => a.time - b.time);
 
   $: bounds = chartBounds(history, range, marks.at(-1)?.time);
-  $: bars = buildBars(history, marks, bounds);
+  $: layout = buildLayout(history, marks, bounds, range);
+  $: bars = layout.bars;
   // The hero price keeps the latest print even when the selected range has no candles.
   $: latest = bars.length ? bars[bars.length - 1].close : marks.at(-1)?.value ?? null;
   $: change = bars.length > 1 && bars[0].open > 0 ? (bars[bars.length - 1].close - bars[0].open) / bars[0].open * 100 : null;
   $: precision = latest === null ? 8 : latest >= 100 ? 2 : latest >= 1 ? 3 : latest >= 0.01 ? 5 : 8;
 
-  $: if (chart) synchronize(bars, precision, bounds);
+  $: if (chart) synchronize(bars, precision, layout.window);
 
   /** Prefer the server's own grid so the fallback candles line up with its buckets. */
   function chartBounds(source: History | null, selectedRange: ChartRange, latestPrint?: number): ChartWindow {
@@ -63,8 +64,8 @@
     };
   }
 
-  function buildBars(source: History | null, prints: Mark[], window: ChartWindow): KLineData[] {
-    const server = (source?.candles ?? []).flatMap(candle => candle.close === null ? [] : [{
+  function serverBars(source: History | null): KLineData[] {
+    return (source?.candles ?? []).flatMap(candle => candle.close === null ? [] : [{
       timestamp: candle.t * 1000,
       open: candle.open ?? candle.close,
       high: candle.high ?? candle.close,
@@ -72,9 +73,36 @@
       close: candle.close,
       volume: candle.volume ?? 0,
     }]);
-    if (server.length) return server;
+  }
+
+  function spotMarks(source: History | null): Mark[] {
+    return (source?.spot?.points ?? []).flatMap(point => {
+      const time = point.t * 1000, value = Number(point.usd);
+      return Number.isFinite(time) && Number.isFinite(value) && value > 0
+        ? [{ id: `spot:${point.t}`, time, value }]
+        : [];
+    });
+  }
+
+  /**
+   * A desk with no settled trades should still show how the market price moved.
+   * The indicative series is coarser than the desk buckets, so re-bucket it to
+   * cover the same window, then fall back to publications and finally to the
+   * selected range's own grid.
+   */
+  function buildLayout(source: History | null, prints: Mark[], serverWindow: ChartWindow, selectedRange: ChartRange): { bars: KLineData[]; window: ChartWindow } {
+    const server = serverBars(source);
+    const spotBucket = source?.spot?.bucket_seconds;
+    const end = serverWindow.from + serverWindow.bucketSeconds * serverWindow.buckets * 1000;
+    const spotWindow = spotBucket && spotBucket > 0
+      ? fitWindow(chartWindow(selectedRange, end), spotBucket)
+      : serverWindow;
+    const spot = markCandles(spotMarks(source), spotWindow);
+    if (server.length >= 4) return { bars: server, window: serverWindow };
+    if (spot.length) return { bars: spot, window: spotWindow };
+    if (server.length) return { bars: server, window: serverWindow };
     // Without bucketed trades, publications are grouped on the selected range's grid.
-    return markCandles(prints, window);
+    return { bars: markCandles(prints, serverWindow), window: serverWindow };
   }
 
   function periodFor(bucketSeconds: number): Period {

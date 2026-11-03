@@ -376,18 +376,23 @@ impl Service {
             "payment_pending" => {
                 kind == "payment" && Utc::now() <= pay_by && body["usdt_payer"] == json!(verified)
             }
-            "delivery_pending" => {
-                kind == "payout"
-                    && row
-                        .get::<_, Option<DateTime<Utc>>>("payout_by")
-                        .is_none_or(|until| Utc::now() <= until)
-            }
+            // The USDT leg is already verified and the counterparty has paid.
+            // Refusing a late EVER delivery would strand those funds, so the
+            // nominal payout deadline is advisory once the deal is here.
+            "delivery_pending" => kind == "payout",
             _ => false,
         };
         if !allowed {
-            return Err(Error::Conflict(
-                "transfer is unavailable in the current deal state".into(),
-            ));
+            let message = match state.as_str() {
+                "payment_pending" if kind == "payout" => {
+                    "the EVER transfer becomes available after the USDT payment is verified"
+                }
+                "payment_pending" => "the USDT payment window has expired",
+                "delivery_pending" => "the EVER transfer is unavailable for this deal",
+                "completed" | "cancelled" | "expired" => "this deal is already closed",
+                _ => "transfer is unavailable in the current deal state",
+            };
+            return Err(Error::Conflict(message.into()));
         }
         if tx
             .query_opt(

@@ -1248,6 +1248,58 @@ async fn p2p_prepare_builds_the_payment_handoff_and_blocks_duplicates() {
 
 #[tokio::test]
 #[ignore = "requires OTC_TEST_DATABASE_URL; run cargo test otc::tests -- --include-ignored"]
+async fn p2p_late_delivery_can_still_prepare_after_the_nominal_deadline() {
+    let (service, task, owner, taker) = p2p_fixture().await;
+    let offer_id = published_offer(&service, &owner, Direction::Sell).await;
+    let deal = service
+        .accept_offer(&taker, offer_id, "accept")
+        .await
+        .unwrap();
+    let id = deal_id(&deal).await;
+    let evidence = Evidence {
+        chain: "ethereum".into(),
+        identity: format!("0x{}", "e".repeat(64)),
+        leg: super::model::Leg {
+            chain: "ethereum".into(),
+            amount: "11889000".into(),
+            transfer_amount: "11889000".into(),
+            sender: format!("0x{}", "1".repeat(40)),
+            recipient: format!("0x{}", "2".repeat(40)),
+        },
+        included_at: Utc::now(),
+        canonical: true,
+        finalized: true,
+        successful: true,
+        raw: json!({}),
+    };
+    service
+        .credit_p2p(Uuid::new_v4(), id, "payment", &evidence)
+        .await
+        .unwrap();
+    assert_eq!(trade_state(&service, id).await, "delivery_pending");
+    // Simulate a trader returning after the advertised EVER delivery window.
+    let client = service.pool.get().await.unwrap();
+    client
+        .execute(
+            "UPDATE otc_p2p_trades SET payout_by=now()-interval '1 hour' WHERE id=$1",
+            &[&id],
+        )
+        .await
+        .unwrap();
+    let prepared = service
+        .p2p_prepare(&owner, id, "deliver-late", "payout")
+        .await
+        .unwrap();
+    assert_eq!(prepared["attempt"]["state"], json!("prepared"));
+    assert_eq!(
+        prepared["attempt"]["instructions"]["leg"]["chain"],
+        json!("everscale")
+    );
+    cleanup(service, task).await;
+}
+
+#[tokio::test]
+#[ignore = "requires OTC_TEST_DATABASE_URL; run cargo test otc::tests -- --include-ignored"]
 async fn p2p_confirm_records_both_sides_once() {
     let (service, task, owner, taker) = p2p_fixture().await;
     let offer_id = published_offer(&service, &owner, Direction::Sell).await;

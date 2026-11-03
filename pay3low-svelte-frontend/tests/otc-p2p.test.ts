@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  p2pAction, p2pActive, p2pBothConfirmed, p2pKind, p2pLegActive, p2pLegDone,
-  p2pLegFailed, p2pOpenAttempt, p2pShortAddress,
+  p2pAction, p2pActive, p2pBothConfirmed, p2pKind, p2pLegActive, p2pLegAsset, p2pLegDone,
+  p2pLegFailed, p2pOpenAttempt, p2pOverdue, p2pShortAddress, p2pViewerLegs,
   type P2pDeal, type P2pLeg,
 } from "../src/lib/otc/p2p.ts";
 
@@ -80,6 +80,33 @@ test("leg visuals only mark the leg that is actually open", () => {
   const completed = deal({ ...both, state: "completed" });
   assert.equal(p2pLegDone(completed, "payment"), true);
   assert.equal(p2pLegDone(completed, "payout"), true);
+});
+
+test("the modal names the exact token each viewer sends and receives", () => {
+  assert.equal(p2pLegAsset("payment"), "USDT");
+  assert.equal(p2pLegAsset("payout"), "EVER");
+  assert.deepEqual(p2pViewerLegs(deal()), {
+    send: { asset: "USDT", amount: "11.889" },
+    receive: { asset: "EVER", amount: "100" },
+  });
+  assert.deepEqual(p2pViewerLegs(deal({ my_leg: "payout" })), {
+    send: { asset: "EVER", amount: "100" },
+    receive: { asset: "USDT", amount: "11.889" },
+  });
+  assert.equal(p2pViewerLegs(deal({ my_leg: undefined })), null);
+});
+
+test("late windows are visible without blocking a delivery retry", () => {
+  const now = Date.parse("2026-11-03T12:00:00Z");
+  assert.equal(p2pOverdue(deal({ pay_by: "2026-11-03T11:59:59Z" }), now), true);
+  assert.equal(p2pOverdue(deal({ pay_by: "2099-01-01T00:00:00Z" }), now), false);
+  const lateDelivery = deal({
+    state: "delivery_pending", my_leg: "payout",
+    my_confirmed: true, counterparty_confirmed: true,
+    payout_by: "2026-11-03T11:00:00Z",
+  });
+  assert.equal(p2pOverdue(lateDelivery, now), true);
+  assert.equal(p2pAction(lateDelivery), "send");
 });
 
 test("addresses stay readable in the modal", () => {

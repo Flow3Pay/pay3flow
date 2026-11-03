@@ -69,7 +69,7 @@ pub struct MarketPriceService {
     endpoint: String,
     chart_root: String,
     cache: Arc<RwLock<Option<PriceSnapshot>>>,
-    history: Arc<RwLock<HashMap<u32, HistorySnapshot>>>,
+    history: Arc<RwLock<HashMap<String, HistorySnapshot>>>,
 }
 
 #[derive(Clone)]
@@ -338,10 +338,20 @@ impl MarketPriceService {
     }
 
     /// Daily indicative USD series for one listed asset, cached per length.
-    /// The provider only answers at day resolution for most coins, so charts
-    /// shorter than a week rely on the desk's own prints instead.
     pub async fn daily_history(&self, asset: &str, days: u32) -> (Vec<SpotPoint>, bool) {
-        let days = days.clamp(2, 400);
+        self.spot_history(asset, "1d", days.clamp(2, 400)).await
+    }
+
+    /// Indicative USD series at a provider-supported resolution. DefiLlama
+    /// exposes hourly points for the recent window and daily points further
+    /// back, so callers choose the period that matches their chart range.
+    pub async fn spot_history(
+        &self,
+        asset: &str,
+        period: &str,
+        span: u32,
+    ) -> (Vec<SpotPoint>, bool) {
+        let span = span.clamp(2, 500);
         let Some(id) = ASSETS
             .iter()
             .find(|(symbol, _)| *symbol == asset)
@@ -349,7 +359,8 @@ impl MarketPriceService {
         else {
             return (Vec::new(), true);
         };
-        if let Some(cached) = self.history.read().await.get(&days) {
+        let key = format!("{period}:{span}");
+        if let Some(cached) = self.history.read().await.get(&key) {
             if cached.fetched_at.elapsed() < HISTORY_TTL {
                 return (cached.points.clone(), false);
             }
@@ -358,11 +369,12 @@ impl MarketPriceService {
             .duration_since(UNIX_EPOCH)
             .map(|elapsed| elapsed.as_secs() as i64)
             .unwrap_or_default();
+        let step = if period == "1h" { 3_600 } else { 86_400 };
         let url = format!(
-            "{}chart/{id}?start={}&span={}&period=1d",
+            "{}chart/{id}?start={}&span={}&period={period}",
             self.chart_root,
-            now - i64::from(days) * 86_400,
-            days + 2
+            now - i64::from(span) * step,
+            span + 2
         );
         let fetched = async {
             Ok::<_, reqwest::Error>(
@@ -397,7 +409,7 @@ impl MarketPriceService {
                     .history
                     .read()
                     .await
-                    .get(&days)
+                    .get(&key)
                     .map(|cached| cached.points.clone())
                     .unwrap_or_default();
                 return (stale, true);
@@ -405,7 +417,7 @@ impl MarketPriceService {
         };
         if !points.is_empty() {
             self.history.write().await.insert(
-                days,
+                key,
                 HistorySnapshot {
                     fetched_at: Instant::now(),
                     points: points.clone(),

@@ -68,7 +68,7 @@ export interface History {
   market?: string;
   range?: string;
   bucket_seconds?: number;
-  spot?: { source?: string; stale?: boolean; points?: HistorySpot[] };
+  spot?: { source?: string; stale?: boolean; bucket_seconds?: number; points?: HistorySpot[] };
   candles?: HistoryCandle[];
   levels?: HistoryLevel[];
 }

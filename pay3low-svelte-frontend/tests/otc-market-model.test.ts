@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chartWindow, chartWindows, markCandles, percentChange, quoteObservations, tradeRow, trimDecimal } from "../src/lib/otc/market.ts";
+import { chartWindow, chartWindows, fitWindow, markCandles, percentChange, quoteObservations, tradeRow, trimDecimal } from "../src/lib/otc/market.ts";
 import type { Trade } from "../src/lib/otc/service.ts";
 
 function units(value: string, precision: number) {
@@ -61,6 +61,17 @@ test("each range uses its own server bucket layout", () => {
   assert.deepEqual(chartWindows["1y"], { bucketSeconds: 604_800, buckets: 52 });
   const year = chartWindow("1y", now);
   assert.equal(year.from + year.bucketSeconds * year.buckets * 1000, now);
+});
+
+test("coarser spot data is re-bucketed without shrinking the selected window", () => {
+  const now = Date.parse("2026-11-03T12:00:00Z");
+  const day = chartWindow("24h", now);
+  const hourly = fitWindow(day, 3_600);
+  assert.deepEqual(hourly, { from: day.from, bucketSeconds: 3_600, buckets: 24 });
+  const month = fitWindow(chartWindow("1m", now), 86_400);
+  assert.equal(month.bucketSeconds, 86_400);
+  assert.equal(month.buckets, 30);
+  assert.equal(month.from + month.bucketSeconds * month.buckets * 1000, now);
 });
 
 test("changes and order rows stay deterministic", () => {
