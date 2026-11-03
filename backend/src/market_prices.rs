@@ -21,6 +21,7 @@ const RETRY_INTERVAL: Duration = Duration::from_secs(60);
 const MAX_STALE_AGE: Duration = Duration::from_secs(6 * 60 * 60);
 const MAX_PROVIDER_PRICE_AGE_SECS: i64 = 15 * 60;
 const DEFILLAMA_ROOT: &str = "https://coins.llama.fi/";
+const COINGECKO_ROOT: &str = "https://api.coingecko.com/api/v3/";
 const HISTORY_TTL: Duration = Duration::from_secs(6 * 60 * 60);
 
 // The Open Network's CoinGecko ID now reports GRAM, the renamed native TON.
@@ -68,6 +69,7 @@ pub struct MarketPriceService {
     client: reqwest::Client,
     endpoint: String,
     chart_root: String,
+    coingecko_root: String,
     cache: Arc<RwLock<Option<PriceSnapshot>>>,
     history: Arc<RwLock<HashMap<String, HistorySnapshot>>>,
 }
@@ -126,6 +128,11 @@ struct ChartPoint {
 }
 
 #[derive(Deserialize)]
+struct MarketChartResponse {
+    prices: Vec<(i64, f64)>,
+}
+
+#[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MarketValuesRequest {
     items: Vec<MarketValueInput>,
@@ -167,10 +174,14 @@ impl MarketPriceService {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(8))
             .build()?;
-        Ok(Self::with_client(client, DEFILLAMA_ROOT.to_owned()))
+        Ok(Self::with_client(
+            client,
+            DEFILLAMA_ROOT.to_owned(),
+            COINGECKO_ROOT.to_owned(),
+        ))
     }
 
-    fn with_client(client: reqwest::Client, root: String) -> Self {
+    fn with_client(client: reqwest::Client, root: String, coingecko_root: String) -> Self {
         let ids = ASSETS
             .iter()
             .map(|(_, id)| *id)
@@ -180,6 +191,7 @@ impl MarketPriceService {
             client,
             endpoint: format!("{root}prices/current/{ids}"),
             chart_root: root,
+            coingecko_root,
             cache: Arc::new(RwLock::new(None)),
             history: Arc::new(RwLock::new(HashMap::new())),
         }
@@ -387,7 +399,7 @@ impl MarketPriceService {
                     .await?,
             )
         };
-        let points: Vec<SpotPoint> = match fetched.await {
+        let mut points: Vec<SpotPoint> = match fetched.await {
             Ok(payload) => payload
                 .coins
                 .get(id)
@@ -415,6 +427,12 @@ impl MarketPriceService {
                 return (stale, true);
             }
         };
+        // DefiLlama stopped returning recent hourly points for some coins
+        // (EVER among them). Keep the daily series there and use CoinGecko for
+        // the intraday ranges so the chart still has movement to draw.
+        if points.is_empty() {
+            points = self.coingecko_history(id, period, span).await;
+        }
         if !points.is_empty() {
             self.history.write().await.insert(
                 key,
@@ -425,6 +443,61 @@ impl MarketPriceService {
             );
         }
         (points, false)
+    }
+
+    /// Intraday fallback for coins whose DefiLlama hourly series is empty.
+    /// CoinGecko's free endpoint returns 5-minute points for one day and
+    /// hourly points for a week, which is enough for the short chart ranges.
+    async fn coingecko_history(&self, id: &str, period: &str, span: u32) -> Vec<SpotPoint> {
+        let Some(slug) = id.strip_prefix("coingecko:") else {
+            return Vec::new();
+        };
+        let days = if period == "1h" {
+            span.div_ceil(24).max(1)
+        } else {
+            span
+        };
+        let days = match days {
+            0..=1 => 1,
+            2..=7 => 7,
+            8..=14 => 14,
+            15..=30 => 30,
+            31..=90 => 90,
+            91..=180 => 180,
+            _ => 365,
+        };
+        let url = format!(
+            "{}coins/{slug}/market_chart?vs_currency=usd&days={days}",
+            self.coingecko_root
+        );
+        let response = match self.client.get(&url).send().await {
+            Ok(response) => match response.error_for_status() {
+                Ok(response) => response,
+                Err(error) => {
+                    tracing::warn!(%error, "CoinGecko history refresh failed");
+                    return Vec::new();
+                }
+            },
+            Err(error) => {
+                tracing::warn!(%error, "CoinGecko history refresh failed");
+                return Vec::new();
+            }
+        };
+        match response.json::<MarketChartResponse>().await {
+            Ok(payload) => payload
+                .prices
+                .into_iter()
+                .filter(|(timestamp, price)| *timestamp > 0 && price.is_finite() && *price > 0.0)
+                .map(|(timestamp, usd)| SpotPoint {
+                    t: timestamp / 1_000,
+                    usd,
+                })
+                .collect(),
+            Err(error) => {
+                tracing::warn!(%error, "CoinGecko history response invalid");
+                Vec::new()
+            }
+        }
     }
 }
 
@@ -510,8 +583,11 @@ mod tests {
             }),
         );
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-        let mut service =
-            MarketPriceService::with_client(reqwest::Client::new(), format!("http://{address}/"));
+        let mut service = MarketPriceService::with_client(
+            reqwest::Client::new(),
+            format!("http://{address}/"),
+            format!("http://{address}/"),
+        );
         service.initialize().await;
         let pair = || {
             vec![
@@ -556,6 +632,48 @@ mod tests {
         service.refresh().await;
         assert_eq!(service.value(pair()).await.values[0].value_usd, Some(200.0));
         assert_eq!(calls.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn hourly_history_falls_back_to_coingecko_when_defillama_is_empty() {
+        let app = Router::new()
+            .route(
+                "/chart/:id",
+                get(|| async { Json(serde_json::json!({ "coins": {} })) }),
+            )
+            .route(
+                "/coins/:id/market_chart",
+                get(|| async {
+                    Json(serde_json::json!({ "prices": [
+                        [1_700_000_000_000_i64, 0.002],
+                        [1_700_000_300_000_i64, 0.0021],
+                        [1_700_000_600_000_i64, 0.0]
+                    ] }))
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let service = MarketPriceService::with_client(
+            reqwest::Client::new(),
+            format!("http://{address}/"),
+            format!("http://{address}/"),
+        );
+        let (points, stale) = service.spot_history("EVER", "1h", 24).await;
+        assert!(!stale);
+        assert_eq!(
+            points,
+            vec![
+                SpotPoint {
+                    t: 1_700_000_000,
+                    usd: 0.002
+                },
+                SpotPoint {
+                    t: 1_700_000_300,
+                    usd: 0.0021
+                },
+            ]
+        );
     }
 
     fn now_epoch() -> i64 {

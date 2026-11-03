@@ -82,9 +82,9 @@ impl Window {
     /// daily series and let the chart aggregate it to the selected bucket.
     pub(crate) fn spot_layout(&self) -> (&'static str, u32, u32) {
         match self.range {
-            "1h" => ("1h", 24, 3_600),
-            "24h" => ("1h", 26, 3_600),
-            "1w" => ("1h", 170, 3_600),
+            "1h" => ("1h", 24, 300),
+            "24h" => ("1h", 26, 300),
+            "1w" => ("1h", 170, 300),
             "1m" => ("1d", 32, 86_400),
             "6m" => ("1d", 186, 86_400),
             _ => ("1d", 372, 86_400),
@@ -256,9 +256,9 @@ mod tests {
     #[test]
     fn spot_layout_uses_hourly_points_for_short_ranges_and_daily_after() {
         let now = at(1_761_000_000);
-        assert_eq!(Window::parse("1h", now).unwrap().spot_layout(), ("1h", 24, 3_600));
-        assert_eq!(Window::parse("24h", now).unwrap().spot_layout(), ("1h", 26, 3_600));
-        assert_eq!(Window::parse("1w", now).unwrap().spot_layout(), ("1h", 170, 3_600));
+        assert_eq!(Window::parse("1h", now).unwrap().spot_layout(), ("1h", 24, 300));
+        assert_eq!(Window::parse("24h", now).unwrap().spot_layout(), ("1h", 26, 300));
+        assert_eq!(Window::parse("1w", now).unwrap().spot_layout(), ("1h", 170, 300));
         assert_eq!(Window::parse("1m", now).unwrap().spot_layout(), ("1d", 32, 86_400));
         assert_eq!(Window::parse("6m", now).unwrap().spot_layout(), ("1d", 186, 86_400));
         assert_eq!(Window::parse("1y", now).unwrap().spot_layout(), ("1d", 372, 86_400));
