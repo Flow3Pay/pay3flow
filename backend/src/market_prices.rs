@@ -21,11 +21,12 @@ const RETRY_INTERVAL: Duration = Duration::from_secs(60);
 const MAX_STALE_AGE: Duration = Duration::from_secs(6 * 60 * 60);
 const MAX_PROVIDER_PRICE_AGE_SECS: i64 = 15 * 60;
 const DEFILLAMA_ROOT: &str = "https://coins.llama.fi/";
-const COINGECKO_ROOT: &str = "https://api.coingecko.com/api/v3/";
+const GATE_ROOT: &str = "https://api.gateio.ws/api/v4/";
 const HISTORY_TTL: Duration = Duration::from_secs(6 * 60 * 60);
 
 // The Open Network's CoinGecko ID now reports GRAM, the renamed native TON.
 // MATIC's legacy ticker is priced through its wrapped Ethereum contract.
+const GATE_PAIRS: &[(&str, &str)] = &[("EVER", "EVER_USDT")];
 const ASSETS: &[(&str, &str)] = &[
     ("AAVE", "coingecko:aave"),
     ("ADA", "coingecko:cardano"),
@@ -69,7 +70,7 @@ pub struct MarketPriceService {
     client: reqwest::Client,
     endpoint: String,
     chart_root: String,
-    coingecko_root: String,
+    exchange_root: String,
     cache: Arc<RwLock<Option<PriceSnapshot>>>,
     history: Arc<RwLock<HashMap<String, HistorySnapshot>>>,
 }
@@ -127,10 +128,10 @@ struct ChartPoint {
     price: f64,
 }
 
+/// Gate.io candlestick row: timestamp, quote volume, close, high, low, open,
+/// base volume, window closed.
 #[derive(Deserialize)]
-struct MarketChartResponse {
-    prices: Vec<(i64, f64)>,
-}
+struct GateCandle(String, String, String, String, String, String, String, bool);
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -177,11 +178,11 @@ impl MarketPriceService {
         Ok(Self::with_client(
             client,
             DEFILLAMA_ROOT.to_owned(),
-            COINGECKO_ROOT.to_owned(),
+            GATE_ROOT.to_owned(),
         ))
     }
 
-    fn with_client(client: reqwest::Client, root: String, coingecko_root: String) -> Self {
+    fn with_client(client: reqwest::Client, root: String, exchange_root: String) -> Self {
         let ids = ASSETS
             .iter()
             .map(|(_, id)| *id)
@@ -191,7 +192,7 @@ impl MarketPriceService {
             client,
             endpoint: format!("{root}prices/current/{ids}"),
             chart_root: root,
-            coingecko_root,
+            exchange_root,
             cache: Arc::new(RwLock::new(None)),
             history: Arc::new(RwLock::new(HashMap::new())),
         }
@@ -428,10 +429,10 @@ impl MarketPriceService {
             }
         };
         // DefiLlama stopped returning recent hourly points for some coins
-        // (EVER among them). Keep the daily series there and use CoinGecko for
-        // the intraday ranges so the chart still has movement to draw.
+        // (EVER among them). Keep its daily series and take the intraday ranges
+        // from the exchange so the chart still has movement to draw.
         if points.is_empty() {
-            points = self.coingecko_history(id, period, span).await;
+            points = self.exchange_history(asset, period, span).await;
         }
         if !points.is_empty() {
             self.history.write().await.insert(
@@ -446,55 +447,55 @@ impl MarketPriceService {
     }
 
     /// Intraday fallback for coins whose DefiLlama hourly series is empty.
-    /// CoinGecko's free endpoint returns 5-minute points for one day and
-    /// hourly points for a week, which is enough for the short chart ranges.
-    async fn coingecko_history(&self, id: &str, period: &str, span: u32) -> Vec<SpotPoint> {
-        let Some(slug) = id.strip_prefix("coingecko:") else {
+    /// Gate.io keeps recent candlesticks for the assets we list, which is the
+    /// only intraday resolution available for the short chart ranges.
+    async fn exchange_history(&self, asset: &str, period: &str, span: u32) -> Vec<SpotPoint> {
+        if period != "1h" {
+            return Vec::new();
+        }
+        let Some(pair) = GATE_PAIRS
+            .iter()
+            .find(|(symbol, _)| *symbol == asset)
+            .map(|(_, pair)| *pair)
+        else {
             return Vec::new();
         };
-        let days = if period == "1h" {
-            span.div_ceil(24).max(1)
-        } else {
-            span
+        // One candlestick per bucket hour minimum; finer steps while the range
+        // still fits in the provider's 1000-candle page.
+        let (interval, per_hour) = match span {
+            0..=24 => ("5m", 12),
+            25..=166 => ("15m", 4),
+            _ => ("1h", 1),
         };
-        let days = match days {
-            0..=1 => 1,
-            2..=7 => 7,
-            8..=14 => 14,
-            15..=30 => 30,
-            31..=90 => 90,
-            91..=180 => 180,
-            _ => 365,
-        };
+        let limit = (span * per_hour + 2).min(1_000);
         let url = format!(
-            "{}coins/{slug}/market_chart?vs_currency=usd&days={days}",
-            self.coingecko_root
+            "{}spot/candlesticks?currency_pair={pair}&interval={interval}&limit={limit}",
+            self.exchange_root
         );
         let response = match self.client.get(&url).send().await {
             Ok(response) => match response.error_for_status() {
                 Ok(response) => response,
                 Err(error) => {
-                    tracing::warn!(%error, "CoinGecko history refresh failed");
+                    tracing::warn!(%error, "exchange history refresh failed");
                     return Vec::new();
                 }
             },
             Err(error) => {
-                tracing::warn!(%error, "CoinGecko history refresh failed");
+                tracing::warn!(%error, "exchange history refresh failed");
                 return Vec::new();
             }
         };
-        match response.json::<MarketChartResponse>().await {
+        match response.json::<Vec<GateCandle>>().await {
             Ok(payload) => payload
-                .prices
                 .into_iter()
-                .filter(|(timestamp, price)| *timestamp > 0 && price.is_finite() && *price > 0.0)
-                .map(|(timestamp, usd)| SpotPoint {
-                    t: timestamp / 1_000,
-                    usd,
+                .filter_map(|GateCandle(timestamp, _, close, _, _, _, _, _)| {
+                    let t = timestamp.parse::<i64>().ok()?;
+                    let usd = close.parse::<f64>().ok()?;
+                    (t > 0 && usd.is_finite() && usd > 0.0).then_some(SpotPoint { t, usd })
                 })
                 .collect(),
             Err(error) => {
-                tracing::warn!(%error, "CoinGecko history response invalid");
+                tracing::warn!(%error, "exchange history response invalid");
                 Vec::new()
             }
         }
@@ -635,20 +636,20 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn hourly_history_falls_back_to_coingecko_when_defillama_is_empty() {
+    async fn hourly_history_falls_back_to_the_exchange_when_defillama_is_empty() {
         let app = Router::new()
             .route(
                 "/chart/:id",
                 get(|| async { Json(serde_json::json!({ "coins": {} })) }),
             )
             .route(
-                "/coins/:id/market_chart",
+                "/spot/candlesticks",
                 get(|| async {
-                    Json(serde_json::json!({ "prices": [
-                        [1_700_000_000_000_i64, 0.002],
-                        [1_700_000_300_000_i64, 0.0021],
-                        [1_700_000_600_000_i64, 0.0]
-                    ] }))
+                    Json(serde_json::json!([
+                        ["1700000000", "1", "0.002", "0.002", "0.002", "0.002", "2", true],
+                        ["1700000300", "1", "0.0021", "0.002", "0.002", "0.002", "2", true],
+                        ["1700000600", "0", "0", "0", "0", "0", "0", false]
+                    ]))
                 }),
             );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
