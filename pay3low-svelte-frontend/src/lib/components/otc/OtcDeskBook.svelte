@@ -73,12 +73,14 @@
 </script>
 
 {#snippet levelRow(level: BookLevel)}
-  <button type="button" class="obRow" class:own={level.own} data-testid={testId} aria-label={`${level.own ? say("Your offer", "Ваш оффер") + ". " : ""}${say("Offer details", "Детали оффера")}: ${formatPrice(level.price, numberLocale)} USDT / EVER`} title={`${offerOwner(level.offer)} · ${formatEver(level.amount, numberLocale)} EVER → ${formatEver(level.offer.terms.usdt_amount, numberLocale)} USDT`} on:click={() => showOffer(level.offer)}>
+  {@const taker = level.own ? "own" : offerDirection(level.offer) === "sell" ? "buy" : "sell"}
+  <div class="obRow" class:own={level.own} data-testid={testId} title={`${offerOwner(level.offer)} · ${formatEver(level.amount, numberLocale)} EVER → ${formatEver(level.offer.terms.usdt_amount, numberLocale)} USDT`}>
     <span class="obOwner"><code>{offerOwner(level.offer).slice(0, 6)}…{offerOwner(level.offer).slice(-4)}</code></span>
     <span class="obPrice"><b data-testid="otc-book-price">{formatPrice(level.price, numberLocale)}</b><i aria-hidden="true">$</i></span>
     <span class="obAmount">{formatEver(level.amount, numberLocale)}</span>
     <span class="obTotal">{formatEver(level.total, numberLocale)}<i aria-hidden="true">$</i></span>
-  </button>
+    <button type="button" class="obTake" class:takeBuy={taker === "buy"} class:takeSell={taker === "sell"} data-testid="otc-offer-take" aria-label={`${level.own ? say("Your offer", "Ваш оффер") + ". " : ""}${say("Offer details", "Детали оффера")}: ${formatPrice(level.price, numberLocale)} USDT / EVER`} on:click={() => showOffer(level.offer)}>{taker === "buy" ? say("Buy", "Купить") : taker === "sell" ? say("Sell", "Продать") : say("Details", "Детали")}</button>
+  </div>
 {/snippet}
 
 {#snippet side(levels: BookLevel[], who: string, label: string, key: string)}
@@ -184,14 +186,17 @@
   .obTables { display:flex; flex-wrap:wrap; gap:20px; }
   .obTable { display:flex; flex:1 1 260px; min-width:0; flex-direction:column; gap:8px; }
   .obTable[data-side="bids"] { order:-1; }
-  .obHead { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr) minmax(0,.9fr) minmax(0,1fr); gap:8px; align-items:end; min-height:32px; padding:0 12px; color:var(--color-text-soft); font-size:11px; line-height:1.35; text-align:right; }
+  .obHead { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr) minmax(0,.9fr) minmax(0,1fr) 64px; gap:8px; align-items:end; min-height:32px; padding:0 12px; color:var(--color-text-soft); font-size:11px; line-height:1.35; text-align:right; }
   .obHead > span:first-child { text-align:left; }
   .obHead small { display:flex; align-items:center; justify-content:flex-end; gap:4px; color:var(--color-text-faint); font-size:9px; }
   .obHead small img { width:12px; height:12px; flex:0 0 auto; border-radius:50%; object-fit:contain; }
   .obSideHead { display:flex; min-height:24px; align-items:center; justify-content:space-between; gap:8px; padding:4px 12px; border-bottom:1px solid var(--color-border); color:var(--color-text-faint); font-size:9px; font-weight:650; letter-spacing:.08em; line-height:1.4; text-transform:uppercase; }
   .obSideHead > span:last-child { font-family:var(--font-mono); font-size:10px; font-weight:400; letter-spacing:0; }
-  .obRow { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr) minmax(0,.9fr) minmax(0,1fr); width:100%; min-height:44px; align-items:center; gap:8px; padding:6px 12px; border:1px solid var(--color-border); border-radius:10px; background:transparent; color:var(--color-text); font-family:var(--font-mono); font-size:12px; font-variant-numeric:tabular-nums; line-height:1.35; text-align:right; cursor:pointer; transition:background .12s ease, box-shadow .12s ease; }
-  .obRow:hover, .obRow:focus-visible { background:var(--color-panel); box-shadow:inset 0 0 0 1px var(--color-border-strong); }
+  .obRow { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr) minmax(0,.9fr) minmax(0,1fr) 64px; width:100%; min-height:44px; align-items:center; gap:8px; padding:6px 8px 6px 12px; border:1px solid var(--color-border); border-radius:10px; background:transparent; color:var(--color-text); font-family:var(--font-mono); font-size:12px; font-variant-numeric:tabular-nums; line-height:1.35; text-align:right; }
+  .obTake { width:100%; min-height:30px; padding:4px 6px; border:0; border-radius:7px; background:var(--color-panel); color:var(--color-text-soft); font-family:var(--font-sans,inherit); font-size:11px; font-weight:650; line-height:1.4; cursor:pointer; transition:background .12s ease; }
+  .obTake:hover { background:var(--color-border); }
+  .takeBuy { color:var(--color-good-ink); }
+  .takeSell { color:var(--color-danger); }
   .obOwner { display:flex; min-width:0; align-items:center; gap:6px; justify-self:start; text-align:left; }
   .obOwner code { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:700; letter-spacing:-.02em; }
   .obPrice { min-width:0; overflow:hidden; text-overflow:ellipsis; font-weight:650; color:var(--color-good-ink); }
@@ -223,7 +228,7 @@
   .ownerDot { width:5px; height:5px; flex:0 0 auto; border-radius:50%; background:var(--color-text-faint); }
   .ownTag { padding:2px 5px; border-radius:4px; background:var(--color-panel); color:var(--color-text-soft); font-family:var(--font-sans,inherit); font-size:9px; }
   .rowChevron { color:var(--color-text-faint); }
-  .bookRow:focus-visible,.obRow:focus-visible,.proposalSelect:focus-visible,.copyButton:focus-visible,.iconButton:focus-visible,.cancelOffer:focus-visible { outline:var(--focus-ring-width) solid var(--color-focus); outline-offset:2px; }
+  .bookRow:focus-visible,.obTake:focus-visible,.proposalSelect:focus-visible,.copyButton:focus-visible,.iconButton:focus-visible,.cancelOffer:focus-visible { outline:var(--focus-ring-width) solid var(--color-focus); outline-offset:2px; }
   .proposalRow { padding:10px var(--otc-panel-padding,20px); border-bottom:1px solid var(--color-border); }
   .proposalRow.selected { background:var(--otc-buy-soft); }
   .proposalSelect { display:flex; width:100%; min-width:0; min-height:38px; align-items:center; gap:8px; text-align:left; font-size:12px; }
@@ -266,6 +271,6 @@
   .acceptOffer:disabled { opacity:.45; cursor:default; }
   .acceptOffer:focus-visible { outline:var(--focus-ring-width) solid var(--color-focus); outline-offset:2px; }
   @media (min-width:640px) { .rowOwner { display:flex; } }
-  @media (max-width:520px) { .bookHeader,.bookRow { grid-template-columns:minmax(0,1fr) minmax(0,.8fr) minmax(0,.75fr) 12px; gap:5px; } .bookHeader,.bookRow { padding-right:12px; padding-left:12px; } .rowAmount small,.rowTotal small { display:none; } .obHead,.obRow,.obSideHead,.obEmpty { padding-right:8px; padding-left:8px; } .obHead,.obRow { grid-template-columns:minmax(0,1fr) minmax(0,.8fr) minmax(0,.8fr) minmax(0,.9fr); gap:5px; font-size:10.5px; } .orderbook { padding-right:12px; padding-left:12px; } .dialogHead,.dialogSummary,.addressList { padding-right:16px; padding-left:16px; } .settlementNote { padding-right:16px; padding-left:16px; } .acceptRow { padding-right:16px; padding-left:16px; } .dialogFoot { align-items:flex-start; padding-right:16px; padding-left:16px; } }
+  @media (max-width:520px) { .bookHeader,.bookRow { grid-template-columns:minmax(0,1fr) minmax(0,.8fr) minmax(0,.75fr) 12px; gap:5px; } .bookHeader,.bookRow { padding-right:12px; padding-left:12px; } .rowAmount small,.rowTotal small { display:none; } .obHead,.obRow,.obSideHead,.obEmpty { padding-right:8px; padding-left:8px; } .obHead,.obRow { grid-template-columns:minmax(0,1fr) minmax(0,.8fr) minmax(0,.8fr) minmax(0,.9fr) 64px; gap:5px; font-size:10.5px; } .orderbook { padding-right:12px; padding-left:12px; } .dialogHead,.dialogSummary,.addressList { padding-right:16px; padding-left:16px; } .settlementNote { padding-right:16px; padding-left:16px; } .acceptRow { padding-right:16px; padding-left:16px; } .dialogFoot { align-items:flex-start; padding-right:16px; padding-left:16px; } }
   @media (prefers-reduced-motion:reduce) { .bookRow,.obRow,.proposalSelect,.copyButton { transition:none; } }
 </style>

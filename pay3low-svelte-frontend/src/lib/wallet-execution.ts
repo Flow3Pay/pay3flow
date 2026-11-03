@@ -115,6 +115,17 @@ export function chainIdForNetwork(network: string): number | null {
   return CHAIN_NAMES[network.toLowerCase()] ?? null;
 }
 
+// A browser wallet without `wallet_switchEthereumChain` cannot be moved by the page, so ask the trader to switch it by hand.
+async function switchEvmChain(config: unknown, chainId: number): Promise<void> {
+  const { switchChain } = await import("@wagmi/core");
+  try {
+    await switchChain(config as Parameters<typeof switchChain>[0], { chainId });
+  } catch (error) {
+    if ((error as { name?: string } | null)?.name === "SwitchChainNotSupportedError") throw new Error(`Switch your wallet to chain ${chainId} and retry.`);
+    throw error;
+  }
+}
+
 async function appKit() {
   if (evmApp) return evmApp;
   evmApp = (async () => {
@@ -194,19 +205,19 @@ export async function connectEvm(network: string): Promise<EvmConnection> {
   if (!chainId) throw new Error(`Embedded EVM execution is unavailable for ${network}`);
   if (!env.PUBLIC_REOWN_PROJECT_ID?.trim()) {
     const { config, connector } = await injectedApp();
-    const { connect, switchChain, getAccount } = await import("@wagmi/core");
+    const { connect, getAccount } = await import("@wagmi/core");
     const account = getAccount(config as Parameters<typeof getAccount>[0]);
     const connected = account.isConnected ? { accounts: account.addresses ?? [], chainId: account.chainId } : await connect(config as Parameters<typeof connect>[0], { connector: connector as Parameters<typeof connect>[1]["connector"] });
     if (!connected.accounts[0]) throw new Error("Injected wallet did not return an account");
-    if (connected.chainId !== chainId) await switchChain(config as Parameters<typeof switchChain>[0], { chainId });
+    if (connected.chainId !== chainId) await switchEvmChain(config, chainId);
     const active = getAccount(config as Parameters<typeof getAccount>[0]);
     if (!active.address || active.chainId !== chainId) throw new Error("Wallet did not switch to the selected network");
     return { family: "evm", address: active.address, chainId, config };
   }
   const { modal, config } = await appKit();
   await waitForEvmAddress(modal);
-  const { switchChain, getAccount } = await import("@wagmi/core");
-  await switchChain(config as Parameters<typeof switchChain>[0], { chainId });
+  const { getAccount } = await import("@wagmi/core");
+  await switchEvmChain(config, chainId);
   const active = getAccount(config as Parameters<typeof getAccount>[0]);
   if (!active.address || active.chainId !== chainId) throw new Error("Wallet did not switch to the selected network");
   return { family: "evm", address: active.address, chainId, config };
@@ -279,10 +290,10 @@ function asNear(wallet: ConnectedWallet): NearConnection {
 }
 
 async function ensureEvmChain(wallet: EvmConnection): Promise<void> {
-  const { getChainId, switchChain } = await import("@wagmi/core");
+  const { getChainId } = await import("@wagmi/core");
   const config = wallet.config as Parameters<typeof getChainId>[0];
   if (getChainId(config) !== wallet.chainId) {
-    await switchChain(wallet.config as Parameters<typeof switchChain>[0], { chainId: wallet.chainId });
+    await switchEvmChain(wallet.config, wallet.chainId);
   }
 }
 

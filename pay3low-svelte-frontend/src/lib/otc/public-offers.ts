@@ -47,7 +47,6 @@ export interface SaleTicketState {
   marketPrice: boolean;
   marketRate: string;
   marketApprox: string;
-  marketStale: boolean;
   error: string;
   onPrice: (value: string) => void;
   onEver: (value: string) => void;

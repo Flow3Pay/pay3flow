@@ -23,7 +23,6 @@
   $: receiveAsset = sale ? "USDT" : direction === "buy" ? "EVER" : "USDT";
   $: sendValue = sale ? sale.everAmount : input;
   $: receiveValue = sale ? sale.usdtAmount : quote?.terms.output || "";
-  $: saleStatus = sale ? busy ? say("Please wait for the current wallet or offer request.", "Дождитесь завершения текущего запроса кошелька или оффера.") : sale.linkingEvm ? say("Waiting for your Ethereum wallet address.", "Ожидаем адрес Ethereum-кошелька.") : sale.blockingReason : "";
   $: sendShort = sale?.shortfall === "ever";
   $: receiveShort = sale?.shortfall === "usdt";
   $: shortfallNote = (asset: "EVER" | "USDT") => {
@@ -103,15 +102,13 @@
     <div class="priceFieldRow"><input aria-label={copy.price} readonly={!sale || sale.marketPrice} value={sale ? sale.price : quote ? rate(quote.terms) : "—"} data-testid={sale ? "otc-offer-price" : undefined} disabled={busy} inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="—" on:input={(event) => sale?.onPrice(event.currentTarget.value)} /><span>USDT</span></div>
   </div>
   {#if sale}
-    {#if sale.marketPrice}<p class="priceHint" data-testid="otc-market-price-hint">{sale.marketStale ? say("The market rate may be stale; you can still set the price by hand.", "Курс мог устареть; цену можно выставить вручную.") : say("Rate from the live market feed.", "Курс из живого рыночного фида.")}</p>{/if}
     {#if sale.priceRounded}<p class="priceHint">{sale.roundingAsset === "EVER" ? say("The EVER amount is rounded down to 9 decimals. Review the exact amounts before publishing.", "Сумма EVER округлена вниз до 9 знаков. Проверьте точные суммы перед публикацией.") : say("The total is rounded down to 6 USDT decimal places. Review the exact amount before publishing.", "Общая сумма округлена вниз до 6 знаков USDT. Проверьте точную сумму перед публикацией.")}</p>{/if}
     {#if sale.amountFloored}<p class="priceHint">{sale.amountFloored === "EVER" ? say("EVER has 9 decimals, so the extra digits you typed were dropped. Review the exact amount before publishing.", "У EVER 9 знаков после запятой, лишние введённые цифры отброшены. Проверьте точную сумму перед публикацией.") : say("USDT has 6 decimals, so the extra digits you typed were dropped. Review the exact amount before publishing.", "У USDT 6 знаков после запятой, лишние введённые цифры отброшены. Проверьте точную сумму перед публикацией.")}</p>{/if}
     {#if sale.reviewing && sale.seller}<OtcOfferReview {direction} everAmount={sale.everAmount} usdtAmount={sale.usdtAmount} askingRate={sale.askingRate} seller={sale.seller} receivingAddress={sale.receivingAddress} error={sale.error} busy={busy} onClose={sale.onCloseReview} onPublish={() => sale.onRequest()} />{/if}
   {/if}
   {#if quote}<p class="priceHint">{say("Quote expires", "Котировка истекает")}: {quote.terms.quote_by}</p>{/if}
   {#if status}<p class="priceHint" id="otc-ticket-status" role="status">{status}</p>{/if}
-  {#if saleStatus}<p class="priceHint" id="otc-sale-status" role="status">{saleStatus}</p>{/if}
-  <button aria-describedby={saleStatus ? "otc-sale-status" : status ? "otc-ticket-status" : undefined} class="cta" type="submit" disabled={busy || (sale ? sale.linkingEvm || (!!sale.seller && !sale.valid) : disabled)} data-testid={sale ? sale.seller ? "otc-publish-offer" : "otc-connect-offer" : "otc-review"}>{sale ? !sale.seller ? say("Connect EVER Wallet to publish", "Подключить EVER Wallet для публикации") : sale.reviewing ? say("Publish offer", "Опубликовать предложение") : say("Review offer", "Проверить предложение") : quote ? say("Review fixed quote", "Проверить котировку") : say("Request exact quote", "Запросить котировку")}<span aria-hidden="true">↗</span></button>
+  <button aria-describedby={status ? "otc-ticket-status" : undefined} class="cta" type="submit" disabled={busy || (sale ? sale.linkingEvm || (!!sale.seller && !sale.valid) : disabled)} data-testid={sale ? sale.seller ? "otc-publish-offer" : "otc-connect-offer" : "otc-review"}>{sale ? !sale.seller ? say("Connect EVER Wallet to publish", "Подключить EVER Wallet для публикации") : sale.reviewing ? say("Publish offer", "Опубликовать предложение") : say("Review offer", "Проверить предложение") : quote ? say("Review fixed quote", "Проверить котировку") : say("Request exact quote", "Запросить котировку")}<span aria-hidden="true">↗</span></button>
 </form>
 
 <style>
@@ -120,7 +117,7 @@
   .walletAddress { width:100%; min-height:44px; padding:8px 12px; border:1px solid var(--color-border); border-radius:8px; font-size:12px; }
   .bridgeForm { display: flex; flex: 1; flex-direction: column; min-width: 0; padding: 0 var(--otc-panel-padding, 20px) 16px; }
   .ticketHead { position: relative; display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding-top: 2px; }
-  .sideTabs { --side-buy: color-mix(in srgb, var(--otc-buy, #8dcb00) 74%, #fff); --side-sell: color-mix(in srgb, var(--otc-sell, #d43d35) 74%, #fff); position: relative; isolation: isolate; display: flex; flex: 1; min-width: 0; gap: 4px; padding: 4px; border-radius: 12px; background: var(--color-panel); }
+  .sideTabs { --side-buy: color-mix(in srgb, var(--otc-buy, #8dcb00) 74%, #fff); --side-sell: color-mix(in srgb, var(--otc-sell, #d43d35) 55%, #fff); position: relative; isolation: isolate; display: flex; flex: 1; min-width: 0; gap: 4px; padding: 4px; border-radius: 12px; background: var(--color-panel); }
   .sideTabs::before { position: absolute; z-index: -1; inset: 4px auto 4px 4px; width: calc(50% - 6px); border-radius: 9px; background-image: linear-gradient(90deg, var(--side-buy) 0 34%, #e6d94c 42%, #f0a34d 50%, var(--side-sell) 58% 100%); background-position: 0% 50%; background-size: 300% 100%; content: ""; transition: transform .32s cubic-bezier(.22, 1, .36, 1), background-position .5s ease; }
   .sideTabs.selling::before { background-position: 100% 50%; transform: translateX(calc(100% + 4px)); }
   .settingsWrap { flex: 0 0 auto; }

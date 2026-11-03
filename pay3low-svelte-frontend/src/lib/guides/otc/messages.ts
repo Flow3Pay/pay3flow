@@ -12,7 +12,7 @@ export const otcMessages = {
     "Confirm the balances": "Подтвердите балансы",
     "Check that {to} arrived in your wallet before you continue.": "Проверьте, что {to} поступил в ваш кошелёк, прежде чем продолжать.",
     "Choose a live Pay3Flow OTC offer that covers your whole amount, check both wallets and settle directly between them.": "Выберите живой оффер Pay3Flow OTC на всю вашу сумму, сверьте оба кошелька и выполните расчёт напрямую между ними.",
-    "Fastest · Pay3Flow OTC": "Pay3Flow OTC · Быстро",
+    "Pay3Flow OTC": "Pay3Flow OTC",
     "Quoted instantly from the Pay3Flow OTC book": "Котировка сразу из книги офферов Pay3Flow OTC",
   },
   hy: {
@@ -28,7 +28,7 @@ export const otcMessages = {
     "Confirm the balances": "Հաստատեք մնացորդները",
     "Check that {to} arrived in your wallet before you continue.": "Ստուգեք, որ {to}-ն հասել է ձեր դամպան, նախքան շարունակելը։",
     "Choose a live Pay3Flow OTC offer that covers your whole amount, check both wallets and settle directly between them.": "Ընտրեք Pay3Flow OTC-ի առկա առաջարկ, որը ծածկում է ձեր ամբողջ գումարը, ստուգեք երկու դամպանները և կատարեք հաշվարկ ուղղակի նրանց միջև։",
-    "Fastest · Pay3Flow OTC": "Pay3Flow OTC · Արագ",
+    "Pay3Flow OTC": "Pay3Flow OTC",
     "Quoted instantly from the Pay3Flow OTC book": "Կոտիրովկան անմիջապես Pay3Flow OTC-ի առաջարկների գրքից",
   },
 };

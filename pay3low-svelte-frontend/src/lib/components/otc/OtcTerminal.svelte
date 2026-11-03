@@ -49,7 +49,7 @@
       </div>
     {/if}
   </div>
-  <div class="railColumn">
+  <div class="railColumn" class:ticketStretch={bookWide}>
     <div class="terminalColumn bridgeColumn" id="otc-bridge-column"><OtcPanel id="otc-bridge" title={say("Create Order","Создать ордер")} collapsible={false}><slot name="ticket" /></OtcPanel></div>
     <slot name="rail" />
   </div>
@@ -80,6 +80,9 @@
   /* The chart and the orderbook stack in the main column; the ticket sits beside them. */
   .terminalShell { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: 24px; align-items: start; }
   .otcGrid, .railColumn { display: flex; min-width: 0; flex-direction: column; gap: 24px; }
+  /* With the book moved below the shell the left column holds only the chart, so the ticket card takes its height. */
+  .ticketStretch { align-self: stretch; }
+  .ticketStretch .bridgeColumn { flex: 1 1 auto; }
   .terminalColumn { display: flex; width: 100%; min-width: 0; overflow: clip; }
   .bookWide { margin-top: 24px; }
   .bridgeColumn :global(.panelHead) { min-height: 48px; padding-block: 12px; }

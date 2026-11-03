@@ -10,7 +10,6 @@
   export let busy = false;
   export let onSelect: (id: string) => void;
   export let onOfferSelect: (offer: PublicOffer) => void = () => {};
-  export let onRepeat: (entry: { direction: Direction; input?: string; ever?: string; usdt?: string; address?: string }) => void = () => {};
   export let emptyTitle = "";
   export let emptyHint = "";
   type Item = {
@@ -78,10 +77,6 @@
     if (item.kind === "offer" && item.offer) onOfferSelect(item.offer);
     else onSelect(item.id);
   }
-  function repeat(item: Item) {
-    if (item.kind === "offer" && item.offer) onRepeat({ direction: item.direction, ever: item.offer.terms.ever_amount, usdt: item.offer.terms.usdt_amount, address: item.offer.terms.usdt_address });
-    else if (item.trade) onRepeat({ direction: item.direction, input: item.trade.terms.input });
-  }
 </script>
 
 {#snippet sideTable(title: string, direction: Direction, side: "bids" | "asks", items: Item[])}
@@ -93,7 +88,6 @@
           <th>{say("Price", "Цена")}<small><img src="/icons/assets/usdt.png" alt="" width="12" height="12" />USDT</small></th>
           <th>{say("Amount", "Объём")}<small><img src="/icons/assets/ever.svg" alt="" width="12" height="12" />EVER</small></th>
           <th>{say("Total", "Всего")}<small><img src="/icons/assets/usdt.png" alt="" width="12" height="12" />USDT</small></th>
-          <th class="obAction">{say("Repeat", "Повтор")}</th>
         </tr></thead>
         <tbody>
           {#each items as item (item.key)}
@@ -102,10 +96,9 @@
               <td class="obPrice"><b>{formatPrice(item.price, numberLocale)}</b><i aria-hidden="true">$</i></td>
               <td class="obAmount">{formatEver(item.amount, numberLocale)}</td>
               <td class="obTotal">{formatEver(item.total, numberLocale)}<i aria-hidden="true">$</i></td>
-              <td class="obAction"><button type="button" class="sideButton" class:sell={item.direction === "sell"} disabled={busy} data-testid="otc-repeat-order" aria-label={`${item.direction === "buy" ? say("Repeat this buy order", "Повторить ордер на покупку") : say("Repeat this sell order", "Повторить ордер на продажу")} · ${formatPrice(item.price, numberLocale)} USDT / EVER · ${formatEver(item.amount, numberLocale)} EVER`} title={say("Move these terms into Create Order", "Перенести эти условия в форму «Создать ордер»")} on:click|stopPropagation={() => repeat(item)}>{item.direction === "buy" ? say("Buy", "Купить") : say("Sell", "Продать")}</button></td>
             </tr>
           {:else}
-            <tr class="emptyRow"><td colspan="5"><strong>{emptyTitle || (direction === "buy" ? say("No buy orders yet", "Покупок пока нет") : say("No sell orders yet", "Продаж пока нет"))}</strong>{#if emptyHint}<small>{emptyHint}</small>{/if}</td></tr>
+            <tr class="emptyRow"><td colspan="4"><strong>{emptyTitle || (direction === "buy" ? say("No buy orders yet", "Покупок пока нет") : say("No sell orders yet", "Продаж пока нет"))}</strong>{#if emptyHint}<small>{emptyHint}</small>{/if}</td></tr>
           {/each}
         </tbody>
       </table>
@@ -137,12 +130,6 @@
   tbody tr.selected td { background:var(--color-accent-soft); }
   .rowOpen { display:grid; width:100%; height:100%; gap:2px; align-content:center; justify-content:start; justify-items:start; padding:8px 12px; border:0; background:transparent; color:inherit; font:inherit; text-align:left; cursor:pointer; }
   .rowOpen:focus-visible { outline:var(--focus-ring-width) solid var(--color-focus); outline-offset:-3px; }
-  .obAction { width:70px; padding-right:6px; }
-  .sideButton { display:inline-flex; min-height:26px; align-items:center; justify-content:center; padding:3px 9px; border:1px solid var(--otc-buy); border-radius:7px; background:var(--otc-buy); color:#152016; font-family:var(--font-sans); font-size:11px; font-weight:700; line-height:1.35; white-space:nowrap; cursor:pointer; transition:filter .15s ease; }
-  .sideButton:hover:not(:disabled) { filter:brightness(1.06); }
-  .sideButton.sell { border-color:var(--otc-sell); background:var(--otc-sell); color:var(--color-text-invert); }
-  .sideButton:disabled { opacity:.45; cursor:default; }
-  .sideButton:focus-visible { outline:var(--focus-ring-width) solid var(--color-focus); outline-offset:2px; }
   .obWhen small { color:var(--color-text-faint); font-size:9px; }
   .obPrice { overflow:hidden; text-overflow:ellipsis; color:var(--color-text); }
   .obPrice i, .obTotal i { margin-left:.22em; font-style:normal; color:var(--color-text); opacity:.62; }
@@ -162,5 +149,5 @@
   .emptyRow small { display:block; margin-top:5px; font-family:var(--font-sans); font-size:11px; line-height:1.5; }
   @media (max-width:900px) { .tradeTables { grid-template-columns:minmax(0,1fr); } }
   @media (max-width:520px) { .tradeTables { padding-right:12px; padding-left:12px; } table { font-size:10.5px; } th,tbody td { padding-right:8px; padding-left:8px; } .rowOpen { padding-right:8px; padding-left:8px; } .obAction { width:62px; } }
-  @media (prefers-reduced-motion:reduce) { tbody td, .sideButton { transition:none; } }
+  @media (prefers-reduced-motion:reduce) { tbody td { transition:none; } }
 </style>

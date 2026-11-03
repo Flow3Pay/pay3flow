@@ -17,7 +17,7 @@
   let offers: Offer[] = [], mine: Offer[] = [], history: OfferHistoryPoint[] = [], error = "", message = "";
   let amountSource: "ever" | "usdt" = "ever";
   let priceInput = "", priceMode = false, loadedDirection: Direction = "sell";
-  let marketRate = "", marketStale = true, marketPrice = false;
+  let marketRate = "", marketPrice = false;
   let everAmount = "", usdtAmount = "", receivingAddress = "", key = "";
   let linkingEvm = false, reviewing = false, mounted = false, generation = 0, loadedActor = "";
   let balances: WalletBalance[] = [], balanceGeneration = 0;
@@ -175,14 +175,12 @@
       const prices = await fetchMarketPrices(signal);
       if (signal.aborted) return;
       marketRate = marketUsdtPerEver(prices.prices.EVER, prices.prices.USDT) || "";
-      marketStale = prices.stale || !marketRate;
       if (!marketRate) marketPrice = false;
       else if (marketPrice) applyMarketRate(marketRate);
     } catch (error) {
       if (signal.aborted) return;
       // A missing feed must not interrupt offer publication; the price stays editable.
       marketRate = "";
-      marketStale = true;
       marketPrice = false;
       console.warn("Market prices unavailable", error);
     }
@@ -214,7 +212,7 @@
   function changeAddress(value: string) { receivingAddress = value; edited(); }
   $: ticket = {
     direction, price, priceRounded, roundingAsset, amountFloored, shortfall, fundedBalance, blockingReason, everAmount, usdtAmount, receivingAddress, seller, askingRate, valid, reviewing, linkingEvm,
-    marketPrice, marketRate, marketApprox, marketStale, error,
+    marketPrice, marketRate, marketApprox, error,
     onPrice: changePrice,
     onEver: changeEver,
     onUsdt: changeUsdt,

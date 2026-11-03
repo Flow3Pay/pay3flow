@@ -122,7 +122,7 @@ test("seller signs in with EVER alone and publishes, restores, and cancels a rea
   expect(await page.evaluate(() => (window as any).everCalls)).not.toContain("sendMessage");
   await page.reload();
   await expect(page.getByTestId("otc-public-offer")).toBeVisible();
-  await page.getByTestId("otc-public-offer").click();
+  await page.getByTestId("otc-offer-take").click();
   await page.getByRole("button", { name: "Cancel offer", exact: true }).click();
   await expect(page.getByTestId("otc-public-offer")).toHaveCount(0);
   await page.getByRole("tab", { name:"History", exact:true }).click();
@@ -137,40 +137,10 @@ test("market price hint fills the USDT total and toggles a live rate", async ({ 
   await expect(page.getByTestId("otc-offer-price")).toHaveValue("0.001050480096");
   await expect(page.getByTestId("otc-offer-price")).toHaveJSProperty("readOnly", true);
   await expect(page.getByTestId("otc-offer-usdt")).toHaveValue("105.048009");
-  await expect(page.getByTestId("otc-market-price-hint")).toContainText("live market feed");
   await page.getByRole("checkbox", { name: "Market price", exact: true }).uncheck();
   await expect(page.getByTestId("otc-offer-price")).toHaveJSProperty("readOnly", false);
   await page.getByTestId("otc-offer-price").fill("0.2");
   await expect(page.getByTestId("otc-offer-usdt")).toHaveValue("20000");
-});
-
-test("the buy and sell chip on an order copies its terms back into Create Order", async ({ page }) => {
-  await setup(page, { signedIn: true });
-  await page.getByTestId("otc-offer-ever").fill("500");
-  await page.getByTestId("otc-offer-usdt").fill("100");
-  await openOfferSettings(page);
-  await page.getByTestId("otc-offer-recipient").fill(eth);
-  await page.getByTestId("otc-publish-offer").click();
-  await expect(page.getByTestId("otc-offer-review")).toBeVisible();
-  await page.getByTestId("otc-offer-publish").click();
-  await expect(page.getByTestId("otc-public-offer")).toBeVisible();
-
-  await page.getByTestId("otc-offer-ever").fill("7");
-  await openOfferSettings(page);
-  await page.getByTestId("otc-offer-recipient").fill(`0x${"d".repeat(40)}`);
-
-  await page.getByRole("tab", { name: /^My orders/ }).click();
-  const row = page.getByTestId("otc-order-row");
-  await expect(row).toHaveCount(1);
-  await expect(row.locator(".sideButton")).toHaveText("Sell");
-  await row.getByTestId("otc-repeat-order").click();
-
-  await expect(page.getByTestId("otc-offer-ever")).toHaveValue("500");
-  await expect(page.getByTestId("otc-offer-usdt")).toHaveValue("100");
-  await expect(page.getByTestId("otc-offer-price")).toHaveValue("0.2");
-  await openOfferSettings(page);
-  await expect(page.getByTestId("otc-offer-recipient")).toHaveValue(eth);
-  await expect(row.getByTestId("otc-repeat-order")).toBeEnabled();
 });
 
 test("a P2P deal shows the gross amount, the 3% service fee, the net and the USDT payout", async ({ page }) => {
@@ -225,7 +195,6 @@ test("publication rejects zero, negative and over-cap amounts, floors extra digi
   }
   await page.getByTestId("otc-offer-ever").fill("1000000000001");
   await expect(page.getByTestId("otc-publish-offer")).toBeDisabled();
-  await expect(page.locator("#otc-sale-status")).toContainText("1,000,000,000,000 EVER");
   await page.getByTestId("otc-offer-ever").fill("1.0000000001");
   await expect(page.getByTestId("otc-publish-offer")).toBeEnabled();
   await expect(page.locator(".priceHint")).toContainText("extra digits you typed were dropped");
@@ -301,11 +270,9 @@ for (const direction of ["buy","sell"] as const) test(`price and amount publish 
   await expect(page.getByTestId("otc-offer-ever")).toHaveValue("100");
   await expect(page.getByTestId("otc-offer-usdt")).toHaveValue("11.889");
   await expect(page.getByTestId("otc-publish-offer")).toBeDisabled();
-  await expect(page.locator("#otc-sale-status")).toContainText("Ethereum wallet address");
   await openOfferSettings(page);
   await page.getByTestId("otc-offer-recipient").fill(`  ${eth}  `);
   await expect(page.getByTestId("otc-publish-offer")).toBeEnabled();
-  await expect(page.locator("#otc-sale-status")).toHaveCount(0);
   await page.getByTestId("otc-publish-offer").click();
   await expect(page.getByTestId("otc-offer-review")).toContainText(`${direction === "buy" ? "Buy" : "Sell"} 100 EVER · 11.889 USDT`);
   expect(f.calls.filter(c=>c.path === "/offers" && c.method === "POST")).toHaveLength(0);
@@ -316,7 +283,7 @@ for (const direction of ["buy","sell"] as const) test(`price and amount publish 
   await expect(offer).toContainText("100");
   await expect(offer).toContainText("11.889");
   expect(f.calls.find(c=>c.path === "/offers" && c.method === "POST")?.body).toEqual({direction,ever_amount:"100",usdt_amount:"11.889",usdt_address:eth});
-  await offer.click();
+  await offer.getByTestId("otc-offer-take").click();
   await page.getByRole("button",{name:"Cancel offer",exact:true}).click();
   await expect(page.locator(".bookColumn").getByTestId("otc-public-offer")).toHaveCount(0);
   await page.getByRole("tab",{name:"History",exact:true}).click();
@@ -337,7 +304,6 @@ test("decimal commas, final totals, and price rounding remain explicit", async (
   await expect(page.getByTestId("otc-publish-offer")).toBeEnabled();
   await page.getByTestId("otc-offer-price").fill("0");
   await expect(page.getByTestId("otc-publish-offer")).toBeDisabled();
-  await expect(page.locator("#otc-sale-status")).toContainText("positive price");
 });
 
 
@@ -418,7 +384,7 @@ test("a saved publication populates the book and chart even if the following pub
   await expect(page.getByRole("alert")).toHaveText("Public offer refresh unavailable");
   await expect(page.locator(".bookColumn").getByTestId("otc-public-offer")).toHaveCount(1);
   await expect(page.locator(".chartColumn .marketChart")).toHaveAttribute("data-points", "1");
-  await page.locator(".bookColumn").getByTestId("otc-public-offer").click();
+  await page.locator(".bookColumn").getByTestId("otc-offer-take").click();
   await page.getByRole("button",{name:"Cancel offer",exact:true}).click();
   await expect(page.locator(".bookColumn").getByTestId("otc-public-offer")).toHaveCount(0);
   await expect(page.locator(".chartColumn .marketChart")).toHaveAttribute("data-points", "1");
