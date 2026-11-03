@@ -7,6 +7,8 @@
   import { otcCopy } from "$lib/otc/copy";
   import { rate, type Direction, type Trade } from "$lib/otc/service";
   import { type SaleTicketState } from "$lib/otc/public-offers";
+  import { everFromUsd, offerTotal } from "$lib/otc/offer-amount";
+  import { formatTokenMarketValue, formatUsdAmount, formatUsdMarketValue, sanitizeDecimalInput } from "$lib/usd-amount";
   export let sale: SaleTicketState | null = null;
   export let direction: Direction = "buy";
   export let input = "100";
@@ -23,6 +25,14 @@
   $: receiveAsset = sale ? "USDT" : direction === "buy" ? "EVER" : "USDT";
   $: sendValue = sale ? sale.everAmount : input;
   $: receiveValue = sale ? sale.usdtAmount : quote?.terms.output || "";
+  let usdMode = false, usdEntry = "", sendFocused = false;
+  $: usdRate = Number(sale?.marketUsdRate || 0);
+  $: usdAvailable = !!sale && Number.isFinite(usdRate) && usdRate > 0;
+  $: if (usdMode && !usdAvailable) { usdMode = false; usdEntry = ""; }
+  $: usdValue = sale && usdAvailable ? offerTotal(sale.everAmount, sale.marketUsdRate)?.amount || "" : "";
+  $: displayedSendValue = sale && usdMode && usdAvailable
+    ? sendFocused && usdEntry ? usdEntry : formatUsdAmount(Number(usdValue))
+    : sendValue;
   $: sendShort = sale?.shortfall === "ever";
   $: receiveShort = sale?.shortfall === "usdt";
   $: shortfallNote = (asset: "EVER" | "USDT") => {
@@ -45,8 +55,25 @@
     if (settingsOpen && event.key === "Escape") { event.preventDefault(); closeSettings(true); }
   }
   function changeSend(value: string) {
+    if (sale && usdMode && usdAvailable) {
+      const nextUsd = sanitizeDecimalInput(value);
+      usdEntry = nextUsd;
+      sale.onEver(everFromUsd(nextUsd, sale.marketUsdRate)?.amount || "");
+      return;
+    }
     if (sale) sale.onEver(value);
     else { input=value; onEdit(); }
+  }
+  function focusSend(event: FocusEvent) {
+    sendFocused = true;
+    (event.currentTarget as HTMLInputElement).select();
+  }
+  function blurSend() { sendFocused = false; usdEntry = ""; }
+  function toggleUsd() {
+    if (!usdAvailable) return;
+    usdMode = !usdMode;
+    usdEntry = "";
+    void tick().then(() => document.getElementById("otc-input")?.focus());
   }
   function changeReceive(value: string) { sale?.onUsdt(value); }
 
@@ -85,7 +112,7 @@
     {/if}
   </div>
   <div class="moneyStack">
-  <div class="moneyPanel exchangeMoneyPanel"><div class="panelTop">{@render asset(sendAsset)}</div><div class="panelCopy"><label for="otc-input">{sale ? direction === "buy" ? say("Buy amount · EVER", "Количество к покупке · EVER") : say("Sell amount · EVER", "Количество к продаже · EVER") : say(`You send · ${sendAsset} on ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы отправляете · ${sendAsset} · ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><div class="amountRow"><input id="otc-input" class="amountInput" class:shortfall={sendShort} type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={sendValue} data-testid={sale ? "otc-offer-ever" : undefined} disabled={busy} on:input={(event) => changeSend(event.currentTarget.value)} on:focus={(event) => event.currentTarget.select()} />{#if sendShort}{@render shortfallMark("EVER")}{/if}</div></div></div>
+  <div class="moneyPanel exchangeMoneyPanel"><div class="panelTop">{@render asset(sendAsset)}</div><div class="panelCopy"><label for="otc-input">{sale ? direction === "buy" ? say(usdMode ? "Buy amount · USD" : "Buy amount · EVER", usdMode ? "Количество к покупке · USD" : "Количество к покупке · EVER") : say(usdMode ? "Sell amount · USD" : "Sell amount · EVER", usdMode ? "Количество к продаже · USD" : "Количество к продаже · EVER") : say(`You send · ${sendAsset} on ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы отправляете · ${sendAsset} · ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><div class="amountRow"><input id="otc-input" class="amountInput" class:shortfall={sendShort} type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedSendValue} data-testid={sale ? "otc-offer-ever" : undefined} disabled={busy} on:input={(event) => changeSend(event.currentTarget.value)} on:focus={focusSend} on:blur={blurSend} />{#if sendShort}{@render shortfallMark("EVER")}{/if}</div>{#if sale}<div class="marketMeta"><span class="marketValue" data-testid="otc-market-value" aria-label={usdMode && usdAvailable ? say("Approximate EVER amount", "Примерная сумма в EVER") : say("Approximate USD market value", "Примерная рыночная стоимость в долларах")}>{usdMode && usdAvailable ? formatTokenMarketValue(Number(sale.everAmount), "EVER") : formatUsdMarketValue(Number(usdValue))}</span><button type="button" class="usdToggle" class:usdToggleActive={usdMode} aria-pressed={usdMode} disabled={!usdAvailable || busy} title={say("Switch amount between USD and EVER", "Переключить сумму между USD и EVER")} aria-label={say("Switch amount between USD and EVER", "Переключить сумму между USD и EVER")} on:click={toggleUsd}>USD</button></div>{/if}</div></div>
   <ExchangeFlowBridge overlay reversed={direction === "sell"} onSwap={() => { if (!busy) onDirection(direction === "buy" ? "sell" : "buy"); }} label={`${copy.buy} / ${copy.sell}`} />
   <div class="moneyPanel exchangeMoneyPanel"><div class="panelTop">{@render asset(receiveAsset)}</div><div class="panelCopy"><label for="otc-receive">{sale ? direction === "buy" ? say("Total to pay · USDT", "Всего к оплате · USDT") : say("Total to receive · USDT", "Всего к получению · USDT") : say(`You receive · ${receiveAsset} on ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы получаете · ${receiveAsset} · ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><div class="amountRow"><input id="otc-receive" class="amountInput amountOutput" class:shortfall={receiveShort} readonly={!sale} value={receiveValue} data-testid={sale ? "otc-offer-usdt" : undefined} disabled={busy} inputmode="decimal" autocomplete="off" on:input={(event) => changeReceive(event.currentTarget.value)} placeholder={sale?.marketApprox ? `≈ ${sale.marketApprox}` : "—"} />{#if receiveShort}{@render shortfallMark("USDT")}{/if}</div></div></div>
   </div>

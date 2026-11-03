@@ -20,7 +20,7 @@ export interface OfferHistoryPoint {
   terms: { direction: Direction; ever_amount: string; usdt_amount: string };
 }
 
-export { offerDecimal, offerTotal, offerEver, offerUnits, offerFloored, balanceUnits, offerShortfall, marketUsdtPerEver, p2pFeeSplit, MAX_OFFER_EVER_UNITS, MAX_OFFER_USDT_UNITS, saleRate, compareOfferRates } from "./offer-amount";
+export { offerDecimal, offerTotal, offerEver, offerUnits, offerFloored, balanceUnits, offerShortfall, marketUsdtPerEver, marketUsdPerEver, everFromUsd, p2pFeeSplit, MAX_OFFER_EVER_UNITS, MAX_OFFER_USDT_UNITS, saleRate, compareOfferRates } from "./offer-amount";
 
 export const offerDirection = (offer: PublicOffer): Direction => offer.terms.direction || "sell";
 export const offerOwner = (offer: PublicOffer): string => offer.owner_ever || offer.seller_ever;
@@ -46,6 +46,8 @@ export interface SaleTicketState {
   linkingEvm: boolean;
   marketPrice: boolean;
   marketRate: string;
+  /** USD per EVER from the same reference feed, used by the USD amount input. */
+  marketUsdRate: string;
   marketApprox: string;
   error: string;
   onPrice: (value: string) => void;

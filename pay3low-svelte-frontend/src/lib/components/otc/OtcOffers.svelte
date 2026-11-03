@@ -5,7 +5,7 @@
   import { connectWallet, wallets } from "$lib/wallet-session";
   import { sameWalletAddress } from "$lib/wallet-amount";
   import { fetchMarketPrices } from "$lib/exchange";
-  import { saleRate, offerDecimal, offerTotal, offerEver, offerUnits, offerFloored, balanceUnits, offerShortfall, marketUsdtPerEver, MAX_OFFER_EVER_UNITS, MAX_OFFER_USDT_UNITS, type PublicOffer as Offer, type OfferHistoryPoint, type SaleTicketState } from "$lib/otc/public-offers";
+  import { saleRate, offerDecimal, offerTotal, offerEver, offerUnits, offerFloored, balanceUnits, offerShortfall, marketUsdtPerEver, marketUsdPerEver, MAX_OFFER_EVER_UNITS, MAX_OFFER_USDT_UNITS, type PublicOffer as Offer, type OfferHistoryPoint, type SaleTicketState } from "$lib/otc/public-offers";
   export let session: Session | null;
   export let busy = false;
   export let onConnect: () => void;
@@ -17,7 +17,7 @@
   let offers: Offer[] = [], mine: Offer[] = [], history: OfferHistoryPoint[] = [], error = "", message = "";
   let amountSource: "ever" | "usdt" = "ever";
   let priceInput = "", priceMode = false, loadedDirection: Direction = "sell";
-  let marketRate = "", marketPrice = false;
+  let marketRate = "", marketUsdRate = "", marketPrice = false;
   let everAmount = "", usdtAmount = "", receivingAddress = "", key = "";
   let linkingEvm = false, reviewing = false, mounted = false, generation = 0, loadedActor = "";
   let balances: WalletBalance[] = [], balanceGeneration = 0;
@@ -175,12 +175,14 @@
       const prices = await fetchMarketPrices(signal);
       if (signal.aborted) return;
       marketRate = marketUsdtPerEver(prices.prices.EVER, prices.prices.USDT) || "";
+      marketUsdRate = marketUsdPerEver(prices.prices.EVER) || "";
       if (!marketRate) marketPrice = false;
       else if (marketPrice) applyMarketRate(marketRate);
     } catch (error) {
       if (signal.aborted) return;
       // A missing feed must not interrupt offer publication; the price stays editable.
       marketRate = "";
+      marketUsdRate = "";
       marketPrice = false;
       console.warn("Market prices unavailable", error);
     }
@@ -212,7 +214,7 @@
   function changeAddress(value: string) { receivingAddress = value; edited(); }
   $: ticket = {
     direction, price, priceRounded, roundingAsset, amountFloored, shortfall, fundedBalance, blockingReason, everAmount, usdtAmount, receivingAddress, seller, askingRate, valid, reviewing, linkingEvm,
-    marketPrice, marketRate, marketApprox, error,
+    marketPrice, marketRate, marketUsdRate, marketApprox, error,
     onPrice: changePrice,
     onEver: changeEver,
     onUsdt: changeUsdt,

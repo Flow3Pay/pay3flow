@@ -143,6 +143,26 @@ test("market price hint fills the USDT total and toggles a live rate", async ({ 
   await expect(page.getByTestId("otc-offer-usdt")).toHaveValue("20000");
 });
 
+test("USD input converts the EVER amount and shows the token value", async ({ page }) => {
+  await setup(page, { signedIn: true });
+  await page.getByTestId("otc-offer-ever").fill("1000");
+  await expect(page.getByTestId("otc-market-value")).toHaveText("$1.05");
+
+  const toggle = page.getByRole("button", { name: "Switch amount between USD and EVER", exact: true });
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("otc-offer-ever")).toHaveValue("1.05");
+
+  await page.getByTestId("otc-offer-ever").fill("100");
+  await expect(page.getByTestId("otc-offer-ever")).toHaveValue("100");
+  await expect(page.getByTestId("otc-market-value")).toHaveText("95,213.61173793 EVER");
+
+  await toggle.click();
+  await expect(page.getByTestId("otc-offer-ever")).toHaveValue("95213.611737934");
+  await expect(page.getByTestId("otc-market-value")).toHaveText("$100.00");
+});
+
+
 test("a P2P deal shows the gross amount, the 3% service fee, the net and the USDT payout", async ({ page }) => {
   const fee = { version: "p2p-3pct-v1", rate: "0.03", floor: "0", basis_units: "11889000", fee_units: "356670", net_units: "11532330", precision: 6 };
   const deal = {

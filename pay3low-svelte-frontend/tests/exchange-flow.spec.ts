@@ -784,6 +784,28 @@ test("USD values recover after the first market price request fails", async ({ p
   await expect(page.locator(".moneyPanelSource .marketValue")).toHaveText("$2.00");
 });
 
+test("USD toggle turns the sending field into a USD budget and shows token units", async ({ page }) => {
+  await mockBackend(page);
+  await openApp(page, "/#/swap/USDT/USDC?amount=2");
+  await expect(page.getByRole("button", { name: "Select sending asset: USDT" })).toBeVisible();
+  await expect(page.locator(".moneyPanelSource .marketValue")).toHaveText("$2.00");
+
+  const toggle = page.locator(".moneyPanelSource .usdToggle");
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByLabel("Amount to send in USD")).toHaveValue("2.00");
+  await expect(page.locator(".moneyPanelSource .marketValue")).toHaveText("2 USDT");
+
+  await page.getByLabel("Amount to send in USD").fill("100");
+  await expect(page.locator(".moneyPanelSource .marketValue")).toHaveText("100 USDT");
+  await expect(page.getByLabel("Amount to send in USD")).toHaveValue("100");
+
+  await toggle.click();
+  await expect(page.getByLabel("Amount to send")).toHaveValue("100");
+  await expect(page.locator(".moneyPanelSource .marketValue")).toHaveText("$100.00");
+});
+
 async function mockBackend(page: Page, options: { includeRestoredTokens?: boolean; includeGram?: boolean; includeNewProviders?: boolean; includeEverscale?: boolean; routeCount?: number; spotCycle?: boolean; spotVenue?: string; spotGuidance?: boolean; reviews?: boolean; usdtFiatNetwork?: string; mexc?: boolean; guideVenue?: string; cifra?: boolean; directSwapProvider?: string } = {}) {
   await page.addInitScript(() => {
     if (!localStorage.getItem("pay3flow-locale")) localStorage.setItem("pay3flow-locale", "en");

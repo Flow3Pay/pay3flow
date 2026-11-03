@@ -28,6 +28,7 @@
   import SearchActivityModal from "./SearchActivityModal.svelte";
   import CurrencyPicker from "./CurrencyPicker.svelte";
   import ReferenceRates from "./ReferenceRates.svelte";
+  import { formatTokenMarketValue, formatUsdAmount, formatUsdMarketValue, sanitizeDecimalInput, tokenAmountForUsd } from "$lib/usd-amount";
   import NetworkPicker from "./NetworkPicker.svelte";
   import ScrambleHeadline from "./ScrambleHeadline.svelte";
 
@@ -89,6 +90,8 @@
   let amount = "0";
   let targetAmount = "0";
   let amountSide: AmountSide = "source";
+  let sourceAmountUsd = false;
+  let sourceUsdEntry = "";
   let sourceAmountFocused = false;
   let targetAmountFocused = false;
   let targetAmountNeedsRate = false;
@@ -622,7 +625,13 @@
   $: previewCanSwap = Boolean(previewRoute?.status === "complete" && canOpenSwap(buildRouteTutorial(previewRoute, {}, {}, {}, key => key)[0], previewRoute));
   $: displayedSourceAmount = amountSide === "target" && targetAmountNeedsRate && amountNumber(amount) <= 0 ? "" : amount;
   $: displayedTargetAmount = amountSide === "target" && !previewRoute ? targetAmount : amountFromRoute(previewRoute);
-  $: displayedSourceInput = sourceAmountFocused ? displayedSourceAmount : compactInputAmount(displayedSourceAmount);
+  $: sourceUsdPrice = sourceMethod?.kind === "wallet" ? marketPrices[selectedSourceCurrency] : undefined;
+  $: sourceUsdAvailable = typeof sourceUsdPrice === "number" && Number.isFinite(sourceUsdPrice) && sourceUsdPrice > 0;
+  $: if (!sourceUsdAvailable && sourceAmountUsd) { sourceAmountUsd = false; sourceUsdEntry = ""; }
+  $: displayedSourceUsdValue = sourceUsdAvailable ? calculateMarketUsd(displayedSourceAmount, sourceUsdPrice) : null;
+  $: displayedSourceInput = sourceAmountUsd && sourceUsdAvailable
+    ? (sourceAmountFocused && sourceUsdEntry ? sourceUsdEntry : formatUsdAmount(displayedSourceUsdValue))
+    : (sourceAmountFocused ? displayedSourceAmount : compactInputAmount(displayedSourceAmount));
   $: displayedTargetInput = targetAmountFocused ? displayedTargetAmount : compactInputAmount(displayedTargetAmount);
   $: onShareStateChange(urlReady && sourceMethod && targetMethod ? {
     source: selectedSourceCurrency, target: selectedTargetCurrency,
@@ -691,8 +700,7 @@
     return Number.isFinite(total) ? total : null;
   }
   function formatMarketUsd(value: number) {
-    if (value > 0 && value < 0.01) return "<$0.01";
-    return `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return formatUsdMarketValue(value);
   }
   function updateHash(source: string, target: string, value: string) {
     if (guideRequested || parseExchangeHash(location.hash)?.guide) return;
@@ -731,6 +739,21 @@
     amount = normalizeAmount(value);
     resetResults();
   }
+  function updateSourceAmount(value: string) {
+    if (sourceAmountUsd && sourceUsdAvailable) {
+      const nextUsd = sanitizeDecimalInput(value);
+      sourceUsdEntry = nextUsd;
+      updateAmount(tokenAmountForUsd(nextUsd, sourceUsdPrice ?? 0, 8) || "0");
+      return;
+    }
+    updateAmount(value);
+  }
+  function toggleSourceUsd() {
+    if (!sourceUsdAvailable) return;
+    sourceAmountUsd = !sourceAmountUsd;
+    sourceUsdEntry = "";
+    void tick().then(() => document.getElementById("exchange-amount")?.focus());
+  }
   const compactInputAmount = (value: string) => value.length > 10 ? `${value.slice(0, 7)}…` : value;
   function focusAmountInput(event: FocusEvent, side: AmountSide) {
     sourceAmountFocused = side === "source";
@@ -739,7 +762,7 @@
     void tick().then(() => input.select());
   }
   function blurAmountInput(side: AmountSide) {
-    if (side === "source") sourceAmountFocused = false;
+    if (side === "source") { sourceAmountFocused = false; sourceUsdEntry = ""; }
     else targetAmountFocused = false;
   }
   function updateTargetAmount(value: string) {
@@ -1256,7 +1279,7 @@
 
       <div class="moneyStack">
       <div class="moneyPanel moneyPanelSource exchangeMoneyPanel">
-        <div class="panelCopy"><label for="exchange-amount">{t("You send", {}, activeLocale)}</label><input id="exchange-amount" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedSourceInput} on:focus={(event) => focusAmountInput(event, "source")} on:blur={() => blurAmountInput("source")} on:input={(event) => updateAmount(event.currentTarget.value)} aria-label={t("Amount to send", {}, activeLocale)} /><span class="marketValue" aria-label={marketUsd.source === null ? undefined : t("Approximate USD market value", {}, activeLocale)}>{marketUsd.source === null ? "" : formatMarketUsd(marketUsd.source)}</span></div>
+        <div class="panelCopy"><label for="exchange-amount">{t("You send", {}, activeLocale)}</label><input id="exchange-amount" class="amountInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedSourceInput} on:focus={(event) => focusAmountInput(event, "source")} on:blur={() => blurAmountInput("source")} on:input={(event) => updateSourceAmount(event.currentTarget.value)} aria-label={sourceAmountUsd && sourceUsdAvailable ? t("Amount to send in USD", {}, activeLocale) : t("Amount to send", {}, activeLocale)} /><div class="marketMeta"><span class="marketValue" aria-label={sourceAmountUsd && sourceUsdAvailable ? t("Approximate token amount", {}, activeLocale) : marketUsd.source === null ? undefined : t("Approximate USD market value", {}, activeLocale)}>{#if sourceAmountUsd && sourceUsdAvailable}{formatTokenMarketValue(Number(displayedSourceAmount.replace(",", ".")), selectedSourceCurrency)}{:else}{marketUsd.source === null ? "" : formatMarketUsd(marketUsd.source)}{/if}</span>{#if sourceMethod?.kind === "wallet"}<button type="button" class="usdToggle" class:usdToggleActive={sourceAmountUsd} aria-pressed={sourceAmountUsd} disabled={!sourceUsdAvailable} title={t("Toggle USD amount input", {}, activeLocale)} aria-label={t("Toggle USD amount input", {}, activeLocale)} on:click={toggleSourceUsd}>USD</button>{/if}</div></div>
         <div class="methodControls">
           <button type="button" class="methodTrigger" data-tooltip={sourceMethod?.kind === "wallet" ? `${sourceCurrencyChoice} · ${t(sourceMethod.name, {}, activeLocale)}` : t(methodTitle(sourceMethod), {}, activeLocale)} on:click={() => void openMethodPicker("source")} aria-label={`Select sending ${methodNoun(sourceMethod)}: ${sourceMethod ? methodTitle(sourceMethod) : "none"}`}>
             <span class="methodAvatar" style:background-color={paymentMethodFavicon(sourceMethod) ? "transparent" : sourceMethod?.color ?? "#171a17"} aria-hidden="true">{#if paymentMethodFavicon(sourceMethod)}<img src={paymentMethodFavicon(sourceMethod) ?? ""} alt="" width="48" height="48" loading="lazy" decoding="async" on:error={hideBrokenImage} /><span data-icon-fallback style="display:none">{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{:else}<span>{sourceMethod?.initials ?? corridor?.source_country ?? "—"}</span>{/if}</span>

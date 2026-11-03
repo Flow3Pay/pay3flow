@@ -79,6 +79,20 @@ export function marketUsdtPerEver(everUsd: number | undefined, usdtUsd: number |
   return rate > 0n ? decimal(rate.toString(), 12) : null;
 }
 
+/** USD per EVER from the reference feed, floored into the twelve decimals the price field accepts. */
+export function marketUsdPerEver(everUsd: number | undefined): string | null {
+  const e = priceUnits(everUsd);
+  return e === null ? null : decimal(e.toString(), 12);
+}
+
+/** EVER for a USD budget at the reference USD price, floored to EVER's nine decimals. */
+export function everFromUsd(usd: string, usdPerEver: string): { amount: string; rounded: boolean } | null {
+  const u = offerDecimal(usd, 2), p = offerDecimal(usdPerEver, 12);
+  if (!u || !p) return null;
+  const numerator = toUnits(u, 2) * 10n**19n, denominator = toUnits(p, 12);
+  return { amount: decimal((numerator / denominator).toString(), 9), rounded: numerator % denominator !== 0n };
+}
+
 /** Calculate EVER from an exact USDT budget and a unit price. */
 export function offerEver(usdt: string, price: string): { amount: string; rounded: boolean } | null {
   const u=offerDecimal(usdt,6),p=offerDecimal(price,12);
