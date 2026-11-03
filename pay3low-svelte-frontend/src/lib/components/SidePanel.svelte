@@ -213,34 +213,15 @@
               </div>
             {/if}
             {#if routeVenues.length}
-              <span class="foundVenues" aria-label={`Venues used in found routes: ${routeVenues.map((venue) => venue.label).join(", ")}`} on:pointerleave={() => routeCountHover = false} on:focusout={() => routeCountHover = false}>              {#each routeVenues as venue, index (venue.id)}
+              <span class="foundVenues" aria-label={`Venues used in found routes: ${routeVenues.map((venue) => venue.label).join(", ")}`} on:pointerleave={() => routeCountHover = false} on:focusout={() => routeCountHover = false}>{#each routeVenues.slice(0, 5) as venue, index (venue.id)}
                   {@const status = venueStats[venue.id.toLowerCase()]}
                   {@const hasRoute = (status?.routes_found ?? 0) > 0}
-                  <div class:foundVenueActive={selectedVenueId === venue.id.toLowerCase()} class:foundVenueOpen={openVenueId === venue.id} class="foundVenue" role="group" aria-label={venue.label} data-testid="found-venue" title={`Found on ${venue.label}`} style:animation-delay={`${index * 70}ms`} on:pointerenter={(event) => openVenuePopover(event.currentTarget, venue.id)} on:pointerleave={(event) => closeVenuePopover(event.currentTarget, venue.id)} on:focusin={(event) => openVenuePopover(event.currentTarget, venue.id)} on:focusout={(event) => closeVenuePopover(event.currentTarget, venue.id)}>
-                    <button type="button" class="foundVenueButton" aria-label={`Show ${venue.label} routes`} aria-pressed={selectedVenueId === venue.id.toLowerCase()} disabled={!hasRoute} on:click={() => selectedVenueId = selectedVenueId === venue.id.toLowerCase() ? null : venue.id.toLowerCase()}>
-                      <img src={venue.iconUrl || venueIcon(venue.id)} alt="" width="18" height="18" decoding="async" on:error={fallbackFoundVenueIcon} />
-                      <span class="foundVenueFallback" aria-hidden="true" hidden>{venue.label.slice(0, 1).toUpperCase()}</span>
-                    </button>
-                    <div class="foundVenuePopover" role="group" aria-label={venue.label} on:click|stopPropagation={hideActivity}>
-                      <div class="foundVenuePopoverTitle">
-                        <img src={venue.iconUrl || venueIcon(venue.id)} alt="" width="20" height="20" decoding="async" on:error={(event) => fallbackVenueIcon(event, venue.id)} />
-                        <strong>{venue.label}</strong>
-                      </div>
-                      <a class="foundVenueProfile" href={`/providers/${encodeURIComponent(venue.id.toLowerCase())}`} aria-label={t("Open {venue} profile", { venue: venue.label }, $locale)}>
-                        {t("Open platform profile", {}, $locale)}
-                        <span aria-hidden="true">→</span>
-                      </a>
-                      {#if !hasRoute && status?.ok !== false}<span class:venueOk={status?.ok}>{(status?.offers_found ?? 0) > 0 ? "Offers received · no matching route" : "No matching route"}</span>{/if}
-                      <dl>
-                        <div><dt>Routes found</dt><dd>{status?.routes_found ?? 0}</dd></div>
-                        <div><dt>Quotes / markets received</dt><dd>{status?.offers_found ?? 0}</dd></div>
-                        {#if status?.last_response_ms != null}<div><dt>Last response</dt><dd>{status.last_response_ms} ms</dd></div>{/if}
-                        {#if status?.average_response_ms != null}<div><dt>Average response</dt><dd>{status.average_response_ms} ms ({status.response_samples})</dd></div>{/if}
-                        {#if status?.cache_hits}<div><dt>Cache hits</dt><dd>{status.cache_hits}</dd></div>{/if}
-                      </dl>
-                    </div>
-                  </div>
+                  <button type="button" class="venueChip" aria-label={`Show ${venue.label} routes`} aria-pressed={selectedVenueId === venue.id.toLowerCase()} disabled={!hasRoute} on:click={() => selectedVenueId = selectedVenueId === venue.id.toLowerCase() ? null : venue.id.toLowerCase()} on:focus={() => openPopover = venue.id} on:blur={() => openPopover = null}><img src={venue.iconUrl || venueIcon(venue.id)} alt="" width="16" height="16" decoding="async" class="venueChipIcon" on:error={fallbackFoundVenueIcon} /></button>
                 {/each}
+                {#if routeVenues.length > 5}
+                  <button type="button" class="venueMoreChip" aria-label="More venues" title="More venues">+{routeVenues.length - 5}</button>
+                {/if}
+                <button type="button" class="venueMoreChip" aria-label="More venues" title="More venues" on:click|stopPropagation={() => { selectedVenueId = null; openVenueId = null; showVenueMenu = !showVenueMenu; }}>…</button>
               </span>
             {/if}
           </span>
@@ -400,6 +381,14 @@
 .sendCurrency img { display: block; flex: 0 0 auto; border-radius: 50%; object-fit: contain; }
 .sendArrow { display: inline-flex; align-items: center; color: var(--color-text-soft); }
 
+.sideTabs { position: relative; isolation: isolate; display: inline-flex; padding: 4px; gap: 4px; border-radius: 9px; background: var(--color-panel); }
+.sideTabs::before { position: absolute; z-index: -1; inset: 4px auto 4px 4px; width: calc(50% - 6px); border-radius: 6px; background: var(--color-accent); content: ""; transition: transform .32s cubic-bezier(.22, 1, .36, 1); }
+.sideTabs.selling::before { transform: translateX(calc(100% + 4px)); }
+.sideTabs button.active { color: #fff; }
+.sideTabs button { flex: 1; min-width: 0; padding: 9px 3px; border-radius: 6px; color: var(--color-text-soft); font-size: 12px; font-weight: 750; transition: color .2s ease, background .2s ease; background: transparent; border: 0; cursor: pointer; }
+.sideTabs button:focus-visible { outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 2px; }
+.sideTabs.selling button.active { background: #c8231f; color: #fff; }
+
 .panelActions {
   display: flex;
   align-items: flex-start;
@@ -533,6 +522,84 @@
   z-index: 41;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.venueMoreMenu {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.venueChip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-soft);
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease, transform 0.14s ease;
+}
+
+.venueChip:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.venueChipIcon {
+  display: block;
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  filter: brightness(0);
+}
+
+:global(html[data-theme="dark"]) .venueChipIcon {
+  filter: brightness(0) invert(1);
+}
+
+.venueMoreChip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-soft);
+  font: inherit;
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+.venueMoreChip:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.venueMoreChip[aria-pressed="true"] {
+  background: var(--color-strong-accent);
+  color: var(--color-strong-accent-contrast);
+}
+
+.venueMoreChip:hover:not([aria-pressed="true"]) {
+  background: var(--color-panel-soft);
+  color: var(--color-text);
+}
+
+.venueMoreChip::before {
+  content: attr(data-label);
+  display: none;
 }
 
 .foundVenue {
