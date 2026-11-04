@@ -136,8 +136,8 @@
         {/if}
         {#if searching && pendingVenues.length}
           <div class="searchingVenues" aria-label={`Searching ${pendingVenues.map((venue) => venue.label).join(", ")}`}>
-            {#each visiblePendingVenues as venue, index (venue.id)}
-              <span class="searchingVenue" data-testid="searching-venue" title={`Searching ${venue.label}`} style:animation-delay={`${index * 130}ms`}>
+            {#each visiblePendingVenues as venue (venue.id)}
+              <span class="searchingVenue" data-testid="searching-venue" title={`Searching ${venue.label}`}>
                 <img src={venue.iconUrl} alt="" width="20" height="20" decoding="async" on:error={(event) => fallbackVenueIcon(event, venue.id)} />
               </span>
             {/each}
@@ -271,6 +271,7 @@
 .panelHeading {
   display: flex;
   min-width: 0;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 3px;
 }
@@ -311,6 +312,7 @@
   flex-wrap: wrap;
   gap: 7px;
   position: relative;
+  margin-left: auto;
 }
 
 .routeCountButton {
@@ -787,8 +789,6 @@
   border-radius: 11px;
   background: rgba(27, 30, 26, 0.92);
   box-shadow: none;
-  animation: venueBounce 1.3s cubic-bezier(0.45, 0, 0.55, 1) infinite;
-  will-change: transform;
 }
 
 .searchingVenuesOverflow {
@@ -885,12 +885,6 @@
 @keyframes skeletonPulse {
   from { opacity: 0.55; }
   to { opacity: 1; }
-}
-
-@keyframes venueBounce {
-  0%, 45%, 100% { transform: translateY(0) scale(1); }
-  18% { transform: translateY(-7px) scale(1.05); }
-  28% { transform: translateY(1px) scale(0.98); }
 }
 
 @media (max-width: 980px) {
@@ -1072,8 +1066,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .routeList > li,
-  .routeCard,
-  .searchingVenue {
+  .routeCard {
     animation: none;
     transition: none;
   }
@@ -1173,7 +1166,6 @@
   .workflow { flex-wrap: wrap; gap: 8px; }
   .workflow:has(> .workflowPart:nth-child(2):last-child) { flex-wrap: wrap; }
   .panelTop { gap: 12px; }
-  .panelHeading { flex: 1; }
   .resultSummary { gap: 8px; }
 }
 </style>

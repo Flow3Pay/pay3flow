@@ -2138,8 +2138,8 @@ test("search venues only show providers with matching routes", async ({ page }) 
   await expect(searchingVenues.nth(4)).toHaveAttribute("title", "Searching ID Pay Live");
   await expect(panelTop.getByTestId("searching-venues-overflow")).toHaveText("...");
   await expect(searchingVenues.nth(0)).toHaveCSS("width", "32px");
-  await expect(searchingVenues.nth(0)).toHaveCSS("animation-delay", "0s");
-  await expect(searchingVenues.nth(1)).toHaveCSS("animation-delay", "0.13s");
+  await expect(searchingVenues.nth(0)).toHaveCSS("animation-name", "none");
+  await expect(searchingVenues.nth(1)).toHaveCSS("animation-name", "none");
 
   const refreshButton = page.getByRole("button", { name: "Refresh routes now" });
   await expect(refreshButton.locator("img")).toHaveClass(/refreshSpin/);
