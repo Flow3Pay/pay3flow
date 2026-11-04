@@ -130,7 +130,7 @@
   .periodButton:focus-visible { outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 2px; }
   @media (max-width: 980px), (pointer: coarse) { .periodButton { width: 44px; height: 44px; } .headingActions { margin-right: -6px; } }
   .periodButton img { width: 18px; height: 18px; object-fit: contain; filter: brightness(0); }
-  :global(html[data-theme="dark"]) .periodButton img { filter: none; }
+  :global(html[data-theme="dark"]) .periodButton img { filter: brightness(0) invert(1); }
   .periodMenu { position: absolute; z-index: 80; top: calc(100% + 9px); right: 0; width: 310px; max-width: calc(100vw - 32px); max-height: min(680px, calc(100dvh - 32px)); overflow-y: auto; padding: 17px; border: 1px solid var(--color-border); border-radius: 20px; background: rgba(255,255,255,.97); box-shadow: none; }
   :global(html[data-theme="dark"]) .periodMenu { border-color: var(--color-border-strong); background: #191919; }
   @media (max-width: 420px) { .activityHeading { align-items: flex-start; } .headingActions { gap: 4px; } .pair { gap: 3px; padding-inline: 5px; font-size: 12px; } .pairCurrency { gap: 3px; } .pairCurrency img { width: 14px; height: 14px; } .activityHeading strong { font-size: 12px; } }
