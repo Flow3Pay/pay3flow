@@ -443,7 +443,7 @@ test("search activity range menu filters and remembers the selected period", asy
   const chart = isMobile ? page.getByRole("dialog", { name: "Searches for this exchange" }).getByTestId("search-activity") : page.getByTestId("search-activity");
   await expect(chart.locator(".activityStats strong")).toHaveText("28");
   const rangeButton = chart.getByRole("button", { name: "Chart time range" });
-  await expect(rangeButton.locator("img")).toHaveAttribute("src", "/icons/ui/chart-period.png");
+  await expect(rangeButton.locator("img")).toHaveAttribute("src", "/icons/ui/chart-period.svg");
   await rangeButton.click();
   await expect(chart.locator(".headingCopy small")).toHaveCount(0);
   const menu = page.getByRole("dialog", { name: "Chart time range", exact: true });
@@ -3826,7 +3826,7 @@ test("guide suspends offscreen animation while scrolling", async ({ page, isMobi
   await startWalkthrough(guide);
   await guide.locator(".scene").scrollIntoViewIfNeeded();
   await expect(guide.locator(".scene")).not.toHaveClass(/paused/);
-  await expect(guide.getByTestId("playback-toggle").locator("img")).toHaveAttribute("src", "/icons/ui/guide-pause.png");
+  await expect(guide.getByTestId("playback-toggle").locator("img")).toHaveAttribute("src", "/icons/ui/guide-pause.svg");
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   await expect(guide.locator(".scene")).toHaveClass(/paused/);
   const progress = await guide.locator(".playerTimeline button[aria-pressed=true] > span").getAttribute("style");

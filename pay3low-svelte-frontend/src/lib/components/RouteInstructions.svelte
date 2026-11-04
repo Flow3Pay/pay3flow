@@ -198,14 +198,14 @@
               {#if step}
                 <div class="sceneOverlay">
                   <button type="button" class="sceneArrow previous" on:click={() => selectFrame(Math.max(0, frame - 1))} disabled={frame === 0} aria-label={copy("Previous scene")}>‹</button>
-                  <button type="button" class="centerPlayback" on:click={togglePlayback} aria-label={copy(playing ? "Pause walkthrough" : "Play walkthrough")} data-testid="center-playback">{#if playing}<img class="pauseIcon" src="/icons/ui/guide-pause.png" alt="" width="24" height="24" />{:else}<svg class="playIcon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 4.5v15L20 12 8 4.5Z" /></svg>{/if}</button>
+                  <button type="button" class="centerPlayback" on:click={togglePlayback} aria-label={copy(playing ? "Pause walkthrough" : "Play walkthrough")} data-testid="center-playback">{#if playing}<img class="pauseIcon" src="/icons/ui/guide-pause.svg" alt="" width="24" height="24" />{:else}<svg class="playIcon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 4.5v15L20 12 8 4.5Z" /></svg>{/if}</button>
                   <button type="button" class="sceneArrow next" on:click={() => selectFrame(Math.min(step!.frames.length - 1, frame + 1))} disabled={frame === step.frames.length - 1} aria-label={copy("Next scene")}>›</button>
                 </div>
               {/if}
               </div>
               {#if step}
                 <div class="playerControls">
-                  <button type="button" on:click={togglePlayback} aria-label={copy(playing ? "Pause walkthrough" : "Play walkthrough")} aria-pressed={playing} data-testid="playback-toggle">{#if playing}<img class="pauseIcon" src="/icons/ui/guide-pause.png" alt="" width="24" height="24" />{:else}<svg class="playIcon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 4.5v15L20 12 8 4.5Z" /></svg>{/if}</button>
+                  <button type="button" on:click={togglePlayback} aria-label={copy(playing ? "Pause walkthrough" : "Play walkthrough")} aria-pressed={playing} data-testid="playback-toggle">{#if playing}<img class="pauseIcon" src="/icons/ui/guide-pause.svg" alt="" width="24" height="24" />{:else}<svg class="playIcon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 4.5v15L20 12 8 4.5Z" /></svg>{/if}</button>
                   <div class="playerTimeline" aria-label={copy("Walkthrough scenes")}>{#each step.frames as item, index}<button type="button" aria-label={copy("Scene {number}: {title}", { number: index + 1, title: item.title })} aria-pressed={index === frame} title={item.title} on:click={() => selectFrame(index)}><b>{String(index + 1).padStart(2, "0")}</b><span style={`transform:scaleX(${index < frame ? 1 : index === frame ? Math.max(.04, elapsed / frameDuration) : 0})`}></span></button>{/each}</div>
                   <span class="sceneCount">{String(frame + 1).padStart(2, "0")} / {String(step.frames.length).padStart(2, "0")}</span>
                   <button type="button" on:click={replay} aria-label={copy("Replay walkthrough")}>↻</button>

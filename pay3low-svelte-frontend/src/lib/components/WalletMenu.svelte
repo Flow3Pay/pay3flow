@@ -156,7 +156,7 @@
 <div class="walletMenu">
   <button class="walletToggle" type="button" bind:this={toggle} disabled={$venueWalletMenu?.disabled ?? false} aria-label={count ? copy("Wallets ({count})", { count }) : copy("Connect wallet")} aria-haspopup="dialog" aria-expanded={$venueWalletMenu ? undefined : open} aria-controls={$venueWalletMenu ? undefined : "wallet-connections"} on:click={() => { error = ""; query = ""; if ($venueWalletMenu) $venueWalletMenu.onOpen(); else openWalletDialog($otcWalletDialog ? "otc" : "wallets"); }}>
     {#if avatar}<img class="walletAvatar" src={avatar} width="20" height="20" alt="" aria-hidden="true" />{/if}
-    <img class="walletIcon" src="/icons/ui/wallet-connect.png" width="18" height="18" alt="" aria-hidden="true" />
+    <img class="walletIcon" src="/icons/ui/wallet-connect.svg" width="18" height="18" alt="" aria-hidden="true" />
     <span>{count ? copy("Wallets ({count})", { count }) : copy("Connect wallet")}</span>
   </button>
 </div>

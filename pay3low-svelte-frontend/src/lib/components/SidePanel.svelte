@@ -131,7 +131,7 @@
       <div class="panelActions">
         {#if sourceCurrency && targetCurrency}
           <button type="button" class="activityButton" on:click={onOpenSearchActivity} aria-label={t("Open search activity graph", {}, $locale)} title={t("Open search activity graph", {}, $locale)}>
-            <img src="/icons/ui/search-activity.png" alt="" width="18" height="18" aria-hidden="true" />
+            <img src="/icons/ui/search-activity.svg" alt="" width="18" height="18" aria-hidden="true" />
           </button>
         {/if}
         {#if searching && pendingVenues.length}

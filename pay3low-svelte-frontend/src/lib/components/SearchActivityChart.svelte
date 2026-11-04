@@ -89,7 +89,7 @@
           {targetCurrency}
         </span>
       </span>
-      <div class="periodWrap" bind:this={periodMenu}><button type="button" class="periodButton" bind:this={periodButton} aria-label={t("Chart time range", {}, $locale)} aria-haspopup="dialog" aria-expanded={periodMenuOpen || periodPickerOpen} title={`${t("Chart time range", {}, $locale)}: ${periodLabel}`} on:click={togglePeriodPicker}><img src="/icons/ui/chart-period.png" alt="" width="18" height="18" aria-hidden="true" /></button>{#if periodMenuOpen}<div class="periodMenu" role="dialog" aria-label={t("Chart time range", {}, $locale)} tabindex="-1" transition:periodMenuTransition><ChartPeriodOptions {period} onSelect={choosePeriod} /></div>{/if}</div>
+      <div class="periodWrap" bind:this={periodMenu}><button type="button" class="periodButton" bind:this={periodButton} aria-label={t("Chart time range", {}, $locale)} aria-haspopup="dialog" aria-expanded={periodMenuOpen || periodPickerOpen} title={`${t("Chart time range", {}, $locale)}: ${periodLabel}`} on:click={togglePeriodPicker}><img src="/icons/ui/chart-period.svg" alt="" width="18" height="18" aria-hidden="true" /></button>{#if periodMenuOpen}<div class="periodMenu" role="dialog" aria-label={t("Chart time range", {}, $locale)} tabindex="-1" transition:periodMenuTransition><ChartPeriodOptions {period} onSelect={choosePeriod} /></div>{/if}</div>
     </div>
   </div>
   {#if error}

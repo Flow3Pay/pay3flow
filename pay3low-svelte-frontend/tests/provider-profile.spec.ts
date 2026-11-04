@@ -149,7 +149,7 @@ test('active tabs have a green underline and the existing share dialog previews 
     }
   }
   const share = page.getByRole('button', { name: 'Поделиться профилем', exact: true });
-  await expect(share.locator('img')).toHaveAttribute('src', '/icons/ui/share.png');
+  await expect(share.locator('img')).toHaveAttribute('src', '/icons/ui/share.svg');
   await share.click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();

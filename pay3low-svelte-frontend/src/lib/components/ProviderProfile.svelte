@@ -101,7 +101,7 @@
         <div class="identityCopy"><h1 id="venue-name">{venue.name}<span class="identityMark" title={copy.identity} aria-label={copy.identity}>✓</span></h1><div class="identityMeta">{#each venue.types as type}<span class="typeBadge">{copy[type]}</span>{/each}</div></div>
       </div>
       <div class="heroBottom"><div class="heroActions">{#if venue.url}<a class="officialButton" href={venue.url} target="_blank" rel="noopener noreferrer">{sourceHost}<span>↗</span></a>{/if}<a class="exchangeButton" href={providerSwapHref(slug)}>{copy.findRoutes}<span>↗</span></a></div></div>
-      <div class="quickActions"><button type="button" aria-label={copy.shareProfile} title={copy.shareProfile} aria-haspopup="dialog" aria-expanded={shareOpen} on:click={share}><img src="/icons/ui/share.png" alt="" width="20" height="20" /></button></div>
+      <div class="quickActions"><button type="button" aria-label={copy.shareProfile} title={copy.shareProfile} aria-haspopup="dialog" aria-expanded={shareOpen} on:click={share}><img src="/icons/ui/share.svg" alt="" width="20" height="20" /></button></div>
     </section>
     {#if catalogFailed}<p class="catalogNotice">{copy.catalogFailed}</p>{/if}
     {#if unavailable}<p class="catalogNotice" role="status">{copy.unavailable}</p>{/if}

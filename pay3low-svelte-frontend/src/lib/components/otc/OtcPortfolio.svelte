@@ -56,7 +56,7 @@
 <div class="portfolio">
   <div class="cardHead">
     <h2>{say("My Portfolio", "Мой портфель")}</h2>
-    <button type="button" class="walletIcon" aria-label={say("Wallet connections", "Подключённые кошельки")} on:click={onWallets}><img src="/icons/ui/wallet-connect.png" width="20" height="20" alt="" /></button>
+    <button type="button" class="walletIcon" aria-label={say("Wallet connections", "Подключённые кошельки")} on:click={onWallets}><img src="/icons/ui/wallet-connect.svg" width="20" height="20" alt="" /></button>
   </div>
   <div class="assetRows">
     {#each rows as row (row.symbol)}
