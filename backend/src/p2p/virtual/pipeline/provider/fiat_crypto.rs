@@ -178,6 +178,7 @@ impl P2pSearchService {
                                             .collect(),
                                         quote_expires_at: quote.expires_at,
                                         execution: None,
+                                        executions: Vec::new(),
                                         payment_methods_verified,
                                         entry_offer: Some(offer.clone()),
                                         exit_offer: None,

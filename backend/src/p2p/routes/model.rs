@@ -104,6 +104,10 @@ pub struct P2pRoute {
     pub quote_expires_at: Option<DateTime<Utc>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub execution: Option<RouteExecutionDescriptor>,
+    /// Every wallet-executable leg of the route, in path order. `execution`
+    /// stays the first entry for routes with a single swap leg.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub executions: Vec<RouteExecutionDescriptor>,
     /// True when both selected bank names were present in venue responses.
     /// False means at least one venue returned only opaque payment IDs.
     pub payment_methods_verified: bool,

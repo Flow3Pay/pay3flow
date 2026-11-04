@@ -129,6 +129,7 @@ export function buildRouteTutorial(route: RouteCandidate, names: Record<string, 
         amount: `${leg.input_amount} ${from}`, output: `${leg.output_amount} ${to}`, network: network(leg.from_asset.split("@")[1]), targetNetwork: network(leg.to_asset.split("@")[1]), pair: leg.market_pair ?? undefined,
         frames: swapFrames(name, pathAsset(leg.from_asset), pathAsset(leg.to_asset)), notes, checkpoint: receive,
         url: leg.source_url ?? (leg.market_pair ? spotTutorialUrl(leg.provider, leg.market_pair, from, to) : null), direct: true,
+        execution: ["cow-swap", "symbiosis", "near-intents"].includes(leg.provider.toLowerCase()),
       });
     });
     return steps;

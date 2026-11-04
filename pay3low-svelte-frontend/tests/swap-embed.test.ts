@@ -30,3 +30,17 @@ test("providers and cycles without an own executable leg stay guides", () => {
 test("the Pay3Flow OTC desk keeps its own executable swap step", () => {
   assert.equal(canOpenSwap(step("pay3flow-otc"), route()), true);
 });
+
+test("each executable cycle leg opens against its own descriptor", () => {
+  const multi = {
+    route_id: "r",
+    execution: { provider: "symbiosis", from_asset: "USDT@ethereum", to_asset: "USDC@ethereum", input_amount: "10", expires_at: "2030-01-01T00:00:00Z", token: "a" },
+    executions: [
+      { provider: "symbiosis", from_asset: "USDT@ethereum", to_asset: "USDC@ethereum", input_amount: "10", expires_at: "2030-01-01T00:00:00Z", token: "a" },
+      { provider: "cow-swap", from_asset: "USDC@ethereum", to_asset: "DAI@ethereum", input_amount: "9.9", expires_at: "2030-01-01T00:00:00Z", token: "b" },
+    ],
+  } as RouteCandidate;
+  assert.equal(canOpenSwap(step("symbiosis", { execution: true, fromAsset: "USDT@ethereum" }), multi), true);
+  assert.equal(canOpenSwap(step("cow-swap", { execution: true, fromAsset: "USDC@ethereum" }), multi), true);
+  assert.equal(canOpenSwap(step("cow-swap", { execution: true, fromAsset: "USDT@ethereum" }), multi), false);
+});

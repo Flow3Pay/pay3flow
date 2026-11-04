@@ -411,7 +411,7 @@
         target_amount_minor: Math.round(targetAmount * 100), target_amount: route.target_amount, target_currency: route.target_fiat,
         target_method_icon_url: toMethod?.kind !== "wallet" ? paymentMethodFavicon(toMethod) ?? undefined : undefined,
         route_kind: route.route_kind, profitability: route.profitability, cycle_legs: route.cycle_legs, profitability_decimals: route.profitability_decimals, bridge_currency: route.bridge_currency, market_path: route.market_path,
-        route_provider: route.route_provider, route_provider_url: route.route_provider_url, route_path: route.route_path, route_fees: route.route_fees, quote_expires_at: route.quote_expires_at, execution: route.execution,
+        route_provider: route.route_provider, route_provider_url: route.route_provider_url, route_path: route.route_path, route_fees: route.route_fees, quote_expires_at: route.quote_expires_at, execution: route.execution, executions: route.executions,
         spread_bps: discovered ? bestValue != null && bestValue > 0 && discovered.value_received_per_input != null && !discovered.missing_costs.length
           ? Math.round((discovered.value_received_per_input / bestValue - 1) * 10_000) : NaN : bestTarget > 0 && Number.isFinite(targetAmount) ? Math.round((targetAmount / bestTarget - 1) * 10_000) : 0,
         is_current_best: index === 0, is_live_market: true, payment_methods_verified: route.payment_methods_verified,

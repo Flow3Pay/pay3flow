@@ -228,6 +228,9 @@ pub(crate) fn aggregate_market(candles: &[ExchangeCandle], window: &Window) -> V
             let (Some(open), Some(close)) = (bucket.open, bucket.close) else {
                 return None;
             };
+            if bucket.volume <= 0.0 {
+                return None;
+            }
             Some(json!({
                 "t": window.from.timestamp() + index as i64 * window.bucket_seconds,
                 "open": round(open, 8),

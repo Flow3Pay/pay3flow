@@ -2,6 +2,7 @@
   import type { RouteCandidate } from "$lib/exchange";
   import type { TutorialStep } from "$lib/route-tutorial";
   import { swapInput } from "$lib/swap-service";
+  import { executionFor } from "$lib/swap-embed";
   import { walletFamily } from "$lib/wallet-execution";
   import RouteExecutionPanel from "./RouteExecutionPanel.svelte";
   import SdkSwapPanel from "./SdkSwapPanel.svelte";
@@ -9,12 +10,13 @@
   export let step: TutorialStep;
   export let networkNames: Record<string, string> = {};
   $: input = swapInput(route, step, networkNames);
-  $: native = Boolean(step.execution && route.execution && walletFamily(input.fromAsset.split("@")[1]));
+  $: legDescriptor = executionFor(step, route) ?? null;
+  $: native = Boolean(legDescriptor && walletFamily(input.fromAsset.split("@")[1]));
 </script>
 
 <div class="unifiedSwap" data-testid="unified-swap">
-  {#key input.routeId}
-    {#if native}<RouteExecutionPanel {route} {networkNames} />
+  {#key `${input.routeId}:${legDescriptor?.provider ?? ""}:${legDescriptor?.from_asset ?? ""}`}
+    {#if native}<RouteExecutionPanel {route} executionDescriptor={legDescriptor} {networkNames} />
     {:else}<SdkSwapPanel {input} providerName={step.venue} {networkNames} initialOutput={step.output?.replace(new RegExp(` ${step.to}$`), "")} />{/if}
   {/key}
 </div>

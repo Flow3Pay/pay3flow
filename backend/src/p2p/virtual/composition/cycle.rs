@@ -154,6 +154,7 @@ pub(in crate::p2p) fn crypto_swap_from_quotes(
         }).collect(),
         quote_expires_at: expires_at,
         execution: None,
+        executions: Vec::new(),
         payment_methods_verified: true,
         entry_offer: None,
         exit_offer: None,

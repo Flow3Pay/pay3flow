@@ -109,14 +109,14 @@
   }
 
   /**
-   * Exchange candles are the primary series because they carry a real OHLC for
-   * every bucket. Desk prints come next, then the indicative series and finally
-   * publications, all re-bucketed onto the selected range's fixed grid so the
-   * candle interval never drifts away from the chosen range.
+   * Exchange candles are the primary series when they carry real traded OHLC.
+   * Flat zero-volume Gate buckets (common on short ranges) are rejected so the
+   * denser spot series can draw instead of white stripes. Desk prints come
+   * next, then spot, then publications — all on the selected range's grid.
    */
   function buildLayout(source: History | null, prints: Mark[], window: ChartWindow): { bars: KLineData[]; window: ChartWindow } {
-    const market = marketBars(source);
-    if (market.length) return { bars: market, window };
+    const market = marketBars(source).filter(bar => (bar.volume ?? 0) > 0);
+    if (market.length >= 2) return { bars: market, window };
     const server = serverBars(source);
     if (server.length >= 4) return { bars: server, window };
     const spot = markCandles(spotMarks(source), window);

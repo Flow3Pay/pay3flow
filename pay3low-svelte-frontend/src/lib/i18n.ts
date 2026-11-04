@@ -578,6 +578,8 @@ const messages: Record<Locale, Record<string, string>> = {
     "Waiting for wallet…": "Ожидаем кошелёк…",
     "Review and sign": "Проверить и подписать",
     "Waiting until the wallet contains at least {amount} {asset}. Balance is checked automatically.": "Ожидаем, пока на кошельке будет не менее {amount} {asset}. Баланс проверяется автоматически.",
+    "The wallet does not have enough {asset}. Need at least {amount}.": "На кошельке недостаточно {asset}. Нужно не менее {amount}.",
+    "The wallet does not have enough {asset}. Need at least {amount}. Balance is checked automatically.": "На кошельке недостаточно {asset}. Нужно не менее {amount}. Баланс проверяется автоматически.",
     "Check now": "Проверить сейчас",
     "Submitted. Pay3Flow is tracking provider completion automatically.": "Отправлено. Pay3Flow автоматически отслеживает выполнение у поставщика.",
     "Swap completed. Continue with the next route step.": "Обмен завершён. Переходите к следующему шагу маршрута.",

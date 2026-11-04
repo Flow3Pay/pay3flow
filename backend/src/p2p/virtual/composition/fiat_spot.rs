@@ -86,6 +86,7 @@ pub(in crate::p2p) fn compose_fiat_spot_routes(
                 route_fees: Vec::new(),
                 quote_expires_at: None,
                 execution: None,
+                executions: Vec::new(),
                 payment_methods_verified,
                 entry_offer: Some(offer.clone()),
                 exit_offer: None,

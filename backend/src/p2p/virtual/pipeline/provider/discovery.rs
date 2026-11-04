@@ -171,6 +171,7 @@ impl P2pSearchService {
                         .collect(),
                     quote_expires_at: quote.expires_at,
                     execution: None,
+                    executions: Vec::new(),
                     payment_methods_verified: true,
                     entry_offer: None,
                     exit_offer: None,

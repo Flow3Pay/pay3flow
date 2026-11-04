@@ -279,77 +279,95 @@ impl RouteExecutionService {
     }
 
     pub fn attach_descriptor(&self, route: &mut P2pRoute) {
-        if !self.enabled || route.execution.is_some() {
+        if !self.enabled {
             return;
         }
-        let Some(provider) = route.route_provider.as_deref() else {
-            return;
-        };
+        let mut executions = Vec::new();
+        if !route.cycle_legs.is_empty() {
+            for leg in &route.cycle_legs {
+                executions.extend(self.descriptor(
+                    &route.route_id,
+                    &leg.provider,
+                    &leg.from_asset,
+                    &leg.to_asset,
+                    &leg.input_amount,
+                ));
+            }
+        } else if let Some(provider) = route.route_provider.as_deref() {
+            let assets = route
+                .route_path
+                .iter()
+                .filter(|part| part.contains('@'))
+                .collect::<Vec<_>>();
+            if let (Some(from_asset), Some(to_asset), Some(input_amount)) =
+                (assets.first(), assets.last(), route.provider_input_amount.as_ref())
+            {
+                executions.extend(self.descriptor(
+                    &route.route_id,
+                    provider,
+                    from_asset,
+                    to_asset,
+                    input_amount,
+                ));
+            }
+        }
+        route.execution = executions.first().cloned();
+        route.executions = executions;
+    }
+
+    fn descriptor(
+        &self,
+        route_id: &str,
+        provider: &str,
+        from_asset: &str,
+        to_asset: &str,
+        input_amount: &str,
+    ) -> Option<RouteExecutionDescriptor> {
         if !trustfile::execution_enabled(provider) {
-            return;
+            return None;
         }
         if !matches!(provider, "near-intents" | "symbiosis")
             && !(provider == "cow-swap" && self.cow.is_some())
         {
-            return;
+            return None;
         }
-        let assets = route
-            .route_path
-            .iter()
-            .filter(|part| part.contains('@'))
-            .collect::<Vec<_>>();
-        let (Some(from_asset), Some(to_asset), Some(input_amount)) = (
-            assets.first(),
-            assets.last(),
-            route.provider_input_amount.as_ref(),
-        ) else {
-            return;
-        };
         if from_asset == to_asset {
-            return;
+            return None;
         }
-        let Some((from, to)) = Asset::parse(from_asset)
+        let (from, to) = Asset::parse(from_asset)
             .ok()
-            .zip(Asset::parse(to_asset).ok())
-        else {
-            return;
-        };
+            .zip(Asset::parse(to_asset).ok())?;
         if !supported_wallet_network(from.location.as_deref().unwrap_or_default())
             || !(supported_wallet_network(to.location.as_deref().unwrap_or_default())
                 || to.location.as_deref() == Some("solana"))
             || (provider == "symbiosis" && !self.symbiosis.supports_wallet_execution(&from, &to))
         {
-            return;
+            return None;
         }
         // Bridge and native-asset orders use CoW Swap's execution flow.
         if provider == "cow-swap"
-            && !Asset::parse(from_asset)
-                .ok()
-                .zip(Asset::parse(to_asset).ok())
-                .is_some_and(|(from, to)| CowRouteProvider::supports_wallet_execution(&from, &to))
+            && !CowRouteProvider::supports_wallet_execution(&from, &to)
         {
-            return;
+            return None;
         }
         let expires_at = Utc::now() + ChronoDuration::minutes(DESCRIPTOR_TTL_MINUTES);
         let claims = ExecutionClaims {
-            route_id: route.route_id.clone(),
+            route_id: route_id.to_string(),
             provider: provider.to_string(),
-            from_asset: (*from_asset).clone(),
-            to_asset: (*to_asset).clone(),
-            input_amount: input_amount.clone(),
+            from_asset: from_asset.to_string(),
+            to_asset: to_asset.to_string(),
+            input_amount: input_amount.to_string(),
             exp: usize::try_from(expires_at.timestamp()).unwrap_or(usize::MAX),
         };
-        let Ok(token) = encode(&Header::default(), &claims, &self.encode_key) else {
-            return;
-        };
-        route.execution = Some(RouteExecutionDescriptor {
+        let token = encode(&Header::default(), &claims, &self.encode_key).ok()?;
+        Some(RouteExecutionDescriptor {
             provider: claims.provider,
             from_asset: claims.from_asset,
             to_asset: claims.to_asset,
             input_amount: claims.input_amount,
             expires_at,
             token,
-        });
+        })
     }
 
     pub async fn create(

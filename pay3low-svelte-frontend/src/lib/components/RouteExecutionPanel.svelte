@@ -2,13 +2,15 @@
   import "@near-wallet-selector/modal-ui/styles.css";
   import { onDestroy, onMount } from "svelte";
   import { getAnonymousUserId } from "$lib/anonymous-user";
-  import { createRouteExecution, fetchRouteExecution, submitRouteExecution, type RouteCandidate, type RouteExecution } from "$lib/exchange";
+  import { createRouteExecution, fetchRouteExecution, submitRouteExecution, type RouteCandidate, type RouteExecution, type RouteExecutionDescriptor } from "$lib/exchange";
   import { locale, t } from "$lib/i18n";
   import SwapForm from "./SwapForm.svelte";
   import { chainIdForNetwork, hasExecutionFunds, prepareWalletAction, validateRecipient, walletFamily, type ConnectedWallet, type PreparedWalletAction } from "$lib/wallet-execution";
   import { wallets, connectWallet, restoreWallets } from "$lib/wallet-session";
 
   export let route: RouteCandidate;
+  /** Per-leg descriptor when the route has multiple executable swaps. Falls back to route.execution. */
+  export let executionDescriptor: RouteExecutionDescriptor | null = null;
   export let networkNames: Record<string, string> = {};
   let sourceWallet: ConnectedWallet | null = null;
   let recipientWallet: ConnectedWallet | null = null;
@@ -34,7 +36,7 @@
   let quoteRequestKey: string | null = null;
   const STORAGE_PREFIX = "pay3flow.route-execution.";
 
-  $: descriptor = route.execution;
+  $: descriptor = executionDescriptor ?? route.execution ?? null;
   const providerNames = { "cow-swap": "CoW Swap", symbiosis: "Symbiosis", "near-intents": "NEAR Intents" };
   $: sourceNetwork = descriptor?.from_asset.split("@", 2)[1]?.toLowerCase() ?? "";
   $: destinationNetwork = descriptor?.to_asset.split("@", 2)[1]?.toLowerCase() ?? "";
@@ -49,7 +51,7 @@
   $: toSymbol = descriptor?.to_asset.split("@", 2)[0] ?? "";
   $: estimatedOutput = execution?.expected_output ?? (!route.exit_offer_snapshot && route.target_currency === toSymbol ? route.target_amount : null);
   $: copy = (key: string, params: Record<string, string | number> = {}) => t(key, params, $locale);
-  $: identity = `${route.route_id}:${sourceWallet?.address ?? ""}:${sourceWallet?.family === "evm" ? sourceWallet.chainId : ""}:${recipient}`;
+  $: identity = `${route.route_id}:${descriptor?.provider ?? ""}:${descriptor?.from_asset ?? ""}:${sourceWallet?.address ?? ""}:${sourceWallet?.family === "evm" ? sourceWallet.chainId : ""}:${recipient}`;
   $: if (mounted && identity !== previousIdentity) {
     previousIdentity = identity;
     revision += 1;
@@ -76,7 +78,12 @@
     if (!ownerId) ownerId = getAnonymousUserId() ?? crypto.randomUUID();
     return ownerId;
   }
-  function storageKey(): string { return `${STORAGE_PREFIX}${route.route_id}`; }
+  function storageKey(): string {
+    return `${STORAGE_PREFIX}${route.route_id}:${descriptor?.provider ?? ""}:${descriptor?.from_asset ?? ""}`;
+  }
+  function insufficientFundsMessage(amount: string, asset: string): string {
+    return copy("The wallet does not have enough {asset}. Need at least {amount}.", { amount, asset });
+  }
   function rememberExecution(value: RouteExecution) {
     try { localStorage.setItem(storageKey(), JSON.stringify({ id: value.id, owner: executionOwner(), submission: pendingSubmission })); } catch { /* Optional persistence. */ }
   }
@@ -182,7 +189,10 @@
       fundTimer = null;
       if (!await prepareQuote(version)) { autoPrompt = false; return; }
       if (fundsReady) await signPrepared(version);
-      else fundTimer = setInterval(() => void updateFunds(), 5_000);
+      else {
+        error = insufficientFundsMessage(execution?.input_amount ?? descriptor?.input_amount ?? "", execution?.from_asset ?? descriptor?.from_asset ?? "");
+        fundTimer = setInterval(() => void updateFunds(), 5_000);
+      }
     } catch (cause) { error = message(cause); autoPrompt = false; }
     finally { busy = false; }
   }
@@ -195,8 +205,13 @@
       const ready = await hasExecutionFunds(execution, sourceWallet);
       if (version !== revision || disposed) return;
       fundsReady = ready;
-      if (ready && fundTimer) { clearInterval(fundTimer); fundTimer = null; }
-      if (ready && autoPrompt) await signAndSubmit();
+      if (ready) {
+        error = "";
+        if (fundTimer) { clearInterval(fundTimer); fundTimer = null; }
+        if (autoPrompt) await signAndSubmit();
+      } else {
+        error = insufficientFundsMessage(execution.input_amount, execution.from_asset);
+      }
     } catch (cause) { error = message(cause); autoPrompt = false; }
     finally { checkingFunds = false; }
   }
@@ -349,7 +364,7 @@
             <p class="ready">{copy("Funds detected. Review the amount and recipient, then confirm in your wallet.")}</p>
             <button type="button" class="primary" disabled={busy} on:click={signAndSubmit}>{busy ? copy("Waiting for wallet…") : copy("Review and sign")}</button>
           {:else}
-            <p class="muted">{copy("Waiting until the wallet contains at least {amount} {asset}. Balance is checked automatically.", { amount: execution.input_amount, asset: execution.from_asset })}</p>
+            <p class="errorText" role="alert">{copy("The wallet does not have enough {asset}. Need at least {amount}. Balance is checked automatically.", { amount: execution.input_amount, asset: execution.from_asset })}</p>
             <button type="button" class="secondary" disabled={busy || !sourceWallet} on:click={swapWithWallet}>{copy("Retry swap")}</button>
           {/if}
         {:else if execution.status === "submitted"}

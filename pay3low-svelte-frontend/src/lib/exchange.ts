@@ -174,6 +174,7 @@ export interface RouteCandidate {
   route_fees?: { asset: string; amount: string }[];
   quote_expires_at?: string | null;
   execution?: RouteExecutionDescriptor | null;
+  executions?: RouteExecutionDescriptor[] | null;
   spread_bps: number;
   fee_minor?: number;
   eta_minutes?: number;
@@ -355,6 +356,7 @@ export interface P2pRoute {
   route_fees?: { asset: string; amount: string }[];
   quote_expires_at?: string | null;
   execution?: RouteExecutionDescriptor | null;
+  executions?: RouteExecutionDescriptor[] | null;
   payment_methods_verified: boolean;
   entry_offer?: P2pOffer;
   exit_offer?: P2pOffer;

@@ -164,6 +164,7 @@ impl P2pSearchService {
                                     .collect(),
                                 quote_expires_at: route_quote.expires_at,
                                 execution: None,
+                                executions: Vec::new(),
                                 payment_methods_verified,
                                 entry_offer: None,
                                 exit_offer: Some(offer.clone()),
@@ -599,6 +600,7 @@ fn compose_fiat_provider_quotes(
                         .collect(),
                     quote_expires_at: route_quote.expires_at,
                     execution: None,
+                    executions: Vec::new(),
                     payment_methods_verified: query.source_payment_method.as_deref().is_none_or(|method|
                         entry.payment_method_match(method) == PaymentMethodMatch::Exact)
                         && query.target_payment_method.as_deref().is_none_or(|method|
