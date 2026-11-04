@@ -1,0 +1,36 @@
+# Trustfile — 0x Swap API v2.
+# Quote support is live when ZEROX_API_KEY is configured. Pay3Flow does not
+# yet have a generic EVM provider-transaction action, so execution stays
+# disabled and the guide links to Matcha instead. Do not enable this file
+# before that action and its wallet tests exist.
+
+schema = 1
+provider = "0x"
+
+[trust]
+state = "disabled"
+transport = "http-json"
+note = "Quote-only until a generic EVM provider transaction action is wired end to end."
+
+[quote]
+method = "GET"
+url = "https://api.0x.org/swap/allowance-holder/price"
+request = "query"
+response = "price"
+
+[build]
+kind = "unsupported"
+fields = []
+
+[submit]
+kind = "unsupported"
+reference = "transaction_hash"
+
+[status]
+method = "GET"
+url = "https://api.0x.org/swap/allowance-holder/price"
+response = "price"
+
+[networks]
+source = ["ethereum", "base", "arbitrum-one", "polygon-pos", "optimism", "bnb-smart-chain"]
+destination = ["ethereum", "base", "arbitrum-one", "polygon-pos", "optimism", "bnb-smart-chain"]

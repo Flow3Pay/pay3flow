@@ -1,0 +1,58 @@
+# Trustfile — how Pay3Flow executes a Symbiosis swap over its HTTP API.
+# The Providerfile above describes the provider; this file describes execution.
+# Build input: validated by build.rs and embedded in the backend binary.
+
+schema = 1
+provider = "symbiosis"
+
+[trust]
+state = "enabled"
+transport = "http-json"
+note = "Cross-chain swap. The backend quotes and validates the provider transaction; the user's wallet signs and broadcasts it."
+
+[quote]
+method = "POST"
+url = "https://api.symbiosis.finance/crosschain/v1/swap"
+request = "json"
+response = "tx"
+
+[build]
+kind = "provider-transaction"
+fields = ["to", "data", "value"]
+approval_field = "approveTo"
+expiry_field = "validUntil"
+
+[submit]
+kind = "wallet-transaction"
+reference = "transaction_hash"
+
+[status]
+method = "GET"
+url = "https://api.symbiosis.finance/crosschain/v1/tx/{chain_id}/{reference}"
+response = "status"
+
+[networks]
+source = [
+  "ethereum",
+  "arbitrum-one",
+  "base",
+  "polygon-pos",
+  "avalanche-c",
+  "bnb-smart-chain",
+  "optimism",
+  "tron",
+]
+destination = [
+  "ethereum",
+  "arbitrum-one",
+  "base",
+  "polygon-pos",
+  "avalanche-c",
+  "bnb-smart-chain",
+  "optimism",
+  "tron",
+  "near",
+  "solana",
+  "bitcoin",
+  "ton",
+]

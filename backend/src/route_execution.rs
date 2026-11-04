@@ -11,6 +11,8 @@ use crate::p2p::{P2pRoute, RouteExecutionDescriptor};
 use crate::route_engine::{
     Amount, Asset, CowRouteProvider, NearIntentsProvider, NearQuoteRequest, SymbiosisRouteProvider,
 };
+use crate::trustfile::{self, Trustfile};
+use crate::trustfile_model::ReferenceKind;
 
 const DESCRIPTOR_TTL_MINUTES: i64 = 30;
 
@@ -217,6 +219,7 @@ impl RouteExecutionService {
         let to =
             Asset::parse(&request.to_asset).map_err(|_| RouteExecutionError::UnsupportedRoute)?;
         if from == to
+            || !trustfile::execution_enabled(&request.provider)
             || !match request.provider.as_str() {
                 "symbiosis" => self.symbiosis.supports_wallet_execution(&from, &to),
                 "cow-swap" => {
@@ -282,6 +285,9 @@ impl RouteExecutionService {
         let Some(provider) = route.route_provider.as_deref() else {
             return;
         };
+        if !trustfile::execution_enabled(provider) {
+            return;
+        }
         if !matches!(provider, "near-intents" | "symbiosis")
             && !(provider == "cow-swap" && self.cow.is_some())
         {
@@ -374,6 +380,9 @@ impl RouteExecutionService {
         )
         .map_err(|_| RouteExecutionError::InvalidToken)?
         .claims;
+        if !trustfile::execution_enabled(&claims.provider) {
+            return Err(RouteExecutionError::UnsupportedRoute);
+        }
         let input_amount = request.amount.unwrap_or(claims.input_amount.clone());
         positive_amount(&claims.input_amount)?;
         positive_amount(&input_amount)?;
@@ -551,14 +560,10 @@ VALUES ($1, $2, $3, $4, $5, 'awaiting_signature', $6, $7, $8, $9, $10, $11, $12,
             return Err(RouteExecutionError::InvalidSubmission);
         }
         let current = self.get_stored(id, request.anonymous_id).await?;
-        let valid_kind = matches!(
-            (current.provider.as_str(), request.kind),
-            ("cow-swap", SubmissionKind::OrderUid)
-                | (
-                    "near-intents" | "symbiosis",
-                    SubmissionKind::TransactionHash
-                )
-        );
+        let trust = trustfile::get(&current.provider)
+            .filter(|trust| trust.executable())
+            .ok_or(RouteExecutionError::UnsupportedRoute)?;
+        let valid_kind = submission_kind(trust) == Some(request.kind);
         if !valid_kind {
             return Err(RouteExecutionError::InvalidSubmission);
         }
@@ -752,6 +757,16 @@ WHERE id = $1 AND anonymous_id = $2
     }
 }
 
+fn submission_kind(trust: &Trustfile) -> Option<SubmissionKind> {
+    if !trust.executable() {
+        return None;
+    }
+    match trust.submit.reference {
+        ReferenceKind::TransactionHash => Some(SubmissionKind::TransactionHash),
+        ReferenceKind::OrderUid => Some(SubmissionKind::OrderUid),
+    }
+}
+
 fn positive_amount(value: &str) -> Result<f64, RouteExecutionError> {
     value
         .parse::<f64>()
@@ -921,6 +936,26 @@ mod tests {
             service.prepare_swap(value, "fresh-step").await,
             Err(RouteExecutionError::UnsupportedRoute)
         ));
+        let mut disabled_trustfile = request();
+        disabled_trustfile["provider"] = json!("0x");
+        let value = serde_json::from_value(disabled_trustfile).unwrap();
+        assert!(matches!(
+            service.prepare_swap(value, "disabled-step").await,
+            Err(RouteExecutionError::UnsupportedRoute)
+        ));
+    }
+
+    #[test]
+    fn trustfile_reference_kind_selects_the_submission_kind() {
+        for (provider, expected) in [
+            ("cow-swap", SubmissionKind::OrderUid),
+            ("near-intents", SubmissionKind::TransactionHash),
+            ("symbiosis", SubmissionKind::TransactionHash),
+        ] {
+            let trust = trustfile::get(provider).unwrap();
+            assert_eq!(submission_kind(trust), Some(expected), "{provider}");
+        }
+        assert_eq!(submission_kind(trustfile::get("0x").unwrap()), None);
     }
 
     #[test]

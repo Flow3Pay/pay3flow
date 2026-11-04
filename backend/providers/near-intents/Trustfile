@@ -1,0 +1,58 @@
+# Trustfile — how Pay3Flow executes a NEAR Intents (1Click) swap over HTTP.
+# The Providerfile above describes the provider; this file describes execution.
+
+schema = 1
+provider = "near-intents"
+
+[trust]
+state = "enabled"
+transport = "http-json"
+note = "The backend requests an executable 1Click quote and returns a deposit address; the wallet sends the source asset, then the backend notifies 1Click."
+
+[quote]
+method = "POST"
+url = "https://1click.chaindefuser.com/v0/quote"
+request = "json"
+response = "quote"
+
+[build]
+kind = "deposit-address"
+fields = ["depositAddress", "depositMemo"]
+
+[submit]
+kind = "wallet-deposit"
+reference = "transaction_hash"
+
+[status]
+method = "GET"
+url = "https://1click.chaindefuser.com/v0/status?depositAddress={deposit_address}"
+response = "status"
+
+[networks]
+source = [
+  "ethereum",
+  "arbitrum-one",
+  "base",
+  "polygon-pos",
+  "avalanche-c",
+  "bnb-smart-chain",
+  "optimism",
+  "gnosis",
+  "near",
+  "tron",
+]
+destination = [
+  "ethereum",
+  "arbitrum-one",
+  "base",
+  "polygon-pos",
+  "avalanche-c",
+  "bnb-smart-chain",
+  "optimism",
+  "gnosis",
+  "near",
+  "tron",
+  "solana",
+  "bitcoin",
+  "ton",
+]

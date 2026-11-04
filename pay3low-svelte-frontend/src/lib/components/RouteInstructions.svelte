@@ -60,7 +60,7 @@
   $: steps = buildRouteTutorial(route, venueNames, providerGuidance, networkNames, copy);
   $: step = steps[chapter];
   $: spot = step && isSpotStep(step) ? spotTrade(step.pair, step.from, step.to) : null;
-  $: swapStep = step?.kind === "swap";
+  $: swapStep = canOpenSwap(step, route);
   $: swapActive = swapStep && swapView === "swap";
   $: if (swapActive && step) activeSwapStep = step.id;
   $: walletProviderStep = Boolean(step?.execution);

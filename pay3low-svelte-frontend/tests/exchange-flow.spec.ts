@@ -2539,7 +2539,7 @@ test("direct provider quotes keep their API names and independent prices", async
   await expect(page.getByTestId("start-search")).toHaveAttribute("aria-label", "SWAP");
   await page.getByTestId("start-search").click();
   await expect(page).toHaveURL(/view=swap/);
-  await expect(page.getByTestId("near-intents-live-widget")).toBeVisible();
+  await expect(page.getByTestId("route-wallet-execution")).toBeVisible();
   await expect(page.getByTestId("start-guide")).toHaveCount(0);
   await page.getByTestId("route-guide").locator(".guideToolbar").getByRole("button", { name: /Back to routes/ }).click();
   await page.getByTestId("open-swap-guide").click();
@@ -2548,50 +2548,31 @@ test("direct provider quotes keep their API names and independent prices", async
   await startWalkthrough(instructions);
   await expect(instructions.getByTestId("instruction-scene")).toBeVisible();
   await instructions.getByRole("button", { name: "SWAP", exact: true }).click();
-  await expect(instructions.getByTestId("near-intents-live-widget")).toBeVisible();
-  await expect(instructions.getByTestId("route-wallet-execution")).toHaveCount(0);
+  await expect(instructions.getByTestId("route-wallet-execution")).toBeVisible();
   await instructions.locator(".guideToolbar").getByRole("button", { name: /Back to routes/ }).click();
   await cards.nth(1).locator(".routeAmount").click();
   instructions = page.getByTestId("route-guide");
   await instructions.getByTestId("start-guide").click();
-  await expect(instructions.getByTestId("cow-live-widget")).toBeVisible();
+  await expect(instructions.getByTestId("route-wallet-execution")).toBeVisible();
   await instructions.getByRole("button", { name: "SWAP guide", exact: true }).click();
   await expect(instructions.getByTestId("instruction-scene")).toBeVisible();
   await instructions.locator(".guideToolbar").getByRole("button", { name: /Back to routes/ }).click();
   await cards.nth(1).locator(".routeCardMain").press("Space");
   await expect(cards.nth(1).locator(".routeCardMain")).toHaveAttribute("aria-pressed", "true");
   await page.getByTestId("start-search").click();
-  await expect(instructions.getByTestId("cow-live-widget")).toBeVisible();
+  await expect(instructions.getByTestId("route-wallet-execution")).toBeVisible();
   await expect(instructions.getByTestId("start-guide")).toHaveCount(0);
 });
 
-for (const provider of ["cow-swap", "symbiosis", "0x", "barter"]) test(`converter opens ${provider} swap directly without a native wallet descriptor`, async ({ page }) => {
+for (const provider of ["cow-swap", "symbiosis", "0x", "barter"]) test(`converter keeps ${provider} as a guide when the route has no executable descriptor`, async ({ page }) => {
   await mockBackend(page, { directSwapProvider: provider });
-  await page.route("https://api.symbiosis.finance/crosschain/**", route => route.fulfill({ json: route.request().url().endsWith("/chains")
-    ? [{ id: 1, name: "Ethereum" }]
-    : [{ symbol: "USDT", chainId: 1, address: "0xdAC17F958D2ee523a2206206994597C13D831ec7" }, { symbol: "USDC", chainId: 1, address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" }] }));
-  await page.route("https://app.symbiosis.finance/**", route => route.fulfill({ contentType: "text/html", body: "<button>Connect wallet</button>" }));
   await openApp(page, `/#/swap/USDT/USDC?amount=100&from=global-usdt&to=global-usdc&fromNetwork=ethereum&toNetwork=ethereum&sources=${provider}&methods=exchanger&lang=en`);
   await expect(page.getByTestId("complete-route")).toHaveCount(1);
-  await expect(page.getByTestId("start-search")).toHaveAttribute("aria-label", "SWAP");
-  await expect(page.getByTestId("open-swap-guide")).toBeVisible();
+  await expect(page.getByTestId("start-search")).toHaveAttribute("aria-label", "Open route instructions");
+  await expect(page.getByTestId("open-swap-guide")).toHaveCount(0);
   await page.getByTestId("start-search").click();
   const guide = page.getByTestId("route-guide");
-  await expect(guide.getByTestId("swap-view")).toBeVisible();
-  await expect(guide.getByTestId("start-guide")).toHaveCount(0);
-  await expect(guide.getByTestId("instruction-scene")).toHaveCount(0);
-  if (provider === "cow-swap") {
-    await expect(guide.getByTestId("cow-live-widget")).toBeVisible();
-    await page.reload();
-    await expect(guide.getByTestId("cow-live-widget")).toBeVisible({ timeout: 20_000 });
-    await expect(guide.getByTestId("start-guide")).toHaveCount(0);
-  } else await expect(guide.getByTestId("provider-swap-frame")).toHaveAttribute("data-provider", provider);
-  await guide.locator(".guideToolbar").getByRole("button", { name: /Back to routes/ }).click();
-  await page.getByTestId("open-swap-guide").click();
-  await expect(page).toHaveURL(/view=guide/);
   await expect(guide.getByTestId("start-guide")).toBeVisible();
-  await startWalkthrough(guide);
-  await expect(guide.getByTestId("instruction-scene")).toBeVisible();
   await expect(guide.getByTestId("swap-view")).toHaveCount(0);
 });
 
@@ -2659,7 +2640,7 @@ test("small AMD to BTC@near routes keep crypto precision", async ({ page }) => {
   await expect(instructions.getByRole("heading", { name: "Buy USDT for 10,000 AMD" })).toBeVisible();
   await instructions.getByTestId("confirm-instruction-step").click();
   await expect(instructions.getByRole("heading", { name: "Swap USDT for BTC via NEAR 1Click" })).toBeVisible();
-  await expect(instructions.getByTestId("near-intents-live-widget")).toBeVisible();
+  await expect(instructions.getByRole("button", { name: "SWAP", exact: true })).toBeVisible();
 });
 
 test("direct Whitebird exchange uses its swap card, provider wording and local venue icons", async ({ page }, testInfo) => {

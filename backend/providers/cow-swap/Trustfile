@@ -1,0 +1,59 @@
+# Trustfile — how Pay3Flow executes a CoW Swap order over the CoW HTTP API.
+# The Providerfile above describes the provider; this file describes execution.
+
+schema = 1
+provider = "cow-swap"
+
+[trust]
+state = "enabled"
+transport = "http-json"
+note = "Same-chain ERC-20 orders. The backend quotes and validates the order; the wallet signs the EIP-712 order and Pay3Flow posts it to the CoW order book."
+
+[quote]
+method = "POST"
+url = "https://api.cow.fi/{api_chain}/api/v1/quote"
+request = "json"
+response = "quote"
+
+[build]
+kind = "http-order"
+fields = ["sellToken", "buyToken", "receiver", "sellAmount", "buyAmount", "validTo", "appData", "feeAmount", "kind", "partiallyFillable", "sellTokenBalance", "buyTokenBalance"]
+approval_field = "sellToken"
+expiry_field = "validTo"
+
+[submit]
+kind = "wallet-order"
+reference = "order_uid"
+
+[status]
+method = "GET"
+url = "https://api.cow.fi/{api_chain}/api/v1/orders/{reference}"
+response = "status"
+
+[networks]
+source = [
+  "ethereum",
+  "gnosis",
+  "arbitrum-one",
+  "base",
+  "polygon-pos",
+  "avalanche-c",
+  "bnb-smart-chain",
+  "optimism",
+  "linea",
+  "plasma",
+  "ink",
+]
+destination = [
+  "ethereum",
+  "gnosis",
+  "arbitrum-one",
+  "base",
+  "polygon-pos",
+  "avalanche-c",
+  "bnb-smart-chain",
+  "optimism",
+  "linea",
+  "plasma",
+  "ink",
+]

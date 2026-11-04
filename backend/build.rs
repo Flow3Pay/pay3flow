@@ -7,8 +7,11 @@ use serde::Deserialize;
 
 #[path = "providerfile_code.rs"]
 mod providerfile_code;
+#[path = "src/trustfile_model.rs"]
+mod trustfile_model;
 
 use providerfile_code::{normalize_path_source, CodeSource};
+use trustfile_model::Trustfile;
 
 #[derive(Deserialize)]
 struct Providerfile {
@@ -150,16 +153,67 @@ fn main() {
         PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR is set")).join("provider_reviews.rs");
     fs::write(&review_output, review_modules)
         .unwrap_or_else(|error| panic!("cannot write {}: {error}", review_output.display()));
+
+    // Trustfiles describe how a provider's swap is executed. They are build
+    // inputs like Providerfiles: unknown fields and missing paths fail the
+    // build, and the validated source is embedded for the runtime registry.
+    let mut trust_files = Vec::new();
+    collect_named(&providers, "Trustfile", &mut trust_files);
+    trust_files.sort();
+    let mut trust_sources =
+        String::from("// Generated from providers/**/Trustfile. Validated by build.rs.\n");
+    trust_sources.push_str("pub const TRUSTFILE_SOURCES: &[(&str, &str)] = &[\n");
+    for path in trust_files {
+        let contents = fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("cannot read {}: {error}", path.display()));
+        let trust: Trustfile = toml::from_str(&contents)
+            .unwrap_or_else(|error| panic!("cannot parse {}: {error}", path.display()));
+        let slug = path
+            .strip_prefix(&providers)
+            .expect("Trustfile must be below providers/")
+            .parent()
+            .expect("Trustfile must have a parent directory")
+            .components()
+            .map(|component| {
+                component
+                    .as_os_str()
+                    .to_str()
+                    .expect("Trustfile path must be UTF-8")
+            })
+            .collect::<Vec<_>>()
+            .join("-");
+        trust
+            .validate(&slug)
+            .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+        println!("cargo:rerun-if-changed={}", path.display());
+        let absolute = fs::canonicalize(&path)
+            .unwrap_or_else(|error| panic!("cannot resolve {}: {error}", path.display()));
+        writeln!(
+            trust_sources,
+            "    ({slug:?}, include_str!({path:?})),",
+            path = absolute.to_str().expect("Trustfile path must be UTF-8")
+        )
+        .unwrap();
+    }
+    trust_sources.push_str("];\n");
+    let trust_output =
+        PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR is set")).join("trustfiles.rs");
+    fs::write(&trust_output, trust_sources)
+        .unwrap_or_else(|error| panic!("cannot write {}: {error}", trust_output.display()));
 }
 
 fn collect(directory: &Path, files: &mut Vec<PathBuf>) {
+    collect_named(directory, "Providerfile", files);
+}
+
+fn collect_named(directory: &Path, name: &str, files: &mut Vec<PathBuf>) {
     let entries = fs::read_dir(directory)
         .unwrap_or_else(|error| panic!("cannot read {}: {error}", directory.display()));
     for entry in entries {
         let path = entry.expect("provider directory entry is readable").path();
         if path.is_dir() {
-            collect(&path, files);
-        } else if path.file_name().is_some_and(|name| name == "Providerfile") {
+            collect_named(&path, name, files);
+        } else if path.file_name().is_some_and(|entry| entry == name) {
             files.push(path);
         }
     }

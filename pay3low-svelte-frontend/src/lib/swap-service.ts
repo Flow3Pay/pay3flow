@@ -56,15 +56,9 @@ export function swapInput(route: RouteCandidate, step: TutorialStep, networks: R
 
 export async function createSwapService(input: SwapInput, onState: (state: SwapServiceState) => void): Promise<SwapService> {
   if (!/^\d+(\.\d+)?$/.test(input.amount) || !/[1-9]/.test(input.amount)) throw new Error("Invalid swap amount");
-  if (input.provider === "near-intents") {
-    const { createNearSwapService } = await import("./near-swap-service");
-    return createNearSwapService(input, onState);
-  }
-  if (input.provider === "cow-swap") {
-    const { createCowSwapService } = await import("./cow-swap-service");
-    return createCowSwapService(input, onState);
-  }
-  if (input.provider === "symbiosis") {
+  // Every executable provider is described by its Trustfile and runs through
+  // the backend route-executions API; no provider SDK is bundled.
+  if (["near-intents", "cow-swap", "symbiosis"].includes(input.provider)) {
     const { createBackendSwapService } = await import("./backend-swap-service");
     return createBackendSwapService(input, onState);
   }

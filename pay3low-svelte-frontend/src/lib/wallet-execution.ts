@@ -100,6 +100,96 @@ const erc20Abi = [
   { type: "function", name: "transfer", stateMutability: "nonpayable", inputs: [{ name: "recipient", type: "address" }, { name: "amount", type: "uint256" }], outputs: [{ name: "ok", type: "bool" }] },
 ] as const;
 
+const COW_SETTLEMENT = "0x9008D19f58AAbD9eD0D60971565AA8510560ab41" as const;
+const COW_VAULT_RELAYER = "0xC92E8bdf79f0507f65a392b0ab4667716BFE0110" as Address;
+// EIP-712 schema published by CoW Protocol (GPv2Order.Data).
+const COW_ORDER_TYPES = {
+  Order: [
+    { name: "sellToken", type: "address" },
+    { name: "buyToken", type: "address" },
+    { name: "receiver", type: "address" },
+    { name: "sellAmount", type: "uint256" },
+    { name: "buyAmount", type: "uint256" },
+    { name: "validTo", type: "uint32" },
+    { name: "appData", type: "bytes32" },
+    { name: "feeAmount", type: "uint256" },
+    { name: "kind", type: "string" },
+    { name: "partiallyFillable", type: "bool" },
+    { name: "sellTokenBalance", type: "string" },
+    { name: "buyTokenBalance", type: "string" },
+  ],
+} as const;
+
+type CowOrder = {
+  sellToken: Address;
+  buyToken: Address;
+  receiver: Address;
+  sellAmount: bigint;
+  buyAmount: bigint;
+  validTo: number;
+  appData: Hex;
+  feeAmount: bigint;
+  kind: "sell";
+  partiallyFillable: false;
+  sellTokenBalance: "erc20";
+  buyTokenBalance: "erc20";
+};
+
+function cowQuote(action: Extract<RouteExecutionAction, { kind: "cow_order" }>): Record<string, unknown> {
+  const raw = action.quote;
+  const nested = raw.quote;
+  return (nested && typeof nested === "object" ? nested : raw) as Record<string, unknown>;
+}
+
+function cowString(record: Record<string, unknown>, ...names: string[]): string | undefined {
+  for (const name of names) {
+    const value = record[name];
+    if (typeof value === "string" && value.length) return value;
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  }
+  return undefined;
+}
+
+function cowAmount(record: Record<string, unknown>, ...names: string[]): bigint | undefined {
+  const value = cowString(record, ...names);
+  if (value === undefined) return undefined;
+  if (!/^\d+$/.test(value)) throw new Error("CoW quote returned a non-integer amount");
+  return BigInt(value);
+}
+
+function cowOrder(
+  quote: Record<string, unknown>,
+  action: Extract<RouteExecutionAction, { kind: "cow_order" }>,
+  execution: RouteExecution,
+): CowOrder {
+  const sellAmount = cowAmount(quote, "sellAmount", "sell_amount") ?? cowAmount({ amount: action.sell_amount }, "amount");
+  const buyAmount = cowAmount(quote, "buyAmount", "buy_amount");
+  if (sellAmount === undefined || buyAmount === undefined) throw new Error("CoW quote did not include the expected amounts");
+  const validTo = Number(cowString(quote, "validTo", "valid_to") ?? Math.floor(Date.parse(execution.quote_expires_at) / 1000));
+  if (!Number.isSafeInteger(validTo) || validTo <= 0) throw new Error("CoW quote did not include a valid expiry");
+  const appData = cowString(quote, "appData", "app_data") ?? `0x${"0".repeat(64)}`;
+  if (!/^0x[0-9a-f]{64}$/i.test(appData)) throw new Error("CoW quote returned an invalid appData hash");
+  return {
+    sellToken: String(quote.sellToken ?? quote.sell_token ?? action.sell_token) as Address,
+    buyToken: String(quote.buyToken ?? quote.buy_token ?? action.buy_token) as Address,
+    receiver: String(quote.receiver ?? execution.recipient) as Address,
+    sellAmount,
+    buyAmount,
+    validTo,
+    appData: appData as Hex,
+    feeAmount: cowAmount(quote, "feeAmount", "fee_amount") ?? 0n,
+    kind: "sell",
+    partiallyFillable: false,
+    sellTokenBalance: "erc20",
+    buyTokenBalance: "erc20",
+  };
+}
+
+function cowQuoteId(quote: Record<string, unknown>): { quoteId?: number | string } {
+  const id = quote.id;
+  return typeof id === "number" || (typeof id === "string" && id.length) ? { quoteId: id } : {};
+}
+
 function networkOf(asset: string): string {
   return asset.split("@", 2)[1]?.toLowerCase() ?? "";
 }
@@ -352,50 +442,63 @@ export async function prepareWalletAction(execution: RouteExecution, wallet: Con
   if (action.kind === "cow_order") {
     const evm = asEvm(wallet);
     if (evm.chainId !== action.chain_id) throw new Error("Connected wallet is on the wrong CoW network");
-    const [{ getPublicClient, getWalletClient, waitForTransactionReceipt }, { TradingSdk, OrderKind }, { ViemAdapter }] = await Promise.all([
-      import("@wagmi/core"),
-      import("@cowprotocol/cow-sdk"),
-      import("@cowprotocol/sdk-viem-adapter"),
-    ]);
-    const publicClient = getPublicClient(evm.config as Parameters<typeof getPublicClient>[0], { chainId: evm.chainId });
-    const walletClient = await getWalletClient(evm.config as Parameters<typeof getWalletClient>[0], { chainId: evm.chainId });
-    if (!publicClient || !walletClient) throw new Error("Connected wallet client is unavailable");
-    const sdk = new TradingSdk({ chainId: action.chain_id, appCode: "Pay3Flow" }, {}, new ViemAdapter({ provider: publicClient, walletClient }));
-    const sellDecimals = action.sell_token_decimals ?? await publicClient.readContract({ address: action.sell_token as Address, abi: erc20Abi, functionName: "decimals" });
-    const buyDecimals = action.buy_token_decimals ?? await publicClient.readContract({ address: action.buy_token as Address, abi: erc20Abi, functionName: "decimals" });
-    const trade = {
-      kind: OrderKind.SELL,
-      sellToken: action.sell_token,
-      sellTokenDecimals: sellDecimals,
-      buyToken: action.buy_token,
-      buyTokenDecimals: buyDecimals,
-      amount: action.sell_amount,
-      receiver: execution.recipient,
-    };
-    const { quoteResults, postSwapOrderFromQuote } = await sdk.getQuote(trade);
-    const atomicOutput = findBuyAmount(quoteResults);
-    if (!atomicOutput) throw new Error("CoW quote did not include the expected output amount");
-    const expectedOutput = atomicToDecimal(atomicOutput, trade.buyTokenDecimals);
-    const atomicFee = findFeeAmount(quoteResults);
+    const quote = cowQuote(action);
+    const order = cowOrder(quote, action, execution);
+    const expectedOutput = action.expected_output || atomicToDecimal(order.buyAmount.toString(), action.buy_token_decimals ?? 18);
     return {
       expectedOutput,
-      expectedFee: atomicFee
-        ? { asset: execution.from_asset, amount: atomicToDecimal(atomicFee, trade.sellTokenDecimals) }
-        : undefined,
-      expiresAt: findQuoteExpiry(quoteResults),
+      expectedFee: execution.expected_fee,
+      expiresAt: new Date(order.validTo * 1000).toISOString(),
       submit: async () => {
+        const { readContract, signTypedData, waitForTransactionReceipt, writeContract } = await import("@wagmi/core");
         await assertReadyToSign(execution, wallet);
-        const amount = BigInt(action.sell_amount);
-        const allowance = await sdk.getCowProtocolAllowance({ tokenAddress: action.sell_token, owner: evm.address, chainId: action.chain_id });
-        if (allowance < amount) {
-          const approvalHash = await sdk.approveCowProtocol({ tokenAddress: action.sell_token, amount, chainId: action.chain_id });
-          const receipt = await waitForTransactionReceipt(evm.config as Parameters<typeof waitForTransactionReceipt>[0], { hash: approvalHash as Hex, chainId: evm.chainId });
-          if (receipt.status !== "success") throw new Error("Token approval failed");
-          return { kind: "approval_confirmed" };
+        const amount = order.sellAmount;
+        if (!isNativeToken(action.sell_token)) {
+          const allowance = await readContract(evm.config as Parameters<typeof readContract>[0], {
+            address: action.sell_token as Address,
+            abi: erc20Abi,
+            functionName: "allowance",
+            args: [evm.address, COW_VAULT_RELAYER],
+            chainId: evm.chainId,
+          });
+          if (allowance < amount) {
+            const approvalHash = await writeContract(evm.config as Parameters<typeof writeContract>[0], {
+              address: action.sell_token as Address,
+              abi: erc20Abi,
+              functionName: "approve",
+              args: [COW_VAULT_RELAYER, amount],
+              chainId: evm.chainId,
+            });
+            const receipt = await waitForTransactionReceipt(evm.config as Parameters<typeof waitForTransactionReceipt>[0], { hash: approvalHash, chainId: evm.chainId });
+            if (receipt.status !== "success") throw new Error("Token approval failed");
+            return { kind: "approval_confirmed" as const };
+          }
         }
         await assertReadyToSign(execution, wallet);
-        const result = await postSwapOrderFromQuote();
-        return { reference: result.orderId, kind: "order_uid" };
+        const signature = await signTypedData(evm.config as Parameters<typeof signTypedData>[0], {
+          account: evm.address,
+          domain: { name: "Gnosis Protocol", version: "v2", chainId: action.chain_id, verifyingContract: COW_SETTLEMENT },
+          types: COW_ORDER_TYPES,
+          primaryType: "Order",
+          message: order,
+        });
+        const response = await fetch(`${action.api_url.replace(/\/$/, "")}/orders`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          // CoW's order book expects decimal strings; the EIP-712 message needs
+          // bigints, so convert only at the HTTP boundary.
+          body: JSON.stringify(
+            { ...order, ...cowQuoteId(quote), signingScheme: "eip712", signature, from: execution.source_address },
+            (_key, value) => (typeof value === "bigint" ? value.toString() : value),
+          ),
+        });
+        if (!response.ok) {
+          const detail = await response.text().catch(() => "");
+          throw new Error(`CoW order submission failed (${response.status})${detail ? `: ${detail.slice(0, 300)}` : ""}`);
+        }
+        const orderUid = await response.json() as unknown;
+        if (typeof orderUid !== "string" || !/^0x[0-9a-f]{112}$/i.test(orderUid)) throw new Error("CoW did not return an order UID");
+        return { reference: orderUid, kind: "order_uid" as const };
       },
     };
   }
@@ -530,35 +633,6 @@ async function nearBalance(wallet: NearConnection, tokenContract?: string): Prom
   if (!tokenContract) return BigInt(payload.result?.amount ?? "0");
   const bytes = payload.result?.result ?? [];
   return BigInt(JSON.parse(new TextDecoder().decode(Uint8Array.from(bytes))) as string);
-}
-
-function findBuyAmount(value: unknown): string | undefined {
-  if (Array.isArray(value)) return value.map(findBuyAmount).find((amount) => amount !== undefined);
-  if (typeof value !== "object" || value === null) return undefined;
-  const record = value as Record<string, unknown>;
-  const amount = record.buyAmount ?? record.buy_amount;
-  if (typeof amount === "string" && /^\d+$/.test(amount)) return amount;
-  return Object.values(record).map(findBuyAmount).find((candidate) => candidate !== undefined);
-}
-
-function findFeeAmount(value: unknown): string | undefined {
-  if (Array.isArray(value)) return value.map(findFeeAmount).find((amount) => amount !== undefined);
-  if (typeof value !== "object" || value === null) return undefined;
-  const record = value as Record<string, unknown>;
-  const amount = record.feeAmount ?? record.fee_amount;
-  if (typeof amount === "string" && /^\d+$/.test(amount)) return amount;
-  return Object.values(record).map(findFeeAmount).find((candidate) => candidate !== undefined);
-}
-
-function findQuoteExpiry(value: unknown): string | undefined {
-  if (Array.isArray(value)) return value.map(findQuoteExpiry).find((expiry) => expiry !== undefined);
-  if (typeof value !== "object" || value === null) return undefined;
-  const record = value as Record<string, unknown>;
-  const validTo = record.validTo ?? record.valid_to;
-  if ((typeof validTo === "number" || (typeof validTo === "string" && /^\d+$/.test(validTo))) && Number(validTo) > 0) {
-    return new Date(Number(validTo) * 1000).toISOString();
-  }
-  return Object.values(record).map(findQuoteExpiry).find((expiry) => expiry !== undefined);
 }
 
 export function sourceNetwork(execution: { from_asset: string }): string {

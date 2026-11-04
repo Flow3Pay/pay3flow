@@ -542,17 +542,8 @@ for (const [provider, from, to, sourceNetwork, targetNetwork] of [
   expect(await page.evaluate(() => (window as any).transfers)).toBe(0);
 });
 
-test("NEAR Intents SDK runs behind the unified form and preserves it across guide and theme changes", async ({ page }) => {
-  test.setTimeout(60_000);
+test("near-intents without an executable descriptor keeps the guide and opens no swap", async ({ page }) => {
   await wallets(page);
-  await page.route("https://intents-api.aurora.dev/**", route => route.fulfill({
-    headers: { "access-control-allow-origin": "*" },
-    status: route.request().url().includes("/api/tokens/") ? 200 : 400,
-    json: route.request().url().includes("/api/tokens/") ? { asset_stats: [], tokens: [
-      { assetId: "nep141:eth.omft.near", symbol: "ETH", blockchain: "eth", decimals: 18, price: 2400 },
-      { assetId: "nep141:sol.omft.near", symbol: "SOL", blockchain: "sol", decimals: 9, price: 100 },
-    ] } : { message: "Quote fixture" },
-  }));
   await page.evaluate(async path => (await import(/* @vite-ignore */ path)).mountGuide({
     route_id: "near-widget", route_kind: "crypto_to_crypto", route_provider: "near-intents",
     source_currency: "ETH", target_currency: "SOL", source_network: "ethereum", target_network: "solana", entry_asset: "ETH",
@@ -560,33 +551,15 @@ test("NEAR Intents SDK runs behind the unified form and preserves it across guid
   }), harnessPath);
   const guide = page.getByTestId("route-guide");
   await guide.getByTestId("start-guide").click();
-  const widget = guide.getByTestId("wallet-swap-form");
-  const input = widget.getByRole("textbox", { name: "Swap amount" });
-  await expect(input).toHaveValue("0.1", { timeout: 45_000 });
-  await expect(widget).toContainText("ETH");
-  await expect(widget).toContainText("SOL");
-  await widget.getByRole("button", { name: "Connect wallet", exact: true }).first().click();
-  const dialog = page.getByRole("dialog", { name: "Connect wallet", exact: true });
-  await expect(dialog.getByRole("heading", { name: "Connect wallet", exact: true })).toBeVisible();
-  await expect(dialog).toContainText("EVM / Solana");
-  await expect(dialog).toContainText("Stellar");
-  await page.keyboard.press("Escape");
-  await expect(dialog).toBeHidden();
-  await page.getByRole("button", { name: "Switch theme" }).click();
-  await expect(widget.locator(".sw")).toHaveCount(0);
-  await expect(guide.locator("iframe")).toHaveCount(0);
-  await guide.getByRole("button", { name: "SWAP guide", exact: true }).click();
-  await expect(widget).toBeHidden();
+  await expect(guide.getByTestId("wallet-swap-form")).toHaveCount(0);
+  await expect(guide.getByTestId("swap-view")).toHaveCount(0);
   await expect(guide.getByTestId("instruction-scene")).toBeVisible();
-  await guide.getByRole("button", { name: "SWAP", exact: true }).click();
-  await expect(widget).toBeVisible();
-  await expect(input).toHaveValue("0.1");
+  await expect(guide.getByRole("button", { name: "SWAP", exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => (window as any).transfers)).toBe(0);
 });
 
-test("composed routes use the unified form with the current CoW leg and exact input", async ({ page }) => {
+test("cycle legs without a matching executable descriptor keep the guide", async ({ page }) => {
   await wallets(page);
-  await page.route("https://swap.cow.fi/**", route => route.fulfill({ contentType: "text/html", body: "<!doctype html>CoW widget" }));
   await page.evaluate(async path => (await import(/* @vite-ignore */ path)).mountGuide({
     route_id: "composed-cow-route", route_kind: "crypto_to_crypto",
     source_currency: "BTC", target_currency: "EVER", source_network: "bitcoin", target_network: "ethereum", entry_asset: "USDC",
@@ -599,44 +572,9 @@ test("composed routes use the unified form with the current CoW leg and exact in
   const guide = page.getByTestId("route-guide");
   await guide.getByTestId("start-guide").click();
   await guide.getByTestId("confirm-instruction-step").click();
-  await guide.getByRole("button", { name: "SWAP", exact: true }).click();
-  const form = guide.getByTestId("wallet-swap-form");
-  await expect(form).toHaveAttribute("data-provider", "cow-swap");
-  await expect(form.getByRole("textbox", { name: "Swap amount" })).toHaveValue("1629.515056");
-  await expect(form).toContainText("USDC");
-  await expect(form).toContainText("EVER");
-  await expect(form).toContainText("ethereum");
-  await expect(guide.locator("iframe")).toHaveCount(0);
-  expect(await page.evaluate(() => (window as any).transfers)).toBe(0);
-});
-
-test("NEAR service accepts native NEAR and USDT0 aliases with the exact amount", async ({ page }) => {
-  test.setTimeout(60_000);
-  await wallets(page);
-  const quoteAmounts: string[] = [];
-  await page.route("https://intents-api.aurora.dev/**", route => {
-    if (route.request().url().includes("/api/quote/")) quoteAmounts.push(route.request().postDataJSON().amount);
-    return route.fulfill({
-    headers: { "access-control-allow-origin": "*" },
-    status: route.request().url().includes("/api/tokens/") ? 200 : 400,
-    json: route.request().url().includes("/api/tokens/") ? { asset_stats: [], tokens: [
-      { assetId: "nep141:wrap.near", symbol: "wNEAR", blockchain: "near", decimals: 24, price: 3 },
-      { assetId: "nep141:usdt0.arb.omft.near", symbol: "USDT0", blockchain: "arb", decimals: 6, price: 1 },
-    ] } : { message: "Quote fixture" },
-    });
-  });
-  await page.evaluate(async path => (await import(/* @vite-ignore */ path)).mountGuide({
-    route_id: "near-aliases", route_kind: "crypto_to_crypto", route_provider: "near-intents",
-    source_currency: "NEAR", target_currency: "USDT", source_network: "near", target_network: "arbitrum-one", entry_asset: "NEAR",
-    source_amount: "10.123456789123", target_amount: "30.37", legs: [], route_path: ["NEAR@near", "USDT@arbitrum-one"],
-  }), harnessPath);
-  const guide = page.getByTestId("route-guide");
-  await guide.getByTestId("start-guide").click();
-  const widget = guide.getByTestId("wallet-swap-form");
-  await expect(widget.getByRole("textbox", { name: "Swap amount" })).toHaveValue("10.123456789123", { timeout: 45_000 });
-  await expect(widget).toContainText("NEAR");
-  await expect(widget).toContainText("USDT");
-  await expect.poll(() => quoteAmounts).toContain("10123456789123000000000000");
+  await expect(guide.getByRole("button", { name: "SWAP", exact: true })).toHaveCount(0);
+  await expect(guide.getByTestId("swap-view")).toHaveCount(0);
+  await expect(guide.getByTestId("instruction-scene")).toBeVisible();
   expect(await page.evaluate(() => (window as any).transfers)).toBe(0);
 });
 
@@ -726,104 +664,43 @@ test("changing the recipient discards the prepared quote without starting anothe
   expect(await page.evaluate(() => (window as any).transfers)).toBe(0);
 });
 
-for (const sellSymbol of ["ETH", "USDC"]) test(`CoW ${sellSymbol} service quotes and submits once through the headless SDK`, async ({ page }) => {
+test("CoW signs the backend quote with EIP-712 and posts the order over HTTP", async ({ page }) => {
   await wallets(page);
-  await page.route("https://ethereum.reth.rs/**", route => {
-    const balance = "0x" + (1000000000000000000n).toString(16).padStart(64, "0") as `0x${string}`;
-    const aggregate = encodeAbiParameters([{ type: "tuple[]", components: [{ name: "success", type: "bool" }, { name: "returnData", type: "bytes" }] }], [[{ success: true, returnData: balance }]]);
-    const respond = (request: any) => ({ jsonrpc: "2.0", id: request.id, result: request.method === "eth_chainId" ? "0x1" : request.method === "eth_call" && request.params?.[0]?.data?.startsWith("0x82ad56cb") ? aggregate : balance });
-    const requests = route.request().postDataJSON();
-    return route.fulfill({ json: Array.isArray(requests) ? requests.map(respond) : respond(requests) });
-  });
   const usdc = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
   const weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
-  await page.route("https://files.cow.fi/tokens/CowSwap.json", route => route.fulfill({ json: { tokens: [
-    { chainId: 1, symbol: "USDC", address: usdc, decimals: 6 },
-    { chainId: 1, symbol: "WETH", address: weth, decimals: 18 },
-  ] } }));
-  await page.route("https://api.symbiosis.finance/crosschain/v2/tokens", route => route.fulfill({ json: [] }));
-  let quotedAmount = "";
-  await page.route("https://api.cow.fi/**", route => {
-    if (route.request().url().endsWith("/quote")) {
-      const body = route.request().postDataJSON();
-      quotedAmount = body.sellAmountBeforeFee;
-      const fee = sellSymbol === "ETH" ? "100000000000000" : "10000";
-      return route.fulfill({ json: { id: 123, from: EVM, expiration: new Date(Date.now() + 120_000).toISOString(), verified: true, quote: {
-        ...body, sellAmount: (BigInt(body.sellAmountBeforeFee) - BigInt(fee)).toString(), buyAmount: sellSymbol === "ETH" ? "240000000" : "100000000000000000",
-        feeAmount: fee, receiver: EVM, partiallyFillable: false, sellTokenBalance: "erc20", buyTokenBalance: "erc20",
-        validTo: Math.floor(Date.now() / 1000) + 120,
-      } } });
-    }
-    if (route.request().url().includes("/app_data/")) return route.fulfill({ json: route.request().url().split("/").at(-1) });
-    if (route.request().url().endsWith("/orders") && route.request().method() === "POST") return route.fulfill({ json: "0x" + "bb".repeat(56) });
-    return route.fulfill({ status: 404, json: { error: "Unexpected SDK endpoint" } });
+  const appData = `0x${"ab".repeat(32)}`;
+  let posted: any;
+  await page.route("https://api.cow.fi/mainnet/api/v1/orders", route => {
+    posted = route.request().postDataJSON();
+    return route.fulfill({ json: "0x" + "bb".repeat(56) });
   });
-  const result = await page.evaluate(async ({ sellSymbol, evm }) => {
-    const { createCowSwapService } = await import("/src/lib/cow-swap-service.ts");
-    const service = await createCowSwapService({ provider: "cow-swap", routeId: "cow-service", fromAsset: `${sellSymbol}@ethereum`, toAsset: `${sellSymbol === "ETH" ? "USDC" : "WETH"}@ethereum`, amount: sellSymbol === "ETH" ? "0.1" : "240" }, () => {});
-    await service.connect();
-    service.setRecipient(evm);
-    try {
-      const prepared = await service.prepare();
-      const transfersBefore = (window as any).transfers;
-      const signed = await prepared.submit();
-      const repeated = await prepared.submit();
-      return { output: prepared.output, expiresAt: prepared.expiresAt, transfersBefore, signed, repeated };
-    } finally { service.destroy(); }
-  }, { sellSymbol, evm: EVM });
-  expect(quotedAmount).toBe(sellSymbol === "ETH" ? "100000000000000000" : "240000000");
-  expect(Number(result.output)).toBeGreaterThan(0);
-  expect(Date.parse(result.expiresAt)).toBeGreaterThan(Date.now());
-  expect(result.transfersBefore).toBe(0);
-  expect(result.signed.reference).toMatch(/^0x[0-9a-f]{112}$/i);
-  expect(result.repeated.reference).toBe(result.signed.reference);
-  expect(await page.evaluate(() => (window as any).transfers)).toBe(sellSymbol === "ETH" ? 1 : 0);
-  expect(await page.evaluate(() => (window as any).signatures)).toBe(sellSymbol === "ETH" ? 0 : 1);
-});
-
-test("NEAR service tracks an external BTC deposit in the common form and restores it after reload", async ({ page }) => {
-  test.setTimeout(60_000);
-  await wallets(page);
-  const btcAddress = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT";
-  let complete = false;
-  const quoteRequests: any[] = [];
-  await page.route("https://intents-api.aurora.dev/**", route => {
-    const url = route.request().url();
-    if (url.includes("/api/tokens/")) return route.fulfill({ json: { asset_stats: [], tokens: [
-      { assetId: "nep141:btc.omft.near", symbol: "BTC", blockchain: "btc", decimals: 8, price: 60000 },
-      { assetId: "nep141:usdc.omft.near", symbol: "USDC", blockchain: "eth", decimals: 6, price: 1 },
-    ] } });
-    if (url.includes("/api/quote/")) {
-      const body = route.request().postDataJSON();
-      quoteRequests.push(body);
-      return route.fulfill({ json: { quote: { amountIn: body.amount, amountOut: "1200000000", amountInUsd: "1200", amountOutUsd: "1200", amountOutFormatted: "1200", timeEstimate: 30,
-        deadline: new Date(Date.now() + 120_000).toISOString(), depositAddress: body.dry ? undefined : btcAddress }, quoteRequest: body } });
-    }
-    if (url.includes("/api/status/")) return route.fulfill({ json: { status: complete ? "SUCCESS" : "PENDING_DEPOSIT", swapDetails: {} } });
-    return route.fulfill({ json: {} });
+  const validTo = Math.floor(Date.now() / 1000) + 120;
+  const value = {
+    id: "00000000-0000-4000-8000-000000000998", route_id: "cow-native", provider: "cow-swap",
+    status: "awaiting_signature", from_asset: "USDC@ethereum", to_asset: "WETH@ethereum",
+    input_amount: "240", expected_output: "0.1", source_address: EVM, recipient: EVM,
+    quote_expires_at: new Date(validTo * 1000).toISOString(), updated_at: new Date().toISOString(),
+    action: {
+      kind: "cow_order", chain: "ethereum", chain_id: 1, api_url: "https://api.cow.fi/mainnet/api/v1",
+      sell_token: usdc, buy_token: weth, sell_amount: "240000000", sell_token_decimals: 6, buy_token_decimals: 18,
+      expected_output: "0.1",
+      quote: { id: 123, quote: {
+        sellToken: usdc, buyToken: weth, receiver: EVM, sellAmount: "239000000", buyAmount: "100000000000000000",
+        validTo, appData, feeAmount: "1000000", kind: "sell", partiallyFillable: false,
+        sellTokenBalance: "erc20", buyTokenBalance: "erc20",
+      } },
+    },
+  } as any;
+  const result = await page.evaluate(async ({ path, value }) => (await import(/* @vite-ignore */ path)).perform(value, "evm"), { path: harnessPath, value });
+  expect(result.reference).toBe("0x" + "bb".repeat(56));
+  expect(result.kind).toBe("order_uid");
+  expect(posted).toMatchObject({
+    sellToken: usdc, buyToken: weth, receiver: EVM, sellAmount: "239000000",
+    buyAmount: "100000000000000000", validTo, appData, feeAmount: "1000000",
+    kind: "sell", partiallyFillable: false, sellTokenBalance: "erc20", buyTokenBalance: "erc20",
+    signingScheme: "eip712", from: EVM, quoteId: 123,
   });
-  const mount = async () => page.evaluate(async path => (await import(/* @vite-ignore */ path)).mountGuide({
-    route_id: "btc-manual-deposit", route_kind: "crypto_to_crypto", route_provider: "near-intents", source_currency: "BTC", target_currency: "USDC",
-    source_network: "bitcoin", target_network: "ethereum", entry_asset: "BTC", source_amount: "0.02", target_amount: "1200", legs: [], route_path: ["BTC@bitcoin", "USDC@ethereum"],
-  }), harnessPath);
-  await mount();
-  let guide = page.getByTestId("route-guide");
-  await guide.getByTestId("start-guide").click();
-  let form = guide.getByTestId("wallet-swap-form");
-  await form.getByRole("button", { name: "Send from another wallet", exact: true }).click();
-  await form.getByRole("textbox", { name: "Swap recipient address" }).fill(EVM);
-  await form.getByRole("textbox", { name: "Refund address", exact: true }).fill(btcAddress);
-  await form.getByRole("button", { name: "Swap BTC for USDC", exact: true }).click();
-  await expect(form.getByTestId("swap-deposit-address")).toHaveText(btcAddress);
-  expect(quoteRequests.some(body => !body.dry && body.recipient === EVM && body.refundTo === btcAddress)).toBe(true);
+  expect(posted.signature).toMatch(/^0x[0-9a-f]+$/i);
+  expect(await page.evaluate(() => (window as any).signatures)).toBe(1);
   expect(await page.evaluate(() => (window as any).transfers)).toBe(0);
-  await page.reload();
-  await mount();
-  guide = page.getByTestId("route-guide");
-  await guide.getByTestId("start-guide").click();
-  form = guide.getByTestId("wallet-swap-form");
-  await expect(form.getByTestId("swap-deposit-address")).toHaveText(btcAddress);
-  complete = true;
-  await expect(form).toContainText("Swap completed.", { timeout: 15_000 });
-  await expect(guide.locator("iframe")).toHaveCount(0);
 });

@@ -1,11 +1,18 @@
-import { fallbackVenue } from "./provider-profile";
 import type { RouteCandidate } from "./exchange";
 import type { TutorialStep } from "./route-tutorial";
 
-/** A swap action must open a wallet swap provider, rather than a bank or spot guide. */
+/**
+ * A swap widget is shown only when the backend says this exact route has an
+ * executable provider swap. Exchange guides (MEXC, Bybit, banks, …) and
+ * providers without a Trustfile-backed execution path stay guides.
+ */
 export function canOpenSwap(step: TutorialStep | undefined, route: RouteCandidate): boolean {
-  return Boolean(step?.kind === "swap" && (
-    fallbackVenue(step.provider.toLowerCase()).types.includes("swap") ||
-    (step.execution && route.execution)
-  ));
+  if (step?.kind !== "swap") return false;
+  const provider = step.provider.toLowerCase();
+  if (provider === "pay3flow-otc") return true;
+  return Boolean(
+    step.execution &&
+      route.execution &&
+      route.execution.provider.toLowerCase() === provider,
+  );
 }
