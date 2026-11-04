@@ -2116,11 +2116,7 @@ test("search venues only show providers with matching routes", async ({ page }) 
   const exchangesButton = page.getByRole("button", { name: "Choose exchanges" });
   await exchangesButton.click();
   await page.getByRole("button", { name: "Whitebird" }).click();
-  if ((page.viewportSize()?.width ?? 0) <= 640) {
-    await page.locator(".settingsBackdrop").dispatchEvent("mousedown");
-  } else {
-    await exchangesButton.click();
-  }
+  await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Exchange settings" })).toHaveCount(0);
   await page.getByLabel("Amount to send").fill("100000");
   await page.getByTestId("start-search").click();
@@ -2139,7 +2135,7 @@ test("search venues only show providers with matching routes", async ({ page }) 
   await expect(page.getByTestId("start-search")).toBeEnabled();
   await expect(page.getByTestId("complete-route").first()).toHaveClass(/selected/);
   const foundVenues = page.getByTestId("found-venue");
-  await expect(panelTop.locator(".resultSummary")).toHaveText("1 route found");
+  await expect(panelTop.locator(".resultSummary .routeCountText")).toHaveText("1 route found");
   await expect(foundVenues).toHaveCount(0);
   await expect(refreshButton).toBeDisabled();
   await expect(refreshButton.locator("img")).not.toHaveClass(/refreshSpin/);
@@ -2148,7 +2144,7 @@ test("search venues only show providers with matching routes", async ({ page }) 
   await expect(page.getByTestId("complete-route")).toHaveCount(2);
   await expect(page.getByTestId("complete-route").first()).toContainText("20420 RUB");
   await expect(page.getByTestId("complete-route").first()).toHaveClass(/selected/);
-  await expect(panelTop.locator(".resultSummary")).toHaveText("2 routes found");
+  await expect(panelTop.locator(".resultSummary .routeCountText")).toHaveText("2 routes found");
   await page.getByTestId("route-count-button").click();
   const venueDialog = page.getByRole("dialog", { name: "Venues in these routes" });
   await expect(venueDialog).toBeVisible();
