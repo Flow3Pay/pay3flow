@@ -187,7 +187,6 @@
     if (!mounted || session?.token !== owner.token) return;
     await refresh();
     if (!mounted || session?.token !== owner.token) return;
-    notice = say("Wallet ownership verified.", "Владение кошельком подтверждено.");
   }
   function requestQuote() {
     if (needsWallets) { openIdentity(true); return; }

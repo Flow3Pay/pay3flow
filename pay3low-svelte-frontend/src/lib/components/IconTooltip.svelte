@@ -53,7 +53,7 @@
   function candidate(target: EventTarget | null) {
     if (!(target instanceof Element)) return null;
     const node = target.closest<HTMLElement>("button[aria-label], a[aria-label]");
-    if (!node || node.matches(":disabled") || node.closest(".foundVenue") || node.matches(".sheetHandle, .periodHandle")) return null;
+    if (!node || node.matches(":disabled") || node.closest(".venueRow") || node.matches(".sheetHandle, .periodHandle")) return null;
     // Text-labelled controls already explain themselves. Icon buttons and compact
     // language/currency controls need the longer accessible name on hover/focus.
     return node.hasAttribute("data-tooltip") || (node.textContent?.trim().length ?? 0) <= 3 ? node : null;

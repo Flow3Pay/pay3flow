@@ -2148,10 +2148,9 @@ test("search venues only show providers with matching routes", async ({ page }) 
   await expect(page.getByTestId("complete-route")).toHaveCount(1);
   await expect(page.getByTestId("start-search")).toBeEnabled();
   await expect(page.getByTestId("complete-route").first()).toHaveClass(/selected/);
-  const foundVenues = panelTop.locator(".resultSummary").getByTestId("found-venue");
-  await expect(foundVenues).toHaveCount(1);
-  await expect(foundVenues.first()).toHaveAttribute("title", "Found on Bybit");
-  await expect(panelTop.locator(".resultSummary")).not.toContainText("venue in routes");
+  const foundVenues = page.getByTestId("found-venue");
+  await expect(panelTop.locator(".resultSummary")).toHaveText("1 route found");
+  await expect(foundVenues).toHaveCount(0);
   await expect(searchingVenues).toHaveCount(5);
   await expect(searchingVenues.nth(0)).toHaveAttribute("title", "Searching Cifra Markets");
   await expect(searchingVenues.nth(4)).toHaveAttribute("title", "Searching Whitebird");
@@ -2163,14 +2162,20 @@ test("search venues only show providers with matching routes", async ({ page }) 
   await expect(page.getByTestId("complete-route")).toHaveCount(2);
   await expect(page.getByTestId("complete-route").first()).toContainText("20420 RUB");
   await expect(page.getByTestId("complete-route").first()).toHaveClass(/selected/);
+  await expect(panelTop.locator(".resultSummary")).toHaveText("2 routes found");
+  await page.getByTestId("route-count-button").click();
+  const venueDialog = page.getByRole("dialog", { name: "Venues in these routes" });
+  await expect(venueDialog).toBeVisible();
   await expect(foundVenues).toHaveCount(2);
   for (const title of ["Whitebird", "Bybit"]) {
-    await expect(panelTop.locator(`[data-testid="found-venue"][title="Found on ${title}"]`)).toHaveCount(1);
+    await expect(page.locator(`[data-testid="found-venue"][title="Found on ${title}"]`)).toHaveCount(1);
   }
-  await page.getByRole("button", { name: "Show Whitebird routes" }).click();
+  await page.getByRole("option", { name: "Show Whitebird routes" }).click();
+  await expect(venueDialog).toHaveCount(0);
   await expect(page.getByTestId("complete-route")).toHaveCount(1);
   await expect(page.getByTestId("complete-route").first()).toContainText("Whitebird");
-  await page.getByRole("button", { name: "Show Whitebird routes" }).click();
+  await expect(panelTop.locator(".venueFilterClear")).toBeVisible();
+  await panelTop.locator(".venueFilterClear").click();
   await expect(page.getByTestId("complete-route")).toHaveCount(2);
   await expect(searchingVenues).toHaveCount(4);
 
@@ -3793,7 +3798,19 @@ test("route scrollbar follows ranking depth and overview includes bank routes", 
   }
   await expect(page.getByTestId("complete-route").first().locator(".workflowAsset img").first()).toHaveAttribute("src", "/icons/flags/am.svg");
   await expect(page.getByTestId("complete-route").first().locator(".workflowAsset img").last()).toHaveAttribute("src", "/icons/flags/ru.svg");
-  for (const popover of await page.locator(".foundVenuePopover").all()) await expect(popover).not.toContainText("Route found");
+  await page.getByTestId("route-count-button").click();
+  const venueDialog = page.getByRole("dialog", { name: "Venues in these routes" });
+  await expect(venueDialog).toBeVisible();
+  await venueDialog.getByRole("button", { name: "Venue metrics" }).first().click();
+  const venueMetrics = page.locator(".venueDetail");
+  await expect(venueMetrics).toBeVisible();
+  await expect(venueMetrics.getByRole("dt")).toContainText(["Routes found", "Quotes received", "Last response", "Average response", "Cache hits"]);
+  await expect(venueMetrics).not.toContainText("Route found");
+  await expect(venueMetrics.getByRole("link", { name: "Open platform profile" })).toHaveAttribute("href", /^\/providers\/[a-z0-9-]+$/);
+  await page.keyboard.press("Escape");
+  await expect(venueMetrics).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(venueDialog).toHaveCount(0);
 });
 
 

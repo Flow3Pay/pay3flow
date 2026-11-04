@@ -144,8 +144,8 @@
   .walletAddress { width:100%; min-height:44px; padding:8px 12px; border:1px solid var(--color-border); border-radius:8px; font-size:12px; }
   .bridgeForm { display: flex; flex: 1; flex-direction: column; min-width: 0; padding: 0 var(--otc-panel-padding, 20px) 16px; }
   .ticketHead { position: relative; display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding-top: 2px; }
-  .sideTabs { --side-buy: color-mix(in srgb, var(--otc-buy, #8dcb00) 74%, #fff); --side-sell: color-mix(in srgb, var(--otc-sell, #d43d35) 55%, #fff); position: relative; isolation: isolate; display: flex; flex: 1; min-width: 0; gap: 4px; padding: 4px; border-radius: 12px; background: var(--color-panel); }
-  .sideTabs::before { position: absolute; z-index: -1; inset: 4px auto 4px 4px; width: calc(50% - 6px); border-radius: 9px; background-image: linear-gradient(90deg, var(--side-buy) 0 34%, #e6d94c 42%, #f0a34d 50%, var(--side-sell) 58% 100%); background-position: 0% 50%; background-size: 300% 100%; content: ""; transition: transform .32s cubic-bezier(.22, 1, .36, 1), background-position .5s ease; }
+  .sideTabs { --side-buy: var(--otc-buy, var(--color-accent-strong)); --side-sell: var(--otc-sell, var(--color-danger)); position: relative; isolation: isolate; display: flex; flex: 1; min-width: 0; gap: 4px; padding: 4px; border-radius: 12px; background: var(--color-panel); }
+  .sideTabs::before { position: absolute; z-index: -1; inset: 4px auto 4px 4px; width: calc(50% - 6px); border-radius: 9px; background-image: linear-gradient(90deg, var(--side-buy) 0 40%, #e6d94c 46%, #f0a34d 52%, var(--side-sell) 58% 100%); background-position: 0% 50%; background-size: 300% 100%; content: ""; transition: transform .32s cubic-bezier(.22, 1, .36, 1), background-position .5s ease; }
   .sideTabs.selling::before { background-position: 100% 50%; transform: translateX(calc(100% + 4px)); }
   .settingsWrap { flex: 0 0 auto; }
   .settingsButton { display: grid; width: 40px; min-width: 40px; height: 40px; place-items: center; border: 1px solid var(--exchange-field-border); border-radius: 12px; background: var(--color-panel); transition: background .18s ease, border-color .18s ease; }
@@ -158,7 +158,8 @@
   .settingsClose { display: grid; width: 28px; height: 28px; flex: 0 0 auto; place-items: center; border-radius: 7px; color: var(--color-text-soft); font-size: 18px; line-height: 1; }
   .settingsClose:hover { background: var(--color-panel); color: var(--color-text); }
   .sideTabs button { flex: 1; min-width: 0; min-height: 40px; padding: 8px 4px; border-radius: 9px; color: var(--color-text-soft); font-size: 13px; font-weight: 650; line-height: 1.5; transition: color .2s ease; }
-  .sideTabs button.active { color: var(--otc-sell); }
+  .sideTabs button.active { color: #152016; }
+  .sideTabs.selling button.active { color: var(--color-text-invert); }
   .priceField { display: block; margin-top: 6px; color: var(--color-text-soft); font-size: 12px; }
   .priceHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .marketToggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--color-text-soft); font-size: 12px; line-height: 1.4; white-space: nowrap; }

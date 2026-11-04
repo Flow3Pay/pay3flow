@@ -2,7 +2,7 @@
   import { flip } from "svelte/animate";
   import { quintOut } from "svelte/easing";
   import { fly } from "svelte/transition";
-  import type { RouteCandidate, ServiceVote, VenueSearchStatus } from "$lib/exchange";
+  import type { RouteCandidate, ServiceVote } from "$lib/exchange";
   import { formatRouteCount, locale, t, type Locale } from "$lib/i18n";
   import { assetIcon, dislikeIcon, likeIcon, venueIcon, warningIcon } from "$lib/icons";
   import WorkflowControl from "$lib/components/WorkflowControl.svelte";
@@ -10,23 +10,6 @@
   import { routeScrollColor } from "$lib/route-scroll-color";
   import { fiatFlagUrl } from "$lib/currency-flags";
   import { OTC_PROVIDER, routeUsesOtc } from "$lib/otc/route";
-
-  let routeCountHover = false;
-  let activityExpanded = false;
-  let activityModalOpen = false;
-  let activityModalTarget: HTMLElement | null = null;
-
-  function toggleActivityGraph() {
-    if (!sourceCurrency || !targetCurrency) return;
-    activityModalOpen = true;
-    onOpenSearchActivity();
-  }
-
-  function hideActivity() {
-    activityExpanded = false;
-    activityModalOpen = false;
-    activityModalTarget = null;
-  }
 
   export let routes: RouteCandidate[];
   export let routesFound = 0;
@@ -40,7 +23,6 @@
   export let renderingRoutes = false;
   export let searchingVenues: { id: string; label: string; iconUrl: string }[] = [];
   export let foundVenues: { id: string; label: string; iconUrl: string }[] = [];
-  export let venueStats: Record<string, VenueSearchStatus> = {};
   export let venueNames: Record<string, string> = {};
   export let networkNames: Record<string, string> = {};
   export let searched = false;
@@ -49,9 +31,10 @@
   export let showBelarusP2pWarning = false;
   export let onOpenBelarusP2pWarning: () => void = () => {};
   export let onOpenSearchActivity: () => void = () => {};
-  let selectedVenueId: string | null = null;
-  let openVenueId: string | null = null;
-  let lastPair = "";
+  export let venueListOpen = false;
+  export let onOpenVenueList: () => void = () => {};
+  export let selectedVenueId: string | null = null;
+  export let onSelectVenue: (venueId: string | null) => void = () => {};
 
   const ASSET_NAMES: Record<string, string> = { BTC: "Bitcoin", ETH: "Ether", USDC: "USD Coin", USDT: "Tether" };
 
@@ -94,42 +77,13 @@
   const routeFlipDuration = (distance: number) => reduceMotion() || routes.length > 12 ? 0 : Math.min(680, 260 + distance * 0.65);
   const routeEnterDuration = () => reduceMotion() || routes.length > 12 ? 0 : 380;
   $: pendingVenues = searchingVenues.filter((venue) => !foundVenues.some((found) => found.id === venue.id));
-  $: routeVenues = foundVenues.filter((venue) => (venueStats[venue.id.toLowerCase()]?.routes_found ?? 0) > 0);
   $: visiblePendingVenues = pendingVenues.slice(0, 5);
   $: hasHiddenPendingVenues = pendingVenues.length > visiblePendingVenues.length;
   $: circularSearch = sourceCurrency.toUpperCase() !== "ANY" && sourceCurrency.toUpperCase() === targetCurrency.toUpperCase();
-  $: if (`${sourceCurrency}:${targetCurrency}` !== lastPair) {
-    lastPair = `${sourceCurrency}:${targetCurrency}`;
-    selectedVenueId = null;
-    openVenueId = null;
-  }
   $: visibleRoutes = selectedVenueId
     ? routes.filter((route) => route.legs.some((leg) => leg.provider.toLowerCase() === selectedVenueId) || route.route_provider?.toLowerCase() === selectedVenueId || route.market_path?.venue.toLowerCase() === selectedVenueId)
     : routes;
   $: selectedVenueName = foundVenues.find((venue) => venue.id.toLowerCase() === selectedVenueId)?.label ?? selectedVenueId;
-
-  function openVenuePopover(venue: HTMLDivElement, id: string) {
-    const popover = venue.querySelector<HTMLElement>(".foundVenuePopover");
-    if (!popover) return;
-    const bounds = venue.getBoundingClientRect();
-    const centeredLeft = bounds.left + bounds.width / 2 - popover.offsetWidth / 2;
-    const left = Math.max(16, Math.min(centeredLeft, window.innerWidth - popover.offsetWidth - 16));
-    venue.style.setProperty("--popover-shift", `${left - centeredLeft}px`);
-    openVenueId = id;
-  }
-
-  function closeVenuePopover(venue: HTMLDivElement, id: string) {
-    if (openVenueId === id && !venue.contains(document.activeElement) && !venue.matches(":hover")) {
-      openVenueId = null;
-      routeCountHover = false;
-    }
-  }
-
-  function closeActivity() {
-    activityExpanded = false;
-    activityModalOpen = false;
-    activityModalTarget = null;
-  }
 
   const workflowSteps = (route: RouteCandidate) => routeWorkflowSteps(route).map((step) => ({ ...step, networkLabel: compactNetwork(step.network) }));
 
@@ -139,49 +93,10 @@
     if (target.closest(".routeAmount") || target.closest(".workflow")) onOpenInstructions(route);
   }
 
-  function popupFocusableElements(popup: HTMLElement): HTMLElement[] {
-    return Array.from(popup.querySelectorAll<HTMLElement>("button, a[href]"));
-  }
-
-  function keepActivityPopupFocus() {
-    if (!activityModalTarget) return;
-    const popup = activityModalTarget.querySelector(".searchActivityPopup") as HTMLElement | null;
-    if (!popup) return;
-    const focusable = popupFocusableElements(popup);
-    if (focusable.length === 0) return;
-    focusable[0].focus();
-  }
-  
-
-  
-  function closeActivityOnEscape(event: KeyboardEvent) {
-    if (!activityModalOpen) return;
-    if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      activityExpanded = false;
-      activityModalOpen = false;
-    }
-  }
-
-  function closeActivityOnWindowBlur() {
-    if (!activityModalOpen) return;
-    if (!document.hasFocus()) return;
-    if (activityModalTarget && !activityModalTarget.contains(document.activeElement)) return;
-    hideActivity();
-  }
-
   function fallbackVenueIcon(event: Event, provider: string) {
     const image = event.currentTarget as HTMLImageElement;
     image.onerror = null;
     image.src = venueIcon(provider);
-  }
-  function fallbackFoundVenueIcon(event: Event) {
-    const image = event.currentTarget as HTMLImageElement;
-    image.onerror = null;
-    image.hidden = true;
-    const fallback = image.nextElementSibling as HTMLElement | null;
-    if (fallback) fallback.hidden = false;
   }
 </script>
 
@@ -189,45 +104,29 @@
   <div class="panel">
     <div class="panelTop">
       <div class="panelHeading">
-        {#if hasAmount}
-          <strong class="sendDirection"><span>{t("Send", {}, $locale)}</span><span class="sendCurrency"><img src={fiatFlagUrl(sourceCurrency) ?? assetIcon(sourceCurrency)} alt="" width="22" height="22" />{sourceCurrency}</span><span class="sendArrow" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 12h16m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span><span class="sendCurrency"><img src={fiatFlagUrl(targetCurrency) ?? assetIcon(targetCurrency)} alt="" width="22" height="22" />{targetCurrency}</span></strong>
-        {:else}
-          <strong>{t("Awaiting your intent", {}, $locale)}</strong>
-        {/if}
-        {#if hasAmount}
-          <span class="resultSummary" class:hasActivity={routeVenues.length > 0}>
-            {#if hasAmount}              <div class="routeCountGroup" class:routeCountGroupHover={routeCountHover} role="status" aria-live="polite" aria-describedby="routeCountHint" on:pointerleave={() => routeCountHover = false} on:focusout={() => routeCountHover = false}>
+        <div class="headingRow">
+          {#if hasAmount}
+            <strong class="sendDirection"><span>{t("Send", {}, $locale)}</span><span class="sendCurrency"><img src={fiatFlagUrl(sourceCurrency) ?? assetIcon(sourceCurrency)} alt="" width="22" height="22" />{sourceCurrency}</span><span class="sendArrow" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 12h16m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span><span class="sendCurrency"><img src={fiatFlagUrl(targetCurrency) ?? assetIcon(targetCurrency)} alt="" width="22" height="22" />{targetCurrency}</span></strong>
+            <span class="resultSummary">
               <button
                 type="button"
-                class="activityButton"
-                class:activityButtonOpen={activityExpanded}
-                aria-label={t(activityExpanded ? "Hide search activity" : "Show search activity", {}, $locale)}
-                aria-expanded={activityExpanded || activityModalOpen}
-                title={t(activityExpanded ? "Hide search activity" : "Show search activity", {}, $locale)}
-                on:click={toggleActivityGraph}
+                class="routeCountButton"
+                data-testid="route-count-button"
+                aria-haspopup="dialog"
+                aria-expanded={venueListOpen}
+                title={t("Venues in these routes", {}, $locale)}
+                on:click={onOpenVenueList}
               >
-                <img src="/icons/ui/search-activity.png" alt="" width="16" height="16" decoding="async" aria-hidden="true" />
+                <small class="routeCountText" role="status" aria-live="polite">{routeCountLabel(routesFound, $locale)}</small>
+                {#if searching}<span class="routeCountState">· {t("Searching…", {}, $locale)}</span>{:else if searchIncomplete}<span class="routeCountState">· {t("Partial results", {}, $locale)}</span>{/if}
               </button>
-                <span class="routeCountText">{routeCountLabel(routesFound, $locale)}{searching ? " · searching…" : searchIncomplete ? ` · ${t("Partial results", {}, $locale)}` : ""}</span>
-                <span class="routeCountHint" id="routeCountHint" hidden>{t("Open search activity", {}, $locale)}</span>
-              </div>
-            {/if}
-            {#if routeVenues.length}
-              <span class="foundVenues" aria-label={`Venues used in found routes: ${routeVenues.map((venue) => venue.label).join(", ")}`} on:pointerleave={() => routeCountHover = false} on:focusout={() => routeCountHover = false}>{#each routeVenues.slice(0, 5) as venue, index (venue.id)}
-                  {@const status = venueStats[venue.id.toLowerCase()]}
-                  {@const hasRoute = (status?.routes_found ?? 0) > 0}
-                  <button type="button" class="venueChip" aria-label={`Show ${venue.label} routes`} aria-pressed={selectedVenueId === venue.id.toLowerCase()} disabled={!hasRoute} on:click={() => selectedVenueId = selectedVenueId === venue.id.toLowerCase() ? null : venue.id.toLowerCase()} on:focus={() => openPopover = venue.id} on:blur={() => openPopover = null}><img src={venue.iconUrl || venueIcon(venue.id)} alt="" width="16" height="16" decoding="async" class="venueChipIcon" on:error={fallbackFoundVenueIcon} /></button>
-                {/each}
-                {#if routeVenues.length > 5}
-                  <button type="button" class="venueMoreChip" aria-label="More venues" title="More venues">+{routeVenues.length - 5}</button>
-                {/if}
-                <button type="button" class="venueMoreChip" aria-label="More venues" title="More venues" on:click|stopPropagation={() => { selectedVenueId = null; openVenueId = null; showVenueMenu = !showVenueMenu; }}>…</button>
-              </span>
-            {/if}
-          </span>
-        {/if}
+            </span>
+          {:else}
+            <strong>{t("Awaiting your intent", {}, $locale)}</strong>
+          {/if}
+        </div>
         {#if hasAmount && renderingRoutes}<small class="resultLimit" data-testid="route-render-progress">Showing {routes.length} now · loading more…</small>{/if}
-        {#if selectedVenueId}<button type="button" class="venueFilterClear" on:click={() => selectedVenueId = null}>Showing {visibleRoutes.length} from {selectedVenueName} · Show all</button>{/if}
+        {#if selectedVenueId}<button type="button" class="venueFilterClear" on:click={() => onSelectVenue(null)}>Showing {visibleRoutes.length} from {selectedVenueName} · Show all</button>{/if}
       </div>
       <div class="panelActions">
         {#if sourceCurrency && targetCurrency}
@@ -381,14 +280,6 @@
 .sendCurrency img { display: block; flex: 0 0 auto; border-radius: 50%; object-fit: contain; }
 .sendArrow { display: inline-flex; align-items: center; color: var(--color-text-soft); }
 
-.sideTabs { position: relative; isolation: isolate; display: inline-flex; padding: 4px; gap: 4px; border-radius: 9px; background: var(--color-panel); }
-.sideTabs::before { position: absolute; z-index: -1; inset: 4px auto 4px 4px; width: calc(50% - 6px); border-radius: 6px; background: var(--color-accent); content: ""; transition: transform .32s cubic-bezier(.22, 1, .36, 1); }
-.sideTabs.selling::before { transform: translateX(calc(100% + 4px)); }
-.sideTabs button.active { color: #fff; }
-.sideTabs button { flex: 1; min-width: 0; padding: 9px 3px; border-radius: 6px; color: var(--color-text-soft); font-size: 12px; font-weight: 750; transition: color .2s ease, background .2s ease; background: transparent; border: 0; cursor: pointer; }
-.sideTabs button:focus-visible { outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 2px; }
-.sideTabs.selling button.active { background: #c8231f; color: #fff; }
-
 .panelActions {
   display: flex;
   align-items: flex-start;
@@ -397,13 +288,20 @@
   flex: 0 0 auto;
 }
 
-.activityButton { display: none; width: 32px; height: 32px; flex: 0 0 auto; place-items: center; padding: 0; border: 0; border-radius: 9px; background: transparent; color: var(--color-text-soft); cursor: pointer; }
+.activityButton { display: none; width: 32px; height: 32px; flex: 0 0 auto; place-items: center; padding: 0; border: 0; border-radius: 9px; background: transparent; color: var(--color-text-soft); cursor: pointer; transition: color 0.14s ease, background 0.14s ease; }
 .activityButton img { display: block; width: 18px; height: 18px; object-fit: contain; filter: brightness(0); }
 :global(html[data-theme="dark"]) .activityButton img { filter: brightness(0) invert(1); }
-.activityButton:focus-visible { outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 2px; }
+.activityButton:focus-visible { outline: var(--focus-ring-width) solid var(--color-focus); outline-offset: 2px; color: var(--color-text); background: var(--color-panel-soft); }
 @media (max-width: 980px) { .activityButton { display: grid; } }
 
-.resultSummary, .foundVenues, .searchingVenues {
+.headingRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.resultSummary, .searchingVenues {
   display: flex;
   align-items: center;
 }
@@ -415,77 +313,35 @@
   position: relative;
 }
 
-.routeCountGroup {
+.routeCountButton {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-}
-
-.routeCountGroupHover .routeCountText {
-  background: var(--color-strong-accent);
-  color: var(--color-strong-accent-contrast);
-  border-radius: 6px;
-}
-
-.routeCountText {
-  font-variant-numeric: tabular-nums;
-  color: var(--color-text-soft);
-  font-size: 12px;
-  pointer-events: none;
-}
-
-.routeCountHint {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-}
-
-.activityButton {
-  display: none;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
-  place-items: center;
-  padding: 0;
+  gap: 5px;
+  padding: 3px 8px;
   border: 0;
   border-radius: 7px;
   background: transparent;
-  color: var(--color-text-soft);
+  color: rgba(255, 255, 255, 0.66);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
   cursor: pointer;
   transition: color 0.14s ease, background 0.14s ease;
-  z-index: 1;
 }
 
-.activityButton img {
-  display: block;
-  width: 16px;
-  height: 16px;
-  object-fit: contain;
-  filter: brightness(0);
+.routeCountButton:hover { color: var(--color-accent); background: var(--color-accent-soft); }
+
+.routeCountButton:focus-visible { outline: var(--focus-ring-width) solid var(--color-accent); outline-offset: 2px; color: var(--color-accent); }
+
+.routeCountText {
+  font-variant-numeric: tabular-nums;
+  font-size: inherit;
+  font-weight: inherit;
+  color: inherit;
 }
 
-:global(html[data-theme="dark"]) .activityButton img {
-  filter: brightness(0) invert(1);
-}
-
-.activityButton:focus-visible {
-  color: var(--color-text);
-  background: var(--color-panel-soft);
-}
-
-.resultSummary.hasActivity .routeCountGroup {
-  display: none;
-}
-
-@media (max-width: 980px) {
-  .routeCountGroup {
-    flex-wrap: wrap;
-    gap: 4px;
-  }
-}
-
+.routeCountState { color: inherit; font-variant-numeric: tabular-nums; }
 
 .legalWarning {
   display: grid;
@@ -517,121 +373,6 @@
   outline-offset: 2px;
 }
 
-.foundVenues {
-  position: relative;
-  z-index: 41;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.venueMoreMenu {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: nowrap;
-}
-
-.venueChip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--color-text-soft);
-  cursor: pointer;
-  transition: background 0.14s ease, color 0.14s ease, transform 0.14s ease;
-}
-
-.venueChip:focus-visible {
-  outline: var(--focus-ring-width) solid var(--color-focus);
-  outline-offset: 2px;
-}
-
-.venueChipIcon {
-  display: block;
-  width: 14px;
-  height: 14px;
-  object-fit: contain;
-  filter: brightness(0);
-}
-
-:global(html[data-theme="dark"]) .venueChipIcon {
-  filter: brightness(0) invert(1);
-}
-
-.venueMoreChip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 24px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--color-text-soft);
-  font: inherit;
-  font-weight: 600;
-  font-size: 12px;
-  line-height: 1;
-  letter-spacing: 0.01em;
-  cursor: pointer;
-  transition: background 0.14s ease, color 0.14s ease;
-}
-
-.venueMoreChip:focus-visible {
-  outline: var(--focus-ring-width) solid var(--color-focus);
-  outline-offset: 2px;
-}
-
-.venueMoreChip[aria-pressed="true"] {
-  background: var(--color-strong-accent);
-  color: var(--color-strong-accent-contrast);
-}
-
-.venueMoreChip:hover:not([aria-pressed="true"]) {
-  background: var(--color-panel-soft);
-  color: var(--color-text);
-}
-
-.venueMoreChip::before {
-  content: attr(data-label);
-  display: none;
-}
-
-.foundVenue {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  width: 32px;
-  height: 32px;
-  place-items: center;
-  border: 1px solid #555b54;
-  border-radius: 8px;
-  background: #343834;
-  animation: foundVenueIn 0.52s cubic-bezier(0.22, 1.42, 0.36, 1) both;
-  will-change: transform, opacity;
-}
-
-.foundVenueButton {
-  display: grid;
-  width: 100%;
-  height: 100%;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-}
-
-.foundVenueActive {
-  border-color: #94dd00;
-  box-shadow: none; outline: var(--focus-ring-width) solid var(--color-accent-strong); outline-offset: 2px;
-}
-
 .venueFilterClear {
   width: fit-content;
   padding: 2px 0;
@@ -647,128 +388,6 @@
   padding: 16px;
   color: var(--color-text-soft);
   font-size: 12px;
-}
-
-.foundVenue.foundVenueOpen {
-  z-index: 50;
-}
-
-.foundVenuePopover {
-  position: absolute;
-  top: calc(100% + 10px);
-  left: calc(50% + var(--popover-shift, 0px));
-  z-index: 100;
-  display: grid;
-  width: min(240px, calc(100vw - 32px));
-  box-sizing: border-box;
-  gap: 7px;
-  padding: 13px 14px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 14px;
-  background: #fff;
-  box-shadow: none;
-  color: var(--color-text);
-  font-size: 12px;
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transform: translate(-50%, -4px);
-  transition: opacity 0.16s ease, transform 0.16s ease;
-}
-
-.foundVenue.foundVenueOpen .foundVenuePopover {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-  transform: translate(-50%, 0);
-}
-
-.foundVenuePopover > span {
-  color: var(--color-text-soft);
-  font-size: 12px;
-}
-
-.foundVenuePopover .venueOk { color: var(--color-accent-text); }
-
-.foundVenuePopover dl {
-  display: grid;
-  gap: 5px;
-  margin: 0;
-}
-
-.foundVenuePopover dl div {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.foundVenuePopover dt { color: var(--color-text-soft); }
-.foundVenuePopover dd { margin: 0; font-weight: 800; }
-
-
-.foundVenueProfile {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 40px;
-  margin: 3px 0;
-  padding: 6px 10px;
-  border: 1px solid var(--color-accent-text);
-  border-radius: 6px;
-  background: var(--color-accent-soft);
-  color: var(--color-accent-text);
-  font-weight: 750;
-  text-decoration: none;
-}
-
-.foundVenueProfile:hover,
-.foundVenueProfile:focus-visible {
-  background: var(--color-accent);
-  color: #172110;
-}
-
-.foundVenueProfile:focus-visible {
-  outline: 2px solid var(--color-accent-text);
-  outline-offset: 2px;
-}
-
-.foundVenuePopover strong {
-  color: #1c2419;
-  font-size: 12px;
-}
-
-.foundVenuePopoverTitle {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-}
-
-.foundVenuePopoverTitle img {
-  flex: 0 0 auto;
-  width: 20px;
-  height: 20px;
-  border-radius: 6px;
-  object-fit: contain;
-}
-
-.foundVenuePopover dt { color: #687464; }
-
-.foundVenuePopover dd { color: #1c2419; }
-
-.foundVenue img {
-  width: 18px;
-  height: 18px;
-  border-radius: 6px;
-  object-fit: contain;
-}
-
-.foundVenueFallback {
-  color: #49630c;
-  font-size: 12px;
-  font-weight: 850;
-  line-height: 1;
 }
 
 .panelTop strong {
@@ -1274,12 +893,6 @@
   28% { transform: translateY(1px) scale(0.98); }
 }
 
-@keyframes foundVenueIn {
-  0% { opacity: 0; transform: translate(9px, -5px) scale(0.72); }
-  72% { opacity: 1; transform: translate(-1px, 1px) scale(1.06); }
-  100% { opacity: 1; transform: translate(0, 0) scale(1); }
-}
-
 @media (max-width: 980px) {
   .panel {
     height: 580px;
@@ -1418,16 +1031,6 @@
   box-shadow: none;
 }
 
-.foundVenue {
-  border-color: #c6cac5;
-  background: #e7e9e6;
-}
-
-.foundVenuePopover {
-  border-color: #cbd0ca;
-  background: #f1f2f1;
-}
-
 .skeletonShort,
 .skeletonLong,
 .skeletonMedium {
@@ -1470,8 +1073,7 @@
 @media (prefers-reduced-motion: reduce) {
   .routeList > li,
   .routeCard,
-  .searchingVenue,
-  .foundVenue {
+  .searchingVenue {
     animation: none;
     transition: none;
   }
@@ -1519,32 +1121,6 @@
   box-shadow: none;
 }
 
-:global(html[data-theme="dark"]) .foundVenue {
-  border-color: #575d56;
-  background: #343834;
-}
-
-:global(html[data-theme="dark"]) .foundVenuePopover {
-  border-color: #555b54;
-  background: #2d302d;
-  box-shadow: none;
-  color: #f0f5ea;
-}
-
-:global(html[data-theme="dark"]) .foundVenuePopover strong,
-:global(html[data-theme="dark"]) .foundVenuePopover dd {
-  color: #f0f5ea;
-}
-
-:global(html[data-theme="dark"]) .foundVenuePopover > span,
-:global(html[data-theme="dark"]) .foundVenuePopover dt {
-  color: #aeb9a7;
-}
-
-:global(html[data-theme="dark"]) .foundVenueFallback {
-  color: #d8f59a;
-}
-
 
 :global(html[data-theme="dark"]) .routeBest,
 :global(html[data-theme="dark"]) .selected {
@@ -1577,15 +1153,10 @@
 .panelTop { transform: none; padding-bottom: 16px; border-bottom: 1px solid var(--color-border); }
 .routeGroups { padding: 12px 6px 12px 0; border-bottom: 1px solid var(--color-border); }
 .routeQuoteMeta { overflow-wrap: anywhere; }
-.foundVenuePopover::before { position: absolute; height: 12px; left: 0; right: 0; bottom: 100%; content: ""; }
-:global(html[data-theme="dark"]) .venueFilterClear,
-:global(html[data-theme="dark"]) .foundVenuePopover .venueOk { color: var(--color-accent-text); }
+:global(html[data-theme="dark"]) .venueFilterClear { color: var(--color-accent-text); }
 @media (max-width: 980px), (pointer: coarse) {
   .activityButton, .legalWarning { width: 44px; height: 44px; }
   .panelActions { margin-right: -4px; }
-  .foundVenues { gap: 12px; padding: 6px 0; }
-  .foundVenue { width: 32px; height: 32px; }
-  .foundVenueButton { position: absolute; width: 44px; height: 44px; min-width: 44px; min-height: 44px; }
   .serviceVote button { min-width: 44px; min-height: 44px; }
   .routeCard { gap: 12px; padding: 12px; }
   .routeTopline { align-items: start; gap: 8px; }

@@ -100,6 +100,8 @@
   $: paymentDone = deal ? p2pLegDone(deal, "payment") : false;
   $: payoutDone = deal ? p2pLegDone(deal, "payout") : false;
   $: flowActive = deal ? p2pLegActive(deal, "payment") || p2pLegActive(deal, "payout") : false;
+  $: canCancel = !!deal && deal.state === "payment_pending";
+  $: canCloseMine = !!deal && deal.state === "delivery_pending" && !!deal.my_confirmed && !deal.counterparty_confirmed;
 
   $: {
     const actor = session?.actor || "";
@@ -140,6 +142,16 @@
     if (dialog?.open) dialog.close();
     selectedId = "";
     error = "";
+  }
+
+  async function cancelDeal() {
+    const current = deal;
+    const token = session?.token;
+    if (!current || !token) return;
+    await run(async () => {
+      applyDeal(await request<P2pDeal>(`/p2p/trades/${current.id}/cancel`, token, {}), current);
+      close();
+    });
   }
 
   function explain(reason: unknown) {
@@ -400,6 +412,11 @@
       {:else}
         <p class="waitingAction">{waitingLabel}</p>
       {/if}
+      {#if canCancel}
+        <button type="button" class="quitButton" disabled={busy || locked} data-testid="otc-p2p-cancel" on:click={cancelDeal}>{say("Cancel offer", "Отменить оффер")}</button>
+      {:else if canCloseMine}
+        <button type="button" class="quitButton" disabled={busy || locked} data-testid="otc-p2p-close-mine" on:click={close}>{say("Close for me", "Закрыть для меня")}</button>
+      {/if}
     </div>
   {/if}
 </dialog>
@@ -446,6 +463,10 @@
   .confirmButton:disabled { opacity:.45; cursor:default; }
   .confirmButton:focus-visible { outline:var(--focus-ring-width) solid var(--color-focus); outline-offset:2px; }
   .waitingAction { display:flex; min-height:46px; align-items:center; justify-content:center; margin:0; color:var(--color-text-soft); font-size:12px; line-height:1.45; text-align:center; }
+  .quitButton { display:flex; width:100%; min-height:40px; align-items:center; justify-content:center; margin-top:10px; border:1px solid var(--color-border-strong); border-radius:11px; background:transparent; color:var(--color-text-soft); font-size:12px; font-weight:650; }
+  .quitButton:hover:not(:disabled) { border-color:var(--color-danger); color:var(--color-danger); }
+  .quitButton:disabled { opacity:.45; cursor:default; }
+  .quitButton:focus-visible { outline:var(--focus-ring-width) solid var(--color-focus); outline-offset:2px; }
   .spinner { width:13px; height:13px; border:2px solid #15201655; border-top-color:#152016; border-radius:50%; animation:spin .8s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
   @keyframes travel { 0%,100% { transform:translate(-50%,-50%); } 50% { transform:translate(calc(-50% + 13px),-50%); } }

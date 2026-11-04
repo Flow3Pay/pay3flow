@@ -26,6 +26,7 @@
   import SidePanel from "./SidePanel.svelte";
   import SearchActivityChart from "./SearchActivityChart.svelte";
   import SearchActivityModal from "./SearchActivityModal.svelte";
+  import VenueListModal from "./VenueListModal.svelte";
   import CurrencyPicker from "./CurrencyPicker.svelte";
   import ReferenceRates from "./ReferenceRates.svelte";
   import { formatTokenMarketValue, formatUsdAmount, formatUsdMarketValue, sanitizeDecimalInput, tokenAmountForUsd } from "$lib/usd-amount";
@@ -142,6 +143,8 @@
   let activityDisplayKey = "";
   let activityController: AbortController | null = null;
   let activityModalOpen = false;
+  let venueListOpen = false;
+  let selectedVenueId: string | null = null;
   let activityExpanded = false;
   let activityRevealElement: HTMLDivElement | undefined;
   let routesRevealElement: HTMLDivElement | undefined;
@@ -725,7 +728,7 @@
   function resetResults() {
     referenceRoutes = [];
     discoveryRows = []; discoveryCursor = null; discoverySignature = ""; searchIncomplete = false;
-    controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; displayRoutes([]); routesFound = 0; selected = null; selectionPinnedByUser = false; instructionsRoute = null; lastUpdatedAt = null; searching = false; awaitingFirstRoute = false; foundVenueIds = []; foundVenues = []; venueStats = {}; error = null;
+    controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; displayRoutes([]); routesFound = 0; selected = null; selectionPinnedByUser = false; instructionsRoute = null; lastUpdatedAt = null; searching = false; awaitingFirstRoute = false; foundVenueIds = []; foundVenues = []; venueStats = {}; selectedVenueId = null; venueListOpen = false; error = null;
     if (refreshTimer) window.clearInterval(refreshTimer);
   }
   function updateAmount(value: string) {
@@ -947,7 +950,7 @@
       error = "No compatible network is available for the selected cryptocurrency";
       return;
     }
-    controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; controller = new AbortController(); const signal = controller.signal; const currentRequest = ++requestId; searching = true; awaitingFirstRoute = true; routesFound = 0; foundVenueIds = []; foundVenues = []; venueStats = {}; responseMetrics = new SearchResponseMetrics(); error = null;
+    controller?.abort(); cancelRouteRendering(); revealedRouteCount = 0; controller = new AbortController(); const signal = controller.signal; const currentRequest = ++requestId; searching = true; awaitingFirstRoute = true; routesFound = 0; foundVenueIds = []; foundVenues = []; venueStats = {}; venueListOpen = false; responseMetrics = new SearchResponseMetrics(); error = null;
     let rerunForTargetAmount = false;
     try {
       const liveQuery = { sourceFiat: selectedSourceCurrency, targetFiat: selectedTargetCurrency, sourceAmount: value, intermediaryAssets: !sourceWallet && !targetWallet && selectedIntermediaryAssets.length ? selectedIntermediaryAssets : undefined, sourceNetwork: sourceWallet ? sourceNetwork?.id : undefined, targetNetwork: targetWallet ? targetNetwork?.id : undefined, sourcePaymentMethod: sourceWallet || sourceMethod.kind === "currency" ? undefined : sourceMethod.p2pQuery, targetPaymentMethod: targetWallet || targetMethod.kind === "currency" ? undefined : targetMethod.p2pQuery, sourcePaymentFeePercent: sourceWallet ? 0 : sourceMethod.bankFeePercent, targetPaymentFeePercent: targetWallet ? 0 : targetMethod.bankFeePercent, sources: selectedSources, exchangeMode, allowCrossVenue: true, maxActions: complexRoutes ? 8 : undefined, limit: 40, countActivity };
@@ -1320,10 +1323,11 @@
     </div>
     {#if routesExpanded}
       <div class="routesReveal" bind:this={routesRevealElement} transition:routesRevealTransition inert={!routesExpanded} aria-hidden={!routesExpanded}>
-        <SidePanel {routes} {routesFound} {searchIncomplete} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {renderingRoutes} {searchingVenues} {foundVenues} {venueStats} {venueNames} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} searched={lastUpdatedAt !== null} {hasAmount} {showBelarusP2pWarning} {onOpenBelarusP2pWarning} onOpenSearchActivity={() => activityModalOpen = true} />
+        <SidePanel {routes} {routesFound} {searchIncomplete} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {renderingRoutes} {searchingVenues} {foundVenues} {venueNames} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} searched={lastUpdatedAt !== null} {hasAmount} {showBelarusP2pWarning} {onOpenBelarusP2pWarning} onOpenSearchActivity={() => activityModalOpen = true} {venueListOpen} onOpenVenueList={() => venueListOpen = true} {selectedVenueId} onSelectVenue={(venueId) => selectedVenueId = venueId} />
       </div>
     {/if}
   </div>
+  {#if venueListOpen}<VenueListModal venues={foundVenues} stats={venueStats} {selectedVenueId} onSelectVenue={(venueId) => selectedVenueId = venueId} onClose={() => venueListOpen = false} />{/if}
   {#if activityModalOpen && !guideRequested}<SearchActivityModal sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} hours={activityHours} period={activityPeriod} onPeriodChange={selectActivityPeriod} loading={activityLoading} error={activityError} onClose={() => activityModalOpen = false} />{/if}
   {#if walkthroughOpen && walkthroughComponent}<svelte:component this={walkthroughComponent} card={converterCard} {paymentMethods} {networks} onClose={() => walkthroughOpen = false} />{/if}
   {#if currencyPicker === "source" || currencyPicker === "target"}<CurrencyPicker open={currencyPicker !== null} selected={currencyPicker === "source" ? sourceCurrencyChoice : targetCurrencyChoice} choices={currencyPicker === "source" ? sourceCurrencyChoices : targetCurrencyChoices} onClose={() => currencyPicker = null} onSelect={(choice) => chooseCurrency(currencyPicker ?? "source", choice)} />{/if}

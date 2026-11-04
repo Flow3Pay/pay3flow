@@ -321,6 +321,21 @@ const messages: Record<Locale, Record<string, string>> = {
     "No routes found": "Маршруты не найдены",
     "Search incomplete": "Поиск ещё не завершён",
     "Partial results": "Частичные результаты",
+    "Searching…": "Идёт поиск…",
+    "Venues in these routes": "Площадки в этих маршрутах",
+    "Search venues": "Поиск площадок",
+    "No venues found": "Площадки не найдены",
+    "Close venue list": "Закрыть список площадок",
+    "Show {venue} routes": "Показать маршруты через {venue}",
+    "Venue metrics": "Метрики площадки",
+    "Routes found": "Маршрутов найдено",
+    "Quotes received": "Котировок получено",
+    "Last response": "Последний ответ",
+    "Average response": "Средний отклик",
+    "Cache hits": "Попаданий в кэш",
+    "No matching route": "Подходящих маршрутов нет",
+    "Offers received · no matching route": "Котировки есть · подходящих маршрутов нет",
+    "Source failed": "Площадка не ответила",
     "Some sources are still being checked. Refresh routes to continue the search.": "Не все источники проверены. Обновите маршруты, чтобы продолжить поиск.",
     "Preparing market scan": "Подготавливаем поиск по рынку",
     "Find your route": "Найдите свой маршрут",
@@ -871,6 +886,21 @@ const messages: Record<Locale, Record<string, string>> = {
     "No routes found": "Ուղղություններ չեն գտնվել",
     "Search incomplete": "Որոնումը դեռ չի ավարտվել",
     "Partial results": "Մասնակի արդյունքներ",
+    "Searching…": "Որոնում է…",
+    "Venues in these routes": "Հարթակներ այս ուղղություններում",
+    "Search venues": "Որոնել հարթակներ",
+    "No venues found": "Հարթակներ չեն գտնվել",
+    "Close venue list": "Փակել հարթակների ցանկը",
+    "Show {venue} routes": "Ցույց տալ {venue} ուղղությունները",
+    "Venue metrics": "Հարթակի ցուցանիշներ",
+    "Routes found": "Գտնված ուղղություններ",
+    "Quotes received": "Ստացված գնանշումներ",
+    "Last response": "Վերջին պատասխան",
+    "Average response": "Միջին պատասխան",
+    "Cache hits": "Արդյունքներ քեշից",
+    "No matching route": "Հարմար ուղղություն չկա",
+    "Offers received · no matching route": "Առաջարկներ կան · հարմար ուղղություն չկա",
+    "Source failed": "Հարթակը չպատասխանեց",
     "Some sources are still being checked. Refresh routes to continue the search.": "Ոչ բոլոր աղբյուրներն են ստուգված։ Թարմացրեք ուղիները՝ որոնումը շարունակելու համար։",
     "Preparing market scan": "Պատրաստում ենք շուկայի որոնումը",
     "Find your route": "Գտեք ձեր ուղղությունը",
@@ -1126,6 +1156,19 @@ export function t(key: string, params: Record<string, string | number> = {}, lan
 }
 
 export const localeLabel = (language: Locale) => language === "ru" ? "RU" : language === "hy" ? "ՀԱՅ" : "EN";
+
+export function routeNoun(count: number, language: Locale) {
+  const absolute = Math.abs(count);
+  if (language === "ru") {
+    const lastTwo = absolute % 100;
+    const last = absolute % 10;
+    if (last === 1 && lastTwo !== 11) return "маршрут";
+    if (last >= 2 && last <= 4 && !(lastTwo >= 12 && lastTwo <= 14)) return "маршрута";
+    return "маршрутов";
+  }
+  if (language === "hy") return "ուղղություն";
+  return absolute === 1 ? "route" : "routes";
+}
 
 export function formatRouteCount(count: number, language: Locale) {
   if (language === "ru") {
