@@ -189,7 +189,6 @@
   let routeInstructionsComponent: typeof import("./RouteInstructions.svelte").default | null = null;
   let instructionsMode: "swap" | "guide" = "swap";
   let instructionsStartAtSwap = false;
-  let searchingVenues: P2pSourceOption[] = [];
   let foundVenues: P2pSourceOption[] = [];
   let venueStats: Record<string, VenueSearchStatus> = {};
   let responseMetrics = new SearchResponseMetrics();
@@ -652,7 +651,6 @@
     target: targetMethod?.kind === "wallet" ? calculateMarketUsd(displayedTargetAmount, marketPrices[selectedTargetCurrency]) : null,
   };
   $: converterAmountDigits = Math.min(14, Math.max(10, displayedSourceAmount.replace(/\D/g, "").length, displayedTargetAmount.replace(/\D/g, "").length));
-  $: converterWidth = 500 + (converterAmountDigits - 10) * 21;
   $: secondsUntilRefresh = refreshSeconds && lastUpdatedAt ? Math.max(0, refreshSeconds - Math.floor((clock - lastUpdatedAt) / 1000)) : null;
   $: refreshProgress = secondsUntilRefresh !== null && refreshSeconds ? ((refreshSeconds - secondsUntilRefresh) / refreshSeconds) * 100 : 0;
   $: exchangeChoices = p2pSources.filter((source) => source.searchMode !== "always_on");
@@ -662,7 +660,6 @@
   $: filteredIntermediaryAssets = INTERMEDIARY_ASSETS.filter((asset) => asset.toLowerCase().includes(exchangesQuery.trim().toLowerCase()));
   $: showRefreshSettings = !settingsQuery || "auto-refresh refresh interval time обновление время custom seconds sec off".includes(settingsQuery.trim().toLowerCase()) || REFRESH_OPTIONS.some((seconds) => refreshOptionLabel(seconds).toLowerCase().includes(settingsQuery.trim().toLowerCase()));
   $: showExchangeMethods = !settingsQuery || "exchange methods p2p exchangers".includes(settingsQuery.trim().toLowerCase()) || "обмен методы".includes(settingsQuery.trim().toLowerCase());
-  $: searchingVenues = [...new Set([...selectedSources, ...alwaysOnProviders.map((provider) => provider.id)])].map((source) => p2pSources.find((item) => item.id === source) ?? { id: source, label: source, iconUrl: venueIcon(source), searchable: true, searchMode: "selectable" as const });
   $: exchangeMode = selectedExchangeMethods.length === EXCHANGE_METHODS.length ? "all" as const : selectedExchangeMethods[0];
   $: searchSignature = `${corridor?.id ?? ""}:${sourceMethod?.id ?? ""}:${sourceNetwork?.id ?? ""}:${targetMethod?.id ?? ""}:${targetNetwork?.id ?? ""}:${amountSide}:${amount}:${targetAmount}:${selectedSources.join(",")}:${selectedExchangeMethods.join(",")}:${selectedIntermediaryAssets.join(",")}:${directionReversed}:${complexRoutes}`;
   $: scheduleAutomaticSearch(searchSignature, preferencesLoaded, urlReady, hasAmount, initialSearchReady);
@@ -936,7 +933,7 @@
     }
   }
 
-  async function startSearch(countActivity = false) {
+  async function startSearch(countActivity = true) {
     if (debounceTimer) window.clearTimeout(debounceTimer);
     debounceTimer = undefined;
     if ((!corridor && !useDiscovery) || !sourceMethod || !targetMethod) return;
@@ -1208,7 +1205,7 @@
 <section hidden={guideRequested} class="shell" class:localeLong={activeLocale !== "en"} class:introReady={introCompleted} id="transfer">
   <div class="hero"><ScrambleHeadline phrases={home.heroPhrases} active={introCompleted} /></div>
   <noscript><p class="nojsNotice">{home.nojs}</p></noscript>
-  <div class="workspace" class:activityExpanded class:routesCollapsed={!routesExpanded} style:--converter-width={`${converterWidth}px`} style:--amount-digits={converterAmountDigits}>
+  <div class="workspace" class:activityExpanded class:routesCollapsed={!routesExpanded} style:--amount-digits={converterAmountDigits}>
     <div class="converterStack">
     <div class="card" class:modalOpen bind:this={converterCard}>
       <div class="cardTop">
@@ -1323,7 +1320,7 @@
     </div>
     {#if routesExpanded}
       <div class="routesReveal" bind:this={routesRevealElement} transition:routesRevealTransition inert={!routesExpanded} aria-hidden={!routesExpanded}>
-        <SidePanel {routes} {routesFound} {searchIncomplete} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {renderingRoutes} {searchingVenues} {foundVenues} {venueNames} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} searched={lastUpdatedAt !== null} {hasAmount} {showBelarusP2pWarning} {onOpenBelarusP2pWarning} onOpenSearchActivity={() => activityModalOpen = true} {venueListOpen} onOpenVenueList={() => venueListOpen = true} {selectedVenueId} onSelectVenue={(venueId) => selectedVenueId = venueId} />
+        <SidePanel {routes} {routesFound} {searchIncomplete} sourceCurrency={selectedSourceCurrency} targetCurrency={selectedTargetCurrency} selectedRouteId={selected?.route_id ?? null} onSelect={selectRoute} onOpenInstructions={openInstructions} onVote={voteForRoute} {searching} {renderingRoutes} {foundVenues} {venueNames} networkNames={Object.fromEntries(networks.map((network) => [network.id, network.name]))} searched={lastUpdatedAt !== null} {hasAmount} {showBelarusP2pWarning} {onOpenBelarusP2pWarning} onOpenSearchActivity={() => activityModalOpen = true} {venueListOpen} onOpenVenueList={() => venueListOpen = true} {selectedVenueId} onSelectVenue={(venueId) => selectedVenueId = venueId} />
       </div>
     {/if}
   </div>
@@ -2661,7 +2658,7 @@
 @media (min-width: 981px) {
   .workspace:not(.routesCollapsed) {
     width: min(var(--layout-width), 100%);
-    grid-template-columns: minmax(0, min(var(--converter-width), 49%)) minmax(0, 1fr);
+    grid-template-columns: minmax(0, min(500px, 49%)) minmax(0, 1fr);
   }
 
   .workspace:not(.routesCollapsed) .amountInput {

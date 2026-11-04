@@ -58,7 +58,7 @@ async function expectPeriodButtonBesidePair(chart: Locator) {
   expect(button).not.toBeNull();
   expect(button!.x).toBeGreaterThanOrEqual(pair!.x + pair!.width - 1);
   expect(Math.abs(button!.y + button!.height / 2 - pair!.y - pair!.height / 2)).toBeLessThan(5);
-  await expect(chart.locator(".periodButton img")).toHaveCSS("filter", "none");
+  await expect(chart.locator(".periodButton img")).toHaveCSS("filter", "brightness(0) invert(1)");
 }
 
 test("shared fiat and crypto link restores its currencies in a new browser", async ({ page }) => {
@@ -282,7 +282,7 @@ test("search activity uses hourly counts and fits beside routes or opens in a mo
     expect(dimensions.stackBottom).toBeLessThanOrEqual(dimensions.sideBottom + 1);
     expect(Math.abs(dimensions.chartBottom - dimensions.sideBottom)).toBeLessThanOrEqual(2);
     expect(Math.abs(dimensions.chartRight - dimensions.cardRight)).toBeLessThanOrEqual(1);
-    await expect(chart.locator(".mainPlot svg path.area")).toHaveCount(1);
+    await expect(chart.locator(".mainPlot svg path.activityLine")).toHaveCount(1);
     await expect(page.locator(".activityReveal")).toHaveCSS("overflow", "visible");
     const chartSize = await chart.evaluate((element) => ({ visible: element.clientHeight, content: element.scrollHeight }));
     expect(chartSize.content).toBeLessThanOrEqual(chartSize.visible + 1);
@@ -342,7 +342,7 @@ test("routes can be hidden while the bridge stays centered and restored after re
   if (!isMobile) {
     await page.getByRole("button", { name: "Show search activity" }).click();
     await expect(page.getByTestId("search-activity")).toBeVisible();
-    await expect(page.locator(".activityReveal .mainPlot svg path.area")).toHaveCount(1);
+    await expect(page.locator(".activityReveal .mainPlot svg path.activityLine")).toHaveCount(1);
     await expect.poll(() => page.locator(".activityReveal .mainPlot svg path:not(.area)").evaluate((element) => (element as SVGGeometryElement).getBBox().height)).toBeGreaterThan(0);
     await expect.poll(() => page.locator(".activityReveal").evaluate((element) => element.getBoundingClientRect().bottom - window.innerHeight)).toBeLessThanOrEqual(-8);
     await expect.poll(() => page.evaluate(() => localStorage.getItem("pay3flow.exchange.activity-visible"))).toBe("true");
@@ -409,7 +409,7 @@ test("search activity keeps valid dimensions when opening guides and resizing", 
   await expect(page.getByTestId("complete-route").first()).toBeVisible();
   const chart = page.getByTestId("search-activity");
   await page.getByRole("button", { name: isMobile ? "Open search activity graph" : "Show search activity" }).click();
-  await expect(chart.locator(".mainPlot svg path.area")).toHaveCount(1);
+  await expect(chart.locator(".mainPlot svg path.activityLine")).toHaveCount(1);
   if (isMobile) await page.keyboard.press("Escape");
   await page.getByTestId("complete-route").first().locator(".routeAmount").click();
   const guide = page.getByTestId("route-guide");
@@ -421,7 +421,7 @@ test("search activity keeps valid dimensions when opening guides and resizing", 
   await page.keyboard.press("Escape");
   await expect(guide).toHaveCount(0);
   if (!isMobile) {
-    await expect(chart.locator(".mainPlot svg path.area")).toHaveCount(1);
+    await expect(chart.locator(".mainPlot svg path.activityLine")).toHaveCount(1);
     await page.setViewportSize({ width: 393, height: 851 });
     await expect(chart).toHaveCount(0);
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -429,7 +429,7 @@ test("search activity keeps valid dimensions when opening guides and resizing", 
   } else {
     await page.getByRole("button", { name: "Open search activity graph" }).click();
   }
-  await expect(chart.locator(".mainPlot svg path.area")).toHaveCount(1);
+  await expect(chart.locator(".mainPlot svg path.activityLine")).toHaveCount(1);
   const size = await chart.locator(".mainPlot svg").boundingBox();
   expect(size!.width).toBeGreaterThan(0);
   expect(size!.height).toBeGreaterThan(0);
@@ -2129,17 +2129,7 @@ test("search venues only show providers with matching routes", async ({ page }) 
   await page.waitForTimeout(750);
   expect(socketConnections).toBe(1);
   const panelTop = page.locator("#routes .panelTop");
-  const searchingVenues = panelTop.getByTestId("searching-venue");
-  await expect(searchingVenues).toHaveCount(5);
-  await expect(searchingVenues.nth(0)).toHaveAttribute("title", "Searching Binance");
-  await expect(searchingVenues.nth(1)).toHaveAttribute("title", "Searching Bybit");
-  await expect(searchingVenues.nth(2)).toHaveAttribute("title", "Searching Cifra Markets");
-  await expect(searchingVenues.nth(3)).toHaveAttribute("title", "Searching CoW Protocol Live");
-  await expect(searchingVenues.nth(4)).toHaveAttribute("title", "Searching ID Pay Live");
-  await expect(panelTop.getByTestId("searching-venues-overflow")).toHaveText("...");
-  await expect(searchingVenues.nth(0)).toHaveCSS("width", "32px");
-  await expect(searchingVenues.nth(0)).toHaveCSS("animation-name", "none");
-  await expect(searchingVenues.nth(1)).toHaveCSS("animation-name", "none");
+  await expect(panelTop.locator(".searchingVenues")).toHaveCount(0);
 
   const refreshButton = page.getByRole("button", { name: "Refresh routes now" });
   await expect(refreshButton.locator("img")).toHaveClass(/refreshSpin/);
@@ -2151,10 +2141,6 @@ test("search venues only show providers with matching routes", async ({ page }) 
   const foundVenues = page.getByTestId("found-venue");
   await expect(panelTop.locator(".resultSummary")).toHaveText("1 route found");
   await expect(foundVenues).toHaveCount(0);
-  await expect(searchingVenues).toHaveCount(5);
-  await expect(searchingVenues.nth(0)).toHaveAttribute("title", "Searching Cifra Markets");
-  await expect(searchingVenues.nth(4)).toHaveAttribute("title", "Searching Whitebird");
-  await expect(panelTop.getByTestId("searching-venues-overflow")).toHaveCount(0);
   await expect(refreshButton).toBeDisabled();
   await expect(refreshButton.locator("img")).not.toHaveClass(/refreshSpin/);
 
@@ -2177,7 +2163,6 @@ test("search venues only show providers with matching routes", async ({ page }) 
   await expect(panelTop.locator(".venueFilterClear")).toBeVisible();
   await panelTop.locator(".venueFilterClear").click();
   await expect(page.getByTestId("complete-route")).toHaveCount(2);
-  await expect(searchingVenues).toHaveCount(4);
 
   await page.getByTestId("complete-route").nth(1).locator(".routeRank").click();
   await expect(page.getByTestId("complete-route").nth(1)).toHaveClass(/selected/);
@@ -2191,7 +2176,6 @@ test("search venues only show providers with matching routes", async ({ page }) 
   await expect(guide.locator(".headingVenue")).toContainText("Bybit");
   await guide.locator(".guideToolbar").getByRole("button", { name: /Back to routes/ }).click();
   await expect(refreshButton).toBeEnabled();
-  await expect(searchingVenues).toHaveCount(0);
   await expect(page.getByTestId("complete-route").nth(1)).toHaveClass(/selected/);
 });
 

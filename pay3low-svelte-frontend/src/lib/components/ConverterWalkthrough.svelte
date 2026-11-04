@@ -105,7 +105,7 @@
     if (!source || !target) { onClose(); return; }
     try {
       await wait(350);
-      await point(replica.querySelector<HTMLElement>(".modeActive")!, undefined, true);
+      await point(replica.querySelector<HTMLElement>(".cardTitle")!, undefined, false);
       await selectMethod("source", source);
       await selectMethod("target", target);
       step = 4;
@@ -144,7 +144,6 @@
     replica.style.width = `${card.getBoundingClientRect().width}px`;
     replica.style.maxWidth = "100%";
     const computed = getComputedStyle(card);
-    stage.style.setProperty("--converter-width", computed.getPropertyValue("--converter-width"));
     stage.style.setProperty("--amount-digits", computed.getPropertyValue("--amount-digits"));
     const cta = replica.querySelector<HTMLButtonElement>(".cta")!;
     cta.textContent = t("Enter an amount to begin", {}, $locale); cta.disabled = true;

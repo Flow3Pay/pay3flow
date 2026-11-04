@@ -21,7 +21,6 @@
   export let onVote: (route: RouteCandidate, vote: ServiceVote) => void;
   export let searching = false;
   export let renderingRoutes = false;
-  export let searchingVenues: { id: string; label: string; iconUrl: string }[] = [];
   export let foundVenues: { id: string; label: string; iconUrl: string }[] = [];
   export let venueNames: Record<string, string> = {};
   export let networkNames: Record<string, string> = {};
@@ -76,9 +75,6 @@
   const reduceMotion = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const routeFlipDuration = (distance: number) => reduceMotion() || routes.length > 12 ? 0 : Math.min(680, 260 + distance * 0.65);
   const routeEnterDuration = () => reduceMotion() || routes.length > 12 ? 0 : 380;
-  $: pendingVenues = searchingVenues.filter((venue) => !foundVenues.some((found) => found.id === venue.id));
-  $: visiblePendingVenues = pendingVenues.slice(0, 5);
-  $: hasHiddenPendingVenues = pendingVenues.length > visiblePendingVenues.length;
   $: circularSearch = sourceCurrency.toUpperCase() !== "ANY" && sourceCurrency.toUpperCase() === targetCurrency.toUpperCase();
   $: visibleRoutes = selectedVenueId
     ? routes.filter((route) => route.legs.some((leg) => leg.provider.toLowerCase() === selectedVenueId) || route.route_provider?.toLowerCase() === selectedVenueId || route.market_path?.venue.toLowerCase() === selectedVenueId)
@@ -87,16 +83,12 @@
 
   const workflowSteps = (route: RouteCandidate) => routeWorkflowSteps(route).map((step) => ({ ...step, networkLabel: compactNetwork(step.network) }));
 
-  const workflowLabel = (route: RouteCandidate) => workflowSteps(route).map((step) => `${assetLabel(step.currency)}${step.paymentMethod ? ` · ${step.paymentMethod}` : ""}${step.network ? ` · ${step.networkLabel ?? compactNetwork(step.network)}` : ""}${step.provider ? ` (${venueName(step.provider)})` : ""}`).join(" → ");  function cardClick(event: MouseEvent, route: RouteCandidate) {
+  const workflowLabel = (route: RouteCandidate) => workflowSteps(route).map((step) => `${assetLabel(step.currency)}${step.paymentMethod ? ` · ${step.paymentMethod}` : ""}${step.network ? ` · ${step.networkLabel ?? compactNetwork(step.network)}` : ""}${step.provider ? ` (${venueName(step.provider)})` : ""}`).join(" → ");
+
+  function cardClick(event: MouseEvent, route: RouteCandidate) {
     onSelect(route);
     const target = event.target as HTMLElement;
     if (target.closest(".routeAmount") || target.closest(".workflow")) onOpenInstructions(route);
-  }
-
-  function fallbackVenueIcon(event: Event, provider: string) {
-    const image = event.currentTarget as HTMLImageElement;
-    image.onerror = null;
-    image.src = venueIcon(provider);
   }
 </script>
 
@@ -133,16 +125,6 @@
           <button type="button" class="activityButton" on:click={onOpenSearchActivity} aria-label={t("Open search activity graph", {}, $locale)} title={t("Open search activity graph", {}, $locale)}>
             <img src="/icons/ui/search-activity.svg" alt="" width="18" height="18" aria-hidden="true" />
           </button>
-        {/if}
-        {#if searching && pendingVenues.length}
-          <div class="searchingVenues" aria-label={`Searching ${pendingVenues.map((venue) => venue.label).join(", ")}`}>
-            {#each visiblePendingVenues as venue (venue.id)}
-              <span class="searchingVenue" data-testid="searching-venue" title={`Searching ${venue.label}`}>
-                <img src={venue.iconUrl} alt="" width="20" height="20" decoding="async" on:error={(event) => fallbackVenueIcon(event, venue.id)} />
-              </span>
-            {/each}
-            {#if hasHiddenPendingVenues}<span class="searchingVenuesOverflow" data-testid="searching-venues-overflow" aria-hidden="true">...</span>{/if}
-          </div>
         {/if}
         {#if showBelarusP2pWarning}
           <button type="button" class="legalWarning" on:click={onOpenBelarusP2pWarning} aria-label={t("Belarus P2P legal warning", {}, $locale)}>
@@ -302,12 +284,9 @@
   gap: 10px;
 }
 
-.resultSummary, .searchingVenues {
+.resultSummary {
   display: flex;
   align-items: center;
-}
-
-.resultSummary {
   min-height: 24px;
   flex-wrap: wrap;
   gap: 7px;
@@ -772,43 +751,6 @@
   overflow: hidden;
 }
 
-.searchingVenues {
-  min-height: 34px;
-  flex: 0 0 auto;
-  justify-content: flex-end;
-  gap: 6px;
-  padding-top: 1px;
-}
-
-.searchingVenue {
-  display: grid;
-  width: 32px;
-  height: 32px;
-  place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 11px;
-  background: rgba(27, 30, 26, 0.92);
-  box-shadow: none;
-}
-
-.searchingVenuesOverflow {
-  display: grid;
-  width: 20px;
-  height: 32px;
-  flex: 0 0 auto;
-  place-items: center;
-  color: rgba(255, 255, 255, 0.58);
-  font-weight: 800;
-  letter-spacing: 0.08em;
-}
-
-.searchingVenue img {
-  width: 20px;
-  height: 20px;
-  border-radius: 6px;
-  object-fit: contain;
-}
-
 .skeletonCard {
   display: flex;
   min-height: 0;
@@ -1019,12 +961,6 @@
   background: #f4f8f1;
 }
 
-.searchingVenue {
-  border-color: var(--color-border-strong);
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: none;
-}
-
 .skeletonShort,
 .skeletonLong,
 .skeletonMedium {
@@ -1107,13 +1043,6 @@
 :global(html[data-theme="dark"]) .serviceVote img {
   filter: brightness(0) invert(1);
 }
-
-:global(html[data-theme="dark"]) .searchingVenue {
-  border-color: #454545;
-  background: rgba(32, 32, 32, 0.96);
-  box-shadow: none;
-}
-
 
 :global(html[data-theme="dark"]) .routeBest,
 :global(html[data-theme="dark"]) .selected {
