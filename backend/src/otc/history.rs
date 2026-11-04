@@ -4,21 +4,38 @@
 //! prints and published advertisements; the indicative price series is merged
 //! in by the route handler because it lives with the market price service.
 use super::{amount, error::Result, Service};
+use crate::market_prices::ExchangeCandle;
 use chrono::{DateTime, Duration, Utc};
 use serde_json::{json, Value};
 
-/// `(range, bucket seconds, bucket count, indicative days)`. The window is
-/// always `bucket seconds * bucket count` so the grid tiles it exactly.
-/// Ranges shorter than a week pass `0` days: the price provider only answers at
-/// day resolution, so intraday detail has to come from the desk's own prints.
-const WINDOWS: &[(&str, i64, i64, u32)] = &[
-    ("1h", 60, 60, 0),
-    ("24h", 900, 96, 0),
-    ("1w", 7_200, 84, 8),
-    ("1m", 21_600, 120, 32),
-    ("6m", 86_400, 183, 186),
-    ("1y", 604_800, 52, 372),
+/// `(range, bucket seconds, bucket count, market interval)`.
+///
+/// The window is always `bucket seconds * bucket count` so the grid tiles it
+/// exactly. `market interval` is the exchange source resolution and must
+/// divide the bucket: every source candle then belongs to exactly one bucket
+/// and the chart keeps the granularity of the range the reader selected.
+const WINDOWS: &[(&str, i64, i64, &str)] = &[
+    ("1h", 60, 60, "1m"),
+    ("24h", 900, 96, "15m"),
+    ("1w", 7_200, 84, "1h"),
+    ("1m", 21_600, 120, "1h"),
+    ("6m", 86_400, 183, "1d"),
+    ("1y", 604_800, 52, "1d"),
 ];
+
+fn interval_seconds(interval: &str) -> i64 {
+    match interval {
+        "1m" => 60,
+        "5m" => 300,
+        "15m" => 900,
+        "30m" => 1_800,
+        "1h" => 3_600,
+        "4h" => 14_400,
+        "8h" => 28_800,
+        "1d" => 86_400,
+        _ => 604_800,
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Side {
@@ -51,25 +68,36 @@ pub(crate) struct Window {
     pub range: &'static str,
     pub bucket_seconds: i64,
     pub buckets: i64,
-    pub history_days: u32,
+    pub market_interval: &'static str,
     pub from: DateTime<Utc>,
     pub to: DateTime<Utc>,
 }
 
 impl Window {
     pub(crate) fn parse(range: &str, now: DateTime<Utc>) -> Result<Self> {
-        let (name, bucket_seconds, buckets, history_days) = *WINDOWS
+        let (name, bucket_seconds, buckets, market_interval) = *WINDOWS
             .iter()
             .find(|(candidate, ..)| *candidate == range)
             .ok_or_else(|| super::error::invalid("range must be 1h, 24h, 1w, 1m, 6m or 1y"))?;
+        // Align the end of the window to a bucket boundary. Both the desk
+        // prints and the exchange candles are then bucketed on the same grid,
+        // and the newest candle is never a partial mixture of two periods.
+        let to = now - Duration::seconds(now.timestamp().rem_euclid(bucket_seconds));
         Ok(Self {
             range: name,
             bucket_seconds,
             buckets,
-            history_days,
-            from: now - Duration::seconds(bucket_seconds * buckets),
-            to: now,
+            market_interval,
+            from: to - Duration::seconds(bucket_seconds * buckets),
+            to,
         })
+    }
+
+    /// Enough exchange candles to cover the window plus a small margin for
+    /// provider clock skew. Capped by the provider's single-page limit.
+    pub(crate) fn market_limit(&self) -> u32 {
+        let step = interval_seconds(self.market_interval).max(1);
+        ((self.bucket_seconds * self.buckets) / step + 3).clamp(2, 1_000) as u32
     }
     fn index(&self, at: DateTime<Utc>) -> Option<usize> {
         let offset = at.timestamp().checked_sub(self.from.timestamp())?;
@@ -162,6 +190,56 @@ pub(crate) fn aggregate(rows: &[Print], window: &Window) -> (Vec<Value>, Vec<Val
     (candles, levels)
 }
 
+#[derive(Default, Clone, Copy)]
+struct MarketBucket {
+    open: Option<f64>,
+    high: f64,
+    low: f64,
+    close: Option<f64>,
+    volume: f64,
+}
+
+/// Folds exchange candles into the exact window grid. Only buckets that the
+/// provider actually covered are returned, so a quiet market draws a gap
+/// instead of a fabricated flat candle.
+pub(crate) fn aggregate_market(candles: &[ExchangeCandle], window: &Window) -> Vec<Value> {
+    let mut buckets = vec![MarketBucket::default(); window.buckets as usize];
+    for candle in candles {
+        let Some(at) = DateTime::from_timestamp(candle.t, 0) else {
+            continue;
+        };
+        let Some(index) = window.index(at) else {
+            continue;
+        };
+        let bucket = &mut buckets[index];
+        if bucket.open.is_none() {
+            bucket.open = Some(candle.open);
+            bucket.low = candle.low;
+        }
+        bucket.high = bucket.high.max(candle.high);
+        bucket.low = bucket.low.min(candle.low);
+        bucket.close = Some(candle.close);
+        bucket.volume += candle.volume;
+    }
+    buckets
+        .iter()
+        .enumerate()
+        .filter_map(|(index, bucket)| {
+            let (Some(open), Some(close)) = (bucket.open, bucket.close) else {
+                return None;
+            };
+            Some(json!({
+                "t": window.from.timestamp() + index as i64 * window.bucket_seconds,
+                "open": round(open, 8),
+                "high": round(bucket.high, 8),
+                "low": round(bucket.low, 8),
+                "close": round(close, 8),
+                "volume": round(bucket.volume, 2),
+            }))
+        })
+        .collect()
+}
+
 fn round(value: f64, places: u32) -> f64 {
     let factor = 10_f64.powi(places as i32);
     (value * factor).round() / factor
@@ -240,17 +318,83 @@ mod tests {
     #[test]
     fn every_supported_range_tiles_its_window_exactly() {
         let now = at(1_761_000_000);
-        for (range, bucket_seconds, buckets, history_days) in WINDOWS {
+        for (range, bucket_seconds, buckets, market_interval) in WINDOWS {
             let window = Window::parse(range, now).unwrap();
             assert_eq!(window.bucket_seconds, *bucket_seconds);
             assert_eq!(window.buckets, *buckets);
-            assert_eq!(window.history_days, *history_days);
+            assert_eq!(window.market_interval, *market_interval);
             assert_eq!(
                 (window.to - window.from).num_seconds(),
                 bucket_seconds * buckets
             );
         }
         assert!(Window::parse("5m", now).is_err());
+    }
+
+    #[test]
+    fn windows_end_on_a_bucket_boundary() {
+        let now = at(1_761_000_123);
+        for range in ["1h", "24h", "1w", "1m", "6m", "1y"] {
+            let window = Window::parse(range, now).unwrap();
+            assert_eq!(window.to.timestamp().rem_euclid(window.bucket_seconds), 0);
+        }
+    }
+
+    #[test]
+    fn every_market_interval_divides_its_bucket_and_covers_the_window() {
+        let now = at(1_761_000_000);
+        for (range, bucket_seconds, buckets, interval) in WINDOWS {
+            assert_eq!(
+                bucket_seconds.rem_euclid(interval_seconds(interval)),
+                0,
+                "{range}"
+            );
+            let window = Window::parse(range, now).unwrap();
+            assert!(
+                i64::from(window.market_limit()) * interval_seconds(interval)
+                    >= bucket_seconds * buckets,
+                "{range}"
+            );
+        }
+    }
+
+    #[test]
+    fn market_candles_fold_into_the_selected_grid() {
+        let now = at(1_761_000_000);
+        let window = Window::parse("24h", now).unwrap();
+        let start = window.from.timestamp();
+        let candles = [
+            ExchangeCandle {
+                t: start,
+                open: 0.1,
+                high: 0.12,
+                low: 0.09,
+                close: 0.11,
+                volume: 10.0,
+            },
+            ExchangeCandle {
+                t: start + 900,
+                open: 0.11,
+                high: 0.13,
+                low: 0.1,
+                close: 0.12,
+                volume: 5.0,
+            },
+            ExchangeCandle {
+                t: start + 3_600,
+                open: 0.2,
+                high: 0.21,
+                low: 0.19,
+                close: 0.2,
+                volume: 1.0,
+            },
+        ];
+        let bars = aggregate_market(&candles, &window);
+        assert_eq!(bars.len(), 3);
+        assert_eq!(bars[0]["t"], json!(start));
+        assert_eq!(bars[0]["open"], json!(0.1));
+        assert_eq!(bars[0]["close"], json!(0.11));
+        assert_eq!(bars[2]["t"], json!(start + 3_600));
     }
 
     #[test]

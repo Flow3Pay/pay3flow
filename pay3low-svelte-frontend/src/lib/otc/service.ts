@@ -64,10 +64,15 @@ export interface HistoryCandle {
 /** Indicative bid/ask for a bucket, carried forward while an offer stays open. */
 export interface HistoryLevel { t: number; bid: number | null; ask: number | null }
 export interface HistorySpot { t: number; usd: number }
+/** A real exchange OHLC candle already folded onto the selected range grid. */
+export interface HistoryMarketCandle { t: number; open: number; high: number; low: number; close: number; volume: number }
 export interface History {
   market?: string;
   range?: string;
   bucket_seconds?: number;
+  from?: string;
+  to?: string;
+  market_candles?: { source?: string; stale?: boolean; interval?: string; candles?: HistoryMarketCandle[] };
   spot?: { source?: string; stale?: boolean; bucket_seconds?: number; points?: HistorySpot[] };
   candles?: HistoryCandle[];
   levels?: HistoryLevel[];

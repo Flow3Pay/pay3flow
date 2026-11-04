@@ -32,6 +32,29 @@ export interface QuoteObservation {
 export const chartRanges = ["1h", "24h", "1w", "1m", "6m", "1y"] as const;
 export type ChartRange = (typeof chartRanges)[number];
 
+/** Human-readable name of the selected range, independent of its candle size. */
+export function chartRangeLabel(range: ChartRange, locale = "en"): string {
+  const labels: Record<ChartRange, [string, string]> = {
+    "1h": ["1 hour", "1 час"],
+    "24h": ["24 hours", "24 часа"],
+    "1w": ["week", "неделя"],
+    "1m": ["month", "месяц"],
+    "6m": ["6 months", "6 месяцев"],
+    "1y": ["year", "год"],
+  };
+  return labels[range][locale === "ru" ? 1 : 0];
+}
+
+/** Candle size on the chart grid, with the unit klinecharts exposes. */
+export function candleIntervalLabel(bucketSeconds: number, locale = "en"): string {
+  const ru = locale === "ru";
+  if (bucketSeconds < 60) return `${Math.max(1, Math.round(bucketSeconds))}${ru ? " с" : "s"}`;
+  if (bucketSeconds < 3_600) return `${Math.round(bucketSeconds / 60)}${ru ? " мин" : "m"}`;
+  if (bucketSeconds < 86_400) return `${Math.round(bucketSeconds / 3_600)}${ru ? " ч" : "h"}`;
+  if (bucketSeconds < 604_800) return `${Math.round(bucketSeconds / 86_400)}D`;
+  return `${Math.round(bucketSeconds / 604_800)}W`;
+}
+
 /** Bucket layout used by the server for each range; the window is `buckets * bucketSeconds`. */
 export const chartWindows: Record<ChartRange, { bucketSeconds: number; buckets: number }> = {
   "1h": { bucketSeconds: 60, buckets: 60 },
@@ -64,20 +87,16 @@ export interface MarketCandle {
   [key: string]: unknown;
 }
 
-/** The exact window the chart should cover, ending at `now` (milliseconds). */
+/**
+ * The exact window the chart should cover, ending at `now` (milliseconds).
+ * The end is aligned to a bucket boundary so it matches the server grid and
+ * the newest candle is never a mixture of two periods.
+ */
 export function chartWindow(range: ChartRange, now = Date.now()): ChartWindow {
   const { bucketSeconds, buckets } = chartWindows[range];
-  return { from: now - bucketSeconds * buckets * 1000, bucketSeconds, buckets };
-}
-
-/**
- * Re-bucket a window so a coarser source (for example daily spot points) still
- * covers the whole selected range instead of leaving empty space between bars.
- */
-export function fitWindow(window: ChartWindow, minimumBucketSeconds: number): ChartWindow {
-  const bucketSeconds = Math.max(window.bucketSeconds, Math.max(1, minimumBucketSeconds));
-  const span = window.bucketSeconds * window.buckets;
-  return { from: window.from, bucketSeconds, buckets: Math.max(1, Math.ceil(span / bucketSeconds)) };
+  const bucketMs = bucketSeconds * 1000;
+  const from = Math.floor((now - bucketMs * buckets) / bucketMs) * bucketMs;
+  return { from, bucketSeconds, buckets };
 }
 
 /**

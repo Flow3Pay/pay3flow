@@ -3,8 +3,15 @@
   import { locale } from "$lib/i18n";
   import { getHistory, rate, type History, type Trade } from "$lib/otc/service";
   import { saleRate, type OfferHistoryPoint } from "$lib/otc/public-offers";
-  import { chartRanges, chartWindow, chartWindows, fitWindow, markCandles, type ChartRange, type ChartWindow } from "$lib/otc/market";
-  import { dispose, init, type Chart, type DeepPartial, type KLineData, type Period, type Styles } from "klinecharts";
+  import { candleIntervalLabel, chartRangeLabel, chartRanges, chartWindow, chartWindows, markCandles, type ChartRange, type ChartWindow } from "$lib/otc/market";
+  import { dispose, init, registerLocale, type Chart, type DeepPartial, type KLineData, type Period, type Styles } from "klinecharts";
+
+  // klinecharts ships `minute: ""`, so a 15-minute series renders as a bare "15".
+  registerLocale("en-US", {
+    time: "Time: ", open: "Open: ", high: "High: ", low: "Low: ", close: "Close: ",
+    volume: "Volume: ", turnover: "Turnover: ", change: "Change: ",
+    second: "s", minute: "m", hour: "H", day: "D", week: "W", month: "M", year: "Y",
+  });
 
   export let trades: Trade[] = [];
   export let publicOffers: OfferHistoryPoint[] | null = null;
@@ -42,7 +49,7 @@
     .sort((a, b) => a.time - b.time);
 
   $: bounds = chartBounds(history, range, marks.at(-1)?.time);
-  $: layout = buildLayout(history, marks, bounds, range);
+  $: layout = buildLayout(history, marks, bounds);
   $: bars = layout.bars;
   // The hero price keeps the latest print even when the selected range has no candles.
   $: latest = bars.length ? bars[bars.length - 1].close : marks.at(-1)?.value ?? null;
@@ -51,17 +58,18 @@
 
   $: if (chart) synchronize(bars, precision, layout.window);
 
-  /** Prefer the server's own grid so the fallback candles line up with its buckets. */
+  /**
+   * The chart always keeps the selected range's grid. The server's window start
+   * is used when available (it is aligned to a bucket edge), otherwise the
+   * local grid anchors on `now` so a just-published offer stays in view.
+   */
   function chartBounds(source: History | null, selectedRange: ChartRange, latestPrint?: number): ChartWindow {
-    const candles = source?.candles ?? [];
-    // Anchor the fallback to the newest print so a just-published offer stays inside the window edge.
-    if (!candles.length) return chartWindow(selectedRange, Math.max(Date.now(), (latestPrint ?? 0) + 1));
     const layout = chartWindows[selectedRange];
-    return {
-      from: candles[0].t * 1000,
-      bucketSeconds: source?.bucket_seconds && source.bucket_seconds > 0 ? source.bucket_seconds : layout.bucketSeconds,
-      buckets: candles.length,
-    };
+    const serverFrom = source?.from ? Date.parse(source.from) : NaN;
+    const from = Number.isFinite(serverFrom)
+      ? serverFrom
+      : chartWindow(selectedRange, Math.max(Date.now(), (latestPrint ?? 0) + 1)).from;
+    return { from, bucketSeconds: layout.bucketSeconds, buckets: layout.buckets };
   }
 
   function serverBars(source: History | null): KLineData[] {
@@ -75,41 +83,54 @@
     }]);
   }
 
+  /** Real exchange OHLC already folded onto the selected range's grid. */
+  function marketBars(source: History | null): KLineData[] {
+    return (source?.market_candles?.candles ?? []).flatMap(candle => {
+      const values = [candle.open, candle.high, candle.low, candle.close];
+      if (!values.every(value => Number.isFinite(value) && value > 0)) return [];
+      return [{
+        timestamp: candle.t * 1000,
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
+        volume: Number.isFinite(candle.volume) && candle.volume > 0 ? candle.volume : 0,
+      }];
+    });
+  }
+
   function spotMarks(source: History | null): Mark[] {
     return (source?.spot?.points ?? []).flatMap(point => {
       const time = point.t * 1000, value = Number(point.usd);
       return Number.isFinite(time) && Number.isFinite(value) && value > 0
         ? [{ id: `spot:${point.t}`, time, value }]
         : [];
-    });
+    }).sort((a, b) => a.time - b.time);
   }
 
   /**
-   * A desk with no settled trades should still show how the market price moved.
-   * The indicative series is coarser than the desk buckets, so re-bucket it to
-   * cover the same window, then fall back to publications and finally to the
-   * selected range's own grid.
+   * Exchange candles are the primary series because they carry a real OHLC for
+   * every bucket. Desk prints come next, then the indicative series and finally
+   * publications, all re-bucketed onto the selected range's fixed grid so the
+   * candle interval never drifts away from the chosen range.
    */
-  function buildLayout(source: History | null, prints: Mark[], serverWindow: ChartWindow, selectedRange: ChartRange): { bars: KLineData[]; window: ChartWindow } {
+  function buildLayout(source: History | null, prints: Mark[], window: ChartWindow): { bars: KLineData[]; window: ChartWindow } {
+    const market = marketBars(source);
+    if (market.length) return { bars: market, window };
     const server = serverBars(source);
-    const spotBucket = source?.spot?.bucket_seconds;
-    const end = serverWindow.from + serverWindow.bucketSeconds * serverWindow.buckets * 1000;
-    const spotWindow = spotBucket && spotBucket > 0
-      ? fitWindow(chartWindow(selectedRange, end), spotBucket)
-      : serverWindow;
-    const spot = markCandles(spotMarks(source), spotWindow);
-    if (server.length >= 4) return { bars: server, window: serverWindow };
-    if (spot.length) return { bars: spot, window: spotWindow };
-    if (server.length) return { bars: server, window: serverWindow };
-    // Without bucketed trades, publications are grouped on the selected range's grid.
-    return { bars: markCandles(prints, serverWindow), window: serverWindow };
+    if (server.length >= 4) return { bars: server, window };
+    const spot = markCandles(spotMarks(source), window);
+    if (spot.length) return { bars: spot, window };
+    if (server.length) return { bars: server, window };
+    return { bars: markCandles(prints, window), window };
   }
 
   function periodFor(bucketSeconds: number): Period {
     if (bucketSeconds < 60) return { type: "second", span: Math.max(1, bucketSeconds) };
     if (bucketSeconds < 3600) return { type: "minute", span: Math.max(1, Math.round(bucketSeconds / 60)) };
     if (bucketSeconds < 86400) return { type: "hour", span: Math.max(1, Math.round(bucketSeconds / 3600)) };
-    return { type: "day", span: Math.max(1, Math.round(bucketSeconds / 86400)) };
+    if (bucketSeconds < 604800) return { type: "day", span: Math.max(1, Math.round(bucketSeconds / 86400)) };
+    return { type: "week", span: Math.max(1, Math.round(bucketSeconds / 604800)) };
   }
 
   function synchronize(data: KLineData[], pricePrecision: number, window: ChartWindow) {
@@ -242,6 +263,7 @@
         <strong data-testid="otc-chart-price">{latest === null ? "—" : `${latest.toLocaleString(numbers, { maximumFractionDigits: Math.max(2, precision) })} $`}</strong>
         {#if change !== null}<em class:negative={change < 0}>{change >= 0 ? "+" : "−"}{Math.abs(change).toFixed(2)}%</em>{/if}
       </div>
+      <p class="chartRange" data-testid="otc-chart-range">{chartRangeLabel(range, $locale)} · {candleIntervalLabel(layout.window.bucketSeconds, $locale)}</p>
     </div>
     <div class="ranges" bind:this={ranges} role="group" aria-label={say("Chart range", "Период графика")}>
       <span class="rangeThumb" class:ready={thumb.ready} style="transform: translateX({thumb.offset}px); width: {thumb.width}px" aria-hidden="true"></span>
@@ -267,6 +289,7 @@
   .chartValue strong { font-family: var(--font-mono); font-size: clamp(34px, 4.4vw, 52px); font-weight: 500; line-height: 1.05; letter-spacing: -.04em; overflow-wrap: anywhere; }
   .chartValue em { color: var(--color-good-ink); font-family: var(--font-mono); font-size: 15px; font-style: normal; }
   .chartValue em.negative { color: var(--color-danger); }
+  .chartRange { margin: 0; color: var(--color-text-soft); font-family: var(--font-mono); font-size: 12px; letter-spacing: .02em; }
   .ranges { position: relative; display: flex; flex: 0 1 auto; gap: 2px; padding: 3px; border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-paper); }
   .rangeThumb { position: absolute; z-index: 0; top: 3px; bottom: 3px; left: 0; border-radius: 999px; background: var(--color-good); opacity: 0; pointer-events: none; transition: transform .32s cubic-bezier(.22, 1, .36, 1), width .32s cubic-bezier(.22, 1, .36, 1), opacity .2s ease; }
   .rangeThumb.ready { opacity: 1; }

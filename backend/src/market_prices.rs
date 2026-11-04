@@ -24,6 +24,9 @@ const DEFILLAMA_ROOT: &str = "https://coins.llama.fi/";
 const GATE_ROOT: &str = "https://api.gateio.ws/api/v4/";
 const HISTORY_TTL: Duration = Duration::from_secs(6 * 60 * 60);
 const EMPTY_TTL: Duration = Duration::from_secs(60);
+/// The OTC chart polls once a minute, so a short candle cache keeps the
+/// provider load bounded without making the newest candle visibly late.
+const CANDLE_TTL: Duration = Duration::from_secs(60);
 
 // The Open Network's CoinGecko ID now reports GRAM, the renamed native TON.
 // MATIC's legacy ticker is priced through its wrapped Ethereum contract.
@@ -74,6 +77,7 @@ pub struct MarketPriceService {
     exchange_root: String,
     cache: Arc<RwLock<Option<PriceSnapshot>>>,
     history: Arc<RwLock<HashMap<String, HistorySnapshot>>>,
+    candles: Arc<RwLock<HashMap<String, CandleSnapshot>>>,
 }
 
 #[derive(Clone)]
@@ -89,10 +93,28 @@ struct HistorySnapshot {
     points: Vec<SpotPoint>,
 }
 
+#[derive(Clone)]
+struct CandleSnapshot {
+    fetched_at: Instant,
+    candles: Vec<ExchangeCandle>,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 pub struct SpotPoint {
     pub t: i64,
     pub usd: f64,
+}
+
+/// A real exchange OHLC candle. `volume` is quoted in the pair's quote asset
+/// (USDT for `EVER_USDT`), matching the desk's own volume unit.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+pub struct ExchangeCandle {
+    pub t: i64,
+    pub open: f64,
+    pub high: f64,
+    pub low: f64,
+    pub close: f64,
+    pub volume: f64,
 }
 
 #[derive(Clone)]
@@ -201,6 +223,7 @@ impl MarketPriceService {
             exchange_root,
             cache: Arc::new(RwLock::new(None)),
             history: Arc::new(RwLock::new(HashMap::new())),
+            candles: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -453,28 +476,41 @@ impl MarketPriceService {
         (points, false)
     }
 
-    /// Intraday fallback for coins whose DefiLlama hourly series is empty.
-    /// Gate.io keeps recent candlesticks for the assets we list, which is the
-    /// only intraday resolution available for the short chart ranges.
-    async fn exchange_history(&self, asset: &str, period: &str, span: u32) -> Vec<SpotPoint> {
-        if period != "1h" {
-            return Vec::new();
-        }
+    /// Real exchange OHLC candles for one listed asset. The chart uses these
+    /// because they carry an exact open, high, low, close and volume for every
+    /// requested interval, unlike the indicative point series.
+    pub async fn exchange_candles(
+        &self,
+        asset: &str,
+        interval: &str,
+        limit: u32,
+    ) -> (Vec<ExchangeCandle>, bool) {
         let Some(pair) = GATE_PAIRS
             .iter()
             .find(|(symbol, _)| *symbol == asset)
             .map(|(_, pair)| *pair)
         else {
-            return Vec::new();
+            return (Vec::new(), true);
         };
-        // One candlestick per bucket hour minimum; finer steps while the range
-        // still fits in the provider's 1000-candle page.
-        let (interval, per_hour) = match span {
-            0..=24 => ("5m", 12),
-            25..=166 => ("15m", 4),
-            _ => ("1h", 1),
-        };
-        let limit = (span * per_hour + 2).min(1_000);
+        if !matches!(
+            interval,
+            "1m" | "5m" | "15m" | "30m" | "1h" | "4h" | "8h" | "1d" | "7d"
+        ) {
+            return (Vec::new(), true);
+        }
+        let limit = limit.clamp(2, 1_000);
+        let key = format!("{asset}:{interval}:{limit}");
+        if let Some(cached) = self.candles.read().await.get(&key) {
+            // An empty series retries soon, exactly like the point series.
+            let ttl = if cached.candles.is_empty() {
+                EMPTY_TTL
+            } else {
+                CANDLE_TTL
+            };
+            if cached.fetched_at.elapsed() < ttl {
+                return (cached.candles.clone(), false);
+            }
+        }
         let url = format!(
             "{}spot/candlesticks?currency_pair={pair}&interval={interval}&limit={limit}",
             self.exchange_root
@@ -483,30 +519,98 @@ impl MarketPriceService {
             Ok(response) => match response.error_for_status() {
                 Ok(response) => response,
                 Err(error) => {
-                    tracing::warn!(%error, "exchange history refresh failed");
-                    return Vec::new();
+                    tracing::warn!(%error, "exchange candle refresh failed");
+                    return (self.stale_candles(&key).await, true);
                 }
             },
             Err(error) => {
-                tracing::warn!(%error, "exchange history refresh failed");
-                return Vec::new();
+                tracing::warn!(%error, "exchange candle refresh failed");
+                return (self.stale_candles(&key).await, true);
             }
         };
-        match response.json::<Vec<Vec<serde_json::Value>>>().await {
-            Ok(payload) => payload
-                .into_iter()
-                .filter_map(|row| {
-                    // [timestamp, quote volume, close, high, low, open, ...]
-                    let t = as_number(row.first()?)? as i64;
-                    let usd = as_number(row.get(2)?)?;
-                    (t > 0 && usd.is_finite() && usd > 0.0).then_some(SpotPoint { t, usd })
-                })
-                .collect(),
-            Err(error) => {
-                tracing::warn!(%error, "exchange history response invalid");
-                Vec::new()
-            }
+        let mut candles: Vec<ExchangeCandle> =
+            match response.json::<Vec<Vec<serde_json::Value>>>().await {
+                Ok(payload) => payload
+                    .into_iter()
+                    .filter_map(|row| {
+                        // [timestamp, quote volume, close, high, low, open, base volume, closed]
+                        let t = as_number(row.first()?)? as i64;
+                        let close = as_number(row.get(2)?)?;
+                        let high = as_number(row.get(3)?)?;
+                        let low = as_number(row.get(4)?)?;
+                        let open = as_number(row.get(5)?)?;
+                        let raw_volume = row.get(1).and_then(as_number).unwrap_or(0.0);
+                        if t <= 0
+                            || [open, high, low, close]
+                                .iter()
+                                .any(|value| !value.is_finite() || *value <= 0.0)
+                        {
+                            return None;
+                        }
+                        Some(ExchangeCandle {
+                            t,
+                            open,
+                            high,
+                            low,
+                            close,
+                            volume: if raw_volume.is_finite() && raw_volume > 0.0 {
+                                raw_volume
+                            } else {
+                                0.0
+                            },
+                        })
+                    })
+                    .collect(),
+                Err(error) => {
+                    tracing::warn!(%error, "exchange candle response invalid");
+                    return (self.stale_candles(&key).await, true);
+                }
+            };
+        candles.sort_by_key(|candle| candle.t);
+        candles.dedup_by_key(|candle| candle.t);
+        self.candles.write().await.insert(
+            key,
+            CandleSnapshot {
+                fetched_at: Instant::now(),
+                candles: candles.clone(),
+            },
+        );
+        (candles, false)
+    }
+
+    async fn stale_candles(&self, key: &str) -> Vec<ExchangeCandle> {
+        self.candles
+            .read()
+            .await
+            .get(key)
+            .map(|cached| cached.candles.clone())
+            .unwrap_or_default()
+    }
+
+    /// Intraday fallback for coins whose DefiLlama hourly series is empty.
+    /// Gate.io keeps recent candlesticks for the assets we list, which is the
+    /// only intraday resolution available for the short chart ranges.
+    async fn exchange_history(&self, asset: &str, period: &str, span: u32) -> Vec<SpotPoint> {
+        if period != "1h" {
+            return Vec::new();
         }
+        // One candlestick per bucket hour minimum; finer steps while the range
+        // still fits in the provider's 1000-candle page.
+        let (interval, per_hour) = match span {
+            0..=24 => ("5m", 12),
+            25..=166 => ("15m", 4),
+            _ => ("1h", 1),
+        };
+        let limit = (span * per_hour + 2).min(1_000);
+        self.exchange_candles(asset, interval, limit)
+            .await
+            .0
+            .into_iter()
+            .map(|candle| SpotPoint {
+                t: candle.t,
+                usd: candle.close,
+            })
+            .collect()
     }
 }
 

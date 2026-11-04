@@ -170,7 +170,8 @@ async fn public_offer_history(State(state): State<AppState>) -> Result<Json<Valu
     Ok(Json(state.otc.public_offer_history().await?))
 }
 /// Time-bucketed chart data: candles and book levels from the desk's own
-/// records, plus the indicative daily series the converter is priced from.
+/// records, real exchange OHLC for the selected range, plus the indicative
+/// series the converter is priced from.
 async fn history(
     State(state): State<AppState>,
     Query(params): Query<HashMap<String, String>>,
@@ -192,12 +193,23 @@ async fn history(
         .market_prices
         .spot_history("EVER", period, span)
         .await;
+    let (exchange, exchange_stale) = state
+        .market_prices
+        .exchange_candles("EVER", window.market_interval, window.market_limit())
+        .await;
+    let market_candles = super::history::aggregate_market(&exchange, &window);
     Ok(Json(json!({
         "market": market,
         "range": window.range,
         "bucket_seconds": window.bucket_seconds,
         "from": window.from,
         "to": window.to,
+        "market_candles": {
+            "source": "Gate.io",
+            "stale": exchange_stale,
+            "interval": window.market_interval,
+            "candles": market_candles,
+        },
         "spot": {
             "source": "DefiLlama",
             "stale": stale,

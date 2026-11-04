@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chartWindow, chartWindows, fitWindow, markCandles, percentChange, quoteObservations, tradeRow, trimDecimal } from "../src/lib/otc/market.ts";
+import { candleIntervalLabel, chartRangeLabel, chartRanges, chartWindow, chartWindows, markCandles, percentChange, quoteObservations, tradeRow, trimDecimal } from "../src/lib/otc/market.ts";
 import type { Trade } from "../src/lib/otc/service.ts";
 
 function units(value: string, precision: number) {
@@ -60,18 +60,37 @@ test("each range uses its own server bucket layout", () => {
   assert.deepEqual(chartWindows["1h"], { bucketSeconds: 60, buckets: 60 });
   assert.deepEqual(chartWindows["1y"], { bucketSeconds: 604_800, buckets: 52 });
   const year = chartWindow("1y", now);
-  assert.equal(year.from + year.bucketSeconds * year.buckets * 1000, now);
+  const bucketMs = year.bucketSeconds * 1000;
+  // The window ends on its bucket boundary, not at the raw wall-clock instant.
+  assert.equal(year.from + year.bucketSeconds * year.buckets * 1000, Math.floor(now / bucketMs) * bucketMs);
 });
 
-test("coarser spot data is re-bucketed without shrinking the selected window", () => {
-  const now = Date.parse("2026-11-03T12:00:00Z");
-  const day = chartWindow("24h", now);
-  const hourly = fitWindow(day, 3_600);
-  assert.deepEqual(hourly, { from: day.from, bucketSeconds: 3_600, buckets: 24 });
-  const month = fitWindow(chartWindow("1m", now), 86_400);
-  assert.equal(month.bucketSeconds, 86_400);
-  assert.equal(month.buckets, 30);
-  assert.equal(month.from + month.bucketSeconds * month.buckets * 1000, now);
+test("every range keeps its own grid, interval and caption", () => {
+  const now = Date.parse("2026-11-03T12:00:07.500Z");
+  const expected = {
+    "1h": ["1 hour", "1m", 60, 60],
+    "24h": ["24 hours", "15m", 900, 96],
+    "1w": ["week", "2h", 7_200, 84],
+    "1m": ["month", "6h", 21_600, 120],
+    "6m": ["6 months", "1D", 86_400, 183],
+    "1y": ["year", "1W", 604_800, 52],
+  } as const;
+  for (const range of chartRanges) {
+    const [label, interval, bucketSeconds, buckets] = expected[range];
+    const window = chartWindow(range, now);
+    assert.equal(chartRangeLabel(range), label);
+    assert.equal(candleIntervalLabel(window.bucketSeconds), interval);
+    assert.equal(window.bucketSeconds, bucketSeconds);
+    assert.equal(window.buckets, buckets);
+    const bucketMs = bucketSeconds * 1000;
+    // Both edges sit on the bucket grid, so the newest candle is never partial.
+    assert.equal(window.from % bucketMs, 0);
+    assert.equal(window.from + window.bucketSeconds * window.buckets * 1000, Math.floor(now / bucketMs) * bucketMs);
+  }
+  // 24h must read as minutes, never as the bare span klinecharts defaults to.
+  assert.equal(candleIntervalLabel(900), "15m");
+  assert.equal(chartRangeLabel("6m", "ru"), "6 месяцев");
+  assert.equal(candleIntervalLabel(900, "ru"), "15 мин");
 });
 
 test("changes and order rows stay deterministic", () => {
