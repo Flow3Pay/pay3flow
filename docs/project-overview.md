@@ -420,6 +420,37 @@ Use `cargo run --manifest-path backend/Cargo.toml --bin providerfile -- test`
 to validate and run them without writing SQL;
 HTTP assertions and standalone Rust examples are documented in [Providerfile.md](Providerfile.md#tests-before-sql-generation).
 
+Publish a text post to the Telegram channel using the bot credentials from the
+environment. `TG_BOT_TOKEN` is the bot token and `TG_CHANNEL_ID` accepts the
+public channel username (for example, `@pay3flow`) or a numeric channel ID.
+Keep credentials in the deployment environment; never put the token in source,
+documentation, or command output. For a local shell, load the protected
+environment file before running the command:
+
+```bash
+set -a
+source backend/.env
+set +a
+cargo run --manifest-path backend/Cargo.toml --bin TgPost -- "Post text"
+```
+
+The command accepts the post text as one quoted argument; multiple arguments
+are joined with spaces. It sends immediately and prints the Telegram message
+ID on success. Telegram errors (including missing credentials, insufficient
+channel permissions, or an invalid channel) are reported as command failures.
+The bot must be an administrator of the target channel with permission to post.
+This command currently supports text posts only; it does not upload media or
+schedule posts.
+
+The command is:
+
+```text
+cargo run --manifest-path backend/Cargo.toml --bin TgPost -- "Post text"
+```
+
+In production, configure `TG_BOT_TOKEN` and `TG_CHANNEL_ID` in the process
+environment or secret manager used to run Cargo. Never echo or log the token.
+
 ### Frontend
 
 Requirements: Node.js 24 and pnpm (Corepack).
