@@ -9,12 +9,22 @@
   import { wallets, connectWallet, disconnectFamily, restoreWallets } from "$lib/wallet-session";
   import { identiconDataUri } from "$lib/otc/identicon";
   import { getAnonymousUserId } from "$lib/anonymous-user";
-  import type { WalletFamily } from "$lib/wallet-execution";
+  import { chainIdForNetwork, type WalletFamily } from "$lib/wallet-execution";
   import { walletDialogMode, otcWalletDialog, venueWalletMenu, openWalletDialog, closeWalletDialog } from "$lib/wallet-dialog";
   import PickerOptionCard from "./PickerOptionCard.svelte";
 
   const choices: { family: WalletFamily; network: string; label: string; icon: string; keywords: string }[] = [
     { family: "evm", network: "ethereum", label: "Ethereum", icon: "/icons/assets/eth.webp", keywords: "ETH EVM эфир этериум" },
+    { family: "evm", network: "bnb-smart-chain", label: "BNB Smart Chain", icon: "/icons/assets/bnb.webp", keywords: "BNB BSC Binance EVM" },
+    { family: "evm", network: "optimism", label: "Optimism", icon: "/icons/assets/eth.webp", keywords: "OP EVM" },
+    { family: "evm", network: "polygon-pos", label: "Polygon", icon: "/icons/assets/matic.webp", keywords: "POL MATIC EVM" },
+    { family: "evm", network: "base", label: "Base", icon: "/icons/assets/eth.webp", keywords: "Coinbase EVM" },
+    { family: "evm", network: "avalanche-c", label: "Avalanche C-Chain", icon: "/icons/assets/avax.webp", keywords: "AVAX Avalanche EVM" },
+    { family: "evm", network: "arbitrum-one", label: "Arbitrum One", icon: "/icons/assets/eth.webp", keywords: "ARB EVM" },
+    { family: "evm", network: "gnosis", label: "Gnosis", icon: "/icons/assets/eth.webp", keywords: "GNO xDai EVM" },
+    { family: "evm", network: "linea", label: "Linea", icon: "/icons/assets/eth.webp", keywords: "EVM" },
+    { family: "evm", network: "plasma", label: "Plasma", icon: "/icons/assets/eth.webp", keywords: "EVM" },
+    { family: "evm", network: "ink", label: "Ink", icon: "/icons/assets/eth.webp", keywords: "Kraken EVM" },
     { family: "near", network: "near", label: "NEAR", icon: assetIcon("near"), keywords: "NEAR Protocol нир" },
     { family: "tron", network: "tron", label: "TRON", icon: "/icons/assets/trx.webp", keywords: "TRX трон" },
     { family: "everscale", network: "everscale", label: "Everscale", icon: "/icons/assets/ever.svg", keywords: "EVER эверскейл" },
@@ -67,9 +77,9 @@
       unlock(); node.remove(); previousFocus?.focus();
     } };
   }
-  async function focusChoice(family: WalletFamily) {
+  async function focusChoice(network: string) {
     await tick();
-    if (open) (dialog.querySelector<HTMLElement>(`[data-family="${family}"] .optionCard`) ?? searchInput)?.focus();
+    if (open) (dialog.querySelector<HTMLElement>(`[data-network="${network}"] .optionCard`) ?? searchInput)?.focus();
   }
   function clearSearch() { query = ""; searchInput?.focus(); }
   function startSheetDrag(event: PointerEvent) {
@@ -120,17 +130,21 @@
     if (context && (network === "ethereum" || network === "everscale") && context.enabled && context.chains.includes(network)) {
       const proof = context.bound.find(value => value.startsWith(`${network}:`))?.slice(network.length + 1).trim();
       if (wallet && proof?.toLowerCase() === wallet.address.toLowerCase()) {
-        await disconnect(family);
+        await disconnect(family, network);
         return;
       }
       busy = family; activeChain = network; error = "";
       try {
         if (context.session) await context.onVerify(network);
         else await context.onConnect(network);
-      } finally { busy = null; void focusChoice(family); }
+      } finally { busy = null; void focusChoice(network); }
       return;
     }
-    if ($wallets[family]) await disconnect(family);
+    if (wallet?.family === "evm" && wallet.chainId !== chainIdForNetwork(network)) {
+      await connect(family, network);
+      return;
+    }
+    if (wallet) await disconnect(family, network);
     else await connect(family, network);
   }
   async function connect(family: WalletFamily, network: string) {
@@ -142,15 +156,15 @@
     providerHandoff = family === "near" || (family === "evm" && Boolean(env.PUBLIC_REOWN_PROJECT_ID?.trim()));
     try { await connectWallet(network); }
     catch (cause) { error = cause instanceof Error ? copy(cause.message) : copy("Wallet connection failed"); }
-    finally { busy = null; providerHandoff = false; void focusChoice(family); }
+    finally { busy = null; providerHandoff = false; void focusChoice(network); }
   }
-  async function disconnect(family: WalletFamily) {
+  async function disconnect(family: WalletFamily, network: string) {
     if (busy) return;
     busy = family;
     error = "";
     try { await disconnectFamily(family); }
     catch (cause) { error = cause instanceof Error ? cause.message : copy("Wallet disconnect failed"); }
-    finally { busy = null; void focusChoice(family); }
+    finally { busy = null; void focusChoice(network); }
   }
 </script>
 
@@ -175,7 +189,7 @@
       <div class="resultPanel">
         <div class="walletList" id="wallet-search-results">
           <section class="section">
-            {#each visibleChoices as choice (choice.family)}
+            {#each visibleChoices as choice (choice.network)}
               {@const wallet = $wallets[choice.family]}
               {@const otcChain = account && (choice.network === "ethereum" || choice.network === "everscale") ? choice.network : null}
               {@const proof = otcChain ? account?.bound.find(value => value.startsWith(`${otcChain}:`))?.slice(otcChain.length + 1).trim() : undefined}
@@ -183,12 +197,13 @@
               {@const verified = !!(wallet && proof?.toLowerCase() === wallet.address.toLowerCase())}
               {@const disconnectable = !!wallet && (!otcChain || verified || !canVerify)}
               {@const verificationAction = !!(canVerify && account?.session && (!proof || (wallet && !verified)))}
-              {@const action = busy === choice.family ? copy("Connecting…") : disconnectable ? copy("Disconnect") : verificationAction ? copy("Verify") : copy("Connect")}
+              {@const selected = !!wallet && (wallet.family !== "evm" || wallet.chainId === chainIdForNetwork(choice.network))}
+              {@const action = busy === choice.family ? copy("Connecting…") : disconnectable && selected ? copy("Disconnect") : verificationAction ? copy("Verify") : wallet && choice.family === "evm" ? copy("Switch network") : copy("Connect")}
               {@const address = wallet?.address}
-              <div class="walletChoice" data-family={choice.family} aria-busy={busy === choice.family}>
+              <div class="walletChoice" data-family={choice.family} data-network={choice.network} aria-busy={busy === choice.family}>
                 {#snippet disconnectAction()}
                   {#if wallet && !disconnectable}
-                    <button type="button" class="cardAction" disabled={working} aria-label={copy("Disconnect {network} wallet", { network: choice.label })} on:click|stopPropagation={() => disconnect(choice.family)}>
+                    <button type="button" class="cardAction" disabled={working} aria-label={copy("Disconnect {network} wallet", { network: choice.label })} on:click|stopPropagation={() => disconnect(choice.family, choice.network)}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8.9 7.56c.31-3.6 2.16-5.07 6.21-5.07h.13c4.47 0 6.26 1.79 6.26 6.26v6.52c0 4.47-1.79 6.26-6.26 6.26h-.13c-4.02 0-5.87-1.45-6.2-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /><path d="M15 12H3.62" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /><path d="m5.85 8.65-3.35 3.35 3.35 3.35" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></svg>
                     </button>
                   {/if}
@@ -198,12 +213,12 @@
                   name={choice.label}
                   iconUrl={choice.icon}
                   initials={choice.label.slice(0, 2).toUpperCase()}
-                  selected={Boolean(wallet)}
+                  selected={selected}
                   category={action}
                   meta={address && address.length > 20 ? `${address.slice(0, 7)}…${address.slice(-6)}` : address}
                   metaTitle={address}
                   disabled={working}
-                  ariaLabel={disconnectable ? copy("Disconnect {network} wallet", { network: choice.label }) : verificationAction ? copy("Verify {network} wallet", { network: choice.label }) : busy === choice.family ? copy("Connecting…") : copy("Connect {network} wallet", { network: choice.label })}
+                  ariaLabel={disconnectable && selected ? copy("Disconnect {network} wallet", { network: choice.label }) : verificationAction ? copy("Verify {network} wallet", { network: choice.label }) : wallet && choice.family === "evm" ? copy("Switch wallet to {network}", { network: choice.label }) : busy === choice.family ? copy("Connecting…") : copy("Connect {network} wallet", { network: choice.label })}
                   trailing={disconnectAction}
                   onSelect={() => selectChoice(choice.family, choice.network)}
                 />

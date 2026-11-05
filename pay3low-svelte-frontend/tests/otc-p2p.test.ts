@@ -93,6 +93,11 @@ test("the modal names the exact token each viewer sends and receives", () => {
     send: { asset: "EVER", amount: "100" },
     receive: { asset: "USDT", amount: "11.889" },
   });
+  assert.equal(p2pLegAsset("payment", "USDC"), "USDC");
+  assert.deepEqual(p2pViewerLegs(deal({ terms: { ...deal().terms, stablecoin: "USDC" } })), {
+    send: { asset: "USDC", amount: "11.889" },
+    receive: { asset: "EVER", amount: "100" },
+  });
   assert.equal(p2pViewerLegs(deal({ my_leg: undefined })), null);
 });
 

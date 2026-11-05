@@ -3,8 +3,10 @@
   import { locale } from "$lib/i18n";
   import { lockPageScroll } from "$lib/page-scroll-lock";
   import { offerDecimal, p2pFeeSplit } from "$lib/otc/public-offers";
+  import type { Stablecoin } from "$lib/otc/public-offers";
   import { type Direction } from "$lib/otc/service";
   export let direction: Direction = "sell";
+  export let stablecoin: Stablecoin = "USDT";
   export let everAmount = "", usdtAmount = "", askingRate = "", seller = "", receivingAddress = "";
   export let error = "";
   export let busy = false;
@@ -26,12 +28,12 @@
     <div class="dialogTop"><span>{say("Offer preview", "Превью оффера")}</span><button type="button" class="dialogClose" aria-label={say("Close", "Закрыть")} on:click={onClose}><svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg></button></div>
     <h2 id="otc-offer-review-title">{say("Review your offer", "Проверьте предложение")}</h2>
     <p class="reviewPending">{say("Not published yet. Check the terms and press Publish offer.", "Ещё не опубликовано. Проверьте условия и нажмите «Опубликовать предложение».")}</p>
-    <strong class="offerSummary">{direction === "buy" ? say("Buy", "Купить") : say("Sell", "Продать")} {offerDecimal(everAmount, 9)} EVER · {offerDecimal(usdtAmount, 6)} USDT</strong>
-    {#if fee}<dl class="feeSplit" data-testid="otc-offer-fee-split"><div><dt>{say("Amount", "Сумма")}</dt><dd>{fee.basis} USDT</dd></div><div><dt>{say("Service fee (3%)", "Комиссия сервиса (3%)")}</dt><dd>−{fee.fee} USDT</dd></div><div><dt>{say("Amount to exchange", "Сумма для обмена")}</dt><dd>{fee.net} USDT</dd></div><div class="net"><dt>{say("You receive", "К получению")}</dt><dd>{fee.net} USDT</dd></div></dl>{/if}
-    <p>{say("Price", "Курс")}: {askingRate} USDT / EVER</p>
+    <strong class="offerSummary">{direction === "buy" ? say("Buy", "Купить") : say("Sell", "Продать")} {offerDecimal(everAmount, 9)} EVER · {offerDecimal(usdtAmount, 6)} {stablecoin}</strong>
+    {#if fee}<dl class="feeSplit" data-testid="otc-offer-fee-split"><div><dt>{say("Amount", "Сумма")}</dt><dd>{fee.basis} {stablecoin}</dd></div><div><dt>{say("Service fee (3%)", "Комиссия сервиса (3%)")}</dt><dd>−{fee.fee} {stablecoin}</dd></div><div><dt>{say("Amount to exchange", "Сумма для обмена")}</dt><dd>{fee.net} {stablecoin}</dd></div><div class="net"><dt>{say("You receive", "К получению")}</dt><dd>{fee.net} {stablecoin}</dd></div></dl>{/if}
+    <p>{say("Price", "Курс")}: {askingRate} {stablecoin} / EVER</p>
     <p>{direction === "buy" ? say("Your EVER receiving wallet", "Ваш кошелёк для получения EVER") : say("Seller", "Продавец")}: <code>{seller}</code></p>
-    <p>{direction === "buy" ? say("USDT paying wallet", "Кошелёк оплаты USDT") : say("USDT recipient", "Получатель USDT")}: <code>{receivingAddress.trim()}</code></p>
-    <p>{say("The 3% service fee is withheld from the USDT total and collected by the service; it is not a network fee. On-chain transfers stay at the gross amount.", "Комиссия сервиса 3% удерживается из суммы USDT и собирается сервисом; это не сетевой расход. Переводы в сети идут на полную сумму.")}</p>
+    <p>{direction === "buy" ? say(`${stablecoin} paying wallet`, `Кошелёк оплаты ${stablecoin}`) : say(`${stablecoin} recipient`, `Получатель ${stablecoin}`)}: <code>{receivingAddress.trim()}</code></p>
+    <p>{say(`The 3% service fee is withheld from the ${stablecoin} total and collected by the service; it is not a network fee. On-chain transfers stay at the gross amount.`, `Комиссия сервиса 3% удерживается из суммы ${stablecoin} и собирается сервисом; это не сетевой расход. Переводы в сети идут на полную сумму.`)}</p>
     <p>{say("These amounts and addresses will be public for 24 hours, or until you cancel. Publication does not move or reserve funds.", "Эти суммы и адреса будут опубликованы на 24 часа или до отмены. Публикация не переводит и не резервирует средства.")}</p>
     {#if error}<p class="reviewError" role="alert">{error}</p>{/if}
     <button type="button" class="confirm" data-testid="otc-offer-publish" disabled={busy} on:click={onPublish}>{say("Publish offer", "Опубликовать предложение")}<span aria-hidden="true">↗</span></button>

@@ -19,10 +19,10 @@ fn entry(chain: &str, symbol: &str, network: &str, amount: Option<String>, state
 
 impl Service {
     pub(crate) async fn balances(&self, actor: &str) -> Value {
-        let network = if self.cfg.ethereum_chain_id == 11155111 {
-            "Sepolia"
-        } else {
+        let network = if self.cfg.p2p_chain() == 1 {
             "Ethereum"
+        } else {
+            "Sepolia"
         };
         let ever = self
             .balance("everscale", "EVER", "Everscale", EVER_DECIMALS, async {
@@ -33,11 +33,20 @@ impl Service {
         let usdt = self
             .balance("ethereum", "USDT", network, USDT_DECIMALS, async {
                 let address = self.wallet(actor, "ethereum").await?;
-                self.erc20_balance_of(&self.desk_evm(), &address, &json!("finalized"))
+                self.erc20_balance_of(&self.p2p_evm(), &address, &json!("finalized"))
                     .await
             })
             .await;
-        json!({"balances": [ever, usdt]})
+        let usdc = self
+            .balance("ethereum", "USDC", network, USDT_DECIMALS, async {
+                let address = self.wallet(actor, "ethereum").await?;
+                let mut net = self.p2p_evm();
+                net.usdt = super::config::USDC.into();
+                self.erc20_balance_of(&net, &address, &json!("finalized"))
+                    .await
+            })
+            .await;
+        json!({"balances": [ever, usdt, usdc]})
     }
 
     async fn balance(

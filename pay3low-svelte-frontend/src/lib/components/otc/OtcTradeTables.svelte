@@ -2,7 +2,7 @@
   import { locale } from "$lib/i18n";
   import { tradeRow } from "$lib/otc/market";
   import { terminalStates } from "$lib/otc/terminal";
-  import { offerDirection, offerOwner, saleRate, type PublicOffer } from "$lib/otc/public-offers";
+  import { offerDirection, offerOwner, offerStablecoin, saleRate, type PublicOffer } from "$lib/otc/public-offers";
   import type { Direction, Trade } from "$lib/otc/service";
   export let trades: Trade[] = [];
   export let offers: PublicOffer[] = [];
@@ -20,6 +20,7 @@
     price: string;
     amount: string;
     total: string;
+    stablecoin: string;
     state: string;
     id: string;
     trade?: Trade;
@@ -30,7 +31,7 @@
   $: numberLocale = $locale === "ru" ? "ru-RU" : "en-US";
   $: tradeItems = trades.map(trade => {
     const row = tradeRow(trade);
-    return { key: `trade:${trade.id}`, kind: "trade", direction: trade.terms.direction, time: row.time, price: row.price, amount: row.amount, total: row.total, state: trade.state, id: trade.id, trade } as Item;
+    return { key: `trade:${trade.id}`, kind: "trade", direction: trade.terms.direction, time: row.time, price: row.price, amount: row.amount, total: row.total, stablecoin: "USDT", state: trade.state, id: trade.id, trade } as Item;
   });
   $: offerItems = offers.map(offer => ({
     key: `offer:${offer.id}`,
@@ -40,6 +41,7 @@
     price: saleRate(offer.terms.ever_amount, offer.terms.usdt_amount),
     amount: offer.terms.ever_amount,
     total: offer.terms.usdt_amount,
+    stablecoin: offerStablecoin(offer),
     state: offer.state,
     id: offer.id,
     offer,
@@ -85,17 +87,17 @@
       <table>
         <thead><tr>
           <th>{title}</th>
-          <th>{say("Price", "Цена")}<small><img src="/icons/assets/usdt.png" alt="" width="12" height="12" />USDT</small></th>
+          <th>{say("Price", "Цена")}<small>USDT / USDC</small></th>
           <th>{say("Amount", "Объём")}<small><img src="/icons/assets/ever.svg" alt="" width="12" height="12" />EVER</small></th>
-          <th>{say("Total", "Всего")}<small><img src="/icons/assets/usdt.png" alt="" width="12" height="12" />USDT</small></th>
+          <th>{say("Total", "Всего")}<small>USDT / USDC</small></th>
         </tr></thead>
         <tbody>
           {#each items as item (item.key)}
             <tr class:selected={item.kind === "trade" && item.id === selectedId} data-kind={item.kind} data-testid="otc-order-row" title={item.kind === "offer" && item.owner ? item.owner : `${datePart(item.time)} ${timePart(item.time)}`} on:click={() => !busy && open(item)}>
               <td class="obWhen"><button type="button" class="rowOpen" aria-label={`${direction === "buy" ? say("Open buy", "Открыть покупку") : say("Open sell", "Открыть продажу")} ${item.kind === "offer" ? say("offer", "оффер") : "EVER"} ${item.id}`} on:click|stopPropagation={() => !busy && open(item)}><span class="status {statusClass(item.state)}"><i></i>{statusLabel(item.state)}</span><small>{datePart(item.time)} · {timePart(item.time)}</small></button></td>
-              <td class="obPrice"><b>{formatPrice(item.price, numberLocale)}</b><i aria-hidden="true">$</i></td>
+              <td class="obPrice"><b>{formatPrice(item.price, numberLocale)}</b><small>{item.stablecoin}</small></td>
               <td class="obAmount">{formatEver(item.amount, numberLocale)}</td>
-              <td class="obTotal">{formatEver(item.total, numberLocale)}<i aria-hidden="true">$</i></td>
+              <td class="obTotal">{formatEver(item.total, numberLocale)}<small>{item.stablecoin}</small></td>
             </tr>
           {:else}
             <tr class="emptyRow"><td colspan="4"><strong>{emptyTitle || (direction === "buy" ? say("No buy orders yet", "Покупок пока нет") : say("No sell orders yet", "Продаж пока нет"))}</strong>{#if emptyHint}<small>{emptyHint}</small>{/if}</td></tr>

@@ -97,8 +97,9 @@
   function historyReplace(hash: string) { window.history.replaceState(window.history.state, "", `${location.pathname}${location.search}${hash}`); }
   const chainLabel = (chain: "ethereum" | "everscale") => (chain === "ethereum" ? "Ethereum" : "Everscale");
   function activeDealLabel(item: P2pDeal) {
-    const stage = item.state === "payment_pending" ? say("awaiting USDT", "ждёт USDT") : say("awaiting EVER", "ждёт EVER");
-    return `${item.terms.usdt_amount} USDT · ${item.terms.ever_amount} EVER · ${stage}`;
+    const token = item.terms.stablecoin || "USDT";
+    const stage = item.state === "payment_pending" ? say(`awaiting ${token}`, `ждёт ${token}`) : say("awaiting EVER", "ждёт EVER");
+    return `${item.terms.usdt_amount} ${token} · ${item.terms.ever_amount} EVER · ${stage}`;
   }
   async function run(action: () => Promise<void>, lockAccount = true) {
     if (busy || offersBusy) return; busy = true; accountLocked = lockAccount; error = ""; notice = "";

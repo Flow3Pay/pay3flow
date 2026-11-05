@@ -1050,6 +1050,7 @@ async fn p2p_fixture() -> (Service, tokio::task::JoinHandle<()>, String, String)
 fn draft(direction: Direction, usdt_address: &str) -> super::public_offers::PublicOfferDraft {
     super::public_offers::PublicOfferDraft {
         direction,
+        stablecoin: super::public_offers::Stablecoin::Usdt,
         ever_amount: "250".into(),
         usdt_amount: "11.889".into(),
         usdt_address: usdt_address.into(),
@@ -1409,7 +1410,13 @@ async fn p2p_cancel_and_payment_expiry_return_the_offer_to_the_book() {
 #[ignore = "requires OTC_TEST_DATABASE_URL; run cargo test otc::tests -- --include-ignored"]
 async fn p2p_completion_accrues_the_service_fee_once() {
     let (service, task, owner, taker) = p2p_fixture().await;
-    let offer_id = published_offer(&service, &owner, Direction::Sell).await;
+    let mut offer_draft = draft(Direction::Sell, &format!("0x{}", "b".repeat(40)));
+    offer_draft.stablecoin = super::public_offers::Stablecoin::Usdc;
+    let offer = service
+        .post_public_offer(&owner, &Uuid::new_v4().to_string(), offer_draft)
+        .await
+        .unwrap();
+    let offer_id = Uuid::parse_str(offer["id"].as_str().unwrap()).unwrap();
     let deal = service
         .accept_offer(&taker, offer_id, "accept")
         .await
@@ -1422,6 +1429,8 @@ async fn p2p_completion_accrues_the_service_fee_once() {
     assert_eq!(deal["fee_policy"]["fee_units"], json!("356670"));
     assert_eq!(deal["fee_policy"]["net_units"], json!("11532330"));
     assert_eq!(deal["fee_accrued"], json!(false));
+    assert_eq!(deal["terms"]["stablecoin"], json!("USDC"));
+    assert_eq!(deal["terms"]["usdt_contract"], json!(super::config::USDC));
     let evidence = |chain: &str| Evidence {
         chain: chain.into(),
         identity: format!("0x{}", "e".repeat(64)),
@@ -1451,7 +1460,7 @@ async fn p2p_completion_accrues_the_service_fee_once() {
     let client = service.pool.get().await.unwrap();
     let row = client
         .query_one(
-            "SELECT basis_units::text,fee_units::text,net_units::text,rate::text,version,state FROM otc_p2p_fees WHERE trade_id=$1",
+            "SELECT basis_units::text,fee_units::text,net_units::text,rate::text,version,state,asset FROM otc_p2p_fees WHERE trade_id=$1",
             &[&id],
         )
         .await
@@ -1462,13 +1471,17 @@ async fn p2p_completion_accrues_the_service_fee_once() {
     assert_eq!(row.get::<_, String>(3), "0.03");
     assert_eq!(row.get::<_, String>(4), "p2p-3pct-v1");
     assert_eq!(row.get::<_, String>(5), "accrued");
+    assert_eq!(row.get::<_, String>(6), "USDC");
     // Replaying the completing leg is idempotent and never doubles the fee.
     service
         .credit_p2p(Uuid::new_v4(), id, "payout", &evidence("everscale"))
         .await
         .unwrap();
     let count: i64 = client
-        .query_one("SELECT count(*) FROM otc_p2p_fees WHERE trade_id=$1", &[&id])
+        .query_one(
+            "SELECT count(*) FROM otc_p2p_fees WHERE trade_id=$1",
+            &[&id],
+        )
         .await
         .unwrap()
         .get(0);
@@ -1480,14 +1493,12 @@ async fn p2p_completion_accrues_the_service_fee_once() {
 }
 #[tokio::test]
 #[ignore = "requires OTC_TEST_DATABASE_URL; run cargo test otc::tests -- --include-ignored"]
-async fn p2p_settles_on_its_own_network_while_the_desk_keeps_mainnet() {
+async fn p2p_publication_rejects_sepolia_even_when_the_desk_keeps_mainnet() {
     let (service, task, owner, taker) = p2p_fixture().await;
-    let (peer_rpc, peer_task) = peer_evm_mock().await;
     let sepolia_usdt = format!("0x{}", "2c".repeat(20));
     let mut cfg = (*service.cfg).clone();
     cfg.p2p_ethereum_chain_id = Some(11155111);
     cfg.p2p_usdt_contract = Some(sepolia_usdt.clone());
-    cfg.p2p_ethereum_rpc = vec![peer_rpc.clone(), peer_rpc];
     let peer = Service {
         cfg: Arc::new(cfg),
         ..service
@@ -1496,39 +1507,23 @@ async fn p2p_settles_on_its_own_network_while_the_desk_keeps_mainnet() {
     assert_eq!(peer.cfg.ethereum_chain_id, 1);
     assert_eq!(peer.cfg.usdt_contract, super::config::USDT);
     assert_eq!(peer.cfg.p2p_chain(), 11155111);
-    let offer_id = published_offer(&peer, &owner, Direction::Sell).await;
-    let advertised = &peer.public_offers(None).await.unwrap()[0];
-    assert_eq!(advertised["terms"]["ethereum_chain_id"], json!(11155111));
-    assert_eq!(advertised["terms"]["usdt_contract"], json!(sepolia_usdt));
-    let deal = peer.accept_offer(&taker, offer_id, "accept").await.unwrap();
-    assert_eq!(deal["terms"]["ethereum_chain_id"], json!(11155111));
-    let prepared = peer
-        .p2p_prepare(&taker, deal_id(&deal).await, "pay-1", "payment")
+    assert!(!peer.public_offers_available());
+    assert!(matches!(
+        peer.post_public_offer(
+            &owner,
+            "sepolia-offer",
+            draft(Direction::Sell, &format!("0x{}", "b".repeat(40))),
+        )
+        .await,
+        Err(super::error::Error::Disabled)
+    ));
+    assert!(peer
+        .public_offers(None)
         .await
-        .unwrap();
-    let instructions = &prepared["attempt"]["instructions"];
-    assert_eq!(instructions["call"]["chain_id"], json!(11155111));
-    assert_eq!(instructions["call"]["to"], json!(sepolia_usdt));
-    assert_eq!(instructions["call"]["nonce"], json!("0x10"));
-    assert_eq!(instructions["checkpoint"], json!({"block": "0x10"}));
-    // Repointing the peer contour strands offers published for the old one.
-    let stranded = published_offer(&peer, &owner, Direction::Sell).await;
-    let mut flipped = (*peer.cfg).clone();
-    flipped.p2p_ethereum_chain_id = None;
-    flipped.p2p_usdt_contract = None;
-    flipped.p2p_ethereum_rpc = Vec::new();
-    let flipped = Service {
-        cfg: Arc::new(flipped),
-        ..peer
-    };
-    let error = flipped
-        .accept_offer(&taker, stranded, "late-accept")
-        .await
-        .expect_err("a stranded offer cannot be accepted");
-    assert!(
-        matches!(&error, super::error::Error::Conflict(message) if message.contains("different Ethereum network")),
-        "{error:?}"
-    );
-    peer_task.abort();
-    cleanup(flipped, task).await;
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .is_empty());
+    let _ = taker;
+    cleanup(peer, task).await;
 }

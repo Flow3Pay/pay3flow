@@ -14,6 +14,7 @@ export interface P2pFeePolicy {
 
 export interface P2pDealTerms {
   direction: "buy" | "sell";
+  stablecoin?: "USDT" | "USDC";
   ever_amount: string;
   usdt_amount: string;
   ever_units: string;
@@ -106,12 +107,12 @@ export function p2pLegDone(deal: P2pDeal, kind: P2pLeg): boolean {
 }
 
 /** Token transferred by a deal leg. */
-export function p2pLegAsset(kind: P2pLeg): "USDT" | "EVER" {
-  return kind === "payment" ? "USDT" : "EVER";
+export function p2pLegAsset(kind: P2pLeg, stablecoin: "USDT" | "USDC" = "USDT"): "USDT" | "USDC" | "EVER" {
+  return kind === "payment" ? stablecoin : "EVER";
 }
 
 export interface P2pLegAmount {
-  asset: "USDT" | "EVER";
+  asset: "USDT" | "USDC" | "EVER";
   amount: string;
 }
 
@@ -124,11 +125,11 @@ export interface P2pViewerLegs {
 export function p2pViewerLegs(deal: P2pDeal): P2pViewerLegs | null {
   if (!deal.my_leg) return null;
   const send = deal.my_leg === "payment"
-    ? { asset: p2pLegAsset("payment"), amount: deal.terms.usdt_amount }
+    ? { asset: p2pLegAsset("payment", deal.terms.stablecoin), amount: deal.terms.usdt_amount }
     : { asset: p2pLegAsset("payout"), amount: deal.terms.ever_amount };
   const receive = deal.my_leg === "payment"
     ? { asset: p2pLegAsset("payout"), amount: deal.terms.ever_amount }
-    : { asset: p2pLegAsset("payment"), amount: deal.terms.usdt_amount };
+    : { asset: p2pLegAsset("payment", deal.terms.stablecoin), amount: deal.terms.usdt_amount };
   return { send, receive };
 }
 

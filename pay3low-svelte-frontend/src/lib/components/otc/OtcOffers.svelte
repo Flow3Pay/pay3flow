@@ -5,7 +5,7 @@
   import { connectWallet, wallets } from "$lib/wallet-session";
   import { sameWalletAddress } from "$lib/wallet-amount";
   import { fetchMarketPrices } from "$lib/exchange";
-  import { saleRate, offerDecimal, offerTotal, offerEver, offerUnits, offerFloored, balanceUnits, offerShortfall, marketUsdtPerEver, marketUsdPerEver, MAX_OFFER_EVER_UNITS, MAX_OFFER_USDT_UNITS, type PublicOffer as Offer, type OfferHistoryPoint, type SaleTicketState } from "$lib/otc/public-offers";
+  import { saleRate, offerDecimal, offerTotal, offerEver, offerUnits, offerFloored, balanceUnits, offerShortfall, marketUsdtPerEver, marketUsdPerEver, MAX_OFFER_EVER_UNITS, MAX_OFFER_USDT_UNITS, type PublicOffer as Offer, type OfferHistoryPoint, type SaleTicketState, type Stablecoin } from "$lib/otc/public-offers";
   export let session: Session | null;
   export let busy = false;
   export let onConnect: () => void;
@@ -16,6 +16,7 @@
   let suggestionKey = "";
   let offers: Offer[] = [], mine: Offer[] = [], history: OfferHistoryPoint[] = [], error = "", message = "";
   let amountSource: "ever" | "usdt" = "ever";
+  let stablecoin: Stablecoin = "USDT";
   let priceInput = "", priceMode = false, loadedDirection: Direction = "sell";
   let marketRate = "", marketUsdRate = "", marketPrice = false;
   let everAmount = "", usdtAmount = "", receivingAddress = "", key = "";
@@ -27,11 +28,12 @@
   $: if (mounted && (session?.actor || "") !== loadedActor) {
     const previousActor = loadedActor;
     loadedActor = session?.actor || ""; loadedDirection = direction; mine = []; reviewing = false; error = ""; message = "";
-    if (previousActor || !loadedActor) { everAmount = ""; usdtAmount = ""; receivingAddress = ""; key = ""; priceInput = ""; priceMode = false; marketPrice = false; }
+    if (previousActor || !loadedActor) { everAmount = ""; usdtAmount = ""; stablecoin = "USDT"; receivingAddress = ""; key = ""; priceInput = ""; priceMode = false; marketPrice = false; }
     try {
       const draft = JSON.parse(localStorage.getItem(draftKey) || "null");
       if (draft && (draft.direction || "sell") === direction && [draft.ever_amount, draft.usdt_amount, draft.usdt_address, draft.key].every(value => typeof value === "string")) {
         everAmount = draft.ever_amount; usdtAmount = draft.usdt_amount; receivingAddress = draft.usdt_address; key = draft.key; priceMode = !!draft.price_mode; priceInput = typeof draft.price_input === "string" ? draft.price_input : ""; amountSource = draft.amount_source === "usdt" ? "usdt" : "ever";
+        stablecoin = draft.stablecoin === "USDC" ? "USDC" : "USDT";
         if (typeof draft.market_price === "boolean") marketPrice = draft.market_price;
       }
     } catch { /* An unreadable draft is not submitted. */ }
@@ -53,7 +55,7 @@
   $: fundedBalance = fundedLeg === "ever"
     ? balances.find(balance => balance.symbol === "EVER" && balance.state === "ok")?.amount || ""
     : sameWalletAddress("evm", receivingAddress.trim(), session?.wallets.find(wallet => wallet.chain === "ethereum")?.address || "")
-      ? balances.find(balance => balance.symbol === "USDT" && balance.state === "ok")?.amount || ""
+      ? balances.find(balance => balance.symbol === stablecoin && balance.state === "ok")?.amount || ""
       : "";
   $: shortfall = offerShortfall(
     fundedLeg === "ever" ? everUnits : usdtUnits,
@@ -66,9 +68,9 @@
     : everUnits > MAX_OFFER_EVER_UNITS
     ? say("One offer can list at most 1,000,000,000,000 EVER.", "Одно предложение может содержать не более 1 000 000 000 000 EVER.")
     : usdtUnits === null
-    ? say("Enter a positive USDT total.", "Укажите положительную сумму USDT.")
+    ? say(`Enter a positive ${stablecoin} total.`, `Укажите положительную сумму ${stablecoin}.`)
     : usdtUnits > MAX_OFFER_USDT_UNITS
-    ? say("One offer can total at most 1,000,000 USDT.", "Общая сумма одного предложения не может превышать 1 000 000 USDT.")
+    ? say(`One offer can total at most 1,000,000 ${stablecoin}.`, `Общая сумма одного предложения не может превышать 1 000 000 ${stablecoin}.`)
     : !/^0x[0-9a-fA-F]{40}$/.test(receivingAddress.trim()) || /^0x0{40}$/.test(receivingAddress.trim())
     ? say("Enter your Ethereum wallet address, or use the wallet button.", "Укажите адрес Ethereum-кошелька или нажмите кнопку кошелька.") : "";
   $: valid = !blockingReason;
@@ -132,7 +134,7 @@
     if (!enabled || !session || !seller || posting || busy || linkingEvm || !valid) return;
     if (!reviewing) { reviewing = true; error = ""; return; }
     key ||= crypto.randomUUID();
-    const body = { direction, ever_amount: offerDecimal(everAmount,9)!, usdt_amount: offerDecimal(usdtAmount,6)!, usdt_address: receivingAddress.trim() };
+    const body = { direction, stablecoin, ever_amount: offerDecimal(everAmount,9)!, usdt_amount: offerDecimal(usdtAmount,6)!, usdt_address: receivingAddress.trim() };
     try {
       localStorage.setItem(draftKey, JSON.stringify({ ...body, key, price_mode: priceMode, price_input: priceInput, amount_source: amountSource, market_price: marketPrice }));
     } catch { error = say("Enable browser storage to publish and safely retry an offer.", "Разрешите хранение данных в браузере для безопасной публикации и повторной проверки."); return; }
@@ -174,7 +176,7 @@
     try {
       const prices = await fetchMarketPrices(signal);
       if (signal.aborted) return;
-      marketRate = marketUsdtPerEver(prices.prices.EVER, prices.prices.USDT) || "";
+      marketRate = marketUsdtPerEver(prices.prices.EVER, stablecoin === "USDC" ? (prices.prices.USDC ?? 1) : prices.prices.USDT) || "";
       marketUsdRate = marketUsdPerEver(prices.prices.EVER) || "";
       if (!marketRate) marketPrice = false;
       else if (marketPrice) applyMarketRate(marketRate);
@@ -211,13 +213,15 @@
   function changePrice(value: string) { priceInput = value; priceMode = true; if (amountSource === "ever") usdtAmount = offerTotal(everAmount,priceInput)?.amount || ""; else everAmount = offerEver(usdtAmount,priceInput)?.amount || ""; edited(); }
   function changeEver(value: string) { everAmount = value; amountSource = "ever"; if (priceMode) usdtAmount = offerTotal(everAmount,priceInput)?.amount || ""; edited(); }
   function changeUsdt(value: string) { usdtAmount = value; amountSource = "usdt"; if (priceMode) everAmount = offerEver(usdtAmount,priceInput)?.amount || ""; edited(); }
+  function changeStablecoin(value: Stablecoin) { stablecoin = value; edited(); }
   function changeAddress(value: string) { receivingAddress = value; edited(); }
   $: ticket = {
-    direction, price, priceRounded, roundingAsset, amountFloored, shortfall, fundedBalance, blockingReason, everAmount, usdtAmount, receivingAddress, seller, askingRate, valid, reviewing, linkingEvm,
+    direction, stablecoin, price, priceRounded, roundingAsset, amountFloored, shortfall, fundedBalance, blockingReason, everAmount, usdtAmount, receivingAddress, seller, askingRate, valid, reviewing, linkingEvm,
     marketPrice, marketRate, marketUsdRate, marketApprox, error,
     onPrice: changePrice,
     onEver: changeEver,
     onUsdt: changeUsdt,
+    onStablecoin: changeStablecoin,
     onAddress: changeAddress,
     onUseEthereum: useEthereumWallet,
     onMarketPrice: useMarketPrice,

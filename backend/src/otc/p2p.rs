@@ -1,5 +1,5 @@
 //! Direct peer-to-peer settlement of public offers.
-//! Two independent handoff-signed transfers (USDT first, then EVER); deliberately
+//! Two independent handoff-signed transfers (stablecoin first, then EVER); deliberately
 //! bypasses the desk/RFQ, inventory and federation machinery.
 use super::{
     amount,
@@ -38,8 +38,10 @@ impl Service {
         let chain_id = body["ethereum_chain_id"]
             .as_u64()
             .ok_or_else(|| invalid("deal network is missing"))?;
-        let usdt = body["usdt_contract"]
-            .as_str()
+        let usdt = body
+            .get("stablecoin_contract")
+            .or_else(|| body.get("usdt_contract"))
+            .and_then(Value::as_str)
             .ok_or_else(|| invalid("deal token is missing"))?
             .to_string();
         Ok(super::chain::EvmNet {
@@ -106,6 +108,12 @@ impl Service {
             .to_string();
         // The fee policy is frozen with the deal: republishing the offer later
         // must never change what this trade agreed to pay.
+        let stablecoin = super::public_offers::Stablecoin::from_terms(&terms)?;
+        let token_contract = terms
+            .get("stablecoin_contract")
+            .or_else(|| terms.get("usdt_contract"))
+            .and_then(Value::as_str)
+            .ok_or_else(|| invalid("offer terms are malformed"))?;
         let usdt_basis = amount::integer(
             terms["usdt_units"]
                 .as_str()
@@ -117,8 +125,9 @@ impl Service {
             .cloned()
             .unwrap_or_else(|| super::public_offers::fee_policy(usdt_basis));
         let direction: Direction = serde_json::from_value(terms["direction"].clone())?;
-        if terms["ethereum_chain_id"] != json!(self.cfg.p2p_chain())
-            || terms["usdt_contract"] != json!(self.cfg.p2p_usdt())
+        if self.cfg.p2p_chain() != 1
+            || terms["ethereum_chain_id"] != json!(1)
+            || token_contract != stablecoin.contract()
         {
             return Err(Error::Conflict(
                 "offer was published for a different Ethereum network".into(),
@@ -142,12 +151,14 @@ impl Service {
             .min(offer.get::<_, DateTime<Utc>>("expires_at"));
         let body = json!({
             "direction": direction,
+            "stablecoin": stablecoin.symbol(),
             "ever_amount": terms["ever_amount"], "usdt_amount": terms["usdt_amount"],
             "ever_units": terms["ever_units"], "usdt_units": terms["usdt_units"],
             "usdt_payer": usdt_payer, "usdt_payee": usdt_payee,
             "ever_payer": ever_payer, "ever_payee": ever_payee,
-            "usdt_contract": self.cfg.p2p_usdt(),
-            "ethereum_chain_id": self.cfg.p2p_chain(),
+            "usdt_contract": token_contract,
+            "stablecoin_contract": token_contract,
+            "ethereum_chain_id": 1,
             "ever_network_id": 42,
             "fee_policy": fee_policy,
         });
@@ -376,7 +387,7 @@ impl Service {
             "payment_pending" => {
                 kind == "payment" && Utc::now() <= pay_by && body["usdt_payer"] == json!(verified)
             }
-            // The USDT leg is already verified and the counterparty has paid.
+            // The stablecoin leg is already verified and the counterparty has paid.
             // Refusing a late EVER delivery would strand those funds, so the
             // nominal payout deadline is advisory once the deal is here.
             "delivery_pending" => kind == "payout",
@@ -385,9 +396,9 @@ impl Service {
         if !allowed {
             let message = match state.as_str() {
                 "payment_pending" if kind == "payout" => {
-                    "the EVER transfer becomes available after the USDT payment is verified"
+                    "the EVER transfer becomes available after the stablecoin payment is verified"
                 }
-                "payment_pending" => "the USDT payment window has expired",
+                "payment_pending" => "the stablecoin payment window has expired",
                 "delivery_pending" => "the EVER transfer is unavailable for this deal",
                 "completed" | "cancelled" | "expired" => "this deal is already closed",
                 _ => "transfer is unavailable in the current deal state",
@@ -428,6 +439,7 @@ impl Service {
         let attempt = Uuid::new_v4();
         let instructions = json!({
             "leg": leg, "call": call, "checkpoint": checkpoint,
+            "stablecoin": body.get("stablecoin").cloned().unwrap_or(json!("USDT")),
             "attempt_id": attempt, "trade_id": id, "kind": kind,
             "submit_path": format!("/p2p/attempts/{attempt}/reference"),
             "prepared_at": Utc::now(),
@@ -515,7 +527,7 @@ impl Service {
                 .is_some()
         {
             return Err(Error::Conflict(
-                "deal can only be cancelled before the USDT leg is sent".into(),
+                "deal can only be cancelled before the stablecoin leg is sent".into(),
             ));
         }
         tx.execute(
@@ -737,8 +749,8 @@ impl Service {
                     .to_string()
             };
             tx.execute(
-                "INSERT INTO otc_p2p_fees(id,trade_id,offer_id,asset,precision,basis_units,fee_units,net_units,rate,version,state) VALUES($1,$2,$3,'USDT',6,$4::text::numeric,$5::text::numeric,$6::text::numeric,$7::text::numeric,$8,'accrued') ON CONFLICT (trade_id) DO NOTHING",
-                &[&Uuid::new_v4(), &id, &offer_id, &text("basis_units"), &text("fee_units"), &text("net_units"), &text("rate"), &text("version")],
+                    "INSERT INTO otc_p2p_fees(id,trade_id,offer_id,asset,precision,basis_units,fee_units,net_units,rate,version,state) VALUES($1,$2,$3,$4,6,$5::text::numeric,$6::text::numeric,$7::text::numeric,$8::text::numeric,$9,'accrued') ON CONFLICT (trade_id) DO NOTHING",
+                    &[&Uuid::new_v4(), &id, &offer_id, &super::public_offers::Stablecoin::from_terms(&body)?.symbol(), &text("basis_units"), &text("fee_units"), &text("net_units"), &text("rate"), &text("version")],
             )
             .await?;
         }

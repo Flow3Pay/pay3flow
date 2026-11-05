@@ -3,7 +3,7 @@
   import { locale } from "$lib/i18n";
   import { proposalDirection } from "$lib/otc/terminal";
   import type { Config, Direction, Proposal } from "$lib/otc/service";
-  import { saleRate, compareOfferRates, offerDirection, offerOwner, type PublicOffer } from "$lib/otc/public-offers";
+  import { saleRate, compareOfferRates, offerDirection, offerOwner, offerStablecoin, type PublicOffer } from "$lib/otc/public-offers";
   import { identiconDataUri } from "$lib/otc/identicon";
   export let publicOffers: PublicOffer[] = [], ownIds: string[] = [];
   export let onCancel: (id: string) => void = () => {};
@@ -76,18 +76,19 @@
 
 {#snippet levelRow(level: BookLevel)}
   {@const taker = level.own ? "own" : offerDirection(level.offer) === "sell" ? "buy" : "sell"}
-  <div class="obRow" class:own={level.own} data-testid={testId} title={`${offerOwner(level.offer)} · ${formatEver(level.amount, numberLocale)} EVER → ${formatEver(level.offer.terms.usdt_amount, numberLocale)} USDT`}>
+  {@const token = offerStablecoin(level.offer)}
+  <div class="obRow" class:own={level.own} data-testid={testId} title={`${offerOwner(level.offer)} · ${formatEver(level.amount, numberLocale)} EVER → ${formatEver(level.offer.terms.usdt_amount, numberLocale)} ${token}`}>
     <span class="obOwner"><img class="obAvatar" src={avatar(level.offer)} alt="" width="18" height="18" /><code>{offerOwner(level.offer).slice(0, 6)}…{offerOwner(level.offer).slice(-4)}</code></span>
-    <span class="obPrice"><b data-testid="otc-book-price">{formatPrice(level.price, numberLocale)}</b><i aria-hidden="true">$</i></span>
+    <span class="obPrice"><b data-testid="otc-book-price">{formatPrice(level.price, numberLocale)}</b><small>{token}</small></span>
     <span class="obAmount">{formatEver(level.amount, numberLocale)}</span>
-    <span class="obTotal">{formatEver(level.total, numberLocale)}<i aria-hidden="true">$</i></span>
-    <button type="button" class="obTake" class:takeBuy={taker === "buy"} class:takeSell={taker === "sell"} data-testid="otc-offer-take" aria-label={`${level.own ? say("Your offer", "Ваш оффер") + ". " : ""}${say("Offer details", "Детали оффера")}: ${formatPrice(level.price, numberLocale)} USDT / EVER`} on:click={() => showOffer(level.offer)}>{taker === "buy" ? say("Buy", "Купить") : taker === "sell" ? say("Sell", "Продать") : say("Details", "Детали")}</button>
+    <span class="obTotal">{formatEver(level.total, numberLocale)}<small>{token}</small></span>
+    <button type="button" class="obTake" class:takeBuy={taker === "buy"} class:takeSell={taker === "sell"} data-testid="otc-offer-take" aria-label={`${level.own ? say("Your offer", "Ваш оффер") + ". " : ""}${say("Offer details", "Детали оффера")}: ${formatPrice(level.price, numberLocale)} ${token} / EVER`} on:click={() => showOffer(level.offer)}>{taker === "buy" ? say("Buy", "Купить") : taker === "sell" ? say("Sell", "Продать") : say("Details", "Детали")}</button>
   </div>
 {/snippet}
 
 {#snippet side(levels: BookLevel[], who: string, label: string, key: string)}
   <section class="obTable" data-side={key} aria-label={label}>
-    <div class="obHead"><span>{who}</span><span>{say("Price", "Цена")}<small><img src="/icons/assets/usdt.png" alt="" width="12" height="12" />USDT</small></span><span>{say("Amount", "Объём")}<small><img src="/icons/assets/ever.svg" alt="" width="12" height="12" />EVER</small></span><span>{say("Total", "Всего")}<small><img src="/icons/assets/usdt.png" alt="" width="12" height="12" />USDT</small></span></div>
+    <div class="obHead"><span>{who}</span><span>{say("Price", "Цена")}<small>USDT / USDC</small></span><span>{say("Amount", "Объём")}<small><img src="/icons/assets/ever.svg" alt="" width="12" height="12" />EVER</small></span><span>{say("Total", "Всего")}<small>USDT / USDC</small></span></div>
     {#each levels as level (level.offer.id)}
       {@render levelRow(level)}
     {:else}
@@ -101,13 +102,14 @@
     <div class="bookRows compact">
       {#each sortedOffers as offer (offer.id)}
         {@const side = offerDirection(offer)}
+        {@const token = offerStablecoin(offer)}
         {@const isOwn = ownIds.includes(offer.id)}
         {@const max = side === "buy" ? maxBuy : maxSell}
-        <button type="button" class="bookRow" class:sell={side === "sell"} data-testid={testId} aria-label={`${say("Offer details", "Детали оффера")}: ${saleRate(offer.terms.ever_amount,offer.terms.usdt_amount)} USDT / EVER`} on:click={() => showOffer(offer)}>
+        <button type="button" class="bookRow" class:sell={side === "sell"} data-testid={testId} aria-label={`${say("Offer details", "Детали оффера")}: ${saleRate(offer.terms.ever_amount,offer.terms.usdt_amount)} ${token} / EVER`} on:click={() => showOffer(offer)}>
           <span class="depth" style={`--depth:${Math.max(4, Math.min(100, (Number(offer.terms.usdt_amount) || 0) / max * 100))}%`}></span>
           <span class="rowPrice" data-testid="otc-book-price">{saleRate(offer.terms.ever_amount,offer.terms.usdt_amount)}</span>
           <span class="rowAmount">{offer.terms.ever_amount}<small>EVER</small></span>
-          <span class="rowTotal">{offer.terms.usdt_amount}<small>USDT</small></span>
+          <span class="rowTotal">{offer.terms.usdt_amount}<small>{token}</small></span>
           <span class="rowOwner"><img class="obAvatar" src={avatar(offer)} alt="" width="16" height="16" /><code title={offerOwner(offer)}>{offerOwner(offer).slice(0,6)}…{offerOwner(offer).slice(-4)}</code>{#if isOwn}<span class="ownTag">{say("You", "Вы")}</span>{/if}</span>
           <svg class="rowChevron" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m6 3 5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
@@ -156,27 +158,28 @@
         {/each}
       </div>
     {/if}
-    <p class="bookFooter">{config?.public_offers_available ? (config.p2p_available ? say("Public offers · USDT / EVER · accept to settle wallet to wallet", "Публичные офферы · USDT / EVER · примите оффер для расчёта между кошельками") : config.available ? say("Public offers · USDT / EVER", "Публичные офферы · USDT / EVER") : say("Offers are public · settlement on this site is paused", "Офферы публичны · расчёты через сайт отключены")) : say("Desk quotes · USDT / EVER", "Котировки деска · USDT / EVER")}</p>
+    <p class="bookFooter">{config?.public_offers_available ? (config.p2p_available ? say("Public offers · USDT or USDC / EVER · accept to settle wallet to wallet", "Публичные офферы · USDT или USDC / EVER · примите оффер для расчёта между кошельками") : config.available ? say("Public offers · USDT or USDC / EVER", "Публичные офферы · USDT или USDC / EVER") : say("Offers are public · settlement on this site is paused", "Офферы публичны · расчёты через сайт отключены")) : say("Desk quotes · USDT / EVER", "Котировки деска · USDT / EVER")}</p>
   {/if}
 {/if}
 
 {#if selectedOffer}
   {@const selected = selectedOffer}
   {@const side = offerDirection(selected)}
+  {@const token = offerStablecoin(selected)}
   {@const isOwn = ownIds.includes(selected.id)}
   {@const offerChain = selected.terms.ethereum_chain_id ?? 1}
   {@const wrongNetwork = !!config?.p2p_usdt_contract && offerChain !== (config.p2p_ethereum_chain_id ?? config.ethereum_chain_id)}
   {@const canAccept = !!config?.p2p_available && !isOwn && !wrongNetwork && selected.state === "open" && Date.parse(selected.expires_at) > Date.now()}
   <dialog bind:this={dialog} class="offerDialog" aria-labelledby="otc-offer-details-title" on:cancel|preventDefault={closeOffer} on:click={(event) => { if (event.target === dialog) closeOffer(); }}>
     <div class="dialogHead"><div><span class="dialogEyebrow" class:sell={side === "sell"}>{side === "buy" ? say("BUY OFFER", "ОФФЕР НА ПОКУПКУ") : say("SELL OFFER", "ОФФЕР НА ПРОДАЖУ")}</span><h2 id="otc-offer-details-title">{say("Offer details", "Детали оффера")}</h2></div><button type="button" class="iconButton" aria-label={say("Close", "Закрыть")} on:click={closeOffer}><svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button></div>
-    <div class="dialogSummary"><div><span>{say("Price", "Цена")}</span><strong>{saleRate(selected.terms.ever_amount,selected.terms.usdt_amount)} <small>USDT / EVER</small></strong></div><div><span>{say("Amount", "Количество")}</span><strong>{selected.terms.ever_amount} <small>EVER</small></strong></div><div><span>{say("Total", "Сумма")}</span><strong>{selected.terms.usdt_amount} <small>USDT</small></strong></div></div>
+    <div class="dialogSummary"><div><span>{say("Price", "Цена")}</span><strong>{saleRate(selected.terms.ever_amount,selected.terms.usdt_amount)} <small>{token} / EVER</small></strong></div><div><span>{say("Amount", "Количество")}</span><strong>{selected.terms.ever_amount} <small>EVER</small></strong></div><div><span>{say("Total", "Сумма")}</span><strong>{selected.terms.usdt_amount} <small>{token}</small></strong></div></div>
     <div class="addressList">
       <div class="addressRow"><img src="/icons/assets/ever.svg" alt="" width="22" height="22"><div><span>{side === "buy" ? say("EVER receiving wallet", "Кошелёк получения EVER") : say("Seller EVER wallet", "EVER-кошелёк продавца")}</span><code>{offerOwner(selected)}</code></div><button class="copyButton" type="button" aria-label={say("Copy EVER address", "Копировать EVER-адрес")} on:click={() => copyAddress(offerOwner(selected), "ever")}>{#if copied === "ever"}<span>{say("Copied", "Скопировано")}</span>{:else}<svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="7" y="7" width="9" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M12 7V4.5A1.5 1.5 0 0 0 10.5 3h-6A1.5 1.5 0 0 0 3 4.5v8A1.5 1.5 0 0 0 4.5 14H7" stroke="currentColor" stroke-width="1.5"/></svg>{/if}</button></div>
-      <div class="addressRow"><img src="/icons/assets/usdt.png" alt="" width="22" height="22"><div><span>{side === "buy" ? say("USDT paying wallet", "Кошелёк оплаты USDT") : say("USDT receiving wallet", "Кошелёк получения USDT")}</span><code>{selected.terms.usdt_address}</code></div><button class="copyButton" type="button" aria-label={say("Copy Ethereum address", "Копировать Ethereum-адрес")} on:click={() => copyAddress(selected.terms.usdt_address, "usdt")}>{#if copied === "usdt"}<span>{say("Copied", "Скопировано")}</span>{:else}<svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="7" y="7" width="9" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M12 7V4.5A1.5 1.5 0 0 0 10.5 3h-6A1.5 1.5 0 0 0 3 4.5v8A1.5 1.5 0 0 0 4.5 14H7" stroke="currentColor" stroke-width="1.5"/></svg>{/if}</button></div>
+      <div class="addressRow"><img src={token === "USDC" ? "/icons/assets/usdc.png" : "/icons/assets/usdt.png"} alt="" width="22" height="22"><div><span>{side === "buy" ? say(`${token} paying wallet`, `Кошелёк оплаты ${token}`) : say(`${token} receiving wallet`, `Кошелёк получения ${token}`)}</span><code>{selected.terms.usdt_address}</code></div><button class="copyButton" type="button" aria-label={say("Copy Ethereum address", "Копировать Ethereum-адрес")} on:click={() => copyAddress(selected.terms.usdt_address, "usdt")}>{#if copied === "usdt"}<span>{say("Copied", "Скопировано")}</span>{:else}<svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="7" y="7" width="9" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M12 7V4.5A1.5 1.5 0 0 0 10.5 3h-6A1.5 1.5 0 0 0 3 4.5v8A1.5 1.5 0 0 0 4.5 14H7" stroke="currentColor" stroke-width="1.5"/></svg>{/if}</button></div>
     </div>
     <div class="dialogFoot"><span><svg width="15" height="15" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M10 6v4l2.5 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>{say("Open until", "Действует до")} {new Date(selected.expires_at).toLocaleString($locale)}</span>{#if isOwn && selected.state === "open"}<button type="button" class="cancelOffer" disabled={busy} on:click={() => { onCancel(selected.id); closeOffer(); }}>{say("Cancel offer", "Снять оффер")}</button>{/if}</div>
     {#if canAccept}
-      <div class="acceptRow"><p>{say("Two direct transfers between the two wallets: one side sends USDT, the other sends EVER. There is no escrow, so send only after checking the addresses.", "Два прямых перевода между кошельками: одна сторона отправляет USDT, другая — EVER. Эскроу нет, поэтому отправляйте только проверив адреса.")}</p><button type="button" class="acceptOffer" disabled={busy} data-testid="otc-accept-offer" on:click={() => { onAccept(selected.id); closeOffer(); }}>{say("Accept offer", "Принять оффер")}<span aria-hidden="true">↗</span></button></div>
+      <div class="acceptRow"><p>{say(`Two direct transfers between the two wallets: one side sends ${token}, the other sends EVER. There is no escrow, so send only after checking the addresses.`, `Два прямых перевода между кошельками: одна сторона отправляет ${token}, другая — EVER. Эскроу нет, поэтому отправляйте только проверив адреса.`)}</p><button type="button" class="acceptOffer" disabled={busy} data-testid="otc-accept-offer" on:click={() => { onAccept(selected.id); closeOffer(); }}>{say("Accept offer", "Принять оффер")}<span aria-hidden="true">↗</span></button></div>
     {:else if wrongNetwork}<p class="settlementNote"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M10 9v4m0-6h.01" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>{say(`This offer was published for another Ethereum network (${offerChain}). It has to be reposted before it can be settled wallet to wallet.`, `Этот оффер опубликован для другой сети Ethereum (${offerChain}). Чтобы рассчитать его между кошельками, его нужно перепубликовать.`)}</p>
     {:else if config?.public_offers_available && !config.available}<p class="settlementNote"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M10 9v4m0-6h.01" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>{say("Settlement through this site is currently unavailable. Verify addresses with the other party before sending funds.", "Расчёты через сайт сейчас недоступны. Перед переводом сверьте адреса с контрагентом.")}</p>{/if}
   </dialog>

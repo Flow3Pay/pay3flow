@@ -15,7 +15,7 @@
   let dialog: HTMLDialogElement;
   $: say = (en: string, ru: string) => $locale === "ru" ? ru : en;
   $: leg = instructions.leg;
-  $: asset = leg.chain === "ethereum" ? "USDT" : "EVER";
+  $: asset = leg.chain === "ethereum" ? p2p ? instructions.stablecoin || "USDT" : "USDT" : "EVER";
   onMount(() => { const previous = document.activeElement as HTMLElement | null; const unlock = lockPageScroll(); dialog.showModal(); return () => { dialog.close(); unlock(); previous?.focus(); }; });
 </script>
 <dialog bind:this={dialog} aria-labelledby="otc-transfer-title" on:cancel|preventDefault={onClose}>

@@ -6,7 +6,7 @@ use super::{
     wallet, Service,
 };
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio_postgres::Row;
 use uuid::Uuid;
@@ -14,15 +14,43 @@ use uuid::Uuid;
 /// Wider than `escrow::MAX_EVER_UNITS` on purpose: offers settle peer-to-peer and never reach the escrow factory.
 const MAX_EVER_OFFER_UNITS: u128 = 1_000_000_000_000 * 1_000_000_000;
 const MAX_USDT_OFFER_UNITS: u128 = 1_000_000 * 1_000_000;
-/// One service fee per peer-to-peer deal, withheld from the USDT leg and collected later.
+/// One service fee per peer-to-peer deal, withheld from the stablecoin leg and collected later.
 pub(crate) const P2P_FEE_VERSION: &str = "p2p-3pct-v1";
 pub(crate) const P2P_FEE_RATE: &str = "0.03";
 pub(crate) const P2P_FEE_PRECISION: u32 = 6;
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub(crate) enum Stablecoin {
+    #[default]
+    Usdt,
+    Usdc,
+}
+impl Stablecoin {
+    pub(crate) fn symbol(self) -> &'static str {
+        match self {
+            Self::Usdt => "USDT",
+            Self::Usdc => "USDC",
+        }
+    }
+    pub(crate) fn contract(self) -> &'static str {
+        match self {
+            Self::Usdt => super::config::USDT,
+            Self::Usdc => super::config::USDC,
+        }
+    }
+    pub(crate) fn from_terms(terms: &Value) -> Result<Self> {
+        Ok(match terms.get("stablecoin").and_then(Value::as_str) {
+            None | Some("USDT") => Self::Usdt,
+            Some("USDC") => Self::Usdc,
+            _ => return Err(invalid("unsupported offer token")),
+        })
+    }
+}
 /// The public chart polls `/offers/history` every few seconds, so the feed is
 /// bounded by rows rather than by how many advertisements an account may post.
 const MAX_HISTORY_ROWS: i64 = 500;
 
-/// Fee policy for a USDT basis in its six-decimal units. Rounding up matches
+/// Fee policy for a stablecoin basis in its six-decimal units. Rounding up matches
 /// `amount::fee()`: the service never keeps less than three percent.
 pub(crate) fn fee_policy(basis: u128) -> Value {
     let fee = basis.saturating_mul(3).saturating_add(99) / 100;
@@ -38,6 +66,8 @@ pub(crate) fn fee_policy(basis: u128) -> Value {
 pub(crate) struct PublicOfferDraft {
     #[serde(default = "legacy_sell_direction")]
     pub direction: Direction,
+    #[serde(default)]
+    pub stablecoin: Stablecoin,
     pub ever_amount: String,
     pub usdt_amount: String,
     pub usdt_address: String,
@@ -47,10 +77,22 @@ fn legacy_sell_direction() -> Direction {
 }
 impl PublicOfferDraft {
     fn terms(&self, cfg: &super::config::Config) -> Result<Value> {
+        if !cfg.p2p_offers_mainnet() {
+            return Err(invalid(
+                "public offers support ERC-20 tokens on Ethereum mainnet only",
+            ));
+        }
+        if self.stablecoin == Stablecoin::Usdt && cfg.p2p_usdt() != self.stablecoin.contract() {
+            return Err(invalid(
+                "Ethereum mainnet must use the canonical USDT contract",
+            ));
+        }
         let ever = amount::units(&self.ever_amount, 9)?;
         let usdt = amount::units(&self.usdt_amount, 6)?;
         if ever > MAX_EVER_OFFER_UNITS {
-            return Err(invalid("EVER offer amount exceeds the 1,000,000,000,000 EVER limit"));
+            return Err(invalid(
+                "EVER offer amount exceeds the 1,000,000,000,000 EVER limit",
+            ));
         }
         if usdt > MAX_USDT_OFFER_UNITS {
             return Err(invalid("USDT offer total exceeds the 1,000,000 USDT limit"));
@@ -61,10 +103,12 @@ impl PublicOfferDraft {
         }
         Ok(json!({
             "direction":self.direction, "ever_amount":amount::decimal(ever,9),
+            "stablecoin":self.stablecoin.symbol(),
             "usdt_amount":amount::decimal(usdt,6), "ever_units":ever.to_string(),
             "usdt_units":usdt.to_string(), "usdt_address":recipient,
-            "ever_network_id":42, "ethereum_chain_id":cfg.p2p_chain(),
-            "usdt_contract":cfg.p2p_usdt(), "fee_policy":fee_policy(usdt),
+            "ever_network_id":42, "ethereum_chain_id":1,
+            "usdt_contract":self.stablecoin.contract(),
+            "stablecoin_contract":self.stablecoin.contract(), "fee_policy":fee_policy(usdt),
         }))
     }
 }
@@ -85,6 +129,7 @@ impl Service {
     pub fn public_offers_available(&self) -> bool {
         self.cfg.public_offers_enabled
             && !self.cfg.demo
+            && self.cfg.p2p_offers_mainnet()
             && self.wallet_login_available()
             && self.wallet_login_chain_available("everscale")
     }
@@ -92,7 +137,7 @@ impl Service {
         let client = self.pool.get().await?;
         let rows = match owner {
             Some(actor) => client.query("SELECT * FROM otc_public_offers WHERE actor=$1 ORDER BY created_at DESC LIMIT 100", &[&actor]).await?,
-            None => client.query("SELECT * FROM otc_public_offers WHERE state='open' AND expires_at>now() ORDER BY created_at DESC LIMIT 100", &[]).await?,
+            None => client.query("SELECT * FROM otc_public_offers WHERE state='open' AND expires_at>now() AND body->>'ethereum_chain_id'='1' AND COALESCE(body->>'stablecoin_contract',body->>'usdt_contract') IN ($1,$2) ORDER BY created_at DESC LIMIT 100", &[&super::config::USDT,&super::config::USDC]).await?,
         };
         Ok(Value::Array(rows.iter().map(offer).collect()))
     }
@@ -120,6 +165,7 @@ impl Service {
                             "direction": terms.get("direction").cloned().unwrap_or(json!("sell")),
                             "ever_amount": terms.get("ever_amount").cloned().unwrap_or(Value::Null),
                             "usdt_amount": terms.get("usdt_amount").cloned().unwrap_or(Value::Null),
+                            "stablecoin": terms.get("stablecoin").cloned().unwrap_or(json!("USDT")),
                         }
                     })
                 })
@@ -178,6 +224,7 @@ mod tests {
     fn draft() -> PublicOfferDraft {
         PublicOfferDraft {
             direction: Direction::Sell,
+            stablecoin: Stablecoin::Usdt,
             ever_amount: "250".into(),
             usdt_amount: "5".into(),
             usdt_address: format!("0x{}", "a".repeat(40)),
@@ -204,7 +251,10 @@ mod tests {
         }
         let mut item = draft();
         item.ever_amount = "1000000000000".into();
-        assert_eq!(item.terms(&cfg).unwrap()["ever_units"], "1000000000000000000000");
+        assert_eq!(
+            item.terms(&cfg).unwrap()["ever_units"],
+            "1000000000000000000000"
+        );
         for value in ["0", "-1", "0.0000001", "1000001"] {
             let mut item = draft();
             item.usdt_amount = value.into();
@@ -235,11 +285,7 @@ mod tests {
 
     #[test]
     fn buy_and_legacy_sell_directions_are_explicit_and_strict() {
-        let cfg = super::super::config::Config {
-            ethereum_chain_id: 11155111,
-            usdt_contract: format!("0x{}", "c".repeat(40)),
-            ..Default::default()
-        };
+        let cfg = super::super::config::Config::default();
         let body = json!({"ever_amount":"100","usdt_amount":"11.889","usdt_address":format!("0x{}","b".repeat(40))});
         let legacy: PublicOfferDraft = serde_json::from_value(body.clone()).unwrap();
         assert_eq!(legacy.terms(&cfg).unwrap()["direction"], "sell");
@@ -247,14 +293,32 @@ mod tests {
         buy["direction"] = json!("buy");
         let buy: PublicOfferDraft = serde_json::from_value(buy).unwrap();
         assert_eq!(buy.terms(&cfg).unwrap()["direction"], "buy");
-        assert_eq!(buy.terms(&cfg).unwrap()["ethereum_chain_id"], 11155111);
+        assert_eq!(buy.terms(&cfg).unwrap()["ethereum_chain_id"], 1);
         assert_eq!(
             buy.terms(&cfg).unwrap()["usdt_contract"],
-            format!("0x{}", "c".repeat(40))
+            super::super::config::USDT
+        );
+        let mut usdc = body.clone();
+        usdc["stablecoin"] = json!("USDC");
+        let usdc: PublicOfferDraft = serde_json::from_value(usdc).unwrap();
+        assert_eq!(usdc.terms(&cfg).unwrap()["stablecoin"], "USDC");
+        assert_eq!(
+            usdc.terms(&cfg).unwrap()["stablecoin_contract"],
+            super::super::config::USDC
         );
         let mut invalid = body;
         invalid["direction"] = json!("anything");
         assert!(serde_json::from_value::<PublicOfferDraft>(invalid).is_err());
+    }
+
+    #[test]
+    fn offers_reject_sepolia_even_when_the_peer_contour_is_configured_for_it() {
+        let cfg = super::super::config::Config {
+            p2p_ethereum_chain_id: Some(11155111),
+            p2p_usdt_contract: Some(format!("0x{}", "c".repeat(40))),
+            ..Default::default()
+        };
+        assert!(draft().terms(&cfg).is_err());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

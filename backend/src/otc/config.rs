@@ -2,6 +2,7 @@ use super::error::{invalid, Error, Result};
 use serde::{Deserialize, Serialize};
 
 pub(crate) const USDT: &str = "0xdac17f958d2ee523a2206206994597c13d831ec7";
+pub(crate) const USDC: &str = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 pub(crate) const PROFILE: &str = "pay3flow-otc-fep0837-v1";
 fn default_evm_chain() -> u64 {
     1
@@ -26,8 +27,7 @@ pub(crate) struct Config {
     pub usdt_contract: String,
     #[serde(default = "default_ever_fee_reserve")]
     pub p2p_ever_fee_reserve: String,
-    /// Peer settlement network. Defaults to the desk network when unset, so a
-    /// deployment can trade offers on a testnet while the desk keeps mainnet.
+    /// Peer settlement network. Public offers are restricted to Ethereum mainnet.
     #[serde(default)]
     pub p2p_ethereum_chain_id: Option<u64>,
     #[serde(default)]
@@ -168,6 +168,9 @@ impl Config {
         self.p2p_usdt_contract
             .as_deref()
             .unwrap_or(&self.usdt_contract)
+    }
+    pub fn p2p_offers_mainnet(&self) -> bool {
+        self.p2p_chain() == 1 && self.p2p_usdt() == USDT
     }
     pub fn p2p_rpc(&self) -> &[String] {
         if self.p2p_ethereum_rpc.is_empty() {

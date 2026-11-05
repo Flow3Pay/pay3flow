@@ -74,7 +74,7 @@ async function setup(page: Page, options: { signedIn?: boolean; lostResponse?: b
       if (lost) { lost = false; status = 503; response = { error: "Publication response lost" }; }
     } else if (path === "/offers") { response = offers.filter(offer => offer.state === "open"); if (options.failPublicRefresh && offers.length) { status=503;response={error:"Public offer refresh unavailable"};} }
     else if (path === "/offers/mine") { response = offers; if (options.failPrivateRefresh) {status=503;response={error:"Private offer list unavailable"};} }
-    else if (path === "/offers/history") { response = offers.map(({id,created_at,terms}) => ({id,created_at,terms:{direction:terms.direction || "sell",ever_amount:terms.ever_amount,usdt_amount:terms.usdt_amount}})); }
+    else if (path === "/offers/history") { response = offers.map(({id,created_at,terms}) => ({id,created_at,terms:{direction:terms.direction || "sell",stablecoin:terms.stablecoin || "USDT",ever_amount:terms.ever_amount,usdt_amount:terms.usdt_amount}})); }
     else if (path.endsWith("/cancel")) { response = offers.find(offer => path.includes(offer.id)); response.state = "cancelled"; }
     await route.fulfill({ status, json: response });
   });
@@ -116,7 +116,7 @@ test("seller signs in with EVER alone and publishes, restores, and cancels a rea
   await expect(page.getByTestId("otc-public-offer")).toContainText("10.000000001");
   await expect(page.getByTestId("otc-public-offer")).toContainText("1.000001");
   expect(f.calls.find(call => call.path === "/session/challenge")?.body.chain).toBe("everscale");
-  expect(f.calls.find(call => call.path === "/offers" && call.method === "POST")?.body).toEqual({ direction:"sell", ever_amount: "10.000000001", usdt_amount: "1.000001", usdt_address: eth });
+  expect(f.calls.find(call => call.path === "/offers" && call.method === "POST")?.body).toEqual({ direction:"sell", stablecoin:"USDT", ever_amount: "10.000000001", usdt_amount: "1.000001", usdt_address: eth });
   expect(f.calls.some(call => /rfqs|attempts|prepare|decision/.test(call.path))).toBe(false);
   expect(await page.evaluate(() => (window as any).everCalls)).toContain("signData");
   expect(await page.evaluate(() => (window as any).everCalls)).not.toContain("sendMessage");
@@ -141,6 +141,28 @@ test("market price hint fills the USDT total and toggles a live rate", async ({ 
   await expect(page.getByTestId("otc-offer-price")).toHaveJSProperty("readOnly", false);
   await page.getByTestId("otc-offer-price").fill("0.2");
   await expect(page.getByTestId("otc-offer-usdt")).toHaveValue("20000");
+});
+
+test("the searchable token picker publishes USDC only on Ethereum ERC-20 and keeps its identity through P2P", async ({ page }) => {
+  const f = await setup(page, { signedIn: true });
+  await fill(page);
+  await page.getByTestId("otc-stablecoin-select").click();
+  const picker = page.getByTestId("otc-stablecoin-picker");
+  await expect(picker).toBeVisible();
+  await picker.getByLabel("Search tokens").fill("USD Coin");
+  await expect(picker.getByTestId("otc-stablecoin-usdt")).toHaveCount(0);
+  await picker.getByTestId("otc-stablecoin-usdc").click();
+  await expect(page.getByTestId("otc-stablecoin-select")).toContainText("USDC");
+  await page.getByTestId("otc-publish-offer").click();
+  await expect(page.getByTestId("otc-offer-review")).toContainText("1.000001 USDC");
+  await expect(page.getByTestId("otc-offer-review")).toContainText("USDC / EVER");
+  await page.getByTestId("otc-offer-publish").click();
+  expect(f.calls.find(call => call.path === "/offers" && call.method === "POST")?.body).toEqual({
+    direction: "sell", stablecoin: "USDC", ever_amount: "10.000000001", usdt_amount: "1.000001", usdt_address: eth,
+  });
+  await expect(page.getByTestId("otc-public-offer")).toContainText("USDC");
+  await page.getByTestId("otc-offer-take").click();
+  await expect(page.getByRole("dialog", { name: "Offer details" })).toContainText("USDC receiving wallet");
 });
 
 test("USD input converts the EVER amount and shows the token value", async ({ page }) => {
@@ -204,6 +226,29 @@ test("a P2P deal opens as a modal with both wallets and one confirmation", async
   await expect(modal.getByTestId("otc-p2p-confirm")).toBeEnabled();
   await expect(modal.getByTestId("otc-p2p-confirm")).toHaveText("Confirm");
   await expect(page.locator(".deals, otc-p2p-deal")).toHaveCount(0);
+});
+
+test("P2P deal details identify USDC as the ERC-20 payment leg", async ({ page }) => {
+  const deal = {
+    id: "usdc-deal", offer_id: "usdc-offer", state: "delivery_pending", role: "owner",
+    counterparty: "https://relay.example/actors/taker",
+    terms: {
+      direction: "sell", stablecoin: "USDC", ever_amount: "100", usdt_amount: "11.889",
+      ever_units: "100000000000", usdt_units: "11889000",
+      usdt_payer: `0x${"c".repeat(40)}`, usdt_payee: eth,
+      ever_payer: ever, ever_payee: `0:${"c".repeat(64)}`,
+    },
+    my_leg: "payout", counterparty_leg: "payment",
+    my_ever: ever, counterparty_ever: `0:${"c".repeat(64)}`,
+    my_confirmed: false, counterparty_confirmed: true,
+    owner_confirmed: false, taker_confirmed: true,
+    pay_by: "2099-01-01T00:00:00Z", payout_by: "2099-01-01T00:00:00Z",
+    created_at: new Date().toISOString(), attempts: [],
+  };
+  await setup(page, { signedIn: true, verifiedEthereum: true, deals: [deal] });
+  const modal = page.getByTestId("otc-p2p-modal");
+  await expect(modal).toContainText("11.889 USDC");
+  await expect(modal.getByTestId("otc-p2p-legs")).toContainText("11.889 USDC");
 });
 
 test("the delivery button names the EVER leg instead of a generic confirmation", async ({ page }) => {
@@ -345,7 +390,7 @@ for (const direction of ["buy","sell"] as const) test(`price and amount publish 
   await expect(offer).toContainText("0.11889");
   await expect(offer).toContainText("100");
   await expect(offer).toContainText("11.889");
-  expect(f.calls.find(c=>c.path === "/offers" && c.method === "POST")?.body).toEqual({direction,ever_amount:"100",usdt_amount:"11.889",usdt_address:eth});
+  expect(f.calls.find(c=>c.path === "/offers" && c.method === "POST")?.body).toEqual({direction,stablecoin:"USDT",ever_amount:"100",usdt_amount:"11.889",usdt_address:eth});
   await offer.getByTestId("otc-offer-take").click();
   await page.getByRole("button",{name:"Cancel offer",exact:true}).click();
   await expect(page.locator(".bookColumn").getByTestId("otc-public-offer")).toHaveCount(0);
@@ -416,7 +461,7 @@ for (const direction of ["buy","sell"] as const) test(`HEX-style ${direction} qu
   await expect(row).toContainText("2.05");
   await expect(page.getByTestId("otc-chart-price")).toHaveText("0.205 $");
   await expect(page.locator(".chartColumn .marketChart")).toHaveAttribute("data-points", "1");
-  expect(f.calls.find(c=>c.method === "POST" && c.path === "/offers")?.body).toEqual({direction,ever_amount:"10",usdt_amount:"2.05",usdt_address:eth});
+  expect(f.calls.find(c=>c.method === "POST" && c.path === "/offers")?.body).toEqual({direction,stablecoin:"USDT",ever_amount:"10",usdt_amount:"2.05",usdt_address:eth});
   await page.reload();
   await expect(page.locator(".bookColumn").getByTestId("otc-book-price")).toHaveText("0.205");
   await expect(page.getByTestId("otc-chart-price")).toHaveText("0.205 $");

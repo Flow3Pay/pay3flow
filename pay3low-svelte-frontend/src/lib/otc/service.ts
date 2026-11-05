@@ -18,11 +18,11 @@ export interface Trade { created_at?: string; id: string; rfq_id: string; state:
 export interface Rfq { created_at?: string; id: string; direction: Direction; input: string; actor: string; state: string }
 export interface Attempt { id: string; kind: string; state: string; instructions: Instructions; reference: string | null }
 interface Instructions {
-  escrow?: boolean; expires_at?: string; trade_id?: string; submit_path?: string;
+  escrow?: boolean; expires_at?: string; trade_id?: string; submit_path?: string; stablecoin?: "USDT" | "USDC";
   leg: { chain: string; sender: string; recipient: string; amount: string; transfer_amount: string };
   call: { family: string; chain_id?: number; from?: string; to?: string; data?: string; value?: string; nonce?: string; sender?: string; recipient?: string; amount?: string; bounce?: boolean };
 }
-export interface Config { public_offers_available?: boolean; public_offer_directions?: Direction[]; everscale_multisig_available?: boolean; p2p_available?: boolean; ethereum_chain_id?: number; usdt_contract?: string; usdt_network?: string; p2p_ethereum_chain_id?: number; p2p_usdt_contract?: string; p2p_usdt_network?: string; escrow?: import("./escrow").EscrowPolicy | null; enabled: boolean; wallet_login_available?: boolean; wallet_login_chains?: ("ethereum" | "everscale")[]; wallet_verification_days?: number; available: boolean; demo: boolean; desk: string; desk_name: string; ever_resource: string; usdt_resource: string; counterparty_risk: string; support_owner: string }
+export interface Config { public_offers_available?: boolean; public_offer_directions?: Direction[]; everscale_multisig_available?: boolean; p2p_available?: boolean; ethereum_chain_id?: number; usdt_contract?: string; usdc_contract?: string; usdt_network?: string; p2p_ethereum_chain_id?: number; p2p_usdt_contract?: string; p2p_usdc_contract?: string; p2p_usdt_network?: string; escrow?: import("./escrow").EscrowPolicy | null; enabled: boolean; wallet_login_available?: boolean; wallet_login_chains?: ("ethereum" | "everscale")[]; wallet_verification_days?: number; available: boolean; demo: boolean; desk: string; desk_name: string; ever_resource: string; usdt_resource: string; counterparty_risk: string; support_owner: string }
 export type LoginChain = "ethereum" | "everscale";
 export interface VerifiedWallet { chain: LoginChain; address: string; verified_at: string; avatar?: string }
 export interface Session { token: string; actor: string; desk: boolean; expires_at: string; signing_wallet: { chain: LoginChain; address: string } | null; wallets: VerifiedWallet[] }

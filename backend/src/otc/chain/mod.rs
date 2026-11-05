@@ -19,7 +19,7 @@ pub(crate) fn number(value: &Value) -> Result<u128> {
         value.parse().map_err(|_| invalid("invalid chain amount"))
     }
 }
-/// One Ethereum contour: the RPC pair that reads it and the USDT token on it.
+/// One Ethereum contour: the RPC pair that reads it and its ERC-20 token.
 /// The desk and peer settlement may point at different networks.
 #[derive(Clone)]
 pub(crate) struct EvmNet {
@@ -33,6 +33,13 @@ impl Service {
             rpcs: self.cfg.ethereum_rpc.clone(),
             chain_id: self.cfg.ethereum_chain_id,
             usdt: self.cfg.usdt_contract.clone(),
+        }
+    }
+    pub(crate) fn p2p_evm(&self) -> EvmNet {
+        EvmNet {
+            rpcs: self.cfg.p2p_rpc().to_vec(),
+            chain_id: self.cfg.p2p_chain(),
+            usdt: self.cfg.p2p_usdt().to_string(),
         }
     }
     async fn evm_read(&self, url: &str, method: &str, params: Value) -> Result<Value> {

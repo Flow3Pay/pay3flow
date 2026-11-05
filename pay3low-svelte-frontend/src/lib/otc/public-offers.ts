@@ -1,5 +1,9 @@
 import type { Direction } from "./service";
 
+export type Stablecoin = "USDT" | "USDC";
+export const offerStablecoin = (offer: Pick<PublicOffer, "terms">): Stablecoin =>
+  offer.terms.stablecoin === "USDC" ? "USDC" : "USDT";
+
 export interface PublicOffer {
   id: string;
   seller_ever: string;
@@ -9,8 +13,8 @@ export interface PublicOffer {
   created_at?: string;
   expires_at: string;
   terms: {
-    direction?: Direction; ever_amount: string; usdt_amount: string; usdt_address: string;
-    ethereum_chain_id?: number; usdt_contract?: string;
+    direction?: Direction; stablecoin?: Stablecoin; ever_amount: string; usdt_amount: string; usdt_address: string;
+    ethereum_chain_id?: number; usdt_contract?: string; stablecoin_contract?: string;
   };
 }
 
@@ -18,7 +22,7 @@ export interface PublicOffer {
 export interface OfferHistoryPoint {
   id: string;
   created_at: string;
-  terms: { direction: Direction; ever_amount: string; usdt_amount: string };
+  terms: { direction: Direction; stablecoin?: Stablecoin; ever_amount: string; usdt_amount: string };
 }
 
 export { offerDecimal, offerTotal, offerEver, offerUnits, offerFloored, balanceUnits, offerShortfall, marketUsdtPerEver, marketUsdPerEver, everFromUsd, p2pFeeSplit, MAX_OFFER_EVER_UNITS, MAX_OFFER_USDT_UNITS, saleRate, compareOfferRates } from "./offer-amount";
@@ -28,6 +32,7 @@ export const offerOwner = (offer: PublicOffer): string => offer.owner_ever || of
 
 export interface SaleTicketState {
   direction: Direction;
+  stablecoin: Stablecoin;
   price: string;
   priceRounded: boolean;
   roundingAsset: "USDT" | "EVER" | null;
@@ -54,6 +59,7 @@ export interface SaleTicketState {
   onPrice: (value: string) => void;
   onEver: (value: string) => void;
   onUsdt: (value: string) => void;
+  onStablecoin: (value: Stablecoin) => void;
   onAddress: (value: string) => void;
   onUseEthereum: () => void;
   onMarketPrice: (checked: boolean) => void;

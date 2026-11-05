@@ -62,7 +62,7 @@
   $: deal = deals.find(item => item.id === selectedId) || null;
   $: action = deal ? p2pAction(deal) : null;
   $: actionKind = deal ? p2pKind(deal) : null;
-  $: actionAsset = actionKind ? p2pLegAsset(actionKind) : "";
+  $: actionAsset = actionKind ? p2pLegAsset(actionKind, deal?.terms.stablecoin) : "";
   $: actionLabel = action === "retry"
     ? actionAsset ? say(`Retry ${actionAsset}`, `Повторить ${actionAsset}`) : say("Retry", "Повторить")
     : action === "send"
@@ -344,7 +344,7 @@
       <div class="dealAmount">
         <strong>{deal.terms.ever_amount}</strong><small>EVER</small>
         <span>·</span>
-        <strong>{deal.terms.usdt_amount}</strong><small>USDT</small>
+        <strong>{deal.terms.usdt_amount}</strong><small>{deal.terms.stablecoin || "USDT"}</small>
       </div>
       <button type="button" class="closeButton" aria-label={say("Close", "Закрыть")} on:click={close}>
         <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
@@ -374,7 +374,7 @@
 
     <div class="flow" class:active={flowActive} class:done={paymentDone && payoutDone}>
       <span class="token usdt" class:done={paymentDone} class:active={p2pLegActive(deal, "payment")} class:failed={p2pLegFailed(deal, "payment")}>
-        <img src="/icons/assets/usdt.png" alt="" width="24" height="24" />
+        <img src={deal.terms.stablecoin === "USDC" ? "/icons/assets/usdc.png" : "/icons/assets/usdt.png"} alt="" width="24" height="24" />
         <b>{deal.terms.usdt_amount}</b>
       </span>
       <span class="rail" aria-hidden="true"><span></span></span>

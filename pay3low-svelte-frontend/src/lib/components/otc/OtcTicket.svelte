@@ -2,6 +2,7 @@
   import { tick } from "svelte";
   import ExchangeFlowBridge from "../ExchangeFlowBridge.svelte";
   import OtcOfferReview from "./OtcOfferReview.svelte";
+  import OtcStablecoinPicker from "./OtcStablecoinPicker.svelte";
   import { locale } from "$lib/i18n";
   import { networkIcon } from "$lib/icons";
   import { otcCopy } from "$lib/otc/copy";
@@ -22,7 +23,7 @@
   $: copy = otcCopy($locale);
   $: say = (en: string, ru: string) => $locale === "ru" ? ru : en;
   $: sendAsset = sale ? "EVER" : direction === "buy" ? "USDT" : "EVER";
-  $: receiveAsset = sale ? "USDT" : direction === "buy" ? "EVER" : "USDT";
+  $: receiveAsset = sale ? sale.stablecoin : direction === "buy" ? "EVER" : "USDT";
   $: sendValue = sale ? sale.everAmount : input;
   $: receiveValue = sale ? sale.usdtAmount : quote?.terms.output || "";
   let usdMode = false, usdEntry = "", sendFocused = false;
@@ -35,7 +36,7 @@
     : sendValue;
   $: sendShort = sale?.shortfall === "ever";
   $: receiveShort = sale?.shortfall === "usdt";
-  $: shortfallNote = (asset: "EVER" | "USDT") => {
+  $: shortfallNote = (asset: "EVER" | "USDT" | "USDC") => {
     const available = sale?.fundedBalance ? say(` — available ${sale.fundedBalance} ${asset}`, ` — доступно ${sale.fundedBalance} ${asset}`) : "";
     return say(`Not enough ${asset} in your wallet${available}. You can still publish the offer.`, `Недостаточно ${asset} на кошельке${available}. Опубликовать предложение всё равно можно.`);
   };
@@ -94,7 +95,7 @@
     <span class="assetNetwork"><span class="assetDot" aria-hidden="true"><img src={networkIcon(networkName)} alt="" width="18" height="18" /></span><span class="assetCopy"><strong>{networkName}</strong></span></span>
   </div>
 {/snippet}
-{#snippet shortfallMark(asset: "EVER" | "USDT")}
+{#snippet shortfallMark(asset: "EVER" | "USDT" | "USDC")}
   <button type="button" class="shortfallMark" data-testid="otc-shortfall-warning" data-tooltip={shortfallNote(asset)} aria-label={shortfallNote(asset)}>
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M12 9V14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
@@ -113,7 +114,7 @@
         {#if settingsOpen}
           <div class="settingsPanel" role="dialog" aria-label={say("Offer settings", "Настройки предложения")} tabindex="-1">
             <div class="settingsPanelHead"><strong>{say("Offer settings", "Настройки предложения")}</strong><button type="button" class="settingsClose" aria-label={say("Close settings", "Закрыть настройки")} on:click={() => closeSettings(true)}>×</button></div>
-            <label class="recipientField">{direction === "buy" ? say("Your Ethereum address for paying USDT", "Ваш Ethereum-адрес для оплаты USDT") : say("Your Ethereum address for receiving USDT", "Ваш Ethereum-адрес для получения USDT")}<input bind:this={settingsInput} data-testid="otc-offer-recipient" value={sale.receivingAddress} on:input={(event) => sale?.onAddress(event.currentTarget.value)} autocomplete="off" spellcheck="false" placeholder="0x…" disabled={busy} /></label>
+            <label class="recipientField">{direction === "buy" ? say(`Your Ethereum address for paying ${sale.stablecoin}`, `Ваш Ethereum-адрес для оплаты ${sale.stablecoin}`) : say(`Your Ethereum address for receiving ${sale.stablecoin}`, `Ваш Ethereum-адрес для получения ${sale.stablecoin}`)}<input bind:this={settingsInput} data-testid="otc-offer-recipient" value={sale.receivingAddress} on:input={(event) => sale?.onAddress(event.currentTarget.value)} autocomplete="off" spellcheck="false" placeholder="0x…" disabled={busy} /></label>
             <button class="walletAddress" type="button" disabled={busy || sale.linkingEvm} on:click={sale.onUseEthereum}>{sale.linkingEvm ? say("Connecting…", "Подключаем…") : say("Use my Ethereum wallet address", "Использовать адрес моего Ethereum-кошелька")}</button>
           </div>
         {/if}
@@ -123,11 +124,11 @@
   <div class="moneyStack">
   <div class="moneyPanel exchangeMoneyPanel"><div class="panelTop">{@render asset(sendAsset)}</div><div class="panelCopy"><label for="otc-input">{sale ? direction === "buy" ? say(usdMode ? "Buy amount · USD" : "Buy amount · EVER", usdMode ? "Количество к покупке · USD" : "Количество к покупке · EVER") : say(usdMode ? "Sell amount · USD" : "Sell amount · EVER", usdMode ? "Количество к продаже · USD" : "Количество к продаже · EVER") : say(`You send · ${sendAsset} on ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы отправляете · ${sendAsset} · ${sendAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><div class="amountRow"><input id="otc-input" class="amountInput" class:shortfall={sendShort} type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value={displayedSendValue} data-testid={sale ? "otc-offer-ever" : undefined} disabled={busy} on:input={(event) => changeSend(event.currentTarget.value)} on:focus={focusSend} on:blur={blurSend} />{#if sendShort}{@render shortfallMark("EVER")}{/if}</div>{#if sale}<div class="marketMeta"><span class="marketValue" data-testid="otc-market-value" aria-label={usdMode && usdAvailable ? say("Approximate EVER amount", "Примерная сумма в EVER") : say("Approximate USD market value", "Примерная рыночная стоимость в долларах")}>{usdMode && usdAvailable ? formatTokenMarketValue(Number(sale.everAmount), "EVER") : formatUsdMarketValue(Number(usdValue))}</span><button type="button" class="usdToggle" class:usdToggleActive={usdMode} aria-pressed={usdMode} disabled={!usdAvailable || busy} title={say("Switch amount between USD and EVER", "Переключить сумму между USD и EVER")} aria-label={say("Switch amount between USD and EVER", "Переключить сумму между USD и EVER")} on:click={toggleUsd}>USD</button>{#if maxBalance}<button type="button" class="usdToggle" class:usdToggleActive={maxActive} data-testid="otc-amount-max" aria-pressed={maxActive} disabled={busy} title={maxActive ? say("Clear the amount", "Сбросить сумму") : say("Use the whole available balance", "Внести весь доступный баланс")} aria-label={maxActive ? say("Clear the amount", "Сбросить сумму") : say("Use the whole available balance", "Внести весь доступный баланс")} on:click={applyMax}>{say("Max", "Макс")}</button>{/if}</div>{/if}</div></div>
   <ExchangeFlowBridge overlay reversed={direction === "sell"} onSwap={() => { if (!busy) onDirection(direction === "buy" ? "sell" : "buy"); }} label={`${copy.buy} / ${copy.sell}`} />
-  <div class="moneyPanel exchangeMoneyPanel"><div class="panelTop">{@render asset(receiveAsset)}</div><div class="panelCopy"><label for="otc-receive">{sale ? direction === "buy" ? say("Total to pay · USDT", "Всего к оплате · USDT") : say("Total to receive · USDT", "Всего к получению · USDT") : say(`You receive · ${receiveAsset} on ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы получаете · ${receiveAsset} · ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><div class="amountRow"><input id="otc-receive" class="amountInput amountOutput" class:shortfall={receiveShort} readonly={!sale} value={receiveValue} data-testid={sale ? "otc-offer-usdt" : undefined} disabled={busy} inputmode="decimal" autocomplete="off" on:input={(event) => changeReceive(event.currentTarget.value)} placeholder={sale?.marketApprox ? `≈ ${sale.marketApprox}` : "—"} />{#if receiveShort}{@render shortfallMark("USDT")}{/if}</div></div></div>
+  <div class="moneyPanel exchangeMoneyPanel"><div class="panelTop">{#if sale}<OtcStablecoinPicker selected={sale.stablecoin} onSelect={sale.onStablecoin} />{:else}{@render asset(receiveAsset)}{/if}</div><div class="panelCopy"><label for="otc-receive">{sale ? direction === "buy" ? say(`Total to pay · ${sale.stablecoin}`, `Всего к оплате · ${sale.stablecoin}`) : say(`Total to receive · ${sale.stablecoin}`, `Всего к получению · ${sale.stablecoin}`) : say(`You receive · ${receiveAsset} on ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`, `Вы получаете · ${receiveAsset} · ${receiveAsset === "EVER" ? "Everscale" : "Ethereum"}`)}</label><div class="amountRow"><input id="otc-receive" class="amountInput amountOutput" class:shortfall={receiveShort} readonly={!sale} value={receiveValue} data-testid={sale ? "otc-offer-usdt" : undefined} disabled={busy} inputmode="decimal" autocomplete="off" on:input={(event) => changeReceive(event.currentTarget.value)} placeholder={sale?.marketApprox ? `≈ ${sale.marketApprox}` : "—"} />{#if receiveShort}{@render shortfallMark(sale?.stablecoin || "USDT")}{/if}</div></div></div>
   </div>
   <div class="priceField">
     <div class="priceHead">
-      <span>{copy.price} · USDT / EVER</span>
+      <span>{copy.price} · {sale?.stablecoin || "USDT"} / EVER</span>
       {#if sale}
         <label class="marketToggle">
           <input type="checkbox" checked={sale.marketPrice} disabled={busy || !sale.marketRate} on:change={(event) => sale.onMarketPrice(event.currentTarget.checked)} />
@@ -135,12 +136,12 @@
         </label>
       {/if}
     </div>
-    <div class="priceFieldRow"><input aria-label={copy.price} readonly={!sale || sale.marketPrice} value={sale ? sale.price : quote ? rate(quote.terms) : "—"} data-testid={sale ? "otc-offer-price" : undefined} disabled={busy} inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="—" on:input={(event) => sale?.onPrice(event.currentTarget.value)} /><span>USDT</span></div>
+    <div class="priceFieldRow"><input aria-label={copy.price} readonly={!sale || sale.marketPrice} value={sale ? sale.price : quote ? rate(quote.terms) : "—"} data-testid={sale ? "otc-offer-price" : undefined} disabled={busy} inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="—" on:input={(event) => sale?.onPrice(event.currentTarget.value)} /><span>{sale?.stablecoin || "USDT"}</span></div>
   </div>
   {#if sale}
-    {#if sale.priceRounded}<p class="priceHint">{sale.roundingAsset === "EVER" ? say("The EVER amount is rounded down to 9 decimals. Review the exact amounts before publishing.", "Сумма EVER округлена вниз до 9 знаков. Проверьте точные суммы перед публикацией.") : say("The total is rounded down to 6 USDT decimal places. Review the exact amount before publishing.", "Общая сумма округлена вниз до 6 знаков USDT. Проверьте точную сумму перед публикацией.")}</p>{/if}
-    {#if sale.amountFloored}<p class="priceHint">{sale.amountFloored === "EVER" ? say("EVER has 9 decimals, so the extra digits you typed were dropped. Review the exact amount before publishing.", "У EVER 9 знаков после запятой, лишние введённые цифры отброшены. Проверьте точную сумму перед публикацией.") : say("USDT has 6 decimals, so the extra digits you typed were dropped. Review the exact amount before publishing.", "У USDT 6 знаков после запятой, лишние введённые цифры отброшены. Проверьте точную сумму перед публикацией.")}</p>{/if}
-    {#if sale.reviewing && sale.seller}<OtcOfferReview {direction} everAmount={sale.everAmount} usdtAmount={sale.usdtAmount} askingRate={sale.askingRate} seller={sale.seller} receivingAddress={sale.receivingAddress} error={sale.error} busy={busy} onClose={sale.onCloseReview} onPublish={() => sale.onRequest()} />{/if}
+    {#if sale.priceRounded}<p class="priceHint">{sale.roundingAsset === "EVER" ? say("The EVER amount is rounded down to 9 decimals. Review the exact amounts before publishing.", "Сумма EVER округлена вниз до 9 знаков. Проверьте точные суммы перед публикацией.") : say(`The total is rounded down to 6 ${sale.stablecoin} decimal places. Review the exact amount before publishing.`, `Общая сумма округлена вниз до 6 знаков ${sale.stablecoin}. Проверьте точную сумму перед публикацией.`)}</p>{/if}
+    {#if sale.amountFloored}<p class="priceHint">{sale.amountFloored === "EVER" ? say("EVER has 9 decimals, so the extra digits you typed were dropped. Review the exact amount before publishing.", "У EVER 9 знаков после запятой, лишние введённые цифры отброшены. Проверьте точную сумму перед публикацией.") : say(`${sale.stablecoin} has 6 decimals, so the extra digits you typed were dropped. Review the exact amount before publishing.`, `У ${sale.stablecoin} 6 знаков после запятой, лишние введённые цифры отброшены. Проверьте точную сумму перед публикацией.`)}</p>{/if}
+    {#if sale.reviewing && sale.seller}<OtcOfferReview {direction} stablecoin={sale.stablecoin} everAmount={sale.everAmount} usdtAmount={sale.usdtAmount} askingRate={sale.askingRate} seller={sale.seller} receivingAddress={sale.receivingAddress} error={sale.error} busy={busy} onClose={sale.onCloseReview} onPublish={() => sale.onRequest()} />{/if}
   {/if}
   {#if quote}<p class="priceHint">{say("Quote expires", "Котировка истекает")}: {quote.terms.quote_by}</p>{/if}
   {#if status}<p class="priceHint" id="otc-ticket-status" role="status">{status}</p>{/if}
