@@ -16,11 +16,24 @@ CREATE TABLE IF NOT EXISTS anonymous_users (
     id UUID PRIMARY KEY,
     request_count BIGINT NOT NULL DEFAULT 0 CHECK (request_count >= 0),
     first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_session_at TIMESTAMPTZ
 );
+
+ALTER TABLE anonymous_users ADD COLUMN IF NOT EXISTS last_session_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS anonymous_users_last_seen_idx
     ON anonymous_users (last_seen_at DESC);
+
+-- A session starts on the first request and after 30 minutes without activity.
+CREATE TABLE IF NOT EXISTS anonymous_user_sessions (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    anonymous_id UUID NOT NULL REFERENCES anonymous_users(id) ON DELETE CASCADE,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS anonymous_user_sessions_started_at_idx
+    ON anonymous_user_sessions (started_at DESC);
 
 -- Self-heal user tables created before referrals were introduced. Referral
 -- attribution is immutable in application code and may only be set when the

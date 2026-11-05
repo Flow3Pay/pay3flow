@@ -22,6 +22,7 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::new(&cfg.log_filter))
         .init();
+    let telegram = pay3flow_backend::tg::bot::BotNotifier::from_env()?;
 
     let pool = db::build_pool(&cfg.database_url).await?;
     db::apply_schema(&pool).await?;
@@ -231,6 +232,7 @@ async fn main() -> anyhow::Result<()> {
         route_executions,
         market_prices,
         otc,
+        telegram,
     );
 
     // Provider refresh work is paced independently from interactive searches:

@@ -50,6 +50,8 @@ pub struct AppState {
     pub reference_rates: crate::reference_rates::ReferenceRateService,
     /// Durable customer-first OTC settlement.
     pub otc: crate::otc::Service,
+    /// Optional Telegram notifications for new anonymous users.
+    pub telegram: Option<crate::tg::bot::BotNotifier>,
 }
 
 impl AppState {
@@ -73,6 +75,7 @@ impl AppState {
         route_executions: RouteExecutionService,
         market_prices: MarketPriceService,
         otc: crate::otc::Service,
+        telegram: Option<crate::tg::bot::BotNotifier>,
     ) -> Self {
         Self {
             pool,
@@ -94,6 +97,7 @@ impl AppState {
             market_prices,
             reference_rates: crate::reference_rates::ReferenceRateService::default(),
             otc,
+            telegram,
         }
     }
 }

@@ -28,9 +28,12 @@ pub async fn register(
     State(state): State<AppState>,
     Json(request): Json<RegisterRequest>,
 ) -> Result<Json<RegisterResponse>, AppError> {
-    record_request(&state.pool, request.anonymous_id)
+    let is_new = record_request(&state.pool, request.anonymous_id)
         .await
         .map_err(AppError::from)?;
+    if is_new {
+        notify_new_user(&state, request.anonymous_id);
+    }
     Ok(Json(RegisterResponse {
         anonymous_id: request.anonymous_id,
     }))
@@ -38,21 +41,67 @@ pub async fn register(
 
 /// Count one API request for a pseudonymous browser. Unknown IDs are accepted
 /// so a lost registration request cannot make the application request fail.
-pub async fn record_request(pool: &DbPool, anonymous_id: Uuid) -> anyhow::Result<()> {
-    let client = pool.get().await?;
-    client
+pub async fn record_request(pool: &DbPool, anonymous_id: Uuid) -> anyhow::Result<bool> {
+    let mut client = pool.get().await?;
+    let transaction = client.transaction().await?;
+    let is_new = transaction
         .execute(
             r#"
 INSERT INTO anonymous_users (id, request_count)
-VALUES ($1, 1)
-ON CONFLICT (id) DO UPDATE SET
-    request_count = anonymous_users.request_count + 1,
-    last_seen_at = now()
+VALUES ($1, 0)
+ON CONFLICT (id) DO NOTHING
 "#,
             &[&anonymous_id],
         )
+        .await?
+        == 1;
+    let starts_session = transaction
+        .query_one(
+            r#"
+SELECT last_session_at IS NULL
+    OR last_seen_at <= now() - INTERVAL '30 minutes'
+FROM anonymous_users
+WHERE id = $1
+FOR UPDATE
+"#,
+            &[&anonymous_id],
+        )
+        .await?
+        .get::<_, bool>(0);
+    transaction
+        .execute(
+            r#"
+UPDATE anonymous_users
+SET request_count = request_count + 1,
+    last_seen_at = now(),
+    last_session_at = CASE WHEN $2 THEN now() ELSE last_session_at END
+WHERE id = $1
+"#,
+            &[&anonymous_id, &starts_session],
+        )
         .await?;
-    Ok(())
+    if starts_session {
+        transaction
+            .execute(
+                "INSERT INTO anonymous_user_sessions (anonymous_id) VALUES ($1)",
+                &[&anonymous_id],
+            )
+            .await?;
+    }
+    transaction.commit().await?;
+    Ok(is_new)
+}
+
+fn notify_new_user(state: &AppState, anonymous_id: Uuid) {
+    let Some(bot) = state.telegram.clone() else {
+        return;
+    };
+
+    tokio::spawn(async move {
+        if let Err(error) = bot.notify_new_user(anonymous_id).await {
+            tracing::warn!(%error, "Telegram new-user notification failed");
+        }
+    });
 }
 
 pub async fn count_users(pool: &DbPool) -> anyhow::Result<(i64, i64)> {
@@ -67,6 +116,34 @@ pub async fn count_users(pool: &DbPool) -> anyhow::Result<(i64, i64)> {
     Ok((row.get(0), row.get(1)))
 }
 
+pub async fn activity_counts(pool: &DbPool) -> anyhow::Result<(i64, i64, i64, i64)> {
+    let client = pool.get().await?;
+    let row = client
+        .query_one(
+            r#"
+SELECT
+    COUNT(DISTINCT anonymous_id) FILTER (
+        WHERE started_at >= now() - INTERVAL '7 days'
+    )::BIGINT,
+    COUNT(DISTINCT anonymous_id) FILTER (
+        WHERE started_at >= now() - INTERVAL '14 days'
+          AND started_at < now() - INTERVAL '7 days'
+    )::BIGINT,
+    COUNT(*) FILTER (
+        WHERE started_at >= now() - INTERVAL '7 days'
+    )::BIGINT,
+    COUNT(*) FILTER (
+        WHERE started_at >= now() - INTERVAL '14 days'
+          AND started_at < now() - INTERVAL '7 days'
+    )::BIGINT
+FROM anonymous_user_sessions
+"#,
+            &[],
+        )
+        .await?;
+    Ok((row.get(0), row.get(1), row.get(2), row.get(3)))
+}
+
 /// Attach usage accounting to every request carrying the anonymous ID. The
 /// ID is deliberately read only from a client-provided pseudonymous header;
 /// no identifying request metadata is stored.
@@ -77,8 +154,10 @@ pub async fn track_request(
 ) -> Response {
     if request.uri().path() != "/api/anonymous/register" {
         if let Some(anonymous_id) = request_anonymous_id(&request) {
-            if let Err(error) = record_request(&state.pool, anonymous_id).await {
-                tracing::warn!(error = %error, "anonymous request accounting failed");
+            match record_request(&state.pool, anonymous_id).await {
+                Ok(true) => notify_new_user(&state, anonymous_id),
+                Ok(false) => {}
+                Err(error) => tracing::warn!(error = %error, "anonymous request accounting failed"),
             }
         }
     }

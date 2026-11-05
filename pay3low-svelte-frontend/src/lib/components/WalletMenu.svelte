@@ -8,6 +8,7 @@
   import { assetIcon } from "$lib/icons";
   import { wallets, connectWallet, disconnectFamily, restoreWallets } from "$lib/wallet-session";
   import { identiconDataUri } from "$lib/otc/identicon";
+  import { getAnonymousUserId } from "$lib/anonymous-user";
   import type { WalletFamily } from "$lib/wallet-execution";
   import { walletDialogMode, otcWalletDialog, venueWalletMenu, openWalletDialog, closeWalletDialog } from "$lib/wallet-dialog";
   import PickerOptionCard from "./PickerOptionCard.svelte";
@@ -28,6 +29,7 @@
   let dialog: HTMLDivElement;
   let providerHandoff = false;
   let activeChain: "ethereum" | "everscale" | null = null;
+  let anonymousUserId = "";
   $: handoff = providerHandoff || (activeChain === "ethereum" && Boolean(env.PUBLIC_REOWN_PROJECT_ID?.trim()) && account?.progress === "Connecting wallet…");
   $: working = Boolean(busy || account?.busy);
   let motionDuration = 160;
@@ -36,8 +38,7 @@
   let dragStartY = 0;
   let dragDistance = 0;
   $: count = $venueWalletMenu?.count ?? Object.keys($wallets).length;
-  $: avatarAddress = $wallets.everscale?.address || $wallets.evm?.address || $wallets.tron?.address || $wallets.near?.address || "";
-  $: avatar = avatarAddress ? identiconDataUri(avatarAddress) : "";
+  $: avatar = anonymousUserId ? identiconDataUri(anonymousUserId) : "";
   $: terms = query.normalize("NFKC").toLowerCase().trim().split(/\s+/).filter(Boolean);
   $: visibleChoices = choices.filter(choice => {
     const text = `${choice.label} ${choice.network} ${choice.family} ${choice.keywords} ${$wallets[choice.family]?.address ?? ''}`.toLowerCase();
@@ -45,6 +46,7 @@
   });
   $: copy = (key: string, params: Record<string, string | number> = {}) => t(key, params, $locale);
   onMount(() => {
+    anonymousUserId = getAnonymousUserId() ?? "";
     void restoreWallets();
     const media = matchMedia("(prefers-reduced-motion: reduce)");
     const updateMotion = () => motionDuration = media.matches ? 0 : 160;

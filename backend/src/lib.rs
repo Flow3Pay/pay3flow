@@ -33,3 +33,4 @@ pub mod service;
 pub mod service_reputation;
 pub mod trustfile;
 pub mod trustfile_model;
+pub mod tg;

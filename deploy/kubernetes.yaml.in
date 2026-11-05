@@ -105,6 +105,8 @@ stringData:
   SYMBIOSIS_PARTNER_ID: "$PAY3FLOW_SYMBIOSIS_PARTNER_ID"
   ZEROX_API_KEY: "$PAY3FLOW_ZEROX_API_KEY"
   BARTER_API_KEY: "$PAY3FLOW_BARTER_API_KEY"
+  TG_BOT_TOKEN: "$PAY3FLOW_TG_BOT_TOKEN"
+  TG_CHAT_ID: "$PAY3FLOW_TG_CHAT_ID"
   CRYPTO_OFFICE_API_TOKEN: "$PAY3FLOW_CRYPTO_OFFICE_API_TOKEN"
   CRYPTO_OFFICE_PUBLIC_KEY: "$PAY3FLOW_CRYPTO_OFFICE_PUBLIC_KEY"
   CRYPTO_OFFICE_SECRET_KEY: "$PAY3FLOW_CRYPTO_OFFICE_SECRET_KEY"
@@ -355,6 +357,18 @@ spec:
                 secretKeyRef:
                   name: pay3flow-secrets
                   key: BARTER_API_KEY
+            - name: TG_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: pay3flow-secrets
+                  key: TG_BOT_TOKEN
+                  optional: true
+            - name: TG_CHAT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: pay3flow-secrets
+                  key: TG_CHAT_ID
+                  optional: true
                   optional: true
           readinessProbe:
             httpGet:

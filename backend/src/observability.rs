@@ -74,6 +74,10 @@ pub fn render(
     registered_users: i64,
     completed_swaps_last_hour: i64,
     swap_searches_last_hour: i64,
+    active_anonymous_users_last_7_days: i64,
+    active_anonymous_users_previous_7_days: i64,
+    sessions_last_7_days: i64,
+    sessions_previous_7_days: i64,
 ) -> String {
     let metrics = metrics();
     let requests_total = metrics.requests_total.load(Ordering::Relaxed);
@@ -136,6 +140,57 @@ pay3flow_build_info{service=\"backend\"} 1\n\
     );
     let _ = writeln!(output, "pay3flow_anonymous_users_total {anonymous_users}");
 
+    for (name, description, value) in [
+        (
+            "pay3flow_anonymous_users_last_7_days",
+            "Unique anonymous users active in the last 7 days.",
+            active_anonymous_users_last_7_days,
+        ),
+        (
+            "pay3flow_anonymous_users_previous_7_days",
+            "Unique anonymous users active in the preceding 7 days.",
+            active_anonymous_users_previous_7_days,
+        ),
+        (
+            "pay3flow_anonymous_sessions_last_7_days",
+            "Anonymous user sessions started in the last 7 days.",
+            sessions_last_7_days,
+        ),
+        (
+            "pay3flow_anonymous_sessions_previous_7_days",
+            "Anonymous user sessions started in the preceding 7 days.",
+            sessions_previous_7_days,
+        ),
+    ] {
+        let _ = writeln!(
+            output,
+            "# HELP {name} {description}\n# TYPE {name} gauge\n{name} {value}"
+        );
+    }
+
+    for (name, current, previous) in [
+        (
+            "pay3flow_anonymous_users_growth_percent",
+            active_anonymous_users_last_7_days,
+            active_anonymous_users_previous_7_days,
+        ),
+        (
+            "pay3flow_anonymous_sessions_growth_percent",
+            sessions_last_7_days,
+            sessions_previous_7_days,
+        ),
+    ] {
+        if previous > 0 {
+            let growth_percent = (current - previous) as f64 / previous as f64 * 100.0;
+            let _ = writeln!(
+                output,
+                "# HELP {name} Percentage change compared with the preceding 7 days.\n\
+# TYPE {name} gauge\n\
+{name} {growth_percent}"
+            );
+        }
+    }
+
     output.push_str(
         "# HELP pay3flow_registered_users_total Number of registered user accounts.\n\
 # TYPE pay3flow_registered_users_total gauge\n",
@@ -161,4 +216,27 @@ pay3flow_build_info{service=\"backend\"} 1\n\
     );
 
     output
+}
+
+#[cfg(test)]
+mod tests {
+    use super::render;
+
+    #[test]
+    fn exports_weekly_user_and_session_counts_and_growth() {
+        let output = render(40, 10, 2, 3, 15, 10, 30, 20);
+
+        assert!(output.contains("pay3flow_anonymous_users_last_7_days 15\n"));
+        assert!(output.contains("pay3flow_anonymous_sessions_last_7_days 30\n"));
+        assert!(output.contains("pay3flow_anonymous_users_growth_percent 50\n"));
+        assert!(output.contains("pay3flow_anonymous_sessions_growth_percent 50\n"));
+    }
+
+    #[test]
+    fn omits_growth_when_the_previous_period_has_no_baseline() {
+        let output = render(40, 10, 2, 3, 15, 0, 30, 0);
+
+        assert!(!output.contains("pay3flow_anonymous_users_growth_percent"));
+        assert!(!output.contains("pay3flow_anonymous_sessions_growth_percent"));
+    }
 }

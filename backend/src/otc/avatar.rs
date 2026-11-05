@@ -17,6 +17,12 @@ const PADDING: usize = 42;
 
 /// Stable SVG data URI for a wallet address.
 pub(crate) fn identicon(address: &str) -> String {
+    let svg = identicon_svg(address);
+    format!("data:image/svg+xml;base64,{}", STANDARD.encode(svg))
+}
+
+/// SVG version of the deterministic identicon, shared with Telegram delivery.
+pub(crate) fn identicon_svg(address: &str) -> String {
     let normalized = address.trim().to_ascii_lowercase();
     let digest = Md5::digest(normalized.as_bytes());
     let mut nibbles = [0u8; 32];
@@ -54,10 +60,9 @@ pub(crate) fn identicon(address: &str) -> String {
             }
         }
     }
-    let svg = format!(
+    format!(
         "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{SIZE}\" height=\"{SIZE}\" viewBox=\"0 0 {SIZE} {SIZE}\" shape-rendering=\"crispEdges\"><g fill=\"rgb({red},{green},{blue})\">{cells}</g></svg>"
-    );
-    format!("data:image/svg+xml;base64,{}", STANDARD.encode(svg))
+    )
 }
 
 /// Persist the avatar for a proven wallet. Re-proving refreshes the public key
@@ -121,12 +126,16 @@ mod tests {
 
     #[test]
     fn identicon_is_deterministic_and_embeddable() {
-        let avatar = identicon("0:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+        let avatar =
+            identicon("0:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
         assert_eq!(
             avatar,
             identicon("0:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
         );
-        assert_ne!(avatar, identicon("0:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
+        assert_ne!(
+            avatar,
+            identicon("0:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+        );
         assert!(avatar.starts_with("data:image/svg+xml;base64,"));
     }
 }
