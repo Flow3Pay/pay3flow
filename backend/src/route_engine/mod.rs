@@ -1242,6 +1242,15 @@ mod tests {
                 contract_address: Some("0x333".into()),
             },
         ]);
+        let selected = provider
+            .token_for_asset_id(&asset("USDT@ethereum"), "usdt-selected")
+            .await
+            .unwrap();
+        assert_eq!(selected.contract_address.as_deref(), Some("0x222"));
+        assert!(provider
+            .token_for_asset_id(&asset("USDT@ethereum"), "missing")
+            .await
+            .is_err());
         let from = asset("USDT@ethereum");
         let error = provider
             .executable_quote(NearQuoteRequest {

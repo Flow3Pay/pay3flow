@@ -283,10 +283,11 @@ async fn p2p_assets(State(state): State<AppState>) -> Json<Value> {
         let Ok(asset) = token.asset() else {
             continue;
         };
-        let Ok(resolved) = provider.token_for_asset(&asset).await else {
-            continue;
-        };
-        if resolved.asset_id != token.asset_id {
+        if provider
+            .token_for_asset_id(&asset, &token.asset_id)
+            .await
+            .is_err()
+        {
             continue;
         }
         let output = match crate::route_engine::Asset::new(&symbol, Some("ethereum")) {

@@ -257,6 +257,11 @@ Implemented so far:
   asset ID and the selected OTC stablecoin. Quote creation binds exact source
   and destination asset IDs to avoid resolving duplicate tickers to a different
   token.
+- The backend serializes quote preparation per trade and returns an existing
+  attempt for a repeated idempotency key rather than creating another quote.
+- Provider quote and deposit-notification failures are reported as a generic
+  temporary route outage; provider-specific error details are kept out of the
+  user response.
 - OTC attempt instructions persist the source/destination asset identity and
   quote/deposit information. Provider status polling advances the trade only
   when the reported output amount exactly matches the deal amount; a confirmed

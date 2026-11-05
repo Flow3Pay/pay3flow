@@ -13,6 +13,8 @@ pub(crate) enum Error {
     Conflict(String),
     #[error("OTC route is paused or not configured")]
     Disabled,
+    #[error("OTC payment route is temporarily unavailable")]
+    RouteUnavailable,
     #[error("OTC authentication required")]
     Unauthorized,
     #[error("No wallet on {0} has been verified within the allowed period. Reconnect that wallet and sign the verification again.")]
@@ -37,6 +39,7 @@ impl IntoResponse for Error {
             Self::Invalid(message) => (StatusCode::BAD_REQUEST, message),
             Self::Conflict(message) => (StatusCode::CONFLICT, message),
             Self::Disabled => (StatusCode::SERVICE_UNAVAILABLE, self.to_string()),
+            Self::RouteUnavailable => (StatusCode::SERVICE_UNAVAILABLE, self.to_string()),
             Self::Unauthorized => (StatusCode::UNAUTHORIZED, self.to_string()),
             Self::VerificationRequired(_) => (StatusCode::FORBIDDEN, self.to_string()),
             Self::NotFound => (StatusCode::NOT_FOUND, self.to_string()),
@@ -68,5 +71,16 @@ pub(crate) fn invalid(message: &str) -> Error {
 impl From<reqwest::Error> for Error {
     fn from(error: reqwest::Error) -> Self {
         Self::Http(error.without_url())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn route_unavailability_is_reported_without_provider_details() {
+        let response = Error::RouteUnavailable.into_response();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
 }

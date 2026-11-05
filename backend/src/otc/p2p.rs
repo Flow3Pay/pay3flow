@@ -548,9 +548,24 @@ impl Service {
         crate::route_execution::validate_otc_wallet_address(network, source_address)
             .map_err(|_| invalid("invalid source wallet address"))?;
         let mut client = self.pool.get().await?;
-        let row = client
+        let body: Value = client
             .query_opt(
-                "SELECT * FROM otc_p2p_trades WHERE id=$1 AND (owner_actor=$2 OR taker_actor=$2)",
+                "SELECT body FROM otc_p2p_trades WHERE id=$1 AND (owner_actor=$2 OR taker_actor=$2)",
+                &[&id, &actor],
+            )
+            .await?
+            .ok_or(Error::NotFound)?
+            .get(0);
+        let stablecoin = super::public_offers::Stablecoin::from_terms(&body)?;
+        let to = Asset::new(stablecoin.symbol(), Some("ethereum"))?;
+        if from == to {
+            drop(client);
+            return Box::pin(self.p2p_prepare(actor, id, key, "payment")).await;
+        }
+        let tx = client.transaction().await?;
+        let row = tx
+            .query_opt(
+                "SELECT * FROM otc_p2p_trades WHERE id=$1 AND (owner_actor=$2 OR taker_actor=$2) FOR UPDATE",
                 &[&id, &actor],
             )
             .await?
@@ -568,7 +583,7 @@ impl Service {
         if actor != expected_payer {
             return Err(Error::Unauthorized);
         }
-        if let Some(existing) = client
+        if let Some(existing) = tx
             .query_opt(
                 "SELECT id,state,instructions FROM otc_p2p_attempts WHERE trade_id=$1 AND kind='payment' AND idempotency_key=$2",
                 &[&id, &key],
@@ -581,12 +596,13 @@ impl Service {
                 "state": existing.get::<_, String>(1),
                 "instructions": existing.get::<_, Value>(2),
             });
+            tx.commit().await?;
             return Ok(result);
         }
         if state != "payment_pending" || Utc::now() > pay_by {
             return Err(Error::Conflict("stablecoin payment is unavailable".into()));
         }
-        if client
+        if tx
             .query_opt(
                 "SELECT id FROM otc_p2p_attempts WHERE trade_id=$1 AND kind='payment' AND state!='failed'",
                 &[&id],
@@ -598,18 +614,14 @@ impl Service {
                 "this deal leg already has an unresolved attempt".into(),
             ));
         }
-        let stablecoin = super::public_offers::Stablecoin::from_terms(&body)?;
-        let to = Asset::new(stablecoin.symbol(), Some("ethereum"))?;
         let provider = self.near_intents.as_ref().ok_or(Error::Disabled)?;
         let source_asset_id = source_asset_id
             .filter(|asset_id| !asset_id.trim().is_empty())
             .ok_or_else(|| invalid("source asset id is required"))?;
-        let source_token = provider.token_for_asset(&from).await?;
-        if source_asset_id != source_token.asset_id {
-            return Err(Error::Conflict(
-                "The selected payment asset changed; select it again".into(),
-            ));
-        }
+        let source_token = provider
+            .token_for_asset_id(&from, source_asset_id)
+            .await
+            .map_err(|_| invalid("selected payment asset is no longer available"))?;
         if !matches!(
             source_token.symbol.to_ascii_uppercase().as_str(),
             "USDT" | "USDC"
@@ -625,10 +637,13 @@ impl Service {
             .filter(|contract| !contract.trim().is_empty())
             .ok_or_else(|| invalid("source token wallet transfer is unavailable"))?;
         amount::units(source_amount, u32::from(decimals))?;
-        if from == to {
-            return Box::pin(self.p2p_prepare(actor, id, key, "payment")).await;
-        }
-        let destination_token = provider.token_for_asset(&to).await?;
+        let destination_token = provider
+            .token_for_asset(&to)
+            .await
+            .map_err(|error| {
+                tracing::warn!(trade=%id, error=%error, "OTC destination token is unavailable");
+                Error::RouteUnavailable
+            })?;
         if destination_token.decimals != Some(6)
             || destination_token
                 .contract_address
@@ -668,7 +683,11 @@ impl Service {
                 slippage_bps: slippage_bps.min(10_000),
                 dry: false,
             })
-            .await?;
+            .await
+            .map_err(|error| {
+                tracing::warn!(trade=%id, error=%error, "OTC payment route quote failed");
+                Error::RouteUnavailable
+            })?;
         let deposit_address = quote
             .deposit_address
             .as_deref()
@@ -740,38 +759,6 @@ impl Service {
             "submit_path": format!("/p2p/attempts/{attempt}/reference"),
         });
 
-        let tx = client.transaction().await?;
-        if let Some(existing) = tx
-            .query_opt(
-                "SELECT id,instructions,state FROM otc_p2p_attempts WHERE trade_id=$1 AND kind='payment' AND idempotency_key=$2",
-                &[&id, &key],
-            )
-            .await?
-        {
-            let trade = tx
-                .query_one("SELECT * FROM otc_p2p_trades WHERE id=$1", &[&id])
-                .await?;
-            let mut result = deal(&trade, actor);
-            result["attempt"] = json!({
-                "id": existing.get::<_, Uuid>(0),
-                "state": existing.get::<_, String>(2),
-                "instructions": existing.get::<_, Value>(1),
-            });
-            tx.commit().await?;
-            return Ok(result);
-        }
-        if tx
-            .query_opt(
-                "SELECT id FROM otc_p2p_attempts WHERE trade_id=$1 AND kind='payment' AND state!='failed'",
-                &[&id],
-            )
-            .await?
-            .is_some()
-        {
-            return Err(Error::Conflict(
-                "this deal leg already has an unresolved attempt".into(),
-            ));
-        }
         tx.execute(
             "INSERT INTO otc_p2p_attempts(id,trade_id,kind,payer_actor,chain,state,instructions,idempotency_key) VALUES($1,$2,'payment',$3,'near-intents','prepared',$4,$5)",
             &[&attempt, &id, &actor, &instructions, &key],
@@ -844,6 +831,7 @@ impl Service {
                     .await
                 {
                     tracing::warn!(attempt=%attempt, error=%error, "NEAR Intents deposit notification failed");
+                    return Err(Error::RouteUnavailable);
                 }
             }
         }

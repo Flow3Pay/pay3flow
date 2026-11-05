@@ -284,6 +284,16 @@ impl NearIntentsProvider {
             .with_context(|| format!("unsupported NEAR Intents asset {asset}"))
     }
 
+    pub async fn token_for_asset_id(&self, asset: &Asset, asset_id: &str) -> Result<NearToken> {
+        self.tokens
+            .read()
+            .await
+            .iter()
+            .find(|token| token.matches(asset) && token.asset_id == asset_id)
+            .cloned()
+            .with_context(|| format!("unsupported NEAR Intents asset identity for {asset}"))
+    }
+
     pub async fn executable_quote(&self, request: NearQuoteRequest) -> Result<NearQuote> {
         self.request_quote(NearQuoteRequest {
             dry: false,
