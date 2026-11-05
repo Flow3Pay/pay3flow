@@ -174,6 +174,16 @@ impl Service {
             ),
             Direction::Buy => (usdt_address.clone(), taker_eth, taker_ever, seller_ever),
         };
+        let output_network = if direction == Direction::Sell {
+            terms["stablecoin_network"].as_str().unwrap_or("ethereum")
+        } else {
+            "ethereum"
+        };
+        let output_asset_id = if direction == Direction::Sell {
+            terms["stablecoin_asset_id"].as_str()
+        } else {
+            None
+        };
         if usdt_payer == usdt_payee || ever_payer == ever_payee {
             return Err(Error::Conflict(
                 "offer uses the same wallet as your verified accounts".into(),
@@ -187,6 +197,8 @@ impl Service {
             "ever_amount": terms["ever_amount"], "usdt_amount": terms["usdt_amount"],
             "ever_units": terms["ever_units"], "usdt_units": terms["usdt_units"],
             "usdt_payer": usdt_payer, "usdt_payee": usdt_payee,
+            "stablecoin_network": output_network,
+            "stablecoin_asset_id": output_asset_id,
             "ever_payer": ever_payer, "ever_payee": ever_payee,
             "fee_payer_actor": fee_payer_actor,
             "usdt_contract": token_contract,
@@ -557,10 +569,14 @@ impl Service {
             .ok_or(Error::NotFound)?
             .get(0);
         let stablecoin = super::public_offers::Stablecoin::from_terms(&body)?;
-        let to = Asset::new(stablecoin.symbol(), Some("ethereum"))?;
+        let output_network = body["stablecoin_network"].as_str().unwrap_or("ethereum");
+        let to = Asset::new(stablecoin.symbol(), Some(output_network))?;
         if from == to {
-            drop(client);
-            return Box::pin(self.p2p_prepare(actor, id, key, "payment")).await;
+            if network != "ethereum" {
+                return Err(Error::Conflict(
+                    "Direct payment on this receiving network is not supported yet".into(),
+                ));
+            }
         }
         let tx = client.transaction().await?;
         let row = tx
@@ -622,6 +638,11 @@ impl Service {
             .token_for_asset_id(&from, source_asset_id)
             .await
             .map_err(|_| invalid("selected payment asset is no longer available"))?;
+        if !source_token.symbol.eq_ignore_ascii_case(&from.symbol) {
+            return Err(invalid(
+                "selected payment token does not match the source asset",
+            ));
+        }
         if !matches!(
             source_token.symbol.to_ascii_uppercase().as_str(),
             "USDT" | "USDC"
@@ -637,26 +658,33 @@ impl Service {
             .filter(|contract| !contract.trim().is_empty())
             .ok_or_else(|| invalid("source token wallet transfer is unavailable"))?;
         amount::units(source_amount, u32::from(decimals))?;
-        let destination_token = provider
-            .token_for_asset(&to)
-            .await
-            .map_err(|error| {
-                tracing::warn!(trade=%id, error=%error, "OTC destination token is unavailable");
-                Error::RouteUnavailable
-            })?;
-        if destination_token.decimals != Some(6)
-            || destination_token
-                .contract_address
-                .as_deref()
-                .is_none_or(|address| !address.eq_ignore_ascii_case(stablecoin.contract()))
+        let destination_token_result = match body["stablecoin_asset_id"].as_str() {
+            Some(asset_id) => provider.token_for_asset_id(&to, asset_id).await,
+            None => provider.token_for_asset(&to).await,
+        };
+        let destination_token = destination_token_result.map_err(|error| {
+            tracing::warn!(trade=%id, error=%error, "OTC destination token is unavailable");
+            Error::RouteUnavailable
+        })?;
+        if !destination_token
+            .symbol
+            .eq_ignore_ascii_case(stablecoin.symbol())
+            || destination_token.decimals != Some(6)
+            || (output_network == "ethereum"
+                && destination_token
+                    .contract_address
+                    .as_deref()
+                    .is_none_or(|address| !address.eq_ignore_ascii_case(stablecoin.contract())))
         {
             return Err(invalid("destination token precision is unsupported"));
         }
         if network == "ethereum" {
             let expected_contract = if source_token.symbol.eq_ignore_ascii_case("USDT") {
                 super::config::USDT
-            } else {
+            } else if source_token.symbol.eq_ignore_ascii_case("USDC") {
                 super::config::USDC
+            } else {
+                return Err(invalid("only USDT and USDC can fund an OTC deal"));
             };
             if source_token
                 .contract_address
@@ -665,6 +693,21 @@ impl Service {
             {
                 return Err(invalid("unsupported Ethereum stablecoin contract"));
             }
+        }
+        if from == to {
+            if !is_direct_ethereum_asset_match(
+                &from,
+                &to,
+                &source_token.asset_id,
+                &destination_token.asset_id,
+            ) {
+                return Err(invalid(
+                    "source and destination token identities do not match",
+                ));
+            }
+            tx.rollback().await?;
+            drop(client);
+            return Box::pin(self.p2p_prepare(actor, id, key, "payment")).await;
         }
         let recipient = body["usdt_payee"]
             .as_str()
@@ -923,32 +966,14 @@ impl Service {
                         continue;
                     }
                 };
-                match status.status.to_ascii_uppercase().as_str() {
-                    "SUCCESS" => {
-                        let output = status.output_amount.clone().or_else(|| {
-                            crate::route_engine::first_string(
-                                &status.raw,
-                                &["amountOut", "amount_out", "outputAmount"],
-                            )
-                        });
-                        let Some(output) = output else {
-                            tracing::warn!(trade=%id, attempt=%attempt, "NEAR Intents success has no output amount");
-                            continue;
-                        };
-                        let Some(output_units) = provider_amount_units(&output, 6) else {
-                            tracing::warn!(trade=%id, attempt=%attempt, "NEAR Intents success has invalid output amount");
-                            continue;
-                        };
-                        let Some(minimum_units) = instructions["minimum_output"]
-                            .as_str()
-                            .and_then(|value| amount::units(value, 6).ok())
-                        else {
-                            return Err(invalid("NEAR Intents minimum output is malformed"));
-                        };
-                        if output_units != minimum_units {
-                            tracing::warn!(trade=%id, attempt=%attempt, output_units, minimum_units, "cross-network output does not match OTC amount");
-                            continue;
-                        }
+                let Some(minimum_units) = instructions["minimum_output"]
+                    .as_str()
+                    .and_then(|value| amount::units(value, 6).ok())
+                else {
+                    return Err(invalid("NEAR Intents minimum output is malformed"));
+                };
+                match near_status_outcome(&status, minimum_units) {
+                    NearStatusOutcome::Success(output_units) => {
                         let identity = reference
                             .clone()
                             .or_else(|| {
@@ -981,7 +1006,7 @@ impl Service {
                         };
                         self.credit_p2p(attempt, id, &kind, &evidence).await?;
                     }
-                    "REFUNDED" => {
+                    NearStatusOutcome::Refunded => {
                         client
                             .execute(
                                 "UPDATE otc_p2p_attempts SET state='failed',evidence=$2,updated_at=now() WHERE id=$1 AND state IN ('prepared','submitted','confirming')",
@@ -989,7 +1014,10 @@ impl Service {
                             )
                             .await?;
                     }
-                    _ => {
+                    NearStatusOutcome::Pending => {
+                        if status.status.eq_ignore_ascii_case("SUCCESS") {
+                            tracing::warn!(trade=%id, attempt=%attempt, "NEAR Intents success has no valid exact output amount");
+                        }
                         client
                             .execute(
                                 "UPDATE otc_p2p_attempts SET state='confirming',evidence=$2,updated_at=now() WHERE id=$1 AND state IN ('submitted','confirming')",
@@ -1211,6 +1239,140 @@ fn provider_amount_units(value: &str, decimals: u32) -> Option<u128> {
         value.parse().ok()
     }
 }
+
+fn is_direct_ethereum_asset_match(
+    source: &Asset,
+    destination: &Asset,
+    source_asset_id: &str,
+    destination_asset_id: &str,
+) -> bool {
+    source == destination
+        && source.location.as_deref() == Some("ethereum")
+        && source_asset_id == destination_asset_id
+}
+
+enum NearStatusOutcome {
+    Success(u128),
+    Refunded,
+    Pending,
+}
+
+fn near_status_outcome(
+    status: &crate::route_engine::NearSwapStatus,
+    expected: u128,
+) -> NearStatusOutcome {
+    match status.status.to_ascii_uppercase().as_str() {
+        "REFUNDED" => NearStatusOutcome::Refunded,
+        "SUCCESS" => {
+            let output = status.output_amount.clone().or_else(|| {
+                crate::route_engine::first_string(
+                    &status.raw,
+                    &["amountOut", "amount_out", "outputAmount"],
+                )
+            });
+            match output
+                .as_deref()
+                .and_then(|value| provider_amount_units(value, 6))
+            {
+                Some(units) if units == expected => NearStatusOutcome::Success(units),
+                _ => NearStatusOutcome::Pending,
+            }
+        }
+        _ => NearStatusOutcome::Pending,
+    }
+}
+
+#[cfg(test)]
+mod route_status_tests {
+    use super::*;
+
+    #[test]
+    fn direct_payment_requires_same_ethereum_asset_identity() {
+        let usdt = Asset::new("USDT", Some("ethereum")).unwrap();
+        let same_ticker_other_network = Asset::new("USDT", Some("base")).unwrap();
+        assert!(is_direct_ethereum_asset_match(
+            &usdt,
+            &usdt,
+            "canonical-usdt",
+            "canonical-usdt"
+        ));
+        assert!(!is_direct_ethereum_asset_match(
+            &usdt,
+            &usdt,
+            "lookalike-token",
+            "canonical-usdt"
+        ));
+        assert!(!is_direct_ethereum_asset_match(
+            &usdt,
+            &same_ticker_other_network,
+            "canonical-usdt",
+            "canonical-usdt"
+        ));
+    }
+
+    #[test]
+    fn provider_output_amounts_are_compared_at_token_precision() {
+        let expected = 1_234_567_u128;
+        assert_eq!(provider_amount_units("1.234567", 6), Some(expected));
+        assert_eq!(provider_amount_units("1234567", 6), Some(expected));
+        assert_ne!(provider_amount_units("1.234566", 6), Some(expected));
+        assert_eq!(provider_amount_units("not-an-amount", 6), None);
+        assert_eq!(provider_amount_units("1.2345678", 6), None);
+    }
+
+    #[test]
+    fn route_status_must_match_exact_deal_amount() {
+        let expected = amount::units("10.000001", 6).unwrap();
+        for actual in ["10.000001", "10000001"] {
+            assert_eq!(provider_amount_units(actual, 6), Some(expected));
+        }
+        for actual in ["10", "10.000002", "10000000", "10000002"] {
+            assert_ne!(provider_amount_units(actual, 6), Some(expected));
+        }
+    }
+
+    #[test]
+    fn provider_status_only_credits_exact_success_and_keeps_unknown_pending() {
+        let expected = 10_000_001;
+        let status = |state: &str, output: Option<&str>| crate::route_engine::NearSwapStatus {
+            status: state.into(),
+            output_amount: output.map(str::to_string),
+            raw: json!({}),
+        };
+        assert!(matches!(
+            near_status_outcome(&status("SUCCESS", Some("10000001")), expected),
+            NearStatusOutcome::Success(10_000_001)
+        ));
+        let with_raw_amount = crate::route_engine::NearSwapStatus {
+            status: "SUCCESS".into(),
+            output_amount: None,
+            raw: json!({"outputAmount":"10000001"}),
+        };
+        assert!(matches!(
+            near_status_outcome(&with_raw_amount, expected),
+            NearStatusOutcome::Success(10_000_001)
+        ));
+        assert!(matches!(
+            near_status_outcome(&status("SUCCESS", Some("10")), expected),
+            NearStatusOutcome::Pending
+        ));
+        assert!(matches!(
+            near_status_outcome(&status("SUCCESS", None), expected),
+            NearStatusOutcome::Pending
+        ));
+        assert!(matches!(
+            near_status_outcome(&status("REFUNDED", None), expected),
+            NearStatusOutcome::Refunded
+        ));
+        for state in ["FAILED", "PENDING", "UNKNOWN"] {
+            assert!(matches!(
+                near_status_outcome(&status(state, Some("10000001")), expected),
+                NearStatusOutcome::Pending
+            ));
+        }
+    }
+}
+
 fn deal(row: &Row, actor: &str) -> Value {
     let body: Value = row.get("body");
     let state: String = row.get("state");

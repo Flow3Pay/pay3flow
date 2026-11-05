@@ -72,6 +72,13 @@ pub(crate) struct PublicOfferDraft {
     pub ever_amount: String,
     pub usdt_amount: String,
     pub usdt_address: String,
+    #[serde(default = "default_stablecoin_network")]
+    pub stablecoin_network: String,
+    #[serde(default)]
+    pub stablecoin_asset_id: Option<String>,
+}
+fn default_stablecoin_network() -> String {
+    "ethereum".into()
 }
 fn legacy_sell_direction() -> Direction {
     Direction::Sell
@@ -98,15 +105,35 @@ impl PublicOfferDraft {
         if usdt > MAX_USDT_OFFER_UNITS {
             return Err(invalid("USDT offer total exceeds the 1,000,000 USDT limit"));
         }
-        let recipient = wallet::address("ethereum", &self.usdt_address)?;
-        if recipient == format!("0x{}", "0".repeat(40)) {
+        let network = crate::route_engine::canonical_network_id(&self.stablecoin_network);
+        if !crate::route_execution::supports_otc_wallet_network(&network) {
+            return Err(invalid("unsupported stablecoin receiving network"));
+        }
+        let recipient = if network == "ethereum" {
+            wallet::address("ethereum", &self.usdt_address)?
+        } else {
+            self.usdt_address.trim().to_string()
+        };
+        crate::route_execution::validate_otc_wallet_address(&network, &self.usdt_address)
+            .map_err(|_| invalid("invalid stablecoin receiving address"))?;
+        if network == "ethereum" && self.usdt_address == format!("0x{}", "0".repeat(40)) {
             return Err(invalid("Ethereum wallet address must be nonzero"));
+        }
+        if network != "ethereum"
+            && self
+                .stablecoin_asset_id
+                .as_deref()
+                .is_none_or(|asset_id| asset_id.trim().is_empty())
+        {
+            return Err(invalid("stablecoin asset identity is required"));
         }
         Ok(json!({
             "direction":self.direction, "ever_amount":amount::decimal(ever,9),
             "stablecoin":self.stablecoin.symbol(),
             "usdt_amount":amount::decimal(usdt,6), "ever_units":ever.to_string(),
             "usdt_units":usdt.to_string(), "usdt_address":recipient,
+            "stablecoin_network":network,
+            "stablecoin_asset_id":self.stablecoin_asset_id,
             "ever_network_id":42, "ethereum_chain_id":1,
             "usdt_contract":self.stablecoin.contract(),
             "stablecoin_contract":self.stablecoin.contract(),
@@ -184,6 +211,36 @@ impl Service {
             return Err(Error::Disabled);
         }
         let terms = draft.terms(&self.cfg)?;
+        let receiving_network = terms["stablecoin_network"]
+            .as_str()
+            .ok_or_else(|| invalid("offer receiving network is malformed"))?;
+        let asset_id = terms["stablecoin_asset_id"].as_str();
+        if receiving_network != "ethereum" || asset_id.is_some() {
+            let provider = self.near_intents.as_ref().ok_or(Error::RouteUnavailable)?;
+            let asset = crate::route_engine::Asset::new(
+                terms["stablecoin"].as_str().unwrap_or("USDT"),
+                Some(receiving_network),
+            )?;
+            let token_result = match asset_id {
+                Some(asset_id) => provider.token_for_asset_id(&asset, asset_id).await,
+                None => provider.token_for_asset(&asset).await,
+            };
+            let token = token_result
+                .map_err(|_| invalid("stablecoin is unavailable on the selected network"))?;
+            if !token
+                .symbol
+                .eq_ignore_ascii_case(terms["stablecoin"].as_str().unwrap_or_default())
+                || token.decimals != Some(6)
+                || (receiving_network == "ethereum"
+                    && token.contract_address.as_deref().is_none_or(|address| {
+                        !address.eq_ignore_ascii_case(
+                            terms["stablecoin_contract"].as_str().unwrap_or_default(),
+                        )
+                    }))
+            {
+                return Err(invalid("selected network token does not match the offer"));
+            }
+        }
         let seller = self.wallet(actor, "everscale").await?;
         let mut client = self.pool.get().await?;
         let tx = client.transaction().await?;
@@ -230,6 +287,8 @@ mod tests {
             ever_amount: "250".into(),
             usdt_amount: "5".into(),
             usdt_address: format!("0x{}", "a".repeat(40)),
+            stablecoin_network: "ethereum".into(),
+            stablecoin_asset_id: None,
         }
     }
     #[test]
@@ -267,6 +326,25 @@ mod tests {
         }
         let mut item = draft();
         item.usdt_address = format!("0x{}", "0".repeat(40));
+        assert!(item.terms(&cfg).is_err());
+    }
+
+    #[test]
+    fn offer_terms_bind_the_receiving_network_and_token_identity() {
+        let cfg = super::super::config::Config::default();
+        let mut item = draft();
+        item.stablecoin_network = "NEAR".into();
+        item.stablecoin_asset_id = Some("nep141:usdt.near".into());
+        item.usdt_address = "alice.near".into();
+        let terms = item.terms(&cfg).unwrap();
+        assert_eq!(terms["stablecoin_network"], "near");
+        assert_eq!(terms["stablecoin_asset_id"], "nep141:usdt.near");
+        assert_eq!(terms["usdt_address"], "alice.near");
+
+        item.stablecoin_asset_id = None;
+        assert!(item.terms(&cfg).is_err());
+        item.stablecoin_asset_id = Some("nep141:usdt.near".into());
+        item.usdt_address = "not an account".into();
         assert!(item.terms(&cfg).is_err());
     }
 

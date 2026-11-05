@@ -1108,6 +1108,8 @@ fn draft(direction: Direction, usdt_address: &str) -> super::public_offers::Publ
         ever_amount: "250".into(),
         usdt_amount: "11.889".into(),
         usdt_address: usdt_address.into(),
+        stablecoin_network: "ethereum".into(),
+        stablecoin_asset_id: None,
     }
 }
 

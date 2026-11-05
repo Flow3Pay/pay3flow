@@ -14,6 +14,7 @@ export interface PublicOffer {
   expires_at: string;
   terms: {
     direction?: Direction; stablecoin?: Stablecoin; ever_amount: string; usdt_amount: string; usdt_address: string;
+    stablecoin_network?: string; stablecoin_asset_id?: string | null;
     ethereum_chain_id?: number; usdt_contract?: string; stablecoin_contract?: string;
   };
 }
@@ -45,6 +46,8 @@ export interface SaleTicketState {
   everAmount: string;
   usdtAmount: string;
   receivingAddress: string;
+  stablecoinNetwork: string;
+  stablecoinNetworks: Array<{ network: string; assetId: string }>;
   seller: string;
   askingRate: string;
   valid: boolean;
@@ -61,6 +64,7 @@ export interface SaleTicketState {
   onUsdt: (value: string) => void;
   onStablecoin: (value: Stablecoin) => void;
   onAddress: (value: string) => void;
+  onStablecoinNetwork: (value: string) => void;
   onUseEthereum: () => void;
   onMarketPrice: (checked: boolean) => void;
   onRequest: () => void;

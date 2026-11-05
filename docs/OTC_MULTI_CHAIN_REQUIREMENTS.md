@@ -252,7 +252,9 @@ Implemented so far:
 
 - The P2P taker can select a source token/network from the live provider token
   catalog, enter a source amount, and review quote output, expiry, deposit
-  address, and memo before wallet submission.
+  address, and memo before wallet submission. The source stablecoin may differ
+  from the deal stablecoin, enabling a USDC-to-USDT or USDT-to-USDC principal
+  conversion through the route.
 - The backend validates the selected source asset against its exact catalog
   asset ID and the selected OTC stablecoin. Quote creation binds exact source
   and destination asset IDs to avoid resolving duplicate tickers to a different
@@ -266,29 +268,36 @@ Implemented so far:
   quote/deposit information. Provider status polling advances the trade only
   when the reported output amount exactly matches the deal amount; a confirmed
   refund releases the attempt for retry.
-- When source and destination stablecoin plus network are identical, the
-  ordinary direct payment path is used and no provider quote is requested.
+- For identical Ethereum source and destination assets, the ordinary direct
+  payment path is used without a provider quote, and only when the exact
+  catalog asset IDs match. Direct payment on identical non-Ethereum networks
+  is not implemented yet.
 - The recorded fee policy is denominated in USDT. This does not yet implement
   conversion/collection of a USDT fee when the trade settles in USDC or when a
-  source route uses another token.
+  source route uses another token. The added cross-stablecoin payment route
+  converts the deal principal; it does not collect the service fee.
 
 Still incomplete and not to be presented as supported:
 
-- OTC offer destination selection and payout remain Ethereum-centric. The
-  cross-network flow currently routes source assets to the deal's Ethereum
-  stablecoin recipient; it does not let the offer choose another destination
-  network.
+- Sell offers can choose a stablecoin receiving network from the supported
+  provider catalog; buy offers still receive stablecoins on Ethereum. The
+  selected sell-offer network and exact asset ID are bound into accepted deal
+  terms and used as the cross-network quote destination.
 - Wallet-executable source networks are limited to the supported EVM, NEAR,
   and TRON paths. In particular, address validation alone does not provide
-  signing/submission support for Solana, Sei, Sui, TON, or Aptos.
+  signing/submission support for Solana, Sei, Sui, TON, or Aptos. The catalog
+  and UI must not imply these paths are executable.
 - Memo handling is currently accepted only for NEAR source transfers; other
   memo/tag-dependent source networks must remain unavailable until their
   wallet executors support the required instruction.
 - Cross-network quote output is constrained to exact deal-value equality.
-  Provider status amount encoding and all status/refund edge cases still need
-  authoritative confirmation and focused coverage.
-- Fee conversion and actual collection, independent destination-network
-  terms, and complete cross-network payout/refund handling remain outstanding.
+  Status handling has focused unit coverage for exact output, missing or
+  mismatched output, pending/unknown states, and refunds. The provider's
+  amount-unit encoding still needs authoritative confirmation.
+- Fee conversion and actual collection, buy-offer destination-network choice,
+  and complete cross-network payout/refund handling remain outstanding. The
+  offer preview labels the 3% amount as indicative for USDC offers because no
+  live USDC/USDT conversion is yet applied.
 
 The worktree changes are not a finished production multi-chain feature.
 Networks must not be exposed as supported unless their complete wallet,

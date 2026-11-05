@@ -70,7 +70,9 @@
   $: action = deal ? p2pAction(deal) : null;
   $: actionKind = deal ? p2pKind(deal) : null;
   $: actionAsset = actionKind ? p2pLegAsset(actionKind, deal?.terms.stablecoin) : "";
-  $: outputAsset = `${deal?.terms.stablecoin || "USDT"}@ethereum`;
+  $: outputNetwork = deal?.terms.stablecoin_network || "ethereum";
+  $: outputAsset = `${deal?.terms.stablecoin || "USDT"}@${outputNetwork}`;
+  $: directPaymentAvailable = outputNetwork === "ethereum";
   $: selectedSource = sourceAssets.find(item => item.asset === selectedSourceAsset) || null;
   $: intentQuote = deal?.attempts?.find(attempt => attempt.kind === "payment" && !!attempt.instructions.source_asset && attempt.state !== "failed") || null;
   $: actionLabel = action === "retry"
@@ -317,7 +319,7 @@
       if (kind && (next === "send" || next === "retry")) {
         if (kind === "payment" && !p2pOpenAttempt(merged, kind)) {
           routePickerOpen = true;
-          selectedSourceAsset = sourceAssets.find(item => item.asset === `${merged.terms.stablecoin || "USDT"}@ethereum`)?.asset || sourceAssets[0]?.asset || "";
+          selectedSourceAsset = sourceAssets.find(item => item.asset === `${merged.terms.stablecoin || "USDT"}@${merged.terms.stablecoin_network || "ethereum"}` && (merged.terms.stablecoin_network || "ethereum") === "ethereum")?.asset || sourceAssets.find(item => item.asset !== `${merged.terms.stablecoin || "USDT"}@${merged.terms.stablecoin_network || "ethereum"}`)?.asset || "";
           sourceAmount = merged.terms.usdt_amount;
           return;
         }
@@ -334,7 +336,7 @@
     if (!kind) return;
     if (kind === "payment" && !p2pOpenAttempt(current, kind)) {
       routePickerOpen = true;
-      selectedSourceAsset = sourceAssets.find(item => item.asset === `${current.terms.stablecoin || "USDT"}@ethereum`)?.asset || sourceAssets[0]?.asset || "";
+      selectedSourceAsset = sourceAssets.find(item => item.asset === `${current.terms.stablecoin || "USDT"}@${current.terms.stablecoin_network || "ethereum"}` && (current.terms.stablecoin_network || "ethereum") === "ethereum")?.asset || sourceAssets.find(item => item.asset !== `${current.terms.stablecoin || "USDT"}@${current.terms.stablecoin_network || "ethereum"}`)?.asset || "";
       sourceAmount = current.terms.usdt_amount;
       return;
     }
@@ -368,7 +370,7 @@
     const source = selectedSource;
     if (!current || !owner || !source) return;
     await run(async () => {
-      if (source.asset === outputAsset) {
+      if (source.asset === outputAsset && directPaymentAvailable) {
         routePickerOpen = false;
         await sendLeg(current, "payment");
         return;
@@ -477,25 +479,25 @@
       <section class="routePicker" aria-label={say("Choose payment network", "Выбрать сеть оплаты")} data-testid="otc-payment-network-picker">
         <label>{say("Pay with", "Оплатить активом")}
           <select bind:value={selectedSourceAsset} disabled={busy || locked}>
-            {#each sourceAssets.filter(item => item.symbol === (deal?.terms.stablecoin || "USDT")) as source}
+            {#each sourceAssets.filter(item => directPaymentAvailable || item.asset !== outputAsset) as source}
               <option value={source.asset}>{source.symbol} · {source.network}</option>
             {/each}
           </select>
         </label>
-        {#if selectedSource && selectedSource.asset === outputAsset}
+        {#if selectedSource && selectedSource.asset === outputAsset && directPaymentAvailable}
           <p class="routeNote">{say("Same token and network: this payment is sent directly, without conversion.", "Токен и сеть совпадают: платёж отправляется напрямую, без конвертации.")}</p>
         {:else if selectedSource}
           <label>{say(`Amount to send (${selectedSource.symbol})`, `Сумма отправки (${selectedSource.symbol})`)}
             <input bind:value={sourceAmount} inputmode="decimal" autocomplete="off" disabled={busy || locked} data-testid="otc-source-amount" />
           </label>
-          <p class="routeNote">{say(`The quote must deliver exactly ${deal?.terms.usdt_amount} ${deal?.terms.stablecoin || "USDT"} to the recipient on Ethereum.`, `Котировка должна доставить получателю ровно ${deal?.terms.usdt_amount} ${deal?.terms.stablecoin || "USDT"} в сети Ethereum.`)}</p>
+          <p class="routeNote">{say(`The quote must deliver exactly ${deal?.terms.usdt_amount} ${deal?.terms.stablecoin || "USDT"} to the recipient on ${outputNetwork}.`, `Котировка должна доставить получателю ровно ${deal?.terms.usdt_amount} ${deal?.terms.stablecoin || "USDT"} в сети ${outputNetwork}.`)}</p>
         {:else}
           <p class="routeNote">{assetLoadError || say("No compatible production payment networks are available.", "Нет доступных production-сетей для оплаты.")}</p>
         {/if}
         <div class="routeActions">
-          <button type="button" class="confirmButton" disabled={busy || locked || !selectedSource} on:click={() => void preparePayment()}>
+          <button type="button" class="confirmButton" disabled={busy || locked || !selectedSource || (selectedSource.asset === outputAsset && !directPaymentAvailable)} on:click={() => void preparePayment()}>
             {#if busy}<span class="spinner" aria-hidden="true"></span>{/if}
-            <span>{selectedSource?.asset === outputAsset ? say("Send directly", "Отправить напрямую") : say("Get payment quote", "Получить котировку")}</span>
+            <span>{selectedSource?.asset === outputAsset && directPaymentAvailable ? say("Send directly", "Отправить напрямую") : say("Get payment quote", "Получить котировку")}</span>
           </button>
           <button type="button" class="quitButton" disabled={busy} on:click={() => { routePickerOpen = false; }}>{say("Back", "Назад")}</button>
         </div>

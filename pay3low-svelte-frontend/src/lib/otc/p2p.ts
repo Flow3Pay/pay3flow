@@ -15,6 +15,7 @@ export interface P2pFeePolicy {
 export interface P2pDealTerms {
   direction: "buy" | "sell";
   stablecoin?: "USDT" | "USDC";
+  stablecoin_network?: string;
   ever_amount: string;
   usdt_amount: string;
   ever_units: string;
