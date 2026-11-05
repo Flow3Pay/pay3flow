@@ -6,17 +6,16 @@ export interface OtcEvmNetwork {
 
 const EVM_NETWORKS: Record<number, { name: string; label: string }> = {
   1: { name: "ethereum", label: "Ethereum mainnet" },
-  11155111: { name: "sepolia", label: "Sepolia testnet" },
 };
 
 /**
  * The backend publishes the OTC chain id; signing against any other chain would
- * move funds the deal never observes, so an unknown chain stops the flow.
+ * move funds the deal never observes, so unsupported networks stop the flow.
  */
 export function evmNetworkFor(chainId: number | undefined): OtcEvmNetwork {
   const id = chainId ?? 1;
   const known = EVM_NETWORKS[id];
-  if (!known) throw new Error(`Ethereum chain ${id} is not available in this wallet integration.`);
+  if (!known) throw new Error(`OTC settlement network ${id} is not supported.`);
   return { ...known, chainId: id };
 }
 

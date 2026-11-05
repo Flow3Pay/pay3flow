@@ -1,6 +1,8 @@
 import { apiUrl } from "$lib/api";
 import { connectWallet } from "$lib/wallet-session";
 import { evmNetworkFor, p2pEvmNetworkFor, walletNetworkName } from "./network";
+import type { RouteExecution } from "$lib/exchange";
+import { sameWalletAddress } from "$lib/wallet-amount";
 
 export type Direction = "buy" | "sell";
 export interface Proposal { id: string; name?: string; publishes: { resourceConformsTo: string }; reciprocal: { resourceConformsTo: string } }
@@ -20,7 +22,13 @@ export interface Attempt { id: string; kind: string; state: string; instructions
 interface Instructions {
   escrow?: boolean; expires_at?: string; trade_id?: string; submit_path?: string; stablecoin?: "USDT" | "USDC";
   leg: { chain: string; sender: string; recipient: string; amount: string; transfer_amount: string };
-  call: { family: string; chain_id?: number; from?: string; to?: string; data?: string; value?: string; nonce?: string; sender?: string; recipient?: string; amount?: string; bounce?: boolean };
+  call?: { family: string; chain_id?: number; from?: string; to?: string; data?: string; value?: string; nonce?: string; sender?: string; recipient?: string; amount?: string; bounce?: boolean };
+  source_asset?: string; source_asset_id?: string; source_network?: string; source_decimals?: number;
+  source_amount?: string; source_address?: string; token_contract?: string; destination_asset?: string;
+  destination_decimals?: number; recipient?: string; refund_to?: string; expected_output?: string;
+  minimum_output?: string; deposit_address?: string; deposit_memo?: string; quote_expires_at?: string;
+  expected_fee?: { asset: string; amount: string };
+  slippage_bps?: number;
 }
 export interface Config { public_offers_available?: boolean; public_offer_directions?: Direction[]; everscale_multisig_available?: boolean; p2p_available?: boolean; ethereum_chain_id?: number; usdt_contract?: string; usdc_contract?: string; usdt_network?: string; p2p_ethereum_chain_id?: number; p2p_usdt_contract?: string; p2p_usdc_contract?: string; p2p_usdt_network?: string; escrow?: import("./escrow").EscrowPolicy | null; enabled: boolean; wallet_login_available?: boolean; wallet_login_chains?: ("ethereum" | "everscale")[]; wallet_verification_days?: number; available: boolean; demo: boolean; desk: string; desk_name: string; ever_resource: string; usdt_resource: string; counterparty_risk: string; support_owner: string }
 export type LoginChain = "ethereum" | "everscale";
@@ -133,6 +141,10 @@ export async function bindWallet(token: string, chain: LoginChain, progress: (me
 }
 /** Called once after a durable handoff; an exception leaves the attempt unknown. */
 export async function sendAttempt(token: string, attempt: Attempt): Promise<void> {
+  if (attempt.instructions.source_asset) {
+    await sendCrossNetworkAttempt(token, attempt);
+    return;
+  }
   if (attempt.instructions.escrow) {
     const { everSigningAvailable } = await import("./escrow");
     const current = await request<import("./escrow").Escrow>(`/trades/${attempt.instructions.trade_id}/escrow`, token);
@@ -140,14 +152,15 @@ export async function sendAttempt(token: string, attempt: Attempt): Promise<void
   }
   const leg = attempt.instructions.leg;
   // The signed handoff carries its own network: the desk and peer settlement can sit on different chains.
-  const net = evmNetworkFor(attempt.instructions.call.chain_id);
+  const call = attempt.instructions.call;
+  if (!call?.chain_id) throw new Error("The payment instructions are incomplete");
+  const net = evmNetworkFor(call.chain_id);
   const wallet = await connectWallet(walletNetwork(leg.chain, net));
   if (wallet.address.toLowerCase() !== leg.sender) throw new Error("Connected wallet differs from the booked sender. Reconcile this saved attempt before sending.");
   let reference: string;
   if (wallet.family === "evm") {
     if (wallet.chainId !== net.chainId) throw new Error(`Switch to ${net.label}.`);
     const { sendTransaction } = await import("@wagmi/core");
-    const call = attempt.instructions.call;
     const nonce = BigInt(call.nonce!);
     if (nonce > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error("Wallet nonce cannot be represented safely.");
     reference = await sendTransaction(wallet.config as Parameters<typeof sendTransaction>[0], { chainId: net.chainId, account: wallet.address, to: call.to as `0x${string}`, data: call.data as `0x${string}`, value: 0n, nonce: Number(nonce) });
@@ -165,4 +178,52 @@ export async function sendAttempt(token: string, attempt: Attempt): Promise<void
   // Keep the original result available if the reference POST response is lost.
   sessionStorage.setItem(`pay3flow.otc.reference.${attempt.id}`, reference);
   await request(attempt.instructions.submit_path || `/attempts/${attempt.id}/reference`, token, { reference });
+}
+
+async function sendCrossNetworkAttempt(token: string, attempt: Attempt) {
+  const instructions = attempt.instructions;
+  const network = instructions.source_network;
+  if (!network || !instructions.source_asset || !instructions.source_amount
+    || !instructions.source_address || !instructions.token_contract
+    || !instructions.deposit_address || !instructions.destination_asset
+    || !instructions.recipient || !instructions.quote_expires_at) {
+    throw new Error("The cross-network payment instructions are incomplete");
+  }
+  const wallet = await connectWallet(walletNetwork(network, p2pNetwork));
+  if (!sameWalletAddress(wallet.family, wallet.address, instructions.source_address)) {
+    throw new Error("Connected wallet differs from the wallet used for this quote. Prepare a new quote.");
+  }
+  const execution: RouteExecution = {
+    id: attempt.id,
+    route_id: `otc:${instructions.trade_id || ""}`,
+    provider: "near-intents",
+    status: "awaiting_signature",
+    from_asset: instructions.source_asset,
+    to_asset: instructions.destination_asset,
+    input_amount: instructions.source_amount,
+    expected_output: instructions.expected_output,
+    expected_fee: instructions.expected_fee,
+    source_address: instructions.source_address,
+    recipient: instructions.recipient,
+    action: {
+      kind: "near_deposit",
+      network,
+      asset: instructions.source_asset,
+      amount: instructions.source_amount,
+      deposit_address: instructions.deposit_address,
+      deposit_memo: instructions.deposit_memo,
+      asset_id: instructions.source_asset_id || "",
+      decimals: instructions.source_decimals,
+      token_contract: instructions.token_contract,
+      expected_output: instructions.expected_output,
+    },
+    quote_expires_at: instructions.quote_expires_at,
+    updated_at: new Date().toISOString(),
+  };
+  const { prepareWalletAction } = await import("$lib/wallet-execution");
+  const prepared = await prepareWalletAction(execution, wallet);
+  const submission = await prepared.submit();
+  if (submission.kind !== "transaction_hash") throw new Error("The wallet did not return a transaction reference");
+  sessionStorage.setItem(`pay3flow.otc.reference.${attempt.id}`, submission.reference);
+  await request(attempt.instructions.submit_path || `/attempts/${attempt.id}/reference`, token, { reference: submission.reference });
 }

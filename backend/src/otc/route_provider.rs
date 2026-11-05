@@ -14,9 +14,7 @@ use serde_json::Value;
 use tokio_postgres::Row;
 
 use crate::db::DbPool;
-use crate::route_engine::{
-    Amount, Asset, PublicRouteProvider, PublicRouteQuote, QuoteUnavailable,
-};
+use crate::route_engine::{Amount, Asset, PublicRouteProvider, PublicRouteQuote, QuoteUnavailable};
 
 const PROVIDER: &str = "pay3flow-otc";
 const EVER_DECIMALS: u32 = 9;
@@ -84,7 +82,11 @@ pub(crate) fn floor_units(value: &str, decimals: u32) -> Option<u128> {
 
 fn offer_from_row(row: &Row) -> Option<BookOffer> {
     let body: Value = row.get("body");
-    let units = |key: &str| body.get(key).and_then(Value::as_str).and_then(|raw| raw.parse::<u128>().ok());
+    let units = |key: &str| {
+        body.get(key)
+            .and_then(Value::as_str)
+            .and_then(|raw| raw.parse::<u128>().ok())
+    };
     let ever_units = units("ever_units")?;
     let usdt_units = units("usdt_units")?;
     if ever_units == 0 || usdt_units == 0 {
@@ -119,8 +121,15 @@ pub(crate) fn quotes_from_offers(
     if !buying_ever && !selling_ever {
         return Vec::new();
     }
-    let requested = floor_units(&amount.value, if buying_ever { USDT_DECIMALS } else { EVER_DECIMALS })
-        .unwrap_or(0);
+    let requested = floor_units(
+        &amount.value,
+        if buying_ever {
+            USDT_DECIMALS
+        } else {
+            EVER_DECIMALS
+        },
+    )
+    .unwrap_or(0);
     if requested == 0 {
         return Vec::new();
     }
@@ -168,7 +177,14 @@ pub(crate) fn quotes_from_offers(
                 return None;
             }
             let output = Amount::new(
-                super::amount::decimal(output_units, if buying_ever { EVER_DECIMALS } else { USDT_DECIMALS }),
+                super::amount::decimal(
+                    output_units,
+                    if buying_ever {
+                        EVER_DECIMALS
+                    } else {
+                        USDT_DECIMALS
+                    },
+                ),
                 to.clone(),
             )
             .ok()?;
@@ -268,7 +284,12 @@ impl PublicRouteProvider for OtcRouteProvider {
         })
     }
 
-    async fn quotes(&self, from: Asset, to: Asset, amount: Amount) -> Result<Vec<PublicRouteQuote>> {
+    async fn quotes(
+        &self,
+        from: Asset,
+        to: Asset,
+        amount: Amount,
+    ) -> Result<Vec<PublicRouteQuote>> {
         if !self.supports_pair(&from, &to) {
             return Ok(Vec::new());
         }
@@ -331,7 +352,10 @@ mod tests {
         assert_eq!(quotes.len(), 1, "only the 100-USDT offer covers 100 USDT");
         let quote = &quotes[0];
         assert_eq!(quote.quote_id.as_deref(), Some("big"));
-        assert_eq!(quote.input, amount, "the requested input is echoed verbatim");
+        assert_eq!(
+            quote.input, amount,
+            "the requested input is echoed verbatim"
+        );
         assert_eq!(quote.from, usdt());
         assert_eq!(quote.to, ever());
         // 100 USDT * (100_000 EVER / 100 USDT) = 100_000 EVER.
@@ -349,7 +373,11 @@ mod tests {
         let amount = Amount::new("500", ever()).unwrap();
         let quotes = quotes_from_offers(&book, &ever(), &usdt(), &amount, "https://x/#/otc");
         assert_eq!(quotes.len(), 2);
-        assert_eq!(quotes[0].quote_id.as_deref(), Some("rich"), "best price first");
+        assert_eq!(
+            quotes[0].quote_id.as_deref(),
+            Some("rich"),
+            "best price first"
+        );
         assert_eq!(quotes[0].output.value, "250");
         assert_eq!(quotes[1].quote_id.as_deref(), Some("cheap"));
         assert_eq!(quotes[1].output.value, "200");

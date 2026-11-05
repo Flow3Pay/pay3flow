@@ -1,7 +1,7 @@
 //! Customer-first, non-custodial EVER/USDT OTC settlement.
 mod test_workspace;
-pub use test_workspace::{Draft, OrderType, Side, TestOtc};
 pub use route_provider::OtcRouteProvider;
+pub use test_workspace::{Draft, OrderType, Side, TestOtc};
 
 mod accounting;
 mod amount;
@@ -37,6 +37,7 @@ mod workers;
 use crate::{
     core::{crypto::SecretBox, jwt::Jwt},
     db::DbPool,
+    route_engine::NearIntentsProvider,
 };
 use config::Config;
 use error::{Error, Result};
@@ -50,6 +51,7 @@ pub struct Service {
     pub(crate) secrets: SecretBox,
     pub(crate) jwt: Jwt,
     pub(crate) http: reqwest::Client,
+    pub(crate) near_intents: Option<NearIntentsProvider>,
 }
 impl Service {
     /// Load OTC configuration, disabled by default, and build bounded HTTP transport.
@@ -74,11 +76,16 @@ impl Service {
             cfg: Arc::new(cfg),
             secrets: SecretBox::new(secrets_key),
             jwt: Jwt::new(&format!("otc:{jwt_secret}")),
+            near_intents: None,
             http: reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(15))
                 .redirect(reqwest::redirect::Policy::none())
                 .build()?,
         })
+    }
+    pub fn with_near_intents(mut self, provider: NearIntentsProvider) -> Self {
+        self.near_intents = Some(provider);
+        self
     }
     pub(crate) async fn ready(&self) -> Result<()> {
         if !self.cfg.enabled {

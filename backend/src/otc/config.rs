@@ -28,7 +28,7 @@ pub(crate) struct Config {
     pub usdt_contract: String,
     #[serde(default = "default_ever_fee_reserve")]
     pub p2p_ever_fee_reserve: String,
-    /// Peer settlement network. Public offers are restricted to Ethereum mainnet.
+    /// Peer settlement network. OTC settlement currently supports Ethereum mainnet only.
     #[serde(default)]
     pub p2p_ethereum_chain_id: Option<u64>,
     #[serde(default)]
@@ -153,18 +153,18 @@ impl Config {
     }
     pub fn validate_network(&self) -> Result<()> {
         self.check_evm_network(self.ethereum_chain_id, &self.usdt_contract)?;
-        if let Some(contract) = &self.p2p_usdt_contract {
-            self.check_evm_network(self.p2p_chain(), contract)?;
-        }
+        self.check_evm_network(self.p2p_chain(), self.p2p_usdt())?;
         super::amount::units(&self.p2p_ever_fee_reserve, 9)?;
         Ok(())
     }
     fn check_evm_network(&self, chain_id: u64, contract: &str) -> Result<()> {
         let canonical = super::wallet::address("ethereum", contract)?;
-        if canonical != contract || chain_id == 0 {
-            return Err(invalid("Ethereum network settings must be canonical"));
+        if canonical != contract || chain_id != 1 {
+            return Err(invalid(
+                "OTC settlement currently supports Ethereum mainnet only",
+            ));
         }
-        if chain_id == 1 && canonical != USDT {
+        if canonical != USDT {
             return Err(invalid(
                 "Ethereum mainnet must use the canonical USDT contract",
             ));
@@ -396,8 +396,8 @@ impl Config {
 }
 
 #[cfg(test)]
-mod fee_recipient_tests {
-    use super::parse_fee_recipients;
+mod config_tests {
+    use super::{parse_fee_recipients, Config, USDT};
 
     #[test]
     fn parses_all_operator_fee_recipients() {
@@ -439,5 +439,23 @@ mod fee_recipient_tests {
             r#"["ethereum=0x1111111111111111111111111111111111111111","ethereum=0x1111111111111111111111111111111111111111"]"#
         )
         .is_err());
+    }
+
+    #[test]
+    fn rejects_testnet_and_unknown_networks_for_otc_settlement() {
+        let mut cfg = Config {
+            enabled: true,
+            ..Config::default()
+        };
+        cfg.ethereum_chain_id = 11155111;
+        assert!(cfg.validate_network().is_err());
+
+        cfg.ethereum_chain_id = 1;
+        cfg.p2p_ethereum_chain_id = Some(11155111);
+        assert!(cfg.validate_network().is_err());
+
+        cfg.p2p_usdt_contract = Some(USDT.into());
+        cfg.p2p_ethereum_chain_id = Some(8453);
+        assert!(cfg.validate_network().is_err());
     }
 }

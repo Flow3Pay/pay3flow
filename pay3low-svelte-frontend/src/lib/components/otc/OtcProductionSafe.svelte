@@ -4,7 +4,8 @@
   import { connectWallet } from "$lib/wallet-session";
   import { SAFE_FACTORY, SAFE_DEPLOYMENTS, factoryAbi, safeAbi, safeAppUrl, safeDeployment, safeOwners, safeNetwork, safePlanStorageKey, loadSafePlan, storeSafePlan, type SafeChainId, type SafePlan } from "$lib/otc/production-safe";
   let owners = ["", "", ""], plan: SafePlan | null = null, existing = "", existingUrl = "", busy = false, error = "";
-  let chainId: SafeChainId = 1, storageError = false;
+  const chainId: SafeChainId = 1;
+  let storageError = false;
   $: network = safeNetwork(chainId);
   $: rpc = createPublicClient({ chain: network.chain, transport: http(network.rpcUrl, { timeout: 20000, retryCount: 1 }) });
   function save(next: SafePlan) { storeSafePlan(localStorage, next); plan = next; }
@@ -98,11 +99,7 @@
 <details class="safeWallet" data-testid="production-safe">
   <summary>OTC multisig wallet <span>Safe 1.4.1 · {network.name} · 2 of 3</span></summary>
   <div class="content">
-    <label>Safe network<select value={chainId} on:change={(event) => { if (busy) return; chainId = Number(event.currentTarget.value) as SafeChainId; loadNetwork(); }} disabled={busy}>
-      <option value={1}>Ethereum Mainnet</option><option value={11155111}>Sepolia (testnet)</option>
-    </select></label>
-    {#if network.faucetUrl}<p>Test network · Use Sepolia ETH only. <a target="_blank" rel="noopener noreferrer" href={network.faucetUrl}>Get test ETH from faucet</a></p>{/if}
-    <p>Buyer, seller and arbitrator share a standard Safe. Any two owners approve transfers and refunds in Safe. {chainId === 1 ? "USDT stays in the Safe; EVER delivery is separate." : "This test uses Sepolia ETH; EVER and USDT settlement are outside this test."} This wallet has no automatic expiry or refund.</p>
+    <p>Buyer, seller and arbitrator share a standard Safe on Ethereum Mainnet. Any two owners approve transfers and refunds in Safe. USDT stays in the Safe; EVER delivery is separate. This wallet has no automatic expiry or refund.</p>
     {#if !plan}
       <form on:submit|preventDefault={() => run(review)}>
         {#each ["Buyer", "Seller", "Arbitrator"] as role, index}<label>{role} Ethereum address<input required autocomplete="off" spellcheck="false" placeholder="0x…" bind:value={owners[index]} disabled={busy} /></label>{/each}
@@ -116,7 +113,7 @@
         <p>Safe address: <code>{plan.address}</code></p>
         {#if plan.reference}<a target="_blank" rel="noopener noreferrer" href={`${network.explorerUrl}/tx/${plan.reference}`}>View original transaction</a>{/if}
         {#if plan.state === "ready"}<a class="action" target="_blank" rel="noopener noreferrer" href={safeAppUrl(plan.address, plan.chainId)}>Open Safe to fund, approve and transfer</a>
-        {:else if ["review", "failed"].includes(plan.state)}<p>Your owner wallet pays {chainId === 1 ? "Ethereum" : "Sepolia ETH"} gas. Creating the wallet transfers no tokens.</p><button disabled={busy} on:click={() => run(create)}>{plan.state === "failed" ? "Retry confirmed failed creation" : "Confirm creation in owner wallet"}</button>
+        {:else if ["review", "failed"].includes(plan.state)}<p>Your owner wallet pays Ethereum gas. Creating the wallet transfers no tokens.</p><button disabled={busy} on:click={() => run(create)}>{plan.state === "failed" ? "Retry confirmed failed creation" : "Confirm creation in owner wallet"}</button>
         {:else}<p>Creation is pending or unresolved. Keep the original transaction; do not send again.</p>{/if}
         <button disabled={busy} on:click={() => run(refresh)}>Check on-chain status</button>
         {#if ["review", "ready", "failed"].includes(plan.state)}<button disabled={busy} on:click={reset}>{plan.state === "review" ? "Edit owners" : "Set up another wallet"}</button>{/if}

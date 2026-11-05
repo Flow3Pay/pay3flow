@@ -195,6 +195,54 @@ fn ethereum_receipt_requires_exact_token_sender_nonce_and_finality() {
     )
     .is_err());
 }
+
+#[test]
+fn ethereum_receipt_binds_usdc_to_its_contract() {
+    let leg = terms(Direction::Buy).leg("payment").unwrap();
+    let hash = format!("0x{}", "c".repeat(64));
+    let tx = json!({
+        "hash":hash, "from":leg.sender, "to":super::config::USDC,
+        "input":super::chain::ethereum::transfer_data(&leg).unwrap(), "nonce":"0x3"
+    });
+    let block = json!({"hash":"canonical","timestamp":"0x640","number":"0x64"});
+    let receipt = json!({
+        "status":"0x1", "blockHash":"canonical", "blockNumber":"0x64", "transactionHash":hash,
+        "logs":[{
+            "address":super::config::USDC,
+            "topics":[
+                "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                format!("0x{:0>64}", leg.sender.trim_start_matches("0x")),
+                format!("0x{:0>64}", leg.recipient.trim_start_matches("0x"))
+            ],
+            "data":"0x5f5e100", "logIndex":"0x0", "removed":false
+        }]
+    });
+    assert!(
+        super::chain::ethereum::receipt(
+            &receipt,
+            &tx,
+            &block,
+            100,
+            &leg,
+            Some(3),
+            super::config::USDC,
+        )
+        .unwrap()
+        .unwrap()
+        .finalized
+    );
+    assert!(super::chain::ethereum::receipt(
+        &receipt,
+        &tx,
+        &block,
+        100,
+        &leg,
+        Some(3),
+        super::config::USDT,
+    )
+    .is_err());
+}
+
 #[test]
 fn ever_receipt_traces_net_delivery_and_bounce() {
     let leg = terms(Direction::Buy).leg("payout").unwrap();
@@ -265,12 +313,14 @@ pub(super) async fn fixture() -> (Service, tokio::task::JoinHandle<()>, String) 
         .await
         .unwrap()
         .batch_execute(&format!(
-            "{}\n{}\n{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
             include_str!("../../migrations/otc.sql"),
             include_str!("../../migrations/otc_escrow.sql"),
             include_str!("../../migrations/otc_public_offers.sql"),
             include_str!("../../migrations/otc_p2p.sql"),
             include_str!("../../migrations/otc_p2p_fees.sql"),
+            include_str!("../../migrations/otc_p2p_fee_payer.sql"),
+            include_str!("../../migrations/otc_p2p_near_intents.sql"),
             include_str!("../../migrations/otc_p2p_ui.sql")
         ))
         .await
@@ -313,6 +363,7 @@ pub(super) async fn fixture() -> (Service, tokio::task::JoinHandle<()>, String) 
         secrets: crate::core::crypto::SecretBox::new("fixture-key"),
         jwt: crate::core::jwt::Jwt::new("fixture-jwt"),
         http: reqwest::Client::new(),
+        near_intents: None,
     };
     let client = service.pool.get().await.unwrap();
     client.batch_execute("UPDATE otc_controls SET paused=FALSE; UPDATE otc_observers SET paused=FALSE,last_scan=now(),checkpoint='{\"block\":\"0x1\",\"timestamp\":\"2026-10-10T00:00:00Z\"}'; INSERT INTO otc_inventory(chain,balance,gas_reserve,observed_at) VALUES('ethereum',1000000000,0,now()),('everscale',10000000000000,1000000000,now())").await.unwrap();
@@ -972,12 +1023,14 @@ async fn p2p_fixture() -> (Service, tokio::task::JoinHandle<()>, String, String)
         .await
         .unwrap()
         .batch_execute(&format!(
-            "{}\n{}\n{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
             include_str!("../../migrations/otc.sql"),
             include_str!("../../migrations/otc_escrow.sql"),
             include_str!("../../migrations/otc_public_offers.sql"),
             include_str!("../../migrations/otc_p2p.sql"),
             include_str!("../../migrations/otc_p2p_fees.sql"),
+            include_str!("../../migrations/otc_p2p_fee_payer.sql"),
+            include_str!("../../migrations/otc_p2p_near_intents.sql"),
             include_str!("../../migrations/otc_p2p_ui.sql")
         ))
         .await
@@ -1014,6 +1067,7 @@ async fn p2p_fixture() -> (Service, tokio::task::JoinHandle<()>, String, String)
         secrets: crate::core::crypto::SecretBox::new("fixture-key"),
         jwt: crate::core::jwt::Jwt::new("fixture-jwt"),
         http: reqwest::Client::new(),
+        near_intents: None,
     };
     let owner = format!("{base}/actors/customer");
     let taker = format!("{base}/actors/customer2");
@@ -1423,12 +1477,16 @@ async fn p2p_completion_accrues_the_service_fee_once() {
         .unwrap();
     let id = deal_id(&deal).await;
     // The deal freezes the policy, so a later offer edit cannot change it.
-    assert_eq!(deal["fee_policy"]["version"], json!("p2p-3pct-v1"));
+    assert_eq!(deal["fee_policy"]["version"], json!("p2p-3pct-usdt-v1"));
     assert_eq!(deal["fee_policy"]["rate"], json!("0.03"));
     assert_eq!(deal["fee_policy"]["basis_units"], json!("11889000"));
     assert_eq!(deal["fee_policy"]["fee_units"], json!("356670"));
     assert_eq!(deal["fee_policy"]["net_units"], json!("11532330"));
     assert_eq!(deal["fee_accrued"], json!(false));
+    assert_eq!(deal["fee_policy"]["asset"], json!("USDT"));
+    assert_eq!(deal["fee_policy"]["payer"], json!("stablecoin_sender"));
+    assert_eq!(deal["fee_policy"]["withheld"], json!(false));
+    assert_eq!(deal["terms"]["fee_payer_actor"], json!(taker));
     assert_eq!(deal["terms"]["stablecoin"], json!("USDC"));
     assert_eq!(deal["terms"]["usdt_contract"], json!(super::config::USDC));
     let evidence = |chain: &str| Evidence {
@@ -1460,7 +1518,7 @@ async fn p2p_completion_accrues_the_service_fee_once() {
     let client = service.pool.get().await.unwrap();
     let row = client
         .query_one(
-            "SELECT basis_units::text,fee_units::text,net_units::text,rate::text,version,state,asset FROM otc_p2p_fees WHERE trade_id=$1",
+            "SELECT basis_units::text,fee_units::text,net_units::text,rate::text,version,state,asset,payer_actor FROM otc_p2p_fees WHERE trade_id=$1",
             &[&id],
         )
         .await
@@ -1469,9 +1527,10 @@ async fn p2p_completion_accrues_the_service_fee_once() {
     assert_eq!(row.get::<_, String>(1), "356670");
     assert_eq!(row.get::<_, String>(2), "11532330");
     assert_eq!(row.get::<_, String>(3), "0.03");
-    assert_eq!(row.get::<_, String>(4), "p2p-3pct-v1");
+    assert_eq!(row.get::<_, String>(4), "p2p-3pct-usdt-v1");
     assert_eq!(row.get::<_, String>(5), "accrued");
-    assert_eq!(row.get::<_, String>(6), "USDC");
+    assert_eq!(row.get::<_, String>(6), "USDT");
+    assert_eq!(row.get::<_, String>(7), taker);
     // Replaying the completing leg is idempotent and never doubles the fee.
     service
         .credit_p2p(Uuid::new_v4(), id, "payout", &evidence("everscale"))

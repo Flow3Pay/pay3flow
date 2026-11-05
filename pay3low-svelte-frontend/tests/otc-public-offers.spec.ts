@@ -337,11 +337,10 @@ test("sale publication uses the original Buy/Sell ticket, book and activity with
   await page.getByTestId("otc-publish-offer").click();
   await expect(page.getByTestId("otc-offer-review")).toContainText("0.0011889 USDT / EVER");
   const split = page.getByTestId("otc-offer-fee-split");
-  await expect(split).toContainText("Amount");
+  await expect(split).toContainText("Offer amount");
   await expect(split).toContainText("Service fee (3%)");
   await expect(split).toContainText("0.003567 USDT");
-  await expect(split).toContainText("0.115323 USDT");
-  await expect(split).toContainText("You receive");
+  await expect(split).toContainText("11.889 USDT");
   await page.getByTestId("otc-offer-publish").click();
   const published = page.locator(".bookColumn .obRow");
   await expect(published).toHaveCount(1);

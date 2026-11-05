@@ -403,12 +403,30 @@ mod tests {
     #[test]
     fn spot_layout_uses_hourly_points_for_short_ranges_and_daily_after() {
         let now = at(1_761_000_000);
-        assert_eq!(Window::parse("1h", now).unwrap().spot_layout(), ("1h", 24, 300));
-        assert_eq!(Window::parse("24h", now).unwrap().spot_layout(), ("1h", 26, 300));
-        assert_eq!(Window::parse("1w", now).unwrap().spot_layout(), ("1h", 170, 300));
-        assert_eq!(Window::parse("1m", now).unwrap().spot_layout(), ("1d", 32, 86_400));
-        assert_eq!(Window::parse("6m", now).unwrap().spot_layout(), ("1d", 186, 86_400));
-        assert_eq!(Window::parse("1y", now).unwrap().spot_layout(), ("1d", 372, 86_400));
+        assert_eq!(
+            Window::parse("1h", now).unwrap().spot_layout(),
+            ("1h", 24, 300)
+        );
+        assert_eq!(
+            Window::parse("24h", now).unwrap().spot_layout(),
+            ("1h", 26, 300)
+        );
+        assert_eq!(
+            Window::parse("1w", now).unwrap().spot_layout(),
+            ("1h", 170, 300)
+        );
+        assert_eq!(
+            Window::parse("1m", now).unwrap().spot_layout(),
+            ("1d", 32, 86_400)
+        );
+        assert_eq!(
+            Window::parse("6m", now).unwrap().spot_layout(),
+            ("1d", 186, 86_400)
+        );
+        assert_eq!(
+            Window::parse("1y", now).unwrap().spot_layout(),
+            ("1d", 372, 86_400)
+        );
     }
 
     #[test]

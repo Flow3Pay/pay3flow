@@ -363,11 +363,23 @@ impl NearIntentsProvider {
             let tokens = self.tokens.read().await;
             let origin = tokens
                 .iter()
-                .find(|token| token.matches(&request.from))
+                .find(|token| {
+                    token.matches(&request.from)
+                        && request
+                            .origin_asset_id
+                            .as_deref()
+                            .is_none_or(|asset_id| token.asset_id == asset_id)
+                })
                 .with_context(|| format!("unsupported NEAR Intents origin {}", request.from))?;
             let destination = tokens
                 .iter()
-                .find(|token| token.matches(&request.to))
+                .find(|token| {
+                    token.matches(&request.to)
+                        && request
+                            .destination_asset_id
+                            .as_deref()
+                            .is_none_or(|asset_id| token.asset_id == asset_id)
+                })
                 .with_context(|| format!("unsupported NEAR Intents destination {}", request.to))?;
             (
                 origin.asset_id.clone(),
@@ -471,6 +483,8 @@ impl QuoteProvider for NearIntentsProvider {
         let request = NearQuoteRequest {
             from: from.clone(),
             to,
+            origin_asset_id: None,
+            destination_asset_id: None,
             amount,
             recipient,
             refund_to,

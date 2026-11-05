@@ -103,7 +103,8 @@ async fn main() -> anyhow::Result<()> {
         &cfg.ap_origin,
         &cfg.secrets_key,
         &cfg.jwt_secret,
-    )?;
+    )?
+    .with_near_intents(near_intents.clone());
     otc.start();
     let mut public_route_providers: Vec<Arc<dyn PublicRouteProvider>> =
         vec![Arc::new(near_intents.clone())];

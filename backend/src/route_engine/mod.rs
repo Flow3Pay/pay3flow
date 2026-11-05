@@ -544,6 +544,8 @@ pub struct NearSwapStatus {
 pub struct NearQuoteRequest {
     pub from: Asset,
     pub to: Asset,
+    pub origin_asset_id: Option<String>,
+    pub destination_asset_id: Option<String>,
     pub amount: Amount,
     pub recipient: String,
     pub refund_to: String,
@@ -1193,6 +1195,73 @@ mod tests {
             serde_json::to_string(&asset("USDT@tron")).unwrap(),
             "\"USDT@tron\""
         );
+    }
+
+    #[tokio::test]
+    async fn near_quote_binds_duplicate_tickers_to_selected_asset_ids() {
+        let (body_tx, body_rx) = tokio::sync::oneshot::channel();
+        let body_tx = std::sync::Arc::new(std::sync::Mutex::new(Some(body_tx)));
+        let app = axum::Router::new().route(
+            "/v0/quote",
+            axum::routing::post(move |axum::Json(body): axum::Json<Value>| async move {
+                if let Ok(mut sender) = body_tx.lock() {
+                    if let Some(sender) = sender.take() {
+                        let _ = sender.send(body);
+                    }
+                }
+                (
+                    axum::http::StatusCode::BAD_REQUEST,
+                    axum::Json(json!({"message": "test response"})),
+                )
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let provider = NearIntentsProvider::new(format!("http://{address}"), None).unwrap();
+        provider.set_supported_tokens(vec![
+            NearToken {
+                asset_id: "usdt-first".into(),
+                blockchain: "eth".into(),
+                symbol: "USDT".into(),
+                decimals: Some(6),
+                contract_address: Some("0x111".into()),
+            },
+            NearToken {
+                asset_id: "usdt-selected".into(),
+                blockchain: "eth".into(),
+                symbol: "USDT".into(),
+                decimals: Some(6),
+                contract_address: Some("0x222".into()),
+            },
+            NearToken {
+                asset_id: "usdc-selected".into(),
+                blockchain: "eth".into(),
+                symbol: "USDC".into(),
+                decimals: Some(6),
+                contract_address: Some("0x333".into()),
+            },
+        ]);
+        let from = asset("USDT@ethereum");
+        let error = provider
+            .executable_quote(NearQuoteRequest {
+                from: from.clone(),
+                to: asset("USDC@ethereum"),
+                origin_asset_id: Some("usdt-selected".into()),
+                destination_asset_id: Some("usdc-selected".into()),
+                amount: Amount::new("10", from).unwrap(),
+                recipient: "recipient".into(),
+                refund_to: "refund".into(),
+                slippage_bps: 100,
+                dry: false,
+            })
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("HTTP 400"));
+        let body = body_rx.await.unwrap();
+        assert_eq!(body["originAsset"], "usdt-selected");
+        assert_eq!(body["destinationAsset"], "usdc-selected");
+        server.abort();
     }
 
     #[test]

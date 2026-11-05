@@ -7,6 +7,7 @@ use super::{
     model::{Direction, Evidence, Leg},
     wallet, Service,
 };
+use crate::route_engine::{Amount, Asset, NearQuoteRequest};
 use chrono::{DateTime, Duration, Utc};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -17,6 +18,28 @@ use uuid::Uuid;
 #[serde(deny_unknown_fields)]
 pub(crate) struct DealPrepareRequest {
     pub kind: String,
+    #[serde(default)]
+    pub source_asset: Option<String>,
+    #[serde(default)]
+    pub source_asset_id: Option<String>,
+    #[serde(default)]
+    pub source_amount: Option<String>,
+    #[serde(default)]
+    pub source_address: Option<String>,
+    #[serde(default)]
+    pub slippage_bps: Option<u32>,
+}
+impl From<&str> for DealPrepareRequest {
+    fn from(kind: &str) -> Self {
+        Self {
+            kind: kind.to_string(),
+            source_asset: None,
+            source_asset_id: None,
+            source_amount: None,
+            source_address: None,
+            slippage_bps: None,
+        }
+    }
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -119,12 +142,21 @@ impl Service {
                 .as_str()
                 .ok_or_else(|| invalid("offer terms are malformed"))?,
         )?;
-        let fee_policy = terms
+        let mut fee_policy = terms
             .get("fee_policy")
             .filter(|policy| policy.is_object())
             .cloned()
             .unwrap_or_else(|| super::public_offers::fee_policy(usdt_basis));
+        fee_policy["version"] = json!(super::public_offers::P2P_FEE_VERSION);
+        fee_policy["asset"] = json!("USDT");
+        fee_policy["payer"] = json!("stablecoin_sender");
+        fee_policy["withheld"] = json!(false);
         let direction: Direction = serde_json::from_value(terms["direction"].clone())?;
+        let fee_payer_actor = if direction == Direction::Sell {
+            actor
+        } else {
+            owner.as_str()
+        };
         if self.cfg.p2p_chain() != 1
             || terms["ethereum_chain_id"] != json!(1)
             || token_contract != stablecoin.contract()
@@ -156,6 +188,7 @@ impl Service {
             "ever_units": terms["ever_units"], "usdt_units": terms["usdt_units"],
             "usdt_payer": usdt_payer, "usdt_payee": usdt_payee,
             "ever_payer": ever_payer, "ever_payee": ever_payee,
+            "fee_payer_actor": fee_payer_actor,
             "usdt_contract": token_contract,
             "stablecoin_contract": token_contract,
             "ethereum_chain_id": 1,
@@ -321,8 +354,36 @@ impl Service {
         actor: &str,
         id: Uuid,
         key: &str,
-        kind: &str,
+        request: impl Into<DealPrepareRequest>,
     ) -> Result<Value> {
+        let request = request.into();
+        if request.kind == "near-intents" {
+            let source_asset = request
+                .source_asset
+                .as_deref()
+                .ok_or_else(|| invalid("source asset is required"))?;
+            let source_amount = request
+                .source_amount
+                .as_deref()
+                .ok_or_else(|| invalid("source amount is required"))?;
+            let source_address = request
+                .source_address
+                .as_deref()
+                .ok_or_else(|| invalid("source address is required"))?;
+            return self
+                .p2p_prepare_near_intents(
+                    actor,
+                    id,
+                    key,
+                    source_asset,
+                    request.source_asset_id.as_deref(),
+                    source_amount,
+                    source_address,
+                    request.slippage_bps.unwrap_or(100),
+                )
+                .await;
+        }
+        let kind = request.kind.as_str();
         if !self.p2p_available() {
             return Err(Error::Disabled);
         }
@@ -459,6 +520,272 @@ impl Service {
         tx.commit().await?;
         Ok(result)
     }
+    async fn p2p_prepare_near_intents(
+        &self,
+        actor: &str,
+        id: Uuid,
+        key: &str,
+        source_asset: &str,
+        source_asset_id: Option<&str>,
+        source_amount: &str,
+        source_address: &str,
+        slippage_bps: u32,
+    ) -> Result<Value> {
+        if !self.p2p_available() {
+            return Err(Error::Disabled);
+        }
+        if key.trim().is_empty() || key.len() > 128 {
+            return Err(invalid("Idempotency-Key required (1–128 characters)"));
+        }
+        let from = Asset::parse(source_asset).map_err(|_| invalid("unsupported source asset"))?;
+        let network = from
+            .location
+            .as_deref()
+            .ok_or_else(|| invalid("source asset must include its network"))?;
+        if !crate::route_execution::supports_otc_wallet_network(network) {
+            return Err(invalid("source network has no OTC wallet executor"));
+        }
+        crate::route_execution::validate_otc_wallet_address(network, source_address)
+            .map_err(|_| invalid("invalid source wallet address"))?;
+        let mut client = self.pool.get().await?;
+        let row = client
+            .query_opt(
+                "SELECT * FROM otc_p2p_trades WHERE id=$1 AND (owner_actor=$2 OR taker_actor=$2)",
+                &[&id, &actor],
+            )
+            .await?
+            .ok_or(Error::NotFound)?;
+        let state: String = row.get("state");
+        let body: Value = row.get("body");
+        let owner: String = row.get("owner_actor");
+        let taker: String = row.get("taker_actor");
+        let pay_by: DateTime<Utc> = row.get("pay_by");
+        let expected_payer = match body["direction"].as_str() {
+            Some("sell") => taker,
+            Some("buy") => owner,
+            _ => return Err(invalid("deal direction is malformed")),
+        };
+        if actor != expected_payer {
+            return Err(Error::Unauthorized);
+        }
+        if let Some(existing) = client
+            .query_opt(
+                "SELECT id,state,instructions FROM otc_p2p_attempts WHERE trade_id=$1 AND kind='payment' AND idempotency_key=$2",
+                &[&id, &key],
+            )
+            .await?
+        {
+            let mut result = deal(&row, actor);
+            result["attempt"] = json!({
+                "id": existing.get::<_, Uuid>(0),
+                "state": existing.get::<_, String>(1),
+                "instructions": existing.get::<_, Value>(2),
+            });
+            return Ok(result);
+        }
+        if state != "payment_pending" || Utc::now() > pay_by {
+            return Err(Error::Conflict("stablecoin payment is unavailable".into()));
+        }
+        if client
+            .query_opt(
+                "SELECT id FROM otc_p2p_attempts WHERE trade_id=$1 AND kind='payment' AND state!='failed'",
+                &[&id],
+            )
+            .await?
+            .is_some()
+        {
+            return Err(Error::Conflict(
+                "this deal leg already has an unresolved attempt".into(),
+            ));
+        }
+        let stablecoin = super::public_offers::Stablecoin::from_terms(&body)?;
+        let to = Asset::new(stablecoin.symbol(), Some("ethereum"))?;
+        let provider = self.near_intents.as_ref().ok_or(Error::Disabled)?;
+        let source_asset_id = source_asset_id
+            .filter(|asset_id| !asset_id.trim().is_empty())
+            .ok_or_else(|| invalid("source asset id is required"))?;
+        let source_token = provider.token_for_asset(&from).await?;
+        if source_asset_id != source_token.asset_id {
+            return Err(Error::Conflict(
+                "The selected payment asset changed; select it again".into(),
+            ));
+        }
+        if !matches!(
+            source_token.symbol.to_ascii_uppercase().as_str(),
+            "USDT" | "USDC"
+        ) {
+            return Err(invalid("only USDT and USDC can fund an OTC deal"));
+        }
+        let decimals = source_token
+            .decimals
+            .ok_or_else(|| invalid("source token precision is unavailable"))?;
+        let token_contract = source_token
+            .contract_address
+            .clone()
+            .filter(|contract| !contract.trim().is_empty())
+            .ok_or_else(|| invalid("source token wallet transfer is unavailable"))?;
+        amount::units(source_amount, u32::from(decimals))?;
+        if from == to {
+            return Box::pin(self.p2p_prepare(actor, id, key, "payment")).await;
+        }
+        let destination_token = provider.token_for_asset(&to).await?;
+        if destination_token.decimals != Some(6)
+            || destination_token
+                .contract_address
+                .as_deref()
+                .is_none_or(|address| !address.eq_ignore_ascii_case(stablecoin.contract()))
+        {
+            return Err(invalid("destination token precision is unsupported"));
+        }
+        if network == "ethereum" {
+            let expected_contract = if source_token.symbol.eq_ignore_ascii_case("USDT") {
+                super::config::USDT
+            } else {
+                super::config::USDC
+            };
+            if source_token
+                .contract_address
+                .as_deref()
+                .is_none_or(|address| !address.eq_ignore_ascii_case(expected_contract))
+            {
+                return Err(invalid("unsupported Ethereum stablecoin contract"));
+            }
+        }
+        let recipient = body["usdt_payee"]
+            .as_str()
+            .ok_or_else(|| invalid("deal recipient is missing"))?;
+        let refund_to = source_address;
+        let amount = Amount::new(source_amount, from.clone())?;
+        let quote = provider
+            .executable_quote(NearQuoteRequest {
+                from: from.clone(),
+                to: to.clone(),
+                origin_asset_id: Some(source_token.asset_id.clone()),
+                destination_asset_id: Some(destination_token.asset_id.clone()),
+                amount,
+                recipient: recipient.to_string(),
+                refund_to: refund_to.to_string(),
+                slippage_bps: slippage_bps.min(10_000),
+                dry: false,
+            })
+            .await?;
+        let deposit_address = quote
+            .deposit_address
+            .as_deref()
+            .filter(|address| !address.trim().is_empty())
+            .ok_or_else(|| invalid("Cross-network payment is temporarily unavailable"))?;
+        let expires_at = quote
+            .expires_at
+            .unwrap_or_else(|| Utc::now() + Duration::minutes(3));
+        if expires_at <= Utc::now() {
+            return Err(Error::Conflict(
+                "The payment quote has expired; request a new quote".into(),
+            ));
+        }
+        let required_units = amount::integer(
+            body["usdt_units"]
+                .as_str()
+                .ok_or_else(|| invalid("deal amount is malformed"))?,
+        )?;
+        let quoted_units = amount::units(&quote.output.value, 6)?;
+        if quoted_units != required_units {
+            return Err(Error::Conflict(
+                "The route quote must match the exact deal amount".into(),
+            ));
+        }
+        let deposit_memo =
+            crate::route_engine::first_string(&quote.raw, &["depositMemo", "deposit_memo"]);
+        if deposit_memo.is_some() && network != "near" {
+            return Err(invalid(
+                "This payment requires a wallet instruction that is not supported on the selected network",
+            ));
+        }
+        let leg = super::model::Leg {
+            chain: network.to_string(),
+            amount: source_amount.to_string(),
+            transfer_amount: source_amount.to_string(),
+            sender: source_address.to_string(),
+            recipient: deposit_address.to_string(),
+        };
+        let attempt = Uuid::new_v4();
+        let instructions = json!({
+            "leg": leg,
+            "stablecoin": stablecoin.symbol(),
+            "source_asset": from,
+            "source_network": network,
+            "source_asset_id": source_token.asset_id,
+            "source_decimals": decimals,
+            "token_contract": token_contract,
+            "source_amount": source_amount,
+            "source_address": source_address,
+            "destination_asset": to,
+            "destination_asset_id": destination_token.asset_id,
+            "destination_decimals": 6,
+            "recipient": recipient,
+            "refund_to": refund_to,
+            "expected_output": quote.output.value,
+            "expected_fee": quote.fee.as_ref().map(|fee| json!({
+                "asset": fee.asset.to_string(),
+                "amount": fee.value,
+            })),
+            "slippage_bps": slippage_bps.min(10_000),
+            "minimum_output": body["usdt_amount"],
+            "deposit_address": deposit_address,
+            "deposit_memo": deposit_memo,
+            "quote_id": quote.quote_id,
+            "quote_expires_at": expires_at,
+            "quote": quote.raw,
+            "attempt_id": attempt,
+            "trade_id": id,
+            "submit_path": format!("/p2p/attempts/{attempt}/reference"),
+        });
+
+        let tx = client.transaction().await?;
+        if let Some(existing) = tx
+            .query_opt(
+                "SELECT id,instructions,state FROM otc_p2p_attempts WHERE trade_id=$1 AND kind='payment' AND idempotency_key=$2",
+                &[&id, &key],
+            )
+            .await?
+        {
+            let trade = tx
+                .query_one("SELECT * FROM otc_p2p_trades WHERE id=$1", &[&id])
+                .await?;
+            let mut result = deal(&trade, actor);
+            result["attempt"] = json!({
+                "id": existing.get::<_, Uuid>(0),
+                "state": existing.get::<_, String>(2),
+                "instructions": existing.get::<_, Value>(1),
+            });
+            tx.commit().await?;
+            return Ok(result);
+        }
+        if tx
+            .query_opt(
+                "SELECT id FROM otc_p2p_attempts WHERE trade_id=$1 AND kind='payment' AND state!='failed'",
+                &[&id],
+            )
+            .await?
+            .is_some()
+        {
+            return Err(Error::Conflict(
+                "this deal leg already has an unresolved attempt".into(),
+            ));
+        }
+        tx.execute(
+            "INSERT INTO otc_p2p_attempts(id,trade_id,kind,payer_actor,chain,state,instructions,idempotency_key) VALUES($1,$2,'payment',$3,'near-intents','prepared',$4,$5)",
+            &[&attempt, &id, &actor, &instructions, &key],
+        )
+        .await?;
+        let trade = tx
+            .query_one("SELECT * FROM otc_p2p_trades WHERE id=$1", &[&id])
+            .await?;
+        let mut result = deal(&trade, actor);
+        result["attempt"] =
+            json!({"id": attempt, "state": "prepared", "instructions": instructions});
+        tx.commit().await?;
+        Ok(result)
+    }
     pub(crate) async fn p2p_submit(
         &self,
         actor: &str,
@@ -468,7 +795,7 @@ impl Service {
         let client = self.pool.get().await?;
         let row = client
             .query_opt(
-                "SELECT a.trade_id,a.kind,a.reference,a.chain,t.owner_actor,t.taker_actor FROM otc_p2p_attempts a JOIN otc_p2p_trades t ON t.id=a.trade_id WHERE a.id=$1",
+                "SELECT a.trade_id,a.kind,a.reference,a.chain,t.owner_actor,t.taker_actor,a.instructions FROM otc_p2p_attempts a JOIN otc_p2p_trades t ON t.id=a.trade_id WHERE a.id=$1",
                 &[&attempt],
             )
             .await?
@@ -481,12 +808,24 @@ impl Service {
         let kind: String = row.get(1);
         let chain: String = row.get(3);
         let existing: Option<String> = row.get(2);
+        let instructions: Value = row.get(6);
         if existing.as_ref().is_some_and(|r| r != reference) {
             return Err(Error::Conflict("original reference is immutable".into()));
         }
-        let bytes = wallet::unhex(reference)?;
-        if bytes.len() != 32 || (chain == "ethereum" && !reference.starts_with("0x")) {
-            return Err(invalid("invalid chain reference"));
+        if chain == "near-intents" {
+            if reference.is_empty()
+                || reference.len() > 160
+                || !reference
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || b"_-".contains(&byte))
+            {
+                return Err(invalid("invalid NEAR Intents transaction reference"));
+            }
+        } else {
+            let bytes = wallet::unhex(reference)?;
+            if bytes.len() != 32 || (chain == "ethereum" && !reference.starts_with("0x")) {
+                return Err(invalid("invalid chain reference"));
+            }
         }
         client
             .execute(
@@ -494,6 +833,20 @@ impl Service {
                 &[&attempt, &reference],
             )
             .await?;
+        if chain == "near-intents" {
+            if let Some(provider) = &self.near_intents {
+                if let Err(error) = provider
+                    .submit_deposit_tx_with_memo(
+                        reference,
+                        instructions["deposit_address"].as_str().unwrap_or_default(),
+                        instructions["deposit_memo"].as_str(),
+                    )
+                    .await
+                {
+                    tracing::warn!(attempt=%attempt, error=%error, "NEAR Intents deposit notification failed");
+                }
+            }
+        }
         tracing::info!(trade=%row.get::<_, Uuid>(0), kind, "otc.p2p.reference");
         Ok(json!({"tracked": true}))
     }
@@ -564,6 +917,101 @@ impl Service {
             let instructions: Value = row.get(4);
             let mut reference: Option<String> = row.get(5);
             let leg: Leg = serde_json::from_value(instructions["leg"].clone())?;
+            if chain == "near-intents" {
+                let Some(provider) = &self.near_intents else {
+                    continue;
+                };
+                let deposit_address = instructions["deposit_address"]
+                    .as_str()
+                    .ok_or_else(|| invalid("NEAR Intents deposit address is missing"))?;
+                let deposit_memo = instructions["deposit_memo"].as_str();
+                let status = match provider
+                    .status_with_memo(deposit_address, deposit_memo)
+                    .await
+                {
+                    Ok(status) => status,
+                    Err(error) => {
+                        tracing::warn!(trade=%id, attempt=%attempt, error=%error, "NEAR Intents status poll failed");
+                        continue;
+                    }
+                };
+                match status.status.to_ascii_uppercase().as_str() {
+                    "SUCCESS" => {
+                        let output = status.output_amount.clone().or_else(|| {
+                            crate::route_engine::first_string(
+                                &status.raw,
+                                &["amountOut", "amount_out", "outputAmount"],
+                            )
+                        });
+                        let Some(output) = output else {
+                            tracing::warn!(trade=%id, attempt=%attempt, "NEAR Intents success has no output amount");
+                            continue;
+                        };
+                        let Some(output_units) = provider_amount_units(&output, 6) else {
+                            tracing::warn!(trade=%id, attempt=%attempt, "NEAR Intents success has invalid output amount");
+                            continue;
+                        };
+                        let Some(minimum_units) = instructions["minimum_output"]
+                            .as_str()
+                            .and_then(|value| amount::units(value, 6).ok())
+                        else {
+                            return Err(invalid("NEAR Intents minimum output is malformed"));
+                        };
+                        if output_units != minimum_units {
+                            tracing::warn!(trade=%id, attempt=%attempt, output_units, minimum_units, "cross-network output does not match OTC amount");
+                            continue;
+                        }
+                        let identity = reference
+                            .clone()
+                            .or_else(|| {
+                                crate::route_engine::first_string(
+                                    &status.raw,
+                                    &["destinationTxHash", "destination_tx_hash", "txHash"],
+                                )
+                            })
+                            .unwrap_or_else(|| {
+                                instructions["quote_id"]
+                                    .as_str()
+                                    .unwrap_or_default()
+                                    .to_string()
+                            });
+                        let evidence = Evidence {
+                            chain: "near-intents".into(),
+                            identity,
+                            leg,
+                            included_at: Utc::now(),
+                            canonical: true,
+                            finalized: true,
+                            successful: true,
+                            raw: json!({
+                                "provider": "near-intents",
+                                "status": status.raw,
+                                "submitted_reference": reference,
+                                "actual_output_units": output_units.to_string(),
+                                "minimum_output_units": minimum_units.to_string(),
+                            }),
+                        };
+                        self.credit_p2p(attempt, id, &kind, &evidence).await?;
+                    }
+                    "REFUNDED" => {
+                        client
+                            .execute(
+                                "UPDATE otc_p2p_attempts SET state='failed',evidence=$2,updated_at=now() WHERE id=$1 AND state IN ('prepared','submitted','confirming')",
+                                &[&attempt, &json!({"provider":"near-intents","status":status.raw,"outcome":"refunded"})],
+                            )
+                            .await?;
+                    }
+                    _ => {
+                        client
+                            .execute(
+                                "UPDATE otc_p2p_attempts SET state='confirming',evidence=$2,updated_at=now() WHERE id=$1 AND state IN ('submitted','confirming')",
+                                &[&attempt, &json!({"provider":"near-intents","status":status.raw})],
+                            )
+                            .await?;
+                    }
+                }
+                continue;
+            }
             // Read the leg back on the network the handoff was built for.
             let evm_net = || super::chain::EvmNet {
                 rpcs: self.cfg.p2p_rpc().to_vec(),
@@ -741,22 +1189,38 @@ impl Service {
                 .filter(|policy| policy.is_object())
                 .cloned()
                 .unwrap_or_else(|| super::public_offers::fee_policy(basis));
-            let text = |key: &str| {
-                policy
+            let fee_asset = policy
+                .get("asset")
+                .and_then(Value::as_str)
+                .filter(|asset| matches!(*asset, "USDT" | "USDC"))
+                .ok_or_else(|| invalid("deal fee asset is malformed"))?;
+            let payer_actor = body
+                .get("fee_payer_actor")
+                .and_then(Value::as_str)
+                .ok_or_else(|| invalid("stablecoin fee payer is missing"))?;
+            let text = |key: &str| -> Result<String> {
+                Ok(policy
                     .get(key)
                     .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_string()
+                    .ok_or_else(|| invalid("deal fee terms are malformed"))?
+                    .to_string())
             };
             tx.execute(
-                    "INSERT INTO otc_p2p_fees(id,trade_id,offer_id,asset,precision,basis_units,fee_units,net_units,rate,version,state) VALUES($1,$2,$3,$4,6,$5::text::numeric,$6::text::numeric,$7::text::numeric,$8::text::numeric,$9,'accrued') ON CONFLICT (trade_id) DO NOTHING",
-                    &[&Uuid::new_v4(), &id, &offer_id, &super::public_offers::Stablecoin::from_terms(&body)?.symbol(), &text("basis_units"), &text("fee_units"), &text("net_units"), &text("rate"), &text("version")],
+                    "INSERT INTO otc_p2p_fees(id,trade_id,offer_id,asset,precision,basis_units,fee_units,net_units,rate,version,state,payer_actor) VALUES($1,$2,$3,$4,6,$5::text::numeric,$6::text::numeric,$7::text::numeric,$8::text::numeric,$9,'accrued',$10) ON CONFLICT (trade_id) DO NOTHING",
+                    &[&Uuid::new_v4(), &id, &offer_id, &fee_asset, &text("basis_units")?, &text("fee_units")?, &text("net_units")?, &text("rate")?, &text("version")?, &payer_actor],
             )
             .await?;
         }
         tracing::info!(trade=%id, kind, state=next, "otc.p2p.leg_verified");
         tx.commit().await?;
         Ok(())
+    }
+}
+fn provider_amount_units(value: &str, decimals: u32) -> Option<u128> {
+    if value.contains('.') {
+        amount::units(value, decimals).ok()
+    } else {
+        value.parse().ok()
     }
 }
 fn deal(row: &Row, actor: &str) -> Value {

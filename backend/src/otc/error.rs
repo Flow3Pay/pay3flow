@@ -46,7 +46,8 @@ impl IntoResponse for Error {
                 tracing::warn!(error = %error, "otc.reader.unavailable");
                 (
                     StatusCode::SERVICE_UNAVAILABLE,
-                    "A chain or relay endpoint is unavailable right now. Try again in a moment.".into(),
+                    "A chain or relay endpoint is unavailable right now. Try again in a moment."
+                        .into(),
                 )
             }
             other => {

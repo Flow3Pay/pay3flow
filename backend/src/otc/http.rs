@@ -39,6 +39,7 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/api/otc/offers/:id/cancel", post(cancel_public_offer))
         .route("/api/otc/offers/:id/accept", post(accept_offer))
         .route("/api/otc/p2p/trades", get(p2p_trades))
+        .route("/api/otc/p2p/assets", get(p2p_assets))
         .route("/api/otc/p2p/trades/:id", get(p2p_deal))
         .route("/api/otc/p2p/trades/:id/prepare", post(p2p_prepare))
         .route("/api/otc/p2p/trades/:id/confirm", post(p2p_confirm))
@@ -259,6 +260,77 @@ async fn p2p_trades(State(state): State<AppState>, headers: HeaderMap) -> Result
     let (_, actor) = state.otc.session(bearer(&headers)?).await?;
     Ok(Json(state.otc.p2p_trades(&actor).await?))
 }
+async fn p2p_assets(State(state): State<AppState>) -> Json<Value> {
+    let Some(provider) = state.otc.near_intents.as_ref() else {
+        return Json(json!({"assets":[]}));
+    };
+    let tokens = provider.supported_tokens().await;
+    let mut assets = Vec::new();
+    for token in tokens {
+        let symbol = token.symbol.to_ascii_uppercase();
+        if !matches!(symbol.as_str(), "USDT" | "USDC")
+            || token.decimals.is_none()
+            || token
+                .contract_address
+                .as_deref()
+                .is_none_or(|address| address.trim().is_empty())
+            || !crate::route_execution::supports_otc_wallet_network(
+                &crate::route_engine::canonical_network_id(&token.blockchain),
+            )
+        {
+            continue;
+        }
+        let Ok(asset) = token.asset() else {
+            continue;
+        };
+        let Ok(resolved) = provider.token_for_asset(&asset).await else {
+            continue;
+        };
+        if resolved.asset_id != token.asset_id {
+            continue;
+        }
+        let output = match crate::route_engine::Asset::new(&symbol, Some("ethereum")) {
+            Ok(output) => output,
+            Err(_) => continue,
+        };
+        if let Ok(destination) = provider.token_for_asset(&output).await {
+            let expected = if symbol == "USDT" {
+                super::config::USDT
+            } else {
+                super::config::USDC
+            };
+            if destination
+                .contract_address
+                .as_deref()
+                .is_none_or(|address| !address.eq_ignore_ascii_case(expected))
+            {
+                continue;
+            }
+        } else {
+            continue;
+        }
+        let cross_network = asset != output;
+        if cross_network && !provider.route_available(&asset, &output).await {
+            continue;
+        }
+        assets.push(json!({
+            "asset": asset,
+            "symbol": symbol,
+            "network": crate::route_engine::canonical_network_id(&token.blockchain),
+            "asset_id": token.asset_id,
+            "decimals": token.decimals,
+            "contract_address": token.contract_address,
+            "cross_network": cross_network,
+        }));
+    }
+    assets.sort_by(|left, right| {
+        left["symbol"]
+            .as_str()
+            .cmp(&right["symbol"].as_str())
+            .then_with(|| left["network"].as_str().cmp(&right["network"].as_str()))
+    });
+    Json(json!({"assets": assets}))
+}
 async fn p2p_deal(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -277,7 +349,7 @@ async fn p2p_prepare(
     Ok(Json(
         state
             .otc
-            .p2p_prepare(&actor, id, key(&headers)?, &request.kind)
+            .p2p_prepare(&actor, id, key(&headers)?, request)
             .await?,
     ))
 }

@@ -14,8 +14,8 @@ use uuid::Uuid;
 /// Wider than `escrow::MAX_EVER_UNITS` on purpose: offers settle peer-to-peer and never reach the escrow factory.
 const MAX_EVER_OFFER_UNITS: u128 = 1_000_000_000_000 * 1_000_000_000;
 const MAX_USDT_OFFER_UNITS: u128 = 1_000_000 * 1_000_000;
-/// One service fee per peer-to-peer deal, withheld from the stablecoin leg and collected later.
-pub(crate) const P2P_FEE_VERSION: &str = "p2p-3pct-v1";
+/// One service fee per peer-to-peer deal, denominated in USDT and accrued for later collection.
+pub(crate) const P2P_FEE_VERSION: &str = "p2p-3pct-usdt-v1";
 pub(crate) const P2P_FEE_RATE: &str = "0.03";
 pub(crate) const P2P_FEE_PRECISION: u32 = 6;
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -50,14 +50,15 @@ impl Stablecoin {
 /// bounded by rows rather than by how many advertisements an account may post.
 const MAX_HISTORY_ROWS: i64 = 500;
 
-/// Fee policy for a stablecoin basis in its six-decimal units. Rounding up matches
-/// `amount::fee()`: the service never keeps less than three percent.
+/// Fee basis uses the six-decimal stablecoin amount; the obligation is always USDT.
+/// Rounding up ensures the service never accrues less than three percent.
 pub(crate) fn fee_policy(basis: u128) -> Value {
     let fee = basis.saturating_mul(3).saturating_add(99) / 100;
     json!({
         "version": P2P_FEE_VERSION, "rate": P2P_FEE_RATE, "floor": "0",
         "basis_units": basis.to_string(), "fee_units": fee.to_string(),
         "net_units": basis.saturating_sub(fee).to_string(), "precision": P2P_FEE_PRECISION,
+        "asset": "USDT", "payer": "stablecoin_sender", "withheld": false,
     })
 }
 
@@ -108,7 +109,8 @@ impl PublicOfferDraft {
             "usdt_units":usdt.to_string(), "usdt_address":recipient,
             "ever_network_id":42, "ethereum_chain_id":1,
             "usdt_contract":self.stablecoin.contract(),
-            "stablecoin_contract":self.stablecoin.contract(), "fee_policy":fee_policy(usdt),
+            "stablecoin_contract":self.stablecoin.contract(),
+            "fee_policy":fee_policy(usdt),
         }))
     }
 }
@@ -244,6 +246,9 @@ mod tests {
         assert_eq!(terms["fee_policy"]["basis_units"], "5000000");
         assert_eq!(terms["fee_policy"]["fee_units"], "150000");
         assert_eq!(terms["fee_policy"]["net_units"], "4850000");
+        assert_eq!(terms["fee_policy"]["asset"], "USDT");
+        assert_eq!(terms["fee_policy"]["payer"], "stablecoin_sender");
+        assert_eq!(terms["fee_policy"]["withheld"], false);
         for value in ["0", "-1", "0.0000000001", "1000000000001", "NaN"] {
             let mut item = draft();
             item.ever_amount = value.into();
@@ -306,6 +311,7 @@ mod tests {
             usdc.terms(&cfg).unwrap()["stablecoin_contract"],
             super::super::config::USDC
         );
+        assert_eq!(usdc.terms(&cfg).unwrap()["fee_policy"]["asset"], "USDT");
         let mut invalid = body;
         invalid["direction"] = json!("anything");
         assert!(serde_json::from_value::<PublicOfferDraft>(invalid).is_err());

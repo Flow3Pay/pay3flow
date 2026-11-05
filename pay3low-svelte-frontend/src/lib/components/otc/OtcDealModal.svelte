@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { locale } from "$lib/i18n";
-  import { request, sendAttempt, type Attempt, type Config, type Session } from "$lib/otc/service";
+  import { otcP2pNetwork, request, sendAttempt, walletNetwork, type Attempt, type Config, type Session } from "$lib/otc/service";
+  import { connectWallet } from "$lib/wallet-session";
+  import type { RouteExecution } from "$lib/exchange";
   import { identiconDataUri } from "$lib/otc/identicon";
   import {
     p2pAction, p2pActive, p2pBothConfirmed, p2pKind, p2pLegActive, p2pLegAsset, p2pLegDone,
@@ -30,6 +32,11 @@
   let autoTried = new Set<string>();
   let reportedActive = -1;
   let reportedActiveIds = "";
+  let sourceAssets: Array<{ asset: string; symbol: "USDT" | "USDC"; network: string; asset_id: string; decimals: number; contract_address: string | null }> = [];
+  let selectedSourceAsset = "";
+  let sourceAmount = "";
+  let routePickerOpen = false;
+  let assetLoadError = "";
 
   const autoMarker = "pay3flow.otc.p2p.auto.";
   const dismissMarker = "pay3flow.otc.p2p.dismissed.v1.";
@@ -63,10 +70,16 @@
   $: action = deal ? p2pAction(deal) : null;
   $: actionKind = deal ? p2pKind(deal) : null;
   $: actionAsset = actionKind ? p2pLegAsset(actionKind, deal?.terms.stablecoin) : "";
+  $: outputAsset = `${deal?.terms.stablecoin || "USDT"}@ethereum`;
+  $: selectedSource = sourceAssets.find(item => item.asset === selectedSourceAsset) || null;
+  $: intentQuote = deal?.attempts?.find(attempt => attempt.kind === "payment" && !!attempt.instructions.source_asset && attempt.state !== "failed") || null;
   $: actionLabel = action === "retry"
-    ? actionAsset ? say(`Retry ${actionAsset}`, `Повторить ${actionAsset}`) : say("Retry", "Повторить")
+    ? actionKind === "payment" && deal && !p2pOpenAttempt(deal, "payment") ? say("Choose payment network", "Выбрать сеть оплаты")
+      : actionAsset ? say(`Retry ${actionAsset}`, `Повторить ${actionAsset}`) : say("Retry", "Повторить")
     : action === "send"
-      ? actionAsset ? say(`Send ${actionAsset}`, `Отправить ${actionAsset}`) : say("Send", "Отправить")
+      ? actionKind === "payment" && deal && !p2pOpenAttempt(deal, "payment") ? say("Choose payment network", "Выбрать сеть оплаты")
+        : intentQuote ? say("Review quote and send", "Проверить котировку и отправить")
+          : actionAsset ? say(`Send ${actionAsset}`, `Отправить ${actionAsset}`) : say("Send", "Отправить")
       : say("Confirm", "Подтвердить");
   $: legs = deal ? p2pViewerLegs(deal) : null;
   $: myLegDone = deal && deal.my_leg ? p2pLegDone(deal, deal.my_leg) : false;
@@ -113,6 +126,9 @@
       dismissed = loadDismissed(actor);
       autoTried.clear();
       configReady = false;
+      routePickerOpen = false;
+      selectedSourceAsset = "";
+      sourceAmount = "";
       error = "";
       if (dialog?.open) dialog.close();
     }
@@ -124,6 +140,9 @@
   }
 
   onMount(() => {
+    void request<{ assets: typeof sourceAssets }>("/p2p/assets")
+      .then(result => { sourceAssets = result.assets || []; })
+      .catch(() => { assetLoadError = say("Payment networks are temporarily unavailable.", "Сети оплаты временно недоступны."); });
     const timer = setInterval(() => { if (!busy && !locked) void refresh(); }, 4500);
     return () => clearInterval(timer);
   });
@@ -296,6 +315,12 @@
       const kind = p2pKind(merged);
       const next = p2pAction(merged);
       if (kind && (next === "send" || next === "retry")) {
+        if (kind === "payment" && !p2pOpenAttempt(merged, kind)) {
+          routePickerOpen = true;
+          selectedSourceAsset = sourceAssets.find(item => item.asset === `${merged.terms.stablecoin || "USDT"}@ethereum`)?.asset || sourceAssets[0]?.asset || "";
+          sourceAmount = merged.terms.usdt_amount;
+          return;
+        }
         markAuto(merged, kind, settleKey(merged, kind));
         await sendLeg(merged, kind);
       }
@@ -307,6 +332,12 @@
     if (!current) return;
     const kind = p2pKind(current);
     if (!kind) return;
+    if (kind === "payment" && !p2pOpenAttempt(current, kind)) {
+      routePickerOpen = true;
+      selectedSourceAsset = sourceAssets.find(item => item.asset === `${current.terms.stablecoin || "USDT"}@ethereum`)?.asset || sourceAssets[0]?.asset || "";
+      sourceAmount = current.terms.usdt_amount;
+      return;
+    }
     markAuto(current, kind, settleKey(current, kind));
     return run(async () => { await sendLeg(current, kind); });
   }
@@ -318,6 +349,7 @@
     const next = p2pAction(current);
     if (!kind || next !== "send") return;
     const open = p2pOpenAttempt(current, kind);
+    if (kind === "payment" && !open) return;
     if (open && (open.state === "submitted" || open.state === "confirming")) return;
     const key = settleKey(current, kind);
     if (autoTried.has(key) || autoBlocked(current, kind)) return;
@@ -328,6 +360,44 @@
   function act() {
     if (action === "confirm") void confirmDeal();
     else if (action) void settleDeal();
+  }
+
+  async function preparePayment() {
+    const current = deal;
+    const owner = session;
+    const source = selectedSource;
+    if (!current || !owner || !source) return;
+    await run(async () => {
+      if (source.asset === outputAsset) {
+        routePickerOpen = false;
+        await sendLeg(current, "payment");
+        return;
+      }
+      if (!sourceAmount.trim()) throw new Error(say("Enter the amount to send.", "Введите сумму отправки."));
+      const connected = await connectWallet(walletNetwork(source.network, otcP2pNetwork()));
+      const storageKey = `pay3flow.otc.quote-key.${current.id}`;
+      const quoteKey = sessionStorage.getItem(storageKey) || crypto.randomUUID();
+      sessionStorage.setItem(storageKey, quoteKey);
+      const prepared = await request<P2pDeal & { attempt: Attempt }>(
+        `/p2p/trades/${current.id}/prepare`,
+        owner.token,
+        {
+          kind: "near-intents",
+          source_asset: source.asset,
+          source_asset_id: source.asset_id,
+          source_amount: sourceAmount.trim(),
+          source_address: connected.address,
+          slippage_bps: 100,
+        },
+        quoteKey,
+      );
+      sessionStorage.removeItem(storageKey);
+      applyDeal(prepared, {
+        ...current,
+        attempts: [...(current.attempts || []), prepared.attempt],
+      });
+      routePickerOpen = false;
+    });
   }
 </script>
 
@@ -403,6 +473,54 @@
 
     {#if error}<p class="error" role="alert">{error}</p>{/if}
 
+    {#if routePickerOpen && actionKind === "payment"}
+      <section class="routePicker" aria-label={say("Choose payment network", "Выбрать сеть оплаты")} data-testid="otc-payment-network-picker">
+        <label>{say("Pay with", "Оплатить активом")}
+          <select bind:value={selectedSourceAsset} disabled={busy || locked}>
+            {#each sourceAssets.filter(item => item.symbol === (deal?.terms.stablecoin || "USDT")) as source}
+              <option value={source.asset}>{source.symbol} · {source.network}</option>
+            {/each}
+          </select>
+        </label>
+        {#if selectedSource && selectedSource.asset === outputAsset}
+          <p class="routeNote">{say("Same token and network: this payment is sent directly, without conversion.", "Токен и сеть совпадают: платёж отправляется напрямую, без конвертации.")}</p>
+        {:else if selectedSource}
+          <label>{say(`Amount to send (${selectedSource.symbol})`, `Сумма отправки (${selectedSource.symbol})`)}
+            <input bind:value={sourceAmount} inputmode="decimal" autocomplete="off" disabled={busy || locked} data-testid="otc-source-amount" />
+          </label>
+          <p class="routeNote">{say(`The quote must deliver exactly ${deal?.terms.usdt_amount} ${deal?.terms.stablecoin || "USDT"} to the recipient on Ethereum.`, `Котировка должна доставить получателю ровно ${deal?.terms.usdt_amount} ${deal?.terms.stablecoin || "USDT"} в сети Ethereum.`)}</p>
+        {:else}
+          <p class="routeNote">{assetLoadError || say("No compatible production payment networks are available.", "Нет доступных production-сетей для оплаты.")}</p>
+        {/if}
+        <div class="routeActions">
+          <button type="button" class="confirmButton" disabled={busy || locked || !selectedSource} on:click={() => void preparePayment()}>
+            {#if busy}<span class="spinner" aria-hidden="true"></span>{/if}
+            <span>{selectedSource?.asset === outputAsset ? say("Send directly", "Отправить напрямую") : say("Get payment quote", "Получить котировку")}</span>
+          </button>
+          <button type="button" class="quitButton" disabled={busy} on:click={() => { routePickerOpen = false; }}>{say("Back", "Назад")}</button>
+        </div>
+      </section>
+    {/if}
+
+    {#if intentQuote && actionKind === "payment"}
+      <section class="routeQuote" aria-label={say("Payment quote", "Котировка оплаты")} data-testid="otc-payment-quote">
+        <strong>{say("Payment route", "Маршрут оплаты")}</strong>
+        <p>{intentQuote.instructions.source_amount} {intentQuote.instructions.source_asset} → {intentQuote.instructions.minimum_output} {intentQuote.instructions.destination_asset}</p>
+        <small>{say("Quoted output", "Расчётное получение")}: {intentQuote.instructions.expected_output} {intentQuote.instructions.destination_asset}</small>
+        {#if intentQuote.instructions.expected_fee}
+          <small>{say("Route fee", "Комиссия маршрута")}: {intentQuote.instructions.expected_fee.amount} {intentQuote.instructions.expected_fee.asset}</small>
+        {/if}
+        {#if intentQuote.instructions.slippage_bps !== undefined}
+          <small>{say("Maximum slippage", "Максимальное проскальзывание")}: {(intentQuote.instructions.slippage_bps / 100).toFixed(2)}%</small>
+        {/if}
+        <small>{say("Quote expires", "Котировка действует до")}: {new Date(intentQuote.instructions.quote_expires_at || "").toLocaleString($locale === "ru" ? "ru-RU" : "en-US")}</small>
+        {#if intentQuote.instructions.deposit_memo}
+          <small>{say("Required payment memo", "Обязательное сообщение платежа")}: <code>{intentQuote.instructions.deposit_memo}</code></small>
+        {/if}
+        <small class="depositAddress">{say("Deposit address", "Адрес депозита")}: <code>{intentQuote.instructions.deposit_address}</code></small>
+      </section>
+    {/if}
+
     <div class="action">
       {#if action}
         <button type="button" class="confirmButton" disabled={busy || locked} data-testid="otc-p2p-confirm" on:click={act}>
@@ -459,6 +577,17 @@
   .notice { margin:12px 26px 0; color:var(--color-text-soft); font-size:11px; line-height:1.45; text-align:center; }
   .error { margin:14px 26px 0; color:var(--color-danger); font-size:11px; line-height:1.45; text-align:center; }
   .action { padding:22px 26px 26px; }
+  .routePicker,.routeQuote { display:grid; gap:10px; margin:18px 26px 0; padding:13px; border:1px solid var(--color-border); border-radius:12px; background:var(--color-panel); }
+  .routePicker label { display:grid; gap:6px; color:var(--color-text-soft); font-size:11px; }
+  .routePicker select,.routePicker input { width:100%; min-height:40px; padding:8px 10px; border:1px solid var(--color-border); border-radius:8px; background:var(--color-paper); color:var(--color-text); font:inherit; }
+  .routeNote { margin:0; color:var(--color-text-faint); font-size:11px; line-height:1.45; }
+  .routeActions { display:grid; gap:8px; }
+  .routeQuote { overflow-wrap:anywhere; }
+  .routeQuote strong { font-size:12px; }
+  .routeQuote p { margin:0; font-family:var(--font-mono); font-size:11px; }
+  .routeQuote small { color:var(--color-text-faint); font-size:10px; line-height:1.4; }
+  .routeQuote code { color:var(--color-text); overflow-wrap:anywhere; }
+  .routeQuote .depositAddress { margin-top:3px; }
   .confirmButton { display:flex; width:100%; min-height:46px; align-items:center; justify-content:center; gap:8px; border:1px solid var(--color-accent-strong); border-radius:11px; background:var(--color-accent); color:#152016; font-size:13px; font-weight:750; }
   .confirmButton:disabled { opacity:.45; cursor:default; }
   .confirmButton:focus-visible { outline:var(--focus-ring-width) solid var(--color-focus); outline-offset:2px; }

@@ -241,37 +241,69 @@ identifies a network.
 
 ## Current implementation context
 
-The current worktree contains an uncommitted first pass for USDC and an
-Ethereum-mainnet-only OTC flow. It includes a USDC picker, offer/P2P display
-updates, backend mainnet validation, and related tests. That implementation
-does **not** satisfy the later multi-chain requirements in this document:
+The current implementation is an incomplete intermediate step, not a claim
+that multi-chain OTC is complete. It includes USDT/USDC offer support, explicit
+production EVM network selection in the wallet flow, and an OTC cross-network
+payment preparation path using the existing NEAR Intents provider. The OTC
+interface describes this generically as a payment route and does not expose
+provider branding.
 
-- The OTC stablecoin network is still Ethereum-centric.
-- OTC P2P still has a direct ERC-20 payment path and is not yet integrated with
-  the NEAR Intents executable quote/deposit/status lifecycle.
-- The wallet dialog currently has four execution families: EVM, NEAR, TRON,
-  and Everscale. It now exposes the production EVM networks already supported
-  by the EVM executor (with explicit chain switching); Sepolia is not listed.
-  Native Solana, Sei, Sui, TON, and Aptos wallet execution is not yet present.
-- Existing NEAR Intents and generic route-execution components are separate
-  from the OTC P2P lifecycle and need deliberate integration.
+Implemented so far:
 
-Accordingly, the current changes are an incomplete intermediate state, not a
-claim that multi-chain OTC is complete. Any implementation that exposes
-networks without their complete backend and wallet execution path would
-contradict these requirements.
+- The P2P taker can select a source token/network from the live provider token
+  catalog, enter a source amount, and review quote output, expiry, deposit
+  address, and memo before wallet submission.
+- The backend validates the selected source asset against its exact catalog
+  asset ID and the selected OTC stablecoin. Quote creation binds exact source
+  and destination asset IDs to avoid resolving duplicate tickers to a different
+  token.
+- OTC attempt instructions persist the source/destination asset identity and
+  quote/deposit information. Provider status polling advances the trade only
+  when the reported output amount exactly matches the deal amount; a confirmed
+  refund releases the attempt for retry.
+- When source and destination stablecoin plus network are identical, the
+  ordinary direct payment path is used and no provider quote is requested.
+- The recorded fee policy is denominated in USDT. This does not yet implement
+  conversion/collection of a USDT fee when the trade settles in USDC or when a
+  source route uses another token.
+
+Still incomplete and not to be presented as supported:
+
+- OTC offer destination selection and payout remain Ethereum-centric. The
+  cross-network flow currently routes source assets to the deal's Ethereum
+  stablecoin recipient; it does not let the offer choose another destination
+  network.
+- Wallet-executable source networks are limited to the supported EVM, NEAR,
+  and TRON paths. In particular, address validation alone does not provide
+  signing/submission support for Solana, Sei, Sui, TON, or Aptos.
+- Memo handling is currently accepted only for NEAR source transfers; other
+  memo/tag-dependent source networks must remain unavailable until their
+  wallet executors support the required instruction.
+- Cross-network quote output is constrained to exact deal-value equality.
+  Provider status amount encoding and all status/refund edge cases still need
+  authoritative confirmation and focused coverage.
+- Fee conversion and actual collection, independent destination-network
+  terms, and complete cross-network payout/refund handling remain outstanding.
+
+The worktree changes are not a finished production multi-chain feature.
+Networks must not be exposed as supported unless their complete wallet,
+settlement, status, and refund paths are implemented.
 
 ## Items to verify during implementation
 
-- The exact current production USDT/USDC networks and asset identifiers in the
-  NEAR Intents catalog.
+- Exact production USDT/USDC token identities in the live provider catalog,
+  including whether multiple assets share a symbol/network pair.
 - Whether each target network has a usable refund-address format and whether
   its transfer requires a memo/tag.
 - Which requested wallets can be supported by existing dependencies and which
   require new, maintained wallet SDKs.
-- How a taker's input network/address is captured at acceptance without
-  weakening account or trade authorization.
-- How NEAR Intents execution state is durably associated with an OTC trade and
-  advances the existing payment, refund, and settlement state machine.
+- Whether provider-reported output amounts are atomic units or decimal token
+  amounts for every supported status response.
+- How destination network/address terms can be added to offers and persisted
+  immutably without weakening account or trade authorization.
+- Whether the supported source-wallet executors safely support memo/tag
+  requirements and refunds for each catalog network.
+- How USDT-denominated fees are converted and collected for USDC and
+  cross-network settlement, including supported fee destinations.
 - What “confidential swap” is intended to mean technically; until specified,
   no privacy promise is in scope.

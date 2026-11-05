@@ -15,15 +15,16 @@
   let dialog: HTMLDialogElement;
   $: say = (en: string, ru: string) => $locale === "ru" ? ru : en;
   $: leg = instructions.leg;
-  $: asset = leg.chain === "ethereum" ? p2p ? instructions.stablecoin || "USDT" : "USDT" : "EVER";
+  $: asset = instructions.source_asset ? instructions.source_asset.split("@")[0] : leg.chain === "ethereum" ? p2p ? instructions.stablecoin || "USDT" : "USDT" : "EVER";
+  $: network = instructions.source_network || (leg.chain === "ethereum" ? evmNetworkFor(instructions.call?.chain_id ?? 1).label : "Everscale");
   onMount(() => { const previous = document.activeElement as HTMLElement | null; const unlock = lockPageScroll(); dialog.showModal(); return () => { dialog.close(); unlock(); previous?.focus(); }; });
 </script>
 <dialog bind:this={dialog} aria-labelledby="otc-transfer-title" on:cancel|preventDefault={onClose}>
   <div class="top"><h2 id="otc-transfer-title">{say("Review transfer", "Проверить перевод")}</h2><button aria-label={say("Close", "Закрыть")} on:click={onClose}>×</button></div>
-  <p>{kind === "payment" ? say("Payment", "Оплата") : say("Delivery", "Выплата")} · {leg.chain === "ethereum" ? evmNetworkFor(instructions.call.chain_id).label : "Everscale"}</p>
+  <p>{kind === "payment" ? say("Payment", "Оплата") : say("Delivery", "Выплата")} · {network}</p>
   <dl><dt>{say("Net amount", "Сумма к получению")}</dt><dd>{decimal(leg.amount, leg.chain === "ethereum" ? 6 : 9)} {asset}</dd><dt>{say("Sender", "Отправитель")}</dt><dd>{leg.sender}</dd><dt>{say("Recipient", "Получатель")}</dt><dd>{leg.recipient}</dd><dt>{say("Network costs", "Сетевые расходы")}</dt><dd>{trade?.terms.network_costs || networkCosts || "—"}</dd></dl>
   <p>{say("The saved transfer is sent once. If its status is unknown, contact support to reconcile it before sending again.", "Сохранённый перевод отправляется один раз. Если его статус неизвестен — сверьте с поддержкой, прежде чем отправлять снова.")}</p>
-  {#if p2p}<p class="feeNote">{say("This transfer goes out at the gross deal amount. The 3% service fee is charged separately by the service and is not deducted from this transfer.", "Этот перевод уходит на полную сумму сделки. Комиссия сервиса 3% удерживается сервисом отдельно и не вычитается из этого перевода.")}</p>{/if}
+  {#if p2p}<p class="feeNote">{say("This transfer goes out at the full deal amount. The 3% service fee is accounted separately and is not deducted from this transfer.", "Этот перевод уходит на полную сумму сделки. Комиссия сервиса 3% учитывается отдельно и не вычитается из этого перевода.")}</p>{/if}
   <p>{say("Your wallet may warn about a first-time recipient: open the alert and dismiss it, then the confirm button unlocks.", "Кошелёк может предупредить о незнакомом получателе: откройте «Просмотреть оповещение» и отклоните его — после этого кнопка подтверждения разблокируется.")}</p>
   <button class="primary" {disabled} on:click={onConfirm}>{say("Confirm in wallet", "Подтвердить в кошельке")} ↗</button><button on:click={onClose}>{say("Close and track saved transfer", "Закрыть и следить за переводом")}</button>
 </dialog>

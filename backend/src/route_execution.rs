@@ -299,9 +299,11 @@ impl RouteExecutionService {
                 .iter()
                 .filter(|part| part.contains('@'))
                 .collect::<Vec<_>>();
-            if let (Some(from_asset), Some(to_asset), Some(input_amount)) =
-                (assets.first(), assets.last(), route.provider_input_amount.as_ref())
-            {
+            if let (Some(from_asset), Some(to_asset), Some(input_amount)) = (
+                assets.first(),
+                assets.last(),
+                route.provider_input_amount.as_ref(),
+            ) {
                 executions.extend(self.descriptor(
                     &route.route_id,
                     provider,
@@ -345,9 +347,7 @@ impl RouteExecutionService {
             return None;
         }
         // Bridge and native-asset orders use CoW Swap's execution flow.
-        if provider == "cow-swap"
-            && !CowRouteProvider::supports_wallet_execution(&from, &to)
-        {
+        if provider == "cow-swap" && !CowRouteProvider::supports_wallet_execution(&from, &to) {
             return None;
         }
         let expires_at = Utc::now() + ChronoDuration::minutes(DESCRIPTOR_TTL_MINUTES);
@@ -430,6 +430,8 @@ impl RouteExecutionService {
                     .executable_quote(NearQuoteRequest {
                         from: from.clone(),
                         to,
+                        origin_asset_id: None,
+                        destination_asset_id: None,
                         amount,
                         recipient: request.recipient.clone(),
                         refund_to: request
@@ -840,6 +842,7 @@ fn validate_wallet_address(network: &str, address: &str) -> Result<(), RouteExec
                 })
                 && address.split(['.', '_', '-']).all(|part| !part.is_empty())
         }
+
         "tron" => bs58::decode(address).into_vec().is_ok_and(|bytes| {
             bytes.len() == 25
                 && bytes[0] == 0x41
@@ -858,6 +861,17 @@ fn validate_wallet_address(network: &str, address: &str) -> Result<(), RouteExec
     } else {
         Err(RouteExecutionError::InvalidAddress)
     }
+}
+
+pub(crate) fn supports_otc_wallet_network(network: &str) -> bool {
+    supported_wallet_network(network)
+}
+
+pub(crate) fn validate_otc_wallet_address(
+    network: &str,
+    address: &str,
+) -> Result<(), RouteExecutionError> {
+    validate_wallet_address(network, address)
 }
 
 fn first_string(value: &Value, keys: &[&str]) -> Option<String> {

@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS otc_p2p_attempts (
  trade_id UUID NOT NULL REFERENCES otc_p2p_trades(id),
  kind TEXT NOT NULL CHECK(kind IN ('payment','payout')),
  payer_actor TEXT NOT NULL,
- chain TEXT NOT NULL CHECK(chain IN ('ethereum','everscale')),
+ chain TEXT NOT NULL CHECK(chain IN ('ethereum','everscale','near-intents')),
  state TEXT NOT NULL DEFAULT 'prepared'
    CHECK(state IN ('prepared','submitted','confirming','verified','failed')),
  instructions JSONB NOT NULL,
