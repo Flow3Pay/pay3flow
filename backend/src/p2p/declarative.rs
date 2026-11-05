@@ -598,7 +598,7 @@ impl PerpetualMarketSource for DeclarativeMarketSource {
         Duration::from_millis(self.config.timeout_ms)
     }
 
-    async fn tickers(&self) -> Result<Vec<FuturesTicker>> {
+    async fn perpetual_tickers(&self) -> Result<Vec<FuturesTicker>> {
         self.fetch_tickers("").await.map(|tickers| {
             tickers
                 .into_iter()

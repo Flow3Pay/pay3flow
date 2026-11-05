@@ -21,7 +21,7 @@ pub(crate) trait PerpetualMarketSource: Send + Sync {
         default
     }
 
-    async fn tickers(&self) -> Result<Vec<FuturesTicker>>;
+    async fn perpetual_tickers(&self) -> Result<Vec<FuturesTicker>>;
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -61,19 +61,19 @@ pub(crate) fn compose_opportunities(
     markets: &[(String, Vec<FuturesTicker>)],
 ) -> Vec<FuturesOpportunity> {
     let contract = format!("{asset}USDT");
-    let mut quotes = markets
-        .iter()
-        .flat_map(|(venue, tickers)| {
-            tickers.iter().filter_map(|ticker| {
-                (ticker.symbol.eq_ignore_ascii_case(&contract)
-                    && ticker.bid.is_finite()
-                    && ticker.ask.is_finite()
-                    && ticker.bid > 0.0
-                    && ticker.ask >= ticker.bid)
-                    .then_some((venue, ticker.bid, ticker.ask))
-            })
-        })
-        .collect::<Vec<_>>();
+    let mut quotes = Vec::new();
+    for (venue, tickers) in markets {
+        for ticker in tickers {
+            if ticker.symbol.eq_ignore_ascii_case(&contract)
+                && ticker.bid.is_finite()
+                && ticker.ask.is_finite()
+                && ticker.bid > 0.0
+                && ticker.ask >= ticker.bid
+            {
+                quotes.push((venue, ticker.bid, ticker.ask));
+            }
+        }
+    }
     quotes.sort_by(|left, right| left.0.cmp(right.0));
 
     let mut opportunities = Vec::new();

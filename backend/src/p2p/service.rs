@@ -1617,9 +1617,10 @@ impl P2pSearchService {
             .cloned()
             .map(|source| async move {
                 let name = source.name().to_owned();
-                let result = tokio::time::timeout(source.timeout(self.timeout), source.tickers())
-                    .await
-                    .map_err(|_| anyhow::anyhow!("{name} perpetual ticker request timed out"))
+                let result =
+                    tokio::time::timeout(source.timeout(self.timeout), source.perpetual_tickers())
+                        .await
+                        .map_err(|_| anyhow::anyhow!("{name} perpetual ticker request timed out"))
                     .and_then(|result| result);
                 (name, result)
             })
