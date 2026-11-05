@@ -1131,9 +1131,9 @@ fn normalize_code(value: &str, field: &str) -> Result<String> {
     if !(2..=32).contains(&value.len())
         || !value
             .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
     {
-        bail!("{field} must be 2-32 ASCII letters, digits, '-' or '_'");
+        bail!("{field} must be 2-32 ASCII letters, digits, '.', '-' or '_'");
     }
     Ok(value)
 }
@@ -1186,6 +1186,7 @@ mod tests {
     #[test]
     fn assets_keep_network_identity() {
         assert_eq!(asset("usdt@TRON").to_string(), "USDT@tron");
+        assert_eq!(asset("usdc.n@sei").to_string(), "USDC.N@sei");
         assert_ne!(asset("USDT@tron"), asset("USDT@binance"));
         assert_eq!(asset("AMD").to_string(), "AMD");
         assert_eq!(

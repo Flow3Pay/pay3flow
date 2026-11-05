@@ -98,6 +98,14 @@ mod tests {
                         Asset::parse("NEWCOIN@ethereum").unwrap(),
                     ],
                 }),
+                Arc::new(CatalogProvider {
+                    name: "symbiosis",
+                    assets: vec![
+                        Asset::parse("USDC@sei").unwrap(),
+                        Asset::parse("USDC.n@sei").unwrap(),
+                        Asset::parse("USDT@sei").unwrap(),
+                    ],
+                }),
             ]);
         let catalog = provider_catalog(
             vec![
@@ -111,11 +119,17 @@ mod tests {
                     name: "TON".into(),
                     currencies: vec!["GRAM".into()],
                 },
+                CryptoNetwork {
+                    id: "sei".into(),
+                    name: "Sei".into(),
+                    currencies: Vec::new(),
+                },
             ],
             &service,
         )
         .await;
         assert_eq!(catalog[0].currencies, ["ETH", "GRAM", "NEWCOIN"]);
         assert_eq!(catalog[1].currencies, ["GRAM"]);
+        assert_eq!(catalog[2].currencies, ["USDC", "USDC.n", "USDT"]);
     }
 }

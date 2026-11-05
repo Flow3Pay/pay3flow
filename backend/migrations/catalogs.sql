@@ -23,6 +23,7 @@ INSERT INTO crypto_networks (slug, name, currencies, status) VALUES
     ('near', 'NEAR', ARRAY['NEAR', 'USDT', 'USDC']::TEXT[], 'enabled'),
     ('aptos', 'Aptos', ARRAY['APT', 'USDT', 'USDC']::TEXT[], 'enabled'),
     ('cosmos-hub', 'Cosmos Hub', ARRAY['ATOM']::TEXT[], 'enabled'),
+    ('sei', 'Sei', ARRAY[]::TEXT[], 'enabled'),
     ('sui', 'Sui', ARRAY['SUI', 'USDT', 'USDC']::TEXT[], 'enabled')
 ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, currencies = EXCLUDED.currencies, status = EXCLUDED.status, updated_at = now();
 
